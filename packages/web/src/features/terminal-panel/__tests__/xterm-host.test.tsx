@@ -104,6 +104,18 @@ function expectReplayCall(mock: ReturnType<typeof vi.fn>, terminalId: string, la
   );
 }
 
+function expectSnapshotCall(mock: ReturnType<typeof vi.fn>, terminalId: string) {
+  expect(mock).toHaveBeenCalledWith(
+    "terminal.snapshot",
+    {
+      terminalId,
+    },
+    {
+      timeoutMs: TERMINAL_REPLAY_TIMEOUT_MS,
+    }
+  );
+}
+
 function expectResizeCall(
   mock: ReturnType<typeof vi.fn>,
   terminalId: string,
@@ -2142,6 +2154,116 @@ describe("XtermHost", () => {
     global.cancelAnimationFrame = originalCancelAnimationFrame;
   });
 
+  it("prefers terminal.snapshot for shell cold start and only flushes live chunks newer than the snapshot seq", async () => {
+    const store = createStore();
+    const snapshotChunk = new TextEncoder().encode("shell snapshot view\n");
+    const coveredChunk = new TextEncoder().encode("covered shell\n");
+    const liveChunk = new TextEncoder().encode("fresh shell output\n");
+    const sendCommand = vi.fn();
+    let subscriptionHandler: ((topic: string, payload: unknown, seq: number) => void) | undefined;
+    const subscribe = vi.fn((topics: string[], handler: typeof subscriptionHandler) => {
+      subscriptionHandler = handler;
+      return vi.fn();
+    });
+    const rafCallbacks: FrameRequestCallback[] = [];
+    const originalRequestAnimationFrame = global.requestAnimationFrame;
+    const originalCancelAnimationFrame = global.cancelAnimationFrame;
+
+    mockTerminal.cols = 132;
+    mockTerminal.rows = 36;
+
+    global.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      rafCallbacks.push(callback);
+      return rafCallbacks.length;
+    }) as typeof requestAnimationFrame;
+    global.cancelAnimationFrame = vi.fn() as typeof cancelAnimationFrame;
+
+    sendCommand.mockImplementation((op: string) => {
+      if (op === "terminal.snapshot") {
+        return Promise.resolve({
+          status: "ok",
+          transport: "binary",
+          streamId: 804,
+          size: snapshotChunk.byteLength,
+          seq: 200,
+          cols: 132,
+          rows: 36,
+          source: "headless",
+          bytes: snapshotChunk,
+        } satisfies TerminalSnapshotPayload);
+      }
+
+      return Promise.resolve({ status: "ok" });
+    });
+
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe,
+      getStatus: vi.fn(() => "connected"),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost
+          terminalId="shell-snapshot-terminal"
+          workspaceId="test-workspace"
+          terminalKind="shell"
+        />
+      </Provider>
+    );
+
+    await act(async () => {
+      subscriptionHandler?.(
+        Topics.terminalOutput("test-workspace", "shell-snapshot-terminal"),
+        { transport: "binary", streamId: 805, size: coveredChunk.byteLength, bytes: coveredChunk },
+        180
+      );
+      subscriptionHandler?.(
+        Topics.terminalOutput("test-workspace", "shell-snapshot-terminal"),
+        { transport: "binary", streamId: 806, size: liveChunk.byteLength, bytes: liveChunk },
+        200 + liveChunk.byteLength
+      );
+      await Promise.resolve();
+    });
+
+    expect(mockTerminal.write).not.toHaveBeenCalled();
+
+    await act(async () => {
+      const callback = rafCallbacks.shift();
+      callback?.(16);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "terminal.snapshot",
+        {
+          terminalId: "shell-snapshot-terminal",
+        },
+        {
+          timeoutMs: TERMINAL_REPLAY_TIMEOUT_MS,
+        }
+      );
+    });
+    expect(sendCommand).not.toHaveBeenCalledWith(
+      "terminal.replay",
+      expect.anything(),
+      expect.anything()
+    );
+
+    await waitFor(() => {
+      expect(mockTerminal.write.mock.calls[0]?.[0]).toBe(snapshotChunk);
+      expect(mockTerminal.write).toHaveBeenCalledWith(liveChunk, expect.any(Function));
+    });
+    expect(mockTerminal.write).not.toHaveBeenCalledWith(coveredChunk);
+
+    global.requestAnimationFrame = originalRequestAnimationFrame;
+    global.cancelAnimationFrame = originalCancelAnimationFrame;
+  });
+
   it("falls back to terminal.replay when agent snapshot is unsupported", async () => {
     const store = createStore();
     const replayChunk = new TextEncoder().encode("replay fallback\n");
@@ -2207,6 +2329,78 @@ describe("XtermHost", () => {
         { timeoutMs: TERMINAL_REPLAY_TIMEOUT_MS }
       );
       expectReplayCall(sendCommand, "agent-fallback-terminal", 0);
+      expectTerminalWriteData(replayChunk);
+    });
+
+    global.requestAnimationFrame = originalRequestAnimationFrame;
+    global.cancelAnimationFrame = originalCancelAnimationFrame;
+  });
+
+  it("falls back to terminal.replay when shell snapshot is unsupported", async () => {
+    const store = createStore();
+    const replayChunk = new TextEncoder().encode("shell replay fallback\n");
+    const sendCommand = vi.fn().mockImplementation((op: string) => {
+      if (op === "terminal.snapshot") {
+        return Promise.resolve({ status: "unsupported" });
+      }
+      if (op === "terminal.replay") {
+        return Promise.resolve({
+          status: "ok",
+          transport: "binary",
+          streamId: 814,
+          size: replayChunk.byteLength,
+          seq: replayChunk.byteLength,
+          bytes: replayChunk,
+        } satisfies TerminalReplayPayload);
+      }
+
+      return Promise.resolve({ status: "ok" });
+    });
+    const rafCallbacks: FrameRequestCallback[] = [];
+    const originalRequestAnimationFrame = global.requestAnimationFrame;
+    const originalCancelAnimationFrame = global.cancelAnimationFrame;
+
+    mockTerminal.cols = 132;
+    mockTerminal.rows = 36;
+
+    global.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      rafCallbacks.push(callback);
+      return rafCallbacks.length;
+    }) as typeof requestAnimationFrame;
+    global.cancelAnimationFrame = vi.fn() as typeof cancelAnimationFrame;
+
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe: vi.fn(() => vi.fn()),
+      getStatus: vi.fn(() => "connected"),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost
+          terminalId="shell-fallback-terminal"
+          workspaceId="test-workspace"
+          terminalKind="shell"
+        />
+      </Provider>
+    );
+
+    await act(async () => {
+      const callback = rafCallbacks.shift();
+      callback?.(16);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "terminal.snapshot",
+        { terminalId: "shell-fallback-terminal" },
+        { timeoutMs: TERMINAL_REPLAY_TIMEOUT_MS }
+      );
+      expectReplayCall(sendCommand, "shell-fallback-terminal", 0);
       expectTerminalWriteData(replayChunk);
     });
 
@@ -3102,6 +3296,102 @@ describe("XtermHost", () => {
     expect(replayCount).toBe(2);
   });
 
+  it("replays shell history again after websocket reconnect using snapshot", async () => {
+    const store = createStore();
+    const firstSnapshot = new TextEncoder().encode("shell snapshot\n");
+    const reconnectSnapshot = new TextEncoder().encode("shell snapshot after reconnect\n");
+    const sendCommand = vi.fn();
+    let snapshotCount = 0;
+    let statusHandler:
+      | ((
+          status: "connecting" | "connected" | "disconnected" | "reconnecting" | "rejected"
+        ) => void)
+      | undefined;
+
+    mockTerminal.cols = 132;
+    mockTerminal.rows = 36;
+
+    sendCommand.mockImplementation((op: string) => {
+      if (op === "terminal.snapshot") {
+        snapshotCount += 1;
+        if (snapshotCount === 1) {
+          return Promise.resolve({
+            status: "ok",
+            transport: "binary",
+            streamId: 945,
+            size: firstSnapshot.byteLength,
+            seq: 200,
+            rows: 36,
+            cols: 132,
+            source: "headless",
+            bytes: firstSnapshot,
+          } satisfies TerminalSnapshotPayload);
+        }
+
+        return Promise.resolve({
+          status: "ok",
+          transport: "binary",
+          streamId: 946,
+          size: reconnectSnapshot.byteLength,
+          seq: 240,
+          rows: 36,
+          cols: 132,
+          source: "headless",
+          bytes: reconnectSnapshot,
+        } satisfies TerminalSnapshotPayload);
+      }
+
+      return Promise.resolve({ status: "ok" });
+    });
+
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe: vi.fn(() => vi.fn()),
+      getStatus: vi.fn(() => "connected"),
+      onStatus: vi.fn((handler: typeof statusHandler) => {
+        statusHandler = handler;
+        return () => {};
+      }),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost
+          terminalId="shell-reconnect-terminal"
+          workspaceId="test-workspace"
+          terminalKind="shell"
+        />
+      </Provider>
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(mockTerminal.write.mock.calls.some(([written]) => written === firstSnapshot)).toBe(
+        true
+      );
+    });
+
+    await act(async () => {
+      statusHandler?.("disconnected");
+      statusHandler?.("reconnecting");
+      statusHandler?.("connected");
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(
+        mockTerminal.write.mock.calls.some(([written]) => written === reconnectSnapshot)
+      ).toBe(true);
+    });
+    expect(snapshotCount).toBe(2);
+    expect(sendCommand.mock.calls.some(([op]) => op === "terminal.replay")).toBe(false);
+  });
+
   it("replays agent history again after websocket reconnect using snapshot", async () => {
     const store = createStore();
     const firstSnapshot = new TextEncoder().encode("agent snapshot\n");
@@ -3195,6 +3485,7 @@ describe("XtermHost", () => {
       );
     });
     expect(snapshotCount).toBe(2);
+    expect(sendCommand.mock.calls.some(([op]) => op === "terminal.replay")).toBe(false);
   });
 
   it("retries historical recovery after reconnect when the initial replay is interrupted by disconnect", async () => {
@@ -3571,6 +3862,103 @@ describe("XtermHost", () => {
     });
   });
 
+  it("falls back to replay on shell reconnect when snapshot refresh fails", async () => {
+    const store = createStore();
+    const initialSnapshot = new TextEncoder().encode("initial shell snapshot\n");
+    const replayFallback = new TextEncoder().encode("shell snapshot fallback replay\n");
+    let statusHandler:
+      | ((
+          status: "connecting" | "connected" | "disconnected" | "reconnecting" | "rejected"
+        ) => void)
+      | undefined;
+    let snapshotCount = 0;
+    const sendCommand = vi
+      .fn()
+      .mockImplementation((op: string, args: { terminalId?: string; lastSeq?: number }) => {
+        if (op === "terminal.snapshot") {
+          snapshotCount += 1;
+          if (snapshotCount === 1) {
+            return Promise.resolve({
+              status: "ok",
+              transport: "binary",
+              streamId: 982,
+              size: initialSnapshot.byteLength,
+              seq: 200,
+              rows: 36,
+              cols: 132,
+              source: "headless",
+              bytes: initialSnapshot,
+            } satisfies TerminalSnapshotPayload);
+          }
+
+          return Promise.reject(new Error("Command timeout: terminal.snapshot"));
+        }
+
+        if (op === "terminal.replay") {
+          expect(args.lastSeq).toBe(200);
+          return Promise.resolve({
+            status: "ok",
+            transport: "binary",
+            streamId: 983,
+            size: replayFallback.byteLength,
+            seq: 240,
+            bytes: replayFallback,
+          } satisfies TerminalReplayPayload);
+        }
+
+        return Promise.resolve({ status: "ok" });
+      });
+
+    mockTerminal.cols = 132;
+    mockTerminal.rows = 36;
+
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe: vi.fn(() => vi.fn()),
+      getStatus: vi.fn(() => "connected"),
+      onStatus: vi.fn((handler: typeof statusHandler) => {
+        statusHandler = handler;
+        return () => {};
+      }),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost
+          terminalId="shell-reconnect-fallback"
+          workspaceId="test-workspace"
+          terminalKind="shell"
+        />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expectTerminalWriteData(initialSnapshot);
+    });
+
+    await act(async () => {
+      statusHandler?.("disconnected");
+      statusHandler?.("reconnecting");
+      statusHandler?.("connected");
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "terminal.replay",
+        {
+          terminalId: "shell-reconnect-fallback",
+          lastSeq: 200,
+        },
+        {
+          timeoutMs: TERMINAL_REPLAY_TIMEOUT_MS,
+        }
+      );
+      expectTerminalWriteData(replayFallback);
+    });
+  });
+
   it("waits for the first fit frame before writing replay output", async () => {
     const store = createStore();
     const replayChunk = new TextEncoder().encode("cursor addressed replay\n");
@@ -3697,9 +4085,9 @@ describe("XtermHost", () => {
     global.cancelAnimationFrame = originalCancelAnimationFrame;
   });
 
-  it("waits for websocket connection before initial resize sync and replay", async () => {
+  it("waits for websocket connection before initial resize sync and snapshot recovery", async () => {
     const store = createStore();
-    const replayChunk = new TextEncoder().encode("replay after connect\n");
+    const snapshotChunk = new TextEncoder().encode("snapshot after connect\n");
     let connectionStatus: "connecting" | "connected" = "connecting";
     let statusListener: ((status: "connecting" | "connected") => void) | undefined;
     const sendCommand = vi.fn().mockImplementation((op: string) => {
@@ -3707,15 +4095,18 @@ describe("XtermHost", () => {
         return Promise.reject(new Error("WebSocket not connected"));
       }
 
-      if (op === "terminal.replay") {
+      if (op === "terminal.snapshot") {
         return Promise.resolve({
           status: "ok",
           transport: "binary",
           streamId: 401,
-          size: replayChunk.byteLength,
+          size: snapshotChunk.byteLength,
           seq: 200,
-          bytes: replayChunk,
-        });
+          rows: 36,
+          cols: 132,
+          source: "headless",
+          bytes: snapshotChunk,
+        } satisfies TerminalSnapshotPayload);
       }
 
       return Promise.resolve({ status: "ok" });
@@ -3777,9 +4168,215 @@ describe("XtermHost", () => {
 
     await waitFor(() => {
       expectResizeCall(sendCommand, "connect-gated-terminal", 132, 36);
-      expectReplayCall(sendCommand, "connect-gated-terminal", 0);
-      expectTerminalWriteData(replayChunk);
+      expectSnapshotCall(sendCommand, "connect-gated-terminal");
+      expectTerminalWriteData(snapshotChunk);
     });
+    expect(sendCommand.mock.calls.some(([op]) => op === "terminal.replay")).toBe(false);
+    const ops = sendCommand.mock.calls.map(([op]) => op);
+    const resizeIndex = ops.indexOf("terminal.resize");
+    const snapshotIndex = ops.indexOf("terminal.snapshot");
+    expect(resizeIndex).toBeGreaterThanOrEqual(0);
+    expect(snapshotIndex).toBeGreaterThan(resizeIndex);
+
+    global.requestAnimationFrame = originalRequestAnimationFrame;
+    global.cancelAnimationFrame = originalCancelAnimationFrame;
+  });
+
+  it("starts historical recovery after the websocket client becomes available post-mount", async () => {
+    const store = createStore();
+    const snapshotChunk = new TextEncoder().encode("snapshot after client attach\n");
+    let connectionStatus: "connecting" | "connected" = "connecting";
+    let statusListener: ((status: "connecting" | "connected") => void) | undefined;
+    const sendCommand = vi.fn().mockImplementation((op: string) => {
+      if (connectionStatus !== "connected") {
+        return Promise.reject(new Error("WebSocket not connected"));
+      }
+
+      if (op === "terminal.snapshot") {
+        return Promise.resolve({
+          status: "ok",
+          transport: "binary",
+          streamId: 402,
+          size: snapshotChunk.byteLength,
+          seq: 200,
+          rows: 36,
+          cols: 132,
+          source: "headless",
+          bytes: snapshotChunk,
+        } satisfies TerminalSnapshotPayload);
+      }
+
+      return Promise.resolve({ status: "ok" });
+    });
+    const subscribe = vi.fn(() => vi.fn());
+    const onStatus = vi.fn((listener: typeof statusListener) => {
+      statusListener = listener;
+      return vi.fn();
+    });
+    const getStatus = vi.fn(() => connectionStatus);
+    const rafCallbacks: FrameRequestCallback[] = [];
+    const originalRequestAnimationFrame = global.requestAnimationFrame;
+    const originalCancelAnimationFrame = global.cancelAnimationFrame;
+
+    mockTerminal.cols = 132;
+    mockTerminal.rows = 36;
+
+    global.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      rafCallbacks.push(callback);
+      return rafCallbacks.length;
+    }) as typeof requestAnimationFrame;
+    global.cancelAnimationFrame = vi.fn() as typeof cancelAnimationFrame;
+
+    const { rerender } = render(
+      <Provider store={store}>
+        <XtermHost terminalId="late-client-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await act(async () => {
+      const callback = rafCallbacks.shift();
+      callback?.(16);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(sendCommand).not.toHaveBeenCalled();
+
+    await act(async () => {
+      store.set(wsClientAtom, {
+        sendCommand,
+        subscribe,
+        onStatus,
+        getStatus,
+      } as never);
+
+      rerender(
+        <Provider store={store}>
+          <XtermHost terminalId="late-client-terminal" workspaceId="test-workspace" />
+        </Provider>
+      );
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      const callback = rafCallbacks.shift();
+      callback?.(16);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(onStatus).toHaveBeenCalled();
+      expect(typeof statusListener).toBe("function");
+    });
+
+    await act(async () => {
+      connectionStatus = "connected";
+      statusListener?.("connected");
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expectResizeCall(sendCommand, "late-client-terminal", 132, 36);
+      expectSnapshotCall(sendCommand, "late-client-terminal");
+      expectTerminalWriteData(snapshotChunk);
+    });
+    expect(sendCommand.mock.calls.some(([op]) => op === "terminal.replay")).toBe(false);
+    const ops = sendCommand.mock.calls.map(([op]) => op);
+    const resizeIndex = ops.indexOf("terminal.resize");
+    const snapshotIndex = ops.indexOf("terminal.snapshot");
+    expect(resizeIndex).toBeGreaterThanOrEqual(0);
+    expect(snapshotIndex).toBeGreaterThan(resizeIndex);
+
+    global.requestAnimationFrame = originalRequestAnimationFrame;
+    global.cancelAnimationFrame = originalCancelAnimationFrame;
+  });
+
+  it("recovers if the websocket connects during waitForConnected listener installation", async () => {
+    const store = createStore();
+    const snapshotChunk = new TextEncoder().encode("snapshot after connection race\n");
+    let connectionStatus: "connecting" | "connected" = "connecting";
+    let triggerConnectionRace = false;
+    const sendCommand = vi.fn().mockImplementation((op: string) => {
+      if (connectionStatus !== "connected") {
+        return Promise.reject(new Error("WebSocket not connected"));
+      }
+
+      if (op === "terminal.snapshot") {
+        return Promise.resolve({
+          status: "ok",
+          transport: "binary",
+          streamId: 403,
+          size: snapshotChunk.byteLength,
+          seq: 200,
+          rows: 36,
+          cols: 132,
+          source: "headless",
+          bytes: snapshotChunk,
+        } satisfies TerminalSnapshotPayload);
+      }
+
+      return Promise.resolve({ status: "ok" });
+    });
+    const subscribe = vi.fn(() => vi.fn());
+    const onStatus = vi.fn(() => {
+      if (triggerConnectionRace) {
+        connectionStatus = "connected";
+        triggerConnectionRace = false;
+      }
+      return vi.fn();
+    });
+    const getStatus = vi.fn(() => connectionStatus);
+    const rafCallbacks: FrameRequestCallback[] = [];
+    const originalRequestAnimationFrame = global.requestAnimationFrame;
+    const originalCancelAnimationFrame = global.cancelAnimationFrame;
+
+    mockTerminal.cols = 132;
+    mockTerminal.rows = 36;
+
+    global.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      rafCallbacks.push(callback);
+      return rafCallbacks.length;
+    }) as typeof requestAnimationFrame;
+    global.cancelAnimationFrame = vi.fn() as typeof cancelAnimationFrame;
+
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe,
+      onStatus,
+      getStatus,
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="connect-race-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await act(async () => {
+      triggerConnectionRace = true;
+      const callback = rafCallbacks.shift();
+      callback?.(16);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expectResizeCall(sendCommand, "connect-race-terminal", 132, 36);
+      expectSnapshotCall(sendCommand, "connect-race-terminal");
+      expectTerminalWriteData(snapshotChunk);
+    });
+    expect(sendCommand.mock.calls.some(([op]) => op === "terminal.replay")).toBe(false);
+    const ops = sendCommand.mock.calls.map(([op]) => op);
+    const resizeIndex = ops.indexOf("terminal.resize");
+    const snapshotIndex = ops.indexOf("terminal.snapshot");
+    expect(resizeIndex).toBeGreaterThanOrEqual(0);
+    expect(snapshotIndex).toBeGreaterThan(resizeIndex);
 
     global.requestAnimationFrame = originalRequestAnimationFrame;
     global.cancelAnimationFrame = originalCancelAnimationFrame;

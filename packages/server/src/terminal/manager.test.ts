@@ -180,7 +180,7 @@ describe("TerminalManager", () => {
       expect(() => manager.create(spec)).toThrow("Terminal spawn failed");
     });
 
-    it("creates a snapshot buffer for agent terminals only", () => {
+    it("creates a snapshot buffer for shell and agent terminals", () => {
       const shell = manager.create({
         workspaceId: "ws-123",
         kind: "shell",
@@ -194,7 +194,7 @@ describe("TerminalManager", () => {
         cwd: "/home/user",
       });
 
-      expect(manager.get(shell.id)?.snapshotBuffer).toBeUndefined();
+      expect(manager.get(shell.id)?.snapshotBuffer).toBeDefined();
       expect(manager.get(agent.id)?.snapshotBuffer).toBeDefined();
     });
 
@@ -214,6 +214,36 @@ describe("TerminalManager", () => {
           workspaceId: "ws-123",
           kind: "agent",
           argv: ["node", "agent.js"],
+          cwd: "/home/user",
+        });
+
+        expect(terminal.alive).toBe(true);
+        expect(mockPtyHost.spawn).toHaveBeenCalledTimes(1);
+        expect(manager.get(terminal.id)?.snapshotBuffer).toBeUndefined();
+        await expect(manager.snapshot(terminal.id)).resolves.toEqual({
+          status: "unsupported",
+        });
+      } finally {
+        snapshotCtorSpy.mockRestore();
+      }
+    });
+
+    it("degrades gracefully when the shell snapshot buffer fails to initialize", async () => {
+      const snapshotCtorSpy = vi
+        .spyOn(snapshotBufferModule, "HeadlessSnapshotBuffer")
+        .mockImplementation(
+          class MockHeadlessSnapshotBuffer {
+            constructor() {
+              throw new Error("headless init failed");
+            }
+          } as unknown as typeof snapshotBufferModule.HeadlessSnapshotBuffer
+        );
+
+      try {
+        const terminal = manager.create({
+          workspaceId: "ws-123",
+          kind: "shell",
+          argv: ["bash"],
           cwd: "/home/user",
         });
 
@@ -340,6 +370,40 @@ describe("TerminalManager", () => {
       });
     });
 
+    it("keeps shell replay live and marks snapshot unsupported when mirror writes fail", async () => {
+      const spec: TerminalSpec = {
+        workspaceId: "ws-123",
+        kind: "shell",
+        argv: ["bash"],
+        cwd: "/home/user",
+      };
+
+      const terminal = manager.create(spec);
+      const activeTerminal = manager.get(terminal.id);
+      const emittedEvents: Array<Extract<DomainEvent, { type: "terminal.output" }>> = [];
+      eventBus.on("terminal.output", (event) => emittedEvents.push(event));
+
+      vi.spyOn(
+        (activeTerminal!.snapshotBuffer! as unknown as { term: { write: () => void } }).term,
+        "write"
+      ).mockImplementation(() => {
+        throw new Error("snapshot mirror exploded");
+      });
+
+      const onDataCallback = (mockPty.onData as Mock).mock.calls[0][0];
+      onDataCallback("shell live output");
+
+      expect(emittedEvents).toHaveLength(1);
+      expect(manager.replay(terminal.id, 0)).toMatchObject({
+        status: "ok",
+        data: Buffer.from("shell live output"),
+        seq: "shell live output".length,
+      });
+      await expect(manager.snapshot(terminal.id)).resolves.toEqual({
+        status: "unsupported",
+      });
+    });
+
     it("keeps agent snapshots available until delayed exit cleanup runs", async () => {
       vi.useFakeTimers();
 
@@ -364,6 +428,44 @@ describe("TerminalManager", () => {
         await expect(manager.snapshot(terminal.id)).resolves.toMatchObject({
           status: "ok",
           seq: 11,
+        });
+        expect(disposeSpy).not.toHaveBeenCalled();
+
+        await vi.advanceTimersByTimeAsync(1000);
+
+        expect(disposeSpy).toHaveBeenCalledTimes(1);
+        await expect(manager.snapshot(terminal.id)).resolves.toEqual({
+          status: "unsupported",
+        });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("keeps shell snapshots available until delayed exit cleanup runs", async () => {
+      vi.useFakeTimers();
+
+      try {
+        const spec: TerminalSpec = {
+          workspaceId: "ws-123",
+          kind: "shell",
+          argv: ["bash"],
+          cwd: "/home/user",
+        };
+
+        const terminal = manager.create(spec);
+        const activeTerminal = manager.get(terminal.id);
+        const disposeSpy = vi.spyOn(activeTerminal!.snapshotBuffer!, "dispose");
+        const onDataCallback = (mockPty.onData as Mock).mock.calls[0][0];
+        const onExitCallback = (mockPty.onExit as Mock).mock.calls[0][0];
+
+        onDataCallback("shell snapshot");
+        await vi.runOnlyPendingTimersAsync();
+        onExitCallback({ exitCode: 0 });
+
+        await expect(manager.snapshot(terminal.id)).resolves.toMatchObject({
+          status: "ok",
+          seq: "shell snapshot".length,
         });
         expect(disposeSpy).not.toHaveBeenCalled();
 
@@ -456,6 +558,29 @@ describe("TerminalManager", () => {
       const snapshotResizeOrder = snapshotResizeSpy.mock.invocationCallOrder[0];
 
       expect(ptyResizeOrder).toBeLessThan(snapshotResizeOrder);
+    });
+
+    it("keeps shell snapshots renderable after resize and reports the new dimensions", async () => {
+      const terminal = manager.create({
+        workspaceId: "ws-123",
+        kind: "shell",
+        argv: ["bash"],
+        cwd: "/home/user",
+      });
+      const onDataCallback = (mockPty.onData as Mock).mock.calls[0][0];
+
+      manager.resize(terminal.id, 100, 40);
+      onDataCallback("after resize\n");
+
+      await expect(manager.snapshot(terminal.id)).resolves.toMatchObject({
+        status: "ok",
+        cols: 100,
+        rows: 40,
+        seq: "after resize\n".length,
+      });
+      await expect(
+        manager.getRenderedSnapshot(terminal.id, { maxLines: 10, maxChars: 1000 })
+      ).resolves.toBe("after resize");
     });
 
     it("should fail silently when terminal not found", () => {
@@ -553,8 +678,8 @@ describe("TerminalManager", () => {
     it("does not dispose the snapshot buffer before the PTY exit cleanup window", () => {
       const terminal = manager.create({
         workspaceId: "ws-123",
-        kind: "agent",
-        argv: ["node", "agent.js"],
+        kind: "shell",
+        argv: ["bash"],
         cwd: "/home/user",
       });
 
@@ -633,8 +758,8 @@ describe("TerminalManager", () => {
       try {
         const terminal = manager.create({
           workspaceId: "ws-123",
-          kind: "agent",
-          argv: ["node", "agent.js"],
+          kind: "shell",
+          argv: ["bash"],
           cwd: "/home/user",
         });
 
@@ -663,8 +788,8 @@ describe("TerminalManager", () => {
       try {
         const terminal = manager.create({
           workspaceId: "ws-123",
-          kind: "agent",
-          argv: ["node", "agent.js"],
+          kind: "shell",
+          argv: ["bash"],
           cwd: "/home/user",
         });
 
@@ -865,16 +990,22 @@ describe("TerminalManager", () => {
   });
 
   describe("snapshot", () => {
-    it("returns unsupported for shell terminals", async () => {
+    it("returns a binary snapshot for shell terminals", async () => {
       const terminal = manager.create({
         workspaceId: "ws-123",
         kind: "shell",
         argv: ["bash"],
         cwd: "/home/user",
       });
+      const onDataCallback = (mockPty.onData as Mock).mock.calls[0][0];
 
-      await expect(manager.snapshot(terminal.id)).resolves.toEqual({
-        status: "unsupported",
+      onDataCallback("hello from shell\n");
+
+      await expect(manager.snapshot(terminal.id)).resolves.toMatchObject({
+        status: "ok",
+        seq: "hello from shell\n".length,
+        cols: 120,
+        rows: 30,
       });
     });
 
@@ -882,6 +1013,22 @@ describe("TerminalManager", () => {
       await expect(manager.snapshot("nonexistent")).resolves.toEqual({
         status: "unsupported",
       });
+    });
+
+    it("renders a text snapshot for shell terminals", async () => {
+      const terminal = manager.create({
+        workspaceId: "ws-123",
+        kind: "shell",
+        argv: ["bash"],
+        cwd: "/home/user",
+      });
+      const onDataCallback = (mockPty.onData as Mock).mock.calls[0][0];
+
+      onDataCallback("shell \x1b[32moutput\x1b[0m\n");
+
+      await expect(
+        manager.getRenderedSnapshot(terminal.id, { maxLines: 10, maxChars: 1000 })
+      ).resolves.toBe("shell output");
     });
 
     it("renders a text snapshot for agent terminals", async () => {
@@ -900,17 +1047,37 @@ describe("TerminalManager", () => {
       ).resolves.toBe("hello world");
     });
 
-    it("returns an empty rendered snapshot when snapshotting is unsupported", async () => {
-      const terminal = manager.create({
-        workspaceId: "ws-123",
-        kind: "shell",
-        argv: ["bash"],
-        cwd: "/home/user",
-      });
-
+    it("returns an empty rendered snapshot for unknown terminals", async () => {
       await expect(
-        manager.getRenderedSnapshot(terminal.id, { maxLines: 10, maxChars: 1000 })
+        manager.getRenderedSnapshot("nonexistent", { maxLines: 10, maxChars: 1000 })
       ).resolves.toBe("");
+    });
+
+    it("returns an empty rendered snapshot when an existing terminal has no snapshot buffer", async () => {
+      const snapshotCtorSpy = vi
+        .spyOn(snapshotBufferModule, "HeadlessSnapshotBuffer")
+        .mockImplementation(
+          class MockHeadlessSnapshotBuffer {
+            constructor() {
+              throw new Error("headless init failed");
+            }
+          } as unknown as typeof snapshotBufferModule.HeadlessSnapshotBuffer
+        );
+
+      try {
+        const terminal = manager.create({
+          workspaceId: "ws-123",
+          kind: "shell",
+          argv: ["bash"],
+          cwd: "/home/user",
+        });
+
+        await expect(
+          manager.getRenderedSnapshot(terminal.id, { maxLines: 10, maxChars: 1000 })
+        ).resolves.toBe("");
+      } finally {
+        snapshotCtorSpy.mockRestore();
+      }
     });
   });
 
@@ -993,7 +1160,22 @@ describe("TerminalManager", () => {
       expect(manager.getAll()).toHaveLength(0);
     });
 
-    it("disposes snapshot buffers during shutdown", () => {
+    it("disposes shell snapshot buffers during shutdown", () => {
+      const terminal = manager.create({
+        workspaceId: "ws-123",
+        kind: "shell",
+        argv: ["bash"],
+        cwd: "/home/user",
+      });
+
+      const disposeSpy = vi.spyOn(manager.get(terminal.id)!.snapshotBuffer!, "dispose");
+
+      manager.shutdown();
+
+      expect(disposeSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it("disposes agent snapshot buffers during shutdown", () => {
       const terminal = manager.create({
         workspaceId: "ws-123",
         kind: "agent",

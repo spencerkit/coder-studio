@@ -923,13 +923,28 @@ export function XtermHost({
       }
 
       await new Promise<void>((resolve) => {
+        let resolved = false;
+        const resolveConnected = () => {
+          if (resolved) {
+            return;
+          }
+          resolved = true;
+          unsubscribeStatus?.();
+          unsubscribeStatus = null;
+          resolve();
+        };
+
         unsubscribeStatus = wsClient.onStatus((status) => {
           if (status === "connected") {
-            unsubscribeStatus?.();
-            unsubscribeStatus = null;
-            resolve();
+            resolveConnected();
           }
         });
+
+        // Close the getStatus/onStatus race: the socket may connect after the
+        // pre-check above but before the listener is fully installed.
+        if (wsClient.getStatus() === "connected") {
+          resolveConnected();
+        }
       });
     };
 
@@ -1132,14 +1147,6 @@ export function XtermHost({
       coldStartStateRef.current = "in-flight";
       replayCompletedRef.current = false;
 
-      if (terminalKind !== "agent") {
-        if (mode === "initial") {
-          setReplayUiState({ kind: "loading" });
-        }
-        requestReplay(mode === "initial" ? 0 : latestRenderedSeqRef.current);
-        return;
-      }
-
       setReplayUiState({ kind: "loading" });
 
       const snapshotPromise: Promise<SnapshotCommandResult> = wsClient
@@ -1156,7 +1163,12 @@ export function XtermHost({
           return;
         }
 
-        if (result.ok && result.data?.status === "ok") {
+        if (
+          result.ok &&
+          result.data?.status === "ok" &&
+          result.data.bytes &&
+          typeof result.data.seq === "number"
+        ) {
           finishHistoricalLoad(result, {
             successStatus: "ok",
             successBytes: result.data.bytes,

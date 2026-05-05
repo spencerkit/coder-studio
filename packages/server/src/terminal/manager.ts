@@ -138,7 +138,7 @@ export class TerminalManager {
     const ringBuffer = new RingBuffer(RING_BUFFER_SIZE);
     let snapshotBuffer: HeadlessSnapshotBuffer | undefined;
 
-    if (spec.kind === "agent") {
+    if (spec.kind === "shell" || spec.kind === "agent") {
       try {
         snapshotBuffer = new HeadlessSnapshotBuffer({
           cols: spec.cols ?? 120,
@@ -438,7 +438,7 @@ export class TerminalManager {
    */
   async snapshot(terminalId: TerminalId): Promise<SnapshotResult> {
     const terminal = this.terminals.get(terminalId);
-    if (!terminal || terminal.spec.kind !== "agent" || !terminal.snapshotBuffer) {
+    if (!terminal || !terminal.snapshotBuffer) {
       return { status: "unsupported" };
     }
 
