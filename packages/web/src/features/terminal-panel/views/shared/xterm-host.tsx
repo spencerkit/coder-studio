@@ -47,7 +47,12 @@ import {
 import { usePasteDropUpload } from "../../uploads/use-paste-drop-upload";
 import { XtermPlaceholder } from "./xterm-placeholder";
 
-const MOBILE_TOUCH_SCROLL_PX_PER_LINE = 16;
+const MOBILE_TOUCH_SCROLL_FALLBACK_PX_PER_LINE = 16;
+const MOBILE_TOUCH_MOMENTUM_SAMPLE_WINDOW_MS = 80;
+const MOBILE_TOUCH_MOMENTUM_MIN_VELOCITY_PX_PER_MS = 0.12;
+const MOBILE_TOUCH_MOMENTUM_STOP_VELOCITY_PX_PER_MS = 0.02;
+const MOBILE_TOUCH_MOMENTUM_FRICTION_PER_FRAME = 0.92;
+const MOBILE_TOUCH_MOMENTUM_FRAME_MS = 16;
 const TERMINAL_FOCUS_REPORTING_BYTES = new Set(["\x1b[I", "\x1b[O"]);
 
 interface TerminalInputDraftState {
@@ -56,6 +61,13 @@ interface TerminalInputDraftState {
 }
 
 type TouchPointLike = Pick<Touch, "identifier" | "clientY">;
+
+interface TouchScrollSample {
+  clientY: number;
+  at: number;
+}
+
+type TouchScrollDeltaResult = "idle" | "buffered" | "scrolled" | "blocked";
 
 function isReplayGeneratedTerminalResponse(data: string): boolean {
   return /^\x1b\[\d+;\d+R$/.test(data) || /^\x1b\[(?:\?|>)(?:\d+;)*\d*c$/.test(data);
@@ -187,6 +199,22 @@ function findTouchByIdentifier(
   }
 
   return null;
+}
+
+function getTouchScrollPxPerLine(terminal: Terminal, container: HTMLElement): number {
+  if (terminal.rows > 0) {
+    const screenElement = terminal.element?.querySelector(".xterm-screen");
+    const screenHeight =
+      screenElement instanceof HTMLElement
+        ? screenElement.getBoundingClientRect().height
+        : container.getBoundingClientRect().height;
+
+    if (screenHeight > 0) {
+      return screenHeight / terminal.rows;
+    }
+  }
+
+  return MOBILE_TOUCH_SCROLL_FALLBACK_PX_PER_LINE;
 }
 
 /**
@@ -431,10 +459,20 @@ export function XtermHost({
     activeTouchId: number | null;
     lastClientY: number;
     carryPx: number;
+    pxPerLine: number | null;
+    velocityPxPerMs: number;
+    lastMomentumFrameAt: number;
+    momentumFrameId: number | null;
+    samples: TouchScrollSample[];
   }>({
     activeTouchId: null,
     lastClientY: 0,
     carryPx: 0,
+    pxPerLine: null,
+    velocityPxPerMs: 0,
+    lastMomentumFrameAt: 0,
+    momentumFrameId: null,
+    samples: [],
   });
 
   const [replayUiState, setReplayUiState] = useState<TerminalReplayUiState>({ kind: "loading" });
@@ -543,10 +581,121 @@ export function XtermHost({
 
     const state = touchScrollStateRef.current;
 
+    const stopMomentumScroll = () => {
+      if (state.momentumFrameId !== null) {
+        cancelAnimationFrame(state.momentumFrameId);
+        state.momentumFrameId = null;
+      }
+      state.velocityPxPerMs = 0;
+      state.lastMomentumFrameAt = 0;
+    };
+
+    const recordTouchSample = (clientY: number, at: number) => {
+      state.samples.push({ clientY, at });
+      const oldestAllowedAt = at - MOBILE_TOUCH_MOMENTUM_SAMPLE_WINDOW_MS;
+      while (state.samples.length > 0 && state.samples[0]!.at < oldestAllowedAt) {
+        state.samples.shift();
+      }
+    };
+
+    const updateVelocityFromSamples = () => {
+      if (state.samples.length < 2) {
+        state.velocityPxPerMs = 0;
+        return;
+      }
+
+      const firstSample = state.samples[0]!;
+      const lastSample = state.samples[state.samples.length - 1]!;
+      const elapsedMs = lastSample.at - firstSample.at;
+      if (elapsedMs <= 0) {
+        state.velocityPxPerMs = 0;
+        return;
+      }
+
+      state.velocityPxPerMs = (firstSample.clientY - lastSample.clientY) / elapsedMs;
+    };
+
+    const applyTouchScrollDelta = (terminal: Terminal, deltaPx: number): TouchScrollDeltaResult => {
+      const base = terminal.buffer.active.baseY;
+      if (base <= 0) {
+        state.carryPx = 0;
+        return "blocked";
+      }
+
+      state.carryPx += deltaPx;
+      const pxPerLine =
+        state.pxPerLine ?? (state.pxPerLine = getTouchScrollPxPerLine(terminal, container));
+      const scrollLines =
+        state.carryPx > 0
+          ? Math.floor(state.carryPx / pxPerLine)
+          : Math.ceil(state.carryPx / pxPerLine);
+
+      if (scrollLines === 0) {
+        return "buffered";
+      }
+
+      const viewport = terminal.buffer.active.viewportY;
+      const remainingScrollback = base - viewport;
+      const allowedScrollLines =
+        scrollLines > 0
+          ? Math.min(scrollLines, remainingScrollback)
+          : Math.max(scrollLines, -viewport);
+
+      if (allowedScrollLines === 0) {
+        state.carryPx = 0;
+        return "blocked";
+      }
+
+      terminal.scrollLines(allowedScrollLines);
+      state.carryPx -= allowedScrollLines * pxPerLine;
+      return "scrolled";
+    };
+
+    const stepMomentumScroll = (frameAt: number) => {
+      if (state.momentumFrameId === null) {
+        return;
+      }
+
+      const terminal = terminalRef.current;
+      if (!terminal) {
+        stopMomentumScroll();
+        return;
+      }
+
+      const previousFrameAt =
+        state.lastMomentumFrameAt > 0
+          ? state.lastMomentumFrameAt
+          : frameAt - MOBILE_TOUCH_MOMENTUM_FRAME_MS;
+      const elapsedMs = Math.max(1, Math.min(64, frameAt - previousFrameAt));
+      state.lastMomentumFrameAt = frameAt;
+
+      const scrollResult = applyTouchScrollDelta(terminal, state.velocityPxPerMs * elapsedMs);
+      const frameFriction = Math.pow(
+        MOBILE_TOUCH_MOMENTUM_FRICTION_PER_FRAME,
+        elapsedMs / MOBILE_TOUCH_MOMENTUM_FRAME_MS
+      );
+      state.velocityPxPerMs *= frameFriction;
+
+      if (
+        scrollResult === "blocked" ||
+        Math.abs(state.velocityPxPerMs) <= MOBILE_TOUCH_MOMENTUM_STOP_VELOCITY_PX_PER_MS
+      ) {
+        state.carryPx = 0;
+        stopMomentumScroll();
+        state.pxPerLine = null;
+        return;
+      }
+
+      state.momentumFrameId = requestAnimationFrame(stepMomentumScroll);
+    };
+
     const resetTouchState = () => {
+      stopMomentumScroll();
       state.activeTouchId = null;
       state.lastClientY = 0;
       state.carryPx = 0;
+      state.pxPerLine = null;
+      state.samples = [];
     };
 
     const handleTouchStart = (event: TouchEvent) => {
@@ -561,9 +710,15 @@ export function XtermHost({
         return;
       }
 
+      stopMomentumScroll();
       state.activeTouchId = touch.identifier;
       state.lastClientY = touch.clientY;
       state.carryPx = 0;
+      state.pxPerLine = terminalRef.current
+        ? getTouchScrollPxPerLine(terminalRef.current, container)
+        : MOBILE_TOUCH_SCROLL_FALLBACK_PX_PER_LINE;
+      state.samples = [];
+      recordTouchSample(touch.clientY, performance.now());
     };
 
     const handleTouchMove = (event: TouchEvent) => {
@@ -573,46 +728,47 @@ export function XtermHost({
         return;
       }
 
-      const viewport = terminal.buffer.active.viewportY;
       const base = terminal.buffer.active.baseY;
       if (base <= 0) {
         state.lastClientY = touch.clientY;
         state.carryPx = 0;
+        state.samples = [];
+        state.velocityPxPerMs = 0;
         return;
       }
 
       const deltaY = state.lastClientY - touch.clientY;
       state.lastClientY = touch.clientY;
-      state.carryPx += deltaY;
+      recordTouchSample(touch.clientY, performance.now());
+      updateVelocityFromSamples();
 
-      const scrollLines =
-        state.carryPx > 0
-          ? Math.floor(state.carryPx / MOBILE_TOUCH_SCROLL_PX_PER_LINE)
-          : Math.ceil(state.carryPx / MOBILE_TOUCH_SCROLL_PX_PER_LINE);
-
-      if (scrollLines === 0) {
-        return;
+      const scrollResult = applyTouchScrollDelta(terminal, deltaY);
+      if ((scrollResult === "buffered" || scrollResult === "scrolled") && event.cancelable) {
+        event.preventDefault();
       }
-
-      const remainingScrollback = base - viewport;
-      const allowedScrollLines =
-        scrollLines > 0
-          ? Math.min(scrollLines, remainingScrollback)
-          : Math.max(scrollLines, -viewport);
-
-      if (allowedScrollLines === 0) {
-        state.carryPx = 0;
-        return;
-      }
-
-      terminal.scrollLines(allowedScrollLines);
-      state.carryPx -= allowedScrollLines * MOBILE_TOUCH_SCROLL_PX_PER_LINE;
-      event.preventDefault();
     };
 
     const handleTouchEnd = (event: TouchEvent) => {
       if (findTouchByIdentifier(event.changedTouches, state.activeTouchId)) {
-        resetTouchState();
+        const touch = findTouchByIdentifier(event.changedTouches, state.activeTouchId);
+        if (touch) {
+          recordTouchSample(touch.clientY, performance.now());
+          updateVelocityFromSamples();
+        }
+
+        state.activeTouchId = null;
+        state.lastClientY = 0;
+        state.samples = [];
+
+        if (Math.abs(state.velocityPxPerMs) >= MOBILE_TOUCH_MOMENTUM_MIN_VELOCITY_PX_PER_MS) {
+          state.lastMomentumFrameAt = 0;
+          state.momentumFrameId = requestAnimationFrame(stepMomentumScroll);
+          return;
+        }
+
+        state.carryPx = 0;
+        state.pxPerLine = null;
+        state.velocityPxPerMs = 0;
       }
     };
 

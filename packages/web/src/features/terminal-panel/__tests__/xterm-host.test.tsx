@@ -4598,6 +4598,322 @@ describe("XtermHost", () => {
     window.matchMedia = originalMatchMedia;
   });
 
+  it("continues coarse-pointer touch scrolling with momentum after release", () => {
+    const originalMatchMedia = window.matchMedia;
+    const originalRequestAnimationFrame = global.requestAnimationFrame;
+    const originalCancelAnimationFrame = global.cancelAnimationFrame;
+    const nowSpy = vi.spyOn(performance, "now");
+    mockTerminal.rows = 20;
+    mockTerminal.buffer.active.viewportY = 6;
+    mockTerminal.buffer.active.baseY = 80;
+
+    let now = 0;
+    nowSpy.mockImplementation(() => now);
+
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query === "(pointer: coarse)",
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })) as typeof window.matchMedia;
+
+    const rafCallbacks: FrameRequestCallback[] = [];
+    global.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      rafCallbacks.push(callback);
+      return rafCallbacks.length;
+    }) as typeof requestAnimationFrame;
+    global.cancelAnimationFrame = vi.fn() as typeof cancelAnimationFrame;
+
+    const { container } = render(
+      <JotaiProvider>
+        <XtermHost terminalId="touch-momentum-terminal" workspaceId="test-workspace" />
+      </JotaiProvider>
+    );
+
+    const host = container.querySelector(".xterm-host");
+    expect(host).toBeTruthy();
+
+    const dispatchTouchEvent = (
+      type: string,
+      touches: Array<{ identifier: number; clientY: number }>,
+      changedTouches: Array<{ identifier: number; clientY: number }> = touches
+    ) => {
+      const event = new Event(type, { bubbles: true, cancelable: true });
+      Object.defineProperty(event, "touches", { value: touches });
+      Object.defineProperty(event, "changedTouches", { value: changedTouches });
+      host?.dispatchEvent(event);
+    };
+
+    now = 0;
+    dispatchTouchEvent("touchstart", [{ identifier: 1, clientY: 120 }]);
+
+    now = 16;
+    dispatchTouchEvent("touchmove", [{ identifier: 1, clientY: 88 }]);
+
+    now = 32;
+    dispatchTouchEvent("touchmove", [{ identifier: 1, clientY: 56 }]);
+
+    expect(mockTerminal.buffer.active.viewportY).toBe(10);
+
+    now = 32;
+    dispatchTouchEvent("touchend", [], [{ identifier: 1, clientY: 56 }]);
+
+    expect(rafCallbacks.length).toBeGreaterThan(0);
+
+    const firstMomentumFrame = rafCallbacks[rafCallbacks.length - 1];
+    expect(firstMomentumFrame).toBeTypeOf("function");
+
+    now = 48;
+    firstMomentumFrame?.(48);
+
+    expect(mockTerminal.buffer.active.viewportY).toBeGreaterThan(10);
+
+    window.matchMedia = originalMatchMedia;
+    global.requestAnimationFrame = originalRequestAnimationFrame;
+    global.cancelAnimationFrame = originalCancelAnimationFrame;
+  });
+
+  it("stops touch momentum when scrollback hits the bottom edge", () => {
+    const originalMatchMedia = window.matchMedia;
+    const originalRequestAnimationFrame = global.requestAnimationFrame;
+    const originalCancelAnimationFrame = global.cancelAnimationFrame;
+    const nowSpy = vi.spyOn(performance, "now");
+    mockTerminal.rows = 20;
+    mockTerminal.buffer.active.viewportY = 78;
+    mockTerminal.buffer.active.baseY = 80;
+
+    let now = 0;
+    nowSpy.mockImplementation(() => now);
+
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query === "(pointer: coarse)",
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })) as typeof window.matchMedia;
+
+    const rafCallbacks: FrameRequestCallback[] = [];
+    global.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      rafCallbacks.push(callback);
+      return rafCallbacks.length;
+    }) as typeof requestAnimationFrame;
+    global.cancelAnimationFrame = vi.fn() as typeof cancelAnimationFrame;
+
+    const { container } = render(
+      <JotaiProvider>
+        <XtermHost terminalId="touch-momentum-boundary-terminal" workspaceId="test-workspace" />
+      </JotaiProvider>
+    );
+
+    const host = container.querySelector(".xterm-host");
+    expect(host).toBeTruthy();
+
+    const dispatchTouchEvent = (
+      type: string,
+      touches: Array<{ identifier: number; clientY: number }>,
+      changedTouches: Array<{ identifier: number; clientY: number }> = touches
+    ) => {
+      const event = new Event(type, { bubbles: true, cancelable: true });
+      Object.defineProperty(event, "touches", { value: touches });
+      Object.defineProperty(event, "changedTouches", { value: changedTouches });
+      host?.dispatchEvent(event);
+    };
+
+    now = 0;
+    dispatchTouchEvent("touchstart", [{ identifier: 1, clientY: 120 }]);
+
+    now = 16;
+    dispatchTouchEvent("touchmove", [{ identifier: 1, clientY: 88 }]);
+
+    now = 32;
+    dispatchTouchEvent("touchend", [], [{ identifier: 1, clientY: 88 }]);
+
+    const firstMomentumFrame = rafCallbacks[rafCallbacks.length - 1];
+    expect(firstMomentumFrame).toBeTypeOf("function");
+
+    now = 48;
+    firstMomentumFrame?.(48);
+
+    expect(mockTerminal.buffer.active.viewportY).toBe(80);
+    expect(global.cancelAnimationFrame).toHaveBeenCalled();
+
+    window.matchMedia = originalMatchMedia;
+    global.requestAnimationFrame = originalRequestAnimationFrame;
+    global.cancelAnimationFrame = originalCancelAnimationFrame;
+  });
+
+  it("cancels touch momentum when a new touch starts", () => {
+    const originalMatchMedia = window.matchMedia;
+    const originalRequestAnimationFrame = global.requestAnimationFrame;
+    const originalCancelAnimationFrame = global.cancelAnimationFrame;
+    const nowSpy = vi.spyOn(performance, "now");
+    mockTerminal.rows = 20;
+    mockTerminal.buffer.active.viewportY = 6;
+    mockTerminal.buffer.active.baseY = 80;
+
+    let now = 0;
+    nowSpy.mockImplementation(() => now);
+
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query === "(pointer: coarse)",
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })) as typeof window.matchMedia;
+
+    const rafCallbacks: FrameRequestCallback[] = [];
+    global.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      rafCallbacks.push(callback);
+      return rafCallbacks.length;
+    }) as typeof requestAnimationFrame;
+    global.cancelAnimationFrame = vi.fn() as typeof cancelAnimationFrame;
+
+    const { container } = render(
+      <JotaiProvider>
+        <XtermHost terminalId="touch-momentum-cancel-terminal" workspaceId="test-workspace" />
+      </JotaiProvider>
+    );
+
+    const host = container.querySelector(".xterm-host");
+    expect(host).toBeTruthy();
+
+    const dispatchTouchEvent = (
+      type: string,
+      touches: Array<{ identifier: number; clientY: number }>,
+      changedTouches: Array<{ identifier: number; clientY: number }> = touches
+    ) => {
+      const event = new Event(type, { bubbles: true, cancelable: true });
+      Object.defineProperty(event, "touches", { value: touches });
+      Object.defineProperty(event, "changedTouches", { value: changedTouches });
+      host?.dispatchEvent(event);
+    };
+
+    now = 0;
+    dispatchTouchEvent("touchstart", [{ identifier: 1, clientY: 120 }]);
+
+    now = 16;
+    dispatchTouchEvent("touchmove", [{ identifier: 1, clientY: 88 }]);
+
+    now = 32;
+    dispatchTouchEvent("touchend", [], [{ identifier: 1, clientY: 88 }]);
+
+    const firstMomentumFrame = rafCallbacks[rafCallbacks.length - 1];
+    expect(firstMomentumFrame).toBeTypeOf("function");
+
+    dispatchTouchEvent("touchstart", [{ identifier: 2, clientY: 200 }]);
+
+    const viewportBeforeCanceledFrame = mockTerminal.buffer.active.viewportY;
+    now = 48;
+    firstMomentumFrame?.(48);
+
+    expect(mockTerminal.buffer.active.viewportY).toBe(viewportBeforeCanceledFrame);
+    expect(global.cancelAnimationFrame).toHaveBeenCalled();
+
+    window.matchMedia = originalMatchMedia;
+    global.requestAnimationFrame = originalRequestAnimationFrame;
+    global.cancelAnimationFrame = originalCancelAnimationFrame;
+  });
+
+  it("measures touch line height once per gesture and reuses it for momentum", () => {
+    const originalMatchMedia = window.matchMedia;
+    const originalRequestAnimationFrame = global.requestAnimationFrame;
+    const originalCancelAnimationFrame = global.cancelAnimationFrame;
+    const nowSpy = vi.spyOn(performance, "now");
+    mockTerminal.rows = 20;
+    mockTerminal.buffer.active.viewportY = 6;
+    mockTerminal.buffer.active.baseY = 80;
+
+    let now = 0;
+    nowSpy.mockImplementation(() => now);
+
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query === "(pointer: coarse)",
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })) as typeof window.matchMedia;
+
+    const rafCallbacks: FrameRequestCallback[] = [];
+    global.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      rafCallbacks.push(callback);
+      return rafCallbacks.length;
+    }) as typeof requestAnimationFrame;
+    global.cancelAnimationFrame = vi.fn() as typeof cancelAnimationFrame;
+
+    const { container } = render(
+      <JotaiProvider>
+        <XtermHost terminalId="touch-line-height-cache-terminal" workspaceId="test-workspace" />
+      </JotaiProvider>
+    );
+
+    const host = container.querySelector(".xterm-host") as HTMLDivElement | null;
+    expect(host).toBeTruthy();
+
+    const rectSpy = vi.spyOn(host!, "getBoundingClientRect").mockReturnValue({
+      width: 320,
+      height: 160,
+      top: 0,
+      right: 320,
+      bottom: 160,
+      left: 0,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    } as DOMRect);
+    rectSpy.mockClear();
+
+    const dispatchTouchEvent = (
+      type: string,
+      touches: Array<{ identifier: number; clientY: number }>,
+      changedTouches: Array<{ identifier: number; clientY: number }> = touches
+    ) => {
+      const event = new Event(type, { bubbles: true, cancelable: true });
+      Object.defineProperty(event, "touches", { value: touches });
+      Object.defineProperty(event, "changedTouches", { value: changedTouches });
+      host?.dispatchEvent(event);
+    };
+
+    now = 0;
+    dispatchTouchEvent("touchstart", [{ identifier: 1, clientY: 120 }]);
+
+    now = 16;
+    dispatchTouchEvent("touchmove", [{ identifier: 1, clientY: 88 }]);
+
+    now = 32;
+    dispatchTouchEvent("touchmove", [{ identifier: 1, clientY: 56 }]);
+
+    now = 32;
+    dispatchTouchEvent("touchend", [], [{ identifier: 1, clientY: 56 }]);
+
+    const firstMomentumFrame = rafCallbacks[rafCallbacks.length - 1];
+    expect(firstMomentumFrame).toBeTypeOf("function");
+
+    now = 48;
+    firstMomentumFrame?.(48);
+
+    expect(rectSpy).toHaveBeenCalledTimes(1);
+
+    window.matchMedia = originalMatchMedia;
+    global.requestAnimationFrame = originalRequestAnimationFrame;
+    global.cancelAnimationFrame = originalCancelAnimationFrame;
+  });
+
   it("syncs xterm resize events back to the server PTY", async () => {
     const store = createStore();
     const dispatchCommand = vi.fn().mockResolvedValue({ ok: true, data: { status: "ok" } });
