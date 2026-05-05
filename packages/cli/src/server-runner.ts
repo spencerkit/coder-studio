@@ -1,8 +1,8 @@
-import { fileURLToPath } from 'url';
-import type { Server, ServerConfig } from '@coder-studio/server';
-import { readCliConfig } from './config-store.js';
-import { getStaticAssetsDir, hasWebAssets } from './embed.js';
-import { assertSupportedNodeVersion } from './node-version.js';
+import type { Server, ServerConfig } from "@coder-studio/server";
+import { fileURLToPath } from "url";
+import { readCliConfig } from "./config-store.js";
+import { getStaticAssetsDir, hasWebAssets } from "./embed.js";
+import { assertSupportedNodeVersion } from "./node-version.js";
 
 export const buildServerConfig = (): Partial<ServerConfig> => {
   const savedConfig = readCliConfig();
@@ -41,7 +41,7 @@ const isServerEntrypoint = (moduleUrl: string, argvEntry?: string): boolean => {
     return true;
   }
 
-  if (argvEntry.endsWith('ProcessContainerFork.js')) {
+  if (argvEntry.endsWith("ProcessContainerFork.js")) {
     return true;
   }
 
@@ -50,10 +50,7 @@ const isServerEntrypoint = (moduleUrl: string, argvEntry?: string): boolean => {
   return entryScript === modulePath;
 };
 
-export const runServerEntrypoint = async (
-  moduleUrl: string,
-  argvEntry?: string
-): Promise<void> => {
+export const runServerEntrypoint = async (moduleUrl: string, argvEntry?: string): Promise<void> => {
   if (!isServerEntrypoint(moduleUrl, argvEntry)) {
     return;
   }
@@ -63,12 +60,12 @@ export const runServerEntrypoint = async (
 
 export const startServer = async (): Promise<Server> => {
   assertSupportedNodeVersion();
-  const { createServer } = await import('@coder-studio/server');
+  const { createServer } = await import("@coder-studio/server");
   const server = await createServer(buildServerConfig());
   const shutdown = createShutdownHandler(server);
 
-  process.on('SIGINT', shutdown);
-  process.on('SIGTERM', shutdown);
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
 
   return server;
 };

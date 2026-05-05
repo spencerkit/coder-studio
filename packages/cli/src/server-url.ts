@@ -1,11 +1,11 @@
-import type { ServerStatus } from './server-control.js';
+import type { ServerStatus } from "./server-control.js";
 
 function isWildcardHost(host: string): boolean {
-  return host === '0.0.0.0' || host === '::' || host === '::0';
+  return host === "0.0.0.0" || host === "::" || host === "::0";
 }
 
 function formatUrlHost(host: string): string {
-  return host.includes(':') && !host.startsWith('[') ? `[${host}]` : host;
+  return host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
 }
 
 export function getListenIp(status: ServerStatus): string | null {
@@ -26,8 +26,8 @@ export function getBrowserUrl(status: ServerStatus): string | null {
   }
 
   const host =
-    status.host === null || status.host === 'localhost' || isWildcardHost(status.host)
-      ? '127.0.0.1'
+    status.host === null || status.host === "localhost" || isWildcardHost(status.host)
+      ? "127.0.0.1"
       : formatUrlHost(status.host);
 
   return `http://${host}:${status.port}`;

@@ -2,9 +2,9 @@
  * File copy utilities for build scripts
  */
 
-import { copyFile, mkdir, cp, stat, access } from 'fs/promises';
-import { dirname, resolve } from 'path';
-import { fileURLToPath } from 'url';
+import { access, copyFile, cp, mkdir, stat } from "fs/promises";
+import { dirname, resolve } from "path";
+import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -19,10 +19,7 @@ export async function ensureDir(dir: string): Promise<void> {
 /**
  * Copy a single file
  */
-export async function copy(
-  src: string,
-  dest: string
-): Promise<void> {
+export async function copy(src: string, dest: string): Promise<void> {
   await ensureDir(dirname(dest));
   await copyFile(src, dest);
 }
@@ -30,10 +27,7 @@ export async function copy(
 /**
  * Copy a directory recursively
  */
-export async function copyDir(
-  src: string,
-  dest: string
-): Promise<void> {
+export async function copyDir(src: string, dest: string): Promise<void> {
   await ensureDir(dest);
   await cp(src, dest, { recursive: true });
 }

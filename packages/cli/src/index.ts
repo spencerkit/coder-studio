@@ -2,4 +2,4 @@
  * CLI Package Entry Point
  */
 
-export { embedWebAssets, hasWebAssets, getStaticAssetsDir } from './embed.js';
+export { embedWebAssets, getStaticAssetsDir, hasWebAssets } from "./embed.js";

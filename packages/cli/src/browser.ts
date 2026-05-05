@@ -1,13 +1,13 @@
-import { spawn } from 'node:child_process';
+import { spawn } from "node:child_process";
 
 function getOpenCommand(url: string): { command: string; args: string[] } {
   switch (process.platform) {
-    case 'darwin':
-      return { command: 'open', args: [url] };
-    case 'win32':
-      return { command: 'cmd', args: ['/c', 'start', '', url] };
+    case "darwin":
+      return { command: "open", args: [url] };
+    case "win32":
+      return { command: "cmd", args: ["/c", "start", "", url] };
     default:
-      return { command: 'xdg-open', args: [url] };
+      return { command: "xdg-open", args: [url] };
   }
 }
 
@@ -17,11 +17,11 @@ export async function openBrowser(url: string): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const child = spawn(command, args, {
       detached: true,
-      stdio: 'ignore',
+      stdio: "ignore",
     });
 
-    child.once('error', reject);
-    child.once('spawn', () => {
+    child.once("error", reject);
+    child.once("spawn", () => {
       child.unref();
       resolve();
     });
