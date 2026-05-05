@@ -1,26 +1,26 @@
-import { mkdirSync, rmSync } from 'node:fs';
-import { dirname } from 'node:path';
-import { closeDatabase, openDatabase } from '../../packages/server/src/storage/db.ts';
+import { mkdirSync, rmSync } from "node:fs";
+import { dirname } from "node:path";
+import { closeDatabase, openDatabase } from "../../packages/server/src/storage/db.ts";
 
-const WORKSPACE_ID = 'ws-hydrate-e2e';
-const INTERRUPTED_SESSION_ID = 'sess-hydrate-interrupted';
-const UNAVAILABLE_SESSION_ID = 'sess-hydrate-unavailable';
-const INTERRUPTED_TERMINAL_ID = 'term-hydrate-interrupted';
-const UNAVAILABLE_TERMINAL_ID = 'term-hydrate-unavailable';
+const WORKSPACE_ID = "ws-hydrate-e2e";
+const INTERRUPTED_SESSION_ID = "sess-hydrate-interrupted";
+const UNAVAILABLE_SESSION_ID = "sess-hydrate-unavailable";
+const INTERRUPTED_TERMINAL_ID = "term-hydrate-interrupted";
+const UNAVAILABLE_TERMINAL_ID = "term-hydrate-unavailable";
 const HYDRATED_PANE_LAYOUT = {
-  id: 'root',
-  type: 'split',
-  direction: 'horizontal',
+  id: "root",
+  type: "split",
+  direction: "horizontal",
   children: [
-    { id: 'left', type: 'leaf', sessionId: INTERRUPTED_SESSION_ID },
-    { id: 'right', type: 'leaf', sessionId: UNAVAILABLE_SESSION_ID },
+    { id: "left", type: "leaf", sessionId: INTERRUPTED_SESSION_ID },
+    { id: "right", type: "leaf", sessionId: UNAVAILABLE_SESSION_ID },
   ],
 };
 
 const [, , dbPath, workspacePath] = process.argv;
 
 if (!dbPath || !workspacePath) {
-  throw new Error('Usage: tsx seed-hydrate-refresh-db.ts <db-path> <workspace-path>');
+  throw new Error("Usage: tsx seed-hydrate-refresh-db.ts <db-path> <workspace-path>");
 }
 
 mkdirSync(dirname(dbPath), { recursive: true });
@@ -36,7 +36,7 @@ try {
   ).run(
     WORKSPACE_ID,
     workspacePath,
-    'native',
+    "native",
     null,
     now,
     now,
@@ -57,11 +57,11 @@ try {
   insertTerminal.run(
     INTERRUPTED_TERMINAL_ID,
     WORKSPACE_ID,
-    'agent',
+    "agent",
     workspacePath,
-    '[]',
+    "[]",
     null,
-    'Claude',
+    "Claude",
     120,
     30,
     now,
@@ -72,11 +72,11 @@ try {
   insertTerminal.run(
     UNAVAILABLE_TERMINAL_ID,
     WORKSPACE_ID,
-    'agent',
+    "agent",
     workspacePath,
-    '[]',
+    "[]",
     null,
-    'Codex',
+    "Codex",
     120,
     30,
     now,
@@ -106,32 +106,32 @@ try {
     INTERRUPTED_SESSION_ID,
     WORKSPACE_ID,
     INTERRUPTED_TERMINAL_ID,
-    'claude',
-    'full',
-    'running',
+    "claude",
+    "full",
+    "running",
     now,
     null,
     now,
     null,
-    'Orphaned before restart',
+    "Orphaned before restart",
     0,
-    'Resume me'
+    "Resume me"
   );
 
   insertSession.run(
     UNAVAILABLE_SESSION_ID,
     WORKSPACE_ID,
     UNAVAILABLE_TERMINAL_ID,
-    'codex',
-    'full',
-    'running',
+    "codex",
+    "full",
+    "running",
     now,
     null,
     now,
     null,
-    'Terminal missing after restart',
+    "Terminal missing after restart",
     0,
-    'Unavailable'
+    "Unavailable"
   );
 
   console.log(

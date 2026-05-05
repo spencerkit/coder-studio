@@ -12,9 +12,7 @@
       "types": "./dist/esm/index.d.mts"
     }
   },
-  "files": [
-    "dist"
-  ],
+  "files": ["dist"],
   "scripts": {
     "build": "tsx ../../scripts/build-cli.ts",
     "dev": "tsx ../../scripts/dev-server.ts",
@@ -51,13 +49,7 @@
   "engines": {
     "node": ">=24.0.0"
   },
-  "keywords": [
-    "cli",
-    "coder-studio",
-    "agent",
-    "development",
-    "tools"
-  ],
+  "keywords": ["cli", "coder-studio", "agent", "development", "tools"],
   "author": "Coder Studio",
   "license": "MIT",
   "repository": {
