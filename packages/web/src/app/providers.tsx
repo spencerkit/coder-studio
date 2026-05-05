@@ -5,44 +5,51 @@
  * Manages connection lifecycle and maps WS events to Jotai atoms.
  */
 
-import { useEffect, useRef } from 'react';
-import { useAtom, useAtomValue, useSetAtom, useStore } from 'jotai';
+import type {
+  GitBranch,
+  GitStatus,
+  Session,
+  Supervisor,
+  SupervisorCycle,
+  Workspace,
+} from "@coder-studio/core";
+import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
+import type { Store } from "jotai/vanilla";
+import { useEffect, useRef } from "react";
 import {
-  wsClientAtom,
-  connectionStatusAtom,
-  connectionErrorAtom,
-  serverInfoAtom,
   authEnabledAtom,
-  reconnectAttemptCountAtom,
-  lastReconnectAttemptAtom,
+  connectionErrorAtom,
+  connectionStatusAtom,
+  dispatchCommandAtom,
   isWriterAtom,
-  workspacesAtom,
+  lastReconnectAttemptAtom,
+  reconnectAttemptCountAtom,
+  serverInfoAtom,
+  sessionsAtom,
   workspaceOrderAtom,
+  workspacesAtom,
   workspacesLoadErrorAtom,
   workspacesLoadStateAtom,
-  sessionsAtom,
-  dispatchCommandAtom,
-} from '../atoms';
-import type { DispatchCommand } from '../atoms/connection';
-import { authenticatedAtom } from '../atoms/app-ui';
+  wsClientAtom,
+} from "../atoms";
+import { authenticatedAtom } from "../atoms/app-ui";
+import type { DispatchCommand } from "../atoms/connection";
+import {
+  appendSessionOutputAtom,
+  clearSessionOutputAtom,
+  useSessionNotifications,
+} from "../features/notifications";
+import { stripAnsiChunk } from "../features/notifications/format";
+import { supervisorCyclesAtom, supervisorsAtom } from "../features/supervisor/atoms";
+import { terminalMetaAtomFamily } from "../features/terminal-panel/atoms";
 import {
   editorRefreshTokenAtomFamily,
   fileTreeStaleAtomFamily,
   gitBranchListAtomFamily,
   gitStateAtomFamily,
-} from '../features/workspace/atoms';
-import { terminalMetaAtomFamily } from '../features/terminal-panel/atoms';
-import { WsClient, resolveWsUrl } from '../ws';
-import type { EventListener, ConnectionStatus, TerminalBinaryPayload } from '../ws';
-import {
-  useSessionNotifications,
-  appendSessionOutputAtom,
-  clearSessionOutputAtom,
-} from '../features/notifications';
-import { stripAnsiChunk } from '../features/notifications/format';
-import { supervisorsAtom, supervisorCyclesAtom } from '../features/supervisor/atoms';
-import type { GitBranch, Supervisor, SupervisorCycle } from '@coder-studio/core';
-import type { Workspace, Session, GitStatus } from '@coder-studio/core';
+} from "../features/workspace/atoms";
+import type { ConnectionStatus, EventListener, TerminalBinaryPayload } from "../ws";
+import { resolveWsUrl, WsClient } from "../ws";
 
 /**
  * Module-level WebSocket client singleton.
@@ -68,7 +75,7 @@ const DEFAULT_REFRESH_HINT: WorkspaceRefreshHint = {
 };
 
 function shouldMarkTreeStaleForFsReason(reason?: string): boolean {
-  return reason === 'fs_change';
+  return reason === "fs_change";
 }
 
 export function resetAppProvidersSingletonsForTests() {
@@ -93,7 +100,10 @@ function mergeRefreshHints(
   };
 }
 
-function parseWorkspaceRefreshHint(topic: string, payload: unknown): {
+function parseWorkspaceRefreshHint(
+  topic: string,
+  payload: unknown
+): {
   workspaceId: string;
   hint: WorkspaceRefreshHint;
 } | null {
@@ -105,7 +115,7 @@ function parseWorkspaceRefreshHint(topic: string, payload: unknown): {
   const workspaceId = match[1]!;
   const subtopic = match[2]!;
 
-  if (subtopic === 'fs.dirty') {
+  if (subtopic === "fs.dirty") {
     const data = (payload ?? {}) as { reason?: string };
     return {
       workspaceId,
@@ -113,7 +123,7 @@ function parseWorkspaceRefreshHint(topic: string, payload: unknown): {
         refreshGit: true,
         refreshBranches: false,
         markTreeStale: shouldMarkTreeStaleForFsReason(data.reason),
-        refreshEditorBuffers: data.reason === 'fs_change' || data.reason === 'file_content',
+        refreshEditorBuffers: data.reason === "fs_change" || data.reason === "file_content",
       },
     };
   }
@@ -147,16 +157,16 @@ function clearTerminalOutputStreamState(terminalId: string): void {
 function decodeTerminalOutputBytes(terminalId: string, chunk: Uint8Array): string {
   let decoder = sessionOutputDecoders.get(terminalId);
   if (!decoder) {
-    decoder = new TextDecoder('utf-8', { fatal: false });
+    decoder = new TextDecoder("utf-8", { fatal: false });
     sessionOutputDecoders.set(terminalId, decoder);
   }
 
   const decoded = decoder.decode(chunk, { stream: true });
   if (!decoded) {
-    return '';
+    return "";
   }
 
-  const { cleaned, carry } = stripAnsiChunk(decoded, sessionOutputAnsiCarry.get(terminalId) ?? '');
+  const { cleaned, carry } = stripAnsiChunk(decoded, sessionOutputAnsiCarry.get(terminalId) ?? "");
   if (carry) {
     sessionOutputAnsiCarry.set(terminalId, carry);
   } else {
@@ -208,12 +218,12 @@ export function AppProviders({ children }: AppProvidersProps) {
 
   // Initialize theme from localStorage
   useEffect(() => {
-    const savedTheme = localStorage.getItem('ui.theme');
+    const savedTheme = localStorage.getItem("ui.theme");
     if (savedTheme) {
       try {
         const theme = JSON.parse(savedTheme);
-        if (theme === 'light' || theme === 'dark') {
-          document.documentElement.setAttribute('data-theme', theme);
+        if (theme === "light" || theme === "dark") {
+          document.documentElement.setAttribute("data-theme", theme);
         }
       } catch {
         // Ignore parse errors
@@ -224,7 +234,7 @@ export function AppProviders({ children }: AppProvidersProps) {
   useEffect(() => {
     const loadAuthStatus = async () => {
       try {
-        const response = await fetch('/auth/status');
+        const response = await fetch("/auth/status");
         const data = await response.json();
         setAuthEnabled(Boolean(data.authEnabled));
         store.set(authenticatedAtom, Boolean(data.authenticated) || data.authEnabled === false);
@@ -248,13 +258,13 @@ export function AppProviders({ children }: AppProvidersProps) {
       }
 
       if (globalWsClient) {
-        globalWsClient.disconnect('auth_required');
+        globalWsClient.disconnect("auth_required");
         globalWsClient = null;
       }
 
       wsClientRef.current = null;
       setWsClient(null);
-      setConnectionStatus('connecting');
+      setConnectionStatus("connecting");
       setConnectionError(null);
       setServerInfo(null);
       setReconnectCount(0);
@@ -268,31 +278,33 @@ export function AppProviders({ children }: AppProvidersProps) {
       setConnectionStatus(status);
 
       // Track reconnect attempts
-      if (status === 'reconnecting') {
+      if (status === "reconnecting") {
         setReconnectCount((count) => count + 1);
         setLastReconnect(Date.now());
       }
 
       // Reset writer status on disconnect
-      if (status === 'disconnected' || status === 'rejected') {
+      if (status === "disconnected" || status === "rejected") {
         setIsWriter(false);
       }
     };
 
     const refreshGitState = (workspaceId: string) => {
-      dispatchRef.current<GitStatus>('git.status', { workspaceId })
+      dispatchRef
+        .current<GitStatus>("git.status", { workspaceId })
         .then((result) => {
           if (result.ok && result.data) {
             store.set(gitStateAtomFamily(workspaceId), result.data);
           }
         })
         .catch((error) => {
-          console.error('[Git Status] git.status command threw error:', error);
+          console.error("[Git Status] git.status command threw error:", error);
         });
     };
 
     const refreshBranchState = (workspaceId: string) => {
-      dispatchRef.current<{ current: string; branches: GitBranch[] }>('git.branches', { workspaceId })
+      dispatchRef
+        .current<{ current: string; branches: GitBranch[] }>("git.branches", { workspaceId })
         .then((result) => {
           if (result.ok && result.data) {
             store.set(gitBranchListAtomFamily(workspaceId), {
@@ -310,7 +322,7 @@ export function AppProviders({ children }: AppProvidersProps) {
           }));
         })
         .catch((error) => {
-          console.error('[Git Branches] git.branches command threw error:', error);
+          console.error("[Git Branches] git.branches command threw error:", error);
         });
     };
 
@@ -328,8 +340,7 @@ export function AppProviders({ children }: AppProvidersProps) {
 
       const timer = setTimeout(() => {
         refreshTimersRef.current.delete(workspaceId);
-        const queuedHint =
-          refreshHintsRef.current.get(workspaceId) ?? DEFAULT_REFRESH_HINT;
+        const queuedHint = refreshHintsRef.current.get(workspaceId) ?? DEFAULT_REFRESH_HINT;
         refreshHintsRef.current.delete(workspaceId);
 
         if (queuedHint.markTreeStale) {
@@ -365,8 +376,8 @@ export function AppProviders({ children }: AppProvidersProps) {
 
     // Subscribe to all topics we care about
     const topics = [
-      'connection.*',          // Connection-level events
-      'workspace.*',           // All workspace events (glob pattern)
+      "connection.*", // Connection-level events
+      "workspace.*", // All workspace events (glob pattern)
     ];
 
     // Reuse existing WebSocket client if available (StrictMode safety)
@@ -386,26 +397,26 @@ export function AppProviders({ children }: AppProvidersProps) {
       const unsubscribeStatus = globalWsClient.onStatus(handleStatusChange);
       const unsubscribeEvents = globalWsClient.subscribe(topics, handleEvent);
 
-      if (status === 'disconnected' || status === 'reconnecting') {
-        globalWsClient.recoverConnection('manual_retry');
+      if (status === "disconnected" || status === "reconnecting") {
+        globalWsClient.recoverConnection("manual_retry");
       }
 
       const handleVisibilityChange = () => {
-        if (document.visibilityState === 'visible') {
-          wsClientRef.current?.recoverConnection('visibility_resume');
+        if (document.visibilityState === "visible") {
+          wsClientRef.current?.recoverConnection("visibility_resume");
         }
       };
 
       const handleOnline = () => {
-        wsClientRef.current?.recoverConnection('network_online');
+        wsClientRef.current?.recoverConnection("network_online");
       };
 
-      document.addEventListener('visibilitychange', handleVisibilityChange);
-      window.addEventListener('online', handleOnline);
+      document.addEventListener("visibilitychange", handleVisibilityChange);
+      window.addEventListener("online", handleOnline);
 
       return () => {
-        document.removeEventListener('visibilitychange', handleVisibilityChange);
-        window.removeEventListener('online', handleOnline);
+        document.removeEventListener("visibilitychange", handleVisibilityChange);
+        window.removeEventListener("online", handleOnline);
         unsubscribeStatus();
         unsubscribeEvents();
         refreshTimersRef.current.forEach((timer) => clearTimeout(timer));
@@ -416,7 +427,7 @@ export function AppProviders({ children }: AppProvidersProps) {
         if (globalWsClient) {
           pendingDisconnectTimer = setTimeout(() => {
             if (globalWsClient) {
-              globalWsClient.disconnect('app_unmount');
+              globalWsClient.disconnect("app_unmount");
               globalWsClient = null;
             }
             pendingDisconnectTimer = null;
@@ -439,27 +450,27 @@ export function AppProviders({ children }: AppProvidersProps) {
 
     // Connect to server
     client.connect().catch((err) => {
-      console.error('Failed to connect WebSocket:', err);
-      setConnectionError(err.message || 'Connection failed');
+      console.error("Failed to connect WebSocket:", err);
+      setConnectionError(err.message || "Connection failed");
     });
 
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        wsClientRef.current?.recoverConnection('visibility_resume');
+      if (document.visibilityState === "visible") {
+        wsClientRef.current?.recoverConnection("visibility_resume");
       }
     };
 
     const handleOnline = () => {
-      wsClientRef.current?.recoverConnection('network_online');
+      wsClientRef.current?.recoverConnection("network_online");
     };
 
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('online', handleOnline);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("online", handleOnline);
 
     // Cleanup on unmount
     return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('online', handleOnline);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("online", handleOnline);
       unsubscribeStatus();
       unsubscribeEvents();
       refreshTimersRef.current.forEach((timer) => clearTimeout(timer));
@@ -469,7 +480,7 @@ export function AppProviders({ children }: AppProvidersProps) {
       // Deferred disconnect: wait 50ms to see if StrictMode remounts
       pendingDisconnectTimer = setTimeout(() => {
         if (globalWsClient) {
-          globalWsClient.disconnect('app_unmount');
+          globalWsClient.disconnect("app_unmount");
           globalWsClient = null;
         }
         pendingDisconnectTimer = null;
@@ -499,16 +510,12 @@ export function AppProviders({ children }: AppProvidersProps) {
 /**
  * Route incoming WebSocket events to appropriate Jotai atoms
  */
-export function routeEventToAtom(
-  topic: string,
-  payload: unknown,
-  store: ReturnType<typeof useStore>
-): void {
+export function routeEventToAtom(topic: string, payload: unknown, store: Store): void {
   // Parse topic to determine event type
   // Topic format: workspace.{id}.session.{sessionId}.state
   // or: connection.ready
 
-  if (topic === 'connection.ready') {
+  if (topic === "connection.ready") {
     // Server metadata on connect
     const data = payload as { version: string; serverInstanceId: string; isWriter: boolean };
     store.set(serverInfoAtom, {
@@ -520,13 +527,13 @@ export function routeEventToAtom(
     return;
   }
 
-  if (topic === 'connection.status') {
+  if (topic === "connection.status") {
     // Connection-level status event
     const data = payload as { status: string; message?: string; authEnabled?: boolean };
-    if (data.status === 'connected' && data.authEnabled === false) {
+    if (data.status === "connected" && data.authEnabled === false) {
       store.set(authenticatedAtom, true);
     }
-    if (data.status === 'error' && data.message) {
+    if (data.status === "error" && data.message) {
       store.set(connectionErrorAtom, data.message);
     }
     return;
@@ -539,7 +546,7 @@ export function routeEventToAtom(
     const subtopic = workspaceMatch[2]!;
 
     // workspace.{id}.meta - workspace metadata update
-    if (subtopic === 'meta') {
+    if (subtopic === "meta") {
       const patch = payload as Partial<Workspace>;
       const existing = store.get(workspacesAtom)[workspaceId];
       const shouldAcceptWorkspace = Boolean(existing || patch.path);
@@ -562,13 +569,13 @@ export function routeEventToAtom(
         }
         return [...prev, workspaceId];
       });
-      store.set(workspacesLoadStateAtom, 'ready');
+      store.set(workspacesLoadStateAtom, "ready");
       store.set(workspacesLoadErrorAtom, null);
       return;
     }
 
     // workspace.{id}.fs.dirty - filesystem dirty state
-    if (subtopic === 'fs.dirty') {
+    if (subtopic === "fs.dirty") {
       const data = (payload ?? {}) as { reason?: string };
       if (shouldMarkTreeStaleForFsReason(data.reason)) {
         const atom = fileTreeStaleAtomFamily(workspaceId);
@@ -578,7 +585,7 @@ export function routeEventToAtom(
     }
 
     // workspace.{id}.git.state - git state changed notification
-    if (subtopic === 'git.state') {
+    if (subtopic === "git.state") {
       return;
     }
 
@@ -588,9 +595,9 @@ export function routeEventToAtom(
       const sessionId = sessionMatch[1]!;
       const sessionSubtopic = sessionMatch[2]!;
 
-      if (sessionSubtopic === 'lifecycle') {
+      if (sessionSubtopic === "lifecycle") {
         const data = payload as { event?: string };
-        if (data.event === 'removed') {
+        if (data.event === "removed") {
           const removedSession = store.get(sessionsAtom)[sessionId];
           if (removedSession?.terminalId) {
             clearTerminalOutputStreamState(removedSession.terminalId);
@@ -610,7 +617,7 @@ export function routeEventToAtom(
       }
 
       // workspace.{id}.session.{sessionId}.state
-      if (sessionSubtopic === 'state') {
+      if (sessionSubtopic === "state") {
         const session = payload as Session;
         store.set(sessionsAtom, (prev: Record<string, Session>) => ({
           ...prev,
@@ -620,7 +627,7 @@ export function routeEventToAtom(
       }
 
       // workspace.{id}.session.{sessionId}.progress
-      if (sessionSubtopic === 'progress') {
+      if (sessionSubtopic === "progress") {
         // Progress updates can be handled separately if needed
         // For now, we'll just log them
         console.log(`Session ${sessionId} progress:`, payload);
@@ -628,9 +635,9 @@ export function routeEventToAtom(
       }
 
       // workspace.{id}.session.{sessionId}.supervisor.state
-      if (sessionSubtopic === 'supervisor.state') {
+      if (sessionSubtopic === "supervisor.state") {
         const data = payload as { supervisor?: Supervisor; supervisorId?: string; event: string };
-        if (data.event === 'deleted' && data.supervisorId) {
+        if (data.event === "deleted" && data.supervisorId) {
           store.set(supervisorsAtom, (prev: Map<string, Supervisor>) => {
             const next = new Map(prev);
             // Find and remove by supervisor ID
@@ -665,7 +672,7 @@ export function routeEventToAtom(
       }
 
       // workspace.{id}.session.{sessionId}.supervisor.cycle
-      if (sessionSubtopic === 'supervisor.cycle') {
+      if (sessionSubtopic === "supervisor.cycle") {
         const data = payload as { cycle: SupervisorCycle; event: string };
         const supervisorId = data.cycle.supervisorId;
         store.set(supervisorCyclesAtom, (prev: Map<string, SupervisorCycle[]>) => {
@@ -686,14 +693,14 @@ export function routeEventToAtom(
       const terminalSubtopic = terminalMatch[2]!;
 
       // workspace.{id}.terminal.{terminalId}.created
-      if (terminalSubtopic === 'created') {
+      if (terminalSubtopic === "created") {
         const data = payload as { id: string; kind: string; title?: string; cwd?: string };
         clearTerminalOutputStreamState(terminalId);
         const atom = terminalMetaAtomFamily(terminalId);
         store.set(atom, {
           id: data.id,
           workspaceId,
-          kind: data.kind as 'agent' | 'shell',
+          kind: data.kind as "agent" | "shell",
           alive: true,
           title: data.title,
         });
@@ -701,7 +708,7 @@ export function routeEventToAtom(
       }
 
       // workspace.{id}.terminal.{terminalId}.output
-      if (terminalSubtopic === 'output') {
+      if (terminalSubtopic === "output") {
         // Terminal panels render output directly into xterm.js. We skim a
         // copy here only when the terminal is bound to a known *agent* session,
         // so the notification engine can include a tail summary in its body.
@@ -726,8 +733,8 @@ export function routeEventToAtom(
         return;
       }
 
-     // workspace.{id}.terminal.{terminalId}.exit
-     if (terminalSubtopic === 'exit') {
+      // workspace.{id}.terminal.{terminalId}.exit
+      if (terminalSubtopic === "exit") {
         const data = payload as { code: number };
         const atom = terminalMetaAtomFamily(terminalId);
         const current = store.get(atom);
