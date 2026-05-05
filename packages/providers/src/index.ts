@@ -1,27 +1,25 @@
 // Provider definitions
-export { claudeDefinition } from './claude/definition.js';
-export { codexDefinition } from './codex/definition.js';
-
-// Provider registry
-export {
-  providerRegistry,
-  getProviderById,
-  isValidProviderId,
-  getAllProviderIds,
-  getProvidersByCapability,
-} from './registry.js';
 
 // Claude-specific exports
-export { claudeConfigSchema, type ClaudeConfig } from './claude/config-schema.js';
-
+export { type ClaudeConfig, claudeConfigSchema } from "./claude/config-schema.js";
+export { claudeDefinition } from "./claude/definition.js";
 // Codex-specific exports
-export { codexConfigSchema, type CodexConfig } from './codex/config-schema.js';
+export { type CodexConfig, codexConfigSchema } from "./codex/config-schema.js";
+export { codexDefinition } from "./codex/definition.js";
 export {
-  extractSessionId,
-  detectIdlePrompt,
-  isValidSessionId,
   detectCompletion,
-  sessionIdPatterns,
-  idlePromptPatterns,
+  detectIdlePrompt,
+  extractSessionId,
   idleDebounceMs,
-} from './codex/stdout-heuristics.js';
+  idlePromptPatterns,
+  isValidSessionId,
+  sessionIdPatterns,
+} from "./codex/stdout-heuristics.js";
+// Provider registry
+export {
+  getAllProviderIds,
+  getProviderById,
+  getProvidersByCapability,
+  isValidProviderId,
+  providerRegistry,
+} from "./registry.js";

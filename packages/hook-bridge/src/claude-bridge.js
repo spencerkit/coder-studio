@@ -7,23 +7,22 @@
  * CRITICAL: Zero external dependencies - pure Node.js
  */
 
-const fs = require('fs');
-const path = require('path');
-const http = require('http');
+const fs = require("fs");
+const path = require("path");
+const http = require("http");
 
 const RUNTIME_DIR =
   process.env.CODER_STUDIO_RUNTIME_DIR ||
-  path.join(process.env.HOME || process.env.USERPROFILE, '.coder-studio');
+  path.join(process.env.HOME || process.env.USERPROFILE, ".coder-studio");
 const RUNTIME_JSON_PATH =
-  process.env.CODER_STUDIO_RUNTIME_JSON_PATH ||
-  path.join(RUNTIME_DIR, 'runtime.json');
+  process.env.CODER_STUDIO_RUNTIME_JSON_PATH || path.join(RUNTIME_DIR, "runtime.json");
 
 /**
  * Read runtime configuration
  */
 function readRuntimeConfig() {
   try {
-    const content = fs.readFileSync(RUNTIME_JSON_PATH, 'utf-8');
+    const content = fs.readFileSync(RUNTIME_JSON_PATH, "utf-8");
     return JSON.parse(content);
   } catch (_err) {
     // Silently fail - server may not be running
@@ -38,12 +37,12 @@ async function readStdinPayload() {
   return new Promise((resolve, reject) => {
     const chunks = [];
 
-    process.stdin.on('data', (chunk) => {
+    process.stdin.on("data", (chunk) => {
       chunks.push(chunk);
     });
 
-    process.stdin.on('end', () => {
-      const content = Buffer.concat(chunks).toString('utf-8');
+    process.stdin.on("end", () => {
+      const content = Buffer.concat(chunks).toString("utf-8");
       try {
         resolve(JSON.parse(content));
       } catch (_err) {
@@ -51,7 +50,7 @@ async function readStdinPayload() {
       }
     });
 
-    process.stdin.on('error', reject);
+    process.stdin.on("error", reject);
   });
 }
 
@@ -60,25 +59,25 @@ async function readStdinPayload() {
  */
 function postHookEvent(port, token, event, payload) {
   const options = {
-    hostname: '127.0.0.1',
+    hostname: "127.0.0.1",
     port: port,
     path: `/internal/hooks/${event}?token=${token}`,
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json',
-      'Content-Length': Buffer.byteLength(JSON.stringify(payload)),
+      "Content-Type": "application/json",
+      "Content-Length": Buffer.byteLength(JSON.stringify(payload)),
     },
   };
 
   const req = http.request(options, (res) => {
     // Ignore response - fire and forget
-    res.on('data', () => {});
-    res.on('end', () => {});
+    res.on("data", () => {});
+    res.on("end", () => {});
   });
 
-  req.on('error', (err) => {
+  req.on("error", (err) => {
     // Silently handle connection errors - server may not be running
-    if (err.code === 'ECONNREFUSED') {
+    if (err.code === "ECONNREFUSED") {
       // Expected: server not running
       process.exit(0);
     } else {
@@ -110,7 +109,7 @@ async function main() {
   const event =
     process.argv[2] || // Event name from CLI argument
     payload.event || // Event name in payload
-    'unknown';
+    "unknown";
 
   // POST to server
   postHookEvent(runtime.port, runtime.token, event, payload);

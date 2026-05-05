@@ -1,5 +1,5 @@
-import type { ProviderConfig, SupervisorEvalCommandRequest } from '@coder-studio/core';
-import { claudeConfigSchema } from './config-schema.js';
+import type { ProviderConfig, SupervisorEvalCommandRequest } from "@coder-studio/core";
+import { claudeConfigSchema } from "./config-schema.js";
 
 export function buildClaudeSupervisorEvalCommand(
   config: ProviderConfig,
@@ -10,12 +10,12 @@ export function buildClaudeSupervisorEvalCommand(
 
   return {
     argv: [
-      'claude',
-      '-p',
+      "claude",
+      "-p",
       req.prompt,
-      '--output-format',
-      'json',
-      ...(model ? ['--model', model] : []),
+      "--output-format",
+      "json",
+      ...(model ? ["--model", model] : []),
       ...(cfg.additionalArgs ?? []),
     ],
     cwd: req.workspacePath,
