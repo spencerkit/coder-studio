@@ -280,12 +280,24 @@ export class SessionManager {
     const session = this.sessions.get(sessionId);
     if (!session) return;
 
+    this.applyTerminalInputActivity(session, activity, text, { armTurnCompletion: true });
+  }
+
+  private applyTerminalInputActivity(
+    session: ActiveSession,
+    activity: TerminalInputActivity,
+    text: string | undefined,
+    options: { armTurnCompletion: boolean }
+  ): void {
     if (activity === "control" || activity === "typing") {
       return;
     }
 
     if (activity === "internal_submit") {
-      session.awaitingTurnCompletion = true;
+      if (options.armTurnCompletion) {
+        session.awaitingTurnCompletion = true;
+        session.sawOutputSinceTurnStart = false;
+      }
       const prev = session.state;
       if (session.state !== "running") {
         session.state = "running";
@@ -305,7 +317,10 @@ export class SessionManager {
     if (submittedText?.trim()) {
       session.latestSubmittedUserInput = submittedText.trim();
     }
-    session.awaitingTurnCompletion = true;
+    if (options.armTurnCompletion) {
+      session.awaitingTurnCompletion = true;
+      session.sawOutputSinceTurnStart = false;
+    }
 
     // Title capture runs independently of state transitions: a session that
     // is still 'starting' or 'running' when the user types won't flip state
@@ -347,12 +362,21 @@ export class SessionManager {
       throw new Error(`Session not found: ${sessionId}`);
     }
 
-    this.deps.terminalMgr.write(session.terminalId, bytes);
     const text =
       activity === "submit" || activity === "internal_submit"
         ? (submittedText ?? bytes.toString("utf-8"))
         : undefined;
-    this.onTerminalInput(session.terminalId, activity, text);
+    const rollbackArm = this.armTurnCompletionBeforeWrite(session, activity);
+
+    try {
+      this.deps.terminalMgr.write(session.terminalId, bytes);
+    } catch (error) {
+      rollbackArm?.();
+      throw error;
+    }
+
+    this.applyTerminalInputActivity(session, activity, text, { armTurnCompletion: false });
+    this.flushPendingPtyIdle(session);
   }
 
   /**
@@ -485,6 +509,67 @@ export class SessionManager {
     };
     this.deps.eventBus.emit(event);
   }
+
+  private armTurnCompletionBeforeWrite(
+    session: ActiveSession,
+    activity: TerminalInputActivity
+  ): (() => void) | null {
+    if (activity !== "submit" && activity !== "internal_submit") {
+      return null;
+    }
+
+    const previousAwaitingTurnCompletion = session.awaitingTurnCompletion;
+    const previousSawOutputSinceTurnStart = session.sawOutputSinceTurnStart;
+    session.awaitingTurnCompletion = true;
+    session.sawOutputSinceTurnStart = false;
+
+    return () => {
+      session.awaitingTurnCompletion = previousAwaitingTurnCompletion;
+      session.sawOutputSinceTurnStart = previousSawOutputSinceTurnStart;
+    };
+  }
+
+  private flushPendingPtyIdle(session: ActiveSession): void {
+    const ptyState = this.comparators.get(session.id)?.snapshot().ptyState;
+    if (ptyState !== "idle") {
+      return;
+    }
+
+    this.transitionSessionToIdle(session);
+  }
+
+  private transitionSessionToIdle(activeSession: ActiveSession): void {
+    const prev = activeSession.state;
+    if (prev !== "running" && prev !== "starting") {
+      return;
+    }
+
+    if (prev === "running" && !activeSession.sawOutputSinceTurnStart) {
+      return;
+    }
+
+    const shouldEmitTurnCompleted = prev === "running" && activeSession.awaitingTurnCompletion;
+    activeSession.state = "idle";
+    activeSession.awaitingTurnCompletion = false;
+    activeSession.sawOutputSinceTurnStart = false;
+    if (!activeSession.startedAt) {
+      activeSession.startedAt = Date.now();
+    }
+    this.deps.db.update(activeSession.id, {
+      state: "idle",
+      startedAt: activeSession.startedAt,
+    });
+    this.emitStateChanged(activeSession, prev, "idle");
+    if (shouldEmitTurnCompleted) {
+      this.deps.eventBus.emit({
+        type: "session.lifecycle",
+        workspaceId: activeSession.workspaceId,
+        sessionId: activeSession.id,
+        event: "turn_completed",
+      } as DomainEvent);
+    }
+  }
+
   private attachShadowDetector(session: ActiveSession, provider: ProviderDefinition): void {
     if (!provider.idleHeuristics) {
       return;
@@ -511,38 +596,8 @@ export class SessionManager {
         }
 
         const prev = activeSession.state;
-        if (state === "running" && prev !== "running") {
-          activeSession.state = "running";
-          activeSession.lastActiveAt = Date.now();
-          if (!activeSession.startedAt) {
-            activeSession.startedAt = activeSession.lastActiveAt;
-          }
-          this.deps.db.update(session.id, {
-            state: "running",
-            startedAt: activeSession.startedAt,
-            lastActiveAt: activeSession.lastActiveAt,
-          });
-          this.emitStateChanged(activeSession, prev, "running");
-        } else if (state === "idle" && (prev === "running" || prev === "starting")) {
-          const shouldEmitTurnCompleted = activeSession.awaitingTurnCompletion;
-          activeSession.state = "idle";
-          activeSession.awaitingTurnCompletion = false;
-          if (!activeSession.startedAt) {
-            activeSession.startedAt = Date.now();
-          }
-          this.deps.db.update(session.id, {
-            state: "idle",
-            startedAt: activeSession.startedAt,
-          });
-          this.emitStateChanged(activeSession, prev, "idle");
-          if (shouldEmitTurnCompleted) {
-            this.deps.eventBus.emit({
-              type: "session.lifecycle",
-              workspaceId: activeSession.workspaceId,
-              sessionId: activeSession.id,
-              event: "turn_completed",
-            } as DomainEvent);
-          }
+        if (state === "idle" && (prev === "running" || prev === "starting")) {
+          this.transitionSessionToIdle(activeSession);
         }
 
         comparator.observePtyState(state);
@@ -552,6 +607,11 @@ export class SessionManager {
     const unsubscribe = this.deps.eventBus.on("terminal.output", (event: TerminalOutputEvent) => {
       if (event.terminalId !== session.terminalId) {
         return;
+      }
+
+      const activeSession = this.sessions.get(session.id);
+      if (activeSession?.awaitingTurnCompletion) {
+        activeSession.sawOutputSinceTurnStart = true;
       }
 
       detector.feed(event.chunk);
@@ -607,6 +667,7 @@ class ActiveSession {
   title?: string;
   latestSubmittedUserInput?: string;
   awaitingTurnCompletion = false;
+  sawOutputSinceTurnStart = false;
 
   constructor(data: {
     id: string;
