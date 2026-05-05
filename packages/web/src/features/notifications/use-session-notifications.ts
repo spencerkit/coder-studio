@@ -346,8 +346,9 @@ export function useSessionNotifications(): void {
       const channel = selectChannel(hidden, suppressed);
       if (channel === "none") continue;
 
+      const sessionLabel = session.title?.trim() || formatSessionLabel(session.id);
       const title = t("notification.session_completed_title", {
-        session: formatSessionLabel(session.id),
+        session: sessionLabel,
       });
 
       // Body has two parts:

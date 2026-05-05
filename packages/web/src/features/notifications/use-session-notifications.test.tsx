@@ -548,6 +548,35 @@ describe("useSessionNotifications", () => {
     expect(metaLine).toBe("Claude · demo-app · 1m 5s");
   });
 
+  it("uses the session title for the notification title when one is available", async () => {
+    const store = createStore();
+    store.set(connectionStatusAtom, "disconnected");
+    store.set(notificationPreferencesAtom, { enabled: true, soundEnabled: true });
+    seedWorkspace(store, "ws-other");
+    store.set(activeWorkspaceIdAtom, "ws-other");
+    store.set(sessionsAtom, {
+      "sess-1": {
+        ...createSession("sess-1", "running", "ws-1"),
+        title: "run tests",
+      },
+    });
+
+    mountAndCompleteTurn(store, () => {
+      store.set(sessionsAtom, {
+        "sess-1": {
+          ...createSession("sess-1", "idle", "ws-1"),
+          title: "run tests",
+        },
+      });
+    });
+
+    await waitFor(() => {
+      expect(store.get(toastsAtom)).toHaveLength(1);
+    });
+
+    expect(store.get(toastsAtom)[0]?.title).toBe("run tests 已完成");
+  });
+
   it("appends a quoted summary line when the session has captured output", async () => {
     const store = createStore();
     store.set(connectionStatusAtom, "disconnected");
