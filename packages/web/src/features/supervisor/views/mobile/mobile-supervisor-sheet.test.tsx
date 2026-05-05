@@ -36,12 +36,16 @@ describe("MobileSupervisorSheet", () => {
     fireEvent.click(screen.getByRole("button", { name: "Enable" }));
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith("supervisor.create", {
-        sessionId: "sess-1",
-        workspaceId: "ws-1",
-        objective: "Reduce mobile regression bugs",
-        evaluatorProviderId: "claude",
-      });
+      expect(sendCommand).toHaveBeenCalledWith(
+        "supervisor.create",
+        {
+          sessionId: "sess-1",
+          workspaceId: "ws-1",
+          objective: "Reduce mobile regression bugs",
+          evaluatorProviderId: "claude",
+        },
+        undefined
+      );
     });
   });
 

@@ -157,12 +157,22 @@ describe("LoginPage", () => {
   });
 
   it("shows a clear retry time when login is blocked after too many failures", async () => {
+    const blockedUntil = new Date("2026-05-05T12:00:00.000Z").getTime();
+    const expectedBlockedUntil = new Intl.DateTimeFormat("zh-CN", {
+      year: "numeric",
+      month: "numeric",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(blockedUntil);
+
     globalThis.fetch = vi.fn().mockResolvedValueOnce({
       ok: false,
       json: async () => ({
         error: "Too many failed attempts",
         blocked: true,
-        blockedUntil: new Date("2026-05-05T12:00:00.000Z").getTime(),
+        blockedUntil,
       }),
     }) as unknown as typeof fetch;
 
@@ -181,7 +191,7 @@ describe("LoginPage", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText("尝试次数过多，请于 2026/5/5 20:00 后再试，或联系管理员解禁。")
+        screen.getByText(`尝试次数过多，请于 ${expectedBlockedUntil} 后再试，或联系管理员解禁。`)
       ).toBeInTheDocument();
       expect(document.querySelector(".auth-status-panel.auth-status-panel-error")).toBeTruthy();
     });

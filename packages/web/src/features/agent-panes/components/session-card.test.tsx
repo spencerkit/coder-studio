@@ -249,7 +249,11 @@ describe("SessionCard", () => {
     );
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith("supervisor.get", { sessionId: "sess_123456" });
+      expect(sendCommand).toHaveBeenCalledWith(
+        "supervisor.get",
+        { sessionId: "sess_123456" },
+        undefined
+      );
     });
 
     expect(screen.getByText("Supervisor")).toBeInTheDocument();
@@ -400,7 +404,11 @@ describe("SessionCard", () => {
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
 
     expect(onClose).toHaveBeenCalledTimes(1);
-    expect(sendCommand).not.toHaveBeenCalledWith("session.stop", { sessionId: "sess_123456" });
+    expect(sendCommand).not.toHaveBeenCalledWith(
+      "session.stop",
+      { sessionId: "sess_123456" },
+      undefined
+    );
   });
 
   it("routes split buttons through explicit callbacks", () => {
@@ -464,12 +472,16 @@ describe("SessionCard", () => {
     fireEvent.click(document.querySelector('[data-session-id="sess_123456"]')!);
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith("workspace.uiState.set", {
-        workspaceId: "ws-123",
-        uiState: expect.objectContaining({
-          activeSessionId: "sess_123456",
-        }),
-      });
+      expect(sendCommand).toHaveBeenCalledWith(
+        "workspace.uiState.set",
+        {
+          workspaceId: "ws-123",
+          uiState: expect.objectContaining({
+            activeSessionId: "sess_123456",
+          }),
+        },
+        undefined
+      );
     });
   });
 

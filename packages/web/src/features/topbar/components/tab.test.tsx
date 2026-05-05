@@ -84,9 +84,13 @@ describe("WorkspaceTab", () => {
     fireEvent.click(screen.getByRole("button", { name: "Close Workspace" }));
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith("workspace.close", {
-        id: "ws-1",
-      });
+      expect(sendCommand).toHaveBeenCalledWith(
+        "workspace.close",
+        {
+          id: "ws-1",
+        },
+        undefined
+      );
     });
 
     expect(store.get(workspaceOrderAtom)).toEqual(["ws-2"]);

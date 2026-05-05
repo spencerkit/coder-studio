@@ -65,9 +65,13 @@ describe("FileTreePanel", () => {
     );
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith("file.readTree", {
-        workspaceId: "ws-test",
-      });
+      expect(sendCommand).toHaveBeenCalledWith(
+        "file.readTree",
+        {
+          workspaceId: "ws-test",
+        },
+        undefined
+      );
     });
 
     await waitFor(() => {
@@ -131,9 +135,13 @@ describe("FileTreePanel", () => {
 
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledTimes(1);
-      expect(sendCommand).toHaveBeenCalledWith("file.readTree", {
-        workspaceId: "ws-test",
-      });
+      expect(sendCommand).toHaveBeenCalledWith(
+        "file.readTree",
+        {
+          workspaceId: "ws-test",
+        },
+        undefined
+      );
     });
 
     await act(async () => {
@@ -182,16 +190,26 @@ describe("FileTreePanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenNthCalledWith(1, "file.create", {
-        workspaceId: "ws-test",
-        path: "src/demo/new-file.ts",
-      });
+      expect(sendCommand).toHaveBeenNthCalledWith(
+        1,
+        "file.create",
+        {
+          workspaceId: "ws-test",
+          path: "src/demo/new-file.ts",
+        },
+        undefined
+      );
     });
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenNthCalledWith(2, "file.readTree", {
-        workspaceId: "ws-test",
-      });
+      expect(sendCommand).toHaveBeenNthCalledWith(
+        2,
+        "file.readTree",
+        {
+          workspaceId: "ws-test",
+        },
+        undefined
+      );
     });
 
     await waitFor(() => {
@@ -270,16 +288,26 @@ describe("FileTreePanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenNthCalledWith(1, "file.mkdir", {
-        workspaceId: "ws-test",
-        path: "src/demo",
-      });
+      expect(sendCommand).toHaveBeenNthCalledWith(
+        1,
+        "file.mkdir",
+        {
+          workspaceId: "ws-test",
+          path: "src/demo",
+        },
+        undefined
+      );
     });
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenNthCalledWith(2, "file.readTree", {
-        workspaceId: "ws-test",
-      });
+      expect(sendCommand).toHaveBeenNthCalledWith(
+        2,
+        "file.readTree",
+        {
+          workspaceId: "ws-test",
+        },
+        undefined
+      );
     });
 
     await waitFor(() => {
@@ -334,10 +362,14 @@ describe("FileTreePanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith("file.create", {
-        workspaceId: "ws-test",
-        path: "src/demo/new-file.ts",
-      });
+      expect(sendCommand).toHaveBeenCalledWith(
+        "file.create",
+        {
+          workspaceId: "ws-test",
+          path: "src/demo/new-file.ts",
+        },
+        undefined
+      );
     });
 
     expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/demo/new-file.ts");
@@ -379,10 +411,14 @@ describe("FileTreePanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith("file.mkdir", {
-        workspaceId: "ws-test",
-        path: "src/demo/new-dir",
-      });
+      expect(sendCommand).toHaveBeenCalledWith(
+        "file.mkdir",
+        {
+          workspaceId: "ws-test",
+          path: "src/demo/new-dir",
+        },
+        undefined
+      );
     });
   });
 
@@ -473,10 +509,14 @@ describe("FileTreePanel", () => {
     );
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith("file.readTree", {
-        workspaceId: "ws-test",
-        subPath: "src",
-      });
+      expect(sendCommand).toHaveBeenCalledWith(
+        "file.readTree",
+        {
+          workspaceId: "ws-test",
+          subPath: "src",
+        },
+        undefined
+      );
     });
 
     expect(await screen.findByText("index.ts")).toBeInTheDocument();
@@ -611,9 +651,13 @@ describe("FileTreePanel", () => {
     });
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith("file.readTree", {
-        workspaceId: "ws-test",
-      });
+      expect(sendCommand).toHaveBeenCalledWith(
+        "file.readTree",
+        {
+          workspaceId: "ws-test",
+        },
+        undefined
+      );
     });
     expect(await screen.findByText("new.ts")).toBeInTheDocument();
     expect(screen.queryByText("old.ts")).not.toBeInTheDocument();
@@ -652,16 +696,26 @@ describe("FileTreePanel", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Confirm" }));
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenNthCalledWith(1, "file.delete", {
-        workspaceId: "ws-test",
-        path: "src/app.tsx",
-      });
+      expect(sendCommand).toHaveBeenNthCalledWith(
+        1,
+        "file.delete",
+        {
+          workspaceId: "ws-test",
+          path: "src/app.tsx",
+        },
+        undefined
+      );
     });
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenNthCalledWith(2, "file.readTree", {
-        workspaceId: "ws-test",
-      });
+      expect(sendCommand).toHaveBeenNthCalledWith(
+        2,
+        "file.readTree",
+        {
+          workspaceId: "ws-test",
+        },
+        undefined
+      );
     });
 
     await waitFor(() => {
@@ -705,16 +759,26 @@ describe("FileTreePanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenNthCalledWith(1, "file.delete", {
-        workspaceId: "ws-test",
-        path: "src",
-      });
+      expect(sendCommand).toHaveBeenNthCalledWith(
+        1,
+        "file.delete",
+        {
+          workspaceId: "ws-test",
+          path: "src",
+        },
+        undefined
+      );
     });
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenNthCalledWith(2, "file.readTree", {
-        workspaceId: "ws-test",
-      });
+      expect(sendCommand).toHaveBeenNthCalledWith(
+        2,
+        "file.readTree",
+        {
+          workspaceId: "ws-test",
+        },
+        undefined
+      );
     });
 
     await waitFor(() => {
@@ -773,10 +837,14 @@ describe("FileTreePanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith("file.delete", {
-        workspaceId: "ws-test",
-        path: "src/app.tsx",
-      });
+      expect(sendCommand).toHaveBeenCalledWith(
+        "file.delete",
+        {
+          workspaceId: "ws-test",
+          path: "src/app.tsx",
+        },
+        undefined
+      );
     });
 
     expect(store.get(activeFilePathAtomFamily("ws-test"))).toBeNull();

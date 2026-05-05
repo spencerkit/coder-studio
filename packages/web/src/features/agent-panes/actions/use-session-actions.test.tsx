@@ -45,6 +45,6 @@ describe("useSessionActions", () => {
     });
 
     expect(sendCommand).toHaveBeenCalledTimes(1);
-    expect(sendCommand).toHaveBeenCalledWith("session.remove", { sessionId: "sess-1" });
+    expect(sendCommand).toHaveBeenCalledWith("session.remove", { sessionId: "sess-1" }, undefined);
   });
 });

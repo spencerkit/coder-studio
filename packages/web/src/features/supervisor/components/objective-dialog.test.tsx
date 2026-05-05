@@ -46,12 +46,16 @@ describe("ObjectiveDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Enable" }));
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith("supervisor.create", {
-        sessionId: "sess-1",
-        workspaceId: "ws-1",
-        objective: "Finish the server refactor",
-        evaluatorProviderId: "claude",
-      });
+      expect(sendCommand).toHaveBeenCalledWith(
+        "supervisor.create",
+        {
+          sessionId: "sess-1",
+          workspaceId: "ws-1",
+          objective: "Finish the server refactor",
+          evaluatorProviderId: "claude",
+        },
+        undefined
+      );
     });
   });
 

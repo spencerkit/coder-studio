@@ -126,7 +126,7 @@ describe("BranchQuickPick", () => {
     expect(
       screen.getByPlaceholderText("Search branches or create new branch...")
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "main" })).toHaveAttribute("data-selected", "true");
+    expect(screen.getByRole("button", { name: "main" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("does not keep the current branch selected when mobile focus moves to create branch", async () => {
@@ -151,7 +151,7 @@ describe("BranchQuickPick", () => {
       key: "ArrowDown",
     });
 
-    expect(screen.getByRole("button", { name: "main" })).toHaveAttribute("data-selected", "false");
+    expect(screen.getByRole("button", { name: "main" })).toHaveAttribute("aria-pressed", "false");
   });
 
   it("renders localized copy for the mobile branch quick pick", () => {
@@ -212,16 +212,28 @@ describe("BranchQuickPick", () => {
     fireEvent.keyDown(input, { key: "Enter" });
 
     await waitFor(() => {
-      expect(sendCommandMock).toHaveBeenCalledWith("git.checkout", {
-        workspaceId: "ws-test",
-        ref: "feature/auth",
-      });
-      expect(sendCommandMock).toHaveBeenCalledWith("git.branches", {
-        workspaceId: "ws-test",
-      });
-      expect(sendCommandMock).toHaveBeenCalledWith("git.status", {
-        workspaceId: "ws-test",
-      });
+      expect(sendCommandMock).toHaveBeenCalledWith(
+        "git.checkout",
+        {
+          workspaceId: "ws-test",
+          ref: "feature/auth",
+        },
+        undefined
+      );
+      expect(sendCommandMock).toHaveBeenCalledWith(
+        "git.branches",
+        {
+          workspaceId: "ws-test",
+        },
+        undefined
+      );
+      expect(sendCommandMock).toHaveBeenCalledWith(
+        "git.status",
+        {
+          workspaceId: "ws-test",
+        },
+        undefined
+      );
     });
 
     // Should close after successful checkout
@@ -247,27 +259,43 @@ describe("BranchQuickPick", () => {
 
     fireEvent.keyDown(input, { key: "Enter" });
 
-    expect(sendCommandMock).not.toHaveBeenCalledWith("git.checkout", {
-      workspaceId: "ws-test",
-      ref: "new-branch",
-      createBranch: true,
-    });
+    expect(sendCommandMock).not.toHaveBeenCalledWith(
+      "git.checkout",
+      {
+        workspaceId: "ws-test",
+        ref: "new-branch",
+        createBranch: true,
+      },
+      undefined
+    );
     expect(screen.getByText("Confirm create branch: new-branch")).toBeInTheDocument();
 
     fireEvent.keyDown(input, { key: "Enter" });
 
     await waitFor(() => {
-      expect(sendCommandMock).toHaveBeenCalledWith("git.checkout", {
-        workspaceId: "ws-test",
-        ref: "new-branch",
-        createBranch: true,
-      });
-      expect(sendCommandMock).toHaveBeenCalledWith("git.branches", {
-        workspaceId: "ws-test",
-      });
-      expect(sendCommandMock).toHaveBeenCalledWith("git.status", {
-        workspaceId: "ws-test",
-      });
+      expect(sendCommandMock).toHaveBeenCalledWith(
+        "git.checkout",
+        {
+          workspaceId: "ws-test",
+          ref: "new-branch",
+          createBranch: true,
+        },
+        undefined
+      );
+      expect(sendCommandMock).toHaveBeenCalledWith(
+        "git.branches",
+        {
+          workspaceId: "ws-test",
+        },
+        undefined
+      );
+      expect(sendCommandMock).toHaveBeenCalledWith(
+        "git.status",
+        {
+          workspaceId: "ws-test",
+        },
+        undefined
+      );
     });
 
     await waitFor(() => {
@@ -299,17 +327,25 @@ describe("BranchQuickPick", () => {
     fireEvent.keyDown(input, { key: "Enter" });
 
     await waitFor(() => {
-      expect(sendCommandMock).toHaveBeenCalledWith("git.checkout", {
-        workspaceId: "ws-test",
-        ref: "m",
-        createBranch: true,
-      });
+      expect(sendCommandMock).toHaveBeenCalledWith(
+        "git.checkout",
+        {
+          workspaceId: "ws-test",
+          ref: "m",
+          createBranch: true,
+        },
+        undefined
+      );
     });
 
-    expect(sendCommandMock).not.toHaveBeenCalledWith("git.checkout", {
-      workspaceId: "ws-test",
-      ref: "main",
-    });
+    expect(sendCommandMock).not.toHaveBeenCalledWith(
+      "git.checkout",
+      {
+        workspaceId: "ws-test",
+        ref: "main",
+      },
+      undefined
+    );
   });
 
   it("navigates with arrow keys", async () => {
@@ -472,10 +508,14 @@ describe("BranchQuickPick", () => {
     fireEvent.keyDown(input, { key: "Enter" });
 
     await waitFor(() => {
-      expect(sendCommandMock).toHaveBeenCalledWith("git.checkout", {
-        workspaceId: "ws-test",
-        ref: "feature/auth",
-      });
+      expect(sendCommandMock).toHaveBeenCalledWith(
+        "git.checkout",
+        {
+          workspaceId: "ws-test",
+          ref: "feature/auth",
+        },
+        undefined
+      );
     });
 
     // Should remain open on failure
@@ -511,10 +551,14 @@ describe("BranchQuickPick", () => {
     fireEvent.keyDown(input, { key: "Enter" });
 
     await waitFor(() => {
-      expect(sendCommandMock).toHaveBeenCalledWith("git.checkout", {
-        workspaceId: "ws-test",
-        ref: "feature/auth",
-      });
+      expect(sendCommandMock).toHaveBeenCalledWith(
+        "git.checkout",
+        {
+          workspaceId: "ws-test",
+          ref: "feature/auth",
+        },
+        undefined
+      );
     });
 
     expect(store.get(branchQuickPickAtom).visible).toBe(true);

@@ -197,7 +197,7 @@ describe("components.css theme-sensitive surfaces", () => {
 
   it("keeps mobile select row-side actions lightweight and token-driven", () => {
     const row = getLastRuleBlock(".mobile-select-sheet__item-row");
-    const rowSelected = getLastRuleBlock(".mobile-select-sheet__item-row[data-selected='true']");
+    const rowSelected = getLastRuleBlock('.mobile-select-sheet__item-row[data-selected="true"]');
     const sideAction = getLastRuleBlock(".mobile-select-sheet__item-side-action");
     const sideActionDanger = getLastRuleBlock(".mobile-select-sheet__item-side-action--danger");
 
@@ -267,7 +267,7 @@ describe("components.css theme-sensitive surfaces", () => {
     const keys = getLastRuleBlock(".mobile-terminal-input-bar__keys");
     const key = getLastRuleBlock(".mobile-terminal-input-bar__key");
     const ctrlLocked = getLastRuleBlock(
-      ".mobile-terminal-input-bar__ctrl[data-ctrl-mode='locked']"
+      '.mobile-terminal-input-bar__ctrl[data-ctrl-mode="locked"]'
     );
 
     expect(shell).toContain("display: flex");

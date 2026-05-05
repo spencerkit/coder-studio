@@ -76,9 +76,13 @@ describe("WorkspaceLaunchModal", () => {
     fireEvent.click(enterButton);
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith("workspace.browse", {
-        path: "/home/spencer/workspace",
-      });
+      expect(sendCommand).toHaveBeenCalledWith(
+        "workspace.browse",
+        {
+          path: "/home/spencer/workspace",
+        },
+        undefined
+      );
     });
 
     expect(await screen.findByText("coder-studio")).toBeInTheDocument();
@@ -130,9 +134,13 @@ describe("WorkspaceLaunchModal", () => {
     fireEvent.click(screen.getByRole("button", { name: "Start Workspace" }));
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith("workspace.open", {
-        path: "/home/spencer/workspace",
-      });
+      expect(sendCommand).toHaveBeenCalledWith(
+        "workspace.open",
+        {
+          path: "/home/spencer/workspace",
+        },
+        undefined
+      );
     });
 
     await waitFor(() => {
@@ -178,9 +186,13 @@ describe("WorkspaceLaunchModal", () => {
     fireEvent.click(screen.getByRole("button", { name: "Start Workspace" }));
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith("workspace.open", {
-        path: "/home/spencer/workspace",
-      });
+      expect(sendCommand).toHaveBeenCalledWith(
+        "workspace.open",
+        {
+          path: "/home/spencer/workspace",
+        },
+        undefined
+      );
     });
 
     await waitFor(() => {
@@ -240,9 +252,13 @@ describe("WorkspaceLaunchModal", () => {
     fireEvent.click(screen.getByRole("button", { name: "Start Workspace" }));
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith("workspace.open", {
-        path: "/home/spencer/workspace",
-      });
+      expect(sendCommand).toHaveBeenCalledWith(
+        "workspace.open",
+        {
+          path: "/home/spencer/workspace",
+        },
+        undefined
+      );
     });
 
     await waitFor(() => {

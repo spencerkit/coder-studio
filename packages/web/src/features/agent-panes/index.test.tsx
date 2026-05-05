@@ -247,7 +247,8 @@ describe("AgentPanes", () => {
               ],
             }),
           }),
-        })
+        }),
+        undefined
       );
     });
   });
@@ -285,7 +286,7 @@ describe("AgentPanes", () => {
       });
     });
 
-    expect(sendCommand).toHaveBeenCalledWith("session.stop", { sessionId: "sess_1" });
+    expect(sendCommand).toHaveBeenCalledWith("session.stop", { sessionId: "sess_1" }, undefined);
   });
 
   it("keeps the remaining draft pane visible after closing the last session pane", async () => {
@@ -335,14 +336,18 @@ describe("AgentPanes", () => {
     );
 
     await act(async () => {});
-    expect(sendCommand).not.toHaveBeenCalledWith("session.list", { workspaceId: "ws-1" });
+    expect(sendCommand).not.toHaveBeenCalledWith(
+      "session.list",
+      { workspaceId: "ws-1" },
+      undefined
+    );
 
     act(() => {
       store.set(connectionStatusAtom, "connected");
     });
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith("session.list", { workspaceId: "ws-1" });
+      expect(sendCommand).toHaveBeenCalledWith("session.list", { workspaceId: "ws-1" }, undefined);
     });
   });
 
@@ -369,7 +374,7 @@ describe("AgentPanes", () => {
     );
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith("session.list", { workspaceId: "ws-1" });
+      expect(sendCommand).toHaveBeenCalledWith("session.list", { workspaceId: "ws-1" }, undefined);
     });
 
     unmount();
@@ -384,7 +389,7 @@ describe("AgentPanes", () => {
     );
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith("session.list", { workspaceId: "ws-1" });
+      expect(sendCommand).toHaveBeenCalledWith("session.list", { workspaceId: "ws-1" }, undefined);
     });
   });
 
@@ -436,7 +441,7 @@ describe("AgentPanes", () => {
     );
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith("session.list", { workspaceId: "ws-1" });
+      expect(sendCommand).toHaveBeenCalledWith("session.list", { workspaceId: "ws-1" }, undefined);
     });
 
     expect(store.get(paneLayoutAtomFamily("ws-1"))).toEqual({
@@ -525,7 +530,8 @@ describe("AgentPanes", () => {
           uiState: expect.objectContaining({
             paneLayout: legacyLayout,
           }),
-        })
+        }),
+        undefined
       );
     });
 
@@ -611,7 +617,7 @@ describe("AgentPanes", () => {
     );
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith("session.list", { workspaceId: "ws-1" });
+      expect(sendCommand).toHaveBeenCalledWith("session.list", { workspaceId: "ws-1" }, undefined);
     });
 
     expect(store.get(paneLayoutAtomFamily("ws-1"))).toEqual({
@@ -664,7 +670,7 @@ describe("AgentPanes", () => {
     );
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith("session.list", { workspaceId: "ws-1" });
+      expect(sendCommand).toHaveBeenCalledWith("session.list", { workspaceId: "ws-1" }, undefined);
     });
 
     expect(store.get(paneLayoutAtomFamily("ws-1"))).toEqual({
@@ -703,10 +709,14 @@ describe("AgentPanes", () => {
     fireEvent.click(claudeButton);
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith("session.create", {
-        workspaceId: "ws-1",
-        providerId: "claude",
-      });
+      expect(sendCommand).toHaveBeenCalledWith(
+        "session.create",
+        {
+          workspaceId: "ws-1",
+          providerId: "claude",
+        },
+        undefined
+      );
     });
 
     expect(claudeButton).toBeDisabled();
@@ -872,17 +882,25 @@ describe("AgentPanes", () => {
 
     fireEvent.click(installCta.closest("button")!);
 
-    expect(sendCommand).toHaveBeenCalledWith("provider.install.start", { providerId: "codex" });
+    expect(sendCommand).toHaveBeenCalledWith(
+      "provider.install.start",
+      { providerId: "codex" },
+      undefined
+    );
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1500);
     });
 
-    expect(sendCommand).toHaveBeenCalledWith("provider.install.get", { jobId: "job-1" });
-    expect(sendCommand).toHaveBeenCalledWith("session.create", {
-      workspaceId: "ws-1",
-      providerId: "codex",
-    });
+    expect(sendCommand).toHaveBeenCalledWith("provider.install.get", { jobId: "job-1" }, undefined);
+    expect(sendCommand).toHaveBeenCalledWith(
+      "session.create",
+      {
+        workspaceId: "ws-1",
+        providerId: "codex",
+      },
+      undefined
+    );
   });
 
   it("shows install failure details and docs link when automatic install fails", async () => {
