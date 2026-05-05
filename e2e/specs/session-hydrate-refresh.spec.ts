@@ -1,8 +1,9 @@
 import { test, expect } from '@playwright/test';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { spawn, type ChildProcess } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 const HOST = '127.0.0.1';
 const SERVER_PORT = 43173;
@@ -18,6 +19,8 @@ let dbPath: string;
 let runtimeDir: string;
 let backendProcess: ChildProcess | undefined;
 let webProcess: ChildProcess | undefined;
+const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const WEB_ROOT = join(REPO_ROOT, 'packages', 'web');
 
 function startProcess(
   command: string,
@@ -82,7 +85,7 @@ test.describe('session hydrate refresh acceptance', () => {
       dbPath,
       workspaceDir,
     ], {
-      cwd: '/home/spencer/workspace/coder-studio',
+      cwd: REPO_ROOT,
       env: process.env,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -103,7 +106,7 @@ test.describe('session hydrate refresh acceptance', () => {
     });
 
     backendProcess = startProcess('pnpm', ['exec', 'tsx', 'packages/server/src/server.ts'], {
-      cwd: '/home/spencer/workspace/coder-studio',
+      cwd: REPO_ROOT,
       env: {
         HOST,
         PORT: String(SERVER_PORT),
@@ -116,8 +119,9 @@ test.describe('session hydrate refresh acceptance', () => {
     await waitForHttp(`${BACKEND_HTTP_URL}/healthz`);
 
     webProcess = startProcess('pnpm', ['exec', 'vite', '--host', HOST, '--port', String(WEB_PORT)], {
-      cwd: '/home/spencer/workspace/coder-studio/packages/web',
+      cwd: WEB_ROOT,
       env: {
+        NODE_ENV: 'development',
         VITE_BACKEND_HTTP_URL: BACKEND_HTTP_URL,
         VITE_BACKEND_WS_URL: `ws://${HOST}:${SERVER_PORT}/ws`,
       },
@@ -201,6 +205,9 @@ test.describe('session hydrate refresh acceptance', () => {
       await expect(visibleCard).toHaveAttribute('data-session-id', UNAVAILABLE_SESSION_ID);
       await expect(visibleCard.locator('.session-title')).toHaveText('Unavailable');
       await expect(visibleCard.locator('.session-state-badge')).toHaveText('Unavailable');
+      await expect(
+        visibleCard.getByRole('button', { name: 'Expand terminal keys' })
+      ).toHaveCount(0);
 
       await page.reload();
 
@@ -208,6 +215,9 @@ test.describe('session hydrate refresh acceptance', () => {
       await expect(page.getByTestId('mobile-shell')).toBeVisible({ timeout: 20000 });
       await expect(visibleCard).toBeVisible();
       await expect(visibleCard).toHaveAttribute('data-session-id', UNAVAILABLE_SESSION_ID);
+      await expect(
+        visibleCard.getByRole('button', { name: 'Expand terminal keys' })
+      ).toHaveCount(0);
 
       await page.getByRole('button', { name: 'Open Agent sheet' }).click();
       const agentSheet = page.getByRole('dialog', { name: 'Agent Sessions' });

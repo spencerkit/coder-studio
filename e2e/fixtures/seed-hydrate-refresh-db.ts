@@ -90,7 +90,6 @@ try {
       workspace_id,
       terminal_id,
       provider_id,
-      resume_id,
       capability,
       state,
       started_at,
@@ -99,9 +98,8 @@ try {
       completion_percent,
       error_reason,
       archived,
-      transcript_path,
       title
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
 
   insertSession.run(
@@ -109,7 +107,6 @@ try {
     WORKSPACE_ID,
     INTERRUPTED_TERMINAL_ID,
     'claude',
-    'resume-hydrate-e2e',
     'full',
     'running',
     now,
@@ -118,7 +115,6 @@ try {
     null,
     'Orphaned before restart',
     0,
-    '/tmp/hydrate-interrupted.jsonl',
     'Resume me'
   );
 
@@ -127,7 +123,6 @@ try {
     WORKSPACE_ID,
     UNAVAILABLE_TERMINAL_ID,
     'codex',
-    null,
     'full',
     'running',
     now,
@@ -136,7 +131,6 @@ try {
     null,
     'Terminal missing after restart',
     0,
-    '/tmp/hydrate-unavailable.jsonl',
     'Unavailable'
   );
 

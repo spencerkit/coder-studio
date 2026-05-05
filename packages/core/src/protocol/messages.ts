@@ -47,9 +47,11 @@ export interface TerminalSnapshotBinaryResult {
   source: 'headless';
 }
 
+export type TerminalInputActivity = 'typing' | 'submit' | 'system' | 'control';
+
 export interface TerminalInputBinaryArgs {
   terminalId: string;
-  activity?: 'typing' | 'submit' | 'system';
+  activity?: TerminalInputActivity;
   submittedText?: string;
   transport: 'binary';
   streamId: number;
@@ -59,7 +61,7 @@ export interface TerminalInputBinaryArgs {
 export interface TerminalInputBase64Args {
   terminalId: string;
   bytes: string;
-  activity?: 'typing' | 'submit' | 'system';
+  activity?: TerminalInputActivity;
   submittedText?: string;
 }
 

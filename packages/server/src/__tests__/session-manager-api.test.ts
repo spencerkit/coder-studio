@@ -324,6 +324,54 @@ describe('SessionManager session-level API', () => {
     expect(lifecycleEvents).toEqual(['turn_completed']);
   });
 
+  it('does not arm turn completion for control input or overwrite latest submitted user input', async () => {
+    vi.useFakeTimers();
+    provider = {
+      ...provider,
+      idleHeuristics: {
+        idlePromptPatterns: [],
+        idleDebounceMs: 3000,
+      },
+    } as ProviderDefinition;
+    sessionMgr = new SessionManager({
+      terminalMgr,
+      eventBus,
+      db: {
+        insert: vi.fn(),
+        update: vi.fn(),
+        findById: vi.fn(),
+        findByWorkspaceId: vi.fn().mockReturnValue([]),
+        listHydratable: vi.fn().mockReturnValue([]),
+        delete: vi.fn(),
+      } as SessionDatabase,
+      broadcaster: { broadcast: vi.fn() } as Broadcaster,
+      providerRegistry: [provider],
+      providerConfigRepo: { get: vi.fn(() => undefined) } as any,
+    });
+    const lifecycleEvents: string[] = [];
+    eventBus.on('session.lifecycle', (event) => lifecycleEvents.push(event.event));
+
+    const session = await createSession();
+    const onData = vi.mocked(mockPty.onData).mock.calls.at(-1)?.[0];
+    onData?.('booting up\n');
+    vi.advanceTimersByTime(3000);
+
+    sessionMgr.sendInput(session.id, Buffer.from('\r'), 'submit', 'fix the build');
+    onData?.('working...\n');
+    vi.advanceTimersByTime(3000);
+    lifecycleEvents.length = 0;
+
+    sessionMgr.sendInput(session.id, Buffer.from('\x03'), 'control');
+    expect(sessionMgr.get(session.id)?.state).toBe('idle');
+
+    onData?.('interrupted\n');
+    vi.advanceTimersByTime(3000);
+
+    expect(sessionMgr.get(session.id)?.state).toBe('idle');
+    expect(sessionMgr.getLatestSubmittedUserInput(session.id)).toBe('fix the build');
+    expect(lifecycleEvents).toEqual([]);
+  });
+
   it('does not expose a resume API', () => {
     expect((sessionMgr as unknown as { resume?: unknown }).resume).toBeUndefined();
   });

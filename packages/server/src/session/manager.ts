@@ -5,7 +5,13 @@
  * It manages Agent domain semantics and the PTY-driven state machine.
  */
 
-import type { Session, SessionState, ProviderDefinition, DomainEvent } from '@coder-studio/core';
+import type {
+  Session,
+  SessionState,
+  ProviderDefinition,
+  DomainEvent,
+  TerminalInputActivity,
+} from '@coder-studio/core';
 import { deriveSessionTitle } from '@coder-studio/core';
 import type { EventBus, Unsubscribe } from '../bus/event-bus.js';
 import type { TerminalManager } from '../terminal/manager.js';
@@ -240,7 +246,7 @@ export class SessionManager {
    */
   onTerminalInput(
     terminalId: string,
-    activity: 'typing' | 'submit' | 'system' = 'typing',
+    activity: TerminalInputActivity = 'typing',
     text?: string
   ): void {
     const sessionId = this.terminalToSession.get(terminalId);
@@ -306,7 +312,7 @@ export class SessionManager {
   sendInput(
     sessionId: string,
     bytes: Buffer,
-    activity: 'typing' | 'submit' | 'system' = 'typing',
+    activity: TerminalInputActivity = 'typing',
     submittedText?: string
   ): void {
     const session = this.sessions.get(sessionId);

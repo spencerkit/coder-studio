@@ -9,6 +9,7 @@ import {
   TERMINAL_BINARY_PROTOCOL_VERSION,
   TerminalBinaryFrameType,
   encodeTerminalBinaryFrame,
+  type TerminalInputActivity,
 } from '@coder-studio/core';
 import { basename } from 'node:path';
 import { z } from 'zod';
@@ -18,7 +19,7 @@ const TerminalInputSchema = z.union([
   z.object({
     terminalId: z.string(),
     bytes: z.string(),
-    activity: z.enum(['typing', 'submit', 'system']).optional(),
+    activity: z.enum(['typing', 'submit', 'system', 'control']).optional(),
     submittedText: z.string().optional(),
   }),
   z.object({
@@ -26,7 +27,7 @@ const TerminalInputSchema = z.union([
     transport: z.literal('binary'),
     streamId: z.number().int().nonnegative(),
     size: z.number().int().nonnegative(),
-    activity: z.enum(['typing', 'submit', 'system']).optional(),
+    activity: z.enum(['typing', 'submit', 'system', 'control']).optional(),
     submittedText: z.string().optional(),
   }),
 ]);
@@ -45,6 +46,10 @@ function decodeTerminalInput(args: TerminalInputBase64Args | TerminalInputBinary
   }
   pendingTerminalInput.delete(args.streamId);
   return pending.payload;
+}
+
+function normalizeTerminalInputActivity(activity: TerminalInputActivity | undefined): TerminalInputActivity | undefined {
+  return activity;
 }
 
 export function registerPendingTerminalInput(args: TerminalInputBinaryArgs, payload: Buffer): void {
@@ -242,15 +247,13 @@ registerCommand(
   async (args, ctx) => {
     const buffer = decodeTerminalInput(args);
     const sessionId = ctx.sessionMgr.findSessionIdByTerminal(args.terminalId);
-    console.log('[DEBUG] terminal.input command:', {
-      terminalId: args.terminalId,
-      sessionId,
-      activity: args.activity,
-      bufferSize: buffer.length,
-      bufferPreview: buffer.toString('utf-8').substring(0, 50),
-    });
     if (sessionId) {
-      ctx.sessionMgr.sendInput(sessionId, buffer, args.activity, args.submittedText);
+      ctx.sessionMgr.sendInput(
+        sessionId,
+        buffer,
+        normalizeTerminalInputActivity(args.activity),
+        args.submittedText
+      );
       return;
     }
 

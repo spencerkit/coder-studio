@@ -226,6 +226,21 @@
       "current": "当前终端",
       "indexed": "终端 {index}"
     },
+    "mobile_input": {
+      "expand": "展开终端按键",
+      "collapse": "收起终端按键",
+      "shortcuts": "终端快捷按键",
+      "ctrl": "Ctrl",
+      "ctrl_armed": "Ctrl 已待命",
+      "ctrl_locked": "Ctrl 已锁定",
+      "escape": "Esc",
+      "tab": "Tab",
+      "enter": "Enter",
+      "up": "上方向键",
+      "down": "下方向键",
+      "left": "左方向键",
+      "right": "右方向键"
+    },
     "replay": {
       "queued_title": "等待队列中（前方还有 {count} 个）",
       "up_next": "即将开始…",

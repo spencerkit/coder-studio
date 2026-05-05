@@ -1097,6 +1097,43 @@ describe('web WsClient', () => {
     await expect(inputPromise).resolves.toBeUndefined();
   });
 
+  it('includes control activity metadata for ctrl-modified terminal input', async () => {
+    const client = new WsClient('ws://127.0.0.1:4173/ws');
+    const connectPromise = client.connect();
+    const socket = MockWebSocket.instances[0]!;
+    socket.triggerOpen();
+    await connectPromise;
+
+    const inputPromise = client.sendTerminalInput(
+      'term_1',
+      new TextEncoder().encode('\x03'),
+      'control',
+    );
+
+    const sentStrings = socket.sent.filter((entry): entry is string => typeof entry === 'string');
+    const command = sentStrings.map((entry) => JSON.parse(entry)).find((entry) => entry.op === 'terminal.input');
+
+    expect(command).toMatchObject({
+      kind: 'command',
+      op: 'terminal.input',
+      args: {
+        terminalId: 'term_1',
+        transport: 'binary',
+        activity: 'control',
+      },
+    });
+    expect(command.args).not.toHaveProperty('submittedText');
+
+    socket.triggerMessage({
+      kind: 'result',
+      id: command.id,
+      ok: true,
+      data: undefined,
+    });
+
+    await expect(inputPromise).resolves.toBeUndefined();
+  });
+
   it('resends subscribed topics when the socket opens', async () => {
     const client = new WsClient('ws://127.0.0.1:4173/ws');
     const handler = vi.fn();

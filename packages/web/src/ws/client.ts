@@ -10,6 +10,7 @@ import {
   decodeTerminalOutputFrame,
   TERMINAL_BINARY_OUTPUT_VERSION,
   TerminalBinaryFrameType,
+  type TerminalInputActivity,
   type ClientToServer,
   type ServerToClient,
   type TerminalBinaryEventData,
@@ -305,7 +306,7 @@ export class WsClient {
   async sendTerminalInput(
     terminalId: string,
     bytes: Uint8Array,
-    activity?: 'typing' | 'submit' | 'system',
+    activity?: TerminalInputActivity,
     submittedText?: string
   ): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -691,8 +692,8 @@ export class WsClient {
  * In development, connect directly to backend server
  */
 export function resolveWsUrl(): string {
-  // In development mode, prefer the explicitly configured backend.
-  if (import.meta.env.DEV) {
+  // Tests exercise the same configurable backend path as development mode.
+  if (import.meta.env.DEV || import.meta.env.MODE === 'test') {
     const configuredUrl = import.meta.env.VITE_BACKEND_WS_URL;
     return normalizeWsUrl(configuredUrl || 'ws://127.0.0.1:4173/ws');
   }

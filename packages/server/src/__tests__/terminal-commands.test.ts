@@ -486,6 +486,48 @@ describe('terminal commands', () => {
     expect(ctx.terminalMgr.write).not.toHaveBeenCalled();
   });
 
+  it('delegates ctrl-modified terminal.input to sessionMgr.sendInput as control activity', async () => {
+    const ctx = createContext({
+      sessionMgr: {
+        findSessionIdByTerminal: vi.fn().mockReturnValue('sess-1'),
+        sendInput: vi.fn(),
+        resize: vi.fn(),
+      } as never,
+    });
+    const bytes = Buffer.from('\x03');
+
+    registerPendingTerminalInput(
+      {
+        terminalId: 'term-1',
+        transport: 'binary',
+        streamId: 77,
+        size: bytes.length,
+        activity: 'control',
+      },
+      bytes,
+    );
+
+    const result = await dispatch(
+      {
+        kind: 'command',
+        id: 'terminal-input-control-1',
+        op: 'terminal.input',
+        args: {
+          terminalId: 'term-1',
+          transport: 'binary',
+          streamId: 77,
+          size: bytes.length,
+          activity: 'control',
+        },
+      },
+      ctx,
+    );
+
+    expect(result.ok).toBe(true);
+    expect(ctx.sessionMgr.sendInput).toHaveBeenCalledWith('sess-1', bytes, 'control', undefined);
+    expect(ctx.terminalMgr.write).not.toHaveBeenCalled();
+  });
+
   it('falls back to terminalMgr.write for terminal.input when no session owns the terminal', async () => {
     const ctx = createContext({
       sessionMgr: {
