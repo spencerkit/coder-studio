@@ -1,7 +1,10 @@
 #!/usr/bin/env sh
 set -eu
 
-if git status --short | grep --quiet '^MM'; then
+if ! git diff --name-only --cached | while IFS= read -r file; do
+  [ -n "$file" ] || continue
+  git diff --quiet -- "$file" || exit 1
+done; then
   printf '%s\n' "ERROR: Some staged files have unstaged changes" >&2
   exit 1
 fi

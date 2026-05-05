@@ -55,7 +55,7 @@ jobs:
         run: pnpm exec biome lint --diagnostic-level=error --max-diagnostics=none .
 
       - name: Test release scripts
-        run: pnpm exec vitest run scripts/publish-cli.test.ts scripts/build-cli.test.ts scripts/check-release-version.test.ts --environment node
+        run: pnpm exec vitest run scripts/publish-cli.test.ts scripts/build-cli.test.ts scripts/check-release-version.test.ts scripts/husky-pre-commit.test.ts --environment node
 
       - name: Test core
         run: pnpm --filter @coder-studio/core test
