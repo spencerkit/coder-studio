@@ -1,8 +1,8 @@
-import type { FC } from 'react';
-import { useMemo } from 'react';
-import { X } from 'lucide-react';
-import { useTranslation } from '../../../../lib/i18n';
-import { useGitDiffViewerActions } from '../../actions/use-git-actions';
+import { X } from "lucide-react";
+import type { FC } from "react";
+import { useMemo } from "react";
+import { useTranslation } from "../../../../lib/i18n";
+import { useGitDiffViewerActions } from "../../actions/use-git-actions";
 
 interface GitDiffViewerProps {
   workspaceId: string;
@@ -10,7 +10,7 @@ interface GitDiffViewerProps {
   showCloseButton?: boolean;
 }
 
-type DiffLineTone = 'meta' | 'added' | 'removed' | 'context';
+type DiffLineTone = "meta" | "added" | "removed" | "context";
 
 interface DisplayLine {
   id: string;
@@ -21,24 +21,24 @@ interface DisplayLine {
 
 function getDiffLineTone(line: string): DiffLineTone {
   if (
-    line.startsWith('diff --git') ||
-    line.startsWith('index ') ||
-    line.startsWith('--- ') ||
-    line.startsWith('+++ ') ||
-    line.startsWith('@@')
+    line.startsWith("diff --git") ||
+    line.startsWith("index ") ||
+    line.startsWith("--- ") ||
+    line.startsWith("+++ ") ||
+    line.startsWith("@@")
   ) {
-    return 'meta';
+    return "meta";
   }
 
-  if (line.startsWith('+')) {
-    return 'added';
+  if (line.startsWith("+")) {
+    return "added";
   }
 
-  if (line.startsWith('-')) {
-    return 'removed';
+  if (line.startsWith("-")) {
+    return "removed";
   }
 
-  return 'context';
+  return "context";
 }
 
 export const GitDiffViewer: FC<GitDiffViewerProps> = ({
@@ -52,14 +52,12 @@ export const GitDiffViewer: FC<GitDiffViewerProps> = ({
 
   const diffLines = useMemo<DisplayLine[]>(
     () =>
-      preview?.diff
-        .split('\n')
-        .map((line, index) => ({
-          id: `${index}:${line}`,
-          line,
-          tone: getDiffLineTone(line),
-          lineNumber: index + 1,
-        })) ?? [],
+      preview?.diff.split("\n").map((line, index) => ({
+        id: `${index}:${line}`,
+        line,
+        tone: getDiffLineTone(line),
+        lineNumber: index + 1,
+      })) ?? [],
     [preview]
   );
 
@@ -68,7 +66,7 @@ export const GitDiffViewer: FC<GitDiffViewerProps> = ({
       <div className="code-editor workspace-git-editor">
         <div className="code-editor-header">
           <span className="code-file-path">
-            {preview?.path ?? 'Select a changed file to inspect'}
+            {preview?.path ?? "Select a changed file to inspect"}
           </span>
           {preview && showCloseButton ? (
             <div className="code-mode-toggle">
@@ -76,8 +74,8 @@ export const GitDiffViewer: FC<GitDiffViewerProps> = ({
                 type="button"
                 className="code-mode-btn"
                 onClick={handleClose}
-                title={t('action.close')}
-                aria-label={t('action.close')}
+                title={t("action.close")}
+                aria-label={t("action.close")}
               >
                 <X size={12} />
               </button>
@@ -89,18 +87,15 @@ export const GitDiffViewer: FC<GitDiffViewerProps> = ({
           {preview ? (
             <div className="code-lines git-diff-lines">
               {diffLines.map((line) => (
-                <div
-                  key={line.id}
-                  className={`code-line git-diff-line git-diff-line-${line.tone}`}
-                >
+                <div key={line.id} className={`code-line git-diff-line git-diff-line-${line.tone}`}>
                   <span className="code-line-num">{line.lineNumber}</span>
-                  <span className="git-diff-line-text">{line.line || ' '}</span>
+                  <span className="git-diff-line-text">{line.line || " "}</span>
                 </div>
               ))}
             </div>
           ) : (
             <div className="git-diff-empty">
-              <p className="git-diff-empty-title">{t('label.git')}</p>
+              <p className="git-diff-empty-title">{t("label.git")}</p>
               <p className="git-diff-empty-body">
                 Select a staged or modified file on the left to inspect its diff.
               </p>

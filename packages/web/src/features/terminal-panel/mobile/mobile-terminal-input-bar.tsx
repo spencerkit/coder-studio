@@ -1,21 +1,21 @@
 import {
-  useEffect,
-  useRef,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
-} from 'react';
-import type { CtrlMode, SoftTerminalKeyId } from './virtual-terminal-keys';
+  useEffect,
+  useRef,
+} from "react";
+import type { CtrlMode, SoftTerminalKeyId } from "./virtual-terminal-keys";
 
 const CTRL_LONG_PRESS_MS = 400;
 
 const SOFT_KEY_LAYOUT: Array<{ id: SoftTerminalKeyId; text: string }> = [
-  { id: 'escape', text: 'Esc' },
-  { id: 'tab', text: 'Tab' },
-  { id: 'arrow_up', text: '↑' },
-  { id: 'enter', text: 'Enter' },
-  { id: 'arrow_left', text: '←' },
-  { id: 'arrow_down', text: '↓' },
-  { id: 'arrow_right', text: '→' },
+  { id: "escape", text: "Esc" },
+  { id: "tab", text: "Tab" },
+  { id: "arrow_up", text: "↑" },
+  { id: "enter", text: "Enter" },
+  { id: "arrow_left", text: "←" },
+  { id: "arrow_down", text: "↓" },
+  { id: "arrow_right", text: "→" },
 ];
 
 export interface MobileTerminalInputBarLabels {
@@ -47,19 +47,19 @@ interface MobileTerminalInputBarProps {
 
 function getKeyAriaLabel(key: SoftTerminalKeyId, labels: MobileTerminalInputBarLabels): string {
   switch (key) {
-    case 'escape':
+    case "escape":
       return labels.escape;
-    case 'tab':
+    case "tab":
       return labels.tab;
-    case 'enter':
+    case "enter":
       return labels.enter;
-    case 'arrow_up':
+    case "arrow_up":
       return labels.up;
-    case 'arrow_down':
+    case "arrow_down":
       return labels.down;
-    case 'arrow_left':
+    case "arrow_left":
       return labels.left;
-    case 'arrow_right':
+    case "arrow_right":
       return labels.right;
   }
 }
@@ -76,7 +76,7 @@ export function MobileTerminalInputBar({
 }: MobileTerminalInputBarProps) {
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressTriggeredRef = useRef(false);
-  const longPressSourceRef = useRef<'keyboard' | 'pointer' | null>(null);
+  const longPressSourceRef = useRef<"keyboard" | "pointer" | null>(null);
   const commandKeysDisabled = disabled;
 
   const clearLongPress = () => {
@@ -110,7 +110,7 @@ export function MobileTerminalInputBar({
     longPressSourceRef.current = null;
     longPressTimerRef.current = setTimeout(() => {
       longPressTriggeredRef.current = true;
-      longPressSourceRef.current = 'pointer';
+      longPressSourceRef.current = "pointer";
       onCtrlLongPress();
     }, CTRL_LONG_PRESS_MS);
   };
@@ -136,8 +136,8 @@ export function MobileTerminalInputBar({
 
     if (longPressTriggeredRef.current) {
       const shouldSwallowClick =
-        longPressSourceRef.current === 'pointer' ||
-        (longPressSourceRef.current === 'keyboard' && event.detail === 0);
+        longPressSourceRef.current === "pointer" ||
+        (longPressSourceRef.current === "keyboard" && event.detail === 0);
 
       longPressTriggeredRef.current = false;
       longPressSourceRef.current = null;
@@ -154,23 +154,27 @@ export function MobileTerminalInputBar({
       return;
     }
 
-    if ((event.key === 'Enter' || event.key === ' ') && event.altKey) {
+    if ((event.key === "Enter" || event.key === " ") && event.altKey) {
       event.preventDefault();
       clearLongPress();
       longPressTriggeredRef.current = true;
-      longPressSourceRef.current = 'keyboard';
+      longPressSourceRef.current = "keyboard";
       onCtrlLongPress();
     }
   };
 
   const ctrlLabel =
-    ctrlMode === 'locked' ? labels.ctrlLocked : ctrlMode === 'armed' ? labels.ctrlArmed : labels.ctrl;
+    ctrlMode === "locked"
+      ? labels.ctrlLocked
+      : ctrlMode === "armed"
+        ? labels.ctrlArmed
+        : labels.ctrl;
 
   return (
     <div
       className="mobile-terminal-input-bar"
-      data-expanded={expanded ? 'true' : 'false'}
-      data-disabled={disabled ? 'true' : 'false'}
+      data-expanded={expanded ? "true" : "false"}
+      data-disabled={disabled ? "true" : "false"}
     >
       <button
         type="button"
@@ -187,7 +191,7 @@ export function MobileTerminalInputBar({
             type="button"
             className="mobile-terminal-input-bar__key mobile-terminal-input-bar__ctrl"
             data-ctrl-mode={ctrlMode}
-            aria-pressed={ctrlMode !== 'off'}
+            aria-pressed={ctrlMode !== "off"}
             aria-label={ctrlLabel}
             aria-keyshortcuts="Alt+Enter Alt+Space"
             disabled={commandKeysDisabled}
@@ -203,14 +207,14 @@ export function MobileTerminalInputBar({
 
           {SOFT_KEY_LAYOUT.map((key) => (
             <button
-                key={key.id}
-                type="button"
-                className="mobile-terminal-input-bar__key"
-                aria-label={getKeyAriaLabel(key.id, labels)}
-                disabled={commandKeysDisabled}
-                onClick={() => onKeyPress(key.id)}
-              >
-                {key.text}
+              key={key.id}
+              type="button"
+              className="mobile-terminal-input-bar__key"
+              aria-label={getKeyAriaLabel(key.id, labels)}
+              disabled={commandKeysDisabled}
+              onClick={() => onKeyPress(key.id)}
+            >
+              {key.text}
             </button>
           ))}
         </div>

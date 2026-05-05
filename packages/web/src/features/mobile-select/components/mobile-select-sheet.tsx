@@ -1,13 +1,13 @@
-import { useId, useMemo, useState, type ReactNode } from 'react';
-import { useTranslation } from '../../../lib/i18n';
-import { MobileSheet } from '../../workspace/views/mobile/mobile-sheet';
-import { PageHeader } from '../../shared/components/page-header';
+import { type ReactNode, useId, useMemo, useState } from "react";
+import { useTranslation } from "../../../lib/i18n";
+import { PageHeader } from "../../shared/components/page-header";
+import { MobileSheet } from "../../workspace/views/mobile/mobile-sheet";
 
 export interface MobileSelectItemTrailingAction {
   id: string;
   ariaLabel: string;
   icon: ReactNode;
-  tone?: 'default' | 'danger';
+  tone?: "default" | "danger";
   disabled?: boolean;
   onAction: () => void | Promise<void>;
 }
@@ -21,7 +21,7 @@ export interface MobileSelectItem {
   icon?: ReactNode;
   disabled?: boolean;
   keywords?: string[];
-  tone?: 'default' | 'danger';
+  tone?: "default" | "danger";
   trailingAction?: MobileSelectItemTrailingAction;
 }
 
@@ -30,28 +30,26 @@ export interface MobileSelectActionItem {
   label: string;
   description?: string;
   icon?: ReactNode;
-  tone?: 'default' | 'danger';
+  tone?: "default" | "danger";
   disabled?: boolean;
   onAction: () => void | Promise<void>;
 }
 
 interface MobileSelectOptionSection {
-  kind: 'options';
+  kind: "options";
   id: string;
   title?: string;
   items: MobileSelectItem[];
 }
 
 interface MobileSelectActionSection {
-  kind: 'actions';
+  kind: "actions";
   id: string;
   title?: string;
   items: MobileSelectActionItem[];
 }
 
-export type MobileSelectSection =
-  | MobileSelectOptionSection
-  | MobileSelectActionSection;
+export type MobileSelectSection = MobileSelectOptionSection | MobileSelectActionSection;
 
 export interface MobileSelectCreateConfig {
   visible: boolean;
@@ -64,7 +62,7 @@ export interface MobileSelectSheetProps {
   title: string;
   sections: MobileSelectSection[];
   selectedId?: string | null;
-  presentation?: 'sheet' | 'inline';
+  presentation?: "sheet" | "inline";
   searchable?: boolean;
   searchPlaceholder?: string;
   searchValue?: string;
@@ -84,7 +82,7 @@ export function MobileSelectSheet({
   title,
   sections,
   selectedId,
-  presentation = 'sheet',
+  presentation = "sheet",
   searchable = false,
   searchPlaceholder,
   searchValue,
@@ -100,13 +98,13 @@ export function MobileSelectSheet({
   onClose,
 }: MobileSelectSheetProps) {
   const t = useTranslation();
-  const [uncontrolledQuery, setUncontrolledQuery] = useState('');
+  const [uncontrolledQuery, setUncontrolledQuery] = useState("");
   const searchId = useId();
   const query = searchValue ?? uncontrolledQuery;
   const normalizedQuery = query.trim().toLowerCase();
-  const resolvedLoadingText = loadingText ?? t('common.loading');
-  const resolvedEmptyText = emptyText ?? t('command.no_results');
-  const resolvedSearchPlaceholder = searchPlaceholder ?? t('action.search');
+  const resolvedLoadingText = loadingText ?? t("common.loading");
+  const resolvedEmptyText = emptyText ?? t("command.no_results");
+  const resolvedSearchPlaceholder = searchPlaceholder ?? t("action.search");
 
   const handleQueryChange = (value: string) => {
     if (searchValue === undefined) {
@@ -122,7 +120,7 @@ export function MobileSelectSheet({
     }
 
     return sections.map((section) => {
-      if (section.kind !== 'options') {
+      if (section.kind !== "options") {
         return section;
       }
 
@@ -131,11 +129,11 @@ export function MobileSelectSheet({
         items: section.items.filter((item) => {
           const haystack = [
             item.label,
-            item.description ?? '',
-            item.meta ?? '',
+            item.description ?? "",
+            item.meta ?? "",
             ...(item.keywords ?? []),
           ]
-            .join(' ')
+            .join(" ")
             .toLowerCase();
           return haystack.includes(normalizedQuery);
         }),
@@ -148,7 +146,7 @@ export function MobileSelectSheet({
   const createDisabled = Boolean(canCreate && create?.disabled?.(query.trim()));
 
   const runAsyncHandler = (
-    context: 'select' | 'action' | 'create',
+    context: "select" | "action" | "create",
     handler: () => void | Promise<void>
   ) => {
     void Promise.resolve(handler()).catch((error: unknown) => {
@@ -157,7 +155,7 @@ export function MobileSelectSheet({
   };
 
   const handleOptionSelect = (id: string) => {
-    runAsyncHandler('select', async () => {
+    runAsyncHandler("select", async () => {
       await onSelect(id);
       if (closeOnSelect) {
         onClose();
@@ -166,11 +164,11 @@ export function MobileSelectSheet({
   };
 
   const handleActionSelect = (action: () => void | Promise<void>) => {
-    runAsyncHandler('action', action);
+    runAsyncHandler("action", action);
   };
 
   const handleTrailingAction = (action: () => void | Promise<void>) => {
-    runAsyncHandler('action', action);
+    runAsyncHandler("action", action);
   };
 
   const handleCreate = () => {
@@ -178,7 +176,7 @@ export function MobileSelectSheet({
       return;
     }
 
-    runAsyncHandler('create', () => create.onCreate(query.trim()));
+    runAsyncHandler("create", () => create.onCreate(query.trim()));
   };
 
   const content = (
@@ -186,7 +184,7 @@ export function MobileSelectSheet({
       {searchable ? (
         <div className="mobile-select-sheet__search">
           <label className="mobile-select-sheet__search-label" htmlFor={searchId}>
-            {t('action.search')}
+            {t("action.search")}
           </label>
           <input
             id={searchId}
@@ -207,7 +205,7 @@ export function MobileSelectSheet({
         ) : (
           <>
             {filteredSections.map((section) => {
-              if (section.items.length === 0 && section.kind === 'options') {
+              if (section.items.length === 0 && section.kind === "options") {
                 return null;
               }
 
@@ -217,7 +215,7 @@ export function MobileSelectSheet({
                     <div className="mobile-select-sheet__section-title">{section.title}</div>
                   ) : null}
                   <div className="mobile-select-sheet__list">
-                    {section.kind === 'options'
+                    {section.kind === "options"
                       ? section.items.map((item) => {
                           const isSelected = item.id === selectedId;
                           const labelId = `${section.id}-${item.id}-label`;
@@ -226,12 +224,12 @@ export function MobileSelectSheet({
                             item.meta ? `${section.id}-${item.id}-meta` : null,
                           ]
                             .filter(Boolean)
-                            .join(' ');
+                            .join(" ");
                           const optionButton = (
                             <button
                               type="button"
                               className={`mobile-select-sheet__item ${
-                                item.tone === 'danger' ? 'mobile-select-sheet__item--danger' : ''
+                                item.tone === "danger" ? "mobile-select-sheet__item--danger" : ""
                               }`}
                               aria-pressed={isSelected}
                               aria-labelledby={labelId}
@@ -266,14 +264,16 @@ export function MobileSelectSheet({
                                 ) : null}
                               </span>
                               {item.badge ? (
-                                <span className="mobile-select-sheet__item-badge">{item.badge}</span>
+                                <span className="mobile-select-sheet__item-badge">
+                                  {item.badge}
+                                </span>
                               ) : null}
                             </button>
                           );
 
                           if (!item.trailingAction) {
                             return (
-                              <div key={item.id} data-selected={isSelected ? 'true' : 'false'}>
+                              <div key={item.id} data-selected={isSelected ? "true" : "false"}>
                                 {optionButton}
                               </div>
                             );
@@ -283,15 +283,15 @@ export function MobileSelectSheet({
                             <div
                               key={item.id}
                               className="mobile-select-sheet__item-row"
-                              data-selected={isSelected ? 'true' : 'false'}
+                              data-selected={isSelected ? "true" : "false"}
                             >
                               {optionButton}
                               <button
                                 type="button"
                                 className={`mobile-select-sheet__item-side-action ${
-                                  item.trailingAction.tone === 'danger'
-                                    ? 'mobile-select-sheet__item-side-action--danger'
-                                    : ''
+                                  item.trailingAction.tone === "danger"
+                                    ? "mobile-select-sheet__item-side-action--danger"
+                                    : ""
                                 }`}
                                 aria-label={item.trailingAction.ariaLabel}
                                 disabled={item.disabled || item.trailingAction.disabled}
@@ -318,7 +318,7 @@ export function MobileSelectSheet({
                               key={item.id}
                               type="button"
                               className={`mobile-select-sheet__item mobile-select-sheet__item--action ${
-                                item.tone === 'danger' ? 'mobile-select-sheet__item--danger' : ''
+                                item.tone === "danger" ? "mobile-select-sheet__item--danger" : ""
                               }`}
                               aria-labelledby={labelId}
                               aria-describedby={descriptionId}
@@ -355,7 +355,7 @@ export function MobileSelectSheet({
               <div className="mobile-select-sheet__section">
                 <div className="mobile-select-sheet__list">
                   {(() => {
-                    const labelId = 'mobile-select-create-label';
+                    const labelId = "mobile-select-create-label";
 
                     return (
                       <button
@@ -386,17 +386,12 @@ export function MobileSelectSheet({
     </>
   );
 
-  if (presentation === 'inline') {
+  if (presentation === "inline") {
     return (
       <div className="mobile-inline-sheet" role="dialog" aria-label={title}>
         <div className="mobile-inline-sheet__handle" aria-hidden="true" />
         <div className="mobile-inline-sheet__header">
-          <PageHeader
-            title={title}
-            titleAs="h3"
-            onBack={onBack}
-            backLabel={t('action.back')}
-          />
+          <PageHeader title={title} titleAs="h3" onBack={onBack} backLabel={t("action.back")} />
         </div>
         <div className="mobile-inline-sheet__body">
           <div className="mobile-select-sheet mobile-select-sheet--inline">{content}</div>

@@ -4,7 +4,7 @@
  * Handles topic subscriptions with pattern matching and deduplication.
  */
 
-import { Topics } from '@coder-studio/core';
+import { Topics } from "@coder-studio/core";
 
 export type EventHandler = (topic: string, payload: unknown, seq: number) => void;
 
@@ -22,17 +22,17 @@ export interface Subscription {
  * - workspace.ws_1.terminal.* matches workspace.ws_1.terminal.term_1.created
  */
 export function topicMatches(pattern: string, topic: string): boolean {
-  if (pattern === topic || pattern === '*') {
+  if (pattern === topic || pattern === "*") {
     return true;
   }
 
-  const patternParts = pattern.split('.');
-  const topicParts = topic.split('.');
+  const patternParts = pattern.split(".");
+  const topicParts = topic.split(".");
 
   for (let i = 0; i < patternParts.length; i++) {
     const patternPart = patternParts[i];
 
-    if (patternPart === '*') {
+    if (patternPart === "*") {
       if (i === patternParts.length - 1) {
         return true;
       }
@@ -120,13 +120,13 @@ export class SubscriptionManager {
  * Create a topic pattern for workspace events
  */
 export function workspaceTopic(workspaceId: string, ...parts: string[]): string {
-  const key = parts.join('.');
+  const key = parts.join(".");
   switch (key) {
-    case 'meta':
+    case "meta":
       return Topics.workspaceMeta(workspaceId);
-    case 'git.state':
+    case "git.state":
       return Topics.workspaceGitState(workspaceId);
-    case 'fs.dirty':
+    case "fs.dirty":
       return Topics.workspaceFsDirty(workspaceId);
     default:
       return `workspace.${workspaceId}.${key}`;
@@ -136,17 +136,13 @@ export function workspaceTopic(workspaceId: string, ...parts: string[]): string 
 /**
  * Create a topic pattern for terminal events
  */
-export function terminalTopic(
-  workspaceId: string,
-  terminalId: string,
-  event: string
-): string {
+export function terminalTopic(workspaceId: string, terminalId: string, event: string): string {
   switch (event) {
-    case 'created':
+    case "created":
       return Topics.terminalCreated(workspaceId, terminalId);
-    case 'output':
+    case "output":
       return Topics.terminalOutput(workspaceId, terminalId);
-    case 'exit':
+    case "exit":
       return Topics.terminalExit(workspaceId, terminalId);
     default:
       return `workspace.${workspaceId}.terminal.${terminalId}.${event}`;
@@ -156,19 +152,15 @@ export function terminalTopic(
 /**
  * Create a topic pattern for session events
  */
-export function sessionTopic(
-  workspaceId: string,
-  sessionId: string,
-  event: string
-): string {
+export function sessionTopic(workspaceId: string, sessionId: string, event: string): string {
   switch (event) {
-    case 'state':
+    case "state":
       return Topics.sessionState(workspaceId, sessionId);
-    case 'progress':
+    case "progress":
       return Topics.sessionProgress(workspaceId, sessionId);
-    case 'supervisor.state':
+    case "supervisor.state":
       return Topics.supervisorState(workspaceId, sessionId);
-    case 'supervisor.cycle':
+    case "supervisor.cycle":
       return Topics.supervisorCycle(workspaceId, sessionId);
     default:
       return `workspace.${workspaceId}.session.${sessionId}.${event}`;

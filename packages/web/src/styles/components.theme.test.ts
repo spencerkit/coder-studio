@@ -68,7 +68,9 @@ describe("components.css theme-sensitive surfaces", () => {
 
     expect(rightToolbar).toContain("justify-content: flex-end");
     expect(rightToolbar).not.toContain("justify-content: flex-start");
-    expect(stylesheet).not.toContain(".terminal-toolbar-right > .terminal-toolbar-actions:first-of-type");
+    expect(stylesheet).not.toContain(
+      ".terminal-toolbar-right > .terminal-toolbar-actions:first-of-type"
+    );
   });
 
   it("keeps workspace editor and diff surfaces theme-aware", () => {
@@ -93,7 +95,9 @@ describe("components.css theme-sensitive surfaces", () => {
   it("keeps xterm and monaco scrollbars aligned with shared tokens", () => {
     const xtermViewport = getLastRuleBlock(".xterm-host .xterm-viewport");
     const xtermThumb = getLastRuleBlock(".xterm-host .xterm-viewport::-webkit-scrollbar-thumb");
-    const xtermThumbHover = getLastRuleBlock(".xterm-host .xterm-viewport::-webkit-scrollbar-thumb:hover");
+    const xtermThumbHover = getLastRuleBlock(
+      ".xterm-host .xterm-viewport::-webkit-scrollbar-thumb:hover"
+    );
     const xtermCustomTrack = getLastRuleBlock(
       ".xterm-host .xterm .xterm-scrollable-element > .scrollbar"
     );
@@ -113,7 +117,9 @@ describe("components.css theme-sensitive surfaces", () => {
       ".monaco-host .monaco-editor .monaco-scrollable-element > .scrollbar:hover > .slider"
     );
 
-    expect(xtermViewport).toContain("scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track)");
+    expect(xtermViewport).toContain(
+      "scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track)"
+    );
     expect(xtermThumb).toContain("var(--scrollbar-thumb)");
     expect(xtermThumb).toContain("var(--radius-full)");
     expect(xtermThumbHover).toContain("var(--border-focus)");
@@ -174,7 +180,9 @@ describe("components.css theme-sensitive surfaces", () => {
   it("uses a unified inline sheet treatment for mobile selectors and keeps topbar controls height-aligned", () => {
     const inlineSheet = getLastRuleBlock(".mobile-inline-sheet");
     const inlineSelectSheet = getLastRuleBlock(".mobile-select-sheet--inline");
-    const workspaceButton = getLastGroupedRuleBlock(/\.mobile-topbar__workspace-button\s*\{([^}]*)\}/g);
+    const workspaceButton = getLastGroupedRuleBlock(
+      /\.mobile-topbar__workspace-button\s*\{([^}]*)\}/g
+    );
     const sessionButton = getLastGroupedRuleBlock(/\.mobile-topbar__session-button\s*\{([^}]*)\}/g);
     const iconButton = getLastRuleBlock(".mobile-topbar__icon-button");
 
@@ -228,7 +236,9 @@ describe("components.css theme-sensitive surfaces", () => {
     const desktopButton = getLastRuleBlock(".supervisor-enable-btn");
     const desktopButtonIcon = getLastRuleBlock(".supervisor-enable-btn > svg");
     const desktopButtonLabel = getLastRuleBlock(".supervisor-enable-btn > span");
-    const mobileBadge = getLastGroupedRuleBlock(/\.mobile-supervisor-badge\s*\{([^}]*justify-content:[^}]*)\}/g);
+    const mobileBadge = getLastGroupedRuleBlock(
+      /\.mobile-supervisor-badge\s*\{([^}]*justify-content:[^}]*)\}/g
+    );
     const mobileBadgeIcon = getLastRuleBlock(".mobile-supervisor-badge__icon");
     const mobileBadgeIconSvg = getLastRuleBlock(".mobile-supervisor-badge__icon svg");
     const mobileBadgeLabel = getLastRuleBlock(".mobile-supervisor-badge__label");
@@ -256,7 +266,9 @@ describe("components.css theme-sensitive surfaces", () => {
     const toggle = getLastRuleBlock(".mobile-terminal-input-bar__toggle");
     const keys = getLastRuleBlock(".mobile-terminal-input-bar__keys");
     const key = getLastRuleBlock(".mobile-terminal-input-bar__key");
-    const ctrlLocked = getLastRuleBlock(".mobile-terminal-input-bar__ctrl[data-ctrl-mode='locked']");
+    const ctrlLocked = getLastRuleBlock(
+      ".mobile-terminal-input-bar__ctrl[data-ctrl-mode='locked']"
+    );
 
     expect(shell).toContain("display: flex");
     expect(shell).toContain("flex-direction: column");

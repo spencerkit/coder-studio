@@ -9,11 +9,13 @@ const ESC = 0x1b;
 const BEL = 0x07;
 
 function isRemovableControl(code: number): boolean {
-  return (code >= 0x00 && code <= 0x08)
-    || code === 0x0b
-    || code === 0x0c
-    || (code >= 0x0d && code <= 0x1f)
-    || code === 0x7f;
+  return (
+    (code >= 0x00 && code <= 0x08) ||
+    code === 0x0b ||
+    code === 0x0c ||
+    (code >= 0x0d && code <= 0x1f) ||
+    code === 0x7f
+  );
 }
 
 function findCsiEnd(text: string, start: number): number | null {
@@ -36,7 +38,7 @@ function findOscEnd(text: string, start: number): number | null {
       if (index + 1 >= text.length) {
         return null;
       }
-      if (text.charAt(index + 1) === '\\') {
+      if (text.charAt(index + 1) === "\\") {
         return index + 2;
       }
     }
@@ -51,7 +53,7 @@ function findStEnd(text: string, start: number): number | null {
       if (index + 1 >= text.length) {
         return null;
       }
-      if (text.charAt(index + 1) === '\\') {
+      if (text.charAt(index + 1) === "\\") {
         return index + 2;
       }
     }
@@ -71,13 +73,13 @@ export interface StripAnsiChunkResult {
  * callers can safely sanitize websocket/PTTY frames without leaking split
  * ANSI fragments into user-visible text.
  */
-export function stripAnsiChunk(input: string, carry = ''): StripAnsiChunkResult {
+export function stripAnsiChunk(input: string, carry = ""): StripAnsiChunkResult {
   if (!input && !carry) {
-    return { cleaned: '', carry: '' };
+    return { cleaned: "", carry: "" };
   }
 
   const text = carry + input;
-  let cleaned = '';
+  let cleaned = "";
 
   for (let index = 0; index < text.length; index += 1) {
     const code = text.charCodeAt(index);
@@ -90,13 +92,13 @@ export function stripAnsiChunk(input: string, carry = ''): StripAnsiChunkResult 
       const next = text.charAt(index + 1);
       let end: number | null = null;
 
-      if (next === '[') {
+      if (next === "[") {
         end = findCsiEnd(text, index);
-      } else if (next === ']') {
+      } else if (next === "]") {
         end = findOscEnd(text, index);
-      } else if (next === 'P' || next === 'X' || next === '^' || next === '_') {
+      } else if (next === "P" || next === "X" || next === "^" || next === "_") {
         end = findStEnd(text, index);
-      } else if (next === 'O' || next === 'N') {
+      } else if (next === "O" || next === "N") {
         end = index + 3 <= text.length ? index + 3 : null;
       } else {
         const nextCode = text.charCodeAt(index + 1);
@@ -120,7 +122,7 @@ export function stripAnsiChunk(input: string, carry = ''): StripAnsiChunkResult 
     cleaned += text.charAt(index);
   }
 
-  return { cleaned, carry: '' };
+  return { cleaned, carry: "" };
 }
 
 /**
@@ -145,7 +147,7 @@ export function stripAnsi(input: string): string {
  * Drops ANSI/control bytes, collapses whitespace, trims the result.
  */
 export function sanitizeInlineText(input: string): string {
-  return stripAnsi(input).replace(/\s+/g, ' ').trim();
+  return stripAnsi(input).replace(/\s+/g, " ").trim();
 }
 
 /**
@@ -156,14 +158,14 @@ export function sanitizeInlineText(input: string): string {
  * final answer or status), collapse internal whitespace, hard-cap length.
  */
 export function summarizeOutput(rawCleanedText: string, maxChars = 140): string {
-  if (!rawCleanedText) return '';
+  if (!rawCleanedText) return "";
   const lines = rawCleanedText
-    .split('\n')
+    .split("\n")
     .map((l) => l.trim())
     // Drop empty lines and lines that look like prompt characters only
     .filter((l) => l.length > 0 && !/^[>$%#❯➜•]+$/.test(l));
-  if (lines.length === 0) return '';
-  const last = lines[lines.length - 1]!.replace(/\s+/g, ' ');
+  if (lines.length === 0) return "";
+  const last = lines[lines.length - 1]!.replace(/\s+/g, " ");
   if (last.length <= maxChars) return last;
   return `${last.slice(0, maxChars - 1).trimEnd()}…`;
 }
@@ -173,12 +175,12 @@ export function summarizeOutput(rawCleanedText: string, maxChars = 140): string 
  * Falls back to title-casing the id if we don't have a hard-coded mapping.
  */
 const PROVIDER_LABELS: Record<string, string> = {
-  claude: 'Claude',
-  codex: 'Codex',
+  claude: "Claude",
+  codex: "Codex",
 };
 export function formatProviderLabel(providerId: string): string {
   if (PROVIDER_LABELS[providerId]) return PROVIDER_LABELS[providerId]!;
-  if (!providerId) return 'Agent';
+  if (!providerId) return "Agent";
   return providerId.charAt(0).toUpperCase() + providerId.slice(1);
 }
 
@@ -186,14 +188,16 @@ export function formatProviderLabel(providerId: string): string {
  * Workspace name → use `name` if set, otherwise basename of `path`.
  * Returns empty string if neither is available, so callers can hide the field.
  */
-export function formatWorkspaceLabel(workspace: { name?: string; path?: string } | null | undefined): string {
-  if (!workspace) return '';
+export function formatWorkspaceLabel(
+  workspace: { name?: string; path?: string } | null | undefined
+): string {
+  if (!workspace) return "";
   const name = workspace.name?.trim();
   if (name) return name;
   const path = workspace.path?.trim();
-  if (!path) return '';
+  if (!path) return "";
   // Strip trailing slashes, then take last segment.
-  const cleaned = path.replace(/[/\\]+$/, '');
+  const cleaned = path.replace(/[/\\]+$/, "");
   const parts = cleaned.split(/[/\\]/);
   return parts[parts.length - 1] || cleaned;
 }
@@ -208,8 +212,8 @@ export function formatWorkspaceLabel(workspace: { name?: string; path?: string }
  *   3_905_000   -> "1h 5m"
  */
 export function formatDuration(ms: number): string {
-  if (!Number.isFinite(ms) || ms < 0) return '';
-  if (ms < 1_000) return '<1s';
+  if (!Number.isFinite(ms) || ms < 0) return "";
+  if (ms < 1_000) return "<1s";
   const totalSeconds = Math.floor(ms / 1_000);
   if (totalSeconds < 60) return `${totalSeconds}s`;
   const totalMinutes = Math.floor(totalSeconds / 60);

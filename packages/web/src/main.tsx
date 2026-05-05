@@ -2,26 +2,24 @@
  * Application Entry Point
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { Provider } from 'jotai';
-import { AppProviders } from './app/providers';
-import App from './app';
+import { Provider } from "jotai";
+import React from "react";
+import ReactDOM from "react-dom/client";
+import App from "./app";
+import { AppProviders } from "./app/providers";
 
-import '@xterm/xterm/css/xterm.css';
+import "@xterm/xterm/css/xterm.css";
 
 // Import fonts
-import './styles/fonts.css';
+import "./styles/fonts.css";
 
 // Import styles
-import './styles/tokens.css';
-import './styles/base.css';
-import './styles/components.css';
+import "./styles/tokens.css";
+import "./styles/base.css";
+import "./styles/components.css";
 
 // Mount application
-const root = ReactDOM.createRoot(
-  document.getElementById('root') as HTMLElement
-);
+const root = ReactDOM.createRoot(document.getElementById("root") as HTMLElement);
 
 root.render(
   <Provider>

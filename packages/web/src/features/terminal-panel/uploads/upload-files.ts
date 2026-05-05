@@ -5,7 +5,7 @@ export interface UploadedFileMeta {
 }
 
 export class UploadError extends Error {
-  override name = 'UploadError';
+  override name = "UploadError";
 
   constructor(
     public readonly code: string,
@@ -23,20 +23,20 @@ export interface UploadFilesInput {
 
 export async function uploadFiles(input: UploadFilesInput): Promise<UploadedFileMeta[]> {
   const form = new FormData();
-  form.append('workspaceId', input.workspaceId);
+  form.append("workspaceId", input.workspaceId);
   for (const file of input.files) {
-    form.append('files', file, file.name);
+    form.append("files", file, file.name);
   }
 
   let response: Response;
   try {
-    response = await fetch('/api/uploads', {
-      method: 'POST',
+    response = await fetch("/api/uploads", {
+      method: "POST",
       body: form,
-      credentials: 'include',
+      credentials: "include",
     });
   } catch (error) {
-    throw new UploadError('network_error', 0, (error as Error).message);
+    throw new UploadError("network_error", 0, (error as Error).message);
   }
 
   let body: { ok?: boolean; files?: UploadedFileMeta[]; error?: string };

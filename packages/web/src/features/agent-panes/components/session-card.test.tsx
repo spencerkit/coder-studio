@@ -1,18 +1,22 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { Provider, createStore } from 'jotai';
-import type { ReactNode } from 'react';
-import { SessionCard } from '../views/shared/session-card';
-import { sessionsAtom } from '../../../atoms/sessions';
-import { wsClientAtom } from '../../../atoms/connection';
-import { pendingFocusSessionAtom } from '../../../atoms/app-ui';
-import { activeWorkspaceIdAtom, workspacesAtom, workspacesLoadStateAtom } from '../../../atoms/workspaces';
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { createStore, Provider } from "jotai";
+import type { ReactNode } from "react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { pendingFocusSessionAtom } from "../../../atoms/app-ui";
+import { wsClientAtom } from "../../../atoms/connection";
+import { sessionsAtom } from "../../../atoms/sessions";
+import {
+  activeWorkspaceIdAtom,
+  workspacesAtom,
+  workspacesLoadStateAtom,
+} from "../../../atoms/workspaces";
+import { SessionCard } from "../views/shared/session-card";
 
 const mockXtermHost = vi.fn((props: Record<string, unknown>) => (
   <div data-testid="mock-xterm-host" data-readonly={String(props.readOnly)} />
 ));
 
-vi.mock('../../terminal-panel/views/shared/xterm-host', () => ({
+vi.mock("../../terminal-panel/views/shared/xterm-host", () => ({
   XtermHost: (props: Record<string, unknown>) => mockXtermHost(props),
 }));
 
@@ -26,13 +30,13 @@ function createSessionStore(
     sendCommand,
     subscribe: vi.fn(() => () => {}),
   } as never);
-  store.set(activeWorkspaceIdAtom, 'ws-123');
-  store.set(workspacesLoadStateAtom, 'ready');
+  store.set(activeWorkspaceIdAtom, "ws-123");
+  store.set(workspacesLoadStateAtom, "ready");
   store.set(workspacesAtom, {
-    'ws-123': {
-      id: 'ws-123',
-      path: '/tmp/ws-123',
-      targetRuntime: 'native',
+    "ws-123": {
+      id: "ws-123",
+      path: "/tmp/ws-123",
+      targetRuntime: "native",
       openedAt: Date.now() - 10_000,
       lastActiveAt: Date.now() - 500,
       uiState: {
@@ -45,12 +49,12 @@ function createSessionStore(
 
   store.set(sessionsAtom, {
     sess_123456: {
-      id: 'sess_123456',
-      workspaceId: 'ws-123',
-      terminalId: 'term-ended',
-      providerId: 'codex',
-      state: 'ended',
-      capability: 'full',
+      id: "sess_123456",
+      workspaceId: "ws-123",
+      terminalId: "term-ended",
+      providerId: "codex",
+      state: "ended",
+      capability: "full",
       startedAt: Date.now() - 5_000,
       lastActiveAt: Date.now() - 1_000,
       endedAt: Date.now(),
@@ -61,12 +65,12 @@ function createSessionStore(
   return { store, sendCommand };
 }
 
-describe('SessionCard', () => {
+describe("SessionCard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('renders ended sessions with a read-only terminal host', () => {
+  it("renders ended sessions with a read-only terminal host", () => {
     const { store } = createSessionStore();
 
     render(
@@ -78,18 +82,18 @@ describe('SessionCard', () => {
     expect(mockXtermHost).toHaveBeenCalled();
     expect(mockXtermHost.mock.calls[0]?.[0]).toEqual(
       expect.objectContaining({
-        terminalId: 'term-ended',
-        workspaceId: 'ws-123',
+        terminalId: "term-ended",
+        workspaceId: "ws-123",
         readOnly: true,
-        terminalKind: 'agent',
+        terminalKind: "agent",
       })
     );
   });
 
-  it('renders interactive sessions without the extra command input', () => {
+  it("renders interactive sessions without the extra command input", () => {
     const { store } = createSessionStore({
-      terminalId: 'term-live',
-      state: 'idle',
+      terminalId: "term-live",
+      state: "idle",
       endedAt: undefined,
     });
 
@@ -99,37 +103,37 @@ describe('SessionCard', () => {
       </Provider>
     );
 
-    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Start' })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Start" })).not.toBeInTheDocument();
     expect(mockXtermHost.mock.calls.at(-1)?.[0]).toEqual(
       expect.objectContaining({
-        terminalId: 'term-live',
+        terminalId: "term-live",
         readOnly: false,
         isActiveSession: false,
-        terminalKind: 'agent',
+        terminalKind: "agent",
       })
     );
   });
 
-  it('passes isActiveSession to XtermHost when the workspace ui state targets this session', () => {
+  it("passes isActiveSession to XtermHost when the workspace ui state targets this session", () => {
     const { store } = createSessionStore({
-      terminalId: 'term-live',
-      state: 'running',
+      terminalId: "term-live",
+      state: "running",
       endedAt: undefined,
     });
 
     store.set(workspacesAtom, {
-      'ws-123': {
-        id: 'ws-123',
-        path: '/tmp/ws-123',
-        targetRuntime: 'native',
+      "ws-123": {
+        id: "ws-123",
+        path: "/tmp/ws-123",
+        targetRuntime: "native",
         openedAt: Date.now() - 10_000,
         lastActiveAt: Date.now() - 500,
         uiState: {
           leftPanelWidth: 320,
           bottomPanelHeight: 240,
           focusMode: false,
-          activeSessionId: 'sess_123456',
+          activeSessionId: "sess_123456",
         },
       },
     });
@@ -142,16 +146,16 @@ describe('SessionCard', () => {
 
     expect(mockXtermHost.mock.calls.at(-1)?.[0]).toEqual(
       expect.objectContaining({
-        terminalId: 'term-live',
+        terminalId: "term-live",
         isActiveSession: true,
       })
     );
   });
 
-  it('hides header actions when showHeaderActions is false', () => {
+  it("hides header actions when showHeaderActions is false", () => {
     const { store } = createSessionStore({
-      terminalId: 'term-live',
-      state: 'running',
+      terminalId: "term-live",
+      state: "running",
       endedAt: undefined,
     });
 
@@ -161,16 +165,16 @@ describe('SessionCard', () => {
       </Provider>
     );
 
-    expect(screen.queryByRole('button', { name: 'Stop' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Stop" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Close" })).not.toBeInTheDocument();
   });
 
-  it('renders a header accessory on the right side of the session header', () => {
+  it("renders a header accessory on the right side of the session header", () => {
     const { store } = createSessionStore({
-      terminalId: 'term-live',
-      state: 'idle',
+      terminalId: "term-live",
+      state: "idle",
       endedAt: undefined,
-      capability: 'limited',
+      capability: "limited",
     });
 
     render(
@@ -179,26 +183,26 @@ describe('SessionCard', () => {
           sessionId="sess_123456"
           showHeaderActions={false}
           showSupervisorInline={false}
-          headerAccessory={<button type="button">Supervisor entry</button> as ReactNode}
+          headerAccessory={(<button type="button">Supervisor entry</button>) as ReactNode}
         />
       </Provider>
     );
 
-    const header = screen.getByText('SESSION-56').closest('.session-header');
-    const accessory = screen.getByRole('button', { name: 'Supervisor entry' });
-    const right = header?.querySelector('.session-header-right');
+    const header = screen.getByText("SESSION-56").closest(".session-header");
+    const accessory = screen.getByRole("button", { name: "Supervisor entry" });
+    const right = header?.querySelector(".session-header-right");
 
     expect(header).not.toBeNull();
-    expect(accessory.parentElement).toHaveClass('session-header-accessory');
+    expect(accessory.parentElement).toHaveClass("session-header-accessory");
     expect(right).not.toBeNull();
     expect(right).toContainElement(accessory);
     expect(header?.lastElementChild).toBe(right);
   });
 
-  it('forces the terminal read-only when terminalReadOnlyOverride is true', () => {
+  it("forces the terminal read-only when terminalReadOnlyOverride is true", () => {
     const { store } = createSessionStore({
-      terminalId: 'term-live',
-      state: 'running',
+      terminalId: "term-live",
+      state: "running",
       endedAt: undefined,
     });
 
@@ -210,23 +214,23 @@ describe('SessionCard', () => {
 
     expect(mockXtermHost.mock.calls.at(-1)?.[0]).toEqual(
       expect.objectContaining({
-        terminalId: 'term-live',
+        terminalId: "term-live",
         readOnly: true,
       })
     );
   });
 
-  it('hydrates supervisor state for full-capability sessions and renders the card above the terminal', async () => {
+  it("hydrates supervisor state for full-capability sessions and renders the card above the terminal", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
-      if (op === 'supervisor.get') {
+      if (op === "supervisor.get") {
         return {
           supervisor: {
-            id: 'sup-1',
-            sessionId: 'sess_123456',
-            workspaceId: 'ws-123',
-            state: 'idle',
-            objective: 'Keep the agent on track',
-            evaluatorProviderId: 'claude',
+            id: "sup-1",
+            sessionId: "sess_123456",
+            workspaceId: "ws-123",
+            state: "idle",
+            objective: "Keep the agent on track",
+            evaluatorProviderId: "claude",
             cycles: [],
             createdAt: Date.now(),
             updatedAt: Date.now(),
@@ -236,7 +240,7 @@ describe('SessionCard', () => {
       return undefined;
     });
 
-    const { store } = createSessionStore({ state: 'running', capability: 'full' }, sendCommand);
+    const { store } = createSessionStore({ state: "running", capability: "full" }, sendCommand);
 
     render(
       <Provider store={store}>
@@ -245,22 +249,22 @@ describe('SessionCard', () => {
     );
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith('supervisor.get', { sessionId: 'sess_123456' });
+      expect(sendCommand).toHaveBeenCalledWith("supervisor.get", { sessionId: "sess_123456" });
     });
 
-    expect(screen.getByText('Supervisor')).toBeInTheDocument();
+    expect(screen.getByText("Supervisor")).toBeInTheDocument();
   });
 
-  it('reacts to a pending-focus request by scrolling itself into view and pulsing, then clears the marker', async () => {
+  it("reacts to a pending-focus request by scrolling itself into view and pulsing, then clears the marker", async () => {
     const scrollSpy = vi.fn();
     // jsdom doesn't implement scrollIntoView; provide a stub before render.
-    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
       configurable: true,
       value: scrollSpy,
     });
 
-    const { store } = createSessionStore({ state: 'idle', endedAt: undefined });
-    store.set(pendingFocusSessionAtom, 'sess_123456');
+    const { store } = createSessionStore({ state: "idle", endedAt: undefined });
+    store.set(pendingFocusSessionAtom, "sess_123456");
 
     render(
       <Provider store={store}>
@@ -274,20 +278,20 @@ describe('SessionCard', () => {
 
     const card = document.querySelector('[data-session-id="sess_123456"]');
     expect(card).not.toBeNull();
-    expect(card?.classList.contains('session-card--focus-pulse')).toBe(true);
+    expect(card?.classList.contains("session-card--focus-pulse")).toBe(true);
     // Marker should self-clear so siblings don't also fire on re-render.
     expect(store.get(pendingFocusSessionAtom)).toBeNull();
   });
 
-  it('ignores a pending-focus request targeting a different session', async () => {
+  it("ignores a pending-focus request targeting a different session", async () => {
     const scrollSpy = vi.fn();
-    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
       configurable: true,
       value: scrollSpy,
     });
 
-    const { store } = createSessionStore({ state: 'idle', endedAt: undefined });
-    store.set(pendingFocusSessionAtom, 'some-other-session');
+    const { store } = createSessionStore({ state: "idle", endedAt: undefined });
+    store.set(pendingFocusSessionAtom, "some-other-session");
 
     render(
       <Provider store={store}>
@@ -302,16 +306,16 @@ describe('SessionCard', () => {
 
     expect(scrollSpy).not.toHaveBeenCalled();
     const card = document.querySelector('[data-session-id="sess_123456"]');
-    expect(card?.classList.contains('session-card--focus-pulse')).toBe(false);
+    expect(card?.classList.contains("session-card--focus-pulse")).toBe(false);
     // Untouched.
-    expect(store.get(pendingFocusSessionAtom)).toBe('some-other-session');
+    expect(store.get(pendingFocusSessionAtom)).toBe("some-other-session");
   });
 
-  it('shows the session title when the server has assigned one', () => {
+  it("shows the session title when the server has assigned one", () => {
     const { store } = createSessionStore({
-      state: 'running',
+      state: "running",
       endedAt: undefined,
-      title: 'fix bug',
+      title: "fix bug",
     });
 
     render(
@@ -320,14 +324,14 @@ describe('SessionCard', () => {
       </Provider>
     );
 
-    expect(screen.getByText('fix bug')).toBeInTheDocument();
+    expect(screen.getByText("fix bug")).toBeInTheDocument();
     // The SESSION-XX fallback should not also render in the header.
     expect(screen.queryByText(/^SESSION-/)).toBeNull();
   });
 
-  it('falls back to SESSION-XX while the session has no title yet', () => {
+  it("falls back to SESSION-XX while the session has no title yet", () => {
     const { store } = createSessionStore({
-      state: 'running',
+      state: "running",
       endedAt: undefined,
       // title intentionally omitted
     });
@@ -338,13 +342,13 @@ describe('SessionCard', () => {
       </Provider>
     );
 
-    expect(screen.getByText('SESSION-56')).toBeInTheDocument();
+    expect(screen.getByText("SESSION-56")).toBeInTheDocument();
   });
 
-  it('renders ended sessions without a start action', () => {
+  it("renders ended sessions without a start action", () => {
     const { store } = createSessionStore({
-      terminalId: 'term-ended',
-      state: 'ended',
+      terminalId: "term-ended",
+      state: "ended",
       endedAt: Date.now(),
     });
 
@@ -356,17 +360,17 @@ describe('SessionCard', () => {
 
     expect(mockXtermHost.mock.calls.at(-1)?.[0]).toEqual(
       expect.objectContaining({
-        terminalId: 'term-ended',
+        terminalId: "term-ended",
         readOnly: true,
       })
     );
-    expect(screen.queryByRole('button', { name: 'Start' })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Start" })).not.toBeInTheDocument();
   });
 
-  it('does not render supervisor chrome for ended sessions', () => {
+  it("does not render supervisor chrome for ended sessions", () => {
     const { store } = createSessionStore({
-      terminalId: 'term-ended',
-      state: 'ended',
+      terminalId: "term-ended",
+      state: "ended",
       endedAt: Date.now(),
     });
 
@@ -376,13 +380,13 @@ describe('SessionCard', () => {
       </Provider>
     );
 
-    expect(screen.queryByText('Supervisor')).not.toBeInTheDocument();
+    expect(screen.queryByText("Supervisor")).not.toBeInTheDocument();
   });
 
-  it('routes close through the explicit callback', async () => {
+  it("routes close through the explicit callback", async () => {
     const { store, sendCommand } = createSessionStore({
-      terminalId: 'term-live',
-      state: 'running',
+      terminalId: "term-live",
+      state: "running",
       endedAt: undefined,
     });
     const onClose = vi.fn();
@@ -393,16 +397,16 @@ describe('SessionCard', () => {
       </Provider>
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
 
     expect(onClose).toHaveBeenCalledTimes(1);
-    expect(sendCommand).not.toHaveBeenCalledWith('session.stop', { sessionId: 'sess_123456' });
+    expect(sendCommand).not.toHaveBeenCalledWith("session.stop", { sessionId: "sess_123456" });
   });
 
-  it('routes split buttons through explicit callbacks', () => {
+  it("routes split buttons through explicit callbacks", () => {
     const { store } = createSessionStore({
-      terminalId: 'term-live',
-      state: 'running',
+      terminalId: "term-live",
+      state: "running",
       endedAt: undefined,
     });
     const onSplitHorizontal = vi.fn();
@@ -418,34 +422,34 @@ describe('SessionCard', () => {
       </Provider>
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Split horizontal' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Split vertical' }));
+    fireEvent.click(screen.getByRole("button", { name: "Split horizontal" }));
+    fireEvent.click(screen.getByRole("button", { name: "Split vertical" }));
 
     expect(onSplitHorizontal).toHaveBeenCalledTimes(1);
     expect(onSplitVertical).toHaveBeenCalledTimes(1);
   });
 
-  it('persists activeSessionId when the card is clicked', async () => {
+  it("persists activeSessionId when the card is clicked", async () => {
     const sendCommand = vi.fn().mockResolvedValue({
       ok: true,
       data: {
-        id: 'ws-123',
-        path: '/tmp/ws-123',
-        targetRuntime: 'native',
+        id: "ws-123",
+        path: "/tmp/ws-123",
+        targetRuntime: "native",
         openedAt: Date.now() - 10_000,
         lastActiveAt: Date.now(),
         uiState: {
           leftPanelWidth: 320,
           bottomPanelHeight: 240,
           focusMode: false,
-          activeSessionId: 'sess_123456',
+          activeSessionId: "sess_123456",
         },
       },
     });
     const { store } = createSessionStore(
       {
-        terminalId: 'term-live',
-        state: 'running',
+        terminalId: "term-live",
+        state: "running",
         endedAt: undefined,
       },
       sendCommand
@@ -460,22 +464,22 @@ describe('SessionCard', () => {
     fireEvent.click(document.querySelector('[data-session-id="sess_123456"]')!);
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith('workspace.uiState.set', {
-        workspaceId: 'ws-123',
+      expect(sendCommand).toHaveBeenCalledWith("workspace.uiState.set", {
+        workspaceId: "ws-123",
         uiState: expect.objectContaining({
-          activeSessionId: 'sess_123456',
+          activeSessionId: "sess_123456",
         }),
       });
     });
   });
 
-  it('does not persist activeSessionId when header action buttons are clicked', async () => {
+  it("does not persist activeSessionId when header action buttons are clicked", async () => {
     const sendCommand = vi.fn().mockResolvedValue({ ok: true });
     const onClose = vi.fn();
     const { store } = createSessionStore(
       {
-        terminalId: 'term-live',
-        state: 'running',
+        terminalId: "term-live",
+        state: "running",
         endedAt: undefined,
       },
       sendCommand
@@ -487,11 +491,11 @@ describe('SessionCard', () => {
       </Provider>
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
 
     expect(onClose).toHaveBeenCalledTimes(1);
-    expect(
-      sendCommand.mock.calls.some(([command]) => command === 'workspace.uiState.set')
-    ).toBe(false);
+    expect(sendCommand.mock.calls.some(([command]) => command === "workspace.uiState.set")).toBe(
+      false
+    );
   });
 });

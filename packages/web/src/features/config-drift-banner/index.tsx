@@ -14,20 +14,20 @@
  * safe even while the user toggles checkboxes.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useAtomValue } from 'jotai';
-import { AlertTriangle, X, ChevronDown, ChevronUp } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
-import { connectionStatusAtom, dispatchCommandAtom } from '../../atoms/connection';
-import { useViewport } from '../../hooks/use-viewport';
-import { useTranslation } from '../../lib/i18n';
+import { useAtomValue } from "jotai";
+import { AlertTriangle, ChevronDown, ChevronUp, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { connectionStatusAtom, dispatchCommandAtom } from "../../atoms/connection";
+import { useViewport } from "../../hooks/use-viewport";
+import { useTranslation } from "../../lib/i18n";
 
-type FindingId = 'toml_notify' | 'toml_codex_hooks';
+type FindingId = "toml_notify" | "toml_codex_hooks";
 
 interface Finding {
   id: FindingId;
   type: FindingId;
-  severity: 'warn' | 'info';
+  severity: "warn" | "info";
   startLine: number;
   endLine: number;
   snippet: string;
@@ -52,18 +52,18 @@ interface CleanupResult {
 }
 
 interface ConfigDriftBannerProps {
-  variant?: 'global' | 'embedded';
+  variant?: "global" | "embedded";
   showLoadError?: boolean;
 }
 
 export function ConfigDriftBanner({
-  variant = 'global',
+  variant = "global",
   showLoadError = true,
 }: ConfigDriftBannerProps) {
   const t = useTranslation();
   const navigate = useNavigate();
-  const isMobile = useViewport() === 'mobile';
-  const auditLoadFailedUnknown = t('codex_audit.load_failed_unknown');
+  const isMobile = useViewport() === "mobile";
+  const auditLoadFailedUnknown = t("codex_audit.load_failed_unknown");
   const dispatch = useAtomValue(dispatchCommandAtom);
   const connectionStatus = useAtomValue(connectionStatusAtom);
 
@@ -79,11 +79,11 @@ export function ConfigDriftBanner({
   // Load once WS is up. Re-run if the connection drops and comes back
   // (reconnect → user may have edited their config in the meantime).
   useEffect(() => {
-    if (connectionStatus !== 'connected') return;
+    if (connectionStatus !== "connected") return;
 
     let cancelled = false;
     const run = async () => {
-      const result = await dispatch<SettingsPayload>('settings.get', {});
+      const result = await dispatch<SettingsPayload>("settings.get", {});
       if (cancelled) return;
       if (!result.ok || !result.data) {
         setAudit(null);
@@ -105,15 +105,15 @@ export function ConfigDriftBanner({
   }, [auditLoadFailedUnknown, connectionStatus, dispatch, refreshKey]);
 
   const hasFindings = !!audit && audit.findings.length > 0;
-  const isCompactMobileGlobal = isMobile && variant === 'global';
+  const isCompactMobileGlobal = isMobile && variant === "global";
   const rootClassName = [
-    'config-drift-banner',
-    variant === 'embedded' ? 'config-drift-banner--embedded' : '',
-    isCompactMobileGlobal ? 'config-drift-banner--mobile-compact' : '',
-    loadError ? 'config-drift-banner--error' : '',
+    "config-drift-banner",
+    variant === "embedded" ? "config-drift-banner--embedded" : "",
+    isCompactMobileGlobal ? "config-drift-banner--mobile-compact" : "",
+    loadError ? "config-drift-banner--error" : "",
   ]
     .filter(Boolean)
-    .join(' ');
+    .join(" ");
 
   const toggleSelected = useCallback((id: FindingId) => {
     setSelected((prev) => {
@@ -129,13 +129,13 @@ export function ConfigDriftBanner({
     setCleaning(true);
     setNotice(null);
     try {
-      const result = await dispatch<CleanupResult>('settings.cleanupCodexConfig', {
+      const result = await dispatch<CleanupResult>("settings.cleanupCodexConfig", {
         removeIds: Array.from(selected),
       });
       if (!result.ok || !result.data) {
         setNotice(
-          t('codex_audit.cleanup_failed') +
-            (result.error?.message ? `: ${result.error.message}` : '')
+          t("codex_audit.cleanup_failed") +
+            (result.error?.message ? `: ${result.error.message}` : "")
         );
         return;
       }
@@ -144,14 +144,14 @@ export function ConfigDriftBanner({
       setSelected(new Set((nextAudit?.findings ?? []).map((f) => f.id)));
       if (result.data.backupPath) {
         setNotice(
-          t('codex_audit.cleanup_done_with_backup', {
+          t("codex_audit.cleanup_done_with_backup", {
             path: result.data.backupPath,
           })
         );
       } else if (result.data.noop) {
-        setNotice(t('codex_audit.cleanup_noop'));
+        setNotice(t("codex_audit.cleanup_noop"));
       } else {
-        setNotice(t('codex_audit.cleanup_done'));
+        setNotice(t("codex_audit.cleanup_done"));
       }
     } finally {
       setCleaning(false);
@@ -159,9 +159,9 @@ export function ConfigDriftBanner({
   }, [audit, dispatch, selected, t]);
 
   const primaryLabel = useMemo(() => {
-    if (cleaning) return t('codex_audit.cleaning');
-    if (selected.size === 0) return t('codex_audit.cleanup_select');
-    return t('codex_audit.cleanup_action', { count: String(selected.size) });
+    if (cleaning) return t("codex_audit.cleaning");
+    if (selected.size === 0) return t("codex_audit.cleanup_select");
+    return t("codex_audit.cleanup_action", { count: String(selected.size) });
   }, [cleaning, selected.size, t]);
 
   if (dismissed) return null;
@@ -170,20 +170,20 @@ export function ConfigDriftBanner({
       <div className={rootClassName} role="alert">
         <div className="config-drift-banner__row config-drift-banner__row--compact">
           <AlertTriangle size={16} className="config-drift-banner__icon" aria-hidden />
-          <span className="config-drift-banner__title">{t('codex_audit.load_failed_title')}</span>
+          <span className="config-drift-banner__title">{t("codex_audit.load_failed_title")}</span>
           <div className="config-drift-banner__spacer" />
           <button
             type="button"
             className="config-drift-banner__summary-action"
             onClick={() => setRefreshKey((value) => value + 1)}
           >
-            {t('action.refresh')}
+            {t("action.refresh")}
           </button>
           <button
             type="button"
             className="config-drift-banner__dismiss"
             onClick={() => setDismissed(true)}
-            aria-label={t('action.close')}
+            aria-label={t("action.close")}
           >
             <X size={14} />
           </button>
@@ -196,7 +196,7 @@ export function ConfigDriftBanner({
       <div className={rootClassName} role="alert">
         <div className="config-drift-banner__row">
           <AlertTriangle size={16} className="config-drift-banner__icon" aria-hidden />
-          <span className="config-drift-banner__title">{t('codex_audit.load_failed_title')}</span>
+          <span className="config-drift-banner__title">{t("codex_audit.load_failed_title")}</span>
           <span className="config-drift-banner__message">{loadError}</span>
           <div className="config-drift-banner__spacer" />
           <button
@@ -204,13 +204,13 @@ export function ConfigDriftBanner({
             className="config-drift-banner__toggle"
             onClick={() => setRefreshKey((value) => value + 1)}
           >
-            <span>{t('action.refresh')}</span>
+            <span>{t("action.refresh")}</span>
           </button>
           <button
             type="button"
             className="config-drift-banner__dismiss"
             onClick={() => setDismissed(true)}
-            aria-label={t('action.close')}
+            aria-label={t("action.close")}
           >
             <X size={14} />
           </button>
@@ -227,7 +227,7 @@ export function ConfigDriftBanner({
         <div className="config-drift-banner__row config-drift-banner__row--compact">
           <AlertTriangle size={16} className="config-drift-banner__icon" aria-hidden />
           <span className="config-drift-banner__title">
-            {t('codex_audit.title', {
+            {t("codex_audit.title", {
               count: String(audit!.findings.length),
             })}
           </span>
@@ -235,15 +235,15 @@ export function ConfigDriftBanner({
           <button
             type="button"
             className="config-drift-banner__summary-action"
-            onClick={() => navigate('/settings')}
+            onClick={() => navigate("/settings")}
           >
-            {t('settings.title')}
+            {t("settings.title")}
           </button>
           <button
             type="button"
             className="config-drift-banner__dismiss"
             onClick={() => setDismissed(true)}
-            aria-label={t('action.close')}
+            aria-label={t("action.close")}
           >
             <X size={14} />
           </button>
@@ -257,7 +257,7 @@ export function ConfigDriftBanner({
       <div className="config-drift-banner__row">
         <AlertTriangle size={16} className="config-drift-banner__icon" aria-hidden />
         <span className="config-drift-banner__title">
-          {t('codex_audit.title', {
+          {t("codex_audit.title", {
             count: String(audit!.findings.length),
           })}
         </span>
@@ -272,12 +272,12 @@ export function ConfigDriftBanner({
         >
           {expanded ? (
             <>
-              <span>{t('codex_audit.collapse')}</span>
+              <span>{t("codex_audit.collapse")}</span>
               <ChevronUp size={14} />
             </>
           ) : (
             <>
-              <span>{t('codex_audit.show_details')}</span>
+              <span>{t("codex_audit.show_details")}</span>
               <ChevronDown size={14} />
             </>
           )}
@@ -294,7 +294,7 @@ export function ConfigDriftBanner({
           type="button"
           className="config-drift-banner__dismiss"
           onClick={() => setDismissed(true)}
-          aria-label={t('action.close')}
+          aria-label={t("action.close")}
         >
           <X size={14} />
         </button>
@@ -314,15 +314,11 @@ export function ConfigDriftBanner({
                   {t(`codex_audit.finding.${finding.type}`)}
                   <span className="config-drift-banner__item-line">
                     :{finding.startLine}
-                    {finding.endLine !== finding.startLine
-                      ? `-${finding.endLine}`
-                      : ''}
+                    {finding.endLine !== finding.startLine ? `-${finding.endLine}` : ""}
                   </span>
                 </span>
               </label>
-              <p className="config-drift-banner__item-message">
-                {finding.message}
-              </p>
+              <p className="config-drift-banner__item-message">{finding.message}</p>
               <pre className="config-drift-banner__snippet">{finding.snippet}</pre>
             </li>
           ))}

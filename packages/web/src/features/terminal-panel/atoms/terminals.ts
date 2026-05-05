@@ -5,8 +5,8 @@
  * Written by: WS event handler for terminal.*.output
  */
 
-import { atom } from 'jotai';
-import { atomFamily } from 'jotai-family';
+import { atom } from "jotai";
+import { atomFamily } from "jotai-family";
 
 /**
  * Output buffer structure
@@ -35,7 +35,7 @@ export const terminalOutputAtomFamily = atomFamily((_terminalId: string) =>
 export interface TerminalMeta {
   id: string;
   workspaceId: string;
-  kind: 'agent' | 'shell';
+  kind: "agent" | "shell";
   alive: boolean;
   exitCode?: number;
   title?: string;

@@ -1,19 +1,19 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
-import { Provider, createStore } from 'jotai';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { localeAtom } from '../../atoms/app-ui';
-import { WelcomePage } from './index';
+import { fireEvent, render, screen } from "@testing-library/react";
+import { createStore, Provider } from "jotai";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { localeAtom } from "../../atoms/app-ui";
+import { WelcomePage } from "./index";
 
 const viewportMocks = vi.hoisted(() => ({
-  viewport: 'desktop' as 'desktop' | 'mobile',
+  viewport: "desktop" as "desktop" | "mobile",
 }));
 
-vi.mock('../../hooks/use-viewport', () => ({
+vi.mock("../../hooks/use-viewport", () => ({
   useViewport: () => viewportMocks.viewport,
 }));
 
-vi.mock('../workspace/views/shared/workspace-launch-modal', () => ({
+vi.mock("../workspace/views/shared/workspace-launch-modal", () => ({
   WorkspaceLaunchModal: ({ onClose }: { onClose: () => void }) => (
     <div data-testid="workspace-launch-modal">
       <button type="button" onClick={onClose}>
@@ -23,14 +23,14 @@ vi.mock('../workspace/views/shared/workspace-launch-modal', () => ({
   ),
 }));
 
-describe('WelcomePage', () => {
+describe("WelcomePage", () => {
   beforeEach(() => {
-    viewportMocks.viewport = 'desktop';
+    viewportMocks.viewport = "desktop";
   });
 
-  it('opens the workspace launch modal directly from the primary action', () => {
+  it("opens the workspace launch modal directly from the primary action", () => {
     const store = createStore();
-    store.set(localeAtom, 'en');
+    store.set(localeAtom, "en");
 
     render(
       <Provider store={store}>
@@ -40,18 +40,18 @@ describe('WelcomePage', () => {
       </Provider>
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Open Workspace' }));
+    fireEvent.click(screen.getByRole("button", { name: "Open Workspace" }));
 
-    expect(screen.getByTestId('workspace-launch-modal')).toBeInTheDocument();
+    expect(screen.getByTestId("workspace-launch-modal")).toBeInTheDocument();
   });
 
-  it('navigates to settings from the secondary action', () => {
+  it("navigates to settings from the secondary action", () => {
     const store = createStore();
-    store.set(localeAtom, 'en');
+    store.set(localeAtom, "en");
 
     render(
       <Provider store={store}>
-        <MemoryRouter initialEntries={['/']}>
+        <MemoryRouter initialEntries={["/"]}>
           <Routes>
             <Route path="/" element={<WelcomePage />} />
             <Route path="/settings" element={<div>Settings Screen</div>} />
@@ -60,13 +60,13 @@ describe('WelcomePage', () => {
       </Provider>
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
 
-    expect(screen.getByText('Settings Screen')).toBeInTheDocument();
+    expect(screen.getByText("Settings Screen")).toBeInTheDocument();
   });
 
-  it('adds the mobile welcome page variant classes on mobile viewports', () => {
-    viewportMocks.viewport = 'mobile';
+  it("adds the mobile welcome page variant classes on mobile viewports", () => {
+    viewportMocks.viewport = "mobile";
     const store = createStore();
 
     render(
@@ -77,13 +77,13 @@ describe('WelcomePage', () => {
       </Provider>
     );
 
-    expect(document.querySelector('.welcome-container--mobile')).toBeTruthy();
-    expect(document.querySelector('.welcome-card--mobile')).toBeTruthy();
+    expect(document.querySelector(".welcome-container--mobile")).toBeTruthy();
+    expect(document.querySelector(".welcome-card--mobile")).toBeTruthy();
   });
 
-  it('renders translated English copy when locale is set to en', () => {
+  it("renders translated English copy when locale is set to en", () => {
     const store = createStore();
-    store.set(localeAtom, 'en');
+    store.set(localeAtom, "en");
 
     render(
       <Provider store={store}>
@@ -93,9 +93,9 @@ describe('WelcomePage', () => {
       </Provider>
     );
 
-    expect(screen.getByText('GET STARTED')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Welcome to Coder Studio' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Open Workspace' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument();
+    expect(screen.getByText("GET STARTED")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Welcome to Coder Studio" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open Workspace" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
   });
 });

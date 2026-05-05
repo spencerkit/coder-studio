@@ -4,9 +4,9 @@
  * Server-backed pane layout projection owned by the agent-panes feature.
  */
 
-import { atom } from 'jotai';
-import { atomFamily } from 'jotai-family';
-import type { WorkspacePaneNode } from '@coder-studio/core';
+import type { WorkspacePaneNode } from "@coder-studio/core";
+import { atom } from "jotai";
+import { atomFamily } from "jotai-family";
 
 /**
  * Pane layout by workspace (agent pane splits).
@@ -18,12 +18,12 @@ export interface PaneNode extends WorkspacePaneNode {
   children?: PaneNode[];
 }
 
-export const LEGACY_PANE_LAYOUT_STORAGE_KEY_PREFIX = 'ui.paneLayout.';
-export const PANE_RATIO_STORAGE_KEY_PREFIX = 'ui.paneRatio.';
+export const LEGACY_PANE_LAYOUT_STORAGE_KEY_PREFIX = "ui.paneLayout.";
+export const PANE_RATIO_STORAGE_KEY_PREFIX = "ui.paneRatio.";
 
 export const defaultPaneLayout: PaneNode = {
-  id: 'root',
-  type: 'leaf',
+  id: "root",
+  type: "leaf",
 };
 
 export const paneLayoutAtomFamily = atomFamily((workspaceId: string) =>
@@ -31,7 +31,7 @@ export const paneLayoutAtomFamily = atomFamily((workspaceId: string) =>
 );
 
 function getLocalStorage(): Storage | null {
-  if (typeof window === 'undefined') {
+  if (typeof window === "undefined") {
     return null;
   }
 

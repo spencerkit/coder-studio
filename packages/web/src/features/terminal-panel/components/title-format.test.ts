@@ -1,20 +1,20 @@
-import { describe, expect, it } from 'vitest';
-import { formatTerminalTitle } from './title-format';
+import { describe, expect, it } from "vitest";
+import { formatTerminalTitle } from "./title-format";
 
-describe('formatTerminalTitle', () => {
-  it('labels shell tabs with the actual shell name instead of hardcoded bash', () => {
+describe("formatTerminalTitle", () => {
+  it("labels shell tabs with the actual shell name instead of hardcoded bash", () => {
     expect(
       formatTerminalTitle(
         {
-          id: 'term-1',
-          workspaceId: 'ws-1',
-          kind: 'shell',
+          id: "term-1",
+          workspaceId: "ws-1",
+          kind: "shell",
           alive: true,
-          title: '/bin/zsh',
+          title: "/bin/zsh",
         },
         0,
-        'Shell'
+        "Shell"
       )
-    ).toBe('zsh — 1');
+    ).toBe("zsh — 1");
   });
 });

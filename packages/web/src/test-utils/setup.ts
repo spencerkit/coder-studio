@@ -4,16 +4,16 @@
  * Global setup for vitest with testing-library.
  */
 
-import '@testing-library/jest-dom';
+import "@testing-library/jest-dom";
 
-if (typeof window !== 'undefined') {
+if (typeof window !== "undefined") {
   if (
     !window.localStorage ||
-    typeof window.localStorage.getItem !== 'function' ||
-    typeof window.localStorage.setItem !== 'function'
+    typeof window.localStorage.getItem !== "function" ||
+    typeof window.localStorage.setItem !== "function"
   ) {
     const storage = new Map<string, string>();
-    Object.defineProperty(window, 'localStorage', {
+    Object.defineProperty(window, "localStorage", {
       configurable: true,
       value: {
         getItem: (key: string) => storage.get(key) ?? null,
@@ -59,14 +59,14 @@ class WebSocketMock {
 global.WebSocket = WebSocketMock as unknown as typeof WebSocket;
 
 // DOM API mocks for jsdom
-if (typeof Element !== 'undefined') {
+if (typeof Element !== "undefined") {
   Element.prototype.scrollIntoView = () => {};
 }
 
-if (typeof HTMLElement !== 'undefined') {
+if (typeof HTMLElement !== "undefined") {
   HTMLElement.prototype.focus = () => {};
 }
 
-if (typeof document !== 'undefined') {
+if (typeof document !== "undefined") {
   document.queryCommandSupported = () => false;
 }

@@ -1,9 +1,9 @@
-import type { SupervisorState } from '@coder-studio/core';
-import { useMemo } from 'react';
-import { useAtomValue } from 'jotai';
-import { Eye } from 'lucide-react';
-import { useTranslation } from '../../../../lib/i18n';
-import { supervisorCyclesAtom, supervisorsAtom } from '../../atoms';
+import type { SupervisorState } from "@coder-studio/core";
+import { useAtomValue } from "jotai";
+import { Eye } from "lucide-react";
+import { useMemo } from "react";
+import { useTranslation } from "../../../../lib/i18n";
+import { supervisorCyclesAtom, supervisorsAtom } from "../../atoms";
 
 interface MobileSupervisorBadgeProps {
   sessionId: string | null;
@@ -23,8 +23,8 @@ export function MobileSupervisorBadge({ sessionId, onOpen }: MobileSupervisorBad
     const supervisor = supervisors.get(sessionId);
     if (!supervisor) {
       return {
-        state: 'inactive' as SupervisorState,
-        label: t('supervisor.title'),
+        state: "inactive" as SupervisorState,
+        label: t("supervisor.title"),
       };
     }
 
@@ -50,7 +50,7 @@ export function MobileSupervisorBadge({ sessionId, onOpen }: MobileSupervisorBad
     <button
       type="button"
       className={`mobile-supervisor-badge mobile-supervisor-badge--${copy.state}`}
-      aria-label={t('mobile.supervisor.open_sheet')}
+      aria-label={t("mobile.supervisor.open_sheet")}
       onClick={onOpen}
     >
       <span className="mobile-supervisor-badge__icon" aria-hidden="true">

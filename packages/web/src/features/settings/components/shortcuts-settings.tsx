@@ -4,24 +4,24 @@
  * UI for viewing and customizing keyboard shortcuts.
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { useAtom, useAtomValue } from 'jotai';
+import { useAtom, useAtomValue } from "jotai";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { dispatchCommandAtom } from "../../../atoms/connection";
+import { useTranslation } from "../../../lib/i18n";
 import {
-  DEFAULT_SHORTCUTS,
   customShortcutsAtom,
+  DEFAULT_SHORTCUTS,
   formatShortcut,
   getEffectiveBinding,
-} from '../../../lib/shortcuts';
-import { useTranslation } from '../../../lib/i18n';
-import { dispatchCommandAtom } from '../../../atoms/connection';
+} from "../../../lib/shortcuts";
 
-type ShortcutCategory = 'global' | 'workspace' | 'editor' | 'terminal';
+type ShortcutCategory = "global" | "workspace" | "editor" | "terminal";
 
 const CATEGORY_LABELS: Record<ShortcutCategory, string> = {
-  global: '全局',
-  workspace: '工作区',
-  editor: '编辑器',
-  terminal: '终端',
+  global: "全局",
+  workspace: "工作区",
+  editor: "编辑器",
+  terminal: "终端",
 };
 
 export function ShortcutsSettings() {
@@ -29,7 +29,7 @@ export function ShortcutsSettings() {
   const dispatch = useAtomValue(dispatchCommandAtom);
   const [customBindings, setCustomBindings] = useAtom(customShortcutsAtom);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [activeCategory, setActiveCategory] = useState<ShortcutCategory>('global');
+  const [activeCategory, setActiveCategory] = useState<ShortcutCategory>("global");
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Focus input when editing starts
@@ -46,22 +46,22 @@ export function ShortcutsSettings() {
 
       // Build binding string
       const parts: string[] = [];
-      const isMac = navigator.platform.includes('Mac');
+      const isMac = navigator.platform.includes("Mac");
 
       if (isMac ? event.metaKey : event.ctrlKey) {
-        parts.push('Mod');
+        parts.push("Mod");
       }
       if (event.shiftKey) {
-        parts.push('Shift');
+        parts.push("Shift");
       }
       if (event.altKey) {
-        parts.push('Alt');
+        parts.push("Alt");
       }
 
       // Add the key
       if (event.key.length === 1) {
         parts.push(event.key.toUpperCase());
-      } else if (event.key === 'Escape') {
+      } else if (event.key === "Escape") {
         // Cancel editing
         setEditingId(null);
         return;
@@ -69,7 +69,7 @@ export function ShortcutsSettings() {
         parts.push(event.key);
       }
 
-      const binding = parts.join('+');
+      const binding = parts.join("+");
 
       // Update custom bindings
       setCustomBindings((prev) => ({
@@ -78,7 +78,7 @@ export function ShortcutsSettings() {
       }));
 
       // Save to settings
-      void dispatch('settings.update', {
+      void dispatch("settings.update", {
         settings: { shortcuts: { [shortcutId]: binding } },
       });
 
@@ -95,7 +95,7 @@ export function ShortcutsSettings() {
         return next;
       });
 
-      void dispatch('settings.update', {
+      void dispatch("settings.update", {
         settings: { shortcuts: { [shortcutId]: null } },
       });
     },
@@ -104,14 +104,12 @@ export function ShortcutsSettings() {
 
   const handleResetAll = useCallback(() => {
     setCustomBindings({});
-    void dispatch('settings.update', {
+    void dispatch("settings.update", {
       settings: { shortcuts: {} },
     });
   }, [setCustomBindings, dispatch]);
 
-  const shortcutsInCategory = DEFAULT_SHORTCUTS.filter(
-    (s) => s.category === activeCategory
-  );
+  const shortcutsInCategory = DEFAULT_SHORTCUTS.filter((s) => s.category === activeCategory);
 
   return (
     <div className="settings-section">
@@ -120,9 +118,7 @@ export function ShortcutsSettings() {
         {(Object.keys(CATEGORY_LABELS) as ShortcutCategory[]).map((category) => (
           <button
             key={category}
-            className={`shortcuts-category-tab ${
-              activeCategory === category ? 'active' : ''
-            }`}
+            className={`shortcuts-category-tab ${activeCategory === category ? "active" : ""}`}
             onClick={() => setActiveCategory(category)}
           >
             {CATEGORY_LABELS[category]}
@@ -140,7 +136,7 @@ export function ShortcutsSettings() {
           return (
             <div
               key={shortcut.id}
-              className={`shortcuts-item ${isCustom ? 'shortcuts-item-custom' : ''}`}
+              className={`shortcuts-item ${isCustom ? "shortcuts-item-custom" : ""}`}
             >
               <div className="shortcuts-info">
                 <span className="shortcuts-name">{shortcut.name}</span>
@@ -160,10 +156,7 @@ export function ShortcutsSettings() {
                   />
                 ) : (
                   <>
-                    <kbd
-                      className="shortcuts-key"
-                      onClick={() => setEditingId(shortcut.id)}
-                    >
+                    <kbd className="shortcuts-key" onClick={() => setEditingId(shortcut.id)}>
                       {formatShortcut(binding)}
                     </kbd>
                     {isCustom && (
@@ -186,7 +179,7 @@ export function ShortcutsSettings() {
       {/* Reset All */}
       <div className="shortcuts-footer">
         <button className="btn btn-secondary" onClick={handleResetAll}>
-          {t('settings.shortcuts.reset_all')}
+          {t("settings.shortcuts.reset_all")}
         </button>
       </div>
     </div>

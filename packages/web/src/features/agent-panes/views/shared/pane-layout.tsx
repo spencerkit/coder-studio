@@ -5,12 +5,12 @@
  * Supports horizontal and vertical splits.
  */
 
-import type { FC, ReactNode } from 'react';
-import { useRef, useCallback, useEffect, useState } from 'react';
+import type { FC, ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 interface PaneLayoutProps {
   splitId: string;
-  direction: 'horizontal' | 'vertical';
+  direction: "horizontal" | "vertical";
   ratio: number;
   children: ReactNode;
   onRatioCommit?: (ratio: number) => void;
@@ -39,22 +39,26 @@ export const PaneLayout: FC<PaneLayoutProps> = ({
   const handleMouseDown = useCallback(() => {
     isDragging.current = true;
     pendingRatio.current = currentRatio;
-    document.body.classList.add('is-resizing-panels');
+    document.body.classList.add("is-resizing-panels");
   }, [currentRatio]);
 
-  const handleMouseMove = useCallback((event: MouseEvent) => {
-    if (!isDragging.current || !containerRef.current) {
-      return;
-    }
+  const handleMouseMove = useCallback(
+    (event: MouseEvent) => {
+      if (!isDragging.current || !containerRef.current) {
+        return;
+      }
 
-    const rect = containerRef.current.getBoundingClientRect();
-    const total = direction === 'horizontal' ? rect.width : rect.height;
-    const position = direction === 'horizontal' ? event.clientX - rect.left : event.clientY - rect.top;
-    const nextRatio = Math.max(0.1, Math.min(0.9, position / total));
+      const rect = containerRef.current.getBoundingClientRect();
+      const total = direction === "horizontal" ? rect.width : rect.height;
+      const position =
+        direction === "horizontal" ? event.clientX - rect.left : event.clientY - rect.top;
+      const nextRatio = Math.max(0.1, Math.min(0.9, position / total));
 
-    setCurrentRatio(nextRatio);
-    pendingRatio.current = nextRatio;
-  }, [direction]);
+      setCurrentRatio(nextRatio);
+      pendingRatio.current = nextRatio;
+    },
+    [direction]
+  );
 
   const handleMouseUp = useCallback(() => {
     if (!isDragging.current) {
@@ -62,17 +66,17 @@ export const PaneLayout: FC<PaneLayoutProps> = ({
     }
 
     isDragging.current = false;
-    document.body.classList.remove('is-resizing-panels');
+    document.body.classList.remove("is-resizing-panels");
     onRatioCommit?.(pendingRatio.current);
   }, [onRatioCommit]);
 
   useEffect(() => {
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
 
     return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
     };
   }, [handleMouseMove, handleMouseUp]);
 
@@ -84,22 +88,23 @@ export const PaneLayout: FC<PaneLayoutProps> = ({
   const childArray = Array.isArray(children) ? children : [children];
   const [first, second] = childArray;
 
-  const style = direction === 'horizontal'
-    ? { gridTemplateColumns: `${currentRatio * 100}% 8px ${(1 - currentRatio) * 100}%` }
-    : { gridTemplateRows: `${currentRatio * 100}% 8px ${(1 - currentRatio) * 100}%` };
+  const style =
+    direction === "horizontal"
+      ? { gridTemplateColumns: `${currentRatio * 100}% 8px ${(1 - currentRatio) * 100}%` }
+      : { gridTemplateRows: `${currentRatio * 100}% 8px ${(1 - currentRatio) * 100}%` };
 
   return (
     <div
       ref={containerRef}
       className={`pane-layout pane-layout-${direction}`}
-      style={{ display: 'grid', ...style }}
+      style={{ display: "grid", ...style }}
     >
       <div className="pane-layout-child">{first}</div>
       <div
         className="pane-layout-divider"
         onMouseDown={handleMouseDown}
         role="separator"
-        aria-orientation={direction === 'horizontal' ? 'vertical' : 'horizontal'}
+        aria-orientation={direction === "horizontal" ? "vertical" : "horizontal"}
       />
       <div className="pane-layout-child">{second}</div>
     </div>

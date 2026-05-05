@@ -1,20 +1,20 @@
-import { useSetAtom } from 'jotai';
-import { useEffect, useState } from 'react';
-import { supervisorDialogAtom } from '../../atoms';
-import { useTranslation } from '../../../../lib/i18n';
-import { MobileSelectSheet } from '../../../mobile-select';
-import {
-  ObjectiveDialogContent,
-  ObjectiveDialogModeIcon,
-} from '../shared/objective-dialog-content';
-import { SupervisorCard } from '../shared/supervisor-card';
+import { useSetAtom } from "jotai";
+import { useEffect, useState } from "react";
+import { useTranslation } from "../../../../lib/i18n";
+import { MobileSelectSheet } from "../../../mobile-select";
+import { MobileSheet } from "../../../workspace/views/mobile/mobile-sheet";
 import {
   OBJECTIVE_DIALOG_EVALUATOR_OPTIONS,
   type ObjectiveDialogEvaluatorProviderId,
   type ObjectiveDialogMode,
   useObjectiveDialogState,
-} from '../../actions/use-objective-dialog-state';
-import { MobileSheet } from '../../../workspace/views/mobile/mobile-sheet';
+} from "../../actions/use-objective-dialog-state";
+import { supervisorDialogAtom } from "../../atoms";
+import {
+  ObjectiveDialogContent,
+  ObjectiveDialogModeIcon,
+} from "../shared/objective-dialog-content";
+import { SupervisorCard } from "../shared/supervisor-card";
 
 interface MobileSupervisorSheetProps {
   sessionId: string;
@@ -58,10 +58,9 @@ export function MobileSupervisorSheet({
       open: true,
       sessionId,
       mode: nextMode,
-      draftObjective: supervisor?.objective ?? '',
+      draftObjective: supervisor?.objective ?? "",
       draftEvaluatorProviderId:
-        (supervisor?.evaluatorProviderId as ObjectiveDialogEvaluatorProviderId) ??
-        'claude',
+        (supervisor?.evaluatorProviderId as ObjectiveDialogEvaluatorProviderId) ?? "claude",
     });
     setEvaluatorPickerOpen(false);
     setDetailMode(nextMode);
@@ -70,11 +69,11 @@ export function MobileSupervisorSheet({
   if (detailMode && evaluatorPickerOpen) {
     return (
       <MobileSelectSheet
-        title={t('supervisor.field.evaluator')}
+        title={t("supervisor.field.evaluator")}
         sections={[
           {
-            kind: 'options',
-            id: 'evaluator-providers',
+            kind: "options",
+            id: "evaluator-providers",
             items: OBJECTIVE_DIALOG_EVALUATOR_OPTIONS.map((option) => ({
               id: option.id,
               label: option.label,
@@ -98,7 +97,7 @@ export function MobileSupervisorSheet({
     return (
       <MobileSheet
         title={copy.title}
-        kicker={t('supervisor.title')}
+        kicker={t("supervisor.title")}
         onBack={() => {
           setEvaluatorPickerOpen(false);
           close();
@@ -149,10 +148,10 @@ export function MobileSupervisorSheet({
                 setDetailMode(null);
               }}
             >
-              {t('action.cancel')}
+              {t("action.cancel")}
             </button>
             <button
-              className={`btn ${isDisable ? 'btn-danger' : 'btn-primary'}`}
+              className={`btn ${isDisable ? "btn-danger" : "btn-primary"}`}
               onClick={() => {
                 void confirm();
               }}
@@ -168,8 +167,8 @@ export function MobileSupervisorSheet({
 
   return (
     <MobileSheet
-      title={t('supervisor.title')}
-      kicker={t('supervisor.title')}
+      title={t("supervisor.title")}
+      kicker={t("supervisor.title")}
       onClose={onClose}
       contentClassName="mobile-supervisor-sheet mobile-supervisor-sheet--root"
       body={
@@ -178,20 +177,20 @@ export function MobileSupervisorSheet({
             <>
               <SupervisorCard sessionId={sessionId} workspaceId={workspaceId} />
               <div className="mobile-supervisor-sheet__actions">
-                <button className="btn btn-secondary" onClick={() => openDetail('edit')}>
-                  {t('supervisor.action.edit_objective')}
+                <button className="btn btn-secondary" onClick={() => openDetail("edit")}>
+                  {t("supervisor.action.edit_objective")}
                 </button>
-                <button className="btn btn-secondary" onClick={() => openDetail('disable')}>
-                  {t('supervisor.action.disable')}
+                <button className="btn btn-secondary" onClick={() => openDetail("disable")}>
+                  {t("supervisor.action.disable")}
                 </button>
               </div>
             </>
           ) : (
             <div className="mobile-supervisor-sheet__empty">
-              <h3>{t('supervisor.title')}</h3>
-              <p>{t('supervisor.empty')}</p>
-              <button className="btn btn-primary" onClick={() => openDetail('enable')}>
-                {t('supervisor.action.enable_objective')}
+              <h3>{t("supervisor.title")}</h3>
+              <p>{t("supervisor.empty")}</p>
+              <button className="btn btn-primary" onClick={() => openDetail("enable")}>
+                {t("supervisor.action.enable_objective")}
               </button>
             </div>
           )}

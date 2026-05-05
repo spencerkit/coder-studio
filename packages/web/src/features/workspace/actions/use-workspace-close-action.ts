@@ -1,12 +1,12 @@
-import { useCallback } from 'react';
-import { useAtomValue, useSetAtom } from 'jotai';
-import { useNavigate } from 'react-router-dom';
-import { dispatchCommandAtom } from '../../../atoms/connection';
+import { useAtomValue, useSetAtom } from "jotai";
+import { useCallback } from "react";
+import { useNavigate } from "react-router-dom";
+import { dispatchCommandAtom } from "../../../atoms/connection";
 import {
   activeWorkspaceIdAtom,
   workspaceOrderAtom,
   workspacesAtom,
-} from '../../../atoms/workspaces';
+} from "../../../atoms/workspaces";
 
 export function useWorkspaceCloseAction() {
   const navigate = useNavigate();
@@ -18,12 +18,12 @@ export function useWorkspaceCloseAction() {
 
   return useCallback(
     async (workspaceId: string, options?: { navigateHomeWhenEmpty?: boolean }) => {
-      const result = await dispatch<void>('workspace.close', {
+      const result = await dispatch<void>("workspace.close", {
         id: workspaceId,
       });
 
       if (!result.ok) {
-        console.error('Failed to close workspace:', result.error?.message);
+        console.error("Failed to close workspace:", result.error?.message);
         return false;
       }
 
@@ -44,7 +44,7 @@ export function useWorkspaceCloseAction() {
       });
 
       if (remainingIds.length === 0 && options?.navigateHomeWhenEmpty) {
-        navigate('/', { replace: true });
+        navigate("/", { replace: true });
       }
 
       return true;

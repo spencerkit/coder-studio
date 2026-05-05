@@ -1,6 +1,10 @@
-import type { TerminalMeta } from '../atoms';
+import type { TerminalMeta } from "../atoms";
 
-export function formatTerminalTitle(meta: TerminalMeta | null | undefined, index: number, fallback: string) {
+export function formatTerminalTitle(
+  meta: TerminalMeta | null | undefined,
+  index: number,
+  fallback: string
+) {
   const rawTitle = meta?.title?.trim();
   const shellLabel = inferShellLabel(rawTitle);
 
@@ -25,18 +29,18 @@ function inferShellLabel(rawTitle?: string) {
     return null;
   }
 
-  const normalized = candidate.toLowerCase().replace(/\.exe$/, '');
+  const normalized = candidate.toLowerCase().replace(/\.exe$/, "");
   const knownShells = new Set([
-    'bash',
-    'cmd',
-    'csh',
-    'fish',
-    'ksh',
-    'powershell',
-    'pwsh',
-    'sh',
-    'tcsh',
-    'zsh',
+    "bash",
+    "cmd",
+    "csh",
+    "fish",
+    "ksh",
+    "powershell",
+    "pwsh",
+    "sh",
+    "tcsh",
+    "zsh",
   ]);
 
   if (!knownShells.has(normalized)) {
@@ -52,7 +56,7 @@ function isGenericShellTitle(rawTitle: string, fallback: string) {
 
   return (
     normalizedTitle === normalizedFallback ||
-    normalizedTitle === 'shell terminal' ||
-    normalizedTitle === 'shell 终端'
+    normalizedTitle === "shell terminal" ||
+    normalizedTitle === "shell 终端"
   );
 }

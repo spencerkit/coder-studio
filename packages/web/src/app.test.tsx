@@ -1,15 +1,15 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import { Provider, createStore } from 'jotai';
-import App from './app';
-import { authEnabledAtom, connectionStatusAtom } from './atoms/connection';
-import { authenticatedAtom } from './atoms/app-ui';
+import { render, screen } from "@testing-library/react";
+import { createStore, Provider } from "jotai";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import App from "./app";
+import { authenticatedAtom } from "./atoms/app-ui";
+import { authEnabledAtom, connectionStatusAtom } from "./atoms/connection";
 
-vi.mock('./shells/desktop-shell', () => ({
+vi.mock("./shells/desktop-shell", () => ({
   DesktopShell: () => <div data-testid="desktop-shell">DesktopShell</div>,
 }));
 
-vi.mock('./shells/mobile-shell', () => ({
+vi.mock("./shells/mobile-shell", () => ({
   MobileShell: () => <div data-testid="mobile-shell">MobileShell</div>,
 }));
 
@@ -23,22 +23,22 @@ function setMatchMediaMock(predicate: (query: string) => boolean) {
   window.matchMedia = matchMedia as unknown as typeof window.matchMedia;
 }
 
-describe('App shell selection', () => {
+describe("App shell selection", () => {
   let originalMatchMedia: typeof window.matchMedia;
 
   beforeEach(() => {
     originalMatchMedia = window.matchMedia;
-    window.history.replaceState({}, '', '/');
+    window.history.replaceState({}, "", "/");
   });
 
   afterEach(() => {
     window.matchMedia = originalMatchMedia;
   });
 
-  it('renders DesktopShell on a wide viewport with fine pointer', () => {
+  it("renders DesktopShell on a wide viewport with fine pointer", () => {
     setMatchMediaMock(() => false);
     const store = createStore();
-    store.set(connectionStatusAtom, 'connected');
+    store.set(connectionStatusAtom, "connected");
     store.set(authEnabledAtom, false);
     store.set(authenticatedAtom, true);
 
@@ -48,14 +48,14 @@ describe('App shell selection', () => {
       </Provider>
     );
 
-    expect(screen.getByTestId('desktop-shell')).toBeInTheDocument();
-    expect(screen.queryByTestId('mobile-shell')).not.toBeInTheDocument();
+    expect(screen.getByTestId("desktop-shell")).toBeInTheDocument();
+    expect(screen.queryByTestId("mobile-shell")).not.toBeInTheDocument();
   });
 
-  it('renders MobileShell when viewport is narrow', () => {
-    setMatchMediaMock((query) => query.includes('max-width: 899px'));
+  it("renders MobileShell when viewport is narrow", () => {
+    setMatchMediaMock((query) => query.includes("max-width: 899px"));
     const store = createStore();
-    store.set(connectionStatusAtom, 'connected');
+    store.set(connectionStatusAtom, "connected");
     store.set(authEnabledAtom, false);
     store.set(authenticatedAtom, true);
 
@@ -65,14 +65,14 @@ describe('App shell selection', () => {
       </Provider>
     );
 
-    expect(screen.getByTestId('mobile-shell')).toBeInTheDocument();
-    expect(screen.queryByTestId('desktop-shell')).not.toBeInTheDocument();
+    expect(screen.getByTestId("mobile-shell")).toBeInTheDocument();
+    expect(screen.queryByTestId("desktop-shell")).not.toBeInTheDocument();
   });
 
-  it('renders DesktopShell on wide coarse-pointer devices', () => {
-    setMatchMediaMock((query) => query.includes('pointer: coarse'));
+  it("renders DesktopShell on wide coarse-pointer devices", () => {
+    setMatchMediaMock((query) => query.includes("pointer: coarse"));
     const store = createStore();
-    store.set(connectionStatusAtom, 'connected');
+    store.set(connectionStatusAtom, "connected");
     store.set(authEnabledAtom, false);
     store.set(authenticatedAtom, true);
 
@@ -82,7 +82,7 @@ describe('App shell selection', () => {
       </Provider>
     );
 
-    expect(screen.getByTestId('desktop-shell')).toBeInTheDocument();
-    expect(screen.queryByTestId('mobile-shell')).not.toBeInTheDocument();
+    expect(screen.getByTestId("desktop-shell")).toBeInTheDocument();
+    expect(screen.queryByTestId("mobile-shell")).not.toBeInTheDocument();
   });
 });

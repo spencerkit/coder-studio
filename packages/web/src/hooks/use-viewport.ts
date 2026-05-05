@@ -1,22 +1,22 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState } from "react";
 
-export type Viewport = 'mobile' | 'desktop';
+export type Viewport = "mobile" | "desktop";
 
-const WIDTH_QUERY = '(max-width: 899px)';
+const WIDTH_QUERY = "(max-width: 899px)";
 
 function computeViewport(): Viewport {
-  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
-    return 'desktop';
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    return "desktop";
   }
 
-  return window.matchMedia(WIDTH_QUERY).matches ? 'mobile' : 'desktop';
+  return window.matchMedia(WIDTH_QUERY).matches ? "mobile" : "desktop";
 }
 
 export function useViewport(): Viewport {
   const [viewport, setViewport] = useState<Viewport>(computeViewport);
 
   useEffect(() => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
       return;
     }
 
@@ -25,11 +25,11 @@ export function useViewport(): Viewport {
       setViewport(computeViewport());
     };
 
-    widthList.addEventListener('change', handleChange);
+    widthList.addEventListener("change", handleChange);
     handleChange();
 
     return () => {
-      widthList.removeEventListener('change', handleChange);
+      widthList.removeEventListener("change", handleChange);
     };
   }, []);
 

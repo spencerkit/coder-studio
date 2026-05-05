@@ -1,13 +1,13 @@
-import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { Provider, createStore } from 'jotai';
-import { AgentPanes } from './index';
-import { connectionStatusAtom, wsClientAtom } from '../../atoms/connection';
-import { sessionsAtom } from '../../atoms/sessions';
-import { activeWorkspaceIdAtom } from '../../atoms/workspaces';
-import { localeAtom } from '../../atoms/app-ui';
-import { LEGACY_PANE_LAYOUT_STORAGE_KEY_PREFIX, paneLayoutAtomFamily } from './atoms/pane-layout';
-import { seedReadyWorkspaceState } from '../../test-utils/workspace-state';
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { createStore, Provider } from "jotai";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { localeAtom } from "../../atoms/app-ui";
+import { connectionStatusAtom, wsClientAtom } from "../../atoms/connection";
+import { sessionsAtom } from "../../atoms/sessions";
+import { activeWorkspaceIdAtom } from "../../atoms/workspaces";
+import { seedReadyWorkspaceState } from "../../test-utils/workspace-state";
+import { LEGACY_PANE_LAYOUT_STORAGE_KEY_PREFIX, paneLayoutAtomFamily } from "./atoms/pane-layout";
+import { AgentPanes } from "./index";
 
 const mockSessionCard = vi.fn(
   ({
@@ -41,11 +41,11 @@ const mockSessionCard = vi.fn(
   )
 );
 
-vi.mock('./views/shared/session-card', () => ({
+vi.mock("./views/shared/session-card", () => ({
   SessionCard: (props: Record<string, unknown>) => mockSessionCard(props),
 }));
 
-vi.mock('./views/shared/pane-layout', () => ({
+vi.mock("./views/shared/pane-layout", () => ({
   PaneLayout: ({
     children,
     ratio,
@@ -59,7 +59,7 @@ vi.mock('./views/shared/pane-layout', () => ({
   }) => (
     <div data-testid="pane-layout" data-ratio={ratio} data-split-id={splitId}>
       <button type="button" onClick={() => onRatioCommit?.(0.73)}>
-        resize-{splitId ?? 'unknown'}
+        resize-{splitId ?? "unknown"}
       </button>
       {children}
     </div>
@@ -69,27 +69,32 @@ vi.mock('./views/shared/pane-layout', () => ({
 function createAgentPaneStore(
   initialLayout?: unknown,
   customSendCommand?: ReturnType<typeof vi.fn>,
-  connectionStatus: 'connecting' | 'connected' | 'disconnected' | 'reconnecting' | 'rejected' = 'connected'
+  connectionStatus:
+    | "connecting"
+    | "connected"
+    | "disconnected"
+    | "reconnecting"
+    | "rejected" = "connected"
 ) {
   const store = createStore();
   const sessions = [
     {
-      id: 'sess_1',
-      workspaceId: 'ws-1',
-      terminalId: 'term-1',
-      providerId: 'claude',
-      state: 'running',
-      capability: 'full',
+      id: "sess_1",
+      workspaceId: "ws-1",
+      terminalId: "term-1",
+      providerId: "claude",
+      state: "running",
+      capability: "full",
       startedAt: Date.now() - 10_000,
       lastActiveAt: Date.now() - 1_000,
     },
     {
-      id: 'sess_2',
-      workspaceId: 'ws-1',
-      terminalId: 'term-2',
-      providerId: 'codex',
-      state: 'idle',
-      capability: 'full',
+      id: "sess_2",
+      workspaceId: "ws-1",
+      terminalId: "term-2",
+      providerId: "codex",
+      state: "idle",
+      capability: "full",
       startedAt: Date.now() - 8_000,
       lastActiveAt: Date.now() - 500,
     },
@@ -97,7 +102,7 @@ function createAgentPaneStore(
   const sendCommand =
     customSendCommand ??
     vi.fn(async (op: string) => {
-      if (op === 'session.list') {
+      if (op === "session.list") {
         return sessions;
       }
 
@@ -109,13 +114,13 @@ function createAgentPaneStore(
     sendCommand,
     subscribe: vi.fn(() => () => {}),
   } as never);
-  store.set(activeWorkspaceIdAtom, 'ws-1');
+  store.set(activeWorkspaceIdAtom, "ws-1");
   seedReadyWorkspaceState(store, {
-    'ws-1': {
-      id: 'ws-1',
-      name: 'repo',
-      path: '/tmp/repo',
-      targetRuntime: 'native',
+    "ws-1": {
+      id: "ws-1",
+      name: "repo",
+      path: "/tmp/repo",
+      targetRuntime: "native",
       openedAt: 1,
       lastActiveAt: 1,
       uiState: {
@@ -125,23 +130,20 @@ function createAgentPaneStore(
       },
     },
   });
+  store.set(sessionsAtom, Object.fromEntries(sessions.map((session) => [session.id, session])));
   store.set(
-    sessionsAtom,
-    Object.fromEntries(sessions.map((session) => [session.id, session]))
-  );
-  store.set(
-    paneLayoutAtomFamily('ws-1'),
+    paneLayoutAtomFamily("ws-1"),
     (initialLayout as never) ?? {
-      id: 'root',
-      type: 'leaf',
-      sessionId: 'sess_1',
+      id: "root",
+      type: "leaf",
+      sessionId: "sess_1",
     }
   );
 
   return { store, sendCommand, sessions };
 }
 
-describe('AgentPanes', () => {
+describe("AgentPanes", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -151,7 +153,7 @@ describe('AgentPanes', () => {
     window.localStorage.clear();
   });
 
-  it('splits the active session pane when session-card requests a split', async () => {
+  it("splits the active session pane when session-card requests a split", async () => {
     const { store } = createAgentPaneStore();
 
     render(
@@ -160,55 +162,55 @@ describe('AgentPanes', () => {
       </Provider>
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'split-sess_1' }));
+    fireEvent.click(screen.getByRole("button", { name: "split-sess_1" }));
 
     await waitFor(() => {
-      expect(store.get(paneLayoutAtomFamily('ws-1'))).toEqual(
+      expect(store.get(paneLayoutAtomFamily("ws-1"))).toEqual(
         expect.objectContaining({
-          type: 'split',
-          direction: 'horizontal',
+          type: "split",
+          direction: "horizontal",
           children: [
-            expect.objectContaining({ sessionId: 'sess_1' }),
-            expect.objectContaining({ type: 'leaf' }),
+            expect.objectContaining({ sessionId: "sess_1" }),
+            expect.objectContaining({ type: "leaf" }),
           ],
         })
       );
     });
   });
 
-  it('persists pane layout mutations into workspace ui state after a split', async () => {
+  it("persists pane layout mutations into workspace ui state after a split", async () => {
     const sendCommand = vi.fn(async (op: string, args?: Record<string, unknown>) => {
-      if (op === 'session.list') {
+      if (op === "session.list") {
         return [
           {
-            id: 'sess_1',
-            workspaceId: 'ws-1',
-            terminalId: 'term-1',
-            providerId: 'claude',
-            state: 'running',
-            capability: 'full',
+            id: "sess_1",
+            workspaceId: "ws-1",
+            terminalId: "term-1",
+            providerId: "claude",
+            state: "running",
+            capability: "full",
             startedAt: Date.now() - 10_000,
             lastActiveAt: Date.now() - 1_000,
           },
           {
-            id: 'sess_2',
-            workspaceId: 'ws-1',
-            terminalId: 'term-2',
-            providerId: 'codex',
-            state: 'idle',
-            capability: 'full',
+            id: "sess_2",
+            workspaceId: "ws-1",
+            terminalId: "term-2",
+            providerId: "codex",
+            state: "idle",
+            capability: "full",
             startedAt: Date.now() - 8_000,
             lastActiveAt: Date.now() - 500,
           },
         ];
       }
 
-      if (op === 'workspace.uiState.set') {
+      if (op === "workspace.uiState.set") {
         return {
-          id: 'ws-1',
-          name: 'repo',
-          path: '/tmp/repo',
-          targetRuntime: 'native',
+          id: "ws-1",
+          name: "repo",
+          path: "/tmp/repo",
+          targetRuntime: "native",
           openedAt: 1,
           lastActiveAt: 1,
           uiState: args?.uiState,
@@ -217,7 +219,7 @@ describe('AgentPanes', () => {
 
       return undefined;
     });
-    const { store } = createAgentPaneStore(undefined, sendCommand, 'connected');
+    const { store } = createAgentPaneStore(undefined, sendCommand, "connected");
 
     render(
       <Provider store={store}>
@@ -225,23 +227,23 @@ describe('AgentPanes', () => {
       </Provider>
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'split-sess_1' }));
+    fireEvent.click(screen.getByRole("button", { name: "split-sess_1" }));
 
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith(
-        'workspace.uiState.set',
+        "workspace.uiState.set",
         expect.objectContaining({
-          workspaceId: 'ws-1',
+          workspaceId: "ws-1",
           uiState: expect.objectContaining({
             leftPanelWidth: 280,
             bottomPanelHeight: 200,
             focusMode: false,
             paneLayout: expect.objectContaining({
-              type: 'split',
-              direction: 'horizontal',
+              type: "split",
+              direction: "horizontal",
               children: [
-                expect.objectContaining({ sessionId: 'sess_1' }),
-                expect.objectContaining({ type: 'leaf' }),
+                expect.objectContaining({ sessionId: "sess_1" }),
+                expect.objectContaining({ type: "leaf" }),
               ],
             }),
           }),
@@ -250,15 +252,15 @@ describe('AgentPanes', () => {
     });
   });
 
-  it('closes only the target pane and preserves the split layout as a draft leaf', async () => {
+  it("closes only the target pane and preserves the split layout as a draft leaf", async () => {
     const { store, sendCommand } = createAgentPaneStore({
-      id: 'root',
-      type: 'split',
-      direction: 'horizontal',
+      id: "root",
+      type: "split",
+      direction: "horizontal",
       ratio: 0.5,
       children: [
-        { id: 'left', type: 'leaf', sessionId: 'sess_1' },
-        { id: 'right', type: 'leaf', sessionId: 'sess_2' },
+        { id: "left", type: "leaf", sessionId: "sess_1" },
+        { id: "right", type: "leaf", sessionId: "sess_2" },
       ],
     });
 
@@ -268,33 +270,33 @@ describe('AgentPanes', () => {
       </Provider>
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'close-sess_1' }));
+    fireEvent.click(screen.getByRole("button", { name: "close-sess_1" }));
 
     await waitFor(() => {
-      expect(store.get(paneLayoutAtomFamily('ws-1'))).toEqual({
-        id: 'root',
-        type: 'split',
-        direction: 'horizontal',
+      expect(store.get(paneLayoutAtomFamily("ws-1"))).toEqual({
+        id: "root",
+        type: "split",
+        direction: "horizontal",
         ratio: 0.5,
         children: [
-          { id: 'left', type: 'leaf' },
-          { id: 'right', type: 'leaf', sessionId: 'sess_2' },
+          { id: "left", type: "leaf" },
+          { id: "right", type: "leaf", sessionId: "sess_2" },
         ],
       });
     });
 
-    expect(sendCommand).toHaveBeenCalledWith('session.stop', { sessionId: 'sess_1' });
+    expect(sendCommand).toHaveBeenCalledWith("session.stop", { sessionId: "sess_1" });
   });
 
-  it('keeps the remaining draft pane visible after closing the last session pane', async () => {
+  it("keeps the remaining draft pane visible after closing the last session pane", async () => {
     const { store } = createAgentPaneStore({
-      id: 'root',
-      type: 'split',
-      direction: 'horizontal',
+      id: "root",
+      type: "split",
+      direction: "horizontal",
       ratio: 0.5,
       children: [
-        { id: 'left', type: 'leaf', sessionId: 'sess_1' },
-        { id: 'right', type: 'leaf' },
+        { id: "left", type: "leaf", sessionId: "sess_1" },
+        { id: "right", type: "leaf" },
       ],
     });
 
@@ -304,26 +306,26 @@ describe('AgentPanes', () => {
       </Provider>
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'close-sess_1' }));
+    fireEvent.click(screen.getByRole("button", { name: "close-sess_1" }));
 
     // After close, both panes become draft leaves, split structure is preserved
     await waitFor(() => {
-      expect(store.get(paneLayoutAtomFamily('ws-1'))).toEqual({
-        id: 'root',
-        type: 'split',
-        direction: 'horizontal',
+      expect(store.get(paneLayoutAtomFamily("ws-1"))).toEqual({
+        id: "root",
+        type: "split",
+        direction: "horizontal",
         ratio: 0.5,
         children: [
-          { id: 'left', type: 'leaf' },
-          { id: 'right', type: 'leaf' },
+          { id: "left", type: "leaf" },
+          { id: "right", type: "leaf" },
         ],
       });
     });
   });
 
-  it('waits for the websocket connection before requesting session.list', async () => {
+  it("waits for the websocket connection before requesting session.list", async () => {
     const sendCommand = vi.fn().mockResolvedValue([]);
-    const { store } = createAgentPaneStore(undefined, sendCommand, 'connecting');
+    const { store } = createAgentPaneStore(undefined, sendCommand, "connecting");
     store.set(sessionsAtom, {});
 
     render(
@@ -333,31 +335,31 @@ describe('AgentPanes', () => {
     );
 
     await act(async () => {});
-    expect(sendCommand).not.toHaveBeenCalledWith('session.list', { workspaceId: 'ws-1' });
+    expect(sendCommand).not.toHaveBeenCalledWith("session.list", { workspaceId: "ws-1" });
 
     act(() => {
-      store.set(connectionStatusAtom, 'connected');
+      store.set(connectionStatusAtom, "connected");
     });
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith('session.list', { workspaceId: 'ws-1' });
+      expect(sendCommand).toHaveBeenCalledWith("session.list", { workspaceId: "ws-1" });
     });
   });
 
-  it('re-requests session.list after remount when the pane tree mounts again', async () => {
+  it("re-requests session.list after remount when the pane tree mounts again", async () => {
     const sendCommand = vi.fn().mockResolvedValue([
       {
-        id: 'sess_1',
-        workspaceId: 'ws-1',
-        terminalId: 'term-1',
-        providerId: 'claude',
-        state: 'running',
-        capability: 'full',
+        id: "sess_1",
+        workspaceId: "ws-1",
+        terminalId: "term-1",
+        providerId: "claude",
+        state: "running",
+        capability: "full",
         startedAt: Date.now() - 10_000,
         lastActiveAt: Date.now() - 1_000,
       },
     ]);
-    const { store } = createAgentPaneStore(undefined, sendCommand, 'connected');
+    const { store } = createAgentPaneStore(undefined, sendCommand, "connected");
     store.set(sessionsAtom, {});
 
     const { unmount } = render(
@@ -367,7 +369,7 @@ describe('AgentPanes', () => {
     );
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith('session.list', { workspaceId: 'ws-1' });
+      expect(sendCommand).toHaveBeenCalledWith("session.list", { workspaceId: "ws-1" });
     });
 
     unmount();
@@ -382,32 +384,32 @@ describe('AgentPanes', () => {
     );
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith('session.list', { workspaceId: 'ws-1' });
+      expect(sendCommand).toHaveBeenCalledWith("session.list", { workspaceId: "ws-1" });
     });
   });
 
-  it('mounts all ended sessions when no pane layout has been persisted yet', async () => {
+  it("mounts all ended sessions when no pane layout has been persisted yet", async () => {
     const sendCommand = vi.fn(async (op: string) => {
-      if (op === 'session.list') {
+      if (op === "session.list") {
         return [
           {
-            id: 'sess_1',
-            workspaceId: 'ws-1',
-            terminalId: 'term-1',
-            providerId: 'claude',
-            state: 'ended',
-            capability: 'full',
+            id: "sess_1",
+            workspaceId: "ws-1",
+            terminalId: "term-1",
+            providerId: "claude",
+            state: "ended",
+            capability: "full",
             startedAt: Date.now() - 10_000,
             lastActiveAt: Date.now() - 1_000,
             endedAt: Date.now() - 500,
           },
           {
-            id: 'sess_2',
-            workspaceId: 'ws-1',
-            terminalId: 'term-2',
-            providerId: 'codex',
-            state: 'ended',
-            capability: 'full',
+            id: "sess_2",
+            workspaceId: "ws-1",
+            terminalId: "term-2",
+            providerId: "codex",
+            state: "ended",
+            capability: "full",
             startedAt: Date.now() - 8_000,
             lastActiveAt: Date.now() - 500,
             endedAt: Date.now() - 250,
@@ -419,11 +421,11 @@ describe('AgentPanes', () => {
     });
     const { store } = createAgentPaneStore(
       {
-        id: 'root',
-        type: 'leaf',
+        id: "root",
+        type: "leaf",
       },
       sendCommand,
-      'connected'
+      "connected"
     );
     store.set(sessionsAtom, {});
 
@@ -434,35 +436,31 @@ describe('AgentPanes', () => {
     );
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith('session.list', { workspaceId: 'ws-1' });
+      expect(sendCommand).toHaveBeenCalledWith("session.list", { workspaceId: "ws-1" });
     });
 
-    expect(store.get(paneLayoutAtomFamily('ws-1'))).toEqual({
-      id: 'split-fallback-1',
-      type: 'split',
-      direction: 'horizontal',
+    expect(store.get(paneLayoutAtomFamily("ws-1"))).toEqual({
+      id: "split-fallback-1",
+      type: "split",
+      direction: "horizontal",
       ratio: 0.5,
       children: [
-        { id: 'fallback-leaf-1', type: 'leaf', sessionId: 'sess_1' },
-        { id: 'fallback-leaf-2', type: 'leaf', sessionId: 'sess_2' },
+        { id: "fallback-leaf-1", type: "leaf", sessionId: "sess_1" },
+        { id: "fallback-leaf-2", type: "leaf", sessionId: "sess_2" },
       ],
     });
-    expect(mockSessionCard).toHaveBeenCalledWith(
-      expect.objectContaining({ sessionId: 'sess_1' })
-    );
-    expect(mockSessionCard).toHaveBeenCalledWith(
-      expect.objectContaining({ sessionId: 'sess_2' })
-    );
+    expect(mockSessionCard).toHaveBeenCalledWith(expect.objectContaining({ sessionId: "sess_1" }));
+    expect(mockSessionCard).toHaveBeenCalledWith(expect.objectContaining({ sessionId: "sess_2" }));
   });
 
-  it('migrates legacy local pane layout to workspace ui state', async () => {
+  it("migrates legacy local pane layout to workspace ui state", async () => {
     const legacyLayout = {
-      id: 'root',
-      type: 'split',
-      direction: 'horizontal',
+      id: "root",
+      type: "split",
+      direction: "horizontal",
       children: [
-        { id: 'left', type: 'leaf', sessionId: 'sess_1' },
-        { id: 'right', type: 'leaf', sessionId: 'sess_2' },
+        { id: "left", type: "leaf", sessionId: "sess_1" },
+        { id: "right", type: "leaf", sessionId: "sess_2" },
       ],
     };
     window.localStorage.setItem(
@@ -471,37 +469,37 @@ describe('AgentPanes', () => {
     );
 
     const sendCommand = vi.fn(async (op: string, args?: Record<string, unknown>) => {
-      if (op === 'session.list') {
+      if (op === "session.list") {
         return [
           {
-            id: 'sess_1',
-            workspaceId: 'ws-1',
-            terminalId: 'term-1',
-            providerId: 'claude',
-            state: 'running',
-            capability: 'full',
+            id: "sess_1",
+            workspaceId: "ws-1",
+            terminalId: "term-1",
+            providerId: "claude",
+            state: "running",
+            capability: "full",
             startedAt: Date.now() - 10_000,
             lastActiveAt: Date.now() - 1_000,
           },
           {
-            id: 'sess_2',
-            workspaceId: 'ws-1',
-            terminalId: 'term-2',
-            providerId: 'codex',
-            state: 'idle',
-            capability: 'full',
+            id: "sess_2",
+            workspaceId: "ws-1",
+            terminalId: "term-2",
+            providerId: "codex",
+            state: "idle",
+            capability: "full",
             startedAt: Date.now() - 8_000,
             lastActiveAt: Date.now() - 500,
           },
         ];
       }
 
-      if (op === 'workspace.uiState.set') {
+      if (op === "workspace.uiState.set") {
         return {
-          id: 'ws-1',
-          name: 'repo',
-          path: '/tmp/repo',
-          targetRuntime: 'native',
+          id: "ws-1",
+          name: "repo",
+          path: "/tmp/repo",
+          targetRuntime: "native",
           openedAt: 1,
           lastActiveAt: 1,
           uiState: args?.uiState,
@@ -510,7 +508,7 @@ describe('AgentPanes', () => {
 
       return undefined;
     });
-    const { store } = createAgentPaneStore({ id: 'root', type: 'leaf' }, sendCommand, 'connected');
+    const { store } = createAgentPaneStore({ id: "root", type: "leaf" }, sendCommand, "connected");
     store.set(sessionsAtom, {});
 
     render(
@@ -521,9 +519,9 @@ describe('AgentPanes', () => {
 
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith(
-        'workspace.uiState.set',
+        "workspace.uiState.set",
         expect.objectContaining({
-          workspaceId: 'ws-1',
+          workspaceId: "ws-1",
           uiState: expect.objectContaining({
             paneLayout: legacyLayout,
           }),
@@ -531,21 +529,19 @@ describe('AgentPanes', () => {
       );
     });
 
-    expect(store.get(paneLayoutAtomFamily('ws-1'))).toEqual(legacyLayout);
-    expect(
-      window.localStorage.getItem(`${LEGACY_PANE_LAYOUT_STORAGE_KEY_PREFIX}ws-1`)
-    ).toBeNull();
+    expect(store.get(paneLayoutAtomFamily("ws-1"))).toEqual(legacyLayout);
+    expect(window.localStorage.getItem(`${LEGACY_PANE_LAYOUT_STORAGE_KEY_PREFIX}ws-1`)).toBeNull();
   });
 
-  it('restores split ratios from client-local storage after remount', async () => {
+  it("restores split ratios from client-local storage after remount", async () => {
     const { store } = createAgentPaneStore({
-      id: 'root',
-      type: 'split',
-      direction: 'horizontal',
+      id: "root",
+      type: "split",
+      direction: "horizontal",
       ratio: 0.5,
       children: [
-        { id: 'left', type: 'leaf', sessionId: 'sess_1' },
-        { id: 'right', type: 'leaf', sessionId: 'sess_2' },
+        { id: "left", type: "leaf", sessionId: "sess_1" },
+        { id: "right", type: "leaf", sessionId: "sess_2" },
       ],
     });
 
@@ -555,14 +551,14 @@ describe('AgentPanes', () => {
       </Provider>
     );
 
-    const initialPaneLayout = screen.getByTestId('pane-layout');
-    expect(initialPaneLayout).toHaveAttribute('data-ratio', '0.5');
+    const initialPaneLayout = screen.getByTestId("pane-layout");
+    expect(initialPaneLayout).toHaveAttribute("data-ratio", "0.5");
 
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'resize-root' }));
+      fireEvent.click(screen.getByRole("button", { name: "resize-root" }));
     });
 
-    expect(window.localStorage.getItem('ui.paneRatio.ws-1.root')).toBe('0.73');
+    expect(window.localStorage.getItem("ui.paneRatio.ws-1.root")).toBe("0.73");
 
     unmount();
 
@@ -573,21 +569,21 @@ describe('AgentPanes', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId('pane-layout')).toHaveAttribute('data-ratio', '0.73');
+      expect(screen.getByTestId("pane-layout")).toHaveAttribute("data-ratio", "0.73");
     });
   });
 
-  it('keeps ended sessions mounted in the pane layout after session.list hydration', async () => {
+  it("keeps ended sessions mounted in the pane layout after session.list hydration", async () => {
     const sendCommand = vi.fn(async (op: string) => {
-      if (op === 'session.list') {
+      if (op === "session.list") {
         return [
           {
-            id: 'sess_1',
-            workspaceId: 'ws-1',
-            terminalId: 'term-1',
-            providerId: 'claude',
-            state: 'ended',
-            capability: 'full',
+            id: "sess_1",
+            workspaceId: "ws-1",
+            terminalId: "term-1",
+            providerId: "claude",
+            state: "ended",
+            capability: "full",
             startedAt: Date.now() - 10_000,
             lastActiveAt: Date.now() - 1_000,
             endedAt: Date.now() - 250,
@@ -599,12 +595,12 @@ describe('AgentPanes', () => {
     });
     const { store } = createAgentPaneStore(
       {
-        id: 'root',
-        type: 'leaf',
-        sessionId: 'sess_1',
+        id: "root",
+        type: "leaf",
+        sessionId: "sess_1",
       },
       sendCommand,
-      'connected'
+      "connected"
     );
     store.set(sessionsAtom, {});
 
@@ -615,34 +611,32 @@ describe('AgentPanes', () => {
     );
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith('session.list', { workspaceId: 'ws-1' });
+      expect(sendCommand).toHaveBeenCalledWith("session.list", { workspaceId: "ws-1" });
     });
 
-    expect(store.get(paneLayoutAtomFamily('ws-1'))).toEqual({
-      id: 'root',
-      type: 'leaf',
-      sessionId: 'sess_1',
+    expect(store.get(paneLayoutAtomFamily("ws-1"))).toEqual({
+      id: "root",
+      type: "leaf",
+      sessionId: "sess_1",
     });
-    expect(mockSessionCard).toHaveBeenCalledWith(
-      expect.objectContaining({ sessionId: 'sess_1' })
-    );
+    expect(mockSessionCard).toHaveBeenCalledWith(expect.objectContaining({ sessionId: "sess_1" }));
     const endedCardProps = mockSessionCard.mock.calls.find(
-      ([props]) => (props as { sessionId?: string }).sessionId === 'sess_1'
+      ([props]) => (props as { sessionId?: string }).sessionId === "sess_1"
     )?.[0] as { onStart?: unknown } | undefined;
     expect(endedCardProps?.onStart).toBeUndefined();
   });
 
-  it('keeps multiple ended sessions mounted in the pane layout after session.list hydration', async () => {
+  it("keeps multiple ended sessions mounted in the pane layout after session.list hydration", async () => {
     const sendCommand = vi.fn(async (op: string) => {
-      if (op === 'session.list') {
+      if (op === "session.list") {
         return [
           {
-            id: 'sess_1',
-            workspaceId: 'ws-1',
-            terminalId: 'term-1',
-            providerId: 'claude',
-            state: 'ended',
-            capability: 'full',
+            id: "sess_1",
+            workspaceId: "ws-1",
+            terminalId: "term-1",
+            providerId: "claude",
+            state: "ended",
+            capability: "full",
             startedAt: Date.now() - 10_000,
             lastActiveAt: Date.now() - 1_000,
             endedAt: Date.now() - 250,
@@ -654,12 +648,12 @@ describe('AgentPanes', () => {
     });
     const { store } = createAgentPaneStore(
       {
-        id: 'root',
-        type: 'leaf',
-        sessionId: 'sess_1',
+        id: "root",
+        type: "leaf",
+        sessionId: "sess_1",
       },
       sendCommand,
-      'connected'
+      "connected"
     );
     store.set(sessionsAtom, {});
 
@@ -670,32 +664,32 @@ describe('AgentPanes', () => {
     );
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith('session.list', { workspaceId: 'ws-1' });
+      expect(sendCommand).toHaveBeenCalledWith("session.list", { workspaceId: "ws-1" });
     });
 
-    expect(store.get(paneLayoutAtomFamily('ws-1'))).toEqual({
-      id: 'root',
-      type: 'leaf',
-      sessionId: 'sess_1',
+    expect(store.get(paneLayoutAtomFamily("ws-1"))).toEqual({
+      id: "root",
+      type: "leaf",
+      sessionId: "sess_1",
     });
   });
 
-  it('disables provider buttons while session.create is in flight to prevent re-entry', async () => {
+  it("disables provider buttons while session.create is in flight to prevent re-entry", async () => {
     let resolveCreate: ((value: unknown) => void) | undefined;
     const sendCommand = vi.fn().mockImplementation((op: string) => {
-      if (op === 'session.create') {
+      if (op === "session.create") {
         return new Promise((resolve) => {
           resolveCreate = resolve;
         });
       }
-      if (op === 'session.list') {
+      if (op === "session.list") {
         return [];
       }
       return undefined;
     });
-    const { store } = createAgentPaneStore(undefined, sendCommand, 'connected');
+    const { store } = createAgentPaneStore(undefined, sendCommand, "connected");
     store.set(sessionsAtom, {});
-    store.set(paneLayoutAtomFamily('ws-1'), { id: 'root', type: 'leaf' });
+    store.set(paneLayoutAtomFamily("ws-1"), { id: "root", type: "leaf" });
 
     render(
       <Provider store={store}>
@@ -703,15 +697,15 @@ describe('AgentPanes', () => {
       </Provider>
     );
 
-    const claudeButton = await screen.findByRole('button', { name: /Claude/i });
-    const codexButton = screen.getByRole('button', { name: /Codex/i });
+    const claudeButton = await screen.findByRole("button", { name: /Claude/i });
+    const codexButton = screen.getByRole("button", { name: /Codex/i });
 
     fireEvent.click(claudeButton);
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith('session.create', {
-        workspaceId: 'ws-1',
-        providerId: 'claude',
+      expect(sendCommand).toHaveBeenCalledWith("session.create", {
+        workspaceId: "ws-1",
+        providerId: "claude",
       });
     });
 
@@ -721,54 +715,55 @@ describe('AgentPanes', () => {
     fireEvent.click(claudeButton);
     fireEvent.click(codexButton);
 
-    expect(sendCommand.mock.calls.filter(([op]) => op === 'session.create')).toHaveLength(1);
+    expect(sendCommand.mock.calls.filter(([op]) => op === "session.create")).toHaveLength(1);
 
     resolveCreate?.({
-      id: 'sess_new',
-      workspaceId: 'ws-1',
-      terminalId: 'term-new',
-      providerId: 'claude',
-      state: 'starting',
-      capability: 'full',
+      id: "sess_new",
+      workspaceId: "ws-1",
+      terminalId: "term-new",
+      providerId: "claude",
+      state: "starting",
+      capability: "full",
       startedAt: Date.now(),
       lastActiveAt: Date.now(),
     });
 
     await waitFor(() => {
-      expect(store.get(sessionsAtom)).toHaveProperty('sess_new');
+      expect(store.get(sessionsAtom)).toHaveProperty("sess_new");
     });
   });
 
-  it('shows install and start CTA when the provider is missing but auto-install is supported', async () => {
+  it("shows install and start CTA when the provider is missing but auto-install is supported", async () => {
     const sendCommand = vi.fn(async (op: string) => {
-      if (op === 'session.list') return [];
-      if (op === 'provider.runtimeStatus') {
+      if (op === "session.list") return [];
+      if (op === "provider.runtimeStatus") {
         return {
           providers: {
             claude: {
-              providerId: 'claude',
+              providerId: "claude",
               available: false,
-              missingCommands: ['claude'],
+              missingCommands: ["claude"],
               missingPrerequisites: [],
               autoInstallSupported: true,
-              installReadiness: 'ready',
-              manualGuideKeys: ['provider.install.nodejs.manual', 'provider.install.claude.manual'],
+              installReadiness: "ready",
+              manualGuideKeys: ["provider.install.nodejs.manual", "provider.install.claude.manual"],
               docUrls: {
-                provider: 'https://docs.anthropic.com/en/docs/claude-code/getting-started',
-                prerequisites: { npm: 'https://nodejs.org/en/download' },
+                provider: "https://docs.anthropic.com/en/docs/claude-code/getting-started",
+                prerequisites: { npm: "https://nodejs.org/en/download" },
               },
             },
             codex: {
-              providerId: 'codex',
+              providerId: "codex",
               available: true,
               missingCommands: [],
               missingPrerequisites: [],
               autoInstallSupported: true,
-              installReadiness: 'ready',
-              manualGuideKeys: ['provider.install.nodejs.manual', 'provider.install.codex.manual'],
+              installReadiness: "ready",
+              manualGuideKeys: ["provider.install.nodejs.manual", "provider.install.codex.manual"],
               docUrls: {
-                provider: 'https://help.openai.com/en/articles/11096431-openai-codex-ci-getting-started',
-                prerequisites: { npm: 'https://nodejs.org/en/download' },
+                provider:
+                  "https://help.openai.com/en/articles/11096431-openai-codex-ci-getting-started",
+                prerequisites: { npm: "https://nodejs.org/en/download" },
               },
             },
           },
@@ -777,10 +772,10 @@ describe('AgentPanes', () => {
       return undefined;
     });
 
-    const { store } = createAgentPaneStore(undefined, sendCommand, 'connected');
+    const { store } = createAgentPaneStore(undefined, sendCommand, "connected");
     store.set(sessionsAtom, {});
-    store.set(localeAtom, 'en');
-    store.set(paneLayoutAtomFamily('ws-1'), { id: 'root', type: 'leaf' });
+    store.set(localeAtom, "en");
+    store.set(paneLayoutAtomFamily("ws-1"), { id: "root", type: "leaf" });
 
     render(
       <Provider store={store}>
@@ -788,71 +783,72 @@ describe('AgentPanes', () => {
       </Provider>
     );
 
-    expect(await screen.findByText('Install & Start')).toBeInTheDocument();
+    expect(await screen.findByText("Install & Start")).toBeInTheDocument();
   });
 
-  it('runs install polling and creates the session after install succeeds', async () => {
+  it("runs install polling and creates the session after install succeeds", async () => {
     const sendCommand = vi.fn(async (op: string) => {
-      if (op === 'session.list') return [];
-      if (op === 'provider.runtimeStatus') {
+      if (op === "session.list") return [];
+      if (op === "provider.runtimeStatus") {
         return {
           providers: {
             codex: {
-              providerId: 'codex',
+              providerId: "codex",
               available: false,
-              missingCommands: ['codex'],
+              missingCommands: ["codex"],
               missingPrerequisites: [],
               autoInstallSupported: true,
-              installReadiness: 'ready',
-              manualGuideKeys: ['provider.install.nodejs.manual', 'provider.install.codex.manual'],
+              installReadiness: "ready",
+              manualGuideKeys: ["provider.install.nodejs.manual", "provider.install.codex.manual"],
               docUrls: {
-                provider: 'https://help.openai.com/en/articles/11096431-openai-codex-ci-getting-started',
-                prerequisites: { npm: 'https://nodejs.org/en/download' },
+                provider:
+                  "https://help.openai.com/en/articles/11096431-openai-codex-ci-getting-started",
+                prerequisites: { npm: "https://nodejs.org/en/download" },
               },
             },
             claude: {
-              providerId: 'claude',
+              providerId: "claude",
               available: true,
               missingCommands: [],
               missingPrerequisites: [],
               autoInstallSupported: true,
-              installReadiness: 'ready',
-              manualGuideKeys: ['provider.install.nodejs.manual', 'provider.install.claude.manual'],
+              installReadiness: "ready",
+              manualGuideKeys: ["provider.install.nodejs.manual", "provider.install.claude.manual"],
               docUrls: {
-                provider: 'https://docs.anthropic.com/en/docs/claude-code/getting-started',
-                prerequisites: { npm: 'https://nodejs.org/en/download' },
+                provider: "https://docs.anthropic.com/en/docs/claude-code/getting-started",
+                prerequisites: { npm: "https://nodejs.org/en/download" },
               },
             },
           },
         };
       }
-      if (op === 'provider.install.start') {
+      if (op === "provider.install.start") {
         return {
-          jobId: 'job-1',
-          providerId: 'codex',
-          strategyIds: ['npm-install-codex'],
-          status: 'running',
-          currentStepId: 'install-provider-codex',
+          jobId: "job-1",
+          providerId: "codex",
+          strategyIds: ["npm-install-codex"],
+          status: "running",
+          currentStepId: "install-provider-codex",
           steps: [],
         };
       }
-      if (op === 'provider.install.get') {
+      if (op === "provider.install.get") {
         return {
-          jobId: 'job-1',
-          providerId: 'codex',
-          strategyIds: ['npm-install-codex'],
-          status: 'succeeded',
+          jobId: "job-1",
+          providerId: "codex",
+          strategyIds: ["npm-install-codex"],
+          status: "succeeded",
           steps: [],
         };
       }
-      if (op === 'session.create') {
+      if (op === "session.create") {
         return {
-          id: 'sess_new',
-          workspaceId: 'ws-1',
-          terminalId: 'term-new',
-          providerId: 'codex',
-          state: 'starting',
-          capability: 'full',
+          id: "sess_new",
+          workspaceId: "ws-1",
+          terminalId: "term-new",
+          providerId: "codex",
+          state: "starting",
+          capability: "full",
           startedAt: Date.now(),
           lastActiveAt: Date.now(),
         };
@@ -860,10 +856,10 @@ describe('AgentPanes', () => {
       return undefined;
     });
 
-    const { store } = createAgentPaneStore(undefined, sendCommand, 'connected');
+    const { store } = createAgentPaneStore(undefined, sendCommand, "connected");
     store.set(sessionsAtom, {});
-    store.set(localeAtom, 'en');
-    store.set(paneLayoutAtomFamily('ws-1'), { id: 'root', type: 'leaf' });
+    store.set(localeAtom, "en");
+    store.set(paneLayoutAtomFamily("ws-1"), { id: "root", type: "leaf" });
 
     render(
       <Provider store={store}>
@@ -871,88 +867,90 @@ describe('AgentPanes', () => {
       </Provider>
     );
 
-    const installCta = await screen.findByText('Install & Start');
+    const installCta = await screen.findByText("Install & Start");
     vi.useFakeTimers();
 
-    fireEvent.click(installCta.closest('button')!);
+    fireEvent.click(installCta.closest("button")!);
 
-    expect(sendCommand).toHaveBeenCalledWith('provider.install.start', { providerId: 'codex' });
+    expect(sendCommand).toHaveBeenCalledWith("provider.install.start", { providerId: "codex" });
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1500);
     });
 
-    expect(sendCommand).toHaveBeenCalledWith('provider.install.get', { jobId: 'job-1' });
-    expect(sendCommand).toHaveBeenCalledWith('session.create', {
-      workspaceId: 'ws-1',
-      providerId: 'codex',
+    expect(sendCommand).toHaveBeenCalledWith("provider.install.get", { jobId: "job-1" });
+    expect(sendCommand).toHaveBeenCalledWith("session.create", {
+      workspaceId: "ws-1",
+      providerId: "codex",
     });
   });
 
-  it('shows install failure details and docs link when automatic install fails', async () => {
+  it("shows install failure details and docs link when automatic install fails", async () => {
     const sendCommand = vi.fn(async (op: string) => {
-      if (op === 'session.list') return [];
-      if (op === 'provider.runtimeStatus') {
+      if (op === "session.list") return [];
+      if (op === "provider.runtimeStatus") {
         return {
           providers: {
             claude: {
-              providerId: 'claude',
+              providerId: "claude",
               available: true,
               missingCommands: [],
               missingPrerequisites: [],
               autoInstallSupported: true,
-              installReadiness: 'ready',
-              manualGuideKeys: ['provider.install.nodejs.manual', 'provider.install.claude.manual'],
+              installReadiness: "ready",
+              manualGuideKeys: ["provider.install.nodejs.manual", "provider.install.claude.manual"],
               docUrls: {
-                provider: 'https://docs.anthropic.com/en/docs/claude-code/getting-started',
-                prerequisites: { npm: 'https://nodejs.org/en/download' },
+                provider: "https://docs.anthropic.com/en/docs/claude-code/getting-started",
+                prerequisites: { npm: "https://nodejs.org/en/download" },
               },
             },
             codex: {
-              providerId: 'codex',
+              providerId: "codex",
               available: false,
-              missingCommands: ['codex'],
-              missingPrerequisites: ['npm'],
+              missingCommands: ["codex"],
+              missingPrerequisites: ["npm"],
               autoInstallSupported: true,
-              installReadiness: 'missing_prerequisite',
-              manualGuideKeys: ['provider.install.nodejs.manual', 'provider.install.codex.manual'],
+              installReadiness: "missing_prerequisite",
+              manualGuideKeys: ["provider.install.nodejs.manual", "provider.install.codex.manual"],
               docUrls: {
-                provider: 'https://help.openai.com/en/articles/11096431-openai-codex-ci-getting-started',
-                prerequisites: { npm: 'https://nodejs.org/en/download' },
+                provider:
+                  "https://help.openai.com/en/articles/11096431-openai-codex-ci-getting-started",
+                prerequisites: { npm: "https://nodejs.org/en/download" },
               },
             },
           },
         };
       }
-      if (op === 'provider.install.start') {
+      if (op === "provider.install.start") {
         return {
-          jobId: 'job-failed',
-          providerId: 'codex',
-          strategyIds: ['winget-nodejs-lts'],
-          status: 'running',
-          currentStepId: 'install-prerequisite-npm',
+          jobId: "job-failed",
+          providerId: "codex",
+          strategyIds: ["winget-nodejs-lts"],
+          status: "running",
+          currentStepId: "install-prerequisite-npm",
           steps: [],
         };
       }
-      if (op === 'provider.install.get') {
+      if (op === "provider.install.get") {
         return {
-          jobId: 'job-failed',
-          providerId: 'codex',
-          strategyIds: ['winget-nodejs-lts'],
-          status: 'failed',
+          jobId: "job-failed",
+          providerId: "codex",
+          strategyIds: ["winget-nodejs-lts"],
+          status: "failed",
           steps: [],
           failure: {
-            code: 'missing_prerequisite',
-            providerId: 'codex',
-            failedStepId: 'install-prerequisite-npm',
-            message: 'Missing prerequisite commands: npm',
-            command: '',
+            code: "missing_prerequisite",
+            providerId: "codex",
+            failedStepId: "install-prerequisite-npm",
+            message: "Missing prerequisite commands: npm",
+            command: "",
             args: [],
-            missingCommands: ['npm'],
-            manualGuideKeys: ['provider.install.nodejs.manual', 'provider.install.codex.manual'],
+            missingCommands: ["npm"],
+            manualGuideKeys: ["provider.install.nodejs.manual", "provider.install.codex.manual"],
             docUrls: {
-              provider: 'https://help.openai.com/en/articles/11096431-openai-codex-ci-getting-started',
-              prerequisites: { npm: 'https://nodejs.org/en/download' },
+              provider:
+                "https://help.openai.com/en/articles/11096431-openai-codex-ci-getting-started",
+              prerequisites: { npm: "https://nodejs.org/en/download" },
             },
           },
         };
@@ -960,10 +958,10 @@ describe('AgentPanes', () => {
       return undefined;
     });
 
-    const { store } = createAgentPaneStore(undefined, sendCommand, 'connected');
+    const { store } = createAgentPaneStore(undefined, sendCommand, "connected");
     store.set(sessionsAtom, {});
-    store.set(localeAtom, 'en');
-    store.set(paneLayoutAtomFamily('ws-1'), { id: 'root', type: 'leaf' });
+    store.set(localeAtom, "en");
+    store.set(paneLayoutAtomFamily("ws-1"), { id: "root", type: "leaf" });
 
     render(
       <Provider store={store}>
@@ -971,19 +969,19 @@ describe('AgentPanes', () => {
       </Provider>
     );
 
-    const installCta = await screen.findByText('Install & Start');
+    const installCta = await screen.findByText("Install & Start");
     vi.useFakeTimers();
 
-    fireEvent.click(installCta.closest('button')!);
+    fireEvent.click(installCta.closest("button")!);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1500);
     });
 
-    expect(screen.getByText('Missing prerequisite commands: npm')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Open official docs' })).toHaveAttribute(
-      'href',
-      'https://help.openai.com/en/articles/11096431-openai-codex-ci-getting-started',
+    expect(screen.getByText("Missing prerequisite commands: npm")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open official docs" })).toHaveAttribute(
+      "href",
+      "https://help.openai.com/en/articles/11096431-openai-codex-ci-getting-started"
     );
   });
 });

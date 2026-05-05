@@ -1,11 +1,11 @@
-import type { FC } from 'react';
-import { useAtomValue, useSetAtom } from 'jotai';
-import { ArrowRight, Bot, Sparkles, FlipHorizontal, FlipVertical, X } from 'lucide-react';
-import type { Session } from '@coder-studio/core';
-import { dispatchCommandAtom } from '../../../../atoms/connection';
-import { sessionsAtom } from '../../../../atoms/sessions';
-import { useTranslation } from '../../../../lib/i18n';
-import { useProviderLauncher, type ProviderId } from '../../actions/use-provider-launcher';
+import type { Session } from "@coder-studio/core";
+import { useAtomValue, useSetAtom } from "jotai";
+import { ArrowRight, Bot, FlipHorizontal, FlipVertical, Sparkles, X } from "lucide-react";
+import type { FC } from "react";
+import { dispatchCommandAtom } from "../../../../atoms/connection";
+import { sessionsAtom } from "../../../../atoms/sessions";
+import { useTranslation } from "../../../../lib/i18n";
+import { type ProviderId, useProviderLauncher } from "../../actions/use-provider-launcher";
 
 interface DraftLauncherProps {
   workspaceId: string;
@@ -13,7 +13,7 @@ interface DraftLauncherProps {
   onAssignSession?: (paneId: string, sessionId: string) => void;
   onClosePane?: (paneId: string) => void;
   onReplaceWithSession?: (sessionId: string) => void;
-  onSplitPane?: (paneId: string, direction: 'horizontal' | 'vertical') => void;
+  onSplitPane?: (paneId: string, direction: "horizontal" | "vertical") => void;
 }
 
 export const DraftLauncher: FC<DraftLauncherProps> = ({
@@ -41,21 +41,25 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
       } else {
         onReplaceWithSession?.(session.id);
       }
-    },
+    }
   );
 
   const getProviderCta = (providerId: ProviderId): string => {
     const state = states[providerId];
-    if (state.loading || state.installJob?.status === 'queued' || state.installJob?.status === 'running') {
-      return t('provider.install.cta.installing');
+    if (
+      state.loading ||
+      state.installJob?.status === "queued" ||
+      state.installJob?.status === "running"
+    ) {
+      return t("provider.install.cta.installing");
     }
     if (state.runtime?.available) {
-      return t('provider.install.cta.start');
+      return t("provider.install.cta.start");
     }
     if (state.runtime?.autoInstallSupported) {
-      return t('provider.install.cta.install_and_start');
+      return t("provider.install.cta.install_and_start");
     }
-    return t('provider.install.cta.manual');
+    return t("provider.install.cta.manual");
   };
 
   const getProviderGuide = (providerId: ProviderId): { message?: string; docUrl?: string } => {
@@ -69,16 +73,16 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
       };
     }
 
-    if (state.inlineError && state.inlineError !== 'manual') {
+    if (state.inlineError && state.inlineError !== "manual") {
       return {
         message: state.inlineError,
         docUrl: state.runtime?.docUrls.provider,
       };
     }
 
-    if (state.inlineError === 'manual' || state.runtime?.autoInstallSupported === false) {
+    if (state.inlineError === "manual" || state.runtime?.autoInstallSupported === false) {
       return {
-        message: state.runtime?.manualGuideKeys.map((key) => t(key)).join(' '),
+        message: state.runtime?.manualGuideKeys.map((key) => t(key)).join(" "),
         docUrl: state.runtime?.docUrls.provider,
       };
     }
@@ -91,18 +95,18 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
   const isAnyProviderBusy = (Object.values(states) as Array<(typeof states)[ProviderId]>).some(
     (state) =>
       state.loading ||
-      state.installJob?.status === 'queued' ||
-      state.installJob?.status === 'running',
+      state.installJob?.status === "queued" ||
+      state.installJob?.status === "running"
   );
 
   const handleSplitHorizontal = () => {
     if (!paneId) return;
-    onSplitPane?.(paneId, 'horizontal');
+    onSplitPane?.(paneId, "horizontal");
   };
 
   const handleSplitVertical = () => {
     if (!paneId) return;
-    onSplitPane?.(paneId, 'vertical');
+    onSplitPane?.(paneId, "vertical");
   };
 
   const handleClosePane = () => {
@@ -117,7 +121,7 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
           <span className="session-dot session-dot-idle" />
           <div className="session-header-copy">
             <div className="session-title-row">
-              <span className="session-title">{t('session.provider_select') || 'New Session'}</span>
+              <span className="session-title">{t("session.provider_select") || "New Session"}</span>
               <span className="session-state-badge badge badge-gray">DRAFT</span>
             </div>
           </div>
@@ -158,30 +162,32 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
             选择一个 AI 会话，在当前 workspace 里继续查看文件、运行命令和推进代码修改。
           </p>
           <div className="agent-draft-providers">
-            {([
-              {
-                id: 'claude',
-                title: 'Claude',
-                meta: 'analysis',
-                icon: <Sparkles size={18} />,
-                description: '更适合长上下文梳理、方案分析和代码审查。',
-                className: 'agent-provider-card-claude',
-              },
-              {
-                id: 'codex',
-                title: 'Codex',
-                meta: 'workspace',
-                icon: <Bot size={18} />,
-                description: '更适合终端操作、直接改文件和逐步修复问题。',
-                className: 'agent-provider-card-codex',
-              },
-            ] as const).map((provider) => {
+            {(
+              [
+                {
+                  id: "claude",
+                  title: "Claude",
+                  meta: "analysis",
+                  icon: <Sparkles size={18} />,
+                  description: "更适合长上下文梳理、方案分析和代码审查。",
+                  className: "agent-provider-card-claude",
+                },
+                {
+                  id: "codex",
+                  title: "Codex",
+                  meta: "workspace",
+                  icon: <Bot size={18} />,
+                  description: "更适合终端操作、直接改文件和逐步修复问题。",
+                  className: "agent-provider-card-codex",
+                },
+              ] as const
+            ).map((provider) => {
               const state = states[provider.id];
               const guide = getProviderGuide(provider.id);
               const isBusy =
                 state.loading ||
-                state.installJob?.status === 'queued' ||
-                state.installJob?.status === 'running';
+                state.installJob?.status === "queued" ||
+                state.installJob?.status === "running";
 
               return (
                 <button
@@ -202,7 +208,7 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
                     <span className="agent-provider-card-cta">{getProviderCta(provider.id)}</span>
                     {isBusy ? (
                       <span className="agent-provider-card-status">
-                        {t('provider.install.status.installing')}
+                        {t("provider.install.status.installing")}
                       </span>
                     ) : null}
                     {guide.message ? (
@@ -210,7 +216,7 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
                         <span>{guide.message}</span>
                         {guide.docUrl ? (
                           <a href={guide.docUrl} target="_blank" rel="noreferrer">
-                            {t('provider.install.open_docs')}
+                            {t("provider.install.open_docs")}
                           </a>
                         ) : null}
                       </span>

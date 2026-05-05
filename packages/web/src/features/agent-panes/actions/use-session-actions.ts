@@ -1,7 +1,7 @@
-import { useCallback } from 'react';
-import { useAtomValue, useStore } from 'jotai';
-import { dispatchCommandAtom, wsClientAtom } from '../../../atoms/connection';
-import { sessionByIdAtomFamily } from '../../../atoms/sessions';
+import { useAtomValue, useStore } from "jotai";
+import { useCallback } from "react";
+import { dispatchCommandAtom, wsClientAtom } from "../../../atoms/connection";
+import { sessionByIdAtomFamily } from "../../../atoms/sessions";
 
 const terminalInputEncoder = new TextEncoder();
 const SESSION_REMOVAL_POLL_INTERVAL_MS = 100;
@@ -14,9 +14,9 @@ export function useSessionActions() {
 
   const stopSession = useCallback(
     async (sessionId: string) => {
-      const result = await dispatch<void>('session.stop', { sessionId });
+      const result = await dispatch<void>("session.stop", { sessionId });
       if (!result.ok) {
-        console.error('Failed to stop session:', result.error?.message);
+        console.error("Failed to stop session:", result.error?.message);
       }
     },
     [dispatch]
@@ -29,17 +29,17 @@ export function useSessionActions() {
         return;
       }
 
-      if (session.state === 'ended') {
-        const removeResult = await dispatch<void>('session.remove', { sessionId });
+      if (session.state === "ended") {
+        const removeResult = await dispatch<void>("session.remove", { sessionId });
         if (!removeResult.ok) {
-          console.error('Failed to remove ended session:', removeResult.error?.message);
+          console.error("Failed to remove ended session:", removeResult.error?.message);
         }
         return;
       }
 
-      const stopResult = await dispatch<void>('session.stop', { sessionId });
-      if (!stopResult.ok && stopResult.error?.code !== 'invalid_state') {
-        console.error('Failed to stop session before removal:', stopResult.error?.message);
+      const stopResult = await dispatch<void>("session.stop", { sessionId });
+      if (!stopResult.ok && stopResult.error?.code !== "invalid_state") {
+        console.error("Failed to stop session before removal:", stopResult.error?.message);
         return;
       }
 
@@ -49,10 +49,10 @@ export function useSessionActions() {
         if (!current) {
           return;
         }
-        if (current.state === 'ended') {
-          const removeResult = await dispatch<void>('session.remove', { sessionId });
+        if (current.state === "ended") {
+          const removeResult = await dispatch<void>("session.remove", { sessionId });
           if (!removeResult.ok) {
-            console.error('Failed to remove ended session:', removeResult.error?.message);
+            console.error("Failed to remove ended session:", removeResult.error?.message);
           }
           return;
         }
@@ -62,7 +62,7 @@ export function useSessionActions() {
         });
       }
 
-      console.error('Timed out waiting for session to end before removal:', sessionId);
+      console.error("Timed out waiting for session to end before removal:", sessionId);
     },
     [dispatch, store]
   );
@@ -79,12 +79,12 @@ export function useSessionActions() {
         await wsClient.sendTerminalInput(
           terminalId,
           terminalInputEncoder.encode(`${trimmedPrompt}\r`),
-          'submit',
+          "submit",
           trimmedPrompt
         );
         return true;
       } catch (error) {
-        console.error('Failed to submit session prompt:', error);
+        console.error("Failed to submit session prompt:", error);
         return false;
       }
     },

@@ -1,1 +1,4 @@
-export { WorkspaceDesktopView as WorkspacePage, default } from './views/desktop/workspace-desktop-view';
+export {
+  default,
+  WorkspaceDesktopView as WorkspacePage,
+} from "./views/desktop/workspace-desktop-view";

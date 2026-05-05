@@ -1,6 +1,6 @@
-import type { ReactNode } from 'react';
-import { useTranslation } from '../../../../lib/i18n';
-import { PageHeader } from '../../../shared/components/page-header';
+import type { ReactNode } from "react";
+import { useTranslation } from "../../../../lib/i18n";
+import { PageHeader } from "../../../shared/components/page-header";
 
 interface MobileSheetProps {
   title: string;
@@ -30,24 +30,28 @@ export function MobileSheet({
   backLabel,
 }: MobileSheetProps) {
   const t = useTranslation();
-  const contentClasses = ['mobile-sheet', fullscreen ? 'mobile-sheet--fullscreen' : null, contentClassName]
+  const contentClasses = [
+    "mobile-sheet",
+    fullscreen ? "mobile-sheet--fullscreen" : null,
+    contentClassName,
+  ]
     .filter(Boolean)
-    .join(' ');
-  const bodyClasses = ['mobile-sheet__body', bodyClassName].filter(Boolean).join(' ');
+    .join(" ");
+  const bodyClasses = ["mobile-sheet__body", bodyClassName].filter(Boolean).join(" ");
   const handleBack = onBack ?? onClose;
-  const resolvedBackLabel = backLabel ?? t('action.back');
+  const resolvedBackLabel = backLabel ?? t("action.back");
 
   return (
     <div className="mobile-sheet-layer">
       <button
         type="button"
         className="mobile-sheet-layer__backdrop"
-        aria-label={t('mobile.sheet.dismiss')}
+        aria-label={t("mobile.sheet.dismiss")}
         onClick={onClose}
       />
       <section
         className={contentClasses}
-        aria-label={t('mobile.sheet.region', { title })}
+        aria-label={t("mobile.sheet.region", { title })}
         role="region"
       >
         {fullscreen ? null : <div className="mobile-sheet__handle" aria-hidden="true" />}

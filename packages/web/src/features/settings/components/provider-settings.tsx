@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { useAtomValue } from 'jotai';
-import { connectionStatusAtom, dispatchCommandAtom } from '../../../atoms/connection';
-import { useTranslation } from '../../../lib/i18n';
-import { ConfigEditor, type ConfigType } from './config-editor';
+import { useAtomValue } from "jotai";
+import { type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from "react";
+import { connectionStatusAtom, dispatchCommandAtom } from "../../../atoms/connection";
+import { useTranslation } from "../../../lib/i18n";
+import { ConfigEditor, type ConfigType } from "./config-editor";
 
 export interface ProviderInfo {
-  id: 'claude' | 'codex';
+  id: "claude" | "codex";
   displayName: string;
 }
 
@@ -14,19 +14,22 @@ interface ProviderSettingsProps {
   additionalArgsById: Record<string, string>;
   setAdditionalArgsById: Dispatch<SetStateAction<Record<string, string>>>;
   isMobile: boolean;
-  onLayoutModeChange?: (mode: 'default' | 'fill-height') => void;
+  onLayoutModeChange?: (mode: "default" | "fill-height") => void;
 }
 
-type ProviderDetailView = 'base' | 'config';
+type ProviderDetailView = "base" | "config";
 
 function parseProviderAdditionalArgs(value: string): string[] {
   return value
-    .split('\n')
+    .split("\n")
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
 }
 
-function createProviderRecord<T>(providers: ProviderInfo[], createValue: () => T): Record<string, T> {
+function createProviderRecord<T>(
+  providers: ProviderInfo[],
+  createValue: () => T
+): Record<string, T> {
   return Object.fromEntries(providers.map((provider) => [provider.id, createValue()]));
 }
 
@@ -40,28 +43,32 @@ export function ProviderSettings({
   const t = useTranslation();
   const dispatch = useAtomValue(dispatchCommandAtom);
   const connectionStatus = useAtomValue(connectionStatusAtom);
-  const [selectedProvider, setSelectedProvider] = useState<ProviderInfo['id']>(providers[0]?.id ?? 'claude');
-  const [desktopView, setDesktopView] = useState<ProviderDetailView>('base');
-  const [mobileView, setMobileView] = useState<ProviderDetailView>('base');
+  const [selectedProvider, setSelectedProvider] = useState<ProviderInfo["id"]>(
+    providers[0]?.id ?? "claude"
+  );
+  const [desktopView, setDesktopView] = useState<ProviderDetailView>("base");
+  const [mobileView, setMobileView] = useState<ProviderDetailView>("base");
   const [previewByProvider, setPreviewByProvider] = useState<Record<string, string>>(() =>
-    createProviderRecord(providers, () => '')
+    createProviderRecord(providers, () => "")
   );
-  const [visitedConfigProviders, setVisitedConfigProviders] = useState<Record<string, boolean>>(() =>
-    createProviderRecord(providers, () => false)
+  const [visitedConfigProviders, setVisitedConfigProviders] = useState<Record<string, boolean>>(
+    () => createProviderRecord(providers, () => false)
   );
-  const previewRequestVersionRef = useRef<Record<string, number>>(createProviderRecord(providers, () => 0));
+  const previewRequestVersionRef = useRef<Record<string, number>>(
+    createProviderRecord(providers, () => 0)
+  );
 
   useEffect(() => {
     if (providers.some((provider) => provider.id === selectedProvider)) {
       return;
     }
 
-    setSelectedProvider(providers[0]?.id ?? 'claude');
+    setSelectedProvider(providers[0]?.id ?? "claude");
   }, [providers, selectedProvider]);
 
   useEffect(() => {
     setPreviewByProvider((previous) => {
-      const next = createProviderRecord(providers, () => '');
+      const next = createProviderRecord(providers, () => "");
       let changed = false;
 
       for (const provider of providers) {
@@ -108,22 +115,22 @@ export function ProviderSettings({
   }, [providers]);
 
   const provider = providers.find((entry) => entry.id === selectedProvider);
-  const additionalArgsText = provider ? additionalArgsById[provider.id] ?? '' : '';
+  const additionalArgsText = provider ? (additionalArgsById[provider.id] ?? "") : "";
   const additionalArgs = useMemo(
     () => parseProviderAdditionalArgs(additionalArgsText),
     [additionalArgsText]
   );
-  const showBase = isMobile ? mobileView === 'base' : desktopView === 'base';
-  const showConfig = isMobile ? mobileView === 'config' : desktopView === 'config';
-  const currentPreview = provider ? previewByProvider[provider.id] ?? '' : '';
+  const showBase = isMobile ? mobileView === "base" : desktopView === "base";
+  const showConfig = isMobile ? mobileView === "config" : desktopView === "config";
+  const currentPreview = provider ? (previewByProvider[provider.id] ?? "") : "";
   const useFillHeightLayout = showConfig;
 
   useEffect(() => {
-    onLayoutModeChange?.(useFillHeightLayout ? 'fill-height' : 'default');
+    onLayoutModeChange?.(useFillHeightLayout ? "fill-height" : "default");
   }, [onLayoutModeChange, useFillHeightLayout]);
 
   useEffect(() => {
-    if (connectionStatus !== 'connected') {
+    if (connectionStatus !== "connected") {
       return;
     }
 
@@ -136,7 +143,7 @@ export function ProviderSettings({
     let cancelled = false;
 
     const loadPreview = async () => {
-      const result = await dispatch<{ preview: string }>('settings.previewCommand', {
+      const result = await dispatch<{ preview: string }>("settings.previewCommand", {
         providerId: provider.id,
         config: { additionalArgs },
       });
@@ -151,8 +158,7 @@ export function ProviderSettings({
 
       setPreviewByProvider((previous) => ({
         ...previous,
-        [provider.id]:
-          result.ok && result.data ? result.data.preview : 'Error loading preview',
+        [provider.id]: result.ok && result.data ? result.data.preview : "Error loading preview",
       }));
     };
 
@@ -173,15 +179,15 @@ export function ProviderSettings({
     );
   }, [provider, showConfig]);
 
-  const handleProviderSelect = (providerId: ProviderInfo['id']) => {
+  const handleProviderSelect = (providerId: ProviderInfo["id"]) => {
     setSelectedProvider(providerId);
     if (isMobile) {
-      setMobileView('base');
+      setMobileView("base");
     }
   };
 
-  const saveSettings = async (providerId: ProviderInfo['id'], nextValue: string) => {
-    await dispatch('settings.update', {
+  const saveSettings = async (providerId: ProviderInfo["id"], nextValue: string) => {
+    await dispatch("settings.update", {
       settings: {
         providers: {
           [providerId]: {
@@ -194,14 +200,14 @@ export function ProviderSettings({
 
   return (
     <div
-      className={`settings-section ${useFillHeightLayout ? 'settings-section--fill-height settings-provider-section--config-active' : ''}`}
+      className={`settings-section ${useFillHeightLayout ? "settings-section--fill-height settings-provider-section--config-active" : ""}`}
     >
       <div className="settings-provider-tabs">
         {providers.map((entry) => (
           <button
             key={entry.id}
             type="button"
-            className={`settings-provider-tab ${selectedProvider === entry.id ? 'settings-provider-tab-active' : ''}`}
+            className={`settings-provider-tab ${selectedProvider === entry.id ? "settings-provider-tab-active" : ""}`}
             onClick={() => handleProviderSelect(entry.id)}
           >
             {entry.displayName}
@@ -210,42 +216,46 @@ export function ProviderSettings({
       </div>
 
       {!isMobile ? (
-        <div className="settings-provider-subnav" role="tablist" aria-label={t('settings.provider.config')}>
+        <div
+          className="settings-provider-subnav"
+          role="tablist"
+          aria-label={t("settings.provider.config")}
+        >
           <button
             type="button"
-            className={`settings-provider-subnav-button ${desktopView === 'base' ? 'settings-provider-subnav-button-active' : ''}`}
-            aria-pressed={desktopView === 'base'}
-            onClick={() => setDesktopView('base')}
+            className={`settings-provider-subnav-button ${desktopView === "base" ? "settings-provider-subnav-button-active" : ""}`}
+            aria-pressed={desktopView === "base"}
+            onClick={() => setDesktopView("base")}
           >
-            {t('settings.provider.base')}
+            {t("settings.provider.base")}
           </button>
           <button
             type="button"
-            className={`settings-provider-subnav-button ${desktopView === 'config' ? 'settings-provider-subnav-button-active' : ''}`}
-            aria-pressed={desktopView === 'config'}
-            onClick={() => setDesktopView('config')}
+            className={`settings-provider-subnav-button ${desktopView === "config" ? "settings-provider-subnav-button-active" : ""}`}
+            aria-pressed={desktopView === "config"}
+            onClick={() => setDesktopView("config")}
           >
-            {t('settings.provider.config_file')}
+            {t("settings.provider.config_file")}
           </button>
         </div>
       ) : null}
 
       {provider && showBase ? (
         <div
-          className={`settings-provider-content ${useFillHeightLayout ? 'settings-provider-content--fill-height' : ''}`}
+          className={`settings-provider-content ${useFillHeightLayout ? "settings-provider-content--fill-height" : ""}`}
         >
           <div className="settings-group">
-            <h3 className="settings-group-title">{t('settings.provider.config')}</h3>
-            <p className="settings-group-desc">{t('settings.provider.startup_args_hint')}</p>
+            <h3 className="settings-group-title">{t("settings.provider.config")}</h3>
+            <p className="settings-group-desc">{t("settings.provider.startup_args_hint")}</p>
             <div className="settings-config-field">
               <label className="settings-config-label" htmlFor="provider-startup-args">
-                {t('settings.provider.startup_args')}
+                {t("settings.provider.startup_args")}
               </label>
               <textarea
                 id="provider-startup-args"
                 className="input settings-provider-args-input"
                 rows={4}
-                placeholder={t('settings.provider.startup_args_placeholder')}
+                placeholder={t("settings.provider.startup_args_placeholder")}
                 value={additionalArgsText}
                 onChange={(event) => {
                   const nextValue = event.target.value;
@@ -271,16 +281,16 @@ export function ProviderSettings({
             <button
               type="button"
               className="settings-provider-mobile-entry"
-              aria-label={t('settings.provider.open_config_file_editor')}
-              onClick={() => setMobileView('config')}
+              aria-label={t("settings.provider.open_config_file_editor")}
+              onClick={() => setMobileView("config")}
             >
               <span className="settings-provider-mobile-entry__title">
-                {t('settings.provider.open_config_file_editor')}
+                {t("settings.provider.open_config_file_editor")}
               </span>
               <span className="settings-provider-mobile-entry__meta">
-                {provider.id === 'codex'
-                  ? t('settings.config_files.codex_config')
-                  : t('settings.config_files.claude_config')}
+                {provider.id === "codex"
+                  ? t("settings.config_files.codex_config")
+                  : t("settings.config_files.claude_config")}
               </span>
             </button>
           ) : null}
@@ -288,41 +298,43 @@ export function ProviderSettings({
       ) : null}
 
       <div
-        className={`settings-provider-config-stack ${useFillHeightLayout ? 'settings-provider-config-stack--fill-height' : ''}`}
+        className={`settings-provider-config-stack ${useFillHeightLayout ? "settings-provider-config-stack--fill-height" : ""}`}
       >
         {providers
-          .filter((entry) => visitedConfigProviders[entry.id] || (provider?.id === entry.id && showConfig))
+          .filter(
+            (entry) => visitedConfigProviders[entry.id] || (provider?.id === entry.id && showConfig)
+          )
           .map((entry) => {
             const visible = provider?.id === entry.id && showConfig;
 
             return (
               <div
                 key={entry.id}
-                className={`settings-provider-config-panel ${useFillHeightLayout ? 'settings-provider-config-panel--fill-height' : ''} ${visible ? '' : 'settings-provider-config-panel-hidden'}`}
+                className={`settings-provider-config-panel ${useFillHeightLayout ? "settings-provider-config-panel--fill-height" : ""} ${visible ? "" : "settings-provider-config-panel-hidden"}`}
                 aria-hidden={!visible}
               >
                 <div
-                  className={`settings-provider-content ${useFillHeightLayout ? 'settings-provider-content--fill-height' : ''}`}
+                  className={`settings-provider-content ${useFillHeightLayout ? "settings-provider-content--fill-height" : ""}`}
                 >
                   <div
-                    className={`settings-group ${useFillHeightLayout ? 'settings-group--fill-height' : ''}`}
+                    className={`settings-group ${useFillHeightLayout ? "settings-group--fill-height" : ""}`}
                   >
                     {isMobile ? (
                       <div className="settings-provider-mobile-config-header">
                         <button
                           type="button"
                           className="settings-link"
-                          onClick={() => setMobileView('base')}
+                          onClick={() => setMobileView("base")}
                         >
-                          {t('settings.provider.back_to_base')}
+                          {t("settings.provider.back_to_base")}
                         </button>
                       </div>
                     ) : null}
-                    <h3 className="settings-group-title">{t('settings.config_files.title')}</h3>
+                    <h3 className="settings-group-title">{t("settings.config_files.title")}</h3>
                     <p className="settings-group-desc">
-                      {entry.id === 'codex'
-                        ? t('settings.config_files.codex_config')
-                        : t('settings.config_files.claude_config')}
+                      {entry.id === "codex"
+                        ? t("settings.config_files.codex_config")
+                        : t("settings.config_files.claude_config")}
                     </p>
                     <ConfigEditor
                       configType={entry.id as ConfigType}

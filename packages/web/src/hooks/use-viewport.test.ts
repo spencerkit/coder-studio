@@ -1,14 +1,14 @@
-import { act, renderHook } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useViewport } from './use-viewport';
+import { act, renderHook } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useViewport } from "./use-viewport";
 
 type MQListener = (event: { matches: boolean }) => void;
 
 interface MockMediaQueryList {
   matches: boolean;
   media: string;
-  addEventListener: (type: 'change', listener: MQListener) => void;
-  removeEventListener: (type: 'change', listener: MQListener) => void;
+  addEventListener: (type: "change", listener: MQListener) => void;
+  removeEventListener: (type: "change", listener: MQListener) => void;
   trigger: (matches: boolean) => void;
 }
 
@@ -41,7 +41,7 @@ function createMatchMediaMock(initialMatches: (query: string) => boolean) {
   return { lists, matchMedia };
 }
 
-describe('useViewport', () => {
+describe("useViewport", () => {
   let originalMatchMedia: typeof window.matchMedia;
 
   beforeEach(() => {
@@ -58,52 +58,52 @@ describe('useViewport', () => {
 
     const { result } = renderHook(() => useViewport());
 
-    expect(result.current).toBe('desktop');
+    expect(result.current).toBe("desktop");
   });
 
   it('returns "mobile" when viewport is narrow', () => {
-    const { matchMedia } = createMatchMediaMock((query) => query.includes('max-width: 899px'));
+    const { matchMedia } = createMatchMediaMock((query) => query.includes("max-width: 899px"));
     window.matchMedia = matchMedia as unknown as typeof window.matchMedia;
 
     const { result } = renderHook(() => useViewport());
 
-    expect(result.current).toBe('mobile');
+    expect(result.current).toBe("mobile");
   });
 
   it('returns "desktop" when pointer is coarse but viewport is wide', () => {
-    const { matchMedia } = createMatchMediaMock((query) => query.includes('pointer: coarse'));
+    const { matchMedia } = createMatchMediaMock((query) => query.includes("pointer: coarse"));
     window.matchMedia = matchMedia as unknown as typeof window.matchMedia;
 
     const { result } = renderHook(() => useViewport());
 
-    expect(result.current).toBe('desktop');
+    expect(result.current).toBe("desktop");
   });
 
-  it('updates reactively when the viewport query changes', () => {
+  it("updates reactively when the viewport query changes", () => {
     const { lists, matchMedia } = createMatchMediaMock(() => false);
     window.matchMedia = matchMedia as unknown as typeof window.matchMedia;
 
     const { result } = renderHook(() => useViewport());
 
-    expect(result.current).toBe('desktop');
+    expect(result.current).toBe("desktop");
 
     act(() => {
-      lists.get('(max-width: 899px)')!.trigger(true);
+      lists.get("(max-width: 899px)")!.trigger(true);
     });
 
-    expect(result.current).toBe('mobile');
+    expect(result.current).toBe("mobile");
   });
 
-  it('cleans up listeners on unmount', () => {
+  it("cleans up listeners on unmount", () => {
     const { lists, matchMedia } = createMatchMediaMock(() => false);
     window.matchMedia = matchMedia as unknown as typeof window.matchMedia;
 
     const { unmount } = renderHook(() => useViewport());
-    const widthList = lists.get('(max-width: 899px)')!;
-    const widthRemove = vi.spyOn(widthList, 'removeEventListener');
+    const widthList = lists.get("(max-width: 899px)")!;
+    const widthRemove = vi.spyOn(widthList, "removeEventListener");
 
     unmount();
 
-    expect(widthRemove).toHaveBeenCalledWith('change', expect.any(Function));
+    expect(widthRemove).toHaveBeenCalledWith("change", expect.any(Function));
   });
 });

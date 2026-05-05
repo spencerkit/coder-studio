@@ -4,10 +4,10 @@
  * Server-state projection atoms. Written only by WS event handlers.
  */
 
-import { atom } from 'jotai';
-import { atomFamily } from 'jotai-family';
-import type { Session, SessionState } from '@coder-studio/core';
-import { activeWorkspaceIdAtom } from './workspaces';
+import type { Session, SessionState } from "@coder-studio/core";
+import { atom } from "jotai";
+import { atomFamily } from "jotai-family";
+import { activeWorkspaceIdAtom } from "./workspaces";
 
 /**
  * All sessions (server state projection)
@@ -43,7 +43,7 @@ export const activeSessionAtom = atom((get) => {
   const wsId = get(activeWorkspaceIdAtom);
   if (!wsId) return null;
   const sessions = get(sessionsByWorkspaceAtomFamily(wsId));
-  return sessions.find((s) => s.state === 'running' || s.state === 'idle') ?? null;
+  return sessions.find((s) => s.state === "running" || s.state === "idle") ?? null;
 });
 
 /**

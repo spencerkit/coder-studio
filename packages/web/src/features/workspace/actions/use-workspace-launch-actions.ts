@@ -1,16 +1,16 @@
-import { useCallback, useEffect, useState } from 'react';
-import { useAtomValue, useSetAtom } from 'jotai';
-import { useLocation, useNavigate } from 'react-router-dom';
-import type { FileNode, GitStatus, Workspace, WorktreeInfo } from '@coder-studio/core';
-import { dispatchCommandAtom, wsClientAtom } from '../../../atoms/connection';
+import type { FileNode, GitStatus, Workspace, WorktreeInfo } from "@coder-studio/core";
+import { useAtomValue, useSetAtom } from "jotai";
+import { useCallback, useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { dispatchCommandAtom, wsClientAtom } from "../../../atoms/connection";
 import {
   activeWorkspaceIdAtom,
   workspaceOrderAtom,
   workspacesAtom,
   workspacesLoadErrorAtom,
   workspacesLoadStateAtom,
-} from '../../../atoms/workspaces';
-import { useTranslation } from '../../../lib/i18n';
+} from "../../../atoms/workspaces";
+import { useTranslation } from "../../../lib/i18n";
 
 export interface DirectoryInfo {
   name: string;
@@ -25,7 +25,7 @@ interface BrowseResult {
   rootPaths?: string[];
 }
 
-type TabType = 'status' | 'diff' | 'tree';
+type TabType = "status" | "diff" | "tree";
 
 export function useWorkspaceLaunchActions(onClose: () => void) {
   const t = useTranslation();
@@ -38,7 +38,7 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
   const setWorkspacesLoadState = useSetAtom(workspacesLoadStateAtom);
   const setWorkspacesLoadError = useSetAtom(workspacesLoadErrorAtom);
 
-  const [currentPath, setCurrentPath] = useState('');
+  const [currentPath, setCurrentPath] = useState("");
   const [directories, setDirectories] = useState<DirectoryInfo[]>([]);
   const [parentPath, setParentPath] = useState<string | null>(null);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
@@ -46,19 +46,19 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
   const [browsing, setBrowsing] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const launchTitle = t('workspace.launch.title');
-  const launchHint = t('workspace.launch.hint');
-  const rootPaths = ['/', '~', '/home/spencer'];
+  const launchTitle = t("workspace.launch.title");
+  const launchHint = t("workspace.launch.hint");
+  const rootPaths = ["/", "~", "/home/spencer"];
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
+      if (event.key === "Escape") {
         onClose();
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
 
   const loadDirectory = useCallback(
@@ -67,10 +67,10 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
       setError(null);
 
       try {
-        const result = await dispatch<BrowseResult>('workspace.browse', { path });
+        const result = await dispatch<BrowseResult>("workspace.browse", { path });
 
         if (!result.ok || !result.data) {
-          setError(result.error?.message || t('workspace.launch.browse_failed'));
+          setError(result.error?.message || t("workspace.launch.browse_failed"));
           return;
         }
 
@@ -104,7 +104,7 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
 
   const handleOpen = useCallback(async () => {
     if (!selectedPath) {
-      setError(t('workspace.launch.select_required'));
+      setError(t("workspace.launch.select_required"));
       return;
     }
 
@@ -112,7 +112,7 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
     setError(null);
 
     try {
-      const result = await dispatch<Workspace>('workspace.open', {
+      const result = await dispatch<Workspace>("workspace.open", {
         path: selectedPath,
       });
 
@@ -128,16 +128,16 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
           }
           return [result.data!.id, ...prev];
         });
-        setWorkspacesLoadState('ready');
+        setWorkspacesLoadState("ready");
         setWorkspacesLoadError(null);
 
-        if (location.pathname !== '/workspace') {
-          navigate('/workspace');
+        if (location.pathname !== "/workspace") {
+          navigate("/workspace");
         }
 
         onClose();
       } else {
-        setError(result.error?.message || t('workspace.launch.open_failed'));
+        setError(result.error?.message || t("workspace.launch.open_failed"));
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -159,11 +159,11 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
   ]);
 
   const getShortPath = useCallback((path: string) => {
-    if (path === '~') return '~';
-    if (path === '/') return '/';
+    if (path === "~") return "~";
+    if (path === "/") return "/";
     const homeMatch = path.match(/^\/home\/[^/]+/);
     if (homeMatch) {
-      return path.replace(homeMatch[0], '~');
+      return path.replace(homeMatch[0], "~");
     }
     return path;
   }, []);
@@ -189,9 +189,9 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
 export function useWorktreeActions(worktree: WorktreeInfo | null) {
   const wsClient = useAtomValue(wsClientAtom);
   const activeWorkspaceId = useAtomValue(activeWorkspaceIdAtom);
-  const [activeTab, setActiveTab] = useState<TabType>('status');
+  const [activeTab, setActiveTab] = useState<TabType>("status");
   const [status, setStatus] = useState<GitStatus | null>(null);
-  const [diff, setDiff] = useState('');
+  const [diff, setDiff] = useState("");
   const [tree, setTree] = useState<FileNode[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -199,7 +199,7 @@ export function useWorktreeActions(worktree: WorktreeInfo | null) {
   useEffect(() => {
     if (!worktree || !wsClient || !activeWorkspaceId) {
       setStatus(null);
-      setDiff('');
+      setDiff("");
       setTree([]);
       return;
     }
@@ -209,27 +209,27 @@ export function useWorktreeActions(worktree: WorktreeInfo | null) {
 
     const fetchData = async () => {
       try {
-        if (activeTab === 'status') {
-          const result = await wsClient.sendCommand<{ status: GitStatus }>('worktree.status', {
+        if (activeTab === "status") {
+          const result = await wsClient.sendCommand<{ status: GitStatus }>("worktree.status", {
             workspaceId: activeWorkspaceId,
             worktreePath: worktree.path,
           });
           setStatus(result.status);
-        } else if (activeTab === 'diff') {
-          const result = await wsClient.sendCommand<{ diff: string }>('worktree.diff', {
+        } else if (activeTab === "diff") {
+          const result = await wsClient.sendCommand<{ diff: string }>("worktree.diff", {
             workspaceId: activeWorkspaceId,
             worktreePath: worktree.path,
           });
           setDiff(result.diff);
-        } else if (activeTab === 'tree') {
-          const result = await wsClient.sendCommand<{ tree: FileNode[] }>('worktree.tree', {
+        } else if (activeTab === "tree") {
+          const result = await wsClient.sendCommand<{ tree: FileNode[] }>("worktree.tree", {
             workspaceId: activeWorkspaceId,
             worktreePath: worktree.path,
           });
           setTree(result.tree);
         }
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Failed to load data';
+        const message = err instanceof Error ? err.message : "Failed to load data";
         setError(message);
       } finally {
         setLoading(false);

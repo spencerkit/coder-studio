@@ -1,11 +1,8 @@
-import { X } from 'lucide-react';
-import { useViewport } from '../../../../hooks/use-viewport';
-import { useTranslation } from '../../../../lib/i18n';
-import { useObjectiveDialogState } from '../../actions/use-objective-dialog-state';
-import {
-  ObjectiveDialogContent,
-  ObjectiveDialogModeIcon,
-} from './objective-dialog-content';
+import { X } from "lucide-react";
+import { useViewport } from "../../../../hooks/use-viewport";
+import { useTranslation } from "../../../../lib/i18n";
+import { useObjectiveDialogState } from "../../actions/use-objective-dialog-state";
+import { ObjectiveDialogContent, ObjectiveDialogModeIcon } from "./objective-dialog-content";
 
 interface ObjectiveDialogProps {
   workspaceId: string;
@@ -27,7 +24,7 @@ export function ObjectiveDialog({ workspaceId, sessionId }: ObjectiveDialogProps
     confirm,
   } = useObjectiveDialogState({ workspaceId, sessionId });
 
-  if (!isVisible || viewport === 'mobile') {
+  if (!isVisible || viewport === "mobile") {
     return null;
   }
 
@@ -48,7 +45,7 @@ export function ObjectiveDialog({ workspaceId, sessionId }: ObjectiveDialogProps
               <span className="supervisor-dialog-subtitle">{copy.subtitle}</span>
             </div>
           </div>
-          <button className="btn btn-ghost btn-sm" onClick={close} aria-label={t('action.close')}>
+          <button className="btn btn-ghost btn-sm" onClick={close} aria-label={t("action.close")}>
             <X size={14} />
           </button>
         </div>
@@ -68,10 +65,10 @@ export function ObjectiveDialog({ workspaceId, sessionId }: ObjectiveDialogProps
 
         <div className="modal-footer">
           <button className="btn btn-secondary" onClick={close}>
-            {t('action.cancel')}
+            {t("action.cancel")}
           </button>
           <button
-            className={`btn ${isDisable ? 'btn-danger' : 'btn-primary'}`}
+            className={`btn ${isDisable ? "btn-danger" : "btn-primary"}`}
             onClick={() => {
               void confirm();
             }}

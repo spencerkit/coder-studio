@@ -1,7 +1,7 @@
-import { useEffect, useCallback } from 'react';
-import { useAtomValue, useSetAtom } from 'jotai';
-import { wsClientAtom } from '../atoms/connection';
-import { tabIdAtom, fencingStateAtom, type FencingState } from '../atoms/fencing';
+import { useAtomValue, useSetAtom } from "jotai";
+import { useCallback, useEffect } from "react";
+import { wsClientAtom } from "../atoms/connection";
+import { type FencingState, fencingStateAtom, tabIdAtom } from "../atoms/fencing";
 
 const VISIBLE_HEARTBEAT_MS = 10000;
 const HIDDEN_HEARTBEAT_MS = 20000;
@@ -18,20 +18,20 @@ export function useFencing(workspaceId: string | null) {
       const result = await wsClient.sendCommand<{
         isController: boolean;
         reason?: string;
-      }>('fencing.request', { workspaceId, tabId });
+      }>("fencing.request", { workspaceId, tabId });
 
       setFencingState((prev) => {
         const next = new Map(prev);
         next.set(workspaceId, {
           isController: result.isController,
-          reason: result.reason as FencingState['reason'],
+          reason: result.reason as FencingState["reason"],
           tabId,
           lastHeartbeat: Date.now(),
         });
         return next;
       });
     } catch (error) {
-      console.error('Failed to request fencing control:', error);
+      console.error("Failed to request fencing control:", error);
     }
   }, [wsClient, workspaceId, tabId, setFencingState]);
 
@@ -39,7 +39,7 @@ export function useFencing(workspaceId: string | null) {
     if (!wsClient || !workspaceId) return;
 
     try {
-      await wsClient.sendCommand('fencing.heartbeat', { workspaceId });
+      await wsClient.sendCommand("fencing.heartbeat", { workspaceId });
       setFencingState((prev) => {
         const next = new Map(prev);
         const existing = next.get(workspaceId);
@@ -49,7 +49,7 @@ export function useFencing(workspaceId: string | null) {
         return next;
       });
     } catch (error) {
-      console.error('Failed to send heartbeat:', error);
+      console.error("Failed to send heartbeat:", error);
     }
   }, [wsClient, workspaceId, setFencingState]);
 
@@ -57,10 +57,10 @@ export function useFencing(workspaceId: string | null) {
     if (!wsClient || !workspaceId) return false;
 
     try {
-      const result = await wsClient.sendCommand<{ success: boolean }>(
-        'fencing.takeover',
-        { workspaceId, tabId }
-      );
+      const result = await wsClient.sendCommand<{ success: boolean }>("fencing.takeover", {
+        workspaceId,
+        tabId,
+      });
       if (result.success) {
         setFencingState((prev) => {
           const next = new Map(prev);
@@ -74,7 +74,7 @@ export function useFencing(workspaceId: string | null) {
       }
       return result.success;
     } catch (error) {
-      console.error('Failed to takeover:', error);
+      console.error("Failed to takeover:", error);
       return false;
     }
   }, [wsClient, workspaceId, tabId, setFencingState]);
@@ -88,8 +88,7 @@ export function useFencing(workspaceId: string | null) {
   useEffect(() => {
     if (!workspaceId) return;
 
-    const getInterval = () =>
-      document.hidden ? HIDDEN_HEARTBEAT_MS : VISIBLE_HEARTBEAT_MS;
+    const getInterval = () => (document.hidden ? HIDDEN_HEARTBEAT_MS : VISIBLE_HEARTBEAT_MS);
 
     let timer = setInterval(sendHeartbeat, getInterval());
 
@@ -98,11 +97,11 @@ export function useFencing(workspaceId: string | null) {
       timer = setInterval(sendHeartbeat, getInterval());
     };
 
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       clearInterval(timer);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [workspaceId, sendHeartbeat]);
 
@@ -110,7 +109,7 @@ export function useFencing(workspaceId: string | null) {
   useEffect(() => {
     return () => {
       if (wsClient && workspaceId) {
-        wsClient.sendCommand('fencing.release', { workspaceId }).catch(() => {});
+        wsClient.sendCommand("fencing.release", { workspaceId }).catch(() => {});
       }
     };
   }, [wsClient, workspaceId]);

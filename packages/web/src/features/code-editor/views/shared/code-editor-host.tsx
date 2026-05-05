@@ -1,12 +1,12 @@
-import type { FC } from 'react';
-import { Save, AlertCircle, X, Image as ImageIcon, FileText } from 'lucide-react';
-import { useTranslation } from '../../../../lib/i18n';
-import { MonacoHost } from '../../components/monaco-host';
-import { ImagePreview } from '../../components/image-preview';
-import { useCodeEditorActions } from '../../actions/use-code-editor-actions';
+import { AlertCircle, FileText, Image as ImageIcon, Save, X } from "lucide-react";
+import type { FC } from "react";
+import { useTranslation } from "../../../../lib/i18n";
+import { useCodeEditorActions } from "../../actions/use-code-editor-actions";
+import { ImagePreview } from "../../components/image-preview";
+import { MonacoHost } from "../../components/monaco-host";
 
-export type CodeEditorChrome = 'full' | 'content-only';
-export type CodeEditorHeaderActionVariant = 'full' | 'mobile';
+export type CodeEditorChrome = "full" | "content-only";
+export type CodeEditorHeaderActionVariant = "full" | "mobile";
 export type CodeEditorState = ReturnType<typeof useCodeEditorActions>;
 
 interface CodeEditorHostProps {
@@ -26,7 +26,7 @@ interface CodeEditorHeaderActionsProps {
 
 export const CodeEditorHeaderActions: FC<CodeEditorHeaderActionsProps> = ({
   state,
-  variant = 'full',
+  variant = "full",
 }) => {
   const t = useTranslation();
   const {
@@ -38,15 +38,13 @@ export const CodeEditorHeaderActions: FC<CodeEditorHeaderActionsProps> = ({
     isSvgTextBacked,
     toggleSvgTextMode,
   } = state;
-  const saveLabel = isSaving ? t('code_editor.saving') : t('action.save_file');
+  const saveLabel = isSaving ? t("code_editor.saving") : t("action.save_file");
   const toggleModeTitle = isImageFile
-    ? t('code_editor.edit_as_text')
-    : t('code_editor.preview_as_image');
-  const toggleModeLabel = isImageFile
-    ? t('code_editor.mode_text')
-    : t('code_editor.mode_image');
+    ? t("code_editor.edit_as_text")
+    : t("code_editor.preview_as_image");
+  const toggleModeLabel = isImageFile ? t("code_editor.mode_text") : t("code_editor.mode_image");
 
-  if (variant === 'mobile') {
+  if (variant === "mobile") {
     return (
       <div className="mobile-sheet__header-actions">
         {isSvgTextBacked ? (
@@ -102,8 +100,8 @@ export const CodeEditorHeaderActions: FC<CodeEditorHeaderActionsProps> = ({
         type="button"
         className="code-mode-btn"
         onClick={handleClose}
-        title={t('action.close')}
-        aria-label={t('action.close')}
+        title={t("action.close")}
+        aria-label={t("action.close")}
       >
         <X size={12} />
       </button>
@@ -111,7 +109,7 @@ export const CodeEditorHeaderActions: FC<CodeEditorHeaderActionsProps> = ({
   );
 };
 
-export const CodeEditorView: FC<CodeEditorViewProps> = ({ state, chrome = 'full' }) => {
+export const CodeEditorView: FC<CodeEditorViewProps> = ({ state, chrome = "full" }) => {
   const t = useTranslation();
   const {
     activeFilePath,
@@ -132,7 +130,7 @@ export const CodeEditorView: FC<CodeEditorViewProps> = ({ state, chrome = 'full'
         <div className="code-editor workspace-git-editor">
           <div className="code-editor-body">
             <div className="git-diff-empty">
-              <p className="git-diff-empty-title">{t('workspace.no_workspace')}</p>
+              <p className="git-diff-empty-title">{t("workspace.no_workspace")}</p>
             </div>
           </div>
         </div>
@@ -142,7 +140,7 @@ export const CodeEditorView: FC<CodeEditorViewProps> = ({ state, chrome = 'full'
 
   const dirtyIndicator =
     isTextFile && currentFile.isDirty ? <span className="dirty-indicator">*</span> : null;
-  const showHeader = chrome === 'full';
+  const showHeader = chrome === "full";
 
   return (
     <div className="workspace-git-view">
@@ -158,7 +156,7 @@ export const CodeEditorView: FC<CodeEditorViewProps> = ({ state, chrome = 'full'
               ) : activeFilePath ? (
                 activeFilePath
               ) : (
-                t('file.title')
+                t("file.title")
               )}
             </span>
             <CodeEditorHeaderActions state={state} />
@@ -176,9 +174,9 @@ export const CodeEditorView: FC<CodeEditorViewProps> = ({ state, chrome = 'full'
           <div className="code-editor-error" role="alert">
             <AlertCircle size={14} />
             <span>
-              {activeExternalStatus === 'deleted'
-                ? t('code_editor.deleted_on_disk')
-                : t('code_editor.modified_on_disk')}
+              {activeExternalStatus === "deleted"
+                ? t("code_editor.deleted_on_disk")
+                : t("code_editor.modified_on_disk")}
             </span>
           </div>
         )}
@@ -201,17 +199,17 @@ export const CodeEditorView: FC<CodeEditorViewProps> = ({ state, chrome = 'full'
             />
           ) : activeLoadError ? (
             <div className="git-diff-empty" role="alert">
-              <p className="git-diff-empty-title">{t('code_editor.open_failed_title')}</p>
+              <p className="git-diff-empty-title">{t("code_editor.open_failed_title")}</p>
               <p className="git-diff-empty-body">{activeLoadError}</p>
             </div>
           ) : activeFilePath ? (
             <div className="git-diff-empty">
-              <p className="git-diff-empty-title">{t('status.connecting')}…</p>
+              <p className="git-diff-empty-title">{t("status.connecting")}…</p>
             </div>
           ) : (
             <div className="git-diff-empty">
-              <p className="git-diff-empty-title">{t('file.title')}</p>
-              <p className="git-diff-empty-body">{t('code_editor.empty_hint')}</p>
+              <p className="git-diff-empty-title">{t("file.title")}</p>
+              <p className="git-diff-empty-body">{t("code_editor.empty_hint")}</p>
             </div>
           )}
         </div>
@@ -220,7 +218,7 @@ export const CodeEditorView: FC<CodeEditorViewProps> = ({ state, chrome = 'full'
   );
 };
 
-export const CodeEditorHost: FC<CodeEditorHostProps> = ({ chrome = 'full', editorState }) => {
+export const CodeEditorHost: FC<CodeEditorHostProps> = ({ chrome = "full", editorState }) => {
   const state = editorState ?? useCodeEditorActions();
 
   return <CodeEditorView state={state} chrome={chrome} />;

@@ -1,75 +1,75 @@
-import { defineConfig } from 'vitest/config';
-import react from '@vitejs/plugin-react';
-import path from 'path';
+import react from "@vitejs/plugin-react";
+import path from "path";
+import { defineConfig } from "vitest/config";
 
-const backendHttpTarget = process.env.VITE_BACKEND_HTTP_URL || 'http://127.0.0.1:4173';
-const backendWsTarget = process.env.VITE_BACKEND_WS_URL || 'ws://127.0.0.1:4173';
+const backendHttpTarget = process.env.VITE_BACKEND_HTTP_URL || "http://127.0.0.1:4173";
+const backendWsTarget = process.env.VITE_BACKEND_WS_URL || "ws://127.0.0.1:4173";
 
 export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
+      "@": path.resolve(__dirname, "./src"),
     },
   },
   server: {
     port: 5173,
     host: true,
     proxy: {
-      '/ws': {
+      "/ws": {
         target: backendWsTarget,
         ws: true,
         changeOrigin: true,
         configure: (proxy) => {
-          proxy.on('error', (err) => {
-            console.log('WS proxy error:', err);
+          proxy.on("error", (err) => {
+            console.log("WS proxy error:", err);
           });
-          proxy.on('proxyReqWs', (proxyReq, req, socket) => {
-            console.log('WS proxy upgrade:', req.url);
+          proxy.on("proxyReqWs", (proxyReq, req, socket) => {
+            console.log("WS proxy upgrade:", req.url);
           });
         },
       },
-      '/auth': {
+      "/auth": {
         target: backendHttpTarget,
       },
-      '/internal': {
+      "/internal": {
         target: backendHttpTarget,
       },
-      '/api': {
+      "/api": {
         target: backendHttpTarget,
       },
     },
   },
   build: {
-    outDir: 'dist',
+    outDir: "dist",
     sourcemap: true,
     rollupOptions: {
       output: {
         manualChunks(id) {
-          if (id.includes('monaco-editor')) {
-            return 'monaco-editor';
+          if (id.includes("monaco-editor")) {
+            return "monaco-editor";
           }
 
           if (
-            id.includes('@xterm/xterm') ||
-            id.includes('@xterm+xterm') ||
-            id.includes('@xterm/addon-fit') ||
-            id.includes('@xterm+addon-fit') ||
-            id.includes('@xterm/addon-webgl') ||
-            id.includes('@xterm+addon-webgl')
+            id.includes("@xterm/xterm") ||
+            id.includes("@xterm+xterm") ||
+            id.includes("@xterm/addon-fit") ||
+            id.includes("@xterm+addon-fit") ||
+            id.includes("@xterm/addon-webgl") ||
+            id.includes("@xterm+addon-webgl")
           ) {
-            return 'xterm';
+            return "xterm";
           }
         },
       },
     },
   },
   test: {
-    environment: 'jsdom',
+    environment: "jsdom",
     globals: true,
     env: {
-      NODE_ENV: 'test',
+      NODE_ENV: "test",
     },
-    setupFiles: ['./src/test-utils/setup.ts'],
+    setupFiles: ["./src/test-utils/setup.ts"],
   },
 });

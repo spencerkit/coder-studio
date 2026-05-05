@@ -1,20 +1,20 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useAtomValue, useSetAtom } from 'jotai';
-import type { GitBranch, GitFileChange, GitStatus } from '@coder-studio/core';
-import { dispatchCommandAtom } from '../../../atoms/connection';
+import type { GitBranch, GitFileChange, GitStatus } from "@coder-studio/core";
+import { useAtomValue, useSetAtom } from "jotai";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { dispatchCommandAtom } from "../../../atoms/connection";
+import { useTranslation } from "../../../lib/i18n";
+import { pushToastAtom } from "../../notifications/atoms";
 import {
   branchQuickPickAtom,
   fileTreeStaleAtomFamily,
-  gitBranchListAtomFamily,
-  gitDiffPreviewDismissedAtomFamily,
-  gitDiffPreviewAtomFamily,
-  gitStateAtomFamily,
   type GitDiffPreview,
-} from '../atoms';
-import { useTranslation } from '../../../lib/i18n';
-import { pushToastAtom } from '../../notifications/atoms';
+  gitBranchListAtomFamily,
+  gitDiffPreviewAtomFamily,
+  gitDiffPreviewDismissedAtomFamily,
+  gitStateAtomFamily,
+} from "../atoms";
 
-export type GitChangeType = 'staged' | 'modified' | 'untracked' | 'deleted';
+export type GitChangeType = "staged" | "modified" | "untracked" | "deleted";
 
 export interface GitChangeGroupDescriptor {
   title: string;
@@ -23,7 +23,7 @@ export interface GitChangeGroupDescriptor {
 }
 
 interface PendingDiscardConfirmation {
-  scope: 'single' | 'all';
+  scope: "single" | "all";
   paths: string[];
   filePath?: string;
 }
@@ -41,26 +41,26 @@ interface GitSyncResult {
 }
 
 export interface GitAuthFailureDetails {
-  operation: 'push' | 'pull';
+  operation: "push" | "pull";
   remote?: string;
   remoteUrl?: string;
   remoteLabel: string;
   host?: string;
-  reason: 'missing_credentials' | 'invalid_credentials' | 'authorization_failed';
-  authMode: 'username_password' | 'unsupported';
+  reason: "missing_credentials" | "invalid_credentials" | "authorization_failed";
+  authMode: "username_password" | "unsupported";
   canPrompt: boolean;
   usernameHint?: string;
 }
 
 export interface GitSyncAuthPromptState {
-  intent: 'push' | 'pull';
+  intent: "push" | "pull";
   details: GitAuthFailureDetails;
 }
 
 const GIT_SYNC_TIMEOUT_MS = 3 * 60 * 1000;
-const GIT_OPERATION_LABELS: Record<'push' | 'pull', string> = {
-  push: 'git.operation_push',
-  pull: 'git.operation_pull',
+const GIT_OPERATION_LABELS: Record<"push" | "pull", string> = {
+  push: "git.operation_push",
+  pull: "git.operation_pull",
 };
 
 export function useGitSyncActions(workspaceId: string) {
@@ -70,27 +70,27 @@ export function useGitSyncActions(workspaceId: string) {
   const setGitState = useSetAtom(gitStateAtomFamily(workspaceId));
   const setBranchList = useSetAtom(gitBranchListAtomFamily(workspaceId));
   const setFileTreeStale = useSetAtom(fileTreeStaleAtomFamily(workspaceId));
-  const [syncingIntent, setSyncingIntent] = useState<'push' | 'pull' | null>(null);
+  const [syncingIntent, setSyncingIntent] = useState<"push" | "pull" | null>(null);
   const [authPrompt, setAuthPrompt] = useState<GitSyncAuthPromptState | null>(null);
 
   const getAuthPromptMessage = useCallback(
     (details: GitAuthFailureDetails) => {
       if (!details.canPrompt) {
-        return t('git.auth_failed_unsupported', { remote: details.remoteLabel });
+        return t("git.auth_failed_unsupported", { remote: details.remoteLabel });
       }
 
-      if (details.reason === 'invalid_credentials') {
-        return t('git.auth_failed_invalid', { remote: details.remoteLabel });
+      if (details.reason === "invalid_credentials") {
+        return t("git.auth_failed_invalid", { remote: details.remoteLabel });
       }
 
-      if (details.reason === 'authorization_failed') {
-        return t('git.auth_failed_forbidden', {
+      if (details.reason === "authorization_failed") {
+        return t("git.auth_failed_forbidden", {
           remote: details.remoteLabel,
           operation: t(GIT_OPERATION_LABELS[details.operation]),
         });
       }
 
-      return t('git.auth_required_message', { remote: details.remoteLabel });
+      return t("git.auth_required_message", { remote: details.remoteLabel });
     },
     [t]
   );
@@ -101,10 +101,10 @@ export function useGitSyncActions(workspaceId: string) {
     }
 
     const [branchResult, statusResult] = await Promise.all([
-      dispatch<{ current: string; branches: GitBranch[] }>('git.branches', {
+      dispatch<{ current: string; branches: GitBranch[] }>("git.branches", {
         workspaceId,
       }),
-      dispatch<GitStatus>('git.status', {
+      dispatch<GitStatus>("git.status", {
         workspaceId,
       }),
     ]);
@@ -130,7 +130,7 @@ export function useGitSyncActions(workspaceId: string) {
 
   const runSyncAction = useCallback(
     async (
-      op: 'git.push' | 'git.pull',
+      op: "git.push" | "git.pull",
       options: {
         successTitle: string;
         fallbackSuccessBody?: string;
@@ -146,7 +146,7 @@ export function useGitSyncActions(workspaceId: string) {
         return false;
       }
 
-      setSyncingIntent(op === 'git.push' ? 'push' : 'pull');
+      setSyncingIntent(op === "git.push" ? "push" : "pull");
 
       try {
         const result = await dispatch<GitSyncResult>(
@@ -161,17 +161,18 @@ export function useGitSyncActions(workspaceId: string) {
         if (!result.ok || !result.data?.success) {
           const body = result.error?.message ?? result.data?.message;
           if (
-            (result.error?.code === 'git_auth_required' || result.error?.code === 'git_auth_failed') &&
+            (result.error?.code === "git_auth_required" ||
+              result.error?.code === "git_auth_failed") &&
             result.error.details &&
-            typeof result.error.details === 'object'
+            typeof result.error.details === "object"
           ) {
             const details = result.error.details as GitAuthFailureDetails;
             setAuthPrompt({
-              intent: op === 'git.push' ? 'push' : 'pull',
+              intent: op === "git.push" ? "push" : "pull",
               details: {
                 ...details,
                 usernameHint:
-                  authPrompt?.intent === (op === 'git.push' ? 'push' : 'pull')
+                  authPrompt?.intent === (op === "git.push" ? "push" : "pull")
                     ? authPrompt.details.usernameHint
                     : details.usernameHint,
               },
@@ -184,7 +185,7 @@ export function useGitSyncActions(workspaceId: string) {
           }
 
           pushToast({
-            kind: 'error',
+            kind: "error",
             title: options.errorTitle,
             body,
           });
@@ -199,7 +200,7 @@ export function useGitSyncActions(workspaceId: string) {
         }
 
         pushToast({
-          kind: 'success',
+          kind: "success",
           title: options.successTitle,
           body: result.data.message || options.fallbackSuccessBody,
         });
@@ -214,10 +215,10 @@ export function useGitSyncActions(workspaceId: string) {
 
   const handlePush = useCallback(
     async (auth?: { username: string; password: string }) =>
-      runSyncAction('git.push', {
-        successTitle: t('git.push_success_title'),
-        fallbackSuccessBody: t('git.push_success_body'),
-        errorTitle: t('git.push_failed_title'),
+      runSyncAction("git.push", {
+        successTitle: t("git.push_success_title"),
+        fallbackSuccessBody: t("git.push_success_body"),
+        errorTitle: t("git.push_failed_title"),
         auth,
       }),
     [runSyncAction, t]
@@ -225,10 +226,10 @@ export function useGitSyncActions(workspaceId: string) {
 
   const handlePull = useCallback(
     async (auth?: { username: string; password: string }) =>
-      runSyncAction('git.pull', {
-        successTitle: t('git.pull_success_title'),
-        fallbackSuccessBody: t('git.pull_success_body'),
-        errorTitle: t('git.pull_failed_title'),
+      runSyncAction("git.pull", {
+        successTitle: t("git.pull_success_title"),
+        fallbackSuccessBody: t("git.pull_success_body"),
+        errorTitle: t("git.pull_failed_title"),
         markFileTreeStale: true,
         auth,
       }),
@@ -257,10 +258,10 @@ export function getFirstChange(
   status: GitStatus
 ): { change: GitFileChange; type: GitChangeType } | null {
   const groups: GitChangeGroupDescriptor[] = [
-    { title: 'staged', type: 'staged', changes: status.staged },
-    { title: 'modified', type: 'modified', changes: status.modified },
-    { title: 'deleted', type: 'deleted', changes: status.deleted },
-    { title: 'untracked', type: 'untracked', changes: status.untracked },
+    { title: "staged", type: "staged", changes: status.staged },
+    { title: "modified", type: "modified", changes: status.modified },
+    { title: "deleted", type: "deleted", changes: status.deleted },
+    { title: "untracked", type: "untracked", changes: status.untracked },
   ];
 
   for (const group of groups) {
@@ -277,10 +278,10 @@ export function getChangeByPath(
   path: string
 ): { change: GitFileChange; type: GitChangeType } | null {
   const groups: Array<{ type: GitChangeType; changes: GitFileChange[] }> = [
-    { type: 'staged', changes: status.staged },
-    { type: 'modified', changes: status.modified },
-    { type: 'deleted', changes: status.deleted },
-    { type: 'untracked', changes: status.untracked },
+    { type: "staged", changes: status.staged },
+    { type: "modified", changes: status.modified },
+    { type: "deleted", changes: status.deleted },
+    { type: "untracked", changes: status.untracked },
   ];
 
   for (const group of groups) {
@@ -308,7 +309,7 @@ export function useGitPanelActions({
   const setDiffPreview = useSetAtom(gitDiffPreviewAtomFamily(workspaceId));
   const setDiffPreviewDismissed = useSetAtom(gitDiffPreviewDismissedAtomFamily(workspaceId));
 
-  const [commitMessage, setCommitMessage] = useState('');
+  const [commitMessage, setCommitMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [pendingDiscard, setPendingDiscard] = useState<PendingDiscardConfirmation | null>(null);
   const isLoadingRef = useRef(false);
@@ -322,7 +323,7 @@ export function useGitPanelActions({
       } | null
     ) => {
       setBranchList({
-        current: branchList?.current ?? '',
+        current: branchList?.current ?? "",
         branches: branchList?.branches ?? [],
         loading: false,
       });
@@ -339,21 +340,21 @@ export function useGitPanelActions({
 
   const requestDiff = useCallback(
     async (change: GitFileChange, type: GitChangeType): Promise<GitDiffPreview | null> => {
-      const result = await dispatch<{ diff: string }>('git.diff', {
+      const result = await dispatch<{ diff: string }>("git.diff", {
         workspaceId,
         path: change.path,
-        staged: type === 'staged',
+        staged: type === "staged",
       });
 
       if (!result.ok || !result.data) {
-        console.error('Failed to get diff:', result.error?.message);
+        console.error("Failed to get diff:", result.error?.message);
         return null;
       }
 
       const preview = {
         path: change.path,
         diff: result.data.diff,
-        staged: type === 'staged',
+        staged: type === "staged",
       };
       setDiffPreviewDismissed(false);
       updatePreview(preview);
@@ -383,7 +384,7 @@ export function useGitPanelActions({
       error: undefined,
     }));
 
-    const result = await dispatch<{ current: string; branches: GitBranch[] }>('git.branches', {
+    const result = await dispatch<{ current: string; branches: GitBranch[] }>("git.branches", {
       workspaceId,
     });
 
@@ -391,9 +392,9 @@ export function useGitPanelActions({
       setBranchList((prev) => ({
         ...prev,
         loading: false,
-        error: result.error?.message ?? 'Failed to load branches',
+        error: result.error?.message ?? "Failed to load branches",
       }));
-      console.error('Failed to load git branches:', result.error?.message);
+      console.error("Failed to load git branches:", result.error?.message);
       return;
     }
 
@@ -414,12 +415,12 @@ export function useGitPanelActions({
     setIsLoading(true);
 
     try {
-      const result = await dispatch<GitStatus>('git.status', {
+      const result = await dispatch<GitStatus>("git.status", {
         workspaceId,
       });
 
       if (!result.ok || !result.data) {
-        console.error('Failed to load git status:', result.error?.message);
+        console.error("Failed to load git status:", result.error?.message);
         return;
       }
 
@@ -442,7 +443,7 @@ export function useGitPanelActions({
       if (
         !diffPreview ||
         diffPreview.path !== nextPreviewTarget.change.path ||
-        Boolean(diffPreview.staged) !== (nextPreviewTarget.type === 'staged')
+        Boolean(diffPreview.staged) !== (nextPreviewTarget.type === "staged")
       ) {
         await requestDiff(nextPreviewTarget.change, nextPreviewTarget.type);
       }
@@ -457,7 +458,15 @@ export function useGitPanelActions({
         });
       }
     }
-  }, [diffPreview, diffPreviewDismissed, dispatch, requestDiff, setGitState, updatePreview, workspaceId]);
+  }, [
+    diffPreview,
+    diffPreviewDismissed,
+    dispatch,
+    requestDiff,
+    setGitState,
+    updatePreview,
+    workspaceId,
+  ]);
 
   useEffect(() => {
     if (!gitState && !isLoadingRef.current) {
@@ -480,7 +489,7 @@ export function useGitPanelActions({
 
     if (diffPreview) {
       const currentChange = getChangeByPath(gitState, diffPreview.path);
-      if (currentChange && Boolean(diffPreview.staged) === (currentChange.type === 'staged')) {
+      if (currentChange && Boolean(diffPreview.staged) === (currentChange.type === "staged")) {
         return;
       }
     }
@@ -502,7 +511,7 @@ export function useGitPanelActions({
 
   const runGitMutation = useCallback(
     async (
-      op: 'git.stage' | 'git.unstage' | 'git.discard' | 'git.commit',
+      op: "git.stage" | "git.unstage" | "git.discard" | "git.commit",
       args: Record<string, unknown>,
       errorMessage: string,
       afterSuccess?: () => void
@@ -527,17 +536,17 @@ export function useGitPanelActions({
       ...(gitState?.untracked.map((file) => file.path) ?? []),
     ];
 
-    await runGitMutation('git.stage', { workspaceId, paths }, 'Failed to stage all:');
+    await runGitMutation("git.stage", { workspaceId, paths }, "Failed to stage all:");
   }, [gitState, runGitMutation, workspaceId]);
 
   const handleUnstageAll = useCallback(async () => {
     await runGitMutation(
-      'git.unstage',
+      "git.unstage",
       {
         workspaceId,
         paths: gitState?.staged.map((file) => file.path) ?? [],
       },
-      'Failed to unstage all:'
+      "Failed to unstage all:"
     );
   }, [gitState, runGitMutation, workspaceId]);
 
@@ -554,14 +563,14 @@ export function useGitPanelActions({
     }
 
     setPendingDiscard({
-      scope: 'all',
+      scope: "all",
       paths,
     });
   }, [gitState]);
 
   const handleRequestDiscardSingle = useCallback((path: string) => {
     setPendingDiscard({
-      scope: 'single',
+      scope: "single",
       paths: [path],
       filePath: path,
     });
@@ -580,12 +589,12 @@ export function useGitPanelActions({
     setPendingDiscard(null);
 
     await runGitMutation(
-      'git.discard',
+      "git.discard",
       {
         workspaceId,
         paths: nextDiscard.paths,
       },
-      nextDiscard.scope === 'all' ? 'Failed to discard all:' : 'Failed to discard:'
+      nextDiscard.scope === "all" ? "Failed to discard all:" : "Failed to discard:"
     );
   }, [pendingDiscard, runGitMutation, workspaceId]);
 
@@ -595,33 +604,31 @@ export function useGitPanelActions({
     }
 
     await runGitMutation(
-      'git.commit',
+      "git.commit",
       {
         workspaceId,
         message: commitMessage.trim(),
       },
-      'Failed to commit:',
-      () => setCommitMessage('')
+      "Failed to commit:",
+      () => setCommitMessage("")
     );
   }, [commitMessage, gitState?.staged.length, runGitMutation, workspaceId]);
 
   const hasChanges = Boolean(
     gitState &&
-      (
-        gitState.staged.length > 0 ||
+      (gitState.staged.length > 0 ||
         gitState.modified.length > 0 ||
         gitState.untracked.length > 0 ||
-        gitState.deleted.length > 0
-      )
+        gitState.deleted.length > 0)
   );
 
   const groups = useMemo<GitChangeGroupDescriptor[]>(
     () =>
       [
-        { title: 'staged', type: 'staged', changes: gitState?.staged ?? [] },
-        { title: 'changes', type: 'modified', changes: gitState?.modified ?? [] },
-        { title: 'deleted', type: 'deleted', changes: gitState?.deleted ?? [] },
-        { title: 'untracked', type: 'untracked', changes: gitState?.untracked ?? [] },
+        { title: "staged", type: "staged", changes: gitState?.staged ?? [] },
+        { title: "changes", type: "modified", changes: gitState?.modified ?? [] },
+        { title: "deleted", type: "deleted", changes: gitState?.deleted ?? [] },
+        { title: "untracked", type: "untracked", changes: gitState?.untracked ?? [] },
       ].filter((group) => group.changes.length > 0),
     [gitState]
   );
@@ -670,9 +677,9 @@ export function useBranchQuickPickActions() {
   const setQuickPick = useSetAtom(branchQuickPickAtom);
   const dispatch = useAtomValue(dispatchCommandAtom);
   const workspaceId = quickPickState.workspaceId;
-  const branchList = useAtomValue(gitBranchListAtomFamily(workspaceId ?? ''));
-  const setBranchList = useSetAtom(gitBranchListAtomFamily(workspaceId ?? ''));
-  const { refreshBranchState } = useGitSyncActions(workspaceId ?? '');
+  const branchList = useAtomValue(gitBranchListAtomFamily(workspaceId ?? ""));
+  const setBranchList = useSetAtom(gitBranchListAtomFamily(workspaceId ?? ""));
+  const { refreshBranchState } = useGitSyncActions(workspaceId ?? "");
 
   const [inputValue, setInputValue] = useState(quickPickState.inputValue);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -711,7 +718,7 @@ export function useBranchQuickPickActions() {
       error: undefined,
     }));
 
-    void dispatch<{ current: string; branches: GitBranch[] }>('git.branches', {
+    void dispatch<{ current: string; branches: GitBranch[] }>("git.branches", {
       workspaceId,
     })
       .then((result) => {
@@ -723,9 +730,9 @@ export function useBranchQuickPickActions() {
           setBranchList((prev) => ({
             ...prev,
             loading: false,
-            error: result.error?.message ?? 'Failed to load branches',
+            error: result.error?.message ?? "Failed to load branches",
           }));
-          console.error('Failed to load git branches:', result.error?.message);
+          console.error("Failed to load git branches:", result.error?.message);
           return;
         }
 
@@ -743,9 +750,9 @@ export function useBranchQuickPickActions() {
         setBranchList((prev) => ({
           ...prev,
           loading: false,
-          error: error instanceof Error ? error.message : 'Failed to load branches',
+          error: error instanceof Error ? error.message : "Failed to load branches",
         }));
-        console.error('Failed to load git branches:', error);
+        console.error("Failed to load git branches:", error);
       });
 
     return () => {
@@ -769,20 +776,20 @@ export function useBranchQuickPickActions() {
 
   const displayItems = useMemo<
     Array<{
-      type: 'branch' | 'create' | 'confirm-create';
+      type: "branch" | "create" | "confirm-create";
       branch?: GitBranch;
       label: string;
     }>
   >(() => {
     const items: Array<{
-      type: 'branch' | 'create' | 'confirm-create';
+      type: "branch" | "create" | "confirm-create";
       branch?: GitBranch;
       label: string;
     }> = [];
 
     filteredBranches.forEach((branch) => {
       items.push({
-        type: 'branch',
+        type: "branch",
         branch,
         label: branch.name,
       });
@@ -790,11 +797,11 @@ export function useBranchQuickPickActions() {
 
     if (!exactMatch && trimmedInput && !branchList.loading) {
       items.push({
-        type: pendingCreateBranchName === trimmedInput ? 'confirm-create' : 'create',
+        type: pendingCreateBranchName === trimmedInput ? "confirm-create" : "create",
         label:
           pendingCreateBranchName === trimmedInput
-            ? t('git.quick_pick.confirm_create', { name: trimmedInput })
-            : t('git.quick_pick.create', { name: trimmedInput }),
+            ? t("git.quick_pick.confirm_create", { name: trimmedInput })
+            : t("git.quick_pick.create", { name: trimmedInput }),
       });
     }
 
@@ -805,7 +812,7 @@ export function useBranchQuickPickActions() {
     setPendingCreateBranchName(null);
     setQuickPick({
       visible: false,
-      inputValue: '',
+      inputValue: "",
     });
   }, [setQuickPick]);
 
@@ -823,13 +830,13 @@ export function useBranchQuickPickActions() {
         return;
       }
 
-      const result = await dispatch<GitCheckoutResult>('git.checkout', {
+      const result = await dispatch<GitCheckoutResult>("git.checkout", {
         workspaceId,
         ref: branchName,
       });
 
       if (!result.ok || !result.data?.success) {
-        console.error('Failed to checkout branch:', result.error?.message ?? result.data?.message);
+        console.error("Failed to checkout branch:", result.error?.message ?? result.data?.message);
         return;
       }
 
@@ -845,14 +852,14 @@ export function useBranchQuickPickActions() {
         return;
       }
 
-      const result = await dispatch<GitCheckoutResult>('git.checkout', {
+      const result = await dispatch<GitCheckoutResult>("git.checkout", {
         workspaceId,
         ref: branchName,
         createBranch: true,
       });
 
       if (!result.ok || !result.data?.success) {
-        console.error('Failed to create branch:', result.error?.message ?? result.data?.message);
+        console.error("Failed to create branch:", result.error?.message ?? result.data?.message);
         return;
       }
 

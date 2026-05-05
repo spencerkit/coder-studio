@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState } from "react";
 
 export function useVisualViewportInset() {
   const [inset, setInset] = useState(0);
@@ -17,12 +17,12 @@ export function useVisualViewportInset() {
     };
 
     update();
-    viewport.addEventListener('resize', update);
-    viewport.addEventListener('scroll', update);
+    viewport.addEventListener("resize", update);
+    viewport.addEventListener("scroll", update);
 
     return () => {
-      viewport.removeEventListener('resize', update);
-      viewport.removeEventListener('scroll', update);
+      viewport.removeEventListener("resize", update);
+      viewport.removeEventListener("scroll", update);
     };
   }, []);
 

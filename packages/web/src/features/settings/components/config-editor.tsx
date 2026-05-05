@@ -9,15 +9,24 @@
  * - Auto-resize editor
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useAtomValue, useSetAtom } from 'jotai';
-import { FileJson2, CheckCircle, Circle, RefreshCw, XCircle, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
-import { useTranslation } from '../../../lib/i18n';
-import { dispatchCommandAtom } from '../../../atoms/connection';
-import { pushToastAtom } from '../../notifications/atoms';
-import { MonacoHost } from '../../code-editor/components/monaco-host';
+import { useAtomValue, useSetAtom } from "jotai";
+import {
+  CheckCircle,
+  ChevronDown,
+  ChevronUp,
+  Circle,
+  FileJson2,
+  RefreshCw,
+  Sparkles,
+  XCircle,
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { dispatchCommandAtom } from "../../../atoms/connection";
+import { useTranslation } from "../../../lib/i18n";
+import { MonacoHost } from "../../code-editor/components/monaco-host";
+import { pushToastAtom } from "../../notifications/atoms";
 
-export type ConfigType = 'codex' | 'claude';
+export type ConfigType = "codex" | "claude";
 
 interface ConfigEditorProps {
   configType: ConfigType;
@@ -37,7 +46,7 @@ interface ConfigWriteResult {
   error?: string;
 }
 
-type SaveStatus = 'saved' | 'dirty' | 'saving' | 'error';
+type SaveStatus = "saved" | "dirty" | "saving" | "error";
 
 export function ConfigEditor({
   configType,
@@ -48,9 +57,9 @@ export function ConfigEditor({
   const dispatch = useAtomValue(dispatchCommandAtom);
   const pushToast = useSetAtom(pushToastAtom);
 
-  const [content, setContent] = useState('');
-  const [originalContent, setOriginalContent] = useState('');
-  const [configPath, setConfigPath] = useState('');
+  const [content, setContent] = useState("");
+  const [originalContent, setOriginalContent] = useState("");
+  const [configPath, setConfigPath] = useState("");
   const [fileExists, setFileExists] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -58,18 +67,18 @@ export function ConfigEditor({
   const [isExpanded, setIsExpanded] = useState(() => {
     // Restore from localStorage
     const stored = localStorage.getItem(`config-expanded-${configType}`);
-    return stored !== null ? stored === 'true' : true;
+    return stored !== null ? stored === "true" : true;
   });
 
   // Compute save status
   const saveStatus: SaveStatus = useMemo(() => {
-    if (isSaving) return 'saving';
-    if (error) return 'error';
-    if (content !== originalContent) return 'dirty';
-    return 'saved';
+    if (isSaving) return "saving";
+    if (error) return "error";
+    if (content !== originalContent) return "dirty";
+    return "saved";
   }, [isSaving, error, content, originalContent]);
 
-  const isDirty = saveStatus === 'dirty';
+  const isDirty = saveStatus === "dirty";
 
   // Load config file on mount or when configType changes
   useEffect(() => {
@@ -80,7 +89,7 @@ export function ConfigEditor({
       setError(null);
 
       try {
-        const result = await dispatch<ConfigReadResult>('settings.readConfigFile', {
+        const result = await dispatch<ConfigReadResult>("settings.readConfigFile", {
           configType,
         });
 
@@ -92,11 +101,11 @@ export function ConfigEditor({
           setConfigPath(result.data.configPath);
           setFileExists(result.data.exists);
         } else {
-          setError(result.error?.message ?? t('settings.config_files.load_failed'));
+          setError(result.error?.message ?? t("settings.config_files.load_failed"));
         }
       } catch {
         if (!cancelled) {
-          setError(t('settings.config_files.load_failed'));
+          setError(t("settings.config_files.load_failed"));
         }
       } finally {
         if (!cancelled) {
@@ -123,36 +132,36 @@ export function ConfigEditor({
     setIsSaving(true);
 
     try {
-      const result = await dispatch<ConfigWriteResult>('settings.writeConfigFile', {
+      const result = await dispatch<ConfigWriteResult>("settings.writeConfigFile", {
         configType,
         content,
       });
 
       if (result.ok && result.data?.success) {
         pushToast({
-          kind: 'success',
-          title: t('settings.config_files.save_success'),
+          kind: "success",
+          title: t("settings.config_files.save_success"),
           body: result.data.backupPath
-            ? t('settings.config_files.backup_created', { path: result.data.backupPath })
+            ? t("settings.config_files.backup_created", { path: result.data.backupPath })
             : undefined,
         });
         setOriginalContent(content);
         setError(null);
       } else {
         const errorMsg = result.error?.message ?? result.data?.error;
-        setError(errorMsg ?? 'Save failed');
+        setError(errorMsg ?? "Save failed");
         pushToast({
-          kind: 'error',
-          title: t('settings.config_files.save_failed'),
+          kind: "error",
+          title: t("settings.config_files.save_failed"),
           body: errorMsg,
         });
       }
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Save failed';
+      const errorMsg = err instanceof Error ? err.message : "Save failed";
       setError(errorMsg);
       pushToast({
-        kind: 'error',
-        title: t('settings.config_files.save_failed'),
+        kind: "error",
+        title: t("settings.config_files.save_failed"),
       });
     } finally {
       setIsSaving(false);
@@ -165,20 +174,20 @@ export function ConfigEditor({
   }, [originalContent]);
 
   const handleFormat = useCallback(() => {
-    if (configType === 'claude') {
+    if (configType === "claude") {
       try {
         const parsed = JSON.parse(content);
         const formatted = JSON.stringify(parsed, null, 2);
         setContent(formatted);
         pushToast({
-          kind: 'success',
-          title: 'JSON formatted',
+          kind: "success",
+          title: "JSON formatted",
         });
       } catch {
         pushToast({
-          kind: 'error',
-          title: 'Invalid JSON',
-          body: 'Cannot format invalid JSON',
+          kind: "error",
+          title: "Invalid JSON",
+          body: "Cannot format invalid JSON",
         });
       }
     }
@@ -197,10 +206,10 @@ export function ConfigEditor({
   // Status indicator component
   const StatusIndicator = () => {
     const statusConfig = {
-      saved: { icon: CheckCircle, color: 'success', text: t('settings.config_files.status_saved') },
-      dirty: { icon: Circle, color: 'warning', text: t('settings.config_files.unsaved_changes') },
-      saving: { icon: RefreshCw, color: 'info', text: t('settings.config_files.saving') },
-      error: { icon: XCircle, color: 'error', text: t('settings.config_files.save_failed') },
+      saved: { icon: CheckCircle, color: "success", text: t("settings.config_files.status_saved") },
+      dirty: { icon: Circle, color: "warning", text: t("settings.config_files.unsaved_changes") },
+      saving: { icon: RefreshCw, color: "info", text: t("settings.config_files.saving") },
+      error: { icon: XCircle, color: "error", text: t("settings.config_files.save_failed") },
     };
 
     const config = statusConfig[saveStatus];
@@ -208,7 +217,7 @@ export function ConfigEditor({
 
     return (
       <div className={`config-status config-status--${config.color}`}>
-        <Icon size={14} className={saveStatus === 'saving' ? 'animate-spin' : ''} />
+        <Icon size={14} className={saveStatus === "saving" ? "animate-spin" : ""} />
         <span>{config.text}</span>
       </div>
     );
@@ -217,7 +226,7 @@ export function ConfigEditor({
   if (isLoading) {
     return (
       <div className="config-card">
-        <div className="config-card-loading">{t('common.loading')}</div>
+        <div className="config-card-loading">{t("common.loading")}</div>
       </div>
     );
   }
@@ -234,7 +243,7 @@ export function ConfigEditor({
   }
 
   return (
-    <div className={`config-card ${fillHeight ? 'config-card--fill-height' : ''}`}>
+    <div className={`config-card ${fillHeight ? "config-card--fill-height" : ""}`}>
       {/* Header */}
       <div className="config-card-header" onClick={handleToggle}>
         <div className="config-card-title">
@@ -250,12 +259,14 @@ export function ConfigEditor({
 
       {/* Body */}
       {isExpanded && (
-        <div className={`config-card-body ${fillHeight ? 'config-card-body--fill-height' : ''}`}>
+        <div className={`config-card-body ${fillHeight ? "config-card-body--fill-height" : ""}`}>
           {!fileExists && (
             <div className="config-empty-state">
               <div className="config-empty-icon">📭</div>
-              <div className="config-empty-title">{t('settings.config_files.file_not_found')}</div>
-              <div className="config-empty-desc">{t('settings.config_files.file_not_found_hint')}</div>
+              <div className="config-empty-title">{t("settings.config_files.file_not_found")}</div>
+              <div className="config-empty-desc">
+                {t("settings.config_files.file_not_found_hint")}
+              </div>
             </div>
           )}
 
@@ -276,14 +287,14 @@ export function ConfigEditor({
                 </div>
 
                 <div className="config-actions-right">
-                  {configType === 'claude' && (
+                  {configType === "claude" && (
                     <button
                       className="btn btn-secondary btn-sm"
                       onClick={handleFormat}
-                      title={t('settings.config_files.format_hint')}
+                      title={t("settings.config_files.format_hint")}
                     >
                       <Sparkles size={14} />
-                      <span>{t('settings.config_files.format')}</span>
+                      <span>{t("settings.config_files.format")}</span>
                     </button>
                   )}
                   <button
@@ -291,14 +302,14 @@ export function ConfigEditor({
                     onClick={handleRevert}
                     disabled={!isDirty || isSaving}
                   >
-                    {t('action.reset')}
+                    {t("action.reset")}
                   </button>
                   <button
                     className="btn btn-primary btn-sm"
                     onClick={handleSave}
                     disabled={!isDirty || isSaving}
                   >
-                    {isSaving ? t('settings.config_files.saving') : t('action.save')}
+                    {isSaving ? t("settings.config_files.saving") : t("action.save")}
                   </button>
                 </div>
               </div>

@@ -1,14 +1,14 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { useAtomValue, useSetAtom, useStore } from 'jotai';
-import { Topics, type Terminal as TerminalDto } from '@coder-studio/core';
-import { dispatchCommandAtom, wsClientAtom } from '../../../atoms/connection';
-import { resolvedActiveWorkspaceIdAtom } from '../../../atoms/workspaces';
-import { terminalMetaAtomFamily, terminalOutputAtomFamily } from '../atoms';
-import type { TerminalBinaryPayload } from '../../../ws/client';
-import { pushToastAtom } from '../../notifications/atoms';
-import { useTranslation } from '../../../lib/i18n';
+import { type Terminal as TerminalDto, Topics } from "@coder-studio/core";
+import { useAtomValue, useSetAtom, useStore } from "jotai";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { dispatchCommandAtom, wsClientAtom } from "../../../atoms/connection";
+import { resolvedActiveWorkspaceIdAtom } from "../../../atoms/workspaces";
+import { useTranslation } from "../../../lib/i18n";
+import type { TerminalBinaryPayload } from "../../../ws/client";
+import { pushToastAtom } from "../../notifications/atoms";
+import { terminalMetaAtomFamily, terminalOutputAtomFamily } from "../atoms";
 
-const EMPTY_TERMINAL_ID = '__terminal_panel_empty__';
+const EMPTY_TERMINAL_ID = "__terminal_panel_empty__";
 
 function mergeTerminalIds(existing: string[], incoming: string[]): string[] {
   const seen = new Set(incoming);
@@ -63,23 +63,23 @@ export function useTerminalActions() {
     setTerminalIds([]);
     setActiveTerminalId(null);
 
-    void dispatch<TerminalDto[]>('terminal.list', { workspaceId: activeWorkspaceId })
+    void dispatch<TerminalDto[]>("terminal.list", { workspaceId: activeWorkspaceId })
       .then((result) => {
         if (cancelled) {
           return;
         }
 
         if (!result.ok || !result.data) {
-          console.error('Failed to fetch terminals:', result.error?.message);
+          console.error("Failed to fetch terminals:", result.error?.message);
           pushToast({
-            kind: 'error',
-            title: t('terminal.load_failed_title'),
-            body: result.error?.message ?? t('terminal.load_failed_body'),
+            kind: "error",
+            title: t("terminal.load_failed_title"),
+            body: result.error?.message ?? t("terminal.load_failed_body"),
           });
           return;
         }
 
-        const shellTerminals = result.data.filter((terminal) => terminal.kind === 'shell');
+        const shellTerminals = result.data.filter((terminal) => terminal.kind === "shell");
         const shellIds = shellTerminals.map((terminal) => terminal.id);
 
         for (const terminal of shellTerminals) {
@@ -91,11 +91,11 @@ export function useTerminalActions() {
       })
       .catch((error) => {
         if (!cancelled) {
-          console.error('Failed to fetch terminals:', error);
+          console.error("Failed to fetch terminals:", error);
           pushToast({
-            kind: 'error',
-            title: t('terminal.load_failed_title'),
-            body: error instanceof Error ? error.message : t('terminal.load_failed_body'),
+            kind: "error",
+            title: t("terminal.load_failed_title"),
+            body: error instanceof Error ? error.message : t("terminal.load_failed_body"),
           });
         }
       });
@@ -113,7 +113,7 @@ export function useTerminalActions() {
     const allTerminalsTopic = Topics.terminalsAll(activeWorkspaceId);
 
     unsubscribeRef.current = wsClient.subscribe([allTerminalsTopic], (topic, payload, seq) => {
-      const parts = topic.split('.');
+      const parts = topic.split(".");
       if (parts.length < 5) {
         return;
       }
@@ -121,9 +121,9 @@ export function useTerminalActions() {
       const terminalId = parts[3];
       const event = parts[4];
 
-      if (event === 'created') {
-        const createData = payload as { id: string; kind: 'shell' | 'agent' };
-        if (createData.kind !== 'shell') {
+      if (event === "created") {
+        const createData = payload as { id: string; kind: "shell" | "agent" };
+        if (createData.kind !== "shell") {
           return;
         }
 
@@ -137,12 +137,12 @@ export function useTerminalActions() {
         return;
       }
 
-      if (event !== 'output') {
+      if (event !== "output") {
         return;
       }
 
       const meta = store.get(terminalMetaAtomFamily(terminalId));
-      if (!meta || meta.kind !== 'shell') {
+      if (!meta || meta.kind !== "shell") {
         return;
       }
 
@@ -168,24 +168,24 @@ export function useTerminalActions() {
   const handleCreateTerminal = useCallback(async () => {
     if (!activeWorkspaceId) {
       pushToast({
-        kind: 'warning',
-        title: t('terminal.create_unavailable_title'),
-        body: t('terminal.create_unavailable_body'),
+        kind: "warning",
+        title: t("terminal.create_unavailable_title"),
+        body: t("terminal.create_unavailable_body"),
       });
       return;
     }
 
     try {
-      const result = await dispatch<TerminalDto>('terminal.create', {
+      const result = await dispatch<TerminalDto>("terminal.create", {
         workspaceId: activeWorkspaceId,
-        kind: 'shell',
+        kind: "shell",
       });
 
       if (!result.ok || !result.data) {
         pushToast({
-          kind: 'error',
-          title: t('terminal.create_failed_title'),
-          body: result.error?.message ?? t('terminal.create_failed_body'),
+          kind: "error",
+          title: t("terminal.create_failed_title"),
+          body: result.error?.message ?? t("terminal.create_failed_body"),
         });
         return;
       }
@@ -202,16 +202,16 @@ export function useTerminalActions() {
       setActiveTerminalId(terminal.id);
     } catch (error) {
       pushToast({
-        kind: 'error',
-        title: t('terminal.create_failed_title'),
-        body: error instanceof Error ? error.message : t('terminal.create_failed_body'),
+        kind: "error",
+        title: t("terminal.create_failed_title"),
+        body: error instanceof Error ? error.message : t("terminal.create_failed_body"),
       });
     }
   }, [activeWorkspaceId, dispatch, pushToast, store, t]);
 
   const handleCloseTerminal = useCallback(
     async (terminalId: string) => {
-      const result = await dispatch('terminal.close', { terminalId });
+      const result = await dispatch("terminal.close", { terminalId });
       if (!result.ok) {
         return;
       }

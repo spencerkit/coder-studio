@@ -1,7 +1,7 @@
-import { ArrowLeft } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { ArrowLeft } from "lucide-react";
+import type { ReactNode } from "react";
 
-type PageHeaderTitleElement = 'div' | 'h1' | 'h2' | 'h3' | 'span';
+type PageHeaderTitleElement = "div" | "h1" | "h2" | "h3" | "span";
 
 interface PageHeaderProps {
   title: string;
@@ -16,11 +16,11 @@ interface PageHeaderProps {
 export function PageHeader({
   title,
   onBack,
-  backLabel = 'Back',
+  backLabel = "Back",
   backAriaLabel,
   kicker,
   rightSlot,
-  titleAs = 'h2',
+  titleAs = "h2",
 }: PageHeaderProps) {
   const TitleTag = titleAs;
 

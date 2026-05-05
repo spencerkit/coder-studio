@@ -4,11 +4,11 @@
  * Server-state projection atoms. Written only by WS event handlers.
  */
 
-import { atom } from 'jotai';
-import { atomFamily } from 'jotai-family';
-import type { Workspace } from '@coder-studio/core';
+import type { Workspace } from "@coder-studio/core";
+import { atom } from "jotai";
+import { atomFamily } from "jotai-family";
 
-export type WorkspaceLoadState = 'idle' | 'loading' | 'ready' | 'error';
+export type WorkspaceLoadState = "idle" | "loading" | "ready" | "error";
 
 /**
  * Active workspace ID intent.
@@ -31,7 +31,7 @@ export const workspaceOrderAtom = atom<string[]>([]);
 /**
  * Workspace collection load state.
  */
-export const workspacesLoadStateAtom = atom<WorkspaceLoadState>('idle');
+export const workspacesLoadStateAtom = atom<WorkspaceLoadState>("idle");
 
 /**
  * Last workspace load error, if any.
@@ -73,7 +73,7 @@ export const orderedWorkspacesAtom = atom((get) =>
  * Resolved active workspace id gated on load readiness.
  */
 export const resolvedActiveWorkspaceIdAtom = atom((get) => {
-  if (get(workspacesLoadStateAtom) !== 'ready') {
+  if (get(workspacesLoadStateAtom) !== "ready") {
     return null;
   }
 

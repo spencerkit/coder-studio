@@ -5,13 +5,13 @@
  * Shows workspace name, status indicator, unread badge, and close button.
  */
 
-import type { FC } from 'react';
-import { useSetAtom } from 'jotai';
-import { X } from 'lucide-react';
-import type { Workspace } from '@coder-studio/core';
-import { activeWorkspaceIdAtom } from '../../../atoms/workspaces';
-import { useTranslation } from '../../../lib/i18n';
-import { useWorkspaceCloseAction } from '../../workspace/actions/use-workspace-close-action';
+import type { Workspace } from "@coder-studio/core";
+import { useSetAtom } from "jotai";
+import { X } from "lucide-react";
+import type { FC } from "react";
+import { activeWorkspaceIdAtom } from "../../../atoms/workspaces";
+import { useTranslation } from "../../../lib/i18n";
+import { useWorkspaceCloseAction } from "../../workspace/actions/use-workspace-close-action";
 
 interface WorkspaceTabProps {
   workspace: Workspace;
@@ -32,7 +32,10 @@ export const WorkspaceTab: FC<WorkspaceTabProps> = ({ workspace, isActive }) => 
   const setActiveWorkspace = useSetAtom(activeWorkspaceIdAtom);
   const closeWorkspace = useWorkspaceCloseAction();
   const displayName =
-    workspace.name || workspace.path?.split('/').filter(Boolean).pop() || workspace.path || workspace.id;
+    workspace.name ||
+    workspace.path?.split("/").filter(Boolean).pop() ||
+    workspace.path ||
+    workspace.id;
 
   const handleClick = () => {
     setActiveWorkspace(workspace.id);
@@ -45,10 +48,10 @@ export const WorkspaceTab: FC<WorkspaceTabProps> = ({ workspace, isActive }) => 
 
   return (
     <div
-      className={`topbar-tab ${isActive ? 'active' : ''}`}
+      className={`topbar-tab ${isActive ? "active" : ""}`}
       onClick={handleClick}
       onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
+        if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
           handleClick();
         }
@@ -58,20 +61,20 @@ export const WorkspaceTab: FC<WorkspaceTabProps> = ({ workspace, isActive }) => 
       aria-selected={isActive}
       title={workspace.path || workspace.id}
     >
-      <span className={`topbar-dot ${workspace.isActive ? 'active' : 'idle'}`} />
+      <span className={`topbar-dot ${workspace.isActive ? "active" : "idle"}`} />
 
       <span className="topbar-tab-name">{displayName}</span>
 
       {workspace.unreadCount && workspace.unreadCount > 0 ? (
         <span className="topbar-unread">
-          {workspace.unreadCount > 9 ? '9+' : workspace.unreadCount}
+          {workspace.unreadCount > 9 ? "9+" : workspace.unreadCount}
         </span>
       ) : null}
 
       <button
         className="topbar-close"
         onClick={handleClose}
-        aria-label={t('action.close_workspace')}
+        aria-label={t("action.close_workspace")}
       >
         <X size={14} />
       </button>

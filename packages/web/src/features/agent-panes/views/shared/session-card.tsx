@@ -5,19 +5,19 @@
  * status indicators, and control buttons.
  */
 
-import type { FC, ReactNode } from 'react';
-import { useEffect, useRef, useState } from 'react';
-import { useAtomValue, useSetAtom } from 'jotai';
-import { X, FlipHorizontal, FlipVertical, Square } from 'lucide-react';
-import { sessionByIdAtomFamily } from '../../../../atoms/sessions';
-import { workspaceByIdAtomFamily } from '../../../../atoms/workspaces';
-import { pendingFocusSessionAtom } from '../../../../atoms/app-ui';
-import type { SessionState } from '@coder-studio/core';
-import { ObjectiveDialog } from '../../../supervisor/views/shared/objective-dialog';
-import { SupervisorCard } from '../../../supervisor/views/shared/supervisor-card';
-import { useSupervisor } from '../../../supervisor/actions/use-supervisor';
-import { XtermHost } from '../../../terminal-panel/views/shared/xterm-host';
-import { useWorkspaceUiStatePersistence } from '../../../workspace/actions/use-workspace-ui-state-persistence';
+import type { SessionState } from "@coder-studio/core";
+import { useAtomValue, useSetAtom } from "jotai";
+import { FlipHorizontal, FlipVertical, Square, X } from "lucide-react";
+import type { FC, ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
+import { pendingFocusSessionAtom } from "../../../../atoms/app-ui";
+import { sessionByIdAtomFamily } from "../../../../atoms/sessions";
+import { workspaceByIdAtomFamily } from "../../../../atoms/workspaces";
+import { useSupervisor } from "../../../supervisor/actions/use-supervisor";
+import { ObjectiveDialog } from "../../../supervisor/views/shared/objective-dialog";
+import { SupervisorCard } from "../../../supervisor/views/shared/supervisor-card";
+import { XtermHost } from "../../../terminal-panel/views/shared/xterm-host";
+import { useWorkspaceUiStatePersistence } from "../../../workspace/actions/use-workspace-ui-state-persistence";
 
 type SessionCardAction = () => void | Promise<void>;
 
@@ -53,14 +53,18 @@ export const SessionCard: FC<SessionCardProps> = ({
   onStop,
 }) => {
   const session = useAtomValue(sessionByIdAtomFamily(sessionId));
-  const workspace = useAtomValue(workspaceByIdAtomFamily(session?.workspaceId ?? '__workspace_empty__'));
+  const workspace = useAtomValue(
+    workspaceByIdAtomFamily(session?.workspaceId ?? "__workspace_empty__")
+  );
   const pendingFocus = useAtomValue(pendingFocusSessionAtom);
   const setPendingFocus = useSetAtom(pendingFocusSessionAtom);
 
   const cardRef = useRef<HTMLDivElement | null>(null);
   const [highlight, setHighlight] = useState(false);
   useSupervisor(session);
-  const { persistUiState } = useWorkspaceUiStatePersistence(session?.workspaceId ?? '__workspace_empty__');
+  const { persistUiState } = useWorkspaceUiStatePersistence(
+    session?.workspaceId ?? "__workspace_empty__"
+  );
 
   useEffect(() => {
     if (pendingFocus !== sessionId) {
@@ -68,7 +72,7 @@ export const SessionCard: FC<SessionCardProps> = ({
     }
     const node = cardRef.current;
     if (node) {
-      node.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+      node.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
     }
     setHighlight(true);
     setPendingFocus(null);
@@ -102,7 +106,7 @@ export const SessionCard: FC<SessionCardProps> = ({
   return (
     <div
       ref={cardRef}
-      className={`session-card agent-pane${highlight ? ' session-card--focus-pulse' : ''}`}
+      className={`session-card agent-pane${highlight ? " session-card--focus-pulse" : ""}`}
       data-session-id={sessionId}
       onClick={handleCardClick}
     >
@@ -130,15 +134,18 @@ export const SessionCard: FC<SessionCardProps> = ({
         {showHeaderActions || headerAccessory ? (
           <div className="session-header-right">
             {headerAccessory ? (
-              <div className="session-header-accessory">
-                {headerAccessory}
-              </div>
+              <div className="session-header-accessory">{headerAccessory}</div>
             ) : null}
 
             {showHeaderActions ? (
               <div className="session-header-actions">
-                {session.state === 'running' ? (
-                  <button className="session-action-btn" onClick={() => void onStop?.()} title="Stop" aria-label="Stop">
+                {session.state === "running" ? (
+                  <button
+                    className="session-action-btn"
+                    onClick={() => void onStop?.()}
+                    title="Stop"
+                    aria-label="Stop"
+                  >
                     <Square size={13} />
                   </button>
                 ) : null}
@@ -173,9 +180,9 @@ export const SessionCard: FC<SessionCardProps> = ({
       </div>
 
       {showSupervisorInline &&
-      session.capability === 'full' &&
-      session.state !== 'draft' &&
-      session.state !== 'ended' ? (
+      session.capability === "full" &&
+      session.state !== "draft" &&
+      session.state !== "ended" ? (
         <>
           <SupervisorCard sessionId={session.id} workspaceId={session.workspaceId} />
           <ObjectiveDialog workspaceId={session.workspaceId} sessionId={session.id} />
@@ -197,11 +204,11 @@ export const SessionCard: FC<SessionCardProps> = ({
 
 function getProgressWidth(state: SessionState): number {
   switch (state) {
-    case 'starting':
+    case "starting":
       return 18;
-    case 'running':
+    case "running":
       return 42;
-    case 'ended':
+    case "ended":
       return 100;
     default:
       return 8;
@@ -210,42 +217,42 @@ function getProgressWidth(state: SessionState): number {
 
 function getSessionProgressClass(state: SessionState) {
   switch (state) {
-    case 'starting':
-      return 'session-progress-starting';
-    case 'running':
-      return 'session-progress-running';
-    case 'idle':
-      return 'session-progress-idle';
-    case 'ended':
-      return 'session-progress-complete';
+    case "starting":
+      return "session-progress-starting";
+    case "running":
+      return "session-progress-running";
+    case "idle":
+      return "session-progress-idle";
+    case "ended":
+      return "session-progress-complete";
     default:
-      return 'session-progress-idle';
+      return "session-progress-idle";
   }
 }
 
 function getSessionDotClass(state: SessionState) {
   switch (state) {
-    case 'starting':
-      return 'session-dot-starting';
-    case 'running':
-      return 'session-dot-running';
-    case 'ended':
-      return 'session-dot-complete';
+    case "starting":
+      return "session-dot-starting";
+    case "running":
+      return "session-dot-running";
+    case "ended":
+      return "session-dot-complete";
     default:
-      return 'session-dot-idle';
+      return "session-dot-idle";
   }
 }
 
 function getSessionBadgeClass(state: SessionState) {
   switch (state) {
-    case 'starting':
-      return 'badge badge-amber';
-    case 'running':
-      return 'badge badge-green';
-    case 'ended':
-      return 'badge badge-blue';
+    case "starting":
+      return "badge badge-amber";
+    case "running":
+      return "badge badge-green";
+    case "ended":
+      return "badge badge-blue";
     default:
-      return 'badge badge-gray';
+      return "badge badge-gray";
   }
 }
 
@@ -253,16 +260,14 @@ function formatSessionLabel(sessionId: string) {
   const numericId = sessionId.match(/(\d+)/)?.[1];
 
   if (numericId) {
-    return `SESSION-${numericId.slice(-2).padStart(2, '0')}`;
+    return `SESSION-${numericId.slice(-2).padStart(2, "0")}`;
   }
 
-  return sessionId.replace(/[_-]/g, ' ').toUpperCase();
+  return sessionId.replace(/[_-]/g, " ").toUpperCase();
 }
 
 function formatSessionStateLabel(state: SessionState) {
-  return state
-    .replace(/_/g, ' ')
-    .replace(/\b\w/g, (char) => char.toUpperCase());
+  return state.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function formatProviderLabel(providerId: string) {
@@ -270,7 +275,7 @@ function formatProviderLabel(providerId: string) {
 }
 
 function isSessionInteractive(state: SessionState) {
-  return state === 'running' || state === 'idle' || state === 'starting';
+  return state === "running" || state === "idle" || state === "starting";
 }
 
 export default SessionCard;

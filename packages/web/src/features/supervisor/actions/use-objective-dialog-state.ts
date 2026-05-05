@@ -1,23 +1,23 @@
-import { useAtom, useAtomValue } from 'jotai';
-import { useCallback } from 'react';
-import { dispatchCommandAtom } from '../../../atoms/connection';
-import { useTranslation } from '../../../lib/i18n';
-import { supervisorDialogAtom, supervisorsAtom } from '../atoms';
+import { useAtom, useAtomValue } from "jotai";
+import { useCallback } from "react";
+import { dispatchCommandAtom } from "../../../atoms/connection";
+import { useTranslation } from "../../../lib/i18n";
+import { supervisorDialogAtom, supervisorsAtom } from "../atoms";
 
-export type ObjectiveDialogMode = 'enable' | 'edit' | 'disable';
-export type ObjectiveDialogEvaluatorProviderId = 'claude' | 'codex';
+export type ObjectiveDialogMode = "enable" | "edit" | "disable";
+export type ObjectiveDialogEvaluatorProviderId = "claude" | "codex";
 
 export const OBJECTIVE_DIALOG_EVALUATOR_OPTIONS = [
-  { id: 'claude', label: 'Claude' },
-  { id: 'codex', label: 'Codex' },
+  { id: "claude", label: "Claude" },
+  { id: "codex", label: "Codex" },
 ] as const;
 
 const CLOSED_DIALOG_STATE = {
   open: false,
   sessionId: null,
-  mode: 'enable' as const,
-  draftObjective: '',
-  draftEvaluatorProviderId: 'claude' as const,
+  mode: "enable" as const,
+  draftObjective: "",
+  draftEvaluatorProviderId: "claude" as const,
 };
 
 interface UseObjectiveDialogStateOptions {
@@ -42,7 +42,7 @@ export function useObjectiveDialogState({
     subtitle: t(`supervisor.dialog.${mode}.subtitle`),
     confirm: t(`supervisor.dialog.${mode}.confirm`),
   };
-  const isDisable = mode === 'disable';
+  const isDisable = mode === "disable";
   const disableObjective = supervisor?.objective ?? dialog.draftObjective;
 
   const close = useCallback(() => {
@@ -66,12 +66,12 @@ export function useObjectiveDialogState({
       return false;
     }
 
-    if (dialog.mode === 'disable') {
+    if (dialog.mode === "disable") {
       if (!supervisor) {
         return false;
       }
 
-      const result = await dispatch('supervisor.delete', { id: supervisor.id });
+      const result = await dispatch("supervisor.delete", { id: supervisor.id });
       if (result.ok) {
         close();
         return true;
@@ -84,8 +84,8 @@ export function useObjectiveDialogState({
       return false;
     }
 
-    if (dialog.mode === 'enable') {
-      const result = await dispatch('supervisor.create', {
+    if (dialog.mode === "enable") {
+      const result = await dispatch("supervisor.create", {
         sessionId: dialog.sessionId,
         workspaceId,
         objective,
@@ -103,7 +103,7 @@ export function useObjectiveDialogState({
       return false;
     }
 
-    const result = await dispatch('supervisor.update', {
+    const result = await dispatch("supervisor.update", {
       id: supervisor.id,
       objective,
       evaluatorProviderId: dialog.draftEvaluatorProviderId,

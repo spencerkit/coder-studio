@@ -4,23 +4,27 @@
  * Modal overlay for quick command access via Ctrl+K.
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { useAtom, useAtomValue, useSetAtom } from 'jotai';
-import { useLocation, useNavigate } from 'react-router-dom';
-import { Search } from 'lucide-react';
-import { commandPaletteOpenAtom } from '../../../atoms/app-ui';
-import { activeWorkspaceIdAtom, orderedWorkspacesAtom, resolvedActiveWorkspaceIdAtom } from '../../../atoms/workspaces';
+import type { Workspace } from "@coder-studio/core";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { Search } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { commandPaletteOpenAtom } from "../../../atoms/app-ui";
 import {
+  activeWorkspaceIdAtom,
+  orderedWorkspacesAtom,
+  resolvedActiveWorkspaceIdAtom,
+} from "../../../atoms/workspaces";
+import { useViewport } from "../../../hooks/use-viewport";
+import { useTranslation } from "../../../lib/i18n";
+import {
+  bottomPanelHeightAtom,
   focusModeAtom,
   sidebarCollapsedAtom,
   terminalPanelVisibleAtom,
-  bottomPanelHeightAtom,
-} from '../../workspace/atoms';
-import { useViewport } from '../../../hooks/use-viewport';
-import { useTranslation } from '../../../lib/i18n';
-import { MobileSheet } from '../../workspace/views/mobile/mobile-sheet';
-import { WorkspaceLaunchModal } from '../../workspace/views/shared/workspace-launch-modal';
-import type { Workspace } from '@coder-studio/core';
+} from "../../workspace/atoms";
+import { MobileSheet } from "../../workspace/views/mobile/mobile-sheet";
+import { WorkspaceLaunchModal } from "../../workspace/views/shared/workspace-launch-modal";
 
 interface Command {
   id: string;
@@ -30,7 +34,7 @@ interface Command {
   action: () => void;
 }
 
-type ShellKind = 'desktop' | 'mobile';
+type ShellKind = "desktop" | "mobile";
 
 /**
  * Command Palette
@@ -46,7 +50,7 @@ export function CommandPalette() {
   const t = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
-  const isMobile = useViewport() === 'mobile';
+  const isMobile = useViewport() === "mobile";
   const [isOpen, setIsOpen] = useAtom(commandPaletteOpenAtom);
   const [focusMode, setFocusMode] = useAtom(focusModeAtom);
   const [sidebarCollapsed, setSidebarCollapsed] = useAtom(sidebarCollapsedAtom);
@@ -56,14 +60,14 @@ export function CommandPalette() {
   const setActiveWorkspaceId = useSetAtom(activeWorkspaceIdAtom);
   const workspaces = useAtomValue(orderedWorkspacesAtom);
 
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [showWorkspaceLaunch, setShowWorkspaceLaunch] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Build command list
   const commands = buildCommands({
-    shellKind: isMobile ? 'mobile' : 'desktop',
+    shellKind: isMobile ? "mobile" : "desktop",
     focusMode,
     setFocusMode,
     sidebarCollapsed,
@@ -100,7 +104,7 @@ export function CommandPalette() {
   useEffect(() => {
     if (isOpen) {
       inputRef.current?.focus();
-      setSearchQuery('');
+      setSearchQuery("");
       setSelectedIndex(0);
     }
   }, [isOpen]);
@@ -109,24 +113,22 @@ export function CommandPalette() {
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       switch (e.key) {
-        case 'ArrowDown':
+        case "ArrowDown":
           e.preventDefault();
-          setSelectedIndex((prev) =>
-            prev < filteredCommands.length - 1 ? prev + 1 : prev
-          );
+          setSelectedIndex((prev) => (prev < filteredCommands.length - 1 ? prev + 1 : prev));
           break;
-        case 'ArrowUp':
+        case "ArrowUp":
           e.preventDefault();
           setSelectedIndex((prev) => (prev > 0 ? prev - 1 : prev));
           break;
-        case 'Enter':
+        case "Enter":
           e.preventDefault();
           if (filteredCommands[selectedIndex]) {
             filteredCommands[selectedIndex].action();
             setIsOpen(false);
           }
           break;
-        case 'Escape':
+        case "Escape":
           e.preventDefault();
           setIsOpen(false);
           break;
@@ -138,14 +140,14 @@ export function CommandPalette() {
   // Global keyboard shortcut (Ctrl+K)
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
         setIsOpen(!isOpen);
       }
     };
 
-    window.addEventListener('keydown', handleGlobalKeyDown);
-    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => window.removeEventListener("keydown", handleGlobalKeyDown);
   }, [isOpen, setIsOpen]);
 
   // Handle command execution
@@ -161,7 +163,7 @@ export function CommandPalette() {
         ref={inputRef}
         type="text"
         className="command-palette-input"
-        placeholder={t('placeholder.command')}
+        placeholder={t("placeholder.command")}
         value={searchQuery}
         onChange={(e) => {
           setSearchQuery(e.target.value);
@@ -178,7 +180,7 @@ export function CommandPalette() {
           <div
             key={cmd.id}
             className={`command-palette-item ${
-              index === selectedIndex ? 'command-palette-item-selected' : ''
+              index === selectedIndex ? "command-palette-item-selected" : ""
             }`}
             onClick={() => handleCommandClick(cmd)}
             onMouseEnter={() => setSelectedIndex(index)}
@@ -193,7 +195,7 @@ export function CommandPalette() {
           </div>
         ))
       ) : (
-        <div className="command-palette-empty">{t('command.no_results')}</div>
+        <div className="command-palette-empty">{t("command.no_results")}</div>
       )}
     </div>
   );
@@ -211,7 +213,7 @@ export function CommandPalette() {
     return (
       <MobileSheet
         title="Quick Actions"
-        kicker={t('command.palette').toUpperCase()}
+        kicker={t("command.palette").toUpperCase()}
         onClose={() => setIsOpen(false)}
         bodyClassName="mobile-sheet__body--flush"
         contentClassName="command-palette-sheet-layer"
@@ -221,10 +223,8 @@ export function CommandPalette() {
               <div className="command-palette-sheet__search">
                 {paletteSearchField}
                 <div className="command-palette-sheet__meta">
-                  <span className="command-palette-hint">{t('placeholder.command')}</span>
-                  <span className="command-palette-meta">
-                    {filteredCommands.length} actions
-                  </span>
+                  <span className="command-palette-hint">{t("placeholder.command")}</span>
+                  <span className="command-palette-meta">{filteredCommands.length} actions</span>
                 </div>
               </div>
               {paletteList}
@@ -243,16 +243,12 @@ export function CommandPalette() {
         onKeyDown={handleKeyDown}
       >
         <div className="command-palette-header">
-          <span className="command-palette-kicker">{t('command.palette').toUpperCase()}</span>
-          <span className="command-palette-meta">
-            {filteredCommands.length} actions
-          </span>
+          <span className="command-palette-kicker">{t("command.palette").toUpperCase()}</span>
+          <span className="command-palette-meta">{filteredCommands.length} actions</span>
         </div>
         {paletteSearchField}
 
-        <div className="command-palette-hint">
-          {t('placeholder.command')}
-        </div>
+        <div className="command-palette-hint">{t("placeholder.command")}</div>
         {paletteList}
       </div>
     </div>
@@ -301,62 +297,62 @@ function buildCommands(context: {
 
   const commands: Command[] = [
     {
-      id: 'new-workspace',
-      label: t('workspace.open'),
-      description: t('workspace.open_hint'),
-      shortcut: 'Ctrl+N',
+      id: "new-workspace",
+      label: t("workspace.open"),
+      description: t("workspace.open_hint"),
+      shortcut: "Ctrl+N",
       action: () => {
         setShowWorkspaceLaunch(true);
       },
     },
     {
-      id: 'open-home',
-      label: t('workspace.title'),
-      description: t('action.back'),
-      action: () => navigate('/'),
+      id: "open-home",
+      label: t("workspace.title"),
+      description: t("action.back"),
+      action: () => navigate("/"),
     },
     {
-      id: 'open-settings',
-      label: t('action.settings'),
-      description: t('settings.title'),
-      shortcut: 'Ctrl+,',
+      id: "open-settings",
+      label: t("action.settings"),
+      description: t("settings.title"),
+      shortcut: "Ctrl+,",
       action: () => {
-        navigate('/settings');
+        navigate("/settings");
       },
     },
   ];
 
-  if (shellKind === 'desktop') {
+  if (shellKind === "desktop") {
     commands.push(
       {
-        id: 'toggle-focus-mode',
-        label: t('tooltip.focus_mode'),
-        description: focusMode ? t('action.close') : t('action.open'),
-        shortcut: 'F',
+        id: "toggle-focus-mode",
+        label: t("tooltip.focus_mode"),
+        description: focusMode ? t("action.close") : t("action.open"),
+        shortcut: "F",
         action: () => setFocusMode(!focusMode),
       },
       {
-        id: 'enable-focus-mode',
-        label: `${t('action.open')} Focus Mode`,
-        description: t('tooltip.focus_mode'),
+        id: "enable-focus-mode",
+        label: `${t("action.open")} Focus Mode`,
+        description: t("tooltip.focus_mode"),
         action: () => setFocusMode(true),
       },
       {
-        id: 'disable-focus-mode',
-        label: `${t('action.close')} Focus Mode`,
-        description: t('tooltip.focus_mode'),
+        id: "disable-focus-mode",
+        label: `${t("action.close")} Focus Mode`,
+        description: t("tooltip.focus_mode"),
         action: () => setFocusMode(false),
       },
       {
-        id: 'toggle-sidebar',
-        label: t('command.shortcut.toggle_sidebar'),
-        description: sidebarCollapsed ? t('action.open') : t('action.close'),
+        id: "toggle-sidebar",
+        label: t("command.shortcut.toggle_sidebar"),
+        description: sidebarCollapsed ? t("action.open") : t("action.close"),
         action: () => setSidebarCollapsed(!sidebarCollapsed),
       },
       {
-        id: 'toggle-terminal',
-        label: t('terminal.title'),
-        description: !terminalPanelVisible ? t('action.open') : t('action.close'),
+        id: "toggle-terminal",
+        label: t("terminal.title"),
+        description: !terminalPanelVisible ? t("action.open") : t("action.close"),
         action: () => {
           setTerminalPanelVisible(!terminalPanelVisible);
           if (!terminalPanelVisible && bottomPanelHeight === 0) {
@@ -365,9 +361,9 @@ function buildCommands(context: {
         },
       },
       {
-        id: 'show-terminal',
-        label: `${t('action.open')} ${t('terminal.title')}`,
-        description: t('command.shortcut.toggle_terminal'),
+        id: "show-terminal",
+        label: `${t("action.open")} ${t("terminal.title")}`,
+        description: t("command.shortcut.toggle_terminal"),
         action: () => {
           setTerminalPanelVisible(true);
           if (bottomPanelHeight === 0) {
@@ -376,9 +372,9 @@ function buildCommands(context: {
         },
       },
       {
-        id: 'hide-terminal',
-        label: `${t('action.close')} ${t('terminal.title')}`,
-        description: t('command.shortcut.toggle_terminal'),
+        id: "hide-terminal",
+        label: `${t("action.close")} ${t("terminal.title")}`,
+        description: t("command.shortcut.toggle_terminal"),
         action: () => setTerminalPanelVisible(false),
       }
     );
@@ -386,16 +382,16 @@ function buildCommands(context: {
 
   // Add workspace switch commands
   workspaces.forEach((ws) => {
-    const workspaceLabel = ws.name || ws.path?.split('/').pop() || ws.path || ws.id;
+    const workspaceLabel = ws.name || ws.path?.split("/").pop() || ws.path || ws.id;
 
     commands.push({
       id: `switch-workspace-${ws.id}`,
-      label: `${t('workspace.title')}: ${workspaceLabel}`,
+      label: `${t("workspace.title")}: ${workspaceLabel}`,
       description: ws.path || ws.id,
       action: () => {
         setActiveWorkspaceId(ws.id);
-        if (locationPathname !== '/workspace') {
-          navigate('/workspace');
+        if (locationPathname !== "/workspace") {
+          navigate("/workspace");
         }
       },
     });
@@ -404,12 +400,12 @@ function buildCommands(context: {
   // Add go home command if in a workspace
   if (activeWorkspaceId) {
     commands.push({
-      id: 'go-home',
-      label: t('action.back'),
-      description: t('workspace.no_workspace'),
+      id: "go-home",
+      label: t("action.back"),
+      description: t("workspace.no_workspace"),
       action: () => {
         setActiveWorkspaceId(null);
-        navigate('/');
+        navigate("/");
       },
     });
   }

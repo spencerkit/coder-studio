@@ -1,6 +1,6 @@
-import { Menu, Settings2 } from 'lucide-react';
-import type { Workspace } from '@coder-studio/core';
-import { useTranslation } from '../../../../lib/i18n';
+import type { Workspace } from "@coder-studio/core";
+import { Menu, Settings2 } from "lucide-react";
+import { useTranslation } from "../../../../lib/i18n";
 
 interface MobileTopBarProps {
   activeWorkspace: Workspace | null;
@@ -18,9 +18,9 @@ export function MobileTopBar({
   const t = useTranslation();
   const workspaceLabel =
     activeWorkspace?.name ??
-    activeWorkspace?.path?.split('/').filter(Boolean).pop() ??
+    activeWorkspace?.path?.split("/").filter(Boolean).pop() ??
     activeWorkspace?.path ??
-    t('mobile.workspace_drawer.select_title');
+    t("mobile.workspace_drawer.select_title");
 
   return (
     <header className="mobile-topbar">
@@ -30,14 +30,14 @@ export function MobileTopBar({
         onClick={() => {
           onToggleDrawer();
         }}
-        aria-label={t('mobile.topbar.switch_workspace')}
+        aria-label={t("mobile.topbar.switch_workspace")}
         aria-expanded={drawerOpen}
       >
         <span className="mobile-topbar__workspace-leading" aria-hidden="true">
           <Menu size={18} />
         </span>
         <span className="mobile-topbar__workspace-copy">
-          <span className="mobile-topbar__workspace-label">{t('label.workspace')}</span>
+          <span className="mobile-topbar__workspace-label">{t("label.workspace")}</span>
           <span className="mobile-topbar__workspace-name">{workspaceLabel}</span>
         </span>
       </button>
@@ -46,7 +46,7 @@ export function MobileTopBar({
         <button
           type="button"
           className="mobile-topbar__icon-button"
-          aria-label={t('mobile.topbar.open_settings')}
+          aria-label={t("mobile.topbar.open_settings")}
           onClick={() => {
             onOpenSettings();
           }}

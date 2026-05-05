@@ -4,15 +4,15 @@
  * Hides non-essential UI elements for distraction-free work.
  */
 
-import { useEffect, useCallback } from 'react';
-import { useAtom } from 'jotai';
+import { useAtom } from "jotai";
+import { useCallback, useEffect } from "react";
 import {
+  bottomPanelHeightAtom,
   focusModeAtom,
   leftPanelWidthAtom,
-  bottomPanelHeightAtom,
   sidebarCollapsedAtom,
   terminalPanelVisibleAtom,
-} from '../../workspace/atoms';
+} from "../../workspace/atoms";
 
 /**
  * Focus Mode
@@ -62,17 +62,15 @@ export function FocusMode() {
       // Only respond to F key when not in a text input
       const target = e.target as HTMLElement;
       const isTextInput =
-        target.tagName === 'INPUT' ||
-        target.tagName === 'TEXTAREA' ||
-        target.isContentEditable;
+        target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable;
 
-      if (e.key === 'f' && !isTextInput && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      if (e.key === "f" && !isTextInput && !e.metaKey && !e.ctrlKey && !e.altKey) {
         e.preventDefault();
         setFocusMode(!focusMode);
       }
 
       // Ctrl+` toggles terminal panel visibility
-      if (e.key === '`' && (e.ctrlKey || e.metaKey)) {
+      if (e.key === "`" && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
         if (terminalPanelVisible) {
           setTerminalPanelVisible(false);
@@ -85,29 +83,36 @@ export function FocusMode() {
       }
 
       // Escape key exits focus mode
-      if (e.key === 'Escape' && focusMode) {
+      if (e.key === "Escape" && focusMode) {
         e.preventDefault();
         setFocusMode(false);
       }
     },
-    [focusMode, setFocusMode, terminalPanelVisible, setTerminalPanelVisible, bottomPanelHeight, setBottomPanelHeight]
+    [
+      focusMode,
+      setFocusMode,
+      terminalPanelVisible,
+      setTerminalPanelVisible,
+      bottomPanelHeight,
+      setBottomPanelHeight,
+    ]
   );
 
   useEffect(() => {
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
 
   // Apply CSS class to body for focus mode styling
   useEffect(() => {
     if (focusMode) {
-      document.body.classList.add('focus-mode-active');
+      document.body.classList.add("focus-mode-active");
     } else {
-      document.body.classList.remove('focus-mode-active');
+      document.body.classList.remove("focus-mode-active");
     }
 
     return () => {
-      document.body.classList.remove('focus-mode-active');
+      document.body.classList.remove("focus-mode-active");
     };
   }, [focusMode]);
 

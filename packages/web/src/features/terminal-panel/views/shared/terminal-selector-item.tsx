@@ -4,11 +4,11 @@
  * Renders a single terminal item in the selector dropdown.
  */
 
-import { useAtomValue } from 'jotai';
-import { X } from 'lucide-react';
-import { terminalMetaAtomFamily } from '../../atoms';
-import { useTranslation } from '../../../../lib/i18n';
-import { formatTerminalTitle } from '../../components/title-format';
+import { useAtomValue } from "jotai";
+import { X } from "lucide-react";
+import { useTranslation } from "../../../../lib/i18n";
+import { terminalMetaAtomFamily } from "../../atoms";
+import { formatTerminalTitle } from "../../components/title-format";
 
 interface TerminalSelectorItemProps {
   id: string;
@@ -28,18 +28,11 @@ export function TerminalSelectorItem({
   const t = useTranslation();
   const meta = useAtomValue(terminalMetaAtomFamily(id));
 
-  const title = formatTerminalTitle(meta, index, t('terminal.shell'));
+  const title = formatTerminalTitle(meta, index, t("terminal.shell"));
 
   return (
-    <div
-      className={`terminal-selector-item ${
-        isActive ? 'terminal-selector-item-active' : ''
-      }`}
-    >
-      <button
-        className="terminal-selector-item-trigger"
-        onClick={onSelect}
-      >
+    <div className={`terminal-selector-item ${isActive ? "terminal-selector-item-active" : ""}`}>
+      <button className="terminal-selector-item-trigger" onClick={onSelect}>
         <span className="terminal-selector-item-title">{title}</span>
       </button>
       <button
