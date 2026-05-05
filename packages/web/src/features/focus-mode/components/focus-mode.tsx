@@ -84,6 +84,10 @@ export function FocusMode() {
 
       // Escape key exits focus mode
       if (e.key === "Escape" && focusMode) {
+        if (document.fullscreenElement) {
+          return;
+        }
+
         e.preventDefault();
         setFocusMode(false);
       }

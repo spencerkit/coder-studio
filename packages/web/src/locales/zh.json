@@ -636,6 +636,8 @@
     "close_pane": "关闭面板",
     "new_workspace": "新建工作区",
     "quick_actions": "快捷操作",
+    "enter_fullscreen": "进入全屏",
+    "exit_fullscreen": "退出全屏",
     "show_terminal": "显示终端",
     "hide_terminal": "隐藏终端",
     "show_files": "显示文件",
