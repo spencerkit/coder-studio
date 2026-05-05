@@ -1203,7 +1203,7 @@
   flex-direction: column;
   gap: var(--sp-2);
   flex-shrink: 0;
-  padding: 0 var(--sp-3) var(--sp-3);
+  padding: var(--sp-3) var(--sp-3) 0;
 }
 
 .mobile-terminal-input-bar__toggle {
@@ -1265,17 +1265,17 @@
 
 .mobile-shell__agent-stage .mobile-terminal-input-bar {
   padding:
-    0
-    calc(var(--mobile-safe-right) + var(--sp-3))
     var(--sp-3)
+    calc(var(--mobile-safe-right) + var(--sp-3))
+    0
     calc(var(--mobile-safe-left) + var(--sp-3));
 }
 
 .bottom-terminal--mobile-fullscreen .mobile-terminal-input-bar {
   padding:
-    0
+    var(--sp-2)
     var(--sp-3)
-    calc(var(--sp-2) + var(--mobile-safe-bottom))
+    0
     var(--sp-3);
 }
 

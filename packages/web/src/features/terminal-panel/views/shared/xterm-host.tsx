@@ -1488,6 +1488,23 @@ export function XtermHost({
 
   return (
     <div className={`xterm-host-shell${showMobileInputBar ? ' xterm-host-shell--mobile-input' : ''}`}>
+      {showMobileInputBar ? (
+        <MobileTerminalInputBar
+          expanded={mobileInputExpanded}
+          ctrlMode={ctrlMode}
+          disabled={mobileInputDisabled}
+          labels={mobileInputLabels}
+          onToggleExpanded={() => {
+            focusTerminal();
+            setMobileInputExpanded((value) => !value);
+          }}
+          onKeyPress={(key) => {
+            void handleSoftKeyPress(key);
+          }}
+          onCtrlTap={handleCtrlTap}
+          onCtrlLongPress={handleCtrlLongPress}
+        />
+      ) : null}
       <div
         ref={containerRef}
         className="xterm-host"
@@ -1507,23 +1524,6 @@ export function XtermHost({
           }
         }}
       />
-      {showMobileInputBar ? (
-        <MobileTerminalInputBar
-          expanded={mobileInputExpanded}
-          ctrlMode={ctrlMode}
-          disabled={mobileInputDisabled}
-          labels={mobileInputLabels}
-          onToggleExpanded={() => {
-            focusTerminal();
-            setMobileInputExpanded((value) => !value);
-          }}
-          onKeyPress={(key) => {
-            void handleSoftKeyPress(key);
-          }}
-          onCtrlTap={handleCtrlTap}
-          onCtrlLongPress={handleCtrlLongPress}
-        />
-      ) : null}
       {uploadBusy ? (
         <div
           role="status"

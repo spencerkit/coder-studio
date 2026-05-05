@@ -1082,6 +1082,9 @@ describe('XtermHost', () => {
     const toggle = await screen.findByRole('button', { name: 'Expand terminal keys' });
     expect(toggle).toBeInTheDocument();
     expect(container.querySelector('.mobile-terminal-input-bar')).toHaveAttribute('data-expanded', 'false');
+    expect(container.querySelector('.xterm-host-shell')?.firstElementChild).toBe(
+      container.querySelector('.mobile-terminal-input-bar')
+    );
 
     await user.click(toggle);
 
