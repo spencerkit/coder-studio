@@ -8,11 +8,8 @@
  */
 
 export {
-  appendSessionOutputAtom,
-  clearSessionOutputAtom,
   dismissToastAtom,
   pushToastAtom,
-  sessionOutputTailAtom,
   type Toast,
   type ToastKind,
   toastsAtom,

@@ -212,8 +212,6 @@ vi.mock("../../features/terminal-panel", () => ({
 
 vi.mock("../../features/notifications", () => ({
   useSessionNotifications: () => {},
-  appendSessionOutputAtom: null,
-  clearSessionOutputAtom: null,
   ToastContainer: () => null,
 }));
 

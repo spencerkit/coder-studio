@@ -9,7 +9,6 @@ import {
   workspacesLoadErrorAtom,
   workspacesLoadStateAtom,
 } from "../atoms/workspaces";
-import { SESSION_OUTPUT_TAIL_BYTES, sessionOutputTailAtom } from "../features/notifications/atoms";
 import { supervisorCyclesAtom, supervisorsAtom } from "../features/supervisor/atoms";
 import { terminalMetaAtomFamily } from "../features/terminal-panel/atoms";
 import { fileTreeStaleAtomFamily } from "../features/workspace/atoms";
@@ -114,188 +113,22 @@ describe("routeEventToAtom", () => {
     expect(store.get(fileTreeStaleAtomFamily("ws-1"))).toBe(false);
   });
 
-  it("appends cleaned terminal output text to the matching session tail buffer", () => {
+  it("marks terminal metadata exited on terminal exit events", () => {
     const store = createStore();
-    store.set(sessionsAtom, {
-      "sess-1": {
-        id: "sess-1",
-        workspaceId: "ws-1",
-        terminalId: "term-1",
-        providerId: "claude",
-        state: "running",
-        capability: "full",
-        startedAt: 1,
-        lastActiveAt: 1,
-      },
+    store.set(terminalMetaAtomFamily("term-1"), {
+      id: "term-1",
+      workspaceId: "ws-1",
+      kind: "agent",
+      alive: true,
+      title: "Claude",
     });
 
-    routeEventToAtom(
-      "workspace.ws-1.terminal.term-1.output",
-      {
-        transport: "binary",
-        streamId: 7,
-        size: 11,
-        bytes: new TextEncoder().encode("[32mhello[0m\n"),
-      },
-      store
-    );
+    routeEventToAtom("workspace.ws-1.terminal.term-1.exit", { code: 1 }, store);
 
-    expect(store.get(sessionOutputTailAtom)).toEqual({
-      "sess-1": "hello\n",
+    expect(store.get(terminalMetaAtomFamily("term-1"))).toMatchObject({
+      alive: false,
+      exitCode: 1,
     });
-  });
-
-  it("strips ANSI sequences split across multiple terminal output events", () => {
-    const store = createStore();
-    store.set(sessionsAtom, {
-      "sess-1": {
-        id: "sess-1",
-        workspaceId: "ws-1",
-        terminalId: "term-1",
-        providerId: "claude",
-        state: "running",
-        capability: "full",
-        startedAt: 1,
-        lastActiveAt: 1,
-      },
-    });
-
-    routeEventToAtom(
-      "workspace.ws-1.terminal.term-1.output",
-      {
-        transport: "binary",
-        streamId: 7,
-        size: 4,
-        bytes: new TextEncoder().encode("\x1b[32"),
-      },
-      store
-    );
-
-    expect(store.get(sessionOutputTailAtom)).toEqual({});
-
-    routeEventToAtom(
-      "workspace.ws-1.terminal.term-1.output",
-      {
-        transport: "binary",
-        streamId: 8,
-        size: 11,
-        bytes: new TextEncoder().encode("mhello\x1b[0m\n"),
-      },
-      store
-    );
-
-    expect(store.get(sessionOutputTailAtom)).toEqual({
-      "sess-1": "hello\n",
-    });
-  });
-
-  it("preserves multibyte utf-8 characters split across terminal output events", () => {
-    const store = createStore();
-    store.set(sessionsAtom, {
-      "sess-1": {
-        id: "sess-1",
-        workspaceId: "ws-1",
-        terminalId: "term-1",
-        providerId: "claude",
-        state: "running",
-        capability: "full",
-        startedAt: 1,
-        lastActiveAt: 1,
-      },
-    });
-
-    routeEventToAtom(
-      "workspace.ws-1.terminal.term-1.output",
-      {
-        transport: "binary",
-        streamId: 7,
-        size: 2,
-        bytes: new Uint8Array([0x41, 0xe2]),
-      },
-      store
-    );
-
-    expect(store.get(sessionOutputTailAtom)).toEqual({
-      "sess-1": "A",
-    });
-
-    routeEventToAtom(
-      "workspace.ws-1.terminal.term-1.output",
-      {
-        transport: "binary",
-        streamId: 8,
-        size: 3,
-        bytes: new Uint8Array([0x9c, 0x93, 0x42]),
-      },
-      store
-    );
-
-    expect(store.get(sessionOutputTailAtom)).toEqual({
-      "sess-1": "A✓B",
-    });
-  });
-
-  it("does not leak ANSI fragments when the cleaned tail buffer trims from the head at the size cap", () => {
-    const store = createStore();
-    store.set(sessionsAtom, {
-      "sess-1": {
-        id: "sess-1",
-        workspaceId: "ws-1",
-        terminalId: "term-1",
-        providerId: "claude",
-        state: "running",
-        capability: "full",
-        startedAt: 1,
-        lastActiveAt: 1,
-      },
-    });
-
-    store.set(sessionOutputTailAtom, {
-      "sess-1": "x".repeat(SESSION_OUTPUT_TAIL_BYTES - 2),
-    });
-
-    routeEventToAtom(
-      "workspace.ws-1.terminal.term-1.output",
-      {
-        transport: "binary",
-        streamId: 7,
-        size: 4,
-        bytes: new TextEncoder().encode("\x1b[32"),
-      },
-      store
-    );
-
-    routeEventToAtom(
-      "workspace.ws-1.terminal.term-1.output",
-      {
-        transport: "binary",
-        streamId: 8,
-        size: 6,
-        bytes: new TextEncoder().encode("mOK\n"),
-      },
-      store
-    );
-
-    const tail = store.get(sessionOutputTailAtom)["sess-1"];
-    expect(tail).toBe("x".repeat(SESSION_OUTPUT_TAIL_BYTES - 3) + "OK\n");
-    expect(tail.startsWith("[32m")).toBe(false);
-  });
-
-  it("ignores terminal output bytes when no matching session exists", () => {
-    const store = createStore();
-
-    routeEventToAtom(
-      "workspace.ws-1.terminal.term-1.output",
-      {
-        transport: "binary",
-        streamId: 7,
-        size: 5,
-        bytes: new TextEncoder().encode("hello"),
-      },
-      store
-    );
-
-    expect(store.get(sessionOutputTailAtom)).toEqual({});
   });
 
   it("removes local session artifacts on session removed lifecycle events", () => {
@@ -321,14 +154,10 @@ describe("routeEventToAtom", () => {
       exitCode: 1,
       title: "Claude",
     });
-    store.set(sessionOutputTailAtom, {
-      "sess-1": "tail output",
-    });
 
     routeEventToAtom("workspace.ws-1.session.sess-1.lifecycle", { event: "removed" }, store);
 
     expect(store.get(sessionsAtom)).toEqual({});
     expect(store.get(terminalMetaAtomFamily("term-1"))).toBeNull();
-    expect(store.get(sessionOutputTailAtom)).toEqual({});
   });
 });

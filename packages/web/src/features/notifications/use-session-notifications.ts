@@ -47,16 +47,9 @@ import {
 } from "../../atoms/workspaces";
 import { useViewport } from "../../hooks/use-viewport";
 import { useTranslation } from "../../lib/i18n";
-import { notificationPreferencesAtom, pushToastAtom, sessionOutputTailAtom } from "./atoms";
+import { notificationPreferencesAtom, pushToastAtom } from "./atoms";
 import { focusSession } from "./focus-session";
-import {
-  formatDuration,
-  formatProviderLabel,
-  formatWorkspaceLabel,
-  sanitizeInlineText,
-  stripAnsi,
-  summarizeOutput,
-} from "./format";
+import { formatDuration, formatProviderLabel, formatWorkspaceLabel } from "./format";
 
 type NotificationChannel = "none" | "toast" | "system";
 
@@ -247,8 +240,7 @@ export function useSessionNotifications(): void {
   const t = useTranslation();
   const viewport = useViewport();
   // Read-on-demand handle for atoms we don't want to trigger re-renders for —
-  // notably the workspaces map (cheap but noisy) and the high-frequency output
-  // tail buffer. We snapshot them only at the moment a notification fires.
+  // notably the workspaces map, which we snapshot only when a notification fires.
   const store = useStore();
 
   // Per-session trace: previous state + when the current turn started + whether
@@ -353,38 +345,28 @@ export function useSessionNotifications(): void {
 
       // Body has two parts:
       //   line 1: structured metadata — provider, workspace, duration
-      //   line 2: a one-line summary of the agent's last output, if any
-      // The metadata line is always present so the user can attribute the
-      // ping at a glance even when output capture missed (e.g. session
-      // started before the page was opened).
+      //   line 2: a fixed completion hint (running→idle vs running→ended)
       const workspace = store.get(workspacesAtom)[session.workspaceId];
       const metaParts: string[] = [];
-      const providerLabel = sanitizeInlineText(formatProviderLabel(session.providerId));
+      const providerLabel = formatProviderLabel(session.providerId).replace(/\s+/g, " ").trim();
       if (providerLabel) metaParts.push(providerLabel);
-      const workspaceLabel = sanitizeInlineText(formatWorkspaceLabel(workspace ?? null));
+      const workspaceLabel = formatWorkspaceLabel(workspace ?? null)
+        .replace(/\s+/g, " ")
+        .trim();
       if (workspaceLabel) metaParts.push(workspaceLabel);
       const durationMs = next.activeSince !== null ? Date.now() - next.activeSince : null;
       const durationLabel = durationMs !== null ? formatDuration(durationMs) : "";
       if (durationLabel) metaParts.push(durationLabel);
       const metaLine = metaParts.join(" · ");
 
-      const tailText = store.get(sessionOutputTailAtom)[session.id] ?? "";
-      const summary = summarizeOutput(stripAnsi(tailText));
-
-      const fallbackHint =
+      const hint =
         curr === "ended"
           ? t("notification.session_ended_hint")
           : t("notification.session_turn_completed");
 
       const bodyLines: string[] = [];
       if (metaLine) bodyLines.push(metaLine);
-      if (summary) {
-        // Quote-prefix so the summary visually reads as agent output rather
-        // than another piece of UI metadata.
-        bodyLines.push(`> ${summary}`);
-      } else {
-        bodyLines.push(fallbackHint);
-      }
+      bodyLines.push(hint);
       const body = bodyLines.join("\n");
 
       if (notificationPreferences.soundEnabled) {

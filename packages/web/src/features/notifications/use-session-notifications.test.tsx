@@ -11,7 +11,7 @@ import {
   workspacesAtom,
   workspacesLoadStateAtom,
 } from "../../atoms/workspaces";
-import { notificationPreferencesAtom, sessionOutputTailAtom, toastsAtom } from "./atoms";
+import { notificationPreferencesAtom, toastsAtom } from "./atoms";
 import { useSessionNotifications } from "./use-session-notifications";
 
 const viewportMocks = vi.hoisted(() => ({
@@ -577,7 +577,7 @@ describe("useSessionNotifications", () => {
     expect(store.get(toastsAtom)[0]?.title).toBe("run tests 已完成");
   });
 
-  it("appends a quoted summary line when the session has captured output", async () => {
+  it("uses the running→idle fixed hint as the body's second line", async () => {
     const store = createStore();
     store.set(connectionStatusAtom, "disconnected");
     store.set(notificationPreferencesAtom, { enabled: true, soundEnabled: true });
@@ -585,13 +585,6 @@ describe("useSessionNotifications", () => {
     store.set(activeWorkspaceIdAtom, "ws-other");
     seedWorkspace(store, "ws-1", { name: "demo-app" });
     seedRunningSession(store, "sess-1", "ws-1");
-
-    // Pre-seed the output tail buffer with raw terminal content; the
-    // notification layer strips ANSI/control bytes when it assembles the
-    // summary so split escape sequences cannot leak through.
-    store.set(sessionOutputTailAtom, {
-      "sess-1": "analysing files...\n\n\x1b[32mAll 12 tests passed.\x1b[0m\n",
-    });
 
     mountAndCompleteTurn(store, () => {
       store.set(sessionsAtom, {
@@ -605,10 +598,10 @@ describe("useSessionNotifications", () => {
     const body = store.get(toastsAtom)[0]?.body ?? "";
     const lines = body.split("\n");
     expect(lines).toHaveLength(2);
-    expect(lines[1]).toBe("> All 12 tests passed.");
+    expect(lines[1]).toBe("会话回合完成");
   });
 
-  it("strips ANSI sequences that arrive split across terminal chunks before building the summary", async () => {
+  it("uses the running→ended fixed hint as the body's second line", async () => {
     const store = createStore();
     store.set(connectionStatusAtom, "disconnected");
     store.set(notificationPreferencesAtom, { enabled: true, soundEnabled: true });
@@ -617,48 +610,23 @@ describe("useSessionNotifications", () => {
     seedWorkspace(store, "ws-1", { name: "demo-app" });
     seedRunningSession(store, "sess-1", "ws-1");
 
-    store.set(sessionOutputTailAtom, {
-      "sess-1": "analysing files...\n\n\x1b[32mAll 12 tests passed.\x1b[0",
-    });
-
-    mountAndCompleteTurn(store, () => {
-      store.set(sessionsAtom, {
-        "sess-1": createSession("sess-1", "idle", "ws-1"),
-      });
-    });
-
-    await waitFor(() => {
-      expect(store.get(toastsAtom)).toHaveLength(1);
-    });
-
-    const body = store.get(toastsAtom)[0]?.body ?? "";
-    const lines = body.split("\n");
-    expect(lines[1]).toBe("> All 12 tests passed.");
-  });
-
-  it("falls back to the generic hint when no output has been captured for the session", async () => {
-    const store = createStore();
-    store.set(connectionStatusAtom, "disconnected");
-    store.set(notificationPreferencesAtom, { enabled: true, soundEnabled: true });
-    seedWorkspace(store, "ws-other");
-    store.set(activeWorkspaceIdAtom, "ws-other");
-    seedWorkspace(store, "ws-1", { name: "demo-app" });
-    seedRunningSession(store, "sess-1", "ws-1");
-
-    mountAndCompleteTurn(store, () => {
-      store.set(sessionsAtom, {
-        "sess-1": createSession("sess-1", "idle", "ws-1"),
-      });
-    });
+    mountAndCompleteTurn(
+      store,
+      () => {
+        store.set(sessionsAtom, {
+          "sess-1": createSession("sess-1", "ended", "ws-1"),
+        });
+      },
+      500
+    );
 
     await waitFor(() => {
       expect(store.get(toastsAtom)).toHaveLength(1);
     });
     const body = store.get(toastsAtom)[0]?.body ?? "";
     const lines = body.split("\n");
-    // Two lines, but the second one is the i18n hint, not a quoted summary.
     expect(lines).toHaveLength(2);
-    expect(lines[1]?.startsWith("> ")).toBe(false);
+    expect(lines[1]).toBe("会话已停止运行");
   });
 
   it("skips the chime when soundEnabled is false but still posts the toast", async () => {

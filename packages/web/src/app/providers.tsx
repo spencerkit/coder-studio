@@ -34,12 +34,7 @@ import {
 } from "../atoms";
 import { authenticatedAtom } from "../atoms/app-ui";
 import type { DispatchCommand } from "../atoms/connection";
-import {
-  appendSessionOutputAtom,
-  clearSessionOutputAtom,
-  useSessionNotifications,
-} from "../features/notifications";
-import { stripAnsiChunk } from "../features/notifications/format";
+import { useSessionNotifications } from "../features/notifications";
 import { supervisorCyclesAtom, supervisorsAtom } from "../features/supervisor/atoms";
 import { terminalMetaAtomFamily } from "../features/terminal-panel/atoms";
 import {
@@ -48,7 +43,7 @@ import {
   gitBranchListAtomFamily,
   gitStateAtomFamily,
 } from "../features/workspace/atoms";
-import type { ConnectionStatus, EventListener, TerminalBinaryPayload } from "../ws";
+import type { ConnectionStatus, EventListener } from "../ws";
 import { resolveWsUrl, WsClient } from "../ws";
 
 /**
@@ -57,8 +52,6 @@ import { resolveWsUrl, WsClient } from "../ws";
  */
 let globalWsClient: WsClient | null = null;
 let pendingDisconnectTimer: NodeJS.Timeout | null = null;
-const sessionOutputDecoders = new Map<string, TextDecoder>();
-const sessionOutputAnsiCarry = new Map<string, string>();
 
 interface WorkspaceRefreshHint {
   refreshGit: boolean;
@@ -84,8 +77,6 @@ export function resetAppProvidersSingletonsForTests() {
     pendingDisconnectTimer = null;
   }
   globalWsClient = null;
-  sessionOutputDecoders.clear();
-  sessionOutputAnsiCarry.clear();
 }
 
 function mergeRefreshHints(
@@ -142,38 +133,6 @@ function parseWorkspaceRefreshHint(
       refreshEditorBuffers: Boolean(data.treeChanged),
     },
   };
-}
-
-/**
- * Shared decoder for terminal output chunks. PTY data is a UTF-8 byte stream.
- * Decoding once-per-event is cheap, but keeping the TextDecoder around saves
- * allocations at high stream rates.
- */
-function clearTerminalOutputStreamState(terminalId: string): void {
-  sessionOutputDecoders.delete(terminalId);
-  sessionOutputAnsiCarry.delete(terminalId);
-}
-
-function decodeTerminalOutputBytes(terminalId: string, chunk: Uint8Array): string {
-  let decoder = sessionOutputDecoders.get(terminalId);
-  if (!decoder) {
-    decoder = new TextDecoder("utf-8", { fatal: false });
-    sessionOutputDecoders.set(terminalId, decoder);
-  }
-
-  const decoded = decoder.decode(chunk, { stream: true });
-  if (!decoded) {
-    return "";
-  }
-
-  const { cleaned, carry } = stripAnsiChunk(decoded, sessionOutputAnsiCarry.get(terminalId) ?? "");
-  if (carry) {
-    sessionOutputAnsiCarry.set(terminalId, carry);
-  } else {
-    sessionOutputAnsiCarry.delete(terminalId);
-  }
-
-  return cleaned;
 }
 
 interface AppProvidersProps {
@@ -600,10 +559,8 @@ export function routeEventToAtom(topic: string, payload: unknown, store: Store):
         if (data.event === "removed") {
           const removedSession = store.get(sessionsAtom)[sessionId];
           if (removedSession?.terminalId) {
-            clearTerminalOutputStreamState(removedSession.terminalId);
             store.set(terminalMetaAtomFamily(removedSession.terminalId), null);
           }
-          store.set(clearSessionOutputAtom, sessionId);
           store.set(sessionsAtom, (prev: Record<string, Session>) => {
             if (!(sessionId in prev)) {
               return prev;
@@ -695,7 +652,6 @@ export function routeEventToAtom(topic: string, payload: unknown, store: Store):
       // workspace.{id}.terminal.{terminalId}.created
       if (terminalSubtopic === "created") {
         const data = payload as { id: string; kind: string; title?: string; cwd?: string };
-        clearTerminalOutputStreamState(terminalId);
         const atom = terminalMetaAtomFamily(terminalId);
         store.set(atom, {
           id: data.id,
@@ -708,28 +664,9 @@ export function routeEventToAtom(topic: string, payload: unknown, store: Store):
       }
 
       // workspace.{id}.terminal.{terminalId}.output
+      // Terminal panels consume output directly via xterm.js — no router-level
+      // handling needed.
       if (terminalSubtopic === "output") {
-        // Terminal panels render output directly into xterm.js. We skim a
-        // copy here only when the terminal is bound to a known *agent* session,
-        // so the notification engine can include a tail summary in its body.
-        // Shell terminals (no session) are ignored to keep the buffer small.
-        const data = payload as TerminalBinaryPayload;
-        const bytes = data?.bytes;
-        if (!bytes || !ArrayBuffer.isView(bytes) || bytes.byteLength === 0) return;
-        const sessions = store.get(sessionsAtom);
-        const session = Object.values(sessions).find((s) => s.terminalId === terminalId);
-        if (!session) return;
-
-        const cleaned = decodeTerminalOutputBytes(
-          terminalId,
-          new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength)
-        );
-        if (cleaned) {
-          store.set(appendSessionOutputAtom, {
-            sessionId: session.id,
-            text: cleaned,
-          });
-        }
         return;
       }
 
@@ -744,14 +681,6 @@ export function routeEventToAtom(topic: string, payload: unknown, store: Store):
             exitCode: data.code,
             alive: false,
           });
-        }
-        // Clean up the output tail buffer for the session this terminal belonged
-        // to (if any). Avoids unbounded growth across long-lived browser tabs.
-        const sessions = store.get(sessionsAtom);
-        const session = Object.values(sessions).find((s) => s.terminalId === terminalId);
-        clearTerminalOutputStreamState(terminalId);
-        if (session) {
-          store.set(clearSessionOutputAtom, session.id);
         }
         return;
       }

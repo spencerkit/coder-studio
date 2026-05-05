@@ -46,8 +46,6 @@ vi.mock("../features/config-drift-banner", () => ({
 
 vi.mock("../features/notifications", () => ({
   useSessionNotifications: () => {},
-  appendSessionOutputAtom: null,
-  clearSessionOutputAtom: null,
   ToastContainer: () => null,
 }));
 

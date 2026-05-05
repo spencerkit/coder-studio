@@ -32,8 +32,6 @@ vi.mock("../ws", () => ({
 
 vi.mock("../features/notifications", () => ({
   useSessionNotifications: () => {},
-  appendSessionOutputAtom: null,
-  clearSessionOutputAtom: null,
 }));
 
 function renderProviders(store = createStore()) {
