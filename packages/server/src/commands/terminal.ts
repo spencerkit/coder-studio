@@ -3,6 +3,8 @@
  */
 
 import {
+  TERMINAL_INPUT_ACTIVITIES,
+  type TerminalInputActivity,
   TerminalInputBase64Args,
   TerminalInputBinaryArgs,
   TerminalSnapshotBinaryResult,
@@ -14,11 +16,21 @@ import { basename } from 'node:path';
 import { z } from 'zod';
 import { registerCommand } from '../ws/dispatch.js';
 
+const TerminalInputActivitySchema = z
+  .enum([...TERMINAL_INPUT_ACTIVITIES, 'system'])
+  .optional()
+  .transform((activity): TerminalInputActivity | undefined => {
+    if (activity === 'system') {
+      return 'internal_submit';
+    }
+    return activity;
+  });
+
 const TerminalInputSchema = z.union([
   z.object({
     terminalId: z.string(),
     bytes: z.string(),
-    activity: z.enum(['typing', 'submit', 'system']).optional(),
+    activity: TerminalInputActivitySchema,
     submittedText: z.string().optional(),
   }),
   z.object({
@@ -26,7 +38,7 @@ const TerminalInputSchema = z.union([
     transport: z.literal('binary'),
     streamId: z.number().int().nonnegative(),
     size: z.number().int().nonnegative(),
-    activity: z.enum(['typing', 'submit', 'system']).optional(),
+    activity: TerminalInputActivitySchema,
     submittedText: z.string().optional(),
   }),
 ]);
@@ -49,6 +61,10 @@ function decodeTerminalInput(args: TerminalInputBase64Args | TerminalInputBinary
 
 export function registerPendingTerminalInput(args: TerminalInputBinaryArgs, payload: Buffer): void {
   pendingTerminalInput.set(args.streamId, { args, payload });
+}
+
+export function clearPendingTerminalInput(streamId: number): void {
+  pendingTerminalInput.delete(streamId);
 }
 
 function allocateOutboundBinaryStreamId(): number {
@@ -242,13 +258,6 @@ registerCommand(
   async (args, ctx) => {
     const buffer = decodeTerminalInput(args);
     const sessionId = ctx.sessionMgr.findSessionIdByTerminal(args.terminalId);
-    console.log('[DEBUG] terminal.input command:', {
-      terminalId: args.terminalId,
-      sessionId,
-      activity: args.activity,
-      bufferSize: buffer.length,
-      bufferPreview: buffer.toString('utf-8').substring(0, 50),
-    });
     if (sessionId) {
       ctx.sessionMgr.sendInput(sessionId, buffer, args.activity, args.submittedText);
       return;

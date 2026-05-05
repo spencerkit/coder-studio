@@ -15,6 +15,7 @@ import WebSocket from 'ws';
 import type { FastifyRequest } from 'fastify';
 import type { CommandContext } from '../ws/dispatch.js';
 import '../commands/terminal.js';
+import { clearPendingTerminalInput } from '../commands/terminal.js';
 
 describe('WsHub', () => {
   let hub: WsHub;
@@ -447,5 +448,59 @@ describe('WsHub', () => {
       .map(([p]: [string]) => JSON.parse(p))
       .find((m: any) => m.kind === 'result' && m.id === 'cmd-input-1');
     expect(result?.ok).toBe(true);
+  });
+
+  it('clears buffered binary terminal.input payloads when validation fails', async () => {
+    hub.destroy();
+    hub = new WsHub({
+      eventBus,
+      commandContext: {
+        ...mockCommandContext,
+        terminalMgr: { write: vi.fn() } as any,
+        sessionMgr: { findSessionIdByTerminal: vi.fn().mockReturnValue(null) } as any,
+      },
+      config: { auth: { enabled: false } } as any,
+      fencingMgr: {} as any,
+    });
+
+    const socket = createMockSocket();
+    hub.handleConnection(socket, createMockRequest());
+    const messageHandler = socket.on.mock.calls.find(
+      (call: any[]) => call[0] === 'message'
+    )?.[1];
+    socket.send.mockClear();
+
+    const streamId = 1_000_002;
+    const jsonCommand = Buffer.from(
+      JSON.stringify({
+        kind: 'command',
+        id: 'cmd-input-invalid-1',
+        op: 'terminal.input',
+        args: {
+          terminalId: 'term-1',
+          transport: 'binary',
+          streamId,
+          size: 5,
+          activity: 'definitely_invalid',
+        },
+      })
+    );
+
+    void messageHandler!(jsonCommand, false);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    void messageHandler!(Buffer.from('hello'), true);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const result = socket.send.mock.calls
+      .filter(([p]: [unknown]) => typeof p === 'string')
+      .map(([p]: [string]) => JSON.parse(p))
+      .find((m: any) => m.kind === 'result' && m.id === 'cmd-input-invalid-1');
+
+    expect(result?.ok).toBe(false);
+    expect(result?.error?.code).toBe('validation_error');
+
+    clearPendingTerminalInput(streamId);
   });
 });

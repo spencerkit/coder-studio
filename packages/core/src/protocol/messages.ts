@@ -47,9 +47,19 @@ export interface TerminalSnapshotBinaryResult {
   source: 'headless';
 }
 
+export const TERMINAL_INPUT_ACTIVITIES = [
+  'typing',
+  'submit',
+  'internal_submit',
+  'control',
+] as const;
+
+export type TerminalInputActivity = (typeof TERMINAL_INPUT_ACTIVITIES)[number];
+export type LegacyTerminalInputActivity = TerminalInputActivity | 'system';
+
 export interface TerminalInputBinaryArgs {
   terminalId: string;
-  activity?: 'typing' | 'submit' | 'system';
+  activity?: LegacyTerminalInputActivity;
   submittedText?: string;
   transport: 'binary';
   streamId: number;
@@ -59,7 +69,7 @@ export interface TerminalInputBinaryArgs {
 export interface TerminalInputBase64Args {
   terminalId: string;
   bytes: string;
-  activity?: 'typing' | 'submit' | 'system';
+  activity?: LegacyTerminalInputActivity;
   submittedText?: string;
 }
 

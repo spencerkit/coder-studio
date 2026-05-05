@@ -974,7 +974,7 @@ describe('XtermHost', () => {
     );
   });
 
-  it('marks focus reporting bytes as system activity before dispatching', async () => {
+  it('suppresses focus reporting bytes instead of dispatching them', async () => {
     const store = createStore();
     const sendTerminalInput = vi.fn().mockResolvedValue(undefined);
 
@@ -994,12 +994,7 @@ describe('XtermHost', () => {
 
     await onDataCallback?.('\x1b[I');
 
-    expect(sendTerminalInput).toHaveBeenCalledWith(
-      'focus-terminal',
-      new TextEncoder().encode('\x1b[I'),
-      'system',
-      undefined
-    );
+    expect(sendTerminalInput).not.toHaveBeenCalled();
   });
 
   it('marks enter key input as submit activity before dispatching', async () => {

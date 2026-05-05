@@ -5,7 +5,13 @@
  * It manages Agent domain semantics and the PTY-driven state machine.
  */
 
-import type { Session, SessionState, ProviderDefinition, DomainEvent } from '@coder-studio/core';
+import type {
+  Session,
+  SessionState,
+  ProviderDefinition,
+  DomainEvent,
+  TerminalInputActivity,
+} from '@coder-studio/core';
 import { deriveSessionTitle } from '@coder-studio/core';
 import type { EventBus, Unsubscribe } from '../bus/event-bus.js';
 import type { TerminalManager } from '../terminal/manager.js';
@@ -240,7 +246,7 @@ export class SessionManager {
    */
   onTerminalInput(
     terminalId: string,
-    activity: 'typing' | 'submit' | 'system' = 'typing',
+    activity: TerminalInputActivity = 'typing',
     text?: string
   ): void {
     const sessionId = this.terminalToSession.get(terminalId);
@@ -249,7 +255,11 @@ export class SessionManager {
     const session = this.sessions.get(sessionId);
     if (!session) return;
 
-    if (activity === 'system') {
+    if (activity === 'control' || activity === 'typing') {
+      return;
+    }
+
+    if (activity === 'internal_submit') {
       session.awaitingTurnCompletion = true;
       const prev = session.state;
       if (session.state !== 'running') {
@@ -306,7 +316,7 @@ export class SessionManager {
   sendInput(
     sessionId: string,
     bytes: Buffer,
-    activity: 'typing' | 'submit' | 'system' = 'typing',
+    activity: TerminalInputActivity = 'typing',
     submittedText?: string
   ): void {
     const session = this.sessions.get(sessionId);
@@ -315,7 +325,10 @@ export class SessionManager {
     }
 
     this.deps.terminalMgr.write(session.terminalId, bytes);
-    const text = activity === 'submit' ? (submittedText ?? bytes.toString('utf-8')) : undefined;
+    const text =
+      activity === 'submit' || activity === 'internal_submit'
+        ? (submittedText ?? bytes.toString('utf-8'))
+        : undefined;
     this.onTerminalInput(session.terminalId, activity, text);
   }
 

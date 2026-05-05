@@ -276,7 +276,7 @@ describe('SessionManager session-level API', () => {
     expect(lifecycleEvents).toEqual(['turn_completed']);
   });
 
-  it('arms turn completion for system input without overwriting latest submitted user input', async () => {
+  it('arms turn completion for internal_submit input without overwriting latest submitted user input', async () => {
     vi.useFakeTimers();
     provider = {
       ...provider,
@@ -313,7 +313,7 @@ describe('SessionManager session-level API', () => {
     vi.advanceTimersByTime(3000);
     lifecycleEvents.length = 0;
 
-    sessionMgr.sendInput(session.id, Buffer.from('[Supervisor] follow up\r', 'utf8'), 'system');
+    sessionMgr.sendInput(session.id, Buffer.from('[Supervisor] follow up\r', 'utf8'), 'internal_submit');
     expect(sessionMgr.get(session.id)?.state).toBe('running');
 
     onData?.('agent reply\n');
@@ -322,6 +322,45 @@ describe('SessionManager session-level API', () => {
     expect(sessionMgr.get(session.id)?.state).toBe('idle');
     expect(sessionMgr.getLatestSubmittedUserInput(session.id)).toBe('fix the build');
     expect(lifecycleEvents).toEqual(['turn_completed']);
+  });
+
+  it('ignores control input for session state and turn completion', async () => {
+    vi.useFakeTimers();
+    provider = {
+      ...provider,
+      idleHeuristics: {
+        idlePromptPatterns: [],
+        idleDebounceMs: 3000,
+      },
+    } as ProviderDefinition;
+    sessionMgr = new SessionManager({
+      terminalMgr,
+      eventBus,
+      db: {
+        insert: vi.fn(),
+        update: vi.fn(),
+        findById: vi.fn(),
+        findByWorkspaceId: vi.fn().mockReturnValue([]),
+        listHydratable: vi.fn().mockReturnValue([]),
+        delete: vi.fn(),
+      } as SessionDatabase,
+      broadcaster: { broadcast: vi.fn() } as Broadcaster,
+      providerRegistry: [provider],
+      providerConfigRepo: { get: vi.fn(() => undefined) } as any,
+    });
+    const lifecycleEvents: string[] = [];
+    eventBus.on('session.lifecycle', (event) => lifecycleEvents.push(event.event));
+
+    const session = await createSession();
+    const onData = vi.mocked(mockPty.onData).mock.calls.at(-1)?.[0];
+    onData?.('booting up\n');
+    vi.advanceTimersByTime(3000);
+    lifecycleEvents.length = 0;
+
+    sessionMgr.sendInput(session.id, Buffer.from('\x1b[I'), 'control');
+
+    expect(sessionMgr.get(session.id)?.state).toBe('idle');
+    expect(lifecycleEvents).toEqual([]);
   });
 
   it('does not expose a resume API', () => {

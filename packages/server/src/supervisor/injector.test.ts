@@ -34,7 +34,7 @@ const supervisor = {
 };
 
 describe('SupervisorInjector', () => {
-  it('writes message through sessionMgr.sendInput using system activity', async () => {
+  it('writes message through sessionMgr.sendInput using internal_submit activity', async () => {
     const sendInputSpy = vi.fn();
     const injector = makeInjector(sendInputSpy);
 
@@ -46,7 +46,7 @@ describe('SupervisorInjector', () => {
       []
     );
 
-    expect(sendInputSpy).toHaveBeenCalledWith('sess-1', expect.any(Buffer), 'system');
+    expect(sendInputSpy).toHaveBeenCalledWith('sess-1', expect.any(Buffer), 'internal_submit');
     const buffer = sendInputSpy.mock.calls[0]![1] as Buffer;
     const payload = buffer.toString('utf8');
     expect(payload).toContain('[Supervisor] Wire the repos into SupervisorManager next.');

@@ -10,6 +10,7 @@ import {
   decodeTerminalOutputFrame,
   TERMINAL_BINARY_OUTPUT_VERSION,
   TerminalBinaryFrameType,
+  type TerminalInputActivity,
   type ClientToServer,
   type ServerToClient,
   type TerminalBinaryEventData,
@@ -305,7 +306,7 @@ export class WsClient {
   async sendTerminalInput(
     terminalId: string,
     bytes: Uint8Array,
-    activity?: 'typing' | 'submit' | 'system',
+    activity?: TerminalInputActivity,
     submittedText?: string
   ): Promise<void> {
     return new Promise((resolve, reject) => {

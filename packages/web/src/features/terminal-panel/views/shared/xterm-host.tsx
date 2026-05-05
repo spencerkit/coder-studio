@@ -17,7 +17,7 @@ import { terminalMetaAtomFamily, terminalOutputAtomFamily } from '../../atoms';
 import { dispatchCommandAtom } from '../../../../atoms/connection';
 import { themeAtom } from '../../../../atoms/app-ui';
 import { useTranslation } from '../../../../lib/i18n';
-import { Topics } from '@coder-studio/core';
+import { Topics, type TerminalInputActivity } from '@coder-studio/core';
 import type { OutputBuffer } from '../../atoms';
 import type {
   TerminalBinaryPayload,
@@ -39,8 +39,7 @@ import { usePasteDropUpload } from '../../uploads/use-paste-drop-upload';
 import { XtermPlaceholder } from './xterm-placeholder';
 
 const MOBILE_TOUCH_SCROLL_PX_PER_LINE = 16;
-
-type TerminalInputActivity = 'typing' | 'submit' | 'system';
+const TERMINAL_FOCUS_REPORTING_BYTES = new Set(['\x1b[I', '\x1b[O']);
 
 interface TerminalInputDraftState {
   nextDraft: string;
@@ -54,8 +53,8 @@ function isReplayGeneratedTerminalResponse(data: string): boolean {
 }
 
 function classifyTerminalInput(data: string): TerminalInputActivity {
-  if (data === '\x1b[I' || data === '\x1b[O') {
-    return 'system';
+  if (TERMINAL_FOCUS_REPORTING_BYTES.has(data)) {
+    return 'control';
   }
 
   if (data.includes('\r') || data.includes('\n')) {
@@ -70,7 +69,7 @@ function consumeTerminalInputDraft(
   data: string,
   activity: TerminalInputActivity
 ): TerminalInputDraftState {
-  if (activity === 'system') {
+  if (activity === 'control') {
     return { nextDraft: draft };
   }
 
@@ -634,6 +633,13 @@ export function XtermHost({
         isReplayGeneratedTerminalResponse(data)
       ) {
         traceTerminal(terminalId, 'input.suppressed-replay-response', {
+          summary: summarizeTerminalData(data),
+        });
+        return;
+      }
+
+      if (TERMINAL_FOCUS_REPORTING_BYTES.has(data)) {
+        traceTerminal(terminalId, 'input.suppressed-focus-report', {
           summary: summarizeTerminalData(data),
         });
         return;

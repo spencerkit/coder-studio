@@ -87,7 +87,7 @@ export class SupervisorInjector {
     const SUBMIT = '\r';
     const payload = `${BRACKETED_PASTE_START}${text}${BRACKETED_PASTE_END}${SUBMIT}`;
 
-    this.deps.sessionMgr.sendInput(session.id, Buffer.from(payload, 'utf8'), 'system');
+    this.deps.sessionMgr.sendInput(session.id, Buffer.from(payload, 'utf8'), 'internal_submit');
     return { injected: true, text };
   }
 }

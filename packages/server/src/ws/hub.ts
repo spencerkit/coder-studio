@@ -20,7 +20,7 @@ import type WebSocket from 'ws';
 import type { FastifyRequest, FastifyBaseLogger } from 'fastify';
 import { v4 as uuidv4 } from 'uuid';
 import { EventBus } from '../bus/event-bus.js';
-import { registerPendingTerminalInput } from '../commands/terminal.js';
+import { clearPendingTerminalInput, registerPendingTerminalInput } from '../commands/terminal.js';
 import { WsClient, ClientId } from './client.js';
 import { dispatch, type CommandContext } from './dispatch.js';
 import type { ServerConfig } from '../config.js';
@@ -120,6 +120,7 @@ export class WsHub implements Broadcaster {
         break;
 
       case 'command': {
+        let pendingBinaryStreamId: number | null = null;
         if (msg.op === 'terminal.input' && isBinaryTerminalInputArgs(msg.args)) {
           // The JSON command arrives one frame ahead of its binary payload.
           // Wait for the payload before dispatching so the handler can decode
@@ -127,6 +128,7 @@ export class WsHub implements Broadcaster {
           try {
             const payload = await this.awaitBinaryPayload(client.id);
             registerPendingTerminalInput(msg.args, payload);
+            pendingBinaryStreamId = msg.args.streamId;
           } catch (error) {
             client.send({
               kind: 'result',
@@ -144,6 +146,13 @@ export class WsHub implements Broadcaster {
           }
         }
         const result = await dispatch(msg as Command, this.deps.commandContext, client.id);
+        if (
+          pendingBinaryStreamId !== null &&
+          !result.ok &&
+          result.error?.code === 'validation_error'
+        ) {
+          clearPendingTerminalInput(pendingBinaryStreamId);
+        }
         client.send(result);
         break;
       }

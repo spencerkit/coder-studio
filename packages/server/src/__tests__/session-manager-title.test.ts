@@ -132,7 +132,8 @@ describe('SessionManager title derivation', () => {
     const session = await createSession();
 
     sessionMgr.onTerminalInput('terminal-1', 'typing', 'keypress');
-    sessionMgr.onTerminalInput('terminal-1', 'system', 'ping');
+    sessionMgr.onTerminalInput('terminal-1', 'control', 'ping');
+    sessionMgr.onTerminalInput('terminal-1', 'internal_submit', 'ping');
 
     expect(sessionMgr.get(session.id)?.title).toBeUndefined();
     const updateCalls = mockDb.update.mock.calls;

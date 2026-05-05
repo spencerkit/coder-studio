@@ -8,7 +8,7 @@ import { dispatch } from '../ws/dispatch.js';
 import type { CommandContext } from '../ws/dispatch.js';
 
 import '../commands/terminal.js';
-import { registerPendingTerminalInput } from '../commands/terminal.js';
+import { clearPendingTerminalInput, registerPendingTerminalInput } from '../commands/terminal.js';
 
 function createContext(overrides: Partial<CommandContext> = {}): CommandContext {
   return {
@@ -486,6 +486,65 @@ describe('terminal commands', () => {
     expect(ctx.terminalMgr.write).not.toHaveBeenCalled();
   });
 
+  it('accepts control activity for session-owned terminal.input', async () => {
+    const ctx = createContext({
+      sessionMgr: {
+        findSessionIdByTerminal: vi.fn().mockReturnValue('sess-1'),
+        sendInput: vi.fn(),
+        resize: vi.fn(),
+      } as never,
+    });
+
+    const result = await dispatch(
+      {
+        kind: 'command',
+        id: 'terminal-input-control-1',
+        op: 'terminal.input',
+        args: {
+          terminalId: 'term-1',
+          bytes: Buffer.from('\x1b[I').toString('base64'),
+          activity: 'control',
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(ctx.sessionMgr.sendInput).toHaveBeenCalledWith('sess-1', Buffer.from('\x1b[I'), 'control', undefined);
+  });
+
+  it('maps legacy system activity to internal_submit for session-owned terminal.input', async () => {
+    const ctx = createContext({
+      sessionMgr: {
+        findSessionIdByTerminal: vi.fn().mockReturnValue('sess-1'),
+        sendInput: vi.fn(),
+        resize: vi.fn(),
+      } as never,
+    });
+
+    const result = await dispatch(
+      {
+        kind: 'command',
+        id: 'terminal-input-legacy-system-1',
+        op: 'terminal.input',
+        args: {
+          terminalId: 'term-1',
+          bytes: Buffer.from('legacy').toString('base64'),
+          activity: 'system',
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(ctx.sessionMgr.sendInput).toHaveBeenCalledWith(
+      'sess-1',
+      Buffer.from('legacy'),
+      'internal_submit',
+      undefined
+    );
+  });
+
   it('falls back to terminalMgr.write for terminal.input when no session owns the terminal', async () => {
     const ctx = createContext({
       sessionMgr: {
@@ -513,6 +572,61 @@ describe('terminal commands', () => {
     expect(result.ok).toBe(true);
     expect(ctx.terminalMgr.write).toHaveBeenCalledWith('term-shell', Buffer.from('ls\n'));
     expect(ctx.sessionMgr.sendInput).not.toHaveBeenCalled();
+  });
+
+  it('rejects invalid terminal.input activity values', async () => {
+    const result = await dispatch(
+      {
+        kind: 'command',
+        id: 'terminal-input-invalid-activity',
+        op: 'terminal.input',
+        args: {
+          terminalId: 'term-1',
+          bytes: Buffer.from('hello').toString('base64'),
+          activity: 'definitely_invalid',
+        },
+      },
+      createContext()
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe('validation_error');
+  });
+
+  it('clears pending binary payloads after validation failures', async () => {
+    const bytes = Buffer.from('hello');
+    const streamId = 31337;
+    registerPendingTerminalInput(
+      {
+        terminalId: 'term-1',
+        transport: 'binary',
+        streamId,
+        size: bytes.length,
+        activity: 'typing',
+      },
+      bytes
+    );
+
+    const result = await dispatch(
+      {
+        kind: 'command',
+        id: 'terminal-input-invalid-binary-activity',
+        op: 'terminal.input',
+        args: {
+          terminalId: 'term-1',
+          transport: 'binary',
+          streamId,
+          size: bytes.length,
+          activity: 'definitely_invalid',
+        },
+      },
+      createContext()
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe('validation_error');
+
+    clearPendingTerminalInput(streamId);
   });
 
   it('delegates terminal.resize to sessionMgr.resize when a session owns the terminal', async () => {
