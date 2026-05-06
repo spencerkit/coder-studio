@@ -1,1403 +1,1623 @@
-# Product Requirements Document: Coder Studio
+# Product Requirements Document: Coder Studio (Product Review Edition, Code-State Baseline)
 
-> **Version:** 0.2.6  
-> **Document Date:** April 13, 2026  
-> **Product Type:** Local-first AI Coding Workbench
-
----
-
-## Table of Contents
-
-1. [Product Overview](#1-product-overview)
-2. [Target Users](#2-target-users)
-3. [Core Value Proposition](#3-core-value-proposition)
-4. [Information Architecture](#4-information-architecture)
-5. [Global UI Framework](#5-global-ui-framework)
-6. [Authentication System](#6-authentication-system)
-7. [Workspace Management](#7-workspace-management)
-8. [Agent Session Management](#8-agent-session-management)
-9. [Code Editor & File Browsing](#9-code-editor--file-browsing)
-10. [Git Integration](#10-git-integration)
-11. [Terminal System](#11-terminal-system)
-12. [Command Palette](#12-command-palette)
-13. [Settings](#13-settings)
-14. [Focus Mode](#14-focus-mode)
-15. [Notification System](#15-notification-system)
-16. [Supervisor System](#16-supervisor-system)
-17. [Internationalization](#17-internationalization)
-18. [Design System](#18-design-system)
-19. [Interaction Patterns](#19-interaction-patterns)
-20. [Edge Cases & Error States](#20-edge-cases--error-states)
+> **Last updated:** 2026-05-06  
+> **Code baseline:** current implementation in `packages/web` and `packages/server`  
+> **Scope:** Web UI, embedded server, WebSocket command layer  
+> **Reading notes:**
+> - Chapters `1 ~ 7` describe the current visible product capabilities, page structures, and user interactions from a product review perspective.
+> - Chapter `8` preserves implementation boundaries and excluded scope so unshipped capabilities are not written up as shipped features.
+> - The current code is the source of truth. Do not inherit unlanded items from older PRDs, the README, or historical planning notes.
 
 ---
 
-## 1. Product Overview
+## 1. Document Notes
 
-### 1.1 Product Definition
+### 1.1 Scope
 
-Coder Studio is a local-first AI coding workbench that integrates AI-powered code generation agents, code editing, version control, and terminal access into a unified developer interface. It enables developers to orchestrate AI coding agents (Claude, Codex) alongside traditional development tools within a single workspace.
+This document only describes product capabilities that are **currently wired, reachable, and interactive** in the codebase, including:
 
-### 1.2 Product Vision
+- Welcome page, auth page, workspace page, settings page, and 404 page
+- The desktop and mobile workspace experiences
+- Core capabilities around files, Git, sessions, terminals, notifications, and configuration
 
-Provide developers with a centralized workbench where AI agents and human developers can collaborate on code in real time, with full visibility into agent activity, file changes, and terminal output.
+### 1.2 Writing Principles
 
-### 1.3 Key Characteristics
+- **Code state is the source of truth:** a component or test existing in the repo does not mean the page-level feature is shipped.
+- **Page-first structure:** describe page goals and interactions first, then state handling, boundaries, and error feedback.
+- **User-visible capability first:** the main body stays in product language whenever possible; implementation facts are consolidated in the appendix.
 
-- **Local-first:** Runs on the user's machine; all code, terminals, and agent processes execute locally.
-- **Multi-agent capable:** Supports running multiple AI coding agent sessions in parallel within a single workspace.
-- **Full-stack development environment:** Combines code editing, Git operations, terminal access, and agent orchestration in one interface.
-- **Distraction-free:** Offers a focus mode that hides non-essential UI elements for concentrated work.
+### 1.3 How to Read This Document
 
----
+- For **product review**, focus on Chapters `2 ~ 7`.
+- To decide whether a capability is **actually wired**, merely UI, or still blocked by implementation boundaries, focus on Chapter `8`.
 
-## 2. Target Users
+## 2. Product Overview
 
-### 2.1 Primary User
+### 2.1 Product Positioning
 
-**Professional Software Developers** who use AI coding assistants (Claude Code, Codex) as part of their daily workflow and need a dedicated environment to manage multiple agent sessions alongside their code, terminals, and version control.
+Coder Studio is an **AI coding workspace for self-deployed environments, built around the promise Deploy once, coding everywhere**. Users can deploy it on a personal computer, development machine, home server, or cloud host, and then access the same workspace, sessions, terminals, and Git capabilities from a browser on desktop or mobile. Depending on how it is deployed, that access can stay on the same machine, remain inside a LAN, or be exposed externally.
 
-### 2.2 Secondary Users
+The current implementation brings the following capabilities into one workspace system:
 
-- **Technical Leads** reviewing AI-generated code and agent progress.
-- **DevOps Engineers** managing local development environments with AI assistance.
+- Open and switch between multiple local workspaces
+- Create multiple AI sessions inside one workspace (`Claude` / `Codex`)
+- View and continue agent sessions through terminal-style interaction
+- Browse a file tree, edit text files, and preview image files
+- Inspect Git status, diffs, commits, push / pull, and branch switching
+- Manage providers, notifications, appearance, and part of shortcut configuration
 
----
+### 2.2 Current Core Value
 
-## 3. Core Value Proposition
+At the product level, the current version delivers three core values:
 
-| Need | Solution |
-|------|----------|
-| Manage multiple AI agent sessions simultaneously | Multi-pane agent workspace with parallel session support |
-| See what agents are doing in real time | Embedded per-agent terminals with live output streaming |
-| Review and edit agent-generated code | Integrated code editor with file browsing and diff viewing |
-| Track and commit agent changes | Git integration with staging, diff review, and in-place commits |
-| Run commands alongside agent work | Multi-tab terminal panel with agent-specific and shell terminals |
-| Stay focused during long agent runs | Focus mode, completion notifications, and supervisor objective tracking |
+1. **Deploy once, coding everywhere:** deploy once and continue coding from any reachable device.
+2. **Bring AI sessions, files, Git, and terminals into one workspace workflow.**
+3. **Provide two real, distinct access experiences for desktop and mobile.**
 
----
+### 2.3 Form Factors
 
-## 4. Information Architecture
+| Form factor | Shape | Core characteristics |
+| --- | --- | --- |
+| Desktop | Wide multi-pane workbench | Top bar + left sidebar + main area + bottom terminal |
+| Mobile | Sheet / Dock driven workbench | Top bar + single-session main area + bottom Dock + multiple full-screen Sheets |
 
-```
-Coder Studio
-├── Authentication Screen (if enabled)
-├── App Level
-│   ├── Top Bar (global, always visible when workspaces exist)
-│   └── Content Area
-│       ├── Welcome Screen (no workspaces open)
-│       ├── Workspace Screen (active workspace)
-│       │   ├── Left Panel: Code Sidebar (Files / Git Diff)
-│       │   ├── Center Panel: Agent Workspace
-│       │   └── Bottom Panel: Terminal
-│       └── Settings Screen
-└── Overlays
-    ├── Command Palette
-    ├── Workspace Launch Overlay
-    ├── Runtime Validation Overlay
-    ├── Confirm Dialogs
-    ├── Worktree Modal
-    └── Supervisor Objective Dialog
-```
+> **Note:**  
+> The mobile experience is not a scaled-down desktop layout. It is a separate interaction model centered on `Dock + Sheet`.
 
-### 4.1 Routing Structure
+## 3. Information Architecture & Core Flows
 
-| Route | Description |
-|-------|-------------|
-| `/` | Welcome screen for launching or reopening a workspace |
-| `/workspace` | Main workspace screen; the active workspace is resolved by frontend state |
-| `/settings` | Settings page |
+### 3.1 Route Map
 
----
+| Route | Page | Notes |
+| --- | --- | --- |
+| `/` | Welcome page | Default entry when no reachable workspace is available; also provides workspace open and settings entry |
+| `/auth` | Auth page | The actual frontend login route |
+| `/workspace` | Workspace page | Main workspace; desktop and mobile use different experiences |
+| `/settings` | Settings page | Desktop and mobile share the same capability set, with different navigation structures |
+| `*` | 404 page | Displays unmatched paths and provides a return-home action |
 
-## 5. Global UI Framework
+### 3.2 Shell Selection
 
-### 5.1 Top Bar
+| Condition | Shell | Page skeleton |
+| --- | --- | --- |
+| Viewport width `> 899px` | Desktop Shell | Top bar, left sidebar, main area, bottom terminal |
+| Viewport width `<= 899px` | Mobile Shell | Top bar, main session area, Dock, full-screen Sheets |
 
-The top bar is a persistent horizontal strip (36px height) at the top of the application, visible whenever at least one workspace is open.
+Both shells share:
 
-#### 5.1.1 Layout
+- The same route system
+- The same workspace / session / terminal data
+- The same global capabilities, such as Quick Actions, branch switching, and Toasts
 
-The top bar is divided into two sections:
+### 3.3 Startup and Entry Flow
 
-- **Left Section:** Workspace/Session tabs
-- **Right Section:** Action buttons
+The actual startup flow is:
 
-#### 5.1.2 Workspace/Session Tabs
+1. Call the auth status endpoint first to determine whether login is required.
+2. If server-side auth is enabled and the user is not authenticated:
+   - Stay inside the auth flow
+   - Do not continue restoring the workspace view
+3. If the user is already authenticated:
+   - Establish or restore the WebSocket connection
+   - Fetch the workspace list after the connection is available
+4. Use the workspace list to decide the default destination:
+   - If the user is on the home page and at least one workspace exists, automatically enter the workspace page
+   - If the user is on the workspace page and no workspace remains, automatically return to the home page
+5. Inside the workspace page, if the current active workspace has not resolved yet:
+   - Show a loading placeholder
+   - Show an error placeholder if resolution fails
 
-Each open workspace is represented as a tab with the following elements (left to right):
+### 3.4 Global Connection State
 
-1. **Status Indicator Dot:**
-   - When the workspace is actively running: A colored dot with a continuous pulse animation (opacity oscillates between 1.0 and 0.5 every 2 seconds).
-   - When idle: A static colored dot with no animation.
-   - Color mapping: Active = green (`#78d7b2`), Idle = gray-blue.
+All pages share one connection-state feedback model:
 
-2. **Label:** Text label displaying the workspace name. Truncated with ellipsis if too long.
-
-3. **Unread Badge (conditional):** Displays a numeric count of unread messages for the workspace. Shows a number (max displayed as "9+") on a small rounded badge (minimum 16px wide, 16px tall) with accent blue background. Hidden when count is zero.
-
-4. **Close Button (X):** Hidden by default, appears on hover over the tab. Clicking closes the workspace tab.
-
-5. **Add Button (+):** A 28×28px button with a plus icon. Opens a new workspace tab.
+- `connected`: no connection banner
+- `connecting`: no banner; wait for completion
+- `reconnecting`: show `Reconnecting...`
+- `disconnected`: show `Connection lost`
+- `rejected`: show `Another tab is active`
 
-#### 5.1.3 Tab Interactions
-
-- **Switch Tab:** Click on any tab to switch to that workspace.
-- **Close Tab:** Hover over a tab to reveal the X button, then click to close.
-- **New Tab:** Click the + button to open a new workspace (launches the Workspace Launch Overlay).
-
-#### 5.1.4 Right-Side Action Buttons
-
-Two 32×32px buttons with rounded corners (6px radius):
-
-1. **Quick Actions Button:** Displays a search icon and the text "Quick Actions". Opens the Command Palette. On wider screens, the text label is visible; on narrower screens, only the icon is shown.
-
-2. **Settings Button:** Displays a gear icon. Navigates to the Settings page. Shows a data attribute `data-testid="settings-open"` for testing purposes.
-
-Both buttons share the same hover state: background shifts to a slightly lighter tint.
-
-#### 5.1.5 Empty State
-
-When no workspaces are open, the top bar displays a centered empty state with a small kicker text and a label prompting the user to open a workspace.
-
-#### 5.1.6 Settings Route Appearance
-
-When on the Settings page, the top bar changes to show:
-- **Left:** A back button with a back arrow icon and the text "Back to App".
-- **Center:** The title "Settings".
-
-### 5.2 Keyboard Shortcuts (Global)
+When the app is **not connected**, both the desktop top bar and mobile top bar also show a lightweight connection indicator.
 
-| Shortcut | Action |
-|----------|--------|
-| `Ctrl/Cmd + K` | Toggle Command Palette |
-| `Escape` (with Command Palette open) | Close Command Palette |
-| `Ctrl/Cmd + S` | Save the currently open file in the code editor |
-| `Ctrl/Cmd + N` | Open a new workspace tab |
-| `Ctrl/Cmd + Shift + [` | Switch to the previous workspace tab |
-| `Ctrl/Cmd + Shift + ]` | Switch to the next workspace tab |
-| `F` (no modifier, not focused on a text input) | Toggle Focus Mode |
-| `Escape` (while in Focus Mode) | Exit Focus Mode |
-| `Cmd + D` (Mac) or `Alt + D` (Windows/Linux) | Split the active agent pane vertically |
-| `Cmd + Shift + D` (Mac) or `Alt + Shift + D` (Windows/Linux) | Split the active agent pane horizontally |
+## 4. Page Specifications
 
-**Note:** Keyboard shortcuts are context-aware. The `F` key only toggles focus mode when the user is not actively typing in a text input field. The save shortcut (`Ctrl/Cmd + S`) only functions when the code editor panel is visible and a file is open.
+## 4.1 Welcome Page `/`
 
-### 5.3 Color Palette (Dark Theme — "Aurora Mint")
+### 4.1.1 Page Goal
 
-| Token | Value | Usage |
-|-------|-------|-------|
-| Background | `#0a1014` | Main app background |
-| Surface | `#11181f` | Panels, cards, elevated surfaces |
-| Border | `#1e2a35` | Divider lines and borders |
-| Text Primary | `#e5edf3` | Headings, labels, body text |
-| Text Secondary | `#9fb0bc` | Secondary labels, descriptions |
-| Text Tertiary | `#728492` | Kicker text, timestamps, muted labels |
-| Accent (Blue) | `#6cb6ff` | Links, active states, highlights |
-| Accent-2 (Green) | `#78d7b2` | Success indicators, running status |
-| Accent-3 (Amber) | `#f1b86a` | Warnings, modified status |
-| Danger (Pink) | `#ff9eb0` | Errors, destructive actions, deleted status |
+The welcome page is the default entry when there is **no workspace currently available to enter**. It serves three purposes:
 
-### 5.4 Typography
+- Open a local workspace
+- Enter the settings page
+- Explain the product’s core capabilities in a lightweight way
 
-| Level | Size | Weight | Usage |
-|-------|------|--------|-------|
-| Kicker | 10px | Uppercase, letter-spacing 0.08em | Section labels, badges |
-| XS | 11px | Regular/medium | Agent pane titles, file paths |
-| SM | 12px | Regular | Button text, small labels |
-| MD | 13px | Regular | Body text, editor content, terminal text |
-| LG | 14px | Regular | Headings, form labels |
-| 3XL | 18px | Medium | Welcome screen title |
+### 4.1.2 Page Structure
 
-- **UI Font:** IBM Plex Sans
-- **Monospace Font:** JetBrains Mono (used in code editor, terminal, and code blocks)
+The main content is a centered welcome card. Mobile only adjusts styling, not the information structure. The card always includes:
 
-### 5.5 Iconography
+- Product kicker
+- Title
+- Description copy
+- Primary button: `Open Workspace`
+- Secondary button: `Settings`
+- Divider
+- Three feature highlight cards
 
-All icons are sourced from the Lucide icon library, rendered at 16px default size with 1.5px stroke weight. Key icons used throughout the product:
+### 4.1.3 Features and Detailed Interactions
 
-| Icon | Name | Usage |
-|------|------|-------|
-| `Plus` | HeaderAddIcon | New workspace, new terminal |
-| `X` | HeaderCloseIcon | Close tabs, close panes, close modals |
-| `Search` | SearchIcon | Command palette, file search |
-| `Settings` | HeaderSettingsIcon | Settings button/link |
-| `ArrowLeft` | HeaderBackIcon | Back navigation |
-| `ChevronRight` / `ChevronDown` | Expand/Collapse | File tree, accordions |
-| `RefreshCw` | RefreshIcon | Refresh file tree, refresh git, retry validation |
-| `Plus` (in git context) | GitStageIcon | Stage changes |
-| `Minus` | GitUnstageIcon | Unstage changes |
-| `Undo2` | GitDiscardIcon | Discard changes |
-| `ArrowUp` | AgentSendIcon | Commit, trigger supervisor |
-| `Square` | Stop/Disable | Disable supervisor |
-| `CirclePause` / `Play` | Pause/Resume | Supervisor pause/resume |
-| `MessageSquare` | Edit objective | Edit supervisor objective |
-| `BadgeCheck` | Supervisor badge | Supervisor section |
-| `Folder` | WorkspaceFolderIcon | Folder browser, file tree |
-| `GitBranch` | WorkspaceBranchIcon | Branch display |
-| `SplitHorizontal` / `SplitVertical` | Pane split icons | Split agent panes |
+| Area | Feature | Interaction rules |
+| --- | --- | --- |
+| Open Workspace button | Open the workspace launcher | Clicking opens the in-app directory browser; this is **not** the system-native file picker |
+| Settings button | Enter settings | Clicking navigates to `/settings` |
+| Feature highlights | Show core capabilities | Currently fixed to three items: Agent-first, Git tools, terminal capabilities |
 
-### 5.6 Animation & Transition Standards
+### 4.1.4 States and Boundaries
 
-| Property | Value | Usage |
-|----------|-------|-------|
-| Fast duration | 60ms | Micro-interactions, button states |
-| Normal duration | 100ms | Standard transitions |
-| Slow duration | 150ms | Panel resizers, larger movements |
-| Ease-out-expo | `cubic-bezier(0.16, 1, 0.3, 1)` | Modal appearances |
-| Ease-out-quart | `cubic-bezier(0.25, 1, 0.5, 1)` | General UI transitions |
+- The welcome page itself has no complex error state.
+- If the app has already resolved at least one workspace, the startup flow usually redirects the user to `/workspace`, so the welcome page is not a long-lived state.
 
-**Keyframe Animations:**
+## 4.2 Auth Page `/auth`
 
-- **Pulse:** Continuous opacity oscillation (1.0 → 0.5 → 1.0) over 2 seconds. Used for running status indicators.
-- **Fade In:** Opacity 0 → 1. Used for modal overlays.
-- **Scale In:** Scale 0.95 → 1.0 with opacity 0 → 1. Used for modal cards.
-- **Slide In:** Translate X from 100% → 0 with opacity. Used for toast notifications.
-- **Spin:** 360-degree rotation over 0.8 seconds, linear, infinite. Used for loading spinners and checking indicators.
-- **Shimmer:** Background position shift over 1.5 seconds. Used for skeleton loaders.
-- **Fade In Up:** Translate Y from 10px → 0 with opacity. Used for list items appearing.
-- **Slide In Right:** Translate X from 20px → 0 with opacity. Used for panel content.
+### 4.2.1 Page Goal
 
-**Performance Rule:** During panel resizing operations, all transitions and animations are temporarily disabled on panel content to maintain smooth resizing.
+The auth page handles the case where the server has password protection enabled.
 
----
+### 4.2.2 Page Structure
 
-## 6. Authentication System
+The auth page reuses the centered-card layout from the welcome page and includes:
 
-### 6.1 Purpose
+- Product kicker
+- App title
+- Status / explanatory copy
+- Status panel
+- Password input
+- Submit button
 
-For deployments exposed on a network (remote servers, shared machines), the authentication system provides single-passphrase access control to prevent unauthorized access to the workbench and its underlying filesystem.
+### 4.2.3 State Detection
 
-### 6.2 Authentication Flow
+After mount, the page decides what to show based on the auth status check result:
 
-#### 6.2.1 States
+| State | Page behavior |
+| --- | --- |
+| Auth status is being checked | Show the `Connecting` state |
+| Server auth is disabled | Immediately mark frontend auth as passed, then exit the auth page flow |
+| A valid session already exists | Immediately mark frontend auth as passed |
+| Service unavailable / request failed | Status panel shows `Unavailable / Unable to fetch status` |
+| Login required | Stay on the page and wait for password input |
 
-The authentication screen cycles through the following states:
+### 4.2.4 Submission and Error Feedback
 
-1. **Loading:** A spinner is displayed while the auth status is being determined.
-2. **Not Configured:** If authentication is not set up on the server, the user is informed that the app is running without authentication.
-3. **Sign In:** The standard login screen with a passphrase input field.
-4. **Blocked:** Displayed when the user's IP has been locked due to repeated failed attempts.
-5. **Unavailable:** Displayed when the authentication service cannot be reached.
-6. **Unlocking:** Transition state during successful authentication.
+| Scenario | Interaction rules |
+| --- | --- |
+| Empty input | Submit button is disabled |
+| Status check in progress / submit in progress | Submit button is disabled and the button label switches to the connecting state |
+| Submit succeeds | Mark frontend auth as passed after login succeeds |
+| Wrong password | Show the server error text directly; the current typical copy is `Invalid password` |
+| Temporary lockout triggered | If the server returns a lockout-until timestamp, the page formats and displays that time in the current language |
+| Network error | Show network error copy |
 
-#### 6.2.2 Sign In Screen
+### 4.2.5 Boundary Notes
 
-The sign-in screen contains:
+- The input type is fixed to `password`.
+- There is currently no `forgot password`, `switch account`, or explicit `logout` flow here.
+- The auth page itself has no extra shortcut design.
 
-- **Product Branding:** Product name and version displayed at the top.
-- **Passphrase Input:** A text input field with a placeholder prompting for the passphrase.
-- **Submit Button:** A primary action button labeled "Sign In".
-- **Error Message (conditional):** Displayed below the input field when credentials are invalid, styled in the danger color.
-- **Security Information Card** (below the login form):
-  - **Session Policy:** Displays the session idle timeout duration and maximum session lifetime.
-  - **Allowed Roots:** Lists the directory paths that the authenticated session is permitted to access.
+## 4.3 Workspace Page `/workspace` (Desktop)
 
-#### 6.2.3 Preview Shell
+### 4.3.1 Page Goal and Overall Structure
 
-While on the authentication screen, a wireframe preview of the workspace UI is displayed behind the login card. This preview consists of placeholder bars and blocks simulating the top bar, left sidebar, main content area, and right panel, giving the user a visual hint of the interface they will access upon authentication.
+The desktop workspace is the most complete workbench form in the current product. Its goal is to let the user do all of the following inside a single screen:
 
-### 6.3 Security Policies
+- Switch workspaces
+- Create / close AI sessions
+- Browse and edit code
+- Inspect and handle Git changes
+- Use the shell terminal
 
-| Policy | Detail |
-|--------|--------|
-| Failed Attempt Lockout | 3 failed login attempts within a 10-minute window result in a 24-hour IP ban |
-| Session Cookies | HttpOnly cookies-based sessions to prevent XSS-based token theft |
-| Session Idle Timeout | Sessions are terminated after a configurable period of inactivity |
-| Maximum Session Duration | Sessions have a hard lifetime limit after which they expire regardless of activity |
+The page is divided into four regions:
 
-### 6.4 Error Codes
+| Region | Content |
+| --- | --- |
+| Top | Workspace top bar |
+| Left | Files / Git panel |
+| Center | Agent / editor / diff main area |
+| Bottom | Terminal panel |
 
-| Error Code | User-Facing Message |
-|------------|-------------------|
-| `invalid_credentials` | "Incorrect passphrase" |
-| `session_expired` | "Your session has expired. Please sign in again." |
-| `session_missing` | "No active session. Please sign in." |
-| `ip_blocked` | "Your IP has been blocked due to too many failed attempts." |
-| `auth_unavailable` | "Authentication service is currently unavailable." |
-| `auth_not_configured` | "Authentication is not configured on this deployment." |
+### 4.3.2 Entry Conditions and Page States
 
----
+| State | Page behavior |
+| --- | --- |
+| Active workspace is still resolving | Show a loading placeholder card |
+| Workspace list failed to load | Show an error card |
+| Active workspace is empty | Show a `No workspace` empty state and do not render the full workbench |
+| A valid workspace exists | Render the full desktop workspace |
 
-## 7. Workspace Management
+### 4.3.3 Top Workspace Bar
 
-### 7.1 Overview
+#### 4.3.3.1 Workspace Tab Area
 
-A workspace represents a single project directory being actively developed. Each workspace contains its own set of agent sessions, file browser, git status, and terminals. Multiple workspaces can be open simultaneously as separate tabs in the top bar.
+| Feature | Interaction / rules |
+| --- | --- |
+| Workspace tab list | Render in the current workspace order |
+| Main tab label | Prefer workspace name; otherwise the last path segment; otherwise the full path or id |
+| Status dot | Active workspace uses the active style; others use the idle style |
+| Unread badge | Show when `unreadCount > 0`; display `9+` when count is greater than `9` |
+| Click tab | Switch the active workspace |
+| Keyboard `Enter` / `Space` | Also switches when the tab is focused |
+| Close button | Close that workspace and remove it from the local list |
+| Add button `+` | Open the workspace launcher |
 
-### 7.2 Workspace Launch
+#### 4.3.3.2 Action Area
 
-#### 7.2.1 Trigger
+| Button / area | Behavior |
+| --- | --- |
+| Connection status | Only visible when state is not `connected` |
+| Quick Actions | Open / close the command palette |
+| Terminal | Show / hide the bottom terminal panel |
+| Files | Show / hide the left sidebar |
+| Settings | Navigate to `/settings` |
+| Fullscreen | Visible when supported by the browser; toggles fullscreen for the workspace root node |
 
-Clicking the "+" button in the top bar or the "Open Workspace" button on the Welcome Screen opens the Workspace Launch Overlay.
+#### 4.3.3.3 Returning After Closing the Last Workspace
 
-#### 7.2.2 Workspace Launch Overlay
+- If the closed workspace was the last one, frontend workspace state becomes empty.
+- Startup logic then detects that `/workspace` has no available workspace and automatically returns to `/`.
 
-A modal dialog (maximum width 760px) with the following sections:
+### 4.3.4 Layout, Sizing, and Focus Mode
 
-**Header Area (two-column layout):**
-- **Left Column:**
-  - Kicker text: "START WORKSPACE"
-  - Title: "Local Folder"
-  - Hint text explaining the selection
-- **Right Column:**
-  - Currently selected path display
-  - Execution target indicator (Native / WSL)
-  - Close button (X)
+#### 4.3.4.1 Page Layout
 
-**Choice Cards:**
-- **Local Folder (always active):** The primary option for creating a workspace from a local directory.
-- **Remote Git (deferred):** A visually disabled/inactive option indicating this feature is planned but not currently available.
+The desktop workspace always consists of three core content blocks:
 
-**Execution Target Selection:**
-- **Native:** Default option. Runs agents directly on the host operating system.
-- **WSL (Windows Subsystem for Linux):** Alternative option available on Windows. Selecting WSL reveals an additional text input field for specifying the WSL distribution name (optional; defaults to the system's default distribution).
+- Left sidebar: files / Git
+- Center main area: sessions / editor / diff
+- Bottom panel: terminal
 
-**Folder Browser:**
-A file picker interface with:
+#### 4.3.4.2 Resizable Areas
 
-1. **Toolbar:**
-   - **Home Directory Button:** Navigates to the user's home directory.
-   - **Go Up Button:** Navigates to the parent directory.
+| Area | Default / range |
+| --- | --- |
+| Left sidebar width | Default `280px`, range `220px ~ 480px` |
+| Bottom terminal height | Range `120px ~ 400px` |
 
-2. **Root Path Chips:** Quick-access buttons for common root directories (e.g., root `/`, common project directories). Clicking a chip navigates directly to that path.
+#### 4.3.4.3 Layout Persistence
 
-3. **Directory Listing:**
-   - Each row displays a folder icon, the directory name, and a brief hint (e.g., modification time or item count).
-   - An "Enter folder" action (arrow icon) appears on hover.
-   - Clicking a directory row navigates into that directory.
-   - Clicking a directory name (not the action) selects it as the workspace root.
+The current workspace remembers:
 
-**Selected Path Display:**
-- Shows the currently selected directory path as a breadcrumb-style text.
-- Updates in real time as the user navigates the folder browser.
+- Left sidebar width
+- Bottom terminal height
+- Focus mode on / off state
+- Current active session
+- Session split layout
 
-**Action Button:**
-- **Start Workspace:** A primary button at the bottom of the overlay. Disabled until a valid directory path is selected. Clicking this button creates and opens a new workspace tab.
+#### 4.3.4.4 Focus Mode
 
-#### 7.2.3 Runtime Validation
+Focus mode is currently wired. When enabled, it:
 
-Upon selecting a directory and execution target, the system performs a runtime validation check (see Section 7.3). The workspace will not launch if required commands are not available on the selected target.
+- Hides the left sidebar
+- Hides the bottom terminal
 
-### 7.3 Runtime Validation Overlay
+When disabled, both are restored.
 
-A modal dialog that appears automatically when launching a workspace to verify that all required system commands are available on the selected execution target.
+> **Current product boundary:**  
+> The only confirmed user-visible entry for focus mode is through the command palette. Do not document a standalone global `F` shortcut as a shipped capability.
 
-#### 7.3.1 Layout
+### 4.3.5 Left Sidebar: Files / Git
 
-- **Header:**
-  - Kicker text: "RUNTIME CHECK"
-  - Title: Contextual message (e.g., "Checking available commands")
-  - Description: Explains what is being checked
-  - Close button (X)
+#### 4.3.5.1 Shared Frame
 
-- **Target Selection (conditional):** If WSL distributions are available, the user can choose between "Native" and "WSL" via choice cards. Selecting WSL reveals a text input for the distribution name.
+The top of the left sidebar always includes:
 
-- **Required Runtime Summary Card:** A card listing all commands required by the current configuration.
+- Current panel name
+- Current branch button
+- `Files / Git` tabs
+- Inline Git status bar
 
-- **Requirements List:** Each required command is listed with:
-  - **Status Dot:** Green if available, red if missing, blue with a pulse animation if currently being checked.
-  - **Command Label:** The command name (e.g., `git`, `node`).
-  - **Detail Text:** Additional information (e.g., "found at /usr/bin/git" or "not found").
+##### Branch Button
 
-- **Install Hint (conditional):** When requirements are not met, a message suggests how to install missing commands.
+Clicking the branch button does the following:
 
-- **Action Button:**
-  - **Retry:** Enabled only when the validation status is "failed". Clicking re-runs the check.
+1. Switch the left sidebar to the Git tab
+2. Open the branch quick switcher overlay
 
-- **Dismissal:** The overlay can be closed with the Escape key or the X button.
+The button label prefers the current branch name, and falls back to `—` if no value exists.
 
-#### 7.3.2 Validation States
+##### Tab Switching
 
-| State | Description |
-|-------|-------------|
-| Idle | Validation has not been triggered |
-| Checking | Validation is in progress (blue pulse indicators) |
-| Ready | All required commands are available (green indicators) |
-| Failed | One or more required commands are missing (red indicators) |
+| Tab | Content |
+| --- | --- |
+| Files | File tree and file action toolbar |
+| Git | Git panel |
 
-### 7.4 Welcome Screen
+When switched to `Files`, the file toolbar is shown. When switched to `Git`, the file toolbar is hidden.
 
-Displayed when no workspace tabs are open.
+#### 4.3.5.2 Files View
 
-#### 7.4.1 Layout
+##### Top Toolbar
 
-- **Centered Panel:**
-  - Kicker text at the top
-  - H1 title (e.g., "Coder Studio")
-  - Body paragraph describing the product
-  - **Primary Action Button:** Labeled "Open Workspace" with a plus icon. Clicking opens the Workspace Launch Overlay.
-  - **Settings Link:** A text link with a gear icon labeled "Open Settings". Clicking navigates to the Settings page.
+| Button | Behavior |
+| --- | --- |
+| New File | Open the create modal in `file` mode |
+| New Folder | Open the create modal in `folder` mode |
+| Refresh | Refetch the file tree |
 
-### 7.5 Workspace Lifecycle
+##### File Tree Loading Model
+
+- The root file tree loads on first entry.
+- Child directories are lazy-loaded: when a directory expands and its children are not loaded yet, another request is sent for that directory path.
+- At the top level, `app`, `packages`, and `src` expand by default.
+
+##### File Search
+
+| Feature | Rules |
+| --- | --- |
+| Search input | Typing triggers file search |
+| Trigger timing | Fire after roughly `150ms` of idle time |
+| Result limit | Default upper limit is `10` items |
+| Result row | Shows file name, containing directory, and a delete action |
+| Click search result | Open the file directly in the editor |
+
+##### Tree Node Interactions
+
+| Node type | Click behavior | Inline actions |
+| --- | --- | --- |
+| Folder | Expand / collapse; fetch children on first expansion | New file, new folder, delete |
+| File | Set as current active file and open it in the main area | Delete |
+
+##### Create File / Folder
+
+The actual rules for the create modal are:
+
+- It is shown as a modal
+- If launched from a folder row action, the input is prefilled with `directory-path/`
+- If launched from the toolbar, the input starts empty
+- Empty path produces an error
+- Creating a file with a path ending in `/` produces an error
+- After submit succeeds:
+  - Refetch the file tree
+  - If a file was created, automatically open that file
+
+##### Delete File / Folder
+
+- Deletion runs through a confirmation dialog
+- After confirmation, the delete request is sent
+- After delete succeeds:
+  - Refetch the file tree
+  - If the deleted path is the currently open file, close it and clear the active file
+
+#### 4.3.5.3 Git View
+
+##### Panel Structure
+
+The Git panel contains, from top to bottom:
+
+- Toolbar
+- Commit message input
+- Latest commit summary
+- Change group list
+- Discard confirmation dialog, conditionally
+
+##### Top Toolbar
+
+| Button | Visibility | Behavior |
+| --- | --- | --- |
+| Refresh | Always visible | Refetch Git status |
+| Stage All | Visible when changes exist | Stage modified / deleted / untracked files |
+| Unstage All | Visible when changes exist | Unstage all staged files |
+| Discard All | Visible when changes exist | Open confirm-all discard flow |
+| Commit | Visible when changes exist | Only enabled when commit message is non-empty and staged changes exist |
+
+##### Commit Input
+
+- Uses a single-line auto-growing style textarea
+- Clicking `Commit` sends the commit request
+- On successful commit, the commit message is cleared and Git status refreshes
+
+##### Latest Commit Summary
+
+If the current state includes a latest commit summary, the panel shows:
+
+- `Latest commit` label
+- Short SHA
+- Commit title
+
+##### Change Groups
+
+Changes are currently shown in this order:
+
+1. `staged`
+2. `changes` (`modified`)
+3. `deleted`
+4. `untracked`
+
+Each group shows a title, count, and file list.
+
+##### File-Level Interactions
 
 | Action | Behavior |
-|--------|----------|
-| Open | Creates a new tab, initializes agent panes, file tree, and terminal |
-| Switch | Preserves all state (agent sessions, terminal output, editor state); the workspace remains running in the background |
-| Close | Terminates all agent sessions, closes terminals, and removes the tab |
-| Recovery | If the application reloads while a workspace was active, the workspace attempts to recover its previous state |
+| --- | --- |
+| Click file row | Request the file diff and open diff view in the main area |
+| Stage / Unstage | Toggle staged state for that file |
+| Discard | Open single-file discard confirmation |
 
-### 7.6 Multi-Tab Concurrency Control
+##### Diff Auto-Preview Rules
 
-When the application is open in multiple browser tabs, a controller/observer model manages which tab has primary control of a workspace:
+The Git panel has a real `preview the first item automatically` behavior:
 
-- One tab acts as the **Controller** and holds a fencing token.
-- Other tabs are **Observers** that receive updates but cannot directly modify workspace state.
-- The Controller sends periodic heartbeats (every 10 seconds when visible, every 20 seconds when the tab is hidden).
-- If the Controller becomes unresponsive, an Observer can request a takeover with a deadline-based handoff protocol.
-- Controllers are automatically released when a tab is closed or navigated away.
+- After Git status finishes loading, if diff preview has not been dismissed:
+  - Keep the current preview if it still exists
+  - Otherwise automatically select the first change and request its diff
+- After the user explicitly closes diff, the `preview dismissed` flag becomes true so the UI does not keep auto-opening diff again
 
----
+#### 4.3.5.4 Git Status Bar
 
-## 8. Agent Session Management
+The status bar shows three kinds of numbers:
 
-### 8.1 Overview
+- Total change count
+- Ahead count
+- Behind count
 
-Agent sessions are the core interactive units of the workspace. Each session runs an AI coding agent (Claude or Codex) in its own process with a dedicated terminal for input/output. Multiple agent sessions can run in parallel within a single workspace, arranged in a split-pane layout.
+##### Push / Pull Triggers
 
-### 8.2 Agent Pane States
+- Click the ahead count: open the Push confirmation dialog
+- Click the behind count: open the Pull confirmation dialog
+- If the corresponding count is `<= 0`, the button is disabled
 
-Each agent pane can be in one of the following states:
+##### Confirmation Dialog
 
-| State | Visual Representation |
-|-------|----------------------|
-| **Draft** | A launcher card with provider selection buttons (Claude, Codex). Not yet started. |
-| **Running** | Active terminal with streaming output. Status dot pulses green. Progress bar animates. |
-| **Idle** | Terminal visible but not actively producing output. Status dot is static. |
-| **Interrupted** | Session was manually interrupted. Status indicator reflects interrupted state. |
-| **Unavailable** | Error state. Displays an error message, reason, and a "Remove" button. |
+The confirmation dialog always includes:
 
-### 8.3 Agent Pane Layout
+- Title
+- Description text
+- Cancel button
+- Primary action button
 
-#### 8.3.1 Pane Card Structure
+##### Secondary Flow for HTTP Auth Failure
 
-Each agent session is displayed within a card (`.agent-pane-card`) with the following vertical structure:
+When Push / Pull hits HTTP auth failure, and the backend indicates it can continue by asking for credentials:
 
-1. **Progress Bar:** A thin bar (3px height) at the very top of the card.
-   - Accent blue for "live" or "loading" states.
-   - Danger pink for "error" state.
-   - Width is dynamic: minimum 14%, 34% when actively running, 6% otherwise.
+- The dialog body switches to an auth form
+- The username input is prefilled from server `usernameHint` when available
+- Both username and password are required before continuing
 
-2. **Pane Header:** A compact header containing:
-   - **Session Dot:** Small colored dot indicating status (green = active, gray = idle, blue = queued, muted = off).
-   - **Title:** Uppercase, 11px, monospace font, letter-spacing 0.5px. Displays the session identifier.
-   - **Provider Badge:** A small tag showing the agent provider name (e.g., "Claude", "Codex").
-   - **Status Tag:** A small tag showing the current session status (e.g., "Running", "Idle", "Queued").
-   - **Action Buttons** (right-aligned, visible on hover):
-     - Split Vertical icon
-     - Split Horizontal icon
-     - Close (X) icon — turns red on hover
+If the backend marks the case as `interactive auth not supported`, the dialog only shows the warning and does not provide a submittable form.
 
-3. **Terminal Area:** An embedded terminal (xterm.js) filling the remainder of the card. Supports both interactive mode (user can type commands) and readonly mode (output only).
+### 4.3.6 Center Main Area: Sessions / Editor / Diff
 
-#### 8.3.2 Split Pane Layout
+#### 4.3.6.1 Display Priority
 
-- **Vertical Split:** Divides the center panel into left and right panes. Triggered by the vertical split button or `Cmd/Ctrl + D`.
-- **Horizontal Split:** Divides the center panel into top and bottom panes. Triggered by the horizontal split button or `Cmd/Ctrl + Shift + D`.
-- **Resizing:** Split dividers are 8px wide and draggable. Dragging adjusts the proportional size of adjacent panes.
-- **Nested Splits:** Panes can be split recursively, allowing complex multi-pane layouts within a single workspace.
+The display priority in the desktop main area is fixed:
 
-### 8.4 Draft Session Launch
+1. If the left sidebar is on the Git tab and a diff preview exists, show diff
+2. Otherwise, if an active file exists, show the editor
+3. Otherwise, show the agent session area
 
-When a new pane is created (via the "+" action or splitting), it starts as a **Draft** pane:
+This means:
 
-- Displays a launcher card (`.agent-draft-launcher`) with buttons for each available provider.
-- Each provider button shows the provider's badge label and display name.
-- Clicking a provider button starts a new agent session with that provider.
-- The draft pane is replaced by the active session pane once the provider is selected.
+- Git diff is bound to the Git tab
+- As soon as the user switches back to the Files tab, the main area leaves diff and returns to the editor or session area
 
-### 8.5 Session Tracking
+#### 4.3.6.2 Agent Session Area
 
-Each active session tracks the following metadata:
+##### Pane Layout
 
-| Attribute | Description |
-|-----------|-------------|
-| Status | Current lifecycle state (idle, running, interrupted) |
-| Mode | Operating mode (branch or git_tree) |
-| Resume ID | Identifier for resuming a previous session |
-| Last Active Time | Timestamp of the most recent activity |
-| Completion Ratio | Progress toward completion, displayed as a progress bar |
+The session area supports:
 
-### 8.6 Session Lifecycle Events
+- Single pane
+- Horizontal split
+- Vertical split
+- Leaf nodes that are either real sessions or new-session draft cards
 
-Sessions emit the following lifecycle events:
+Each split container ratio is persisted into the current workspace UI state.
 
-| Event | Trigger |
-|-------|---------|
-| `session_started` | When a new agent process is launched |
-| `turn_completed` | When the agent completes a coding turn/request |
+##### New Session Draft Card
 
-### 8.7 Session Recovery
+When a pane has no real session yet, the main area shows a new-session draft card that supports:
 
-- **Archive:** Past sessions are recorded and can be viewed in an archive history.
-- **Resume:** Previous sessions can be resumed using their resume ID, restoring context.
-- **Remove:** Unavailable or errored sessions can be removed from the workspace.
+- Choosing `Claude` or `Codex`
+- Creating a session in the current pane
+- Splitting to a new horizontal draft pane
+- Splitting to a new vertical draft pane
+- Closing the draft pane
 
-### 8.8 Idle Policy
+##### Provider Launch Flow
 
-Each workspace maintains a per-workspace idle policy:
+The desktop draft card and the mobile create-session flow share the same provider launch model:
 
-| Setting | Description |
-|---------|-------------|
-| Enabled | Whether the idle policy is active |
-| Idle Minutes | Number of minutes of inactivity before marking the workspace as idle |
-| Max Active Sessions | Maximum number of sessions allowed before entering pressure mode |
-| Pressure Mode | Behavior when too many sessions are active simultaneously |
+1. Check whether the provider runtime is available
+2. If the runtime is available:
+   - Create the session directly
+3. If the runtime is unavailable but supports auto-install:
+   - Start installation first
+   - Poll install status every `1.5s`
+   - Create the session after install succeeds
+4. If the runtime is unavailable and auto-install is not supported:
+   - Show manual install instructions on the card
+   - If documentation URL exists, show a link-out action
 
-Sessions are marked as idle after the configured idle time. Completion reminders can be triggered when idle sessions complete their work.
+Desktop-only extra rule:
 
----
+- If either provider is currently starting or installing, both provider cards are disabled to avoid duplicate launches
 
-## 9. Code Editor & File Browsing
+##### Session Card
 
-### 9.1 Left Panel (Code Sidebar)
+Each created session renders as a card containing:
 
-The left panel is a resizable sidebar (default width 280px, minimum 200px, maximum 400px) with a dark surface background (`#0d141a`) and a right border. It contains two toggleable views: **Files** and **Git Diff**.
+- Top progress bar
+- Header: status dot, title, provider badge, state badge, right-side action area
+- Conditional Supervisor card
+- Session terminal
 
-### 9.2 View Toggle
+###### Title and Status Display Rules
 
-At the top of the sidebar, a tab bar allows switching between views:
+- Prefer `session.title`
+- If missing, fall back to `SESSION-XX`
+- Provider badge shows `Claude` / `Codex`
+- State badge converts `starting / running / idle / ended / draft` into Title Case
 
-- **Files Tab:** Displays the repository file tree.
-- **Git Diff Tab:** Displays the Git changes panel.
+###### Header Actions
 
-Both tabs are 24px tall with 4px border radius. The active tab is visually highlighted.
+| Action | Visibility | Behavior |
+| --- | --- | --- |
+| Stop | Only visible when `running` | Stop the current session |
+| Split Horizontal | Always visible | Create a horizontal split anchored on the current session |
+| Split Vertical | Always visible | Create a vertical split anchored on the current session |
+| Close | Always visible | Remove from the pane layout first, then run the session close flow |
 
-### 9.3 File Tree View
+###### Clicking the Card Body
 
-#### 9.3.1 Header
+- Clicking blank space inside the card sets that session as the current workspace active session
+- Clicking buttons, links, or input controls does not trigger that behavior
 
-- **Section Label:** "REPOSITORY NAVIGATOR" in uppercase, 10px, with wide letter-spacing.
-- **Branch Chip:** Displays the current Git branch name or root path with a folder or branch icon.
+###### Actual Close Flow for Sessions
 
-#### 9.3.2 Toolbar
+| Session state | Behavior |
+| --- | --- |
+| `ended` | Delete directly |
+| Any other state | Stop first, poll until `ended`, then delete |
 
-A single refresh button that re-scans the workspace directory and updates the file tree.
+##### Inline Supervisor on Desktop
 
-#### 9.3.3 Tree Structure
+The Supervisor card appears inline inside a Session Card only when all of the following are true:
 
-- **Folders:** Displayed with a folder icon and a chevron indicating expand/collapse state (right-pointing = collapsed, down-pointing = expanded).
-- **Files:** Displayed with a file-type-colored icon and the file name.
-- **Selection:** The currently selected file has a left border accent in the accent color.
-- **Collapsed State:** The expanded/collapsed state of directories is persisted per workspace.
+- The session has full capability
+- The session is not `draft`
+- The session is not `ended`
 
-#### 9.3.4 Interactions
+The inline area supports:
 
-- **Click Folder:** Expands or collapses the folder to show/hide its contents.
-- **Click File:** Opens the file in the code editor panel (center-left area).
-- **Expand/Collapse:** Clicking the chevron toggles folder visibility without selecting.
+- Enable objective
+- Edit objective
+- Pause / resume
+- Manually trigger one evaluation
+- Disable objective
 
-### 9.4 File Search
+On desktop, enable / edit / disable all use modal dialogs.
 
-#### 9.4.1 Search Field
+#### 4.3.6.3 Editor and File Preview
 
-Located at the top of the code editor panel header:
+##### File Open Rules
 
-- **Search Icon:** Left side of the input.
-- **Input Field:** Maximum width 360px. Placeholder text: "Search files..."
-- **Functionality:** Filters the workspace file tree in real time as the user types.
+After a file is selected, the page enters one of two modes based on file type:
 
-#### 9.4.2 Search Results Dropdown
+| File type | Page behavior |
+| --- | --- |
+| Text file | Open Monaco editor |
+| Image file | Open image preview |
 
-- Appears below the search field as a floating dropdown (`.workspace-search-dropdown.floating`).
-- Lists matching files with their name and parent path.
-- The currently focused result is highlighted.
-- **Keyboard Navigation:** Arrow Up/Arrow Down to move focus, Enter to select, Escape to close.
+##### Text File Editing
 
-### 9.5 Code Editor Panel
+| Feature | Interaction rules |
+| --- | --- |
+| Editor | Uses Monaco; switches language mode automatically from file extension |
+| Dirty state | Mark unsaved after content changes |
+| Save button | Only enabled for text files with unsaved changes |
+| Save shortcut | Monaco really registers `Ctrl/Cmd + S` |
+| Close button | Close the current file and clear the active file |
 
-#### 9.5.1 Layout
+Saving sends `baseHash` for conflict detection.
 
-The code editor occupies the left portion of the center area, adjacent to the agent panes.
+##### Image File Preview
 
-**Header:**
-- **File Path Display:** Shows the path of the currently open file (11px, monospace, maximum 56 characters). Truncated with ellipsis if longer.
-- **Search Field:** The file search input described above.
+- Image files are previewed through `/api/file`
+- That endpoint is only used for image preview, not as a general download endpoint
 
-**Body:**
-- **Expanded State:** Shows the Monaco code editor on the right and a file information sidebar on the left.
-- **Collapsed State:** Shows only the sidebar content without the editor.
+##### SVG / Text-Image Mode Switching
 
-#### 9.5.2 Editor Modes
+If the image file is itself a text-based image file, currently mainly SVG:
 
-- **Preview Mode:** Standard code viewing with syntax highlighting and line numbers.
-- **Diff Mode:** Monaco diff editor showing a side-by-side comparison of original vs. modified content.
+- The page shows an `Image / Text` mode switch button
+- Switching from image to text:
+  - Refetches the text content
+  - Opens Monaco in text-file mode
+- Switching from text back to image:
+  - Reloads in image mode again
 
-The user can toggle between Preview and Diff modes via a toggle button in the editor toolbar.
+##### External Change Detection
 
-#### 9.5.3 Editor Interactions
-
-- **Syntax Highlighting:** Automatic language detection based on file extension.
-- **Save:** `Ctrl/Cmd + S` saves the current file.
-- **Font Size:** 13px in the editor.
-- **Padding:** 12px around the editor content area.
-
----
-
-## 10. Git Integration
-
-### 10.1 Git Changes Panel
-
-Accessible via the "Git Diff" tab in the left sidebar.
-
-#### 10.1.1 Header
-
-- **Section Label:** "SOURCE CONTROL" in uppercase, 10px, with wide letter-spacing.
-- **Branch Chip:** Displays the current Git branch name with a branch icon.
-
-#### 10.1.2 Toolbar
-
-Five action buttons (left to right):
-
-1. **Refresh:** Re-scans Git status and updates the change list.
-2. **Stage All:** Stages all unstaged changes.
-3. **Unstage All:** Unstages all staged changes.
-4. **Discard All:** Discards all unstaged changes (triggers a confirmation dialog).
-5. **Commit:** Commits staged changes. Disabled when no commit message is entered.
-
-#### 10.1.3 Commit Message Input
-
-A text area (minimum height 30px) below the toolbar for entering commit messages.
-
-#### 10.1.4 Change Groups
-
-Changes are organized into three groups:
-
-1. **Staged:** Files that have been staged for the next commit.
-2. **Changes:** Modified files that are not yet staged.
-3. **Untracked:** New files that Git is not yet tracking.
-
-Each group has a header showing the group label and the count of items in that group.
-
-#### 10.1.5 Change Rows
-
-Each file change is displayed as a row with:
-
-- **File Icon:** Colored based on file type.
-- **File Name:** The name of the changed file.
-- **Parent Path:** The directory containing the file.
-- **Status Badge:** A colored badge indicating the change type:
-  - Staged: Green (`#78d7b2`)
-  - Modified: Orange (`#f1b86a`)
-  - Untracked: Blue (`#6cb6ff`)
-  - Deleted: Red (`#ff9eb0`)
-- **Action Buttons (per file):** Stage, Unstage, or Discard (context-dependent).
-
-#### 10.1.6 Per-File Actions
-
-| Action | Behavior |
-|--------|----------|
-| Stage | Adds the file's changes to the staging area |
-| Unstage | Removes the file's changes from the staging area |
-| Discard | Reverts the file's changes to the last committed state (triggers confirmation dialog) |
-
-#### 10.1.7 Bulk Actions
-
-| Action | Behavior |
-|--------|----------|
-| Stage All | Stages all unstaged changes at once |
-| Unstage All | Unstages all staged changes at once |
-| Discard All | Discards all unstaged changes at once (triggers confirmation dialog) |
-
-### 10.2 Git Diff Review
-
-When a file is selected in the Git Changes panel, the code editor panel switches to Diff Mode:
-
-- **Monaco Diff Editor:** Side-by-side view showing the original content on the left and the modified content on the right.
-- **Added Lines:** Highlighted in green.
-- **Removed Lines:** Highlighted in red.
-- **Modified Lines:** Highlighted with both removal and addition indicators.
-
-### 10.3 Worktree Inspection
-
-A modal dialog for inspecting Git worktrees associated with the repository.
-
-#### 10.3.1 Header Information
-
-- **Worktree Name:** Displayed as the modal title.
-- **Branch Chip:** Shows the branch this worktree is on.
-- **Path Chip:** Shows the filesystem path of the worktree.
-- **Status Chip:** Indicates whether the worktree is "dirty" (has uncommitted changes) or "clean".
-
-#### 10.3.2 Tabs
-
-Three tabs for viewing different aspects of the worktree:
-
-1. **Status Tab:**
-   - Displays the worktree path, branch, and status.
-   - Lists individual file changes with their status.
-
-2. **Diff Tab:**
-   - Shows a text-based diff of changes in the worktree.
-   - Rendered in a `<pre>` block with diff formatting.
-
-3. **Tree Tab:**
-   - A file tree view of the worktree's contents.
-   - Uses the same TreeView component as the main file browser.
-
----
-
-## 11. Terminal System
-
-### 11.1 Overview
-
-The application provides two types of terminals:
-
-1. **Agent Terminals:** Embedded within each agent session pane, displaying the agent's process output.
-2. **Shell Terminals:** Independent terminals in the bottom panel for running arbitrary commands.
-
-### 11.2 Shell Terminal Panel
-
-Located at the bottom of the workspace screen, below the agent panes.
-
-#### 11.2.1 Layout
-
-- **Progress Bar:** A thin bar (3px height) at the top of the panel, similar to agent pane progress bars.
-- **Terminal Content Area:** The active terminal's xterm.js output.
-
-#### 11.2.2 Toolbar
-
-- **Kicker Text:** "TERMINAL" in uppercase, small font.
-- **Terminal Title:** The name/title of the current terminal.
-- **Terminal Selector Dropdown:** A dropdown listing all available shell terminals. Allows switching between terminals.
-- **Close Button:** Closes the currently active terminal.
-- **Add Button:** Creates a new shell terminal tab.
-
-#### 11.2.3 Multi-Terminal Support
-
-- Users can create multiple shell terminals within a single workspace.
-- Each terminal is an independent session with its own process history.
-- Terminals are listed in the selector dropdown for easy switching.
-- Closing a terminal removes it from the list.
-
-#### 11.2.4 Empty State
-
-When no terminals exist, the panel displays:
-- A message: "No terminal yet"
-- An action button to create a new terminal
-
-### 11.3 Agent Terminals
-
-Each agent session has its own embedded terminal:
-
-- **Class:** `.agent-pane-xterm`
-- **Render Modes:**
-  - **Direct xterm:** Standard terminal rendering via xterm.js.
-  - **Transcript Mode:** A hidden xterm with a visible `<pre>` text overlay for better readability of historical output.
-- **Interaction Modes:**
-  - **Interactive:** The user can type commands into the terminal.
-  - **Readonly:** The terminal displays output only; user input is not accepted.
-
-### 11.4 Terminal Styling
-
-| Property | Value |
-|----------|-------|
-| Background | `#0b1218` |
-| Foreground Text | `#d8e2ea` |
-| Cursor Color | `#78d7b2` (green) |
-| Selection Background | `rgba(108, 182, 255, 0.24)` (blue tint) |
-| Font | JetBrains Mono, 13px |
-| Scrollbar | 3px wide with rounded thumb |
-
-### 11.5 Terminal Compatibility Modes
-
-In Settings → Appearance, users can choose between two terminal rendering modes:
-
-- **Standard:** Default rendering mode, optimized for performance.
-- **Compatibility:** Alternative rendering mode for environments where the standard mode has display issues.
-
-### 11.6 Terminal Sizing
-
-- Terminals auto-fit to their container size.
-- Terminal size is tracked and restored when the workspace is reopened.
-
----
-
-## 12. Command Palette
-
-### 12.1 Access
-
-- **Keyboard:** `Ctrl/Cmd + K`
-- **Button:** "Quick Actions" button in the top bar
-
-### 12.2 Layout
-
-A modal dialog (660px maximum width, 8px border radius) with a compact density layout.
-
-#### 12.2.1 Header
-
-- **Kicker Text:** "COMMAND PALETTE"
-- **Meta Text:** Shows the number of available actions (e.g., "12 actions")
-
-#### 12.2.2 Search Row
-
-- **Search Icon:** Left side.
-- **Search Input:** Filters the action list in real time.
-- **Hint Text:** Guidance text below the input.
-
-#### 12.2.3 Results List
-
-- Lists all available actions that match the search query.
-- Each action item displays:
-  - **Label:** The action name.
-  - **Description:** A brief explanation of what the action does.
-  - **Shortcut Badge (optional):** The keyboard shortcut for the action, displayed as a small tag on the right side.
-
-#### 12.2.4 Empty State
-
-When no actions match the search query: "No results found"
-
-### 12.5 Available Actions
-
-| Action | Description | Shortcut |
-|--------|-------------|----------|
-| New Workspace | Open a new workspace tab | `Ctrl/Cmd + N` |
-| Toggle Focus Mode | Enter or exit focus mode | `F` |
-| Toggle Code Panel | Show or hide the code editor panel | — |
-| Toggle Terminal Panel | Show or hide the terminal panel | — |
-| Focus Agent Input | Focus the input area of the active agent | — |
-| Split Pane Vertically | Split the active agent pane into left/right panes | `Cmd/Ctrl + D` |
-| Split Pane Horizontally | Split the active agent pane into top/bottom panes | `Shift + Cmd/Ctrl + D` |
-| Switch to Previous Workspace | Move to the workspace tab to the left | `Ctrl/Cmd + Shift + [` |
-| Switch to Next Workspace | Move to the workspace tab to the right | `Ctrl/Cmd + Shift + ]` |
-| Open Settings | Navigate to the Settings page | — |
-| Switch to [Workspace Name] | Directly switch to a specific workspace tab | — |
-
-### 12.6 Interactions
-
-- **Keyboard Navigation:** Arrow Up/Arrow Down to move through the action list, Enter to activate the focused action, Escape to close the palette.
-- **Mouse Navigation:** Click any action to activate it.
-- **Dismissal:** Clicking outside the palette or pressing Escape closes it.
-
----
-
-## 13. Settings
-
-### 13.1 Access
-
-- **Button:** Gear icon in the top bar
-- **Link:** "Open Settings" on the Welcome Screen
-- **Command Palette:** "Open Settings" action
-
-### 13.2 Layout
-
-A dedicated page with a two-column layout:
-
-- **Sidebar Navigation (200px wide):** Lists all settings sections.
-- **Content Area:** Displays the settings for the selected section.
-
-### 13.3 Navigation Sections
-
-| Section | Icon | Description |
-|---------|------|-------------|
-| General | Settings icon | Default agent provider, notification preferences |
-| Claude (per provider) | Config icon | Claude-specific settings |
-| Codex (per provider) | Config icon | Codex-specific settings |
-| Appearance | Appearance icon | Theme, terminal rendering, language |
-
-Each navigation item is at least 42px tall with 14px padding and 7px border radius. The active section is highlighted with an accent background and border.
-
-### 13.4 General Settings
-
-#### 13.4.1 Agent Defaults
-
-- **Default Provider:** A pill selector (set of toggle buttons) listing available providers (Claude, Codex). Determines which provider is pre-selected when creating a new agent session.
-
-#### 13.4.2 Completion Notifications
-
-- **Completion Notifications Toggle:** Enable or disable sound and browser push notifications when agent sessions complete.
-- **Notify Only In Background Toggle:** When enabled, notifications are only triggered when the application window is not the active/focused window.
-- **Notification Permission Status:** A static text display showing whether the browser has granted notification permissions (e.g., "Granted", "Denied", "Default").
-
-### 13.5 Provider Settings (per provider)
-
-Each provider has its own settings panel with:
-
-#### 13.5.1 Summary Card
-
-A card displaying the provider's badge label and current configuration summary.
-
-#### 13.5.2 Inject Hooks Section
-
-- **Inline Button:** A button to inject provider-specific hooks into the active workspace.
-- **Status Display:** Shows success or error state after injection attempt.
-
-#### 13.5.3 Configuration Fields
-
-Dynamic fields based on the provider's configuration schema:
-
-| Field Type | UI Component |
-|------------|-------------|
-| String | Single-line text input |
-| String List | Textarea (one item per line) |
-| Environment Map | Textarea (key=value pairs) |
-| JSON | Textarea with JSON content |
-| Select | Dropdown menu |
-
-Each field may have:
-- **Label:** The field name.
-- **Description:** Help text explaining the field's purpose.
-- **Error Display:** Red text below the field when validation fails.
-
-#### 13.5.4 Command Preview
-
-A display showing the effective command that will be used to launch the agent process, incorporating all current settings values. Updates in real time as settings are modified.
-
-### 13.6 Appearance Settings
-
-#### 13.6.1 Theme
-
-- **Current State:** Dark theme only.
-- **UI:** A pill selector showing "Dark" as the active option. Light theme is planned but not currently shipped.
-
-#### 13.6.2 Terminal Rendering
-
-- **Options:** "Standard" / "Compatibility"
-- **UI:** Pill selector (toggle buttons).
-
-#### 13.6.3 Language
-
-- **Options:** "English" / "Chinese"
-- **UI:** Pill selector (toggle buttons).
-- **Behavior:** Changes the interface language immediately. The preference is persisted and applied on subsequent visits.
-
-### 13.7 Footer Bar
-
-At the bottom of the Settings page:
-
-- **Auto-Save Notice:** A message indicating that settings are saved automatically.
-- **Build Metadata:** The application version number and the build published timestamp.
-
----
-
-## 14. Focus Mode
-
-### 14.1 Purpose
-
-Focus mode provides a distraction-free environment by hiding non-essential UI elements, allowing the user to concentrate on agent output and code.
-
-### 14.2 Activation
-
-- **Keyboard:** Press the `F` key (when not focused on a text input).
-- **Command Palette:** "Toggle Focus Mode" action.
-
-### 14.3 Behavior
-
-When focus mode is activated:
-
-- The top bar is hidden or minimized.
-- The left sidebar (code panel) is hidden.
-- The bottom terminal panel is hidden.
-- The agent workspace (center panel) expands to fill the available space.
-- Agent pane headers may be simplified.
-
-### 14.4 Deactivation
-
-- **Keyboard:** Press `Escape`.
-- **Command Palette:** "Toggle Focus Mode" action again.
-
-All hidden UI elements are restored to their previous state.
-
----
-
-## 15. Notification System
-
-### 15.1 Purpose
-
-Notify the user when long-running agent sessions complete their work, especially when the user is working in another tab or application.
-
-### 15.2 Notification Types
-
-#### 15.2.1 Sound Notification
-
-- A task completion sound (`task-complete.wav`) is played when an agent session transitions to a completed state.
-- Can be enabled/disabled in Settings → General → Completion Notifications.
-
-#### 15.2.2 Browser Push Notification
-
-- A browser push notification is displayed with:
-  - **Title:** Indicating the session/workspace name.
-  - **Body:** A message about the completion (e.g., "Session completed").
-- **Click Behavior:** Clicking the notification switches the user's view to the relevant workspace and session.
-- Can be enabled/disabled in Settings → General → Completion Notifications.
-
-### 15.3 Notification Configuration
-
-| Setting | Options | Default |
-|---------|---------|---------|
-| Completion Notifications | Enabled / Disabled | Enabled |
-| Notify Only In Background | Enabled / Disabled | Enabled |
-
----
-
-## 16. Supervisor System
-
-### 16.1 Purpose
-
-The Supervisor is an automated evaluation system that periodically assesses an agent session's progress toward a defined objective. It can inject guidance, pause evaluation, or trigger re-evaluation based on the session's state.
-
-### 16.2 Supervisor States
-
-| State | Description |
-|-------|-------------|
-| **Inactive** | No supervisor is configured for the session. |
-| **Idle** | Supervisor is configured but not currently evaluating. |
-| **Evaluating** | Supervisor is actively assessing the session's progress. |
-| **Injecting** | Supervisor is injecting guidance or feedback into the session. |
-| **Paused** | Supervisor evaluation is temporarily suspended. |
-| **Error** | Supervisor encountered an error during evaluation. |
-
-### 16.3 Supervisor UI
-
-#### 16.3.1 Supervisor Section in Agent Pane
-
-Each agent session with an active supervisor displays a supervisor card (`.agent-pane-supervisor-card`) with:
-
-- **State Attribute:** The card reflects the current supervisor state (evaluating, injecting, paused, error, off).
-- **Label Row:**
-  - Badge check icon + "Supervisor" label.
-  - State tag showing the current state.
-
-#### 16.3.2 Supervisor Actions
-
-When a supervisor exists on a session, the following action buttons are available (13px icons):
-
-| Button | Icon | Action |
-|--------|------|--------|
-| Edit Objective | Message Square | Opens the Supervisor Objective Dialog to modify the evaluation criteria |
-| Pause | Circle Pause | Suspends supervisor evaluation |
-| Resume | Play | Resumes a paused supervisor |
-| Retry | Refresh | Re-attempts a failed evaluation |
-| Trigger | Arrow Up | Manually triggers an evaluation cycle |
-| Disable | Square | Disables the supervisor for this session |
-
-#### 16.3.3 Enable Supervisor
-
-When no supervisor is configured on a session (and the session is not in draft state):
-
-- An "Enable" button (Play icon) is displayed.
-- Clicking it opens the Supervisor Objective Dialog in "enable" mode.
-
-### 16.4 Supervisor Objective Dialog
-
-A modal dialog for defining and editing the supervisor's evaluation criteria.
-
-#### 16.4.1 Modes
-
-- **Enable:** First-time setup of the supervisor.
-- **Edit:** Modifying an existing supervisor objective.
-- **Disable:** Removing the supervisor from the session.
-
-#### 16.4.2 Layout
-
-- **Objective Textarea:** A multi-line text area (5 rows, autofocus) with a placeholder prompting the user to describe the objective.
-- **Preview Section:** A read-only preview displaying the objective text in a formatted code block (`<pre>`).
-- **Action Buttons:**
-  - **Cancel:** Closes the dialog without saving.
-  - **Confirm:** A primary button that saves the objective and activates/updates the supervisor.
-
-### 16.5 Supervisor Cycles
-
-Each evaluation cycle is tracked with the following statuses:
-
-| Status | Description |
-|--------|-------------|
-| Queued | Waiting to be evaluated |
-| Evaluating | Currently being evaluated |
-| Completed | Evaluation finished successfully |
-| Injected | Guidance was injected into the session |
-| Failed | Evaluation failed |
-
----
-
-## 17. Internationalization
-
-### 17.1 Supported Languages
-
-| Language | Code |
-|----------|------|
-| English | `en` |
-| Chinese (Simplified) | `zh` |
-
-### 17.2 Language Switching
-
-- Language can be changed in Settings → Appearance → Language.
-- The interface updates immediately upon selection.
-- The preference is persisted in the user's settings and applied on subsequent visits.
-
-### 17.3 Localized Content
-
-The following content types are localized:
-
-- All UI labels, button text, and navigation elements.
-- Session titles (generated by agents).
-- Workspace titles.
-- Terminal titles.
-- Relative time formatting (e.g., "2 minutes ago", "3 hours ago").
-- Kicker texts and section labels.
-
-### 17.4 Translation System
-
-- Uses a key-based translation system with `{key}` interpolation.
-- Translation files are stored as JSON (`locales/en.json`, `locales/zh.json`).
-- A `createTranslator` function provides runtime translation lookups.
-
----
-
-## 18. Design System
-
-### 18.1 Component Density
-
-The application uses a **compact** density layout across all surfaces. Components with `data-density="compact"` have tighter padding and smaller font sizes than a comfortable density variant.
-
-### 18.2 Button Styles
-
-| Style | Class | Usage |
-|-------|-------|-------|
-| Primary | `.btn.btn-primary` | Confirm actions, start operations |
-| Default | `.btn` | Cancel, secondary actions |
-| Danger | `.btn.btn-danger` | Destructive actions (discard, delete) |
-| Icon Button | `.pane-action` | Pane-level actions (split, close) |
-| Toolbar Button | `.topbar-tool` | Top bar action buttons |
-
-### 18.3 Interactive States
-
-| State | Treatment |
-|-------|-----------|
-| Hover | Background shifts to a lighter tint (calculated via `color-mix`) |
-| Active/Pressed | Further background darkening, slight scale reduction |
-| Focus | Outline in accent color |
-| Disabled | Reduced opacity (50%), pointer-events none |
-
-### 18.4 Panel Resizers
-
-- **Width:** 4px for main panel dividers, 8px for agent split dividers.
-- **Cursor:** `col-resize` for vertical dividers, `row-resize` for horizontal dividers.
-- **Hover State:** Background changes to accent color (`#6cb6ff`).
-- **During Resize:** All transitions on panel content are disabled (`transition: none !important`) for performance. A class `body.is-resizing-panels` is applied to the body element.
-
-### 18.5 Modal Overlays
-
-- **Backdrop:** Semi-transparent black overlay (`rgba(0, 0, 0, 0.5)`).
-- **Card:** Scales in from 0.95 with fade-in animation.
-- **Dismissal:** Click outside the modal, press Escape, or click the close button.
-- **Density:** All modals use compact density.
-
-### 18.6 Status Badges & Indicators
-
-#### 18.6.1 Session Status Dots
-
-| Color | State |
-|-------|-------|
-| Green (`#78d7b2`) | Active/Running |
-| Gray-Blue | Idle |
-| Blue (`#6cb6ff`) | Queued |
-| Muted | Off/Unavailable |
-
-#### 18.6.2 Source Status Badges
-
-| Color | Status |
-|-------|--------|
-| Green (`#78d7b2`) | Staged |
-| Orange (`#f1b86a`) | Modified |
-| Blue (`#6cb6ff`) | Untracked |
-| Red (`#ff9eb0`) | Deleted |
-
-#### 18.6.3 Worktree Status Chips
-
-| Class | Status |
-|-------|--------|
-| `.worktree-meta-chip.status.dirty` | Has uncommitted changes |
-| `.worktree-meta-chip.status.clean` | No pending changes |
-
-### 18.7 Progress Bars
-
-- **Height:** 3px.
-- **Behavior:** Width animates based on completion ratio.
-- **Colors:**
-  - Accent blue for live/loading states.
-  - Danger pink for error states.
-- **Minimum Width:** 6% (always visible even at 0% progress).
-- **Running State:** Minimum 34% width when actively running.
-- **Transition:** Width animates with fast duration (60ms).
-
----
-
-## 19. Interaction Patterns
-
-### 19.1 Hover-Reveal Pattern
-
-Several UI elements follow a hover-reveal pattern where secondary actions are hidden by default and appear only on hover:
-
-- **Tab Close Buttons:** X buttons on workspace tabs are hidden until the tab is hovered.
-- **Pane Action Buttons:** Split and close buttons in agent pane headers appear on hover.
-- **Folder Browser Actions:** "Enter folder" actions appear on hover over directory rows.
-
-### 19.2 Pill Selector Pattern
-
-Settings options that choose between discrete values use a pill selector (a row of toggle buttons):
-
-- Only one pill is active at a time (single selection).
-- The active pill has a distinct background and border.
-- Clicking an inactive pill activates it and deactivates the previous selection.
-- Used for: Default Provider, Theme, Terminal Rendering, Language.
-
-### 19.3 Confirmation Dialog Pattern
-
-Destructive actions (Discard All, close workspace with active sessions) trigger a confirmation dialog:
-
-- **Overlay:** Semi-transparent backdrop.
-- **Card:** Compact modal card with:
-  - **Header:** H3 title.
-  - **Body:** Message text with optional details section (content + timestamp).
-  - **Footer:** Cancel button (default style) and Confirm button (danger style).
-
-### 19.4 Empty State Pattern
-
-Every major section of the application has a defined empty state:
-
-| Area | Empty State Content |
-|------|-------------------|
-| Top Bar (no workspaces) | Kicker + label prompting to open a workspace |
-| Welcome Screen | Product description + action buttons |
-| Terminal Panel (no terminals) | "No terminal yet" + add button |
-| Agent Pane (draft) | Provider selection buttons |
-| Agent Pane (unavailable) | Error title, reason, and remove button |
-| Agent Pane (no output) | "No agent output yet" |
-| Command Palette (no results) | "No results found" |
-| File Search (no matches) | Empty dropdown |
-
-### 19.5 Loading State Pattern
-
-- **Runtime Validation:** Blue pulse animation on status dots while checking.
-- **Auth Screen:** Spinner during loading state.
-- **Skeleton Loaders:** Shimmer animation on placeholder bars during initial load.
-- **Agent Sessions:** Progress bar at minimum 6% width during initialization.
-
-### 19.6 Real-Time Sync
-
-The application maintains real-time synchronization of:
-
-- Agent events (session started, turn completed).
-- Terminal events (output chunks).
-- Lifecycle events (workspace state changes).
-- Artifact dirty events (git changes, worktree changes, file tree changes).
-
-Reconnection with fallback is handled automatically when the connection is interrupted.
-
----
-
-## 20. Edge Cases & Error States
-
-### 20.1 Authentication Errors
+The editor responds to refreshes triggered by filesystem or Git changes:
 
 | Scenario | Behavior |
-|----------|----------|
-| Incorrect passphrase | Error message displayed below input field; user can retry immediately |
-| Session expired | User is redirected to the authentication screen with an expiration message |
-| IP blocked | "Blocked" state is displayed with information about the lockout duration |
-| Auth service unavailable | "Unavailable" state is displayed with a retry option |
+| --- | --- |
+| File changed on disk and the current file has **no unsaved changes** | Automatically refresh to latest disk content |
+| File changed on disk and the current file **has unsaved changes** | Keep local content and show `File has been modified on disk` warning |
+| File deleted on disk | Show `File has been deleted on disk` warning |
+| Image file resource changed | Refresh image URL / size |
 
-### 20.2 Agent Session Errors
+##### Errors and Empty States
 
-| Scenario | Behavior |
-|----------|----------|
-| Agent process fails to start | Pane enters "unavailable" state with error reason and remove button |
-| Agent process crashes | Terminal displays crash output; pane status reflects the error |
-| Agent session times out | Session is marked as idle; completion reminder may be triggered |
+| Scenario | Page behavior |
+| --- | --- |
+| Open file fails | Show error information in the main area |
+| `activePath` exists but file has not finished loading | Show a loading placeholder |
+| No file selected | Show the editor empty-state prompt |
 
-### 20.3 Workspace Errors
+#### 4.3.6.4 Diff Viewer
 
-| Scenario | Behavior |
-|----------|----------|
-| Directory not accessible | Workspace launch fails; error message is displayed in the launch overlay |
-| Runtime validation fails | Workspace launch is blocked; Runtime Validation Overlay shows missing commands with install hints |
-| Workspace recovery fails | Workspace is opened in a clean state; previous session data may be lost |
+Diff Viewer is a read-only view containing:
 
-### 20.4 Git Errors
+- File path at the top
+- Close button
+- Line-by-line rendered diff content
+- Line numbers
+- Distinct visuals for added / removed / meta / context lines
 
-| Scenario | Behavior |
-|----------|----------|
-| Not a Git repository | Git Changes panel displays an empty state with guidance to initialize Git |
-| Git command fails | Error is displayed in the relevant section (e.g., commit failure) |
-| Merge conflict | Files with conflicts are highlighted in the changes list |
+After diff is closed, the current behavior is:
 
-### 20.5 Terminal Errors
+- Clear the current diff preview
+- Clear `activeFilePath`
+- Return the main area to the agent view
 
-| Scenario | Behavior |
-|----------|----------|
-| PTY allocation fails | Terminal displays an error message and a retry option |
-| Terminal process exits unexpectedly | Terminal displays the exit code and a prompt to create a new terminal |
+### 4.3.7 Bottom Terminal Panel
 
-### 20.6 Concurrency Conflicts
+#### 4.3.7.1 Panel Structure
 
-| Scenario | Behavior |
-|----------|----------|
-| Two tabs attempt to control the same workspace | Controller/observer protocol ensures only one tab has write access; the other tab observes |
-| Controller heartbeat misses deadline | Observer initiates takeover protocol with a deadline-based handoff |
-| Page unload during active session | Controller is released gracefully; workspace state is preserved |
+The terminal panel contains:
 
-### 20.7 Network Interruption
+- Top toolbar
+- Optional terminal tabs
+- xterm rendering area for the current terminal
 
-| Scenario | Behavior |
-|----------|----------|
-| WebSocket disconnects | Automatic reconnection with fallback; events are buffered during disconnection |
-| Server becomes unreachable | Agent sessions continue running locally; UI displays connection status |
+#### 4.3.7.2 Toolbar
 
-### 20.8 File System Errors
+| Feature | Behavior |
+| --- | --- |
+| Current terminal title | Formatted from current terminal meta / title |
+| Close current terminal | Close the selected terminal |
+| New terminal | Create a new shell terminal |
+| Terminal selector | Switch terminal when multiple terminals exist |
 
-| Scenario | Behavior |
-|----------|----------|
-| File deleted externally | File tree updates automatically via file watcher; open file in editor shows a stale state until refreshed |
-| File permission denied | Error displayed when attempting to open or save the file |
+#### 4.3.7.3 Multi-Terminal Behavior
 
----
+| Scenario | Page behavior |
+| --- | --- |
+| `0` terminals | Show empty state and `Create terminal` CTA |
+| `1` terminal | Show xterm directly |
+| `> 1` terminals | Show tabs and also provide selector dropdown |
 
-## Appendix A: Current Boundaries (Not Yet Shipped)
+#### 4.3.7.4 Shell Terminal Creation Rules
 
-The following features are partially implemented or planned but not fully available in the current release:
+When creating a new shell terminal:
 
-| Feature | Current State |
-|---------|--------------|
-| Multi-agent provider support | Claude and Codex exist but multi-provider orchestration is not fully production-ready |
-| Light theme | Dark theme only; light theme is planned but not shipped |
-| Full visual task queue UI | Task queue exists internally but is not fully visualized in the UI |
-| Complete Archive/Dispatch Center | Archive history exists but a full management center is not shipped |
-| Explicit worktree management entry points | Worktree inspection exists but full creation/deletion management is not available |
-| Fully closed-loop auto-suspend behavior | Idle policy exists but auto-suspend is not fully automatic |
-| Remote Git workspace creation | Backend supports it but the UI entry is hidden/deferred |
+- The working directory is fixed to the current workspace path
+- Unix-like environments default to `$SHELL -i`
+- Windows defaults to `cmd.exe`
 
----
+#### 4.3.7.5 Terminal Recovery and Rendering
 
-## Appendix B: Product Metrics & Telemetry (Recommended)
+Desktop terminals and agent terminals share the same xterm host capability and currently behave as follows:
 
-The following metrics should be tracked to understand product usage:
+- On first entry, try replay / snapshot restoration first
+- Show a restoring overlay before restoration finishes
+- Show a degraded overlay if replay is too stale, the terminal has already closed, or restoration fails
+- Non-active terminals go through a hydration queue and show a placeholder during that stage
 
-| Metric | Purpose |
-|--------|---------|
-| Active workspaces per session | Understand typical usage depth |
-| Agent sessions per workspace | Understand parallelism needs |
-| Average session duration | Understand typical agent run length |
-| Supervisor activation rate | Measure adoption of the supervisor feature |
-| Focus mode usage | Measure demand for distraction-free mode |
-| Terminal count per workspace | Understand shell terminal demand |
-| Git commit frequency | Understand Git integration usage |
-| Command palette usage frequency | Measure discoverability and adoption |
-| Settings change frequency | Understand configuration friction |
-| Auth failure rate (for remote deployments) | Monitor authentication health |
+#### 4.3.7.6 Interaction Capabilities
 
----
+| Feature | Behavior |
+| --- | --- |
+| Standard input | Send directly to terminal or session |
+| Read-only protection | Non-interactive session terminals cannot accept input |
+| Paste / drag-upload files | Upload files into the current workspace first, then inject shell-safe path text into the input |
+| Upload in progress | Show `Uploading…` mask above xterm and temporarily disable input |
 
-## Appendix C: Accessibility Considerations
+After upload succeeds, the terminal receives:
 
-| Area | Recommendation |
-|------|---------------|
-| Color contrast | Ensure all text meets WCAG 2.1 AA contrast ratios (4.5:1 for normal text, 3:1 for large text) |
-| Keyboard navigation | All interactive elements must be reachable and operable via keyboard |
-| Focus indicators | All focusable elements must have visible focus indicators |
-| Screen reader support | ARIA labels should be added to icon-only buttons and complex interactive components |
-| Motion preferences | Users who prefer reduced motion should be able to disable pulse animations and transitions |
+- Each path shell-escaped with single quotes
+- Multiple files joined by spaces
+- A trailing space, so the user can keep typing the command
 
----
+## 4.4 Workspace Page `/workspace` (Mobile)
 
-*End of Document*
+### 4.4.1 Page Goal and Overall Structure
+
+The mobile workspace is not a shrunken desktop layout. It is a mobile workflow organized around `current session + Dock + multiple full-screen Sheets`.
+
+The overall structure is:
+
+- Top bar
+- Current single-session main area
+- Bottom Dock
+- Full-screen Sheets for Agent / Files / Terminal / Supervisor and related flows
+
+### 4.4.2 Entry Conditions and Page States
+
+Mobile shares the same workspace startup and route-guard logic as desktop:
+
+- Resolving: show loading placeholder
+- Load failed: show error placeholder
+- Valid workspace exists: enter the mobile workspace
+
+### 4.4.3 Top Bar
+
+| Feature | Behavior |
+| --- | --- |
+| Workspace button | Shows current workspace name; clicking opens the Workspace Drawer |
+| Settings button | Navigate to `/settings` |
+| Fullscreen button | Visible when supported by the browser; toggles fullscreen for the workspace view |
+
+Workspace title display follows the same rule as desktop: workspace name first, then last path segment, then full path.
+
+### 4.4.4 In-Page Banner
+
+The mobile workspace page embeds the config drift banner at the top of workspace content.  
+It is not a shell-level global bar spanning every page.
+
+### 4.4.5 Main Session Area
+
+#### 4.4.5.1 When a Session Exists
+
+The main area shows **only one currently active session**.
+
+The current main card behavior is:
+
+- Reuse the same Session Card core content
+- Do not show the desktop header action set
+- Provide Supervisor entry through a top-corner affordance
+
+So the mobile main card does **not** directly expose:
+
+- Stop
+- Split
+- Close
+
+#### 4.4.5.2 When No Session Exists
+
+The page shows an empty state and CTA:
+
+- Copy 1: prompt the user to start a session
+- Copy 2: explain that file and terminal capabilities remain available from the Dock
+- CTA: open Agent Sheet directly in create mode
+
+#### 4.4.5.3 Focus Synchronization
+
+If an external action, such as clicking a notification, requests focus on a session:
+
+- As long as that session belongs to the current workspace
+- Mobile automatically switches the visible current session to it
+
+### 4.4.6 Bottom Dock
+
+The Dock always contains three entries:
+
+- `Agent`
+- `Files`
+- `Terminal`
+
+Interaction rules:
+
+| Dock item | Behavior |
+| --- | --- |
+| Agent | Open / close Agent Sheet |
+| Files | Open Files full-screen Sheet |
+| Terminal | Open Terminal full-screen Sheet |
+
+Current active-state rules:
+
+- Highlight `Agent` when Agent Sheet is open
+- Highlight the matching item when Files or Terminal Sheet is open
+
+### 4.4.7 Agent Sheet
+
+#### 4.4.7.1 Modes
+
+Agent Sheet has two modes:
+
+- `sessions`: session list
+- `providers`: create new session
+
+Default rules:
+
+- If sessions already exist, default to `sessions`
+- If no session exists yet, default to `providers`
+
+#### 4.4.7.2 Session List Mode
+
+Content includes:
+
+- `Create session` action row
+- Session list for the current workspace
+
+Each session row provides:
+
+- Primary click: switch to that session and close the Sheet
+- Trailing close button: close that session, then close the Sheet
+
+#### 4.4.7.3 Provider Mode
+
+The provider list is currently fixed to:
+
+- Claude
+- Codex
+
+Interaction rules:
+
+- After choosing a provider, reuse the same runtime / auto-install / create flow as desktop
+- After successful creation:
+  - Write session data
+  - Append it into layout
+  - Switch it into the current mobile session
+  - Close the Sheet
+
+Difference from desktop:
+
+- Mobile shows busy state per provider and only disables the busy item
+- Desktop locks the entire provider area if any provider is busy
+
+### 4.4.8 Files Sheet
+
+Files Sheet is a full-screen Sheet with three route states:
+
+- `root`
+- `editor`
+- `diff`
+
+#### 4.4.8.1 Root State
+
+The root-state top area includes:
+
+- Current branch button
+- `Files / Git` tabs
+- Inline Git status bar
+
+##### Branch Button
+
+- Clicking opens the branch quick switcher
+- Label shows the current branch name; if empty, show the `no branch` copy
+
+##### Tab Behavior
+
+| Tab | Content |
+| --- | --- |
+| Files | File tree |
+| Git | Git panel |
+
+#### 4.4.8.2 Editor State
+
+- Entry: select a file in the Files tab
+- Main content: code editor / file preview
+- Page-level back: use Sheet Header `Back` to return to root
+- Header right-side actions:
+  - Text-image files can switch `Image / Text`
+  - Text files can be saved
+
+#### 4.4.8.3 Diff State
+
+- Entry: select a change in the Git tab
+- Main content: Diff Viewer
+- Page-level back: use Sheet Header `Back` to return to root
+- Closing the whole Sheet: exit Files Sheet directly
+
+### 4.4.9 Terminal Sheet
+
+On mobile, Terminal opens as a full-screen Sheet and reuses the same terminal capability set internally.
+
+#### 4.4.9.1 Toolbar Differences
+
+Compared with desktop:
+
+- Only show the current terminal selector when at least one terminal exists
+- Use `MobileSelectSheet` for multi-terminal selection
+- Do not show desktop-style tabs
+
+#### 4.4.9.2 Mobile Soft Key Bar
+
+A real soft key bar appears above mobile xterm and includes:
+
+- `Ctrl`
+- `Shift`
+- `Esc`
+- `Tab`
+- `↑`
+- `←`
+- `↓`
+- `→`
+- `Enter`
+
+Interaction rules:
+
+| Key | Behavior |
+| --- | --- |
+| Ctrl tap | Toggle between `off` and `armed` |
+| Ctrl long-press | Lock as `locked` |
+| Shift tap | Enter `armed`; auto-consume after the next soft-key input |
+| Arrow / Esc / Tab / Enter | Write the corresponding control sequence directly |
+
+The soft key bar is disabled when:
+
+- The current terminal is non-interactive
+- File upload is in progress
+- WebSocket is disconnected
+
+### 4.4.10 Supervisor Sheet
+
+Mobile Supervisor is split into two levels:
+
+#### 4.4.10.1 Root Level
+
+| Scenario | Page behavior |
+| --- | --- |
+| Current session already has Supervisor enabled | Show a status card and `Edit objective` / `Disable` buttons |
+| Current session has Supervisor disabled | Show empty state and `Enable objective` button |
+
+#### 4.4.10.2 Detail Level
+
+Enable, edit, and disable all enter the detail level, which supports:
+
+- Showing mode-specific title, subtitle, and icon
+- Editing the objective
+- Choosing the evaluator provider
+- Fixed bottom `Cancel / Confirm` buttons
+
+Choosing the evaluator provider opens another selection Sheet.
+
+### 4.4.11 Workspace Drawer
+
+#### 4.4.11.1 List Items
+
+Each workspace row contains:
+
+- Primary area: switch to that workspace and navigate to `/workspace`
+- Close button: close that workspace
+
+#### 4.4.11.2 Bottom Action
+
+The drawer footer contains one fixed button:
+
+- Open the workspace launcher
+
+#### 4.4.11.3 Closing the Last Workspace
+
+When the last workspace is closed from the mobile drawer, the flow explicitly requires `return home when empty`, so the app returns to the welcome page.
+
+## 4.5 Settings Page `/settings`
+
+### 4.5.1 Page Goal and Navigation Structure
+
+The settings page manages:
+
+- Notifications
+- Provider launch args and config files
+- Appearance
+- Part of shortcut configuration
+
+Desktop and mobile share the same capability set, but use different navigation structures:
+
+| Form factor | Navigation structure |
+| --- | --- |
+| Desktop | Left-side section navigation + right-side content area |
+| Mobile | Root list page + detail subpages |
+
+Current visible section scope:
+
+| Form factor | Visible sections |
+| --- | --- |
+| Desktop | General / Providers / Appearance / Shortcuts |
+| Mobile | General / Providers / Appearance |
+
+> **Note:**  
+> Mobile currently has no `Shortcuts` entry.
+
+### 4.5.2 Shared Rules
+
+#### 4.5.2.1 Back Logic
+
+| Scenario | Back behavior |
+| --- | --- |
+| Mobile detail page | Return to the mobile root list first |
+| All other cases | Prefer browser history; otherwise go to `/workspace`; otherwise go to `/` |
+
+#### 4.5.2.2 Loading Logic
+
+After connection becomes available, the settings page loads settings data and syncs the following into page state:
+
+- Notification master switch
+- Notification sound switch
+- Terminal renderer
+- Language
+- Provider additional args
+- External config audit
+
+If loading fails:
+
+- An error notice appears at the top of the content area
+- The user can click `Refresh` to refetch
+
+#### 4.5.2.3 Shared Footer
+
+The bottom of the settings page always shows:
+
+- Autosave hint
+- Version string `v0.2.6`
+
+#### 4.5.2.4 In-Page Banner
+
+The settings content area embeds the config drift banner at the top to handle Codex config drift.
+
+### 4.5.3 General
+
+General currently contains notification settings only.
+
+#### 4.5.3.1 Toggle Items
+
+| Setting | Interaction rules |
+| --- | --- |
+| Notifications Enabled | Toggle saves immediately |
+| Notification Sound | Toggle saves immediately; disabled when Notifications Enabled is off |
+
+The frontend also syncs both values into local notification preferences.
+
+#### 4.5.3.2 Browser Capability Status
+
+The page checks browser notification capability and shows one of three states:
+
+- `available`
+- `limited`
+- `unsupported`
+
+Mobile rule:
+
+- If the device is mobile and not running as a standalone web app, capability is marked as `limited`
+
+#### 4.5.3.3 Permission State
+
+The page shows browser notification permission state:
+
+- `granted`
+- `denied`
+- `default`
+- `unavailable`
+
+Among those:
+
+- When state is `default` and capability is `available`, show `Request permission`
+- When state is `denied`, `limited`, or `unavailable`, show the corresponding explanatory copy
+
+### 4.5.4 Providers
+
+Providers is the most complex section in Settings and is split into two layers:
+
+1. Base launch-args layer
+2. Config-file editing layer
+
+#### 4.5.4.1 Provider Switching
+
+The provider set is currently fixed to:
+
+- Claude
+- Codex
+
+#### 4.5.4.2 Base Layer
+
+Desktop has a second-level switch:
+
+- Base
+- Config File
+
+Mobile enters `Base` first by default, then uses a dedicated entry to go into `Config File`.
+
+The Base layer currently includes:
+
+| Feature | Interaction rules |
+| --- | --- |
+| Additional Args textarea | One argument per line; changes autosave immediately |
+| Command Preview | Refresh command preview in real time |
+
+#### 4.5.4.3 Config File Layer
+
+The actual behavior of the config-file editor is:
+
+| Feature | Interaction rules |
+| --- | --- |
+| Load | Read real config-file content and absolute path on entry |
+| File missing | Show empty state and guidance copy, but keep the card structure |
+| Expand / collapse | Card is collapsible; expanded state persists to local storage |
+| Editor | Uses Monaco |
+| Status display | `saved / dirty / saving / error` |
+| Save | Save to the real config file; if a backup path is created, notify through Toast |
+| Reset | Restore the latest loaded / saved content |
+| Format | Supported only for `claude` config; implemented as JSON pretty-print |
+
+#### 4.5.4.4 Layout Differences
+
+| Form factor | Behavior |
+| --- | --- |
+| Desktop | Provider tabs + Base / Config File second-level switch; Config File can fill the remaining height |
+| Mobile | Base page shows `Open Config File Editor`; clicking enters the config-file sublayer with a back action to Base |
+
+### 4.5.5 Appearance
+
+Appearance currently contains three items:
+
+- Theme
+- Terminal Renderer
+- Language
+
+#### 4.5.5.1 Theme
+
+| Feature | Interaction rules |
+| --- | --- |
+| Dark / Light switch | Switch frontend theme immediately on click |
+| Local persistence | Theme choice writes to local storage |
+| Server save | The page attempts to sync the setting to the server |
+
+> **Current implementation boundary:**  
+> Immediate theme switching is complete.  
+> Server-side persistence still has limitations; see Chapter `8.2`.
+
+#### 4.5.5.2 Terminal Renderer
+
+Two renderer modes are supported:
+
+- `standard`
+- `compatibility`
+
+Clicking saves immediately.
+
+#### 4.5.5.3 Language
+
+Supported languages:
+
+- Chinese `zh`
+- English `en`
+
+Clicking switches the frontend language immediately and saves the config.
+
+### 4.5.6 Shortcuts (Desktop Only)
+
+The Shortcuts page currently provides a **shortcut configuration UI**, split into four groups:
+
+- Global
+- Workspace
+- Editor
+- Terminal
+
+#### 4.5.6.1 Configuration Interaction
+
+| Feature | Behavior |
+| --- | --- |
+| Click a shortcut binding | Enter capture mode |
+| Capture input | Record `Mod / Shift / Alt + Key` |
+| `Escape` | Cancel the current capture |
+| Reset one item | Remove the custom binding for that item |
+| Reset All | Clear all custom bindings |
+
+All changes:
+
+- Write into local shortcut config
+- Sync-save to settings
+
+#### 4.5.6.2 Current Capability Boundary
+
+The real capability of this page should currently be defined as:
+
+- View default bindings
+- Enter / reset custom bindings
+- Save configuration
+
+It should **not** be defined as a `global shortcuts take effect immediately at runtime` system. The more precise runtime boundary is documented in Chapter `8.3`.
+
+## 4.6 404 Page `*`
+
+The 404 page reuses the visual shell of the welcome page and includes:
+
+- Kicker
+- Title
+- Description
+- A status panel showing the unmatched path
+- A `Return Home` button
+
+The interaction rule is simple:
+
+- Clicking the button returns to `/`
+
+## 5. Cross-Page Systems
+
+## 5.1 Quick Actions (Command Palette)
+
+Quick Actions is currently wired on both desktop and mobile.
+
+### 5.1.1 Open Entry
+
+The **only globally wired hotkey currently confirmed in code** is:
+
+- `Ctrl/Cmd + K`: open / close Quick Actions
+
+### 5.1.2 Presentation Shape
+
+| Form factor | Shape |
+| --- | --- |
+| Desktop | Centered overlay modal |
+| Mobile | Full-screen Sheet |
+
+### 5.1.3 Shared Behavior After Opening
+
+- Autofocus the search input
+- Clear the previous search term
+- Reset the selection index to the first item
+
+### 5.1.4 Keyboard Interaction
+
+| Key | Behavior |
+| --- | --- |
+| `ArrowDown` | Move selection down |
+| `ArrowUp` | Move selection up |
+| `Enter` | Execute the selected command and close the panel |
+| `Escape` | Close the panel |
+
+### 5.1.5 Current Command Set
+
+#### Shared Across Desktop and Mobile
+
+- Open the workspace launcher
+- Return to the home page
+- Open the settings page
+- Switch to any already-open workspace
+- When an active workspace exists, also provide `Return home and clear active workspace`
+
+#### Desktop Only
+
+- Toggle Focus Mode
+- Explicitly enter Focus Mode
+- Explicitly exit Focus Mode
+- Toggle left sidebar visibility
+- Toggle terminal visibility
+- Explicitly open terminal
+- Explicitly close terminal
+
+### 5.1.6 Boundary Between Display Copy and Real Listeners
+
+The command list may currently display shortcut labels such as:
+
+- `Ctrl+N`
+- `Ctrl+,`
+- `F`
+
+These are currently **display copy only** and do not mean the corresponding global shortcuts are actually wired.
+
+## 5.2 Workspace Launcher
+
+The welcome page, desktop top bar, and mobile drawer all use the same workspace launcher.
+
+### 5.2.1 Open Shape
+
+| Form factor | Shape |
+| --- | --- |
+| Desktop | Modal |
+| Mobile | Full-screen Sheet |
+
+### 5.2.2 Directory Browsing
+
+| Feature | Behavior |
+| --- | --- |
+| Home button | Jump to `~` |
+| Go Up button | Jump to parent directory; hidden at root `/` |
+| Preset root chips | Currently fixed to `/`, `~`, and `/home/spencer` |
+| Current path chip | If the current path is not in preset chips, append one extra current-path chip |
+| Single-click directory row | Select directory |
+| Double-click directory row | Enter directory |
+| Inline action after selection | Show `Enter directory` action button |
+
+### 5.2.3 Start Rules
+
+- `Start` is disabled when no directory is selected
+- Clicking `Start` opens that directory as a workspace
+- After success:
+  - Add the workspace into the local list
+  - Update workspace order
+  - Set it as the active workspace
+  - If not currently on `/workspace`, auto-navigate to `/workspace`
+  - Close the launcher
+
+### 5.2.4 Quick Close
+
+The desktop launcher listens for:
+
+- `Escape`: close the modal
+
+## 5.3 Branch Quick Switcher
+
+### 5.3.1 Trigger Entry
+
+- Desktop left sidebar branch button
+- Mobile Files Sheet branch button
+
+### 5.3.2 Presentation Shape
+
+| Form factor | Shape |
+| --- | --- |
+| Desktop | Overlay popover |
+| Mobile | Selection Sheet |
+
+### 5.3.3 Search and Switch
+
+| Feature | Behavior |
+| --- | --- |
+| Search input | Filter branch list by name |
+| Current branch | Shows a checkmark |
+| Remote branch | Shows `Remote` badge |
+| Select existing branch | Switch to that branch directly |
+
+### 5.3.4 Create New Branch
+
+The current implementation is not `one click creates immediately`. It uses a **two-step confirmation**:
+
+1. When the user types a branch name that does not exist, the list shows `Create xxx`
+2. After selecting it once, the entry becomes `Confirm create xxx`
+3. Only after selecting again is the branch actually created and checked out
+
+### 5.3.5 Keyboard Interaction
+
+| Key | Behavior |
+| --- | --- |
+| `ArrowDown / ArrowUp` | Move selection |
+| `Enter` | Select branch / initiate create / confirm create |
+| `Escape` | Close |
+
+## 5.4 Config Drift Banner
+
+Config Drift Banner warns about config items in `~/.codex/config.toml` that interfere with current app behavior.
+
+### 5.4.1 Data Source
+
+The data comes from `externalConfigAudit` in the settings payload.
+
+### 5.4.2 Display Positions
+
+| Scenario | Position |
+| --- | --- |
+| Desktop shell, excluding auth and settings pages | Global top banner |
+| Mobile workspace page | Compact in-page banner |
+| Settings page | Embedded banner at the top of the content area |
+
+### 5.4.3 Interaction Capabilities
+
+| Feature | Behavior |
+| --- | --- |
+| Expand details | View each finding, line number, and snippet |
+| Check cleanup items | All findings are selected by default |
+| Cleanup | Execute config cleanup |
+| Cleanup success | If a backup path is produced, show it in banner notice |
+| Dismiss | Close the current banner in frontend state only; not a permanent ignore |
+| Load failure | Show failure banner and allow `Refresh` retry |
+
+The compact banner on the mobile workspace page does not expand details inline; it routes the user to `/settings`.
+
+## 5.5 Connection Status Banner
+
+The global connection banner handles these states in a unified way:
+
+- `reconnecting`: show `Reconnecting...`
+- `rejected`: show `Another tab is active`
+- Any other disconnected state: show `Connection lost`
+
+## 5.6 Toasts and Notifications
+
+### 5.6.1 Toast Container
+
+The Toast container supports:
+
+- Keeping at most the latest `5` toasts at once
+- Four types: `success / error / warning / info`
+- Auto-dismiss, default `5s`; `duration = 0` switches to manual close
+
+### 5.6.2 Toast Click Behavior
+
+| Attached toast data | Click result |
+| --- | --- |
+| `workspaceId + sessionId` | Jump to that workspace and focus / scroll into view / pulse-highlight the session |
+| `workspaceId` only | Switch to that workspace and navigate to `/workspace` if needed |
+| No navigation data | Only close the toast |
+
+### 5.6.3 Session Completion Notifications
+
+Notifications currently fire only when **an agent finishes one round of work**, with explicit rules:
+
+- Primary trigger: `running -> idle`
+- Fallback trigger: `running -> ended`
+
+And additionally:
+
+- Rounds shorter than `4s` do not notify
+- When the page is visible:
+  - If desktop is already on the workspace that owns the session
+  - Or mobile is already showing that session
+  - Then suppress the notification
+- When the page is visible but the user is not on that workspace / session:
+  - Send in-app toast
+- When the page is hidden:
+  - Send browser system notification
+
+If sound is enabled:
+
+- Prefer playing `/task-complete.wav`
+- Fall back to a Web Audio synthesized sound if playback fails
+
+## 5.7 Supervisor Editing Container
+
+Supervisor editing interactions are carried by two containers:
+
+| Form factor | Container |
+| --- | --- |
+| Desktop | Modal dialog |
+| Mobile | Full-screen Sheet + optional selection Sheet |
+
+Supported modes:
+
+- `enable`
+- `edit`
+- `disable`
+
+Editable fields:
+
+- Objective text
+- Evaluator Provider
+
+## 6. Confirmed Shortcuts and Input Baseline
+
+This chapter lists **only interactions that are currently confirmed as wired**. It does not repeat historical PRD items that were planned but do not have unified runtime listeners today.
+
+### 6.1 Global Level
+
+| Interaction | Status |
+| --- | --- |
+| `Ctrl/Cmd + K` | Wired: open / close Quick Actions |
+
+### 6.2 Inside Overlays
+
+| Overlay | Wired interaction |
+| --- | --- |
+| Quick Actions | `ArrowUp / ArrowDown / Enter / Escape` |
+| Branch quick switcher | `ArrowUp / ArrowDown / Enter / Escape` |
+| Workspace launcher (desktop) | `Escape` closes |
+
+### 6.3 Inside the Editor
+
+| Interaction | Status |
+| --- | --- |
+| Monaco `Ctrl/Cmd + S` | Wired: save the current text file |
+
+### 6.4 Mobile Terminal
+
+Wired soft keys:
+
+- Ctrl / Shift
+- Esc / Tab / Enter
+- Arrow Up / Left / Down / Right
+
+### 6.5 Items That Must Not Be Documented as Shipped Shortcuts
+
+The following items **must not be written as shipped global shortcuts** in the current product description:
+
+- `Ctrl/Cmd + N`
+- `Ctrl/Cmd + ,`
+- `F`
+- Any pane split shortcut
+- Any custom binding entered on the Settings page
+
+At most, these currently exist as:
+
+- Shortcut labels shown inside command lists
+- Or code that exists in unmounted components / code paths without unified runtime consumption
+
+## 7. System Boundaries and Error Handling
+
+## 7.1 File / Git Change Propagation
+
+The server pushes file-change and Git-dirty events. The frontend reacts by:
+
+- Refreshing Git status
+- Refreshing the branch list
+- Marking the file tree stale and reloading on demand
+- Refreshing already-open editor buffers
+
+## 7.2 Auth Boundary
+
+The frontend currently has no explicit `logout` entry, even though the backend has a corresponding endpoint.
+
+The main login-related failure cases are:
+
+- Wrong password
+- Login endpoint unavailable
+- Temporary lockout after too many failed attempts
+
+## 7.3 Upload Boundary
+
+Paste / drag-upload into terminals currently has these boundaries:
+
+- Requests must include `workspaceId`
+- The current batch must contain at least one file
+- Missing workspace returns `workspace_not_found`
+- Oversized files, parse failures, and write failures return dedicated errors
+- Frontend reports failure through error Toast
+
+## 7.4 Image Preview Boundary
+
+`/api/file` currently serves image preview only:
+
+- Non-image types return `not_an_image`
+- Path escape returns `path_escape`
+- It is not a general-purpose file download endpoint
+
+## 8. Implementation Appendix and Excluded Scope
+
+This chapter covers only two kinds of content:
+
+1. Implementation facts that should be preserved but do not belong in the main page descriptions
+2. Items that exist in the repo but must not currently be described as shipped capability
+
+### 8.1 Auth Route Implementation Note
+
+The main product review chapters consistently describe the login page as `/auth`, because that is the actual mounted frontend login page.
+
+But one implementation fact still needs to be preserved:
+
+- Server-side SPA navigation for unauthenticated users redirects to `/login`
+- Frontend bootstrap actively navigates users to `/auth` when auth fails
+
+So the product document uses `/auth` in the main body, while preserving `/login` here as an implementation fact on the server side.
+
+### 8.2 Theme Persistence Boundary
+
+The current frontend UI genuinely supports immediate dark / light switching.  
+But the server settings schema fully accepts only the `appearance.theme = "dark"` path.
+
+Therefore:
+
+- Theme **taking effect immediately** is true
+- Theme **full and symmetrical persistence across frontend and backend** is currently incomplete
+
+The PRD should not describe it as a fully consistent cross-layer theme persistence system.
+
+### 8.3 Items That Must Not Be Counted as Shipped Capability
+
+The following items can be found in the repo as components, tests, or implementation fragments, but **must not be described as currently reachable user-facing functionality**:
+
+#### 8.3.1 `WorktreeModal`
+
+- The component exists
+- But there is no reachable mounted entry in actual pages today
+
+#### 8.3.2 Standalone `FocusMode` Component
+
+- The component exists
+- It defines internal logic for `F`, `Escape`, and related behavior
+- But it is not currently mounted by the shell or workspace page
+
+The only truly user-visible focus mode entry currently confirmed is **toggling focus mode state from Quick Actions**.
+
+#### 8.3.3 Runtime Shortcut Replacement
+
+- The Shortcuts settings page exists
+- Custom bindings can already be saved
+- But runtime global hotkeys are not uniformly driven by those saved bindings
+
+Therefore, the PRD must not claim that `custom shortcuts take effect globally and immediately at runtime`.
+
+## 9. Maintenance Principles
+
+When this PRD is maintained in future updates, follow three rules:
+
+1. **Write the main body by page and user flow, not by piling up technical modules.**
+2. **Write real reachable interactions first, then states, errors, and boundaries.**
+3. **A component existing is not the same as a feature being shipped; if it is not mounted or not uniformly listened to, do not document it as current product capability.**
