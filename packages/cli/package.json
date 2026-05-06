@@ -1,6 +1,6 @@
 {
   "name": "@spencer-kit/coder-studio",
-  "version": "0.2.6",
+  "version": "0.3.0",
   "type": "module",
   "description": "Coder Studio CLI - The only published package",
   "main": "./src/index.ts",
