@@ -128,7 +128,15 @@ EXAMPLES:
 }
 
 function showVersion(): void {
-  const version = "0.0.1";
+  const manifestPath = [
+    new URL("../package.json", import.meta.url),
+    new URL("../../package.json", import.meta.url),
+  ].find((candidate) => existsSync(candidate));
+  if (!manifestPath) {
+    throw new Error("Unable to locate CLI package.json");
+  }
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf-8")) as { version?: string };
+  const version = manifest.version ?? "0.0.0";
   console.log(`@spencer-kit/coder-studio v${version}`);
 }
 

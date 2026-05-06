@@ -4,6 +4,8 @@ import { readCliConfig } from "./config-store.js";
 import { getStaticAssetsDir, hasWebAssets } from "./embed.js";
 import { assertSupportedNodeVersion } from "./node-version.js";
 
+const MISSING_WEB_ASSETS_WARNING = "Warning: Web assets not found. Frontend will not be available.";
+
 export const buildServerConfig = (): Partial<ServerConfig> => {
   const savedConfig = readCliConfig();
   const config: Partial<ServerConfig> = {

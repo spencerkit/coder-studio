@@ -102,6 +102,9 @@ export function parseArgs(argv: string[]): CliArgs {
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
+    if (arg === undefined) {
+      continue;
+    }
 
     switch (arg) {
       case "serve":

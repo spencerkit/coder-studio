@@ -72,7 +72,7 @@ async function loadPm2(): Promise<Pm2Module> {
   let pm2Module: Pm2Module;
   try {
     const pm2 = await import("pm2");
-    pm2Module = pm2.default as Pm2Module;
+    pm2Module = pm2.default as unknown as Pm2Module;
   } catch {
     throw new Error(
       "pm2 is not installed. Run `npm install -g pm2` to use background server management."

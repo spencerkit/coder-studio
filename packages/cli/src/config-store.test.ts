@@ -1,5 +1,5 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "fs";
-import { homedir, tmpdir } from "os";
+import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {

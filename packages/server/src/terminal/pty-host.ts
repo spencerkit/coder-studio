@@ -201,6 +201,9 @@ export class NodePtyHost implements PtyHost {
     }
 
     const [command, ...args] = argv;
+    if (command === undefined) {
+      throw new Error("PTY spawn requires a command");
+    }
 
     const ptyProcess = pty.spawn(command, args, {
       cwd: options.cwd,
