@@ -29,12 +29,11 @@ describe("getSoftTerminalInputBytes", () => {
     ["arrow_down", "\x1b[1;2B"],
     ["arrow_right", "\x1b[1;2C"],
     ["arrow_left", "\x1b[1;2D"],
-  ] satisfies Array<[SoftTerminalKeyId, string]>)(
-    "maps shifted %s to modified terminal bytes",
-    (key, expected) => {
-      expect(getSoftTerminalInputBytes(key, { shift: true })).toBe(expected);
-    }
-  );
+  ] satisfies Array<
+    [SoftTerminalKeyId, string]
+  >)("maps shifted %s to modified terminal bytes", (key, expected) => {
+    expect(getSoftTerminalInputBytes(key, { shift: true })).toBe(expected);
+  });
 
   it("keeps escape and enter unchanged when shift is armed", () => {
     expect(getSoftTerminalInputBytes("escape", { shift: true })).toBe("\x1b");

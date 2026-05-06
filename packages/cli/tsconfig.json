@@ -4,7 +4,7 @@
     "target": "ES2022",
     "module": "ESNext",
     "lib": ["ES2022"],
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "jsx": "react-jsx",
     "strict": true,
     "esModuleInterop": true,
@@ -16,11 +16,7 @@
     "declarationMap": true,
     "sourceMap": true,
     "outDir": "./dist",
-    "rootDir": "./src",
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["./src/*"]
-    }
+    "rootDir": "./src"
   },
   "include": ["src/**/*.ts"],
   "exclude": ["node_modules", "dist"]
