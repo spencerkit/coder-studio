@@ -3,9 +3,6 @@
  *
  * Creates and assembles all server components.
  */
-
-import { execFile as nodeExecFile } from "node:child_process";
-import { promisify } from "node:util";
 import {
   deleteRuntimeConfig,
   getRuntimePath,
@@ -25,6 +22,7 @@ import {
 } from "./config/codex-config-audit.js";
 import { ensureDataDir, parseServerConfig, type ServerConfig } from "./config.js";
 import { ProviderInstallManager } from "./provider-runtime/install-manager.js";
+import { execFileAsString } from "./provider-runtime/exec-file.js";
 import type { RuntimeStatusDeps } from "./provider-runtime/runtime-status.js";
 import { SessionManager } from "./session/manager.js";
 import type { Database } from "./storage/database.js";
@@ -102,7 +100,6 @@ export async function logCodexConfigFindings(
 export async function createServer(
   configOverrides?: Partial<ServerConfig> & ServerRuntimeOptions
 ): Promise<Server> {
-  const execFileAsync = promisify(nodeExecFile);
   const config = parseServerConfig(configOverrides);
 
   ensureDataDir(config);
@@ -196,7 +193,7 @@ export async function createServer(
   const providerRuntimeDeps: RuntimeStatusDeps = {};
   const providerInstallMgr = new ProviderInstallManager(providerRegistry, {
     ...providerRuntimeDeps,
-    execFile: (file, args, options) => execFileAsync(file, args, options),
+    execFile: execFileAsString,
   });
 
   const commandContext: CommandContext = {

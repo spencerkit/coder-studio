@@ -1,13 +1,9 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import {
   type CommandAvailabilityCheck,
   type CommandCheckDeps,
   checkCommandAvailable,
 } from "../provider-runtime/command-check.js";
-
-const execFileAsync = promisify(execFile);
-type ExecFileOptions = { windowsHide?: boolean };
+import { execFileAsString } from "../provider-runtime/exec-file.js";
 
 export interface RuntimeCheckResult {
   ok: boolean;
@@ -22,9 +18,7 @@ export interface RuntimeCheckDeps extends CommandCheckDeps {
 
 async function checkGit(execRunner: RuntimeCheckDeps["execFile"]): Promise<boolean> {
   try {
-    const runner =
-      execRunner ??
-      ((file, args, options?: ExecFileOptions) => execFileAsync(file, args, options));
+    const runner = execRunner ?? execFileAsString;
     const { stdout } = await runner("git", ["--version"], { windowsHide: true });
     return stdout.includes("git version");
   } catch {
@@ -34,9 +28,7 @@ async function checkGit(execRunner: RuntimeCheckDeps["execFile"]): Promise<boole
 
 async function checkNode(execRunner: RuntimeCheckDeps["execFile"]): Promise<boolean> {
   try {
-    const runner =
-      execRunner ??
-      ((file, args, options?: ExecFileOptions) => execFileAsync(file, args, options));
+    const runner = execRunner ?? execFileAsString;
     const { stdout } = await runner("node", ["--version"], { windowsHide: true });
     return stdout.startsWith("v");
   } catch {

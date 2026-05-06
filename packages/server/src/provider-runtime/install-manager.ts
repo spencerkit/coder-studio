@@ -1,6 +1,4 @@
-import { execFile as nodeExecFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { promisify } from "node:util";
 import type {
   ProviderDefinition,
   ProviderInstallFailure,
@@ -12,18 +10,13 @@ import {
   type CommandCheckDeps,
   checkCommandAvailable,
 } from "./command-check.js";
+import { execFileAsString, type ExecFileRunner } from "./exec-file.js";
 
-const execFileAsync = promisify(nodeExecFile);
 const EXCERPT_LIMIT = 400;
-type ExecFileOptions = { windowsHide?: boolean };
 
 export interface InstallManagerDeps extends CommandCheckDeps {
   commandExists?: CommandAvailabilityCheck;
-  execFile?: (
-    file: string,
-    args: string[],
-    options?: ExecFileOptions
-  ) => Promise<{ stdout: string; stderr: string }>;
+  execFile?: ExecFileRunner;
 }
 
 export class ProviderInstallManager {
@@ -245,9 +238,7 @@ export class ProviderInstallManager {
     job: ProviderInstallJobSnapshot
   ): Promise<void> {
     const execFile =
-      this.deps.execFile ??
-      ((file: string, args: string[], options?: ExecFileOptions) =>
-        execFileAsync(file, args, options));
+      this.deps.execFile ?? execFileAsString;
 
     job.status = "running";
     this.jobs.set(job.jobId, job);
