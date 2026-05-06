@@ -1,0 +1,682 @@
+{
+  "app": {
+    "name": "Coder Studio",
+    "description": "Agent-First Development Environment"
+  },
+  "common": {
+    "loading": "Loading...",
+    "error": "Error",
+    "success": "Success",
+    "warning": "Warning",
+    "info": "Info",
+    "confirm": "Confirm",
+    "cancel": "Cancel",
+    "save": "Save",
+    "delete": "Delete",
+    "edit": "Edit",
+    "view": "View",
+    "close": "Close",
+    "yes": "Yes",
+    "no": "No",
+    "ok": "OK",
+    "all": "All"
+  },
+  "action": {
+    "open": "Open",
+    "open_workspace": "Open Workspace",
+    "close_workspace": "Close Workspace",
+    "create_session": "Create Session",
+    "stop_session": "Stop Session",
+    "resume_session": "Resume Session",
+    "save_file": "Save File",
+    "save_all": "Save All",
+    "save": "Save",
+    "discard_changes": "Discard Changes",
+    "commit": "Commit",
+    "push": "Push",
+    "pull": "Pull",
+    "refresh": "Refresh",
+    "settings": "Settings",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "close": "Close",
+    "apply": "Apply",
+    "reset": "Reset",
+    "search": "Search",
+    "search_files": "Search Files",
+    "search_commands": "Search Commands",
+    "back": "Back"
+  },
+  "label": {
+    "workspace": "Workspace",
+    "agent": "Agent",
+    "session": "Session",
+    "terminal": "Terminal",
+    "file": "File",
+    "git": "Git",
+    "settings": "Settings",
+    "provider": "Provider",
+    "status": "Status",
+    "progress": "Progress"
+  },
+  "provider": {
+    "install": {
+      "cta": {
+        "start": "Start Session",
+        "install_and_start": "Install & Start",
+        "installing": "Installing...",
+        "manual": "View Install Steps"
+      },
+      "status": {
+        "installing": "Installing provider CLI...",
+        "failed": "Automatic install failed"
+      },
+      "open_docs": "Open official docs",
+      "nodejs": {
+        "manual": "Install Node.js from the official download page."
+      },
+      "claude": {
+        "manual": "Then run npm install -g @anthropic-ai/claude-code."
+      },
+      "codex": {
+        "manual": "Then run npm install -g @openai/codex."
+      }
+    }
+  },
+  "status": {
+    "starting": "Starting",
+    "running": "Running",
+    "idle": "Idle",
+    "busy": "Busy",
+    "ended": "Ended",
+    "unavailable": "Unavailable",
+    "connecting": "Connecting",
+    "connected": "Connected",
+    "disconnected": "Disconnected",
+    "reconnecting": "Reconnecting",
+    "rejected": "Rejected"
+  },
+  "workspace": {
+    "title": "Workspace",
+    "open": "Open",
+    "close": "Close",
+    "path": "Path",
+    "no_workspace": "No workspace open",
+    "open_hint": "Click the button below to open a project directory",
+    "loading_title": "Loading workspaces",
+    "loading_description": "Preparing your workspace list and restoring the last active session.",
+    "load_failed_title": "Failed to load workspaces",
+    "load_failed_description": "Failed to fetch workspace list",
+    "launch": {
+      "kicker": "START WORKSPACE",
+      "title": "Open Workspace",
+      "home_directory": "Home Directory",
+      "go_up": "Go Up",
+      "no_directories": "No directories found",
+      "items_count": "{count} items",
+      "enter_folder": "Enter {name}",
+      "enter_folder_action": "Enter folder →",
+      "cancel": "Cancel",
+      "start": "Start Workspace",
+      "starting": "Starting...",
+      "hint": "Select a directory to use as the workspace root.",
+      "browse_failed": "Failed to browse directories",
+      "select_required": "Please select a directory",
+      "open_failed": "Failed to open workspace"
+    },
+    "runtime_check": {
+      "title": "Runtime Check",
+      "checking": "Checking runtime environment...",
+      "success": "Runtime environment check passed",
+      "failed": "Runtime environment check failed",
+      "missing_git": "Git command not found",
+      "missing_node": "Node.js not found",
+      "missing_provider": "{provider} CLI not found"
+    }
+  },
+  "mobile": {
+    "dock": {
+      "aria_label": "Mobile dock",
+      "open_agent": "Open Agent sheet",
+      "open_files": "Open Files sheet",
+      "open_terminal": "Open Terminal sheet"
+    },
+    "agent": {
+      "title": "Agent Sessions",
+      "close_current_session": "Close Current Session",
+      "providers": "Session providers",
+      "start_session": "Start {provider} session",
+      "starting": "Starting...",
+      "start_new_session": "Start new session",
+      "active_agents": "Active agents",
+      "switch_to_agent": "Switch to agent {name}",
+      "empty": "No active sessions"
+    },
+    "supervisor": {
+      "open_sheet": "Open Supervisor sheet"
+    },
+    "topbar": {
+      "switch_workspace": "Switch workspace",
+      "open_settings": "Open settings"
+    },
+    "sheet": {
+      "dismiss": "Dismiss current sheet",
+      "region": "{title} sheet"
+    },
+    "files": {
+      "tabs": "Files sheet tabs",
+      "git_diff": "Git",
+      "editor_fallback": "Editor"
+    },
+    "workspace_drawer": {
+      "aria_label": "Workspace drawer",
+      "close": "Close workspace drawer",
+      "select_title": "Select workspace",
+      "switch_to_workspace": "Switch to workspace {name}",
+      "close_workspace": "Close workspace {name}"
+    },
+    "empty": {
+      "start_session": "Start a new agent session for this workspace.",
+      "files_terminal_hint": "Files and Terminal stay available from the bottom bar."
+    }
+  },
+  "session": {
+    "title": "Session",
+    "create": "Create Session",
+    "stop": "Stop",
+    "resume": "Resume",
+    "no_session": "No active session",
+    "provider_select": "Select Provider",
+    "state": {
+      "starting": "Starting...",
+      "running": "Running",
+      "idle": "Waiting for input",
+      "busy": "Executing",
+      "ended": "Stopped",
+      "unavailable": "Unavailable"
+    },
+    "resume_unavailable": "This session cannot be resumed",
+    "progress": {
+      "thinking": "Thinking...",
+      "executing": "Executing...",
+      "waiting": "Waiting for response..."
+    }
+  },
+  "terminal": {
+    "title": "Terminal",
+    "kicker": "TERMINAL",
+    "new_terminal": "New Terminal",
+    "close_terminal": "Close Terminal",
+    "shell": "Shell Terminal",
+    "agent": "Agent Terminal",
+    "reconnect_hint": "Connection lost, reconnecting...",
+    "no_terminal": "No terminals",
+    "empty_hint": "Launch a shell to inspect files, run commands, and verify changes without leaving the workspace.",
+    "load_failed_title": "Could not load terminals",
+    "load_failed_body": "Refresh the workspace connection and try again.",
+    "create_failed_title": "Could not create terminal",
+    "create_failed_body": "The shell process could not be started. Check the server runtime and shell configuration.",
+    "create_unavailable_title": "No workspace selected",
+    "create_unavailable_body": "Open or switch to a workspace before creating a terminal.",
+    "hide": "Hide Terminal",
+    "show": "Show Terminal",
+    "selector": {
+      "switch": "Switch terminal",
+      "title": "Terminal Sessions",
+      "current": "Current terminal",
+      "indexed": "Terminal {index}"
+    },
+    "mobile_input": {
+      "shortcuts": "Terminal shortcut keys",
+      "ctrl": "Ctrl",
+      "ctrl_armed": "Ctrl armed",
+      "ctrl_locked": "Ctrl locked",
+      "shift": "Shift",
+      "shift_armed": "Shift armed",
+      "escape": "Escape",
+      "tab": "Tab",
+      "enter": "Enter",
+      "up": "Up arrow",
+      "down": "Down arrow",
+      "left": "Left arrow",
+      "right": "Right arrow"
+    },
+    "replay": {
+      "queued_title": "Waiting in queue ({count} ahead)",
+      "up_next": "Up next...",
+      "loading_title": "Restoring terminal output...",
+      "loading_body": "You can keep using this page while history catches up in the background. Larger histories may take longer to restore.",
+      "failed_title": "Terminal history could not be restored",
+      "failed_body": "New output will keep streaming. Refresh manually only if you need the missing history.",
+      "closed_title": "This session has been closed",
+      "closed_body": "Start a new session to continue.",
+      "truncated_title": "Terminal history is partial",
+      "truncated_body": "Older output has already fallen out of the replay buffer, but new output will continue to stream."
+    }
+  },
+  "file": {
+    "title": "Files",
+    "modified": "Modified",
+    "unsaved": "Unsaved",
+    "dirty": "Has unsaved changes",
+    "empty_directory": "Empty directory",
+    "new_file": "New File",
+    "new_folder": "New Folder",
+    "rename": "Rename",
+    "delete": "Delete",
+    "delete_confirm": "Are you sure you want to delete \"{name}\"?",
+    "path": "Path",
+    "path_required": "Enter a path",
+    "invalid_file_path": "File paths cannot end with /",
+    "path_helper_file": "Enter a workspace-relative path, for example src/demo/new-file.ts",
+    "path_helper_folder": "Enter a workspace-relative path, for example src/demo/new-folder",
+    "create_failed": "Failed to create item",
+    "delete_failed": "Failed to delete file",
+    "conflict": "File has been modified externally",
+    "conflict_message": "The file may have been modified outside the editor. Discard local changes and reload?"
+  },
+  "code_editor": {
+    "saving": "Saving...",
+    "edit_as_text": "Edit as text",
+    "preview_as_image": "Preview as image",
+    "mode_text": "Text",
+    "mode_image": "Image",
+    "open_failed_title": "Failed to open file",
+    "empty_hint": "Select a file on the left to open it in the editor.",
+    "modified_on_disk": "This file changed on disk after you opened it. Save carefully or reload the file.",
+    "deleted_on_disk": "This file was deleted on disk after you opened it."
+  },
+  "git": {
+    "title": "Git",
+    "changes": "Changes",
+    "staged": "Staged",
+    "modified": "Modified",
+    "deleted": "Deleted",
+    "unstaged": "Unstaged",
+    "untracked": "Untracked",
+    "no_changes": "No changes",
+    "commit": "Commit",
+    "commit_message": "Commit Message",
+    "commit_placeholder": "Enter commit message...",
+    "latest_commit": "Latest Commit",
+    "no_commits": "No commits yet",
+    "stage": "Stage",
+    "unstage": "Unstage",
+    "stage_all": "Stage All",
+    "unstage_all": "Unstage All",
+    "discard": "Discard",
+    "discard_all": "Discard All",
+    "discard_file_confirm_title": "Discard File Changes",
+    "discard_file_confirm_message": "Are you sure you want to discard changes in \"{path}\"?",
+    "discard_all_confirm_title": "Discard All Changes",
+    "discard_all_confirm_message": "Are you sure you want to discard changes in {count} files?",
+    "discard_confirm_irreversible": "This action cannot be undone.",
+    "branch": "Branch",
+    "current_branch": "Current Branch",
+    "no_branch": "Not on any branch",
+    "ahead": "{count} commits ahead",
+    "behind": "{count} commits behind",
+    "synced": "Synced with remote",
+    "push_confirm_title": "Push Changes",
+    "push_confirm_message": "Do you want to push {count} local commits to the remote?",
+    "pull_confirm_title": "Pull Changes",
+    "pull_confirm_message": "Do you want to pull {count} remote commits into your local branch?",
+    "sync_confirm_helper": "This action updates your current branch and workspace state.",
+    "push_success_title": "Push completed",
+    "push_success_body": "Local commits were pushed to the remote.",
+    "pull_success_title": "Pull completed",
+    "pull_success_body": "Latest remote commits were pulled into your local branch.",
+    "push_in_progress": "Pushing...",
+    "pull_in_progress": "Pulling...",
+    "push_failed_title": "Push failed",
+    "pull_failed_title": "Pull failed",
+    "operation_push": "push",
+    "operation_pull": "pull",
+    "auth_required_message": "Authentication is required for {remote}.",
+    "auth_failed_invalid": "Credentials for {remote} were rejected. Enter a valid username and password or personal access token to continue.",
+    "auth_failed_forbidden": "Credentials for {remote} were accepted, but this account is not allowed to {operation}.",
+    "auth_failed_unsupported": "Authentication failed for {remote}. Configure SSH keys or a credential helper, then try again.",
+    "auth_helper_http": "Enter your Git username and password or a personal access token to retry this operation.",
+    "auth_helper_unsupported": "This remote does not support in-app authentication. Configure SSH keys or a credential helper, then try again.",
+    "auth_username": "Username",
+    "auth_password": "Password or token",
+    "auth_username_placeholder": "Git username",
+    "auth_password_placeholder": "Password or personal access token",
+    "branch_remote": "Remote",
+    "quick_pick": {
+      "search_placeholder": "Search branches or create new branch...",
+      "loading": "Loading branches...",
+      "empty_filtered": "No branches found",
+      "empty_idle": "Type to search branches",
+      "create": "Create branch: {name}",
+      "confirm_create": "Confirm create branch: {name}"
+    },
+    "statusbar": {
+      "changes": "Uncommitted file changes",
+      "ahead": "Local commits to push",
+      "behind": "Remote commits to pull"
+    }
+  },
+  "worktree": {
+    "title": "Worktree",
+    "status_tab": "Status",
+    "diff_tab": "Diff",
+    "tree_tab": "Tree",
+    "path": "Path",
+    "branch": "Branch",
+    "changes": "Changes",
+    "loading": "Loading...",
+    "empty_tree": "Empty tree",
+    "clean": "Clean",
+    "dirty": "Dirty",
+    "dirty_status": "Has changes",
+    "staged_count": "Staged: {count}",
+    "modified_count": "Modified: {count}",
+    "untracked_count": "Untracked: {count}"
+  },
+  "settings": {
+    "title": "Settings",
+    "general": "General",
+    "appearance": "Appearance",
+    "providers": "Providers",
+    "autosave_hint": "Settings saved automatically",
+    "load_failed": "Failed to load settings",
+    "load_failed_unknown": "Server did not return settings data",
+    "notifications": "Notifications",
+    "notifications_channel_hint": "No notification while you are in the originating workspace; an in-app banner if you are in another workspace; a system notification when the window is hidden.",
+    "notifications_enabled": "Enable completion notifications",
+    "notifications_enabled_hint": "Send notification when Agent session completes",
+    "notification_sound": "Notification sound",
+    "notification_sound_hint": "Play a completion chime when a notification fires",
+    "notification_status": "Notification Status",
+    "notification_status_available": "Available",
+    "notification_status_limited": "Limited",
+    "notification_status_limited_hint": "System notifications on this mobile browser are inconsistent; browser permission does not guarantee delivery.",
+    "notification_status_unsupported": "Unsupported",
+    "notification_status_unsupported_hint": "This browser environment does not support this notification path.",
+    "notification_permission": "Notification Permission",
+    "permission_granted": "Granted",
+    "permission_denied": "Denied",
+    "permission_request": "Request Permission",
+    "permission_unavailable": "Unavailable",
+    "permission_limited_hint": "Even with notification permission allowed, this mobile browser may still fail to show system notifications reliably.",
+    "supervisor": {
+      "title": "Supervisor",
+      "hint": "Maximum time the supervisor evaluator can run before the server aborts it.",
+      "evaluation_timeout": "Supervisor Evaluation Timeout (seconds)",
+      "validation_error": "Enter a whole number between 1 and {max} seconds."
+    },
+    "terminal_renderer": "Terminal Renderer",
+    "terminal_renderer_hint": "Choose terminal rendering mode",
+    "terminal_standard": "Standard",
+    "terminal_compatibility": "Compatibility Mode",
+    "provider": {
+      "title": "Provider Settings",
+      "status": "Status",
+      "capability": "Capability Level",
+      "capability_full": "Full Support",
+      "capability_limited": "Limited Support",
+      "capability_unsupported": "Unsupported",
+      "hooks_registered": "Hooks Registered",
+      "hooks_unregistered": "Hooks Not Registered",
+      "hooks_error": "Hooks Registration Failed",
+      "hooks": "Hooks Integration",
+      "hooks_hint": "Inject Provider-specific hooks into current workspace",
+      "hooks_inject": "Inject Hooks",
+      "configure": "Configure",
+      "reset": "Reset",
+      "config": "Configuration",
+      "base": "Base Settings",
+      "config_file": "Config File",
+      "open_config_file_editor": "Open Config File Editor",
+      "back_to_base": "Back to Base Settings",
+      "startup_args": "Startup Command Args",
+      "startup_args_hint": "Enter one startup argument per line. Each saved line is appended to the provider launch command.",
+      "startup_args_placeholder": "--verbose\n--debug"
+    },
+    "theme": {
+      "title": "Theme",
+      "dark": "Dark",
+      "light": "Light",
+      "system": "System",
+      "hint": "Only dark theme is currently supported"
+    },
+    "language": {
+      "title": "Language",
+      "zh": "中文",
+      "en": "English",
+      "hint": "Select interface language"
+    },
+    "auth": {
+      "title": "Authentication",
+      "password": "Password",
+      "password_set": "Set Password",
+      "password_change": "Change Password",
+      "password_remove": "Remove Password"
+    },
+    "shortcuts": {
+      "title": "Keyboard Shortcuts",
+      "reset_all": "Reset All",
+      "capture_hint": "Press new shortcut combination",
+      "reset_hint": "Reset to default"
+    },
+    "config_files": {
+      "title": "Config Files",
+      "codex_config": "Codex Config",
+      "claude_config": "Claude Config",
+      "path_label": "Path",
+      "unsaved_changes": "Unsaved changes",
+      "saving": "Saving...",
+      "save_success": "Config saved successfully",
+      "backup_created": "Backup saved to {path}",
+      "save_failed": "Failed to save config",
+      "load_failed": "Failed to load config",
+      "file_not_found": "Config file does not exist. Edit and save to create it.",
+      "status_saved": "Saved",
+      "collapse": "Collapse",
+      "format": "Format",
+      "format_hint": "Format JSON code",
+      "file_not_found_hint": "Edit and save to create the config file."
+    },
+    "permission_denied_hint": "Browser or system notification permission may be blocked. Check site settings and device notification settings.",
+    "permission_unavailable_hint": "This environment cannot request browser notification permission"
+  },
+  "auth": {
+    "description": "Enter your password to continue to the current workspace.",
+    "hint": "Enter the access password configured for this deployment.",
+    "blocked_until": "Too many attempts. Try again after {time}, or ask an administrator to unblock access.",
+    "blocked_generic": "Too many attempts. Try again later, or ask an administrator to unblock access.",
+    "status_title": "Access verification",
+    "status_loading": "Checking the access state for this deployment.",
+    "status_unavailable": "The authentication service is temporarily unavailable. Please try again shortly.",
+    "status_not_configured": "Authentication is not configured on this deployment."
+  },
+  "connection": {
+    "title": "Connection",
+    "status": "Status",
+    "reconnecting": "Reconnecting...",
+    "reconnect_failed": "Reconnection failed",
+    "another_tab": "Another tab is active",
+    "takeover": "Take Control",
+    "server_shutdown": "Server has shut down",
+    "backpressure_warning": "Network congested, some output may be lost"
+  },
+  "supervisor": {
+    "title": "Supervisor",
+    "empty": "Supervisor is not enabled",
+    "latest_evaluation": "Latest evaluation",
+    "state": {
+      "inactive": "Inactive",
+      "idle": "Idle",
+      "evaluating": "Evaluating",
+      "injecting": "Injecting",
+      "paused": "Paused",
+      "error": "Error"
+    },
+    "trigger": {
+      "manual": "MANUAL",
+      "auto": "AUTO"
+    },
+    "cycle": {
+      "no_guidance": "No guidance injected this cycle",
+      "evaluating": "Evaluating...",
+      "waiting": "Waiting for evaluation result"
+    },
+    "field": {
+      "objective": "Objective",
+      "current_objective": "Current objective",
+      "objective_placeholder": "Describe what Supervisor should watch, for example:\n- Finish implementing user authentication\n- Fix all failing unit tests\n- Reduce P95 latency below 100ms",
+      "objective_helper": "The more specific and measurable the target, the better the evaluation. Include completion criteria when possible.",
+      "evaluator": "Evaluator",
+      "evaluator_helper": "The provider that evaluates progress and suggests the next step. It can differ from the execution provider."
+    },
+    "action": {
+      "enable": "Enable Supervisor",
+      "enable_objective": "Enable Objective",
+      "edit_objective": "Edit Objective",
+      "disable": "Disable Supervisor",
+      "pause": "Pause",
+      "resume": "Resume",
+      "trigger": "Trigger Evaluation",
+      "pause_failed": "Failed to pause Supervisor",
+      "resume_failed": "Failed to resume Supervisor",
+      "trigger_failed": "Failed to trigger evaluation"
+    },
+    "dialog": {
+      "enable": {
+        "title": "Enable Supervisor",
+        "subtitle": "Describe an objective and Supervisor will evaluate progress and suggest the next step after each turn.",
+        "confirm": "Enable"
+      },
+      "edit": {
+        "title": "Edit Supervisor",
+        "subtitle": "Adjust the objective or switch evaluators without clearing evaluation history.",
+        "confirm": "Save"
+      },
+      "disable": {
+        "title": "Disable Supervisor",
+        "subtitle": "Stop automatic evaluation. The current session's supervision cycles will be removed.",
+        "confirm": "Disable",
+        "warning_title": "Disabling stops evaluation cycles",
+        "warning_body": "Supervisor will be removed from the current session and its cycle history will be cleared. You can enable it again later, but previous records cannot be restored."
+      }
+    }
+  },
+  "command": {
+    "palette": "Command Palette",
+    "no_results": "No results found",
+    "shortcut": {
+      "save": "Save",
+      "save_all": "Save All",
+      "search": "Search",
+      "search_files": "Search Files",
+      "command_palette": "Command Palette",
+      "toggle_focus": "Toggle Focus Mode",
+      "toggle_sidebar": "Toggle Sidebar",
+      "toggle_terminal": "Toggle Terminal Panel"
+    }
+  },
+  "notification": {
+    "success": "Success",
+    "error": "Error",
+    "warning": "Warning",
+    "info": "Info",
+    "session_turn_completed": "Session turn completed",
+    "file_saved": "File saved",
+    "committed": "Committed",
+    "session_completed_title": "{session} completed",
+    "session_completed_body": "Agent session has finished executing",
+    "session_ended": "Session ended",
+    "session_ended_hint": "The session has stopped running"
+  },
+  "error": {
+    "unknown": "Unknown error",
+    "network": "Network error",
+    "not_found": "Not found",
+    "permission_denied": "Permission denied",
+    "validation": "Validation failed",
+    "conflict": "Resource conflict"
+  },
+  "welcome": {
+    "kicker": "GET STARTED",
+    "title": "Welcome to Coder Studio",
+    "description": "A local-first AI coding workbench. Launch AI agent sessions, review generated code, manage Git changes, and run terminals all in one place.",
+    "features": {
+      "agent_first": {
+        "title": "Agent-first AI coding",
+        "description": "Launch AI sessions that write, test, and deploy code."
+      },
+      "git_tools": {
+        "title": "Built-in Git tools",
+        "description": "Stage, commit, and manage branches without leaving the IDE."
+      },
+      "terminals": {
+        "title": "Integrated terminals",
+        "description": "Run commands and scripts alongside your AI sessions."
+      }
+    }
+  },
+  "not_found": {
+    "kicker": "ROUTE NOT FOUND",
+    "title": "Page not found",
+    "description": "The route you opened does not exist in this workspace shell.",
+    "path_label": "Requested path",
+    "go_home": "Go Home"
+  },
+  "confirm": {
+    "save_changes": "Save changes?",
+    "discard_changes": "Discard changes?",
+    "delete_file": "Delete this file?",
+    "stop_session": "Stop session?",
+    "close_workspace": "Close workspace?"
+  },
+  "placeholder": {
+    "search": "Type to search...",
+    "command": "Type a command or shortcut...",
+    "commit_message": "Enter commit message"
+  },
+  "tooltip": {
+    "focus_mode": "Focus Mode: Hide sidebar and bottom panel",
+    "split_horizontal": "Split panel horizontally",
+    "split_vertical": "Split panel vertically",
+    "close_pane": "Close panel",
+    "new_workspace": "New workspace",
+    "quick_actions": "Quick Actions",
+    "enter_fullscreen": "Enter Fullscreen",
+    "exit_fullscreen": "Exit Fullscreen",
+    "show_terminal": "Show Terminal",
+    "hide_terminal": "Hide Terminal",
+    "show_files": "Show Files",
+    "hide_files": "Hide Files"
+  },
+  "time": {
+    "just_now": "Just now",
+    "seconds_ago": "{count} seconds ago",
+    "minutes_ago": "{count} minutes ago",
+    "hours_ago": "{count} hours ago",
+    "days_ago": "{count} days ago"
+  },
+  "fencing": {
+    "observer_mode": "Read-only mode — another tab is the controller",
+    "takeover": "Take over",
+    "takeover_failed": "Takeover failed — controller is still active"
+  },
+  "codex_audit": {
+    "title": "Codex config conflicts ({count})",
+    "load_failed_title": "Codex config check unavailable",
+    "load_failed_unknown": "Server did not return config audit data",
+    "show_details": "Show details",
+    "collapse": "Collapse",
+    "cleanup_select": "Select entries to clean up",
+    "cleanup_action": "Clean up {count} selected",
+    "cleaning": "Cleaning up...",
+    "cleanup_done": "Cleanup complete",
+    "cleanup_done_with_backup": "Cleanup complete. Backup saved to {path}",
+    "cleanup_noop": "Nothing to clean up",
+    "cleanup_failed": "Cleanup failed",
+    "finding": {
+      "toml_notify": "Top-level notify = [...]",
+      "toml_codex_hooks": "[features] codex_hooks = true"
+    }
+  }
+}

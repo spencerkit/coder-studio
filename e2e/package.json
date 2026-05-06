@@ -1,0 +1,12 @@
+{
+  "name": "@coder-studio/e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "acceptance:phase1:report": "tsx fixtures/report-writer.ts phase-1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.59.1",
+    "typescript": "^6.0.3"
+  }
+}

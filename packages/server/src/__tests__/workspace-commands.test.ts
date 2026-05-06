@@ -1,0 +1,155 @@
+import { mkdir } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { beforeEach, describe, expect, it } from "vitest";
+import { EventBus } from "../bus/event-bus.js";
+import { openDatabase, runMigrations } from "../storage/db.js";
+import { WorkspaceManager } from "../workspace/manager.js";
+import type { CommandContext } from "../ws/dispatch.js";
+import { dispatch } from "../ws/dispatch.js";
+
+// Import command handlers to register them
+import "../commands/workspace.js";
+
+describe("Workspace Commands", () => {
+  let db: ReturnType<typeof openDatabase>;
+  let ctx: CommandContext;
+  let eventBus: EventBus;
+  let workspaceMgr: WorkspaceManager;
+
+  beforeEach(() => {
+    // Create in-memory database for testing
+    db = openDatabase(":memory:");
+    runMigrations(db);
+
+    // Create event bus
+    eventBus = new EventBus();
+
+    // Create workspace manager
+    workspaceMgr = new WorkspaceManager({ db, eventBus });
+
+    // Create context with required dependencies
+    ctx = {
+      db,
+      workspaceMgr,
+      sessionMgr: {},
+      terminalMgr: {},
+      eventBus,
+      broadcaster: { broadcast: () => {} },
+      providerRegistry: [],
+    } as unknown as CommandContext;
+  });
+
+  describe("workspace.list", () => {
+    it("should return empty array when no workspaces exist", async () => {
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "test-id-1",
+          op: "workspace.list",
+          args: {},
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.data).toEqual([]);
+    });
+  });
+
+  describe("workspace.open", () => {
+    it("should fail for non-existent path", async () => {
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "test-id-3",
+          op: "workspace.open",
+          args: {
+            path: "/non/existent/path/that/does/not/exist",
+          },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(false);
+    });
+  });
+
+  describe("workspace.close", () => {
+    it("should error if workspace not found", async () => {
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "test-id-6",
+          op: "workspace.close",
+          args: {
+            id: "non-existent-id",
+          },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.error?.code).toBe("internal_error");
+    });
+  });
+
+  describe("workspace.uiState.set", () => {
+    it("persists pane layout into workspace ui state", async () => {
+      const dir = join(tmpdir(), `workspace-command-test-${Date.now()}`);
+      await mkdir(dir);
+
+      const openResult = await dispatch(
+        {
+          kind: "command",
+          id: "open-workspace",
+          op: "workspace.open",
+          args: {
+            path: dir,
+          },
+        },
+        ctx
+      );
+
+      expect(openResult.ok).toBe(true);
+
+      const workspaceId = (openResult.data as { id: string }).id;
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "set-ui-state",
+          op: "workspace.uiState.set",
+          args: {
+            workspaceId,
+            uiState: {
+              leftPanelWidth: 320,
+              bottomPanelHeight: 210,
+              focusMode: false,
+              paneLayout: {
+                id: "root",
+                type: "split",
+                direction: "horizontal",
+                children: [
+                  { id: "left", type: "leaf", sessionId: "sess-left" },
+                  { id: "right", type: "leaf", sessionId: "sess-right" },
+                ],
+              },
+            },
+          },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(true);
+      expect((result.data as { uiState: { paneLayout: unknown } }).uiState.paneLayout).toEqual({
+        id: "root",
+        type: "split",
+        direction: "horizontal",
+        children: [
+          { id: "left", type: "leaf", sessionId: "sess-left" },
+          { id: "right", type: "leaf", sessionId: "sess-right" },
+        ],
+      });
+    });
+  });
+});

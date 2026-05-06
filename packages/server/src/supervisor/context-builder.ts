@@ -1,0 +1,139 @@
+import type { ProviderDefinition, SessionState, Supervisor } from "@coder-studio/core";
+import type { FastifyBaseLogger } from "fastify";
+import { getGitDiffStatSummary, getGitStatusSummary } from "../git/cli.js";
+import type { SessionManager } from "../session/manager.js";
+import type { TerminalManager } from "../terminal/manager.js";
+import type { WorkspaceManager } from "../workspace/manager.js";
+
+export { stripAnsi } from "../terminal/snapshot-render.js";
+
+const NOOP_LOGGER: FastifyBaseLogger = {
+  child: () => NOOP_LOGGER,
+  debug: () => {},
+  error: () => {},
+  fatal: () => {},
+  info: () => {},
+  level: "silent",
+  silent: () => {},
+  trace: () => {},
+  warn: () => {},
+};
+
+const TERMINAL_MAX_LINES = 200;
+const TERMINAL_MAX_CHARS = 12_000;
+const GIT_SUMMARY_MAX_CHARS = 4_000;
+
+export interface SupervisorEvaluationContext {
+  objective: string;
+  sessionId: string;
+  workspaceId: string;
+  workspacePath: string;
+  sessionProviderId: string;
+  evaluatorProviderId: string;
+  sessionState: SessionState;
+  transcriptExcerpt?: string;
+  terminalExcerpt?: string;
+  gitStatusSummary?: string;
+  gitDiffStat?: string;
+  lastTurnId?: string;
+  evidenceSource: "headless_snapshot" | "transcript" | "terminal_fallback";
+  /** Latest user input from the current turn (for supervisor context) */
+  latestUserInput?: string;
+}
+
+export class SupervisorContextBuilder {
+  private readonly logger: FastifyBaseLogger;
+
+  constructor(
+    private readonly deps: {
+      workspaceMgr: WorkspaceManager;
+      sessionMgr: SessionManager;
+      terminalMgr: TerminalManager;
+      providerRegistry: ProviderDefinition[];
+      logger?: FastifyBaseLogger;
+      git?: {
+        getStatusSummary?: typeof getGitStatusSummary;
+        getDiffStatSummary?: typeof getGitDiffStatSummary;
+      };
+    }
+  ) {
+    this.logger = deps.logger ?? NOOP_LOGGER;
+  }
+
+  async build(supervisor: Supervisor): Promise<SupervisorEvaluationContext> {
+    const session = this.deps.sessionMgr.get(supervisor.sessionId);
+    const workspace = this.deps.workspaceMgr.get(supervisor.workspaceId);
+
+    if (!session || !workspace) {
+      throw {
+        code: "supervisor_not_found",
+        message: "Supervisor session context is unavailable",
+      };
+    }
+
+    let renderedSnapshot = "";
+    try {
+      renderedSnapshot = await this.deps.sessionMgr.getRenderedSnapshot(session.id, {
+        maxLines: TERMINAL_MAX_LINES,
+        maxChars: TERMINAL_MAX_CHARS,
+      });
+    } catch (error) {
+      this.logger.warn(
+        { err: error, sessionId: session.id },
+        "Supervisor headless snapshot read failed"
+      );
+    }
+
+    const getStatusSummary = this.deps.git?.getStatusSummary ?? getGitStatusSummary;
+    const getDiffStatSummary = this.deps.git?.getDiffStatSummary ?? getGitDiffStatSummary;
+
+    const gitStatusSummary = await getStatusSummary(workspace.path)
+      .then((value) => value.slice(-GIT_SUMMARY_MAX_CHARS))
+      .catch((error) => {
+        this.logger.warn(
+          { err: error, workspaceId: workspace.id },
+          "Supervisor git status read failed"
+        );
+        return "";
+      });
+    const gitDiffStat = await getDiffStatSummary(workspace.path)
+      .then((value) => value.slice(-GIT_SUMMARY_MAX_CHARS))
+      .catch((error) => {
+        this.logger.warn(
+          { err: error, workspaceId: workspace.id },
+          "Supervisor git diff read failed"
+        );
+        return "";
+      });
+
+    const latestUserInput = this.deps.sessionMgr.getLatestSubmittedUserInput(session.id);
+
+    this.logger.info(
+      {
+        metric: "supervisor.evidence.built",
+        sessionId: session.id,
+        workspaceId: workspace.id,
+        evidenceSource: "headless_snapshot",
+        terminalCharCount: renderedSnapshot.length,
+      },
+      "supervisor evidence built"
+    );
+
+    return {
+      objective: supervisor.objective,
+      sessionId: session.id,
+      workspaceId: workspace.id,
+      workspacePath: workspace.path,
+      sessionProviderId: session.providerId,
+      evaluatorProviderId: supervisor.evaluatorProviderId,
+      sessionState: session.state,
+      transcriptExcerpt: undefined,
+      terminalExcerpt: renderedSnapshot,
+      gitStatusSummary,
+      gitDiffStat,
+      lastTurnId: undefined,
+      evidenceSource: "headless_snapshot",
+      latestUserInput,
+    };
+  }
+}

@@ -1,120 +1,49 @@
 name: CI
 
 on:
+  pull_request:
   push:
     branches:
       - main
-  pull_request:
-
-permissions:
-  contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  version-consistency:
-    name: Version Consistency
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --no-frozen-lockfile
-      - run: pnpm version:check
+  verify:
+    name: Lint, test, and build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
-  cli-cross-platform:
-    name: CLI Unit (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    needs: version-consistency
-    strategy:
-      fail-fast: false
-      matrix:
-        os:
-          - ubuntu-22.04
-          - macos-latest
-          - windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --no-frozen-lockfile
-      - run: pnpm test:cli
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-  transport-windows-smoke:
-    name: Transport Windows Smoke
-    runs-on: windows-2022
-    needs: version-consistency
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Install Windows GNU target
-        run: rustup target add x86_64-pc-windows-gnu
-      - uses: Swatinem/rust-cache@v2
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
         with:
-          workspaces: apps/server -> .build/server/target
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --no-frozen-lockfile
-      - run: npx playwright install chromium
-      # Pin this smoke to windows-2022 because windows-latest currently tracks
-      # windows-2025 and GitHub-hosted windows-2025 does not reliably provide WSL.
-      - run: pnpm test:smoke:windows:transport -- --skip-wsl-preflight
+          version: 10.33.2
+          run_install: false
 
-  verify-linux:
-    name: Verify Linux Runtime
-    runs-on: ubuntu-22.04
-    needs: version-consistency
-    env:
-      CODER_STUDIO_START_TIMEOUT_MS: 45000
-      CODER_STUDIO_RUST_TARGET: x86_64-unknown-linux-musl
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install Linux build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            curl \
-            file \
-            musl-tools \
-            xvfb \
-            wget
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          components: rustfmt, clippy
-      - name: Install Linux musl target
-        run: rustup target add x86_64-unknown-linux-musl
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: apps/server -> .build/server/target
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --no-frozen-lockfile
-      - run: pnpm test:cli
-      - run: cargo fmt --manifest-path apps/server/Cargo.toml --all --check
-      - run: cargo clippy --manifest-path apps/server/Cargo.toml --all-targets -- -D warnings
-      - run: cargo check --manifest-path apps/server/Cargo.toml
-      - run: cargo test --manifest-path apps/server/Cargo.toml
-      - run: pnpm pack:local
-      - run: xvfb-run -a pnpm test:smoke
-      - run: npx playwright install --with-deps chromium
-      - run: xvfb-run -a pnpm test:e2e:release
-      - uses: actions/upload-artifact@v4
-        if: success()
-        with:
-          name: release-artifacts-linux
-          path: .artifacts/*
+          node-version: "24"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate changesets metadata
+        run: pnpm changeset:validate
+
+      - name: Run lint
+        run: pnpm ci:lint
+
+      - name: Run tests
+        run: pnpm ci:test
+
+      - name: Run production build
+        run: pnpm ci:build

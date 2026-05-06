@@ -1,0 +1,2818 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Coder Studio — Aurora Mint Design System</title>
+<style>
+  /* ============================================================
+     AURORA MINT DESIGN SYSTEM — Visual Specification
+     Coder Studio — Single Source of Truth
+     ============================================================ */
+
+  /* --- Reset & Base --- */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    /* Backgrounds */
+    --bg-page: #0a1014;
+    --bg-surface: #11181f;
+    --bg-sidebar: #0d141a;
+    --bg-terminal: #0b1218;
+    --bg-hover: #1a2632;
+    --bg-active: #1e3040;
+    --bg-disabled: #151f28;
+
+    /* Borders */
+    --border: #1e2a35;
+    --border-light: #263545;
+    --border-focus: #6cb6ff;
+
+    /* Text */
+    --text-primary: #e5edf3;
+    --text-secondary: #9fb0bc;
+    --text-tertiary: #728492;
+    --text-inverse: #0a1014;
+
+    /* Accents */
+    --accent-blue: #6cb6ff;
+    --accent-green: #78d7b2;
+    --accent-amber: #f1b86a;
+    --accent-pink: #ff9eb0;
+
+    /* Typography */
+    --font-sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Cascadia Code', Consolas, monospace;
+
+    /* Spacing (4px grid) */
+    --sp-1: 4px;
+    --sp-2: 8px;
+    --sp-3: 12px;
+    --sp-4: 16px;
+    --sp-5: 20px;
+    --sp-6: 24px;
+    --sp-8: 32px;
+    --sp-10: 40px;
+    --sp-12: 48px;
+    --sp-16: 64px;
+
+    /* Border Radii */
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-lg: 7px;
+    --radius-xl: 8px;
+
+    /* Shadows */
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.5);
+    --shadow-lg: 0 8px 32px rgba(0,0,0,0.6);
+
+    /* Transitions */
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --duration-fast: 100ms;
+    --duration-normal: 150ms;
+    --duration-slow: 200ms;
+
+    /* Layout */
+    --sidebar-width: 44px;
+    --nav-width: 220px;
+    --terminal-height: 200px;
+    --toolbar-height: 48px;
+    --header-height: 40px;
+  }
+
+  html {
+    font-size: 16px;
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background: var(--bg-page);
+    color: var(--text-primary);
+    line-height: 1.5;
+  }
+
+  /* --- Spec Page Layout --- */
+  .spec-page {
+    display: flex;
+    min-height: 100vh;
+  }
+
+  .spec-sidebar {
+    width: 240px;
+    background: var(--bg-sidebar);
+    border-right: 1px solid var(--border);
+    padding: var(--sp-6) var(--sp-4);
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    overflow-y: auto;
+    z-index: 100;
+  }
+
+  .spec-sidebar h2 {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+    margin-bottom: var(--sp-2);
+    padding: var(--sp-2) var(--sp-2);
+  }
+
+  .spec-sidebar nav a {
+    display: block;
+    padding: var(--sp-1) var(--sp-2);
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-size: 13px;
+    border-radius: var(--radius-md);
+    transition: background var(--duration-normal) var(--ease-out),
+                color var(--duration-normal) var(--ease-out);
+    margin-bottom: 2px;
+  }
+
+  .spec-sidebar nav a:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .spec-main {
+    margin-left: 240px;
+    padding: var(--sp-10) var(--sp-12);
+    max-width: 1200px;
+  }
+
+  /* --- Header --- */
+  .spec-header {
+    margin-bottom: var(--sp-12);
+    padding-bottom: var(--sp-8);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .spec-header .logo-row {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-4);
+    margin-bottom: var(--sp-4);
+  }
+
+  .spec-header .logo-icon {
+    width: 40px;
+    height: 40px;
+    background: linear-gradient(135deg, var(--accent-green), var(--accent-blue));
+    border-radius: var(--radius-xl);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 18px;
+    color: var(--text-inverse);
+  }
+
+  .spec-header h1 {
+    font-size: 32px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+  }
+
+  .spec-header .subtitle {
+    color: var(--text-secondary);
+    font-size: 14px;
+    margin-top: var(--sp-2);
+  }
+
+  .spec-header .version-badge {
+    display: inline-block;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    padding: 3px 10px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    color: var(--text-tertiary);
+    margin-top: var(--sp-4);
+  }
+
+  /* --- Section --- */
+  .spec-section {
+    margin-bottom: var(--sp-16);
+    scroll-margin-top: var(--sp-6);
+  }
+
+  .spec-section h2 {
+    font-size: 24px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin-bottom: var(--sp-2);
+    padding-bottom: var(--sp-3);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .spec-section h3 {
+    font-size: 16px;
+    font-weight: 600;
+    margin-top: var(--sp-8);
+    margin-bottom: var(--sp-3);
+    color: var(--text-secondary);
+  }
+
+  .spec-section > p {
+    color: var(--text-secondary);
+    font-size: 13px;
+    margin-bottom: var(--sp-6);
+    max-width: 720px;
+  }
+
+  /* --- Swatch Grid --- */
+  .swatch-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: var(--sp-4);
+  }
+
+  .swatch-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    overflow: hidden;
+    transition: transform var(--duration-normal) var(--ease-out),
+                box-shadow var(--duration-normal) var(--ease-out);
+  }
+
+  .swatch-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+  }
+
+  .swatch {
+    height: 80px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .swatch-card .info {
+    padding: var(--sp-3);
+  }
+
+  .swatch-card .color-name {
+    font-size: 12px;
+    font-weight: 500;
+    margin-bottom: 2px;
+  }
+
+  .swatch-card .color-hex {
+    font-size: 11px;
+    font-family: var(--font-mono);
+    color: var(--text-tertiary);
+  }
+
+  .swatch-card .color-role {
+    font-size: 10px;
+    color: var(--text-tertiary);
+    margin-top: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  /* --- Typography Scale --- */
+  .type-scale {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    overflow: hidden;
+  }
+
+  .type-row {
+    display: grid;
+    grid-template-columns: 120px 80px 1fr;
+    align-items: baseline;
+    padding: var(--sp-4) var(--sp-6);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .type-row:last-child { border-bottom: none; }
+
+  .type-label {
+    font-size: 11px;
+    font-family: var(--font-mono);
+    color: var(--text-tertiary);
+  }
+
+  .type-size {
+    font-size: 11px;
+    color: var(--text-tertiary);
+  }
+
+  .type-sample {
+    font-weight: 500;
+  }
+
+  .type-sample.mono {
+    font-family: var(--font-mono);
+  }
+
+  /* --- Spacing Scale --- */
+  .spacing-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: var(--sp-3);
+  }
+
+  .spacing-item {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: var(--sp-3);
+  }
+
+  .spacing-bar {
+    background: var(--accent-blue);
+    border-radius: var(--radius-sm);
+    height: 8px;
+    margin-bottom: var(--sp-2);
+    opacity: 0.8;
+  }
+
+  .spacing-label {
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  .spacing-value {
+    font-size: 11px;
+    font-family: var(--font-mono);
+    color: var(--text-tertiary);
+  }
+
+  /* --- Border Radius Examples --- */
+  .radius-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: var(--sp-4);
+  }
+
+  .radius-item {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: var(--sp-4);
+    text-align: center;
+  }
+
+  .radius-preview {
+    width: 64px;
+    height: 64px;
+    background: linear-gradient(135deg, var(--accent-blue), var(--accent-green));
+    margin: 0 auto var(--sp-3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-inverse);
+  }
+
+  .radius-name {
+    font-size: 12px;
+    font-weight: 500;
+    margin-bottom: 2px;
+  }
+
+  .radius-value {
+    font-size: 11px;
+    font-family: var(--font-mono);
+    color: var(--text-tertiary);
+  }
+
+  /* --- Component Card --- */
+  .component-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-3);
+    align-items: center;
+    margin-bottom: var(--sp-6);
+    padding: var(--sp-4);
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+  }
+
+  .component-row.horizontal {
+    justify-content: flex-start;
+  }
+
+  .component-label {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    min-width: 100px;
+    margin-right: var(--sp-4);
+  }
+
+  /* --- Buttons --- */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sp-2);
+    height: 32px;
+    padding: 0 var(--sp-4);
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--duration-normal) var(--ease-out);
+    white-space: nowrap;
+    text-decoration: none;
+    outline: none;
+    line-height: 1;
+  }
+
+  .btn:focus-visible {
+    box-shadow: 0 0 0 2px var(--bg-page), 0 0 0 4px var(--accent-blue);
+  }
+
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+
+  .btn-primary {
+    background: var(--accent-blue);
+    color: var(--text-inverse);
+    border-color: transparent;
+  }
+
+  .btn-primary:hover { background: #85c5ff; }
+  .btn-primary:active { background: #5aa3ef; }
+
+  .btn-default {
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    border-color: var(--border);
+  }
+
+  .btn-default:hover {
+    background: var(--bg-hover);
+    border-color: var(--border-light);
+  }
+
+  .btn-default:active {
+    background: var(--bg-active);
+  }
+
+  .btn-danger {
+    background: var(--accent-pink);
+    color: var(--text-inverse);
+    border-color: transparent;
+  }
+
+  .btn-danger:hover { background: #ffb0c0; }
+  .btn-danger:active { background: #e88da0; }
+
+  .btn-icon {
+    width: 32px;
+    padding: 0;
+    background: transparent;
+    border-color: transparent;
+    color: var(--text-secondary);
+  }
+
+  .btn-icon:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .btn-icon:active {
+    background: var(--bg-active);
+  }
+
+  .btn-sm {
+    height: 24px;
+    padding: 0 var(--sp-2);
+    font-size: 11px;
+    border-radius: var(--radius-sm);
+  }
+
+  .btn-lg {
+    height: 40px;
+    padding: 0 var(--sp-6);
+    font-size: 14px;
+    border-radius: var(--radius-lg);
+  }
+
+  /* --- Inputs --- */
+  .input {
+    height: 32px;
+    padding: 0 var(--sp-3);
+    background: var(--bg-page);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    outline: none;
+    transition: border-color var(--duration-normal) var(--ease-out),
+                box-shadow var(--duration-normal) var(--ease-out);
+  }
+
+  .input::placeholder { color: var(--text-tertiary); }
+
+  .input:hover { border-color: var(--border-light); }
+
+  .input:focus {
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 0 1px var(--accent-blue);
+  }
+
+  .input:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  textarea.input {
+    height: auto;
+    min-height: 80px;
+    padding: var(--sp-3);
+    resize: vertical;
+  }
+
+  select.input {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239fb0bc' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    padding-right: 28px;
+  }
+
+  /* --- Badges --- */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-1);
+    height: 20px;
+    padding: 0 var(--sp-2);
+    border-radius: var(--radius-sm);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .badge-blue {
+    background: rgba(108, 182, 255, 0.15);
+    color: var(--accent-blue);
+  }
+
+  .badge-green {
+    background: rgba(120, 215, 178, 0.15);
+    color: var(--accent-green);
+  }
+
+  .badge-amber {
+    background: rgba(241, 184, 106, 0.15);
+    color: var(--accent-amber);
+  }
+
+  .badge-pink {
+    background: rgba(255, 158, 176, 0.15);
+    color: var(--accent-pink);
+  }
+
+  .badge-gray {
+    background: rgba(114, 132, 146, 0.15);
+    color: var(--text-tertiary);
+  }
+
+  /* --- Chips --- */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-1);
+    height: 24px;
+    padding: 0 var(--sp-3);
+    border-radius: var(--radius-md);
+    font-size: 11px;
+    font-weight: 500;
+    background: var(--bg-hover);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+  }
+
+  .chip-blue {
+    background: rgba(108, 182, 255, 0.1);
+    border-color: rgba(108, 182, 255, 0.25);
+    color: var(--accent-blue);
+  }
+
+  .chip-green {
+    background: rgba(120, 215, 178, 0.1);
+    border-color: rgba(120, 215, 178, 0.25);
+    color: var(--accent-green);
+  }
+
+  .chip-amber {
+    background: rgba(241, 184, 106, 0.1);
+    border-color: rgba(241, 184, 106, 0.25);
+    color: var(--accent-amber);
+  }
+
+  .chip-pink {
+    background: rgba(255, 158, 176, 0.1);
+    border-color: rgba(255, 158, 176, 0.25);
+    color: var(--accent-pink);
+  }
+
+  .chip .chip-remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: transparent;
+    border: none;
+    color: inherit;
+    opacity: 0.6;
+    cursor: pointer;
+    font-size: 10px;
+    transition: opacity var(--duration-normal) var(--ease-out);
+  }
+
+  .chip .chip-remove:hover { opacity: 1; }
+
+  /* --- Tabs --- */
+  .tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .tab {
+    padding: var(--sp-2) var(--sp-4);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-tertiary);
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    transition: color var(--duration-normal) var(--ease-out),
+                border-color var(--duration-normal) var(--ease-out);
+  }
+
+  .tab:hover { color: var(--text-secondary); }
+
+  .tab.active {
+    color: var(--text-primary);
+    border-bottom-color: var(--accent-blue);
+  }
+
+  /* Settings Nav Tabs */
+  .tabs-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    padding: var(--sp-2);
+    width: 160px;
+  }
+
+  .tab-nav {
+    padding: var(--sp-2) var(--sp-3);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    border-radius: var(--radius-md);
+    text-align: left;
+    transition: all var(--duration-normal) var(--ease-out);
+  }
+
+  .tab-nav:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .tab-nav.active {
+    background: var(--bg-active);
+    color: var(--text-primary);
+  }
+
+  /* Workspace Tabs */
+  .tabs-workspace {
+    display: flex;
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border);
+    overflow: hidden;
+    border-radius: var(--radius-md) var(--radius-md) 0 0;
+  }
+
+  .tab-workspace {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-2) var(--sp-4);
+    font-size: 12px;
+    color: var(--text-tertiary);
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    border-right: 1px solid var(--border);
+    transition: all var(--duration-normal) var(--ease-out);
+    white-space: nowrap;
+  }
+
+  .tab-workspace:hover {
+    color: var(--text-secondary);
+    background: var(--bg-hover);
+  }
+
+  .tab-workspace.active {
+    color: var(--text-primary);
+    background: var(--bg-active);
+  }
+
+  .tab-workspace .tab-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent-green);
+  }
+
+  .tab-workspace .tab-close {
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-sm);
+    color: var(--text-tertiary);
+    font-size: 10px;
+    opacity: 0;
+    transition: opacity var(--duration-normal) var(--ease-out),
+                background var(--duration-normal) var(--ease-out);
+  }
+
+  .tab-workspace:hover .tab-close { opacity: 0.6; }
+  .tab-workspace .tab-close:hover {
+    opacity: 1;
+    background: var(--bg-hover);
+  }
+
+  /* --- Progress Bars --- */
+  .progress {
+    height: 6px;
+    background: var(--bg-page);
+    border-radius: var(--radius-xl);
+    overflow: hidden;
+    width: 240px;
+  }
+
+  .progress-fill {
+    height: 100%;
+    border-radius: inherit;
+    transition: width 0.6s var(--ease-out);
+  }
+
+  .progress-fill.blue { background: var(--accent-blue); }
+  .progress-fill.green { background: var(--accent-green); }
+  .progress-fill.amber { background: var(--accent-amber); }
+  .progress-fill.pink { background: var(--accent-pink); }
+
+  .progress.indeterminate {
+    background: linear-gradient(90deg, var(--bg-page) 0%, var(--bg-page) 30%, var(--bg-hover) 50%, var(--bg-page) 70%, var(--bg-page) 100%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite linear;
+  }
+
+  /* --- Session Status Dots --- */
+  .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+
+  .status-dot.green {
+    background: var(--accent-green);
+    box-shadow: 0 0 6px rgba(120, 215, 178, 0.5);
+  }
+
+  .status-dot.gray-blue {
+    background: var(--text-tertiary);
+  }
+
+  .status-dot.blue {
+    background: var(--accent-blue);
+    box-shadow: 0 0 6px rgba(108, 182, 255, 0.5);
+  }
+
+  .status-dot.muted {
+    background: var(--text-tertiary);
+    opacity: 0.4;
+  }
+
+  /* --- Cards --- */
+  .card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    padding: var(--sp-6);
+  }
+
+  .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--sp-4);
+  }
+
+  .card-title {
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .card-body {
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  /* --- Panel --- */
+  .panel {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+  }
+
+  .panel-header {
+    display: flex;
+    align-items: center;
+    padding: var(--sp-3) var(--sp-4);
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+  }
+
+  .panel-body {
+    padding: var(--sp-4);
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+
+  /* --- Modal --- */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    backdrop-filter: blur(4px);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity var(--duration-slow) var(--ease-out);
+  }
+
+  .modal-overlay.visible {
+    pointer-events: auto;
+    opacity: 1;
+  }
+
+  .modal {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    width: 420px;
+    max-width: 90vw;
+    box-shadow: var(--shadow-lg);
+    transform: translateY(8px) scale(0.98);
+    transition: transform var(--duration-slow) var(--ease-out);
+  }
+
+  .modal-overlay.visible .modal {
+    transform: translateY(0) scale(1);
+  }
+
+  .modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--sp-4) var(--sp-6);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .modal-title {
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .modal-close {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-md);
+    background: transparent;
+    border: none;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    font-size: 14px;
+    transition: all var(--duration-normal) var(--ease-out);
+  }
+
+  .modal-close:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .modal-body {
+    padding: var(--sp-6);
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+  }
+
+  .modal-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--sp-3);
+    padding: var(--sp-4) var(--sp-6);
+    border-top: 1px solid var(--border);
+  }
+
+  /* --- Pill Selector --- */
+  .pill-selector {
+    display: inline-flex;
+    background: var(--bg-page);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    padding: 3px;
+    gap: 2px;
+  }
+
+  .pill-option {
+    padding: var(--sp-1) var(--sp-3);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-tertiary);
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    border-radius: var(--radius-lg);
+    transition: all var(--duration-normal) var(--ease-out);
+  }
+
+  .pill-option:hover { color: var(--text-secondary); }
+
+  .pill-option.active {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  /* --- Toolbar --- */
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-1);
+    padding: var(--sp-2) var(--sp-3);
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+  }
+
+  .toolbar-btn {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-md);
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all var(--duration-normal) var(--ease-out);
+    font-size: 14px;
+  }
+
+  .toolbar-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .toolbar-btn:active {
+    background: var(--bg-active);
+  }
+
+  .toolbar-divider {
+    width: 1px;
+    height: 20px;
+    background: var(--border);
+    margin: 0 var(--sp-1);
+  }
+
+  .toolbar-btn.active {
+    background: var(--bg-active);
+    color: var(--accent-blue);
+  }
+
+  /* --- SVG Icons --- */
+  .icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    color: inherit;
+  }
+
+  .icon svg {
+    width: 100%;
+    height: 100%;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  /* --- Animations --- */
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  @keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateX(-8px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  .anim-pulse { animation: pulse 2s ease-in-out infinite; }
+  .anim-shimmer {
+    background: linear-gradient(90deg, var(--bg-surface) 0%, var(--bg-hover) 50%, var(--bg-surface) 100%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite linear;
+  }
+  .anim-spin { animation: spin 1s linear infinite; }
+  .anim-fade { animation: fadeIn 0.3s var(--ease-out) both; }
+  .anim-slide { animation: slideIn 0.3s var(--ease-out) both; }
+
+  /* --- Animation Demonstrations --- */
+  .anim-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: var(--sp-4);
+  }
+
+  .anim-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    padding: var(--sp-6);
+    text-align: center;
+  }
+
+  .anim-preview {
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: var(--sp-3);
+  }
+
+  .anim-name {
+    font-size: 12px;
+    font-weight: 500;
+    margin-bottom: 2px;
+  }
+
+  .anim-css {
+    font-size: 10px;
+    font-family: var(--font-mono);
+    color: var(--text-tertiary);
+  }
+
+  /* --- Layout Diagram --- */
+  .layout-diagram {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    padding: var(--sp-6);
+    margin-bottom: var(--sp-6);
+  }
+
+  .layout-wireframe {
+    display: grid;
+    gap: var(--sp-2);
+    border: 1px dashed var(--border-light);
+    border-radius: var(--radius-md);
+    padding: var(--sp-2);
+    min-height: 200px;
+  }
+
+  .layout-wireframe.ltr {
+    grid-template-columns: 44px 220px 1fr;
+  }
+
+  .layout-block {
+    background: var(--bg-page);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    color: var(--text-tertiary);
+    padding: var(--sp-2);
+    text-align: center;
+    min-height: 40px;
+  }
+
+  .layout-block.sidebar { background: var(--bg-sidebar); }
+  .layout-block.nav { background: rgba(108, 182, 255, 0.05); border-color: rgba(108, 182, 255, 0.15); }
+  .layout-block.main { background: rgba(120, 215, 178, 0.05); border-color: rgba(120, 215, 178, 0.15); }
+  .layout-block.header { min-height: 40px; }
+  .layout-block.terminal { min-height: 120px; background: var(--bg-terminal); }
+
+  .layout-dimension {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-4);
+    margin-bottom: var(--sp-3);
+  }
+
+  .layout-dim-line {
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+    position: relative;
+  }
+
+  .layout-dim-label {
+    font-size: 11px;
+    font-family: var(--font-mono);
+    color: var(--accent-blue);
+    white-space: nowrap;
+  }
+
+  /* --- State Demonstrations --- */
+  .state-row {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-6);
+    margin-bottom: var(--sp-4);
+    padding: var(--sp-3) var(--sp-4);
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+  }
+
+  .state-label {
+    font-size: 11px;
+    font-family: var(--font-mono);
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    min-width: 80px;
+  }
+
+  /* --- Icon Grid --- */
+  .icon-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+    gap: var(--sp-3);
+  }
+
+  .icon-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-4);
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    transition: all var(--duration-normal) var(--ease-out);
+  }
+
+  .icon-item:hover {
+    background: var(--bg-hover);
+    border-color: var(--border-light);
+  }
+
+  .icon-item .icon {
+    width: 20px;
+    height: 20px;
+    color: var(--text-secondary);
+  }
+
+  .icon-item .icon-label {
+    font-size: 10px;
+    color: var(--text-tertiary);
+    text-align: center;
+    word-break: break-word;
+  }
+
+  /* --- Terminal --- */
+  .terminal {
+    background: var(--bg-terminal);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    overflow: hidden;
+    font-family: var(--font-mono);
+  }
+
+  .terminal-titlebar {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-2) var(--sp-4);
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .terminal-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+  }
+
+  .terminal-dot.red { background: #ff5f57; }
+  .terminal-dot.yellow { background: #febc2e; }
+  .terminal-dot.green { background: #28c840; }
+
+  .terminal-title {
+    flex: 1;
+    font-size: 11px;
+    color: var(--text-tertiary);
+    text-align: center;
+  }
+
+  .terminal-body {
+    padding: var(--sp-4);
+    font-size: 12px;
+    line-height: 1.7;
+    color: #d8e2ea;
+    min-height: 160px;
+  }
+
+  .terminal-line {
+    margin-bottom: var(--sp-1);
+  }
+
+  .terminal-prompt {
+    color: var(--accent-green);
+    user-select: none;
+  }
+
+  .terminal-cmd {
+    color: #d8e2ea;
+  }
+
+  .terminal-output {
+    color: var(--text-secondary);
+  }
+
+  .terminal-cursor {
+    display: inline-block;
+    width: 7px;
+    height: 14px;
+    background: var(--accent-blue);
+    animation: pulse 1s ease-in-out infinite;
+    vertical-align: middle;
+    margin-left: 2px;
+  }
+
+  .terminal-error {
+    color: var(--accent-pink);
+  }
+
+  .terminal-warning {
+    color: var(--accent-amber);
+  }
+
+  .terminal-success {
+    color: var(--accent-green);
+  }
+
+  /* --- Empty States --- */
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--sp-12) var(--sp-8);
+    text-align: center;
+    background: var(--bg-surface);
+    border: 1px dashed var(--border-light);
+    border-radius: var(--radius-xl);
+  }
+
+  .empty-state-icon {
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: var(--sp-4);
+    color: var(--text-tertiary);
+    opacity: 0.5;
+  }
+
+  .empty-state h4 {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: var(--sp-2);
+  }
+
+  .empty-state p {
+    font-size: 13px;
+    color: var(--text-secondary);
+    max-width: 320px;
+    margin-bottom: var(--sp-4);
+    line-height: 1.6;
+  }
+
+  /* --- Inline Code --- */
+  code {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    background: var(--bg-page);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 2px 6px;
+    color: var(--accent-blue);
+  }
+
+  /* --- Divider --- */
+  .divider {
+    height: 1px;
+    background: var(--border);
+    margin: var(--sp-6) 0;
+  }
+
+  /* --- Utility --- */
+  .flex { display: flex; }
+  .flex-wrap { flex-wrap: wrap; }
+  .gap-2 { gap: var(--sp-2); }
+  .gap-3 { gap: var(--sp-3); }
+  .gap-4 { gap: var(--sp-4); }
+  .gap-6 { gap: var(--sp-6); }
+  .items-center { align-items: center; }
+  .flex-col { flex-direction: column; }
+  .mt-2 { margin-top: var(--sp-2); }
+  .mt-4 { margin-top: var(--sp-4); }
+  .mb-2 { margin-bottom: var(--sp-2); }
+  .mb-4 { margin-bottom: var(--sp-4); }
+  .w-full { width: 100%; }
+  .text-secondary { color: var(--text-secondary); }
+  .text-tertiary { color: var(--text-tertiary); }
+
+  /* --- State Hover/Focus Simulation --- */
+  .state-demo {
+    display: flex;
+    gap: var(--sp-4);
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .state-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--sp-2);
+  }
+
+  .state-item-label {
+    font-size: 10px;
+    font-family: var(--font-mono);
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  /* Specific state overrides for demonstration */
+  .state-hover {
+    background: var(--bg-hover) !important;
+    border-color: var(--border-light) !important;
+  }
+
+  .state-active {
+    background: var(--bg-active) !important;
+    border-color: var(--accent-blue) !important;
+  }
+
+  .state-focus {
+    box-shadow: 0 0 0 2px var(--bg-page), 0 0 0 4px var(--accent-blue) !important;
+  }
+
+  .state-disabled {
+    opacity: 0.5 !important;
+    pointer-events: none !important;
+  }
+
+  /* --- Color Group Labels --- */
+  .color-group {
+    margin-bottom: var(--sp-6);
+  }
+
+  .color-group-title {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-tertiary);
+    margin-bottom: var(--sp-3);
+  }
+
+  /* --- Responsive --- */
+  @media (max-width: 900px) {
+    .spec-sidebar { display: none; }
+    .spec-main { margin-left: 0; padding: var(--sp-6); }
+    .swatch-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+    .layout-wireframe.ltr { grid-template-columns: 1fr; }
+  }
+
+  /* --- Print --- */
+  @media print {
+    .spec-sidebar { display: none; }
+    .spec-main { margin-left: 0; }
+    body { background: #fff; color: #000; }
+  }
+</style>
+</head>
+<body>
+<div class="spec-page">
+
+  <!-- ============================================================
+       SIDEBAR NAVIGATION
+       ============================================================ -->
+  <aside class="spec-sidebar">
+    <h2>Design System</h2>
+    <nav>
+      <a href="#colors">Colors</a>
+      <a href="#typography">Typography</a>
+      <a href="#spacing">Spacing</a>
+      <a href="#border-radii">Border Radii</a>
+      <a href="#buttons">Buttons</a>
+      <a href="#inputs">Inputs</a>
+      <a href="#badges-chips">Badges &amp; Chips</a>
+      <a href="#tabs">Tabs</a>
+      <a href="#progress">Progress Bars</a>
+      <a href="#session-status">Session Status</a>
+      <a href="#cards-panels">Cards &amp; Panels</a>
+      <a href="#modal">Modal Dialog</a>
+      <a href="#pill-selector">Pill Selector</a>
+      <a href="#toolbar">Toolbar</a>
+      <a href="#layout">Layout Specs</a>
+      <a href="#type-scale">Type Scale</a>
+      <a href="#animations">Animations</a>
+      <a href="#states">States</a>
+      <a href="#icons">Icons</a>
+      <a href="#terminal">Terminal</a>
+      <a href="#empty-states">Empty States</a>
+    </nav>
+  </aside>
+
+  <!-- ============================================================
+       MAIN CONTENT
+       ============================================================ -->
+  <main class="spec-main">
+
+    <!-- Header -->
+    <header class="spec-header">
+      <div class="logo-row">
+        <div class="logo-icon">CS</div>
+        <h1>Aurora Mint</h1>
+      </div>
+      <p class="subtitle">Coder Studio Design System &mdash; Dark Theme Visual Specification</p>
+      <span class="version-badge">v1.0.0 &mdash; April 2026</span>
+    </header>
+
+    <!-- ============================================================
+         SECTION 1: COLORS
+         ============================================================ -->
+    <section class="spec-section" id="colors">
+      <h2>Colors</h2>
+      <p>The Aurora Mint palette uses a deep navy-charcoal foundation with carefully calibrated cool undertones. Accents are vivid but restrained for extended viewing sessions.</p>
+
+      <div class="color-group">
+        <div class="color-group-title">Backgrounds</div>
+        <div class="swatch-grid">
+          <div class="swatch-card">
+            <div class="swatch" style="background: #0a1014;"></div>
+            <div class="info">
+              <div class="color-name">Page Background</div>
+              <div class="color-hex">#0a1014</div>
+              <div class="color-role">Background</div>
+            </div>
+          </div>
+          <div class="swatch-card">
+            <div class="swatch" style="background: #11181f;"></div>
+            <div class="info">
+              <div class="color-name">Surface</div>
+              <div class="color-hex">#11181f</div>
+              <div class="color-role">Surface</div>
+            </div>
+          </div>
+          <div class="swatch-card">
+            <div class="swatch" style="background: #0d141a;"></div>
+            <div class="info">
+              <div class="color-name">Sidebar</div>
+              <div class="color-hex">#0d141a</div>
+              <div class="color-role">Surface</div>
+            </div>
+          </div>
+          <div class="swatch-card">
+            <div class="swatch" style="background: #0b1218;"></div>
+            <div class="info">
+              <div class="color-name">Terminal</div>
+              <div class="color-hex">#0b1218</div>
+              <div class="color-role">Surface</div>
+            </div>
+          </div>
+          <div class="swatch-card">
+            <div class="swatch" style="background: #1a2632;"></div>
+            <div class="info">
+              <div class="color-name">Hover</div>
+              <div class="color-hex">#1a2632</div>
+              <div class="color-role">Interaction</div>
+            </div>
+          </div>
+          <div class="swatch-card">
+            <div class="swatch" style="background: #1e3040;"></div>
+            <div class="info">
+              <div class="color-name">Active</div>
+              <div class="color-hex">#1e3040</div>
+              <div class="color-role">Interaction</div>
+            </div>
+          </div>
+          <div class="swatch-card">
+            <div class="swatch" style="background: #151f28;"></div>
+            <div class="info">
+              <div class="color-name">Disabled</div>
+              <div class="color-hex">#151f28</div>
+              <div class="color-role">State</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="color-group">
+        <div class="color-group-title">Borders</div>
+        <div class="swatch-grid">
+          <div class="swatch-card">
+            <div class="swatch" style="background: #1e2a35;"></div>
+            <div class="info">
+              <div class="color-name">Border</div>
+              <div class="color-hex">#1e2a35</div>
+              <div class="color-role">Border</div>
+            </div>
+          </div>
+          <div class="swatch-card">
+            <div class="swatch" style="background: #263545;"></div>
+            <div class="info">
+              <div class="color-name">Border Light</div>
+              <div class="color-hex">#263545</div>
+              <div class="color-role">Border</div>
+            </div>
+          </div>
+          <div class="swatch-card">
+            <div class="swatch" style="background: #6cb6ff;"></div>
+            <div class="info">
+              <div class="color-name">Focus Border</div>
+              <div class="color-hex">#6cb6ff</div>
+              <div class="color-role">Interaction</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="color-group">
+        <div class="color-group-title">Text</div>
+        <div class="swatch-grid">
+          <div class="swatch-card">
+            <div class="swatch" style="background: #e5edf3;"></div>
+            <div class="info">
+              <div class="color-name">Primary</div>
+              <div class="color-hex">#e5edf3</div>
+              <div class="color-role">Text</div>
+            </div>
+          </div>
+          <div class="swatch-card">
+            <div class="swatch" style="background: #9fb0bc;"></div>
+            <div class="info">
+              <div class="color-name">Secondary</div>
+              <div class="color-hex">#9fb0bc</div>
+              <div class="color-role">Text</div>
+            </div>
+          </div>
+          <div class="swatch-card">
+            <div class="swatch" style="background: #728492;"></div>
+            <div class="info">
+              <div class="color-name">Tertiary</div>
+              <div class="color-hex">#728492</div>
+              <div class="color-role">Text</div>
+            </div>
+          </div>
+          <div class="swatch-card">
+            <div class="swatch" style="background: #0a1014; border-bottom: 1px solid #1e2a35;"></div>
+            <div class="info">
+              <div class="color-name">Inverse</div>
+              <div class="color-hex">#0a1014</div>
+              <div class="color-role">Text on Accent</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="color-group">
+        <div class="color-group-title">Accent Colors</div>
+        <div class="swatch-grid">
+          <div class="swatch-card">
+            <div class="swatch" style="background: #6cb6ff;"></div>
+            <div class="info">
+              <div class="color-name">Accent Blue</div>
+              <div class="color-hex">#6cb6ff</div>
+              <div class="color-role">Primary Action</div>
+            </div>
+          </div>
+          <div class="swatch-card">
+            <div class="swatch" style="background: #78d7b2;"></div>
+            <div class="info">
+              <div class="color-name">Accent Green</div>
+              <div class="color-hex">#78d7b2</div>
+              <div class="color-role">Success / Active</div>
+            </div>
+          </div>
+          <div class="swatch-card">
+            <div class="swatch" style="background: #f1b86a;"></div>
+            <div class="info">
+              <div class="color-name">Accent Amber</div>
+              <div class="color-hex">#f1b86a</div>
+              <div class="color-role">Warning / Pending</div>
+            </div>
+          </div>
+          <div class="swatch-card">
+            <div class="swatch" style="background: #ff9eb0;"></div>
+            <div class="info">
+              <div class="color-name">Danger Pink</div>
+              <div class="color-hex">#ff9eb0</div>
+              <div class="color-role">Error / Destroy</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SECTION 2: TYPOGRAPHY
+         ============================================================ -->
+    <section class="spec-section" id="typography">
+      <h2>Typography</h2>
+      <p>IBM Plex Sans for UI text, JetBrains Mono for code. Both loaded with appropriate weights. System fallbacks ensure graceful degradation.</p>
+
+      <div class="type-scale">
+        <div class="type-row">
+          <span class="type-label">Sans-serif</span>
+          <span class="type-size">14px</span>
+          <span class="type-sample" style="font-size: 14px;">The quick brown fox jumps over the lazy dog</span>
+        </div>
+        <div class="type-row">
+          <span class="type-label">Mono</span>
+          <span class="type-size">13px</span>
+          <span class="type-sample mono" style="font-size: 13px;">const result = await build(project);</span>
+        </div>
+        <div class="type-row">
+          <span class="type-label">Weight 400</span>
+          <span class="type-size">Regular</span>
+          <span class="type-sample" style="font-size: 14px; font-weight: 400;">Body text and descriptions use regular weight</span>
+        </div>
+        <div class="type-row">
+          <span class="type-label">Weight 500</span>
+          <span class="type-size">Medium</span>
+          <span class="type-sample" style="font-size: 14px; font-weight: 500;">Buttons, labels, and interactive elements use medium</span>
+        </div>
+        <div class="type-row">
+          <span class="type-label">Weight 600</span>
+          <span class="type-size">Semi-bold</span>
+          <span class="type-sample" style="font-size: 14px; font-weight: 600;">Headings and important text use semi-bold</span>
+        </div>
+        <div class="type-row">
+          <span class="type-label">Weight 700</span>
+          <span class="type-size">Bold</span>
+          <span class="type-sample" style="font-size: 14px; font-weight: 700;">Page titles and logos use bold</span>
+        </div>
+      </div>
+
+      <h3>Letter Spacing</h3>
+      <p>Captions and badges use slightly expanded letter spacing for readability at small sizes.</p>
+      <div class="component-row">
+        <span class="component-label">Uppercase</span>
+        <span style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-tertiary);">CAPTION TEXT</span>
+        <span style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary);">LABEL TEXT</span>
+        <span style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-tertiary);">BADGE TEXT</span>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SECTION 3: SPACING
+         ============================================================ -->
+    <section class="spec-section" id="spacing">
+      <h2>Spacing</h2>
+      <p>All spacing follows a strict 4px grid system. Values are powers of 2 for predictability.</p>
+
+      <div class="spacing-grid">
+        <div class="spacing-item">
+          <div class="spacing-bar" style="width: 4px;"></div>
+          <div class="spacing-label">sp-1</div>
+          <div class="spacing-value">4px</div>
+        </div>
+        <div class="spacing-item">
+          <div class="spacing-bar" style="width: 8px;"></div>
+          <div class="spacing-label">sp-2</div>
+          <div class="spacing-value">8px</div>
+        </div>
+        <div class="spacing-item">
+          <div class="spacing-bar" style="width: 12px;"></div>
+          <div class="spacing-label">sp-3</div>
+          <div class="spacing-value">12px</div>
+        </div>
+        <div class="spacing-item">
+          <div class="spacing-bar" style="width: 16px;"></div>
+          <div class="spacing-label">sp-4</div>
+          <div class="spacing-value">16px</div>
+        </div>
+        <div class="spacing-item">
+          <div class="spacing-bar" style="width: 20px;"></div>
+          <div class="spacing-label">sp-5</div>
+          <div class="spacing-value">20px</div>
+        </div>
+        <div class="spacing-item">
+          <div class="spacing-bar" style="width: 24px;"></div>
+          <div class="spacing-label">sp-6</div>
+          <div class="spacing-value">24px</div>
+        </div>
+        <div class="spacing-item">
+          <div class="spacing-bar" style="width: 32px;"></div>
+          <div class="spacing-label">sp-8</div>
+          <div class="spacing-value">32px</div>
+        </div>
+        <div class="spacing-item">
+          <div class="spacing-bar" style="width: 40px;"></div>
+          <div class="spacing-label">sp-10</div>
+          <div class="spacing-value">40px</div>
+        </div>
+        <div class="spacing-item">
+          <div class="spacing-bar" style="width: 48px;"></div>
+          <div class="spacing-label">sp-12</div>
+          <div class="spacing-value">48px</div>
+        </div>
+        <div class="spacing-item">
+          <div class="spacing-bar" style="width: 64px;"></div>
+          <div class="spacing-label">sp-16</div>
+          <div class="spacing-value">64px</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SECTION 4: BORDER RADII
+         ============================================================ -->
+    <section class="spec-section" id="border-radii">
+      <h2>Border Radii</h2>
+      <p>Four radius values used consistently across all components.</p>
+
+      <div class="radius-grid">
+        <div class="radius-item">
+          <div class="radius-preview" style="border-radius: 4px;">sm</div>
+          <div class="radius-name">Small</div>
+          <div class="radius-value">4px</div>
+        </div>
+        <div class="radius-item">
+          <div class="radius-preview" style="border-radius: 6px;">md</div>
+          <div class="radius-name">Medium</div>
+          <div class="radius-value">6px</div>
+        </div>
+        <div class="radius-item">
+          <div class="radius-preview" style="border-radius: 7px;">lg</div>
+          <div class="radius-name">Large</div>
+          <div class="radius-value">7px</div>
+        </div>
+        <div class="radius-item">
+          <div class="radius-preview" style="border-radius: 8px;">xl</div>
+          <div class="radius-name">Extra Large</div>
+          <div class="radius-value">8px</div>
+        </div>
+      </div>
+
+      <h3>Usage Guide</h3>
+      <div class="component-row" style="flex-direction: column; align-items: flex-start;">
+        <div style="margin-bottom: var(--sp-2);">
+          <code>radius-sm (4px)</code> <span class="text-secondary">&mdash; Badges, small elements, checkbox</span>
+        </div>
+        <div style="margin-bottom: var(--sp-2);">
+          <code>radius-md (6px)</code> <span class="text-secondary">&mdash; Buttons, inputs, tabs, chips</span>
+        </div>
+        <div style="margin-bottom: var(--sp-2);">
+          <code>radius-lg (7px)</code> <span class="text-secondary">&mdash; Large buttons, pill active</span>
+        </div>
+        <div>
+          <code>radius-xl (8px)</code> <span class="text-secondary">&mdash; Cards, panels, modals, containers</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SECTION 5: BUTTONS
+         ============================================================ -->
+    <section class="spec-section" id="buttons">
+      <h2>Buttons</h2>
+      <p>Four button variants in three sizes. All buttons share the same height, padding, and transition timing.</p>
+
+      <h3>Variants</h3>
+      <div class="component-row">
+        <span class="component-label">Primary</span>
+        <button class="btn btn-primary">Primary Action</button>
+      </div>
+      <div class="component-row">
+        <span class="component-label">Default</span>
+        <button class="btn btn-default">Default Button</button>
+      </div>
+      <div class="component-row">
+        <span class="component-label">Danger</span>
+        <button class="btn btn-danger">Delete Project</button>
+      </div>
+      <div class="component-row">
+        <span class="component-label">Icon</span>
+        <button class="btn btn-icon" title="Settings">
+          <span class="icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg></span>
+        </button>
+        <button class="btn btn-icon" title="Add">
+          <span class="icon"><svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span>
+        </button>
+        <button class="btn btn-icon" title="Close">
+          <span class="icon"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span>
+        </button>
+      </div>
+
+      <h3>Sizes</h3>
+      <div class="component-row">
+        <span class="component-label">Small</span>
+        <button class="btn btn-primary btn-sm">Save</button>
+        <button class="btn btn-default btn-sm">Cancel</button>
+      </div>
+      <div class="component-row">
+        <span class="component-label">Default</span>
+        <button class="btn btn-primary">Save Changes</button>
+        <button class="btn btn-default">Reset</button>
+      </div>
+      <div class="component-row">
+        <span class="component-label">Large</span>
+        <button class="btn btn-primary btn-lg">Start Building</button>
+        <button class="btn btn-default btn-lg">Learn More</button>
+      </div>
+
+      <h3>With Icons</h3>
+      <div class="component-row">
+        <span class="component-label">With icon</span>
+        <button class="btn btn-primary">
+          <span class="icon"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span>
+          Deploy
+        </button>
+        <button class="btn btn-default">
+          <span class="icon"><svg viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg></span>
+          Configure
+        </button>
+        <button class="btn btn-danger">
+          <span class="icon"><svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></span>
+          Delete
+        </button>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SECTION 6: INPUTS
+         ============================================================ -->
+    <section class="spec-section" id="inputs">
+      <h2>Inputs</h2>
+      <p>Form controls use the surface-dark background with a subtle border that highlights blue on focus.</p>
+
+      <h3>Text Input</h3>
+      <div class="component-row">
+        <span class="component-label">Default</span>
+        <input type="text" class="input" placeholder="Enter project name..." value="my-awesome-app">
+      </div>
+      <div class="component-row">
+        <span class="component-label">Placeholder</span>
+        <input type="text" class="input" placeholder="Search components...">
+      </div>
+      <div class="component-row">
+        <span class="component-label">Disabled</span>
+        <input type="text" class="input" value="Cannot edit this" disabled>
+      </div>
+
+      <h3>Textarea</h3>
+      <div style="max-width: 400px; margin-top: var(--sp-4);">
+        <textarea class="input" placeholder="Enter description...">This is a textarea component for multi-line text input. It supports resizing vertically.</textarea>
+      </div>
+
+      <h3>Select Dropdown</h3>
+      <div class="component-row">
+        <span class="component-label">Select</span>
+        <select class="input">
+          <option>Choose a framework...</option>
+          <option selected>React + Vite</option>
+          <option>Next.js</option>
+          <option>Vue + Vite</option>
+          <option>SvelteKit</option>
+        </select>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SECTION 7: BADGES & CHIPS
+         ============================================================ -->
+    <section class="spec-section" id="badges-chips">
+      <h2>Badges &amp; Chips</h2>
+      <p>Badges are small status indicators. Chips are removable tags. Both use translucent backgrounds with colored text.</p>
+
+      <h3>Badges (Uppercase, 10px)</h3>
+      <div class="component-row">
+        <span class="component-label">All states</span>
+        <span class="badge badge-blue">Building</span>
+        <span class="badge badge-green">Online</span>
+        <span class="badge badge-amber">Pending</span>
+        <span class="badge badge-pink">Error</span>
+        <span class="badge badge-gray">Offline</span>
+      </div>
+
+      <h3>Chips (11px, with close button)</h3>
+      <div class="component-row">
+        <span class="component-label">All colors</span>
+        <span class="chip chip-blue">TypeScript <button class="chip-remove">&times;</button></span>
+        <span class="chip chip-green">Active <button class="chip-remove">&times;</button></span>
+        <span class="chip chip-amber">Warning <button class="chip-remove">&times;</button></span>
+        <span class="chip chip-pink">Urgent <button class="chip-remove">&times;</button></span>
+        <span class="chip">Default <button class="chip-remove">&times;</button></span>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SECTION 8: TABS
+         ============================================================ -->
+    <section class="spec-section" id="tabs">
+      <h2>Tabs</h2>
+      <p>Three distinct tab styles for different contexts: view switcher, settings navigation, and workspace tabs.</p>
+
+      <h3>View Switcher (Underline)</h3>
+      <div class="component-row" style="flex-direction: column; align-items: flex-start;">
+        <div class="tabs">
+          <button class="tab active">Preview</button>
+          <button class="tab">Code</button>
+          <button class="tab">Terminal</button>
+          <button class="tab">Logs</button>
+        </div>
+        <div style="padding: var(--sp-4) 0; color: var(--text-secondary); font-size: 13px;">Active tab content appears below the blue underline.</div>
+      </div>
+
+      <h3>Settings Navigation (Sidebar Pills)</h3>
+      <div class="component-row">
+        <div class="tabs-nav">
+          <button class="tab-nav active">General</button>
+          <button class="tab-nav">Appearance</button>
+          <button class="tab-nav">Workspace</button>
+          <button class="tab-nav">Extensions</button>
+          <button class="tab-nav">Accounts</button>
+        </div>
+      </div>
+
+      <h3>Workspace Tabs (Browser-style)</h3>
+      <div class="component-row" style="flex-direction: column; align-items: flex-start;">
+        <div class="tabs-workspace" style="width: 100%; max-width: 500px;">
+          <button class="tab-workspace">
+            <span class="tab-dot"></span>
+            index.tsx
+            <span class="tab-close">&times;</span>
+          </button>
+          <button class="tab-workspace active">
+            App.tsx
+            <span class="tab-close">&times;</span>
+          </button>
+          <button class="tab-workspace">
+            styles.css
+            <span class="tab-close">&times;</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SECTION 9: PROGRESS BARS
+         ============================================================ -->
+    <section class="spec-section" id="progress">
+      <h2>Progress Bars</h2>
+      <p>Thin, rounded progress indicators in all four accent colors plus an indeterminate loading state.</p>
+
+      <div class="component-row" style="flex-direction: column; align-items: flex-start;">
+        <div style="display: flex; align-items: center; gap: var(--sp-4); margin-bottom: var(--sp-3);">
+          <span class="component-label" style="min-width: 60px;">Blue</span>
+          <div class="progress"><div class="progress-fill blue" style="width: 75%;"></div></div>
+          <span class="text-tertiary" style="font-size: 12px; font-family: var(--font-mono);">75%</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: var(--sp-4); margin-bottom: var(--sp-3);">
+          <span class="component-label" style="min-width: 60px;">Green</span>
+          <div class="progress"><div class="progress-fill green" style="width: 100%;"></div></div>
+          <span class="text-tertiary" style="font-size: 12px; font-family: var(--font-mono);">100%</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: var(--sp-4); margin-bottom: var(--sp-3);">
+          <span class="component-label" style="min-width: 60px;">Amber</span>
+          <div class="progress"><div class="progress-fill amber" style="width: 45%;"></div></div>
+          <span class="text-tertiary" style="font-size: 12px; font-family: var(--font-mono);">45%</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: var(--sp-4); margin-bottom: var(--sp-3);">
+          <span class="component-label" style="min-width: 60px;">Pink</span>
+          <div class="progress"><div class="progress-fill pink" style="width: 20%;"></div></div>
+          <span class="text-tertiary" style="font-size: 12px; font-family: var(--font-mono);">20%</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: var(--sp-4);">
+          <span class="component-label" style="min-width: 60px;">Loading</span>
+          <div class="progress indeterminate"></div>
+          <span class="text-tertiary" style="font-size: 12px; font-family: var(--font-mono);">...</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SECTION 10: SESSION STATUS DOTS
+         ============================================================ -->
+    <section class="spec-section" id="session-status">
+      <h2>Session Status Dots</h2>
+      <p>Small circular indicators showing session state. Green has a subtle glow effect.</p>
+
+      <div class="component-row">
+        <span class="component-label">All states</span>
+        <div style="display: flex; align-items: center; gap: var(--sp-4);">
+          <div style="display: flex; align-items: center; gap: var(--sp-2);">
+            <span class="status-dot green"></span>
+            <span style="font-size: 13px;">Online</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: var(--sp-2);">
+            <span class="status-dot gray-blue"></span>
+            <span style="font-size: 13px;">Idle</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: var(--sp-2);">
+            <span class="status-dot blue"></span>
+            <span style="font-size: 13px;">Connecting</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: var(--sp-2);">
+            <span class="status-dot muted"></span>
+            <span style="font-size: 13px;">Offline</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SECTION 11: CARDS & PANELS
+         ============================================================ -->
+    <section class="spec-section" id="cards-panels">
+      <h2>Cards &amp; Panels</h2>
+      <p>Cards are used for content grouping. Panels are used for structured sections with headers.</p>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: var(--sp-6); margin-bottom: var(--sp-6);">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Session Details</span>
+            <span class="badge badge-green">Active</span>
+          </div>
+          <div class="card-body">
+            <div style="display: flex; flex-direction: column; gap: var(--sp-2);">
+              <div style="display: flex; justify-content: space-between;">
+                <span class="text-tertiary">Framework</span>
+                <span>React + Vite</span>
+              </div>
+              <div style="display: flex; justify-content: space-between;">
+                <span class="text-tertiary">Environment</span>
+                <span>Production</span>
+              </div>
+              <div style="display: flex; justify-content: space-between;">
+                <span class="text-tertiary">Uptime</span>
+                <span>4h 23m</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <span class="status-dot green" style="margin-right: var(--sp-2);"></span>
+            Build Pipeline
+          </div>
+          <div class="panel-body">
+            <div style="display: flex; flex-direction: column; gap: var(--sp-2);">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span>Install dependencies</span>
+                <span class="badge badge-green">Done</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span>Run build</span>
+                <span class="badge badge-blue">Running</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span>Deploy</span>
+                <span class="badge badge-gray">Queued</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SECTION 12: MODAL DIALOG
+         ============================================================ -->
+    <section class="spec-section" id="modal">
+      <h2>Modal Dialog</h2>
+      <p>Centered overlay with backdrop blur. Click outside to dismiss. Use for confirmations and settings.</p>
+
+      <div style="position: relative; width: 100%; max-width: 460px; margin: 0 auto; background: rgba(0,0,0,0.5); border-radius: var(--radius-xl); padding: var(--sp-6); display: flex; align-items: center; justify-content: center; min-height: 280px;">
+        <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-xl); width: 100%; box-shadow: var(--shadow-lg);">
+          <div class="modal-header" style="border-bottom: 1px solid var(--border);">
+            <span class="modal-title">Delete Session</span>
+            <button class="modal-close">&times;</button>
+          </div>
+          <div class="modal-body" style="padding: var(--sp-6); font-size: 13px; color: var(--text-secondary); line-height: 1.6;">
+            Are you sure you want to delete this session? This action cannot be undone and all unsaved changes will be lost.
+          </div>
+          <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: var(--sp-3); padding: var(--sp-4) var(--sp-6); border-top: 1px solid var(--border);">
+            <button class="btn btn-default">Cancel</button>
+            <button class="btn btn-danger">Delete Session</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SECTION 13: PILL SELECTOR
+         ============================================================ -->
+    <section class="spec-section" id="pill-selector">
+      <h2>Pill Selector</h2>
+      <p>Segmented control for mutually exclusive options. Used in toolbars and view switchers.</p>
+
+      <div class="component-row" style="flex-direction: column; align-items: flex-start;">
+        <div style="margin-bottom: var(--sp-3);">
+          <span class="component-label">View mode</span>
+          <div class="pill-selector">
+            <button class="pill-option active">Preview</button>
+            <button class="pill-option">Code</button>
+            <button class="pill-option">Split</button>
+          </div>
+        </div>
+        <div>
+          <span class="component-label">Frequency</span>
+          <div class="pill-selector">
+            <button class="pill-option">Hourly</button>
+            <button class="pill-option active">Daily</button>
+            <button class="pill-option">Weekly</button>
+            <button class="pill-option">Monthly</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SECTION 14: TOOLBAR
+         ============================================================ -->
+    <section class="spec-section" id="toolbar">
+      <h2>Toolbar</h2>
+      <p>Compact horizontal button groups with dividers. Used in editors, preview panels, and command bars.</p>
+
+      <div class="component-row" style="flex-direction: column; align-items: flex-start;">
+        <span class="component-label">Editor toolbar</span>
+        <div class="toolbar">
+          <button class="toolbar-btn active" title="Preview">
+            <span class="icon"><svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></span>
+          </button>
+          <button class="toolbar-btn" title="Code">
+            <span class="icon"><svg viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></span>
+          </button>
+          <button class="toolbar-btn" title="Terminal">
+            <span class="icon"><svg viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg></span>
+          </button>
+          <div class="toolbar-divider"></div>
+          <button class="toolbar-btn" title="Refresh">
+            <span class="icon"><svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg></span>
+          </button>
+          <button class="toolbar-btn" title="Settings">
+            <span class="icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg></span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SECTION 15: LAYOUT SPECS
+         ============================================================ -->
+    <section class="spec-section" id="layout">
+      <h2>Layout Specifications</h2>
+      <p>The Coder Studio layout uses a three-panel structure with fixed-width sidebars and a flexible main content area.</p>
+
+      <h3>Desktop Layout</h3>
+      <div class="layout-diagram">
+        <div class="layout-wireframe ltr" style="grid-template-rows: 40px 1fr 200px;">
+          <!-- Header -->
+          <div class="layout-block header" style="grid-column: 1 / -1;">
+            Header / Toolbar &mdash; 40px height
+          </div>
+          <!-- Sidebar -->
+          <div class="layout-block sidebar" style="grid-row: 2 / 4;">
+            Sidebar<br>44px
+          </div>
+          <!-- Nav Panel -->
+          <div class="layout-block nav">
+            Navigation Panel<br>220px
+          </div>
+          <!-- Main Content -->
+          <div class="layout-block main" style="grid-row: 2 / 4;">
+            Main Content Area<br>flex: 1
+          </div>
+          <!-- Terminal -->
+          <div class="layout-block terminal" style="grid-column: 2;">
+            Terminal<br>200px
+          </div>
+        </div>
+      </div>
+
+      <h3>Fixed Dimensions</h3>
+      <div class="component-row" style="flex-direction: column; align-items: flex-start;">
+        <div class="layout-dimension">
+          <span class="layout-dim-label">Sidebar Width</span>
+          <span class="layout-dim-label">44px</span>
+        </div>
+        <div class="layout-dimension">
+          <span class="layout-dim-label">Nav Panel Width</span>
+          <span class="layout-dim-label">220px</span>
+        </div>
+        <div class="layout-dimension">
+          <span class="layout-dim-label">Header Height</span>
+          <span class="layout-dim-label">40px</span>
+        </div>
+        <div class="layout-dimension">
+          <span class="layout-dim-label">Toolbar Height</span>
+          <span class="layout-dim-label">48px</span>
+        </div>
+        <div class="layout-dimension">
+          <span class="layout-dim-label">Terminal Height</span>
+          <span class="layout-dim-label">200px (resizable)</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SECTION 16: TYPE SCALE
+         ============================================================ -->
+    <section class="spec-section" id="type-scale">
+      <h2>Type Scale</h2>
+      <p>Complete typographic hierarchy. All sizes use IBM Plex Sans unless noted.</p>
+
+      <div class="type-scale">
+        <div class="type-row">
+          <span class="type-label">3XL</span>
+          <span class="type-size">18px</span>
+          <span class="type-sample" style="font-size: 18px;">Page headings</span>
+        </div>
+        <div class="type-row">
+          <span class="type-label">LG</span>
+          <span class="type-size">14px</span>
+          <span class="type-sample" style="font-size: 14px;">Body text, card titles</span>
+        </div>
+        <div class="type-row">
+          <span class="type-label">MD</span>
+          <span class="type-size">13px</span>
+          <span class="type-sample" style="font-size: 13px;">Body default, buttons, inputs</span>
+        </div>
+        <div class="type-row">
+          <span class="type-label">SM</span>
+          <span class="type-size">12px</span>
+          <span class="type-sample" style="font-size: 12px;">Labels, tabs, secondary text</span>
+        </div>
+        <div class="type-row">
+          <span class="type-label">XS</span>
+          <span class="type-size">11px</span>
+          <span class="type-sample" style="font-size: 11px;">Captions, version badges, chips</span>
+        </div>
+        <div class="type-row">
+          <span class="type-label">Caption</span>
+          <span class="type-size">10px</span>
+          <span class="type-sample" style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;">Uppercase captions</span>
+        </div>
+        <div class="type-row">
+          <span class="type-label">Mono MD</span>
+          <span class="type-size">13px</span>
+          <span class="type-sample mono" style="font-size: 13px;">Code blocks, terminal output</span>
+        </div>
+        <div class="type-row">
+          <span class="type-label">Mono SM</span>
+          <span class="type-size">12px</span>
+          <span class="type-sample mono" style="font-size: 12px;">Inline code, file paths</span>
+        </div>
+        <div class="type-row">
+          <span class="type-label">Mono XS</span>
+          <span class="type-size">11px</span>
+          <span class="type-sample mono" style="font-size: 11px;">Terminal prompt, hex codes</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SECTION 17: ANIMATIONS
+         ============================================================ -->
+    <section class="spec-section" id="animations">
+      <h2>Animations</h2>
+      <p>All animations use CSS keyframes with consistent easing curves. Live demonstrations below.</p>
+
+      <div class="anim-grid">
+        <div class="anim-card">
+          <div class="anim-preview">
+            <div class="status-dot green" style="width: 24px; height: 24px;" class="anim-pulse"></div>
+          </div>
+          <div class="anim-name">Pulse</div>
+          <div class="anim-css">pulse 2s ease-in-out infinite</div>
+          <div style="margin-top: var(--sp-2); font-size: 12px; color: var(--text-tertiary);">Opacity oscillation for status indicators</div>
+        </div>
+
+        <div class="anim-card">
+          <div class="anim-preview">
+            <div class="anim-shimmer" style="width: 120px; height: 16px; border-radius: var(--radius-xl);"></div>
+          </div>
+          <div class="anim-name">Shimmer</div>
+          <div class="anim-css">shimmer 1.5s linear infinite</div>
+          <div style="margin-top: var(--sp-2); font-size: 12px; color: var(--text-tertiary);">Loading skeleton effect</div>
+        </div>
+
+        <div class="anim-card">
+          <div class="anim-preview">
+            <svg class="anim-spin" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent-blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
+          </div>
+          <div class="anim-name">Spin</div>
+          <div class="anim-css">spin 1s linear infinite</div>
+          <div style="margin-top: var(--sp-2); font-size: 12px; color: var(--text-tertiary);">Loading spinner</div>
+        </div>
+
+        <div class="anim-card">
+          <div class="anim-preview">
+            <div class="anim-fade" style="background: var(--accent-green); width: 48px; height: 48px; border-radius: var(--radius-xl); display: flex; align-items: center; justify-content: center; font-size: 18px; color: var(--text-inverse); font-weight: 700;">A</div>
+          </div>
+          <div class="anim-name">Fade In</div>
+          <div class="anim-css">fadeIn 0.3s ease-out both</div>
+          <div style="margin-top: var(--sp-2); font-size: 12px; color: var(--text-tertiary);">Content entrance animation</div>
+        </div>
+
+        <div class="anim-card">
+          <div class="anim-preview">
+            <div class="anim-slide" style="background: var(--accent-blue); width: 48px; height: 48px; border-radius: var(--radius-xl); display: flex; align-items: center; justify-content: center; font-size: 18px; color: var(--text-inverse); font-weight: 700;">S</div>
+          </div>
+          <div class="anim-name">Slide In</div>
+          <div class="anim-css">slideIn 0.3s ease-out both</div>
+          <div style="margin-top: var(--sp-2); font-size: 12px; color: var(--text-tertiary);">Sidebar item entrance</div>
+        </div>
+      </div>
+
+      <h3>Transition Tokens</h3>
+      <div class="component-row" style="flex-direction: column; align-items: flex-start;">
+        <div style="display: flex; gap: var(--sp-8);">
+          <div>
+            <code>--ease-out</code>
+            <div style="margin-top: var(--sp-1); font-size: 12px; color: var(--text-tertiary);">cubic-bezier(0.16, 1, 0.3, 1)</div>
+          </div>
+          <div>
+            <code>--duration-fast</code>
+            <div style="margin-top: var(--sp-1); font-size: 12px; color: var(--text-tertiary);">100ms</div>
+          </div>
+          <div>
+            <code>--duration-normal</code>
+            <div style="margin-top: var(--sp-1); font-size: 12px; color: var(--text-tertiary);">150ms</div>
+          </div>
+          <div>
+            <code>--duration-slow</code>
+            <div style="margin-top: var(--sp-1); font-size: 12px; color: var(--text-tertiary);">200ms</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SECTION 18: STATES
+         ============================================================ -->
+    <section class="spec-section" id="states">
+      <h2>States</h2>
+      <p>Interactive elements respond to hover, active, focus, and disabled states. These simulated states show the visual difference.</p>
+
+      <h3>Button States</h3>
+      <div class="state-row">
+        <span class="state-label">Default</span>
+        <button class="btn btn-primary">Primary</button>
+        <button class="btn btn-default">Default</button>
+      </div>
+      <div class="state-row">
+        <span class="state-label">Hover</span>
+        <button class="btn btn-primary state-hover" style="background: #85c5ff;">Primary</button>
+        <button class="btn btn-default state-hover">Default</button>
+      </div>
+      <div class="state-row">
+        <span class="state-label">Active</span>
+        <button class="btn btn-primary" style="background: #5aa3ef;">Primary</button>
+        <button class="btn btn-default state-active">Default</button>
+      </div>
+      <div class="state-row">
+        <span class="state-label">Focus</span>
+        <button class="btn btn-primary state-focus">Primary</button>
+        <button class="btn btn-default state-focus">Default</button>
+      </div>
+      <div class="state-row">
+        <span class="state-label">Disabled</span>
+        <button class="btn btn-primary state-disabled">Primary</button>
+        <button class="btn btn-default state-disabled">Default</button>
+      </div>
+
+      <h3>Input States</h3>
+      <div class="state-row">
+        <span class="state-label">Default</span>
+        <input type="text" class="input" value="Normal input">
+      </div>
+      <div class="state-row">
+        <span class="state-label">Hover</span>
+        <input type="text" class="input state-hover" value="Hovered input">
+      </div>
+      <div class="state-row">
+        <span class="state-label">Focus</span>
+        <input type="text" class="input state-focus" value="Focused input">
+      </div>
+      <div class="state-row">
+        <span class="state-label">Disabled</span>
+        <input type="text" class="input state-disabled" value="Disabled input">
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SECTION 19: ICONS
+         ============================================================ -->
+    <section class="spec-section" id="icons">
+      <h2>Icons</h2>
+      <p>Lucide icons at 16px (20px in grids) with 2px stroke weight. All icons use round linecaps and linejoins.</p>
+
+      <div class="icon-grid">
+        <div class="icon-item">
+          <span class="icon"><svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></span>
+          <span class="icon-label">eye</span>
+        </div>
+        <div class="icon-item">
+          <span class="icon"><svg viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></span>
+          <span class="icon-label">code</span>
+        </div>
+        <div class="icon-item">
+          <span class="icon"><svg viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg></span>
+          <span class="icon-label">terminal</span>
+        </div>
+        <div class="icon-item">
+          <span class="icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg></span>
+          <span class="icon-label">settings</span>
+        </div>
+        <div class="icon-item">
+          <span class="icon"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span>
+          <span class="icon-label">upload</span>
+        </div>
+        <div class="icon-item">
+          <span class="icon"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span>
+          <span class="icon-label">download</span>
+        </div>
+        <div class="icon-item">
+          <span class="icon"><svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg></span>
+          <span class="icon-label">refresh</span>
+        </div>
+        <div class="icon-item">
+          <span class="icon"><svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span>
+          <span class="icon-label">plus</span>
+        </div>
+        <div class="icon-item">
+          <span class="icon"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span>
+          <span class="icon-label">x</span>
+        </div>
+        <div class="icon-item">
+          <span class="icon"><svg viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg></span>
+          <span class="icon-label">wrench</span>
+        </div>
+        <div class="icon-item">
+          <span class="icon"><svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></span>
+          <span class="icon-label">trash</span>
+        </div>
+        <div class="icon-item">
+          <span class="icon"><svg viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg></span>
+          <span class="icon-label">message</span>
+        </div>
+        <div class="icon-item">
+          <span class="icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></span>
+          <span class="icon-label">info</span>
+        </div>
+        <div class="icon-item">
+          <span class="icon"><svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+          <span class="icon-label">alert</span>
+        </div>
+        <div class="icon-item">
+          <span class="icon"><svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></span>
+          <span class="icon-label">check</span>
+        </div>
+        <div class="icon-item">
+          <span class="icon"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg></span>
+          <span class="icon-label">layout</span>
+        </div>
+        <div class="icon-item">
+          <span class="icon"><svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></span>
+          <span class="icon-label">monitor</span>
+        </div>
+        <div class="icon-item">
+          <span class="icon"><svg viewBox="0 0 24 24"><path d="M18 3a3 3 0 00-3 3v12a3 3 0 003 3 3 3 0 003-3 3 3 0 00-3-3H6a3 3 0 00-3 3 3 3 0 003 3 3 3 0 003-3V6a3 3 0 00-3-3 3 3 0 00-3 3 3 3 0 003 3h12a3 3 0 003-3 3 3 0 00-3-3z"/></svg></span>
+          <span class="icon-label">folder</span>
+        </div>
+        <div class="icon-item">
+          <span class="icon"><svg viewBox="0 0 24 24"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/><polyline points="13 2 13 9 20 9"/></svg></span>
+          <span class="icon-label">file</span>
+        </div>
+        <div class="icon-item">
+          <span class="icon"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
+          <span class="icon-label">search</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SECTION 20: TERMINAL
+         ============================================================ -->
+    <section class="spec-section" id="terminal">
+      <h2>Terminal Styling</h2>
+      <p>The terminal uses a dedicated dark surface with JetBrains Mono. Syntax highlighting uses the accent palette.</p>
+
+      <div style="max-width: 640px;">
+        <div class="terminal">
+          <div class="terminal-titlebar">
+            <span class="terminal-dot red"></span>
+            <span class="terminal-dot yellow"></span>
+            <span class="terminal-dot green"></span>
+            <span class="terminal-title">Terminal &mdash; zsh</span>
+          </div>
+          <div class="terminal-body">
+            <div class="terminal-line">
+              <span class="terminal-prompt">&#10095; </span>
+              <span class="terminal-cmd">npm run build</span>
+            </div>
+            <div class="terminal-line">
+              <span class="terminal-output">Building project...</span>
+            </div>
+            <div class="terminal-line">
+              <span class="terminal-success">&#10004; Compiled successfully in 2.4s</span>
+            </div>
+            <div class="terminal-line">&nbsp;</div>
+            <div class="terminal-line">
+              <span class="terminal-prompt">&#10095; </span>
+              <span class="terminal-cmd">npm run deploy</span>
+            </div>
+            <div class="terminal-line">
+              <span class="terminal-warning">&#9888; Warning: Large bundle size (1.2MB)</span>
+            </div>
+            <div class="terminal-line">
+              <span class="terminal-output">Deploying to production...</span>
+            </div>
+            <div class="terminal-line">
+              <span class="terminal-error">&#10008; Deploy failed: Connection timeout</span>
+            </div>
+            <div class="terminal-line">&nbsp;</div>
+            <div class="terminal-line">
+              <span class="terminal-prompt">&#10095; </span>
+              <span class="terminal-cursor"></span>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top: var(--sp-4); display: flex; flex-wrap: wrap; gap: var(--sp-3);">
+          <div style="display: flex; align-items: center; gap: var(--sp-2);">
+            <span style="width: 12px; height: 12px; background: var(--accent-green); border-radius: var(--radius-sm);"></span>
+            <span style="font-size: 11px; color: var(--text-tertiary);">Success <code style="font-size: 10px;">#78d7b2</code></span>
+          </div>
+          <div style="display: flex; align-items: center; gap: var(--sp-2);">
+            <span style="width: 12px; height: 12px; background: var(--accent-amber); border-radius: var(--radius-sm);"></span>
+            <span style="font-size: 11px; color: var(--text-tertiary);">Warning <code style="font-size: 10px;">#f1b86a</code></span>
+          </div>
+          <div style="display: flex; align-items: center; gap: var(--sp-2);">
+            <span style="width: 12px; height: 12px; background: var(--accent-pink); border-radius: var(--radius-sm);"></span>
+            <span style="font-size: 11px; color: var(--text-tertiary);">Error <code style="font-size: 10px;">#ff9eb0</code></span>
+          </div>
+          <div style="display: flex; align-items: center; gap: var(--sp-2);">
+            <span style="width: 12px; height: 12px; background: var(--accent-blue); border-radius: var(--radius-sm);"></span>
+            <span style="font-size: 11px; color: var(--text-tertiary);">Prompt <code style="font-size: 10px;">#6cb6ff</code></span>
+          </div>
+          <div style="display: flex; align-items: center; gap: var(--sp-2);">
+            <span style="width: 12px; height: 12px; background: #d8e2ea; border-radius: var(--radius-sm);"></span>
+            <span style="font-size: 11px; color: var(--text-tertiary);">Output <code style="font-size: 10px;">#d8e2ea</code></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         SECTION 21: EMPTY STATES
+         ============================================================ -->
+    <section class="spec-section" id="empty-states">
+      <h2>Empty States</h2>
+      <p>Empty states provide clear guidance when there is no content to display. Each includes an icon, a title, descriptive text, and a call-to-action.</p>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--sp-6);">
+
+        <div class="empty-state">
+          <div class="empty-state-icon">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg>
+          </div>
+          <h4>No Sessions</h4>
+          <p>You don't have any active sessions. Create one to start building your project.</p>
+          <button class="btn btn-primary btn-sm">New Session</button>
+        </div>
+
+        <div class="empty-state">
+          <div class="empty-state-icon">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+          </div>
+          <h4>No Files</h4>
+          <p>This directory is empty. Start by creating your first file or importing a project.</p>
+          <button class="btn btn-default btn-sm">Create File</button>
+        </div>
+
+        <div class="empty-state">
+          <div class="empty-state-icon">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          </div>
+          <h4>No Results</h4>
+          <p>No matching results found. Try adjusting your search terms or filters.</p>
+          <button class="btn btn-default btn-sm">Clear Filters</button>
+        </div>
+
+        <div class="empty-state">
+          <div class="empty-state-icon">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          </div>
+          <h4>All Caught Up</h4>
+          <p>No pending tasks or notifications. Everything is running smoothly.</p>
+        </div>
+
+        <div class="empty-state">
+          <div class="empty-state-icon">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </div>
+          <h4>History Empty</h4>
+          <p>No recent activity to display. Actions you take will appear here.</p>
+        </div>
+
+        <div class="empty-state">
+          <div class="empty-state-icon">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 3a3 3 0 00-3 3v12a3 3 0 003 3 3 3 0 003-3 3 3 0 00-3-3H6a3 3 0 00-3 3 3 3 0 003 3 3 3 0 003-3V6a3 3 0 00-3-3 3 3 0 00-3 3 3 3 0 003 3h12a3 3 0 003-3 3 3 0 00-3-3z"/></svg>
+          </div>
+          <h4>No Projects</h4>
+          <p>You haven't created any projects yet. Start with a template or from scratch.</p>
+          <button class="btn btn-primary btn-sm">Create Project</button>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ============================================================
+         FOOTER
+         ============================================================ -->
+    <footer style="margin-top: var(--sp-16); padding-top: var(--sp-8); border-top: 1px solid var(--border); text-align: center; padding-bottom: var(--sp-8);">
+      <p style="font-size: 12px; color: var(--text-tertiary);">Aurora Mint Design System &mdash; Coder Studio</p>
+      <p style="font-size: 11px; color: var(--text-tertiary); margin-top: var(--sp-1);">Last updated April 2026 &middot; v1.0.0</p>
+    </footer>
+
+  </main>
+
+</div>
+
+<!-- ============================================================
+     INTERACTIVE SCRIPTS
+     ============================================================ -->
+<script>
+  // Pill selector interactivity
+  document.querySelectorAll('.pill-selector').forEach(selector => {
+    selector.querySelectorAll('.pill-option').forEach(btn => {
+      btn.addEventListener('click', () => {
+        selector.querySelectorAll('.pill-option').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      });
+    });
+  });
+
+  // Tab interactivity
+  document.querySelectorAll('.tabs').forEach(tabGroup => {
+    tabGroup.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        tabGroup.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+      });
+    });
+  });
+
+  // Settings nav tab interactivity
+  document.querySelectorAll('.tabs-nav').forEach(tabGroup => {
+    tabGroup.querySelectorAll('.tab-nav').forEach(tab => {
+      tab.addEventListener('click', () => {
+        tabGroup.querySelectorAll('.tab-nav').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+      });
+    });
+  });
+
+  // Workspace tab interactivity
+  document.querySelectorAll('.tabs-workspace').forEach(tabGroup => {
+    tabGroup.querySelectorAll('.tab-workspace').forEach(tab => {
+      tab.addEventListener('click', () => {
+        tabGroup.querySelectorAll('.tab-workspace').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+      });
+    });
+  });
+
+  // Toolbar button interactivity
+  document.querySelectorAll('.toolbar').forEach(toolbar => {
+    toolbar.querySelectorAll('.toolbar-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        btn.classList.toggle('active');
+      });
+    });
+  });
+
+  // Smooth scroll for sidebar nav
+  document.querySelectorAll('.spec-sidebar a').forEach(link => {
+    link.addEventListener('click', e => {
+      e.preventDefault();
+      const target = document.querySelector(link.getAttribute('href'));
+      if (target) {
+        target.scrollIntoView({ behavior: 'smooth' });
+      }
+    });
+  });
+
+  // Intersection observer for active sidebar link
+  const sections = document.querySelectorAll('.spec-section');
+  const navLinks = document.querySelectorAll('.spec-sidebar nav a');
+
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        navLinks.forEach(link => link.style.background = '');
+        const activeLink = document.querySelector(`.spec-sidebar nav a[href="#${entry.target.id}"]`);
+        if (activeLink) {
+          activeLink.style.background = 'var(--bg-hover)';
+          activeLink.style.color = 'var(--text-primary)';
+        }
+      }
+    });
+  }, { rootMargin: '-20% 0px -60% 0px' });
+
+  sections.forEach(section => observer.observe(section));
+</script>
+
+</body>
+</html>

@@ -1,0 +1,2520 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Coder Studio — 视觉稿</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   Coder Studio — 高保真视觉稿
+   Aurora Mint 暗色主题
+   ============================================================ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0a1014;
+  --bg-surface: #11181f;
+  --bg-sidebar: #0d141a;
+  --bg-terminal: #0b1218;
+  --bg-hover: #1a2632;
+  --bg-active: #1e3040;
+  --border: #1e2a35;
+  --border-light: #263545;
+  --text: #e5edf3;
+  --text-sec: #9fb0bc;
+  --text-ter: #728492;
+  --blue: #6cb6ff;
+  --green: #78d7b2;
+  --amber: #f1b86a;
+  --pink: #ff9eb0;
+  --sans: 'IBM Plex Sans', -apple-system, sans-serif;
+  --mono: 'JetBrains Mono', Consolas, monospace;
+}
+
+body {
+  font-family: var(--sans);
+  background: #060a0d;
+  color: var(--text);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ============================================================
+   展示容器 — Gallery Wrapper
+   ============================================================ */
+.mockup-gallery {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 48px 24px;
+}
+
+.mockup-header {
+  text-align: center;
+  padding-bottom: 40px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 48px;
+}
+
+.mockup-header h1 {
+  font-size: 28px;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.mockup-header p {
+  font-size: 14px;
+  color: var(--text-ter);
+}
+
+.mockup-header .version-badge {
+  display: inline-block;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 4px 12px;
+  font-size: 12px;
+  color: var(--text-sec);
+  margin-top: 12px;
+}
+
+.mockup-nav {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 24px;
+}
+
+.mockup-nav a {
+  display: inline-block;
+  padding: 6px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text-sec);
+  text-decoration: none;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  transition: all 0.1s;
+}
+
+.mockup-nav a:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+
+/* ============================================================
+   单屏展示 Card
+   ============================================================ */
+.mockup-screen {
+  margin-bottom: 64px;
+  scroll-margin-top: 24px;
+}
+
+.mockup-screen-title {
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 4px;
+  padding-left: 4px;
+}
+
+.mockup-screen-desc {
+  font-size: 13px;
+  color: var(--text-ter);
+  margin-bottom: 16px;
+  padding-left: 4px;
+}
+
+.mockup-frame {
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 2px 8px rgba(0,0,0,0.3);
+  background: var(--bg);
+}
+
+.mockup-frame-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-ter);
+  padding: 8px 16px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mockup-frame-label .dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+/* ============================================================
+   应用级通用组件
+   ============================================================ */
+
+/* --- 顶栏 --- */
+.app-topbar {
+  height: 36px;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  background: color-mix(in srgb, var(--bg-surface) 95%, var(--blue) 5%);
+  border-bottom: 1px solid var(--border);
+  gap: 2px;
+  user-select: none;
+}
+
+.topbar-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+  overflow: hidden;
+}
+
+.topbar-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--text-sec);
+  cursor: pointer;
+  position: relative;
+  white-space: nowrap;
+  transition: background 0.06s;
+}
+
+.topbar-tab:hover { background: var(--bg-hover); }
+.topbar-tab.active {
+  background: var(--bg-active);
+  color: var(--text);
+}
+
+.topbar-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.topbar-dot.active {
+  background: var(--green);
+  animation: pulse 2s infinite;
+}
+
+.topbar-dot.idle { background: var(--text-ter); }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.topbar-unread {
+  background: var(--blue);
+  color: var(--bg);
+  font-size: 10px;
+  font-weight: 600;
+  min-width: 16px; height: 16px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+}
+
+.topbar-close {
+  width: 18px; height: 18px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  color: var(--text-ter);
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.06s;
+}
+
+.topbar-tab:hover .topbar-close { opacity: 1; }
+.topbar-close:hover { background: rgba(255,255,255,0.1); color: var(--text); }
+
+.topbar-add {
+  width: 28px; height: 28px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-sec);
+  cursor: pointer;
+  font-size: 16px;
+  transition: background 0.06s;
+  flex-shrink: 0;
+}
+
+.topbar-add:hover { background: var(--bg-hover); }
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.topbar-btn {
+  width: 32px; height: 32px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-sec);
+  cursor: pointer;
+  transition: background 0.06s;
+}
+
+.topbar-btn:hover { background: color-mix(in srgb, var(--bg-surface) 72%, var(--blue) 28%); }
+
+/* --- 左侧面板 --- */
+.left-panel {
+  width: 280px;
+  min-width: 200px;
+  max-width: 400px;
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.panel-header {
+  padding: 12px 12px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.panel-kicker {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-ter);
+  margin-bottom: 6px;
+}
+
+.panel-branch {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-sec);
+  background: var(--bg-hover);
+  border-radius: 4px;
+  padding: 2px 8px;
+}
+
+.panel-tabs {
+  display: flex;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.panel-tab {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  color: var(--text-ter);
+  cursor: pointer;
+  transition: all 0.1s;
+}
+
+.panel-tab:hover { color: var(--text-sec); }
+.panel-tab.active {
+  background: var(--blue);
+  color: var(--bg);
+  font-weight: 500;
+}
+
+.panel-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.panel-toolbar-btn {
+  width: 22px; height: 22px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-ter);
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.06s;
+}
+
+.panel-toolbar-btn:hover { background: var(--bg-hover); color: var(--text-sec); }
+
+/* --- 文件树 --- */
+.file-tree {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.tree-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 12px 3px 16px;
+  font-size: 13px;
+  color: var(--text-sec);
+  cursor: pointer;
+  transition: background 0.06s;
+  white-space: nowrap;
+}
+
+.tree-item:hover { background: rgba(108,182,255,0.06); }
+.tree-item.selected {
+  background: rgba(108,182,255,0.1);
+  color: var(--text);
+  border-left: 2px solid var(--blue);
+  padding-left: 14px;
+}
+
+.tree-chevron {
+  width: 16px; height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-ter);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.tree-icon {
+  width: 16px; height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 13px;
+}
+
+.tree-icon.folder { color: var(--amber); }
+.tree-icon.ts { color: var(--blue); }
+.tree-icon.css { color: var(--green); }
+.tree-icon.json { color: var(--amber); }
+.tree-icon.md { color: var(--text-ter); }
+.tree-icon.rust { color: var(--accent-3); }
+
+.tree-label { overflow: hidden; text-overflow: ellipsis; }
+
+.tree-children { padding-left: 12px; }
+
+/* --- 中央区域 --- */
+.center-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* --- Agent 面板 --- */
+.agent-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  position: relative;
+}
+
+.agent-progress {
+  height: 3px;
+  background: rgba(108,182,255,0.15);
+  position: relative;
+}
+
+.agent-progress .fill {
+  height: 100%;
+  background: var(--blue);
+  transition: width 60ms;
+}
+
+.agent-progress .fill.error { background: var(--pink); }
+
+.agent-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.agent-session-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.agent-session-dot.active {
+  background: var(--green);
+  animation: pulse 2s infinite;
+}
+
+.agent-title {
+  font-size: 11px;
+  font-family: var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-sec);
+}
+
+.agent-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--bg-hover);
+  color: var(--text-ter);
+}
+
+.agent-status {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+
+.agent-status.running {
+  background: rgba(120,215,178,0.15);
+  color: var(--green);
+}
+
+.agent-status.idle {
+  background: rgba(114,132,146,0.15);
+  color: var(--text-ter);
+}
+
+.agent-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+}
+
+.agent-action-btn {
+  width: 20px; height: 20px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-ter);
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.06s;
+}
+
+.agent-action-btn:hover { background: var(--bg-hover); }
+.agent-action-btn.close:hover { color: var(--pink); }
+
+.agent-terminal {
+  flex: 1;
+  background: var(--bg-terminal);
+  padding: 12px;
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.6;
+  color: #d8e2ea;
+  overflow: hidden;
+}
+
+.term-line { white-space: pre; }
+.term-prompt { color: var(--green); }
+.term-path { color: var(--blue); }
+.term-cmd { color: var(--text); }
+.term-output { color: var(--text-sec); }
+.term-success { color: var(--green); }
+.term-warn { color: var(--amber); }
+.term-error { color: var(--pink); }
+.term-cursor {
+  display: inline-block;
+  width: 8px;
+  height: 16px;
+  background: var(--green);
+  animation: pulse 1s step-end infinite;
+  vertical-align: middle;
+}
+
+/* --- Supervisor 卡片 --- */
+.supervisor-card {
+  margin: 8px 12px;
+  padding: 10px 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.supervisor-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-sec);
+  margin-bottom: 6px;
+}
+
+.supervisor-state {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(120,215,178,0.15);
+  color: var(--green);
+}
+
+.supervisor-objective {
+  font-size: 12px;
+  color: var(--text-sec);
+  line-height: 1.6;
+  font-family: var(--mono);
+  background: var(--bg-terminal);
+  padding: 8px;
+  border-radius: 4px;
+  margin-top: 4px;
+}
+
+.supervisor-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.supervisor-action {
+  width: 22px; height: 22px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-ter);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.supervisor-action:hover { background: var(--bg-hover); color: var(--text-sec); }
+
+/* --- 底部终端 --- */
+.bottom-terminal {
+  border-top: 1px solid var(--border);
+  background: var(--bg-surface);
+}
+
+.terminal-toolbar {
+  display: flex;
+  align-items: center;
+  padding: 6px 12px;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.terminal-kicker {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-ter);
+}
+
+.terminal-title {
+  font-size: 12px;
+  color: var(--text-sec);
+}
+
+.terminal-select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 11px;
+  color: var(--text-sec);
+  font-family: var(--sans);
+}
+
+/* --- 欢迎页 --- */
+.welcome-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+}
+
+.welcome-card {
+  max-width: 480px;
+  text-align: center;
+  padding: 48px 32px;
+}
+
+.welcome-kicker {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-ter);
+  margin-bottom: 12px;
+}
+
+.welcome-title {
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 12px;
+}
+
+.welcome-body {
+  font-size: 13px;
+  color: var(--text-sec);
+  line-height: 1.6;
+  margin-bottom: 24px;
+}
+
+.welcome-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 24px;
+  border-radius: 6px;
+  background: var(--blue);
+  color: var(--bg);
+  font-size: 14px;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  font-family: var(--sans);
+  transition: all 0.06s;
+}
+
+.welcome-btn:hover { filter: brightness(1.1); }
+
+.welcome-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--text-ter);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.welcome-link:hover { color: var(--text-sec); }
+
+/* --- Git 变更 --- */
+.git-commit-input {
+  margin: 0 12px;
+  padding: 6px 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--text);
+  min-height: 30px;
+  font-family: var(--sans);
+  resize: none;
+  outline: none;
+}
+
+.git-commit-input:focus { border-color: var(--blue); }
+
+.git-group {
+  border-top: 1px solid var(--border);
+}
+
+.git-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  font-size: 11px;
+  color: var(--text-ter);
+}
+
+.git-group-count {
+  background: var(--bg-hover);
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+
+.git-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  font-size: 12px;
+  color: var(--text-sec);
+  cursor: pointer;
+}
+
+.git-row:hover { background: rgba(108,182,255,0.04); }
+
+.git-status-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-weight: 500;
+}
+
+.git-status-badge.staged { background: rgba(120,215,178,0.15); color: var(--green); }
+.git-status-badge.modified { background: rgba(241,184,106,0.15); color: var(--amber); }
+.git-status-badge.untracked { background: rgba(108,182,255,0.15); color: var(--blue); }
+
+.git-row-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 2px;
+}
+
+.git-row-action {
+  width: 20px; height: 20px;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-ter);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.git-row-action:hover { background: var(--bg-hover); }
+
+/* --- 设置页 --- */
+.settings-layout {
+  display: flex;
+  flex: 1;
+}
+
+.settings-sidebar {
+  width: 200px;
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border);
+  padding: 16px 12px;
+  flex-shrink: 0;
+}
+
+.settings-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 7px;
+  font-size: 13px;
+  color: var(--text-sec);
+  cursor: pointer;
+  margin-bottom: 2px;
+  transition: all 0.1s;
+}
+
+.settings-nav-item:hover { background: var(--bg-hover); }
+.settings-nav-item.active {
+  background: var(--bg-active);
+  color: var(--text);
+  border-left: 2px solid var(--blue);
+}
+
+.settings-nav-icon {
+  width: 16px; height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-ter);
+}
+
+.settings-content {
+  flex: 1;
+  padding: 32px 40px;
+  overflow-y: auto;
+}
+
+.settings-section {
+  margin-bottom: 32px;
+}
+
+.settings-section-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.settings-section-desc {
+  font-size: 12px;
+  color: var(--text-ter);
+  margin-bottom: 16px;
+}
+
+.settings-field {
+  margin-bottom: 16px;
+}
+
+.settings-field-label {
+  font-size: 12px;
+  color: var(--text-sec);
+  margin-bottom: 6px;
+}
+
+.settings-field-input {
+  width: 100%;
+  max-width: 400px;
+  padding: 6px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 13px;
+  color: var(--text);
+  font-family: var(--sans);
+  outline: none;
+}
+
+.settings-field-input:focus { border-color: var(--blue); }
+
+.settings-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.toggle-track {
+  width: 36px; height: 20px;
+  border-radius: 10px;
+  background: var(--border);
+  position: relative;
+  transition: background 0.1s;
+}
+
+.toggle-track.on { background: var(--blue); }
+
+.toggle-track::after {
+  content: '';
+  position: absolute;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: white;
+  top: 2px; left: 2px;
+  transition: transform 0.1s;
+}
+
+.toggle-track.on::after { transform: translateX(16px); }
+
+.settings-toggle-label {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.settings-pill-group {
+  display: flex;
+  gap: 4px;
+}
+
+.settings-pill {
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--text-ter);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.settings-pill.active {
+  background: var(--blue);
+  color: var(--bg);
+  border-color: var(--blue);
+}
+
+/* --- 认证页 --- */
+.auth-layout {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  position: relative;
+}
+
+.auth-preview-shell {
+  position: absolute;
+  inset: 0;
+  opacity: 0.08;
+  pointer-events: none;
+}
+
+.auth-preview-shell .preview-topbar {
+  height: 36px;
+  background: var(--bg-surface);
+  margin: 0 8px;
+  border-radius: 4px;
+}
+
+.auth-preview-shell .preview-body {
+  display: flex;
+  gap: 8px;
+  margin: 8px;
+  height: calc(100% - 52px);
+}
+
+.auth-preview-shell .preview-sidebar {
+  width: 200px;
+  background: var(--bg-surface);
+  border-radius: 4px;
+}
+
+.auth-preview-shell .preview-main {
+  flex: 1;
+  background: var(--bg-surface);
+  border-radius: 4px;
+}
+
+.auth-preview-shell .preview-right {
+  width: 200px;
+  background: var(--bg-surface);
+  border-radius: 4px;
+}
+
+.auth-card {
+  position: relative;
+  z-index: 10;
+  width: 380px;
+  padding: 32px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-lg, 0 8px 32px rgba(0,0,0,0.5));
+  animation: scaleIn 0.2s ease-out;
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.auth-card-title {
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--text);
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.auth-card-desc {
+  font-size: 13px;
+  color: var(--text-sec);
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.auth-input {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text);
+  font-family: var(--sans);
+  outline: none;
+  margin-bottom: 16px;
+}
+
+.auth-input:focus { border-color: var(--blue); }
+
+.auth-submit {
+  width: 100%;
+  padding: 10px;
+  background: var(--blue);
+  color: var(--bg);
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  font-family: var(--sans);
+  cursor: pointer;
+  transition: all 0.06s;
+}
+
+.auth-submit:hover { filter: brightness(1.1); }
+
+.auth-security-card {
+  margin-top: 16px;
+  padding: 10px 12px;
+  background: var(--bg);
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+
+.auth-security-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-ter);
+  padding: 3px 0;
+}
+
+/* --- 命令面板 --- */
+.command-palette-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 20vh;
+  z-index: 100;
+  animation: fadeIn 0.15s;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.command-palette {
+  width: 660px;
+  max-width: 90vw;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  overflow: hidden;
+  animation: scaleIn 0.15s ease-out;
+}
+
+.cp-header {
+  padding: 12px 16px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.cp-kicker {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-ter);
+}
+
+.cp-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+}
+
+.cp-search-icon { color: var(--text-ter); font-size: 14px; flex-shrink: 0; }
+
+.cp-search-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  font-size: 14px;
+  color: var(--text);
+  font-family: var(--sans);
+  outline: none;
+}
+
+.cp-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  cursor: pointer;
+  transition: background 0.06s;
+}
+
+.cp-item:hover { background: var(--bg-hover); }
+.cp-item.active { background: var(--bg-active); }
+
+.cp-item-label {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.cp-item-desc {
+  font-size: 11px;
+  color: var(--text-ter);
+}
+
+.cp-item-shortcut {
+  font-size: 11px;
+  font-family: var(--mono);
+  color: var(--text-ter);
+  background: var(--bg);
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+/* --- 启动浮层 --- */
+.launch-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.launch-modal {
+  width: 760px;
+  max-width: 90vw;
+  max-height: 85vh;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.launch-header {
+  display: flex;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+.launch-header-left .lp-kicker {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-ter);
+}
+
+.launch-header-left .lp-title {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text);
+  margin-top: 4px;
+}
+
+.launch-header-left .lp-hint {
+  font-size: 12px;
+  color: var(--text-ter);
+  margin-top: 2px;
+}
+
+.launch-path-display {
+  text-align: right;
+  font-size: 12px;
+  color: var(--text-sec);
+  font-family: var(--mono);
+}
+
+.launch-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px;
+}
+
+.launch-choice-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.launch-choice {
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.1s;
+}
+
+.launch-choice.active {
+  border-color: var(--blue);
+  background: rgba(108,182,255,0.06);
+}
+
+.launch-choice.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.launch-choice-title {
+  font-size: 13px;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.launch-choice-desc {
+  font-size: 11px;
+  color: var(--text-ter);
+  margin-top: 2px;
+}
+
+.folder-picker {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px;
+}
+
+.fp-toolbar {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.fp-btn {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--text-sec);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.fp-btn:hover { background: var(--bg-hover); }
+
+.fp-root-chips {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.fp-chip {
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-family: var(--mono);
+  color: var(--text-sec);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.fp-chip:hover { background: var(--bg-hover); }
+
+.fp-dir-list {
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.fp-dir {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.fp-dir:hover { background: rgba(108,182,255,0.04); }
+
+.fp-dir-icon { color: var(--amber); font-size: 14px; }
+.fp-dir-name { font-size: 13px; color: var(--text); }
+.fp-dir-hint { font-size: 11px; color: var(--text-ter); }
+.fp-dir-action { margin-left: auto; font-size: 11px; color: var(--blue); }
+
+.launch-footer {
+  padding: 16px 24px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.launch-start-btn {
+  padding: 8px 20px;
+  background: var(--blue);
+  color: var(--bg);
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: var(--sans);
+  cursor: pointer;
+}
+
+.launch-start-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* --- 代码编辑器 --- */
+.code-editor {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.code-editor-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-surface);
+}
+
+.code-file-path {
+  font-size: 11px;
+  font-family: var(--mono);
+  color: var(--text-sec);
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.code-mode-toggle {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.code-mode-btn {
+  padding: 3px 8px;
+  border-radius: 3px;
+  font-size: 11px;
+  color: var(--text-ter);
+  cursor: pointer;
+}
+
+.code-mode-btn.active {
+  background: var(--blue);
+  color: var(--bg);
+}
+
+.code-editor-body {
+  display: flex;
+  min-height: 200px;
+}
+
+.code-lines {
+  flex: 1;
+  padding: 12px;
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.6;
+  overflow: hidden;
+}
+
+.code-line-num {
+  color: var(--text-ter);
+  user-select: none;
+  display: inline-block;
+  width: 32px;
+  text-align: right;
+  margin-right: 12px;
+}
+
+.code-line { white-space: pre; }
+.code-keyword { color: #c678dd; }
+.code-string { color: #98c379; }
+.code-comment { color: #5c6370; font-style: italic; }
+.code-function { color: #61afef; }
+.code-type { color: #e5c07b; }
+.code-operator { color: #56b6c2; }
+
+/* --- 分割面板布局 --- */
+.split-layout {
+  display: flex;
+  flex: 1;
+}
+
+.split-divider-v {
+  width: 8px;
+  background: var(--border);
+  cursor: col-resize;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.split-divider-v:hover { background: var(--blue); }
+
+.split-divider-h {
+  height: 8px;
+  background: var(--border);
+  cursor: row-resize;
+  flex-shrink: 0;
+}
+
+.split-divider-h:hover { background: var(--blue); }
+
+/* ============================================================
+   布局辅助
+   ============================================================ */
+.workspace-body {
+  display: flex;
+  height: 500px;
+}
+
+.workspace-body-tall {
+  display: flex;
+  height: 600px;
+}
+
+.workspace-body-short {
+  display: flex;
+  height: 420px;
+}
+
+.workspace-main-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* --- 空状态 --- */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  text-align: center;
+}
+
+.empty-icon {
+  width: 48px; height: 48px;
+  border-radius: 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-ter);
+  font-size: 20px;
+  margin-bottom: 16px;
+}
+
+.empty-title {
+  font-size: 14px;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.empty-desc {
+  font-size: 12px;
+  color: var(--text-ter);
+  margin-bottom: 16px;
+}
+
+.empty-cta {
+  padding: 6px 16px;
+  background: var(--blue);
+  color: var(--bg);
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: var(--sans);
+}
+
+/* ============================================================
+   响应式
+   ============================================================ */
+@media (max-width: 900px) {
+  .workspace-body, .workspace-body-tall { flex-direction: column; height: auto; }
+  .left-panel { width: 100%; max-width: none; border-right: none; border-bottom: 1px solid var(--border); height: 200px; }
+  .settings-layout { flex-direction: column; }
+  .settings-sidebar { width: 100%; border-right: none; border-bottom: 1px solid var(--border); }
+}
+</style>
+</head>
+<body>
+
+<div class="mockup-gallery">
+
+<!-- ============================================================
+     页面头部
+     ============================================================ -->
+<div class="mockup-header">
+  <h1>Coder Studio</h1>
+  <p>高保真视觉稿 · Aurora Mint 暗色主题</p>
+  <span class="version-badge">v0.2.6 — 2026.04.13</span>
+  <nav class="mockup-nav">
+    <a href="#screen-welcome">欢迎页</a>
+    <a href="#screen-workspace">工作区</a>
+    <a href="#screen-split">分割面板</a>
+    <a href="#screen-git">Git 变更</a>
+    <a href="#screen-settings">设置</a>
+    <a href="#screen-auth">认证</a>
+    <a href="#screen-command">命令面板</a>
+    <a href="#screen-launch">启动浮层</a>
+  </nav>
+</div>
+
+<!-- ============================================================
+     SCREEN 1: 欢迎页
+     ============================================================ -->
+<div class="mockup-screen" id="screen-welcome">
+  <div class="mockup-screen-title">欢迎页面</div>
+  <div class="mockup-screen-desc">未打开任何工作区时显示 — 包含顶栏空状态和居中欢迎卡片</div>
+
+  <div class="mockup-frame">
+    <div class="mockup-frame-label"><span class="dot"></span> Welcome Screen — /workspace</div>
+
+    <!-- 顶栏 -->
+    <div class="app-topbar">
+      <div class="topbar-tabs">
+        <div style="display:flex;align-items:center;justify-content:center;flex:1;padding:4px 0;">
+          <span style="font-size:11px;color:var(--text-ter);">No workspaces open</span>
+        </div>
+      </div>
+      <div class="topbar-add" title="New workspace">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="8" y1="3" x2="8" y2="13"/><line x1="3" y1="8" x2="13" y2="8"/></svg>
+      </div>
+      <div class="topbar-actions">
+        <div class="topbar-btn" title="Quick Actions">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="5"/><line x1="11" y1="11" x2="15" y2="15"/></svg>
+        </div>
+        <div class="topbar-btn" title="Settings">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.5"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/></svg>
+        </div>
+      </div>
+    </div>
+
+    <!-- 欢迎卡片 -->
+    <div class="welcome-container">
+      <div class="welcome-card">
+        <div class="welcome-kicker">Get Started</div>
+        <h1 class="welcome-title">Welcome to Coder Studio</h1>
+        <p class="welcome-body">
+          A local-first AI coding workbench. Launch AI agent sessions, review generated code,
+          manage Git changes, and run terminals — all in one place.
+        </p>
+        <button class="welcome-btn">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="8" y1="3" x2="8" y2="13"/><line x1="3" y1="8" x2="13" y2="8"/></svg>
+          Open Workspace
+        </button>
+        <a class="welcome-link">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="2.5"/><path d="M7 1.5v2M7 10.5v2M1.5 7h2M10.5 7h2"/></svg>
+          Open Settings
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     SCREEN 2: 主工作区
+     ============================================================ -->
+<div class="mockup-screen" id="screen-workspace">
+  <div class="mockup-screen-title">工作区页面</div>
+  <div class="mockup-screen-desc">标准工作区 — 左侧文件树、中央 Agent 会话（运行中）、底部终端面板</div>
+
+  <div class="mockup-frame">
+    <div class="mockup-frame-label"><span class="dot" style="animation:pulse 2s infinite"></span> Workspace — coder-studio</div>
+
+    <!-- 顶栏 -->
+    <div class="app-topbar">
+      <div class="topbar-tabs">
+        <div class="topbar-tab active">
+          <span class="topbar-dot active"></span>
+          <span>coder-studio</span>
+          <span class="topbar-unread">3</span>
+          <span class="topbar-close">&times;</span>
+        </div>
+        <div class="topbar-tab">
+          <span class="topbar-dot idle"></span>
+          <span>my-project</span>
+        </div>
+        <div class="topbar-add">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="7" y1="2" x2="7" y2="12"/><line x1="2" y1="7" x2="12" y2="7"/></svg>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <div class="topbar-btn" title="Quick Actions" style="display:flex;gap:6px;align-items:center;width:auto;padding:0 8px;font-size:12px;">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="6" r="4.5"/><line x1="10" y1="10" x2="14" y2="14"/></svg>
+          Quick Actions
+        </div>
+        <div class="topbar-btn" title="Settings">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="2.5"/><path d="M7 1v2M7 11v2M1 7h2M11 7h2M2.8 2.8l1.4 1.4M9.8 9.8l1.4 1.4"/></svg>
+        </div>
+      </div>
+    </div>
+
+    <!-- 工作区主体 -->
+    <div class="workspace-body">
+
+      <!-- 左侧面板 -->
+      <div class="left-panel">
+        <div class="panel-header">
+          <div class="panel-kicker">REPOSITORY NAVIGATOR</div>
+          <div class="panel-branch">
+            <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="2" r="1.5"/><circle cx="6" cy="10" r="1.5"/><path d="M6 3.5v5M6 6c0 1.5-2.5 1-2.5 0"/></svg>
+            main
+          </div>
+          <div class="panel-tabs">
+            <div class="panel-tab active">Files</div>
+            <div class="panel-tab">Git Diff</div>
+          </div>
+        </div>
+        <div class="panel-toolbar">
+          <div class="panel-toolbar-btn" title="Refresh">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 7a6 6 0 0 1 10.5-4M13 7a6 6 0 0 1-10.5 4"/><polyline points="1,2 1,5 4,5"/><polyline points="13,12 13,9 10,9"/></svg>
+          </div>
+        </div>
+        <div class="file-tree">
+          <div class="tree-item">
+            <span class="tree-chevron">▼</span>
+            <span class="tree-icon folder">📁</span>
+            <span class="tree-label">apps</span>
+          </div>
+          <div class="tree-children">
+            <div class="tree-item">
+              <span class="tree-chevron">▼</span>
+              <span class="tree-icon folder">📁</span>
+              <span class="tree-label">web</span>
+            </div>
+            <div class="tree-children">
+              <div class="tree-item">
+                <span class="tree-chevron" style="visibility:hidden">▶</span>
+                <span class="tree-icon ts">📄</span>
+                <span class="tree-label">main.ts</span>
+              </div>
+              <div class="tree-item selected">
+                <span class="tree-chevron" style="visibility:hidden">▶</span>
+                <span class="tree-icon ts">📄</span>
+                <span class="tree-label">AppController.tsx</span>
+              </div>
+              <div class="tree-item">
+                <span class="tree-chevron" style="visibility:hidden">▶</span>
+                <span class="tree-icon css">🎨</span>
+                <span class="tree-label">styles.css</span>
+              </div>
+            </div>
+            <div class="tree-item">
+              <span class="tree-chevron">▶</span>
+              <span class="tree-icon folder">📁</span>
+              <span class="tree-label">server</span>
+            </div>
+          </div>
+          <div class="tree-item">
+            <span class="tree-chevron">▶</span>
+            <span class="tree-icon folder">📁</span>
+            <span class="tree-label">packages</span>
+          </div>
+          <div class="tree-item">
+            <span class="tree-chevron" style="visibility:hidden">▶</span>
+            <span class="tree-icon json">📋</span>
+            <span class="tree-label">package.json</span>
+          </div>
+          <div class="tree-item">
+            <span class="tree-chevron" style="visibility:hidden">▶</span>
+            <span class="tree-icon md">📝</span>
+            <span class="tree-label">README.md</span>
+          </div>
+          <div class="tree-item">
+            <span class="tree-chevron" style="visibility:hidden">▶</span>
+            <span class="tree-icon" style="color:#728492">⚙️</span>
+            <span class="tree-label">.gitignore</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 中央区域 -->
+      <div class="workspace-main-area">
+        <!-- Agent 面板 -->
+        <div class="agent-pane">
+          <div class="agent-progress"><div class="fill" style="width:34%"></div></div>
+          <div class="agent-header">
+            <span class="agent-session-dot active"></span>
+            <span class="agent-title">SESSION-01</span>
+            <span class="agent-badge">Claude</span>
+            <span class="agent-status running">Running</span>
+            <div class="agent-actions">
+              <div class="agent-action-btn" title="Split vertical">
+                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="10" height="10" rx="1"/><line x1="7" y1="2" x2="7" y2="12"/></svg>
+              </div>
+              <div class="agent-action-btn" title="Split horizontal">
+                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="10" height="10" rx="1"/><line x1="2" y1="7" x2="12" y2="7"/></svg>
+              </div>
+              <div class="agent-action-btn close" title="Close">&times;</div>
+            </div>
+          </div>
+          <div class="agent-terminal">
+            <div class="term-line"><span class="term-prompt">❯</span> <span class="term-path">~/coder-studio</span> <span class="term-cmd">claude --workspace .</span></div>
+            <div class="term-line"><span class="term-output"></span></div>
+            <div class="term-line"><span class="term-success">✔  Agent initialized. Model: claude-sonnet-4-20250514</span></div>
+            <div class="term-line"><span class="term-success">✔  Workspace loaded: /home/spencer/coder-studio</span></div>
+            <div class="term-line"><span class="term-output"></span></div>
+            <div class="term-line"><span class="term-prompt">❯</span> <span class="term-output">Analyzing project structure...</span></div>
+            <div class="term-line"><span class="term-output">Found 3 workspaces, 28 packages</span></div>
+            <div class="term-line"><span class="term-output">Reading tsconfig.json, vite.config.ts...</span></div>
+            <div class="term-line"><span class="term-output"></span></div>
+            <div class="term-line"><span class="term-prompt">❯</span> <span class="term-cmd">Analyzing AppController.tsx routing...</span></div>
+            <div class="term-line"><span class="term-output">Routes detected: /, /workspace, /settings</span></div>
+            <div class="term-line"><span class="term-output"></span></div>
+            <div class="term-line"><span class="term-warn">⚡  Processing request: "Add dark mode toggle to settings"</span></div>
+            <div class="term-line"><span class="term-output">Reading settings page components...</span><span class="term-cursor"></span></div>
+          </div>
+        </div>
+
+        <!-- 底部终端 -->
+        <div class="bottom-terminal" style="height:160px;">
+          <div class="terminal-toolbar">
+            <span class="terminal-kicker">TERMINAL</span>
+            <span class="terminal-title">bash — 1</span>
+            <select class="terminal-select"><option>bash — 1</option></select>
+            <div style="margin-left:auto;display:flex;gap:4px;">
+              <div class="panel-toolbar-btn" title="Close">
+                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="3" y1="3" x2="11" y2="11"/><line x1="11" y1="3" x2="3" y2="11"/></svg>
+              </div>
+              <div class="panel-toolbar-btn" title="Add">
+                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="7" y1="3" x2="7" y2="11"/><line x1="3" y1="7" x2="11" y2="7"/></svg>
+              </div>
+            </div>
+          </div>
+          <div class="agent-terminal" style="border-top:none;">
+            <div class="term-line"><span class="term-prompt">❯</span> <span class="term-path">~/coder-studio</span> <span class="term-cmd">git status</span></div>
+            <div class="term-line"><span class="term-output">On branch main</span></div>
+            <div class="term-line"><span class="term-output">Changes not staged for commit:</span></div>
+            <div class="term-line"><span class="term-output">  modified:   apps/web/src/AppController.tsx</span></div>
+            <div class="term-line"><span class="term-output"></span></div>
+            <div class="term-line"><span class="term-prompt">❯</span> <span class="term-cursor"></span></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     SCREEN 3: 分割面板
+     ============================================================ -->
+<div class="mockup-screen" id="screen-split">
+  <div class="mockup-screen-title">分割面板 — 多 Agent 会话</div>
+  <div class="mockup-screen-desc">垂直分割布局 — 两个 Agent 会话并行运行，各自拥有独立终端和 Supervisor</div>
+
+  <div class="mockup-frame">
+    <div class="mockup-frame-label"><span class="dot" style="animation:pulse 2s infinite"></span> Split Pane Layout — Vertical Split</div>
+
+    <!-- 顶栏 -->
+    <div class="app-topbar">
+      <div class="topbar-tabs">
+        <div class="topbar-tab active">
+          <span class="topbar-dot active"></span>
+          <span>coder-studio</span>
+          <div class="topbar-close">&times;</div>
+        </div>
+        <div class="topbar-add">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="7" y1="2" x2="7" y2="12"/><line x1="2" y1="7" x2="12" y2="7"/></svg>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <div class="topbar-btn">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="6" r="4.5"/><line x1="10" y1="10" x2="14" y2="14"/></svg>
+        </div>
+        <div class="topbar-btn">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="2.5"/><path d="M7 1v2M7 11v2M1 7h2M11 7h2"/></svg>
+        </div>
+      </div>
+    </div>
+
+    <div class="workspace-body">
+      <!-- 左侧面板 -->
+      <div class="left-panel" style="width:200px;">
+        <div class="panel-header">
+          <div class="panel-kicker">REPOSITORY NAVIGATOR</div>
+          <div class="panel-branch">
+            <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="2" r="1.5"/><circle cx="6" cy="10" r="1.5"/></svg>
+            feature/ai-agent
+          </div>
+          <div class="panel-tabs">
+            <div class="panel-tab active">Files</div>
+            <div class="panel-tab">Git Diff</div>
+          </div>
+        </div>
+        <div class="panel-toolbar">
+          <div class="panel-toolbar-btn">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 7a6 6 0 0 1 10.5-4M13 7a6 6 0 0 1-10.5 4"/><polyline points="1,2 1,5 4,5"/><polyline points="13,12 13,9 10,9"/></svg>
+          </div>
+        </div>
+        <div class="file-tree">
+          <div class="tree-item"><span class="tree-chevron">▶</span><span class="tree-icon folder">📁</span><span class="tree-label">src</span></div>
+          <div class="tree-item"><span class="tree-chevron">▶</span><span class="tree-icon folder">📁</span><span class="tree-label">components</span></div>
+          <div class="tree-item"><span class="tree-chevron" style="visibility:hidden">▶</span><span class="tree-icon ts">📄</span><span class="tree-label">App.tsx</span></div>
+          <div class="tree-item"><span class="tree-chevron" style="visibility:hidden">▶</span><span class="tree-icon json">📋</span><span class="tree-label">package.json</span></div>
+        </div>
+      </div>
+
+      <!-- 分割面板区域 -->
+      <div class="workspace-main-area">
+        <div class="split-layout" style="flex-direction:row;">
+          <!-- 左侧 Agent -->
+          <div class="agent-pane">
+            <div class="agent-progress"><div class="fill" style="width:68%"></div></div>
+            <div class="agent-header">
+              <span class="agent-session-dot active"></span>
+              <span class="agent-title">SESSION-01</span>
+              <span class="agent-badge">Claude</span>
+              <span class="agent-status running">Running</span>
+              <div class="agent-actions">
+                <div class="agent-action-btn">
+                  <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="10" height="10" rx="1"/><line x1="6" y1="1" x2="6" y2="11"/></svg>
+                </div>
+                <div class="agent-action-btn">
+                  <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="10" height="10" rx="1"/><line x1="1" y1="6" x2="11" y2="6"/></svg>
+                </div>
+                <div class="agent-action-btn close">&times;</div>
+              </div>
+            </div>
+            <div class="agent-terminal">
+              <div class="term-line"><span class="term-prompt">❯</span> <span class="term-cmd">claude --prompt "implement auth"</span></div>
+              <div class="term-line"><span class="term-success">✔  Created src/auth/AuthGate.tsx</span></div>
+              <div class="term-line"><span class="term-success">✔  Created src/auth/auth.service.ts</span></div>
+              <div class="term-line"><span class="term-output"></span></div>
+              <div class="term-line"><span class="term-warn">⚡ Writing middleware for session...</span></div>
+              <div class="term-line"><span class="term-output">Reading existing auth patterns...</span></div>
+              <div class="term-line"><span class="term-prompt">❯</span> <span class="term-cursor"></span></div>
+            </div>
+          </div>
+
+          <!-- 分割线 -->
+          <div class="split-divider-v" style="width:8px;background:var(--border);cursor:col-resize;"></div>
+
+          <!-- 右侧 Agent (Draft) -->
+          <div class="agent-pane" style="flex:0.6;">
+            <div class="agent-progress"><div class="fill" style="width:6%"></div></div>
+            <div class="agent-header">
+              <span class="agent-session-dot idle"></span>
+              <span class="agent-title">SESSION-02</span>
+              <span class="agent-badge">Codex</span>
+              <span class="agent-status idle">Idle</span>
+              <div class="agent-actions">
+                <div class="agent-action-btn">
+                  <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="10" height="10" rx="1"/><line x1="6" y1="1" x2="6" y2="11"/></svg>
+                </div>
+                <div class="agent-action-btn close">&times;</div>
+              </div>
+            </div>
+            <div class="agent-terminal">
+              <div class="term-line"><span class="term-prompt">❯</span> <span class="term-cmd">codex --prompt "add tests"</span></div>
+              <div class="term-line"><span class="term-success">✔  Created tests/test_auth.test.ts</span></div>
+              <div class="term-line"><span class="term-output"></span></div>
+              <div class="term-line"><span class="term-output">Waiting for next instruction...</span></div>
+              <div class="term-line"><span class="term-prompt">❯</span> <span class="term-cursor"></span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 底部终端 -->
+        <div class="bottom-terminal" style="height:120px;">
+          <div class="terminal-toolbar">
+            <span class="terminal-kicker">TERMINAL</span>
+            <span class="terminal-title">bash — 1</span>
+            <select class="terminal-select"><option>bash — 1</option></select>
+            <div style="margin-left:auto;display:flex;gap:4px;">
+              <div class="panel-toolbar-btn"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="3" y1="3" x2="11" y2="11"/><line x1="11" y1="3" x2="3" y2="11"/></svg></div>
+              <div class="panel-toolbar-btn"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="7" y1="3" x2="7" y2="11"/><line x1="3" y1="7" x2="11" y2="7"/></svg></div>
+            </div>
+          </div>
+          <div class="agent-terminal" style="border-top:none;">
+            <div class="term-line"><span class="term-prompt">❯</span> <span class="term-path">~/workspace</span> <span class="term-cmd">npm run build</span></div>
+            <div class="term-line"><span class="term-success">✓  Built successfully in 2.3s</span></div>
+            <div class="term-line"><span class="term-prompt">❯</span> <span class="term-cursor"></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     SCREEN 4: Git 变更
+     ============================================================ -->
+<div class="mockup-screen" id="screen-git">
+  <div class="mockup-screen-title">Git 变更视图</div>
+  <div class="mockup-screen-desc">左侧面板切换到 Git Diff 视图 — 显示变更分组、暂存操作和提交输入</div>
+
+  <div class="mockup-frame">
+    <div class="mockup-frame-label"><span class="dot" style="animation:pulse 2s infinite"></span> Git Changes View — Source Control</div>
+
+    <!-- 顶栏 -->
+    <div class="app-topbar">
+      <div class="topbar-tabs">
+        <div class="topbar-tab active">
+          <span class="topbar-dot active"></span>
+          <span>coder-studio</span>
+          <div class="topbar-close">&times;</div>
+        </div>
+        <div class="topbar-add">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="7" y1="2" x2="7" y2="12"/><line x1="2" y1="7" x2="12" y2="7"/></svg>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <div class="topbar-btn">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="6" r="4.5"/><line x1="10" y1="10" x2="14" y2="14"/></svg>
+        </div>
+        <div class="topbar-btn">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="2.5"/><path d="M7 1v2M7 11v2M1 7h2M11 7h2"/></svg>
+        </div>
+      </div>
+    </div>
+
+    <div class="workspace-body">
+      <!-- 左侧面板 — Git -->
+      <div class="left-panel">
+        <div class="panel-header">
+          <div class="panel-kicker">SOURCE CONTROL</div>
+          <div class="panel-branch">
+            <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="2" r="1.5"/><circle cx="6" cy="10" r="1.5"/><path d="M6 3.5v5M6 6c0 1.5-2.5 1-2.5 0"/></svg>
+            feature/ai-agent
+          </div>
+          <div class="panel-tabs">
+            <div class="panel-tab">Files</div>
+            <div class="panel-tab active">Git Diff</div>
+          </div>
+        </div>
+        <div class="panel-toolbar">
+          <div style="display:flex;gap:2px;">
+            <div class="panel-toolbar-btn" title="Refresh">
+              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 7a6 6 0 0 1 10.5-4"/><polyline points="1,2 1,5 4,5"/></svg>
+            </div>
+            <div class="panel-toolbar-btn" title="Stage All">
+              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="7" y1="3" x2="7" y2="11"/><line x1="3" y1="7" x2="11" y2="7"/></svg>
+            </div>
+            <div class="panel-toolbar-btn" title="Unstage All">
+              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="3" y1="7" x2="11" y2="7"/></svg>
+            </div>
+            <div class="panel-toolbar-btn" title="Discard All">
+              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h8M3 7l3-3M3 7l3 3"/></svg>
+            </div>
+            <div class="panel-toolbar-btn" title="Commit" style="color:var(--blue);">
+              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="7" y1="10" x2="7" y2="3"/><polyline points="4,6 7,3 10,6"/></svg>
+            </div>
+          </div>
+        </div>
+
+        <textarea class="git-commit-input" placeholder="Enter commit message..." rows="1">feat: add agent session supervisor</textarea>
+
+        <div style="flex:1;overflow-y:auto;">
+          <!-- Staged -->
+          <div class="git-group">
+            <div class="git-group-header">
+              <span>Staged</span>
+              <span class="git-group-count">2</span>
+            </div>
+            <div class="git-row">
+              <span style="color:var(--blue);">📄</span>
+              <span>AuthGate.tsx</span>
+              <span style="color:var(--text-ter);font-size:11px;">src/auth/</span>
+              <span class="git-status-badge staged">Staged</span>
+              <div class="git-row-actions">
+                <div class="git-row-action" title="Unstage">
+                  <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="2" y1="6" x2="10" y2="6"/></svg>
+                </div>
+              </div>
+            </div>
+            <div class="git-row">
+              <span style="color:var(--blue);">📄</span>
+              <span>auth.service.ts</span>
+              <span style="color:var(--text-ter);font-size:11px;">src/auth/</span>
+              <span class="git-status-badge staged">Staged</span>
+              <div class="git-row-actions">
+                <div class="git-row-action" title="Unstage">
+                  <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="2" y1="6" x2="10" y2="6"/></svg>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Changes -->
+          <div class="git-group">
+            <div class="git-group-header">
+              <span>Changes</span>
+              <span class="git-group-count">3</span>
+            </div>
+            <div class="git-row">
+              <span style="color:var(--blue);">📄</span>
+              <span>AppController.tsx</span>
+              <span style="color:var(--text-ter);font-size:11px;">src/app/</span>
+              <span class="git-status-badge modified">Modified</span>
+              <div class="git-row-actions">
+                <div class="git-row-action" title="Stage">
+                  <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="6" y1="2" x2="6" y2="10"/><line x1="2" y1="6" x2="10" y2="6"/></svg>
+                </div>
+                <div class="git-row-action" title="Discard">
+                  <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 6h8M2 6l2.5-2.5M2 6l2.5 2.5"/></svg>
+                </div>
+              </div>
+            </div>
+            <div class="git-row">
+              <span style="color:var(--amber);">📄</span>
+              <span>WorkspaceScreen.tsx</span>
+              <span style="color:var(--text-ter);font-size:11px;">src/features/</span>
+              <span class="git-status-badge modified">Modified</span>
+              <div class="git-row-actions">
+                <div class="git-row-action" title="Stage">
+                  <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="6" y1="2" x2="6" y2="10"/><line x1="2" y1="6" x2="10" y2="6"/></svg>
+                </div>
+                <div class="git-row-action" title="Discard">
+                  <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 6h8M2 6l2.5-2.5M2 6l2.5 2.5"/></svg>
+                </div>
+              </div>
+            </div>
+            <div class="git-row">
+              <span style="color:var(--text-ter);">📄</span>
+              <span>SupervisorObjectiveDialog.tsx</span>
+              <span style="color:var(--text-ter);font-size:11px;">src/features/</span>
+              <span class="git-status-badge modified">Modified</span>
+              <div class="git-row-actions">
+                <div class="git-row-action" title="Stage">
+                  <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="6" y1="2" x2="6" y2="10"/><line x1="2" y1="6" x2="10" y2="6"/></svg>
+                </div>
+                <div class="git-row-action" title="Discard">
+                  <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 6h8M2 6l2.5-2.5M2 6l2.5 2.5"/></svg>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Untracked -->
+          <div class="git-group">
+            <div class="git-group-header">
+              <span>Untracked</span>
+              <span class="git-group-count">1</span>
+            </div>
+            <div class="git-row">
+              <span style="color:var(--text-ter);">📄</span>
+              <span>supervisor.test.ts</span>
+              <span style="color:var(--text-ter);font-size:11px;">tests/</span>
+              <span class="git-status-badge untracked">Untracked</span>
+              <div class="git-row-actions">
+                <div class="git-row-action" title="Stage">
+                  <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="6" y1="2" x2="6" y2="10"/><line x1="2" y1="6" x2="10" y2="6"/></svg>
+                </div>
+                <div class="git-row-action" title="Discard">
+                  <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 6h8M2 6l2.5-2.5M2 6l2.5 2.5"/></svg>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 中央区域 — 代码编辑器 -->
+      <div class="workspace-main-area" style="padding:16px;">
+        <div class="code-editor" style="flex:1;">
+          <div class="code-editor-header">
+            <span class="code-file-path">apps/web/src/auth/AuthGate.tsx</span>
+            <div class="code-mode-toggle">
+              <div class="code-mode-btn active">Preview</div>
+              <div class="code-mode-btn">Diff</div>
+            </div>
+          </div>
+          <div class="code-editor-body">
+            <div class="code-lines">
+              <div class="code-line"><span class="code-line-num">1</span><span class="code-keyword">import</span> React, { useState } <span class="code-keyword">from</span> <span class="code-string">'react'</span>;</div>
+              <div class="code-line"><span class="code-line-num">2</span><span class="code-keyword">import</span> { <span class="code-type">AuthService</span> } <span class="code-keyword">from</span> <span class="code-string">'./auth.service'</span>;</div>
+              <div class="code-line"><span class="code-line-num">3</span></div>
+              <div class="code-line"><span class="code-line-num">4</span><span class="code-comment">// Authentication gate component</span></div>
+              <div class="code-line"><span class="code-line-num">5</span><span class="code-keyword">export const</span> <span class="code-function">AuthGate</span>: React.FC = () <span class="code-operator">=></span> {</div>
+              <div class="code-line"><span class="code-line-num">6</span>  <span class="code-keyword">const</span> [status, setStatus] = <span class="code-function">useState</span>&lt;<span class="code-type">AuthStatus</span>&gt;(<span class="code-string">'loading'</span>);</div>
+              <div class="code-line"><span class="code-line-num">7</span>  <span class="code-keyword">const</span> [passphrase, setPassphrase] = <span class="code-function">useState</span>(<span class="code-string">''</span>);</div>
+              <div class="code-line"><span class="code-line-num">8</span></div>
+              <div class="code-line"><span class="code-line-num">9</span>  <span class="code-keyword">const</span> <span class="code-function">handleLogin</span> = <span class="code-keyword">async</span> () <span class="code-operator">=></span> {</div>
+              <div class="code-line"><span class="code-line-num">10</span>    <span class="code-keyword">try</span> {</div>
+              <div class="code-line"><span class="code-line-num">11</span>      <span class="code-keyword">const</span> result = <span class="code-keyword">await</span> <span class="code-type">AuthService</span>.<span class="code-function">login</span>(passphrase);</div>
+              <div class="code-line"><span class="code-line-num">12</span>      <span class="code-function">setStatus</span>(<span class="code-string">'unlocking'</span>);</div>
+              <div class="code-line"><span class="code-line-num">13</span>    } <span class="code-keyword">catch</span> (err) {</div>
+              <div class="code-line"><span class="code-line-num">14</span>      <span class="code-function">setStatus</span>(<span class="code-string">'error'</span>);</div>
+              <div class="code-line"><span class="code-line-num">15</span>    }</div>
+              <div class="code-line"><span class="code-line-num">16</span>  };</div>
+              <div class="code-line"><span class="code-line-num">17</span></div>
+              <div class="code-line"><span class="code-line-num">18</span>  <span class="code-keyword">if</span> (status === <span class="code-string">'loading'</span>) <span class="code-keyword">return</span> &lt;<span class="code-type">Spinner</span> /&gt;;</div>
+              <div class="code-line"><span class="code-line-num">19</span>  <span class="code-keyword">if</span> (status === <span class="code-string">'blocked'</span>) <span class="code-keyword">return</span> &lt;<span class="code-type">BlockedScreen</span> /&gt;;</div>
+              <div class="code-line"><span class="code-line-num">20</span></div>
+              <div class="code-line"><span class="code-line-num">21</span>  <span class="code-keyword">return</span> (</div>
+              <div class="code-line"><span class="code-line-num">22</span>    &lt;<span class="code-type">div</span> <span class="code-operator">className</span>=<span class="code-string">"auth-layout"</span>&gt;</div>
+              <div class="code-line"><span class="code-line-num">23</span>      &lt;<span class="code-type">AuthCard</span> <span class="code-operator">onSubmit</span>={handleLogin} /&gt;</div>
+              <div class="code-line"><span class="code-line-num">24</span>    &lt;/<span class="code-type">div</span>&gt;</div>
+              <div class="code-line"><span class="code-line-num">25</span>  );</div>
+              <div class="code-line"><span class="code-line-num">26</span>};</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     SCREEN 5: 设置
+     ============================================================ -->
+<div class="mockup-screen" id="screen-settings">
+  <div class="mockup-screen-title">设置页面</div>
+  <div class="mockup-screen-desc">设置页 — 左侧导航 + 内容区域，展示通用设置、Provider 设置和外观设置</div>
+
+  <div class="mockup-frame">
+    <div class="mockup-frame-label"><span class="dot"></span> Settings — /settings</div>
+
+    <!-- 顶栏 — 设置路由 -->
+    <div class="app-topbar" style="justify-content:space-between;">
+      <div style="display:flex;align-items:center;gap:8px;color:var(--text-sec);font-size:13px;cursor:pointer;">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="10" y1="7" x2="2" y2="7"/><polyline points="5,4 2,7 5,10"/></svg>
+        Back to App
+      </div>
+      <div style="font-size:14px;font-weight:500;color:var(--text);">Settings</div>
+      <div style="width:60px;"></div>
+    </div>
+
+    <div style="display:flex;height:500px;">
+      <!-- 设置侧边栏 -->
+      <div class="settings-sidebar">
+        <div class="settings-nav-item active">
+          <span class="settings-nav-icon">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="2.5"/><path d="M7 1v2M7 11v2M1 7h2M11 7h2"/></svg>
+          </span>
+          General
+        </div>
+        <div class="settings-nav-item">
+          <span class="settings-nav-icon">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="10" height="10" rx="2"/><circle cx="7" cy="7" r="1.5"/></svg>
+          </span>
+          Claude
+        </div>
+        <div class="settings-nav-item">
+          <span class="settings-nav-icon">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="10" height="10" rx="2"/><circle cx="7" cy="7" r="1.5"/></svg>
+          </span>
+          Codex
+        </div>
+        <div class="settings-nav-item">
+          <span class="settings-nav-icon">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="6" r="4"/><path d="M4 12h6"/></svg>
+          </span>
+          Appearance
+        </div>
+      </div>
+
+      <!-- 设置内容 -->
+      <div class="settings-content">
+        <!-- Agent Defaults -->
+        <div class="settings-section">
+          <div class="settings-section-title">Agent Defaults</div>
+          <div class="settings-section-desc">Configure default behavior for agent sessions.</div>
+          <div class="settings-field">
+            <div class="settings-field-label">Default Agent Provider</div>
+            <div class="settings-pill-group">
+              <div class="settings-pill active">Claude</div>
+              <div class="settings-pill">Codex</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Completion Notifications -->
+        <div class="settings-section">
+          <div class="settings-section-title">Completion Notifications</div>
+          <div class="settings-section-desc">Get notified when agent sessions complete.</div>
+
+          <div class="settings-field">
+            <div class="settings-toggle">
+              <div class="toggle-track on"></div>
+              <span class="settings-toggle-label">Completion Notifications</span>
+            </div>
+          </div>
+
+          <div class="settings-field">
+            <div class="settings-toggle">
+              <div class="toggle-track on"></div>
+              <span class="settings-toggle-label">Notify Only In Background</span>
+            </div>
+          </div>
+
+          <div class="settings-field">
+            <div class="settings-field-label" style="color:var(--text-ter);">Notification Permission</div>
+            <div style="font-size:12px;color:var(--green);margin-top:4px;">✓ Granted</div>
+          </div>
+        </div>
+
+        <!-- Appearance -->
+        <div class="settings-section">
+          <div class="settings-section-title">Appearance</div>
+          <div class="settings-section-desc">Customize the look and feel of the interface.</div>
+
+          <div class="settings-field">
+            <div class="settings-field-label">Theme</div>
+            <div class="settings-pill-group">
+              <div class="settings-pill active">Dark</div>
+              <div class="settings-pill" style="opacity:0.4;cursor:not-allowed;">Light (Coming Soon)</div>
+            </div>
+          </div>
+
+          <div class="settings-field">
+            <div class="settings-field-label">Terminal Rendering</div>
+            <div class="settings-pill-group">
+              <div class="settings-pill active">Standard</div>
+              <div class="settings-pill">Compatibility</div>
+            </div>
+          </div>
+
+          <div class="settings-field">
+            <div class="settings-field-label">Language</div>
+            <div class="settings-pill-group">
+              <div class="settings-pill active">English</div>
+              <div class="settings-pill">中文</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     SCREEN 6: 认证
+     ============================================================ -->
+<div class="mockup-screen" id="screen-auth">
+  <div class="mockup-screen-title">认证页面</div>
+  <div class="mockup-screen-desc">网络部署时的密码验证界面 — 背景带有工作台线框预览</div>
+
+  <div class="mockup-frame">
+    <div class="mockup-frame-label"><span class="dot" style="background:var(--amber)"></span> Authentication — Sign In</div>
+
+    <div style="height:500px;position:relative;background:var(--bg);display:flex;align-items:center;justify-content:center;">
+      <!-- 预览外壳 -->
+      <div style="position:absolute;inset:0;opacity:0.06;pointer-events:none;">
+        <div style="height:36px;background:var(--bg-surface);margin:8px 8px 0;border-radius:4px;"></div>
+        <div style="display:flex;gap:8px;margin:8px;height:calc(100% - 52px);">
+          <div style="width:200px;background:var(--bg-surface);border-radius:4px;"></div>
+          <div style="flex:1;background:var(--bg-surface);border-radius:4px;"></div>
+          <div style="width:200px;background:var(--bg-surface);border-radius:4px;"></div>
+        </div>
+      </div>
+
+      <!-- 登录卡片 -->
+      <div style="position:relative;z-index:10;width:380px;padding:32px;background:var(--bg-surface);border:1px solid var(--border);border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,0.5);">
+        <div style="text-align:center;margin-bottom:8px;">
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-ter);">Coder Studio</div>
+          <div style="font-size:18px;font-weight:500;color:var(--text);margin-top:4px;">Sign In</div>
+        </div>
+        <div style="font-size:13px;color:var(--text-sec);text-align:center;margin-bottom:24px;">Enter the passphrase to access your workspaces.</div>
+
+        <input type="password" class="auth-input" placeholder="Enter passphrase..." value="" style="margin-bottom:16px;">
+
+        <button class="auth-submit" style="width:100%;padding:10px;background:var(--blue);color:var(--bg);border:none;border-radius:6px;font-size:14px;font-weight:500;font-family:var(--sans);cursor:pointer;">
+          Sign In
+        </button>
+
+        <div style="margin-top:16px;padding:10px 12px;background:var(--bg);border-radius:6px;border:1px solid var(--border);">
+          <div style="font-size:11px;color:var(--text-ter);display:flex;align-items:center;gap:6px;padding:3px 0;">
+            <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="6" r="4"/><polyline points="6,3 6,6 8,7"/></svg>
+            Session idle timeout: 30 minutes
+          </div>
+          <div style="font-size:11px;color:var(--text-ter);display:flex;align-items:center;gap:6px;padding:3px 0;">
+            <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="8" height="8" rx="1"/></svg>
+            Max session duration: 24 hours
+          </div>
+          <div style="font-size:11px;color:var(--text-ter);display:flex;align-items:center;gap:6px;padding:3px 0;">
+            <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 6h8M2 6l2-2M2 6l2 2"/></svg>
+            Allowed root: /home/spencer/workspace
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     SCREEN 7: 命令面板
+     ============================================================ -->
+<div class="mockup-screen" id="screen-command">
+  <div class="mockup-screen-title">命令面板</div>
+  <div class="mockup-screen-desc">通过 Ctrl/Cmd + K 触发的全局命令搜索面板</div>
+
+  <div class="mockup-frame">
+    <div class="mockup-frame-label"><span class="dot"></span> Command Palette — Ctrl+K</div>
+
+    <!-- 应用背景 -->
+    <div style="height:420px;background:var(--bg);position:relative;">
+      <!-- 模糊背景 -->
+      <div style="opacity:0.3;filter:blur(1px);padding:8px;">
+        <div class="app-topbar" style="margin-bottom:8px;">
+          <div class="topbar-tabs">
+            <div class="topbar-tab active"><span class="topbar-dot active"></span><span>coder-studio</span></div>
+          </div>
+        </div>
+        <div style="display:flex;height:350px;">
+          <div style="width:200px;background:var(--bg-sidebar);border-right:1px solid var(--border);border-radius:4px;"></div>
+          <div style="flex:1;background:var(--bg);border-radius:4px;margin:0 4px;"></div>
+        </div>
+      </div>
+
+      <!-- 遮罩 -->
+      <div style="position:absolute;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:flex-start;justify-content:center;padding-top:60px;">
+        <!-- 命令面板 -->
+        <div style="width:660px;max-width:90%;background:var(--bg-surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,0.5);overflow:hidden;">
+          <div style="padding:12px 16px 8px;border-bottom:1px solid var(--border);">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-ter);">COMMAND PALETTE</span>
+              <span style="font-size:11px;color:var(--text-ter);">12 actions</span>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:10px 16px;">
+            <svg width="16" height="16" fill="none" stroke="var(--text-ter)" stroke-width="1.5"><circle cx="7" cy="7" r="5"/><line x1="11" y1="11" x2="15" y2="15"/></svg>
+            <input type="text" value="split" style="flex:1;background:transparent;border:none;font-size:14px;color:var(--text);font-family:var(--sans);outline:none;">
+          </div>
+          <div style="border-top:1px solid var(--border);">
+            <div class="cp-item active" style="background:var(--bg-active);">
+              <div>
+                <div class="cp-item-label">Split Pane Vertically</div>
+                <div class="cp-item-desc">Split the active agent pane into left and right panes</div>
+              </div>
+              <span class="cp-item-shortcut">⌘D</span>
+            </div>
+            <div class="cp-item">
+              <div>
+                <div class="cp-item-label">Split Pane Horizontally</div>
+                <div class="cp-item-desc">Split the active agent pane into top and bottom panes</div>
+              </div>
+              <span class="cp-item-shortcut">⇧⌘D</span>
+            </div>
+            <div class="cp-item">
+              <div>
+                <div class="cp-item-label">Toggle Focus Mode</div>
+                <div class="cp-item-desc">Hide non-essential UI elements for distraction-free work</div>
+              </div>
+              <span class="cp-item-shortcut">F</span>
+            </div>
+            <div class="cp-item">
+              <div>
+                <div class="cp-item-label">Toggle Terminal Panel</div>
+                <div class="cp-item-desc">Show or hide the bottom terminal panel</div>
+              </div>
+              <span class="cp-item-shortcut"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     SCREEN 8: 启动浮层
+     ============================================================ -->
+<div class="mockup-screen" id="screen-launch">
+  <div class="mockup-screen-title">工作区启动浮层</div>
+  <div class="mockup-screen-desc">选择本地文件夹和执行目标以启动新工作区</div>
+
+  <div class="mockup-frame">
+    <div class="mockup-frame-label"><span class="dot"></span> Workspace Launch Overlay</div>
+
+    <div style="height:600px;background:var(--bg);position:relative;display:flex;align-items:center;justify-content:center;">
+      <!-- 模糊背景 -->
+      <div style="opacity:0.2;filter:blur(1px);position:absolute;inset:0;">
+        <div class="welcome-container">
+          <div class="welcome-card">
+            <div class="welcome-kicker">Get Started</div>
+            <h1 class="welcome-title">Welcome to Coder Studio</h1>
+          </div>
+        </div>
+      </div>
+
+      <!-- 遮罩 -->
+      <div style="position:absolute;inset:0;background:rgba(0,0,0,0.5);"></div>
+
+      <!-- 启动模态 -->
+      <div style="position:relative;z-index:10;width:760px;max-width:90%;max-height:85vh;background:var(--bg-surface);border:1px solid var(--border);border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,0.5);display:flex;flex-direction:column;overflow:hidden;">
+        <!-- 头部 -->
+        <div style="display:flex;justify-content:space-between;padding:20px 24px;border-bottom:1px solid var(--border);">
+          <div>
+            <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-ter);">START WORKSPACE</div>
+            <div style="font-size:16px;font-weight:500;color:var(--text);margin-top:4px;">Local Folder</div>
+            <div style="font-size:12px;color:var(--text-ter);margin-top:2px;">Select a directory to use as the workspace root.</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:12px;color:var(--text-sec);font-family:var(--mono);">/home/spencer/</div>
+            <div style="font-size:11px;color:var(--text-ter);margin-top:4px;">Target: Native</div>
+            <div style="width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--text-ter);cursor:pointer;margin-top:8px;margin-left:auto;" title="Close">&times;</div>
+          </div>
+        </div>
+
+        <!-- 主体 -->
+        <div style="flex:1;overflow-y:auto;padding:20px 24px;">
+          <!-- 选择卡片 -->
+          <div style="display:flex;gap:8px;margin-bottom:16px;">
+            <div style="flex:1;padding:10px 12px;border:1px solid var(--blue);border-radius:6px;background:rgba(108,182,255,0.06);">
+              <div style="font-size:13px;color:var(--text);font-weight:500;">Local Folder</div>
+              <div style="font-size:11px;color:var(--text-ter);margin-top:2px;">Select a directory on your machine</div>
+            </div>
+            <div style="flex:1;padding:10px 12px;border:1px solid var(--border);border-radius:6px;opacity:0.4;">
+              <div style="font-size:13px;color:var(--text);font-weight:500;">Remote Git</div>
+              <div style="font-size:11px;color:var(--text-ter);margin-top:2px;">Clone a repository (Coming Soon)</div>
+            </div>
+          </div>
+
+          <!-- 执行目标 -->
+          <div style="display:flex;gap:4px;margin-bottom:16px;">
+            <div style="padding:4px 12px;border-radius:4px;font-size:12px;background:var(--blue);color:var(--bg);cursor:pointer;">Native</div>
+            <div style="padding:4px 12px;border-radius:4px;font-size:12px;background:var(--bg);border:1px solid var(--border);color:var(--text-ter);cursor:pointer;">WSL</div>
+          </div>
+
+          <!-- 文件夹浏览器 -->
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:12px;">
+            <!-- 工具栏 -->
+            <div style="display:flex;gap:4px;margin-bottom:8px;">
+              <button style="padding:4px 8px;border-radius:4px;font-size:11px;color:var(--text-sec);background:var(--bg-surface);border:1px solid var(--border);cursor:pointer;">🏠 Home Directory</button>
+              <button style="padding:4px 8px;border-radius:4px;font-size:11px;color:var(--text-sec);background:var(--bg-surface);border:1px solid var(--border);cursor:pointer;">↑ Go Up</button>
+            </div>
+
+            <!-- 根路径 chips -->
+            <div style="display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap;">
+              <span style="padding:3px 8px;border-radius:4px;font-size:11px;font-family:var(--mono);color:var(--text-sec);background:var(--bg-surface);border:1px solid var(--border);cursor:pointer;">/</span>
+              <span style="padding:3px 8px;border-radius:4px;font-size:11px;font-family:var(--mono);color:var(--text-sec);background:var(--bg-surface);border:1px solid var(--border);cursor:pointer;">~</span>
+              <span style="padding:3px 8px;border-radius:4px;font-size:11px;font-family:var(--mono);color:var(--text);background:var(--bg-active);border:1px solid var(--blue);cursor:pointer;">/home/spencer</span>
+            </div>
+
+            <!-- 目录列表 -->
+            <div style="max-height:180px;overflow-y:auto;">
+              <div style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:4px;cursor:pointer;">
+                <span style="color:var(--amber);font-size:14px;">📁</span>
+                <span style="font-size:13px;color:var(--text);">workspace</span>
+                <span style="font-size:11px;color:var(--text-ter);">projects</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:4px;background:rgba(108,182,255,0.06);cursor:pointer;">
+                <span style="color:var(--amber);font-size:14px;">📁</span>
+                <span style="font-size:13px;color:var(--text);font-weight:500;">coder-studio</span>
+                <span style="font-size:11px;color:var(--text-ter);">12 items</span>
+                <span style="margin-left:auto;font-size:11px;color:var(--blue);">Enter folder →</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:4px;cursor:pointer;">
+                <span style="color:var(--amber);font-size:14px;">📁</span>
+                <span style="font-size:13px;color:var(--text);">my-project</span>
+                <span style="font-size:11px;color:var(--text-ter);">8 items</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:4px;cursor:pointer;">
+                <span style="color:var(--amber);font-size:14px;">📁</span>
+                <span style="font-size:13px;color:var(--text);">dotfiles</span>
+                <span style="font-size:11px;color:var(--text-ter);">5 items</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 底部 -->
+        <div style="padding:16px 24px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;">
+          <button style="padding:8px 20px;background:var(--blue);color:var(--bg);border:none;border-radius:6px;font-size:13px;font-weight:500;font-family:var(--sans);cursor:pointer;">
+            Start Workspace
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div><!-- end .mockup-gallery -->
+
+</body>
+</html>

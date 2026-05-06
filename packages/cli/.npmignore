@@ -1,0 +1,6 @@
+# Only include dist folder
+src/
+tsconfig.json
+node_modules/
+*.test.ts
+*.spec.ts

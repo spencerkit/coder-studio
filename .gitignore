@@ -1,42 +1,67 @@
-# Dependencies
 node_modules/
 
 # Build outputs
+dist/
 .build/
+build/
+output/
+.cache/
+.turbo/
+
+# Test outputs
 coverage/
-*.tsbuildinfo
-
-# Tauri (Rust)
-apps/server/target/
-apps/server/gen/
-
-# Playwright
-test-results/
 playwright-report/
+test-results/
+e2e-screenshots/
 
-# Environment files
-.env
-.env.*
-!.env.example
-!.env.sample
+# Local tool caches
+.playwright-mcp/
 
-# Logs
+# Temp files
+tmp/
+temp/
+.tmp/
+*.tmp
 *.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-pnpm-error.log*
+*.pid
 
-# OS/editor
-.DS_Store
-Thumbs.db
+# Editor / IDE
 .idea/
 .vscode/
 *.swp
-.tools/
-output
-.tmp
-.playwright-cli
-.artifacts/
+*.swo
+
+# Local env overrides
+.env.local
+.env.*.local
+
+# Worktrees
 .worktrees/
+.claude/
+
+# Acceptance runtime artifacts
+docs/验收报告/**/*.json
+
+# Root-level screenshot artifacts
+/*.png
+
+# SQLite runtime files (SQLite database + WAL/SHM)
+data
+data-shm
+data-wl
+**/data
+**/data-shm
+**/data-wl
+
+# E2E test runner scripts (ad-hoc)
+e2e/playwright.session.config.ts
+e2e/run-session-tests.*
+.playwright-cli/
+/superpowers/
+/.superpowers/
+/.coder-studio/
+/.codex
+tsconfig.tsbuildinfo
+
+# Stitch design files
+.stitch/

@@ -1,0 +1,39 @@
+{
+  "name": "@coder-studio/core",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./runtime": {
+      "types": "./src/runtime.ts",
+      "default": "./src/runtime.ts"
+    }
+  },
+  "publishConfig": {
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
+      "./runtime": { "types": "./dist/runtime.d.ts", "import": "./dist/runtime.js" }
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "peerDependencies": {
+    "zod": "^4.4.2"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.5",
+    "zod": "^4.4.2"
+  }
+}

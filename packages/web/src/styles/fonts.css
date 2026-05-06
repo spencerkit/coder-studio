@@ -1,0 +1,20 @@
+/**
+ * Font Imports
+ *
+ * 使用本地字体文件，避免依赖外部 CDN
+ * 字重：400 (Regular), 500 (Medium), 600 (SemiBold)
+ */
+
+/* JetBrains Mono - 代码字体 */
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
+@import "@fontsource/jetbrains-mono/600.css";
+
+/* IBM Plex Sans - UI 字体 */
+@import "@fontsource/ibm-plex-sans/400.css";
+@import "@fontsource/ibm-plex-sans/500.css";
+@import "@fontsource/ibm-plex-sans/600.css";
+
+/* Noto Sans SC - 中文字体 */
+@import "@fontsource/noto-sans-sc/400.css";
+@import "@fontsource/noto-sans-sc/500.css";

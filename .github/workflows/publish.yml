@@ -1,0 +1,106 @@
+name: Publish CLI
+
+on:
+  workflow_dispatch:
+    inputs:
+      npm_tag:
+        description: "npm dist-tag to publish under"
+        required: true
+        default: "latest"
+        type: string
+
+concurrency:
+  group: publish-cli
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish CLI package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Ensure publish runs from main
+        run: |
+          if [ "${GITHUB_REF_NAME}" != "main" ]; then
+            echo "Publish workflow must run from main" >&2
+            exit 1
+          fi
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "pnpm"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Ensure there are no pending release changesets
+        run: |
+          pending_changesets=$(find .changeset -maxdepth 1 -type f -name '*.md' ! -name 'README.md')
+          if [ -n "${pending_changesets}" ]; then
+            echo "Pending changesets exist. Merge the generated release PR before publishing." >&2
+            echo "${pending_changesets}" >&2
+            exit 1
+          fi
+
+      - name: Run release validation
+        run: pnpm ci:release:validate
+
+      - name: Read CLI version
+        id: release
+        run: |
+          version=$(node --input-type=module -e "import { readFileSync } from 'node:fs'; console.log(JSON.parse(readFileSync('packages/cli/package.json', 'utf8')).version)")
+          if [ -z "${version}" ]; then
+            echo "Failed to determine CLI version" >&2
+            exit 1
+          fi
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "tag=v${version}" >> "${GITHUB_OUTPUT}"
+
+      - name: Ensure release tag does not already exist
+        run: |
+          if git rev-parse --verify --quiet "refs/tags/${{ steps.release.outputs.tag }}" >/dev/null; then
+            echo "Release tag ${{ steps.release.outputs.tag }} already exists" >&2
+            exit 1
+          fi
+
+      - name: Publish CLI to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "${NODE_AUTH_TOKEN}" ]; then
+            echo "NPM_TOKEN secret is required for publishing" >&2
+            exit 1
+          fi
+          pnpm publish:cli -- --publish --no-build --tag "${{ inputs.npm_tag }}"
+
+      - name: Create and push release tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag "${{ steps.release.outputs.tag }}"
+          git push origin "${{ steps.release.outputs.tag }}"
+
+      - name: Create GitHub release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.release.outputs.tag }}" \
+            --title "@spencer-kit/coder-studio ${{ steps.release.outputs.version }}" \
+            --generate-notes \
+            --verify-tag

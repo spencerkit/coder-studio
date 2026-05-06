@@ -1,26 +1,63 @@
 {
   "name": "@spencer-kit/coder-studio",
-  "version": "0.2.6",
+  "version": "0.0.1",
   "type": "module",
-  "description": "CLI runtime manager for Coder Studio.",
+  "description": "Coder Studio CLI - The only published package",
   "bin": {
-    "coder-studio": "./bin/coder-studio.mjs"
+    "coder-studio": "./dist/bin.js"
   },
-  "files": [
-    "bin",
-    "lib",
-    "README.md"
-  ],
-  "optionalDependencies": {
-    "@spencer-kit/coder-studio-linux-x64": "0.2.6",
-    "@spencer-kit/coder-studio-darwin-arm64": "0.2.6",
-    "@spencer-kit/coder-studio-darwin-x64": "0.2.6",
-    "@spencer-kit/coder-studio-win32-x64": "0.2.6"
+  "exports": {
+    ".": {
+      "import": "./dist/esm/index.mjs",
+      "types": "./dist/esm/index.d.mts"
+    }
   },
-  "publishConfig": {
-    "access": "public"
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsx ../../scripts/build-cli.ts",
+    "dev": "tsx ../../scripts/dev-server.ts",
+    "test": "vitest run --passWithNoTests",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@fastify/compress": "^8.3.1",
+    "@fastify/cors": "^11.2.0",
+    "@fastify/multipart": "^10.0.0",
+    "@fastify/static": "^9.1.3",
+    "@fastify/websocket": "^11.2.0",
+    "@xterm/addon-serialize": "^0.14.0",
+    "@xterm/headless": "^6.0.0",
+    "chokidar": "^5.0.0",
+    "fastify": "^5.8.5",
+    "ignore": "^7.0.5",
+    "node-pty": "^1.1.0",
+    "pino-pretty": "^13.1.3",
+    "pm2": "^7.0.1",
+    "uuid": "^14.0.0",
+    "ws": "^8.20.0",
+    "zod": "^4.4.2"
+  },
+  "devDependencies": {
+    "@coder-studio/core": "workspace:*",
+    "@coder-studio/server": "workspace:*",
+    "@types/node": "^25.6.0",
+    "@types/ws": "^8.18.1",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.5"
   },
   "engines": {
-    "node": ">=22"
-  }
+    "node": ">=24.0.0"
+  },
+  "keywords": ["cli", "coder-studio", "agent", "development", "tools"],
+  "author": "Coder Studio",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/spencerkit/coder-studio.git"
+  },
+  "bugs": {
+    "url": "https://github.com/spencerkit/coder-studio/issues"
+  },
+  "homepage": "https://github.com/spencerkit/coder-studio#readme"
 }

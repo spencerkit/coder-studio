@@ -1,0 +1,51 @@
+name: Release PR
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: release-pr-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release-pr:
+    name: Create or update release PR
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate changesets metadata
+        run: pnpm changeset:validate
+
+      - name: Create or update release PR
+        uses: changesets/action@v1
+        with:
+          version: pnpm version-packages
+          commit: "release: version packages"
+          title: "release: version packages"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

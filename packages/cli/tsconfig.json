@@ -1,16 +1,23 @@
 {
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "target": "ES2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "rootDir": "./src",
-    "outDir": "../../.build/cli",
-    "types": ["node"],
-    "lib": ["ES2023"],
-    "strict": false,
+    "module": "ESNext",
+    "lib": ["ES2022"],
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "esModuleInterop": true,
     "skipLibCheck": true,
-    "noEmitOnError": true,
-    "verbatimModuleSyntax": true
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "outDir": "./dist",
+    "rootDir": "./src"
   },
-  "include": ["src/**/*.mts"]
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
 }
