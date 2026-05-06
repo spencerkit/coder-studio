@@ -15,19 +15,6 @@ export interface CommandCheckDeps {
   ) => Promise<{ stdout: string; stderr: string }>;
 }
 
-function runExecFile(
-  execFile: NonNullable<CommandCheckDeps["execFile"]>,
-  file: string,
-  args: string[],
-  options?: ExecFileOptions
-): Promise<{ stdout: string; stderr: string }> {
-  if (options && execFile.length >= 3) {
-    return execFile(file, args, options);
-  }
-
-  return execFile(file, args);
-}
-
 export function getCommandLookupExecutable(platform: NodeJS.Platform): "where" | "which" {
   return platform === "win32" ? "where" : "which";
 }
@@ -44,12 +31,7 @@ export async function checkCommandAvailable(
   const lookup = getCommandLookupExecutable(platform);
 
   try {
-    await runExecFile(
-      execFile,
-      lookup,
-      [command],
-      platform === "win32" ? { windowsHide: true } : undefined
-    );
+    await execFile(lookup, [command], { windowsHide: true });
     return true;
   } catch {
     return false;

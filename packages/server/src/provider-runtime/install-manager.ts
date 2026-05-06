@@ -26,19 +26,6 @@ export interface InstallManagerDeps extends CommandCheckDeps {
   ) => Promise<{ stdout: string; stderr: string }>;
 }
 
-function runExecFile(
-  execFile: NonNullable<InstallManagerDeps["execFile"]>,
-  file: string,
-  args: string[],
-  options?: ExecFileOptions
-): Promise<{ stdout: string; stderr: string }> {
-  if (options && execFile.length >= 3) {
-    return execFile(file, args, options);
-  }
-
-  return execFile(file, args);
-}
-
 export class ProviderInstallManager {
   private readonly providers = new Map<string, ProviderDefinition>();
   private readonly jobs = new Map<string, ProviderInstallJobSnapshot>();
@@ -290,9 +277,7 @@ export class ProviderInstallManager {
             return;
           }
         } else {
-          const result = await runExecFile(execFile, step.command, step.args, {
-            windowsHide: true,
-          });
+          const result = await execFile(step.command, step.args, { windowsHide: true });
           step.stdoutExcerpt = excerpt(result.stdout);
           step.stderrExcerpt = excerpt(result.stderr);
         }

@@ -20,25 +20,12 @@ export interface RuntimeCheckDeps extends CommandCheckDeps {
   commandExists?: CommandAvailabilityCheck;
 }
 
-function runExecFile(
-  execFile: NonNullable<RuntimeCheckDeps["execFile"]>,
-  file: string,
-  args: string[],
-  options?: ExecFileOptions
-): Promise<{ stdout: string; stderr: string }> {
-  if (options && execFile.length >= 3) {
-    return execFile(file, args, options);
-  }
-
-  return execFile(file, args);
-}
-
 async function checkGit(execRunner: RuntimeCheckDeps["execFile"]): Promise<boolean> {
   try {
     const runner =
       execRunner ??
       ((file, args, options?: ExecFileOptions) => execFileAsync(file, args, options));
-    const { stdout } = await runExecFile(runner, "git", ["--version"], { windowsHide: true });
+    const { stdout } = await runner("git", ["--version"], { windowsHide: true });
     return stdout.includes("git version");
   } catch {
     return false;
@@ -50,7 +37,7 @@ async function checkNode(execRunner: RuntimeCheckDeps["execFile"]): Promise<bool
     const runner =
       execRunner ??
       ((file, args, options?: ExecFileOptions) => execFileAsync(file, args, options));
-    const { stdout } = await runExecFile(runner, "node", ["--version"], { windowsHide: true });
+    const { stdout } = await runner("node", ["--version"], { windowsHide: true });
     return stdout.startsWith("v");
   } catch {
     return false;
