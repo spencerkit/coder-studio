@@ -61,7 +61,7 @@ vi.mock("./browser.js", () => ({
   openBrowser,
 }));
 
-import { main } from "./bin";
+import { main } from "./cli";
 import { parseArgs, RUNTIME_CONFIG_ERROR } from "./parse-args";
 
 beforeEach(() => {
