@@ -157,7 +157,7 @@ export class SessionManager {
 
     await this.deps.terminalMgr.close(session.terminalId);
 
-    if (session.state !== "ended") {
+    if (this.sessions.has(session.id) && session.state !== "ended") {
       this.finishSession(session, this.terminalToSession.has(session.terminalId) ? undefined : 0);
     }
   }
