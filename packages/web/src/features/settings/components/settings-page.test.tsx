@@ -8,6 +8,7 @@ import {
   wsClientAtom,
 } from "../../../atoms/connection";
 import { activeWorkspaceIdAtom } from "../../../atoms/workspaces";
+import { CommandResultError } from "../../../ws/client";
 import { SettingsPage } from "./settings-page";
 
 const viewportMocks = vi.hoisted(() => ({
@@ -252,6 +253,196 @@ describe("SettingsPage", () => {
     expect(screen.queryByText("选择默认的 Agent Provider")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Claude" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Codex" })).not.toBeInTheDocument();
+  });
+
+  it("loads and saves supervisor evaluation timeout in seconds from general settings", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "supervisor.evaluationTimeoutSec": 600,
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+
+    const input = await screen.findByLabelText("Supervisor 超时（秒）");
+    expect(input).toHaveValue(600);
+
+    fireEvent.change(input, { target: { value: "900" } });
+    fireEvent.blur(input);
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            supervisor: {
+              evaluationTimeoutSec: 900,
+            },
+          },
+        },
+        undefined
+      );
+    });
+  });
+
+  it("does not save supervisor timeout for non-integer numeric strings", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "supervisor.evaluationTimeoutSec": 600,
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+
+    const input = await screen.findByLabelText("Supervisor 超时（秒）");
+    fireEvent.change(input, { target: { value: "1e2" } });
+    fireEvent.blur(input);
+
+    await waitFor(() => {
+      expect(input).toHaveValue(600);
+    });
+    expect(sendCommand).not.toHaveBeenCalledWith("settings.update", expect.anything(), undefined);
+  });
+
+  it("does not save supervisor timeout above the supported maximum", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "supervisor.evaluationTimeoutSec": 600,
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+
+    const input = await screen.findByLabelText("Supervisor 超时（秒）");
+    fireEvent.change(input, { target: { value: "86401" } });
+    fireEvent.blur(input);
+
+    await waitFor(() => {
+      expect(input).toHaveValue(600);
+    });
+    expect(sendCommand).not.toHaveBeenCalledWith(
+      "settings.update",
+      expect.objectContaining({
+        settings: {
+          supervisor: {
+            evaluationTimeoutSec: 86401,
+          },
+        },
+      }),
+      undefined
+    );
+  });
+
+  it("normalizes an invalid persisted supervisor timeout before rendering", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "supervisor.evaluationTimeoutSec": 999999,
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+
+    const input = await screen.findByLabelText("Supervisor 超时（秒）");
+    expect(input).toHaveValue(600);
+  });
+
+  it("falls back when the persisted supervisor timeout is fractional", async () => {
+    let resolveSettingsGet: ((value: Record<string, unknown>) => void) | undefined;
+    const settingsGetPromise = new Promise<Record<string, unknown>>((resolve) => {
+      resolveSettingsGet = resolve;
+    });
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return await settingsGetPromise;
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+
+    const input = screen.getByLabelText("Supervisor 超时（秒）");
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith("settings.get", {}, undefined);
+    });
+    await act(async () => {
+      resolveSettingsGet?.({
+        "supervisor.evaluationTimeoutSec": 1.9,
+      });
+      await settingsGetPromise;
+    });
+    expect(input).toHaveValue(600);
+  });
+
+  it("rolls back supervisor timeout when saving fails", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "supervisor.evaluationTimeoutSec": 600,
+        };
+      }
+      if (op === "settings.update") {
+        throw new Error("save failed");
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+
+    const input = await screen.findByLabelText("Supervisor 超时（秒）");
+    fireEvent.change(input, { target: { value: "900" } });
+    fireEvent.blur(input);
+
+    await waitFor(() => {
+      expect(input).toHaveValue(600);
+    });
+    expect(screen.getByRole("alert")).toHaveTextContent("save failed");
+  });
+
+  it("shows a localized fallback when saving supervisor timeout fails without a message", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "supervisor.evaluationTimeoutSec": 600,
+        };
+      }
+      if (op === "settings.update") {
+        throw new CommandResultError({
+          code: "command_error",
+          message: "",
+        });
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+
+    const input = await screen.findByLabelText("Supervisor 超时（秒）");
+    fireEvent.change(input, { target: { value: "900" } });
+    fireEvent.blur(input);
+
+    await waitFor(() => {
+      expect(input).toHaveValue(600);
+    });
+    expect(screen.getByRole("alert")).toHaveTextContent("配置保存失败");
   });
 
   it("does not render the MCP Servers settings section", async () => {

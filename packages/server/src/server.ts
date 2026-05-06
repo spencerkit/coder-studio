@@ -33,6 +33,7 @@ import { AuthLoginBlockRepo } from "./storage/repositories/auth-login-block-repo
 import { AuthSessionRepo } from "./storage/repositories/auth-session-repo.js";
 import { ProviderConfigRepo } from "./storage/repositories/provider-config-repo.js";
 import { rowToSession, type SessionRow } from "./storage/repositories/session-repo.js";
+import { SettingsRepo } from "./storage/repositories/settings-repo.js";
 import { SupervisorCycleRepo } from "./storage/repositories/supervisor-cycle-repo.js";
 import { SupervisorRepo } from "./storage/repositories/supervisor-repo.js";
 import { SupervisorManager } from "./supervisor/manager.js";
@@ -119,6 +120,7 @@ export async function createServer(
 
   const sessionDb = createSessionDatabase(db);
   const providerConfigRepo = new ProviderConfigRepo(db);
+  const settingsRepo = new SettingsRepo(db);
   const sessionMgr = new SessionManager({
     terminalMgr,
     eventBus,
@@ -183,6 +185,7 @@ export async function createServer(
     sessionMgr,
     providerRegistry,
     providerConfigRepo,
+    settingsRepo,
     supervisorRepo,
     cycleRepo,
     logger: app.log,

@@ -45,6 +45,9 @@ describe("settings commands", () => {
               enabled: true,
               soundEnabled: false,
             },
+            supervisor: {
+              evaluationTimeoutSec: 600,
+            },
           },
         },
       },
@@ -61,6 +64,63 @@ describe("settings commands", () => {
     expect(
       db.prepare("SELECT value FROM user_settings WHERE key = ?").get("notifications.soundEnabled")
     ).toEqual({ value: "false" });
+    expect(
+      db
+        .prepare("SELECT value FROM user_settings WHERE key = ?")
+        .get("supervisor.evaluationTimeoutSec")
+    ).toEqual({ value: "600" });
+  });
+
+  it("settings.update rejects fractional supervisor timeout values", async () => {
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "settings-update-supervisor-timeout-fractional",
+        op: "settings.update",
+        args: {
+          settings: {
+            supervisor: {
+              evaluationTimeoutSec: 1.9,
+            },
+          },
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("validation_error");
+    expect(
+      db
+        .prepare("SELECT value FROM user_settings WHERE key = ?")
+        .get("supervisor.evaluationTimeoutSec")
+    ).toBeUndefined();
+  });
+
+  it("settings.update rejects supervisor timeout values above the supported maximum", async () => {
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "settings-update-supervisor-timeout-too-large",
+        op: "settings.update",
+        args: {
+          settings: {
+            supervisor: {
+              evaluationTimeoutSec: 86_401,
+            },
+          },
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("validation_error");
+    expect(
+      db
+        .prepare("SELECT value FROM user_settings WHERE key = ?")
+        .get("supervisor.evaluationTimeoutSec")
+    ).toBeUndefined();
   });
 
   it("settings.update persists provider startup command arguments per provider config", async () => {
@@ -191,6 +251,10 @@ describe("settings commands", () => {
       "notifications.enabled",
       "true"
     );
+    db.prepare("INSERT INTO user_settings (key, value) VALUES (?, ?)").run(
+      "supervisor.evaluationTimeoutSec",
+      "900"
+    );
 
     const result = await dispatch(
       {
@@ -206,6 +270,7 @@ describe("settings commands", () => {
     expect(result.data).toMatchObject({
       defaultProviderId: "codex",
       "notifications.enabled": true,
+      "supervisor.evaluationTimeoutSec": 900,
       externalConfigAudit: {
         codex: {
           configPath: "/tmp/config.toml",
@@ -214,5 +279,45 @@ describe("settings commands", () => {
         },
       },
     });
+  });
+
+  it("settings.get normalizes invalid persisted supervisor timeout values", async () => {
+    db.prepare("INSERT INTO user_settings (key, value) VALUES (?, ?)").run(
+      "supervisor.evaluationTimeoutSec",
+      "999999"
+    );
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "settings-get-supervisor-timeout-invalid",
+        op: "settings.get",
+        args: {},
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.data?.["supervisor.evaluationTimeoutSec"]).toBe(600);
+  });
+
+  it("settings.get falls back when the persisted supervisor timeout is fractional", async () => {
+    db.prepare("INSERT INTO user_settings (key, value) VALUES (?, ?)").run(
+      "supervisor.evaluationTimeoutSec",
+      "1.9"
+    );
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "settings-get-supervisor-timeout-fractional",
+        op: "settings.get",
+        args: {},
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.data?.["supervisor.evaluationTimeoutSec"]).toBe(600);
   });
 });

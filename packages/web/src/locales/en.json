@@ -400,6 +400,12 @@
     "permission_request": "Request Permission",
     "permission_unavailable": "Unavailable",
     "permission_limited_hint": "Even with notification permission allowed, this mobile browser may still fail to show system notifications reliably.",
+    "supervisor": {
+      "title": "Supervisor",
+      "hint": "Maximum time the supervisor evaluator can run before the server aborts it.",
+      "evaluation_timeout": "Supervisor Evaluation Timeout (seconds)",
+      "validation_error": "Enter a whole number between 1 and {max} seconds."
+    },
     "terminal_renderer": "Terminal Renderer",
     "terminal_renderer_hint": "Choose terminal rendering mode",
     "terminal_standard": "Standard",

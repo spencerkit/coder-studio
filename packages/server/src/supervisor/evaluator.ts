@@ -8,8 +8,10 @@ import {
 import type { FastifyBaseLogger } from "fastify";
 import { mergeProviderLaunchConfig } from "../provider-config.js";
 import type { ProviderConfigRepo } from "../storage/repositories/provider-config-repo.js";
+import type { SettingsRepo } from "../storage/repositories/settings-repo.js";
 import { escalateKillWithPolling } from "../terminal/pty-host.js";
 import type { SupervisorEvaluationContext } from "./context-builder.js";
+import { getSupervisorEvaluationTimeoutMs } from "./settings.js";
 
 const NOOP_LOGGER: FastifyBaseLogger = {
   child: () => NOOP_LOGGER,
@@ -43,6 +45,7 @@ export class SupervisorEvaluator {
     private readonly deps: {
       providerRegistry: ProviderDefinition[];
       providerConfigRepo: ProviderConfigRepo;
+      settingsRepo?: Pick<SettingsRepo, "get">;
       timeoutMs?: number;
       config?: SupervisorConfig;
       logger?: FastifyBaseLogger;
@@ -87,7 +90,11 @@ export class SupervisorEvaluator {
       };
     }
 
-    const stdout = await runCommand(command, this.deps.timeoutMs ?? 30_000, options);
+    const stdout = await runCommand(
+      command,
+      this.deps.timeoutMs ?? getSupervisorEvaluationTimeoutMs(this.deps.settingsRepo),
+      options
+    );
 
     let message: string;
     try {

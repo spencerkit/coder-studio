@@ -48,6 +48,21 @@ export interface SupervisorConfig {
   guidanceDedupeWindow: number;
 }
 
+export const DEFAULT_SUPERVISOR_EVALUATION_TIMEOUT_SEC = 600;
+export const MAX_SUPERVISOR_EVALUATION_TIMEOUT_SEC = 86_400;
+
+export function resolveSupervisorEvaluationTimeoutSec(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || !Number.isSafeInteger(value)) {
+    return DEFAULT_SUPERVISOR_EVALUATION_TIMEOUT_SEC;
+  }
+
+  if (value < 1 || value > MAX_SUPERVISOR_EVALUATION_TIMEOUT_SEC) {
+    return DEFAULT_SUPERVISOR_EVALUATION_TIMEOUT_SEC;
+  }
+
+  return value;
+}
+
 export const DEFAULT_SUPERVISOR_CONFIG: SupervisorConfig = {
   maxCyclesPerSession: 100,
   terminalLinesForEvaluation: 500,

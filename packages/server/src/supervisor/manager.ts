@@ -13,6 +13,7 @@ import type { FastifyBaseLogger } from "fastify";
 import type { EventBus } from "../bus/event-bus.js";
 import type { SessionManager } from "../session/manager.js";
 import type { ProviderConfigRepo } from "../storage/repositories/provider-config-repo.js";
+import type { SettingsRepo } from "../storage/repositories/settings-repo.js";
 import type { SupervisorCycleRepo } from "../storage/repositories/supervisor-cycle-repo.js";
 import type { SupervisorRepo } from "../storage/repositories/supervisor-repo.js";
 import type { TerminalManager } from "../terminal/manager.js";
@@ -64,6 +65,7 @@ export interface SupervisorManagerDeps {
   sessionMgr: SessionManager;
   providerRegistry: ProviderDefinition[];
   providerConfigRepo: ProviderConfigRepo;
+  settingsRepo: Pick<SettingsRepo, "get">;
   supervisorRepo: SupervisorRepo;
   cycleRepo: SupervisorCycleRepo;
   logger?: FastifyBaseLogger;
@@ -148,6 +150,7 @@ export class SupervisorManager {
     this.evaluator = new SupervisorEvaluator({
       providerRegistry: deps.providerRegistry,
       providerConfigRepo: deps.providerConfigRepo,
+      settingsRepo: deps.settingsRepo,
       config: this.config,
       logger: this.logger,
     });

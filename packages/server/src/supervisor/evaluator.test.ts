@@ -1,12 +1,19 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { ProviderDefinition, Supervisor } from "@coder-studio/core";
+import {
+  DEFAULT_SUPERVISOR_EVALUATION_TIMEOUT_SEC,
+  type ProviderDefinition,
+  type Supervisor,
+} from "@coder-studio/core";
 import type { FastifyBaseLogger } from "fastify";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { closeDatabase, openDatabase } from "../storage/db.js";
 import type { ProviderConfigRepo } from "../storage/repositories/provider-config-repo.js";
+import { SettingsRepo } from "../storage/repositories/settings-repo.js";
 import type { SupervisorEvaluationContext } from "./context-builder.js";
 import { SupervisorEvaluator } from "./evaluator.js";
+import { getSupervisorEvaluationTimeoutMs } from "./settings.js";
 
 function nodeEchoCommand(stdout: string) {
   return {
@@ -188,6 +195,90 @@ describe("SupervisorEvaluator", () => {
     );
 
     expect(result.message).toBe("proceed with review");
+  });
+
+  it("uses the shared 600-second default timeout when the setting is missing", () => {
+    expect(getSupervisorEvaluationTimeoutMs()).toBe(
+      DEFAULT_SUPERVISOR_EVALUATION_TIMEOUT_SEC * 1000
+    );
+    expect(
+      getSupervisorEvaluationTimeoutMs({
+        get: vi.fn(() => undefined),
+      } as never)
+    ).toBe(DEFAULT_SUPERVISOR_EVALUATION_TIMEOUT_SEC * 1000);
+  });
+
+  it("uses the stored supervisor timeout setting when available", () => {
+    expect(
+      getSupervisorEvaluationTimeoutMs({
+        get: vi.fn(() => 900),
+      } as never)
+    ).toBe(900_000);
+  });
+
+  it("falls back to the default timeout when the stored setting exceeds the supported maximum", () => {
+    expect(
+      getSupervisorEvaluationTimeoutMs({
+        get: vi.fn(() => 999_999_999),
+      } as never)
+    ).toBe(DEFAULT_SUPERVISOR_EVALUATION_TIMEOUT_SEC * 1000);
+  });
+
+  it("falls back to the default timeout when the stored setting is fractional", () => {
+    expect(
+      getSupervisorEvaluationTimeoutMs({
+        get: vi.fn(() => 1.9),
+      } as never)
+    ).toBe(DEFAULT_SUPERVISOR_EVALUATION_TIMEOUT_SEC * 1000);
+  });
+
+  it("falls back to the default timeout when reading the stored setting throws", () => {
+    expect(
+      getSupervisorEvaluationTimeoutMs({
+        get: vi.fn(() => {
+          throw new SyntaxError("Unexpected token");
+        }),
+      } as never)
+    ).toBe(DEFAULT_SUPERVISOR_EVALUATION_TIMEOUT_SEC * 1000);
+  });
+
+  it("reads the evaluator timeout from settingsRepo when timeoutMs is not provided", async () => {
+    const settingsRepo = {
+      get: vi.fn(() => 900),
+    };
+    const evaluator = new SupervisorEvaluator({
+      providerRegistry: [createProvider("codex", "next step: run tests")],
+      providerConfigRepo: createProviderConfigRepo(),
+      settingsRepo: settingsRepo as never,
+    });
+
+    const result = await evaluator.evaluate(makeSupervisor("codex"), makeContext());
+
+    expect(result.message).toBe("next step: run tests");
+    expect(settingsRepo.get).toHaveBeenCalledWith("supervisor.evaluationTimeoutSec");
+  });
+
+  it("falls back to the default timeout when the stored row is malformed JSON", async () => {
+    const db = openDatabase(":memory:");
+
+    try {
+      db.prepare("INSERT INTO user_settings (key, value) VALUES (?, ?)").run(
+        "supervisor.evaluationTimeoutSec",
+        "not-json"
+      );
+
+      const evaluator = new SupervisorEvaluator({
+        providerRegistry: [createProvider("codex", "next step: run tests")],
+        providerConfigRepo: createProviderConfigRepo(),
+        settingsRepo: new SettingsRepo(db),
+      });
+
+      const result = await evaluator.evaluate(makeSupervisor("codex"), makeContext());
+
+      expect(result.message).toBe("next step: run tests");
+    } finally {
+      closeDatabase(db);
+    }
   });
 
   it("builds a natural language prompt matching the develop supervisor pattern", async () => {

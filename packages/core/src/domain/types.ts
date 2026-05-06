@@ -138,6 +138,9 @@ export interface Settings {
     enabled: boolean;
     soundEnabled: boolean;
   };
+  supervisor: {
+    evaluationTimeoutSec: number;
+  };
   appearance: {
     theme: "dark";
     terminalRenderer: "standard" | "compatibility";

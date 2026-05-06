@@ -2,6 +2,11 @@
  * Settings Commands
  */
 
+import {
+  DEFAULT_SUPERVISOR_EVALUATION_TIMEOUT_SEC,
+  MAX_SUPERVISOR_EVALUATION_TIMEOUT_SEC,
+  resolveSupervisorEvaluationTimeoutSec,
+} from "@coder-studio/core";
 import { z } from "zod";
 import { type ConfigType, readConfigFile, writeConfigFile } from "../config/config-io.js";
 import {
@@ -12,6 +17,7 @@ import {
   sanitizeProviderLaunchConfig,
 } from "../provider-config.js";
 import { ProviderConfigRepo } from "../storage/repositories/provider-config-repo.js";
+import { SUPERVISOR_EVALUATION_TIMEOUT_SETTING_KEY } from "../supervisor/settings.js";
 import { registerCommand } from "../ws/dispatch.js";
 
 const EMPTY_CODEX_AUDIT = {
@@ -33,6 +39,17 @@ const SettingsSchema = z.object({
       // no longer surfaced in the UI. The web client now picks the channel
       // automatically based on workspace focus + page visibility.
       onlyWhenBackgrounded: z.boolean().optional(),
+    })
+    .optional(),
+  supervisor: z
+    .object({
+      evaluationTimeoutSec: z
+        .number()
+        .int()
+        .min(1)
+        .max(MAX_SUPERVISOR_EVALUATION_TIMEOUT_SEC)
+        .default(DEFAULT_SUPERVISOR_EVALUATION_TIMEOUT_SEC)
+        .optional(),
     })
     .optional(),
   appearance: z
@@ -86,6 +103,12 @@ registerCommand("settings.get", z.object({}), async (_args, ctx) => {
   } catch {
     // Never let a broken audit take down settings fetch.
     settings.externalConfigAudit = null;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(settings, SUPERVISOR_EVALUATION_TIMEOUT_SETTING_KEY)) {
+    settings[SUPERVISOR_EVALUATION_TIMEOUT_SETTING_KEY] = resolveSupervisorEvaluationTimeoutSec(
+      settings[SUPERVISOR_EVALUATION_TIMEOUT_SETTING_KEY]
+    );
   }
 
   return settings;

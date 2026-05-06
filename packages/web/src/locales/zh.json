@@ -400,6 +400,12 @@
     "permission_request": "请求授权",
     "permission_unavailable": "不可用",
     "permission_limited_hint": "当前移动端浏览器内即使允许通知权限，也可能无法稳定展示系统通知。",
+    "supervisor": {
+      "title": "Supervisor",
+      "hint": "限制 Supervisor 评估器的最长运行时间，超过后服务端会主动中止本轮评估。",
+      "evaluation_timeout": "Supervisor 超时（秒）",
+      "validation_error": "请输入 1 到 {max} 秒之间的整数。"
+    },
     "terminal_renderer": "终端渲染器",
     "terminal_renderer_hint": "选择终端渲染模式",
     "terminal_standard": "标准",

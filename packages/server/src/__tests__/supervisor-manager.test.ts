@@ -137,6 +137,9 @@ function createManagerDeps() {
       providerId === "codex" ? { additionalArgs: [], envVars: {} } : undefined
     ),
   };
+  const settingsRepo = {
+    get: vi.fn(() => undefined),
+  };
 
   const supervisorRepo = {
     create: vi.fn((value: NewSupervisor) => {
@@ -222,6 +225,7 @@ function createManagerDeps() {
       }),
     ],
     providerConfigRepo,
+    settingsRepo,
     logger,
     supervisorRepo,
     cycleRepo,

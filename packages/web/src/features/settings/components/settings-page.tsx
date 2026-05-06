@@ -4,6 +4,11 @@
  * Configuration page for provider, appearance, and notifications.
  */
 
+import {
+  DEFAULT_SUPERVISOR_EVALUATION_TIMEOUT_SEC,
+  MAX_SUPERVISOR_EVALUATION_TIMEOUT_SEC,
+  resolveSupervisorEvaluationTimeoutSec,
+} from "@coder-studio/core";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { Check, ChevronRight } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -131,6 +136,9 @@ export function SettingsPage() {
   ]);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [supervisorEvaluationTimeoutSec, setSupervisorEvaluationTimeoutSec] = useState(
+    DEFAULT_SUPERVISOR_EVALUATION_TIMEOUT_SEC
+  );
   const [terminalRenderer, setTerminalRenderer] = useState<"standard" | "compatibility">(
     "standard"
   );
@@ -184,6 +192,9 @@ export function SettingsPage() {
       if (typeof settings["notifications.soundEnabled"] === "boolean") {
         setSoundEnabled(settings["notifications.soundEnabled"]);
       }
+      setSupervisorEvaluationTimeoutSec(
+        resolveSupervisorEvaluationTimeoutSec(settings["supervisor.evaluationTimeoutSec"])
+      );
       setNotificationPreferences({
         enabled:
           typeof settings["notifications.enabled"] === "boolean"
@@ -255,6 +266,8 @@ export function SettingsPage() {
             setNotificationsEnabled={setNotificationsEnabled}
             soundEnabled={soundEnabled}
             setSoundEnabled={setSoundEnabled}
+            supervisorEvaluationTimeoutSec={supervisorEvaluationTimeoutSec}
+            setSupervisorEvaluationTimeoutSec={setSupervisorEvaluationTimeoutSec}
           />
         );
       case "appearance":
@@ -401,6 +414,26 @@ interface GeneralSettingsProps {
   setNotificationsEnabled: (value: boolean) => void;
   soundEnabled: boolean;
   setSoundEnabled: (value: boolean) => void;
+  supervisorEvaluationTimeoutSec: number;
+  setSupervisorEvaluationTimeoutSec: (value: number) => void;
+}
+
+function parseSupervisorTimeoutInput(value: string): number | null {
+  const trimmed = value.trim();
+  if (!/^\d+$/.test(trimmed)) {
+    return null;
+  }
+
+  const parsed = Number(trimmed);
+  if (
+    !Number.isSafeInteger(parsed) ||
+    parsed < 1 ||
+    parsed > MAX_SUPERVISOR_EVALUATION_TIMEOUT_SEC
+  ) {
+    return null;
+  }
+
+  return parsed;
 }
 
 function GeneralSettings({
@@ -408,6 +441,8 @@ function GeneralSettings({
   setNotificationsEnabled,
   soundEnabled,
   setSoundEnabled,
+  supervisorEvaluationTimeoutSec,
+  setSupervisorEvaluationTimeoutSec,
 }: GeneralSettingsProps) {
   const t = useTranslation();
   const dispatch = useAtomValue(dispatchCommandAtom);
@@ -416,9 +451,13 @@ function GeneralSettings({
     useState<NotificationPermissionState>("unavailable");
   const [notificationCapability, setNotificationCapability] =
     useState<NotificationCapabilityStatus>("unsupported");
+  const [supervisorTimeoutDraft, setSupervisorTimeoutDraft] = useState(
+    String(supervisorEvaluationTimeoutSec)
+  );
+  const [supervisorTimeoutError, setSupervisorTimeoutError] = useState<string | null>(null);
 
   const saveSettings = async (settings: Record<string, unknown>) => {
-    await dispatch("settings.update", { settings });
+    return await dispatch("settings.update", { settings });
   };
 
   const syncNotificationPreferences = (next: { enabled: boolean; soundEnabled: boolean }) => {
@@ -436,11 +475,54 @@ function GeneralSettings({
     setNotificationPermission("unavailable");
   }, []);
 
+  useEffect(() => {
+    setSupervisorTimeoutDraft(String(supervisorEvaluationTimeoutSec));
+  }, [supervisorEvaluationTimeoutSec]);
+
+  useEffect(() => {
+    setSupervisorTimeoutError(null);
+  }, [supervisorEvaluationTimeoutSec]);
+
   const requestNotificationPermission = async () => {
     if ("Notification" in window) {
       const permission = await Notification.requestPermission();
       setNotificationPermission(permission);
     }
+  };
+
+  const commitSupervisorTimeout = async () => {
+    const parsed = parseSupervisorTimeoutInput(supervisorTimeoutDraft);
+    if (parsed === null) {
+      setSupervisorTimeoutDraft(String(supervisorEvaluationTimeoutSec));
+      setSupervisorTimeoutError(
+        t("settings.supervisor.validation_error", {
+          max: MAX_SUPERVISOR_EVALUATION_TIMEOUT_SEC,
+        })
+      );
+      return;
+    }
+
+    if (parsed === supervisorEvaluationTimeoutSec) {
+      setSupervisorTimeoutDraft(String(parsed));
+      setSupervisorTimeoutError(null);
+      return;
+    }
+
+    const result = await saveSettings({
+      supervisor: {
+        evaluationTimeoutSec: parsed,
+      },
+    });
+
+    if (!result.ok) {
+      setSupervisorTimeoutDraft(String(supervisorEvaluationTimeoutSec));
+      setSupervisorTimeoutError(result.error?.message || t("settings.config_files.save_failed"));
+      return;
+    }
+
+    setSupervisorEvaluationTimeoutSec(parsed);
+    setSupervisorTimeoutDraft(String(parsed));
+    setSupervisorTimeoutError(null);
   };
 
   return (
@@ -551,6 +633,48 @@ function GeneralSettings({
               </>
             )}
           </span>
+        </div>
+      </div>
+
+      <div className="settings-group">
+        <h3 className="settings-group-title">{t("settings.supervisor.title")}</h3>
+        <p className="settings-group-desc">{t("settings.supervisor.hint")}</p>
+
+        <div className="settings-config-field">
+          <label className="settings-config-label" htmlFor="supervisor-evaluation-timeout">
+            {t("settings.supervisor.evaluation_timeout")}
+          </label>
+          <input
+            id="supervisor-evaluation-timeout"
+            className="input"
+            type="number"
+            min={1}
+            max={MAX_SUPERVISOR_EVALUATION_TIMEOUT_SEC}
+            step={1}
+            inputMode="numeric"
+            aria-invalid={supervisorTimeoutError ? "true" : "false"}
+            value={supervisorTimeoutDraft}
+            onChange={(event) => {
+              setSupervisorTimeoutDraft(event.target.value);
+              if (supervisorTimeoutError) {
+                setSupervisorTimeoutError(null);
+              }
+            }}
+            onBlur={() => {
+              void commitSupervisorTimeout();
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                void commitSupervisorTimeout();
+              }
+            }}
+          />
+          {supervisorTimeoutError ? (
+            <span className="form-error" role="alert">
+              {supervisorTimeoutError}
+            </span>
+          ) : null}
         </div>
       </div>
     </div>
