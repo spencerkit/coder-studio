@@ -4,8 +4,8 @@ import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
   assertCliPublishArtifacts,
-  buildNpmPackDryRunArgs,
-  buildNpmPublishArgs,
+  buildPackDryRunArgs,
+  buildPublishArgs,
   parsePublishCliArgs,
   runPublishCli,
 } from "./publish-cli.js";
@@ -51,7 +51,7 @@ describe("publish-cli", () => {
   });
 
   it("builds npm pack and publish command arguments", () => {
-    expect(buildNpmPackDryRunArgs("https://registry.example.test")).toEqual([
+    expect(buildPackDryRunArgs("https://registry.example.test")).toEqual([
       "pack",
       "--dry-run",
       "--json",
@@ -60,7 +60,7 @@ describe("publish-cli", () => {
     ]);
 
     expect(
-      buildNpmPublishArgs({
+      buildPublishArgs({
         access: "public",
         allowDirty: false,
         build: true,
@@ -152,6 +152,42 @@ describe("publish-cli", () => {
     await expect(assertCliPublishArtifacts(cliDir)).rejects.toThrow("@xterm/addon-serialize");
   });
 
+  it("rejects internal workspace packages in the publishable CLI package manifest", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "coder-studio-publish-"));
+    const cliDir = join(dir, "packages", "cli");
+
+    await mkdir(join(cliDir, "dist", "esm", "migrations"), { recursive: true });
+    await mkdir(join(cliDir, "dist", "web"), { recursive: true });
+    await writeFile(join(cliDir, "dist", "bin.js"), "#!/usr/bin/env node\n");
+    await writeFile(join(cliDir, "dist", "esm", "bin.mjs"), "export {};\n");
+    await writeFile(join(cliDir, "dist", "esm", "index.mjs"), "export {};\n");
+    await writeFile(join(cliDir, "dist", "esm", "server-runner.mjs"), "export {};\n");
+    await writeFile(join(cliDir, "dist", "esm", "migrations", "001_init.sql"), "-- init\n");
+    await writeFile(join(cliDir, "dist", "web", "index.html"), "<!doctype html>\n");
+    await writeFile(
+      join(cliDir, "package.json"),
+      JSON.stringify({
+        name: "@spencer-kit/coder-studio",
+        version: "1.2.3",
+        bin: { "coder-studio": "./dist/bin.js" },
+        files: ["dist"],
+        exports: {
+          ".": {
+            import: "./dist/esm/index.mjs",
+          },
+        },
+        dependencies: {
+          "@coder-studio/core": "1.2.3",
+          "@xterm/addon-serialize": "^0.14.0",
+        },
+      })
+    );
+
+    await expect(assertCliPublishArtifacts(cliDir)).rejects.toThrow(
+      "@coder-studio/core dependency must not be published with the CLI bundle"
+    );
+  });
+
   it("rejects a real publish from a dirty worktree unless explicitly allowed", async () => {
     const exec = vi.fn(async () => ({ stdout: " M package.json\n" }));
 
@@ -175,6 +211,6 @@ describe("publish-cli", () => {
       cwd: "/repo",
       stdio: "pipe",
     });
-    expect(exec).not.toHaveBeenCalledWith("npm", expect.any(Array), expect.any(Object));
+    expect(exec).not.toHaveBeenCalledWith("pnpm", expect.any(Array), expect.any(Object));
   });
 });

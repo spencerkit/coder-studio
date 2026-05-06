@@ -2,7 +2,7 @@
  * Safe local publish flow for the CLI package.
  *
  * Default mode is a dry-run: validate artifacts, build, and run
- * `npm pack --dry-run`. Real publication requires `--publish`.
+ * `pnpm pack --dry-run`. Real publication requires `--publish`.
  */
 
 import { spawn } from "node:child_process";
@@ -37,6 +37,8 @@ export interface ExecResult {
 }
 
 export type ExecFn = (command: string, args: string[], options: ExecOptions) => Promise<ExecResult>;
+
+const INTERNAL_PACKAGE_PREFIX = "@coder-studio/";
 
 export interface RunPublishCliInput {
   cliDir?: string;
@@ -98,7 +100,7 @@ export function parsePublishCliArgs(argv: string[]): PublishCliOptions {
   return options;
 }
 
-export function buildNpmPackDryRunArgs(registry?: string): string[] {
+export function buildPackDryRunArgs(registry?: string): string[] {
   const args = ["pack", "--dry-run", "--json"];
   if (registry) {
     args.push("--registry", registry);
@@ -106,7 +108,7 @@ export function buildNpmPackDryRunArgs(registry?: string): string[] {
   return args;
 }
 
-export function buildNpmPublishArgs(options: PublishCliOptions): string[] {
+export function buildPublishArgs(options: PublishCliOptions): string[] {
   const args = ["publish", "--access", options.access, "--tag", options.tag];
   if (options.registry) {
     args.push("--registry", options.registry);
@@ -145,6 +147,7 @@ export async function assertCliPublishArtifacts(
   if (!hasNestedRecordValue(pkg.exports, ".", "import", "./dist/esm/index.mjs")) {
     throw new Error('CLI package.json exports must point "." import to "./dist/esm/index.mjs"');
   }
+  assertPublishDependenciesResolvable(pkg.dependencies, packageJsonPath);
 
   await assertFile(resolve(cliDir, "dist/bin.js"));
   await assertFile(resolve(cliDir, "dist/esm/bin.mjs"));
@@ -189,12 +192,12 @@ export async function runPublishCli({
   const meta = await assertCliPublishArtifacts(cliDir);
   success(`Validated ${meta.name}@${meta.version} publish artifacts.`);
 
-  info("Running npm pack dry-run...");
-  await exec("npm", buildNpmPackDryRunArgs(options.registry), {
+  info("Running pnpm pack dry-run...");
+  await exec("pnpm", buildPackDryRunArgs(options.registry), {
     cwd: cliDir,
     stdio: "inherit",
   });
-  success("npm pack dry-run completed.");
+  success("pnpm pack dry-run completed.");
 
   if (!options.publish) {
     success("Dry-run complete. Re-run with --publish to publish to npm.");
@@ -202,7 +205,7 @@ export async function runPublishCli({
   }
 
   info("Publishing CLI package to npm...");
-  await exec("npm", buildNpmPublishArgs(options), {
+  await exec("pnpm", buildPublishArgs(options), {
     cwd: cliDir,
     stdio: "inherit",
   });
@@ -323,6 +326,24 @@ function assertBundleRuntimeDependenciesDeclared(
   }
 }
 
+function assertPublishDependenciesResolvable(dependencies: unknown, packageJsonPath: string): void {
+  if (typeof dependencies !== "object" || dependencies === null) {
+    throw new Error(`CLI package.json is missing dependencies in ${packageJsonPath}`);
+  }
+
+  for (const [name, version] of Object.entries(dependencies)) {
+    if (!name.startsWith(INTERNAL_PACKAGE_PREFIX)) {
+      continue;
+    }
+    if (typeof version !== "string") {
+      throw new Error(`Expected ${name} dependency version to be a string in ${packageJsonPath}`);
+    }
+    throw new Error(
+      `${name} dependency must not be published with the CLI bundle (${packageJsonPath})`
+    );
+  }
+}
+
 async function collectBareImports(dir: string, entries: string[]): Promise<string[]> {
   const specifiers = new Set<string>();
 
@@ -400,7 +421,7 @@ Default mode is safe and does not publish:
   pnpm publish:cli
 
 Options:
-  --publish              Run npm publish after validation and pack dry-run
+  --publish              Run pnpm publish after validation and pack dry-run
   --dry-run              Force dry-run mode (default)
   --no-build             Skip pnpm build; validate existing dist instead
   --allow-dirty          Allow real publish from a dirty git worktree

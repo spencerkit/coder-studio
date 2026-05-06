@@ -126,6 +126,7 @@ pnpm dev
 ### Common Commands
 
 ```bash
+pnpm changeset
 pnpm acceptance:phase1
 pnpm build:cli
 pnpm lint
@@ -133,6 +134,14 @@ pnpm lint:fix
 pnpm format
 pnpm check
 ```
+
+### Release Flow
+
+- Release-worthy PRs add a changeset for `@spencer-kit/coder-studio`
+- Ordinary PRs can merge without a changeset
+- After release-worthy changes land on `main`, GitHub Actions auto-creates or updates a release PR
+- Merging the release PR writes the CLI version bump and changelog
+- Publishing is manual through the `Publish CLI` workflow, which publishes to npm, creates the git tag, and opens the GitHub release
 
 ### Tech Stack
 

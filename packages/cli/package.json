@@ -27,8 +27,6 @@
     "@fastify/websocket": "^11.2.0",
     "@xterm/addon-serialize": "^0.14.0",
     "@xterm/headless": "^6.0.0",
-    "@coder-studio/core": "workspace:*",
-    "@coder-studio/server": "workspace:*",
     "chokidar": "^5.0.0",
     "fastify": "^5.8.5",
     "ignore": "^7.0.5",
@@ -40,6 +38,8 @@
     "zod": "^4.4.2"
   },
   "devDependencies": {
+    "@coder-studio/core": "workspace:*",
+    "@coder-studio/server": "workspace:*",
     "@types/node": "^25.6.0",
     "@types/ws": "^8.18.1",
     "tsx": "^4.21.0",

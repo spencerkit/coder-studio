@@ -1,6 +1,6 @@
 /**
  * Build script for CLI package
- * Creates ESM bundle with esbuild and assembles web assets
+ * Creates the publishable CLI bundle and copies web assets
  */
 
 import * as esbuild from "esbuild";
@@ -15,10 +15,8 @@ import {
   ensureDir,
   error,
   exists,
-  HOOK_BRIDGE_SRC,
   info,
   log,
-  RUNTIME_HOOKS_DIR,
   SERVER_DIR,
   step,
   success,
@@ -93,16 +91,6 @@ import('./esm/bin.mjs').catch((err) => {
     success(`Web assets: ${CLI_WEB_DIR}`);
   } else {
     throw new Error("Web dist not found. Run build:web first (pnpm build:web)");
-  }
-
-  // Copy hook-bridge scripts
-  info("Copying hook-bridge scripts...");
-  if (await exists(HOOK_BRIDGE_SRC)) {
-    await ensureDir(RUNTIME_HOOKS_DIR);
-    await copyDir(HOOK_BRIDGE_SRC, RUNTIME_HOOKS_DIR);
-    success(`Hook scripts: ${RUNTIME_HOOKS_DIR}`);
-  } else {
-    error("Warning: hook-bridge source not found, skipping");
   }
 
   log("\n✓ CLI build complete.");
