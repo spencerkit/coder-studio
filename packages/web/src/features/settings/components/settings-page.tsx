@@ -640,36 +640,38 @@ function GeneralSettings({
         <h3 className="settings-group-title">{t("settings.supervisor.title")}</h3>
         <p className="settings-group-desc">{t("settings.supervisor.hint")}</p>
 
-        <div className="settings-config-field">
+        <div className="settings-config-field settings-config-field--inline">
           <label className="settings-config-label" htmlFor="supervisor-evaluation-timeout">
             {t("settings.supervisor.evaluation_timeout")}
           </label>
-          <input
-            id="supervisor-evaluation-timeout"
-            className="input"
-            type="number"
-            min={1}
-            max={MAX_SUPERVISOR_EVALUATION_TIMEOUT_SEC}
-            step={1}
-            inputMode="numeric"
-            aria-invalid={supervisorTimeoutError ? "true" : "false"}
-            value={supervisorTimeoutDraft}
-            onChange={(event) => {
-              setSupervisorTimeoutDraft(event.target.value);
-              if (supervisorTimeoutError) {
-                setSupervisorTimeoutError(null);
-              }
-            }}
-            onBlur={() => {
-              void commitSupervisorTimeout();
-            }}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
+          <div className="settings-config-control">
+            <input
+              id="supervisor-evaluation-timeout"
+              className="input settings-input-compact"
+              type="number"
+              min={1}
+              max={MAX_SUPERVISOR_EVALUATION_TIMEOUT_SEC}
+              step={1}
+              inputMode="numeric"
+              aria-invalid={supervisorTimeoutError ? "true" : "false"}
+              value={supervisorTimeoutDraft}
+              onChange={(event) => {
+                setSupervisorTimeoutDraft(event.target.value);
+                if (supervisorTimeoutError) {
+                  setSupervisorTimeoutError(null);
+                }
+              }}
+              onBlur={() => {
                 void commitSupervisorTimeout();
-              }
-            }}
-          />
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  void commitSupervisorTimeout();
+                }
+              }}
+            />
+          </div>
           {supervisorTimeoutError ? (
             <span className="form-error" role="alert">
               {supervisorTimeoutError}

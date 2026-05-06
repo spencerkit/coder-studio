@@ -954,11 +954,33 @@
   width: 100%;
 }
 
+.settings-config-field--inline {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
 .settings-config-label {
   display: block;
   font-size: var(--text-sm);
   color: var(--text-secondary);
   margin-bottom: var(--sp-2);
+}
+
+.settings-config-field--inline .settings-config-label {
+  margin-bottom: 0;
+}
+
+.settings-config-control {
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.settings-input-compact {
+  width: min(160px, 100%);
+  text-align: right;
 }
 
 .settings-provider-args-input {

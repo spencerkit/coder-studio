@@ -289,6 +289,27 @@ describe("SettingsPage", () => {
     });
   });
 
+  it("renders the supervisor timeout control as an inline settings row", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "supervisor.evaluationTimeoutSec": 600,
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+
+    const input = await screen.findByLabelText("Supervisor 超时（秒）");
+    const field = input.closest(".settings-config-field");
+    const control = input.closest(".settings-config-control");
+
+    expect(field).toHaveClass("settings-config-field--inline");
+    expect(control).not.toBeNull();
+  });
+
   it("does not save supervisor timeout for non-integer numeric strings", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "settings.get") {

@@ -293,4 +293,18 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(ctrlLocked).toContain("var(--accent-blue)");
     expect(shiftArmed).toContain("var(--accent-blue)");
   });
+
+  it("keeps the supervisor timeout setting aligned as a label-left control-right row", () => {
+    const inlineField = getLastRuleBlock(".settings-config-field--inline");
+    const inlineLabel = getLastRuleBlock(".settings-config-field--inline .settings-config-label");
+    const control = getLastRuleBlock(".settings-config-control");
+    const compactInput = getLastRuleBlock(".settings-input-compact");
+
+    expect(inlineField).toContain("display: grid");
+    expect(inlineField).toContain("grid-template-columns: minmax(0, 1fr) auto");
+    expect(inlineField).toContain("align-items: center");
+    expect(inlineLabel).toContain("margin-bottom: 0");
+    expect(control).toContain("justify-content: flex-end");
+    expect(compactInput).toContain("text-align: right");
+  });
 });
