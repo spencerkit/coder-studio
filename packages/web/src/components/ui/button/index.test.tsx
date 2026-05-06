@@ -42,6 +42,21 @@ describe("Button", () => {
     expect(screen.getByRole("button", { name: "Large" })).toBeInTheDocument();
   });
 
+  it("preserves legacy compatibility classes for migrated callers", () => {
+    render(
+      <Button variant="primary" size="lg" className="auth-submit">
+        Submit
+      </Button>
+    );
+
+    expect(screen.getByRole("button", { name: "Submit" })).toHaveClass(
+      "btn",
+      "btn-primary",
+      "btn-lg",
+      "auth-submit"
+    );
+  });
+
   it("disables click handlers while loading", async () => {
     const user = userEvent.setup();
     const onClick = vi.fn();

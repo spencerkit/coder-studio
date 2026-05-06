@@ -40,6 +40,19 @@ const sizeClassMap: Record<ButtonSize, string | undefined> = {
   lg: styles.lg,
 };
 
+const legacyVariantClassMap: Record<ButtonVariant, string> = {
+  primary: "btn-primary",
+  secondary: "btn-secondary",
+  ghost: "btn-ghost",
+  danger: "btn-danger",
+};
+
+const legacySizeClassMap: Record<ButtonSize, string | undefined> = {
+  sm: "btn-sm",
+  md: undefined,
+  lg: "btn-lg",
+};
+
 const ButtonContent = ({
   children,
   leadingIcon,
@@ -82,6 +95,9 @@ export const Button = (props: ButtonProps) => {
     styles.btn,
     variantClassMap[variant],
     sizeClassMap[size],
+    "btn",
+    legacyVariantClassMap[variant],
+    legacySizeClassMap[size],
     loading ? styles.loading : undefined,
     className
   );
