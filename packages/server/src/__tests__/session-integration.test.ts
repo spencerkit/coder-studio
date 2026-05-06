@@ -458,7 +458,7 @@ describe("Session Integration", () => {
     it("passes the provider-built argv and session id env through to PTY spawn", async () => {
       db.prepare("INSERT INTO provider_configs (provider_id, config) VALUES (?, ?)").run(
         "claude",
-        '{"additionalArgs":["--verbose"]}'
+        '{"additionalArgs":["--verbose"],"envVars":{"TASK3_PROVIDER_ENV":"task3-value"}}'
       );
 
       const openResult = await dispatch(
@@ -497,6 +497,9 @@ describe("Session Integration", () => {
         {
           ...claudeProvider!.defaultConfig,
           additionalArgs: ["--verbose"],
+          envVars: {
+            TASK3_PROVIDER_ENV: "task3-value",
+          },
         },
         {
           workspacePath: testDir,
@@ -509,6 +512,7 @@ describe("Session Integration", () => {
       expect((lastSpawn?.options as { env?: Record<string, string> } | undefined)?.env).toEqual(
         expect.objectContaining({
           CODER_STUDIO_SESSION_ID: sessionId,
+          TASK3_PROVIDER_ENV: "task3-value",
         })
       );
     });

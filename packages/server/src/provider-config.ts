@@ -8,6 +8,7 @@ const supportedProviderIds = new Set<string>(SUPPORTED_PROVIDER_IDS);
 export const ProviderLaunchConfigInputSchema = z
   .object({
     additionalArgs: z.array(z.string()).optional(),
+    envVars: z.record(z.string(), z.string()).optional(),
   })
   .strict();
 
@@ -20,6 +21,7 @@ export const ProviderSettingsSchema = z
 
 const ProviderLaunchConfigSchema = z.object({
   additionalArgs: z.array(z.string()).default([]),
+  envVars: z.record(z.string(), z.string()).optional(),
 });
 
 export function isSupportedProviderId(
@@ -28,7 +30,10 @@ export function isSupportedProviderId(
   return supportedProviderIds.has(providerId);
 }
 
-export function sanitizeProviderLaunchConfig(config: unknown): { additionalArgs: string[] } {
+export function sanitizeProviderLaunchConfig(config: unknown): {
+  additionalArgs: string[];
+  envVars?: Record<string, string>;
+} {
   const parsed = ProviderLaunchConfigSchema.safeParse(config);
   return parsed.success ? parsed.data : { additionalArgs: [] };
 }
