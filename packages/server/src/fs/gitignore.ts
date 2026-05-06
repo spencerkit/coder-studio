@@ -25,6 +25,10 @@ function isDefaultTreeIgnored(name: string): boolean {
   return name.startsWith(".") || name === "node_modules" || name === ".git";
 }
 
+function isAlwaysTreeIgnored(name: string): boolean {
+  return name === "node_modules" || name === ".git";
+}
+
 function isIgnoredByGitignore(ig: ReturnType<typeof ignore>, path: string): boolean {
   if (!path || path.startsWith("..")) {
     return false;
@@ -55,7 +59,7 @@ export function createGitignoreFilter(
   const ig = ignore().add(gitignoreContent);
 
   return (name: string) => {
-    if (isDefaultTreeIgnored(name)) {
+    if (isAlwaysTreeIgnored(name)) {
       return false;
     }
 

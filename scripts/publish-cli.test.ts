@@ -99,11 +99,19 @@ describe("publish-cli", () => {
       JSON.stringify({
         name: "@spencer-kit/coder-studio",
         version: "1.2.3",
-        bin: { "coder-studio": "./dist/bin.js" },
+        bin: { "coder-studio": "./src/bin.ts" },
         files: ["dist"],
+        publishConfig: {
+          bin: { "coder-studio": "./dist/bin.js" },
+          exports: {
+            ".": {
+              import: "./dist/esm/index.mjs",
+            },
+          },
+        },
         exports: {
           ".": {
-            import: "./dist/esm/index.mjs",
+            import: "./src/index.ts",
           },
         },
         dependencies: {
@@ -138,11 +146,19 @@ describe("publish-cli", () => {
       JSON.stringify({
         name: "@spencer-kit/coder-studio",
         version: "1.2.3",
-        bin: { "coder-studio": "./dist/bin.js" },
+        bin: { "coder-studio": "./src/bin.ts" },
         files: ["dist"],
+        publishConfig: {
+          bin: { "coder-studio": "./dist/bin.js" },
+          exports: {
+            ".": {
+              import: "./dist/esm/index.mjs",
+            },
+          },
+        },
         exports: {
           ".": {
-            import: "./dist/esm/index.mjs",
+            import: "./src/index.ts",
           },
         },
         dependencies: {},
@@ -169,11 +185,19 @@ describe("publish-cli", () => {
       JSON.stringify({
         name: "@spencer-kit/coder-studio",
         version: "1.2.3",
-        bin: { "coder-studio": "./dist/bin.js" },
+        bin: { "coder-studio": "./src/bin.ts" },
         files: ["dist"],
+        publishConfig: {
+          bin: { "coder-studio": "./dist/bin.js" },
+          exports: {
+            ".": {
+              import: "./dist/esm/index.mjs",
+            },
+          },
+        },
         exports: {
           ".": {
-            import: "./dist/esm/index.mjs",
+            import: "./src/index.ts",
           },
         },
         dependencies: {

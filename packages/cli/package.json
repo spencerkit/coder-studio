@@ -1,18 +1,31 @@
 {
   "name": "@spencer-kit/coder-studio",
-  "version": "0.0.1",
+  "version": "0.2.6",
   "type": "module",
   "description": "Coder Studio CLI - The only published package",
+  "main": "./src/index.ts",
   "bin": {
-    "coder-studio": "./dist/bin.js"
+    "coder-studio": "./src/bin.ts"
   },
   "exports": {
     ".": {
-      "import": "./dist/esm/index.mjs",
-      "types": "./dist/esm/index.d.mts"
+      "import": "./src/index.ts",
+      "types": "./src/index.ts"
     }
   },
-  "files": ["dist"],
+  "files": ["dist", "src", "README.md", "CHANGELOG.md", "package.json"],
+  "publishConfig": {
+    "main": "./dist/esm/index.mjs",
+    "bin": {
+      "coder-studio": "./dist/bin.js"
+    },
+    "exports": {
+      ".": {
+        "import": "./dist/esm/index.mjs",
+        "types": "./dist/esm/index.d.mts"
+      }
+    }
+  },
   "scripts": {
     "build": "tsx ../../scripts/build-cli.ts",
     "dev": "tsx ../../scripts/dev-server.ts",

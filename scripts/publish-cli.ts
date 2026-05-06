@@ -129,6 +129,7 @@ export async function assertCliPublishArtifacts(
     bin?: unknown;
     files?: unknown;
     exports?: unknown;
+    publishConfig?: unknown;
     dependencies?: unknown;
   };
 
@@ -138,14 +139,20 @@ export async function assertCliPublishArtifacts(
   if (typeof pkg.version !== "string" || pkg.version.length === 0) {
     throw new Error(`Missing CLI package version in ${packageJsonPath}`);
   }
+
+  const publishBin = readPublishBin(pkg);
+  const publishExports = readPublishExports(pkg);
+
   if (!Array.isArray(pkg.files) || !pkg.files.includes("dist")) {
     throw new Error('CLI package.json must publish only the "dist" files entry');
   }
-  if (!hasRecordValue(pkg.bin, "coder-studio", "./dist/bin.js")) {
-    throw new Error('CLI package.json bin must point "coder-studio" to "./dist/bin.js"');
+  if (!hasRecordValue(publishBin, "coder-studio", "./dist/bin.js")) {
+    throw new Error('CLI package.json publish bin must point "coder-studio" to "./dist/bin.js"');
   }
-  if (!hasNestedRecordValue(pkg.exports, ".", "import", "./dist/esm/index.mjs")) {
-    throw new Error('CLI package.json exports must point "." import to "./dist/esm/index.mjs"');
+  if (!hasNestedRecordValue(publishExports, ".", "import", "./dist/esm/index.mjs")) {
+    throw new Error(
+      'CLI package.json publish exports must point "." import to "./dist/esm/index.mjs"'
+    );
   }
   assertPublishDependenciesResolvable(pkg.dependencies, packageJsonPath);
 
@@ -166,6 +173,28 @@ export async function assertCliPublishArtifacts(
   );
 
   return { name: pkg.name, version: pkg.version };
+}
+
+function readPublishBin(pkg: { bin?: unknown; publishConfig?: unknown }): unknown {
+  if (typeof pkg.publishConfig === "object" && pkg.publishConfig !== null) {
+    const publishBin = (pkg.publishConfig as Record<string, unknown>).bin;
+    if (publishBin !== undefined) {
+      return publishBin;
+    }
+  }
+
+  return pkg.bin;
+}
+
+function readPublishExports(pkg: { exports?: unknown; publishConfig?: unknown }): unknown {
+  if (typeof pkg.publishConfig === "object" && pkg.publishConfig !== null) {
+    const publishExports = (pkg.publishConfig as Record<string, unknown>).exports;
+    if (publishExports !== undefined) {
+      return publishExports;
+    }
+  }
+
+  return pkg.exports;
 }
 
 export async function runPublishCli({

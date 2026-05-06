@@ -39,7 +39,7 @@ describe("createGitignoreFilter", () => {
     expect(filter("file.txt")).toBe(true);
     expect(filter("build")).toBe(false);
     expect(filter(".env")).toBe(false);
-    expect(filter(".env.local")).toBe(false);
+    expect(filter(".env.local")).toBe(true);
   });
 
   it("respects negation patterns", async () => {
@@ -60,16 +60,29 @@ describe("createGitignoreFilter", () => {
     expect(filter("root-only.txt")).toBe(true);
   });
 
-  it("keeps default hidden and dependency ignores when .gitignore exists", async () => {
+  it("keeps required repository and dependency ignores when .gitignore exists", async () => {
     await writeFile(join(testDir, ".gitignore"), "*.log");
 
     const filter = createGitignoreFilter(testDir, testDir);
 
     expect(filter(".git")).toBe(false);
-    expect(filter(".hidden")).toBe(false);
+    expect(filter(".hidden")).toBe(true);
+    expect(filter(".gitignore")).toBe(true);
     expect(filter("node_modules")).toBe(false);
     expect(filter("app.log")).toBe(false);
     expect(filter("file.txt")).toBe(true);
+  });
+
+  it("shows dotfiles when .gitignore does not ignore them", async () => {
+    await writeFile(join(testDir, ".gitignore"), "*.log\n!.env\n!.gitignore");
+
+    const filter = createGitignoreFilter(testDir, testDir);
+
+    expect(filter(".env")).toBe(true);
+    expect(filter(".gitignore")).toBe(true);
+    expect(filter(".hidden")).toBe(true);
+    expect(filter("node_modules")).toBe(false);
+    expect(filter(".git")).toBe(false);
   });
 });
 
