@@ -196,7 +196,7 @@ export async function createServer(
   const providerRuntimeDeps: RuntimeStatusDeps = {};
   const providerInstallMgr = new ProviderInstallManager(providerRegistry, {
     ...providerRuntimeDeps,
-    execFile: (file, args) => execFileAsync(file, args),
+    execFile: (file, args, options) => execFileAsync(file, args, options),
   });
 
   const commandContext: CommandContext = {

@@ -163,6 +163,7 @@ async function runCommand(
       detached: process.platform !== "win32",
       env: { ...process.env, ...command.env },
       stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
     });
 
     const stdout: Buffer[] = [];

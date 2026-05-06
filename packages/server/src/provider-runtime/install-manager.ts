@@ -15,10 +15,28 @@ import {
 
 const execFileAsync = promisify(nodeExecFile);
 const EXCERPT_LIMIT = 400;
+type ExecFileOptions = { windowsHide?: boolean };
 
 export interface InstallManagerDeps extends CommandCheckDeps {
   commandExists?: CommandAvailabilityCheck;
-  execFile?: (file: string, args: string[]) => Promise<{ stdout: string; stderr: string }>;
+  execFile?: (
+    file: string,
+    args: string[],
+    options?: ExecFileOptions
+  ) => Promise<{ stdout: string; stderr: string }>;
+}
+
+function runExecFile(
+  execFile: NonNullable<InstallManagerDeps["execFile"]>,
+  file: string,
+  args: string[],
+  options?: ExecFileOptions
+): Promise<{ stdout: string; stderr: string }> {
+  if (options && execFile.length >= 3) {
+    return execFile(file, args, options);
+  }
+
+  return execFile(file, args);
 }
 
 export class ProviderInstallManager {
@@ -240,7 +258,9 @@ export class ProviderInstallManager {
     job: ProviderInstallJobSnapshot
   ): Promise<void> {
     const execFile =
-      this.deps.execFile ?? ((file: string, args: string[]) => execFileAsync(file, args));
+      this.deps.execFile ??
+      ((file: string, args: string[], options?: ExecFileOptions) =>
+        execFileAsync(file, args, options));
 
     job.status = "running";
     this.jobs.set(job.jobId, job);
@@ -270,7 +290,9 @@ export class ProviderInstallManager {
             return;
           }
         } else {
-          const result = await execFile(step.command, step.args);
+          const result = await runExecFile(execFile, step.command, step.args, {
+            windowsHide: true,
+          });
           step.stdoutExcerpt = excerpt(result.stdout);
           step.stderrExcerpt = excerpt(result.stderr);
         }

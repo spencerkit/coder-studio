@@ -7,6 +7,7 @@ import {
 } from "../provider-runtime/command-check.js";
 
 const execFileAsync = promisify(execFile);
+type ExecFileOptions = { windowsHide?: boolean };
 
 export interface RuntimeCheckResult {
   ok: boolean;
@@ -19,11 +20,25 @@ export interface RuntimeCheckDeps extends CommandCheckDeps {
   commandExists?: CommandAvailabilityCheck;
 }
 
+function runExecFile(
+  execFile: NonNullable<RuntimeCheckDeps["execFile"]>,
+  file: string,
+  args: string[],
+  options?: ExecFileOptions
+): Promise<{ stdout: string; stderr: string }> {
+  if (options && execFile.length >= 3) {
+    return execFile(file, args, options);
+  }
+
+  return execFile(file, args);
+}
+
 async function checkGit(execRunner: RuntimeCheckDeps["execFile"]): Promise<boolean> {
   try {
-    const { stdout } = await (execRunner ?? ((file, args) => execFileAsync(file, args)))("git", [
-      "--version",
-    ]);
+    const runner =
+      execRunner ??
+      ((file, args, options?: ExecFileOptions) => execFileAsync(file, args, options));
+    const { stdout } = await runExecFile(runner, "git", ["--version"], { windowsHide: true });
     return stdout.includes("git version");
   } catch {
     return false;
@@ -32,9 +47,10 @@ async function checkGit(execRunner: RuntimeCheckDeps["execFile"]): Promise<boole
 
 async function checkNode(execRunner: RuntimeCheckDeps["execFile"]): Promise<boolean> {
   try {
-    const { stdout } = await (execRunner ?? ((file, args) => execFileAsync(file, args)))("node", [
-      "--version",
-    ]);
+    const runner =
+      execRunner ??
+      ((file, args, options?: ExecFileOptions) => execFileAsync(file, args, options));
+    const { stdout } = await runExecFile(runner, "node", ["--version"], { windowsHide: true });
     return stdout.startsWith("v");
   } catch {
     return false;

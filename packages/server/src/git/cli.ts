@@ -82,6 +82,7 @@ export async function runGit(
         },
         maxBuffer: 10 * 1024 * 1024,
         timeout: options.timeoutMs,
+        windowsHide: true,
       },
       (err, stdout, stderr) => {
         if (err) {
