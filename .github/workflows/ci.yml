@@ -47,3 +47,45 @@ jobs:
 
       - name: Run production build
         run: pnpm ci:build
+
+  windows-runtime-verify:
+    name: Windows runtime verification
+    runs-on: windows-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # This lane proves the Windows runtime contract for provider/session startup paths.
+      # It does not visually prove that node-pty avoids a transient desktop console flash.
+      - name: Run targeted Windows provider tests
+        run: pnpm --filter @coder-studio/providers test -- --run src/claude/definition.test.ts src/codex/definition.test.ts
+
+      - name: Run targeted Windows server tests
+        run: pnpm --filter @coder-studio/server test -- --run src/__tests__/provider-runtime/command-check.test.ts src/__tests__/provider-runtime/install-manager.test.ts src/__tests__/workspace/runtime-check.test.ts src/git/cli.windows.test.ts src/supervisor/evaluator.windows.test.ts src/__tests__/session-commands.test.ts src/__tests__/session-integration.test.ts
+
+      - name: Run targeted Windows CLI tests
+        run: pnpm --filter @spencer-kit/coder-studio test -- --run src/browser.test.ts src/bin.test.ts src/pm2-control.test.ts src/server-control.test.ts
+
+      - name: Build server package
+        run: pnpm --filter @coder-studio/server build
+
+      - name: Build CLI package
+        run: pnpm --filter @spencer-kit/coder-studio build
