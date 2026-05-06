@@ -34,7 +34,8 @@ export function useObjectiveDialogState({
   const dispatch = useAtomValue(dispatchCommandAtom);
   const t = useTranslation();
 
-  const supervisor = dialog.sessionId ? supervisors.get(dialog.sessionId) : undefined;
+  const effectiveSessionId = sessionId ?? dialog.sessionId;
+  const supervisor = effectiveSessionId ? supervisors.get(effectiveSessionId) : undefined;
   const isVisible = dialog.open && (!sessionId || dialog.sessionId === sessionId);
   const mode = dialog.mode;
   const copy = {

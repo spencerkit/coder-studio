@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createStore, Provider } from "jotai";
 import { describe, expect, it, vi } from "vitest";
@@ -8,6 +8,49 @@ import { supervisorDialogAtom, supervisorsAtom } from "../../atoms";
 import { MobileSupervisorSheet } from "./mobile-supervisor-sheet";
 
 describe("MobileSupervisorSheet", () => {
+  it("renders the current session supervisor details in the root sheet", () => {
+    const store = createStore();
+
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+    store.set(
+      supervisorsAtom,
+      new Map([
+        [
+          "sess-1",
+          {
+            id: "sup-1",
+            sessionId: "sess-1",
+            workspaceId: "ws-1",
+            state: "idle",
+            objective: "Reduce mobile regression bugs",
+            evaluatorProviderId: "claude",
+            cycles: [],
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        ],
+      ])
+    );
+
+    render(
+      <Provider store={store}>
+        <MobileSupervisorSheet sessionId="sess-1" workspaceId="ws-1" onClose={vi.fn()} />
+      </Provider>
+    );
+
+    const rootActions = document.querySelector(".mobile-supervisor-sheet__actions");
+    expect(rootActions).not.toBeNull();
+
+    expect(screen.getByText("Reduce mobile regression bugs")).toBeInTheDocument();
+    expect(within(rootActions as HTMLElement).getByRole("button", { name: "Edit Objective" })).toBeInTheDocument();
+    expect(
+      within(rootActions as HTMLElement).getByRole("button", { name: "Disable Supervisor" })
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Supervisor is not enabled")).not.toBeInTheDocument();
+  });
+
   it("opens the enable flow inside the same sheet without rendering a second overlay", async () => {
     const sendCommand = vi.fn().mockResolvedValue({ id: "sup-1" });
     const store = createStore();
