@@ -9,7 +9,7 @@ const SESSION_REMOVAL_TIMEOUT_MS = 5_000;
 
 function delay(ms: number) {
   return new Promise<void>((resolve) => {
-    globalThis.setTimeout(resolve, ms);
+    setTimeout(resolve, ms);
   });
 }
 
