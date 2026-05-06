@@ -14,6 +14,8 @@ vi.mock("node:child_process", () => ({
 
 import { SupervisorEvaluator } from "./evaluator.js";
 
+const originalPlatform = process.platform;
+
 function createProviderConfigRepo(): ProviderConfigRepo {
   return {
     get: vi.fn(() => ({ additionalArgs: [], envVars: {} })),
@@ -51,10 +53,19 @@ function makeContext(): SupervisorEvaluationContext {
 
 describe("SupervisorEvaluator windows child-process options", () => {
   afterEach(() => {
+    Object.defineProperty(process, "platform", {
+      value: originalPlatform,
+      configurable: true,
+    });
     vi.clearAllMocks();
   });
 
-  it("passes windowsHide to spawn", async () => {
+  it("passes windowsHide to spawn and disables detached mode on Windows", async () => {
+    Object.defineProperty(process, "platform", {
+      value: "win32",
+      configurable: true,
+    });
+
     spawnMock.mockImplementation(() => {
       const stdout = new EventEmitter();
       const stderr = new EventEmitter();
@@ -107,7 +118,7 @@ describe("SupervisorEvaluator windows child-process options", () => {
     expect(spawnMock).toHaveBeenCalledWith(
       "codex",
       ["exec", "--json"],
-      expect.objectContaining({ windowsHide: true })
+      expect.objectContaining({ windowsHide: true, detached: false })
     );
   });
 });
