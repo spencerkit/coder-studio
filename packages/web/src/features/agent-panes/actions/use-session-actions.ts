@@ -7,6 +7,12 @@ const terminalInputEncoder = new TextEncoder();
 const SESSION_REMOVAL_POLL_INTERVAL_MS = 100;
 const SESSION_REMOVAL_TIMEOUT_MS = 5_000;
 
+function delay(ms: number) {
+  return new Promise<void>((resolve) => {
+    globalThis.setTimeout(resolve, ms);
+  });
+}
+
 export function useSessionActions() {
   const dispatch = useAtomValue(dispatchCommandAtom);
   const wsClient = useAtomValue(wsClientAtom);
@@ -56,10 +62,7 @@ export function useSessionActions() {
           }
           return;
         }
-
-        await new Promise((resolve) => {
-          window.setTimeout(resolve, SESSION_REMOVAL_POLL_INTERVAL_MS);
-        });
+        await delay(SESSION_REMOVAL_POLL_INTERVAL_MS);
       }
 
       console.error("Timed out waiting for session to end before removal:", sessionId);
