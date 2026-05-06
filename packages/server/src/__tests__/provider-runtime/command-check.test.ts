@@ -35,4 +35,19 @@ describe("checkCommandAvailable", () => {
     );
     expect(execFile).toHaveBeenCalledWith("where", ["claude"]);
   });
+
+  it("passes windowsHide to Windows lookups", async () => {
+    const execFile = vi.fn(
+      async (_file: string, _args: string[], _options?: { windowsHide: boolean }) => ({
+        stdout: "C:\\Users\\test\\AppData\\Local\\Programs\\Codex\\codex.exe\r\n",
+        stderr: "",
+      })
+    );
+
+    await expect(checkCommandAvailable("codex", { platform: "win32", execFile })).resolves.toBe(
+      true
+    );
+
+    expect(execFile).toHaveBeenCalledWith("where", ["codex"], { windowsHide: true });
+  });
 });

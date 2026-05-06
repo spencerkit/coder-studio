@@ -38,6 +38,31 @@ describe("runtimeCheck", () => {
 
     expect(result).toEqual({ ok: false, missing: ["git", "node"] });
   });
+
+  it("passes windowsHide to injected execFile on Windows version checks", async () => {
+    const execFile = vi.fn(
+      async (file: string, _args: string[], _options?: { windowsHide: boolean }) => {
+        if (file === "git") {
+          return { stdout: "git version 2.48.0\n", stderr: "" };
+        }
+
+        if (file === "node") {
+          return { stdout: "v22.15.0\n", stderr: "" };
+        }
+
+        throw new Error(`${file} unavailable`);
+      }
+    );
+
+    const result = await runtimeCheck("/tmp", "native", {
+      platform: "win32",
+      execFile,
+    });
+
+    expect(result).toEqual({ ok: true, missing: [] });
+    expect(execFile).toHaveBeenCalledWith("git", ["--version"], { windowsHide: true });
+    expect(execFile).toHaveBeenCalledWith("node", ["--version"], { windowsHide: true });
+  });
 });
 
 describe("RuntimeCheckFailedError", () => {

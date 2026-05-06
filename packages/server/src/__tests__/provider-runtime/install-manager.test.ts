@@ -139,4 +139,47 @@ describe("ProviderInstallManager", () => {
     });
     expect(stored?.steps[0]?.status).toBe("failed");
   });
+
+  it("passes windowsHide to injected execFile on Windows install steps", async () => {
+    const execFile = vi.fn(
+      async (_file: string, _args: string[], _options?: { windowsHide: boolean }) => ({
+        stdout: "",
+        stderr: "",
+      })
+    );
+    let codexChecks = 0;
+    const manager = new ProviderInstallManager([codexDefinition], {
+      platform: "win32",
+      commandExists: vi.fn(async (command: string) => {
+        if (command === "winget") {
+          return true;
+        }
+
+        if (command === "codex") {
+          codexChecks += 1;
+          return codexChecks > 1;
+        }
+
+        return false;
+      }),
+      execFile,
+    });
+
+    const job = await manager.start("codex");
+
+    await vi.waitFor(() => {
+      expect(manager.get(job.jobId)?.status).toBe("succeeded");
+    });
+
+    expect(execFile).toHaveBeenCalledWith(
+      "winget",
+      ["install", "--id", "OpenJS.NodeJS.LTS", "--exact", "--silent"],
+      { windowsHide: true }
+    );
+    expect(execFile).toHaveBeenCalledWith(
+      "npm",
+      ["install", "-g", "@openai/codex"],
+      { windowsHide: true }
+    );
+  });
 });
