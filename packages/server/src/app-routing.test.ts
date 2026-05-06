@@ -141,6 +141,22 @@ describe("app routing", () => {
     expect(response.body).toContain('<div id="root">shell</div>');
   });
 
+  it("serves index.html for the /login frontend route", async () => {
+    const instance = await createApp();
+
+    const response = await instance.inject({
+      method: "GET",
+      url: "/login",
+      headers: {
+        accept: "text/html",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toContain("text/html");
+    expect(response.body).toContain('<div id="root">shell</div>');
+  });
+
   it("serves the built entrypoint when requesting /index.html directly", async () => {
     const instance = await createApp();
 

@@ -139,13 +139,13 @@ function useWorkspaceBootstrap() {
 
     const authRequired = authEnabled === true;
     if (authRequired && !authenticated) {
-      if (location.pathname !== '/auth') {
-        navigate('/auth', { replace: true });
+      if (location.pathname !== '/login') {
+        navigate('/login', { replace: true });
       }
       return;
     }
 
-    if (location.pathname === '/auth') {
+    if (location.pathname === '/login') {
       navigate('/', { replace: true });
       return;
     }
@@ -234,7 +234,7 @@ export function DesktopShell() {
   const location = useLocation();
   const authRequired = authEnabled === true;
   const authUnknown = authEnabled === null;
-  const shouldShowLogin = authRequired && !authenticated && location.pathname === '/auth';
+  const shouldShowLogin = authRequired && !authenticated && location.pathname === '/login';
   const shouldShowGlobalConfigDriftBanner =
     !shouldShowLogin && !authUnknown && !location.pathname.startsWith('/settings');
 
@@ -265,7 +265,7 @@ export function DesktopShell() {
         ) : (
           <Routes>
             <Route path="/" element={<WelcomePage />} />
-            <Route path="/auth" element={<LoginPage />} />
+            <Route path="/login" element={<LoginPage />} />
             <Route path="/workspace" element={<WorkspacePage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Routes>
@@ -371,8 +371,8 @@ describe('DesktopShell auth gating', () => {
     expect(screen.getByText('WorkspacePage')).toBeInTheDocument();
   });
 
-  it('renders the explicit /auth route when auth is enabled and user is unauthenticated', () => {
-    window.history.replaceState({}, '', '/auth');
+  it('renders the explicit /login route when auth is enabled and user is unauthenticated', () => {
+    window.history.replaceState({}, '', '/login');
     const store = createStore();
     store.set(connectionStatusAtom, 'connected');
     store.set(authEnabledAtom, true);
@@ -548,7 +548,7 @@ pnpm dev:web
 
 Open the dev URL the script prints. Verify:
 - App loads without console errors
-- Routes (`/`, `/workspace`, `/settings`, `/auth`) render the same as before
+- Routes (`/`, `/workspace`, `/settings`, `/login`) render the same as before
 
 Stop the dev server.
 
@@ -1273,7 +1273,7 @@ In a wide browser window:
 - `/` shows Welcome (or redirects to `/workspace`)
 - `/workspace` renders the workspace shell with all panels visible
 - `/settings` opens settings normally
-- `/auth` (when auth required) renders login
+- `/login` (when auth required) renders login
 - Connection banner appears when WS reconnects
 - Command palette opens via shortcut
 - No console errors

@@ -16,7 +16,7 @@ This phase exists because Phase 3 already established the mobile workspace shell
 ## 2. In Scope
 
 - Mobile full-screen treatment for `/` via `WelcomePage`
-- Mobile full-screen treatment for `/auth` via `LoginPage`
+- Mobile full-screen treatment for `/login` via `LoginPage`
 - Mobile full-screen treatment for `/settings` via `SettingsPage`
 - Mobile-only `Settings` navigation stack inside the existing `/settings` route
 - Mobile-safe return behavior from `Settings`
@@ -43,7 +43,7 @@ This phase also does not change:
 
 ## 4. Design Constraints
 
-- Route paths remain unchanged: `/`, `/auth`, `/workspace`, `/settings`
+- Route paths remain unchanged: `/`, `/login`, `/workspace`, `/settings`
 - `MobileShell` remains responsible for shell selection, not for introducing mobile-only routes
 - Desktop `SettingsPage` keeps the current sidebar + content layout
 - Mobile `SettingsPage` must meet the spec requirement of `category -> detail`
@@ -57,7 +57,7 @@ This phase also does not change:
 The existing route model stays intact:
 
 - `/` -> `WelcomePage`
-- `/auth` -> `LoginPage`
+- `/login` -> `LoginPage`
 - `/workspace` -> `WorkspacePage` on desktop, `MobileWorkspaceScaffold` on mobile
 - `/settings` -> `SettingsPage`
 
@@ -280,4 +280,3 @@ Phase 4A is complete when all of the following are true:
 - On mobile, leaving the settings root uses history-first navigation with workspace/home fallback
 - On desktop, `Settings` still renders the existing sidebar/content layout
 - No Phase 3 mobile workspace behavior regresses
-

@@ -36,7 +36,7 @@ export function MobileShell() {
         ) : (
           <Routes>
             <Route path="/" element={<WelcomePage />} />
-            <Route path="/auth" element={<LoginPage />} />
+            <Route path="/login" element={<LoginPage />} />
             <Route
               path="/workspace"
               element={

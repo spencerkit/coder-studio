@@ -391,7 +391,7 @@ drawer 永远盖过 sheet，sheet 永远盖过 chat。
 
 ### 9.3 认证 / 会话
 
-- token 过期：拦截 ws 重连失败，自动 navigate 到 `/auth`，登录后回原 path
+- token 过期：拦截 ws 重连失败，自动 navigate 到 `/login`，登录后回原 path
 - 移动端 auth 与桌面共用 atoms，shell 切换无感
 
 ### 9.4 应用前后台切换（移动专属）

@@ -84,7 +84,7 @@ describe("DesktopShell auth gating", () => {
     expect(screen.queryByText("LoginPage")).not.toBeInTheDocument();
   });
 
-  it("shows login only when auth is enabled and user is unauthenticated", () => {
+  it("keeps / on WelcomePage when auth is enabled and user is unauthenticated", () => {
     const store = createStore();
     store.set(connectionStatusAtom, "connected");
     store.set(authEnabledAtom, true);
@@ -92,8 +92,50 @@ describe("DesktopShell auth gating", () => {
 
     renderShell(store);
 
-    expect(screen.getByText("LoginPage")).toBeInTheDocument();
-    expect(screen.queryByText("WelcomePage")).not.toBeInTheDocument();
+    expect(screen.getByText("WelcomePage")).toBeInTheDocument();
+    expect(screen.queryByText("LoginPage")).not.toBeInTheDocument();
+  });
+
+  it("does not bootstrap workspaces from / when auth is enabled and user is unauthenticated", () => {
+    const sendCommand = vi.fn();
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(authEnabledAtom, true);
+    store.set(authenticatedAtom, false);
+    store.set(workspacesAtom, {
+      "ws-1": {
+        id: "ws-1",
+        path: "/tmp/ws-1",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+      },
+    });
+    store.set(workspaceOrderAtom, ["ws-1"]);
+    store.set(workspacesLoadStateAtom, "ready");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    renderShell(store);
+
+    expect(window.location.pathname).toBe("/");
+    expect(screen.getByText("WelcomePage")).toBeInTheDocument();
+    expect(sendCommand).not.toHaveBeenCalled();
+  });
+
+  it("redirects /workspace to /login when auth is enabled and user is unauthenticated", async () => {
+    window.history.replaceState({}, "", "/workspace");
+
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(authEnabledAtom, true);
+    store.set(authenticatedAtom, false);
+
+    renderShell(store);
+
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/login");
+      expect(screen.getByText("LoginPage")).toBeInTheDocument();
+    });
   });
 
   it("renders WorkspacePage on /workspace", () => {
@@ -161,7 +203,55 @@ describe("DesktopShell auth gating", () => {
     });
   });
 
-  it("renders the explicit /auth route when auth is enabled and user is unauthenticated", () => {
+  it("keeps the explicit /login route when auth is enabled and user is unauthenticated", async () => {
+    window.history.replaceState({}, "", "/login");
+
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(authEnabledAtom, true);
+    store.set(authenticatedAtom, false);
+
+    renderShell(store);
+
+    await waitFor(() => {
+      expect(screen.getByText("LoginPage")).toBeInTheDocument();
+      expect(window.location.pathname).toBe("/login");
+    });
+  });
+
+  it("redirects /login to / for authenticated users", async () => {
+    window.history.replaceState({}, "", "/login");
+
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(authEnabledAtom, true);
+    store.set(authenticatedAtom, true);
+    store.set(workspacesAtom, {});
+    store.set(workspaceOrderAtom, []);
+    store.set(workspacesLoadStateAtom, "ready");
+
+    renderShell(store);
+
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/");
+      expect(screen.getByText("WelcomePage")).toBeInTheDocument();
+    });
+  });
+
+  it("does not preserve the legacy /auth route on desktop", () => {
+    window.history.replaceState({}, "", "/auth");
+
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(authEnabledAtom, false);
+    store.set(authenticatedAtom, true);
+
+    renderShell(store);
+
+    expect(screen.getByText("Page not found")).toBeInTheDocument();
+  });
+
+  it("does not rewrite /auth to /login on desktop when auth is required and user is unauthenticated", async () => {
     window.history.replaceState({}, "", "/auth");
 
     const store = createStore();
@@ -171,7 +261,11 @@ describe("DesktopShell auth gating", () => {
 
     renderShell(store);
 
-    expect(screen.getByText("LoginPage")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText("Page not found")).toBeInTheDocument();
+      expect(window.location.pathname).toBe("/auth");
+      expect(screen.queryByText("LoginPage")).not.toBeInTheDocument();
+    });
   });
 
   it("shows a not found page for unknown frontend routes", () => {

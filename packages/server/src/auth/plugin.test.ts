@@ -295,4 +295,57 @@ describe("auth login protection", () => {
       error: "Authentication required",
     });
   });
+
+  it("does not treat the legacy /auth frontend path as a login redirect target", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/auth",
+      headers: {
+        accept: "text/html",
+      },
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toMatchObject({
+      ok: false,
+      error: "Authentication required",
+    });
+  });
+
+  it("does not treat unknown /auth/* paths as frontend navigations", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/auth/unknown",
+      headers: {
+        accept: "text/html",
+      },
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toMatchObject({
+      ok: false,
+      error: "Authentication required",
+    });
+  });
+
+  it("does not fall through to the SPA for GET /auth/login or GET /auth/logout", async () => {
+    const loginResponse = await app.inject({
+      method: "GET",
+      url: "/auth/login",
+      headers: {
+        accept: "text/html",
+      },
+    });
+
+    const logoutResponse = await app.inject({
+      method: "GET",
+      url: "/auth/logout",
+      headers: {
+        accept: "text/html",
+      },
+    });
+
+    expect(loginResponse.statusCode).toBe(404);
+    expect(logoutResponse.statusCode).toBe(404);
+  });
 });

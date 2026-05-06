@@ -1751,12 +1751,10 @@ app.register(authPlugin, {
 ```
 
 Plugin 内部：
-- 非白名单路径（`/api/auth/*`、`/healthz`、`/internal/hooks/*`）以外都要有效 cookie
+- 非白名单路径（`/auth/*`、`/healthz`）以外都要有效 cookie
 - WS 连接前 upgrade 阶段也校验 cookie
 - 登录失败 → 记录到 `auth_failures` → 命中阈值 → 写入 `auth_blocked_ips`
 - IP 黑名单提前短路 (`ipBlocker` middleware)
-
-内部 hooks endpoint `/internal/hooks/:event` **不经过** auth，但必须带查询参数 token 且只接受 `127.0.0.1` 连接（server 明确 bind 时也是如此）。
 
 ### 4.13 服务器生命周期与信号处理
 
@@ -1980,7 +1978,7 @@ main.tsx
 | `/workspace/:id` | `<WorkspacePage workspaceId={id}>` |
 | `/settings` | `<SettingsPage>` |
 | `/settings/:section` | `<SettingsPage section={section}>` |
-| `/auth` | `<AuthPage>` (Phase 2) |
+| `/login` | `<AuthPage>` (Phase 2) |
 
 ### 5.2 Jotai Atom 组织
 

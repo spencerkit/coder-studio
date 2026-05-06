@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import userEvent from "@testing-library/user-event";
 import { createStore, Provider } from "jotai";
 import type { ReactNode } from "react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   authenticatedAtom,
@@ -351,6 +351,12 @@ function installMatchMediaMock(predicate: (query: string) => boolean) {
   return () => {
     window.matchMedia = originalMatchMedia;
   };
+}
+
+function LocationProbe() {
+  const location = useLocation();
+
+  return <div data-testid="location-display">{location.pathname}</div>;
 }
 
 function renderMobileShell({
@@ -797,6 +803,118 @@ describe("MobileShell Phase 2 workspace", () => {
 
     expect(screen.getByText("WelcomePage")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Switch workspace" })).not.toBeInTheDocument();
+  });
+
+  it("does not bootstrap workspaces from / on mobile when auth is enabled and user is unauthenticated", () => {
+    const sendCommand = vi.fn();
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(authEnabledAtom, true);
+    store.set(authenticatedAtom, false);
+    store.set(workspacesAtom, {
+      "ws-1": {
+        id: "ws-1",
+        path: "/tmp/ws-1",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+      },
+    });
+    store.set(workspaceOrderAtom, ["ws-1"]);
+    store.set(workspacesLoadStateAtom, "ready");
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/"]}>
+          <LocationProbe />
+          <MobileShell />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    expect(screen.getByText("WelcomePage")).toBeInTheDocument();
+    expect(screen.getByTestId("location-display")).toHaveTextContent("/");
+    expect(sendCommand).not.toHaveBeenCalled();
+  });
+
+  it("keeps the explicit /login route on mobile when auth is enabled and user is unauthenticated", async () => {
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(authEnabledAtom, true);
+    store.set(authenticatedAtom, false);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/login"]}>
+          <LocationProbe />
+          <MobileShell />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("LoginPage")).toBeInTheDocument();
+      expect(screen.getByTestId("location-display")).toHaveTextContent("/login");
+    });
+  });
+
+  it("redirects /login to / on mobile for authenticated users", async () => {
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(authEnabledAtom, true);
+    store.set(authenticatedAtom, true);
+    store.set(workspacesAtom, {});
+    store.set(workspaceOrderAtom, []);
+    store.set(workspacesLoadStateAtom, "ready");
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/login"]}>
+          <LocationProbe />
+          <MobileShell />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("WelcomePage")).toBeInTheDocument();
+      expect(screen.getByTestId("location-display")).toHaveTextContent("/");
+    });
+  });
+
+  it("does not preserve the legacy /auth route on mobile", () => {
+    renderMobileShell({
+      initialEntry: "/auth",
+      withWorkspaces: false,
+    });
+
+    expect(screen.getByText("Page not found")).toBeInTheDocument();
+  });
+
+  it("does not rewrite /auth to /login on mobile when auth is required and user is unauthenticated", async () => {
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(authEnabledAtom, true);
+    store.set(authenticatedAtom, false);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/auth"]}>
+          <LocationProbe />
+          <MobileShell />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Page not found")).toBeInTheDocument();
+      expect(screen.getByTestId("location-display")).toHaveTextContent("/auth");
+      expect(screen.queryByText("LoginPage")).not.toBeInTheDocument();
+    });
   });
 
   it("shows a loading workspace gate instead of the mobile scaffold while workspaces are still loading", () => {

@@ -71,7 +71,7 @@ At the product level, the current version delivers three core values:
 | Route | Page | Notes |
 | --- | --- | --- |
 | `/` | Welcome page | Default entry when no reachable workspace is available; also provides workspace open and settings entry |
-| `/auth` | Auth page | The actual frontend login route |
+| `/login` | Auth page | Frontend login route |
 | `/workspace` | Workspace page | Main workspace; desktop and mobile use different experiences |
 | `/settings` | Settings page | Desktop and mobile share the same capability set, with different navigation structures |
 | `*` | 404 page | Displays unmatched paths and provides a return-home action |
@@ -156,7 +156,7 @@ The main content is a centered welcome card. Mobile only adjusts styling, not th
 - The welcome page itself has no complex error state.
 - If the app has already resolved at least one workspace, the startup flow usually redirects the user to `/workspace`, so the welcome page is not a long-lived state.
 
-## 4.2 Auth Page `/auth`
+## 4.2 Auth Page `/login`
 
 ### 4.2.1 Page Goal
 
@@ -1568,14 +1568,15 @@ This chapter covers only two kinds of content:
 
 ### 8.1 Auth Route Implementation Note
 
-The main product review chapters consistently describe the login page as `/auth`, because that is the actual mounted frontend login page.
+The frontend login page is mounted at `/login`.
 
-But one implementation fact still needs to be preserved:
+Backend auth endpoints remain under `/auth/*`, such as:
 
-- Server-side SPA navigation for unauthenticated users redirects to `/login`
-- Frontend bootstrap actively navigates users to `/auth` when auth fails
+- `/auth/status`
+- `/auth/login`
+- `/auth/logout`
 
-So the product document uses `/auth` in the main body, while preserving `/login` here as an implementation fact on the server side.
+`/auth` is not a frontend page route and should not be described as one in product-facing flow documentation.
 
 ### 8.2 Theme Persistence Boundary
 

@@ -32,15 +32,18 @@ export function useWorkspaceBootstrap() {
       return;
     }
 
+    const isProtectedWorkspaceRoute = location.pathname === "/workspace";
     const authRequired = authEnabled === true;
     if (authRequired && !authenticated) {
-      if (location.pathname !== "/auth") {
-        navigate("/auth", { replace: true });
+      if (isProtectedWorkspaceRoute) {
+        navigate("/login", { replace: true });
+        return;
       }
+
       return;
     }
 
-    if (location.pathname === "/auth") {
+    if (location.pathname === "/login" && (!authRequired || authenticated)) {
       navigate("/", { replace: true });
       return;
     }

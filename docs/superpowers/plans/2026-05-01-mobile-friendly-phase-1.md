@@ -136,7 +136,7 @@ Use the shared bootstrap hook and keep non-workspace routes on the existing page
 ```tsx
 <Routes>
   <Route path="/" element={<WelcomePage />} />
-  <Route path="/auth" element={<LoginPage />} />
+  <Route path="/login" element={<LoginPage />} />
   <Route path="/settings" element={<SettingsPage />} />
   <Route path="/workspace" element={<MobileWorkspaceScaffold />} />
 </Routes>

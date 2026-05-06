@@ -29,7 +29,7 @@ export function DesktopShell() {
   const location = useLocation();
   const authRequired = authEnabled === true;
   const authUnknown = authEnabled === null;
-  const shouldShowLogin = authRequired && !authenticated && location.pathname === "/auth";
+  const shouldShowLogin = authRequired && !authenticated && location.pathname === "/login";
   const shouldShowGlobalConfigDriftBanner =
     !shouldShowLogin && !authUnknown && !location.pathname.startsWith("/settings");
 
@@ -53,7 +53,7 @@ export function DesktopShell() {
         ) : (
           <Routes>
             <Route path="/" element={<WelcomePage />} />
-            <Route path="/auth" element={<LoginPage />} />
+            <Route path="/login" element={<LoginPage />} />
             <Route
               path="/workspace"
               element={
