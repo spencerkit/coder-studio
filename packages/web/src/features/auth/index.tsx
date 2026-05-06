@@ -2,6 +2,7 @@ import { useAtom, useAtomValue } from "jotai";
 import { useEffect, useState } from "react";
 import { authenticatedAtom, localeAtom } from "../../atoms/app-ui";
 import { authEnabledAtom } from "../../atoms/connection";
+import { Button } from "../../components/ui";
 import { useViewport } from "../../hooks/use-viewport";
 import { formatDate, useTranslation } from "../../lib/i18n";
 
@@ -157,13 +158,15 @@ export function LoginPage() {
             onChange={(e) => setPassword(e.target.value)}
             placeholder={t("settings.auth.password")}
           />
-          <button
-            className="btn btn-primary btn-lg auth-submit"
+          <Button
+            className="auth-submit"
+            variant="primary"
+            size="lg"
             type="submit"
             disabled={checkingStatus || submitting || !password.trim()}
           >
             {submitLabel}
-          </button>
+          </Button>
         </form>
       </div>
     </div>

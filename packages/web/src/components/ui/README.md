@@ -7,7 +7,9 @@
 - PC / 移动差异默认由 token 或共享内部逻辑解决，业务代码不直接写 `matchMedia`。
 
 ## 已实现组件
-当前 phase 只会先落 `Button`。公共导出完成后，这里会改成可用组件列表。
+| Component | Tier | Public API | Notes |
+|---|---|---|---|
+| Button | 0 | `src/components/ui/index.ts` named export only | `primary / secondary / ghost / danger` × `sm / md / lg` |
 
 ## 迁移状态
 见 `./MIGRATION.md`。

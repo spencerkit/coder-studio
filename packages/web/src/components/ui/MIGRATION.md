@@ -2,7 +2,7 @@
 
 | Component | Status | Legacy classes | Callers left | Last update |
 |---|---|---|---:|---|
-| Button | ⚫ not-started | `.btn .btn-*` | 31 | 2026-05-06 |
+| Button | 🟡 in-flight | `.btn .btn-*` | 30 | 2026-05-06 |
 | IconButton | ⚫ not-started | `.btn` icon-only | — | — |
 | Input | ⚫ not-started | `.input` | — | — |
 | Textarea | ⚫ not-started | `.input.textarea` | — | — |
