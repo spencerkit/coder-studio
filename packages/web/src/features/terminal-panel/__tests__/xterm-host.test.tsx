@@ -3318,37 +3318,39 @@ describe("XtermHost", () => {
     mockTerminal.cols = 132;
     mockTerminal.rows = 36;
 
-    sendCommand.mockImplementation((op: string, args: { terminalId?: string; lastSeq?: number }) => {
-      if (op === "terminal.snapshot") {
-        snapshotCount += 1;
-        return Promise.resolve({
-          status: "ok",
-          transport: "binary",
-          streamId: 945,
-          size: firstSnapshot.byteLength,
-          seq: 200,
-          rows: 36,
-          cols: 132,
-          source: "headless",
-          bytes: firstSnapshot,
-        } satisfies TerminalSnapshotPayload);
-      }
+    sendCommand.mockImplementation(
+      (op: string, args: { terminalId?: string; lastSeq?: number }) => {
+        if (op === "terminal.snapshot") {
+          snapshotCount += 1;
+          return Promise.resolve({
+            status: "ok",
+            transport: "binary",
+            streamId: 945,
+            size: firstSnapshot.byteLength,
+            seq: 200,
+            rows: 36,
+            cols: 132,
+            source: "headless",
+            bytes: firstSnapshot,
+          } satisfies TerminalSnapshotPayload);
+        }
 
-      if (op === "terminal.replay") {
-        replayCount += 1;
-        expect(args.lastSeq).toBe(200);
-        return Promise.resolve({
-          status: "ok",
-          transport: "binary",
-          streamId: 946,
-          size: reconnectReplay.byteLength,
-          seq: 240,
-          bytes: reconnectReplay,
-        } satisfies TerminalReplayPayload);
-      }
+        if (op === "terminal.replay") {
+          replayCount += 1;
+          expect(args.lastSeq).toBe(200);
+          return Promise.resolve({
+            status: "ok",
+            transport: "binary",
+            streamId: 946,
+            size: reconnectReplay.byteLength,
+            seq: 240,
+            bytes: reconnectReplay,
+          } satisfies TerminalReplayPayload);
+        }
 
-      return Promise.resolve({ status: "ok" });
-    });
+        return Promise.resolve({ status: "ok" });
+      }
+    );
 
     store.set(wsClientAtom, {
       sendCommand,
@@ -3414,37 +3416,39 @@ describe("XtermHost", () => {
     mockTerminal.cols = 132;
     mockTerminal.rows = 36;
 
-    sendCommand.mockImplementation((op: string, args: { terminalId?: string; lastSeq?: number }) => {
-      if (op === "terminal.snapshot") {
-        snapshotCount += 1;
-        return Promise.resolve({
-          status: "ok",
-          transport: "binary",
-          streamId: 950,
-          size: firstSnapshot.byteLength,
-          seq: 200,
-          rows: 36,
-          cols: 132,
-          source: "headless",
-          bytes: firstSnapshot,
-        } satisfies TerminalSnapshotPayload);
-      }
+    sendCommand.mockImplementation(
+      (op: string, args: { terminalId?: string; lastSeq?: number }) => {
+        if (op === "terminal.snapshot") {
+          snapshotCount += 1;
+          return Promise.resolve({
+            status: "ok",
+            transport: "binary",
+            streamId: 950,
+            size: firstSnapshot.byteLength,
+            seq: 200,
+            rows: 36,
+            cols: 132,
+            source: "headless",
+            bytes: firstSnapshot,
+          } satisfies TerminalSnapshotPayload);
+        }
 
-      if (op === "terminal.replay") {
-        replayCount += 1;
-        expect(args.lastSeq).toBe(200);
-        return Promise.resolve({
-          status: "ok",
-          transport: "binary",
-          streamId: 951,
-          size: reconnectReplay.byteLength,
-          seq: 240,
-          bytes: reconnectReplay,
-        } satisfies TerminalReplayPayload);
-      }
+        if (op === "terminal.replay") {
+          replayCount += 1;
+          expect(args.lastSeq).toBe(200);
+          return Promise.resolve({
+            status: "ok",
+            transport: "binary",
+            streamId: 951,
+            size: reconnectReplay.byteLength,
+            seq: 240,
+            bytes: reconnectReplay,
+          } satisfies TerminalReplayPayload);
+        }
 
-      return Promise.resolve({ status: "ok" });
-    });
+        return Promise.resolve({ status: "ok" });
+      }
+    );
 
     store.set(wsClientAtom, {
       sendCommand,
@@ -3577,8 +3581,12 @@ describe("XtermHost", () => {
           status: "connecting" | "connected" | "disconnected" | "reconnecting" | "rejected"
         ) => void)
       | undefined;
-    let connectionStatus: "connecting" | "connected" | "disconnected" | "reconnecting" | "rejected" =
-      "connected";
+    let connectionStatus:
+      | "connecting"
+      | "connected"
+      | "disconnected"
+      | "reconnecting"
+      | "rejected" = "connected";
     let rejectInitialSnapshot: ((error: Error) => void) | undefined;
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const sendCommand = vi
@@ -3586,8 +3594,8 @@ describe("XtermHost", () => {
       .mockImplementation((op: string, args: { terminalId?: string; lastSeq?: number }) => {
         if (op === "terminal.snapshot") {
           if (
-            sendCommand.mock.calls.filter(([calledOp]) => calledOp === "terminal.snapshot").length ===
-            1
+            sendCommand.mock.calls.filter(([calledOp]) => calledOp === "terminal.snapshot")
+              .length === 1
           ) {
             return new Promise((_, reject: (error: Error) => void) => {
               rejectInitialSnapshot = reject;
@@ -3611,7 +3619,9 @@ describe("XtermHost", () => {
           if (connectionStatus !== "connected") {
             return Promise.reject(new Error("WebSocket disconnected"));
           }
-          throw new Error(`Unexpected replay request after reconnect during initial hydration: ${args.lastSeq}`);
+          throw new Error(
+            `Unexpected replay request after reconnect during initial hydration: ${args.lastSeq}`
+          );
         }
 
         return Promise.resolve({ status: "ok" });
@@ -3673,8 +3683,12 @@ describe("XtermHost", () => {
           status: "connecting" | "connected" | "disconnected" | "reconnecting" | "rejected"
         ) => void)
       | undefined;
-    let connectionStatus: "connecting" | "connected" | "disconnected" | "reconnecting" | "rejected" =
-      "connected";
+    let connectionStatus:
+      | "connecting"
+      | "connected"
+      | "disconnected"
+      | "reconnecting"
+      | "rejected" = "connected";
     let resolveInitialSnapshot: ((payload: TerminalSnapshotPayload) => void) | undefined;
     let snapshotCount = 0;
     let replayCount = 0;
@@ -4102,9 +4116,7 @@ describe("XtermHost", () => {
       | undefined;
     let subscriptionHandler: ((topic: string, payload: unknown, seq: number) => void) | undefined;
     let replayCount = 0;
-    let resolveFirstReconnectReplay:
-      | ((payload: TerminalReplayPayload) => void)
-      | undefined;
+    let resolveFirstReconnectReplay: ((payload: TerminalReplayPayload) => void) | undefined;
     const sendCommand = vi
       .fn()
       .mockImplementation((op: string, args: { terminalId?: string; lastSeq?: number }) => {
@@ -4240,9 +4252,7 @@ describe("XtermHost", () => {
       | undefined;
     let subscriptionHandler: ((topic: string, payload: unknown, seq: number) => void) | undefined;
     let replayCount = 0;
-    let resolveFirstReconnectReplay:
-      | ((payload: TerminalReplayPayload) => void)
-      | undefined;
+    let resolveFirstReconnectReplay: ((payload: TerminalReplayPayload) => void) | undefined;
     let releaseDelayedBufferedWrite: (() => void) | undefined;
 
     mockTerminal.write.mockImplementation((data: Uint8Array | string, callback?: () => void) => {
@@ -4675,8 +4685,12 @@ describe("XtermHost", () => {
           status: "connecting" | "connected" | "disconnected" | "reconnecting" | "rejected"
         ) => void)
       | undefined;
-    let connectionStatus: "connecting" | "connected" | "disconnected" | "reconnecting" | "rejected" =
-      "connected";
+    let connectionStatus:
+      | "connecting"
+      | "connected"
+      | "disconnected"
+      | "reconnecting"
+      | "rejected" = "connected";
     let rejectReconnectReplay: ((error: Error) => void) | undefined;
     let replayCount = 0;
     const getStatus = vi.fn(() => connectionStatus);
@@ -4804,8 +4818,8 @@ describe("XtermHost", () => {
       .mockImplementation((op: string, args: { terminalId?: string; lastSeq?: number }) => {
         if (op === "terminal.snapshot") {
           if (
-            sendCommand.mock.calls.filter(([calledOp]) => calledOp === "terminal.snapshot").length ===
-            1
+            sendCommand.mock.calls.filter(([calledOp]) => calledOp === "terminal.snapshot")
+              .length === 1
           ) {
             return Promise.resolve({
               status: "ok",
