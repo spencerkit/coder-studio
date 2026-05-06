@@ -157,9 +157,15 @@ export class SessionManager {
 
     await this.deps.terminalMgr.close(session.terminalId);
 
-    if (this.sessions.has(session.id) && session.state !== "ended") {
-      this.finishSession(session, this.terminalToSession.has(session.terminalId) ? undefined : 0);
+    const latestSession = this.sessions.get(session.id);
+    if (!latestSession || latestSession.state === "ended") {
+      return;
     }
+
+    this.finishSession(
+      latestSession,
+      this.terminalToSession.has(latestSession.terminalId) ? undefined : 0
+    );
   }
 
   async hydrate(): Promise<void> {
