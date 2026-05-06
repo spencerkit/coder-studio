@@ -1,7 +1,7 @@
 import { writeRuntimeConfig } from "@coder-studio/core/runtime";
-import { existsSync, mkdtempSync, rmSync } from "fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
-import { join } from "path";
+import { dirname, join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { connect, start, deleteProcess, describeProcess, disconnect } = vi.hoisted(() => ({
@@ -196,6 +196,45 @@ describe("pm2-control", () => {
     ).rejects.toThrow(
       "Run `coder-studio logs` for details or `coder-studio serve --foreground` for interactive debugging."
     );
+  });
+
+  it("includes only the current startup error log excerpt when background startup fails", async () => {
+    const { errFile } = getLogPaths();
+    mkdirSync(dirname(errFile), { recursive: true });
+    writeFileSync(errFile, "Error: stale previous startup failure\n");
+
+    start.mockImplementationOnce(
+      (config: unknown, callback: (error: Error | null, apps: unknown[]) => void) => {
+        const errorFile = (config as { error_file: string }).error_file;
+        writeFileSync(
+          errorFile,
+          "Error: listen EADDRINUSE: address already in use 127.0.0.1:4187\n",
+          { flag: "a" }
+        );
+        callback(null, [{ pm_id: 1 }]);
+      }
+    );
+    describeProcess.mockImplementationOnce(
+      (_name: string, callback: (error: Error | null, result: unknown[]) => void) =>
+        callback(null, [{ pid: 424242, pm2_env: { status: "errored", restart_time: 1 } }])
+    );
+
+    let startupError: unknown;
+    try {
+      await startManagedServer({
+        script: "/cli/dist/esm/server-runner.js",
+        cwd: "/repo",
+        waitMs: 10,
+      });
+    } catch (error) {
+      startupError = error;
+    }
+
+    expect(startupError).toBeInstanceOf(Error);
+    expect((startupError as Error).message).toContain(
+      "Error: listen EADDRINUSE: address already in use 127.0.0.1:4187"
+    );
+    expect((startupError as Error).message).not.toContain("Error: stale previous startup failure");
   });
 
   it("maps missing PM2 app to stopped status", async () => {

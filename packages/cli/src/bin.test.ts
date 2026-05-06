@@ -212,6 +212,66 @@ describe("main", () => {
     }
   });
 
+  it("prints only the recent tail for logs command", async () => {
+    const logDir = mkdtempSync(join(tmpdir(), "cs-cli-logs-tail-"));
+    const outFile = join(logDir, "server.out.log");
+    const errFile = join(logDir, "server.err.log");
+    const outLines = Array.from({ length: 45 }, (_, index) => `out line ${index + 1}`);
+    const errLines = ["err line 1", "err line 2"];
+    writeFileSync(outFile, `${outLines.join("\n")}\n`, "utf-8");
+    writeFileSync(errFile, `${errLines.join("\n")}\n`, "utf-8");
+    getServerStatus.mockResolvedValue({
+      status: "running",
+      pid: 424242,
+      host: "127.0.0.1",
+      port: 4187,
+      restartCount: 2,
+      outFile,
+      errFile,
+      startedAt: 1000,
+    });
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    try {
+      await main(["logs"]);
+      expect(logSpy).toHaveBeenCalledWith(
+        `${outLines.slice(-40).join("\n")}\n${errLines.join("\n")}`
+      );
+    } finally {
+      if (existsSync(logDir)) {
+        rmSync(logDir, { recursive: true, force: true });
+      }
+    }
+  });
+
+  it("prints only the requested error log tail for logs command", async () => {
+    const logDir = mkdtempSync(join(tmpdir(), "cs-cli-logs-errors-"));
+    const outFile = join(logDir, "server.out.log");
+    const errFile = join(logDir, "server.err.log");
+    writeFileSync(outFile, "out line 1\nout line 2\n", "utf-8");
+    writeFileSync(errFile, "err line 1\nerr line 2\n", "utf-8");
+    getServerStatus.mockResolvedValue({
+      status: "running",
+      pid: 424242,
+      host: "127.0.0.1",
+      port: 4187,
+      restartCount: 2,
+      outFile,
+      errFile,
+      startedAt: 1000,
+    });
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    try {
+      await main(["logs", "--errors-only", "--tail", "1"]);
+      expect(logSpy).toHaveBeenCalledWith("err line 2");
+    } finally {
+      if (existsSync(logDir)) {
+        rmSync(logDir, { recursive: true, force: true });
+      }
+    }
+  });
+
   it("prints stop output for stop command", async () => {
     stopRunningServer.mockResolvedValue(true);
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -383,6 +443,18 @@ describe("main", () => {
     expect(openBrowser).toHaveBeenCalledWith("http://127.0.0.1:4190");
   });
 
+  it("rethrows background startup failures for open and does not open the browser", async () => {
+    const startupError = new Error(
+      "Coder Studio failed to start in background: the managed process entered the errored state.\n\nRecent error log excerpt (/tmp/server.err.log):\nError: listen EADDRINUSE: address already in use 127.0.0.1:4187\n\nRun `coder-studio logs` for details or `coder-studio serve --foreground` for interactive debugging."
+    );
+    startManagedServer.mockRejectedValueOnce(startupError);
+
+    await expect(main(["open"])).rejects.toThrow(
+      "Error: listen EADDRINUSE: address already in use 127.0.0.1:4187"
+    );
+    expect(openBrowser).not.toHaveBeenCalled();
+  });
+
   it("does not restart in non-interactive mode and prints a clear message", async () => {
     getServerStatus.mockResolvedValue({
       status: "running",
@@ -512,6 +584,20 @@ describe("parseArgs", () => {
     });
   });
 
+  it("parses logs command with tail count", () => {
+    expect(parseArgs(["logs", "--tail", "100"])).toEqual({
+      command: "logs",
+      tail: 100,
+    });
+  });
+
+  it("parses logs command with errors-only flag", () => {
+    expect(parseArgs(["logs", "--errors-only"])).toEqual({
+      command: "logs",
+      errorsOnly: true,
+    });
+  });
+
   it("parses open command", () => {
     expect(parseArgs(["open"])).toEqual({
       command: "open",
@@ -631,6 +717,26 @@ describe("parseArgs", () => {
 
   it("rejects logs-time port overrides", () => {
     expect(() => parseArgs(["logs", "--port", "4186"])).toThrow("Unknown option: --port");
+  });
+
+  it("rejects logs tail with a non-numeric value", () => {
+    expect(() => parseArgs(["logs", "--tail", "nope"])).toThrow("Invalid tail number");
+  });
+
+  it("rejects logs tail with zero", () => {
+    expect(() => parseArgs(["logs", "--tail", "0"])).toThrow("Invalid tail number");
+  });
+
+  it("rejects logs tail with a negative value", () => {
+    expect(() => parseArgs(["logs", "--tail", "-1"])).toThrow("Invalid tail number");
+  });
+
+  it("rejects logs tail with a decimal value", () => {
+    expect(() => parseArgs(["logs", "--tail", "1.5"])).toThrow("Invalid tail number");
+  });
+
+  it("rejects logs tail with trailing garbage", () => {
+    expect(() => parseArgs(["logs", "--tail", "10junk"])).toThrow("Invalid tail number");
   });
 
   it("rejects stop-time data-dir overrides", () => {

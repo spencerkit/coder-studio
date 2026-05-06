@@ -2,6 +2,7 @@ import { deleteRuntimeConfig, readRuntimeConfig } from "@coder-studio/core/runti
 import { mkdirSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
+import { getFileSize, readLogExcerpt } from "./log-excerpt.js";
 
 export const MANAGED_SERVER_NAME = "coder-studio-server";
 const PM2_RESTART_DELAY_MS = 2000;
@@ -30,6 +31,11 @@ interface Pm2ProcessDescription {
     status?: string;
     restart_time?: number;
   };
+}
+
+interface StartupLogOffsets {
+  outOffset: number;
+  errOffset: number;
 }
 
 const isMissingManagedServerError = (error: unknown): boolean => {
@@ -101,9 +107,6 @@ const sleep = async (ms: number): Promise<void> =>
   new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
-
-const createStartupError = (reason: string): Error =>
-  new Error(`Coder Studio failed to start in background: ${reason}. ${STARTUP_FAILURE_GUIDANCE}`);
 
 const disconnectPm2 = async (): Promise<void> => {
   const pm2 = await loadPm2();
@@ -186,7 +189,10 @@ const withPm2Connection = async <T>(operation: () => Promise<T>): Promise<T> => 
   }
 };
 
-const waitForRuntimeReady = async (waitMs: number): Promise<void> => {
+const waitForRuntimeReady = async (
+  waitMs: number,
+  logOffsets: StartupLogOffsets
+): Promise<void> => {
   const deadline = Date.now() + waitMs;
 
   while (Date.now() <= deadline) {
@@ -197,12 +203,15 @@ const waitForRuntimeReady = async (waitMs: number): Promise<void> => {
     const processes = await describeManagedServer();
     const process = processes[0];
     if (!process) {
-      throw createStartupError("the managed process exited before runtime data was written");
+      throw createStartupError(
+        "the managed process exited before runtime data was written",
+        logOffsets
+      );
     }
 
     const status = process.pm2_env?.status;
     if (status === "errored" || status === "stopped") {
-      throw createStartupError(`the managed process entered the ${status} state`);
+      throw createStartupError(`the managed process entered the ${status} state`, logOffsets);
     }
 
     const remainingMs = deadline - Date.now();
@@ -213,7 +222,7 @@ const waitForRuntimeReady = async (waitMs: number): Promise<void> => {
     await sleep(Math.min(STARTUP_POLL_INTERVAL_MS, remainingMs));
   }
 
-  throw createStartupError(`runtime readiness timed out after ${waitMs}ms`);
+  throw createStartupError(`runtime readiness timed out after ${waitMs}ms`, logOffsets);
 };
 
 const waitForManagedServerExit = async (): Promise<void> => {
@@ -235,6 +244,43 @@ export const getLogPaths = () => ({
   outFile: join(homedir(), ".coder-studio", "logs", "server.out.log"),
   errFile: join(homedir(), ".coder-studio", "logs", "server.err.log"),
 });
+
+const captureStartupLogOffsets = (): StartupLogOffsets => {
+  const { outFile, errFile } = getLogPaths();
+  return {
+    outOffset: getFileSize(outFile),
+    errOffset: getFileSize(errFile),
+  };
+};
+
+const getStartupFailureDetails = (offsets: StartupLogOffsets): string | null => {
+  const { outFile, errFile } = getLogPaths();
+  const sections: string[] = [];
+  const errExcerpt = readLogExcerpt(errFile, { startOffset: offsets.errOffset });
+  const outExcerpt =
+    outFile === errFile ? null : readLogExcerpt(outFile, { startOffset: offsets.outOffset });
+
+  if (errExcerpt) {
+    sections.push(`Recent error log excerpt (${errFile}):\n${errExcerpt}`);
+  }
+
+  if (outExcerpt) {
+    sections.push(`Recent output log excerpt (${outFile}):\n${outExcerpt}`);
+  }
+
+  return sections.length === 0 ? null : sections.join("\n\n");
+};
+
+const createStartupError = (reason: string, offsets: StartupLogOffsets): Error => {
+  const details = getStartupFailureDetails(offsets);
+  const message = [
+    `Coder Studio failed to start in background: ${reason}.`,
+    ...(details ? [details] : []),
+    STARTUP_FAILURE_GUIDANCE,
+  ].join("\n\n");
+
+  return new Error(message);
+};
 
 export const deleteManagedServer = async ({
   ignoreMissing = false,
@@ -281,6 +327,7 @@ export const startManagedServer = async ({
   const pm2 = await loadPm2();
 
   await withPm2Connection(async () => {
+    const logOffsets = captureStartupLogOffsets();
     await new Promise<void>((resolve, reject) => {
       pm2.start(
         {
@@ -310,7 +357,7 @@ export const startManagedServer = async ({
       );
     });
 
-    await waitForRuntimeReady(waitMs);
+    await waitForRuntimeReady(waitMs, logOffsets);
   });
 };
 

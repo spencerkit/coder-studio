@@ -4,6 +4,7 @@ import { fileURLToPath } from "url";
 import { clearAuthBlockByIp, listAuthBlocks } from "./auth-control.js";
 import { openBrowser } from "./browser.js";
 import { type CliConfig, readCliConfig, writeCliConfig } from "./config-store.js";
+import { readLogExcerpt } from "./log-excerpt.js";
 import { assertSupportedNodeVersion } from "./node-version.js";
 import { parseArgs } from "./parse-args.js";
 import { startManagedServer } from "./pm2-control.js";
@@ -13,6 +14,7 @@ import { startServer } from "./server-runner.js";
 import { getBrowserUrl, getListenIp, getListenUrl } from "./server-url.js";
 
 const MANAGED_SERVER_WAIT_MS = 5000;
+const DEFAULT_LOG_TAIL_LINES = 40;
 
 function formatConfig(config: CliConfig | null): string {
   return JSON.stringify(config ?? {}, null, 2);
@@ -38,15 +40,18 @@ function formatStatus(status: ServerStatus): string {
   ].join("\n");
 }
 
-function showLogs(status: ServerStatus): void {
-  const contents = [status.outFile, status.errFile]
+function showLogs(
+  status: ServerStatus,
+  {
+    tail = DEFAULT_LOG_TAIL_LINES,
+    errorsOnly = false,
+  }: { tail?: number; errorsOnly?: boolean } = {}
+): void {
+  const paths = errorsOnly ? [status.errFile] : [status.outFile, status.errFile];
+  const contents = paths
     .filter((path, index, paths) => paths.indexOf(path) === index)
     .flatMap((path) => {
-      if (!existsSync(path)) {
-        return [];
-      }
-
-      const content = readFileSync(path, "utf-8").trim();
+      const content = readLogExcerpt(path, { maxLines: tail, maxChars: null });
       return content ? [content] : [];
     });
 
@@ -303,7 +308,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
   }
 
   if (args.command === "logs") {
-    showLogs(await getServerStatus());
+    showLogs(await getServerStatus(), { tail: args.tail, errorsOnly: args.errorsOnly });
     return;
   }
 

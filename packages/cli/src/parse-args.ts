@@ -17,6 +17,8 @@ export interface CliArgs {
   foreground?: boolean;
   restart?: boolean;
   command?: CliCommand;
+  tail?: number;
+  errorsOnly?: boolean;
   authCommand?: AuthCommand;
   configHelp?: boolean;
   port?: number;
@@ -45,6 +47,11 @@ function clearAuthArgs(args: CliArgs): void {
   delete args.ip;
 }
 
+function clearLogsArgs(args: CliArgs): void {
+  delete args.tail;
+  delete args.errorsOnly;
+}
+
 function setCommand(args: CliArgs, command: CliCommand): void {
   if (command !== "config") {
     clearConfigArgs(args);
@@ -52,6 +59,10 @@ function setCommand(args: CliArgs, command: CliCommand): void {
 
   if (command !== "auth") {
     clearAuthArgs(args);
+  }
+
+  if (command !== "logs") {
+    clearLogsArgs(args);
   }
 
   if (command !== "serve") {
@@ -156,6 +167,34 @@ export function parseArgs(argv: string[]): CliArgs {
         args.restart = true;
         break;
       }
+
+      case "--tail": {
+        if (getActiveCommand(args) !== "logs") {
+          throwUnknownOption(arg);
+        }
+
+        const tailValue = readOptionValue(argv, i + 1, "tail");
+        if (!/^[1-9]\d*$/u.test(tailValue)) {
+          throw new Error("Invalid tail number");
+        }
+
+        const tail = Number(tailValue);
+        if (!Number.isSafeInteger(tail)) {
+          throw new Error("Invalid tail number");
+        }
+
+        args.tail = tail;
+        i += 1;
+        break;
+      }
+
+      case "--errors-only":
+        if (getActiveCommand(args) !== "logs") {
+          throwUnknownOption(arg);
+        }
+
+        args.errorsOnly = true;
+        break;
 
       case "--port":
       case "-p": {
