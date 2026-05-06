@@ -69,7 +69,7 @@ describe("App shell selection", () => {
     expect(screen.queryByTestId("desktop-shell")).not.toBeInTheDocument();
   });
 
-  it("renders DesktopShell on wide coarse-pointer devices", () => {
+  it("renders MobileShell on wide coarse-pointer devices", () => {
     setMatchMediaMock((query) => query.includes("pointer: coarse"));
     const store = createStore();
     store.set(connectionStatusAtom, "connected");
@@ -82,7 +82,7 @@ describe("App shell selection", () => {
       </Provider>
     );
 
-    expect(screen.getByTestId("desktop-shell")).toBeInTheDocument();
-    expect(screen.queryByTestId("mobile-shell")).not.toBeInTheDocument();
+    expect(screen.getByTestId("mobile-shell")).toBeInTheDocument();
+    expect(screen.queryByTestId("desktop-shell")).not.toBeInTheDocument();
   });
 });
