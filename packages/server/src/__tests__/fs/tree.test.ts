@@ -136,4 +136,18 @@ describe("readTree", () => {
     expect(result.children.some((n) => n.name === "app.txt")).toBe(true);
     expect(result.children.some((n) => n.name === "src")).toBe(true);
   });
+
+  it("should show dotfiles when .gitignore does not ignore them", async () => {
+    await writeFile(join(testDir, ".gitignore"), "*.log");
+    await writeFile(join(testDir, ".env"), "secret");
+    await writeFile(join(testDir, ".hidden-config"), "hidden");
+    await writeFile(join(testDir, "visible.txt"), "visible");
+
+    const result = await readTree(testDir);
+
+    expect(result.children.some((n) => n.name === ".env")).toBe(true);
+    expect(result.children.some((n) => n.name === ".gitignore")).toBe(true);
+    expect(result.children.some((n) => n.name === ".hidden-config")).toBe(true);
+    expect(result.children.some((n) => n.name === "visible.txt")).toBe(true);
+  });
 });
