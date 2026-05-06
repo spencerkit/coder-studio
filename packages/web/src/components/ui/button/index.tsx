@@ -28,10 +28,10 @@ type AnchorElementProps = ButtonBaseProps &
 export type ButtonProps = ButtonElementProps | AnchorElementProps;
 
 const variantClassMap: Record<ButtonVariant, string> = {
-  primary: styles.primary,
-  secondary: styles.secondary,
-  ghost: styles.ghost,
-  danger: styles.danger,
+  primary: styles.primary ?? "",
+  secondary: styles.secondary ?? "",
+  ghost: styles.ghost ?? "",
+  danger: styles.danger ?? "",
 };
 
 const sizeClassMap: Record<ButtonSize, string | undefined> = {
