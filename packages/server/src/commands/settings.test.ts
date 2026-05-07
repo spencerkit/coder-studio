@@ -15,10 +15,6 @@ describe("settings commands", () => {
       workspaceMgr: {} as never,
       sessionMgr: {} as never,
       terminalMgr: {} as never,
-      codexConfigAudit: {
-        audit: () => ({ codex: { configPath: "/tmp/config.toml", exists: false, findings: [] } }),
-        cleanup: () => ({ removed: [], backupPath: null, noop: true }),
-      } as never,
       eventBus: {} as never,
       broadcaster: {} as never,
       db,
@@ -242,7 +238,7 @@ describe("settings commands", () => {
     expect(result.data?.["providers.openai.additionalArgs"]).toBeUndefined();
   });
 
-  it("settings.get reads settings from user_settings and includes config audit metadata", async () => {
+  it("settings.get reads settings from user_settings", async () => {
     db.prepare("INSERT INTO user_settings (key, value) VALUES (?, ?)").run(
       "defaultProviderId",
       '"codex"'
@@ -271,13 +267,6 @@ describe("settings commands", () => {
       defaultProviderId: "codex",
       "notifications.enabled": true,
       "supervisor.evaluationTimeoutSec": 900,
-      externalConfigAudit: {
-        codex: {
-          configPath: "/tmp/config.toml",
-          exists: false,
-          findings: [],
-        },
-      },
     });
   });
 

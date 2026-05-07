@@ -1392,36 +1392,7 @@ Shortcuts 页面当前提供的是**快捷键配置 UI**，分四类：
 | `Enter` | 选中分支 / 发起创建 / 确认创建 |
 | `Escape` | 关闭 |
 
-## 5.4 Config Drift Banner
-
-Config Drift Banner 用于提示 `~/.codex/config.toml` 中会干扰当前应用行为的配置项。
-
-### 5.4.1 数据来源
-
-由设置数据中的 `externalConfigAudit` 提供。
-
-### 5.4.2 展示位置
-
-| 场景 | 位置 |
-| --- | --- |
-| 桌面壳层（非登录、非设置页） | 顶部全局 banner |
-| 移动工作区页 | 页面内紧凑 banner |
-| 设置页 | 内容区顶部 embedded banner |
-
-### 5.4.3 交互能力
-
-| 功能点 | 行为 |
-| --- | --- |
-| 展开详情 | 查看每个 finding、行号、片段 |
-| 勾选清理项 | 默认全选全部 findings |
-| Cleanup | 执行配置清理 |
-| Cleanup 成功 | 若产生备份路径，通过 banner notice 展示 |
-| Dismiss | 关闭当前 banner（仅当前前端状态，不是永久忽略） |
-| 加载失败 | 显示失败 banner，并可点击 Refresh 重试 |
-
-移动工作区页的紧凑 banner 不在页内展开详情，而是把用户引导到 `/settings`。
-
-## 5.5 连接状态横幅
+## 5.4 连接状态横幅
 
 全局连接横幅统一处理以下状态：
 
@@ -1429,9 +1400,9 @@ Config Drift Banner 用于提示 `~/.codex/config.toml` 中会干扰当前应用
 - `rejected`：显示“另一个标签页已激活”
 - 其他非连接态：显示“连接已断开”
 
-## 5.6 Toast 与通知
+## 5.5 Toast 与通知
 
-### 5.6.1 Toast 容器
+### 5.5.1 Toast 容器
 
 Toast 容器支持：
 
@@ -1439,7 +1410,7 @@ Toast 容器支持：
 - `success / error / warning / info` 四种类型
 - 自动消失（默认 `5s`，`duration = 0` 可改为手动）
 
-### 5.6.2 Toast 点击行为
+### 5.5.2 Toast 点击行为
 
 | Toast 附带数据 | 点击结果 |
 | --- | --- |
@@ -1447,7 +1418,7 @@ Toast 容器支持：
 | 仅 `workspaceId` | 切换到对应 workspace，并在必要时导航到 `/workspace` |
 | 无跳转数据 | 仅关闭 Toast |
 
-### 5.6.3 Session 完成通知
+### 5.5.3 Session 完成通知
 
 当前只针对“Agent 一轮工作完成”发通知，触发规则非常明确：
 
@@ -1471,7 +1442,7 @@ Toast 容器支持：
 - 优先播放 `/task-complete.wav`
 - 播放失败时回退到 Web Audio 合成提示音
 
-## 5.7 Supervisor 编辑容器
+## 5.6 Supervisor 编辑容器
 
 Supervisor 的编辑类交互由两种容器承载：
 
