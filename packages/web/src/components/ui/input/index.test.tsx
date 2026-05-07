@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import { createRef } from "react";
 import { describe, expect, it } from "vitest";
 import { Input } from "..";
 
@@ -28,5 +29,13 @@ describe("Input", () => {
     render(<Input aria-invalid="true" aria-label="Timeout" />);
 
     expect(screen.getByLabelText("Timeout")).toHaveAttribute("aria-invalid", "true");
+  });
+
+  it("forwards refs to the native input element", () => {
+    const ref = createRef<HTMLInputElement>();
+
+    render(<Input aria-label="Ref target" ref={ref} />);
+
+    expect(ref.current).toBe(screen.getByLabelText("Ref target"));
   });
 });

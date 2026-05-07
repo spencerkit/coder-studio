@@ -4,6 +4,7 @@ import { AlertTriangle, ArrowUp, ChevronDown, Minus, Plus, RotateCcw, X } from "
 import type { FC } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { localeAtom } from "../../../../atoms/app-ui";
+import { Textarea } from "../../../../components/ui";
 import { formatRelativeTime, useTranslation } from "../../../../lib/i18n";
 import {
   type GitChangeType,
@@ -109,7 +110,7 @@ export const GitPanel: FC<GitPanelProps> = ({
       <div className={`git-panel git-panel--${variant}`}>
         <div className="git-panel-scroll">
           <section className="git-commit-block">
-            <textarea
+            <Textarea
               className="git-commit-input"
               placeholder={t("git.commit_summary_placeholder")}
               value={commitMessage}

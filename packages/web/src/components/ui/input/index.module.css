@@ -18,21 +18,33 @@
   border-color: var(--border-light);
 }
 
-.input:focus {
+.input:focus,
+.input:focus-visible {
   border-color: var(--accent-blue);
   box-shadow: 0 0 0 1px rgba(108, 182, 255, 0.4);
 }
 
 .sm {
   height: var(--input-height-sm);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
 }
 
 .lg {
   height: var(--input-height-lg);
+  border-radius: var(--radius-lg);
+  font-size: var(--text-lg);
 }
 
 .invalid,
 .input[aria-invalid="true"] {
-  border-color: var(--accent-pink);
-  box-shadow: 0 0 0 1px rgba(255, 122, 162, 0.24);
+  border-color: var(--border-error);
+}
+
+.invalid:focus,
+.invalid:focus-visible,
+.input[aria-invalid="true"]:focus,
+.input[aria-invalid="true"]:focus-visible {
+  border-color: var(--border-error);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--border-error) 70%, transparent 30%);
 }

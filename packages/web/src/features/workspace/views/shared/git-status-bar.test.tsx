@@ -229,8 +229,10 @@ describe("GitStatusBar", () => {
     expect(confirmModal).not.toBeNull();
     fireEvent.click(within(confirmModal as HTMLElement).getByRole("button", { name: "Push" }));
 
-    expect(await screen.findByLabelText("Username")).toBeInTheDocument();
-    expect(screen.getByLabelText("Username")).toHaveValue("alice");
+    const usernameInput = await screen.findByLabelText("Username");
+    expect(usernameInput).toHaveClass("input");
+    expect(usernameInput).toHaveValue("alice");
+    expect(screen.getByLabelText("Password or token")).toHaveClass("input");
 
     fireEvent.change(screen.getByLabelText("Password or token"), {
       target: { value: "secret-token" },
@@ -301,10 +303,13 @@ describe("GitStatusBar", () => {
     fireEvent.click(screen.getByRole("button", { name: "Push" }));
     fireEvent.click(screen.getAllByRole("button", { name: "Push" })[1] as HTMLElement);
 
-    fireEvent.change(await screen.findByLabelText("Password or token"), {
+    const passwordInput = await screen.findByLabelText("Password or token");
+    expect(passwordInput).toHaveClass("input");
+
+    fireEvent.change(passwordInput, {
       target: { value: "secret-token" },
     });
-    fireEvent.submit(screen.getByLabelText("Password or token").closest("form") as HTMLFormElement);
+    fireEvent.submit(passwordInput.closest("form") as HTMLFormElement);
 
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith(

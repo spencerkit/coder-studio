@@ -23,7 +23,7 @@ const legacySizeClassMap: Record<InputSize, string | undefined> = {
 };
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
-  { className, size = "md", htmlSize, invalid, ...props },
+  { className, htmlSize, invalid, size = "md", ...props },
   ref
 ) {
   const ariaInvalid = invalid === undefined ? props["aria-invalid"] : invalid ? "true" : "false";

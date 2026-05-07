@@ -614,6 +614,47 @@ describe("GitPanel", () => {
     });
   });
 
+  it("renders the shared commit textarea styling in the updated panel shell", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return status;
+      }
+
+      if (op === "git.branches") {
+        return { current: "feature/ai-agent", branches: [] };
+      }
+
+      if (op === "worktree.list") {
+        return { worktrees: [] };
+      }
+
+      if (op === "git.log") {
+        return { entries: [] };
+      }
+
+      return {};
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedWorkspaceStore(store);
+
+    render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    await screen.findByText("Worktrees");
+
+    expect(screen.getByPlaceholderText("Enter commit message...")).toHaveClass(
+      "input",
+      "textarea",
+      "git-commit-input"
+    );
+  });
+
   it("loads branch list on mount", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string, _args: unknown) => {
       if (op === "git.status") {

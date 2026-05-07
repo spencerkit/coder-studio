@@ -58,6 +58,7 @@ describe("LoginPage", () => {
 
     expect(screen.getByText("输入密码后继续进入当前工作区。")).toBeInTheDocument();
     expect(screen.getByText("请输入当前部署配置的访问密码。")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("密码")).toHaveClass("input", "auth-input");
   });
 
   it("renders the auth password field with shared input compatibility classes", async () => {
