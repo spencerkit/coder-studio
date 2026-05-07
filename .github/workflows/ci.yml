@@ -73,13 +73,16 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # This lane proves the Windows runtime contract for provider/session startup paths.
-      # It does not visually prove that node-pty avoids a transient desktop console flash.
+      # Windows CI now proves that our non-PTY subprocess paths pass `windowsHide: true`
+      # and that provider/session PTY startup still works with the existing cross-platform
+      # argv contract. It does not visually prove the absence of a transient desktop
+      # console flash from node-pty itself; that still requires a manual smoke check on
+      # a real Windows desktop.
       - name: Run targeted Windows provider tests
         run: pnpm --filter @coder-studio/providers exec vitest run src/claude/definition.test.ts src/codex/definition.test.ts
 
       - name: Run targeted Windows server tests
-        run: pnpm --filter @coder-studio/server exec vitest run src/__tests__/provider-runtime/command-check.test.ts src/__tests__/provider-runtime/install-manager.test.ts src/__tests__/workspace/runtime-check.test.ts src/git/cli.windows.test.ts src/supervisor/evaluator.windows.test.ts src/__tests__/session-commands.test.ts src/__tests__/session-integration.test.ts
+        run: pnpm --filter @coder-studio/server exec vitest run src/__tests__/provider-runtime/command-check.test.ts src/__tests__/provider-runtime/exec-file.test.ts src/__tests__/provider-runtime/install-manager.test.ts src/__tests__/workspace/runtime-check.test.ts src/git/cli.windows.test.ts src/supervisor/evaluator.windows.test.ts src/__tests__/session-commands.test.ts src/__tests__/session-integration.test.ts
 
       - name: Run targeted Windows CLI tests
         run: pnpm --filter @spencer-kit/coder-studio exec vitest run src/browser.test.ts src/bin.test.ts src/pm2-control.test.ts src/server-control.test.ts

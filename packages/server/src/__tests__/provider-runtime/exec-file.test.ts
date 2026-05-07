@@ -17,11 +17,17 @@ import { execFileAsString } from "../../provider-runtime/exec-file.js";
 
 describe("execFileAsString", () => {
   it("normalizes Buffer stdout and stderr to strings", async () => {
+    const execFileCalls: Array<{
+      file: string;
+      args: string[];
+      options: { windowsHide?: boolean } | undefined;
+    }> = [];
+
     execFileMock.mockImplementation(
       (
-        _file: string,
-        _args: string[],
-        _options: { windowsHide?: boolean } | undefined,
+        file: string,
+        args: string[],
+        options: { windowsHide?: boolean } | undefined,
         callback: (
           error: Error | null,
           result: {
@@ -30,6 +36,7 @@ describe("execFileAsString", () => {
           }
         ) => void
       ) => {
+        execFileCalls.push({ file, args, options });
         callback(null, {
           stdout: Buffer.from("ok\n"),
           stderr: Buffer.from("warn\n"),
@@ -41,5 +48,12 @@ describe("execFileAsString", () => {
     const result = await execFileAsString("demo", ["--version"], { windowsHide: true });
 
     expect(result).toEqual({ stdout: "ok\n", stderr: "warn\n" });
+    expect(execFileCalls).toEqual([
+      {
+        file: "demo",
+        args: ["--version"],
+        options: { windowsHide: true },
+      },
+    ]);
   });
 });
