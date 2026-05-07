@@ -20,6 +20,7 @@ import { createServer, type Server } from "../server.js";
 describe("createServer provider install wiring", () => {
   let server: Server | undefined;
   let dataDir: string;
+  const originalPlatform = Object.getOwnPropertyDescriptor(process, "platform");
 
   afterEach(async () => {
     if (server) {
@@ -31,45 +32,60 @@ describe("createServer provider install wiring", () => {
       rmSync(dataDir, { recursive: true, force: true });
     }
 
+    if (originalPlatform) {
+      Object.defineProperty(process, "platform", originalPlatform);
+    }
+
     vi.clearAllMocks();
   });
 
   it("forwards execFile options from the assembled provider install manager", async () => {
     let codexChecks = 0;
+    Object.defineProperty(process, "platform", {
+      configurable: true,
+      value: "win32",
+    });
+
     execFileMock.mockImplementation(
       (
         file: string,
         args: string[],
         options: { windowsHide?: boolean },
-        callback: (error: Error | null, stdout: string, stderr: string) => void
+        callback: (
+          error: Error | null,
+          result?: {
+            stdout: string;
+            stderr: string;
+          }
+        ) => void
       ) => {
         if (!options?.windowsHide) {
-          callback(new Error(`windowsHide missing for ${file}`), "", "");
+          callback(new Error(`windowsHide missing for ${file}`));
           return {} as ReturnType<typeof execFileMock>;
         }
 
-        if (file === "which" && args[0] === "codex") {
+        if (file === "where" && args[0] === "codex") {
           codexChecks += 1;
           if (codexChecks === 1) {
-            callback(new Error("codex unavailable"), "", "not found");
+            callback(new Error("codex unavailable"));
             return {} as ReturnType<typeof execFileMock>;
           }
 
-          callback(null, "/usr/bin/codex\n", "");
+          callback(null, { stdout: "C:\\codex\\codex.exe\r\n", stderr: "" });
           return {} as ReturnType<typeof execFileMock>;
         }
 
-        if (file === "which" && args[0] === "npm") {
-          callback(null, "/usr/bin/npm\n", "");
+        if (file === "where" && args[0] === "npm") {
+          callback(null, { stdout: "C:\\npm\\npm.cmd\r\n", stderr: "" });
           return {} as ReturnType<typeof execFileMock>;
         }
 
         if (file === "npm" && args.join(" ") === "install -g @openai/codex") {
-          callback(null, "installed", "");
+          callback(null, { stdout: "installed", stderr: "" });
           return {} as ReturnType<typeof execFileMock>;
         }
 
-        callback(new Error(`unexpected execFile call: ${file} ${args.join(" ")}`), "", "");
+        callback(new Error(`unexpected execFile call: ${file} ${args.join(" ")}`));
         return {} as ReturnType<typeof execFileMock>;
       }
     );
