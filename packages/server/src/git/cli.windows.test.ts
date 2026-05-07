@@ -36,7 +36,10 @@ describe("runGit windows child-process options", () => {
       }
     );
 
-    await expect(runGit("/tmp/worktree", ["status"])).resolves.toEqual({ stdout: "ok", stderr: "" });
+    await expect(runGit("/tmp/worktree", ["status"])).resolves.toEqual({
+      stdout: "ok",
+      stderr: "",
+    });
 
     expect(execFileMock).toHaveBeenCalledWith(
       "git",
