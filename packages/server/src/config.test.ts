@@ -1,7 +1,16 @@
+import { readFileSync } from "node:fs";
 import { homedir, tmpdir } from "os";
 import { join } from "path";
 import { afterEach, describe, expect, it } from "vitest";
 import { parseServerConfig } from "./config.js";
+
+function readCliPackageVersion(): string | undefined {
+  return (
+    JSON.parse(readFileSync(new URL("../../cli/package.json", import.meta.url), "utf-8")) as {
+      version?: string;
+    }
+  ).version;
+}
 
 describe("parseServerConfig", () => {
   const originalEnv = { ...process.env };
@@ -31,7 +40,7 @@ describe("parseServerConfig", () => {
 
     const config = parseServerConfig();
 
-    expect(config.appVersion).toBe("0.3.0");
+    expect(config.appVersion).toBe(readCliPackageVersion());
   });
 
   it("prefers explicit appVersion override over inferred CLI version", () => {
