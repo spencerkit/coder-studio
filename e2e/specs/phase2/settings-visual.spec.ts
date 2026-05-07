@@ -1,4 +1,9 @@
 import { expect, test } from "@playwright/test";
+import {
+  openSettingsSection,
+  providerSettingPattern,
+  settingsGroupPattern,
+} from "../../fixtures/phase2-i18n";
 
 test.describe("@phase2 settings visual acceptance", () => {
   test("P2V-01 settings page layout baseline", async ({ page }) => {
@@ -22,7 +27,7 @@ test.describe("@phase2 settings visual acceptance", () => {
 
   test("P2V-03 provider card styling", async ({ page }) => {
     await page.goto("/settings");
-    await page.getByRole("button", { name: "Providers" }).click();
+    await openSettingsSection(page, "providers");
     // Provider cards should have consistent styling
     const providerCard = page.locator(".settings-provider-content");
     await expect(providerCard).toBeVisible();
@@ -33,23 +38,17 @@ test.describe("@phase2 settings visual acceptance", () => {
 
   test("P2V-04 appearance section layout", async ({ page }) => {
     await page.goto("/settings");
-    const appearanceBtn = page.getByRole("button", { name: "外观" });
-    if (await appearanceBtn.isVisible()) {
-      await appearanceBtn.click();
-      // Appearance section should be visible
-      const appearanceSection = page.locator(".settings-appearance, .appearance-settings");
-      const count = await appearanceSection.count();
-      expect(count).toBeGreaterThanOrEqual(0);
-    } else {
-      expect(true).toBe(true);
-    }
+    await openSettingsSection(page, "appearance");
+    await expect(
+      page.locator(".settings-group-title").filter({ hasText: settingsGroupPattern("theme") })
+    ).toBeVisible();
   });
 
   test("P2V-05 input field focus states", async ({ page }) => {
     await page.goto("/settings");
-    await page.getByRole("button", { name: "Providers" }).click();
+    await openSettingsSection(page, "providers");
     // Find an input and focus it
-    const input = page.locator("input.input, select.input").first();
+    const input = page.getByLabel(providerSettingPattern("startup_args"));
     if (await input.isVisible()) {
       await input.focus();
       // Check focus border color
@@ -62,9 +61,9 @@ test.describe("@phase2 settings visual acceptance", () => {
 
   test("P2V-06 button hover states", async ({ page }) => {
     await page.goto("/settings");
-    await page.getByRole("button", { name: "Providers" }).click();
+    await openSettingsSection(page, "providers");
     // Find a button and hover
-    const button = page.locator(".btn").first();
+    const button = page.locator(".settings-provider-tab").first();
     await button.hover();
     // Button should respond to hover
     await expect(button).toBeVisible();
@@ -80,15 +79,8 @@ test.describe("@phase2 settings visual acceptance", () => {
 
   test("P2V-08 theme toggle visual feedback", async ({ page }) => {
     await page.goto("/settings");
-    const appearanceBtn = page.getByRole("button", { name: "外观" });
-    if (await appearanceBtn.isVisible()) {
-      await appearanceBtn.click();
-      // Look for theme toggle buttons
-      const themeToggle = page.locator('.theme-toggle, [data-testid="theme-toggle"]');
-      const count = await themeToggle.count();
-      expect(count).toBeGreaterThanOrEqual(0);
-    } else {
-      expect(true).toBe(true);
-    }
+    await openSettingsSection(page, "appearance");
+    await expect(page.getByRole("button", { name: /^(?:深色|Dark)$/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^(?:浅色|Light)$/ })).toBeVisible();
   });
 });

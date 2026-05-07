@@ -1,6 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { error, ROOT_DIR, success } from "./shared/index.js";
+import { isDirectExecution } from "./shared/process.js";
 
 const ALLOWED_PACKAGE = "@spencer-kit/coder-studio";
 
@@ -53,7 +54,7 @@ async function main(): Promise<void> {
   );
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isDirectExecution(import.meta.url)) {
   main().catch((err) => {
     error(err.message);
     process.exit(1);

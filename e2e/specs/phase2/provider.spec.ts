@@ -1,54 +1,58 @@
 import { expect, test } from "@playwright/test";
+import {
+  configFilePattern,
+  openSettingsSection,
+  providerSettingPattern,
+} from "../../fixtures/phase2-i18n";
 
 test.describe("@phase2 provider acceptance", () => {
   test("desktop uses provider sub-navigation and preserves config view across providers", async ({
     page,
   }) => {
     await page.goto("/settings");
-    await page.getByRole("button", { name: "Providers" }).click();
+    await openSettingsSection(page, "providers");
 
     await expect(page.getByRole("button", { name: "Claude" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Codex" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "基础配置" })).toHaveAttribute(
-      "aria-pressed",
-      "true"
-    );
-    await expect(page.getByLabel("启动命令参数")).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: providerSettingPattern("base") })
+    ).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByLabel(providerSettingPattern("startup_args"))).toBeVisible();
 
-    await page.getByRole("button", { name: "配置文件" }).click();
-    await expect(page.getByRole("button", { name: "配置文件" })).toHaveAttribute(
-      "aria-pressed",
-      "true"
-    );
-    await expect(page.getByText("Claude 配置")).toBeVisible();
-    await expect(page.getByLabel("启动命令参数")).not.toBeVisible();
+    await page.getByRole("button", { name: providerSettingPattern("config_file") }).click();
+    await expect(
+      page.getByRole("button", { name: providerSettingPattern("config_file") })
+    ).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByText(configFilePattern("claude"))).toBeVisible();
+    await expect(page.getByLabel(providerSettingPattern("startup_args"))).not.toBeVisible();
 
     await page.getByRole("button", { name: "Codex" }).click();
-    await expect(page.getByRole("button", { name: "配置文件" })).toHaveAttribute(
-      "aria-pressed",
-      "true"
-    );
-    await expect(page.getByText("Codex 配置")).toBeVisible();
-    await expect(page.getByLabel("启动命令参数")).not.toBeVisible();
+    await expect(
+      page.getByRole("button", { name: providerSettingPattern("config_file") })
+    ).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByText(configFilePattern("codex"))).toBeVisible();
+    await expect(page.getByLabel(providerSettingPattern("startup_args"))).not.toBeVisible();
 
-    await page.getByRole("button", { name: "基础配置" }).click();
-    await expect(page.getByLabel("启动命令参数")).toBeVisible();
+    await page.getByRole("button", { name: providerSettingPattern("base") }).click();
+    await expect(page.getByLabel(providerSettingPattern("startup_args"))).toBeVisible();
   });
 
   test("desktop updates startup args per provider and keeps command preview scoped", async ({
     page,
   }) => {
     await page.goto("/settings");
-    await page.getByRole("button", { name: "Providers" }).click();
+    await openSettingsSection(page, "providers");
 
-    const argsInput = page.getByLabel("启动命令参数");
+    const argsInput = page.getByLabel(providerSettingPattern("startup_args"));
     await expect(argsInput).toBeVisible();
 
     await argsInput.fill("--verbose\n--print");
     await expect(page.locator(".settings-command-preview")).toContainText("--print");
 
     await page.getByRole("button", { name: "Codex" }).click();
-    await expect(page.getByLabel("启动命令参数")).not.toHaveValue("--verbose\n--print");
+    await expect(page.getByLabel(providerSettingPattern("startup_args"))).not.toHaveValue(
+      "--verbose\n--print"
+    );
     await expect(page.locator(".settings-command-preview")).not.toContainText("--print");
   });
 
@@ -62,18 +66,24 @@ test.describe("@phase2 provider acceptance", () => {
 
     try {
       await page.goto("/settings");
-      await page.getByRole("button", { name: "Providers" }).click();
+      await openSettingsSection(page, "providers");
 
-      await expect(page.getByLabel("启动命令参数")).toBeVisible();
+      await expect(page.getByLabel(providerSettingPattern("startup_args"))).toBeVisible();
       await expect(page.locator(".settings-provider-subnav")).toHaveCount(0);
 
-      await page.getByRole("button", { name: /打开配置文件编辑/ }).click();
-      await expect(page.getByRole("button", { name: "返回基础配置" })).toBeVisible();
-      await expect(page.getByText("Claude 配置")).toBeVisible();
+      await page
+        .getByRole("button", { name: providerSettingPattern("open_config_file_editor") })
+        .click();
+      await expect(
+        page.getByRole("button", { name: providerSettingPattern("back_to_base") })
+      ).toBeVisible();
+      await expect(page.getByText(configFilePattern("claude"))).toBeVisible();
 
       await page.getByRole("button", { name: "Codex" }).click();
-      await expect(page.getByLabel("启动命令参数")).toBeVisible();
-      await expect(page.getByRole("button", { name: "返回基础配置" })).toHaveCount(0);
+      await expect(page.getByLabel(providerSettingPattern("startup_args"))).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: providerSettingPattern("back_to_base") })
+      ).toHaveCount(0);
     } finally {
       await context.close();
     }

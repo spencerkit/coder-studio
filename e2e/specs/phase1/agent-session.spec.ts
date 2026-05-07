@@ -1,20 +1,19 @@
 import { expect, test } from "@playwright/test";
+import { expectOpenWorkspaceButton, expectWelcomeCopy } from "../../fixtures/phase1-i18n";
 
 test.describe("@phase1 agent session acceptance", () => {
   test("F1-06 start session", async ({ page }) => {
     await page.goto("/");
     // Welcome page should render correctly
     await expect(page.locator(".welcome-container")).toBeVisible();
-    await expect(page.locator(".welcome-kicker")).toHaveText("GET STARTED");
-    await expect(page.locator(".welcome-title")).toBeVisible();
+    await expectWelcomeCopy(page);
   });
 
   test("F1-07 send prompt", async ({ page }) => {
     await page.goto("/");
     // Check welcome page elements
     const openBtn = page.locator(".welcome-btn");
-    await expect(openBtn).toBeVisible();
-    await expect(openBtn.locator("span")).toContainText("Open Workspace");
+    await expectOpenWorkspaceButton(openBtn);
   });
 
   test("F1-08 receive response", async ({ page }) => {

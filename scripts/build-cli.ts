@@ -22,6 +22,7 @@ import {
   success,
   WEB_DIST_DIR,
 } from "./shared/index.js";
+import { isDirectExecution } from "./shared/process.js";
 
 export interface CliOutputDirs {
   cliDistDir: string;
@@ -100,7 +101,7 @@ import('./esm/bin.mjs').catch((err) => {
 }
 
 // Run if called directly
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isDirectExecution(import.meta.url)) {
   buildCli()
     .then(() => {
       log("\n✓ CLI build complete.\n");

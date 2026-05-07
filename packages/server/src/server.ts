@@ -21,8 +21,9 @@ import {
   cleanupCodexConfigToml,
 } from "./config/codex-config-audit.js";
 import { ensureDataDir, parseServerConfig, type ServerConfig } from "./config.js";
-import { ProviderInstallManager } from "./provider-runtime/install-manager.js";
+import { isDirectExecution } from "./direct-execution.js";
 import { execFileAsString } from "./provider-runtime/exec-file.js";
+import { ProviderInstallManager } from "./provider-runtime/install-manager.js";
 import type { RuntimeStatusDeps } from "./provider-runtime/runtime-status.js";
 import { SessionManager } from "./session/manager.js";
 import type { Database } from "./storage/database.js";
@@ -374,7 +375,7 @@ function createSessionDatabase(db: Database) {
   };
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isDirectExecution(import.meta.url)) {
   const server = await createServer();
 
   process.on("SIGINT", async () => {

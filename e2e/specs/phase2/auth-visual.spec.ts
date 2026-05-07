@@ -1,4 +1,6 @@
 import { expect, test } from "@playwright/test";
+import { translateForE2E } from "../../fixtures/i18n";
+import { AUTH_PREVIEW_URL } from "../../fixtures/phase2-i18n";
 
 test.describe("@phase2 auth visual acceptance", () => {
   test("P2AV-01 welcome page layout", async ({ page }) => {
@@ -10,7 +12,7 @@ test.describe("@phase2 auth visual acceptance", () => {
 
   test("P2AV-02 welcome page buttons styling", async ({ page }) => {
     await page.goto("/");
-    const openBtn = page.getByRole("button", { name: /Open|打开/ });
+    const openBtn = page.getByRole("button", { name: translateForE2E("action.open_workspace") });
     if (await openBtn.isVisible()) {
       const bgColor = await openBtn.evaluate((el) => getComputedStyle(el).backgroundColor);
       expect(bgColor).toBeTruthy();
@@ -32,16 +34,18 @@ test.describe("@phase2 auth visual acceptance", () => {
   });
 
   test("P2AV-05 auth preview uses shared card and form primitives", async ({ page }) => {
-    await page.goto("file:///home/spencer/workspace/coder-studio/packages/web/auth-preview.html");
+    await page.goto(AUTH_PREVIEW_URL);
 
     await expect(page.locator(".welcome-container.auth-screen")).toBeVisible();
     await expect(page.locator(".welcome-card.auth-card-shell")).toBeVisible();
     await expect(page.locator(".auth-form")).toBeVisible();
-    await expect(page.locator(".input.auth-input")).toBeVisible();
-    await expect(page.locator(".btn.btn-primary.auth-submit")).toBeVisible();
+    await expect(page.getByPlaceholder(translateForE2E("settings.auth.password"))).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: translateForE2E("action.confirm") })
+    ).toBeVisible();
 
     const errorColor = await page
-      .locator(".auth-error")
+      .locator(".auth-status-panel-error")
       .evaluate((el) => getComputedStyle(el).color);
     expect(errorColor).toBeTruthy();
   });

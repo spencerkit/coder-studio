@@ -3,9 +3,8 @@
  * Starts Vite dev server for frontend
  */
 
-import { resolve } from "path";
 import { error, info, log, success, WEB_DIR } from "./shared/index.js";
-import { runBackground } from "./shared/process.js";
+import { isDirectExecution, runBackground } from "./shared/process.js";
 
 const VITE_PORT = 5173;
 const VITE_HOST = "localhost";
@@ -39,7 +38,7 @@ async function devWeb(): Promise<void> {
 }
 
 // Run if called directly
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isDirectExecution(import.meta.url)) {
   devWeb().catch((err) => {
     error(err.message);
     process.exit(1);

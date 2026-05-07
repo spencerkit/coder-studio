@@ -1,29 +1,36 @@
 import { expect, test } from "@playwright/test";
+import { translateForE2E } from "../../fixtures/i18n";
+import {
+  openSettingsSection,
+  settingsGroupLabel,
+  settingsSectionLabel,
+} from "../../fixtures/phase2-i18n";
 
 test.describe("@phase2 i18n acceptance", () => {
   test("P2I-01 language switch to English", async ({ page }) => {
     await page.goto("/settings");
-    // UI defaults to Chinese, click "外观" (Appearance)
-    await page.getByRole("button", { name: "外观" }).click();
+    await openSettingsSection(page, "appearance");
 
-    // Click English button
-    await page.getByRole("button", { name: /English/i }).click();
+    await page.getByRole("button", { name: translateForE2E("settings.language.en") }).click();
 
-    // Verify UI is in English (Appearance section title should be translated)
-    await expect(page.locator(".settings-section-title")).toContainText("Appearance");
+    await expect(page.locator(".settings-group-title").first()).toHaveText(
+      settingsGroupLabel("theme", "en")
+    );
   });
 
   test("P2I-02 language persists after reload", async ({ page }) => {
     await page.goto("/settings");
-    // UI defaults to Chinese, click "外观" (Appearance)
-    await page.getByRole("button", { name: "外观" }).click();
-    await page.getByRole("button", { name: /English/i }).click();
+    await openSettingsSection(page, "appearance");
+    await page.getByRole("button", { name: translateForE2E("settings.language.en") }).click();
 
-    // Reload page
     await page.reload();
 
-    // Verify language persisted (page resets to General section after reload)
-    await expect(page.locator(".settings-section-title")).toContainText("General");
+    await expect(
+      page.getByRole("button", { name: settingsSectionLabel("general", "en") })
+    ).toBeVisible();
+    await expect(page.locator(".settings-group-title").first()).toHaveText(
+      settingsGroupLabel("notifications", "en")
+    );
   });
 
   test("P2I-03 all UI text uses translation", async ({ page }) => {

@@ -1,14 +1,18 @@
 import { expect, test } from "@playwright/test";
+import { translateForE2E } from "../../fixtures/i18n";
+import { expectOpenWorkspaceButton, expectWelcomeCopy } from "../../fixtures/phase1-i18n";
 
 test.describe("@phase1 workspace acceptance", () => {
   test("F1-01 open workspace", async ({ page }) => {
     await page.goto("/");
     // Click open workspace button to open the workspace launch modal.
     const openBtn = page.locator(".welcome-btn");
-    await expect(openBtn).toBeVisible();
+    await expectOpenWorkspaceButton(openBtn);
     await openBtn.click();
     await expect(page.locator(".launch-overlay")).toBeVisible();
-    await expect(page.locator(".launch-title")).toHaveText("Local Folder");
+    await expect(page.locator(".launch-title")).toHaveText(
+      translateForE2E("workspace.launch.title")
+    );
   });
 
   test("F1-02 browse file tree", async ({ page }) => {
@@ -26,9 +30,8 @@ test.describe("@phase1 workspace acceptance", () => {
 
   test("F1-04 create file", async ({ page }) => {
     await page.goto("/");
-    // Welcome page should have kicker
-    const kicker = page.locator(".welcome-kicker");
-    await expect(kicker).toHaveText("GET STARTED");
+    // Welcome page should have translated copy
+    await expectWelcomeCopy(page);
   });
 
   test("F1-05 delete file", async ({ page }) => {

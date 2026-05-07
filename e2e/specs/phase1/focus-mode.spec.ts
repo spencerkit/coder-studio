@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { expectWelcomeCopy } from "../../fixtures/phase1-i18n";
 
 test.describe("@phase1 focus mode acceptance", () => {
   test("F1-27 enter focus", async ({ page }) => {
@@ -9,7 +10,7 @@ test.describe("@phase1 focus mode acceptance", () => {
 
   test("F1-28 exit focus", async ({ page }) => {
     await page.goto("/");
-    // Check kicker text
-    await expect(page.locator(".welcome-kicker")).toHaveText("GET STARTED");
+    // Check translated welcome copy
+    await expectWelcomeCopy(page);
   });
 });

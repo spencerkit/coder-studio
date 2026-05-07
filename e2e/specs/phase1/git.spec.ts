@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { expectWelcomeCopy } from "../../fixtures/phase1-i18n";
 
 test.describe("@phase1 git acceptance", () => {
   test("F1-16 view status", async ({ page }) => {
@@ -9,8 +10,8 @@ test.describe("@phase1 git acceptance", () => {
 
   test("F1-17 view diff", async ({ page }) => {
     await page.goto("/");
-    // Check welcome elements
-    await expect(page.locator(".welcome-kicker")).toHaveText("GET STARTED");
+    // Check translated welcome copy
+    await expectWelcomeCopy(page);
   });
 
   test("F1-18 commit", async ({ page }) => {

@@ -1,4 +1,6 @@
 import { expect, test } from "@playwright/test";
+import { translateForE2E } from "../../fixtures/i18n";
+import { AUTH_PREVIEW_URL } from "../../fixtures/phase2-i18n";
 
 // Auth tests require a password-protected server
 // These tests are skipped in normal dev mode and run with special config in CI
@@ -20,10 +22,12 @@ test.describe("@phase2 auth acceptance", () => {
   });
 
   test("P2-03 auth preview exposes the login form structure", async ({ page }) => {
-    await page.goto("file:///home/spencer/workspace/coder-studio/packages/web/auth-preview.html");
+    await page.goto(AUTH_PREVIEW_URL);
     await expect(page.locator(".auth-form")).toBeVisible();
-    await expect(page.locator(".input.auth-input")).toBeVisible();
-    await expect(page.getByRole("button", { name: /确认|Confirm/ })).toBeVisible();
+    await expect(page.getByPlaceholder(translateForE2E("settings.auth.password"))).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: translateForE2E("action.confirm") })
+    ).toBeVisible();
   });
 
   test("P2-04 frontend reaches main app without auth", async ({ page }) => {

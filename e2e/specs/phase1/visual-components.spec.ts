@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { expectWelcomeCopy } from "../../fixtures/phase1-i18n";
 
 /**
  * Phase 1 Visual Acceptance Tests: Core Components
@@ -16,8 +17,8 @@ test.describe("@phase1 visual acceptance", () => {
 
   test("V1-05 workspace panel baseline", async ({ page }) => {
     await page.goto("/");
-    // Welcome kicker should be present
-    await expect(page.locator(".welcome-kicker")).toHaveText("GET STARTED");
+    // Welcome copy should be present in the active locale
+    await expectWelcomeCopy(page);
   });
 
   test("V1-06 agent pane baseline", async ({ page }) => {

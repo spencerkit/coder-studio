@@ -6,6 +6,7 @@
 import { buildCli } from "./build-cli.js";
 import { buildWeb } from "./build-web.js";
 import { error, info, log, step, success } from "./shared/index.js";
+import { isDirectExecution } from "./shared/process.js";
 
 async function build(): Promise<void> {
   step("BUILD", "Running full production build...\n");
@@ -20,7 +21,7 @@ async function build(): Promise<void> {
 }
 
 // Run if called directly
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isDirectExecution(import.meta.url)) {
   build()
     .then(() => {
       process.exit(0);
