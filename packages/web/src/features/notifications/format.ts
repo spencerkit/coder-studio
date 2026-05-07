@@ -28,11 +28,15 @@ export function formatWorkspaceLabel(
 ): string {
   if (!workspace) return "";
   const name = workspace.name?.trim();
-  if (name) return name;
+  if (name) return extractWorkspaceLeafName(name);
   const path = workspace.path?.trim();
   if (!path) return "";
+  return extractWorkspaceLeafName(path);
+}
+
+function extractWorkspaceLeafName(value: string): string {
   // Strip trailing slashes, then take last segment.
-  const cleaned = path.replace(/[/\\]+$/, "");
+  const cleaned = value.replace(/[/\\]+$/, "");
   const parts = cleaned.split(/[/\\]/);
   return parts[parts.length - 1] || cleaned;
 }

@@ -1,6 +1,7 @@
 import type { Workspace } from "@coder-studio/core";
 import { Menu, Settings2 } from "lucide-react";
 import { useTranslation } from "../../../../lib/i18n";
+import { formatWorkspaceLabel } from "../../../notifications/format";
 import type { WorkspaceFullscreenController } from "../../actions/use-workspace-fullscreen";
 import { WorkspaceFullscreenButton } from "../../components/workspace-fullscreen-button";
 
@@ -21,10 +22,7 @@ export function MobileTopBar({
 }: MobileTopBarProps) {
   const t = useTranslation();
   const workspaceLabel =
-    activeWorkspace?.name ??
-    activeWorkspace?.path?.split("/").filter(Boolean).pop() ??
-    activeWorkspace?.path ??
-    t("mobile.workspace_drawer.select_title");
+    formatWorkspaceLabel(activeWorkspace) || t("mobile.workspace_drawer.select_title");
 
   return (
     <header className="mobile-topbar">

@@ -21,6 +21,15 @@ describe("formatWorkspaceLabel", () => {
     expect(formatWorkspaceLabel({ name: "My Project", path: "/tmp/foo" })).toBe("My Project");
   });
 
+  it("extracts the basename when the explicit name is a full path", () => {
+    expect(
+      formatWorkspaceLabel({
+        name: "/home/spencer/workspace/coder-studio",
+        path: "/home/spencer/workspace/coder-studio",
+      })
+    ).toBe("coder-studio");
+  });
+
   it("falls back to the basename of the path", () => {
     expect(formatWorkspaceLabel({ path: "/home/spencer/workspace/coder-studio" })).toBe(
       "coder-studio"

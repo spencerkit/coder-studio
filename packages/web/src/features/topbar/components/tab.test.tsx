@@ -43,6 +43,24 @@ describe("WorkspaceTab", () => {
     routerMocks.navigate.mockReset();
   });
 
+  it("renders the folder basename when workspace name is a full path", () => {
+    const workspace = {
+      ...createWorkspace("ws-2", "/home/spencer/workspace/coder-studio"),
+      name: "/home/spencer/workspace/coder-studio",
+    };
+    const store = createStore();
+    store.set(localeAtom, "en");
+
+    render(
+      <Provider store={store}>
+        <WorkspaceTab workspace={workspace} isActive={false} />
+      </Provider>
+    );
+
+    expect(screen.getByText("coder-studio")).toBeInTheDocument();
+    expect(screen.queryByText("/home/spencer/workspace/coder-studio")).toBeNull();
+  });
+
   it("sets the active workspace without navigating when a tab is clicked", () => {
     const workspace = createWorkspace("ws-2", "/tmp/two");
     const store = createStore();

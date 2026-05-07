@@ -17,6 +17,7 @@ import {
 } from "../../../atoms/workspaces";
 import { useViewport } from "../../../hooks/use-viewport";
 import { useTranslation } from "../../../lib/i18n";
+import { formatWorkspaceLabel } from "../../notifications/format";
 import {
   bottomPanelHeightAtom,
   focusModeAtom,
@@ -382,7 +383,7 @@ function buildCommands(context: {
 
   // Add workspace switch commands
   workspaces.forEach((ws) => {
-    const workspaceLabel = ws.name || ws.path?.split("/").pop() || ws.path || ws.id;
+    const workspaceLabel = formatWorkspaceLabel(ws) || ws.id;
 
     commands.push({
       id: `switch-workspace-${ws.id}`,

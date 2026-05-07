@@ -4,6 +4,7 @@ import { X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { activeWorkspaceIdAtom } from "../../../../atoms/workspaces";
 import { useTranslation } from "../../../../lib/i18n";
+import { formatWorkspaceLabel } from "../../../notifications/format";
 import { useWorkspaceCloseAction } from "../../actions/use-workspace-close-action";
 
 interface MobileWorkspaceDrawerProps {
@@ -51,11 +52,7 @@ export function MobileWorkspaceDrawer({
 
         <div className="mobile-workspace-drawer__list">
           {workspaces.map((workspace) => {
-            const displayName =
-              workspace.name ||
-              workspace.path?.split("/").filter(Boolean).pop() ||
-              workspace.path ||
-              workspace.id;
+            const displayName = formatWorkspaceLabel(workspace) || workspace.id;
 
             return (
               <div
