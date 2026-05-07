@@ -7,6 +7,7 @@
 import { chmodSync, existsSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
+import { resolveSpawnArgv } from "@coder-studio/utils";
 import type * as NodePty from "node-pty";
 import type { PtyHost, PtyProcess, PtySpawnOptions } from "./types.js";
 
@@ -200,7 +201,18 @@ export class NodePtyHost implements PtyHost {
       throw new Error(`node-pty native module not available. ${message}`);
     }
 
-    const [command, ...args] = argv;
+    if (argv.length === 0) {
+      throw new Error("PTY spawn requires a command");
+    }
+
+    // On Windows, node-pty calls Win32 CreateProcess directly and cannot run
+    // .cmd/.bat shims. resolveSpawnArgv walks PATH+PATHEXT and unwraps
+    // npm-style cmd-shims into a `node <entry.js>` invocation. On non-win32
+    // platforms this returns argv unchanged.
+    const [command, ...args] = resolveSpawnArgv(argv, {
+      pathEnv: options.env.Path ?? options.env.PATH,
+      pathExt: options.env.PATHEXT,
+    });
     if (command === undefined) {
       throw new Error("PTY spawn requires a command");
     }
