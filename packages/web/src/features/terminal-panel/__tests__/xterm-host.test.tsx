@@ -378,7 +378,9 @@ describe("XtermHost", () => {
 
     expect(await screen.findByText("正在恢复终端内容…")).toBeInTheDocument();
     expect(
-      screen.getByText("你已经可以继续使用当前页面；历史内容会在后台补上，内容较多时可能需要更久。")
+      screen.getByText(
+        "恢复期间暂时无法使用当前终端；请耐心等待，历史内容恢复完成后再继续。内容较多时可能需要更久。"
+      )
     ).toBeInTheDocument();
 
     global.requestAnimationFrame = originalRequestAnimationFrame;
