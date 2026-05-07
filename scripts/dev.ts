@@ -4,7 +4,7 @@
  */
 
 import { error, info, log, SERVER_DIR, step, success, WEB_DIR } from "./shared/index.js";
-import { runBackground, waitForProcesses } from "./shared/process.js";
+import { isDirectExecution, runBackground, waitForProcesses } from "./shared/process.js";
 
 const VITE_PORT = 5173;
 const VITE_HOST = "localhost";
@@ -65,7 +65,7 @@ async function dev(): Promise<void> {
 }
 
 // Run if called directly
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isDirectExecution(import.meta.url)) {
   dev().catch((err) => {
     error(err.message);
     process.exit(1);

@@ -1,7 +1,7 @@
 import type { Supervisor, SupervisorCycle } from "@coder-studio/core";
 import { createStore } from "jotai";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { sessionsAtom } from "../atoms";
+import { isWriterAtom, serverInfoAtom, sessionsAtom } from "../atoms";
 import {
   activeWorkspaceAtom,
   activeWorkspaceIdAtom,
@@ -61,6 +61,29 @@ describe("routeEventToAtom", () => {
 
     expect(store.get(supervisorsAtom).size).toBe(0);
     expect(store.get(supervisorCyclesAtom).size).toBe(0);
+  });
+
+  it("stores server metadata from the initial connected status event", () => {
+    const store = createStore();
+
+    routeEventToAtom(
+      "connection.status",
+      {
+        status: "connected",
+        authEnabled: false,
+        version: "0.3.0",
+        serverInstanceId: "server-123",
+        isWriter: true,
+      },
+      store
+    );
+
+    expect(store.get(serverInfoAtom)).toEqual({
+      version: "0.3.0",
+      serverInstanceId: "server-123",
+      authEnabled: false,
+    });
+    expect(store.get(isWriterAtom)).toBe(true);
   });
 
   it("appends brand-new workspace meta events to workspace order without reordering existing entries", () => {

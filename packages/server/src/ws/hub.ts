@@ -92,12 +92,16 @@ export class WsHub implements Broadcaster {
     const client = new WsClient(socket, uuidv4(), this.deps.logger);
     this.clients.set(client.id, client);
 
-    // Send connection ready (controller status determined later by fencing.request command)
+    // Send initial connection metadata. Writer status is established later by
+    // fencing.request, but the UI still needs the app version immediately.
     client.sendEvent("connection.status", {
       status: "connected",
       clientId: client.id,
       authEnabled: this.deps.config.auth.enabled,
       binaryTerminalTransport: true,
+      version: this.deps.config.appVersion ?? "0.0.0",
+      serverInstanceId: `server-${process.pid}`,
+      isWriter: false,
     });
 
     // Setup handlers

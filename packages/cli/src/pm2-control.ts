@@ -8,6 +8,8 @@ export const MANAGED_SERVER_NAME = "coder-studio-server";
 const PM2_RESTART_DELAY_MS = 2000;
 const PM2_MIN_UPTIME = "5s";
 const PM2_MAX_RESTARTS = 10;
+const PM2_DELETE_WAIT_MS = 5000;
+const PM2_DISCONNECT_WAIT_MS = 1000;
 const STARTUP_POLL_INTERVAL_MS = 100;
 const STARTUP_FAILURE_GUIDANCE =
   "Run `coder-studio logs` for details or `coder-studio serve --foreground` for interactive debugging.";
@@ -61,7 +63,7 @@ const isPm2BrokenStateError = (error: unknown): boolean => {
 
 type Pm2Module = {
   connect: (cb: (err: Error | null) => void) => void;
-  disconnect: () => void;
+  disconnect: (cb?: (err: Error | null, data?: unknown) => void) => void;
   describe: (name: string, cb: (err: Error | null, result: unknown[]) => void) => void;
   delete: (name: string, cb: (err: Error | null) => void) => void;
   start: (opts: unknown, cb: (err: Error | null) => void) => void;
@@ -110,36 +112,51 @@ const sleep = async (ms: number): Promise<void> =>
 
 const disconnectPm2 = async (): Promise<void> => {
   const pm2 = await loadPm2();
-  pm2.disconnect();
+  await new Promise<void>((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      resolve();
+    };
+
+    const timer = setTimeout(finish, PM2_DISCONNECT_WAIT_MS);
+    try {
+      pm2.disconnect(() => {
+        clearTimeout(timer);
+        finish();
+      });
+    } catch {
+      clearTimeout(timer);
+      finish();
+    }
+  });
 };
 
-const describeManagedServer = async (): Promise<Pm2ProcessDescription[]> => {
-  const pm2 = await loadPm2();
-  return new Promise((resolve, reject) => {
+const describeManagedServer = async (pm2: Pm2Module): Promise<Pm2ProcessDescription[]> =>
+  new Promise((resolve, reject) => {
     pm2.describe(MANAGED_SERVER_NAME, (error, result) => {
       if (error) {
         reject(error);
         return;
       }
-
       resolve((result ?? []) as Pm2ProcessDescription[]);
     });
   });
-};
 
-const removeManagedServer = async (): Promise<void> => {
-  const pm2 = await loadPm2();
-  return new Promise((resolve, reject) => {
+const removeManagedServer = async (pm2: Pm2Module): Promise<void> =>
+  new Promise((resolve, reject) => {
     pm2.delete(MANAGED_SERVER_NAME, (error) => {
       if (error) {
         reject(error);
         return;
       }
-
       resolve();
     });
   });
-};
 
 /**
  * Kill the PM2 daemon to clear stale paths/caches.
@@ -158,9 +175,10 @@ const killPm2Daemon = async (): Promise<void> => {
  * Try to connect to PM2, and if it's in a broken state (stale worktree path),
  * kill the daemon and reconnect fresh.
  */
-const connectWithRecovery = async (): Promise<void> => {
+const connectWithRecovery = async (): Promise<Pm2Module> => {
   try {
     await connectPm2();
+    return loadPm2();
   } catch (error) {
     if (isPm2BrokenStateError(error)) {
       console.warn("PM2 daemon is in a stale state. Killing and reconnecting...");
@@ -173,23 +191,25 @@ const connectWithRecovery = async (): Promise<void> => {
       // Clear cached module so next loadPm2 gets a fresh instance
       cachedPm2 = null;
       await connectPm2();
+      return loadPm2();
     } else {
       throw error;
     }
   }
 };
 
-const withPm2Connection = async <T>(operation: () => Promise<T>): Promise<T> => {
-  await connectWithRecovery();
+const withPm2Connection = async <T>(operation: (pm2: Pm2Module) => Promise<T>): Promise<T> => {
+  const pm2 = await connectWithRecovery();
 
   try {
-    return await operation();
+    return await operation(pm2);
   } finally {
     await disconnectPm2();
   }
 };
 
 const waitForRuntimeReady = async (
+  pm2: Pm2Module,
   waitMs: number,
   logOffsets: StartupLogOffsets
 ): Promise<void> => {
@@ -200,7 +220,7 @@ const waitForRuntimeReady = async (
       return;
     }
 
-    const processes = await describeManagedServer();
+    const processes = await describeManagedServer(pm2);
     const process = processes[0];
     if (!process) {
       throw createStartupError(
@@ -225,15 +245,52 @@ const waitForRuntimeReady = async (
   throw createStartupError(`runtime readiness timed out after ${waitMs}ms`, logOffsets);
 };
 
-const waitForManagedServerExit = async (): Promise<void> => {
-  while (true) {
-    const processes = await describeManagedServer();
+const waitForManagedServerDeletion = async (pm2: Pm2Module, waitMs: number): Promise<void> => {
+  const deadline = Date.now() + waitMs;
+
+  while (Date.now() <= deadline) {
+    const processes = await describeManagedServer(pm2);
     if (processes.length === 0) {
       return;
     }
 
-    await sleep(STARTUP_POLL_INTERVAL_MS);
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) {
+      break;
+    }
+
+    await sleep(Math.min(STARTUP_POLL_INTERVAL_MS, remainingMs));
   }
+
+  throw new Error(`Timed out waiting for the managed server to stop after ${waitMs}ms.`);
+};
+
+const deleteManagedServerInSession = async (
+  pm2: Pm2Module,
+  {
+    ignoreMissing = false,
+  }: {
+    ignoreMissing?: boolean;
+  } = {}
+): Promise<boolean> => {
+  const processes = await describeManagedServer(pm2);
+  if (processes.length === 0) {
+    return false;
+  }
+
+  try {
+    await removeManagedServer(pm2);
+  } catch (error) {
+    if (ignoreMissing && isMissingManagedServerError(error)) {
+      await waitForManagedServerDeletion(pm2, PM2_DELETE_WAIT_MS);
+      return false;
+    }
+
+    throw error;
+  }
+
+  await waitForManagedServerDeletion(pm2, PM2_DELETE_WAIT_MS);
+  return true;
 };
 
 const ensureLogDirectory = (): void => {
@@ -287,47 +344,25 @@ export const deleteManagedServer = async ({
 }: {
   ignoreMissing?: boolean;
 } = {}): Promise<boolean> =>
-  withPm2Connection(async () => {
-    const processes = await describeManagedServer();
-    if (processes.length === 0) {
-      return false;
-    }
-
-    try {
-      await removeManagedServer();
-      return true;
-    } catch (error) {
-      if (ignoreMissing && isMissingManagedServerError(error)) {
-        return false;
-      }
-
-      throw error;
-    }
-  });
+  withPm2Connection((pm2) => deleteManagedServerInSession(pm2, { ignoreMissing }));
 
 export const startManagedServer = async ({
   script,
   cwd,
   waitMs,
   args,
-}: StartManagedServerOptions): Promise<void> => {
-  // First try to delete any existing managed server
-  await deleteManagedServer({ ignoreMissing: true });
+}: StartManagedServerOptions): Promise<void> =>
+  withPm2Connection(async (pm2) => {
+    await deleteManagedServerInSession(pm2, { ignoreMissing: true });
 
-  // Wait for the old process to actually exit
-  await withPm2Connection(waitForManagedServerExit);
+    if (readRuntimeConfig()) {
+      deleteRuntimeConfig();
+    }
 
-  // Clear stale runtime config
-  if (readRuntimeConfig()) {
-    deleteRuntimeConfig();
-  }
-
-  ensureLogDirectory();
-  const { outFile, errFile } = getLogPaths();
-  const pm2 = await loadPm2();
-
-  await withPm2Connection(async () => {
+    ensureLogDirectory();
+    const { outFile, errFile } = getLogPaths();
     const logOffsets = captureStartupLogOffsets();
+
     await new Promise<void>((resolve, reject) => {
       pm2.start(
         {
@@ -357,13 +392,12 @@ export const startManagedServer = async ({
       );
     });
 
-    await waitForRuntimeReady(waitMs, logOffsets);
+    await waitForRuntimeReady(pm2, waitMs, logOffsets);
   });
-};
 
 export const getManagedServerStatus = async (): Promise<ManagedServerStatus> =>
-  withPm2Connection(async () => {
-    const processes = await describeManagedServer();
+  withPm2Connection(async (pm2) => {
+    const processes = await describeManagedServer(pm2);
     const process = processes[0];
 
     if (!process) {
@@ -395,6 +429,14 @@ export const getManagedServerStatus = async (): Promise<ManagedServerStatus> =>
     }
 
     if (status === "stopped") {
+      return {
+        status: "stopped",
+        pm2Pid: null,
+        restartCount,
+      };
+    }
+
+    if (pm2Pid === null || pm2Pid === 0) {
       return {
         status: "stopped",
         pm2Pid: null,

@@ -17,22 +17,44 @@ describe("getCommandLookupExecutable", () => {
 
 describe("checkCommandAvailable", () => {
   it("returns true when the lookup command succeeds", async () => {
-    const execFile = vi.fn(async () => ({ stdout: "/usr/bin/codex\n", stderr: "" }));
-
-    await expect(checkCommandAvailable("codex", { platform: "linux", execFile })).resolves.toBe(
-      true
+    const execFile = vi.fn(
+      async (_file: string, _args: string[], _options?: { windowsHide: boolean }) => ({
+        stdout: "/usr/bin/codex\n",
+        stderr: "",
+      })
     );
-    expect(execFile).toHaveBeenCalledWith("which", ["codex"]);
+
+    await expect(
+      checkCommandAvailable("codex", { platform: "linux", runCommand: execFile })
+    ).resolves.toBe(true);
+    expect(execFile).toHaveBeenCalledWith("which", ["codex"], { windowsHide: true });
   });
 
   it("returns false when the lookup command fails", async () => {
-    const execFile = vi.fn(async () => {
-      throw new Error("not found");
-    });
-
-    await expect(checkCommandAvailable("claude", { platform: "win32", execFile })).resolves.toBe(
-      false
+    const execFile = vi.fn(
+      async (_file: string, _args: string[], _options?: { windowsHide: boolean }) => {
+        throw new Error("not found");
+      }
     );
-    expect(execFile).toHaveBeenCalledWith("where", ["claude"]);
+
+    await expect(
+      checkCommandAvailable("claude", { platform: "win32", runCommand: execFile })
+    ).resolves.toBe(false);
+    expect(execFile).toHaveBeenCalledWith("where", ["claude"], { windowsHide: true });
+  });
+
+  it("passes windowsHide to Windows lookups", async () => {
+    const execFile = vi.fn(
+      async (_file: string, _args: string[], _options?: { windowsHide: boolean }) => ({
+        stdout: "C:\\Users\\test\\AppData\\Local\\Programs\\Codex\\codex.exe\r\n",
+        stderr: "",
+      })
+    );
+
+    await expect(
+      checkCommandAvailable("codex", { platform: "win32", runCommand: execFile })
+    ).resolves.toBe(true);
+
+    expect(execFile).toHaveBeenCalledWith("where", ["codex"], { windowsHide: true });
   });
 });

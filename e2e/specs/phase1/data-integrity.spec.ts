@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { expectWelcomeCopy } from "../../fixtures/phase1-i18n";
 
 test.describe("@phase1 data integrity acceptance", () => {
   test("F1-37 file persistence", async ({ page }) => {
@@ -9,8 +10,8 @@ test.describe("@phase1 data integrity acceptance", () => {
 
   test("F1-38 session persistence", async ({ page }) => {
     await page.goto("/");
-    // Check kicker
-    await expect(page.locator(".welcome-kicker")).toHaveText("GET STARTED");
+    // Check translated welcome copy
+    await expectWelcomeCopy(page);
   });
 
   test("F1-39 terminal replay", async ({ page }) => {

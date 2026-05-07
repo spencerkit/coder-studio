@@ -230,7 +230,7 @@ describe("Session Integration", () => {
     ctx.providerInstallMgr = new ProviderInstallManager(providerRegistry, {
       platform: "win32",
       commandExists: async (command: string) => command === "winget",
-      execFile: async () => ({ stdout: "", stderr: "" }),
+      runCommand: async () => ({ stdout: "", stderr: "" }),
     });
 
     const status = await dispatch(
@@ -453,6 +453,68 @@ describe("Session Integration", () => {
       expect(sessionResult.ok).toBe(true);
       expect(spawnCalls.at(-1)?.argv).toContain("--sandbox");
       expect((spawnCalls.at(-1)?.options as { cwd?: string } | undefined)?.cwd).toBe(testDir);
+    });
+
+    it("passes the provider-built argv and session id env through to PTY spawn", async () => {
+      db.prepare("INSERT INTO provider_configs (provider_id, config) VALUES (?, ?)").run(
+        "claude",
+        '{"additionalArgs":["--verbose"],"envVars":{"TASK3_PROVIDER_ENV":"task3-value"}}'
+      );
+
+      const openResult = await dispatch(
+        {
+          kind: "command",
+          id: "test-provider-handoff-open",
+          op: "workspace.open",
+          args: { path: testDir },
+        },
+        ctx
+      );
+
+      expect(openResult.ok).toBe(true);
+      const workspaceId = openResult.data!.id;
+
+      const sessionResult = await dispatch(
+        {
+          kind: "command",
+          id: "test-provider-handoff-create",
+          op: "session.create",
+          args: {
+            workspaceId,
+            providerId: "claude",
+          },
+        },
+        ctx
+      );
+
+      expect(sessionResult.ok).toBe(true);
+
+      const sessionId = sessionResult.data!.id;
+      const claudeProvider = providerRegistry.find((provider) => provider.id === "claude");
+      expect(claudeProvider).toBeDefined();
+
+      const expectedCommand = claudeProvider!.buildCommand(
+        {
+          ...claudeProvider!.defaultConfig,
+          additionalArgs: ["--verbose"],
+          envVars: {
+            TASK3_PROVIDER_ENV: "task3-value",
+          },
+        },
+        {
+          workspacePath: testDir,
+          sessionId,
+        }
+      );
+
+      const lastSpawn = spawnCalls.at(-1);
+      expect(lastSpawn?.argv).toEqual(expectedCommand.argv);
+      expect((lastSpawn?.options as { env?: Record<string, string> } | undefined)?.env).toEqual(
+        expect.objectContaining({
+          CODER_STUDIO_SESSION_ID: sessionId,
+          TASK3_PROVIDER_ENV: "task3-value",
+        })
+      );
     });
   });
 

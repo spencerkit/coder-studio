@@ -1,13 +1,10 @@
-import { execFile as nodeExecFile } from "node:child_process";
-import { promisify } from "node:util";
-
-const execFileAsync = promisify(nodeExecFile);
-
 export type CommandAvailabilityCheck = (command: string) => Promise<boolean>;
+
+import { type CommandRunner, runCommandAsString } from "./command-runner.js";
 
 export interface CommandCheckDeps {
   platform?: NodeJS.Platform;
-  execFile?: (file: string, args: string[]) => Promise<{ stdout: string; stderr: string }>;
+  runCommand?: CommandRunner;
 }
 
 export function getCommandLookupExecutable(platform: NodeJS.Platform): "where" | "which" {
@@ -19,12 +16,12 @@ export async function checkCommandAvailable(
   deps: CommandCheckDeps = {}
 ): Promise<boolean> {
   const platform = deps.platform ?? process.platform;
-  const execFile = deps.execFile ?? ((file: string, args: string[]) => execFileAsync(file, args));
+  const runCommand = deps.runCommand ?? runCommandAsString;
   const lookup = getCommandLookupExecutable(platform);
 
   try {
-    await execFile(lookup, [command]);
-    return true;
+    const { stdout } = await runCommand(lookup, [command], { windowsHide: true });
+    return stdout.trim().length > 0;
   } catch {
     return false;
   }

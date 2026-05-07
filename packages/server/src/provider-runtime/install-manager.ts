@@ -1,6 +1,4 @@
-import { execFile as nodeExecFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { promisify } from "node:util";
 import type {
   ProviderDefinition,
   ProviderInstallFailure,
@@ -12,13 +10,13 @@ import {
   type CommandCheckDeps,
   checkCommandAvailable,
 } from "./command-check.js";
+import { type CommandRunner, runCommandAsString } from "./command-runner.js";
 
-const execFileAsync = promisify(nodeExecFile);
 const EXCERPT_LIMIT = 400;
 
 export interface InstallManagerDeps extends CommandCheckDeps {
   commandExists?: CommandAvailabilityCheck;
-  execFile?: (file: string, args: string[]) => Promise<{ stdout: string; stderr: string }>;
+  runCommand?: CommandRunner;
 }
 
 export class ProviderInstallManager {
@@ -224,7 +222,6 @@ export class ProviderInstallManager {
       args: ["--version"],
       status: "pending",
     });
-
     return {
       jobId,
       providerId: provider.id,
@@ -239,8 +236,7 @@ export class ProviderInstallManager {
     provider: ProviderDefinition,
     job: ProviderInstallJobSnapshot
   ): Promise<void> {
-    const execFile =
-      this.deps.execFile ?? ((file: string, args: string[]) => execFileAsync(file, args));
+    const runCommand = this.deps.runCommand ?? runCommandAsString;
 
     job.status = "running";
     this.jobs.set(job.jobId, job);
@@ -270,7 +266,7 @@ export class ProviderInstallManager {
             return;
           }
         } else {
-          const result = await execFile(step.command, step.args);
+          const result = await runCommand(step.command, step.args, { windowsHide: true });
           step.stdoutExcerpt = excerpt(result.stdout);
           step.stderrExcerpt = excerpt(result.stderr);
         }

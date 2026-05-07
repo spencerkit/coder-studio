@@ -4,7 +4,7 @@
  */
 
 import { error, exists, info, log, step, success, WEB_DIR, WEB_DIST_DIR } from "./shared/index.js";
-import { run } from "./shared/process.js";
+import { isDirectExecution, run } from "./shared/process.js";
 
 async function buildWeb(): Promise<void> {
   step("BUILD WEB", "Building frontend static assets...\n");
@@ -21,7 +21,7 @@ async function buildWeb(): Promise<void> {
 }
 
 // Run if called directly
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isDirectExecution(import.meta.url)) {
   buildWeb()
     .then(() => {
       log("\n✓ Web build complete.\n");

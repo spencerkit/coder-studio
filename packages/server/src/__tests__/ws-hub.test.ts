@@ -36,8 +36,9 @@ type MessageHandler = ((data: Buffer, isBinary?: boolean) => void) | undefined;
 
 type ResultMessage = Extract<ServerToClient, { kind: "result" }>;
 
-const TEST_CONFIG: Pick<ServerConfig, "auth"> = {
+const TEST_CONFIG: Pick<ServerConfig, "auth" | "appVersion"> = {
   auth: { enabled: false },
+  appVersion: "0.3.0",
 };
 
 const createMockSocket = (): MockSocket => ({
@@ -123,11 +124,21 @@ describe("WsHub", () => {
     eventBus.clear();
   });
 
-  it("should accept first connection as writer", () => {
+  it("sends connection metadata including the CLI version on connect", () => {
     const socket = createMockSocket();
     hub.handleConnection(socket as never, createMockRequest());
 
-    expect(socket.send).toHaveBeenCalledWith(expect.stringContaining("connected"));
+    const sentEvents = parseSentEvents(socket);
+    expect(sentEvents[0]).toMatchObject({
+      kind: "event",
+      topic: "connection.status",
+      data: expect.objectContaining({
+        status: "connected",
+        version: "0.3.0",
+        serverInstanceId: expect.stringMatching(/^server-\d+$/),
+        isWriter: false,
+      }),
+    });
   });
 
   it("should accept multiple connections (writer tracking moved to FencingManager)", () => {

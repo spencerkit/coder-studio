@@ -2,12 +2,35 @@
  * Process utilities for running child processes
  */
 
-import { type ChildProcess, spawn } from "child_process";
+import { isDirectExecution, shouldUseShellForCommand } from "@coder-studio/utils";
+import { type ChildProcess, type SpawnOptions, spawn } from "child_process";
+
+export { isDirectExecution, shouldUseShellForCommand };
 
 export interface ProcessOptions {
   cwd?: string;
   env?: NodeJS.ProcessEnv;
   stdio?: "inherit" | "pipe" | "ignore";
+}
+
+interface SpawnConfig {
+  command: string;
+  options: ProcessOptions;
+  platform?: NodeJS.Platform;
+}
+
+function createSpawnOptions({
+  command,
+  options,
+  platform = process.platform,
+}: SpawnConfig): SpawnOptions {
+  return {
+    cwd: options.cwd,
+    env: options.env ?? process.env,
+    stdio: options.stdio ?? "inherit",
+    shell: shouldUseShellForCommand(command, platform),
+    windowsHide: true,
+  };
 }
 
 /**
@@ -19,12 +42,7 @@ export function run(
   options: ProcessOptions = {}
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
-      cwd: options.cwd,
-      env: options.env ?? process.env,
-      stdio: options.stdio ?? "inherit",
-      shell: true,
-    });
+    const child = spawn(command, args, createSpawnOptions({ command, options }));
 
     child.on("close", (code) => {
       if (code === 0) {
@@ -48,12 +66,7 @@ export function runBackground(
   args: string[] = [],
   options: ProcessOptions = {}
 ): ChildProcess {
-  const child = spawn(command, args, {
-    cwd: options.cwd,
-    env: options.env ?? process.env,
-    stdio: options.stdio ?? "inherit",
-    shell: true,
-  });
+  const child = spawn(command, args, createSpawnOptions({ command, options }));
 
   return child;
 }

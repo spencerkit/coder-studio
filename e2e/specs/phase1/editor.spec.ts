@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { expectWelcomeCopy } from "../../fixtures/phase1-i18n";
 
 test.describe("@phase1 editor acceptance", () => {
   test("F1-11 open file", async ({ page }) => {
@@ -9,9 +10,8 @@ test.describe("@phase1 editor acceptance", () => {
 
   test("F1-12 edit content", async ({ page }) => {
     await page.goto("/");
-    // Check welcome body text
-    const body = page.locator(".welcome-body");
-    await expect(body).toContainText("A local-first AI coding workbench.");
+    // Check translated welcome copy
+    await expectWelcomeCopy(page);
   });
 
   test("F1-13 save file", async ({ page }) => {

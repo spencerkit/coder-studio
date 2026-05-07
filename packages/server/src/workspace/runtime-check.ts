@@ -1,12 +1,9 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import {
   type CommandAvailabilityCheck,
   type CommandCheckDeps,
   checkCommandAvailable,
 } from "../provider-runtime/command-check.js";
-
-const execFileAsync = promisify(execFile);
+import { runCommandAsString } from "../provider-runtime/command-runner.js";
 
 export interface RuntimeCheckResult {
   ok: boolean;
@@ -19,22 +16,20 @@ export interface RuntimeCheckDeps extends CommandCheckDeps {
   commandExists?: CommandAvailabilityCheck;
 }
 
-async function checkGit(execRunner: RuntimeCheckDeps["execFile"]): Promise<boolean> {
+async function checkGit(runCommand: RuntimeCheckDeps["runCommand"]): Promise<boolean> {
   try {
-    const { stdout } = await (execRunner ?? ((file, args) => execFileAsync(file, args)))("git", [
-      "--version",
-    ]);
+    const runner = runCommand ?? runCommandAsString;
+    const { stdout } = await runner("git", ["--version"], { windowsHide: true });
     return stdout.includes("git version");
   } catch {
     return false;
   }
 }
 
-async function checkNode(execRunner: RuntimeCheckDeps["execFile"]): Promise<boolean> {
+async function checkNode(runCommand: RuntimeCheckDeps["runCommand"]): Promise<boolean> {
   try {
-    const { stdout } = await (execRunner ?? ((file, args) => execFileAsync(file, args)))("node", [
-      "--version",
-    ]);
+    const runner = runCommand ?? runCommandAsString;
+    const { stdout } = await runner("node", ["--version"], { windowsHide: true });
     return stdout.startsWith("v");
   } catch {
     return false;
@@ -57,12 +52,12 @@ export async function runtimeCheck(
   const commandExists =
     deps.commandExists ?? ((command: string) => checkCommandAvailable(command, deps));
 
-  const gitAvailable = await checkGit(deps.execFile);
+  const gitAvailable = await checkGit(deps.runCommand);
   if (!gitAvailable) {
     missing.push("git");
   }
 
-  const nodeAvailable = await checkNode(deps.execFile);
+  const nodeAvailable = await checkNode(deps.runCommand);
   if (!nodeAvailable) {
     missing.push("node");
   }

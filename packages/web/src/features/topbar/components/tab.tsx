@@ -11,6 +11,7 @@ import { X } from "lucide-react";
 import type { FC } from "react";
 import { activeWorkspaceIdAtom } from "../../../atoms/workspaces";
 import { useTranslation } from "../../../lib/i18n";
+import { formatWorkspaceLabel } from "../../notifications/format";
 import { useWorkspaceCloseAction } from "../../workspace/actions/use-workspace-close-action";
 
 interface WorkspaceTabProps {
@@ -31,11 +32,7 @@ export const WorkspaceTab: FC<WorkspaceTabProps> = ({ workspace, isActive }) => 
   const t = useTranslation();
   const setActiveWorkspace = useSetAtom(activeWorkspaceIdAtom);
   const closeWorkspace = useWorkspaceCloseAction();
-  const displayName =
-    workspace.name ||
-    workspace.path?.split("/").filter(Boolean).pop() ||
-    workspace.path ||
-    workspace.id;
+  const displayName = formatWorkspaceLabel(workspace) || workspace.id;
 
   const handleClick = () => {
     setActiveWorkspace(workspace.id);

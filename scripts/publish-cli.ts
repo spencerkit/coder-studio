@@ -10,6 +10,7 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { build } from "./build.js";
 import { CLI_DIR, error, info, step, success } from "./shared/index.js";
+import { isDirectExecution, shouldUseShellForCommand } from "./shared/process.js";
 
 export interface PublishCliOptions {
   access: string;
@@ -264,8 +265,9 @@ export async function execCommand(
     const child = spawn(command, args, {
       cwd: options.cwd,
       env: process.env,
-      shell: false,
+      shell: shouldUseShellForCommand(command),
       stdio: stdio === "pipe" ? ["ignore", "pipe", "pipe"] : "inherit",
+      windowsHide: true,
     });
 
     let stdout = "";
@@ -461,7 +463,7 @@ Options:
 `);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isDirectExecution(import.meta.url)) {
   runPublishCli({ options: parsePublishCliArgs(process.argv.slice(2)) }).catch((err) => {
     error(err.message);
     process.exit(1);

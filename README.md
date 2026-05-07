@@ -10,7 +10,7 @@ Coder Studio lets you launch an AI coding workspace on your machine and keep usi
 
 Start a task in the office, check progress on your phone during the commute, review changes from a tablet, and continue on a laptop later. Same workspace, same context, no environment handoff.
 
-![Workspace](docs/help/assets/screenshot-workspace.png)
+![Workspace](docs/help/assets/screenshot-workspace-overview.png)
 
 ## Why Coder Studio
 

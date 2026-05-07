@@ -8,7 +8,7 @@ describe("ProviderInstallManager", () => {
     const manager = new ProviderInstallManager([codexDefinition], {
       platform: "win32",
       commandExists,
-      execFile: vi.fn(async () => ({ stdout: "", stderr: "" })),
+      runCommand: vi.fn(async () => ({ stdout: "", stderr: "" })),
     });
 
     const job = await manager.start("codex");
@@ -26,7 +26,7 @@ describe("ProviderInstallManager", () => {
     const manager = new ProviderInstallManager([codexDefinition], {
       platform: "linux",
       commandExists,
-      execFile: vi.fn(async () => ({ stdout: "", stderr: "" })),
+      runCommand: vi.fn(async () => ({ stdout: "", stderr: "" })),
     });
 
     const job = await manager.start("codex");
@@ -45,7 +45,7 @@ describe("ProviderInstallManager", () => {
     const manager = new ProviderInstallManager([codexDefinition], {
       platform: "aix",
       commandExists: vi.fn(async (command: string) => command === "npm"),
-      execFile: vi.fn(async () => ({ stdout: "", stderr: "" })),
+      runCommand: vi.fn(async () => ({ stdout: "", stderr: "" })),
     });
 
     const job = await manager.start("codex");
@@ -61,10 +61,17 @@ describe("ProviderInstallManager", () => {
 
   it("reuses the active job when the same provider is clicked twice", async () => {
     const pending = new Promise<{ stdout: string; stderr: string }>(() => {});
+    const execFile = vi.fn((file: string) => {
+      if (file === "which") {
+        return Promise.resolve({ stdout: "", stderr: "" });
+      }
+
+      return pending;
+    });
     const manager = new ProviderInstallManager([codexDefinition], {
       platform: "darwin",
       commandExists: vi.fn(async (command: string) => command === "npm"),
-      execFile: vi.fn(() => pending),
+      runCommand: execFile,
     });
 
     const first = await manager.start("codex");
@@ -89,7 +96,7 @@ describe("ProviderInstallManager", () => {
     const manager = new ProviderInstallManager([codexDefinition], {
       platform: "linux",
       commandExists,
-      execFile: vi.fn(async () => ({ stdout: "", stderr: "" })),
+      runCommand: vi.fn(async () => ({ stdout: "", stderr: "" })),
     });
 
     const firstPromise = manager.start("codex");
@@ -112,7 +119,7 @@ describe("ProviderInstallManager", () => {
     const manager = new ProviderInstallManager([codexDefinition], {
       platform: "linux",
       commandExists: vi.fn(async (command: string) => command === "npm"),
-      execFile: vi.fn(async () => {
+      runCommand: vi.fn(async () => {
         throw installError;
       }),
     });
@@ -138,5 +145,56 @@ describe("ProviderInstallManager", () => {
       },
     });
     expect(stored?.steps[0]?.status).toBe("failed");
+  });
+
+  it("executes Windows install steps with the declared command names", async () => {
+    let npmInstalled = false;
+    let codexInstalled = false;
+    const commandExists = vi.fn(async (command: string) => {
+      if (command === "winget") {
+        return true;
+      }
+      if (command === "npm") {
+        return npmInstalled;
+      }
+      if (command === "codex") {
+        return codexInstalled;
+      }
+      return false;
+    });
+    const execFile = vi.fn(
+      async (file: string, args: string[], _options?: { windowsHide: boolean }) => {
+        if (
+          file === "winget" &&
+          args.join(" ") === "install --id OpenJS.NodeJS.LTS --exact --silent"
+        ) {
+          npmInstalled = true;
+          return { stdout: "installed node", stderr: "" };
+        }
+
+        if (file === "npm" && args.join(" ") === "install -g @openai/codex") {
+          expect(npmInstalled).toBe(true);
+          codexInstalled = true;
+          return { stdout: "installed codex", stderr: "" };
+        }
+
+        throw new Error(`unexpected execFile call: ${file} ${args.join(" ")}`);
+      }
+    );
+    const manager = new ProviderInstallManager([codexDefinition], {
+      platform: "win32",
+      commandExists,
+      runCommand: execFile,
+    });
+
+    const job = await manager.start("codex");
+
+    await vi.waitFor(() => {
+      expect(manager.get(job.jobId)?.status).toBe("succeeded");
+    });
+
+    expect(execFile).toHaveBeenCalledWith("npm", ["install", "-g", "@openai/codex"], {
+      windowsHide: true,
+    });
   });
 });

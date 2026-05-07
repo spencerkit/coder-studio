@@ -18,6 +18,7 @@ export async function openBrowser(url: string): Promise<void> {
     const child = spawn(command, args, {
       detached: true,
       stdio: "ignore",
+      windowsHide: true,
     });
 
     child.once("error", reject);

@@ -1,5 +1,6 @@
 import { fileURLToPath } from "url";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { getCliVersion } from "./package-manifest.js";
 
 const { createServer, readCliConfig, hasWebAssets, getStaticAssetsDir } = vi.hoisted(() => ({
   createServer: vi.fn(),
@@ -29,6 +30,17 @@ describe("server-runner", () => {
     vi.clearAllMocks();
   });
 
+  it("includes the CLI package version in the server config", () => {
+    readCliConfig.mockReturnValue(null);
+    hasWebAssets.mockReturnValue(true);
+    getStaticAssetsDir.mockReturnValue("/tmp/web");
+
+    expect(buildServerConfig()).toMatchObject({
+      appVersion: getCliVersion(import.meta.url),
+      webRoot: "/tmp/web",
+    });
+  });
+
   it("ignores ephemeral port zero from saved cli config", () => {
     readCliConfig.mockReturnValue({
       host: "127.0.0.1",
@@ -40,6 +52,7 @@ describe("server-runner", () => {
     getStaticAssetsDir.mockReturnValue("/tmp/web");
 
     expect(buildServerConfig()).toEqual({
+      appVersion: getCliVersion(import.meta.url),
       host: "127.0.0.1",
       dataDir: "/tmp/cs-data/coder-studio.db",
       auth: {
@@ -67,6 +80,7 @@ describe("server-runner", () => {
     const runningServer = await startServer();
 
     expect(createServer).toHaveBeenCalledWith({
+      appVersion: getCliVersion(import.meta.url),
       host: "127.0.0.1",
       port: 4173,
       webRoot: "/tmp/web",

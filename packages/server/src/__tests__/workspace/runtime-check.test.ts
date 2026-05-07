@@ -3,40 +3,67 @@ import { RuntimeCheckFailedError, runtimeCheck } from "../../workspace/runtime-c
 
 describe("runtimeCheck", () => {
   it("reports missing wsl through the shared command helper fallback", async () => {
-    const execFile = vi.fn(async (file: string, args: string[]) => {
-      if (file === "git") {
-        return { stdout: "git version 2.48.0\n", stderr: "" };
-      }
+    const execFile = vi.fn(
+      async (file: string, args: string[], _options?: { windowsHide: boolean }) => {
+        if (file === "git") {
+          return { stdout: "git version 2.48.0\n", stderr: "" };
+        }
 
-      if (file === "node") {
-        return { stdout: "v22.15.0\n", stderr: "" };
-      }
+        if (file === "node") {
+          return { stdout: "v22.15.0\n", stderr: "" };
+        }
 
-      if (file === "where" && args[0] === "wsl") {
-        throw new Error("wsl unavailable");
-      }
+        if (file === "where" && args[0] === "wsl") {
+          throw new Error("wsl unavailable");
+        }
 
-      return { stdout: "", stderr: "" };
-    });
+        return { stdout: "", stderr: "" };
+      }
+    );
 
     const result = await runtimeCheck("/tmp", "wsl", {
       platform: "win32",
-      execFile,
+      runCommand: execFile,
     });
 
     expect(result).toEqual({ ok: false, missing: ["wsl"] });
-    expect(execFile).toHaveBeenCalledWith("where", ["wsl"]);
+    expect(execFile).toHaveBeenCalledWith("where", ["wsl"], { windowsHide: true });
   });
 
   it("reports missing git and node from the version checks deterministically", async () => {
     const result = await runtimeCheck("/tmp", "native", {
       commandExists: async () => true,
-      execFile: vi.fn(async (file: string) => {
+      runCommand: vi.fn(async (file: string) => {
         throw new Error(`${file} unavailable`);
       }),
     });
 
     expect(result).toEqual({ ok: false, missing: ["git", "node"] });
+  });
+
+  it("passes windowsHide to injected execFile on Windows version checks", async () => {
+    const execFile = vi.fn(
+      async (file: string, _args: string[], _options?: { windowsHide: boolean }) => {
+        if (file === "git") {
+          return { stdout: "git version 2.48.0\n", stderr: "" };
+        }
+
+        if (file === "node") {
+          return { stdout: "v22.15.0\n", stderr: "" };
+        }
+
+        throw new Error(`${file} unavailable`);
+      }
+    );
+
+    const result = await runtimeCheck("/tmp", "native", {
+      platform: "win32",
+      runCommand: execFile,
+    });
+
+    expect(result).toEqual({ ok: true, missing: [] });
+    expect(execFile).toHaveBeenCalledWith("git", ["--version"], { windowsHide: true });
+    expect(execFile).toHaveBeenCalledWith("node", ["--version"], { windowsHide: true });
   });
 });
 

@@ -29,7 +29,7 @@ describe("ActiveTerminal", () => {
     const id = "term-123";
     const createdAt = Date.now();
 
-    const active = new ActiveTerminal(id, spec, mockPty, ringBuffer, createdAt);
+    const active = new ActiveTerminal(id, spec, mockPty, ringBuffer, undefined, createdAt);
 
     expect(active.id).toBe(id);
     expect(active.spec).toBe(spec);
@@ -45,7 +45,7 @@ describe("ActiveTerminal", () => {
     const id = "term-123";
     const createdAt = Date.now();
 
-    const active = new ActiveTerminal(id, spec, mockPty, ringBuffer, createdAt);
+    const active = new ActiveTerminal(id, spec, mockPty, ringBuffer, undefined, createdAt);
     const dto = active.toDTO();
 
     expect(dto).toEqual({
@@ -115,7 +115,7 @@ describe("ActiveTerminal", () => {
     const id = "term-123";
     const createdAt = Date.now();
 
-    const active = new ActiveTerminal(id, spec, mockPty, ringBuffer, createdAt);
+    const active = new ActiveTerminal(id, spec, mockPty, ringBuffer, undefined, createdAt);
     const row = active.toRow();
 
     // Should be same as DTO

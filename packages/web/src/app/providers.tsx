@@ -466,6 +466,38 @@ export function AppProviders({ children }: AppProvidersProps) {
   return <>{children}</>;
 }
 
+function storeServerMetadata(
+  payload: unknown,
+  store: Store
+): payload is {
+  version: string;
+  serverInstanceId: string;
+  authEnabled?: boolean;
+  isWriter?: boolean;
+} {
+  const data = payload as {
+    version?: unknown;
+    serverInstanceId?: unknown;
+    authEnabled?: unknown;
+    isWriter?: unknown;
+  };
+
+  if (typeof data.version !== "string" || typeof data.serverInstanceId !== "string") {
+    return false;
+  }
+
+  store.set(serverInfoAtom, {
+    version: data.version,
+    serverInstanceId: data.serverInstanceId,
+    authEnabled: typeof data.authEnabled === "boolean" ? data.authEnabled : undefined,
+  });
+  if (typeof data.isWriter === "boolean") {
+    store.set(isWriterAtom, data.isWriter);
+  }
+
+  return true;
+}
+
 /**
  * Route incoming WebSocket events to appropriate Jotai atoms
  */
@@ -475,20 +507,24 @@ export function routeEventToAtom(topic: string, payload: unknown, store: Store):
   // or: connection.ready
 
   if (topic === "connection.ready") {
-    // Server metadata on connect
-    const data = payload as { version: string; serverInstanceId: string; isWriter: boolean };
-    store.set(serverInfoAtom, {
-      version: data.version,
-      serverInstanceId: data.serverInstanceId,
-    });
-    store.set(isWriterAtom, data.isWriter);
+    storeServerMetadata(payload, store);
     store.set(connectionErrorAtom, null);
     return;
   }
 
   if (topic === "connection.status") {
     // Connection-level status event
-    const data = payload as { status: string; message?: string; authEnabled?: boolean };
+    const data = payload as {
+      status: string;
+      message?: string;
+      authEnabled?: boolean;
+      version?: string;
+      serverInstanceId?: string;
+      isWriter?: boolean;
+    };
+    if (data.status === "connected") {
+      storeServerMetadata(payload, store);
+    }
     if (data.status === "connected" && data.authEnabled === false) {
       store.set(authenticatedAtom, true);
     }

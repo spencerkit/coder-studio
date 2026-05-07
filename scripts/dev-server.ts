@@ -3,9 +3,8 @@
  * Starts tsx watch for backend
  */
 
-import { resolve } from "path";
 import { error, info, log, SERVER_DIR, success } from "./shared/index.js";
-import { runBackground } from "./shared/process.js";
+import { isDirectExecution, runBackground } from "./shared/process.js";
 
 const SERVER_PORT = 4173;
 const SERVER_HOST = "127.0.0.1";
@@ -44,7 +43,7 @@ async function devServer(): Promise<void> {
 }
 
 // Run if called directly
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isDirectExecution(import.meta.url)) {
   devServer().catch((err) => {
     error(err.message);
     process.exit(1);

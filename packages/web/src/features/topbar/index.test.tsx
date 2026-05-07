@@ -156,7 +156,7 @@ describe("TopBar", () => {
     expect(settingsButton.nextElementSibling).toBe(fullscreenButton);
   });
 
-  it("hides the fullscreen toggle when the controller reports unsupported", () => {
+  it("keeps the fullscreen toggle visible when the controller reports unsupported", () => {
     const store = createStore();
     store.set(localeAtom, "en");
     store.set(workspacesLoadStateAtom, "ready");
@@ -175,6 +175,6 @@ describe("TopBar", () => {
       </Provider>
     );
 
-    expect(screen.queryByRole("button", { name: "Enter Fullscreen" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Enter Fullscreen" })).toBeInTheDocument();
   });
 });

@@ -31,7 +31,7 @@ export async function getServerStatus(): Promise<ServerStatus> {
   const runtime = readRuntimeConfig();
   const { outFile, errFile } = getLogPaths();
 
-  if (managedStatus.status === "stopped") {
+  if (managedStatus.status === "stopped" || (managedStatus.pm2Pid === null && runtime === null)) {
     if (runtime) {
       deleteRuntimeConfig();
     }

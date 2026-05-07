@@ -17,6 +17,9 @@ importers:
       '@changesets/cli':
         specifier: ^2.31.0
         version: 2.31.0(@types/node@25.6.0)
+      '@coder-studio/utils':
+        specifier: workspace:*
+        version: link:packages/utils
       '@types/node':
         specifier: ^25.6.0
         version: 25.6.0
@@ -159,6 +162,9 @@ importers:
       '@coder-studio/providers':
         specifier: workspace:*
         version: link:../providers
+      '@coder-studio/utils':
+        specifier: workspace:*
+        version: link:../utils
       '@fastify/compress':
         specifier: ^8.3.1
         version: 8.3.1
@@ -221,6 +227,18 @@ importers:
         specifier: ^4.1.5
         version: 4.1.5(@types/node@25.6.0)(jsdom@29.1.1)(vite@8.0.10(@types/node@25.6.0)(esbuild@0.28.0)(tsx@4.21.0))
 
+  packages/utils:
+    devDependencies:
+      '@types/node':
+        specifier: ^25.6.0
+        version: 25.6.0
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.5
+        version: 4.1.5(@types/node@25.6.0)(jsdom@29.1.1)(vite@8.0.10(@types/node@25.6.0)(esbuild@0.28.0)(tsx@4.21.0))
+
   packages/web:
     dependencies:
       '@coder-studio/core':
@@ -238,6 +256,9 @@ importers:
       '@xterm/xterm':
         specifier: ^6.0.0
         version: 6.0.0
+      clsx:
+        specifier: ^2.1.1
+        version: 2.1.1
       jotai:
         specifier: ^2.19.1
         version: 2.19.1(@types/react@19.2.14)(react@19.2.5)
@@ -1348,6 +1369,10 @@ packages:
   cli-tableau@2.0.1:
     resolution: {integrity: sha512-he+WTicka9cl0Fg/y+YyxcN6/bfQ/1O3QmgxRXDhABKqLzvoOSM4fMzp39uMyLBulAFuywD2N7UaoQE7WaADxQ==}
     engines: {node: '>=8.10.0'}
+
+  clsx@2.1.1:
+    resolution: {integrity: sha512-eYm0QWBtUrBWZWG0d386OGAw16Z995PiOVo2B7bjWSbHedGl5e0ZWaq65kOGgUSNesEIDkB9ISbTg/JK9dhCZA==}
+    engines: {node: '>=6'}
 
   color-convert@2.0.1:
     resolution: {integrity: sha512-RRECPsj7iu/xb5oKYcsFHSppFNnsj/52OVTRKb4zP5onXwVF3zVmmToNcOfGC+CRDpfK/U584fMg38ZHCaElKQ==}
@@ -3719,6 +3744,8 @@ snapshots:
   cli-tableau@2.0.1:
     dependencies:
       chalk: 3.0.0
+
+  clsx@2.1.1: {}
 
   color-convert@2.0.1:
     dependencies:
