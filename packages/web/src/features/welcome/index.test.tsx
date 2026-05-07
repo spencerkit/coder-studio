@@ -93,7 +93,7 @@ describe("WelcomePage", () => {
       </Provider>
     );
 
-    expect(screen.getByText("GET STARTED")).toBeInTheDocument();
+    expect(screen.getByText("DEPLOY ONCE, CODE EVERYWHERE")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Welcome to Coder Studio" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open Workspace" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();

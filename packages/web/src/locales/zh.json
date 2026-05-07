@@ -606,9 +606,9 @@
     "conflict": "资源冲突"
   },
   "welcome": {
-    "kicker": "开始使用",
+    "kicker": "一次部署，随处编码",
     "title": "欢迎使用 Coder Studio",
-    "description": "一个本地优先的 AI 编码工作台。在同一个界面里启动 AI Agent 会话、审阅生成代码、管理 Git 变更并运行终端。",
+    "description": "只需部署一次编码工作区，即可在任何地方继续工作。同一个工作区，同一个上下文，跨所有设备。",
     "features": {
       "agent_first": {
         "title": "以 Agent 为核心的 AI 编码",

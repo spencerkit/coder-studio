@@ -606,9 +606,9 @@
     "conflict": "Resource conflict"
   },
   "welcome": {
-    "kicker": "GET STARTED",
+    "kicker": "DEPLOY ONCE, CODE EVERYWHERE",
     "title": "Welcome to Coder Studio",
-    "description": "A local-first AI coding workbench. Launch AI agent sessions, review generated code, manage Git changes, and run terminals all in one place.",
+    "description": "Deploy your coding workspace once, then keep working from wherever you are. Same workspace, same context, across all your devices.",
     "features": {
       "agent_first": {
         "title": "Agent-first AI coding",
