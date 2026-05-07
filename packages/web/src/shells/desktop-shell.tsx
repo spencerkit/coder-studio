@@ -11,33 +11,29 @@ import { authEnabledAtom, connectionStatusAtom } from "../atoms";
 import { authenticatedAtom } from "../atoms/app-ui";
 import { LoginPage } from "../features/auth";
 import { CommandPalette } from "../features/command-palette";
-import { ConfigDriftBanner } from "../features/config-drift-banner";
 import { NotFoundPage } from "../features/not-found";
 import { ToastContainer } from "../features/notifications";
 import { SettingsPage } from "../features/settings";
 import { WelcomePage } from "../features/welcome";
-import { useWorkspaceBootstrap } from "../features/workspace/actions/use-workspace-bootstrap";
 import { WorkspaceDesktopView } from "../features/workspace/views/desktop/workspace-desktop-view";
 import { BranchQuickPick } from "../features/workspace/views/shared/branch-quick-pick";
 import { WorkspaceRouteGate } from "../features/workspace/views/shared/workspace-route-gate";
+import { useBootstrap } from "../hooks/use-bootstrap";
 import { ConnectionStatusBanner } from "./shared/connection-status-banner";
 
 export function DesktopShell() {
-  useWorkspaceBootstrap();
+  useBootstrap();
   const authenticated = useAtomValue(authenticatedAtom);
   const authEnabled = useAtomValue(authEnabledAtom);
   const location = useLocation();
   const authRequired = authEnabled === true;
   const authUnknown = authEnabled === null;
   const shouldShowLogin = authRequired && !authenticated && location.pathname === "/login";
-  const shouldShowGlobalConfigDriftBanner =
-    !shouldShowLogin && !authUnknown && !location.pathname.startsWith("/settings");
+  !shouldShowLogin && !authUnknown && !location.pathname.startsWith("/settings");
 
   return (
     <div className="app">
       <ConnectionStatusBanner />
-
-      {shouldShowGlobalConfigDriftBanner && <ConfigDriftBanner />}
 
       <main className="main-content">
         {authUnknown ? (
