@@ -59,6 +59,29 @@ describe("ObjectiveDialog", () => {
     });
   });
 
+  it("renders the migrated shared textarea for the objective field", () => {
+    const store = createStore();
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+    store.set(supervisorDialogAtom, {
+      open: true,
+      sessionId: "sess-1",
+      mode: "enable",
+      draftObjective: "Ship phase 4B1",
+      draftEvaluatorProviderId: "claude",
+    });
+    store.set(supervisorsAtom, new Map());
+
+    render(
+      <Provider store={store}>
+        <ObjectiveDialog workspaceId="ws-1" />
+      </Provider>
+    );
+
+    expect(screen.getByRole("textbox", { name: "Objective" })).toHaveClass("input", "textarea");
+  });
+
   it("renders disable confirmation mode", () => {
     const store = createStore();
     window.localStorage.setItem("ui.locale", JSON.stringify("en"));

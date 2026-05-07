@@ -4,8 +4,8 @@
 |---|---|---|---:|---|
 | Button | 🟡 in-flight | `.btn .btn-*` | 30 | 2026-05-06 |
 | IconButton | ⚫ not-started | `.btn` icon-only | — | — |
-| Input | ⚫ not-started | `.input` | — | — |
-| Textarea | ⚫ not-started | `.input.textarea` | — | — |
+| Input | 🟢 complete | `.input` | 0 | 2026-05-07 |
+| Textarea | 🟢 complete | `.input.textarea` | 0 | 2026-05-07 |
 | Tag | ⚫ not-started | `.badge .badge-*` | — | — |
 | Badge | ⚫ not-started | `.badge` | — | — |
 | Pill | ⚫ not-started | `.settings-pill*` | — | — |
@@ -26,3 +26,5 @@
 | Popover | ⚫ not-started | new | — | — |
 | ActionMenu | ⚫ not-started | new | — | — |
 | Sheet | ⚫ not-started | mobile sheet shells | — | — |
+
+`Input` / `Textarea` caller counts only include raw native text-entry controls that should migrate to those shared primitives. They intentionally exclude `select.input`, `button.input`, search-model controls, and checkbox/radio inputs.

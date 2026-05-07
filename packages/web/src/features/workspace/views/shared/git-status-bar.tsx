@@ -1,6 +1,7 @@
 import type { GitStatus } from "@coder-studio/core";
 import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Diff, X } from "lucide-react";
 import { type FC, useLayoutEffect, useState } from "react";
+import { Input } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { useGitSyncActions } from "../../actions/use-git-actions";
 
@@ -198,9 +199,8 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({ workspaceId, gitState, inl
                     <label htmlFor={`git-auth-username-${workspaceId}`}>
                       {t("git.auth_username")}
                     </label>
-                    <input
+                    <Input
                       id={`git-auth-username-${workspaceId}`}
-                      className="input"
                       value={credentials.username}
                       onChange={(event) =>
                         setCredentials((previous) => ({
@@ -217,9 +217,8 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({ workspaceId, gitState, inl
                     <label htmlFor={`git-auth-password-${workspaceId}`}>
                       {t("git.auth_password")}
                     </label>
-                    <input
+                    <Input
                       id={`git-auth-password-${workspaceId}`}
-                      className="input"
                       type="password"
                       value={credentials.password}
                       onChange={(event) =>

@@ -20,6 +20,7 @@ import {
   serverInfoAtom,
 } from "../../../atoms/connection";
 import { resolvedActiveWorkspaceIdAtom } from "../../../atoms/workspaces";
+import { Input } from "../../../components/ui";
 import { useViewport } from "../../../hooks/use-viewport";
 import { useTranslation } from "../../../lib/i18n";
 import { ConfigDriftBanner } from "../../config-drift-banner";
@@ -650,9 +651,9 @@ function GeneralSettings({
             {t("settings.supervisor.evaluation_timeout")}
           </label>
           <div className="settings-config-control">
-            <input
+            <Input
               id="supervisor-evaluation-timeout"
-              className="input settings-input-compact"
+              className="settings-input-compact"
               type="number"
               min={1}
               max={MAX_SUPERVISOR_EVALUATION_TIMEOUT_SEC}

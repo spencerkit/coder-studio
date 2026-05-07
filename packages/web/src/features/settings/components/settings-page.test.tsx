@@ -319,6 +319,7 @@ describe("SettingsPage", () => {
     const field = input.closest(".settings-config-field");
     const control = input.closest(".settings-config-control");
 
+    expect(input).toHaveClass("input", "settings-input-compact");
     expect(field).toHaveClass("settings-config-field--inline");
     expect(control).not.toBeNull();
   });
@@ -531,7 +532,7 @@ describe("SettingsPage", () => {
 
     const argsInput = screen.getByLabelText("启动命令参数");
     expect(argsInput).toHaveValue("--verbose");
-    expect(argsInput).toHaveClass("settings-provider-args-input");
+    expect(argsInput).toHaveClass("input", "textarea", "settings-provider-args-input");
 
     fireEvent.change(argsInput, {
       target: {
@@ -787,6 +788,21 @@ describe("SettingsPage", () => {
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "快捷键" })).toBeInTheDocument();
     });
+  });
+
+  it("renders shortcut capture with shared input compatibility classes", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({});
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+
+    fireEvent.click(await screen.findByRole("button", { name: "快捷键" }));
+    fireEvent.click(screen.getByText("⌘+K"));
+
+    expect(screen.getByPlaceholderText("按下快捷键...")).toHaveClass(
+      "input",
+      "shortcuts-capture"
+    );
   });
 
   it("prefers browser history when leaving the mobile settings root", async () => {

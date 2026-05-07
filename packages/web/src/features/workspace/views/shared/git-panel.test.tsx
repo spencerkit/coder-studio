@@ -66,6 +66,11 @@ describe("GitPanel", () => {
     expect(screen.getByLabelText("Latest Commit")).toBeInTheDocument();
     expect(screen.getByText("abc1234")).toBeInTheDocument();
     expect(screen.getByText("Refresh git projection")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Enter commit message...")).toHaveClass(
+      "input",
+      "textarea",
+      "git-commit-input"
+    );
   });
 
   it("loads branch list on mount", async () => {

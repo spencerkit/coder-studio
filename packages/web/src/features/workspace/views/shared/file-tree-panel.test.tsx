@@ -184,7 +184,10 @@ describe("FileTreePanel", () => {
       </Provider>
     );
 
-    fireEvent.change(await screen.findByLabelText("file.path"), {
+    const pathInput = await screen.findByLabelText("file.path");
+    expect(pathInput).toHaveClass("input");
+
+    fireEvent.change(pathInput, {
       target: { value: "src/demo/new-file.ts" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
@@ -451,7 +454,7 @@ describe("FileTreePanel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "file.new_folder src" }));
 
-    expect(await screen.findByLabelText("file.path")).toBeInTheDocument();
+    expect(await screen.findByLabelText("file.path")).toHaveClass("input");
   });
 
   it("uses translated loading copy while the tree is still being fetched", async () => {

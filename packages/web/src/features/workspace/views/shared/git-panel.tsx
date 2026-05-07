@@ -2,6 +2,7 @@ import type { GitFileChange } from "@coder-studio/core";
 import { AlertTriangle, ArrowUp, File, Minus, Plus, RefreshCw, RotateCcw, X } from "lucide-react";
 import type { FC } from "react";
 import { useMemo } from "react";
+import { Textarea } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { type GitChangeType, useGitPanelActions } from "../../actions/use-git-actions";
 import type { GitDiffPreview } from "../../atoms";
@@ -93,7 +94,7 @@ export const GitPanel: FC<GitPanelProps> = ({ workspaceId, refreshToken = 0, onP
         </div>
       </div>
 
-      <textarea
+      <Textarea
         className="git-commit-input"
         placeholder={t("git.commit_placeholder")}
         value={commitMessage}

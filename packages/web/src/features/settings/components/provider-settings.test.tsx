@@ -122,9 +122,9 @@ describe("ProviderSettings desktop", () => {
   it("defaults to base settings and switches to config files explicitly", async () => {
     renderHarness();
 
-    await waitFor(() => {
-      expect(screen.getByLabelText("启动命令参数")).toHaveValue("--verbose");
-    });
+    const input = await screen.findByLabelText("启动命令参数");
+    expect(input).toHaveValue("--verbose");
+    expect(input).toHaveClass("input", "textarea", "settings-provider-args-input");
 
     expect(screen.getByRole("button", { name: "基础配置" })).toHaveAttribute(
       "aria-pressed",
@@ -280,9 +280,9 @@ describe("ProviderSettings mobile", () => {
   it("defaults to base settings and enters config files from a secondary action", async () => {
     renderHarness({ isMobile: true });
 
-    await waitFor(() => {
-      expect(screen.getByLabelText("启动命令参数")).toHaveValue("--verbose");
-    });
+    const input = await screen.findByLabelText("启动命令参数");
+    expect(input).toHaveValue("--verbose");
+    expect(input).toHaveClass("input", "textarea", "settings-provider-args-input");
 
     expect(screen.queryByTestId("config-editor-claude")).not.toBeInTheDocument();
 

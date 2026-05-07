@@ -7,6 +7,7 @@
 import { useAtom, useAtomValue } from "jotai";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { dispatchCommandAtom } from "../../../atoms/connection";
+import { Input } from "../../../components/ui";
 import { useTranslation } from "../../../lib/i18n";
 import {
   customShortcutsAtom,
@@ -145,10 +146,10 @@ export function ShortcutsSettings() {
 
               <div className="shortcuts-binding">
                 {isEditing ? (
-                  <input
+                  <Input
                     ref={inputRef}
                     type="text"
-                    className="input shortcuts-capture"
+                    className="shortcuts-capture"
                     placeholder="按下快捷键..."
                     onKeyDown={(e) => handleKeyCapture(e, shortcut.id)}
                     onBlur={() => setEditingId(null)}

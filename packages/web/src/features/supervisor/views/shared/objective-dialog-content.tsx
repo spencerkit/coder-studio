@@ -1,5 +1,6 @@
 import { AlertTriangle, ChevronDown, Eye, Pencil, PowerOff } from "lucide-react";
 import { useId } from "react";
+import { Textarea } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import {
   OBJECTIVE_DIALOG_EVALUATOR_OPTIONS,
@@ -65,9 +66,8 @@ export function ObjectiveDialogContent({
     <>
       <div className="form-group">
         <label htmlFor="objective">{t("supervisor.field.objective")}</label>
-        <textarea
+        <Textarea
           id="objective"
-          className="input textarea"
           rows={5}
           value={draftObjective}
           onChange={(event) => onDraftObjectiveChange(event.target.value)}

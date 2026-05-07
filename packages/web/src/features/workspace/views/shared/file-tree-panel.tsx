@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import type { FC } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Input } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import {
   type CreateDialogState,
@@ -439,9 +440,8 @@ const CreatePathModal: FC<CreatePathModalProps> = ({
         <div className="modal-body">
           <div className="form-group">
             <label htmlFor="file-path">{t("file.path")}</label>
-            <input
+            <Input
               id="file-path"
-              className="input"
               value={dialog.draftPath}
               onChange={(event) => onDraftPathChange(event.target.value)}
               placeholder={dialog.mode === "file" ? "src/demo/new-file.ts" : "src/demo/new-folder"}
