@@ -9,9 +9,9 @@
 | Tag | ⚫ not-started | `.badge .badge-*` | — | — |
 | Badge | ⚫ not-started | `.badge` | — | — |
 | Pill | 🟢 complete | `.settings-pill*` | 0 | 2026-05-09 |
-| StatusDot | ⚫ not-started | token-backed dot patterns | — | — |
-| Kbd | ⚫ not-started | `kbd` | — | — |
-| Spinner | ⚫ not-started | `.animate-spin` | — | — |
+| StatusDot | 🟡 partial | `.session-dot*`, `.connection-status-dot*` | 0 | 2026-05-09 |
+| Kbd | 🟢 complete | `kbd`, `.shortcuts-key` | 0 | 2026-05-09 |
+| Spinner | 🟡 partial | `.animate-spin` | 1 | 2026-05-09 |
 | Switch | ⚫ not-started | new | — | — |
 | Modal | ⚫ not-started | `.modal-overlay .modal-card .modal-*` | — | — |
 | ConfirmDialog | ⚫ not-started | modal convenience wrapper | — | — |
@@ -36,3 +36,9 @@
 `Notice` now completes the bounded legacy `.settings-page__notice*` migration inventory: the settings-page load-error shell uses the shared primitive from the public UI barrel while preserving the legacy `settings-page__notice*` compatibility classes and the caller-owned `settings-link` refresh action styling. Other notice-like alerts such as supervisor or worktree callouts remain intentionally outside this row because they do not belong to the `.settings-page__notice*` family selected for this slice.
 
 `Pill` now completes the bounded legacy `.settings-pill*` migration inventory: the settings appearance theme, terminal renderer, and language option groups use the shared primitive from the public UI barrel while preserving the legacy `settings-pill*` compatibility classes and the existing `settings-pills` layout hook. The primitive now owns the pill visuals locally, so the old global `.settings-pill*` style block is removed from `components.css` to avoid duplicate styling sources.
+
+`Kbd` now completes the bounded keyboard-shortcut display slice: the settings shortcut bindings use the shared primitive from the public UI barrel while preserving the legacy `.shortcuts-key` compatibility class and interactive keyboard semantics.
+
+`StatusDot` now covers the bounded desktop status-indicator slice: the agent session cards and topbar connection status use the shared primitive with caller-owned layout hooks preserved. The row remains partial because other dot variants outside this bounded slice remain deferred.
+
+`Spinner` now covers the bounded workspace launch modal loading slice: the modal uses the shared primitive while preserving the legacy `.animate-spin` compatibility class. The row remains partial because other feature-specific spinner usages remain deferred.

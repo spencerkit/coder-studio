@@ -293,4 +293,28 @@ describe("WorkspaceLaunchModal", () => {
     expect(screen.getByRole("button", { name: "Start Workspace" })).toBeInTheDocument();
     expect(screen.getByText("3 items")).toBeInTheDocument();
   });
+
+  it("shows the shared animated spinner while browsing directories", () => {
+    const sendCommand = vi.fn(
+      () =>
+        new Promise(() => {
+          return undefined;
+        })
+    );
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    const { container } = render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <WorkspaceLaunchModal onClose={vi.fn()} />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    const spinner = screen.getByRole("status", { name: "Loading..." });
+    expect(spinner).toHaveClass("animate-spin");
+    expect(container.querySelector(".directory-loading .animate-spin")).toBe(spinner);
+  });
 });

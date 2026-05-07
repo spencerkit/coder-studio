@@ -11,11 +11,14 @@
 |---|---|---|---|
 | Button | 0 | `src/components/ui/index.ts` named export only | `primary / secondary / ghost / danger` × `sm / md / lg` |
 | Input | 0 | `src/components/ui/index.ts` named export only | Shared single-line text entry with legacy `.input` compatibility |
+| Kbd | 0 | `src/components/ui/index.ts` named export only | Shared keyboard shortcut primitive with legacy `.shortcuts-key` compatibility |
+| Pill | 1 | `src/components/ui/index.ts` named export only | Current bounded slice covers the settings appearance option groups |
+| Spinner | 0 | `src/components/ui/index.ts` named export only | Shared loading indicator with legacy `.animate-spin` compatibility |
+| StatusDot | 0 | `src/components/ui/index.ts` named export only | Shared token-backed status dot primitive |
 | Textarea | 0 | `src/components/ui/index.ts` named export only | Shared multiline text entry with legacy `.input.textarea` compatibility and optional `autoResize` |
 | Select | 2 | `src/components/ui/index.ts` named export only | Current bounded slice covers the supervisor evaluator selector family |
 | Notice | 1 | `src/components/ui/index.ts` named export only | Current bounded slice covers the settings load-error notice family |
 | Tooltip | 1 | `src/components/ui/index.ts` named export only | Current bounded slice covers branch picker plus selected code-editor, file-tree, and git-diff icon actions |
-| Pill | 1 | `src/components/ui/index.ts` named export only | Current bounded slice covers the settings appearance option groups |
 
 ## 迁移状态
 见 `./MIGRATION.md`。

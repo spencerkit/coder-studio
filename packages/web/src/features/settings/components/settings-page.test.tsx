@@ -1027,6 +1027,20 @@ describe("SettingsPage", () => {
     expect(screen.getByPlaceholderText("按下快捷键...")).toHaveClass("input", "shortcuts-capture");
   });
 
+  it("uses the shared kbd primitive compatibility class and interactive semantics for shortcut bindings", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({});
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+
+    fireEvent.click(await screen.findByRole("button", { name: "快捷键" }));
+
+    expect(screen.getByText("⌘+K")).toHaveClass("shortcuts-key");
+    expect(screen.getByText("⌘+K").tagName).toBe("KBD");
+    expect(screen.getByText("⌘+K")).toHaveAttribute("role", "button");
+    expect(screen.getByText("⌘+K")).toHaveAttribute("tabindex", "0");
+  });
+
   it("prefers browser history when leaving the mobile settings root", async () => {
     viewportMocks.viewport = "mobile";
     window.history.replaceState({ idx: 0 }, "", "/workspace");

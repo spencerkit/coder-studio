@@ -7,7 +7,7 @@
 import { useAtom, useAtomValue } from "jotai";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { dispatchCommandAtom } from "../../../atoms/connection";
-import { Input } from "../../../components/ui";
+import { Input, Kbd } from "../../../components/ui";
 import { useTranslation } from "../../../lib/i18n";
 import {
   customShortcutsAtom,
@@ -166,9 +166,13 @@ export function ShortcutsSettings() {
                   />
                 ) : (
                   <>
-                    <kbd className="shortcuts-key" onClick={() => setEditingId(shortcut.id)}>
+                    <Kbd
+                      className="shortcuts-key"
+                      interactive
+                      onClick={() => setEditingId(shortcut.id)}
+                    >
                       {formatShortcut(binding)}
-                    </kbd>
+                    </Kbd>
                     {isCustom && (
                       <button
                         className="btn btn-ghost btn-sm"

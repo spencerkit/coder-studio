@@ -1,0 +1,11 @@
+.spinner {
+  display: inline-flex;
+  width: var(--spinner-size, 16px);
+  height: var(--spinner-size, 16px);
+  flex-shrink: 0;
+  border: 2px solid color-mix(in srgb, currentColor 30%, var(--bg-page) 70%);
+  border-top-color: currentColor;
+  border-radius: var(--radius-full);
+  box-sizing: border-box;
+  color: var(--text-tertiary);
+}

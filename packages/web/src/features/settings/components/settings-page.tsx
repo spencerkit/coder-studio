@@ -767,16 +767,16 @@ function AppearanceSettings({
           role="group"
         >
           <Pill
-            active={theme === "dark"}
             leadingIcon={theme === "dark" ? <Check size={12} /> : undefined}
             onClick={() => handleThemeChange("dark")}
+            active={theme === "dark"}
           >
             {t("settings.theme.dark")}
           </Pill>
           <Pill
-            active={theme === "light"}
             leadingIcon={theme === "light" ? <Check size={12} /> : undefined}
             onClick={() => handleThemeChange("light")}
+            active={theme === "light"}
           >
             {t("settings.theme.light")}
           </Pill>
@@ -798,22 +798,22 @@ function AppearanceSettings({
           role="group"
         >
           <Pill
-            active={terminalRenderer === "standard"}
             leadingIcon={terminalRenderer === "standard" ? <Check size={12} /> : undefined}
             onClick={() => {
               setTerminalRenderer("standard");
               void saveSettings({ appearance: { terminalRenderer: "standard" } });
             }}
+            active={terminalRenderer === "standard"}
           >
             {t("settings.terminal_standard")}
           </Pill>
           <Pill
-            active={terminalRenderer === "compatibility"}
             leadingIcon={terminalRenderer === "compatibility" ? <Check size={12} /> : undefined}
             onClick={() => {
               setTerminalRenderer("compatibility");
               void saveSettings({ appearance: { terminalRenderer: "compatibility" } });
             }}
+            active={terminalRenderer === "compatibility"}
           >
             {t("settings.terminal_compatibility")}
           </Pill>
@@ -835,22 +835,22 @@ function AppearanceSettings({
           role="group"
         >
           <Pill
-            active={locale === "zh"}
             leadingIcon={locale === "zh" ? <Check size={12} /> : undefined}
             onClick={() => {
               setLocale("zh");
               void saveSettings({ appearance: { locale: "zh" } });
             }}
+            active={locale === "zh"}
           >
             {t("settings.language.zh")}
           </Pill>
           <Pill
-            active={locale === "en"}
             leadingIcon={locale === "en" ? <Check size={12} /> : undefined}
             onClick={() => {
               setLocale("en");
               void saveSettings({ appearance: { locale: "en" } });
             }}
+            active={locale === "en"}
           >
             {t("settings.language.en")}
           </Pill>

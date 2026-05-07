@@ -169,6 +169,26 @@ describe("SessionCard", () => {
     expect(screen.queryByRole("button", { name: "Close" })).not.toBeInTheDocument();
   });
 
+  it("preserves the legacy session status dot classes", () => {
+    const { store } = createSessionStore({
+      terminalId: "term-live",
+      state: "running",
+      endedAt: undefined,
+    });
+
+    const { container } = render(
+      <Provider store={store}>
+        <SessionCard sessionId="sess_123456" />
+      </Provider>
+    );
+
+    expect(container.querySelector(".session-dot.session-dot-running")).not.toBeNull();
+    expect(container.querySelector(".session-dot.session-dot-running")).toHaveAttribute(
+      "aria-hidden",
+      "true"
+    );
+  });
+
   it("renders a header accessory on the right side of the session header", () => {
     const { store } = createSessionStore({
       terminalId: "term-live",
