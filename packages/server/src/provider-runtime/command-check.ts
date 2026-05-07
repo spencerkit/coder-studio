@@ -1,55 +1,28 @@
 export type CommandAvailabilityCheck = (command: string) => Promise<boolean>;
-import { execFileAsString, type ExecFileRunner } from "./exec-file.js";
+
+import { type CommandRunner, runCommandAsString } from "./command-runner.js";
 
 export interface CommandCheckDeps {
   platform?: NodeJS.Platform;
-  execFile?: ExecFileRunner;
-}
-
-export interface ResolvedCommand {
-  command: string;
-  executable: string;
+  runCommand?: CommandRunner;
 }
 
 export function getCommandLookupExecutable(platform: NodeJS.Platform): "where" | "which" {
   return platform === "win32" ? "where" : "which";
 }
 
-export async function resolveCommand(
-  command: string,
-  deps: CommandCheckDeps = {}
-): Promise<ResolvedCommand | null> {
-  const platform = deps.platform ?? process.platform;
-  const execFile = deps.execFile ?? execFileAsString;
-  const lookup = getCommandLookupExecutable(platform);
-
-  try {
-    const { stdout } = await execFile(lookup, [command], { windowsHide: true });
-    const executable = firstLookupMatch(stdout);
-    if (!executable) {
-      return null;
-    }
-
-    return { command, executable };
-  } catch {
-    return null;
-  }
-}
-
 export async function checkCommandAvailable(
   command: string,
   deps: CommandCheckDeps = {}
 ): Promise<boolean> {
-  return (await resolveCommand(command, deps)) !== null;
-}
+  const platform = deps.platform ?? process.platform;
+  const runCommand = deps.runCommand ?? runCommandAsString;
+  const lookup = getCommandLookupExecutable(platform);
 
-function firstLookupMatch(stdout: string): string | null {
-  for (const line of stdout.split(/\r?\n/u)) {
-    const match = line.trim();
-    if (match.length > 0) {
-      return match;
-    }
+  try {
+    const { stdout } = await runCommand(lookup, [command], { windowsHide: true });
+    return stdout.trim().length > 0;
+  } catch {
+    return false;
   }
-
-  return null;
 }

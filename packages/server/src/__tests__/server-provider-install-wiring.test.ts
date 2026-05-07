@@ -3,15 +3,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const { execFileMock } = vi.hoisted(() => ({
-  execFileMock: vi.fn(),
+const { spawnMock } = vi.hoisted(() => ({
+  spawnMock: vi.fn(),
 }));
 
 vi.mock("node:child_process", async () => {
   const actual = await vi.importActual<typeof import("node:child_process")>("node:child_process");
   return {
     ...actual,
-    execFile: execFileMock,
+    spawn: spawnMock,
   };
 });
 
@@ -39,54 +39,96 @@ describe("createServer provider install wiring", () => {
     vi.clearAllMocks();
   });
 
-  it("forwards execFile options from the assembled provider install manager", async () => {
-    let codexChecks = 0;
+  it("forwards direct command-name execution from the assembled provider install manager", async () => {
     Object.defineProperty(process, "platform", {
       configurable: true,
       value: "win32",
     });
 
-    execFileMock.mockImplementation(
-      (
-        file: string,
-        args: string[],
-        options: { windowsHide?: boolean },
-        callback: (
-          error: Error | null,
-          result?: {
-            stdout: string;
-            stderr: string;
+    let npmInstalled = false;
+    let codexInstalled = false;
+    spawnMock.mockImplementation(
+      (file: string, args: string[], options: { windowsHide?: boolean }) => {
+        const stdoutHandlers: Array<(chunk: string) => void> = [];
+        const stderrHandlers: Array<(chunk: string) => void> = [];
+        const closeHandlers: Array<(code: number) => void> = [];
+        const errorHandlers: Array<(error: Error) => void> = [];
+        const child = {
+          stdout: {
+            on: vi.fn((event: string, handler: (chunk: string) => void) => {
+              if (event === "data") stdoutHandlers.push(handler);
+            }),
+          },
+          stderr: {
+            on: vi.fn((event: string, handler: (chunk: string) => void) => {
+              if (event === "data") stderrHandlers.push(handler);
+            }),
+          },
+          on: vi.fn((event: string, handler: ((arg: number) => void) | ((arg: Error) => void)) => {
+            if (event === "close") closeHandlers.push(handler as (code: number) => void);
+            if (event === "error") errorHandlers.push(handler as (error: Error) => void);
+          }),
+        };
+
+        queueMicrotask(() => {
+          if (!options?.windowsHide) {
+            for (const handler of errorHandlers) {
+              handler(new Error(`windowsHide missing for ${file}`));
+            }
+            return;
           }
-        ) => void
-      ) => {
-        if (!options?.windowsHide) {
-          callback(new Error(`windowsHide missing for ${file}`));
-          return {} as ReturnType<typeof execFileMock>;
-        }
 
-        if (file === "where" && args[0] === "codex") {
-          codexChecks += 1;
-          if (codexChecks === 1) {
-            callback(new Error("codex unavailable"));
-            return {} as ReturnType<typeof execFileMock>;
+          const writeStdout = (value: string) => {
+            for (const handler of stdoutHandlers) handler(value);
+          };
+          const closeOk = () => {
+            for (const handler of closeHandlers) handler(0);
+          };
+          const fail = (message: string) => {
+            for (const handler of errorHandlers) handler(new Error(message));
+          };
+
+          if (file === "where" && args[0] === "winget") {
+            writeStdout("C:\\Users\\test\\AppData\\Local\\Microsoft\\WindowsApps\\winget.exe\r\n");
+            closeOk();
+            return;
           }
 
-          callback(null, { stdout: "C:\\codex\\codex.exe\r\n", stderr: "" });
-          return {} as ReturnType<typeof execFileMock>;
-        }
+          if (
+            file === "winget" &&
+            args.join(" ") === "install --id OpenJS.NodeJS.LTS --exact --silent"
+          ) {
+            npmInstalled = true;
+            writeStdout("installed node");
+            closeOk();
+            return;
+          }
 
-        if (file === "where" && args[0] === "npm") {
-          callback(null, { stdout: "C:\\npm\\npm.cmd\r\n", stderr: "" });
-          return {} as ReturnType<typeof execFileMock>;
-        }
+          if (file === "npm" && args.join(" ") === "install -g @openai/codex") {
+            if (!npmInstalled) {
+              fail("npm unavailable");
+              return;
+            }
+            codexInstalled = true;
+            writeStdout("installed");
+            closeOk();
+            return;
+          }
 
-        if (file === "C:\\npm\\npm.cmd" && args.join(" ") === "install -g @openai/codex") {
-          callback(null, { stdout: "installed", stderr: "" });
-          return {} as ReturnType<typeof execFileMock>;
-        }
+          if (file === "where" && args[0] === "codex") {
+            if (!codexInstalled) {
+              fail("codex unavailable");
+              return;
+            }
+            writeStdout("C:\\codex\\codex.cmd\r\n");
+            closeOk();
+            return;
+          }
 
-        callback(new Error(`unexpected execFile call: ${file} ${args.join(" ")}`));
-        return {} as ReturnType<typeof execFileMock>;
+          fail(`unexpected spawn call: ${file} ${args.join(" ")}`);
+        });
+
+        return child;
       }
     );
 
@@ -106,11 +148,10 @@ describe("createServer provider install wiring", () => {
       expect(providerInstallMgr!.get(job.jobId)?.status).toBe("succeeded");
     });
 
-    expect(execFileMock).toHaveBeenCalledWith(
-      "C:\\npm\\npm.cmd",
+    expect(spawnMock).toHaveBeenCalledWith(
+      "npm",
       ["install", "-g", "@openai/codex"],
-      { windowsHide: true },
-      expect.any(Function)
+      expect.objectContaining({ shell: false, windowsHide: true })
     );
   });
 });

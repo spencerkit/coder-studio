@@ -23,7 +23,7 @@ describe("runtimeCheck", () => {
 
     const result = await runtimeCheck("/tmp", "wsl", {
       platform: "win32",
-      execFile,
+      runCommand: execFile,
     });
 
     expect(result).toEqual({ ok: false, missing: ["wsl"] });
@@ -33,7 +33,7 @@ describe("runtimeCheck", () => {
   it("reports missing git and node from the version checks deterministically", async () => {
     const result = await runtimeCheck("/tmp", "native", {
       commandExists: async () => true,
-      execFile: vi.fn(async (file: string) => {
+      runCommand: vi.fn(async (file: string) => {
         throw new Error(`${file} unavailable`);
       }),
     });
@@ -58,7 +58,7 @@ describe("runtimeCheck", () => {
 
     const result = await runtimeCheck("/tmp", "native", {
       platform: "win32",
-      execFile,
+      runCommand: execFile,
     });
 
     expect(result).toEqual({ ok: true, missing: [] });

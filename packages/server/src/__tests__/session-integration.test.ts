@@ -230,7 +230,7 @@ describe("Session Integration", () => {
     ctx.providerInstallMgr = new ProviderInstallManager(providerRegistry, {
       platform: "win32",
       commandExists: async (command: string) => command === "winget",
-      execFile: async () => ({ stdout: "", stderr: "" }),
+      runCommand: async () => ({ stdout: "", stderr: "" }),
     });
 
     const status = await dispatch(

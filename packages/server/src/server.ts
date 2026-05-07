@@ -22,7 +22,7 @@ import {
 } from "./config/codex-config-audit.js";
 import { ensureDataDir, parseServerConfig, type ServerConfig } from "./config.js";
 import { isDirectExecution } from "./direct-execution.js";
-import { execFileAsString } from "./provider-runtime/exec-file.js";
+import { runCommandAsString } from "./provider-runtime/command-runner.js";
 import { ProviderInstallManager } from "./provider-runtime/install-manager.js";
 import type { RuntimeStatusDeps } from "./provider-runtime/runtime-status.js";
 import { SessionManager } from "./session/manager.js";
@@ -194,7 +194,7 @@ export async function createServer(
   const providerRuntimeDeps: RuntimeStatusDeps = {};
   const providerInstallMgr = new ProviderInstallManager(providerRegistry, {
     ...providerRuntimeDeps,
-    execFile: execFileAsString,
+    runCommand: runCommandAsString,
   });
 
   const commandContext: CommandContext = {
