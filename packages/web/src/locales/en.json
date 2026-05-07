@@ -102,6 +102,14 @@
     "close": "Close",
     "path": "Path",
     "no_workspace": "No workspace open",
+    "fullscreen": {
+      "unsupported_title": "Fullscreen unavailable",
+      "unsupported_body": "Fullscreen is not available in this browser.",
+      "enter_failed_title": "Could not enter fullscreen",
+      "enter_failed_body": "The browser denied the fullscreen request.",
+      "exit_failed_title": "Could not exit fullscreen",
+      "exit_failed_body": "The browser could not exit fullscreen right now."
+    },
     "open_hint": "Click the button below to open a project directory",
     "loading_title": "Loading workspaces",
     "loading_description": "Preparing your workspace list and restoring the last active session.",
@@ -245,7 +253,7 @@
       "queued_title": "Waiting in queue ({count} ahead)",
       "up_next": "Up next...",
       "loading_title": "Restoring terminal output...",
-      "loading_body": "You can keep using this page while history catches up in the background. Larger histories may take longer to restore.",
+      "loading_body": "This terminal is unavailable while history is being restored. Please wait until recovery finishes before continuing. Larger histories may take longer to restore.",
       "failed_title": "Terminal history could not be restored",
       "failed_body": "New output will keep streaming. Refresh manually only if you need the missing history.",
       "closed_title": "This session has been closed",

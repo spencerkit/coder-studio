@@ -17,7 +17,7 @@ export function WorkspaceFullscreenButton({
 }: WorkspaceFullscreenButtonProps) {
   const t = useTranslation();
 
-  if (!controller?.supported) {
+  if (!controller) {
     return null;
   }
 

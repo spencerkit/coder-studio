@@ -27,6 +27,7 @@ import {
   workspacesLoadStateAtom,
 } from "../../atoms/workspaces";
 import { paneLayoutAtomFamily } from "../../features/agent-panes/atoms/pane-layout";
+import { toastsAtom } from "../../features/notifications/atoms";
 import { supervisorCyclesAtom, supervisorsAtom } from "../../features/supervisor/atoms";
 import {
   branchQuickPickAtom,
@@ -777,12 +778,30 @@ describe("MobileShell Phase 2 workspace", () => {
     expect(settingsButton.nextElementSibling).toBe(fullscreenButton);
   });
 
-  it("hides the fullscreen toggle on mobile when the browser does not support fullscreen", async () => {
+  it("keeps the fullscreen toggle visible on mobile when the browser does not support fullscreen", async () => {
     removeFullscreenApiForMobileShell();
     renderMobileShell({ initialEntry: "/workspace" });
 
     expect(screen.getByRole("button", { name: "Open settings" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Enter Fullscreen" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Enter Fullscreen" })).toBeInTheDocument();
+  });
+
+  it("shows a friendly toast instead of crashing when mobile fullscreen is unavailable", async () => {
+    removeFullscreenApiForMobileShell();
+    const user = userEvent.setup();
+    const { store } = renderMobileShell({ initialEntry: "/workspace" });
+
+    await user.click(screen.getByRole("button", { name: "Enter Fullscreen" }));
+
+    await waitFor(() => {
+      expect(store.get(toastsAtom)).toHaveLength(1);
+    });
+
+    expect(store.get(toastsAtom)[0]).toMatchObject({
+      kind: "info",
+      title: "Fullscreen unavailable",
+      body: "Fullscreen is not available in this browser.",
+    });
   });
 
   it("switches the mobile fullscreen button to exit mode after entering fullscreen", async () => {

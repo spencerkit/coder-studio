@@ -12,22 +12,22 @@ function renderWithEnglish(ui: React.ReactElement) {
 }
 
 describe("WorkspaceFullscreenButton", () => {
-  it("renders nothing when fullscreen is unsupported", () => {
-    const { container } = renderWithEnglish(
+  it("renders the fullscreen control even when the controller reports unsupported", () => {
+    renderWithEnglish(
       <WorkspaceFullscreenButton
         controller={{
           supported: false,
           isFullscreen: false,
           enterFullscreen: vi.fn(),
-          exitFullscreen: vi.fn(),
           toggleFullscreen: vi.fn(),
+          exitFullscreen: vi.fn(),
         }}
         className="topbar-btn"
         iconSize={14}
       />
     );
 
-    expect(container).toBeEmptyDOMElement();
+    expect(screen.getByRole("button", { name: "Enter Fullscreen" })).toBeInTheDocument();
   });
 
   it("renders enter state and calls toggle", () => {
@@ -68,5 +68,13 @@ describe("WorkspaceFullscreenButton", () => {
     );
 
     expect(screen.getByRole("button", { name: "Exit Fullscreen" })).toBeInTheDocument();
+  });
+
+  it("renders nothing when no fullscreen controller is provided", () => {
+    const { container } = renderWithEnglish(
+      <WorkspaceFullscreenButton controller={undefined} className="topbar-btn" iconSize={14} />
+    );
+
+    expect(container).toBeEmptyDOMElement();
   });
 });

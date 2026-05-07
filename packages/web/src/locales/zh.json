@@ -102,6 +102,14 @@
     "close": "关闭",
     "path": "路径",
     "no_workspace": "未打开工作区",
+    "fullscreen": {
+      "unsupported_title": "当前无法全屏",
+      "unsupported_body": "当前浏览器不支持全屏功能。",
+      "enter_failed_title": "进入全屏失败",
+      "enter_failed_body": "浏览器拒绝了全屏请求。",
+      "exit_failed_title": "退出全屏失败",
+      "exit_failed_body": "浏览器暂时无法退出全屏。"
+    },
     "open_hint": "点击下方按钮打开一个项目目录",
     "loading_title": "正在加载工作区",
     "loading_description": "正在准备工作区列表并恢复上次活跃的会话。",
@@ -245,7 +253,7 @@
       "queued_title": "等待队列中（前方还有 {count} 个）",
       "up_next": "即将开始…",
       "loading_title": "正在恢复终端内容…",
-      "loading_body": "你已经可以继续使用当前页面；历史内容会在后台补上，内容较多时可能需要更久。",
+      "loading_body": "恢复期间暂时无法使用当前终端；请耐心等待，历史内容恢复完成后再继续。内容较多时可能需要更久。",
       "failed_title": "历史内容恢复失败",
       "failed_body": "新输出仍会继续显示；如果需要完整历史，再手动刷新页面。",
       "closed_title": "该会话已被关闭",
