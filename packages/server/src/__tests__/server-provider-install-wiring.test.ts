@@ -151,6 +151,11 @@ describe("createServer provider install wiring", () => {
     expect(spawnMock).toHaveBeenCalledWith(
       "npm",
       ["install", "-g", "@openai/codex"],
+      expect.objectContaining({ shell: true, windowsHide: true })
+    );
+    expect(spawnMock).toHaveBeenCalledWith(
+      "winget",
+      ["install", "--id", "OpenJS.NodeJS.LTS", "--exact", "--silent"],
       expect.objectContaining({ shell: false, windowsHide: true })
     );
   });

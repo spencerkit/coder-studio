@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isDirectExecution, resolveSpawnCommand, shouldUseShellForCommand } from "./process.js";
+import { isDirectExecution, shouldUseShellForCommand } from "./process.js";
 
 describe("isDirectExecution", () => {
   it("matches direct execution for POSIX script paths", () => {
@@ -14,20 +14,6 @@ describe("isDirectExecution", () => {
 
   it("returns false when the current module differs from argv[1]", () => {
     expect(isDirectExecution("file:///repo/scripts/build.ts", "/repo/scripts/dev.ts")).toBe(false);
-  });
-});
-
-describe("resolveSpawnCommand", () => {
-  it("keeps pnpm unresolved on Windows so cmd can resolve the shim", () => {
-    expect(resolveSpawnCommand("pnpm", "win32")).toBe("pnpm");
-  });
-
-  it("does not rewrite native Windows executables like git", () => {
-    expect(resolveSpawnCommand("git", "win32")).toBe("git");
-  });
-
-  it("leaves commands unchanged on POSIX platforms", () => {
-    expect(resolveSpawnCommand("pnpm", "linux")).toBe("pnpm");
   });
 });
 

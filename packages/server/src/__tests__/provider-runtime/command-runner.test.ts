@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 import { EventEmitter } from "node:events";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 const { spawnMock } = vi.hoisted(() => ({
   spawnMock: vi.fn(),
@@ -29,6 +29,14 @@ function createChildProcessMock() {
 }
 
 describe("runCommandAsString", () => {
+  const originalPlatform = Object.getOwnPropertyDescriptor(process, "platform");
+
+  afterEach(() => {
+    if (originalPlatform) {
+      Object.defineProperty(process, "platform", originalPlatform);
+    }
+  });
+
   it("normalizes stdout and stderr to strings", async () => {
     spawnMock.mockImplementation(
       (_file: string, _args: string[], _options: { windowsHide?: boolean }) => {
@@ -49,5 +57,54 @@ describe("runCommandAsString", () => {
       shell: false,
       windowsHide: true,
     });
+  });
+
+  it("defaults windowsHide to true when caller omits the option", async () => {
+    spawnMock.mockImplementation(() => {
+      const child = createChildProcessMock();
+      queueMicrotask(() => child.emit("close", 0));
+      return child;
+    });
+
+    await runCommandAsString("demo", []);
+
+    expect(spawnMock).toHaveBeenCalledWith("demo", [], {
+      shell: false,
+      windowsHide: true,
+    });
+  });
+
+  it("routes Windows .cmd shims through a shell so Node does not reject them", async () => {
+    Object.defineProperty(process, "platform", { configurable: true, value: "win32" });
+    spawnMock.mockImplementation(() => {
+      const child = createChildProcessMock();
+      queueMicrotask(() => child.emit("close", 0));
+      return child;
+    });
+
+    await runCommandAsString("npm", ["install", "-g", "@openai/codex"]);
+
+    expect(spawnMock).toHaveBeenCalledWith(
+      "npm",
+      ["install", "-g", "@openai/codex"],
+      expect.objectContaining({ shell: true, windowsHide: true })
+    );
+  });
+
+  it("keeps native Windows executables off the shell path", async () => {
+    Object.defineProperty(process, "platform", { configurable: true, value: "win32" });
+    spawnMock.mockImplementation(() => {
+      const child = createChildProcessMock();
+      queueMicrotask(() => child.emit("close", 0));
+      return child;
+    });
+
+    await runCommandAsString("git", ["--version"]);
+
+    expect(spawnMock).toHaveBeenCalledWith(
+      "git",
+      ["--version"],
+      expect.objectContaining({ shell: false, windowsHide: true })
+    );
   });
 });

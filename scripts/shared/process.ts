@@ -79,13 +79,6 @@ export function isDirectExecution(moduleUrl: string, argv1: string | undefined =
   return modulePath === normalizeArgvPath(argv1);
 }
 
-export function resolveSpawnCommand(
-  command: string,
-  _platform: NodeJS.Platform = process.platform
-): string {
-  return command;
-}
-
 export function shouldUseShellForCommand(
   command: string,
   platform: NodeJS.Platform = process.platform
@@ -103,6 +96,7 @@ function createSpawnOptions({
     env: options.env ?? process.env,
     stdio: options.stdio ?? "inherit",
     shell: shouldUseShellForCommand(command, platform),
+    windowsHide: true,
   };
 }
 
@@ -115,11 +109,7 @@ export function run(
   options: ProcessOptions = {}
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn(
-      resolveSpawnCommand(command),
-      args,
-      createSpawnOptions({ command, options })
-    );
+    const child = spawn(command, args, createSpawnOptions({ command, options }));
 
     child.on("close", (code) => {
       if (code === 0) {
@@ -143,7 +133,7 @@ export function runBackground(
   args: string[] = [],
   options: ProcessOptions = {}
 ): ChildProcess {
-  const child = spawn(resolveSpawnCommand(command), args, createSpawnOptions({ command, options }));
+  const child = spawn(command, args, createSpawnOptions({ command, options }));
 
   return child;
 }
