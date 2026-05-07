@@ -6,8 +6,8 @@
 | IconButton | ⚫ not-started | `.btn` icon-only | — | — |
 | Input | 🟢 complete | `.input` | 0 | 2026-05-09 |
 | Textarea | 🟢 complete | `.input.textarea` | 0 | 2026-05-09 |
-| Tag | ⚫ not-started | `.badge .badge-*` | — | — |
-| Badge | ⚫ not-started | `.badge` | — | — |
+| Tag | 🟢 complete | `.badge .badge-*` | 0 | 2026-05-09 |
+| Badge | 🟢 complete | `.topbar-unread` | 0 | 2026-05-09 |
 | Pill | 🟢 complete | `.settings-pill*` | 0 | 2026-05-09 |
 | StatusDot | 🟡 partial | `.session-dot*`, `.connection-status-dot*` | 0 | 2026-05-09 |
 | Kbd | 🟢 complete | `kbd`, `.shortcuts-key` | 0 | 2026-05-09 |
@@ -30,6 +30,10 @@
 `Input` now completes the legacy `.input` single-line text-entry migration inventory: the auth password field, the settings supervisor timeout field, the git sync auth username/password fields, the worktree manager create-form branch/path fields, the file-tree create-path modal field, and the shortcuts capture input all use the shared primitive from the public UI barrel while preserving legacy `.input` compatibility classes and caller-owned layout hooks such as `auth-input`, `settings-input-compact`, and `shortcuts-capture`.
 
 `Textarea` now completes the bounded legacy `.input.textarea` migration inventory: the provider startup-args textarea and the supervisor objective textarea both use the shared primitive from the public UI barrel while preserving legacy `input` / `textarea` compatibility classes and caller-owned hooks such as `settings-provider-args-input`. The primitive also supports optional auto-resize for later adopters. The `git-panel` commit message field is intentionally not counted on this row because it is not part of the `.input.textarea` family selected for this slice, and standalone `.textarea` utility usage remains outside this row.
+
+`Tag` now completes the bounded legacy `.badge` / `.badge-*` migration inventory: the session provider and state labels, the draft session label, the mobile select item badge, and the branch quick-pick remote badge all use the shared primitive from the public UI barrel while preserving legacy compatibility classes and caller-owned layout hooks. Other tag-like labels that do not belong to this legacy family remain intentionally outside this row.
+
+`Badge` now completes the bounded legacy `.topbar-unread` migration inventory: the workspace tab unread counter uses the shared primitive from the public UI barrel while preserving the legacy compatibility class and count-capping behavior.
 
 `Select` now covers the bounded supervisor objective dialog evaluator-provider flow on both platforms: desktop uses the shared primitive's native `<select>` path while mobile uses its trigger mode to reopen the existing `MobileSelectSheet` flow, preserving legacy `input` / `mobile-select-trigger*` compatibility classes and the objective dialog's existing label, helper-text, and hook ids. The row remains in-flight because this slice only migrates the objective dialog evaluator-provider selector; deferred select-like callers still include the settings provider tabs/subnav families and the broader mobile select-trigger families outside this flow.
 

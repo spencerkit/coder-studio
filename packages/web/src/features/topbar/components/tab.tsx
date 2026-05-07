@@ -10,6 +10,7 @@ import { useSetAtom } from "jotai";
 import { X } from "lucide-react";
 import type { FC } from "react";
 import { activeWorkspaceIdAtom } from "../../../atoms/workspaces";
+import { Badge } from "../../../components/ui";
 import { useTranslation } from "../../../lib/i18n";
 import { formatWorkspaceLabel } from "../../notifications/format";
 import { useWorkspaceCloseAction } from "../../workspace/actions/use-workspace-close-action";
@@ -62,11 +63,7 @@ export const WorkspaceTab: FC<WorkspaceTabProps> = ({ workspace, isActive }) => 
 
       <span className="topbar-tab-name">{displayName}</span>
 
-      {workspace.unreadCount && workspace.unreadCount > 0 ? (
-        <span className="topbar-unread">
-          {workspace.unreadCount > 9 ? "9+" : workspace.unreadCount}
-        </span>
-      ) : null}
+      <Badge count={workspace.unreadCount ?? 0} max={9} />
 
       <button
         className="topbar-close"

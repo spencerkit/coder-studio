@@ -13,7 +13,7 @@ import { useEffect, useRef, useState } from "react";
 import { pendingFocusSessionAtom } from "../../../../atoms/app-ui";
 import { sessionByIdAtomFamily } from "../../../../atoms/sessions";
 import { workspaceByIdAtomFamily } from "../../../../atoms/workspaces";
-import { StatusDot } from "../../../../components/ui";
+import { StatusDot, Tag } from "../../../../components/ui";
 import { useSupervisor } from "../../../supervisor/actions/use-supervisor";
 import { ObjectiveDialog } from "../../../supervisor/views/shared/objective-dialog";
 import { SupervisorCard } from "../../../supervisor/views/shared/supervisor-card";
@@ -128,10 +128,16 @@ export const SessionCard: FC<SessionCardProps> = ({
           <div className="session-header-copy">
             <div className="session-title-row">
               <span className="session-title">{sessionTitle}</span>
-              <span className="badge badge-blue session-provider-badge">{providerLabel}</span>
-              <span className={`session-state-badge ${getSessionBadgeClass(session.state)}`}>
+              <Tag color="blue" className="session-provider-badge">
+                {providerLabel}
+              </Tag>
+              <Tag
+                color={getSessionTagColor(session.state)}
+                className="session-state-badge"
+                caps={false}
+              >
                 {sessionStateLabel}
-              </span>
+              </Tag>
             </div>
           </div>
         </div>
@@ -270,16 +276,16 @@ function shouldPulseSessionDot(state: SessionState) {
   }
 }
 
-function getSessionBadgeClass(state: SessionState) {
+function getSessionTagColor(state: SessionState): "amber" | "green" | "blue" | "neutral" {
   switch (state) {
     case "starting":
-      return "badge badge-amber";
+      return "amber";
     case "running":
-      return "badge badge-green";
+      return "green";
     case "ended":
-      return "badge badge-blue";
+      return "blue";
     default:
-      return "badge badge-gray";
+      return "neutral";
   }
 }
 

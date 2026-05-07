@@ -1,0 +1,16 @@
+:where(.badge),
+:global(:where(.topbar-unread)) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 var(--sp-1);
+  border-radius: var(--radius-full);
+  background: var(--accent-blue);
+  color: var(--bg-page);
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: var(--font-semibold);
+  line-height: 1;
+}

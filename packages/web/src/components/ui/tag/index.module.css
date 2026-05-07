@@ -1,0 +1,60 @@
+:where(.tag),
+:global(:where(.badge)) {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  height: 20px;
+  padding: 0 var(--sp-2);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: var(--font-semibold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.sm {
+  height: 18px;
+  font-size: 9px;
+  padding: 0 var(--sp-1);
+}
+
+.noCaps {
+  text-transform: none;
+}
+
+:where(.blue),
+:global(:where(.badge-blue)) {
+  background: color-mix(in srgb, var(--accent-blue) 15%, transparent);
+  color: var(--accent-blue);
+}
+
+:where(.green),
+:global(:where(.badge-green)) {
+  background: color-mix(in srgb, var(--accent-green) 15%, transparent);
+  color: var(--accent-green);
+}
+
+:where(.amber),
+:global(:where(.badge-amber)) {
+  background: color-mix(in srgb, var(--accent-amber) 15%, transparent);
+  color: var(--accent-amber);
+}
+
+:where(.pink),
+:global(:where(.badge-pink)) {
+  background: color-mix(in srgb, var(--accent-pink) 15%, transparent);
+  color: var(--accent-pink);
+}
+
+:where(.purple),
+:global(:where(.badge-purple)) {
+  background: color-mix(in srgb, var(--accent-purple) 15%, transparent);
+  color: var(--accent-purple);
+}
+
+:where(.neutral),
+:global(:where(.badge-gray)) {
+  background: color-mix(in srgb, var(--text-tertiary) 15%, transparent);
+  color: var(--text-tertiary);
+}

@@ -168,6 +168,20 @@ describe("BranchQuickPick", () => {
     expect(screen.getByPlaceholderText("搜索分支或创建新分支...")).toBeInTheDocument();
   });
 
+  it("renders the remote branch label with shared tag compatibility classes", () => {
+    render(
+      <Provider store={store}>
+        <BranchQuickPick />
+      </Provider>
+    );
+
+    expect(screen.getByText("Remote")).toHaveClass(
+      "badge",
+      "badge-gray",
+      "branch-quick-pick-badge"
+    );
+  });
+
   it("shows create option for non-existent branch", async () => {
     render(
       <Provider store={store}>

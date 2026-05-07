@@ -55,6 +55,29 @@ describe("MobileSelectSheet", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("renders item badges with the shared tag compatibility classes without forcing all caps", () => {
+    renderWithEnglishLocale(
+      <MobileSelectSheet
+        title="Branches"
+        sections={[
+          {
+            kind: "options",
+            id: "branches",
+            items: [{ id: "origin/main", label: "origin/main", badge: "Remote" }],
+          },
+        ]}
+        onSelect={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("Remote")).toHaveClass(
+      "badge",
+      "badge-gray",
+      "mobile-select-sheet__item-badge"
+    );
+  });
+
   it("waits for async onSelect to settle before closing when closeOnSelect is true", async () => {
     const user = userEvent.setup();
     let resolveSelect: (() => void) | null = null;

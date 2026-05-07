@@ -1,3 +1,5 @@
+export type { BadgeProps } from "./badge";
+export { Badge } from "./badge";
 export type { ButtonProps, ButtonSize, ButtonVariant } from "./button";
 export { Button } from "./button";
 export type { InputProps, InputSize } from "./input";
@@ -14,6 +16,8 @@ export type { SpinnerProps, SpinnerSize } from "./spinner";
 export { Spinner } from "./spinner";
 export type { StatusDotProps, StatusDotSize, StatusDotTone } from "./status-dot";
 export { StatusDot } from "./status-dot";
+export type { TagColor, TagProps, TagSize } from "./tag";
+export { Tag } from "./tag";
 export type { TextareaProps, TextareaSize } from "./textarea";
 export { Textarea } from "./textarea";
 export type { TooltipProps } from "./tooltip";
