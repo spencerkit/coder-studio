@@ -41,6 +41,11 @@ function normalizeModuleUrlPath(moduleUrl: string): string | null {
   return normalizeComparablePath(path);
 }
 
+function normalizeArgvPath(argv1: string): string {
+  const isAbsoluteWindowsPath = /^[A-Za-z]:[\\/]/.test(argv1) || /^\\\\/.test(argv1);
+  return normalizeComparablePath(isAbsoluteWindowsPath ? argv1 : resolve(argv1));
+}
+
 export function isDirectExecution(
   moduleUrl: string,
   argv1: string | undefined = process.argv[1]
@@ -55,8 +60,5 @@ export function isDirectExecution(
     return false;
   }
 
-  const isAbsoluteWindowsPath = /^[A-Za-z]:[\\/]/.test(argv1) || /^\\\\/.test(argv1);
-  const argvPath = normalizeComparablePath(isAbsoluteWindowsPath ? argv1 : resolve(argv1));
-
-  return modulePath === argvPath;
+  return modulePath === normalizeArgvPath(argv1);
 }

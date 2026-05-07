@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isDirectExecution, shouldUseShellForCommand } from "./process.js";
+import { isDirectExecution } from "./direct-execution.js";
 
 describe("isDirectExecution", () => {
   it("matches direct execution for POSIX script paths", () => {
@@ -15,18 +15,12 @@ describe("isDirectExecution", () => {
   it("returns false when the current module differs from argv[1]", () => {
     expect(isDirectExecution("file:///repo/scripts/build.ts", "/repo/scripts/dev.ts")).toBe(false);
   });
-});
 
-describe("shouldUseShellForCommand", () => {
-  it("uses a shell for pnpm on Windows because pnpm.cmd is not directly executable", () => {
-    expect(shouldUseShellForCommand("pnpm", "win32")).toBe(true);
+  it("returns false when argv[1] is undefined", () => {
+    expect(isDirectExecution("file:///repo/scripts/dev.ts", undefined)).toBe(false);
   });
 
-  it("does not use a shell for native executables like git on Windows", () => {
-    expect(shouldUseShellForCommand("git", "win32")).toBe(false);
-  });
-
-  it("does not use a shell on POSIX platforms", () => {
-    expect(shouldUseShellForCommand("pnpm", "linux")).toBe(false);
+  it("returns false when moduleUrl is not a file: URL", () => {
+    expect(isDirectExecution("https://example.com/dev.ts", "/repo/scripts/dev.ts")).toBe(false);
   });
 });

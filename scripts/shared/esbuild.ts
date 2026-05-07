@@ -4,7 +4,7 @@
 
 import { type BuildOptions } from "esbuild";
 import { resolve } from "path";
-import { CLI_DIR, CORE_DIR, PACKAGES_DIR, PROVIDERS_DIR, SERVER_DIR } from "./paths.js";
+import { CLI_DIR, CORE_DIR, PACKAGES_DIR, PROVIDERS_DIR, SERVER_DIR, UTILS_DIR } from "./paths.js";
 
 /**
  * Get external dependencies from package.json
@@ -33,6 +33,7 @@ export async function createCliBuildOptions(format: "esm" | "cjs"): Promise<Buil
   const serverExternal = await getExternalDeps(SERVER_DIR);
   const coreExternal = await getExternalDeps(CORE_DIR);
   const providersExternal = await getExternalDeps(PROVIDERS_DIR);
+  const utilsExternal = await getExternalDeps(UTILS_DIR);
 
   // Combine all dependencies
   const allDeps = new Set([
@@ -40,6 +41,7 @@ export async function createCliBuildOptions(format: "esm" | "cjs"): Promise<Buil
     ...serverExternal,
     ...coreExternal,
     ...providersExternal,
+    ...utilsExternal,
   ]);
 
   // Only externalize third-party dependencies (not internal @coder-studio/* packages)
@@ -73,6 +75,7 @@ export async function createCliBuildOptions(format: "esm" | "cjs"): Promise<Buil
       "@coder-studio/core/runtime": resolve(CORE_DIR, "src/runtime.ts"),
       "@coder-studio/core": resolve(CORE_DIR, "src/index.ts"),
       "@coder-studio/providers": resolve(PROVIDERS_DIR, "src/index.ts"),
+      "@coder-studio/utils": resolve(UTILS_DIR, "src/index.ts"),
     },
     banner: format === "esm" ? { js: "// @spencer-kit/coder-studio - ESM bundle" } : undefined,
   };
@@ -86,6 +89,7 @@ export async function getProductionDeps(): Promise<string[]> {
   const serverExternal = await getExternalDeps(SERVER_DIR);
   const coreExternal = await getExternalDeps(CORE_DIR);
   const providersExternal = await getExternalDeps(PROVIDERS_DIR);
+  const utilsExternal = await getExternalDeps(UTILS_DIR);
 
   // Combine all dependencies and filter out internal packages
   const allDeps = new Set([
@@ -93,6 +97,7 @@ export async function getProductionDeps(): Promise<string[]> {
     ...serverExternal,
     ...coreExternal,
     ...providersExternal,
+    ...utilsExternal,
   ]);
 
   return Array.from(allDeps).filter((dep) => !dep.startsWith("@coder-studio/"));

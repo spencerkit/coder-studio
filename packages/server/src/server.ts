@@ -10,6 +10,7 @@ import {
   writeRuntimeConfig,
 } from "@coder-studio/core/runtime";
 import { providerRegistry } from "@coder-studio/providers";
+import { isDirectExecution } from "@coder-studio/utils";
 import type { FastifyInstance } from "fastify";
 import { buildFastifyApp } from "./app.js";
 import { EventBus } from "./bus/event-bus.js";
@@ -21,7 +22,6 @@ import {
   cleanupCodexConfigToml,
 } from "./config/codex-config-audit.js";
 import { ensureDataDir, parseServerConfig, type ServerConfig } from "./config.js";
-import { isDirectExecution } from "./direct-execution.js";
 import { runCommandAsString } from "./provider-runtime/command-runner.js";
 import { ProviderInstallManager } from "./provider-runtime/install-manager.js";
 import type { RuntimeStatusDeps } from "./provider-runtime/runtime-status.js";

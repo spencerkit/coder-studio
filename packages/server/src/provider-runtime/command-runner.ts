@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { shouldUseShellForCommand } from "@coder-studio/utils";
 
 export type CommandRunnerOptions = { windowsHide?: boolean };
 
@@ -12,15 +13,6 @@ export type CommandRunner = (
   args: string[],
   options?: CommandRunnerOptions
 ) => Promise<CommandRunnerResult>;
-
-// Windows ships these as .cmd shims that Node refuses to spawn directly post
-// CVE-2024-27980. Routing them through cmd.exe via shell:true is the only
-// approach that survives both ENOENT (bare name) and EINVAL (full .cmd path).
-const WINDOWS_CMD_SHIMS = new Set(["pnpm", "npm", "npx"]);
-
-function shouldUseShellForCommand(file: string, platform: NodeJS.Platform): boolean {
-  return platform === "win32" && WINDOWS_CMD_SHIMS.has(file.toLowerCase());
-}
 
 export async function runCommandAsString(
   file: string,

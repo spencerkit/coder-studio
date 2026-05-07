@@ -2,8 +2,10 @@
  * Process utilities for running child processes
  */
 
+import { isDirectExecution, shouldUseShellForCommand } from "@coder-studio/utils";
 import { type ChildProcess, type SpawnOptions, spawn } from "child_process";
-import { posix, resolve } from "path";
+
+export { isDirectExecution, shouldUseShellForCommand };
 
 export interface ProcessOptions {
   cwd?: string;
@@ -15,75 +17,6 @@ interface SpawnConfig {
   command: string;
   options: ProcessOptions;
   platform?: NodeJS.Platform;
-}
-
-const WINDOWS_CMD_SHIMS = new Set(["pnpm", "npm", "npx"]);
-
-function isWindowsDrivePath(path: string): boolean {
-  return /^[A-Za-z]:\//.test(path);
-}
-
-function normalizeComparablePath(path: string): string {
-  let normalized = path.replace(/\\/g, "/");
-
-  if (/^\/[A-Za-z]:\//.test(normalized)) {
-    normalized = normalized.slice(1);
-  }
-
-  if (normalized.startsWith("//")) {
-    normalized = `//${posix.normalize(normalized.slice(2))}`;
-  } else {
-    normalized = posix.normalize(normalized);
-  }
-
-  if (isWindowsDrivePath(normalized) || normalized.startsWith("//")) {
-    normalized = normalized.toLowerCase();
-  }
-
-  return normalized;
-}
-
-function normalizeModuleUrlPath(moduleUrl: string): string | null {
-  let url: URL;
-
-  try {
-    url = new URL(moduleUrl);
-  } catch {
-    return null;
-  }
-
-  if (url.protocol !== "file:") {
-    return null;
-  }
-
-  const path = `${url.host ? `//${url.host}` : ""}${decodeURIComponent(url.pathname)}`;
-  return normalizeComparablePath(path);
-}
-
-function normalizeArgvPath(argv1: string): string {
-  const isAbsoluteWindowsPath = /^[A-Za-z]:[\\/]/.test(argv1) || /^\\\\/.test(argv1);
-  return normalizeComparablePath(isAbsoluteWindowsPath ? argv1 : resolve(argv1));
-}
-
-export function isDirectExecution(moduleUrl: string, argv1: string | undefined = process.argv[1]) {
-  if (argv1 === undefined) {
-    return false;
-  }
-
-  const modulePath = normalizeModuleUrlPath(moduleUrl);
-
-  if (modulePath === null) {
-    return false;
-  }
-
-  return modulePath === normalizeArgvPath(argv1);
-}
-
-export function shouldUseShellForCommand(
-  command: string,
-  platform: NodeJS.Platform = process.platform
-): boolean {
-  return platform === "win32" && WINDOWS_CMD_SHIMS.has(command.toLowerCase());
 }
 
 function createSpawnOptions({

@@ -17,6 +17,9 @@ importers:
       '@changesets/cli':
         specifier: ^2.31.0
         version: 2.31.0(@types/node@25.6.0)
+      '@coder-studio/utils':
+        specifier: workspace:*
+        version: link:packages/utils
       '@types/node':
         specifier: ^25.6.0
         version: 25.6.0
@@ -159,6 +162,9 @@ importers:
       '@coder-studio/providers':
         specifier: workspace:*
         version: link:../providers
+      '@coder-studio/utils':
+        specifier: workspace:*
+        version: link:../utils
       '@fastify/compress':
         specifier: ^8.3.1
         version: 8.3.1
@@ -214,6 +220,18 @@ importers:
       form-data:
         specifier: ^4.0.5
         version: 4.0.5
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.5
+        version: 4.1.5(@types/node@25.6.0)(jsdom@29.1.1)(vite@8.0.10(@types/node@25.6.0)(esbuild@0.28.0)(tsx@4.21.0))
+
+  packages/utils:
+    devDependencies:
+      '@types/node':
+        specifier: ^25.6.0
+        version: 25.6.0
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
