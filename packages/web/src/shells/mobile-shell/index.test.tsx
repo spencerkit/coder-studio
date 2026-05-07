@@ -76,10 +76,6 @@ vi.mock("../../features/not-found", () => ({
   NotFoundPage: () => <div>Page not found</div>,
 }));
 
-vi.mock("../../features/config-drift-banner", () => ({
-  ConfigDriftBanner: () => null,
-}));
-
 vi.mock("../../features/agent-panes", () => ({
   AgentPanes: () => <div data-testid="agent-panes-empty-mock">AgentPanes</div>,
 }));

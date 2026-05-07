@@ -10,7 +10,6 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
-import { resolveCodexConfigPath } from "./codex-config-audit.js";
 
 export type ConfigType = "codex" | "claude";
 
@@ -50,7 +49,11 @@ export function resolveConfigPath(configType: ConfigType): string {
     if (testHome && testHome.trim()) {
       return join(testHome, "config.toml");
     }
-    return resolveCodexConfigPath();
+    const codexHome = process.env.CODEX_HOME;
+    if (codexHome && codexHome.trim()) {
+      return join(codexHome, "config.toml");
+    }
+    return join(homedir(), ".codex", "config.toml");
   }
 
   if (configType === "claude") {

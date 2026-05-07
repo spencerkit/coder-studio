@@ -40,10 +40,6 @@ vi.mock("../features/not-found", () => ({
   NotFoundPage: () => <div>Page not found</div>,
 }));
 
-vi.mock("../features/config-drift-banner", () => ({
-  ConfigDriftBanner: () => null,
-}));
-
 vi.mock("../features/notifications", () => ({
   useSessionNotifications: () => {},
   ToastContainer: () => null,

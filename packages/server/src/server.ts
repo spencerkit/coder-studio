@@ -14,13 +14,6 @@ import { isDirectExecution } from "@coder-studio/utils";
 import type { FastifyInstance } from "fastify";
 import { buildFastifyApp } from "./app.js";
 import { EventBus } from "./bus/event-bus.js";
-import {
-  auditCodexConfigToml,
-  type CodexAuditFindingType,
-  type CodexCleanupResult,
-  type CodexConfigAudit,
-  cleanupCodexConfigToml,
-} from "./config/codex-config-audit.js";
 import { ensureDataDir, parseServerConfig, type ServerConfig } from "./config.js";
 import { runCommandAsString } from "./provider-runtime/command-runner.js";
 import { ProviderInstallManager } from "./provider-runtime/install-manager.js";
@@ -56,46 +49,6 @@ export interface Server {
 
 export interface ServerRuntimeOptions {
   writeRuntimeConfig?: boolean;
-}
-
-export interface ServerWarnLogger {
-  warn(context: Record<string, unknown>, message: string): void;
-}
-
-export interface CodexConfigAuditApi {
-  audit(): { codex: CodexConfigAudit };
-  cleanup(removeIds: CodexAuditFindingType[]): CodexCleanupResult;
-}
-
-export function createCodexConfigAuditApi(): CodexConfigAuditApi {
-  return {
-    audit: () => ({ codex: auditCodexConfigToml() }),
-    cleanup: (removeIds) => {
-      const audit = auditCodexConfigToml();
-      return cleanupCodexConfigToml(audit.configPath, { removeIds });
-    },
-  };
-}
-
-export async function logCodexConfigFindings(
-  auditApi: Pick<CodexConfigAuditApi, "audit">,
-  logger: ServerWarnLogger
-): Promise<void> {
-  try {
-    const audit = auditApi.audit();
-    for (const finding of audit.codex.findings) {
-      logger.warn(
-        {
-          configPath: audit.codex.configPath,
-          startLine: finding.startLine,
-          findingMessage: finding.message,
-        },
-        "Codex config finding"
-      );
-    }
-  } catch (err) {
-    logger.warn({ err }, "Codex config audit failed (non-fatal)");
-  }
 }
 
 export async function createServer(
@@ -148,7 +101,6 @@ export async function createServer(
 
   const authSessionRepo = new AuthSessionRepo(db);
   const authLoginBlockRepo = new AuthLoginBlockRepo(db);
-  const codexConfigAudit = createCodexConfigAuditApi();
 
   const app = await buildFastifyApp({
     wsHub,
@@ -171,7 +123,6 @@ export async function createServer(
   });
 
   wsHub.setLogger(app.log);
-  await logCodexConfigFindings(codexConfigAudit, app.log);
 
   const supervisorRepo = new SupervisorRepo(db);
   const cycleRepo = new SupervisorCycleRepo(db);
@@ -209,7 +160,6 @@ export async function createServer(
     supervisorMgr,
     providerRuntimeDeps,
     providerInstallMgr,
-    codexConfigAudit,
   };
 
   wsHub.setCommandContext(commandContext);

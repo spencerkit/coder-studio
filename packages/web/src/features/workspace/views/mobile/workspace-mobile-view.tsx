@@ -6,7 +6,6 @@ import { useTranslation } from "../../../../lib/i18n";
 import { SessionCard } from "../../../agent-panes/views/shared/session-card";
 import { useCodeEditorActions } from "../../../code-editor/actions/use-code-editor-actions";
 import { CodeEditorHeaderActions } from "../../../code-editor/views/shared/code-editor-host";
-import { ConfigDriftBanner } from "../../../config-drift-banner";
 import { MobileSupervisorBadge } from "../../../supervisor/views/mobile/mobile-supervisor-badge";
 import { MobileSupervisorSheet } from "../../../supervisor/views/mobile/mobile-supervisor-sheet";
 import { TerminalPanel } from "../../../terminal-panel";
@@ -161,8 +160,6 @@ export function WorkspaceMobileView() {
           setDrawerOpen((value) => !value);
         }}
       />
-
-      <ConfigDriftBanner />
 
       <main className="mobile-shell__viewport">
         <div className="mobile-shell__content">

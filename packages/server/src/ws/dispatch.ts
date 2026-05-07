@@ -7,11 +7,6 @@
 import type { Command, ProviderDefinition, Result } from "@coder-studio/core";
 import { z } from "zod";
 import type { EventBus } from "../bus/event-bus.js";
-import type {
-  CodexAuditFindingType,
-  CodexCleanupResult,
-  CodexConfigAudit,
-} from "../config/codex-config-audit.js";
 import type { ProviderInstallManager } from "../provider-runtime/install-manager.js";
 import type { RuntimeStatusDeps } from "../provider-runtime/runtime-status.js";
 import type { SessionManager } from "../session/manager.js";
@@ -37,10 +32,6 @@ export interface CommandContext {
   supervisorMgr: SupervisorManager;
   providerRuntimeDeps?: RuntimeStatusDeps;
   providerInstallMgr?: ProviderInstallManager;
-  codexConfigAudit?: {
-    audit: () => { codex: CodexConfigAudit };
-    cleanup: (removeIds: CodexAuditFindingType[]) => CodexCleanupResult;
-  };
 }
 
 /**

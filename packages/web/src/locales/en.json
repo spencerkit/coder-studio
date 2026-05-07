@@ -123,7 +123,7 @@
       "no_directories": "No directories found",
       "items_count": "{count} items",
       "enter_folder": "Enter {name}",
-      "enter_folder_action": "Enter folder →",
+      "enter_folder_action": "Enter folder \u2192",
       "cancel": "Cancel",
       "start": "Start Workspace",
       "starting": "Starting...",
@@ -451,7 +451,7 @@
     },
     "language": {
       "title": "Language",
-      "zh": "中文",
+      "zh": "\u4e2d\u6587",
       "en": "English",
       "hint": "Select interface language"
     },
@@ -665,26 +665,8 @@
     "days_ago": "{count} days ago"
   },
   "fencing": {
-    "observer_mode": "Read-only mode — another tab is the controller",
+    "observer_mode": "Read-only mode \u2014 another tab is the controller",
     "takeover": "Take over",
-    "takeover_failed": "Takeover failed — controller is still active"
-  },
-  "codex_audit": {
-    "title": "Codex config conflicts ({count})",
-    "load_failed_title": "Codex config check unavailable",
-    "load_failed_unknown": "Server did not return config audit data",
-    "show_details": "Show details",
-    "collapse": "Collapse",
-    "cleanup_select": "Select entries to clean up",
-    "cleanup_action": "Clean up {count} selected",
-    "cleaning": "Cleaning up...",
-    "cleanup_done": "Cleanup complete",
-    "cleanup_done_with_backup": "Cleanup complete. Backup saved to {path}",
-    "cleanup_noop": "Nothing to clean up",
-    "cleanup_failed": "Cleanup failed",
-    "finding": {
-      "toml_notify": "Top-level notify = [...]",
-      "toml_codex_hooks": "[features] codex_hooks = true"
-    }
+    "takeover_failed": "Takeover failed \u2014 controller is still active"
   }
 }

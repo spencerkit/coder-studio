@@ -668,23 +668,5 @@
     "observer_mode": "只读模式 — 另一个标签页正在控制",
     "takeover": "接管控制",
     "takeover_failed": "接管失败 — 控制器仍然活跃"
-  },
-  "codex_audit": {
-    "title": "Codex 配置冲突（{count} 项）",
-    "load_failed_title": "Codex 配置检查不可用",
-    "load_failed_unknown": "未收到服务端返回的配置检查结果",
-    "show_details": "展开",
-    "collapse": "折叠",
-    "cleanup_select": "选择要清理的项",
-    "cleanup_action": "清理选中的 {count} 项",
-    "cleaning": "正在清理...",
-    "cleanup_done": "清理完成",
-    "cleanup_done_with_backup": "清理完成，原文件已备份到 {path}",
-    "cleanup_noop": "没有需要清理的内容",
-    "cleanup_failed": "清理失败",
-    "finding": {
-      "toml_notify": "顶层 notify = [...]",
-      "toml_codex_hooks": "[features] codex_hooks = true"
-    }
   }
 }
