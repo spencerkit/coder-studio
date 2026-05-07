@@ -1,0 +1,19 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="1024"
+  height="1024"
+  viewBox="0 0 1024 1024"
+  fill="none"
+>
+  <path
+    d="M558 160C540 278 480 370 408 446C358 499 301 536 287 568C270 607 332 613 416 614C512 615 566 634 566 684C566 739 516 797 449 867"
+    stroke="#8CCFFF"
+    stroke-width="108"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <path
+    d="M512 388C528 470 554 496 636 512C554 528 528 554 512 636C496 554 470 528 388 512C470 496 496 470 512 388Z"
+    fill="#FFFFFF"
+  />
+</svg>
