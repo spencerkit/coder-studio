@@ -8,6 +8,7 @@ export const MANAGED_SERVER_NAME = "coder-studio-server";
 const PM2_RESTART_DELAY_MS = 2000;
 const PM2_MIN_UPTIME = "5s";
 const PM2_MAX_RESTARTS = 10;
+const PM2_DELETE_WAIT_MS = 5000;
 const STARTUP_POLL_INTERVAL_MS = 100;
 const STARTUP_FAILURE_GUIDANCE =
   "Run `coder-studio logs` for details or `coder-studio serve --foreground` for interactive debugging.";
@@ -236,6 +237,26 @@ const waitForManagedServerExit = async (): Promise<void> => {
   }
 };
 
+const waitForManagedServerDeletion = async (waitMs: number): Promise<void> => {
+  const deadline = Date.now() + waitMs;
+
+  while (Date.now() <= deadline) {
+    const processes = await withPm2Connection(describeManagedServer);
+    if (processes.length === 0) {
+      return;
+    }
+
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) {
+      break;
+    }
+
+    await sleep(Math.min(STARTUP_POLL_INTERVAL_MS, remainingMs));
+  }
+
+  throw new Error(`Timed out waiting for the managed server to stop after ${waitMs}ms.`);
+};
+
 const ensureLogDirectory = (): void => {
   mkdirSync(join(homedir(), ".coder-studio", "logs"), { recursive: true });
 };
@@ -286,8 +307,8 @@ export const deleteManagedServer = async ({
   ignoreMissing = false,
 }: {
   ignoreMissing?: boolean;
-} = {}): Promise<boolean> =>
-  withPm2Connection(async () => {
+} = {}): Promise<boolean> => {
+  const deleted = await withPm2Connection(async () => {
     const processes = await describeManagedServer();
     if (processes.length === 0) {
       return false;
@@ -304,6 +325,14 @@ export const deleteManagedServer = async ({
       throw error;
     }
   });
+
+  if (!deleted) {
+    return false;
+  }
+
+  await waitForManagedServerDeletion(PM2_DELETE_WAIT_MS);
+  return true;
+};
 
 export const startManagedServer = async ({
   script,
@@ -395,6 +424,14 @@ export const getManagedServerStatus = async (): Promise<ManagedServerStatus> =>
     }
 
     if (status === "stopped") {
+      return {
+        status: "stopped",
+        pm2Pid: null,
+        restartCount,
+      };
+    }
+
+    if (pm2Pid === null || pm2Pid === 0) {
       return {
         status: "stopped",
         pm2Pid: null,

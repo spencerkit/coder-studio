@@ -33,12 +33,16 @@ import {
 describe("pm2-control", () => {
   const originalHome = process.env.HOME;
   const originalUserProfile = process.env.USERPROFILE;
+  const originalRuntimeDir = process.env.CODER_STUDIO_RUNTIME_DIR;
+  const originalRuntimeJsonPath = process.env.CODER_STUDIO_RUNTIME_JSON_PATH;
   let testHomeDir: string;
 
   beforeEach(() => {
     testHomeDir = mkdtempSync(join(tmpdir(), "cs-pm2-control-home-"));
     process.env.HOME = testHomeDir;
     process.env.USERPROFILE = testHomeDir;
+    process.env.CODER_STUDIO_RUNTIME_DIR = join(testHomeDir, ".coder-studio");
+    delete process.env.CODER_STUDIO_RUNTIME_JSON_PATH;
 
     connect.mockImplementation((callback: (error: Error | null) => void) => callback(null));
     disconnect.mockImplementation(() => undefined);
@@ -78,6 +82,18 @@ describe("pm2-control", () => {
       delete process.env.USERPROFILE;
     } else {
       process.env.USERPROFILE = originalUserProfile;
+    }
+
+    if (originalRuntimeDir === undefined) {
+      delete process.env.CODER_STUDIO_RUNTIME_DIR;
+    } else {
+      process.env.CODER_STUDIO_RUNTIME_DIR = originalRuntimeDir;
+    }
+
+    if (originalRuntimeJsonPath === undefined) {
+      delete process.env.CODER_STUDIO_RUNTIME_JSON_PATH;
+    } else {
+      process.env.CODER_STUDIO_RUNTIME_JSON_PATH = originalRuntimeJsonPath;
     }
 
     if (existsSync(testHomeDir)) {
@@ -183,6 +199,10 @@ describe("pm2-control", () => {
           callback(null, [])
       )
       .mockImplementationOnce(
+        (_name: string, callback: (error: Error | null, result: unknown[]) => void) =>
+          callback(null, [])
+      )
+      .mockImplementation(
         (_name: string, callback: (error: Error | null, result: unknown[]) => void) =>
           callback(null, [{ pid: 424242, pm2_env: { status: "online", restart_time: 0 } }])
       );
