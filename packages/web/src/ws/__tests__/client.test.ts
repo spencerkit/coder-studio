@@ -1313,6 +1313,17 @@ describe("web WsClient", () => {
     expect(resolveWsUrl()).toBe("ws://127.0.0.1:43173/ws");
   });
 
+  it("uses the current browser origin in development when no backend URL is configured", () => {
+    vi.stubGlobal("window", {
+      location: {
+        protocol: "http:",
+        host: "localhost:5173",
+      },
+    });
+
+    expect(resolveWsUrl()).toBe("ws://localhost:5173/ws");
+  });
+
   it("falls back to the local backend URL when window is unavailable", () => {
     vi.stubGlobal("window", undefined);
 
