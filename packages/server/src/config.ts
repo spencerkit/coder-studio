@@ -47,7 +47,7 @@ function resolveDefaultAppVersion(): string {
     return cachedAppVersion;
   }
 
-  const packageJsonPath = [path.resolve(__dirname, "../../cli/package.json")].find((candidate) =>
+  const packageJsonPath = [new URL("../../cli/package.json", import.meta.url)].find((candidate) =>
     fs.existsSync(candidate)
   );
 
