@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   type ConnectionStatus,
   connectionStatusAtom,
+  serverInfoAtom,
   wsClientAtom,
 } from "../../../atoms/connection";
 import { activeWorkspaceIdAtom } from "../../../atoms/workspaces";
@@ -231,6 +232,18 @@ describe("SettingsPage", () => {
     });
 
     expect(screen.getByText("settings exploded")).toBeInTheDocument();
+  });
+
+  it("renders the footer version from server metadata", () => {
+    const store = createConnectedStore(vi.fn().mockResolvedValue({}));
+    store.set(serverInfoAtom, {
+      version: "0.3.0",
+      serverInstanceId: "server-123",
+    });
+
+    renderSettingsPage(store);
+
+    expect(screen.getByText("v0.3.0")).toBeInTheDocument();
   });
 
   it("does not render default Agent Provider selection in general settings", async () => {

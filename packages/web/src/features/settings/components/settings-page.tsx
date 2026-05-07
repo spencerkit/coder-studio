@@ -14,7 +14,11 @@ import { Check, ChevronRight } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { localeAtom, themeAtom } from "../../../atoms/app-ui";
-import { connectionStatusAtom, dispatchCommandAtom } from "../../../atoms/connection";
+import {
+  connectionStatusAtom,
+  dispatchCommandAtom,
+  serverInfoAtom,
+} from "../../../atoms/connection";
 import { resolvedActiveWorkspaceIdAtom } from "../../../atoms/workspaces";
 import { useViewport } from "../../../hooks/use-viewport";
 import { useTranslation } from "../../../lib/i18n";
@@ -122,6 +126,7 @@ export function SettingsPage() {
   const isMobile = viewport === "mobile";
   const dispatch = useAtomValue(dispatchCommandAtom);
   const connectionStatus = useAtomValue(connectionStatusAtom);
+  const serverInfo = useAtomValue(serverInfoAtom);
   const activeWorkspaceId = useAtomValue(resolvedActiveWorkspaceIdAtom);
   const [navigationState, setNavigationState] = useState<SettingsNavigationState>(() =>
     isMobile
@@ -383,7 +388,7 @@ export function SettingsPage() {
 
       <footer className={`settings-footer ${isMobile ? "settings-footer--mobile" : ""}`}>
         <span className="settings-autosave">{t("settings.autosave_hint")}</span>
-        <span className="settings-version">v0.2.6</span>
+        <span className="settings-version">v{serverInfo?.version ?? "0.0.0"}</span>
       </footer>
     </div>
   );

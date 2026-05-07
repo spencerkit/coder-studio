@@ -26,6 +26,20 @@ describe("parseServerConfig", () => {
     expect(config.port).toBe(8080);
   });
 
+  it("defaults appVersion to the CLI package version", () => {
+    delete process.env.CODER_STUDIO_APP_VERSION;
+
+    const config = parseServerConfig();
+
+    expect(config.appVersion).toBe("0.3.0");
+  });
+
+  it("prefers explicit appVersion override over inferred CLI version", () => {
+    const config = parseServerConfig({ appVersion: "9.9.9" });
+
+    expect(config.appVersion).toBe("9.9.9");
+  });
+
   it("uses the temp sqlite file by default outside production", () => {
     delete process.env.NODE_ENV;
     delete process.env.DATA_DIR;

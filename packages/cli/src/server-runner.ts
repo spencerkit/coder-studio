@@ -3,12 +3,14 @@ import { fileURLToPath } from "url";
 import { readCliConfig } from "./config-store.js";
 import { getStaticAssetsDir, hasWebAssets } from "./embed.js";
 import { assertSupportedNodeVersion } from "./node-version.js";
+import { getCliVersion } from "./package-manifest.js";
 
 const MISSING_WEB_ASSETS_WARNING = "Warning: Web assets not found. Frontend will not be available.";
 
 export const buildServerConfig = (): Partial<ServerConfig> => {
   const savedConfig = readCliConfig();
   const config: Partial<ServerConfig> = {
+    appVersion: getCliVersion(import.meta.url),
     ...(savedConfig?.host !== undefined ? { host: savedConfig.host } : {}),
     ...(savedConfig?.port !== undefined && savedConfig.port > 0 ? { port: savedConfig.port } : {}),
     ...(savedConfig?.dataDir !== undefined ? { dataDir: savedConfig.dataDir } : {}),

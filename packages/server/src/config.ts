@@ -19,6 +19,7 @@ export interface ServerConfig {
   uploadsDir: string;
   logLevel: "trace" | "debug" | "info" | "warn" | "error";
   webRoot?: string;
+  appVersion?: string;
   auth: {
     enabled: boolean;
     password?: string;
@@ -26,6 +27,7 @@ export interface ServerConfig {
 }
 
 let cachedTestUploadsDir: string | undefined;
+let cachedAppVersion: string | undefined;
 
 function parseLogLevel(value: string | undefined): ServerConfig["logLevel"] | undefined {
   switch (value) {
@@ -38,6 +40,30 @@ function parseLogLevel(value: string | undefined): ServerConfig["logLevel"] | un
     default:
       return undefined;
   }
+}
+
+function resolveDefaultAppVersion(): string {
+  if (cachedAppVersion) {
+    return cachedAppVersion;
+  }
+
+  const packageJsonPath = [path.resolve(__dirname, "../../cli/package.json")].find((candidate) =>
+    fs.existsSync(candidate)
+  );
+
+  if (!packageJsonPath) {
+    cachedAppVersion = "0.0.0";
+    return cachedAppVersion;
+  }
+
+  try {
+    const pkg = JSON.parse(fs.readFileSync(packageJsonPath, "utf-8")) as { version?: unknown };
+    cachedAppVersion = typeof pkg.version === "string" ? pkg.version : "0.0.0";
+  } catch {
+    cachedAppVersion = "0.0.0";
+  }
+
+  return cachedAppVersion;
 }
 
 /**
@@ -96,6 +122,8 @@ export function parseServerConfig(overrides?: Partial<ServerConfig>): ServerConf
     uploadsDir,
     logLevel: overrides?.logLevel ?? parseLogLevel(process.env.LOG_LEVEL) ?? "info",
     webRoot: overrides?.webRoot,
+    appVersion:
+      overrides?.appVersion ?? process.env.CODER_STUDIO_APP_VERSION ?? resolveDefaultAppVersion(),
     auth: overrides?.auth || {
       enabled: !noAuth && !!password,
       password,

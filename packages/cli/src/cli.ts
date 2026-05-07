@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "fs";
+import { existsSync } from "fs";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { clearAuthBlockByIp, listAuthBlocks } from "./auth-control.js";
@@ -6,6 +6,7 @@ import { openBrowser } from "./browser.js";
 import { type CliConfig, readCliConfig, writeCliConfig } from "./config-store.js";
 import { readLogExcerpt } from "./log-excerpt.js";
 import { assertSupportedNodeVersion } from "./node-version.js";
+import { getCliVersion } from "./package-manifest.js";
 import { parseArgs } from "./parse-args.js";
 import { startManagedServer } from "./pm2-control.js";
 import { confirmYesNo, isInteractiveSession } from "./prompts.js";
@@ -133,16 +134,7 @@ EXAMPLES:
 }
 
 function showVersion(): void {
-  const manifestPath = [
-    new URL("../package.json", import.meta.url),
-    new URL("../../package.json", import.meta.url),
-  ].find((candidate) => existsSync(candidate));
-  if (!manifestPath) {
-    throw new Error("Unable to locate CLI package.json");
-  }
-  const manifest = JSON.parse(readFileSync(manifestPath, "utf-8")) as { version?: string };
-  const version = manifest.version ?? "0.0.0";
-  console.log(`@spencer-kit/coder-studio v${version}`);
+  console.log(`@spencer-kit/coder-studio v${getCliVersion(import.meta.url)}`);
 }
 
 function formatAuthBlocks(blocks: Awaited<ReturnType<typeof listAuthBlocks>>): string {
