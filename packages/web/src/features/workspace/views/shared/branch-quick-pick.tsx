@@ -1,5 +1,6 @@
 import { Check, Plus } from "lucide-react";
 import { type KeyboardEvent, type MouseEvent, useEffect, useRef } from "react";
+import { Tag } from "../../../../components/ui";
 import { useViewport } from "../../../../hooks/use-viewport";
 import { useTranslation } from "../../../../lib/i18n";
 import { MobileSelectSheet } from "../../../mobile-select";
@@ -135,7 +136,9 @@ export function BranchQuickPick() {
                       <span className="branch-quick-pick-name">{item.branch.name}</span>
 
                       {item.branch.isRemote && (
-                        <span className="branch-quick-pick-badge">Remote</span>
+                        <Tag color="neutral" caps={false} className="branch-quick-pick-badge">
+                          Remote
+                        </Tag>
                       )}
                     </>
                   ) : (

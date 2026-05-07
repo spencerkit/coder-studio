@@ -98,4 +98,38 @@ describe("WorkspaceTab", () => {
     expect(store.get(workspacesAtom)["ws-1"]).toBeUndefined();
     expect(routerMocks.navigate).not.toHaveBeenCalled();
   });
+
+  it("renders unread counts through the shared badge primitive and truncates above max", () => {
+    const workspace = {
+      ...createWorkspace("ws-2", "/tmp/two"),
+      unreadCount: 12,
+    };
+    const store = createStore();
+    store.set(localeAtom, "en");
+
+    render(
+      <Provider store={store}>
+        <WorkspaceTab workspace={workspace} isActive={false} />
+      </Provider>
+    );
+
+    expect(screen.getByText("9+")).toHaveClass("topbar-unread");
+  });
+
+  it("does not render an unread badge when the count is zero", () => {
+    const workspace = {
+      ...createWorkspace("ws-2", "/tmp/two"),
+      unreadCount: 0,
+    };
+    const store = createStore();
+    store.set(localeAtom, "en");
+
+    render(
+      <Provider store={store}>
+        <WorkspaceTab workspace={workspace} isActive={false} />
+      </Provider>
+    );
+
+    expect(document.querySelector(".topbar-unread")).toBeNull();
+  });
 });

@@ -4,7 +4,7 @@ import { ArrowRight, Bot, FlipHorizontal, FlipVertical, Sparkles, X } from "luci
 import type { FC } from "react";
 import { dispatchCommandAtom } from "../../../../atoms/connection";
 import { sessionsAtom } from "../../../../atoms/sessions";
-import { StatusDot } from "../../../../components/ui";
+import { StatusDot, Tag } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { type ProviderId, useProviderLauncher } from "../../actions/use-provider-launcher";
 
@@ -123,7 +123,9 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
           <div className="session-header-copy">
             <div className="session-title-row">
               <span className="session-title">{t("session.provider_select") || "New Session"}</span>
-              <span className="session-state-badge badge badge-gray">DRAFT</span>
+              <Tag color="neutral" className="session-state-badge">
+                DRAFT
+              </Tag>
             </div>
           </div>
         </div>

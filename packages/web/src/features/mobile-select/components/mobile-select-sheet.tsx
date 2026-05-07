@@ -1,4 +1,5 @@
 import { type ReactNode, useId, useMemo, useState } from "react";
+import { Tag } from "../../../components/ui";
 import { useTranslation } from "../../../lib/i18n";
 import { PageHeader } from "../../shared/components/page-header";
 import { MobileSheet } from "../../workspace/views/mobile/mobile-sheet";
@@ -264,9 +265,13 @@ export function MobileSelectSheet({
                                 ) : null}
                               </span>
                               {item.badge ? (
-                                <span className="mobile-select-sheet__item-badge">
+                                <Tag
+                                  color="neutral"
+                                  caps={false}
+                                  className="mobile-select-sheet__item-badge"
+                                >
                                   {item.badge}
-                                </span>
+                                </Tag>
                               ) : null}
                             </button>
                           );

@@ -10,11 +10,13 @@
 | Component | Tier | Public API | Notes |
 |---|---|---|---|
 | Button | 0 | `src/components/ui/index.ts` named export only | `primary / secondary / ghost / danger` × `sm / md / lg` |
+| Badge | 0 | `src/components/ui/index.ts` named export only | `count / max`，count-only，保留 legacy `topbar-unread` 兼容类 |
 | Input | 0 | `src/components/ui/index.ts` named export only | `sm / md / lg`，保留 legacy `input` 兼容类 |
 | Kbd | 0 | `src/components/ui/index.ts` named export only | `sm / md`，保留 legacy `shortcuts-key` 兼容类 |
 | Pill | 0 | `src/components/ui/index.ts` named export only | `active / disabled / leadingIcon`，保留 legacy `settings-pill*` 兼容类 |
 | Spinner | 0 | `src/components/ui/index.ts` named export only | `sm / md / lg`，`label` 必填，保留 legacy `animate-spin` 兼容类 |
 | StatusDot | 0 | `src/components/ui/index.ts` named export only | `tone / size / pulse`，可叠加 legacy dot class |
+| Tag | 0 | `src/components/ui/index.ts` named export only | `color / size / caps`，保留 legacy `badge / badge-*` 兼容类 |
 | Textarea | 0 | `src/components/ui/index.ts` named export only | `md / lg`，支持可选 `autoResize`，保留 legacy `input textarea` 兼容类 |
 
 ## 迁移状态

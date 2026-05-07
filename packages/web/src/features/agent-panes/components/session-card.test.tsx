@@ -189,6 +189,23 @@ describe("SessionCard", () => {
     );
   });
 
+  it("renders migrated provider and state tags with legacy badge compatibility classes", () => {
+    const { store } = createSessionStore({
+      terminalId: "term-live",
+      state: "running",
+      endedAt: undefined,
+    });
+
+    render(
+      <Provider store={store}>
+        <SessionCard sessionId="sess_123456" />
+      </Provider>
+    );
+
+    expect(screen.getByText("Codex")).toHaveClass("badge", "badge-blue", "session-provider-badge");
+    expect(screen.getByText("Running")).toHaveClass("badge", "badge-green", "session-state-badge");
+  });
+
   it("renders a header accessory on the right side of the session header", () => {
     const { store } = createSessionStore({
       terminalId: "term-live",

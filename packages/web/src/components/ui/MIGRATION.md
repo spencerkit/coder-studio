@@ -6,8 +6,8 @@
 | IconButton | ⚫ not-started | `.btn` icon-only | — | — |
 | Input | 🟢 complete | `.input` | 0 | 2026-05-07 |
 | Textarea | 🟢 complete | `.input.textarea` | 0 | 2026-05-07 |
-| Tag | ⚫ not-started | `.badge .badge-*` | — | — |
-| Badge | ⚫ not-started | `.badge` | — | — |
+| Tag | 🟡 in-flight | `.badge .badge-*` | 0 | 2026-05-07 |
+| Badge | 🟡 in-flight | `.topbar-unread` | 0 | 2026-05-07 |
 | Pill | 🟡 in-flight | `.settings-pill*` | 0 | 2026-05-07 |
 | StatusDot | 🟡 in-flight | `.session-dot*`, `.connection-status-dot*` | 0 | 2026-05-07 |
 | Kbd | 🟡 in-flight | `kbd`, `.shortcuts-key` | 0 | 2026-05-07 |
@@ -29,4 +29,4 @@
 
 `Input` / `Textarea` caller counts only include raw native text-entry controls that should migrate to those shared primitives. They intentionally exclude `select.input`, `button.input`, search-model controls, and checkbox/radio inputs.
 
-`Pill` / `Kbd` counts only cover the bounded settings callers in this slice. `StatusDot` excludes mobile-only and other feature-specific dot variants deferred by the phase-d plan, so the selected family callers in this slice are now fully migrated. `Spinner` excludes the internal `Button` loading spinner and leaves the remaining feature-specific `animate-spin` usage for a later slice.
+`Pill` / `Kbd` counts only cover the bounded settings callers in this slice. `Tag` covers the bounded `.badge` family callers plus the selected selector labels in this slice; it intentionally excludes deferred badge-like families such as supervisor and git-row state labels. `Badge` covers the bounded topbar unread count caller only. `StatusDot` excludes mobile-only and other feature-specific dot variants deferred by the phase-d plan, so the selected family callers in this slice are now fully migrated. `Spinner` excludes the internal `Button` loading spinner and leaves the remaining feature-specific `animate-spin` usage for a later slice.
