@@ -2,7 +2,7 @@
   "name": "@spencer-kit/coder-studio",
   "version": "0.3.1",
   "type": "module",
-  "description": "Coder Studio CLI - The only published package",
+  "description": "Deploy once, code everywhere. Browser-based AI coding workspace for Claude Code and Codex.",
   "main": "./src/index.ts",
   "bin": {
     "coder-studio": "./src/bin.ts"
