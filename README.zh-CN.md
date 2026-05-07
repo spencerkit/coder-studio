@@ -10,7 +10,7 @@ Coder Studio 让你把 AI coding workspace 启动在自己的机器上，然后�
 
 你可以在办公室发起任务，在通勤路上用手机看进度，在外面用平板审阅改动，回到家再用另一台电脑继续接着做。还是同一个 workspace，还是同一份上下文，不需要重新接管环境。
 
-![工作区界面](docs/help/assets/screenshot-workspace.png)
+![工作区界面](docs/help/assets/screenshot-workspace-overview.png)
 
 ## 为什么是 Coder Studio
 
