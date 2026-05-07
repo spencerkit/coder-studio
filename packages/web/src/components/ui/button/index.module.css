@@ -5,7 +5,6 @@
   justify-content: center;
   gap: var(--sp-2);
   height: var(--btn-height-md);
-  min-height: var(--touch-target-min);
   padding: 0 var(--sp-4);
   border: 1px solid transparent;
   border-radius: var(--radius-md);
@@ -14,35 +13,24 @@
   font-weight: var(--font-medium);
   line-height: 1;
   white-space: nowrap;
-  text-decoration: none;
   transition:
     background var(--duration-normal) var(--ease-out),
     border-color var(--duration-normal) var(--ease-out),
     color var(--duration-normal) var(--ease-out),
     box-shadow var(--duration-normal) var(--ease-out),
     transform var(--duration-fast) var(--ease-out);
-  cursor: pointer;
 }
 
 .btn:focus-visible,
 :global(.btn):focus-visible {
   box-shadow:
-    0 0 0 calc(var(--sp-1) / 2) var(--bg-page),
-    0 0 0 var(--sp-1) var(--border-focus);
+    0 0 0 2px var(--bg-page),
+    0 0 0 4px rgba(108, 182, 255, 0.35);
 }
 
-.btn:hover:not(:disabled):not([aria-disabled="true"]),
-:global(.btn):hover:not(:disabled):not([aria-disabled="true"]) {
-  transform: translateY(calc(var(--sp-1) / -4));
-}
-
-.btn:disabled,
-.btn[aria-disabled="true"],
-:global(.btn):disabled,
-:global(.btn[aria-disabled="true"]) {
-  opacity: 0.5;
-  cursor: not-allowed;
-  transform: none;
+.btn:hover:not(:disabled),
+:global(.btn):hover:not(:disabled) {
+  transform: translateY(-1px);
 }
 
 .primary,
@@ -53,7 +41,7 @@
 
 .primary:hover:not(:disabled):not([aria-disabled="true"]),
 :global(.btn-primary):hover:not(:disabled):not([aria-disabled="true"]) {
-  background: color-mix(in srgb, var(--accent-blue) 84%, var(--bg-surface) 16%);
+  background: color-mix(in srgb, var(--accent-blue) 84%, white 16%);
 }
 
 .secondary,
@@ -92,8 +80,7 @@
 
 .sm,
 :global(.btn-sm) {
-  height: var(--btn-height-sm);
-  min-height: var(--touch-target-min);
+  height: 24px;
   padding: 0 var(--sp-2);
   border-radius: var(--radius-sm);
   font-size: var(--text-xs);
@@ -101,8 +88,7 @@
 
 .lg,
 :global(.btn-lg) {
-  height: var(--btn-height-lg);
-  min-height: var(--touch-target-min);
+  height: 40px;
   padding: 0 var(--sp-6);
   border-radius: var(--radius-lg);
   font-size: var(--text-lg);

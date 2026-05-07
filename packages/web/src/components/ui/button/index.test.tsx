@@ -109,4 +109,20 @@ describe("Button", () => {
 
     expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings");
   });
+
+  it("preserves legacy classes and loading semantics for anchors", () => {
+    render(
+      <Button as="a" href="/settings" loading variant="ghost" size="sm">
+        Settings
+      </Button>
+    );
+
+    expect(screen.getByRole("link", { name: "Settings" })).toHaveClass(
+      "btn",
+      "btn-ghost",
+      "btn-sm"
+    );
+    expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("link", { name: "Settings" })).not.toHaveAttribute("disabled");
+  });
 });
