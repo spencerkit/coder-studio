@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isDirectExecution, resolveSpawnCommand } from "./process.js";
+import { isDirectExecution, resolveSpawnCommand, shouldUseShellForCommand } from "./process.js";
 
 describe("isDirectExecution", () => {
   it("matches direct execution for POSIX script paths", () => {
@@ -18,8 +18,8 @@ describe("isDirectExecution", () => {
 });
 
 describe("resolveSpawnCommand", () => {
-  it("uses pnpm.cmd on Windows so spawn works without a shell", () => {
-    expect(resolveSpawnCommand("pnpm", "win32")).toBe("pnpm.cmd");
+  it("keeps pnpm unresolved on Windows so cmd can resolve the shim", () => {
+    expect(resolveSpawnCommand("pnpm", "win32")).toBe("pnpm");
   });
 
   it("does not rewrite native Windows executables like git", () => {
@@ -28,5 +28,19 @@ describe("resolveSpawnCommand", () => {
 
   it("leaves commands unchanged on POSIX platforms", () => {
     expect(resolveSpawnCommand("pnpm", "linux")).toBe("pnpm");
+  });
+});
+
+describe("shouldUseShellForCommand", () => {
+  it("uses a shell for pnpm on Windows because pnpm.cmd is not directly executable", () => {
+    expect(shouldUseShellForCommand("pnpm", "win32")).toBe(true);
+  });
+
+  it("does not use a shell for native executables like git on Windows", () => {
+    expect(shouldUseShellForCommand("git", "win32")).toBe(false);
+  });
+
+  it("does not use a shell on POSIX platforms", () => {
+    expect(shouldUseShellForCommand("pnpm", "linux")).toBe(false);
   });
 });

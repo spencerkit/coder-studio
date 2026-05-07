@@ -2,13 +2,19 @@
  * Process utilities for running child processes
  */
 
-import { type ChildProcess, spawn } from "child_process";
+import { type ChildProcess, type SpawnOptions, spawn } from "child_process";
 import { posix, resolve } from "path";
 
 export interface ProcessOptions {
   cwd?: string;
   env?: NodeJS.ProcessEnv;
   stdio?: "inherit" | "pipe" | "ignore";
+}
+
+interface SpawnConfig {
+  command: string;
+  options: ProcessOptions;
+  platform?: NodeJS.Platform;
 }
 
 const WINDOWS_CMD_SHIMS = new Set(["pnpm", "npm", "npx"]);
@@ -75,13 +81,29 @@ export function isDirectExecution(moduleUrl: string, argv1: string | undefined =
 
 export function resolveSpawnCommand(
   command: string,
-  platform: NodeJS.Platform = process.platform
+  _platform: NodeJS.Platform = process.platform
 ): string {
-  if (platform !== "win32") {
-    return command;
-  }
+  return command;
+}
 
-  return WINDOWS_CMD_SHIMS.has(command.toLowerCase()) ? `${command}.cmd` : command;
+export function shouldUseShellForCommand(
+  command: string,
+  platform: NodeJS.Platform = process.platform
+): boolean {
+  return platform === "win32" && WINDOWS_CMD_SHIMS.has(command.toLowerCase());
+}
+
+function createSpawnOptions({
+  command,
+  options,
+  platform = process.platform,
+}: SpawnConfig): SpawnOptions {
+  return {
+    cwd: options.cwd,
+    env: options.env ?? process.env,
+    stdio: options.stdio ?? "inherit",
+    shell: shouldUseShellForCommand(command, platform),
+  };
 }
 
 /**
@@ -93,12 +115,11 @@ export function run(
   options: ProcessOptions = {}
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn(resolveSpawnCommand(command), args, {
-      cwd: options.cwd,
-      env: options.env ?? process.env,
-      stdio: options.stdio ?? "inherit",
-      shell: false,
-    });
+    const child = spawn(
+      resolveSpawnCommand(command),
+      args,
+      createSpawnOptions({ command, options })
+    );
 
     child.on("close", (code) => {
       if (code === 0) {
@@ -122,12 +143,7 @@ export function runBackground(
   args: string[] = [],
   options: ProcessOptions = {}
 ): ChildProcess {
-  const child = spawn(resolveSpawnCommand(command), args, {
-    cwd: options.cwd,
-    env: options.env ?? process.env,
-    stdio: options.stdio ?? "inherit",
-    shell: false,
-  });
+  const child = spawn(resolveSpawnCommand(command), args, createSpawnOptions({ command, options }));
 
   return child;
 }
