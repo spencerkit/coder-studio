@@ -1,0 +1,48 @@
+.pill,
+:global(.settings-pill) {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.pill:hover:not(:disabled),
+:global(.settings-pill):hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: var(--border-light);
+}
+
+.pill:focus-visible,
+:global(.settings-pill):focus-visible {
+  outline: none;
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 1px rgba(108, 182, 255, 0.4);
+}
+
+.active,
+:global(.settings-pill-active) {
+  background: var(--accent-blue);
+  border-color: var(--accent-blue);
+  color: var(--text-inverse);
+}
+
+.icon {
+  display: inline-flex;
+  align-items: center;
+}
+
+.pill:disabled,
+:global(.settings-pill-disabled) {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

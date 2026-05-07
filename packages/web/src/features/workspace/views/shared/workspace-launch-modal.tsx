@@ -1,4 +1,5 @@
-import { ArrowUp, Folder, Home, Loader2, X } from "lucide-react";
+import { ArrowUp, Folder, Home, X } from "lucide-react";
+import { Spinner } from "../../../../components/ui";
 import { useViewport } from "../../../../hooks/use-viewport";
 import { useTranslation } from "../../../../lib/i18n";
 import { useWorkspaceLaunchActions } from "../../actions/use-workspace-launch-actions";
@@ -62,7 +63,7 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
         <div className="fp-dir-list">
           {browsing ? (
             <div className="directory-loading">
-              <Loader2 size={16} className="animate-spin" />
+              <Spinner label={t("common.loading")} />
             </div>
           ) : directories.length === 0 ? (
             <div className="directory-empty">{t("workspace.launch.no_directories")}</div>

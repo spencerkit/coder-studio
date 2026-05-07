@@ -1,0 +1,52 @@
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
+import { StatusDot } from ".";
+
+describe("StatusDot", () => {
+  it("renders a neutral medium dot by default", () => {
+    render(<StatusDot data-testid="dot" />);
+
+    const dot = screen.getByTestId("dot");
+    expect(dot.style.getPropertyValue("--status-dot-current-color")).toBe("var(--text-tertiary)");
+    expect(dot.style.getPropertyValue("--status-dot-current-size")).toBe("8px");
+    expect(dot).toHaveAttribute("aria-hidden", "true");
+  });
+
+  it("supports tone, size, and pulse variants", () => {
+    render(<StatusDot tone="warning" size="lg" pulse data-testid="dot" />);
+
+    const dot = screen.getByTestId("dot");
+    expect(dot.style.getPropertyValue("--status-dot-current-color")).toBe("var(--color-warning)");
+    expect(dot.style.getPropertyValue("--status-dot-current-size")).toBe("10px");
+    expect(dot.className).toContain("pulse");
+  });
+
+  it("preserves legacy session compatibility classes for migrated callers", () => {
+    render(
+      <StatusDot
+        tone="info"
+        className="session-dot session-dot-running session-header-indicator"
+        data-testid="dot"
+      />
+    );
+
+    const dot = screen.getByTestId("dot");
+    expect(dot).toHaveClass("session-dot", "session-dot-running", "session-header-indicator");
+    expect(dot.style.getPropertyValue("--status-dot-current-color")).toBe("var(--color-info)");
+  });
+
+  it("preserves legacy connection compatibility classes for migrated callers", () => {
+    render(
+      <StatusDot
+        tone="error"
+        size="sm"
+        className="connection-status-dot connection-status-dot-disconnected"
+        data-testid="dot"
+      />
+    );
+
+    const dot = screen.getByTestId("dot");
+    expect(dot).toHaveClass("connection-status-dot", "connection-status-dot-disconnected");
+    expect(dot.style.getPropertyValue("--status-dot-current-size")).toBe("6px");
+  });
+});

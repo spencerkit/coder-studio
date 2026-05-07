@@ -20,7 +20,7 @@ import {
   serverInfoAtom,
 } from "../../../atoms/connection";
 import { resolvedActiveWorkspaceIdAtom } from "../../../atoms/workspaces";
-import { Input } from "../../../components/ui";
+import { Input, Pill } from "../../../components/ui";
 import { useViewport } from "../../../hooks/use-viewport";
 import { useTranslation } from "../../../lib/i18n";
 import { ConfigDriftBanner } from "../../config-drift-banner";
@@ -726,20 +726,20 @@ function AppearanceSettings({
         <p className="settings-group-desc">{t("settings.theme.hint")}</p>
 
         <div className="settings-pills">
-          <button
-            className={`settings-pill ${theme === "dark" ? "settings-pill-active" : ""}`}
+          <Pill
+            leadingIcon={theme === "dark" ? <Check size={12} /> : undefined}
             onClick={() => handleThemeChange("dark")}
+            active={theme === "dark"}
           >
-            {theme === "dark" && <Check size={12} />}
-            <span>{t("settings.theme.dark")}</span>
-          </button>
-          <button
-            className={`settings-pill ${theme === "light" ? "settings-pill-active" : ""}`}
+            {t("settings.theme.dark")}
+          </Pill>
+          <Pill
+            leadingIcon={theme === "light" ? <Check size={12} /> : undefined}
             onClick={() => handleThemeChange("light")}
+            active={theme === "light"}
           >
-            {theme === "light" && <Check size={12} />}
-            <span>{t("settings.theme.light")}</span>
-          </button>
+            {t("settings.theme.light")}
+          </Pill>
         </div>
       </div>
 
@@ -748,26 +748,26 @@ function AppearanceSettings({
         <p className="settings-group-desc">{t("settings.terminal_renderer_hint")}</p>
 
         <div className="settings-pills">
-          <button
-            className={`settings-pill ${terminalRenderer === "standard" ? "settings-pill-active" : ""}`}
+          <Pill
+            leadingIcon={terminalRenderer === "standard" ? <Check size={12} /> : undefined}
             onClick={() => {
               setTerminalRenderer("standard");
               void saveSettings({ appearance: { terminalRenderer: "standard" } });
             }}
+            active={terminalRenderer === "standard"}
           >
-            {terminalRenderer === "standard" && <Check size={12} />}
-            <span>{t("settings.terminal_standard")}</span>
-          </button>
-          <button
-            className={`settings-pill ${terminalRenderer === "compatibility" ? "settings-pill-active" : ""}`}
+            {t("settings.terminal_standard")}
+          </Pill>
+          <Pill
+            leadingIcon={terminalRenderer === "compatibility" ? <Check size={12} /> : undefined}
             onClick={() => {
               setTerminalRenderer("compatibility");
               void saveSettings({ appearance: { terminalRenderer: "compatibility" } });
             }}
+            active={terminalRenderer === "compatibility"}
           >
-            {terminalRenderer === "compatibility" && <Check size={12} />}
-            <span>{t("settings.terminal_compatibility")}</span>
-          </button>
+            {t("settings.terminal_compatibility")}
+          </Pill>
         </div>
       </div>
 
@@ -776,26 +776,26 @@ function AppearanceSettings({
         <p className="settings-group-desc">{t("settings.language.hint")}</p>
 
         <div className="settings-pills">
-          <button
-            className={`settings-pill ${locale === "zh" ? "settings-pill-active" : ""}`}
+          <Pill
+            leadingIcon={locale === "zh" ? <Check size={12} /> : undefined}
             onClick={() => {
               setLocale("zh");
               void saveSettings({ appearance: { locale: "zh" } });
             }}
+            active={locale === "zh"}
           >
-            {locale === "zh" && <Check size={12} />}
-            <span>{t("settings.language.zh")}</span>
-          </button>
-          <button
-            className={`settings-pill ${locale === "en" ? "settings-pill-active" : ""}`}
+            {t("settings.language.zh")}
+          </Pill>
+          <Pill
+            leadingIcon={locale === "en" ? <Check size={12} /> : undefined}
             onClick={() => {
               setLocale("en");
               void saveSettings({ appearance: { locale: "en" } });
             }}
+            active={locale === "en"}
           >
-            {locale === "en" && <Check size={12} />}
-            <span>{t("settings.language.en")}</span>
-          </button>
+            {t("settings.language.en")}
+          </Pill>
         </div>
       </div>
     </div>

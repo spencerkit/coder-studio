@@ -799,10 +799,38 @@ describe("SettingsPage", () => {
     fireEvent.click(await screen.findByRole("button", { name: "快捷键" }));
     fireEvent.click(screen.getByText("⌘+K"));
 
-    expect(screen.getByPlaceholderText("按下快捷键...")).toHaveClass(
-      "input",
-      "shortcuts-capture"
-    );
+    expect(screen.getByPlaceholderText("按下快捷键...")).toHaveClass("input", "shortcuts-capture");
+  });
+
+  it("renders appearance selectors with shared pill compatibility classes", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({});
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+
+    fireEvent.click(await screen.findByRole("button", { name: "外观" }));
+
+    const darkThemePill = await screen.findByRole("button", { name: "深色" });
+    const lightThemePill = screen.getByRole("button", { name: "浅色" });
+
+    expect(darkThemePill).toHaveClass("settings-pill", "settings-pill-active");
+    expect(darkThemePill).toHaveAttribute("aria-pressed", "true");
+    expect(lightThemePill).toHaveClass("settings-pill");
+    expect(lightThemePill).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("uses the shared kbd primitive compatibility class and interactive semantics for shortcut bindings", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({});
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+
+    fireEvent.click(await screen.findByRole("button", { name: "快捷键" }));
+
+    expect(screen.getByText("⌘+K")).toHaveClass("shortcuts-key");
+    expect(screen.getByText("⌘+K").tagName).toBe("KBD");
+    expect(screen.getByText("⌘+K")).toHaveAttribute("role", "button");
+    expect(screen.getByText("⌘+K")).toHaveAttribute("tabindex", "0");
   });
 
   it("prefers browser history when leaving the mobile settings root", async () => {

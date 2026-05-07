@@ -4,6 +4,7 @@ import { ArrowRight, Bot, FlipHorizontal, FlipVertical, Sparkles, X } from "luci
 import type { FC } from "react";
 import { dispatchCommandAtom } from "../../../../atoms/connection";
 import { sessionsAtom } from "../../../../atoms/sessions";
+import { StatusDot } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { type ProviderId, useProviderLauncher } from "../../actions/use-provider-launcher";
 
@@ -118,7 +119,7 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
     <div className="session-card agent-pane">
       <div className="session-header">
         <div className="session-header-left">
-          <span className="session-dot session-dot-idle" />
+          <StatusDot tone="neutral" className="session-dot session-dot-idle" />
           <div className="session-header-copy">
             <div className="session-title-row">
               <span className="session-title">{t("session.provider_select") || "New Session"}</span>

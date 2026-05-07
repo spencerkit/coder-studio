@@ -1,0 +1,66 @@
+.dot {
+  display: inline-flex;
+  width: var(--status-dot-current-size, var(--status-dot-size));
+  height: var(--status-dot-current-size, var(--status-dot-size));
+  flex-shrink: 0;
+  border-radius: var(--radius-full);
+  background: var(--status-dot-current-color, var(--text-tertiary));
+  box-shadow: 0 0 0 1px
+    color-mix(in srgb, var(--status-dot-current-color, var(--text-tertiary)) 18%, transparent);
+}
+
+.pulse {
+  animation: statusDotPulse 1s ease-in-out infinite;
+}
+
+@keyframes statusDotPulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+
+  50% {
+    transform: scale(1.08);
+    opacity: 0.72;
+  }
+}
+
+:global(.session-dot),
+:global(.connection-status-dot) {
+  display: inline-flex;
+  flex-shrink: 0;
+  border-radius: var(--radius-full);
+}
+
+:global(.session-dot) {
+  --status-dot-current-size: 8px;
+}
+
+:global(.connection-status-dot) {
+  --status-dot-current-size: 6px;
+}
+
+:global(.session-dot-idle) {
+  --status-dot-current-color: var(--text-tertiary);
+}
+
+:global(.session-dot-starting),
+:global(.connection-status-dot-connecting),
+:global(.connection-status-dot-reconnecting) {
+  --status-dot-current-color: var(--color-warning);
+  animation: statusDotPulse 1s ease-in-out infinite;
+}
+
+:global(.session-dot-running),
+:global(.connection-status-dot-connected) {
+  --status-dot-current-color: var(--color-info);
+}
+
+:global(.session-dot-complete) {
+  --status-dot-current-color: var(--color-success);
+}
+
+:global(.connection-status-dot-disconnected) {
+  --status-dot-current-color: var(--color-error);
+}

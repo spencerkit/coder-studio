@@ -13,6 +13,7 @@ import { useEffect, useRef, useState } from "react";
 import { pendingFocusSessionAtom } from "../../../../atoms/app-ui";
 import { sessionByIdAtomFamily } from "../../../../atoms/sessions";
 import { workspaceByIdAtomFamily } from "../../../../atoms/workspaces";
+import { StatusDot } from "../../../../components/ui";
 import { useSupervisor } from "../../../supervisor/actions/use-supervisor";
 import { ObjectiveDialog } from "../../../supervisor/views/shared/objective-dialog";
 import { SupervisorCard } from "../../../supervisor/views/shared/supervisor-card";
@@ -119,7 +120,11 @@ export const SessionCard: FC<SessionCardProps> = ({
 
       <div className="session-header">
         <div className="session-header-left">
-          <span className={`session-dot ${getSessionDotClass(session.state)}`} />
+          <StatusDot
+            tone={getSessionDotTone(session.state)}
+            pulse={shouldPulseSessionDot(session.state)}
+            className={`session-dot ${getSessionDotClass(session.state)}`}
+          />
           <div className="session-header-copy">
             <div className="session-title-row">
               <span className="session-title">{sessionTitle}</span>
@@ -240,6 +245,28 @@ function getSessionDotClass(state: SessionState) {
       return "session-dot-complete";
     default:
       return "session-dot-idle";
+  }
+}
+
+function getSessionDotTone(state: SessionState): "success" | "warning" | "info" | "neutral" {
+  switch (state) {
+    case "starting":
+      return "warning";
+    case "running":
+      return "info";
+    case "ended":
+      return "success";
+    default:
+      return "neutral";
+  }
+}
+
+function shouldPulseSessionDot(state: SessionState) {
+  switch (state) {
+    case "starting":
+      return true;
+    default:
+      return false;
   }
 }
 
