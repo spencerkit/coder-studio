@@ -61,10 +61,17 @@ describe("ProviderInstallManager", () => {
 
   it("reuses the active job when the same provider is clicked twice", async () => {
     const pending = new Promise<{ stdout: string; stderr: string }>(() => {});
+    const execFile = vi.fn((file: string) => {
+      if (file === "which") {
+        return Promise.resolve({ stdout: "", stderr: "" });
+      }
+
+      return pending;
+    });
     const manager = new ProviderInstallManager([codexDefinition], {
       platform: "darwin",
       commandExists: vi.fn(async (command: string) => command === "npm"),
-      execFile: vi.fn(() => pending),
+      execFile,
     });
 
     const first = await manager.start("codex");
@@ -140,28 +147,58 @@ describe("ProviderInstallManager", () => {
     expect(stored?.steps[0]?.status).toBe("failed");
   });
 
-  it("passes windowsHide to injected execFile on Windows install steps", async () => {
+  it("re-resolves and executes the installed npm executable on Windows install steps", async () => {
+    let npmInstalled = false;
+    let codexInstalled = false;
     const execFile = vi.fn(
-      async (_file: string, _args: string[], _options?: { windowsHide: boolean }) => ({
-        stdout: "",
-        stderr: "",
-      })
+      async (file: string, args: string[], _options?: { windowsHide: boolean }) => {
+        if (file === "where" && args[0] === "winget") {
+          return {
+            stdout: "C:\\Users\\test\\AppData\\Local\\Microsoft\\WindowsApps\\winget.exe\r\n",
+            stderr: "",
+          };
+        }
+
+        if (file === "where" && args[0] === "npm") {
+          if (!npmInstalled) {
+            throw new Error("npm unavailable");
+          }
+
+          return {
+            stdout: "C:\\npm\\npm.cmd\r\n",
+            stderr: "",
+          };
+        }
+
+        if (file === "where" && args[0] === "codex") {
+          if (!codexInstalled) {
+            throw new Error("codex unavailable");
+          }
+
+          return {
+            stdout: "C:\\codex\\codex.exe\r\n",
+            stderr: "",
+          };
+        }
+
+        if (
+          file === "C:\\Users\\test\\AppData\\Local\\Microsoft\\WindowsApps\\winget.exe" &&
+          args.join(" ") === "install --id OpenJS.NodeJS.LTS --exact --silent"
+        ) {
+          npmInstalled = true;
+          return { stdout: "installed node", stderr: "" };
+        }
+
+        if (file === "C:\\npm\\npm.cmd" && args.join(" ") === "install -g @openai/codex") {
+          codexInstalled = true;
+          return { stdout: "installed codex", stderr: "" };
+        }
+
+        throw new Error(`unexpected execFile call: ${file} ${args.join(" ")}`);
+      }
     );
-    let codexChecks = 0;
     const manager = new ProviderInstallManager([codexDefinition], {
       platform: "win32",
-      commandExists: vi.fn(async (command: string) => {
-        if (command === "winget") {
-          return true;
-        }
-
-        if (command === "codex") {
-          codexChecks += 1;
-          return codexChecks > 1;
-        }
-
-        return false;
-      }),
       execFile,
     });
 
@@ -172,12 +209,7 @@ describe("ProviderInstallManager", () => {
     });
 
     expect(execFile).toHaveBeenCalledWith(
-      "winget",
-      ["install", "--id", "OpenJS.NodeJS.LTS", "--exact", "--silent"],
-      { windowsHide: true }
-    );
-    expect(execFile).toHaveBeenCalledWith(
-      "npm",
+      "C:\\npm\\npm.cmd",
       ["install", "-g", "@openai/codex"],
       { windowsHide: true }
     );

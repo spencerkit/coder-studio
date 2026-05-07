@@ -80,7 +80,7 @@ describe("createServer provider install wiring", () => {
           return {} as ReturnType<typeof execFileMock>;
         }
 
-        if (file === "npm" && args.join(" ") === "install -g @openai/codex") {
+        if (file === "C:\\npm\\npm.cmd" && args.join(" ") === "install -g @openai/codex") {
           callback(null, { stdout: "installed", stderr: "" });
           return {} as ReturnType<typeof execFileMock>;
         }
@@ -107,7 +107,7 @@ describe("createServer provider install wiring", () => {
     });
 
     expect(execFileMock).toHaveBeenCalledWith(
-      "npm",
+      "C:\\npm\\npm.cmd",
       ["install", "-g", "@openai/codex"],
       { windowsHide: true },
       expect.any(Function)

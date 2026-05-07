@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   checkCommandAvailable,
   getCommandLookupExecutable,
+  resolveCommand,
 } from "../../provider-runtime/command-check.js";
 
 describe("getCommandLookupExecutable", () => {
@@ -56,5 +57,22 @@ describe("checkCommandAvailable", () => {
     );
 
     expect(execFile).toHaveBeenCalledWith("where", ["codex"], { windowsHide: true });
+  });
+});
+
+describe("resolveCommand", () => {
+  it("returns the first resolved executable path from command lookup output", async () => {
+    const execFile = vi.fn(
+      async (_file: string, _args: string[], _options?: { windowsHide: boolean }) => ({
+        stdout: "C:\\npm\\npm.cmd\r\nC:\\Program Files\\nodejs\\npm.cmd\r\n",
+        stderr: "",
+      })
+    );
+
+    await expect(resolveCommand("npm", { platform: "win32", execFile })).resolves.toEqual({
+      command: "npm",
+      executable: "C:\\npm\\npm.cmd",
+    });
+    expect(execFile).toHaveBeenCalledWith("where", ["npm"], { windowsHide: true });
   });
 });

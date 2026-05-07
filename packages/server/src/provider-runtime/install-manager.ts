@@ -9,6 +9,7 @@ import {
   type CommandAvailabilityCheck,
   type CommandCheckDeps,
   checkCommandAvailable,
+  resolveCommand,
 } from "./command-check.js";
 import { execFileAsString, type ExecFileRunner } from "./exec-file.js";
 
@@ -19,6 +20,11 @@ export interface InstallManagerDeps extends CommandCheckDeps {
   execFile?: ExecFileRunner;
 }
 
+interface PreparedCommand {
+  command: string;
+  executable: string;
+}
+
 export class ProviderInstallManager {
   private readonly providers = new Map<string, ProviderDefinition>();
   private readonly jobs = new Map<string, ProviderInstallJobSnapshot>();
@@ -27,6 +33,7 @@ export class ProviderInstallManager {
     string,
     Promise<ProviderInstallJobSnapshot>
   >();
+  private readonly preparedCommandsByJobId = new Map<string, Map<string, PreparedCommand>>();
   private readonly deps: InstallManagerDeps;
 
   constructor(providers: ProviderDefinition[], deps: InstallManagerDeps = {}) {
@@ -85,10 +92,12 @@ export class ProviderInstallManager {
     const platform = this.deps.platform ?? process.platform;
     const strategies = provider.install.strategies[platform] ?? [];
     const availableCommands = new Set<string>();
+    const preparedCommands = new Map<string, PreparedCommand>();
 
     const missingProviderCommands = await this.collectMissing(
       provider.requiredCommands,
-      availableCommands
+      availableCommands,
+      preparedCommands
     );
     if (missingProviderCommands.length === 0) {
       return {
@@ -102,7 +111,8 @@ export class ProviderInstallManager {
 
     const missingPrerequisites = await this.collectMissing(
       provider.install.prerequisites,
-      availableCommands
+      availableCommands,
+      preparedCommands
     );
 
     const dependencyCommands = new Set<string>();
@@ -116,8 +126,10 @@ export class ProviderInstallManager {
       if (availableCommands.has(command)) {
         continue;
       }
-      if (await this.commandExists(command)) {
+      const resolved = await this.resolveCommand(command);
+      if (resolved) {
         availableCommands.add(command);
+        preparedCommands.set(command, resolved);
       }
     }
 
@@ -223,6 +235,8 @@ export class ProviderInstallManager {
       status: "pending",
     });
 
+    this.preparedCommandsByJobId.set(jobId, preparedCommands);
+
     return {
       jobId,
       providerId: provider.id,
@@ -237,8 +251,8 @@ export class ProviderInstallManager {
     provider: ProviderDefinition,
     job: ProviderInstallJobSnapshot
   ): Promise<void> {
-    const execFile =
-      this.deps.execFile ?? execFileAsString;
+    const execFile = this.deps.execFile ?? execFileAsString;
+    const preparedCommands = this.preparedCommandsByJobId.get(job.jobId) ?? new Map();
 
     job.status = "running";
     this.jobs.set(job.jobId, job);
@@ -251,7 +265,8 @@ export class ProviderInstallManager {
 
       try {
         if (step.kind === "verify") {
-          const available = await this.commandExists(step.command);
+          const resolved = await this.resolveCommand(step.command);
+          const available = resolved !== null;
           if (!available) {
             step.status = "failed";
             step.finishedAt = Date.now();
@@ -267,8 +282,17 @@ export class ProviderInstallManager {
             this.jobs.set(job.jobId, job);
             return;
           }
+
+          preparedCommands.set(step.command, resolved);
         } else {
-          const result = await execFile(step.command, step.args, { windowsHide: true });
+          const resolved =
+            preparedCommands.get(step.command) ?? (await this.resolveCommand(step.command));
+          if (resolved) {
+            preparedCommands.set(step.command, resolved);
+          }
+
+          const executable = resolved?.executable ?? step.command;
+          const result = await execFile(executable, step.args, { windowsHide: true });
           step.stdoutExcerpt = excerpt(result.stdout);
           step.stderrExcerpt = excerpt(result.stderr);
         }
@@ -295,18 +319,22 @@ export class ProviderInstallManager {
     job.status = "succeeded";
     job.currentStepId = undefined;
     this.clearActiveJob(provider.id, job.jobId);
+    this.preparedCommandsByJobId.delete(job.jobId);
     this.jobs.set(job.jobId, job);
   }
 
   private async collectMissing(
     commands: string[],
-    availableCommands?: Set<string>
+    availableCommands?: Set<string>,
+    preparedCommands?: Map<string, PreparedCommand>
   ): Promise<string[]> {
     const missing: string[] = [];
 
     for (const command of commands) {
-      if (await this.commandExists(command)) {
+      const resolved = await this.resolveCommand(command);
+      if (resolved) {
         availableCommands?.add(command);
+        preparedCommands?.set(command, resolved);
       } else {
         missing.push(command);
       }
@@ -320,6 +348,20 @@ export class ProviderInstallManager {
       this.deps.commandExists ??
       ((candidate: string) => checkCommandAvailable(candidate, this.deps));
     return commandExists(command);
+  }
+
+  private async resolveCommand(command: string): Promise<PreparedCommand | null> {
+    if (this.deps.commandExists) {
+      const available = await this.commandExists(command);
+      return available
+        ? {
+            command,
+            executable: command,
+          }
+        : null;
+    }
+
+    return resolveCommand(command, this.deps);
   }
 
   private normalizeFailure(
@@ -419,6 +461,7 @@ export class ProviderInstallManager {
     if (this.activeJobIdsByProviderId.get(providerId) === jobId) {
       this.activeJobIdsByProviderId.delete(providerId);
     }
+    this.preparedCommandsByJobId.delete(jobId);
   }
 
   private getActiveJob(providerId: string): ProviderInstallJobSnapshot | undefined {
