@@ -588,6 +588,46 @@ describe("MobileShell Phase 2 workspace", () => {
     expect(screen.queryByRole("textbox", { name: "Agent composer" })).not.toBeInTheDocument();
   });
 
+  it("renders the shared workspace footer below the mobile dock", async () => {
+    const sendCommand = vi.fn(async (op: string) => {
+      if (op === "session.list") {
+        return [];
+      }
+
+      if (op === "git.status") {
+        return {
+          branch: "feature/mobile-footer",
+          ahead: 1,
+          behind: 0,
+          staged: [],
+          modified: [{ path: "src/app.tsx", status: "modified" }],
+          deleted: [],
+          untracked: [],
+        };
+      }
+
+      return undefined;
+    });
+
+    renderMobileShell({ initialEntry: "/workspace", sendCommand });
+
+    await waitFor(() => {
+      expect(
+        document.querySelector(".mobile-shell__bottom-stack .git-panel-status-strip__branch-text")
+      ).toHaveTextContent("feature/mobile-footer");
+    });
+
+    expect(
+      document.querySelector(".mobile-shell__bottom-stack .workspace-status-bar")
+    ).not.toBeNull();
+    expect(
+      document.querySelector(".mobile-shell__bottom-stack .git-panel-status-strip__branch-text")
+    ).toHaveTextContent("feature/mobile-footer");
+    expect(document.querySelector(".mobile-shell__bottom-stack")?.lastElementChild).toHaveClass(
+      "workspace-status-bar"
+    );
+  });
+
   it("opens and closes the files sheet", async () => {
     const user = userEvent.setup();
     renderMobileShell({ initialEntry: "/workspace" });
@@ -602,45 +642,47 @@ describe("MobileShell Phase 2 workspace", () => {
     expect(screen.queryByRole("tab", { name: "Files" })).not.toBeInTheDocument();
   });
 
-  it("shows the current branch name in the files sheet", async () => {
-    const user = userEvent.setup();
+  it("shows the current branch name in the shared workspace footer", async () => {
     const { store } = renderMobileShell({ initialEntry: "/workspace" });
 
-    store.set(gitStateAtomFamily("ws-1"), {
-      branch: "feature/mobile-branch-pill",
-      ahead: 0,
-      behind: 0,
-      staged: [],
-      modified: [],
-      deleted: [],
-      untracked: [],
+    act(() => {
+      store.set(gitStateAtomFamily("ws-1"), {
+        branch: "feature/mobile-branch-pill",
+        ahead: 0,
+        behind: 0,
+        staged: [],
+        modified: [],
+        deleted: [],
+        untracked: [],
+      });
     });
-
-    await user.click(screen.getByRole("button", { name: "Open Files sheet" }));
 
     expect(
-      screen.getByRole("button", { name: "Current Branch: feature/mobile-branch-pill" })
-    ).toBeInTheDocument();
+      document.querySelector(".mobile-shell__bottom-stack .git-panel-status-strip__branch-text")
+    ).toHaveTextContent("feature/mobile-branch-pill");
   });
 
-  it("opens branch quick pick from the mobile branch pill", async () => {
+  it("opens branch quick pick from the shared mobile footer", async () => {
     const user = userEvent.setup();
     const { store } = renderMobileShell({ initialEntry: "/workspace" });
 
-    store.set(gitStateAtomFamily("ws-1"), {
-      branch: "feature/mobile-branch-pill",
-      ahead: 0,
-      behind: 0,
-      staged: [],
-      modified: [],
-      deleted: [],
-      untracked: [],
+    act(() => {
+      store.set(gitStateAtomFamily("ws-1"), {
+        branch: "feature/mobile-branch-pill",
+        ahead: 0,
+        behind: 0,
+        staged: [],
+        modified: [],
+        deleted: [],
+        untracked: [],
+      });
     });
 
-    await user.click(screen.getByRole("button", { name: "Open Files sheet" }));
-    await user.click(
-      screen.getByRole("button", { name: "Current Branch: feature/mobile-branch-pill" })
+    const branchButton = document.querySelector(
+      ".mobile-shell__bottom-stack .git-panel-status-strip__branch"
     );
+    expect(branchButton).not.toBeNull();
+    await user.click(branchButton as HTMLElement);
 
     expect(store.get(branchQuickPickAtom)).toEqual({
       visible: true,
@@ -1790,6 +1832,19 @@ describe("MobileShell Phase 2 workspace", () => {
     await user.click(screen.getByRole("button", { name: "mock-git-panel" }));
 
     expect(screen.getByTestId("mobile-git-diff-viewer")).toBeInTheDocument();
+  });
+
+  it("shows file actions in the tab row only on the files tab", async () => {
+    const user = userEvent.setup();
+    renderMobileShell();
+
+    await user.click(screen.getByRole("button", { name: "Open Files sheet" }));
+    expect(screen.getByRole("button", { name: /^new file$|^新建文件$/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /refresh|刷新/i })).toBeNull();
+
+    await user.click(screen.getByRole("tab", { name: "Git" }));
+
+    expect(screen.queryByRole("button", { name: /^new file$|^新建文件$/i })).toBeNull();
   });
 
   it("returns to the session content when closing the diff viewer", async () => {

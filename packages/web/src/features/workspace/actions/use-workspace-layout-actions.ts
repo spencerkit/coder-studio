@@ -1,32 +1,46 @@
 import { useAtom } from "jotai";
-import { type MouseEvent as ReactMouseEvent, useCallback, useEffect, useRef } from "react";
+import { type MouseEvent as ReactMouseEvent, useCallback, useRef } from "react";
 import { bottomPanelHeightAtom, leftPanelWidthAtom } from "../atoms";
 
-const DEFAULT_LEFT_WIDTH = 280;
 const MIN_LEFT_WIDTH = 220;
-const MAX_LEFT_WIDTH = 480;
 const MIN_BOTTOM_HEIGHT = 120;
-const MAX_BOTTOM_HEIGHT = 400;
+
+function resolvePanelSize(measuredSize: number, inlineSize: string, fallbackSize: number) {
+  if (measuredSize > 0) {
+    return measuredSize;
+  }
+
+  const parsedInlineSize = Number.parseFloat(inlineSize);
+  if (Number.isFinite(parsedInlineSize) && parsedInlineSize > 0) {
+    return parsedInlineSize;
+  }
+
+  return fallbackSize;
+}
 
 export function useWorkspaceLayoutActions() {
-  const [leftPanelWidth, setLeftPanelWidth] = useAtom(leftPanelWidthAtom);
-  const [bottomPanelHeight, setBottomPanelHeight] = useAtom(bottomPanelHeightAtom);
-
-  useEffect(() => {
-    if (leftPanelWidth === 200 || leftPanelWidth === 220 || leftPanelWidth === 264) {
-      setLeftPanelWidth(DEFAULT_LEFT_WIDTH);
-    }
-  }, [leftPanelWidth, setLeftPanelWidth]);
+  const [storedLeftPanelWidth, setLeftPanelWidth] = useAtom(leftPanelWidthAtom);
+  const [storedBottomPanelHeight, setBottomPanelHeight] = useAtom(bottomPanelHeightAtom);
 
   const leftMouseDown = useRef(false);
+  const leftPanelRef = useRef<HTMLElement | null>(null);
   const leftStartX = useRef(0);
   const leftStartWidth = useRef(0);
+  const leftCurrentWidth = useRef(storedLeftPanelWidth);
+  const bottomPanelRef = useRef<HTMLDivElement | null>(null);
 
   const handleLeftMouseDown = useCallback(
     (event: ReactMouseEvent) => {
+      event.preventDefault();
       leftMouseDown.current = true;
       leftStartX.current = event.clientX;
-      leftStartWidth.current = leftPanelWidth;
+      leftStartWidth.current = resolvePanelSize(
+        leftPanelRef.current?.offsetWidth ?? 0,
+        leftPanelRef.current?.style.width ?? "",
+        storedLeftPanelWidth
+      );
+      leftCurrentWidth.current = leftStartWidth.current;
+      document.body.classList.add("is-resizing-panels");
 
       const onMouseMove = (moveEvent: MouseEvent) => {
         if (!leftMouseDown.current) {
@@ -34,15 +48,17 @@ export function useWorkspaceLayoutActions() {
         }
 
         const dx = moveEvent.clientX - leftStartX.current;
-        const nextWidth = Math.min(
-          MAX_LEFT_WIDTH,
-          Math.max(MIN_LEFT_WIDTH, leftStartWidth.current + dx)
-        );
-        setLeftPanelWidth(nextWidth);
+        const nextWidth = Math.max(MIN_LEFT_WIDTH, leftStartWidth.current + dx);
+        leftCurrentWidth.current = nextWidth;
+        if (leftPanelRef.current) {
+          leftPanelRef.current.style.width = `${nextWidth}px`;
+        }
       };
 
       const onMouseUp = () => {
         leftMouseDown.current = false;
+        document.body.classList.remove("is-resizing-panels");
+        setLeftPanelWidth(leftCurrentWidth.current);
         document.removeEventListener("mousemove", onMouseMove);
         document.removeEventListener("mouseup", onMouseUp);
       };
@@ -50,18 +66,26 @@ export function useWorkspaceLayoutActions() {
       document.addEventListener("mousemove", onMouseMove);
       document.addEventListener("mouseup", onMouseUp);
     },
-    [leftPanelWidth, setLeftPanelWidth]
+    [setLeftPanelWidth, storedLeftPanelWidth]
   );
 
   const bottomMouseDown = useRef(false);
   const bottomStartY = useRef(0);
   const bottomStartHeight = useRef(0);
+  const bottomCurrentHeight = useRef(storedBottomPanelHeight);
 
   const handleBottomMouseDown = useCallback(
     (event: ReactMouseEvent) => {
+      event.preventDefault();
       bottomMouseDown.current = true;
       bottomStartY.current = event.clientY;
-      bottomStartHeight.current = bottomPanelHeight;
+      bottomStartHeight.current = resolvePanelSize(
+        bottomPanelRef.current?.offsetHeight ?? 0,
+        bottomPanelRef.current?.style.height ?? "",
+        storedBottomPanelHeight
+      );
+      bottomCurrentHeight.current = bottomStartHeight.current;
+      document.body.classList.add("is-resizing-panels");
 
       const onMouseMove = (moveEvent: MouseEvent) => {
         if (!bottomMouseDown.current) {
@@ -69,15 +93,17 @@ export function useWorkspaceLayoutActions() {
         }
 
         const dy = bottomStartY.current - moveEvent.clientY;
-        const nextHeight = Math.min(
-          MAX_BOTTOM_HEIGHT,
-          Math.max(MIN_BOTTOM_HEIGHT, bottomStartHeight.current + dy)
-        );
-        setBottomPanelHeight(nextHeight);
+        const nextHeight = Math.max(MIN_BOTTOM_HEIGHT, bottomStartHeight.current + dy);
+        bottomCurrentHeight.current = nextHeight;
+        if (bottomPanelRef.current) {
+          bottomPanelRef.current.style.height = `${nextHeight}px`;
+        }
       };
 
       const onMouseUp = () => {
         bottomMouseDown.current = false;
+        document.body.classList.remove("is-resizing-panels");
+        setBottomPanelHeight(bottomCurrentHeight.current);
         document.removeEventListener("mousemove", onMouseMove);
         document.removeEventListener("mouseup", onMouseUp);
       };
@@ -85,13 +111,15 @@ export function useWorkspaceLayoutActions() {
       document.addEventListener("mousemove", onMouseMove);
       document.addEventListener("mouseup", onMouseUp);
     },
-    [bottomPanelHeight, setBottomPanelHeight]
+    [setBottomPanelHeight, storedBottomPanelHeight]
   );
 
   return {
-    bottomPanelHeight,
+    bottomPanelHeight: storedBottomPanelHeight,
+    bottomPanelRef,
     handleBottomMouseDown,
     handleLeftMouseDown,
-    leftPanelWidth,
+    leftPanelRef,
+    leftPanelWidth: storedLeftPanelWidth,
   };
 }

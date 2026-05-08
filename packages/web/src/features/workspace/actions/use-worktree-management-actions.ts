@@ -1,8 +1,15 @@
-import type { WorktreeInfo } from "@coder-studio/core";
+import type { Workspace, WorktreeInfo } from "@coder-studio/core";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useMemo } from "react";
 import { dispatchCommandAtom } from "../../../atoms/connection";
-import { workspaceByIdAtomFamily } from "../../../atoms/workspaces";
+import {
+  activeWorkspaceIdAtom,
+  workspaceByIdAtomFamily,
+  workspaceOrderAtom,
+  workspacesAtom,
+  workspacesLoadErrorAtom,
+  workspacesLoadStateAtom,
+} from "../../../atoms/workspaces";
 import { useTranslation } from "../../../lib/i18n";
 import { pushToastAtom } from "../../notifications/atoms";
 import { worktreeListAtomFamily } from "../atoms";
@@ -33,6 +40,11 @@ export function useWorktreeManagementActions(workspaceId: string) {
   const dispatch = useAtomValue(dispatchCommandAtom);
   const workspace = useAtomValue(workspaceByIdAtomFamily(workspaceId));
   const [list, setList] = useAtom(worktreeListAtomFamily(workspaceId));
+  const setActiveWorkspaceId = useSetAtom(activeWorkspaceIdAtom);
+  const setWorkspaces = useSetAtom(workspacesAtom);
+  const setWorkspaceOrder = useSetAtom(workspaceOrderAtom);
+  const setWorkspacesLoadState = useSetAtom(workspacesLoadStateAtom);
+  const setWorkspacesLoadError = useSetAtom(workspacesLoadErrorAtom);
   const pushToast = useSetAtom(pushToastAtom);
 
   const loadWorktrees = useCallback(async () => {
@@ -140,6 +152,48 @@ export function useWorktreeManagementActions(workspaceId: string) {
     [workspace?.path]
   );
 
+  const openWorktree = useCallback(
+    async (path: string) => {
+      const result = await dispatch<Workspace>("workspace.open", { path });
+
+      if (!result.ok || !result.data?.id) {
+        const message = result.error?.message ?? "Failed to open worktree";
+        pushToast({
+          kind: "error",
+          title: t("workspace.launch.open_failed"),
+          body: message,
+        });
+        return { ok: false as const, error: message };
+      }
+
+      setActiveWorkspaceId(result.data.id);
+      setWorkspaces((prev) => ({
+        ...prev,
+        [result.data!.id]: result.data!,
+      }));
+      setWorkspaceOrder((prev) => {
+        if (prev.includes(result.data!.id)) {
+          return prev;
+        }
+        return [result.data!.id, ...prev];
+      });
+      setWorkspacesLoadState("ready");
+      setWorkspacesLoadError(null);
+
+      return { ok: true as const, workspace: result.data };
+    },
+    [
+      dispatch,
+      pushToast,
+      setActiveWorkspaceId,
+      setWorkspaceOrder,
+      setWorkspaces,
+      setWorkspacesLoadError,
+      setWorkspacesLoadState,
+      t,
+    ]
+  );
+
   return {
     createWorktree,
     currentWorktree,
@@ -147,6 +201,7 @@ export function useWorktreeManagementActions(workspaceId: string) {
     hasWorkspace: Boolean(workspace),
     list,
     loadWorktrees,
+    openWorktree,
     removeWorktreeByPath,
     suggestedPathForBranch,
   };

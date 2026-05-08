@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   classifyGitAuthFailure,
   GitError,
+  getGitHistory,
   getGitStatus,
   runGit,
   runGitFetch,
@@ -71,7 +72,7 @@ describe("runGit", () => {
 
     const status = await getGitStatus(testDir);
 
-    expect(status.deleted).toEqual([{ path: "docs/验收报告/phase 1/a b.txt" }]);
+    expect(status.deleted).toEqual([{ path: "docs/验收报告/phase 1/a b.txt", status: "deleted" }]);
     await expect(
       execFileAsync("git", ["add", "--", status.deleted[0]?.path ?? ""], { cwd: testDir })
     ).resolves.toBeDefined();
@@ -638,8 +639,8 @@ describe("getGitStatus", () => {
     const status = await getGitStatus(testDir);
 
     expect(status.untracked).toEqual([
-      { path: "docs/help/README.md" },
-      { path: "docs/help/assets/logo.png" },
+      { path: "docs/help/README.md", status: "untracked" },
+      { path: "docs/help/assets/logo.png", status: "untracked" },
     ]);
 
     await rm(testDir, { recursive: true, force: true });
@@ -676,6 +677,82 @@ describe("getGitStatus", () => {
     expect(status.headSha).toBe(stdout.trim());
     expect(status.headShortSha).toBe(stdout.trim().slice(0, 7));
     expect(status.headSubject).toBe("detached subject");
+
+    await rm(testDir, { recursive: true, force: true });
+  });
+});
+
+describe("getGitHistory", () => {
+  it("returns recent commits in reverse chronological order with author and timestamp", async () => {
+    const testDir = await mkdtemp(join(tmpdir(), "git-history-"));
+    await execFileAsync("git", ["init"], { cwd: testDir });
+    await execFileAsync("git", ["config", "user.name", "Test"], { cwd: testDir });
+    await execFileAsync("git", ["config", "user.email", "test@example.com"], { cwd: testDir });
+
+    await writeFile(join(testDir, "file.txt"), "one\n");
+    await execFileAsync("git", ["add", "."], { cwd: testDir });
+    await execFileAsync("git", ["commit", "-m", "first commit"], { cwd: testDir });
+
+    await writeFile(join(testDir, "file.txt"), "two\n");
+    await execFileAsync("git", ["add", "."], { cwd: testDir });
+    await execFileAsync("git", ["commit", "-m", "second commit"], { cwd: testDir });
+
+    const history = await getGitHistory(testDir, 5);
+
+    expect(history).toHaveLength(2);
+    expect(history[0]).toEqual(
+      expect.objectContaining({
+        subject: "second commit",
+        authorName: "Test",
+      })
+    );
+    expect(history[0]?.sha).toHaveLength(40);
+    expect(history[0]?.shortSha).toHaveLength(7);
+    expect(history[0]?.authoredAt).toBeTypeOf("number");
+    expect(history[0]!.authoredAt).toBeGreaterThanOrEqual(history[1]!.authoredAt);
+    expect(history[1]).toEqual(
+      expect.objectContaining({
+        subject: "first commit",
+        authorName: "Test",
+      })
+    );
+
+    await rm(testDir, { recursive: true, force: true });
+  });
+
+  it("returns an empty list for repositories without commits", async () => {
+    const testDir = await mkdtemp(join(tmpdir(), "git-history-empty-"));
+    await execFileAsync("git", ["init"], { cwd: testDir });
+
+    await expect(getGitHistory(testDir, 5)).resolves.toEqual([]);
+
+    await rm(testDir, { recursive: true, force: true });
+  });
+});
+
+describe("getGitCommitDiff", () => {
+  it("returns the requested commit patch with metadata", async () => {
+    const testDir = await mkdtemp(join(tmpdir(), "git-show-"));
+    await execFileAsync("git", ["init"], { cwd: testDir });
+    await execFileAsync("git", ["config", "user.name", "Test"], { cwd: testDir });
+    await execFileAsync("git", ["config", "user.email", "test@example.com"], { cwd: testDir });
+
+    await writeFile(join(testDir, "file.txt"), "one\n");
+    await execFileAsync("git", ["add", "."], { cwd: testDir });
+    await execFileAsync("git", ["commit", "-m", "first commit"], { cwd: testDir });
+
+    await writeFile(join(testDir, "file.txt"), "two\n");
+    await execFileAsync("git", ["add", "."], { cwd: testDir });
+    await execFileAsync("git", ["commit", "-m", "second commit"], { cwd: testDir });
+
+    const { stdout } = await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: testDir });
+    const { getGitCommitDiff } = await import("../../git/cli.js");
+    const diff = await getGitCommitDiff(testDir, stdout.trim());
+
+    expect(diff).toContain("second commit");
+    expect(diff).toContain("diff --git a/file.txt b/file.txt");
+    expect(diff).toContain("-one");
+    expect(diff).toContain("+two");
 
     await rm(testDir, { recursive: true, force: true });
   });

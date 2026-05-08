@@ -41,6 +41,8 @@ export interface GitDiffPreview {
   path: string;
   diff: string;
   staged?: boolean;
+  source?: "file" | "commit";
+  title?: string;
 }
 
 export const gitDiffPreviewAtomFamily = atomFamily((_workspaceId: string) =>

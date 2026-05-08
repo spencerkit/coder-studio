@@ -1,4 +1,4 @@
-import type { GitBranch, GitFileChange, GitStatus } from "@coder-studio/core";
+import type { GitBranch, GitCommitSummary, GitFileChange, GitStatus } from "@coder-studio/core";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { dispatchCommandAtom } from "../../../atoms/connection";
@@ -18,10 +18,14 @@ import {
 
 export type GitChangeType = "staged" | "modified" | "untracked" | "deleted";
 
+export interface GitPanelChangeItem {
+  change: GitFileChange;
+  type: GitChangeType;
+}
+
 export interface GitChangeGroupDescriptor {
   title: string;
-  type: GitChangeType;
-  changes: GitFileChange[];
+  changes: GitPanelChangeItem[];
 }
 
 interface PendingDiscardConfirmation {
@@ -57,6 +61,12 @@ export interface GitAuthFailureDetails {
 export interface GitSyncAuthPromptState {
   intent: "push" | "pull" | "fetch";
   details: GitAuthFailureDetails;
+}
+
+function isCommitPreview(
+  preview: GitDiffPreview | null
+): preview is GitDiffPreview & { source: "commit" } {
+  return preview?.source === "commit";
 }
 
 const GIT_SYNC_TIMEOUT_MS = 3 * 60 * 1000;
@@ -322,12 +332,13 @@ interface UseGitPanelActionsArgs {
   workspaceId: string;
   refreshToken?: number;
   onPreviewOpen?: (preview: GitDiffPreview) => void;
+  initialHistoryLimit?: number;
 }
 
 export function getFirstChange(
   status: GitStatus
 ): { change: GitFileChange; type: GitChangeType } | null {
-  const groups: GitChangeGroupDescriptor[] = [
+  const groups: Array<{ title: string; type: GitChangeType; changes: GitFileChange[] }> = [
     { title: "staged", type: "staged", changes: status.staged },
     { title: "modified", type: "modified", changes: status.modified },
     { title: "deleted", type: "deleted", changes: status.deleted },
@@ -368,12 +379,14 @@ export function useGitPanelActions({
   workspaceId,
   refreshToken = 0,
   onPreviewOpen,
+  initialHistoryLimit = 5,
 }: UseGitPanelActionsArgs) {
   const t = useTranslation();
   const gitState = useAtomValue(gitStateAtomFamily(workspaceId));
   const diffPreview = useAtomValue(gitDiffPreviewAtomFamily(workspaceId));
   const diffPreviewDismissed = useAtomValue(gitDiffPreviewDismissedAtomFamily(workspaceId));
   const dispatch = useAtomValue(dispatchCommandAtom);
+  const pushToast = useSetAtom(pushToastAtom);
   const setGitState = useSetAtom(gitStateAtomFamily(workspaceId));
   const setBranchList = useSetAtom(gitBranchListAtomFamily(workspaceId));
   const setDiffPreview = useSetAtom(gitDiffPreviewAtomFamily(workspaceId));
@@ -381,6 +394,9 @@ export function useGitPanelActions({
 
   const [commitMessage, setCommitMessage] = useAtom(commitMessageDraftAtomFamily(workspaceId));
   const [isLoading, setIsLoading] = useState(false);
+  const [history, setHistory] = useState<GitCommitSummary[]>([]);
+  const [historyLimit, setHistoryLimit] = useState(initialHistoryLimit);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [pendingDiscard, setPendingDiscard] = useState<PendingDiscardConfirmation | null>(null);
   const isLoadingRef = useRef(false);
   const pendingReloadRef = useRef(false);
@@ -425,12 +441,39 @@ export function useGitPanelActions({
         path: change.path,
         diff: result.data.diff,
         staged: type === "staged",
+        source: "file" as const,
       };
       setDiffPreviewDismissed(false);
       updatePreview(preview);
       return preview;
     },
     [dispatch, setDiffPreviewDismissed, updatePreview, workspaceId]
+  );
+
+  const openHistoryDiff = useCallback(
+    async (entry: GitCommitSummary) => {
+      const result = await dispatch<{ diff: string }>("git.show", {
+        workspaceId,
+        sha: entry.sha,
+      });
+
+      if (!result.ok || !result.data) {
+        console.error("Failed to get commit diff:", result.error?.message);
+        return null;
+      }
+
+      const preview = {
+        path: entry.sha,
+        title: `${entry.shortSha} · ${entry.subject}`,
+        diff: result.data.diff,
+        source: "commit" as const,
+      };
+      setDiffPreviewDismissed(false);
+      updatePreview(preview);
+      onPreviewOpen?.(preview);
+      return preview;
+    },
+    [dispatch, onPreviewOpen, setDiffPreviewDismissed, updatePreview, workspaceId]
   );
 
   const openDiff = useCallback(
@@ -471,6 +514,33 @@ export function useGitPanelActions({
     updateBranchList(result.data);
   }, [dispatch, setBranchList, updateBranchList, workspaceId]);
 
+  const loadGitHistory = useCallback(
+    async (limit = historyLimit) => {
+      if (!workspaceId) {
+        return;
+      }
+
+      setHistoryLoading(true);
+      try {
+        const result = await dispatch<{ entries?: GitCommitSummary[] }>("git.log", {
+          workspaceId,
+          limit,
+        });
+
+        if (!result.ok) {
+          console.error("Failed to load git history:", result.error?.message);
+          setHistory([]);
+          return;
+        }
+
+        setHistory(Array.isArray(result.data?.entries) ? result.data.entries : []);
+      } finally {
+        setHistoryLoading(false);
+      }
+    },
+    [dispatch, historyLimit, workspaceId]
+  );
+
   const loadGitStatus = useCallback(async () => {
     if (!workspaceId) {
       return;
@@ -498,6 +568,10 @@ export function useGitPanelActions({
 
       if (diffPreviewDismissed) {
         updatePreview(null);
+        return;
+      }
+
+      if (isCommitPreview(diffPreview)) {
         return;
       }
 
@@ -549,11 +623,19 @@ export function useGitPanelActions({
   }, [loadBranchList]);
 
   useEffect(() => {
+    void loadGitHistory(historyLimit);
+  }, [gitState?.headSha, historyLimit, loadGitHistory]);
+
+  useEffect(() => {
     if (!gitState) {
       return;
     }
 
     if (diffPreviewDismissed) {
+      return;
+    }
+
+    if (isCommitPreview(diffPreview)) {
       return;
     }
 
@@ -584,10 +666,16 @@ export function useGitPanelActions({
       op: "git.stage" | "git.unstage" | "git.discard" | "git.commit",
       args: Record<string, unknown>,
       errorMessage: string,
+      errorTitle: string,
       afterSuccess?: () => void
     ) => {
       const result = await dispatch<void>(op, args);
       if (!result.ok) {
+        pushToast({
+          kind: "error",
+          title: errorTitle,
+          body: result.error?.message ?? errorMessage,
+        });
         console.error(errorMessage, result.error?.message);
         return false;
       }
@@ -596,29 +684,52 @@ export function useGitPanelActions({
       await loadGitStatus();
       return true;
     },
-    [dispatch, loadGitStatus]
+    [dispatch, loadGitStatus, pushToast]
+  );
+
+  const stagePaths = useCallback(
+    async (paths: string[]) => {
+      if (paths.length === 0) {
+        return;
+      }
+
+      await runGitMutation(
+        "git.stage",
+        { workspaceId, paths },
+        "Failed to stage all:",
+        t("git.stage_failed_title")
+      );
+    },
+    [runGitMutation, t, workspaceId]
+  );
+
+  const unstagePaths = useCallback(
+    async (paths: string[]) => {
+      if (paths.length === 0) {
+        return;
+      }
+
+      await runGitMutation(
+        "git.unstage",
+        { workspaceId, paths },
+        "Failed to unstage all:",
+        t("git.unstage_failed_title")
+      );
+    },
+    [runGitMutation, t, workspaceId]
   );
 
   const handleStageAll = useCallback(async () => {
-    const paths = [
+    await stagePaths([
       ...(gitState?.modified.map((file) => file.path) ?? []),
       ...(gitState?.deleted.map((file) => file.path) ?? []),
       ...(gitState?.untracked.map((file) => file.path) ?? []),
-    ];
-
-    await runGitMutation("git.stage", { workspaceId, paths }, "Failed to stage all:");
-  }, [gitState, runGitMutation, workspaceId]);
+    ]);
+  }, [gitState, stagePaths]);
 
   const handleUnstageAll = useCallback(async () => {
-    await runGitMutation(
-      "git.unstage",
-      {
-        workspaceId,
-        paths: gitState?.staged.map((file) => file.path) ?? [],
-      },
-      "Failed to unstage all:"
-    );
-  }, [gitState, runGitMutation, workspaceId]);
+    await unstagePaths(gitState?.staged.map((file) => file.path) ?? []);
+  }, [gitState, unstagePaths]);
 
   const handleDiscardAll = useCallback(() => {
     const paths = [
@@ -637,6 +748,17 @@ export function useGitPanelActions({
       paths,
     });
   }, [gitState]);
+
+  const handleRequestDiscardPaths = useCallback((paths: string[]) => {
+    if (!paths.length) {
+      return;
+    }
+
+    setPendingDiscard({
+      scope: "all",
+      paths,
+    });
+  }, []);
 
   const handleRequestDiscardSingle = useCallback((path: string) => {
     setPendingDiscard({
@@ -664,9 +786,10 @@ export function useGitPanelActions({
         workspaceId,
         paths: nextDiscard.paths,
       },
-      nextDiscard.scope === "all" ? "Failed to discard all:" : "Failed to discard:"
+      nextDiscard.scope === "all" ? "Failed to discard all:" : "Failed to discard:",
+      t("git.discard_failed_title")
     );
-  }, [pendingDiscard, runGitMutation, workspaceId]);
+  }, [pendingDiscard, runGitMutation, t, workspaceId]);
 
   const handleCommit = useCallback(async () => {
     if (!commitMessage.trim() || !gitState?.staged.length) {
@@ -680,9 +803,10 @@ export function useGitPanelActions({
         message: commitMessage.trim(),
       },
       "Failed to commit:",
+      t("git.commit_failed_title"),
       () => setCommitMessage("")
     );
-  }, [commitMessage, gitState?.staged.length, runGitMutation, workspaceId]);
+  }, [commitMessage, gitState?.staged.length, runGitMutation, t, workspaceId]);
 
   const hasChanges = Boolean(
     gitState &&
@@ -695,10 +819,21 @@ export function useGitPanelActions({
   const groups = useMemo<GitChangeGroupDescriptor[]>(
     () =>
       [
-        { title: "staged", type: "staged" as const, changes: gitState?.staged ?? [] },
-        { title: "changes", type: "modified" as const, changes: gitState?.modified ?? [] },
-        { title: "deleted", type: "deleted" as const, changes: gitState?.deleted ?? [] },
-        { title: "untracked", type: "untracked" as const, changes: gitState?.untracked ?? [] },
+        {
+          title: "staged",
+          changes: (gitState?.staged ?? []).map((change) => ({ change, type: "staged" as const })),
+        },
+        {
+          title: "changes",
+          changes: [
+            ...(gitState?.modified ?? []).map((change) => ({ change, type: "modified" as const })),
+            ...(gitState?.deleted ?? []).map((change) => ({ change, type: "deleted" as const })),
+            ...(gitState?.untracked ?? []).map((change) => ({
+              change,
+              type: "untracked" as const,
+            })),
+          ],
+        },
       ].filter((group) => group.changes.length > 0),
     [gitState]
   );
@@ -709,20 +844,30 @@ export function useGitPanelActions({
     gitState,
     groups,
     hasChanges,
+    history,
+    historyLimit,
+    historyLoading,
     isLoading,
     pendingDiscard,
+    canShowMoreHistory: historyLimit < 10 && history.length > 0,
     setCommitMessage,
     handleCancelDiscard,
     handleCommit,
     handleConfirmDiscard,
     handleDiscardAll,
+    handleRequestDiscardPaths,
     handleRequestDiscardSingle,
     handleStageAll,
+    handleStagePaths: stagePaths,
     handleUnstageAll,
+    handleUnstagePaths: unstagePaths,
     loadGitStatus,
+    loadGitHistory,
     openDiff,
+    openHistoryDiff,
     requestDiff,
     runGitMutation,
+    showMoreHistory: () => setHistoryLimit(10),
     t,
   };
 }

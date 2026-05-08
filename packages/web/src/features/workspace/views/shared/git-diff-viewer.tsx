@@ -66,7 +66,7 @@ export const GitDiffViewer: FC<GitDiffViewerProps> = ({
       <div className="code-editor workspace-git-editor">
         <div className="code-editor-header">
           <span className="code-file-path">
-            {preview?.path ?? "Select a changed file to inspect"}
+            {preview?.title ?? preview?.path ?? "Select a changed file to inspect"}
           </span>
           {preview && showCloseButton ? (
             <div className="code-mode-toggle">

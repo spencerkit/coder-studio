@@ -7,6 +7,8 @@ import {
   commitChanges,
   discardChanges,
   GitAuthError,
+  getGitCommitDiff,
+  getGitHistory,
   getGitStatus,
   runGitCheckout,
   runGitCreateBranch,
@@ -92,6 +94,44 @@ registerCommand(
 
     return {
       diff: await getFileDiff(workspace.path, args.path, args.staged ?? false),
+    };
+  }
+);
+
+// git.log
+registerCommand(
+  "git.log",
+  z.object({
+    workspaceId: z.string(),
+    limit: z.number().int().min(1).max(50).optional(),
+  }),
+  async (args, ctx) => {
+    const workspace = ctx.workspaceMgr.get(args.workspaceId);
+    if (!workspace) {
+      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
+    }
+
+    return {
+      entries: await getGitHistory(workspace.path, args.limit ?? 5),
+    };
+  }
+);
+
+// git.show
+registerCommand(
+  "git.show",
+  z.object({
+    workspaceId: z.string(),
+    sha: z.string().min(1),
+  }),
+  async (args, ctx) => {
+    const workspace = ctx.workspaceMgr.get(args.workspaceId);
+    if (!workspace) {
+      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
+    }
+
+    return {
+      diff: await getGitCommitDiff(workspace.path, args.sha),
     };
   }
 );

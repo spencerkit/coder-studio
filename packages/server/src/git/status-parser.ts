@@ -2,7 +2,7 @@
  * Git status parser for porcelain=v2 format.
  */
 
-import type { GitFileChange, GitStatus } from "@coder-studio/core";
+import type { GitChangeStatus, GitFileChange, GitStatus } from "@coder-studio/core";
 
 /**
  * Parses git status --porcelain=v2 --branch output.
@@ -70,7 +70,7 @@ export function parseStatus(porcelainV2: string): GitStatus {
     }
 
     if (record.startsWith("? ")) {
-      untracked.push({ path: record.substring(2) });
+      untracked.push({ path: record.substring(2), status: "untracked" });
     }
   }
 
@@ -157,7 +157,10 @@ function pushChange(
   const worktreeStatus = xy[1];
 
   if (indexStatus && indexStatus !== "." && indexStatus !== " ") {
-    staged.push(change);
+    staged.push({
+      ...change,
+      status: resolveGitChangeStatus(indexStatus, change.oldPath),
+    });
   }
 
   if (!worktreeStatus || worktreeStatus === "." || worktreeStatus === " ") {
@@ -165,9 +168,32 @@ function pushChange(
   }
 
   if (worktreeStatus === "D") {
-    deleted.push({ path: change.path });
+    deleted.push({ path: change.path, status: "deleted" });
     return;
   }
 
-  modified.push({ path: change.path });
+  modified.push({
+    path: change.path,
+    oldPath: change.oldPath,
+    status: resolveGitChangeStatus(worktreeStatus, change.oldPath),
+  });
+}
+
+function resolveGitChangeStatus(code: string, oldPath?: string): GitChangeStatus {
+  switch (code) {
+    case "A":
+      return "added";
+    case "D":
+      return "deleted";
+    case "R":
+      return "renamed";
+    case "C":
+      return oldPath ? "renamed" : "added";
+    case "U":
+      return "modified";
+    case "M":
+    case "T":
+    default:
+      return oldPath ? "renamed" : "modified";
+  }
 }

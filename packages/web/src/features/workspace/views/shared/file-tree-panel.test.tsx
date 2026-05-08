@@ -470,7 +470,7 @@ describe("FileTreePanel", () => {
       </Provider>
     );
 
-    expect(await screen.findByText("common.loading")).toBeInTheDocument();
+    expect((await screen.findAllByText("common.loading")).length).toBeGreaterThan(0);
   });
 
   it("loads children for default-expanded root directories", async () => {
@@ -520,6 +520,52 @@ describe("FileTreePanel", () => {
     });
 
     expect(await screen.findByText("index.ts")).toBeInTheDocument();
+  });
+
+  it("collapses expanded directories when the external collapse trigger changes", () => {
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand: vi.fn().mockResolvedValue({}) } as never);
+    store.set(
+      fileTreeAtomFamily("ws-test"),
+      new Map([
+        [
+          ".",
+          [
+            {
+              path: "src",
+              name: "src",
+              kind: "dir",
+            },
+          ],
+        ],
+        [
+          "src",
+          [
+            {
+              path: "src/index.ts",
+              name: "index.ts",
+              kind: "file",
+            },
+          ],
+        ],
+      ])
+    );
+
+    const { rerender } = render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" collapseVersion={0} />
+      </Provider>
+    );
+
+    expect(screen.getByText("index.ts")).toBeInTheDocument();
+
+    rerender(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" collapseVersion={1} />
+      </Provider>
+    );
+
+    expect(screen.queryByText("index.ts")).not.toBeInTheDocument();
   });
 
   it("uses translated empty-directory copy for expanded folders with no children", () => {
@@ -857,5 +903,32 @@ describe("FileTreePanel", () => {
         isDirty: false,
       },
     });
+  });
+
+  it("does not render a panel footer on mobile", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({
+      path: "/workspace",
+      children: [
+        {
+          path: "README.md",
+          name: "README.md",
+          kind: "file",
+        },
+      ],
+    });
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(fileTreeAtomFamily("ws-test"), new Map([[".", []]]));
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" variant="mobile" />
+      </Provider>
+    );
+
+    expect(screen.getByLabelText("action.search_files")).toBeInTheDocument();
+    expect(document.querySelector(".git-panel-status-strip")).toBeNull();
+    expect(document.querySelector(".file-tree-status-strip")).toBeNull();
+    expect(screen.queryByText("file.visible_count")).toBeNull();
   });
 });

@@ -131,6 +131,64 @@ describe("Git Commands", () => {
     expect((result.data as { diff: string }).diff).toContain("+notes");
   });
 
+  it("returns recent commit history for git.log", async () => {
+    await execFileAsync("git", ["add", "."], { cwd: testDir });
+    await execFileAsync("git", ["commit", "-m", "Refresh command surface"], { cwd: testDir });
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "git-log-1",
+        op: "git.log",
+        args: {
+          workspaceId,
+          limit: 5,
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.data).toEqual(
+      expect.objectContaining({
+        entries: expect.arrayContaining([
+          expect.objectContaining({
+            subject: "Refresh command surface",
+            authorName: "Test",
+          }),
+        ]),
+      })
+    );
+  });
+
+  it("returns a commit patch for git.show", async () => {
+    await execFileAsync("git", ["add", "."], { cwd: testDir });
+    await execFileAsync("git", ["commit", "-m", "Refresh command surface"], { cwd: testDir });
+    const { stdout: headSha } = await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: testDir });
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "git-show-1",
+        op: "git.show",
+        args: {
+          workspaceId,
+          sha: headSha.trim(),
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.data).toEqual(
+      expect.objectContaining({
+        diff: expect.stringContaining("Refresh command surface"),
+      })
+    );
+    expect((result.data as { diff: string }).diff).toContain("+export const value = 2;");
+    expect((result.data as { diff: string }).diff).toContain("-export const value = 1;");
+  });
+
   it("discards modified tracked files", async () => {
     const result = await dispatch(
       {

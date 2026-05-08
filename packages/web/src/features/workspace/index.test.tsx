@@ -5,7 +5,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { connectionStatusAtom, wsClientAtom } from "../../atoms/connection";
 import { activeWorkspaceIdAtom, workspaceOrderAtom, workspacesAtom } from "../../atoms/workspaces";
 import { seedReadyWorkspaceState } from "../../test-utils/workspace-state";
-import { branchQuickPickAtom, gitDiffPreviewAtomFamily, terminalPanelVisibleAtom } from "./atoms";
+import {
+  bottomPanelHeightAtom,
+  branchQuickPickAtom,
+  gitDiffPreviewAtomFamily,
+  leftPanelWidthAtom,
+  terminalPanelVisibleAtom,
+} from "./atoms";
 import { WorkspaceDesktopView } from "./views/desktop/workspace-desktop-view";
 
 const fileTreePanelSpy = vi.fn();
@@ -51,6 +57,8 @@ describe("WorkspacePage", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     fileTreePanelSpy.mockReset();
+    window.localStorage.clear();
+    document.body.classList.remove("is-resizing-panels");
   });
 
   it("loads git status on mount so the file view shows the active branch", async () => {
@@ -61,7 +69,7 @@ describe("WorkspacePage", () => {
           ahead: 0,
           behind: 0,
           staged: [],
-          modified: [],
+          modified: [{ path: "src/app.tsx", status: "modified" }],
           deleted: [],
           untracked: [],
         };
@@ -108,7 +116,69 @@ describe("WorkspacePage", () => {
       );
     });
 
-    expect(await screen.findByText("feature/refactor-ts")).toBeInTheDocument();
+    await screen.findByText("feature/refactor-ts");
+
+    expect(
+      document.querySelector(".workspace-status-bar .git-panel-status-strip__branch-text")
+    ).toHaveTextContent("feature/refactor-ts");
+    expect(document.querySelector(".workspace-page > .workspace-status-bar")).not.toBeNull();
+    expect(document.querySelector(".workspace-sidebar-panel__tab-count")).toBeNull();
+  });
+
+  it("shows file actions without a separate refresh action in the desktop sidebar", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return {
+          branch: "main",
+          ahead: 0,
+          behind: 0,
+          staged: [],
+          modified: [],
+          deleted: [],
+          untracked: [],
+        };
+      }
+
+      return [];
+    });
+
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedReadyWorkspaceState(store, {
+      "ws-test": {
+        id: "ws-test",
+        path: "/home/spencer/workspace/coder-studio",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/workspace"]}>
+          <Routes>
+            <Route path="/workspace" element={<WorkspaceDesktopView />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>
+    );
+
+    await screen.findByTestId("file-tree-panel");
+    expect(screen.getByRole("button", { name: /^new file$|^新建文件$/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /refresh|刷新/i })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Git" }));
+
+    expect(screen.getByTestId("git-panel")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^new file$|^新建文件$/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /refresh|刷新/i })).toBeNull();
   });
 
   it("opens branch quick pick from the existing branch pill and switches to git tab", async () => {
@@ -156,10 +226,13 @@ describe("WorkspacePage", () => {
       </Provider>
     );
 
-    const branchButton = await screen.findByRole("button", {
-      name: "Open branch switcher for feature/refactor-ts",
-    });
-    fireEvent.click(branchButton);
+    await screen.findByText("feature/refactor-ts");
+
+    const branchButton = document.querySelector(
+      ".workspace-status-bar .git-panel-status-strip__branch"
+    );
+    expect(branchButton).not.toBeNull();
+    fireEvent.click(branchButton as HTMLElement);
 
     expect(screen.getByRole("button", { name: "Git" })).toHaveClass("active");
     expect(store.get(branchQuickPickAtom)).toEqual({
@@ -491,5 +564,259 @@ describe("WorkspacePage", () => {
       expect(screen.getByTestId("agent-panes")).toBeInTheDocument();
     });
     expect(store.get(gitDiffPreviewAtomFamily("ws-test"))).toBeNull();
+  });
+
+  it("keeps the resized desktop file panel width after dragging the left separator", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return {
+          branch: "main",
+          ahead: 0,
+          behind: 0,
+          staged: [],
+          modified: [],
+          deleted: [],
+          untracked: [],
+        };
+      }
+
+      return [];
+    });
+
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedReadyWorkspaceState(store, {
+      "ws-test": {
+        id: "ws-test",
+        path: "/home/spencer/workspace/coder-studio",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+
+    const { container } = render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/workspace"]}>
+          <Routes>
+            <Route path="/workspace" element={<WorkspaceDesktopView />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>
+    );
+
+    await screen.findByTestId("file-tree-panel");
+
+    const leftSeparator = screen.getByRole("separator", { name: "Resize left panel" });
+    const leftPanel = container.querySelector(".left-panel");
+
+    expect(leftPanel).not.toBeNull();
+    expect(store.get(leftPanelWidthAtom)).toBe(280);
+
+    fireEvent.mouseDown(leftSeparator, { clientX: 280 });
+    fireEvent.mouseMove(document, { clientX: 264 });
+
+    expect(leftPanel).toHaveStyle({ width: "264px" });
+    expect(store.get(leftPanelWidthAtom)).toBe(280);
+
+    fireEvent.mouseUp(document);
+
+    await waitFor(() => {
+      expect(store.get(leftPanelWidthAtom)).toBe(264);
+    });
+    expect(leftPanel).toHaveStyle({ width: "264px" });
+  });
+
+  it("toggles the global resizing body class while dragging the desktop file panel separator", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return {
+          branch: "main",
+          ahead: 0,
+          behind: 0,
+          staged: [],
+          modified: [],
+          deleted: [],
+          untracked: [],
+        };
+      }
+
+      return [];
+    });
+
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedReadyWorkspaceState(store, {
+      "ws-test": {
+        id: "ws-test",
+        path: "/home/spencer/workspace/coder-studio",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/workspace"]}>
+          <Routes>
+            <Route path="/workspace" element={<WorkspaceDesktopView />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>
+    );
+
+    await screen.findByTestId("file-tree-panel");
+
+    const leftSeparator = screen.getByRole("separator", { name: "Resize left panel" });
+
+    expect(document.body).not.toHaveClass("is-resizing-panels");
+
+    fireEvent.mouseDown(leftSeparator, { clientX: 280 });
+    expect(document.body).toHaveClass("is-resizing-panels");
+
+    fireEvent.mouseUp(document);
+    await waitFor(() => {
+      expect(document.body).not.toHaveClass("is-resizing-panels");
+    });
+  });
+
+  it("allows the desktop file panel to grow past the previous max width limit", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return {
+          branch: "main",
+          ahead: 0,
+          behind: 0,
+          staged: [],
+          modified: [],
+          deleted: [],
+          untracked: [],
+        };
+      }
+
+      return [];
+    });
+
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedReadyWorkspaceState(store, {
+      "ws-test": {
+        id: "ws-test",
+        path: "/home/spencer/workspace/coder-studio",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+
+    const { container } = render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/workspace"]}>
+          <Routes>
+            <Route path="/workspace" element={<WorkspaceDesktopView />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>
+    );
+
+    await screen.findByTestId("file-tree-panel");
+
+    const leftSeparator = screen.getByRole("separator", { name: "Resize left panel" });
+    const leftPanel = container.querySelector(".left-panel");
+
+    expect(leftPanel).not.toBeNull();
+
+    fireEvent.mouseDown(leftSeparator, { clientX: 280 });
+    fireEvent.mouseMove(document, { clientX: 620 });
+    expect(leftPanel).toHaveStyle({ width: "620px" });
+
+    fireEvent.mouseUp(document);
+
+    await waitFor(() => {
+      expect(store.get(leftPanelWidthAtom)).toBe(620);
+    });
+  });
+
+  it("allows the bottom terminal panel to grow past the previous max height limit", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return {
+          branch: "main",
+          ahead: 0,
+          behind: 0,
+          staged: [],
+          modified: [],
+          deleted: [],
+          untracked: [],
+        };
+      }
+
+      return [];
+    });
+
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(terminalPanelVisibleAtom, true);
+    seedReadyWorkspaceState(store, {
+      "ws-test": {
+        id: "ws-test",
+        path: "/home/spencer/workspace/coder-studio",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+
+    const { container } = render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/workspace"]}>
+          <Routes>
+            <Route path="/workspace" element={<WorkspaceDesktopView />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>
+    );
+
+    await screen.findByTestId("terminal-panel");
+
+    const bottomSeparator = screen.getByRole("separator", { name: "Resize bottom panel" });
+    const bottomPanel = container.querySelector(".workspace-bottom-panel");
+
+    expect(bottomPanel).not.toBeNull();
+
+    fireEvent.mouseDown(bottomSeparator, { clientY: 400 });
+    fireEvent.mouseMove(document, { clientY: 100 });
+    expect(bottomPanel).toHaveStyle({ height: "500px" });
+
+    fireEvent.mouseUp(document);
+
+    await waitFor(() => {
+      expect(store.get(bottomPanelHeightAtom)).toBe(500);
+    });
   });
 });

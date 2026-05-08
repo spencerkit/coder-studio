@@ -1,54 +1,52 @@
-import { useAtomValue, useSetAtom } from "jotai";
-import { ChevronDown, GitBranch } from "lucide-react";
-import { useState } from "react";
+import { ChevronsUp, FilePlus, FolderPlus } from "lucide-react";
 import { useTranslation } from "../../../../lib/i18n";
 import {
   CodeEditorHost,
   type CodeEditorState,
 } from "../../../code-editor/views/shared/code-editor-host";
+import type { CreateRequest } from "../../actions/use-file-actions";
 import { useGitDiffViewerActions } from "../../actions/use-git-actions";
 import type { MobileFilesRoute } from "../../actions/use-workspace-screen-model";
-import { branchQuickPickAtom, gitStateAtomFamily } from "../../atoms";
 import { FileTreePanel } from "../shared/file-tree-panel";
 import { GitDiffViewer } from "../shared/git-diff-viewer";
 import { GitPanel } from "../shared/git-panel";
-import { GitStatusBar } from "../shared/git-status-bar";
 
 interface MobileFilesSheetProps {
   workspaceId: string;
   route: MobileFilesRoute;
+  activeTab: "files" | "git";
+  createRequest?: CreateRequest | null;
+  onCreateRequestConsumed?: () => void;
+  collapseVersion?: number;
+  onCreateFile?: () => void;
+  onCreateFolder?: () => void;
+  onCollapseAll?: () => void;
   onRouteChange?: (route: MobileFilesRoute) => void;
+  onTabChange?: (tab: "files" | "git") => void;
   onCloseSheet?: () => void;
-  detailBackMode?: "sheet" | "inline";
   editorState?: CodeEditorState;
 }
 
 export function MobileFilesSheet({
   workspaceId,
   route,
+  activeTab,
+  createRequest = null,
+  onCreateRequestConsumed,
+  collapseVersion = 0,
+  onCreateFile,
+  onCreateFolder,
+  onCollapseAll,
   onRouteChange,
+  onTabChange,
   onCloseSheet,
-  detailBackMode = "inline",
   editorState,
 }: MobileFilesSheetProps) {
   const t = useTranslation();
-  const gitState = useAtomValue(gitStateAtomFamily(workspaceId));
-  const setBranchQuickPick = useSetAtom(branchQuickPickAtom);
-  const [activeTab, setActiveTab] = useState<"files" | "git">("files");
-  const [panelRefreshToken, setPanelRefreshToken] = useState(0);
   const { closePreview } = useGitDiffViewerActions(workspaceId);
-  const branchName = gitState?.branch?.trim() || t("git.no_branch");
-
-  const handleSelectFile = (path: string) => {
-    onRouteChange?.({ kind: "editor", path });
-  };
 
   const handlePreviewChange = (preview: { path: string }) => {
     onRouteChange?.({ kind: "diff", path: preview.path });
-  };
-
-  const handleBack = () => {
-    onRouteChange?.({ kind: "root" });
   };
 
   const handleCloseDiff = () => {
@@ -56,33 +54,9 @@ export function MobileFilesSheet({
     onCloseSheet?.();
   };
 
-  const handleOpenBranchSwitcher = () => {
-    setBranchQuickPick({
-      visible: true,
-      workspaceId,
-      inputValue: "",
-    });
-  };
-
-  const handleRefreshPanel = () => {
-    setPanelRefreshToken((previous) => previous + 1);
-  };
-
   if (route.kind === "editor") {
     return (
       <div className="mobile-files-sheet">
-        {detailBackMode === "inline" ? (
-          <div className="mobile-files-sheet__detail-toolbar">
-            <button
-              type="button"
-              className="mobile-files-sheet__back"
-              aria-label={t("action.back")}
-              onClick={handleBack}
-            >
-              {t("action.back")}
-            </button>
-          </div>
-        ) : null}
         <div className="mobile-files-sheet__detail">
           <CodeEditorHost chrome="content-only" editorState={editorState} />
         </div>
@@ -93,18 +67,6 @@ export function MobileFilesSheet({
   if (route.kind === "diff") {
     return (
       <div className="mobile-files-sheet">
-        {detailBackMode === "inline" ? (
-          <div className="mobile-files-sheet__detail-toolbar">
-            <button
-              type="button"
-              className="mobile-files-sheet__back"
-              aria-label={t("action.back")}
-              onClick={handleBack}
-            >
-              {t("action.back")}
-            </button>
-          </div>
-        ) : null}
         <div className="mobile-files-sheet__detail">
           <GitDiffViewer
             workspaceId={workspaceId}
@@ -117,30 +79,10 @@ export function MobileFilesSheet({
   }
 
   return (
-    <div className="mobile-files-sheet">
-      <div className="mobile-files-sheet__branch-row">
-        <button
-          className="panel-branch panel-branch-button mobile-files-sheet__branch"
-          onClick={handleOpenBranchSwitcher}
-          aria-label={`${t("git.current_branch")}: ${branchName}`}
-          title={branchName}
-          type="button"
-        >
-          <span className="mobile-files-sheet__branch-icon" aria-hidden="true">
-            <GitBranch size={12} />
-          </span>
-          <span className="mobile-files-sheet__branch-copy">
-            <span className="mobile-files-sheet__branch-label">{t("git.current_branch")}</span>
-            <span className="mobile-files-sheet__branch-name">{branchName}</span>
-          </span>
-          <span className="mobile-files-sheet__branch-chevron" aria-hidden="true">
-            <ChevronDown size={14} />
-          </span>
-        </button>
-      </div>
-      <div className="panel-tabs-row mobile-files-sheet__tabs-row">
+    <div className="mobile-files-sheet mobile-files-sheet--root">
+      <div className="mobile-files-sheet__segmented">
         <div
-          className="panel-tabs mobile-files-sheet__tabs"
+          className="mobile-files-sheet__tabs"
           role="tablist"
           aria-label={t("mobile.files.tabs")}
         >
@@ -148,41 +90,70 @@ export function MobileFilesSheet({
             type="button"
             role="tab"
             aria-selected={activeTab === "files"}
-            className={`panel-tab ${activeTab === "files" ? "active" : ""}`}
-            onClick={() => setActiveTab("files")}
+            className={`mobile-files-sheet__segment ${activeTab === "files" ? "active" : ""}`}
+            onClick={() => onTabChange?.("files")}
           >
-            {t("file.title")}
+            <span>{t("file.title")}</span>
           </button>
           <button
             type="button"
             role="tab"
             aria-selected={activeTab === "git"}
-            className={`panel-tab ${activeTab === "git" ? "active" : ""}`}
-            onClick={() => setActiveTab("git")}
+            className={`mobile-files-sheet__segment ${activeTab === "git" ? "active" : ""}`}
+            onClick={() => onTabChange?.("git")}
           >
-            {t("label.git")}
+            <span>{t("label.git")}</span>
           </button>
         </div>
-        <GitStatusBar
-          workspaceId={workspaceId}
-          gitState={gitState}
-          inline
-          onRefresh={handleRefreshPanel}
-        />
+
+        {activeTab === "files" ? (
+          <div className="mobile-files-sheet__tab-actions">
+            <button
+              type="button"
+              className="mobile-files-sheet__tab-action"
+              aria-label={t("file.new_file")}
+              title={t("file.new_file")}
+              onClick={onCreateFile}
+            >
+              <FilePlus size={14} />
+            </button>
+            <button
+              type="button"
+              className="mobile-files-sheet__tab-action"
+              aria-label={t("file.new_folder")}
+              title={t("file.new_folder")}
+              onClick={onCreateFolder}
+            >
+              <FolderPlus size={14} />
+            </button>
+            <button
+              type="button"
+              className="mobile-files-sheet__tab-action"
+              aria-label={t("file.collapse_all")}
+              title={t("file.collapse_all")}
+              onClick={onCollapseAll}
+            >
+              <ChevronsUp size={14} />
+            </button>
+          </div>
+        ) : null}
       </div>
 
       <div className="mobile-files-sheet__content">
         {activeTab === "files" ? (
           <FileTreePanel
             workspaceId={workspaceId}
-            refreshToken={panelRefreshToken}
-            onSelectFile={handleSelectFile}
+            createRequest={createRequest}
+            onCreateRequestConsumed={onCreateRequestConsumed}
+            onSelectFile={(path) => onRouteChange?.({ kind: "editor", path })}
+            collapseVersion={collapseVersion}
+            variant="mobile"
           />
         ) : (
           <GitPanel
             workspaceId={workspaceId}
-            refreshToken={panelRefreshToken}
             onPreviewOpen={handlePreviewChange}
+            variant="mobile"
           />
         )}
       </div>
