@@ -19,6 +19,7 @@ import { AlertTriangle, ChevronDown, ChevronUp, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { connectionStatusAtom, dispatchCommandAtom } from "../../atoms/connection";
+import { Notice } from "../../components/ui";
 import { useViewport } from "../../hooks/use-viewport";
 import { useTranslation } from "../../lib/i18n";
 
@@ -325,7 +326,9 @@ export function ConfigDriftBanner({
         </ul>
       )}
 
-      {notice && <div className="config-drift-banner__notice">{notice}</div>}
+      {notice ? (
+        <Notice className="config-drift-banner__notice" message={notice} tone="warning" />
+      ) : null}
     </div>
   );
 }

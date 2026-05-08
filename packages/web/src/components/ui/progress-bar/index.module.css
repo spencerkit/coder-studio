@@ -1,0 +1,58 @@
+.root {
+  height: 3px;
+  background: rgba(108, 182, 255, 0.08);
+  overflow: hidden;
+}
+
+.fill {
+  height: 100%;
+  width: var(--progress-bar-width, 0%);
+  background: var(--progress-bar-color, var(--accent-blue));
+  transition: width var(--duration-slower) var(--ease-out);
+}
+
+.success {
+  --progress-bar-color: var(--accent-green);
+}
+
+.warning {
+  --progress-bar-color: var(--accent-amber);
+}
+
+.error {
+  --progress-bar-color: var(--color-error);
+}
+
+.info {
+  --progress-bar-color: var(--accent-blue);
+}
+
+.neutral {
+  --progress-bar-color: var(--text-tertiary);
+}
+
+.indeterminate .fill {
+  position: relative;
+  width: 100%;
+  background: transparent;
+  overflow: hidden;
+}
+
+.indeterminate .fill::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 40%;
+  background: var(--progress-bar-color, var(--accent-blue));
+  animation: progressBarIndeterminate 1.2s var(--ease-out) infinite;
+}
+
+@keyframes progressBarIndeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+
+  100% {
+    transform: translateX(250%);
+  }
+}

@@ -1,6 +1,7 @@
 import { useSetAtom } from "jotai";
 import { FilePlus, FolderPlus, GitBranch, RefreshCw } from "lucide-react";
 import { type FC, useRef } from "react";
+import { Tab, TabList, Tabs } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { AgentPanes } from "../../../agent-panes";
 import { CodeEditorHost } from "../../../code-editor/views/shared/code-editor-host";
@@ -85,20 +86,20 @@ export const WorkspaceDesktopView: FC = () => {
                     <span>{panelBranch}</span>
                   </button>
                   <div className="panel-tabs-row">
-                    <div className="panel-tabs">
-                      <button
-                        className={`panel-tab ${sidebarTab === "files" ? "active" : ""}`}
-                        onClick={() => setSidebarTab("files")}
-                      >
-                        Files
-                      </button>
-                      <button
-                        className={`panel-tab ${sidebarTab === "git" ? "active" : ""}`}
-                        onClick={() => setSidebarTab("git")}
-                      >
-                        {t("label.git")}
-                      </button>
-                    </div>
+                    <Tabs
+                      aria-label="Workspace sections"
+                      onValueChange={setSidebarTab}
+                      value={sidebarTab}
+                    >
+                      <TabList className="panel-tabs">
+                        <Tab className="panel-tab" value="files">
+                          Files
+                        </Tab>
+                        <Tab className="panel-tab" value="git">
+                          {t("label.git")}
+                        </Tab>
+                      </TabList>
+                    </Tabs>
                     <GitStatusBar workspaceId={workspace.id} gitState={gitState} inline />
                   </div>
                 </div>

@@ -1,6 +1,7 @@
 import { useStore } from "jotai";
 import { ChevronDown, Plus, Terminal, X } from "lucide-react";
 import { useState } from "react";
+import { Button, EmptyState } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { MobileSelectSheet } from "../../../mobile-select";
 import { useTerminalActions } from "../../actions/use-terminal-actions";
@@ -171,15 +172,22 @@ export function TerminalPanel({ chrome = "default" }: TerminalPanelProps) {
 
       <div className="bottom-terminal-content">
         {!hasTerminals ? (
-          <div className="bottom-terminal-empty">
-            <Terminal size={32} className="bottom-terminal-empty-icon" />
-            <p className="bottom-terminal-empty-text">{t("terminal.no_terminal")}</p>
-            <p className="bottom-terminal-empty-hint">{t("terminal.empty_hint")}</p>
-            <button className="btn btn-primary btn-sm" onClick={handleCreateTerminal}>
-              <Plus size={14} />
-              <span>{t("terminal.new_terminal")}</span>
-            </button>
-          </div>
+          <EmptyState
+            action={
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleCreateTerminal}
+                leadingIcon={<Plus size={14} />}
+              >
+                {t("terminal.new_terminal")}
+              </Button>
+            }
+            className="bottom-terminal-empty"
+            description={<p className="bottom-terminal-empty-hint">{t("terminal.empty_hint")}</p>}
+            icon={<Terminal size={32} className="bottom-terminal-empty-icon" />}
+            title={<p className="bottom-terminal-empty-text">{t("terminal.no_terminal")}</p>}
+          />
         ) : (
           <>
             {showTabs ? (

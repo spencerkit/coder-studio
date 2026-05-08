@@ -1,6 +1,6 @@
-import { AlertTriangle, ChevronDown, Eye, Pencil, PowerOff } from "lucide-react";
+import { AlertTriangle, Eye, Pencil, PowerOff } from "lucide-react";
 import { useId } from "react";
-import { Textarea } from "../../../../components/ui";
+import { Select, Textarea } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import {
   OBJECTIVE_DIALOG_EVALUATOR_OPTIONS,
@@ -15,10 +15,6 @@ interface ObjectiveDialogContentProps {
   disableObjective: string;
   onDraftObjectiveChange: (value: string) => void;
   onDraftEvaluatorProviderChange: (value: ObjectiveDialogEvaluatorProviderId) => void;
-  mobileEvaluatorPicker?: {
-    onOpen: () => void;
-    isMobile: boolean;
-  };
 }
 
 export function ObjectiveDialogModeIcon({ mode }: { mode: ObjectiveDialogMode }) {
@@ -34,15 +30,10 @@ export function ObjectiveDialogContent({
   disableObjective,
   onDraftObjectiveChange,
   onDraftEvaluatorProviderChange,
-  mobileEvaluatorPicker,
 }: ObjectiveDialogContentProps) {
   const t = useTranslation();
   const evaluatorLabelId = useId();
   const evaluatorHelperId = useId();
-  const evaluatorValueId = useId();
-  const selectedEvaluatorLabel =
-    OBJECTIVE_DIALOG_EVALUATOR_OPTIONS.find((option) => option.id === draftEvaluatorProviderId)
-      ?.label ?? draftEvaluatorProviderId;
 
   if (mode === "disable") {
     return (
@@ -78,49 +69,25 @@ export function ObjectiveDialogContent({
       </div>
 
       <div className="form-group">
-        <label
-          id={evaluatorLabelId}
-          htmlFor={
-            mobileEvaluatorPicker?.isMobile ? "evaluator-provider-trigger" : "evaluator-provider"
-          }
-        >
+        <label id={evaluatorLabelId} htmlFor="evaluator-provider">
           {t("supervisor.field.evaluator")}
         </label>
-        {mobileEvaluatorPicker?.isMobile ? (
-          <>
-            <button
-              id="evaluator-provider-trigger"
-              type="button"
-              className="input mobile-select-trigger"
-              aria-labelledby={`${evaluatorLabelId} ${evaluatorValueId}`}
-              aria-describedby={evaluatorHelperId}
-              aria-haspopup="dialog"
-              onClick={mobileEvaluatorPicker.onOpen}
-            >
-              <span id={evaluatorValueId} className="mobile-select-trigger__value">
-                {selectedEvaluatorLabel}
-              </span>
-              <ChevronDown size={16} className="mobile-select-trigger__icon" aria-hidden="true" />
-            </button>
-          </>
-        ) : (
-          <select
-            id="evaluator-provider"
-            className="input"
-            value={draftEvaluatorProviderId}
-            onChange={(event) =>
-              onDraftEvaluatorProviderChange(
-                event.target.value as ObjectiveDialogEvaluatorProviderId
-              )
-            }
-          >
-            {OBJECTIVE_DIALOG_EVALUATOR_OPTIONS.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        )}
+        <Select
+          id="evaluator-provider"
+          aria-describedby={evaluatorHelperId}
+          aria-labelledby={evaluatorLabelId}
+          className="mobile-select-trigger"
+          iconClassName="mobile-select-trigger__icon"
+          options={OBJECTIVE_DIALOG_EVALUATOR_OPTIONS.map((option) => ({
+            label: option.label,
+            value: option.id,
+          }))}
+          value={draftEvaluatorProviderId}
+          valueClassName="mobile-select-trigger__value"
+          onChange={(nextValue) =>
+            onDraftEvaluatorProviderChange(nextValue as ObjectiveDialogEvaluatorProviderId)
+          }
+        />
         <span id={evaluatorHelperId} className="dialog-helper">
           {t("supervisor.field.evaluator_helper")}
         </span>

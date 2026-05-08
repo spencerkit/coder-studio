@@ -1,4 +1,13 @@
 import { X } from "lucide-react";
+import {
+  Button,
+  IconButton,
+  Modal,
+  ModalBody,
+  ModalFooter,
+  ModalHeader,
+  ModalTitle,
+} from "../../../../components/ui";
 import { useViewport } from "../../../../hooks/use-viewport";
 import { useTranslation } from "../../../../lib/i18n";
 import { useObjectiveDialogState } from "../../actions/use-objective-dialog-state";
@@ -29,55 +38,50 @@ export function ObjectiveDialog({ workspaceId, sessionId }: ObjectiveDialogProps
   }
 
   return (
-    <div className="modal-overlay" onClick={close}>
-      <div
-        className="modal-card supervisor-dialog"
-        data-mode={mode}
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="modal-header">
-          <div className="supervisor-dialog-header">
-            <span className="supervisor-dialog-header-icon" aria-hidden="true">
-              <ObjectiveDialogModeIcon mode={mode} />
-            </span>
-            <div>
-              <h3>{copy.title}</h3>
-              <span className="supervisor-dialog-subtitle">{copy.subtitle}</span>
-            </div>
+    <Modal className={`supervisor-dialog supervisor-dialog--${mode}`} onOpenChange={close} open>
+      <ModalHeader>
+        <div className="supervisor-dialog-header">
+          <span className="supervisor-dialog-header-icon" aria-hidden="true">
+            <ObjectiveDialogModeIcon mode={mode} />
+          </span>
+          <div>
+            <ModalTitle>{copy.title}</ModalTitle>
+            <span className="supervisor-dialog-subtitle">{copy.subtitle}</span>
           </div>
-          <button className="btn btn-ghost btn-sm" onClick={close} aria-label={t("action.close")}>
-            <X size={14} />
-          </button>
         </div>
+        <IconButton
+          aria-label={t("action.close")}
+          icon={<X size={14} />}
+          onClick={close}
+          size="sm"
+        />
+      </ModalHeader>
 
-        <div className="modal-body">
-          <ObjectiveDialogContent
-            mode={mode}
-            draftObjective={dialog.draftObjective}
-            draftEvaluatorProviderId={dialog.draftEvaluatorProviderId}
-            disableObjective={disableObjective}
-            onDraftObjectiveChange={(draftObjective) => updateDraft({ draftObjective })}
-            onDraftEvaluatorProviderChange={(draftEvaluatorProviderId) =>
-              updateDraft({ draftEvaluatorProviderId })
-            }
-          />
-        </div>
+      <ModalBody>
+        <ObjectiveDialogContent
+          mode={mode}
+          draftObjective={dialog.draftObjective}
+          draftEvaluatorProviderId={dialog.draftEvaluatorProviderId}
+          disableObjective={disableObjective}
+          onDraftObjectiveChange={(draftObjective) => updateDraft({ draftObjective })}
+          onDraftEvaluatorProviderChange={(draftEvaluatorProviderId) =>
+            updateDraft({ draftEvaluatorProviderId })
+          }
+        />
+      </ModalBody>
 
-        <div className="modal-footer">
-          <button className="btn btn-secondary" onClick={close}>
-            {t("action.cancel")}
-          </button>
-          <button
-            className={`btn ${isDisable ? "btn-danger" : "btn-primary"}`}
-            onClick={() => {
-              void confirm();
-            }}
-            disabled={!isDisable && !dialog.draftObjective.trim()}
-          >
-            {copy.confirm}
-          </button>
-        </div>
-      </div>
-    </div>
+      <ModalFooter>
+        <Button onClick={close}>{t("action.cancel")}</Button>
+        <Button
+          variant={isDisable ? "danger" : "primary"}
+          onClick={() => {
+            void confirm();
+          }}
+          disabled={!isDisable && !dialog.draftObjective.trim()}
+        >
+          {copy.confirm}
+        </Button>
+      </ModalFooter>
+    </Modal>
   );
 }

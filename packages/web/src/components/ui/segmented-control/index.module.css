@@ -1,0 +1,110 @@
+.segmentedControl,
+:global(.settings-provider-tabs),
+:global(.settings-provider-subnav),
+:global(.shortcuts-category-tabs) {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+
+.segmentedControl {
+  padding: var(--sp-1);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--bg-surface) 94%, var(--bg-page));
+  border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+}
+
+.segmentedControlOption,
+:global(.settings-provider-tab),
+:global(.settings-provider-subnav-button),
+:global(.shortcuts-category-tab) {
+  min-width: 0;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  line-height: 1.2;
+}
+
+.segmentedControlOption[data-size="sm"],
+:global(.shortcuts-category-tab) {
+  min-height: max(var(--touch-target-min), 36px);
+  padding: var(--sp-2) var(--sp-3);
+}
+
+.segmentedControlOption[data-size="md"],
+:global(.settings-provider-tab),
+:global(.settings-provider-subnav-button) {
+  min-height: max(var(--touch-target-min), 40px);
+  padding: var(--sp-2) var(--sp-4);
+}
+
+.segmentedControlOption:hover,
+:global(.settings-provider-tab:hover),
+:global(.settings-provider-subnav-button:hover),
+:global(.shortcuts-category-tab:hover) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.segmentedControlOption[data-state="active"],
+:global(.settings-provider-tab.active),
+:global(.settings-provider-subnav-button.active),
+:global(.shortcuts-category-tab.active) {
+  background: var(--bg-active);
+  border-color: color-mix(in srgb, var(--accent-blue) 56%, var(--border));
+  color: var(--text-primary);
+}
+
+:global(.settings-provider-tabs) {
+  margin-bottom: var(--sp-6);
+}
+
+:global(.settings-provider-subnav) {
+  display: flex;
+  width: 100%;
+  margin-bottom: var(--sp-6);
+  padding-bottom: var(--sp-3);
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  border-top: none;
+  border-left: none;
+  border-right: none;
+  padding-left: 0;
+  padding-right: 0;
+  padding-top: 0;
+}
+
+:global(.settings-provider-tab) {
+  background: var(--bg-surface);
+  border-color: var(--border);
+}
+
+:global(.settings-provider-tab.active) {
+  border-color: var(--accent-blue);
+}
+
+:global(.settings-provider-subnav-button) {
+  background: transparent;
+}
+
+:global(.settings-provider-subnav-button.active) {
+  background: var(--bg-hover);
+  border-color: var(--border-light);
+}
+
+:global(.shortcuts-category-tabs) {
+  margin-bottom: var(--sp-4);
+}
+
+:global(.shortcuts-category-tab) {
+  background: var(--bg-hover);
+}
+
+:global(.shortcuts-category-tab.active) {
+  background: color-mix(in srgb, var(--accent-blue) 18%, var(--bg-surface));
+  border-color: transparent;
+}

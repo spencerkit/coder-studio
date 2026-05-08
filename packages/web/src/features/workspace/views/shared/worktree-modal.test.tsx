@@ -68,9 +68,55 @@ describe("WorktreeModal", () => {
 
     expect(document.querySelector(".modal-overlay")).toBeTruthy();
     expect(document.querySelector(".mobile-sheet")).toBeNull();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(screen.getByText("Latest Commit")).toBeInTheDocument();
     expect(screen.getByText("abc1234")).toBeInTheDocument();
     expect(screen.getByText("Initial mobile sheet setup")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Close" })).toHaveClass("btn", "btn-ghost", "btn-sm");
+  });
+
+  it("keeps the large modal size and tab content on desktop viewports", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({
+      status: {
+        branch: "feature/mobile-sheet",
+        ahead: 0,
+        behind: 0,
+        headSha: "abc1234567890",
+        headShortSha: "abc1234",
+        headSubject: "Initial mobile sheet setup",
+        staged: [],
+        modified: [],
+        untracked: [],
+        deleted: [],
+      },
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(activeWorkspaceIdAtom, "ws-1");
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <WorktreeModal worktree={worktree} onClose={vi.fn()} />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith("worktree.status", {
+        workspaceId: "ws-1",
+        worktreePath: "/tmp/coder-studio-feature",
+      });
+    });
+
+    expect(screen.getByRole("dialog")).toHaveClass("modal-card", "modal-card-lg");
+    expect(screen.getByRole("tablist", { name: "Worktree" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Status" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Status" })).toHaveClass("worktree-tab", "active");
+    expect(screen.getByText("Latest Commit")).toBeInTheDocument();
   });
 
   it("renders inside MobileSheet on mobile and still loads data when tabs change", async () => {
@@ -131,8 +177,11 @@ describe("WorktreeModal", () => {
 
     expect(document.querySelector(".mobile-sheet")).toBeTruthy();
     expect(document.querySelector(".modal-overlay")).toBeNull();
+    expect(
+      document.querySelector(".mobile-worktree-sheet__content .worktree-content")
+    ).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Diff" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Diff" }));
 
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith("worktree.diff", {
@@ -181,7 +230,7 @@ describe("WorktreeModal", () => {
       });
     });
 
-    expect(screen.getByRole("button", { name: "状态" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "状态" })).toBeInTheDocument();
     expect(screen.getByText("路径")).toBeInTheDocument();
     expect(screen.getByText("最新提交")).toBeInTheDocument();
     expect(screen.getByText("初始移动端面板")).toBeInTheDocument();

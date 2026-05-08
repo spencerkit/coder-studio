@@ -54,6 +54,77 @@ describe("ConfigDriftBanner", () => {
     expect(screen.getByText("boom")).toBeInTheDocument();
   });
 
+  it("renders cleanup feedback inside the shared notice shell", async () => {
+    const store = createStore();
+    const sendCommand = vi
+      .fn()
+      .mockResolvedValueOnce({
+        externalConfigAudit: {
+          codex: {
+            configPath: "/home/spencer/.codex/config.toml",
+            exists: true,
+            findings: [
+              {
+                id: "toml_notify",
+                type: "toml_notify",
+                severity: "warn",
+                startLine: 11,
+                endLine: 14,
+                snippet: 'notify = ["agent-notify", "codex"]',
+                message: "top-level notify conflicts with injected notify",
+              },
+            ],
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        removed: ["toml_notify"],
+        backupPath: "/tmp/config.toml.bak",
+        noop: false,
+        audit: {
+          codex: {
+            configPath: "/home/spencer/.codex/config.toml",
+            exists: true,
+            findings: [
+              {
+                id: "toml_notify",
+                type: "toml_notify",
+                severity: "warn",
+                startLine: 11,
+                endLine: 14,
+                snippet: 'notify = ["agent-notify", "codex"]',
+                message: "top-level notify conflicts with injected notify",
+              },
+            ],
+          },
+        },
+      });
+
+    store.set(connectionStatusAtom, "connected");
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <ConfigDriftBanner />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Codex 配置冲突（1 项）")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "清理选中的 1 项" }));
+
+    const notice = await screen.findByText(/清理完成，原文件已备份到 \/tmp\/config\.toml\.bak/);
+    const noticeShell = notice.closest(".config-drift-banner__notice");
+    expect(noticeShell).toBeTruthy();
+    expect(noticeShell).not.toHaveAttribute("role");
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
+  });
+
   it("renders a compact global summary on mobile and routes to settings for details", async () => {
     viewportMocks.viewport = "mobile";
 

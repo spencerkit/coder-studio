@@ -171,7 +171,9 @@ describe("WorkspacePage", () => {
     });
     fireEvent.click(branchButton);
 
-    expect(screen.getByRole("button", { name: "Git" })).toHaveClass("active");
+    expect(screen.getByRole("tablist", { name: "Workspace sections" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Git" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Git" })).toHaveClass("panel-tab", "active");
     expect(store.get(branchQuickPickAtom)).toEqual({
       visible: true,
       workspaceId: "ws-test",
@@ -376,7 +378,7 @@ describe("WorkspacePage", () => {
       </Provider>
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "Git" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Git" }));
 
     act(() => {
       store.set(gitDiffPreviewAtomFamily("ws-test"), {

@@ -1,5 +1,5 @@
 import { Topics } from "@coder-studio/core";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createStore, Provider } from "jotai";
 import { MemoryRouter } from "react-router-dom";
@@ -300,6 +300,55 @@ describe("TerminalPanel", () => {
     expect(screen.getByText("No terminals")).toBeInTheDocument();
     expect(screen.queryByTestId("xterm-host")).not.toBeInTheDocument();
     expect(consoleSpy).not.toHaveBeenCalled();
+  });
+
+  it("renders the empty-state create action with shared button compatibility classes", async () => {
+    const store = createStore();
+    const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
+      handlers.push(handler);
+      return () => {
+        handlers = handlers.filter((candidate) => candidate !== handler);
+      };
+    });
+    const sendCommand = vi.fn().mockResolvedValue([]);
+
+    seedReadyWorkspaceState(store, {
+      "ws-test": {
+        id: "ws-test",
+        path: "/tmp/ws-test",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+    store.set(bottomPanelHeightAtom, 240);
+    setEnglishLocale(store);
+    store.set(wsClientAtom, { subscribe, sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <TerminalPanel />
+      </Provider>
+    );
+
+    const emptyState = await screen.findByText("No terminals");
+    const emptyPanel = emptyState.closest(".bottom-terminal-empty");
+    expect(emptyPanel).not.toBeNull();
+    expect(document.querySelector(".bottom-terminal-empty")).toBeTruthy();
+    expect(
+      within(emptyPanel as HTMLElement).getByText(
+        "Launch a shell to inspect files, run commands, and verify changes without leaving the workspace."
+      )
+    ).toHaveClass("bottom-terminal-empty-hint");
+
+    expect(
+      within(emptyPanel as HTMLElement).getByRole("button", { name: "New Terminal" })
+    ).toHaveClass("btn", "btn-primary", "btn-sm");
   });
 
   it("caches terminal output to atom for shell terminals before xterm-host subscribes", async () => {

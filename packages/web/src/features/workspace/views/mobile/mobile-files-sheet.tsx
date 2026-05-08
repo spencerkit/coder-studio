@@ -1,6 +1,7 @@
 import { useAtomValue, useSetAtom } from "jotai";
 import { ChevronDown, GitBranch } from "lucide-react";
 import { useState } from "react";
+import { Tab, TabList, Tabs } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import {
   CodeEditorHost,
@@ -134,30 +135,16 @@ export function MobileFilesSheet({
         </button>
       </div>
       <div className="panel-tabs-row mobile-files-sheet__tabs-row">
-        <div
-          className="panel-tabs mobile-files-sheet__tabs"
-          role="tablist"
-          aria-label={t("mobile.files.tabs")}
-        >
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === "files"}
-            className={`panel-tab ${activeTab === "files" ? "active" : ""}`}
-            onClick={() => setActiveTab("files")}
-          >
-            {t("file.title")}
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === "git"}
-            className={`panel-tab ${activeTab === "git" ? "active" : ""}`}
-            onClick={() => setActiveTab("git")}
-          >
-            {t("label.git")}
-          </button>
-        </div>
+        <Tabs aria-label={t("mobile.files.tabs")} onValueChange={setActiveTab} value={activeTab}>
+          <TabList className="panel-tabs mobile-files-sheet__tabs">
+            <Tab className="panel-tab" value="files">
+              {t("file.title")}
+            </Tab>
+            <Tab className="panel-tab" value="git">
+              {t("label.git")}
+            </Tab>
+          </TabList>
+        </Tabs>
         <GitStatusBar workspaceId={workspaceId} gitState={gitState} inline />
       </div>
 

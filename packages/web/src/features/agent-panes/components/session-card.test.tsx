@@ -189,6 +189,30 @@ describe("SessionCard", () => {
     );
   });
 
+  it("renders a decorative session status strip with legacy session classes", () => {
+    const { store } = createSessionStore({
+      terminalId: "term-live",
+      state: "running",
+      endedAt: undefined,
+    });
+
+    const { container } = render(
+      <Provider store={store}>
+        <SessionCard sessionId="sess_123456" />
+      </Provider>
+    );
+
+    const progress = container.querySelector(".session-progress");
+    const fill = container.querySelector(".session-progress-bar.session-progress-running");
+
+    expect(progress).toHaveAttribute("aria-hidden", "true");
+    expect(progress).not.toHaveAttribute("role");
+    expect(progress).not.toHaveAttribute("aria-valuemin");
+    expect(progress).not.toHaveAttribute("aria-valuemax");
+    expect(progress).not.toHaveAttribute("aria-valuenow");
+    expect(fill).toHaveStyle({ "--progress-bar-width": "42%" });
+  });
+
   it("renders migrated provider and state tags with legacy badge compatibility classes", () => {
     const { store } = createSessionStore({
       terminalId: "term-live",

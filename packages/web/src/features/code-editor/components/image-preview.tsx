@@ -9,6 +9,7 @@
 
 import type { FC } from "react";
 import { useEffect, useState } from "react";
+import { EmptyState } from "../../../components/ui";
 
 interface ImagePreviewProps {
   url: string;
@@ -45,13 +46,16 @@ export const ImagePreview: FC<ImagePreviewProps> = ({ url, mime, sizeBytes, alt 
     <div className="image-preview">
       <div className="image-preview-canvas">
         {errored ? (
-          <div className="git-diff-empty">
-            <p className="git-diff-empty-title">Preview unavailable</p>
-            <p className="git-diff-empty-body">
-              The image could not be loaded. The file may have been moved or is larger than the
-              browser allows.
-            </p>
-          </div>
+          <EmptyState
+            className="git-diff-empty"
+            description={
+              <p className="git-diff-empty-body">
+                The image could not be loaded. The file may have been moved or is larger than the
+                browser allows.
+              </p>
+            }
+            title={<p className="git-diff-empty-title">Preview unavailable</p>}
+          />
         ) : (
           <img
             className="image-preview-img"

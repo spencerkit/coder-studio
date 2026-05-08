@@ -1,9 +1,8 @@
 import { ArrowUp, Folder, Home, X } from "lucide-react";
-import { Spinner } from "../../../../components/ui";
+import { Sheet, Spinner } from "../../../../components/ui";
 import { useViewport } from "../../../../hooks/use-viewport";
 import { useTranslation } from "../../../../lib/i18n";
 import { useWorkspaceLaunchActions } from "../../actions/use-workspace-launch-actions";
-import { MobileSheet } from "../mobile/mobile-sheet";
 
 interface WorkspaceLaunchModalProps {
   onClose: () => void;
@@ -127,7 +126,7 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
 
   if (isMobile) {
     return (
-      <MobileSheet
+      <Sheet
         kicker={t("workspace.launch.kicker")}
         title={launchTitle}
         body={launchBody}

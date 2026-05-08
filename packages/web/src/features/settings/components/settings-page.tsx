@@ -11,7 +11,7 @@ import {
 } from "@coder-studio/core";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { Check, ChevronRight } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { localeAtom, themeAtom } from "../../../atoms/app-ui";
 import {
@@ -20,7 +20,7 @@ import {
   serverInfoAtom,
 } from "../../../atoms/connection";
 import { resolvedActiveWorkspaceIdAtom } from "../../../atoms/workspaces";
-import { Input, Pill } from "../../../components/ui";
+import { Input, Notice, Pill, Switch } from "../../../components/ui";
 import { useViewport } from "../../../hooks/use-viewport";
 import { useTranslation } from "../../../lib/i18n";
 import { ConfigDriftBanner } from "../../config-drift-banner";
@@ -367,19 +367,14 @@ export function SettingsPage() {
             className={`settings-content ${isMobile ? "settings-content--mobile" : ""} ${contentLayoutMode === "fill-height" ? "settings-content--fill-height" : ""}`}
           >
             {settingsLoadError && (
-              <div className="settings-page__notice settings-page__notice--error" role="alert">
-                <div className="settings-page__notice-copy">
-                  <span className="settings-page__notice-title">{t("settings.load_failed")}</span>
-                  <span className="settings-page__notice-message">{settingsLoadError}</span>
-                </div>
-                <button
-                  type="button"
-                  className="settings-link"
-                  onClick={() => setSettingsRefreshKey((value) => value + 1)}
-                >
-                  {t("action.refresh")}
-                </button>
-              </div>
+              <Notice
+                actionLabel={t("action.refresh")}
+                message={settingsLoadError}
+                onAction={() => setSettingsRefreshKey((value) => value + 1)}
+                role="alert"
+                title={t("settings.load_failed")}
+                tone="error"
+              />
             )}
             <ConfigDriftBanner variant="embedded" showLoadError={!settingsLoadError} />
             {renderContent()}
@@ -451,6 +446,10 @@ function GeneralSettings({
   setSupervisorEvaluationTimeoutSec,
 }: GeneralSettingsProps) {
   const t = useTranslation();
+  const notificationsLabelId = useId();
+  const notificationsDescId = useId();
+  const soundLabelId = useId();
+  const soundDescId = useId();
   const dispatch = useAtomValue(dispatchCommandAtom);
   const setNotificationPreferences = useSetAtom(notificationPreferencesAtom);
   const [notificationPermission, setNotificationPermission] =
@@ -539,49 +538,53 @@ function GeneralSettings({
 
         <div className="settings-toggle-row">
           <div className="settings-toggle-info">
-            <span className="settings-toggle-label">{t("settings.notifications_enabled")}</span>
-            <span className="settings-toggle-desc">{t("settings.notifications_enabled_hint")}</span>
+            <span className="settings-toggle-label" id={notificationsLabelId}>
+              {t("settings.notifications_enabled")}
+            </span>
+            <span className="settings-toggle-desc" id={notificationsDescId}>
+              {t("settings.notifications_enabled_hint")}
+            </span>
           </div>
-          <label className="settings-toggle">
-            <input
-              type="checkbox"
-              checked={notificationsEnabled}
-              onChange={(e) => {
-                const nextEnabled = e.target.checked;
-                setNotificationsEnabled(nextEnabled);
-                syncNotificationPreferences({
-                  enabled: nextEnabled,
-                  soundEnabled,
-                });
-                void saveSettings({ notifications: { enabled: nextEnabled } });
-              }}
-            />
-            <span className="settings-toggle-slider" />
-          </label>
+          <Switch
+            aria-describedby={notificationsDescId}
+            aria-labelledby={notificationsLabelId}
+            checked={notificationsEnabled}
+            className="settings-toggle"
+            onCheckedChange={(nextEnabled) => {
+              setNotificationsEnabled(nextEnabled);
+              syncNotificationPreferences({
+                enabled: nextEnabled,
+                soundEnabled,
+              });
+              void saveSettings({ notifications: { enabled: nextEnabled } });
+            }}
+          />
         </div>
 
         <div className="settings-toggle-row">
           <div className="settings-toggle-info">
-            <span className="settings-toggle-label">{t("settings.notification_sound")}</span>
-            <span className="settings-toggle-desc">{t("settings.notification_sound_hint")}</span>
+            <span className="settings-toggle-label" id={soundLabelId}>
+              {t("settings.notification_sound")}
+            </span>
+            <span className="settings-toggle-desc" id={soundDescId}>
+              {t("settings.notification_sound_hint")}
+            </span>
           </div>
-          <label className="settings-toggle">
-            <input
-              type="checkbox"
-              checked={soundEnabled}
-              onChange={(e) => {
-                const nextSoundEnabled = e.target.checked;
-                setSoundEnabled(nextSoundEnabled);
-                syncNotificationPreferences({
-                  enabled: notificationsEnabled,
-                  soundEnabled: nextSoundEnabled,
-                });
-                void saveSettings({ notifications: { soundEnabled: nextSoundEnabled } });
-              }}
-              disabled={!notificationsEnabled}
-            />
-            <span className="settings-toggle-slider" />
-          </label>
+          <Switch
+            aria-describedby={soundDescId}
+            aria-labelledby={soundLabelId}
+            checked={soundEnabled}
+            className="settings-toggle"
+            disabled={!notificationsEnabled}
+            onCheckedChange={(nextSoundEnabled) => {
+              setSoundEnabled(nextSoundEnabled);
+              syncNotificationPreferences({
+                enabled: notificationsEnabled,
+                soundEnabled: nextSoundEnabled,
+              });
+              void saveSettings({ notifications: { soundEnabled: nextSoundEnabled } });
+            }}
+          />
         </div>
 
         <div className="settings-info-row">

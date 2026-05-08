@@ -1,8 +1,19 @@
 import type { WorktreeInfo } from "@coder-studio/core";
+import { X } from "lucide-react";
+import {
+  IconButton,
+  Modal,
+  ModalBody,
+  ModalHeader,
+  ModalTitle,
+  Sheet,
+  Tab,
+  TabList,
+  Tabs,
+} from "../../../../components/ui";
 import { useViewport } from "../../../../hooks/use-viewport";
 import { useTranslation } from "../../../../lib/i18n";
 import { useWorktreeActions } from "../../actions/use-workspace-launch-actions";
-import { MobileSheet } from "../mobile/mobile-sheet";
 
 type TabType = "status" | "diff" | "tree";
 
@@ -38,25 +49,23 @@ export function WorktreeModal({ worktree, onClose }: WorktreeModalProps) {
   );
 
   const worktreeTabs = (
-    <div className={`modal-tabs${isMobile ? " mobile-worktree-sheet__tabs" : ""}`}>
-      {(["status", "diff", "tree"] as TabType[]).map((tab) => (
-        <button
-          key={tab}
-          className={`modal-tab ${activeTab === tab ? "active" : ""}`}
-          onClick={() => handleTabChange(tab)}
-        >
-          {tab === "status"
-            ? t("worktree.status_tab")
-            : tab === "diff"
-              ? t("worktree.diff_tab")
-              : t("worktree.tree_tab")}
-        </button>
-      ))}
-    </div>
+    <Tabs aria-label={t("worktree.title")} onValueChange={handleTabChange} value={activeTab}>
+      <TabList className={`worktree-tabs${isMobile ? " mobile-worktree-sheet__tabs" : ""}`}>
+        {(["status", "diff", "tree"] as TabType[]).map((tab) => (
+          <Tab key={tab} className="worktree-tab" value={tab}>
+            {tab === "status"
+              ? t("worktree.status_tab")
+              : tab === "diff"
+                ? t("worktree.diff_tab")
+                : t("worktree.tree_tab")}
+          </Tab>
+        ))}
+      </TabList>
+    </Tabs>
   );
 
   const worktreeContent = (
-    <div className="modal-body worktree-content">
+    <div className="worktree-content">
       {error && <div className="worktree-error">{error}</div>}
       {loading ? (
         <div className="worktree-loading">{t("worktree.loading")}</div>
@@ -151,7 +160,7 @@ export function WorktreeModal({ worktree, onClose }: WorktreeModalProps) {
 
   if (isMobile) {
     return (
-      <MobileSheet
+      <Sheet
         kicker={t("worktree.title").toUpperCase()}
         title={worktree.name}
         body={
@@ -169,21 +178,22 @@ export function WorktreeModal({ worktree, onClose }: WorktreeModalProps) {
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card modal-card-lg" onClick={(event) => event.stopPropagation()}>
-        <div className="modal-header">
-          <div className="worktree-header-info">
-            <h3>{worktree.name}</h3>
-            {worktreeSummary}
-          </div>
-          <button className="btn btn-ghost btn-sm" onClick={onClose}>
-            ✕
-          </button>
+    <Modal className="worktree-modal" onOpenChange={onClose} open size="lg">
+      <ModalHeader>
+        <div className="worktree-header-info">
+          <ModalTitle>{worktree.name}</ModalTitle>
+          {worktreeSummary}
         </div>
+        <IconButton
+          aria-label={t("action.close")}
+          icon={<X size={14} />}
+          onClick={onClose}
+          size="sm"
+        />
+      </ModalHeader>
 
-        {worktreeTabs}
-        {worktreeContent}
-      </div>
-    </div>
+      {worktreeTabs}
+      <ModalBody>{worktreeContent}</ModalBody>
+    </Modal>
   );
 }

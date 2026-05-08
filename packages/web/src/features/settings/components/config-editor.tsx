@@ -16,12 +16,12 @@ import {
   ChevronUp,
   Circle,
   FileJson2,
-  RefreshCw,
   Sparkles,
   XCircle,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { dispatchCommandAtom } from "../../../atoms/connection";
+import { Button, EmptyState, Spinner } from "../../../components/ui";
 import { useTranslation } from "../../../lib/i18n";
 import { MonacoHost } from "../../code-editor/components/monaco-host";
 import { pushToastAtom } from "../../notifications/atoms";
@@ -145,6 +145,7 @@ export function ConfigEditor({
             ? t("settings.config_files.backup_created", { path: result.data.backupPath })
             : undefined,
         });
+        setFileExists(true);
         setOriginalContent(content);
         setError(null);
       } else {
@@ -205,19 +206,31 @@ export function ConfigEditor({
 
   // Status indicator component
   const StatusIndicator = () => {
+    if (!fileExists && !isSaving && !error && !isDirty) {
+      return (
+        <div className="config-status config-status--warning">
+          <Circle size={14} />
+          <span>{t("settings.config_files.file_not_found_hint")}</span>
+        </div>
+      );
+    }
+
     const statusConfig = {
       saved: { icon: CheckCircle, color: "success", text: t("settings.config_files.status_saved") },
       dirty: { icon: Circle, color: "warning", text: t("settings.config_files.unsaved_changes") },
-      saving: { icon: RefreshCw, color: "info", text: t("settings.config_files.saving") },
+      saving: { color: "info", text: t("settings.config_files.saving") },
       error: { icon: XCircle, color: "error", text: t("settings.config_files.save_failed") },
     };
 
     const config = statusConfig[saveStatus];
-    const Icon = config.icon;
 
     return (
       <div className={`config-status config-status--${config.color}`}>
-        <Icon size={14} className={saveStatus === "saving" ? "animate-spin" : ""} />
+        {saveStatus === "saving" ? (
+          <Spinner label={config.text} size="sm" />
+        ) : (
+          <config.icon size={14} />
+        )}
         <span>{config.text}</span>
       </div>
     );
@@ -261,60 +274,60 @@ export function ConfigEditor({
       {isExpanded && (
         <div className={`config-card-body ${fillHeight ? "config-card-body--fill-height" : ""}`}>
           {!fileExists && (
-            <div className="config-empty-state">
-              <div className="config-empty-icon">📭</div>
-              <div className="config-empty-title">{t("settings.config_files.file_not_found")}</div>
-              <div className="config-empty-desc">
-                {t("settings.config_files.file_not_found_hint")}
-              </div>
+            <EmptyState
+              className="config-empty-state"
+              description={
+                <div className="config-empty-desc">
+                  {t("settings.config_files.file_not_found_hint")}
+                </div>
+              }
+              icon={<div className="config-empty-icon">📭</div>}
+              title={
+                <div className="config-empty-title">
+                  {t("settings.config_files.file_not_found")}
+                </div>
+              }
+            />
+          )}
+
+          <MonacoHost
+            workspaceId={`config-editor-${configType}`}
+            filePath={configPath}
+            content={content}
+            onContentChange={handleContentChange}
+            visible={visible}
+          />
+
+          {/* Actions */}
+          <div className="config-card-actions">
+            <div className="config-actions-left">
+              <StatusIndicator />
             </div>
-          )}
 
-          {fileExists && (
-            <>
-              <MonacoHost
-                workspaceId={`config-editor-${configType}`}
-                filePath={configPath}
-                content={content}
-                onContentChange={handleContentChange}
-                visible={visible}
-              />
-
-              {/* Actions */}
-              <div className="config-card-actions">
-                <div className="config-actions-left">
-                  <StatusIndicator />
-                </div>
-
-                <div className="config-actions-right">
-                  {configType === "claude" && (
-                    <button
-                      className="btn btn-secondary btn-sm"
-                      onClick={handleFormat}
-                      title={t("settings.config_files.format_hint")}
-                    >
-                      <Sparkles size={14} />
-                      <span>{t("settings.config_files.format")}</span>
-                    </button>
-                  )}
-                  <button
-                    className="btn btn-secondary btn-sm"
-                    onClick={handleRevert}
-                    disabled={!isDirty || isSaving}
-                  >
-                    {t("action.reset")}
-                  </button>
-                  <button
-                    className="btn btn-primary btn-sm"
-                    onClick={handleSave}
-                    disabled={!isDirty || isSaving}
-                  >
-                    {isSaving ? t("settings.config_files.saving") : t("action.save")}
-                  </button>
-                </div>
-              </div>
-            </>
-          )}
+            <div className="config-actions-right">
+              {configType === "claude" && (
+                <Button
+                  size="sm"
+                  onClick={handleFormat}
+                  title={t("settings.config_files.format_hint")}
+                >
+                  <Sparkles size={14} />
+                  <span>{t("settings.config_files.format")}</span>
+                </Button>
+              )}
+              <Button size="sm" onClick={handleRevert} disabled={!isDirty || isSaving}>
+                {t("action.reset")}
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleSave}
+                disabled={!isDirty || isSaving}
+              >
+                {isSaving ? t("settings.config_files.saving") : t("action.save")}
+              </Button>
+            </div>
+          </div>
         </div>
       )}
     </div>

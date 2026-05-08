@@ -4,7 +4,7 @@ import { ArrowRight, Bot, FlipHorizontal, FlipVertical, Sparkles, X } from "luci
 import type { FC } from "react";
 import { dispatchCommandAtom } from "../../../../atoms/connection";
 import { sessionsAtom } from "../../../../atoms/sessions";
-import { StatusDot, Tag } from "../../../../components/ui";
+import { Button, StatusDot, Tag } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { type ProviderId, useProviderLauncher } from "../../actions/use-provider-launcher";
 
@@ -193,15 +193,17 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
                 state.installJob?.status === "running";
 
               return (
-                <button
+                <Button
                   key={provider.id}
-                  className={`btn btn-secondary agent-provider-card ${provider.className}`}
+                  className={`agent-provider-card ${provider.className}`}
                   disabled={isAnyProviderBusy}
+                  leadingIcon={<span className="agent-provider-card-icon">{provider.icon}</span>}
                   onClick={() => {
                     void launch(provider.id);
                   }}
+                  trailingIcon={<ArrowRight size={16} className="agent-provider-card-arrow" />}
+                  variant="secondary"
                 >
-                  <span className="agent-provider-card-icon">{provider.icon}</span>
                   <span className="agent-provider-card-body">
                     <span className="agent-provider-card-title-row">
                       <span className="agent-provider-card-title">{provider.title}</span>
@@ -225,8 +227,7 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
                       </span>
                     ) : null}
                   </span>
-                  <ArrowRight size={16} className="agent-provider-card-arrow" />
-                </button>
+                </Button>
               );
             })}
           </div>

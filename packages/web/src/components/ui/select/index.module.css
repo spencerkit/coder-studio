@@ -1,0 +1,106 @@
+.root {
+  position: relative;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.trigger,
+:global(.mobile-select-trigger) {
+  display: flex;
+  width: 100%;
+  min-height: var(--input-height-md);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  text-align: left;
+  cursor: pointer;
+}
+
+.trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.64;
+}
+
+.value,
+:global(.mobile-select-trigger__value) {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.icon,
+:global(.mobile-select-trigger__icon) {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  transition: transform var(--duration-normal) var(--ease-out);
+}
+
+.iconOpen {
+  transform: rotate(180deg);
+}
+
+.listbox {
+  position: absolute;
+  top: calc(100% + var(--sp-2));
+  z-index: var(--z-popover);
+  display: flex;
+  width: 100%;
+  min-width: 180px;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding: var(--sp-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-lg);
+}
+
+.option {
+  display: flex;
+  width: 100%;
+  min-height: max(var(--touch-target-min), 32px);
+  align-items: center;
+  padding: 0 var(--sp-3);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.option:hover,
+.optionHighlighted {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.optionSelected {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--accent-blue) 18%, transparent);
+}
+
+.option:disabled {
+  cursor: not-allowed;
+  color: var(--text-disabled);
+  background: transparent;
+}
+
+.inlineSheet :global(.mobile-inline-sheet) {
+  border: 1px solid var(--border);
+}

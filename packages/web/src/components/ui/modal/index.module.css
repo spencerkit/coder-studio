@@ -1,0 +1,120 @@
+.overlay,
+:global(.modal-overlay) {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-4);
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.card,
+:global(.modal-card) {
+  display: flex;
+  width: min(100%, 480px);
+  min-width: min(400px, 100%);
+  max-height: calc(100vh - var(--sp-16));
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-lg);
+  outline: none;
+}
+
+.sm {
+  width: min(100%, 400px);
+}
+
+.md {
+  width: min(100%, 480px);
+}
+
+.lg,
+:global(.modal-card-lg) {
+  width: min(100%, 720px);
+}
+
+.full {
+  width: min(100%, 1080px);
+  max-height: calc(100vh - var(--sp-8));
+}
+
+.header,
+:global(.modal-header) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-5);
+  border-bottom: 1px solid var(--border);
+}
+
+.title,
+:global(.modal-title) {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+}
+
+.body,
+:global(.modal-body) {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-5);
+  overflow-y: auto;
+}
+
+.footer,
+:global(.modal-footer) {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-5);
+  border-top: 1px solid var(--border);
+}
+
+:global(.modal-close) {
+  border-radius: var(--radius-sm);
+}
+
+:global(.modal-close:hover) {
+  background: var(--bg-hover);
+}
+
+@media (max-width: 640px) {
+  .overlay,
+  :global(.modal-overlay) {
+    padding: var(--sp-3);
+  }
+
+  .card,
+  :global(.modal-card),
+  .sm,
+  .md,
+  .lg,
+  :global(.modal-card-lg),
+  .full {
+    min-width: 0;
+    width: 100%;
+    max-height: calc(100vh - var(--sp-6));
+  }
+
+  .header,
+  :global(.modal-header),
+  .body,
+  :global(.modal-body),
+  .footer,
+  :global(.modal-footer) {
+    padding-left: var(--sp-4);
+    padding-right: var(--sp-4);
+  }
+}

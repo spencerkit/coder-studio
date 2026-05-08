@@ -357,7 +357,8 @@ describe("FileTreePanel", () => {
       </Provider>
     );
 
-    expect(await screen.findByLabelText("file.path")).toBeInTheDocument();
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByLabelText("file.path")).toHaveClass("input");
 
     fireEvent.change(screen.getByLabelText("file.path"), {
       target: { value: "src/demo/new-file.ts" },
@@ -376,6 +377,74 @@ describe("FileTreePanel", () => {
     });
 
     expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/demo/new-file.ts");
+  });
+
+  it("does not create a file until the confirmation action is clicked", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({ ok: true });
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(fileTreeAtomFamily("ws-test"), new Map([[".", []]]));
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel
+          workspaceId="ws-test"
+          createRequest={{ id: 1, mode: "file", baseDir: null }}
+        />
+      </Provider>
+    );
+
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    const pathInput = screen.getByLabelText("file.path");
+    expect(pathInput).toHaveClass("input");
+
+    fireEvent.change(pathInput, { target: { value: "src/demo/new-file.ts" } });
+
+    expect(sendCommand).not.toHaveBeenCalledWith(
+      "file.create",
+      {
+        workspaceId: "ws-test",
+        path: "src/demo/new-file.ts",
+      },
+      undefined
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+
+    expect(sendCommand).not.toHaveBeenCalledWith(
+      "file.create",
+      {
+        workspaceId: "ws-test",
+        path: "src/demo/new-file.ts",
+      },
+      undefined
+    );
+  });
+
+  it("renders the create dialog close action with icon button compatibility classes", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({ path: "/workspace", children: [] });
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(fileTreeAtomFamily("ws-test"), new Map([[".", []]]));
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel
+          workspaceId="ws-test"
+          createRequest={{ id: 1, mode: "file", baseDir: null }}
+        />
+      </Provider>
+    );
+
+    expect(await screen.findByRole("button", { name: "action.close" })).toHaveClass(
+      "btn",
+      "btn-ghost",
+      "btn-sm"
+    );
   });
 
   it("opens the new folder dialog from a directory action and pre-fills the directory prefix", async () => {
@@ -455,6 +524,27 @@ describe("FileTreePanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "file.new_folder src" }));
 
     expect(await screen.findByLabelText("file.path")).toHaveClass("input");
+  });
+
+  it("renders file dialog actions with shared button compatibility classes", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({ ok: true });
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(fileTreeAtomFamily("ws-test"), new Map([[".", []]]));
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel
+          workspaceId="ws-test"
+          createRequest={{ id: 1, mode: "file", baseDir: null }}
+        />
+      </Provider>
+    );
+
+    await screen.findByLabelText("file.path");
+
+    expect(screen.getByRole("button", { name: "Cancel" })).toHaveClass("btn", "btn-secondary");
+    expect(screen.getByRole("button", { name: "Confirm" })).toHaveClass("btn", "btn-primary");
   });
 
   it("uses translated loading copy while the tree is still being fetched", async () => {
@@ -696,6 +786,7 @@ describe("FileTreePanel", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "file.delete src/app.tsx" }));
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
     fireEvent.click(await screen.findByRole("button", { name: "Confirm" }));
 
     await waitFor(() => {
@@ -758,7 +849,15 @@ describe("FileTreePanel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "file.delete src" }));
 
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toBeInTheDocument();
     expect(await screen.findByText('Are you sure you want to delete "src"?')).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Confirm" })).toHaveClass("btn", "btn-danger");
+    expect(screen.getByRole("button", { name: "action.close" })).toHaveClass(
+      "btn",
+      "btn-ghost",
+      "btn-sm"
+    );
     fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
 
     await waitFor(() => {
@@ -834,6 +933,7 @@ describe("FileTreePanel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "file.delete src/app.tsx" }));
 
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
     expect(
       await screen.findByText('Are you sure you want to delete "app.tsx"?')
     ).toBeInTheDocument();
@@ -860,5 +960,56 @@ describe("FileTreePanel", () => {
         isDirty: false,
       },
     });
+  });
+
+  it("requires explicit confirmation before deleting a file", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({ ok: true });
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(
+      fileTreeAtomFamily("ws-test"),
+      new Map([
+        [
+          ".",
+          [
+            {
+              path: "src/app.tsx",
+              name: "app.tsx",
+              kind: "file",
+            },
+          ],
+        ],
+      ])
+    );
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "file.delete src/app.tsx" }));
+
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Confirm" })).toHaveClass("btn", "btn-danger");
+    expect(screen.getByRole("button", { name: "action.close" })).toHaveClass(
+      "btn",
+      "btn-ghost",
+      "btn-sm"
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+
+    expect(sendCommand).not.toHaveBeenCalledWith(
+      "file.delete",
+      {
+        workspaceId: "ws-test",
+        path: "src/app.tsx",
+      },
+      undefined
+    );
   });
 });

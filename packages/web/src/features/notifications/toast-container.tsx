@@ -7,20 +7,21 @@
  */
 
 import { useAtomValue, useSetAtom } from "jotai";
-import { AlertCircle, AlertTriangle, CheckCircle, Info, X } from "lucide-react";
+import { AlertCircle, AlertTriangle, CheckCircle, Info } from "lucide-react";
 import { useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { pendingFocusSessionAtom } from "../../atoms/app-ui";
 import { activeWorkspaceIdAtom } from "../../atoms/workspaces";
+import { ToastViewport, Toast as UiToast } from "../../components/ui";
 import { useViewport } from "../../hooks/use-viewport";
-import { dismissToastAtom, type Toast, type ToastKind, toastsAtom } from "./atoms";
+import { dismissToastAtom, type Toast, toastsAtom } from "./atoms";
 import { focusSession } from "./focus-session";
 
-const KIND_CONFIG: Record<ToastKind, { icon: typeof CheckCircle; className: string }> = {
-  success: { icon: CheckCircle, className: "toast--success" },
-  error: { icon: AlertCircle, className: "toast--error" },
-  warning: { icon: AlertTriangle, className: "toast--warning" },
-  info: { icon: Info, className: "toast--info" },
+const KIND_CONFIG = {
+  success: CheckCircle,
+  error: AlertCircle,
+  warning: AlertTriangle,
+  info: Info,
 };
 
 function ToastItem({ toast }: { toast: Toast }) {
@@ -28,8 +29,7 @@ function ToastItem({ toast }: { toast: Toast }) {
   const setActiveWorkspaceId = useSetAtom(activeWorkspaceIdAtom);
   const setPendingFocus = useSetAtom(pendingFocusSessionAtom);
   const navigate = useNavigate();
-  const config = KIND_CONFIG[toast.kind];
-  const Icon = config.icon;
+  const Icon = KIND_CONFIG[toast.kind];
   const duration = toast.duration ?? 5000;
 
   // Auto-dismiss
@@ -69,28 +69,14 @@ function ToastItem({ toast }: { toast: Toast }) {
   ]);
 
   return (
-    <div
-      className={`toast ${config.className}`}
-      role="alert"
-      onClick={handleClick}
-      style={{ cursor: toast.workspaceId ? "pointer" : "default" }}
-    >
-      <Icon size={16} className="toast__icon" />
-      <div className="toast__content">
-        <span className="toast__title">{toast.title}</span>
-        {toast.body && <span className="toast__body">{toast.body}</span>}
-      </div>
-      <button
-        className="toast__close"
-        onClick={(e) => {
-          e.stopPropagation();
-          dismiss(toast.id);
-        }}
-        aria-label="Dismiss"
-      >
-        <X size={14} />
-      </button>
-    </div>
+    <UiToast
+      description={toast.body}
+      icon={<Icon size={16} />}
+      onClick={toast.workspaceId ? handleClick : undefined}
+      onDismiss={() => dismiss(toast.id)}
+      title={toast.title}
+      tone={toast.kind}
+    />
   );
 }
 
@@ -100,15 +86,11 @@ export function ToastContainer() {
 
   if (toasts.length === 0) return null;
 
-  const containerClassName = ["toast-container", isMobile ? "toast-container--mobile" : ""]
-    .filter(Boolean)
-    .join(" ");
-
   return (
-    <div className={containerClassName} aria-live="polite">
+    <ToastViewport aria-live="polite" mobile={isMobile}>
       {toasts.map((toast) => (
         <ToastItem key={toast.id} toast={toast} />
       ))}
-    </div>
+    </ToastViewport>
   );
 }

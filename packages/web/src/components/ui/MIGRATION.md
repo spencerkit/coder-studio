@@ -2,31 +2,43 @@
 
 | Component | Status | Legacy classes | Callers left | Last update |
 |---|---|---|---:|---|
-| Button | 🟡 in-flight | `.btn .btn-*` | 30 | 2026-05-06 |
-| IconButton | ⚫ not-started | `.btn` icon-only | — | — |
+| Button | 🟢 complete | `.btn .btn-*` | 0 | 2026-05-07 |
+| IconButton | 🟢 complete | `.btn` icon-only | 0 | 2026-05-07 |
 | Input | 🟢 complete | `.input` | 0 | 2026-05-07 |
 | Textarea | 🟢 complete | `.input.textarea` | 0 | 2026-05-07 |
-| Tag | 🟡 in-flight | `.badge .badge-*` | 0 | 2026-05-07 |
-| Badge | 🟡 in-flight | `.topbar-unread` | 0 | 2026-05-07 |
-| Pill | 🟡 in-flight | `.settings-pill*` | 0 | 2026-05-07 |
-| StatusDot | 🟡 in-flight | `.session-dot*`, `.connection-status-dot*` | 0 | 2026-05-07 |
-| Kbd | 🟡 in-flight | `kbd`, `.shortcuts-key` | 0 | 2026-05-07 |
-| Spinner | 🟡 in-flight | `.animate-spin` | 1 | 2026-05-07 |
-| Switch | ⚫ not-started | new | — | — |
-| Modal | ⚫ not-started | `.modal-overlay .modal-card .modal-*` | — | — |
-| ConfirmDialog | ⚫ not-started | modal convenience wrapper | — | — |
-| Toast | ⚫ not-started | `.toast*` | — | — |
-| Tooltip | ⚫ not-started | new | — | — |
-| ProgressBar | ⚫ not-started | `--progress-height` patterns | — | — |
-| Notice | ⚫ not-started | `.settings-page__notice*` | — | — |
-| EmptyState | ⚫ not-started | feature-specific empty state blocks | — | — |
-| Tabs | ⚫ not-started | tab / pill patterns across features | — | — |
-| SegmentedControl | ⚫ not-started | `.settings-pill*` | — | — |
-| Select | ⚫ not-started | `.input`, `.mobile-select-*` | — | — |
+| Tag | 🟢 complete | `.badge .badge-*` | 0 | 2026-05-07 |
+| Badge | 🟢 complete | `.topbar-unread` | 0 | 2026-05-07 |
+| Pill | 🟢 complete | `.settings-pill*` | 0 | 2026-05-07 |
+| StatusDot | 🟢 complete | `.session-dot*`, `.connection-status-dot*` | 0 | 2026-05-07 |
+| Kbd | 🟢 complete | `kbd`, `.shortcuts-key` | 0 | 2026-05-07 |
+| Spinner | 🟢 complete | `.animate-spin` | 0 | 2026-05-07 |
+| Switch | 🟢 complete | new | 0 | 2026-05-07 |
+| Modal | 🟢 complete | `.modal-overlay .modal-card .modal-*` | 0 | 2026-05-07 |
+| ConfirmDialog | 🟡 partial | modal convenience wrapper | 3 | 2026-05-07 |
+| Toast | 🟢 complete | `.toast*` | 0 | 2026-05-08 |
+| Tooltip | 🟡 partial | native `title` hover labels | deferred title-based families remain | 2026-05-08 |
+| ProgressBar | 🟡 partial | `.session-progress*` | 0 | 2026-05-08 |
+| Notice | 🟡 partial | `.settings-page__notice*`, `.config-drift-banner__notice` | 0 | 2026-05-08 |
+| EmptyState | 🟡 partial | `.bottom-terminal-empty`, `.config-empty-state`, `.git-diff-empty` | 1 | 2026-05-08 |
+| Tabs | 🟢 complete | `.panel-tab`, `.worktree-tab` | 0 in-scope callers left | 2026-05-08 |
+| SegmentedControl | 🟢 complete | `.settings-provider-tabs`, `.settings-provider-tab`, `.settings-provider-subnav`, `.settings-provider-subnav-button`, `.shortcuts-category-tabs`, `.shortcuts-category-tab` | 0 in-scope callers left | 2026-05-08 |
+| Sheet | 🟡 partial | `.mobile-sheet*` | 3 deferred mobile sheet families | 2026-05-08 |
+| Select | 🟡 partial | `.input`, `.mobile-select-trigger*` | 3 bounded richer selector families deferred | 2026-05-08 |
 | Popover | ⚫ not-started | new | — | — |
 | ActionMenu | ⚫ not-started | new | — | — |
-| Sheet | ⚫ not-started | mobile sheet shells | — | — |
 
 `Input` / `Textarea` caller counts only include raw native text-entry controls that should migrate to those shared primitives. They intentionally exclude `select.input`, `button.input`, search-model controls, and checkbox/radio inputs.
 
-`Pill` / `Kbd` counts only cover the bounded settings callers in this slice. `Tag` covers the bounded `.badge` family callers plus the selected selector labels in this slice; it intentionally excludes deferred badge-like families such as supervisor and git-row state labels. `Badge` covers the bounded topbar unread count caller only. `StatusDot` excludes mobile-only and other feature-specific dot variants deferred by the phase-d plan, so the selected family callers in this slice are now fully migrated. `Spinner` excludes the internal `Button` loading spinner and leaves the remaining feature-specific `animate-spin` usage for a later slice.
+`Button` now covers the last bounded raw text-button callers from this migration slice, including the draft launcher provider cards, observer takeover action, and shortcuts reset-all action, so no raw non-icon-only `.btn` callers remain in scope. `IconButton` covers the bounded icon-only `.btn` family for modal/dialog close actions plus the shortcut reset action, and this slice leaves no raw icon-only `.btn` callers behind. `Pill` and `Kbd` cover the bounded settings callers selected for the phase-d display primitives slice, and those selected callers are now fully migrated. `StatusDot` excludes mobile-only and other feature-specific dot variants deferred by the phase-d plan, so the selected session and connection status dot callers are fully migrated. `Spinner` now covers the last bounded feature-side loading indicator in `config-editor.tsx`; the only remaining `animate-spin` usages are internal compatibility classes in shared primitives and legacy stylesheet definitions. `Switch` covers the two bounded `SettingsPage` notification toggles from this slice, so no selected notification toggle callers remain. `Tag` covers the bounded `.badge` family callers plus the selected selector labels from phase-e, while intentionally excluding deferred badge-like families such as supervisor and git-row state labels. `Badge` covers the bounded topbar unread count caller only, and the selected phase-e count caller is now fully migrated.
+`Modal` now covers the bounded desktop raw `.modal-*` callers from the phase-g slice: `ObjectiveDialog`, desktop `WorktreeModal`, `CreatePathModal`, `DeleteFileModal`, `GitDiscardConfirmModal`, and the `GitStatusBar` confirm/auth dialogs. Mobile-specific branches such as `MobileSheet` and mobile supervisor flows remain intentionally separate, and no selected desktop raw modal callers remain in scope.
+`ConfirmDialog` now covers the bounded destructive confirmation wrappers from phase-h: `DeleteFileModal` and `GitDiscardConfirmModal` are migrated to the shared convenience wrapper. The remaining counted desktop candidates are `CreatePathModal`, `GitStatusBar`, and `ObjectiveDialog`, which stay on raw `Modal` for now because they require form fields, dual-state auth/confirm behavior, or richer custom dialog structure; mobile dialog flows and other richer modal bodies remain intentionally out of scope for this component.
+`Toast` now covers the bounded notification presenter in `features/notifications/toast-container.tsx`. The shared primitive owns the generic shell and compatibility classes, while Jotai queue state, auto-dismiss timing, icon selection, and workspace/session navigation remain in the feature layer by design.
+`Tooltip` now covers the bounded first-batch icon-trigger callers from the phase-q slice: the topbar add-workspace, quick-actions, terminal/files toggles, settings action, and the workspace fullscreen toggle now use the shared desktop/fine-pointer tooltip wrapper from the public UI barrel instead of native `title` attributes. The shared primitive intentionally stays text-only, pointer/focus driven, and becomes a no-op wrapper on coarse/mobile viewports. Deferred tooltip-like families for this component are truncation/path `title` callers, connection-status/container `title` usage, and the code-editor and git-panel icon-action families.
+`ProgressBar` now covers the bounded `session-card.tsx` progress strip in `features/agent-panes/views/shared`. The shared primitive owns generic track/fill styling plus optional ARIA progress semantics, while progress width heuristics, decorative-vs-semantic usage, session-state-to-tone mapping, and `session-progress*` compatibility class composition remain in feature code by design. Supervisor progress UI and unrelated `.agent-progress` patterns remain intentionally out of scope for this slice.
+`Notice` now covers the bounded inline settings load error shell and the config-drift cleanup feedback notice. The shared primitive owns generic tone/layout styling plus legacy compatibility classes, while message content, refresh/navigation handlers, cleanup state, dismiss behavior, and compact mobile banner rendering remain in the feature layer.
+`EmptyState` now covers the bounded centered empty-state shells in `terminal-panel.tsx`, `config-editor.tsx`, `code-editor-host.tsx`, `git-diff-viewer.tsx`, and `image-preview.tsx`. The shared primitive owns the generic centered layout only; feature copy, alert semantics, terminal/file behavior, and legacy compatibility classes remain in caller code. `WorkspaceEmptyState` and the `workspace-resolving-*` shell stay intentionally out of scope for this phase, which leaves one remaining empty-state-style caller in the inventory.
+
+`Tabs` now covers the bounded content-switching callers in workspace desktop, mobile files sheet, and worktree modal. The shared primitive owns semantics, roving focus, and legacy compatibility classes, while feature state and branching remain in the caller. The remaining raw tablist/tab callers outside this slice are intentionally deferred families such as topbar navigation, settings provider subnav, and shortcuts categories.
+`Sheet` now covers the bounded shared mobile bottom-sheet shell from the phase-p slice: the mobile `CommandPalette`, the mobile branch of `WorktreeModal`, and the mobile branch of `WorkspaceLaunchModal` now import the shared primitive from the public UI barrel. The shared primitive intentionally preserves the existing `.mobile-sheet*` DOM/class contract and inline `title/body/footer` prop model, while desktop drawers, portal/focus-trap behavior, compositional subcomponents, and more orchestrated mobile sheet families remain out of scope. The deferred callers for this component are `MobileSupervisorSheet`, `MobileSelectSheet`, and the route-driven `WorkspaceMobileView` sheet orchestration.
+`SegmentedControl` now covers the bounded settings selector families from the phase-n slice: the provider chooser, the desktop provider detail subnav, and the shortcuts category chooser. The shared primitive owns compact segmented styling plus the legacy compatibility classes, while settings-specific state, view branching, config editors, and shortcut editing flows remain in feature code. Appearance settings `Pill` selectors, broader tabs/navigation families, and deferred menu/select/popover work remain intentionally out of scope.
+`Select` now covers the bounded supervisor evaluator-provider selector family from the phase-o slice. The shared primitive owns the controlled trigger, desktop listbox semantics, mobile viewport switching through shared `useViewport()`, and the bounded `.input` / `.mobile-select-trigger*` compatibility classes, while richer searchable or multi-section flows stay in feature code. The remaining deferred selector-like families for this inventory are the branch quick pick, terminal selector, and mobile agent sheet, which continue to use direct `MobileSelectSheet` or other bespoke flows until broader popover/action-menu work lands.
