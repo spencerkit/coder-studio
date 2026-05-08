@@ -2,17 +2,17 @@ import type { Workspace } from "@coder-studio/core";
 import { useAtomValue, useSetAtom } from "jotai";
 import { useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { authEnabledAtom, connectionStatusAtom, dispatchCommandAtom } from "../../../atoms";
-import { authenticatedAtom } from "../../../atoms/app-ui";
+import { authEnabledAtom, connectionStatusAtom, dispatchCommandAtom } from "../atoms";
+import { authenticatedAtom } from "../atoms/app-ui";
 import {
   orderedWorkspacesAtom,
   workspaceOrderAtom,
   workspacesAtom,
   workspacesLoadErrorAtom,
   workspacesLoadStateAtom,
-} from "../../../atoms/workspaces";
+} from "../atoms/workspaces";
 
-export function useWorkspaceBootstrap() {
+export function useBootstrap() {
   const bootstrapRequestIdRef = useRef(0);
   const navigate = useNavigate();
   const location = useLocation();
@@ -32,26 +32,29 @@ export function useWorkspaceBootstrap() {
       return;
     }
 
-    const isProtectedWorkspaceRoute = location.pathname === "/workspace";
+    // Auth guard: redirect to login if auth required but not authenticated
     const authRequired = authEnabled === true;
     if (authRequired && !authenticated) {
-      if (isProtectedWorkspaceRoute) {
+      // Allow /login path, redirect all other paths to login
+      if (location.pathname !== "/login") {
         navigate("/login", { replace: true });
         return;
       }
-
       return;
     }
 
+    // Redirect from login if already authenticated or auth not required
     if (location.pathname === "/login" && (!authRequired || authenticated)) {
       navigate("/", { replace: true });
       return;
     }
 
+    // Only bootstrap workspaces on "/" and "/workspace" paths
     if (location.pathname !== "/" && location.pathname !== "/workspace") {
       return;
     }
 
+    // Workspace bootstrap logic
     if (workspacesLoadState === "idle") {
       if (connectionStatus !== "connected") {
         return;
@@ -102,6 +105,7 @@ export function useWorkspaceBootstrap() {
       return;
     }
 
+    // Route based on workspace state
     if (location.pathname === "/" && workspaces.length > 0) {
       navigate("/workspace", { replace: true });
       return;

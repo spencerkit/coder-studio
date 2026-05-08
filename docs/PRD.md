@@ -1374,36 +1374,7 @@ The current implementation is not `one click creates immediately`. It uses a **t
 | `Enter` | Select branch / initiate create / confirm create |
 | `Escape` | Close |
 
-## 5.4 Config Drift Banner
-
-Config Drift Banner warns about config items in `~/.codex/config.toml` that interfere with current app behavior.
-
-### 5.4.1 Data Source
-
-The data comes from `externalConfigAudit` in the settings payload.
-
-### 5.4.2 Display Positions
-
-| Scenario | Position |
-| --- | --- |
-| Desktop shell, excluding auth and settings pages | Global top banner |
-| Mobile workspace page | Compact in-page banner |
-| Settings page | Embedded banner at the top of the content area |
-
-### 5.4.3 Interaction Capabilities
-
-| Feature | Behavior |
-| --- | --- |
-| Expand details | View each finding, line number, and snippet |
-| Check cleanup items | All findings are selected by default |
-| Cleanup | Execute config cleanup |
-| Cleanup success | If a backup path is produced, show it in banner notice |
-| Dismiss | Close the current banner in frontend state only; not a permanent ignore |
-| Load failure | Show failure banner and allow `Refresh` retry |
-
-The compact banner on the mobile workspace page does not expand details inline; it routes the user to `/settings`.
-
-## 5.5 Connection Status Banner
+## 5.4 Connection Status Banner
 
 The global connection banner handles these states in a unified way:
 
@@ -1411,9 +1382,9 @@ The global connection banner handles these states in a unified way:
 - `rejected`: show `Another tab is active`
 - Any other disconnected state: show `Connection lost`
 
-## 5.6 Toasts and Notifications
+## 5.5 Toasts and Notifications
 
-### 5.6.1 Toast Container
+### 5.5.1 Toast Container
 
 The Toast container supports:
 
@@ -1421,7 +1392,7 @@ The Toast container supports:
 - Four types: `success / error / warning / info`
 - Auto-dismiss, default `5s`; `duration = 0` switches to manual close
 
-### 5.6.2 Toast Click Behavior
+### 5.5.2 Toast Click Behavior
 
 | Attached toast data | Click result |
 | --- | --- |
@@ -1429,7 +1400,7 @@ The Toast container supports:
 | `workspaceId` only | Switch to that workspace and navigate to `/workspace` if needed |
 | No navigation data | Only close the toast |
 
-### 5.6.3 Session Completion Notifications
+### 5.5.3 Session Completion Notifications
 
 Notifications currently fire only when **an agent finishes one round of work**, with explicit rules:
 
@@ -1453,7 +1424,7 @@ If sound is enabled:
 - Prefer playing `/task-complete.wav`
 - Fall back to a Web Audio synthesized sound if playback fails
 
-## 5.7 Supervisor Editing Container
+## 5.6 Supervisor Editing Container
 
 Supervisor editing interactions are carried by two containers:
 

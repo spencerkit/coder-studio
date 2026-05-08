@@ -6,7 +6,7 @@ interface MobileSheetProps {
   title: string;
   body: ReactNode;
   onClose: () => void;
-  kicker?: string;
+  kicker?: ReactNode;
   onBack?: () => void;
   footer?: ReactNode;
   headerAction?: ReactNode;

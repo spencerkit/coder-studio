@@ -11,8 +11,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   classifyGitAuthFailure,
   GitError,
+  getGitHistory,
   getGitStatus,
   runGit,
+  runGitFetch,
   runGitPull,
   runGitPush,
 } from "../../git/cli.js";
@@ -70,7 +72,7 @@ describe("runGit", () => {
 
     const status = await getGitStatus(testDir);
 
-    expect(status.deleted).toEqual([{ path: "docs/验收报告/phase 1/a b.txt" }]);
+    expect(status.deleted).toEqual([{ path: "docs/验收报告/phase 1/a b.txt", status: "deleted" }]);
     await expect(
       execFileAsync("git", ["add", "--", status.deleted[0]?.path ?? ""], { cwd: testDir })
     ).resolves.toBeDefined();
@@ -241,6 +243,189 @@ describe("GitError", () => {
         remoteUrl: "https://github.com/openai/demo.git",
       })
     ).toBeNull();
+  });
+
+  it("classifies fetch auth failures with operation=fetch", async () => {
+    const testDir = await mkdtemp(join(tmpdir(), "git-fetch-auth-classify-"));
+    await execFileAsync("git", ["init"], { cwd: testDir });
+    await execFileAsync("git", ["remote", "add", "origin", "https://github.com/openai/demo.git"], {
+      cwd: testDir,
+    });
+
+    const wrapperDir = join(testDir, "bin");
+    await mkdir(wrapperDir, { recursive: true });
+    const realGit = (await execFileAsync("sh", ["-lc", "command -v git"])).stdout.trim();
+    await writeFile(
+      join(wrapperDir, "git"),
+      [
+        "#!/bin/sh",
+        'for arg in "$@"; do',
+        '  if [ "$arg" = "fetch" ]; then',
+        '    printf "fatal: could not read Username for \\"https://github.com\\": terminal prompts disabled\\n" >&2',
+        "    exit 128",
+        "  fi",
+        "done",
+        `exec ${JSON.stringify(realGit)} "$@"`,
+        "",
+      ].join("\n"),
+      { mode: 0o700 }
+    );
+
+    const originalPath = process.env.PATH ?? "";
+    vi.stubEnv("PATH", `${wrapperDir}:${originalPath}`);
+
+    try {
+      await expect(runGitFetch(testDir, { remote: "origin" })).rejects.toMatchObject({
+        code: "git_auth_required",
+        details: expect.objectContaining({
+          operation: "fetch",
+        }),
+      });
+    } finally {
+      vi.unstubAllEnvs();
+      await rm(testDir, { recursive: true, force: true });
+    }
+  });
+
+  it("classifies fetch auth failures with operation=fetch when using the default --all path", async () => {
+    const testDir = await mkdtemp(join(tmpdir(), "git-fetch-auth-default-"));
+    await execFileAsync("git", ["init"], { cwd: testDir });
+    await execFileAsync("git", ["remote", "add", "origin", "https://github.com/openai/demo.git"], {
+      cwd: testDir,
+    });
+
+    const wrapperDir = join(testDir, "bin-default");
+    await mkdir(wrapperDir, { recursive: true });
+    const realGit = (await execFileAsync("sh", ["-lc", "command -v git"])).stdout.trim();
+    await writeFile(
+      join(wrapperDir, "git"),
+      [
+        "#!/bin/sh",
+        'for arg in "$@"; do',
+        '  if [ "$arg" = "fetch" ]; then',
+        '    printf "fatal: could not read Username for \\"https://github.com\\": terminal prompts disabled\\n" >&2',
+        "    exit 128",
+        "  fi",
+        "done",
+        `exec ${JSON.stringify(realGit)} "$@"`,
+        "",
+      ].join("\n"),
+      { mode: 0o700 }
+    );
+
+    const originalPath = process.env.PATH ?? "";
+    vi.stubEnv("PATH", `${wrapperDir}:${originalPath}`);
+
+    try {
+      await expect(
+        runGitFetch(testDir, {
+          auth: {
+            username: "alice",
+            password: "secret-token",
+          },
+        })
+      ).rejects.toMatchObject({
+        code: "git_auth_required",
+        details: expect.objectContaining({
+          operation: "fetch",
+          remote: "origin",
+          authMode: "username_password",
+          canPrompt: true,
+        }),
+      });
+    } finally {
+      vi.unstubAllEnvs();
+      await rm(testDir, { recursive: true, force: true });
+    }
+  });
+
+  it("classifies pull auth failures with operation=pull", async () => {
+    const testDir = await mkdtemp(join(tmpdir(), "git-pull-auth-classify-"));
+    await execFileAsync("git", ["init"], { cwd: testDir });
+    await execFileAsync("git", ["remote", "add", "origin", "https://github.com/openai/demo.git"], {
+      cwd: testDir,
+    });
+
+    const wrapperDir = join(testDir, "bin-pull");
+    await mkdir(wrapperDir, { recursive: true });
+    const realGit = (await execFileAsync("sh", ["-lc", "command -v git"])).stdout.trim();
+    await writeFile(
+      join(wrapperDir, "git"),
+      [
+        "#!/bin/sh",
+        'for arg in "$@"; do',
+        '  if [ "$arg" = "pull" ]; then',
+        '    printf "fatal: could not read Username for \\"https://github.com\\": terminal prompts disabled\\n" >&2',
+        "    exit 128",
+        "  fi",
+        "done",
+        `exec ${JSON.stringify(realGit)} \"$@\"`,
+        "",
+      ].join("\n"),
+      { mode: 0o700 }
+    );
+
+    const originalPath = process.env.PATH ?? "";
+    vi.stubEnv("PATH", `${wrapperDir}:${originalPath}`);
+
+    try {
+      await expect(runGitPull(testDir, { remote: "origin", branch: "main" })).rejects.toMatchObject(
+        {
+          code: "git_auth_required",
+          details: expect.objectContaining({
+            operation: "pull",
+          }),
+        }
+      );
+    } finally {
+      vi.unstubAllEnvs();
+      await rm(testDir, { recursive: true, force: true });
+    }
+  });
+
+  it("allows fetch callers to override the network timeout", async () => {
+    const testDir = await mkdtemp(join(tmpdir(), "git-fetch-timeout-"));
+    await execFileAsync("git", ["init"], { cwd: testDir });
+    await execFileAsync("git", ["remote", "add", "origin", "https://github.com/openai/demo.git"], {
+      cwd: testDir,
+    });
+
+    const wrapperDir = join(testDir, "bin-timeout");
+    await mkdir(wrapperDir, { recursive: true });
+    const realGit = (await execFileAsync("sh", ["-lc", "command -v git"])).stdout.trim();
+    await writeFile(
+      join(wrapperDir, "git"),
+      [
+        "#!/bin/sh",
+        'for arg in "$@"; do',
+        '  if [ "$arg" = "fetch" ]; then',
+        "    sleep 1",
+        '    printf "fatal: fetch timed out\\n" >&2',
+        "    exit 124",
+        "  fi",
+        "done",
+        `exec ${JSON.stringify(realGit)} "$@"`,
+        "",
+      ].join("\n"),
+      { mode: 0o700 }
+    );
+
+    const originalPath = process.env.PATH ?? "";
+    vi.stubEnv("PATH", `${wrapperDir}:${originalPath}`);
+
+    try {
+      const startedAt = Date.now();
+      await expect(
+        runGitFetch(testDir, {
+          remote: "origin",
+          timeoutMs: 50,
+        })
+      ).rejects.toBeInstanceOf(GitError);
+      expect(Date.now() - startedAt).toBeLessThan(900);
+    } finally {
+      vi.unstubAllEnvs();
+      await rm(testDir, { recursive: true, force: true });
+    }
   });
 });
 
@@ -454,8 +639,8 @@ describe("getGitStatus", () => {
     const status = await getGitStatus(testDir);
 
     expect(status.untracked).toEqual([
-      { path: "docs/help/README.md" },
-      { path: "docs/help/assets/logo.png" },
+      { path: "docs/help/README.md", status: "untracked" },
+      { path: "docs/help/assets/logo.png", status: "untracked" },
     ]);
 
     await rm(testDir, { recursive: true, force: true });
@@ -492,6 +677,82 @@ describe("getGitStatus", () => {
     expect(status.headSha).toBe(stdout.trim());
     expect(status.headShortSha).toBe(stdout.trim().slice(0, 7));
     expect(status.headSubject).toBe("detached subject");
+
+    await rm(testDir, { recursive: true, force: true });
+  });
+});
+
+describe("getGitHistory", () => {
+  it("returns recent commits in reverse chronological order with author and timestamp", async () => {
+    const testDir = await mkdtemp(join(tmpdir(), "git-history-"));
+    await execFileAsync("git", ["init"], { cwd: testDir });
+    await execFileAsync("git", ["config", "user.name", "Test"], { cwd: testDir });
+    await execFileAsync("git", ["config", "user.email", "test@example.com"], { cwd: testDir });
+
+    await writeFile(join(testDir, "file.txt"), "one\n");
+    await execFileAsync("git", ["add", "."], { cwd: testDir });
+    await execFileAsync("git", ["commit", "-m", "first commit"], { cwd: testDir });
+
+    await writeFile(join(testDir, "file.txt"), "two\n");
+    await execFileAsync("git", ["add", "."], { cwd: testDir });
+    await execFileAsync("git", ["commit", "-m", "second commit"], { cwd: testDir });
+
+    const history = await getGitHistory(testDir, 5);
+
+    expect(history).toHaveLength(2);
+    expect(history[0]).toEqual(
+      expect.objectContaining({
+        subject: "second commit",
+        authorName: "Test",
+      })
+    );
+    expect(history[0]?.sha).toHaveLength(40);
+    expect(history[0]?.shortSha).toHaveLength(7);
+    expect(history[0]?.authoredAt).toBeTypeOf("number");
+    expect(history[0]!.authoredAt).toBeGreaterThanOrEqual(history[1]!.authoredAt);
+    expect(history[1]).toEqual(
+      expect.objectContaining({
+        subject: "first commit",
+        authorName: "Test",
+      })
+    );
+
+    await rm(testDir, { recursive: true, force: true });
+  });
+
+  it("returns an empty list for repositories without commits", async () => {
+    const testDir = await mkdtemp(join(tmpdir(), "git-history-empty-"));
+    await execFileAsync("git", ["init"], { cwd: testDir });
+
+    await expect(getGitHistory(testDir, 5)).resolves.toEqual([]);
+
+    await rm(testDir, { recursive: true, force: true });
+  });
+});
+
+describe("getGitCommitDiff", () => {
+  it("returns the requested commit patch with metadata", async () => {
+    const testDir = await mkdtemp(join(tmpdir(), "git-show-"));
+    await execFileAsync("git", ["init"], { cwd: testDir });
+    await execFileAsync("git", ["config", "user.name", "Test"], { cwd: testDir });
+    await execFileAsync("git", ["config", "user.email", "test@example.com"], { cwd: testDir });
+
+    await writeFile(join(testDir, "file.txt"), "one\n");
+    await execFileAsync("git", ["add", "."], { cwd: testDir });
+    await execFileAsync("git", ["commit", "-m", "first commit"], { cwd: testDir });
+
+    await writeFile(join(testDir, "file.txt"), "two\n");
+    await execFileAsync("git", ["add", "."], { cwd: testDir });
+    await execFileAsync("git", ["commit", "-m", "second commit"], { cwd: testDir });
+
+    const { stdout } = await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: testDir });
+    const { getGitCommitDiff } = await import("../../git/cli.js");
+    const diff = await getGitCommitDiff(testDir, stdout.trim());
+
+    expect(diff).toContain("second commit");
+    expect(diff).toContain("diff --git a/file.txt b/file.txt");
+    expect(diff).toContain("-one");
+    expect(diff).toContain("+two");
 
     await rm(testDir, { recursive: true, force: true });
   });

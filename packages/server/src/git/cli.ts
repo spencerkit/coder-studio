@@ -2,7 +2,7 @@
  * Git CLI operations - Wrapper around git commands.
  */
 
-import type { GitBranch, GitStatus } from "@coder-studio/core";
+import type { GitBranch, GitCommitSummary, GitStatus } from "@coder-studio/core";
 import { execFile } from "child_process";
 import { mkdir, mkdtemp, rm, writeFile } from "fs/promises";
 import os from "os";
@@ -35,7 +35,7 @@ export interface GitHttpAuth {
 }
 
 export interface GitAuthFailureDetails {
-  operation: "push" | "pull";
+  operation: "push" | "pull" | "fetch";
   remote?: string;
   remoteUrl?: string;
   remoteLabel: string;
@@ -131,7 +131,7 @@ export class GitAuthError extends Error {
 interface GitAuthContext {
   remote?: string;
   remoteUrl?: string;
-  operation: "push" | "pull";
+  operation: "push" | "pull" | "fetch";
   attemptedCredentialAuth?: boolean;
 }
 
@@ -171,6 +171,50 @@ export async function getGitStatus(cwd: string): Promise<GitStatus> {
     ...status,
     headSubject: headSubjectOutput.trim(),
   };
+}
+
+/**
+ * Get recent commit history for the current HEAD.
+ */
+export async function getGitHistory(cwd: string, limit = 5): Promise<GitCommitSummary[]> {
+  try {
+    const { stdout } = await runGit(cwd, [
+      "log",
+      `--max-count=${Math.max(1, limit)}`,
+      "--format=%H%x1f%h%x1f%s%x1f%an%x1f%at%x1e",
+    ]);
+
+    return stdout
+      .split("\x1e")
+      .map((record) => record.trim())
+      .filter((record) => record.length > 0)
+      .map((record) => {
+        const [sha = "", shortSha = "", subject = "", authorName = "", authoredAt = "0"] =
+          record.split("\x1f");
+        return {
+          sha,
+          shortSha,
+          subject,
+          authorName,
+          authoredAt: Number.parseInt(authoredAt, 10) * 1000,
+        };
+      })
+      .filter((entry) => entry.sha && entry.subject);
+  } catch (error) {
+    if (error instanceof GitError && /does not have any commits yet/i.test(error.stderr)) {
+      return [];
+    }
+
+    throw error;
+  }
+}
+
+/**
+ * Get the full patch for a specific commit.
+ */
+export async function getGitCommitDiff(cwd: string, sha: string): Promise<string> {
+  const { stdout } = await runGit(cwd, ["show", "--format=medium", "--no-color", sha]);
+  return stdout;
 }
 
 /**
@@ -393,6 +437,81 @@ export async function runGitPull(
   } finally {
     await authExecution.cleanup();
   }
+}
+
+/**
+ * Fetch remote refs without merging. Used by manual fetch + background auto-fetch.
+ */
+export interface RunGitFetchOptions {
+  remote?: string;
+  prune?: boolean;
+  auth?: GitHttpAuth;
+  timeoutMs?: number;
+}
+
+export async function runGitFetch(
+  cwd: string,
+  options?: RunGitFetchOptions
+): Promise<{ success: boolean; message: string; updatedRefs: string[] }> {
+  const args = ["fetch"];
+  const remote = options?.remote;
+  const metadataRemote = remote ?? (await getPreferredRemote(cwd)) ?? undefined;
+  const prune = options?.prune ?? true;
+
+  if (remote) {
+    args.push(remote);
+  } else {
+    args.push("--all");
+  }
+
+  if (prune) {
+    args.push("--prune");
+  }
+
+  const remoteUrl = metadataRemote ? await getRemoteUrl(cwd, metadataRemote) : null;
+  const remoteMetadata = parseRemoteUrlMetadata(remoteUrl ?? undefined);
+  const authExecution = await prepareGitAuthExecution(options?.auth, remoteMetadata);
+
+  try {
+    const { stdout, stderr } = await runGit(cwd, args, {
+      timeoutMs: options?.timeoutMs ?? GIT_NETWORK_TIMEOUT_MS,
+      env: authExecution.env,
+      config: authExecution.config,
+    });
+
+    if (options?.auth) {
+      await persistGitHttpCredentials(cwd, options.auth, remoteMetadata);
+    }
+
+    const message = stdout || stderr || "Fetch completed successfully";
+    return {
+      success: true,
+      message,
+      updatedRefs: parseFetchUpdatedRefs(stderr),
+    };
+  } catch (error) {
+    throw normalizeGitAuthFailure(error, {
+      operation: "fetch",
+      remote: metadataRemote,
+      remoteUrl: remoteMetadata.sanitizedUrl ?? remoteUrl ?? undefined,
+      attemptedCredentialAuth: Boolean(options?.auth),
+    });
+  } finally {
+    await authExecution.cleanup();
+  }
+}
+
+function parseFetchUpdatedRefs(stderr: string): string[] {
+  const refs: string[] = [];
+  for (const rawLine of stderr.split("\n")) {
+    const line = rawLine.trimEnd();
+    const arrowIndex = line.indexOf(" -> ");
+    if (arrowIndex < 0) continue;
+    const target = line.slice(arrowIndex + 4).trim();
+    if (!target) continue;
+    refs.push(target);
+  }
+  return refs;
 }
 
 /**

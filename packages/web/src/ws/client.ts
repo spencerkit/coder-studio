@@ -688,7 +688,6 @@ export class WsClient {
 
 /**
  * Resolve WebSocket URL based on current location
- * In development, connect directly to backend server
  */
 export function resolveWsUrl(): string {
   const configuredUrl = import.meta.env.VITE_BACKEND_WS_URL;
@@ -696,9 +695,7 @@ export function resolveWsUrl(): string {
     return normalizeWsUrl(configuredUrl);
   }
 
-  // Development and test environments connect directly to the backend, and
-  // node-based tests may not provide a browser location object at all.
-  if (import.meta.env.DEV || import.meta.env.MODE === "test" || typeof window === "undefined") {
+  if (typeof window === "undefined") {
     return "ws://127.0.0.1:4173/ws";
   }
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { dispatchCommandAtom } from "../../../atoms/connection";
 import {
   activeWorkspaceAtom,
+  activeWorkspaceIdAtom,
   orderedWorkspacesAtom,
   resolvedActiveWorkspaceIdAtom,
 } from "../../../atoms/workspaces";
@@ -41,6 +42,7 @@ export function useWorkspaceScreenModel() {
   const workspace = useAtomValue(activeWorkspaceAtom);
   const workspaceId = workspace?.id ?? "__workspace_placeholder__";
   const activeWorkspaceId = useAtomValue(resolvedActiveWorkspaceIdAtom);
+  const setActiveWorkspaceId = useSetAtom(activeWorkspaceIdAtom);
   const workspaces = useAtomValue(orderedWorkspacesAtom);
   const gitState = useAtomValue(gitStateAtomFamily(workspaceId));
   const activeFilePath = useAtomValue(activeFilePathAtomFamily(workspaceId));
@@ -63,6 +65,19 @@ export function useWorkspaceScreenModel() {
   const [mobileSheet, setMobileSheet] = useState<MobileWorkspaceSheetKind>(null);
   const [mobileFilesRoute, setMobileFilesRoute] = useState<MobileFilesRoute>({ kind: "root" });
   const [mobileActiveSessionId, setMobileActiveSessionId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!workspace) {
+      setActiveWorkspaceId(null);
+      return;
+    }
+
+    setActiveWorkspaceId(workspace.id);
+
+    return () => {
+      setActiveWorkspaceId((current) => (current === workspace.id ? null : current));
+    };
+  }, [setActiveWorkspaceId, workspace]);
 
   useEffect(() => {
     if (!workspace || gitState) {

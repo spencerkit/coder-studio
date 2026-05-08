@@ -1,119 +1,169 @@
 # Coder Studio
 
+<div align="center">
+
+**AI Coding Workspace · Browser-Based · Cross-Device · Self-Hosted**
+
+[![npm version](https://img.shields.io/npm/v/@spencer-kit/coder-studio.svg)](https://www.npmjs.com/package/@spencer-kit/coder-studio)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D24.0.0-green.svg)](https://nodejs.org/)
+
+</div>
+
+---
+
 > Deploy once, code everywhere.
 >
 > Deploy your coding workspace once, then keep working anywhere.
 
-[中文说明](README.zh-CN.md)
+[中文说明](README.zh-CN.md) | [Documentation](docs/help/quick-start.md) | [GitHub](https://github.com/spencerkit/coder-studio)
 
-Coder Studio lets you launch an AI coding workspace on your machine and keep using it from wherever you are. Claude Code or Codex, files, Git, and terminal all stay in one browser-based workspace, so your workflow is no longer pinned to one desk or one device.
+**Coder Studio** is a browser-based AI coding workspace that runs on your local machine. Access your development environment from any device with a web browser — continue coding on your phone during commute, review changes on a tablet, or switch between computers seamlessly.
 
-Start a task in the office, check progress on your phone during the commute, review changes from a tablet, and continue on a laptop later. Same workspace, same context, no environment handoff.
+## ✨ Key Features
 
-![Workspace](docs/help/assets/screenshot-workspace.png)
+- 🌐 **Browser-Based Workspace** — No desktop app needed, works in any modern browser
+- 📱 **Cross-Device Continuity** — Start on desktop, continue on mobile, switch devices freely
+- 🤖 **Multi-Agent Support** — Run Claude Code and OpenAI Codex sessions side by side
+- 🔧 **Integrated Environment** — Terminal, file editor, Git viewer, and AI agents in one interface
+- 🔒 **Self-Hosted & Private** — Code stays on your machine, no cloud IDE dependency
+- ⚡ **Real-Time Sync** — Live workspace state across all connected devices
 
-## Why Coder Studio
+![Workspace Overview](docs/help/assets/screenshot-workspace-overview.png)
 
-- **Deploy once, continue anywhere**: start the service once and move between devices and contexts without breaking your flow
-- **One workspace across devices**: not just remote logs, but the same workspace with Agent, code, Git, and terminal
-- **Agent + Code + Git + Terminal in one place**: less context switching between CLI, editor, diff tools, and shell
-- **Works with Claude Code and Codex**: choose the right Agent per task and run sessions side by side
-- **Runs locally, keeps your data under your control**: the service runs on your machine, without relying on a third-party cloud IDE
+---
 
-## What Problem It Solves
+## 🎯 Why Coder Studio
 
-Traditional AI coding workflows are often tied to the one machine where the CLI is running:
+| Feature | Benefit |
+|---------|---------|
+| **Deploy once, continue anywhere** | Start the service once, move between devices without breaking flow |
+| **Unified workspace** | Agent, code, Git, and terminal in one place — no more app switching |
+| **Multi-Agent support** | Run Claude Code and Codex sessions side by side |
+| **Local-first & private** | Runs on your machine, code never leaves your device |
+| **Zero-config browser access** | No desktop client, just open a URL from any device |
 
-- The Agent is running, but you still have to stay near the original device
-- Changing locations makes it hard to keep watching context and execution state
-- A phone may show notifications, but not the full coding workspace
-- Switching devices usually means taking over the environment again instead of simply continuing the work
+---
 
-Coder Studio turns that into:
-
-`Deploy once, code everywhere.`
-
-## Quick Start
+## 🚀 Quick Start
 
 ```bash
+# Install globally
 npm install -g @spencer-kit/coder-studio
+
+# Launch the workspace
 coder-studio open
 ```
 
-Then just:
+Your browser opens automatically. Select your project folder and start working with Claude Code or OpenAI Codex.
 
-1. Click **Open Workspace** in the browser
-2. Choose your project directory and create a Claude or Codex session
-3. Start working with the Agent while viewing files, Git changes, and terminal output in the same workspace
+> **No AI CLI installed yet?** You can still browse files and use the terminal. Install Claude Code or Codex later when needed.
 
-> You can open the UI and browse files and terminals before installing a provider CLI. See the [Provider Setup Guide](docs/help/providers.md) for details.
+---
 
-## How You Can Use It
+## 💡 Use Cases
 
-| Scenario | What you do |
-|----------|-------------|
-| Start work in the office | Launch the service, open the project, create a Claude or Codex session, and let the Agent begin |
-| Check progress during a commute | Open the same workspace on your phone and review Agent output, session status, and Git changes |
-| Review changes while away from your desk | Use a tablet to browse files, inspect diffs, and confirm terminal output |
-| Continue later on another device | Reconnect to the same workspace and keep going with the same context |
-| Share progress with teammates | Let others on the same local network open the workspace in a browser and view the current state |
+### Remote-Friendly Development
 
-## What You Can Do
+- Start an Agent task at the office, check progress on your phone during commute
+- Review code changes on a tablet without opening your laptop
+- Continue work from a home computer with zero setup
 
-- Run multiple Agent sessions inside one workspace
-- Watch the file tree, editor, and Git diff while the Agent is working
-- Open a Shell terminal to validate the Agent's output yourself
-- Use the full multi-panel desktop layout and keyboard shortcuts
-- Monitor workspace and session progress from a phone or tablet
-- Manage themes, language, shortcuts, and provider arguments from Settings
+### Team Collaboration
 
-## Works Across Devices
+- Share workspace URL with teammates on the same network
+- Code review without screen sharing — just open the link
+- Real-time visibility into Agent progress for stakeholders
 
-Coder Studio runs in a standard browser and does not require a desktop client:
+### AI-Assisted Coding
 
-- **Desktop**: best for full coding sessions, editing files, reviewing diffs, and managing panels
-- **Tablet**: useful for lightweight review, tracking Agent progress, and browsing project state
-- **Phone**: useful for checking session status, terminal output, and workspace changes on the go
+- Run multiple Claude Code or Codex sessions in parallel
+- Monitor Agent progress from mobile while away from desk
+- Keep terminal, editor, and Git view in one unified interface
 
-The same service URL can be opened from different devices, and the interface adapts to the screen automatically.
+---
 
-**Desktop Workspace**
+## 📱 Cross-Device Experience
+
+| Device | Best For |
+|--------|----------|
+| 🖥️ **Desktop** | Full coding sessions, file editing, diff review, panel management |
+| 📱 **Tablet** | Code review, Agent progress tracking, file browsing |
+| 📲 **Phone** | Quick status checks, terminal output monitoring, session viewing |
+
+The same workspace URL works across all devices — interface adapts automatically.
+
+**Desktop Interface**
 
 ![Desktop Workspace](docs/help/assets/screenshot-pc.png)
 
-**Mobile Workspace**
+**Mobile Interface**
 
 ![Mobile Workspace](docs/help/assets/screenshot-mobile.png)
 
-## Core Capabilities
+---
 
-- **Workspace**: a local project directory with its own files, terminals, Git state, and sessions
-- **Session**: an independent Claude or Codex Agent run inside a workspace
-- **Terminal**: both Shell terminals and Agent terminals are supported
-- **Git View**: inspect branches, changed files, and diffs directly inside the workspace
-- **Settings**: manage themes, language, shortcuts, and provider startup arguments in one place
+## 🛠️ Feature Overview
 
-## Documentation
+| Feature | Description |
+|---------|-------------|
+| **Multi-Agent Sessions** | Run Claude Code and Codex sessions side by side |
+| **Integrated Editor** | Monaco-powered code editor with syntax highlighting |
+| **Git Integration** | View branches, diffs, and changed files without leaving workspace |
+| **Shell Terminal** | Full PTY terminal for commands and validating Agent output |
+| **Responsive UI** | Desktop, tablet, and phone layouts that adapt automatically |
+| **Session History** | Resume previous sessions with full context preserved |
+| **Dark/Light Theme** | Customizable appearance and keyboard shortcuts |
 
-- [Quick Start](docs/help/quick-start.md) - From install to first launch
-- [App Overview](docs/help/app-overview.md) - Core concepts and capabilities
-- [Provider Setup](docs/help/providers.md) - Install and configure Claude Code / Codex CLI
-- [Desktop Guide](docs/help/desktop-guide.md) - Desktop interface and workflows
-- [Mobile Guide](docs/help/mobile-guide.md) - Phone and tablet usage
-- [Common Workflows](docs/help/workflows.md) - Task-oriented usage patterns
-- [Troubleshooting](docs/help/troubleshooting.md) - Common issues and fixes
-- [CLI Reference](docs/help/cli.md) - Command-line reference
+---
 
-## Installation Requirements
+## 📋 Requirements
 
-| Requirement | Notes |
-|-------------|-------|
-| Node.js >= 24.0.0 | Required to run the Coder Studio service |
-| Claude Code CLI or OpenAI Codex CLI | Required to create Agent sessions; files and terminals can still be used before installing a provider |
+| Dependency | Version | Notes |
+|------------|---------|-------|
+| Node.js | ≥ 24.0.0 | Required for running Coder Studio |
+| Claude Code CLI | Latest | Optional — for Claude Agent sessions |
+| OpenAI Codex CLI | Latest | Optional — for Codex Agent sessions |
 
-## Contributor Notes
+---
 
-The following section is for repository contributors. Regular users can start with the quick start and product docs above.
+## 📚 Documentation
+
+| Resource | Description |
+|----------|-------------|
+| [Quick Start Guide](docs/help/quick-start.md) | Installation to first workspace |
+| [App Overview](docs/help/app-overview.md) | Core concepts and features |
+| [Provider Setup](docs/help/providers.md) | Claude Code / Codex CLI installation |
+| [Desktop Guide](docs/help/desktop-guide.md) | PC interface and shortcuts |
+| [Mobile Guide](docs/help/mobile-guide.md) | Phone / tablet usage |
+| [Common Workflows](docs/help/workflows.md) | Task-based tutorials |
+| [Troubleshooting](docs/help/troubleshooting.md) | FAQ and known issues |
+| [CLI Reference](docs/help/cli.md) | Command-line options |
+
+---
+
+## 👥 Who Should Use Coder Studio
+
+- **AI Coding Power Users** — Daily Claude Code / Codex users who want better session management
+- **Multi-Device Developers** — Switch between office, home, and mobile devices frequently
+- **Remote-First Teams** — Need to share work progress without screen sharing
+- **Privacy-Conscious Developers** — Want code to stay on local machine, not cloud IDE
+
+---
+
+## 🔮 Roadmap
+
+- [ ] Web-based terminal streaming optimization
+- [ ] Session replay and history navigation
+- [ ] Multi-workspace management
+- [ ] Plugin system for custom integrations
+- [ ] Cloud sync for workspace preferences
+
+---
+
+## 🤝 Contributing
+
+We welcome contributions! See [Contributing Guide](CONTRIBUTING.md) for details.
 
 ### Local Development
 
@@ -123,33 +173,15 @@ pnpm install
 pnpm dev
 ```
 
-### Common Commands
-
-```bash
-pnpm changeset
-pnpm acceptance:phase1
-pnpm build:cli
-pnpm lint
-pnpm lint:fix
-pnpm format
-pnpm check
-```
-
-### Release Flow
-
-- Release-worthy PRs add a changeset for `@spencer-kit/coder-studio`
-- Ordinary PRs can merge without a changeset
-- After release-worthy changes land on `main`, GitHub Actions auto-creates or updates a release PR
-- Merging the release PR writes the CLI version bump and changelog
-- Publishing is manual through the `Publish CLI` workflow, which publishes to npm, creates the git tag, and opens the GitHub release
-
 ### Tech Stack
 
-- Frontend: React + Vite + Jotai
-- Backend: Fastify + WebSocket
-- Terminal: xterm.js + node-pty
-- Editor: Monaco Editor
-- Storage: SQLite (`node:sqlite`)
+| Layer | Technology |
+|-------|------------|
+| Frontend | React, Vite, Jotai |
+| Backend | Fastify, WebSocket |
+| Terminal | xterm.js, node-pty |
+| Editor | Monaco Editor |
+| Storage | SQLite (node:sqlite) |
 
 ### Development Docs
 
@@ -157,6 +189,14 @@ pnpm check
 - [Design Spec](docs/superpowers/specs/2026-04-13-coder-studio-design.md)
 - [More Docs](docs/)
 
-## License
+---
 
-MIT
+## 📄 License
+
+MIT License — see [LICENSE](LICENSE) for details.
+
+---
+
+## 🔍 Keywords
+
+`ai coding assistant` `browser ide` `claude code` `codex` `remote development` `web-based ide` `self-hosted ide` `cross-device coding` `ai agent workspace` `local-first development` `mobile coding` `tablet coding` `developer tools` `terminal in browser` `git web interface` `monaco editor` `websocket terminal` `ai pair programming` `coding anywhere` `cloud ide alternative`

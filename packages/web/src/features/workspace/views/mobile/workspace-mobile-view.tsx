@@ -6,13 +6,14 @@ import { useTranslation } from "../../../../lib/i18n";
 import { SessionCard } from "../../../agent-panes/views/shared/session-card";
 import { useCodeEditorActions } from "../../../code-editor/actions/use-code-editor-actions";
 import { CodeEditorHeaderActions } from "../../../code-editor/views/shared/code-editor-host";
-import { ConfigDriftBanner } from "../../../config-drift-banner";
 import { MobileSupervisorBadge } from "../../../supervisor/views/mobile/mobile-supervisor-badge";
 import { MobileSupervisorSheet } from "../../../supervisor/views/mobile/mobile-supervisor-sheet";
 import { TerminalPanel } from "../../../terminal-panel";
+import type { CreateRequest } from "../../actions/use-file-actions";
 import { useWorkspaceFullscreen } from "../../actions/use-workspace-fullscreen";
 import { useWorkspaceScreenModel } from "../../actions/use-workspace-screen-model";
 import { WorkspaceLaunchModal } from "../shared/workspace-launch-modal";
+import { WorkspaceStatusBar } from "../shared/workspace-status-bar";
 import { useMobileLayoutMode } from "./hooks/use-mobile-layout-mode";
 import { useMobileMotionMode } from "./hooks/use-mobile-motion-mode";
 import { useVisualViewportInset } from "./hooks/use-visual-viewport-inset";
@@ -36,6 +37,8 @@ export function WorkspaceMobileView() {
     closeMobileSession,
     closeMobileSheet,
     handleMobileSessionCreated,
+    handleOpenBranchSwitcher,
+    gitState,
     mobileActiveSessionId,
     mobileFilesRoute,
     mobileSheet,
@@ -48,6 +51,11 @@ export function WorkspaceMobileView() {
   } = useWorkspaceScreenModel();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [agentSheetOpen, setAgentSheetOpen] = useState(false);
+  const [mobileFilesTab, setMobileFilesTab] = useState<"files" | "git">("files");
+  const [mobileFileCreateRequest, setMobileFileCreateRequest] = useState<CreateRequest | null>(
+    null
+  );
+  const [mobileFileCollapseVersion, setMobileFileCollapseVersion] = useState(0);
   const [workspaceLaunchOpen, setWorkspaceLaunchOpen] = useState(false);
   const keyboardInset = useVisualViewportInset();
   const layoutMode = useMobileLayoutMode();
@@ -76,6 +84,26 @@ export function WorkspaceMobileView() {
     };
   }, [mobileActiveSessionId, setVisibleMobileSessionId]);
 
+  const filesSheetKicker =
+    mobileFilesRoute.kind === "editor"
+      ? t("file.title")
+      : mobileFilesRoute.kind === "diff"
+        ? t("label.git")
+        : null;
+
+  const handleMobileCreateRequest = (mode: "file" | "folder") => {
+    setMobileFileCreateRequest((previous) => ({
+      id: (previous?.id ?? 0) + 1,
+      mode,
+      baseDir: null,
+    }));
+  };
+
+  const filesSheetHeaderAction =
+    mobileFilesRoute.kind === "editor" ? (
+      <CodeEditorHeaderActions state={mobileEditorState} variant="mobile" />
+    ) : null;
+
   const sheetBody =
     mobileSheet === "files"
       ? {
@@ -84,27 +112,41 @@ export function WorkspaceMobileView() {
               ? (mobileFilesRoute.path.split("/").pop() ?? t("mobile.files.editor_fallback"))
               : mobileFilesRoute.kind === "diff"
                 ? (mobileFilesRoute.path.split("/").pop() ?? t("worktree.diff_tab"))
-                : t("file.title"),
+                : mobileFilesTab === "files"
+                  ? t("file.title")
+                  : t("label.git"),
           body: activeWorkspaceId ? (
             <MobileFilesSheet
               workspaceId={activeWorkspaceId}
               route={mobileFilesRoute}
+              activeTab={mobileFilesTab}
+              createRequest={mobileFileCreateRequest}
+              onCreateRequestConsumed={() => setMobileFileCreateRequest(null)}
+              collapseVersion={mobileFileCollapseVersion}
+              onCreateFile={() => handleMobileCreateRequest("file")}
+              onCreateFolder={() => handleMobileCreateRequest("folder")}
+              onCollapseAll={() => setMobileFileCollapseVersion((value) => value + 1)}
               onRouteChange={updateMobileFilesRoute}
+              onTabChange={setMobileFilesTab}
               onCloseSheet={closeMobileSheet}
-              detailBackMode="sheet"
               editorState={mobileEditorState}
             />
           ) : null,
-          kicker: mobileFilesRoute.kind === "root" ? t("label.workspace") : t("file.title"),
+          footer: activeWorkspaceId ? (
+            <WorkspaceStatusBar
+              workspaceId={activeWorkspaceId}
+              gitState={gitState}
+              onOpenBranchSwitcher={handleOpenBranchSwitcher}
+              flush
+            />
+          ) : null,
+          kicker: filesSheetKicker,
           onBack:
             mobileFilesRoute.kind === "root"
               ? undefined
               : () => updateMobileFilesRoute({ kind: "root" }),
           backLabel: t("action.back"),
-          headerAction:
-            mobileFilesRoute.kind === "editor" ? (
-              <CodeEditorHeaderActions state={mobileEditorState} variant="mobile" />
-            ) : null,
+          headerAction: filesSheetHeaderAction,
           fullscreen: true,
           bodyClassName: "mobile-sheet__body--flush mobile-sheet__body--fullscreen",
           contentClassName: "mobile-sheet--files",
@@ -117,6 +159,14 @@ export function WorkspaceMobileView() {
                 <TerminalPanel chrome="mobile-fullscreen" />
               </div>
             ),
+            footer: activeWorkspaceId ? (
+              <WorkspaceStatusBar
+                workspaceId={activeWorkspaceId}
+                gitState={gitState}
+                onOpenBranchSwitcher={handleOpenBranchSwitcher}
+                flush
+              />
+            ) : null,
             kicker: null,
             fullscreen: true,
             bodyClassName: "mobile-sheet__body--flush mobile-sheet__body--fullscreen",
@@ -161,8 +211,6 @@ export function WorkspaceMobileView() {
           setDrawerOpen((value) => !value);
         }}
       />
-
-      <ConfigDriftBanner />
 
       <main className="mobile-shell__viewport">
         <div className="mobile-shell__content">
@@ -215,6 +263,13 @@ export function WorkspaceMobileView() {
         <div className="mobile-dock-shell">
           <MobileDock activeItem={activeDockItem} onSelectItem={handleDockSelect} />
         </div>
+        {activeWorkspaceId ? (
+          <WorkspaceStatusBar
+            workspaceId={activeWorkspaceId}
+            gitState={gitState}
+            onOpenBranchSwitcher={handleOpenBranchSwitcher}
+          />
+        ) : null}
       </div>
 
       {agentSheetOpen ? (
@@ -255,6 +310,7 @@ export function WorkspaceMobileView() {
           headerAction={"headerAction" in sheetBody ? sheetBody.headerAction : undefined}
           bodyClassName={sheetBody.bodyClassName}
           contentClassName={sheetBody.contentClassName}
+          footer={"footer" in sheetBody ? sheetBody.footer : undefined}
           fullscreen={sheetBody.fullscreen}
         />
       ) : null}

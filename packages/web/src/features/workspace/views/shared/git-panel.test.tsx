@@ -4,6 +4,9 @@ import { createStore, Provider } from "jotai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../../../atoms/app-ui";
 import { wsClientAtom } from "../../../../atoms/connection";
+import { workspacesAtom } from "../../../../atoms/workspaces";
+import { CommandResultError } from "../../../../ws/client";
+import { toastsAtom } from "../../../notifications/atoms";
 import {
   gitBranchListAtomFamily,
   gitDiffPreviewAtomFamily,
@@ -20,18 +23,438 @@ describe("GitPanel", () => {
     headSha: "abc1234567890",
     headShortSha: "abc1234",
     headSubject: "Refresh git projection",
-    staged: [{ path: "src/auth/AuthGate.tsx" }],
-    modified: [{ path: "src/app/AppController.tsx" }],
-    untracked: [{ path: "tests/supervisor.test.ts" }],
-    deleted: [{ path: "src/legacy/deprecated.ts" }],
+    staged: [{ path: "src/auth/AuthGate.tsx", status: "modified" }],
+    modified: [{ path: "src/app/AppController.tsx", status: "modified" }],
+    untracked: [{ path: "tests/supervisor.test.ts", status: "untracked" }],
+    deleted: [{ path: "src/legacy/deprecated.ts", status: "deleted" }],
   };
+
+  const worktrees = [
+    {
+      name: "feature/ai-agent",
+      path: "/home/spencer/workspace/coder-studio",
+      branch: "feature/ai-agent",
+      commit: "abc1234",
+      status: "dirty" as const,
+    },
+    {
+      name: "pr/123-fix-auth",
+      path: "/home/spencer/workspace/coder-studio-pr-123-fix-auth",
+      branch: "pr/123-fix-auth",
+      commit: "def5678",
+      status: "clean" as const,
+    },
+  ];
+
+  const historyEntries = [
+    {
+      sha: "98db173000000000000000000000000000000000",
+      shortSha: "98db173",
+      subject: "feat: refresh source control surface",
+      authorName: "pallyoung",
+      authoredAt: Date.now(),
+    },
+    {
+      sha: "4c16c68000000000000000000000000000000000",
+      shortSha: "4c16c68",
+      subject: "Add worktree management surface spec",
+      authorName: "pallyoung",
+      authoredAt: Date.now() - 60_000,
+    },
+  ];
+
+  function seedWorkspaceStore(store: ReturnType<typeof createStore>, workspaceId = "ws-test") {
+    store.set(workspacesAtom, {
+      [workspaceId]: {
+        id: workspaceId,
+        path: "/home/spencer/workspace/coder-studio",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+  }
 
   beforeEach(() => {
     vi.restoreAllMocks();
+    window.localStorage.clear();
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+    window.localStorage.clear();
+  });
+
+  it("does not render a branch switcher inside the desktop panel", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return status;
+      }
+
+      if (op === "git.branches") {
+        return { current: "feature/ai-agent", branches: [] };
+      }
+
+      if (op === "worktree.list") {
+        return { worktrees: [] };
+      }
+
+      if (op === "git.log") {
+        return { entries: [] };
+      }
+
+      return {};
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedWorkspaceStore(store);
+
+    const { container } = render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    await screen.findByText("Worktrees");
+
+    expect(container.querySelector(".git-panel-branch-row")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Current Branch: feature/ai-agent" })).toBeNull();
+  });
+
+  it("does not render a branch switcher inside the mobile panel", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return status;
+      }
+
+      if (op === "git.branches") {
+        return { current: "feature/ai-agent", branches: [] };
+      }
+
+      if (op === "worktree.list") {
+        return { worktrees: [] };
+      }
+
+      if (op === "git.log") {
+        return { entries: [] };
+      }
+
+      return {};
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedWorkspaceStore(store);
+
+    render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" variant="mobile" />
+      </Provider>
+    );
+
+    await screen.findByText("Worktrees");
+
+    expect(screen.queryByRole("button", { name: "Current Branch: feature/ai-agent" })).toBeNull();
+  });
+
+  it("does not render an internal footer strip or duplicate change-count label", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return status;
+      }
+
+      if (op === "git.branches") {
+        return { current: "feature/ai-agent", branches: [] };
+      }
+
+      if (op === "worktree.list") {
+        return { worktrees: [] };
+      }
+
+      if (op === "git.log") {
+        return { entries: [] };
+      }
+
+      return {};
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedWorkspaceStore(store);
+
+    const { container } = render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    await screen.findByText("Worktrees");
+
+    expect(screen.queryByText("4 changes")).toBeNull();
+    expect(container.querySelector(".git-panel-status-strip")).toBeNull();
+  });
+
+  it("renders a single trailing commit button in the desktop commit actions", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return status;
+      }
+
+      if (op === "git.branches") {
+        return { current: "feature/ai-agent", branches: [] };
+      }
+
+      if (op === "worktree.list") {
+        return { worktrees: [] };
+      }
+
+      if (op === "git.log") {
+        return { entries: [] };
+      }
+
+      return {};
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedWorkspaceStore(store);
+
+    const { container } = render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    await screen.findByText("Worktrees");
+
+    const actionRow = container.querySelector(".git-commit-actions");
+    const primaryButton = container.querySelector(".git-commit-primary");
+
+    expect(actionRow).not.toBeNull();
+    expect(primaryButton).not.toBeNull();
+    expect(primaryButton?.parentElement).toBe(actionRow);
+    expect(actionRow?.querySelectorAll("button")).toHaveLength(1);
+  });
+
+  it("renders compact mobile commit actions with only the shared primary button", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return status;
+      }
+
+      if (op === "git.branches") {
+        return { current: "feature/ai-agent", branches: [] };
+      }
+
+      if (op === "worktree.list") {
+        return { worktrees: [] };
+      }
+
+      if (op === "git.log") {
+        return { entries: [] };
+      }
+
+      return {};
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedWorkspaceStore(store);
+
+    const { container } = render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" variant="mobile" />
+      </Provider>
+    );
+
+    await screen.findByText("Worktrees");
+
+    expect(container.querySelector(".git-commit-actions")).not.toBeNull();
+    expect(container.querySelector(".git-commit-actions > .git-commit-primary")).not.toBeNull();
+    expect(container.querySelector(".git-commit-primary-mobile")).toBeNull();
+    expect(container.querySelectorAll(".git-commit-actions button")).toHaveLength(1);
+  });
+
+  it("renders the commit box above collapsed worktree and history sections", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return status;
+      }
+
+      if (op === "git.branches") {
+        return { current: "feature/ai-agent", branches: [] };
+      }
+
+      if (op === "worktree.list") {
+        return {
+          worktrees,
+        };
+      }
+
+      if (op === "git.log") {
+        return {
+          entries: historyEntries,
+        };
+      }
+
+      return {};
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedWorkspaceStore(store);
+
+    render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    expect(await screen.findByText("Worktrees")).toBeInTheDocument();
+    expect(screen.getByText("History")).toBeInTheDocument();
+    expect(screen.queryByText("pr/123-fix-auth")).toBeNull();
+    expect(screen.queryByText("feat: refresh source control surface")).toBeNull();
+    const summary = screen.getByText("Worktrees");
+    const textarea = screen.getByPlaceholderText("Enter commit message...");
+    expect(
+      textarea.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      summary.compareDocumentPosition(screen.getByText("History")) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+
+  it("renders the desktop history section as a collapsible header with a chevron", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return status;
+      }
+
+      if (op === "git.branches") {
+        return { current: "feature/ai-agent", branches: [] };
+      }
+
+      if (op === "worktree.list") {
+        return {
+          worktrees,
+        };
+      }
+
+      if (op === "git.log") {
+        return {
+          entries: historyEntries,
+        };
+      }
+
+      return {};
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedWorkspaceStore(store);
+
+    render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    const historyToggle = await screen.findByRole("button", { name: "History" });
+
+    expect(historyToggle).toHaveAttribute("aria-expanded", "false");
+    expect(historyToggle.querySelector(".git-panel-section-chevron")).not.toBeNull();
+  });
+
+  it("keeps the worktree list collapsed by default", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return status;
+      }
+
+      if (op === "git.branches") {
+        return { current: "feature/ai-agent", branches: [] };
+      }
+
+      if (op === "worktree.list") {
+        return {
+          worktrees,
+        };
+      }
+
+      if (op === "git.log") {
+        return {
+          entries: historyEntries,
+        };
+      }
+
+      return {};
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedWorkspaceStore(store);
+
+    render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    const worktreeToggle = (await screen.findByText("Worktrees")).closest("button");
+
+    expect(worktreeToggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("pr/123-fix-auth")).toBeNull();
+  });
+
+  it("does not render the legacy header worktree button", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return status;
+      }
+
+      if (op === "git.branches") {
+        return { current: "feature/ai-agent", branches: [] };
+      }
+
+      if (op === "worktree.list") {
+        return { worktrees: [] };
+      }
+
+      if (op === "git.log") {
+        return { entries: [] };
+      }
+
+      return {};
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedWorkspaceStore(store);
+
+    render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    expect(await screen.findByText("Worktrees")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Open worktree list")).not.toBeInTheDocument();
   });
 
   it("renders git groups from the first git.status response", async () => {
@@ -57,20 +480,141 @@ describe("GitPanel", () => {
 
     expect((await screen.findAllByText("Staged")).length).toBeGreaterThan(0);
     expect(screen.getByText("Changes")).toBeInTheDocument();
-    expect(screen.getAllByText("Untracked").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Deleted").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Untracked")).toBeNull();
     expect(screen.getByText("AuthGate.tsx")).toBeInTheDocument();
     expect(screen.getByText("AppController.tsx")).toBeInTheDocument();
     expect(screen.getByText("supervisor.test.ts")).toBeInTheDocument();
     expect(screen.getByText("deprecated.ts")).toBeInTheDocument();
-    expect(screen.getByLabelText("Latest Commit")).toBeInTheDocument();
-    expect(screen.getByText("abc1234")).toBeInTheDocument();
-    expect(screen.getByText("Refresh git projection")).toBeInTheDocument();
+    expect(screen.getByText("History")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Latest Commit")).not.toBeInTheDocument();
     expect(screen.getByPlaceholderText("Enter commit message...")).toHaveClass(
       "input",
       "textarea",
       "git-commit-input"
     );
+  });
+
+  it("loads the latest 20 history entries by default and does not render a show-all control", async () => {
+    const sendCommand = vi
+      .fn()
+      .mockImplementation(async (op: string, args?: { limit?: number }) => {
+        if (op === "git.status") {
+          return status;
+        }
+
+        if (op === "git.branches") {
+          return {
+            current: "feature/ai-agent",
+            branches: [],
+          };
+        }
+
+        if (op === "git.log") {
+          return {
+            entries: historyEntries,
+          };
+        }
+
+        return {};
+      });
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "git.log",
+        {
+          workspaceId: "ws-test",
+          limit: 20,
+        },
+        undefined
+      );
+    });
+
+    expect(screen.queryByRole("button", { name: "Show all history" })).toBeNull();
+  });
+
+  it("opens a commit diff when a history row is clicked", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args: unknown) => {
+      if (op === "git.status") {
+        return status;
+      }
+
+      if (op === "git.branches") {
+        return {
+          current: "feature/ai-agent",
+          branches: [],
+        };
+      }
+
+      if (op === "git.log") {
+        return {
+          entries: historyEntries,
+        };
+      }
+
+      if (op === "git.diff") {
+        return {
+          diff: "diff --git a/src/auth/AuthGate.tsx b/src/auth/AuthGate.tsx",
+        };
+      }
+
+      if (op === "git.show") {
+        return {
+          diff: `commit-diff:${JSON.stringify(args)}`,
+        };
+      }
+
+      return {};
+    });
+    const onPreviewOpen = vi.fn();
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" onPreviewOpen={onPreviewOpen} />
+      </Provider>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "History" }));
+
+    const historyRow = await screen.findByRole("button", {
+      name: /feat: refresh source control surface/i,
+    });
+    fireEvent.click(historyRow);
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "git.show",
+        {
+          workspaceId: "ws-test",
+          sha: historyEntries[0]?.sha,
+        },
+        undefined
+      );
+    });
+
+    expect(store.get(gitDiffPreviewAtomFamily("ws-test"))).toEqual({
+      path: historyEntries[0]?.sha,
+      title: `98db173 · ${historyEntries[0]?.subject}`,
+      diff: expect.stringContaining("commit-diff"),
+      source: "commit",
+    });
+    expect(onPreviewOpen).toHaveBeenCalledWith({
+      path: historyEntries[0]?.sha,
+      title: `98db173 · ${historyEntries[0]?.subject}`,
+      diff: expect.stringContaining("commit-diff"),
+      source: "commit",
+    });
   });
 
   it("loads branch list on mount", async () => {
@@ -137,6 +681,12 @@ describe("GitPanel", () => {
         };
       }
 
+      if (op === "git.log") {
+        return {
+          entries: [],
+        };
+      }
+
       return {};
     });
     const onPreviewOpen = vi.fn();
@@ -172,11 +722,13 @@ describe("GitPanel", () => {
       path: "src/auth/AuthGate.tsx",
       diff: expect.stringContaining("diff --git a/src/auth/AuthGate.tsx b/src/auth/AuthGate.tsx"),
       staged: true,
+      source: "file",
     });
     expect(onPreviewOpen).toHaveBeenCalledWith({
       path: "src/auth/AuthGate.tsx",
       diff: expect.stringContaining("diff --git a/src/auth/AuthGate.tsx b/src/auth/AuthGate.tsx"),
       staged: true,
+      source: "file",
     });
     expect(dispatchEventSpy).not.toHaveBeenCalled();
   });
@@ -193,6 +745,12 @@ describe("GitPanel", () => {
         return {
           current: "feature/ai-agent",
           branches: [],
+        };
+      }
+
+      if (op === "git.log") {
+        return {
+          entries: [],
         };
       }
 
@@ -227,6 +785,7 @@ describe("GitPanel", () => {
       path: "src/auth/AuthGate.tsx",
       diff: expect.stringContaining("diff --git a/src/auth/AuthGate.tsx b/src/auth/AuthGate.tsx"),
       staged: true,
+      source: "file",
     });
     expect(dispatchEventSpy).not.toHaveBeenCalled();
   });
@@ -326,10 +885,248 @@ describe("GitPanel", () => {
       expect(sendCommand).toHaveBeenCalledWith("git.status", { workspaceId: "ws-test" }, undefined);
     });
 
-    resolveFirst?.(status);
+    expect(resolveFirst).not.toBeNull();
+    resolveFirst!(status);
 
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledTimes(3);
+    });
+  });
+
+  it("stages modified, deleted, and untracked files from the merged changes section action", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return status;
+      }
+      if (op === "git.branches") {
+        return {
+          current: "feature/ai-agent",
+          branches: [],
+        };
+      }
+      if (op === "git.diff") {
+        return {
+          diff: "diff --git a/src/auth/AuthGate.tsx b/src/auth/AuthGate.tsx",
+        };
+      }
+      if (op === "git.log") {
+        return {
+          entries: [],
+        };
+      }
+
+      if (op === "worktree.list") {
+        return {
+          worktrees: [],
+        };
+      }
+
+      return {};
+    });
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedWorkspaceStore(store);
+
+    render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    const changesSection = (await screen.findByText("Changes")).closest(".git-panel-section");
+    expect(changesSection).not.toBeNull();
+
+    fireEvent.click(within(changesSection as HTMLElement).getByTitle("Stage All"));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "git.stage",
+        {
+          workspaceId: "ws-test",
+          paths: [
+            "src/app/AppController.tsx",
+            "src/legacy/deprecated.ts",
+            "tests/supervisor.test.ts",
+          ],
+        },
+        undefined
+      );
+    });
+  });
+
+  it("shows an error toast when staging fails", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return status;
+      }
+      if (op === "git.branches") {
+        return {
+          current: "feature/ai-agent",
+          branches: [],
+        };
+      }
+      if (op === "git.diff") {
+        return {
+          diff: "diff --git a/src/auth/AuthGate.tsx b/src/auth/AuthGate.tsx",
+        };
+      }
+      if (op === "git.log") {
+        return {
+          entries: [],
+        };
+      }
+      if (op === "worktree.list") {
+        return {
+          worktrees: [],
+        };
+      }
+      if (op === "git.stage") {
+        throw new CommandResultError({
+          code: "git_locked",
+          message: "fatal: Unable to create '.git/index.lock': File exists.",
+        });
+      }
+
+      return {};
+    });
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedWorkspaceStore(store);
+
+    render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    const changesSection = (await screen.findByText("Changes")).closest(".git-panel-section");
+    expect(changesSection).not.toBeNull();
+
+    fireEvent.click(within(changesSection as HTMLElement).getByTitle("Stage All"));
+
+    await waitFor(() => {
+      expect(store.get(toastsAtom)[0]).toMatchObject({
+        kind: "error",
+        title: "Stage failed",
+        body: expect.stringContaining("index.lock"),
+      });
+    });
+  });
+
+  it("shows a section-level discard action for the merged changes group only", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return status;
+      }
+      if (op === "git.branches") {
+        return {
+          current: "feature/ai-agent",
+          branches: [],
+        };
+      }
+      if (op === "git.diff") {
+        return {
+          diff: "diff --git a/src/auth/AuthGate.tsx b/src/auth/AuthGate.tsx",
+        };
+      }
+      if (op === "git.log") {
+        return {
+          entries: [],
+        };
+      }
+      if (op === "worktree.list") {
+        return {
+          worktrees: [],
+        };
+      }
+      return {};
+    });
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedWorkspaceStore(store);
+
+    render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    const stagedSection = (await screen.findByText("Staged")).closest(".git-panel-section");
+    const changesSection = screen.getByText("Changes").closest(".git-panel-section");
+
+    expect(stagedSection).not.toBeNull();
+    expect(changesSection).not.toBeNull();
+    expect(within(stagedSection as HTMLElement).queryByTitle("Discard All")).toBeNull();
+    expect(within(changesSection as HTMLElement).getByTitle("Discard All")).toBeInTheDocument();
+  });
+
+  it("discards only the merged changes group files after section confirmation", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return status;
+      }
+      if (op === "git.branches") {
+        return {
+          current: "feature/ai-agent",
+          branches: [],
+        };
+      }
+      if (op === "git.diff") {
+        return {
+          diff: "diff --git a/src/auth/AuthGate.tsx b/src/auth/AuthGate.tsx",
+        };
+      }
+      if (op === "git.log") {
+        return {
+          entries: [],
+        };
+      }
+      if (op === "worktree.list") {
+        return {
+          worktrees: [],
+        };
+      }
+      return {};
+    });
+    const store = createStore();
+    store.set(localeAtom, "zh");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedWorkspaceStore(store);
+
+    render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    const changesSection = (await screen.findByText("更改")).closest(".git-panel-section");
+    expect(changesSection).not.toBeNull();
+
+    fireEvent.click(within(changesSection as HTMLElement).getByTitle("放弃全部"));
+
+    expect(screen.getByText("放弃所有更改")).toBeInTheDocument();
+    expect(screen.getByText("确定要放弃 3 个文件的更改吗？")).toBeInTheDocument();
+
+    const modal = screen.getByText("放弃所有更改").closest(".modal-card");
+    expect(modal).not.toBeNull();
+    fireEvent.click(within(modal as HTMLElement).getByRole("button", { name: /^放弃$/ }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "git.discard",
+        {
+          workspaceId: "ws-test",
+          paths: [
+            "src/app/AppController.tsx",
+            "src/legacy/deprecated.ts",
+            "tests/supervisor.test.ts",
+          ],
+        },
+        undefined
+      );
     });
   });
 
@@ -430,7 +1227,7 @@ describe("GitPanel", () => {
     });
   });
 
-  it("shows a discard-all confirmation with the affected file count", async () => {
+  it("shows a discard-all confirmation with the affected file count from the changes group", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "git.status") {
         return status;
@@ -458,11 +1255,14 @@ describe("GitPanel", () => {
       </Provider>
     );
 
-    fireEvent.click(await screen.findByTitle("放弃全部"));
+    const changesSection = (await screen.findByText("更改")).closest(".git-panel-section");
+    expect(changesSection).not.toBeNull();
+
+    fireEvent.click(within(changesSection as HTMLElement).getByTitle("放弃全部"));
 
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(screen.getByText("放弃所有更改")).toBeInTheDocument();
-    expect(screen.getByText("确定要放弃 4 个文件的更改吗？")).toBeInTheDocument();
+    expect(screen.getByText("确定要放弃 3 个文件的更改吗？")).toBeInTheDocument();
 
     const dialog = screen.getByRole("dialog");
     const modal = dialog.closest(".modal-card") ?? dialog;
@@ -475,7 +1275,6 @@ describe("GitPanel", () => {
         {
           workspaceId: "ws-test",
           paths: [
-            "src/auth/AuthGate.tsx",
             "src/app/AppController.tsx",
             "src/legacy/deprecated.ts",
             "tests/supervisor.test.ts",
@@ -664,22 +1463,200 @@ describe("GitPanel", () => {
       </Provider>
     );
 
-    expect(await screen.findAllByText("已暂存")).toHaveLength(2);
+    expect((await screen.findAllByText("已暂存")).length).toBeGreaterThan(0);
     expect(screen.getByText("更改")).toBeInTheDocument();
-    expect(screen.getByText("已修改")).toBeInTheDocument();
-    expect(screen.getAllByText("未跟踪").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("已删除").length).toBeGreaterThan(0);
+    expect(screen.queryByText("未跟踪")).toBeNull();
     expect(screen.getByPlaceholderText("输入提交信息...")).toBeInTheDocument();
-    expect(screen.getByTitle("刷新")).toBeInTheDocument();
-    expect(screen.getByTitle("暂存全部")).toBeInTheDocument();
+    expect(screen.queryByTitle("刷新")).not.toBeInTheDocument();
     expect(screen.getByTitle("放弃全部")).toBeInTheDocument();
+    expect(screen.getAllByTitle("暂存全部")).toHaveLength(1);
+    expect(screen.getByTitle("取消暂存全部")).toBeInTheDocument();
+
+    const commitBlock = screen.getByPlaceholderText("输入提交信息...").closest(".git-commit-block");
+    expect(commitBlock).not.toBeNull();
+    expect(within(commitBlock as HTMLElement).queryByRole("button", { name: "放弃" })).toBeNull();
+    expect(
+      within(commitBlock as HTMLElement).queryByRole("button", { name: "暂存全部" })
+    ).toBeNull();
+    expect(
+      within(commitBlock as HTMLElement).getByRole("button", { name: "提交" })
+    ).toBeInTheDocument();
 
     const untrackedRow = screen.getByText("supervisor.test.ts").closest(".git-row");
     expect(untrackedRow).not.toBeNull();
-    expect(within(untrackedRow as HTMLElement).getByText("未跟踪")).toHaveClass(
-      "git-row-status",
-      "git-row-status-end"
+    expect(within(untrackedRow as HTMLElement).getByText("?")).toHaveClass(
+      "git-row-status-badge",
+      "git-row-status-badge-untracked"
     );
     expect(within(untrackedRow as HTMLElement).queryByText("tests/")).toHaveClass("git-row-dir");
+  });
+
+  it("renders add and discard row actions on mobile like desktop", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return status;
+      }
+      if (op === "git.branches") {
+        return { current: "feature/ai-agent", branches: [] };
+      }
+      if (op === "worktree.list") {
+        return { worktrees: [] };
+      }
+      if (op === "git.log") {
+        return { entries: [] };
+      }
+      if (op === "git.diff") {
+        return { diff: "diff --git a/src/auth/AuthGate.tsx b/src/auth/AuthGate.tsx" };
+      }
+      return {};
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedWorkspaceStore(store);
+
+    render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" variant="mobile" />
+      </Provider>
+    );
+
+    const changesToggle = (await screen.findByText("Changes")).closest("button");
+    expect(changesToggle).not.toBeNull();
+    fireEvent.click(changesToggle as HTMLElement);
+
+    const row = (await screen.findByText("supervisor.test.ts")).closest(".git-row");
+    expect(row).not.toBeNull();
+    expect(within(row as HTMLElement).queryByLabelText("Stage")).toBeNull();
+    expect(within(row as HTMLElement).getByTitle("Stage")).toBeInTheDocument();
+    expect(within(row as HTMLElement).getByTitle("Discard")).toBeInTheDocument();
+  });
+
+  it("persists the commit message draft across panel remount per workspace", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return status;
+      }
+      if (op === "git.branches") {
+        return { current: "feature/ai-agent", branches: [] };
+      }
+      if (op === "git.diff") {
+        return { diff: "diff --git a/src/auth/AuthGate.tsx b/src/auth/AuthGate.tsx" };
+      }
+      return {};
+    });
+
+    const firstStore = createStore();
+    firstStore.set(localeAtom, "zh");
+    firstStore.set(wsClientAtom, { sendCommand } as never);
+
+    const firstMount = render(
+      <Provider store={firstStore}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    const textarea = (await screen.findByPlaceholderText("输入提交信息...")) as HTMLTextAreaElement;
+
+    fireEvent.change(textarea, { target: { value: "wip: persist me" } });
+
+    await waitFor(() => {
+      expect(textarea.value).toBe("wip: persist me");
+    });
+
+    firstMount.unmount();
+
+    const secondStore = createStore();
+    secondStore.set(localeAtom, "zh");
+    secondStore.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={secondStore}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    const restoredTextarea = (await screen.findByPlaceholderText(
+      "输入提交信息..."
+    )) as HTMLTextAreaElement;
+    expect(restoredTextarea.value).toBe("wip: persist me");
+
+    const otherStore = createStore();
+    otherStore.set(localeAtom, "zh");
+    otherStore.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={otherStore}>
+        <GitPanel workspaceId="ws-other" />
+      </Provider>
+    );
+
+    const otherTextareas = (await screen.findAllByPlaceholderText(
+      "输入提交信息..."
+    )) as HTMLTextAreaElement[];
+    const otherTextarea = otherTextareas[otherTextareas.length - 1];
+    expect(otherTextarea?.value).toBe("");
+  });
+
+  it("clears the persisted commit draft for the workspace after a successful commit", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return status;
+      }
+      if (op === "git.branches") {
+        return { current: "feature/ai-agent", branches: [] };
+      }
+      if (op === "git.diff") {
+        return { diff: "diff --git a/src/auth/AuthGate.tsx b/src/auth/AuthGate.tsx" };
+      }
+      if (op === "git.commit") {
+        return undefined;
+      }
+      return {};
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "zh");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    const textarea = (await screen.findByPlaceholderText("输入提交信息...")) as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: "feat: ship it" } });
+
+    await waitFor(() => {
+      expect(textarea.value).toBe("feat: ship it");
+    });
+
+    const commitButton = await screen.findByTitle("提交");
+    fireEvent.click(commitButton);
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "git.commit",
+        { workspaceId: "ws-test", message: "feat: ship it" },
+        undefined
+      );
+    });
+
+    await waitFor(() => {
+      expect(textarea.value).toBe("");
+    });
+
+    const persistedDraftKeys = Object.keys(window.localStorage).filter((key) =>
+      key.includes("git-commit-draft")
+    );
+    for (const key of persistedDraftKeys) {
+      const raw = window.localStorage.getItem(key);
+      if (raw === null) {
+        continue;
+      }
+      expect(JSON.parse(raw)).toBe("");
+    }
   });
 });

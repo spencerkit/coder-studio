@@ -149,6 +149,25 @@ describe("server-control", () => {
     });
   });
 
+  it("reports stopped when pm2 is no longer running and runtime is absent", async () => {
+    getManagedServerStatus.mockResolvedValue({
+      status: "starting",
+      pm2Pid: null,
+      restartCount: 0,
+    });
+
+    await expect(getServerStatus()).resolves.toEqual({
+      status: "stopped",
+      pid: null,
+      host: null,
+      port: null,
+      restartCount: 0,
+      outFile: "/tmp/server.out.log",
+      errFile: "/tmp/server.err.log",
+      startedAt: null,
+    });
+  });
+
   it("cleans stale runtime when pm2 reports stopped", async () => {
     writeRuntimeConfig({
       host: "127.0.0.1",

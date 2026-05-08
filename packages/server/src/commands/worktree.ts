@@ -5,6 +5,7 @@
 import { z } from "zod";
 import {
   createWorktree,
+  getGitCommonDirPath,
   getWorktreeDiff,
   getWorktreeStatus,
   getWorktreeTree,
@@ -12,7 +13,34 @@ import {
   removeWorktree,
   resolveWorktreePath,
 } from "../git/worktree.js";
+import type { CommandContext } from "../ws/dispatch.js";
 import { registerCommand } from "../ws/dispatch.js";
+import { emitGitStateChanged } from "./git-events.js";
+
+async function findRelatedWorkspaceIds(
+  ctx: CommandContext,
+  workspacePath: string
+): Promise<string[]> {
+  const targetCommonDir = await getGitCommonDirPath(workspacePath);
+  const relatedWorkspaceIds = await Promise.all(
+    ctx.workspaceMgr.list().map(async (workspace) => {
+      try {
+        const commonDir = await getGitCommonDirPath(workspace.path);
+        return commonDir === targetCommonDir ? workspace.id : null;
+      } catch {
+        return null;
+      }
+    })
+  );
+
+  return relatedWorkspaceIds.filter((workspaceId): workspaceId is string => Boolean(workspaceId));
+}
+
+function emitWorktreeChangedForWorkspaceIds(ctx: CommandContext, workspaceIds: string[]) {
+  for (const workspaceId of workspaceIds) {
+    emitGitStateChanged(ctx, workspaceId, { worktreeChanged: true });
+  }
+}
 
 // worktree.list
 registerCommand("worktree.list", z.object({ workspaceId: z.string() }), async (args, ctx) => {
@@ -85,7 +113,11 @@ registerCommand(
     if (!workspace) {
       throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
     }
-    return { worktree: await createWorktree(workspace.path, args.branch, args.path) };
+
+    const relatedWorkspaceIds = await findRelatedWorkspaceIds(ctx, workspace.path);
+    const worktree = await createWorktree(workspace.path, args.branch, args.path);
+    emitWorktreeChangedForWorkspaceIds(ctx, relatedWorkspaceIds);
+    return { worktree };
   }
 );
 
@@ -103,8 +135,10 @@ registerCommand(
       throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
     }
 
+    const relatedWorkspaceIds = await findRelatedWorkspaceIds(ctx, workspace.path);
     const worktreePath = await resolveWorktreePath(workspace.path, args.worktreePath);
     await removeWorktree(workspace.path, worktreePath, args.force);
+    emitWorktreeChangedForWorkspaceIds(ctx, relatedWorkspaceIds);
     return {};
   }
 );

@@ -33,6 +33,7 @@ type MockSocket = {
 };
 
 type MessageHandler = ((data: Buffer, isBinary?: boolean) => void) | undefined;
+type CloseHandler = (() => void) | undefined;
 
 type ResultMessage = Extract<ServerToClient, { kind: "result" }>;
 
@@ -65,6 +66,10 @@ const createCommandContext = (eventBus: EventBus): CommandContext =>
     broadcaster: {},
     db: {},
     providerRegistry: [],
+    autoFetch: {
+      registerViewer: vi.fn(),
+      unregisterViewer: vi.fn(),
+    },
   }) as unknown as CommandContext;
 
 const createHub = (eventBus: EventBus, commandContext: CommandContext): WsHub =>
@@ -78,6 +83,11 @@ const createHub = (eventBus: EventBus, commandContext: CommandContext): WsHub =>
 const getMessageHandler = (socket: MockSocket): MessageHandler =>
   socket.on.mock.calls.find((call: unknown[]) => call[0] === "message")?.[1] as
     | MessageHandler
+    | undefined;
+
+const getCloseHandler = (socket: MockSocket): CloseHandler =>
+  socket.on.mock.calls.find((call: unknown[]) => call[0] === "close")?.[1] as
+    | CloseHandler
     | undefined;
 
 const subscribeToAllTopics = (socket: MockSocket) => {
@@ -122,6 +132,20 @@ describe("WsHub", () => {
   afterEach(() => {
     hub.destroy();
     eventBus.clear();
+  });
+
+  it("unregisters autoFetch viewers when a client disconnects", () => {
+    const socket = createMockSocket();
+    hub.handleConnection(socket as never, createMockRequest());
+
+    const connected = parseSentEvents(socket)[0];
+    const clientId = (connected as Extract<ServerToClient, { kind: "event" }>).data
+      .clientId as string;
+    const closeHandler = getCloseHandler(socket);
+
+    closeHandler?.();
+
+    expect(mockCommandContext.autoFetch.unregisterViewer).toHaveBeenCalledWith(clientId);
   });
 
   it("sends connection metadata including the CLI version on connect", () => {

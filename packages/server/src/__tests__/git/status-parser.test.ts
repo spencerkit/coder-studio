@@ -42,7 +42,9 @@ describe("parseStatus", () => {
     const status = parseStatus(porcelain);
     expect(status.untracked).toHaveLength(2);
     expect(status.untracked[0].path).toBe("file1.txt");
+    expect(status.untracked[0].status).toBe("untracked");
     expect(status.untracked[1].path).toBe("file2.txt");
+    expect(status.untracked[1].status).toBe("untracked");
   });
 
   it("should parse modified files", () => {
@@ -51,6 +53,7 @@ describe("parseStatus", () => {
     const status = parseStatus(porcelain);
     expect(status.modified).toHaveLength(1);
     expect(status.modified[0].path).toBe("file.txt");
+    expect(status.modified[0].status).toBe("modified");
   });
 
   it("should parse staged files", () => {
@@ -59,6 +62,7 @@ describe("parseStatus", () => {
     const status = parseStatus(porcelain);
     expect(status.staged).toHaveLength(1);
     expect(status.staged[0].path).toBe("file.txt");
+    expect(status.staged[0].status).toBe("modified");
   });
 
   it("should parse unstaged deleted files", () => {
@@ -67,6 +71,7 @@ describe("parseStatus", () => {
     const status = parseStatus(porcelain);
     expect(status.deleted).toHaveLength(1);
     expect(status.deleted[0].path).toBe("file.txt");
+    expect(status.deleted[0].status).toBe("deleted");
   });
 
   it("should treat staged deletions as staged changes", () => {
@@ -75,6 +80,7 @@ describe("parseStatus", () => {
     const status = parseStatus(porcelain);
     expect(status.staged).toHaveLength(1);
     expect(status.staged[0].path).toBe("file.txt");
+    expect(status.staged[0].status).toBe("deleted");
     expect(status.deleted).toHaveLength(0);
   });
 
@@ -85,6 +91,7 @@ describe("parseStatus", () => {
     expect(status.staged).toHaveLength(1);
     expect(status.staged[0].path).toBe("new.txt");
     expect(status.staged[0].oldPath).toBe("old.txt");
+    expect(status.staged[0].status).toBe("renamed");
   });
 
   it("should parse NUL-delimited records with raw paths", () => {
@@ -100,8 +107,10 @@ describe("parseStatus", () => {
     expect(status.branch).toBe("main");
     expect(status.ahead).toBe(1);
     expect(status.behind).toBe(2);
-    expect(status.deleted).toEqual([{ path: "docs/验收报告/phase 1/a b.txt" }]);
-    expect(status.untracked).toEqual([{ path: "docs/验收报告/phase 1/c d.txt" }]);
+    expect(status.deleted).toEqual([{ path: "docs/验收报告/phase 1/a b.txt", status: "deleted" }]);
+    expect(status.untracked).toEqual([
+      { path: "docs/验收报告/phase 1/c d.txt", status: "untracked" },
+    ]);
   });
 
   it("should parse NUL-delimited renamed files with spaces and non-ascii paths", () => {
@@ -117,6 +126,20 @@ describe("parseStatus", () => {
       {
         path: "docs/验收报告/phase 1/c d.txt",
         oldPath: "docs/验收报告/phase 1/a b.txt",
+        status: "renamed",
+      },
+    ]);
+  });
+
+  it("parses staged additions with an added status marker", () => {
+    const porcelain = `# branch.head main
+1 A. N... 000000 100644 100644 000000 abc123 new-file.ts`;
+    const status = parseStatus(porcelain);
+
+    expect(status.staged).toEqual([
+      {
+        path: "new-file.ts",
+        status: "added",
       },
     ]);
   });

@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { homedir, tmpdir } from "os";
 import { join } from "path";
@@ -41,6 +42,27 @@ describe("parseServerConfig", () => {
     const config = parseServerConfig();
 
     expect(config.appVersion).toBe(readCliPackageVersion());
+  });
+
+  it("can resolve the CLI package version when imported via native ESM", () => {
+    const env = { ...process.env };
+    delete env.CODER_STUDIO_APP_VERSION;
+
+    const output = execFileSync(
+      process.execPath,
+      [
+        "--input-type=module",
+        "-e",
+        "import('./src/config.ts').then((module) => { process.stdout.write(String(module.parseServerConfig().appVersion)); });",
+      ],
+      {
+        cwd: new URL("../", import.meta.url),
+        env,
+        encoding: "utf-8",
+      }
+    );
+
+    expect(output).toBe(readCliPackageVersion());
   });
 
   it("prefers explicit appVersion override over inferred CLI version", () => {

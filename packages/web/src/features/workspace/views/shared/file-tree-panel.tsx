@@ -43,6 +43,9 @@ interface FileTreePanelProps {
   createRequest?: CreateRequest | null;
   onCreateRequestConsumed?: () => void;
   onSelectFile?: (path: string) => void;
+  onVisibleCountChange?: (count: number, loading: boolean) => void;
+  collapseVersion?: number;
+  variant?: "desktop" | "mobile";
 }
 
 export const FileTreePanel: FC<FileTreePanelProps> = ({
@@ -51,6 +54,9 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
   createRequest = null,
   onCreateRequestConsumed,
   onSelectFile,
+  onVisibleCountChange,
+  collapseVersion = 0,
+  variant = "desktop",
 }) => {
   const t = useTranslation();
   const {
@@ -87,6 +93,10 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
   const [searchLoading, setSearchLoading] = useState(false);
   const searchRequestIdRef = useRef(0);
   const hasSearch = searchQuery.length > 0;
+  const visibleFileCount = useMemo(
+    () => (hasSearch ? searchResults.length : countVisibleFiles(treeNodes)),
+    [hasSearch, searchResults.length, treeNodes]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -121,9 +131,13 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
     };
   }, [hasSearch, loadSearchResults, searchQuery]);
 
+  useEffect(() => {
+    onVisibleCountChange?.(visibleFileCount, searchLoading || isLoading);
+  }, [isLoading, onVisibleCountChange, searchLoading, visibleFileCount]);
+
   return (
     <>
-      <div className="file-tree-shell">
+      <div className={`file-tree-shell file-tree-shell--${variant}`}>
         <label className="file-tree-search" htmlFor={`file-tree-search-${workspaceId}`}>
           <Search size={14} className="file-tree-search-icon" aria-hidden="true" />
           <input
@@ -170,6 +184,7 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
                 onSelectFile={handleSelectFile}
                 onLoadChildren={loadChildren}
                 isLoadingDir={isLoadingDir}
+                collapseVersion={collapseVersion}
               />
             ))
           ) : (
@@ -222,7 +237,7 @@ const FileSearchResultRow: FC<FileSearchResultRowProps> = ({
     >
       <span className="tree-chevron" aria-hidden="true" />
 
-      <span className={`tree-icon ${getFileToneClass(node)}`}>
+      <span className={`tree-icon ${getNodeToneClass(node, false)}`}>
         <Icon size={14} />
       </span>
 
@@ -258,6 +273,7 @@ interface FileTreeNodeProps {
   onSelectFile: (path: string) => void;
   onLoadChildren: (dirPath: string) => void;
   isLoadingDir: string | null;
+  collapseVersion: number;
 }
 
 const FileTreeNode: FC<FileTreeNodeProps> = ({
@@ -269,6 +285,7 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
   onSelectFile,
   onLoadChildren,
   isLoadingDir,
+  collapseVersion,
 }) => {
   const t = useTranslation();
   const isFolder = node.kind === "dir";
@@ -290,6 +307,12 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
     }
   }, [isFolder, isExpanded, node.children, node.path, onLoadChildren]);
 
+  useEffect(() => {
+    if (collapseVersion > 0) {
+      setIsExpanded(false);
+    }
+  }, [collapseVersion]);
+
   const handleClick = () => {
     if (isFolder) {
       if (!isExpanded) {
@@ -301,7 +324,7 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
     }
   };
 
-  const paddingLeft = depth * 14 + 12;
+  const paddingLeft = depth * 14 + 16;
   const Icon = getNodeIcon(node, isExpanded);
 
   return (
@@ -316,7 +339,7 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
           {isFolder ? isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} /> : null}
         </span>
 
-        <span className={`tree-icon ${getFileToneClass(node)}`}>
+        <span className={`tree-icon ${getNodeToneClass(node, isExpanded)}`}>
           <Icon size={14} />
         </span>
 
@@ -392,6 +415,7 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
               onSelectFile={onSelectFile}
               onLoadChildren={onLoadChildren}
               isLoadingDir={isLoadingDir}
+              collapseVersion={collapseVersion}
             />
           ))}
           {node.children.length === 0 && !isLoadingDir && (
@@ -524,6 +548,16 @@ const DeleteFileModal: FC<DeleteFileModalProps> = ({ pendingDelete, onCancel, on
 
 export default FileTreePanel;
 
+function countVisibleFiles(nodes: FileNode[]): number {
+  return nodes.reduce((count, node) => {
+    if (node.kind === "file") {
+      return count + 1;
+    }
+
+    return count + countVisibleFiles(node.children ?? []);
+  }, 0);
+}
+
 function buildNestedTree(treeMap: Map<string, FileNode[]>): FileNode[] {
   const attachChildren = (nodes: FileNode[]): FileNode[] =>
     nodes.map((node) => {
@@ -589,34 +623,10 @@ function getNodeIcon(node: FileNode, isExpanded: boolean): LucideIcon {
   }
 }
 
-function getFileToneClass(node: FileNode) {
+function getNodeToneClass(node: FileNode, isExpanded: boolean) {
   if (node.kind === "dir") {
-    return "folder";
+    return isExpanded ? "folder-open" : "folder";
   }
 
-  const ext = node.name.split(".").pop()?.toLowerCase();
-
-  switch (ext) {
-    case "ts":
-    case "tsx":
-    case "js":
-    case "jsx":
-      return "code";
-    case "json":
-    case "yaml":
-    case "yml":
-      return "data";
-    case "md":
-    case "txt":
-      return "doc";
-    case "png":
-    case "jpg":
-    case "jpeg":
-    case "gif":
-    case "svg":
-    case "webp":
-      return "media";
-    default:
-      return "file";
-  }
+  return "file";
 }

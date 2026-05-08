@@ -7,14 +7,14 @@ import { NotFoundPage } from "../../features/not-found";
 import { ToastContainer } from "../../features/notifications";
 import { SettingsPage } from "../../features/settings";
 import { WelcomePage } from "../../features/welcome";
-import { useWorkspaceBootstrap } from "../../features/workspace/actions/use-workspace-bootstrap";
 import { WorkspaceMobileView } from "../../features/workspace/views/mobile/workspace-mobile-view";
 import { BranchQuickPick } from "../../features/workspace/views/shared/branch-quick-pick";
 import { WorkspaceRouteGate } from "../../features/workspace/views/shared/workspace-route-gate";
+import { useBootstrap } from "../../hooks/use-bootstrap";
 import { ConnectionStatusBanner } from "../shared/connection-status-banner";
 
 export function MobileShell() {
-  useWorkspaceBootstrap();
+  useBootstrap();
   const authEnabled = useAtomValue(authEnabledAtom);
   const authUnknown = authEnabled === null;
 

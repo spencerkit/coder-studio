@@ -23,7 +23,6 @@ import { resolvedActiveWorkspaceIdAtom } from "../../../atoms/workspaces";
 import { Input, Notice, Pill, Switch } from "../../../components/ui";
 import { useViewport } from "../../../hooks/use-viewport";
 import { useTranslation } from "../../../lib/i18n";
-import { ConfigDriftBanner } from "../../config-drift-banner";
 import { notificationPreferencesAtom } from "../../notifications/atoms";
 import { PageHeader } from "../../shared/components/page-header";
 import { type ProviderInfo, ProviderSettings } from "./provider-settings";
@@ -376,7 +375,6 @@ export function SettingsPage() {
                 tone="error"
               />
             )}
-            <ConfigDriftBanner variant="embedded" showLoadError={!settingsLoadError} />
             {renderContent()}
           </main>
         </div>

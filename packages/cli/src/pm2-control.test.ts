@@ -33,15 +33,22 @@ import {
 describe("pm2-control", () => {
   const originalHome = process.env.HOME;
   const originalUserProfile = process.env.USERPROFILE;
+  const originalRuntimeDir = process.env.CODER_STUDIO_RUNTIME_DIR;
+  const originalRuntimeJsonPath = process.env.CODER_STUDIO_RUNTIME_JSON_PATH;
   let testHomeDir: string;
 
   beforeEach(() => {
     testHomeDir = mkdtempSync(join(tmpdir(), "cs-pm2-control-home-"));
     process.env.HOME = testHomeDir;
     process.env.USERPROFILE = testHomeDir;
+    process.env.CODER_STUDIO_RUNTIME_DIR = join(testHomeDir, ".coder-studio");
+    delete process.env.CODER_STUDIO_RUNTIME_JSON_PATH;
 
     connect.mockImplementation((callback: (error: Error | null) => void) => callback(null));
-    disconnect.mockImplementation(() => undefined);
+    disconnect.mockImplementation((callback?: (error: Error | null) => void) => {
+      callback?.(null);
+      return undefined;
+    });
     start.mockImplementation(
       (_config: unknown, callback: (error: Error | null, apps: unknown[]) => void) => {
         writeRuntimeConfig({
@@ -78,6 +85,18 @@ describe("pm2-control", () => {
       delete process.env.USERPROFILE;
     } else {
       process.env.USERPROFILE = originalUserProfile;
+    }
+
+    if (originalRuntimeDir === undefined) {
+      delete process.env.CODER_STUDIO_RUNTIME_DIR;
+    } else {
+      process.env.CODER_STUDIO_RUNTIME_DIR = originalRuntimeDir;
+    }
+
+    if (originalRuntimeJsonPath === undefined) {
+      delete process.env.CODER_STUDIO_RUNTIME_JSON_PATH;
+    } else {
+      process.env.CODER_STUDIO_RUNTIME_JSON_PATH = originalRuntimeJsonPath;
     }
 
     if (existsSync(testHomeDir)) {
@@ -157,6 +176,67 @@ describe("pm2-control", () => {
     ).resolves.toBe("waiting");
 
     expect(start).not.toHaveBeenCalled();
+    await pendingStart;
+  });
+
+  it("reuses one pm2 session while polling deletion during startup", async () => {
+    describeProcess
+      .mockImplementationOnce(
+        (_name: string, callback: (error: Error | null, result: unknown[]) => void) =>
+          callback(null, [{ pid: 111, pm2_env: { status: "online", restart_time: 0 } }])
+      )
+      .mockImplementationOnce(
+        (_name: string, callback: (error: Error | null, result: unknown[]) => void) =>
+          callback(null, [{ pid: 111, pm2_env: { status: "stopping", restart_time: 0 } }])
+      )
+      .mockImplementationOnce(
+        (_name: string, callback: (error: Error | null, result: unknown[]) => void) =>
+          callback(null, [])
+      );
+
+    await startManagedServer({
+      script: "/cli/dist/esm/server-runner.js",
+      cwd: "/repo",
+      waitMs: 10,
+    });
+
+    expect(connect).toHaveBeenCalledTimes(1);
+    expect(disconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps waiting during startup when delete reports missing but the old app still lingers", async () => {
+    describeProcess
+      .mockImplementationOnce(
+        (_name: string, callback: (error: Error | null, result: unknown[]) => void) =>
+          callback(null, [{ pid: 111, pm2_env: { status: "online", restart_time: 0 } }])
+      )
+      .mockImplementationOnce(
+        (_name: string, callback: (error: Error | null, result: unknown[]) => void) =>
+          callback(null, [{ pid: 111, pm2_env: { status: "stopping", restart_time: 0 } }])
+      )
+      .mockImplementationOnce(
+        (_name: string, callback: (error: Error | null, result: unknown[]) => void) =>
+          callback(null, [])
+      );
+    deleteProcess.mockImplementationOnce((_name: string, callback: (error: Error | null) => void) =>
+      callback(new Error("process or namespace not found"))
+    );
+
+    const pendingStart = startManagedServer({
+      script: "/cli/dist/esm/server-runner.js",
+      cwd: "/repo",
+      waitMs: 10,
+    });
+
+    await expect(
+      Promise.race([
+        pendingStart.then(() => "started"),
+        new Promise((resolve) => setTimeout(() => resolve("waiting"), 20)),
+      ])
+    ).resolves.toBe("waiting");
+
+    expect(start).not.toHaveBeenCalled();
+    await pendingStart;
   });
 
   it("ignores delete-time missing errors when requested", async () => {
@@ -169,6 +249,8 @@ describe("pm2-control", () => {
     );
 
     await expect(deleteManagedServer({ ignoreMissing: true })).resolves.toBe(false);
+    expect(connect).toHaveBeenCalledTimes(1);
+    expect(disconnect).toHaveBeenCalledTimes(1);
   });
 
   it("fails background startup when runtime readiness times out", async () => {
@@ -183,6 +265,10 @@ describe("pm2-control", () => {
           callback(null, [])
       )
       .mockImplementationOnce(
+        (_name: string, callback: (error: Error | null, result: unknown[]) => void) =>
+          callback(null, [])
+      )
+      .mockImplementation(
         (_name: string, callback: (error: Error | null, result: unknown[]) => void) =>
           callback(null, [{ pid: 424242, pm2_env: { status: "online", restart_time: 0 } }])
       );
@@ -243,6 +329,8 @@ describe("pm2-control", () => {
       pm2Pid: null,
       restartCount: 0,
     });
+    expect(connect).toHaveBeenCalledTimes(1);
+    expect(disconnect).toHaveBeenCalledTimes(1);
   });
 
   it("maps an online PM2 app to running status", async () => {

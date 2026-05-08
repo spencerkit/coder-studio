@@ -1,6 +1,8 @@
 import type { GitStatus } from "@coder-studio/core";
-import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Diff, X } from "lucide-react";
+import { useAtomValue } from "jotai";
+import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Diff, RefreshCw, X } from "lucide-react";
 import { type FC, useLayoutEffect, useState } from "react";
+import { localeAtom } from "../../../../atoms/app-ui";
 import {
   Button,
   IconButton,
@@ -11,13 +13,15 @@ import {
   ModalHeader,
   ModalTitle,
 } from "../../../../components/ui";
-import { useTranslation } from "../../../../lib/i18n";
+import { formatDate, type LocaleCode, useTranslation } from "../../../../lib/i18n";
 import { useGitSyncActions } from "../../actions/use-git-actions";
+import { gitFetchAtomFamily } from "../../atoms";
 
 interface GitStatusBarProps {
   workspaceId: string;
   gitState: GitStatus | null;
   inline?: boolean;
+  onRefresh?: () => void;
 }
 
 type GitSyncIntent = "push" | "pull";
@@ -27,12 +31,20 @@ interface SyncDialogState {
   count: number;
 }
 
-export const GitStatusBar: FC<GitStatusBarProps> = ({ workspaceId, gitState, inline = false }) => {
+export const GitStatusBar: FC<GitStatusBarProps> = ({
+  workspaceId,
+  gitState,
+  inline = false,
+  onRefresh,
+}) => {
   const t = useTranslation();
+  const locale = useAtomValue(localeAtom) as LocaleCode;
+  const fetchState = useAtomValue(gitFetchAtomFamily(workspaceId));
   const {
     authPrompt,
     clearAuthPrompt,
     getAuthPromptMessage,
+    handleFetch,
     handlePull,
     handlePush,
     syncingIntent,
@@ -65,6 +77,13 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({ workspaceId, gitState, inl
 
   const ahead = gitState.ahead;
   const behind = gitState.behind;
+  const isFetching = fetchState.status === "fetching";
+  const fetchTitle = fetchState.lastFetchAt
+    ? t("git.fetch_last_at", {
+        when: formatDate(fetchState.lastFetchAt, locale),
+      })
+    : t("git.fetch_last_never");
+  const fetchAriaLabel = isFetching ? t("git.fetch_in_progress") : t("git.fetch_label");
   const confirmTitle =
     pendingAction?.intent === "push" ? t("git.push_confirm_title") : t("git.pull_confirm_title");
   const confirmMessage =
@@ -76,12 +95,21 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({ workspaceId, gitState, inl
     pendingAction?.intent === "push" ? t("git.push_in_progress") : t("git.pull_in_progress");
   const isSyncingCurrentAction = Boolean(pendingAction && syncingIntent === pendingAction.intent);
   const authIntent = authPrompt?.intent;
-  const authActionLabel = authIntent === "push" ? t("action.push") : t("action.pull");
+  const dialogIntent = authIntent ?? pendingAction?.intent ?? "pull";
+  const authActionLabel =
+    authIntent === "push"
+      ? t("action.push")
+      : authIntent === "pull"
+        ? t("action.pull")
+        : t("git.fetch_label");
   const authBusyLabel =
-    authIntent === "push" ? t("git.push_in_progress") : t("git.pull_in_progress");
+    authIntent === "push"
+      ? t("git.push_in_progress")
+      : authIntent === "pull"
+        ? t("git.pull_in_progress")
+        : t("git.fetch_in_progress");
   const isSyncingAuthAction = Boolean(authIntent && syncingIntent === authIntent);
   const isDialogLocked = isSyncingCurrentAction || isSyncingAuthAction;
-  const isDialogOpen = Boolean(pendingAction);
 
   const openConfirm = (intent: GitSyncIntent, count: number) => {
     if (count <= 0) {
@@ -138,11 +166,24 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({ workspaceId, gitState, inl
       return;
     }
 
-    const success = authPrompt.intent === "push" ? await handlePush(auth) : await handlePull(auth);
+    const success =
+      authPrompt.intent === "push"
+        ? await handlePush(auth)
+        : authPrompt.intent === "pull"
+          ? await handlePull(auth)
+          : await handleFetch(auth);
 
     if (success) {
       clearAuthPrompt();
       setPendingAction(null);
+      onRefresh?.();
+    }
+  };
+
+  const refreshAfterFetch = async () => {
+    const success = await handleFetch();
+    if (success) {
+      onRefresh?.();
     }
   };
 
@@ -175,18 +216,36 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({ workspaceId, gitState, inl
           <ArrowDownToLine size={13} aria-hidden="true" />
           <span className="git-status-bar__value">{behind}</span>
         </button>
+        <button
+          className="git-status-bar__item git-status-bar__item--actionable"
+          title={fetchTitle}
+          type="button"
+          aria-label={fetchAriaLabel}
+          disabled={isFetching}
+          onClick={() => void refreshAfterFetch()}
+        >
+          <RefreshCw size={13} aria-hidden="true" className={isFetching ? "spin" : undefined} />
+        </button>
       </div>
 
       <Modal
         className="git-status-bar__confirm"
         dismissible={!isDialogLocked}
-        open={isDialogOpen}
+        open={Boolean(pendingAction || authPrompt)}
         onOpenChange={handleOpenChange}
       >
         <ModalHeader>
           <ModalTitle>
             <AlertTriangle size={16} />
-            <span>{confirmTitle}</span>
+            <span>
+              {authPrompt
+                ? dialogIntent === "push"
+                  ? t("git.push_confirm_title")
+                  : dialogIntent === "pull"
+                    ? t("git.pull_confirm_title")
+                    : t("git.fetch_label")
+                : confirmTitle}
+            </span>
           </ModalTitle>
           <IconButton
             aria-label={t("action.close")}

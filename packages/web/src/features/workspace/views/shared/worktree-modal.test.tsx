@@ -55,7 +55,7 @@ describe("WorktreeModal", () => {
 
     render(
       <Provider store={store}>
-        <WorktreeModal worktree={worktree} onClose={vi.fn()} />
+        <WorktreeModal workspaceId="ws-1" worktree={worktree} onClose={vi.fn()} />
       </Provider>
     );
 
@@ -101,7 +101,7 @@ describe("WorktreeModal", () => {
 
     render(
       <Provider store={store}>
-        <WorktreeModal worktree={worktree} onClose={vi.fn()} />
+        <WorktreeModal workspaceId="ws-1" worktree={worktree} onClose={vi.fn()} />
       </Provider>
     );
 
@@ -164,7 +164,7 @@ describe("WorktreeModal", () => {
 
     render(
       <Provider store={store}>
-        <WorktreeModal worktree={worktree} onClose={vi.fn()} />
+        <WorktreeModal workspaceId="ws-1" worktree={worktree} onClose={vi.fn()} />
       </Provider>
     );
 
@@ -219,7 +219,7 @@ describe("WorktreeModal", () => {
 
     render(
       <Provider store={store}>
-        <WorktreeModal worktree={worktree} onClose={vi.fn()} />
+        <WorktreeModal workspaceId="ws-1" worktree={worktree} onClose={vi.fn()} />
       </Provider>
     );
 

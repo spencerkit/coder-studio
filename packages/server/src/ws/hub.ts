@@ -253,6 +253,7 @@ export class WsHub implements Broadcaster {
   private handleClose(client: WsClient): void {
     this.clients.delete(client.id);
     this.discardPendingBinaryWaiters(client.id);
+    this.deps.commandContext?.autoFetch.unregisterViewer(client.id);
 
     // Release fencing tokens held by this client
     // FencingManager tracks by clientId internally

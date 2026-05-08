@@ -20,14 +20,6 @@ import { ProviderConfigRepo } from "../storage/repositories/provider-config-repo
 import { SUPERVISOR_EVALUATION_TIMEOUT_SETTING_KEY } from "../supervisor/settings.js";
 import { registerCommand } from "../ws/dispatch.js";
 
-const EMPTY_CODEX_AUDIT = {
-  codex: {
-    configPath: "",
-    exists: false,
-    findings: [],
-  },
-};
-
 // Settings schema
 const SettingsSchema = z.object({
   defaultProviderId: z.string().optional(),
@@ -95,16 +87,6 @@ registerCommand("settings.get", z.object({}), async (_args, ctx) => {
     );
   }
 
-  // Surface config drift (Codex config.toml interfering settings) so the
-  // web UI can show a banner + cleanup action. Cheap to compute on every
-  // settings.get — it's a single file read + a couple regex passes.
-  try {
-    settings.externalConfigAudit = ctx.codexConfigAudit?.audit() ?? EMPTY_CODEX_AUDIT;
-  } catch {
-    // Never let a broken audit take down settings fetch.
-    settings.externalConfigAudit = null;
-  }
-
   if (Object.prototype.hasOwnProperty.call(settings, SUPERVISOR_EVALUATION_TIMEOUT_SETTING_KEY)) {
     settings[SUPERVISOR_EVALUATION_TIMEOUT_SETTING_KEY] = resolveSupervisorEvaluationTimeoutSec(
       settings[SUPERVISOR_EVALUATION_TIMEOUT_SETTING_KEY]
@@ -156,29 +138,6 @@ registerCommand(
         ...Object.keys(flatSettings),
         ...Object.keys(providers ?? {}).map((providerId) => `providers.${providerId}`),
       ],
-    };
-  }
-);
-
-// settings.cleanupCodexConfig — user opts in to removing interfering entries
-// from `~/.codex/config.toml`. A backup is written next to the file before
-// any mutation; the backup path is returned so the UI can show it.
-registerCommand(
-  "settings.cleanupCodexConfig",
-  z.object({
-    removeIds: z.array(z.enum(["toml_notify", "toml_codex_hooks"])).min(1),
-  }),
-  async (args, ctx) => {
-    const result = ctx.codexConfigAudit?.cleanup(args.removeIds) ?? {
-      removed: [],
-      backupPath: null,
-      noop: true,
-    };
-    return {
-      removed: result.removed,
-      backupPath: result.backupPath,
-      noop: result.noop,
-      audit: ctx.codexConfigAudit?.audit() ?? EMPTY_CODEX_AUDIT,
     };
   }
 );
