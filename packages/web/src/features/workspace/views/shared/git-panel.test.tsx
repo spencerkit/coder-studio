@@ -4,6 +4,7 @@ import { createStore, Provider } from "jotai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../../../atoms/app-ui";
 import { wsClientAtom } from "../../../../atoms/connection";
+import { workspacesAtom } from "../../../../atoms/workspaces";
 import {
   gitBranchListAtomFamily,
   gitDiffPreviewAtomFamily,
@@ -26,6 +27,23 @@ describe("GitPanel", () => {
     deleted: [{ path: "src/legacy/deprecated.ts" }],
   };
 
+  function seedWorkspaceStore(store: ReturnType<typeof createStore>, workspaceId = "ws-test") {
+    store.set(workspacesAtom, {
+      [workspaceId]: {
+        id: workspaceId,
+        path: "/home/spencer/workspace/coder-studio",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+  }
+
   beforeEach(() => {
     vi.restoreAllMocks();
     window.localStorage.clear();
@@ -34,6 +52,84 @@ describe("GitPanel", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     window.localStorage.clear();
+  });
+
+  it("renders the worktree summary card above the commit box", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return status;
+      }
+
+      if (op === "git.branches") {
+        return { current: "feature/ai-agent", branches: [] };
+      }
+
+      if (op === "worktree.list") {
+        return {
+          worktrees: [
+            {
+              name: "feature/ai-agent",
+              path: "/home/spencer/workspace/coder-studio",
+              branch: "feature/ai-agent",
+              commit: "abc1234",
+              status: "dirty",
+            },
+          ],
+        };
+      }
+
+      return {};
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedWorkspaceStore(store);
+
+    render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    expect(await screen.findByLabelText("Worktrees")).toBeInTheDocument();
+    const summary = screen.getByLabelText("Worktrees");
+    const textarea = screen.getByPlaceholderText("Enter commit message...");
+    expect(
+      summary.compareDocumentPosition(textarea) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+
+  it("does not render the legacy header worktree button", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return status;
+      }
+
+      if (op === "git.branches") {
+        return { current: "feature/ai-agent", branches: [] };
+      }
+
+      if (op === "worktree.list") {
+        return { worktrees: [] };
+      }
+
+      return {};
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedWorkspaceStore(store);
+
+    render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    expect(await screen.findByLabelText("Worktrees")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Open worktree list")).not.toBeInTheDocument();
   });
 
   it("renders git groups from the first git.status response", async () => {

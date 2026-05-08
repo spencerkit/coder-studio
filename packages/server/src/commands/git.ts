@@ -20,24 +20,7 @@ import {
 import { getFileDiff } from "../git/diff.js";
 import type { CommandContext } from "../ws/dispatch.js";
 import { registerCommand } from "../ws/dispatch.js";
-
-function emitGitStateChanged(
-  ctx: CommandContext,
-  workspaceId: string,
-  options?: {
-    treeChanged?: boolean;
-    branchChanged?: boolean;
-    worktreeChanged?: boolean;
-  }
-) {
-  ctx.eventBus.emit({
-    type: "git.state.changed",
-    workspaceId,
-    treeChanged: options?.treeChanged,
-    branchChanged: options?.branchChanged,
-    worktreeChanged: options?.worktreeChanged,
-  });
-}
+import { emitGitStateChanged } from "./git-events.js";
 
 const gitHttpAuthSchema = z.object({
   username: z.string(),

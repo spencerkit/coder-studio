@@ -5,6 +5,7 @@ import { useMemo } from "react";
 import { useTranslation } from "../../../../lib/i18n";
 import { type GitChangeType, useGitPanelActions } from "../../actions/use-git-actions";
 import type { GitDiffPreview } from "../../atoms";
+import { WorktreesSummaryCard } from "./worktrees-summary-card";
 
 interface GitPanelProps {
   workspaceId: string;
@@ -40,6 +41,8 @@ export const GitPanel: FC<GitPanelProps> = ({ workspaceId, refreshToken = 0, onP
 
   return (
     <div className="git-panel">
+      <WorktreesSummaryCard workspaceId={workspaceId} />
+
       <div className="panel-toolbar git-panel-toolbar">
         <div className="git-toolbar-cluster">
           {hasChanges && (

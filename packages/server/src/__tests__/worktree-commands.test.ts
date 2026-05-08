@@ -33,6 +33,7 @@ describe("Worktree Commands", () => {
   let eventBus: EventBus;
   let db: ReturnType<typeof openDatabase>;
   let workspaceId: string;
+  let tempPaths: string[];
 
   beforeEach(async () => {
     repoDir = join(
@@ -51,6 +52,7 @@ describe("Worktree Commands", () => {
     runMigrations(db);
     eventBus = new EventBus();
     workspaceMgr = new WorkspaceManager({ db, eventBus });
+    tempPaths = [];
 
     const workspace = await workspaceMgr.open({ path: repoDir });
     workspaceId = workspace.id;
@@ -71,6 +73,7 @@ describe("Worktree Commands", () => {
   afterEach(async () => {
     await rm(repoDir, { recursive: true, force: true });
     await rm(otherRepoDir, { recursive: true, force: true });
+    await Promise.all(tempPaths.map((tempPath) => rm(tempPath, { recursive: true, force: true })));
   });
 
   it("returns status for a worktree belonging to the workspace repo", async () => {
@@ -117,5 +120,84 @@ describe("Worktree Commands", () => {
 
     expect(result.ok).toBe(false);
     expect(result.error?.code).toBe("worktree_not_found");
+  });
+
+  it("emits worktreeChanged after create and remove", async () => {
+    const createdPath = join(
+      tmpdir(),
+      `worktree-command-created-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    );
+    const linkedPath = join(
+      tmpdir(),
+      `worktree-command-linked-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    );
+    tempPaths.push(createdPath, linkedPath);
+
+    await execFileAsync("git", ["branch", "feature/existing-worktree"], { cwd: repoDir });
+    await execFileAsync("git", ["worktree", "add", linkedPath, "feature/existing-worktree"], {
+      cwd: repoDir,
+    });
+    const linkedWorkspace = await workspaceMgr.open({ path: linkedPath });
+    await execFileAsync("git", ["branch", "feature/worktree-manager"], { cwd: repoDir });
+
+    const emitted: Array<{ workspaceId: string; worktreeChanged?: boolean }> = [];
+    eventBus.on("git.state.changed", (event) => emitted.push(event));
+
+    const createResult = await dispatch(
+      {
+        kind: "command",
+        id: "worktree-create-event",
+        op: "worktree.create",
+        args: {
+          workspaceId,
+          branch: "feature/worktree-manager",
+          path: createdPath,
+        },
+      },
+      ctx
+    );
+
+    expect(createResult.ok).toBe(true);
+    expect(emitted).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          workspaceId,
+          worktreeChanged: true,
+        }),
+        expect.objectContaining({
+          workspaceId: linkedWorkspace.id,
+          worktreeChanged: true,
+        }),
+      ])
+    );
+
+    emitted.length = 0;
+
+    const removeResult = await dispatch(
+      {
+        kind: "command",
+        id: "worktree-remove-event",
+        op: "worktree.remove",
+        args: {
+          workspaceId,
+          worktreePath: createdPath,
+        },
+      },
+      ctx
+    );
+
+    expect(removeResult.ok).toBe(true);
+    expect(emitted).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          workspaceId,
+          worktreeChanged: true,
+        }),
+        expect.objectContaining({
+          workspaceId: linkedWorkspace.id,
+          worktreeChanged: true,
+        }),
+      ])
+    );
   });
 });
