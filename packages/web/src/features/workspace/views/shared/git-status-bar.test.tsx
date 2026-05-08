@@ -44,6 +44,16 @@ function renderStatusBar({
 }
 
 describe("GitStatusBar", () => {
+  it("keeps fetch as the trailing action after change and sync counters", () => {
+    renderStatusBar();
+
+    const toolbar = screen.getByRole("button", { name: "Fetch" }).closest(".git-status-bar");
+    expect(toolbar).not.toBeNull();
+
+    const buttons = within(toolbar as HTMLElement).getAllByRole("button");
+    expect(buttons.at(-1)).toHaveAccessibleName("Fetch");
+  });
+
   it("confirms and pushes local commits from the status bar", async () => {
     let resolvePush: (() => void) | null = null;
     const pushPromise = new Promise<void>((resolve) => {
@@ -578,6 +588,74 @@ describe("GitStatusBar", () => {
     );
 
     nowSpy.mockRestore();
+  });
+
+  it("runs local refresh after fetch succeeds", async () => {
+    const onRefresh = vi.fn();
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.fetch") {
+        return { success: true, message: "Fetch completed successfully", updatedRefs: [] };
+      }
+
+      if (op === "git.branches") {
+        return {
+          current: "main",
+          branches: [{ name: "main", isRemote: false, isCurrent: true }],
+        };
+      }
+
+      if (op === "git.status") {
+        return baseStatus;
+      }
+
+      throw new Error(`Unexpected command: ${op}`);
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(gitStateAtomFamily("ws-test"), baseStatus);
+
+    render(
+      <Provider store={store}>
+        <GitStatusBar workspaceId="ws-test" gitState={baseStatus} inline onRefresh={onRefresh} />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Fetch" }));
+
+    await waitFor(() => {
+      expect(onRefresh).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("does not run local refresh when fetch fails", async () => {
+    const onRefresh = vi.fn();
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.fetch") {
+        throw new Error("boom");
+      }
+
+      throw new Error(`Unexpected command: ${op}`);
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(gitStateAtomFamily("ws-test"), baseStatus);
+
+    render(
+      <Provider store={store}>
+        <GitStatusBar workspaceId="ws-test" gitState={baseStatus} inline onRefresh={onRefresh} />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Fetch" }));
+
+    await waitFor(() => {
+      expect(store.get(toastsAtom)[0]?.title).toBe("Fetch failed");
+    });
+    expect(onRefresh).not.toHaveBeenCalled();
   });
 
   it("shows fetching state while a manual fetch is running", async () => {

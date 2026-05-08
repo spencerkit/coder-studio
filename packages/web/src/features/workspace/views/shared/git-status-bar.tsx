@@ -11,6 +11,7 @@ interface GitStatusBarProps {
   workspaceId: string;
   gitState: GitStatus | null;
   inline?: boolean;
+  onRefresh?: () => void;
 }
 
 type GitSyncIntent = "push" | "pull";
@@ -20,7 +21,12 @@ interface SyncDialogState {
   count: number;
 }
 
-export const GitStatusBar: FC<GitStatusBarProps> = ({ workspaceId, gitState, inline = false }) => {
+export const GitStatusBar: FC<GitStatusBarProps> = ({
+  workspaceId,
+  gitState,
+  inline = false,
+  onRefresh,
+}) => {
   const t = useTranslation();
   const locale = useAtomValue(localeAtom) as LocaleCode;
   const fetchState = useAtomValue(gitFetchAtomFamily(workspaceId));
@@ -154,6 +160,14 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({ workspaceId, gitState, inl
     if (success) {
       clearAuthPrompt();
       setPendingAction(null);
+      onRefresh?.();
+    }
+  };
+
+  const refreshAfterFetch = async () => {
+    const success = await handleFetch();
+    if (success) {
+      onRefresh?.();
     }
   };
 
@@ -164,16 +178,6 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({ workspaceId, gitState, inl
           <Diff size={13} aria-hidden="true" />
           <span className="git-status-bar__value">{changeCount}</span>
         </span>
-        <button
-          className="git-status-bar__item git-status-bar__item--actionable"
-          title={fetchTitle}
-          type="button"
-          aria-label={fetchAriaLabel}
-          disabled={isFetching}
-          onClick={() => void handleFetch()}
-        >
-          <RefreshCw size={13} aria-hidden="true" className={isFetching ? "spin" : undefined} />
-        </button>
         <button
           className="git-status-bar__item git-status-bar__item--actionable git-status-bar__item--ahead"
           title={t("git.statusbar.ahead")}
@@ -195,6 +199,16 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({ workspaceId, gitState, inl
         >
           <ArrowDownToLine size={13} aria-hidden="true" />
           <span className="git-status-bar__value">{behind}</span>
+        </button>
+        <button
+          className="git-status-bar__item git-status-bar__item--actionable"
+          title={fetchTitle}
+          type="button"
+          aria-label={fetchAriaLabel}
+          disabled={isFetching}
+          onClick={() => void refreshAfterFetch()}
+        >
+          <RefreshCw size={13} aria-hidden="true" className={isFetching ? "spin" : undefined} />
         </button>
       </div>
 

@@ -1,5 +1,5 @@
 import type { GitFileChange } from "@coder-studio/core";
-import { AlertTriangle, ArrowUp, File, Minus, Plus, RefreshCw, RotateCcw, X } from "lucide-react";
+import { AlertTriangle, ArrowUp, File, Minus, Plus, RotateCcw, X } from "lucide-react";
 import type { FC } from "react";
 import { useMemo } from "react";
 import { useTranslation } from "../../../../lib/i18n";
@@ -30,7 +30,6 @@ export const GitPanel: FC<GitPanelProps> = ({ workspaceId, refreshToken = 0, onP
     handleRequestDiscardSingle,
     handleStageAll,
     handleUnstageAll,
-    loadGitStatus,
     openDiff,
     runGitMutation,
   } = useGitPanelActions({
@@ -43,16 +42,6 @@ export const GitPanel: FC<GitPanelProps> = ({ workspaceId, refreshToken = 0, onP
     <div className="git-panel">
       <div className="panel-toolbar git-panel-toolbar">
         <div className="git-toolbar-cluster">
-          <button
-            className="panel-toolbar-btn"
-            onClick={() => void loadGitStatus()}
-            disabled={isLoading}
-            title={t("action.refresh")}
-            type="button"
-          >
-            <RefreshCw size={14} className={isLoading ? "spin" : undefined} />
-          </button>
-
           {hasChanges && (
             <>
               <button

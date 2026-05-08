@@ -561,7 +561,7 @@ describe("GitPanel", () => {
     expect(screen.getAllByText("未跟踪").length).toBeGreaterThan(0);
     expect(screen.getAllByText("已删除").length).toBeGreaterThan(0);
     expect(screen.getByPlaceholderText("输入提交信息...")).toBeInTheDocument();
-    expect(screen.getByTitle("刷新")).toBeInTheDocument();
+    expect(screen.queryByTitle("刷新")).not.toBeInTheDocument();
     expect(screen.getByTitle("暂存全部")).toBeInTheDocument();
     expect(screen.getByTitle("放弃全部")).toBeInTheDocument();
 

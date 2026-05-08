@@ -35,6 +35,7 @@ export function MobileFilesSheet({
   const gitState = useAtomValue(gitStateAtomFamily(workspaceId));
   const setBranchQuickPick = useSetAtom(branchQuickPickAtom);
   const [activeTab, setActiveTab] = useState<"files" | "git">("files");
+  const [panelRefreshToken, setPanelRefreshToken] = useState(0);
   const { closePreview } = useGitDiffViewerActions(workspaceId);
   const branchName = gitState?.branch?.trim() || t("git.no_branch");
 
@@ -61,6 +62,10 @@ export function MobileFilesSheet({
       workspaceId,
       inputValue: "",
     });
+  };
+
+  const handleRefreshPanel = () => {
+    setPanelRefreshToken((previous) => previous + 1);
   };
 
   if (route.kind === "editor") {
@@ -158,14 +163,27 @@ export function MobileFilesSheet({
             {t("label.git")}
           </button>
         </div>
-        <GitStatusBar workspaceId={workspaceId} gitState={gitState} inline />
+        <GitStatusBar
+          workspaceId={workspaceId}
+          gitState={gitState}
+          inline
+          onRefresh={handleRefreshPanel}
+        />
       </div>
 
       <div className="mobile-files-sheet__content">
         {activeTab === "files" ? (
-          <FileTreePanel workspaceId={workspaceId} onSelectFile={handleSelectFile} />
+          <FileTreePanel
+            workspaceId={workspaceId}
+            refreshToken={panelRefreshToken}
+            onSelectFile={handleSelectFile}
+          />
         ) : (
-          <GitPanel workspaceId={workspaceId} onPreviewOpen={handlePreviewChange} />
+          <GitPanel
+            workspaceId={workspaceId}
+            refreshToken={panelRefreshToken}
+            onPreviewOpen={handlePreviewChange}
+          />
         )}
       </div>
     </div>
