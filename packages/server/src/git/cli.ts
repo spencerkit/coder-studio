@@ -35,7 +35,7 @@ export interface GitHttpAuth {
 }
 
 export interface GitAuthFailureDetails {
-  operation: "push" | "pull";
+  operation: "push" | "pull" | "fetch";
   remote?: string;
   remoteUrl?: string;
   remoteLabel: string;
@@ -131,7 +131,7 @@ export class GitAuthError extends Error {
 interface GitAuthContext {
   remote?: string;
   remoteUrl?: string;
-  operation: "push" | "pull";
+  operation: "push" | "pull" | "fetch";
   attemptedCredentialAuth?: boolean;
 }
 
@@ -393,6 +393,81 @@ export async function runGitPull(
   } finally {
     await authExecution.cleanup();
   }
+}
+
+/**
+ * Fetch remote refs without merging. Used by manual fetch + background auto-fetch.
+ */
+export interface RunGitFetchOptions {
+  remote?: string;
+  prune?: boolean;
+  auth?: GitHttpAuth;
+  timeoutMs?: number;
+}
+
+export async function runGitFetch(
+  cwd: string,
+  options?: RunGitFetchOptions
+): Promise<{ success: boolean; message: string; updatedRefs: string[] }> {
+  const args = ["fetch"];
+  const remote = options?.remote;
+  const metadataRemote = remote ?? (await getPreferredRemote(cwd)) ?? undefined;
+  const prune = options?.prune ?? true;
+
+  if (remote) {
+    args.push(remote);
+  } else {
+    args.push("--all");
+  }
+
+  if (prune) {
+    args.push("--prune");
+  }
+
+  const remoteUrl = metadataRemote ? await getRemoteUrl(cwd, metadataRemote) : null;
+  const remoteMetadata = parseRemoteUrlMetadata(remoteUrl ?? undefined);
+  const authExecution = await prepareGitAuthExecution(options?.auth, remoteMetadata);
+
+  try {
+    const { stdout, stderr } = await runGit(cwd, args, {
+      timeoutMs: options?.timeoutMs ?? GIT_NETWORK_TIMEOUT_MS,
+      env: authExecution.env,
+      config: authExecution.config,
+    });
+
+    if (options?.auth) {
+      await persistGitHttpCredentials(cwd, options.auth, remoteMetadata);
+    }
+
+    const message = stdout || stderr || "Fetch completed successfully";
+    return {
+      success: true,
+      message,
+      updatedRefs: parseFetchUpdatedRefs(stderr),
+    };
+  } catch (error) {
+    throw normalizeGitAuthFailure(error, {
+      operation: "fetch",
+      remote: metadataRemote,
+      remoteUrl: remoteMetadata.sanitizedUrl ?? remoteUrl ?? undefined,
+      attemptedCredentialAuth: Boolean(options?.auth),
+    });
+  } finally {
+    await authExecution.cleanup();
+  }
+}
+
+function parseFetchUpdatedRefs(stderr: string): string[] {
+  const refs: string[] = [];
+  for (const rawLine of stderr.split("\n")) {
+    const line = rawLine.trimEnd();
+    const arrowIndex = line.indexOf(" -> ");
+    if (arrowIndex < 0) continue;
+    const target = line.slice(arrowIndex + 4).trim();
+    if (!target) continue;
+    refs.push(target);
+  }
+  return refs;
 }
 
 /**

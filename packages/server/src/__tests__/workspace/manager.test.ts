@@ -7,7 +7,7 @@ import type { DomainEvent } from "@coder-studio/core";
 import { mkdir, rmdir } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Database } from "../../storage/database.js";
 import { WorkspaceManager } from "../../workspace/manager.js";
 
@@ -16,6 +16,10 @@ describe("WorkspaceManager", () => {
   let db: Database;
   let manager: WorkspaceManager;
   let events: DomainEvent[];
+  let eventBus: {
+    emit: (event: DomainEvent) => void;
+    on: () => () => void;
+  };
 
   beforeEach(async () => {
     // Create test directory
@@ -42,7 +46,7 @@ describe("WorkspaceManager", () => {
 
     // Event bus mock
     events = [];
-    const eventBus = {
+    eventBus = {
       emit: (event: DomainEvent) => {
         events.push(event);
       },
@@ -71,6 +75,21 @@ describe("WorkspaceManager", () => {
       expect(workspace.path).toBe(testDir);
       expect(workspace.openedAt).toBeDefined();
       expect(workspace.uiState).toBeDefined();
+    });
+
+    it("triggers open-time auto fetch for new workspaces", async () => {
+      const autoFetch = {
+        triggerOpenTimeFetch: vi.fn(),
+        recordSuccess: vi.fn(),
+        getLastFetchAt: vi.fn(),
+      };
+      manager = new WorkspaceManager({ db, eventBus, autoFetch });
+
+      const workspace = await manager.open({
+        path: testDir,
+      });
+
+      expect(autoFetch.triggerOpenTimeFetch).toHaveBeenCalledWith(workspace.id);
     });
 
     it("should emit workspace.meta.changed event", async () => {
@@ -102,6 +121,23 @@ describe("WorkspaceManager", () => {
       // Should return the same workspace
       expect(second.id).toBe(first.id);
       expect(second.path).toBe(first.path);
+    });
+
+    it("triggers open-time auto fetch for existing workspaces", async () => {
+      const autoFetch = {
+        triggerOpenTimeFetch: vi.fn(),
+        recordSuccess: vi.fn(),
+        getLastFetchAt: vi.fn(),
+      };
+      manager = new WorkspaceManager({ db, eventBus, autoFetch });
+
+      const first = await manager.open({ path: testDir });
+      autoFetch.triggerOpenTimeFetch.mockClear();
+
+      const second = await manager.open({ path: testDir });
+
+      expect(second.id).toBe(first.id);
+      expect(autoFetch.triggerOpenTimeFetch).toHaveBeenCalledWith(first.id);
     });
 
     it("does not start file watchers when broadcaster is omitted", async () => {
@@ -169,6 +205,22 @@ describe("WorkspaceManager", () => {
 
       const updated = manager.get(workspace.id);
       expect(updated?.lastActiveAt).toBeGreaterThan(originalLastActive);
+    });
+  });
+
+  describe("recordFetch", () => {
+    it("forwards fetch success tracking to autoFetch", async () => {
+      const autoFetch = {
+        triggerOpenTimeFetch: vi.fn(),
+        recordSuccess: vi.fn(),
+        getLastFetchAt: vi.fn(),
+      };
+      manager = new WorkspaceManager({ db, eventBus, autoFetch });
+      const workspace = await manager.open({ path: testDir });
+
+      manager.recordFetch(workspace.id);
+
+      expect(autoFetch.recordSuccess).toHaveBeenCalledWith(workspace.id);
     });
   });
 

@@ -14,6 +14,7 @@ import { FileTreePanel } from "../shared/file-tree-panel";
 import { GitDiffViewer } from "../shared/git-diff-viewer";
 import { GitPanel } from "../shared/git-panel";
 import { GitStatusBar } from "../shared/git-status-bar";
+import { WorktreeListButton } from "../shared/worktree-list-button";
 
 export const WorkspaceDesktopView: FC = () => {
   const fullscreenRootRef = useRef<HTMLDivElement>(null);
@@ -100,6 +101,7 @@ export const WorkspaceDesktopView: FC = () => {
                       </button>
                     </div>
                     <GitStatusBar workspaceId={workspace.id} gitState={gitState} inline />
+                    <WorktreeListButton workspaceId={workspace.id} />
                   </div>
                 </div>
 

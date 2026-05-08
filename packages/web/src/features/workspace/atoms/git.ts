@@ -4,8 +4,9 @@
  * Server-state projection atoms. Written only by WS event handlers.
  */
 
-import type { GitBranch, GitStatus } from "@coder-studio/core";
+import type { GitBranch, GitStatus, WorktreeInfo } from "@coder-studio/core";
 import { atom } from "jotai";
+import { atomWithStorage } from "jotai/utils";
 import { atomFamily } from "jotai-family";
 
 /**
@@ -32,7 +33,9 @@ export interface BranchQuickPickState {
  * Git state by workspace (server state projection)
  * Written by: WS event handler for workspace.*.git.state
  */
-export const gitStateAtomFamily = atomFamily((workspaceId: string) => atom<GitStatus | null>(null));
+export const gitStateAtomFamily = atomFamily((_workspaceId: string) =>
+  atom<GitStatus | null>(null)
+);
 
 export interface GitDiffPreview {
   path: string;
@@ -40,11 +43,11 @@ export interface GitDiffPreview {
   staged?: boolean;
 }
 
-export const gitDiffPreviewAtomFamily = atomFamily((workspaceId: string) =>
+export const gitDiffPreviewAtomFamily = atomFamily((_workspaceId: string) =>
   atom<GitDiffPreview | null>(null)
 );
 
-export const gitDiffPreviewDismissedAtomFamily = atomFamily((workspaceId: string) => atom(false));
+export const gitDiffPreviewDismissedAtomFamily = atomFamily((_workspaceId: string) => atom(false));
 
 /**
  * Has changes (derived)
@@ -86,7 +89,7 @@ export const gitChangeCountAtomFamily = atomFamily((workspaceId: string) =>
  * Git branch list per workspace.
  * Loaded on demand by branch-related UI commands.
  */
-export const gitBranchListAtomFamily = atomFamily((workspaceId: string) =>
+export const gitBranchListAtomFamily = atomFamily((_workspaceId: string) =>
   atom<GitBranchList>({
     current: "",
     branches: [],
@@ -101,3 +104,40 @@ export const branchQuickPickAtom = atom<BranchQuickPickState>({
   visible: false,
   inputValue: "",
 });
+
+/**
+ * Persisted commit message draft per workspace.
+ * Survives panel remount and full page reload via localStorage.
+ */
+export const commitMessageDraftAtomFamily = atomFamily((workspaceId: string) =>
+  atomWithStorage<string>(`coder-studio:git-commit-draft:${workspaceId}`, "")
+);
+
+/**
+ * Worktree list state per workspace.
+ * Server projection — written by event-driven refresh in providers, read by UI.
+ */
+export interface WorktreeListState {
+  items: WorktreeInfo[];
+  loading: boolean;
+  error?: string;
+  lastLoadedAt?: number;
+}
+
+export const worktreeListAtomFamily = atomFamily((_workspaceId: string) =>
+  atom<WorktreeListState>({ items: [], loading: false })
+);
+
+/**
+ * Manual fetch state per workspace.
+ * Tracks button busy state and last successful fetch timestamp for tooltip display.
+ */
+export interface GitFetchState {
+  status: "idle" | "fetching" | "error";
+  lastFetchAt?: number;
+  error?: string;
+}
+
+export const gitFetchAtomFamily = atomFamily((_workspaceId: string) =>
+  atom<GitFetchState>({ status: "idle" })
+);

@@ -3,19 +3,9 @@ import { createStore, Provider } from "jotai";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { connectionStatusAtom, wsClientAtom } from "../../atoms/connection";
-import {
-  activeWorkspaceIdAtom,
-  resolvedActiveWorkspaceIdAtom,
-  workspaceOrderAtom,
-  workspacesAtom,
-} from "../../atoms/workspaces";
+import { activeWorkspaceIdAtom, workspaceOrderAtom, workspacesAtom } from "../../atoms/workspaces";
 import { seedReadyWorkspaceState } from "../../test-utils/workspace-state";
-import {
-  activeFilePathAtomFamily,
-  branchQuickPickAtom,
-  gitDiffPreviewAtomFamily,
-  terminalPanelVisibleAtom,
-} from "./atoms";
+import { branchQuickPickAtom, gitDiffPreviewAtomFamily, terminalPanelVisibleAtom } from "./atoms";
 import { WorkspaceDesktopView } from "./views/desktop/workspace-desktop-view";
 
 const fileTreePanelSpy = vi.fn();
@@ -177,6 +167,60 @@ describe("WorkspacePage", () => {
       workspaceId: "ws-test",
       inputValue: "",
     });
+  });
+
+  it("writes the displayed workspace id on mount and clears it on unmount", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return {
+          branch: "main",
+          ahead: 0,
+          behind: 0,
+          staged: [],
+          modified: [],
+          deleted: [],
+          untracked: [],
+        };
+      }
+
+      return [];
+    });
+
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedReadyWorkspaceState(store, {
+      "ws-test": {
+        id: "ws-test",
+        path: "/home/spencer/workspace/coder-studio",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+
+    const { unmount } = render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/workspace"]}>
+          <Routes>
+            <Route path="/workspace" element={<WorkspaceDesktopView />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(store.get(activeWorkspaceIdAtom)).toBe("ws-test");
+    });
+
+    unmount();
+
+    expect(store.get(activeWorkspaceIdAtom)).toBeNull();
   });
 
   it("shows the empty state when rendered without an active workspace", async () => {

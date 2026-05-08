@@ -16,10 +16,17 @@ export interface EventBus {
   on(type: DomainEvent["type"], handler: (event: DomainEvent) => void): () => void;
 }
 
+export interface AutoFetchRuntime {
+  triggerOpenTimeFetch(workspaceId: string): void;
+  recordSuccess(workspaceId: string): void;
+  getLastFetchAt(workspaceId: string): number | undefined;
+}
+
 export interface WorkspaceManagerDeps {
   db: Database;
   eventBus: EventBus;
   broadcaster?: Broadcaster;
+  autoFetch?: AutoFetchRuntime;
   teardown?: (workspaceId: string) => void | Promise<void>;
   onClose?: (workspaceId: string) => void | Promise<void>;
 }
@@ -99,6 +106,7 @@ export class WorkspaceManager {
         workspaceId: existing.id,
         patch: { lastActiveAt: Date.now() },
       });
+      this.deps.autoFetch?.triggerOpenTimeFetch(existing.id);
       return existing;
     }
 
@@ -145,6 +153,7 @@ export class WorkspaceManager {
 
     // Start file system watcher
     this.startWatcher(workspace.id, workspace.path);
+    this.deps.autoFetch?.triggerOpenTimeFetch(workspace.id);
 
     return workspace;
   }
@@ -309,6 +318,10 @@ export class WorkspaceManager {
     this.deps.db
       .prepare("UPDATE workspaces SET last_active_at = ? WHERE id = ?")
       .run(now, workspaceId);
+  }
+
+  recordFetch(workspaceId: string): void {
+    this.deps.autoFetch?.recordSuccess(workspaceId);
   }
 }
 

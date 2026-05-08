@@ -1,7 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { EventBus } from "../bus/event-bus.js";
 import { openDatabase, runMigrations } from "../storage/db.js";
 import { WorkspaceManager } from "../workspace/manager.js";
@@ -16,6 +16,13 @@ describe("Workspace Commands", () => {
   let ctx: CommandContext;
   let eventBus: EventBus;
   let workspaceMgr: WorkspaceManager;
+  let autoFetch: {
+    registerViewer: ReturnType<typeof vi.fn>;
+    unregisterViewer: ReturnType<typeof vi.fn>;
+    triggerOpenTimeFetch: ReturnType<typeof vi.fn>;
+    recordSuccess: ReturnType<typeof vi.fn>;
+    getLastFetchAt: ReturnType<typeof vi.fn>;
+  };
 
   beforeEach(() => {
     // Create in-memory database for testing
@@ -24,9 +31,16 @@ describe("Workspace Commands", () => {
 
     // Create event bus
     eventBus = new EventBus();
+    autoFetch = {
+      registerViewer: vi.fn(),
+      unregisterViewer: vi.fn(),
+      triggerOpenTimeFetch: vi.fn(),
+      recordSuccess: vi.fn(),
+      getLastFetchAt: vi.fn(() => undefined),
+    };
 
     // Create workspace manager
-    workspaceMgr = new WorkspaceManager({ db, eventBus });
+    workspaceMgr = new WorkspaceManager({ db, eventBus, autoFetch });
 
     // Create context with required dependencies
     ctx = {
@@ -37,6 +51,7 @@ describe("Workspace Commands", () => {
       eventBus,
       broadcaster: { broadcast: () => {} },
       providerRegistry: [],
+      autoFetch,
     } as unknown as CommandContext;
   });
 
@@ -72,6 +87,41 @@ describe("Workspace Commands", () => {
       );
 
       expect(result.ok).toBe(false);
+    });
+
+    it("triggers open-time auto fetch after workspace.open succeeds", async () => {
+      const dir = join(tmpdir(), `workspace-open-test-${Date.now()}`);
+      await mkdir(dir);
+      const triggerOpenTimeFetch = vi.fn();
+      autoFetch = {
+        registerViewer: () => {},
+        unregisterViewer: () => {},
+        triggerOpenTimeFetch,
+        recordSuccess: () => {},
+        getLastFetchAt: () => undefined,
+      } as never;
+      workspaceMgr = new WorkspaceManager({ db, eventBus, autoFetch });
+      ctx = {
+        ...ctx,
+        workspaceMgr,
+        autoFetch,
+      } as CommandContext;
+
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "workspace-open-auto-fetch",
+          op: "workspace.open",
+          args: {
+            path: dir,
+          },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(true);
+      const workspaceId = (result.data as { id: string }).id;
+      expect(triggerOpenTimeFetch).toHaveBeenCalledWith(workspaceId);
     });
   });
 

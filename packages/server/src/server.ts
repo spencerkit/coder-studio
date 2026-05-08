@@ -15,6 +15,7 @@ import type { FastifyInstance } from "fastify";
 import { buildFastifyApp } from "./app.js";
 import { EventBus } from "./bus/event-bus.js";
 import { ensureDataDir, parseServerConfig, type ServerConfig } from "./config.js";
+import { AutoFetchScheduler } from "./git/auto-fetch.js";
 import { runCommandAsString } from "./provider-runtime/command-runner.js";
 import { ProviderInstallManager } from "./provider-runtime/install-manager.js";
 import type { RuntimeStatusDeps } from "./provider-runtime/runtime-status.js";
@@ -36,6 +37,7 @@ import { deleteWorkspaceUploads, runStartupGc } from "./uploads/cleanup.js";
 import { STARTUP_GC_DELAY_MS } from "./uploads/constants.js";
 import { WorkspaceManager } from "./workspace/manager.js";
 import type { CommandContext } from "./ws/dispatch.js";
+import { dispatch } from "./ws/dispatch.js";
 import { FencingManager } from "./ws/fencing.js";
 import { WsHub } from "./ws/hub.js";
 
@@ -62,6 +64,8 @@ export async function createServer(
   const eventBus = new EventBus();
   const fencingMgr = new FencingManager();
   const wsHub = new WsHub({ eventBus, commandContext: null, config, fencingMgr });
+  let workspaceMgr: WorkspaceManager;
+  let commandContext: CommandContext;
 
   const terminalMgr = new TerminalManager({
     ptyHost: createPtyHost(),
@@ -69,9 +73,42 @@ export async function createServer(
     db: createTerminalDatabase(db),
   });
 
+  const settingsRepo = new SettingsRepo(db);
+  const autoFetch = new AutoFetchScheduler({
+    workspaceMgr: { get: (workspaceId) => workspaceMgr.get(workspaceId) },
+    eventBus,
+    settingsRepo,
+    runFetch: async (workspaceId) => {
+      if (!workspaceMgr.get(workspaceId)) {
+        return;
+      }
+
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: `auto-fetch:${workspaceId}:${Date.now()}`,
+          op: "git.fetch",
+          args: {
+            workspaceId,
+            background: true,
+          },
+        },
+        commandContext
+      );
+
+      if (!result.ok) {
+        throw new Error(result.error?.message ?? "Background fetch failed");
+      }
+
+      const data = result.data as { success?: boolean; message?: string };
+      if (data.success === false) {
+        throw new Error(data.message ?? "Background fetch failed");
+      }
+    },
+  });
+
   const sessionDb = createSessionDatabase(db);
   const providerConfigRepo = new ProviderConfigRepo(db);
-  const settingsRepo = new SettingsRepo(db);
   const sessionMgr = new SessionManager({
     terminalMgr,
     eventBus,
@@ -83,10 +120,11 @@ export async function createServer(
 
   let supervisorMgr: SupervisorManager | undefined;
 
-  const workspaceMgr = new WorkspaceManager({
+  workspaceMgr = new WorkspaceManager({
     db,
     eventBus,
     broadcaster: wsHub,
+    autoFetch,
     teardown: async (workspaceId) => {
       await supervisorMgr?.deleteForWorkspace(workspaceId);
       await sessionMgr.stopForWorkspace(workspaceId);
@@ -148,7 +186,7 @@ export async function createServer(
     runCommand: runCommandAsString,
   });
 
-  const commandContext: CommandContext = {
+  commandContext = {
     workspaceMgr,
     sessionMgr,
     terminalMgr,
@@ -158,6 +196,7 @@ export async function createServer(
     providerRegistry,
     fencingMgr,
     supervisorMgr,
+    autoFetch,
     providerRuntimeDeps,
     providerInstallMgr,
   };
@@ -196,6 +235,7 @@ export async function createServer(
 
     clearTimeout(gcTimer);
     await app.close();
+    autoFetch.stop();
     supervisorMgr.stop();
     terminalMgr.shutdown();
     wsHub.destroy();

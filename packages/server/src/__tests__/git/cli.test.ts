@@ -13,6 +13,7 @@ import {
   GitError,
   getGitStatus,
   runGit,
+  runGitFetch,
   runGitPull,
   runGitPush,
 } from "../../git/cli.js";
@@ -241,6 +242,189 @@ describe("GitError", () => {
         remoteUrl: "https://github.com/openai/demo.git",
       })
     ).toBeNull();
+  });
+
+  it("classifies fetch auth failures with operation=fetch", async () => {
+    const testDir = await mkdtemp(join(tmpdir(), "git-fetch-auth-classify-"));
+    await execFileAsync("git", ["init"], { cwd: testDir });
+    await execFileAsync("git", ["remote", "add", "origin", "https://github.com/openai/demo.git"], {
+      cwd: testDir,
+    });
+
+    const wrapperDir = join(testDir, "bin");
+    await mkdir(wrapperDir, { recursive: true });
+    const realGit = (await execFileAsync("sh", ["-lc", "command -v git"])).stdout.trim();
+    await writeFile(
+      join(wrapperDir, "git"),
+      [
+        "#!/bin/sh",
+        'for arg in "$@"; do',
+        '  if [ "$arg" = "fetch" ]; then',
+        '    printf "fatal: could not read Username for \\"https://github.com\\": terminal prompts disabled\\n" >&2',
+        "    exit 128",
+        "  fi",
+        "done",
+        `exec ${JSON.stringify(realGit)} "$@"`,
+        "",
+      ].join("\n"),
+      { mode: 0o700 }
+    );
+
+    const originalPath = process.env.PATH ?? "";
+    vi.stubEnv("PATH", `${wrapperDir}:${originalPath}`);
+
+    try {
+      await expect(runGitFetch(testDir, { remote: "origin" })).rejects.toMatchObject({
+        code: "git_auth_required",
+        details: expect.objectContaining({
+          operation: "fetch",
+        }),
+      });
+    } finally {
+      vi.unstubAllEnvs();
+      await rm(testDir, { recursive: true, force: true });
+    }
+  });
+
+  it("classifies fetch auth failures with operation=fetch when using the default --all path", async () => {
+    const testDir = await mkdtemp(join(tmpdir(), "git-fetch-auth-default-"));
+    await execFileAsync("git", ["init"], { cwd: testDir });
+    await execFileAsync("git", ["remote", "add", "origin", "https://github.com/openai/demo.git"], {
+      cwd: testDir,
+    });
+
+    const wrapperDir = join(testDir, "bin-default");
+    await mkdir(wrapperDir, { recursive: true });
+    const realGit = (await execFileAsync("sh", ["-lc", "command -v git"])).stdout.trim();
+    await writeFile(
+      join(wrapperDir, "git"),
+      [
+        "#!/bin/sh",
+        'for arg in "$@"; do',
+        '  if [ "$arg" = "fetch" ]; then',
+        '    printf "fatal: could not read Username for \\"https://github.com\\": terminal prompts disabled\\n" >&2',
+        "    exit 128",
+        "  fi",
+        "done",
+        `exec ${JSON.stringify(realGit)} "$@"`,
+        "",
+      ].join("\n"),
+      { mode: 0o700 }
+    );
+
+    const originalPath = process.env.PATH ?? "";
+    vi.stubEnv("PATH", `${wrapperDir}:${originalPath}`);
+
+    try {
+      await expect(
+        runGitFetch(testDir, {
+          auth: {
+            username: "alice",
+            password: "secret-token",
+          },
+        })
+      ).rejects.toMatchObject({
+        code: "git_auth_required",
+        details: expect.objectContaining({
+          operation: "fetch",
+          remote: "origin",
+          authMode: "username_password",
+          canPrompt: true,
+        }),
+      });
+    } finally {
+      vi.unstubAllEnvs();
+      await rm(testDir, { recursive: true, force: true });
+    }
+  });
+
+  it("classifies pull auth failures with operation=pull", async () => {
+    const testDir = await mkdtemp(join(tmpdir(), "git-pull-auth-classify-"));
+    await execFileAsync("git", ["init"], { cwd: testDir });
+    await execFileAsync("git", ["remote", "add", "origin", "https://github.com/openai/demo.git"], {
+      cwd: testDir,
+    });
+
+    const wrapperDir = join(testDir, "bin-pull");
+    await mkdir(wrapperDir, { recursive: true });
+    const realGit = (await execFileAsync("sh", ["-lc", "command -v git"])).stdout.trim();
+    await writeFile(
+      join(wrapperDir, "git"),
+      [
+        "#!/bin/sh",
+        'for arg in "$@"; do',
+        '  if [ "$arg" = "pull" ]; then',
+        '    printf "fatal: could not read Username for \\"https://github.com\\": terminal prompts disabled\\n" >&2',
+        "    exit 128",
+        "  fi",
+        "done",
+        `exec ${JSON.stringify(realGit)} \"$@\"`,
+        "",
+      ].join("\n"),
+      { mode: 0o700 }
+    );
+
+    const originalPath = process.env.PATH ?? "";
+    vi.stubEnv("PATH", `${wrapperDir}:${originalPath}`);
+
+    try {
+      await expect(runGitPull(testDir, { remote: "origin", branch: "main" })).rejects.toMatchObject(
+        {
+          code: "git_auth_required",
+          details: expect.objectContaining({
+            operation: "pull",
+          }),
+        }
+      );
+    } finally {
+      vi.unstubAllEnvs();
+      await rm(testDir, { recursive: true, force: true });
+    }
+  });
+
+  it("allows fetch callers to override the network timeout", async () => {
+    const testDir = await mkdtemp(join(tmpdir(), "git-fetch-timeout-"));
+    await execFileAsync("git", ["init"], { cwd: testDir });
+    await execFileAsync("git", ["remote", "add", "origin", "https://github.com/openai/demo.git"], {
+      cwd: testDir,
+    });
+
+    const wrapperDir = join(testDir, "bin-timeout");
+    await mkdir(wrapperDir, { recursive: true });
+    const realGit = (await execFileAsync("sh", ["-lc", "command -v git"])).stdout.trim();
+    await writeFile(
+      join(wrapperDir, "git"),
+      [
+        "#!/bin/sh",
+        'for arg in "$@"; do',
+        '  if [ "$arg" = "fetch" ]; then',
+        "    sleep 1",
+        '    printf "fatal: fetch timed out\\n" >&2',
+        "    exit 124",
+        "  fi",
+        "done",
+        `exec ${JSON.stringify(realGit)} "$@"`,
+        "",
+      ].join("\n"),
+      { mode: 0o700 }
+    );
+
+    const originalPath = process.env.PATH ?? "";
+    vi.stubEnv("PATH", `${wrapperDir}:${originalPath}`);
+
+    try {
+      const startedAt = Date.now();
+      await expect(
+        runGitFetch(testDir, {
+          remote: "origin",
+          timeoutMs: 50,
+        })
+      ).rejects.toBeInstanceOf(GitError);
+      expect(Date.now() - startedAt).toBeLessThan(900);
+    } finally {
+      vi.unstubAllEnvs();
+      await rm(testDir, { recursive: true, force: true });
+    }
   });
 });
 

@@ -7,6 +7,7 @@
 import type { Command, ProviderDefinition, Result } from "@coder-studio/core";
 import { z } from "zod";
 import type { EventBus } from "../bus/event-bus.js";
+import type { AutoFetchRuntime } from "../git/auto-fetch.js";
 import type { ProviderInstallManager } from "../provider-runtime/install-manager.js";
 import type { RuntimeStatusDeps } from "../provider-runtime/runtime-status.js";
 import type { SessionManager } from "../session/manager.js";
@@ -30,6 +31,7 @@ export interface CommandContext {
   providerRegistry: ProviderDefinition[];
   fencingMgr: FencingManager;
   supervisorMgr: SupervisorManager;
+  autoFetch: AutoFetchRuntime;
   providerRuntimeDeps?: RuntimeStatusDeps;
   providerInstallMgr?: ProviderInstallManager;
 }
@@ -54,63 +56,6 @@ const handlers = new Map<string, CommandHandler>();
  * Registry of all command schemas
  */
 const schemas = new Map<string, CommandSchema>();
-
-/**
- * Debounce state for commands that should be coalesced.
- * Per-workspace, with a deadline that resets on each call.
- */
-interface DebounceEntry<T> {
-  timer: NodeJS.Timeout;
-  promise: Promise<T>;
-  resolve: (value: T) => void;
-  reject: (reason: unknown) => void;
-  op: () => Promise<T>;
-}
-const debounceMap = new Map<string, DebounceEntry<unknown>>();
-
-const DEBOUNCE_GIT_STATUS_MS = 500;
-
-/**
- * Run an operation with per-key debounce.
- * If the same key is invoked within the debounce window, the earlier
- * invocation waits and the new one replaces the timer. The result
- * from the final (post-debounce) execution is delivered to all waiters.
- */
-async function debounce<R>(key: string, op: () => Promise<R>, windowMs: number): Promise<R> {
-  let entry = debounceMap.get(key) as DebounceEntry<R> | undefined;
-  if (entry) {
-    clearTimeout(entry.timer);
-    entry.op = op;
-  } else {
-    let resolve: (value: R) => void;
-    let reject: (reason: unknown) => void;
-    const promise = new Promise<R>((res, rej) => {
-      resolve = res;
-      reject = rej;
-    });
-
-    entry = {
-      timer: undefined as unknown as NodeJS.Timeout,
-      promise,
-      resolve: resolve!,
-      reject: reject!,
-      op,
-    };
-    debounceMap.set(key, entry as DebounceEntry<unknown>);
-  }
-
-  entry.timer = setTimeout(async () => {
-    debounceMap.delete(key);
-    try {
-      const result = await entry.op();
-      entry.resolve(result);
-    } catch (err) {
-      entry.reject(err);
-    }
-  }, windowMs);
-
-  return entry.promise;
-}
 
 /**
  * Register a command handler
@@ -155,8 +100,7 @@ export async function dispatch(
       args = schema.parse(msg.args);
     }
 
-    // Execute handler (with debounce for git.status)
-    const data = await executeWithDebounce(msg.op, args, ctx, clientId);
+    const data = await handler(args, ctx, clientId);
 
     return {
       kind: "result",
@@ -175,36 +119,6 @@ export async function dispatch(
       error: normalizedError,
     };
   }
-}
-
-/**
- * Execute a command handler, optionally with debounce.
- * For git.status, coalesces rapid-fire calls per workspace into one execution.
- */
-async function executeWithDebounce(
-  op: string,
-  args: unknown,
-  ctx: CommandContext,
-  clientId?: string
-): Promise<unknown> {
-  const handler = handlers.get(op)!;
-
-  if (op === "git.status") {
-    const workspaceId = getWorkspaceId(args);
-    const key = workspaceId ? `git.status:${workspaceId}` : op;
-    return debounce(key, () => handler(args, ctx, clientId), DEBOUNCE_GIT_STATUS_MS);
-  }
-
-  return handler(args, ctx, clientId);
-}
-
-function getWorkspaceId(args: unknown): string | undefined {
-  if (typeof args !== "object" || args === null || !("workspaceId" in args)) {
-    return undefined;
-  }
-
-  const workspaceId = (args as { workspaceId: unknown }).workspaceId;
-  return typeof workspaceId === "string" ? workspaceId : undefined;
 }
 
 /**

@@ -28,10 +28,12 @@ describe("GitPanel", () => {
 
   beforeEach(() => {
     vi.restoreAllMocks();
+    window.localStorage.clear();
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+    window.localStorage.clear();
   });
 
   it("renders git groups from the first git.status response", async () => {
@@ -321,7 +323,8 @@ describe("GitPanel", () => {
       expect(sendCommand).toHaveBeenCalledWith("git.status", { workspaceId: "ws-test" }, undefined);
     });
 
-    resolveFirst?.(status);
+    expect(resolveFirst).not.toBeNull();
+    resolveFirst!(status);
 
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledTimes(3);
@@ -569,5 +572,132 @@ describe("GitPanel", () => {
       "git-row-status-end"
     );
     expect(within(untrackedRow as HTMLElement).queryByText("tests/")).toHaveClass("git-row-dir");
+  });
+
+  it("persists the commit message draft across panel remount per workspace", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return status;
+      }
+      if (op === "git.branches") {
+        return { current: "feature/ai-agent", branches: [] };
+      }
+      if (op === "git.diff") {
+        return { diff: "diff --git a/src/auth/AuthGate.tsx b/src/auth/AuthGate.tsx" };
+      }
+      return {};
+    });
+
+    const firstStore = createStore();
+    firstStore.set(localeAtom, "zh");
+    firstStore.set(wsClientAtom, { sendCommand } as never);
+
+    const firstMount = render(
+      <Provider store={firstStore}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    const textarea = (await screen.findByPlaceholderText("输入提交信息...")) as HTMLTextAreaElement;
+
+    fireEvent.change(textarea, { target: { value: "wip: persist me" } });
+
+    await waitFor(() => {
+      expect(textarea.value).toBe("wip: persist me");
+    });
+
+    firstMount.unmount();
+
+    const secondStore = createStore();
+    secondStore.set(localeAtom, "zh");
+    secondStore.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={secondStore}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    const restoredTextarea = (await screen.findByPlaceholderText(
+      "输入提交信息..."
+    )) as HTMLTextAreaElement;
+    expect(restoredTextarea.value).toBe("wip: persist me");
+
+    const otherStore = createStore();
+    otherStore.set(localeAtom, "zh");
+    otherStore.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={otherStore}>
+        <GitPanel workspaceId="ws-other" />
+      </Provider>
+    );
+
+    const otherTextareas = (await screen.findAllByPlaceholderText(
+      "输入提交信息..."
+    )) as HTMLTextAreaElement[];
+    const otherTextarea = otherTextareas[otherTextareas.length - 1];
+    expect(otherTextarea?.value).toBe("");
+  });
+
+  it("clears the persisted commit draft for the workspace after a successful commit", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return status;
+      }
+      if (op === "git.branches") {
+        return { current: "feature/ai-agent", branches: [] };
+      }
+      if (op === "git.diff") {
+        return { diff: "diff --git a/src/auth/AuthGate.tsx b/src/auth/AuthGate.tsx" };
+      }
+      if (op === "git.commit") {
+        return undefined;
+      }
+      return {};
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "zh");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    const textarea = (await screen.findByPlaceholderText("输入提交信息...")) as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: "feat: ship it" } });
+
+    await waitFor(() => {
+      expect(textarea.value).toBe("feat: ship it");
+    });
+
+    const commitButton = await screen.findByTitle("提交");
+    fireEvent.click(commitButton);
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "git.commit",
+        { workspaceId: "ws-test", message: "feat: ship it" },
+        undefined
+      );
+    });
+
+    await waitFor(() => {
+      expect(textarea.value).toBe("");
+    });
+
+    const persistedDraftKeys = Object.keys(window.localStorage).filter((key) =>
+      key.includes("git-commit-draft")
+    );
+    for (const key of persistedDraftKeys) {
+      const raw = window.localStorage.getItem(key);
+      if (raw === null) {
+        continue;
+      }
+      expect(JSON.parse(raw)).toBe("");
+    }
   });
 });

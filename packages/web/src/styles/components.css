@@ -3453,6 +3453,60 @@ body.is-resizing-panels * {
   background: rgba(241, 184, 106, 0.15);
 }
 
+.worktree-list-modal {
+  min-width: 320px;
+  max-width: 480px;
+}
+
+.worktree-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.worktree-list-row {
+  margin: 0;
+}
+
+.worktree-list-row__button {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  padding: var(--sp-2) var(--sp-3);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: left;
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.worktree-list-row__button:hover {
+  background: var(--bg-hover);
+}
+
+.worktree-list-row__name {
+  flex: 1;
+  font-weight: 500;
+}
+
+.worktree-list-row__branch {
+  color: var(--accent-blue);
+  font-size: var(--text-xs);
+}
+
+.worktree-empty {
+  color: var(--text-tertiary);
+  text-align: center;
+  padding: var(--sp-4) 0;
+}
+
 .modal-tabs {
   display: flex;
   border-bottom: 1px solid var(--border);

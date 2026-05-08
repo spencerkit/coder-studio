@@ -1,16 +1,18 @@
 import type { GitBranch, GitFileChange, GitStatus } from "@coder-studio/core";
-import { useAtomValue, useSetAtom } from "jotai";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { dispatchCommandAtom } from "../../../atoms/connection";
 import { useTranslation } from "../../../lib/i18n";
 import { pushToastAtom } from "../../notifications/atoms";
 import {
   branchQuickPickAtom,
+  commitMessageDraftAtomFamily,
   fileTreeStaleAtomFamily,
   type GitDiffPreview,
   gitBranchListAtomFamily,
   gitDiffPreviewAtomFamily,
   gitDiffPreviewDismissedAtomFamily,
+  gitFetchAtomFamily,
   gitStateAtomFamily,
 } from "../atoms";
 
@@ -41,7 +43,7 @@ interface GitSyncResult {
 }
 
 export interface GitAuthFailureDetails {
-  operation: "push" | "pull";
+  operation: "push" | "pull" | "fetch";
   remote?: string;
   remoteUrl?: string;
   remoteLabel: string;
@@ -53,14 +55,15 @@ export interface GitAuthFailureDetails {
 }
 
 export interface GitSyncAuthPromptState {
-  intent: "push" | "pull";
+  intent: "push" | "pull" | "fetch";
   details: GitAuthFailureDetails;
 }
 
 const GIT_SYNC_TIMEOUT_MS = 3 * 60 * 1000;
-const GIT_OPERATION_LABELS: Record<"push" | "pull", string> = {
+const GIT_OPERATION_LABELS: Record<"push" | "pull" | "fetch", string> = {
   push: "git.operation_push",
   pull: "git.operation_pull",
+  fetch: "git.operation_fetch",
 };
 
 export function useGitSyncActions(workspaceId: string) {
@@ -70,7 +73,8 @@ export function useGitSyncActions(workspaceId: string) {
   const setGitState = useSetAtom(gitStateAtomFamily(workspaceId));
   const setBranchList = useSetAtom(gitBranchListAtomFamily(workspaceId));
   const setFileTreeStale = useSetAtom(fileTreeStaleAtomFamily(workspaceId));
-  const [syncingIntent, setSyncingIntent] = useState<"push" | "pull" | null>(null);
+  const setFetchState = useSetAtom(gitFetchAtomFamily(workspaceId));
+  const [syncingIntent, setSyncingIntent] = useState<"push" | "pull" | "fetch" | null>(null);
   const [authPrompt, setAuthPrompt] = useState<GitSyncAuthPromptState | null>(null);
 
   const getAuthPromptMessage = useCallback(
@@ -130,7 +134,7 @@ export function useGitSyncActions(workspaceId: string) {
 
   const runSyncAction = useCallback(
     async (
-      op: "git.push" | "git.pull",
+      op: "git.push" | "git.pull" | "git.fetch",
       options: {
         successTitle: string;
         fallbackSuccessBody?: string;
@@ -146,7 +150,13 @@ export function useGitSyncActions(workspaceId: string) {
         return false;
       }
 
-      setSyncingIntent(op === "git.push" ? "push" : "pull");
+      const isFetch = op === "git.fetch";
+      if (isFetch) {
+        setFetchState((prev) => ({ ...prev, status: "fetching", error: undefined }));
+        setSyncingIntent("fetch");
+      } else {
+        setSyncingIntent(op === "git.push" ? "push" : "pull");
+      }
 
       try {
         const result = await dispatch<GitSyncResult>(
@@ -166,13 +176,21 @@ export function useGitSyncActions(workspaceId: string) {
             result.error.details &&
             typeof result.error.details === "object"
           ) {
+            if (isFetch) {
+              setFetchState((prev) => ({
+                ...prev,
+                status: "error",
+                error: body,
+              }));
+            }
             const details = result.error.details as GitAuthFailureDetails;
+            const intent = op === "git.push" ? "push" : op === "git.pull" ? "pull" : "fetch";
             setAuthPrompt({
-              intent: op === "git.push" ? "push" : "pull",
+              intent,
               details: {
                 ...details,
                 usernameHint:
-                  authPrompt?.intent === (op === "git.push" ? "push" : "pull")
+                  authPrompt?.intent === intent
                     ? authPrompt.details.usernameHint
                     : details.usernameHint,
               },
@@ -184,6 +202,14 @@ export function useGitSyncActions(workspaceId: string) {
             setAuthPrompt(null);
           }
 
+          if (isFetch) {
+            setFetchState((prev) => ({
+              ...prev,
+              status: "error",
+              error: body,
+            }));
+          }
+
           pushToast({
             kind: "error",
             title: options.errorTitle,
@@ -193,10 +219,33 @@ export function useGitSyncActions(workspaceId: string) {
           return false;
         }
 
-        await refreshBranchState();
+        const refreshed = await refreshBranchState();
+        if (!refreshed) {
+          if (isFetch) {
+            const message = t("git.fetch_refresh_failed_body");
+            setFetchState((prev) => ({
+              ...prev,
+              status: "error",
+              error: message,
+            }));
+            pushToast({
+              kind: "error",
+              title: options.errorTitle,
+              body: message,
+            });
+            return false;
+          }
+        }
 
         if (options.markFileTreeStale) {
           setFileTreeStale(true);
+        }
+
+        if (isFetch) {
+          setFetchState({
+            status: "idle",
+            lastFetchAt: Date.now(),
+          });
         }
 
         pushToast({
@@ -210,7 +259,16 @@ export function useGitSyncActions(workspaceId: string) {
         setSyncingIntent(null);
       }
     },
-    [authPrompt, dispatch, pushToast, refreshBranchState, setFileTreeStale, workspaceId]
+    [
+      authPrompt,
+      dispatch,
+      pushToast,
+      refreshBranchState,
+      setFetchState,
+      setFileTreeStale,
+      t,
+      workspaceId,
+    ]
   );
 
   const handlePush = useCallback(
@@ -236,11 +294,23 @@ export function useGitSyncActions(workspaceId: string) {
     [runSyncAction, t]
   );
 
+  const handleFetch = useCallback(
+    async (auth?: { username: string; password: string }) =>
+      runSyncAction("git.fetch", {
+        successTitle: t("git.fetch_success_title"),
+        fallbackSuccessBody: t("git.fetch_success_body"),
+        errorTitle: t("git.fetch_failed_title"),
+        auth,
+      }),
+    [runSyncAction, t]
+  );
+
   return {
     authPrompt,
     clearAuthPrompt: () => setAuthPrompt(null),
     setAuthPrompt,
     getAuthPromptMessage,
+    handleFetch,
     handlePull,
     handlePush,
     refreshBranchState,
@@ -309,7 +379,7 @@ export function useGitPanelActions({
   const setDiffPreview = useSetAtom(gitDiffPreviewAtomFamily(workspaceId));
   const setDiffPreviewDismissed = useSetAtom(gitDiffPreviewDismissedAtomFamily(workspaceId));
 
-  const [commitMessage, setCommitMessage] = useState("");
+  const [commitMessage, setCommitMessage] = useAtom(commitMessageDraftAtomFamily(workspaceId));
   const [isLoading, setIsLoading] = useState(false);
   const [pendingDiscard, setPendingDiscard] = useState<PendingDiscardConfirmation | null>(null);
   const isLoadingRef = useRef(false);
@@ -625,10 +695,10 @@ export function useGitPanelActions({
   const groups = useMemo<GitChangeGroupDescriptor[]>(
     () =>
       [
-        { title: "staged", type: "staged", changes: gitState?.staged ?? [] },
-        { title: "changes", type: "modified", changes: gitState?.modified ?? [] },
-        { title: "deleted", type: "deleted", changes: gitState?.deleted ?? [] },
-        { title: "untracked", type: "untracked", changes: gitState?.untracked ?? [] },
+        { title: "staged", type: "staged" as const, changes: gitState?.staged ?? [] },
+        { title: "changes", type: "modified" as const, changes: gitState?.modified ?? [] },
+        { title: "deleted", type: "deleted" as const, changes: gitState?.deleted ?? [] },
+        { title: "untracked", type: "untracked" as const, changes: gitState?.untracked ?? [] },
       ].filter((group) => group.changes.length > 0),
     [gitState]
   );

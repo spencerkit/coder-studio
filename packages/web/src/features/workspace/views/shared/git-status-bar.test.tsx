@@ -4,9 +4,10 @@ import { createStore, Provider } from "jotai";
 import { describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../../../atoms/app-ui";
 import { wsClientAtom } from "../../../../atoms/connection";
+import { formatDate } from "../../../../lib/i18n";
 import { CommandResultError } from "../../../../ws/client";
 import { toastsAtom } from "../../../notifications/atoms";
-import { gitStateAtomFamily } from "../../atoms";
+import { gitFetchAtomFamily, gitStateAtomFamily } from "../../atoms";
 import { GitStatusBar } from "./git-status-bar";
 
 const baseStatus: GitStatus = {
@@ -87,7 +88,8 @@ describe("GitStatusBar", () => {
 
     expect(within(modal as HTMLElement).getByRole("button", { name: "Pushing..." })).toBeDisabled();
 
-    resolvePush?.();
+    expect(resolvePush).not.toBeNull();
+    resolvePush!();
 
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith(
@@ -350,7 +352,7 @@ describe("GitStatusBar", () => {
 
   it("keeps the typed username after an invalid credential retry", async () => {
     let pushAttempts = 0;
-    const sendCommand = vi.fn().mockImplementation(async (op: string, args?: unknown) => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "git.push") {
         pushAttempts += 1;
         if (pushAttempts <= 2) {
@@ -474,7 +476,8 @@ describe("GitStatusBar", () => {
     fireEvent.click(cancelButton);
     expect(screen.getByText("Push Changes")).toBeInTheDocument();
 
-    resolvePush?.();
+    expect(resolvePush).not.toBeNull();
+    resolvePush!();
     await waitFor(() => {
       expect(screen.queryByText("Push Changes")).not.toBeInTheDocument();
     });
@@ -531,6 +534,196 @@ describe("GitStatusBar", () => {
     expect(
       screen.getByText("Do you want to push 2 local commits to the remote?")
     ).toBeInTheDocument();
+  });
+
+  it("dispatches fetch immediately and shows the last fetch timestamp in the tooltip", async () => {
+    const lastFetchAt = Date.UTC(2026, 4, 8, 4, 5, 0);
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(lastFetchAt);
+
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.fetch") {
+        return { success: true, message: "Fetch completed successfully", updatedRefs: [] };
+      }
+
+      if (op === "git.branches") {
+        return {
+          current: "main",
+          branches: [{ name: "main", isRemote: false, isCurrent: true }],
+        };
+      }
+
+      if (op === "git.status") {
+        return baseStatus;
+      }
+
+      throw new Error(`Unexpected command: ${op}`);
+    });
+
+    const { store } = renderStatusBar({ sendCommand });
+
+    fireEvent.click(screen.getByRole("button", { name: "Fetch" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "git.fetch",
+        { workspaceId: "ws-test" },
+        { timeoutMs: 180000 }
+      );
+    });
+
+    expect(store.get(toastsAtom)[0]?.title).toBe("Fetched from remote");
+    expect(screen.getByRole("button", { name: "Fetch" })).toHaveAttribute(
+      "title",
+      `Last fetched ${formatDate(lastFetchAt, "en")}`
+    );
+
+    nowSpy.mockRestore();
+  });
+
+  it("shows fetching state while a manual fetch is running", async () => {
+    let resolveFetch: (() => void) | null = null;
+    const fetchPromise = new Promise<void>((resolve) => {
+      resolveFetch = resolve;
+    });
+
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.fetch") {
+        await fetchPromise;
+        return { success: true, message: "Fetch completed successfully", updatedRefs: [] };
+      }
+
+      if (op === "git.branches") {
+        return {
+          current: "main",
+          branches: [{ name: "main", isRemote: false, isCurrent: true }],
+        };
+      }
+
+      if (op === "git.status") {
+        return baseStatus;
+      }
+
+      throw new Error(`Unexpected command: ${op}`);
+    });
+
+    renderStatusBar({ locale: "zh", sendCommand });
+
+    fireEvent.click(screen.getByRole("button", { name: "获取" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "git.fetch",
+        { workspaceId: "ws-test" },
+        { timeoutMs: 180000 }
+      );
+    });
+
+    expect(screen.getByRole("button", { name: "获取中..." })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "获取中..." })).toHaveAttribute("title", "尚未获取");
+
+    expect(resolveFetch).not.toBeNull();
+    resolveFetch!();
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "获取" })).toBeInTheDocument();
+    });
+  });
+
+  it("opens the auth form and retries fetch when remote authentication is required", async () => {
+    let fetchAttempts = 0;
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.fetch") {
+        fetchAttempts += 1;
+        if (fetchAttempts === 1) {
+          throw new CommandResultError({
+            code: "git_auth_required",
+            message: "Authentication is required",
+            details: {
+              operation: "fetch",
+              remote: "origin",
+              remoteLabel: "origin (github.com)",
+              host: "github.com",
+              reason: "missing_credentials",
+              authMode: "username_password",
+              canPrompt: true,
+              usernameHint: "alice",
+            },
+          });
+        }
+
+        return { success: true, message: "Fetch completed successfully", updatedRefs: [] };
+      }
+
+      if (op === "git.branches") {
+        return {
+          current: "main",
+          branches: [{ name: "main", isRemote: false, isCurrent: true }],
+        };
+      }
+
+      if (op === "git.status") {
+        return baseStatus;
+      }
+
+      throw new Error(`Unexpected command: ${op}`);
+    });
+
+    const { store } = renderStatusBar({ sendCommand });
+
+    fireEvent.click(screen.getByRole("button", { name: "Fetch" }));
+
+    expect(await screen.findByLabelText("Username")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Password or token"), {
+      target: { value: "secret-token" },
+    });
+    const authModal = screen.getByLabelText("Username").closest(".modal-card");
+    expect(authModal).not.toBeNull();
+    fireEvent.click(within(authModal as HTMLElement).getByRole("button", { name: "Fetch" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "git.fetch",
+        {
+          workspaceId: "ws-test",
+          auth: {
+            username: "alice",
+            password: "secret-token",
+          },
+        },
+        { timeoutMs: 180000 }
+      );
+    });
+
+    expect(store.get(gitFetchAtomFamily("ws-test")).status).toBe("idle");
+  });
+
+  it("does not mark fetch successful when refreshing git state fails afterward", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.fetch") {
+        return { success: true, message: "Fetch completed successfully", updatedRefs: [] };
+      }
+
+      if (op === "git.branches") {
+        throw new Error("branches failed");
+      }
+
+      if (op === "git.status") {
+        return baseStatus;
+      }
+
+      throw new Error(`Unexpected command: ${op}`);
+    });
+
+    const { store } = renderStatusBar({ sendCommand });
+
+    fireEvent.click(screen.getByRole("button", { name: "Fetch" }));
+
+    await waitFor(() => {
+      const toasts = store.get(toastsAtom);
+      expect(toasts[0]?.title).toBe("Fetch failed");
+    });
+
+    expect(store.get(gitFetchAtomFamily("ws-test")).lastFetchAt).toBeUndefined();
+    expect(store.get(gitFetchAtomFamily("ws-test")).status).toBe("error");
   });
 });
 

@@ -3,6 +3,11 @@ import type { Database } from "../database.js";
 /**
  * Settings repository for key-value storage
  * Stores JSON values for various settings
+ *
+ * Known keys:
+ * - `git.autofetchPeriodSec`: polling interval for active-workspace background fetch.
+ *   Defaults to 180 seconds; `0` disables periodic polling while preserving
+ *   open-time fetch and manual fetch.
  */
 export class SettingsRepo {
   constructor(private db: Database) {}

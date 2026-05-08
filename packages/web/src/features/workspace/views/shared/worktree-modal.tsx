@@ -7,15 +7,18 @@ import { MobileSheet } from "../mobile/mobile-sheet";
 type TabType = "status" | "diff" | "tree";
 
 interface WorktreeModalProps {
+  workspaceId: string;
   worktree: WorktreeInfo | null;
   onClose: () => void;
 }
 
-export function WorktreeModal({ worktree, onClose }: WorktreeModalProps) {
+export function WorktreeModal({ workspaceId, worktree, onClose }: WorktreeModalProps) {
   const isMobile = useViewport() === "mobile";
   const t = useTranslation();
-  const { activeTab, diff, error, handleTabChange, loading, status, tree } =
-    useWorktreeActions(worktree);
+  const { activeTab, diff, error, handleTabChange, loading, status, tree } = useWorktreeActions(
+    workspaceId,
+    worktree
+  );
 
   if (!worktree) {
     return null;

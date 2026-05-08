@@ -6,9 +6,11 @@ import { z } from "zod";
 import {
   commitChanges,
   discardChanges,
+  GitAuthError,
   getGitStatus,
   runGitCheckout,
   runGitCreateBranch,
+  runGitFetch,
   runGitListBranches,
   runGitPull,
   runGitPush,
@@ -41,6 +43,20 @@ const gitHttpAuthSchema = z.object({
   username: z.string(),
   password: z.string(),
 });
+
+const GIT_BACKGROUND_FETCH_TIMEOUT_MS = 30 * 1000;
+
+async function runGitNetworkOperation<T>(
+  ctx: CommandContext,
+  workspaceId: string,
+  op: () => Promise<T>
+): Promise<T> {
+  if (!ctx.autoFetch?.runExclusive) {
+    return op();
+  }
+
+  return ctx.autoFetch.runExclusive(workspaceId, op);
+}
 
 // git.status
 registerCommand(
@@ -175,12 +191,14 @@ registerCommand(
       throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
     }
 
-    const result = await runGitPush(workspace.path, {
-      remote: args.remote,
-      branch: args.branch,
-      force: args.force,
-      auth: args.auth,
-    });
+    const result = await runGitNetworkOperation(ctx, args.workspaceId, () =>
+      runGitPush(workspace.path, {
+        remote: args.remote,
+        branch: args.branch,
+        force: args.force,
+        auth: args.auth,
+      })
+    );
     emitGitStateChanged(ctx, args.workspaceId, {
       branchChanged: true,
       worktreeChanged: true,
@@ -204,17 +222,59 @@ registerCommand(
       throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
     }
 
-    const result = await runGitPull(workspace.path, {
-      remote: args.remote,
-      branch: args.branch,
-      auth: args.auth,
-    });
+    const result = await runGitNetworkOperation(ctx, args.workspaceId, () =>
+      runGitPull(workspace.path, {
+        remote: args.remote,
+        branch: args.branch,
+        auth: args.auth,
+      })
+    );
+    ctx.workspaceMgr.recordFetch(args.workspaceId);
     emitGitStateChanged(ctx, args.workspaceId, {
       treeChanged: true,
       branchChanged: true,
       worktreeChanged: true,
     });
     return result;
+  }
+);
+
+// git.fetch
+registerCommand(
+  "git.fetch",
+  z.object({
+    workspaceId: z.string(),
+    remote: z.string().optional(),
+    prune: z.boolean().optional(),
+    auth: gitHttpAuthSchema.optional(),
+    background: z.boolean().optional(),
+  }),
+  async (args, ctx) => {
+    const workspace = ctx.workspaceMgr.get(args.workspaceId);
+    if (!workspace) {
+      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
+    }
+
+    try {
+      const runFetch = () =>
+        runGitFetch(workspace.path, {
+          remote: args.remote,
+          prune: args.prune,
+          auth: args.auth,
+          timeoutMs: args.background ? GIT_BACKGROUND_FETCH_TIMEOUT_MS : undefined,
+        });
+      const result = args.background
+        ? await runFetch()
+        : await runGitNetworkOperation(ctx, args.workspaceId, runFetch);
+      ctx.workspaceMgr.recordFetch(args.workspaceId);
+      emitGitStateChanged(ctx, args.workspaceId, { branchChanged: true });
+      return result;
+    } catch (err) {
+      if (args.background && err instanceof GitAuthError) {
+        return { success: false, message: err.message, updatedRefs: [] };
+      }
+      throw err;
+    }
   }
 );
 
