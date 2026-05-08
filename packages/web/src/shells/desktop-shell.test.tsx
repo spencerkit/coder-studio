@@ -80,7 +80,7 @@ describe("DesktopShell auth gating", () => {
     expect(screen.queryByText("LoginPage")).not.toBeInTheDocument();
   });
 
-  it("keeps / on WelcomePage when auth is enabled and user is unauthenticated", () => {
+  it("redirects / to /login when auth is enabled and user is unauthenticated", async () => {
     const store = createStore();
     store.set(connectionStatusAtom, "connected");
     store.set(authEnabledAtom, true);
@@ -88,11 +88,13 @@ describe("DesktopShell auth gating", () => {
 
     renderShell(store);
 
-    expect(screen.getByText("WelcomePage")).toBeInTheDocument();
-    expect(screen.queryByText("LoginPage")).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/login");
+      expect(screen.getByText("LoginPage")).toBeInTheDocument();
+    });
   });
 
-  it("does not bootstrap workspaces from / when auth is enabled and user is unauthenticated", () => {
+  it("does not bootstrap workspaces from / before redirecting to /login when auth is enabled and user is unauthenticated", async () => {
     const sendCommand = vi.fn();
     const store = createStore();
     store.set(connectionStatusAtom, "connected");
@@ -113,9 +115,11 @@ describe("DesktopShell auth gating", () => {
 
     renderShell(store);
 
-    expect(window.location.pathname).toBe("/");
-    expect(screen.getByText("WelcomePage")).toBeInTheDocument();
-    expect(sendCommand).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/login");
+      expect(screen.getByText("LoginPage")).toBeInTheDocument();
+      expect(sendCommand).not.toHaveBeenCalled();
+    });
   });
 
   it("redirects /workspace to /login when auth is enabled and user is unauthenticated", async () => {
@@ -247,7 +251,7 @@ describe("DesktopShell auth gating", () => {
     expect(screen.getByText("Page not found")).toBeInTheDocument();
   });
 
-  it("does not rewrite /auth to /login on desktop when auth is required and user is unauthenticated", async () => {
+  it("rewrites /auth to /login on desktop when auth is required and user is unauthenticated", async () => {
     window.history.replaceState({}, "", "/auth");
 
     const store = createStore();
@@ -258,9 +262,8 @@ describe("DesktopShell auth gating", () => {
     renderShell(store);
 
     await waitFor(() => {
-      expect(screen.getByText("Page not found")).toBeInTheDocument();
-      expect(window.location.pathname).toBe("/auth");
-      expect(screen.queryByText("LoginPage")).not.toBeInTheDocument();
+      expect(window.location.pathname).toBe("/login");
+      expect(screen.getByText("LoginPage")).toBeInTheDocument();
     });
   });
 

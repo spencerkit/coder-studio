@@ -1,5 +1,5 @@
 import type { Session } from "@coder-studio/core";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createStore, Provider } from "jotai";
 import type { ReactNode } from "react";
@@ -820,7 +820,7 @@ describe("MobileShell Phase 2 workspace", () => {
     expect(screen.queryByRole("button", { name: "Switch workspace" })).not.toBeInTheDocument();
   });
 
-  it("does not bootstrap workspaces from / on mobile when auth is enabled and user is unauthenticated", () => {
+  it("does not bootstrap workspaces from / on mobile before redirecting to /login when auth is enabled and user is unauthenticated", async () => {
     const sendCommand = vi.fn();
     const store = createStore();
     store.set(connectionStatusAtom, "connected");
@@ -851,9 +851,11 @@ describe("MobileShell Phase 2 workspace", () => {
       </Provider>
     );
 
-    expect(screen.getByText("WelcomePage")).toBeInTheDocument();
-    expect(screen.getByTestId("location-display")).toHaveTextContent("/");
-    expect(sendCommand).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(screen.getByText("LoginPage")).toBeInTheDocument();
+      expect(screen.getByTestId("location-display")).toHaveTextContent("/login");
+      expect(sendCommand).not.toHaveBeenCalled();
+    });
   });
 
   it("keeps the explicit /login route on mobile when auth is enabled and user is unauthenticated", async () => {
@@ -910,7 +912,7 @@ describe("MobileShell Phase 2 workspace", () => {
     expect(screen.getByText("Page not found")).toBeInTheDocument();
   });
 
-  it("does not rewrite /auth to /login on mobile when auth is required and user is unauthenticated", async () => {
+  it("rewrites /auth to /login on mobile when auth is required and user is unauthenticated", async () => {
     const store = createStore();
     store.set(connectionStatusAtom, "connected");
     store.set(authEnabledAtom, true);
@@ -926,9 +928,8 @@ describe("MobileShell Phase 2 workspace", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("Page not found")).toBeInTheDocument();
-      expect(screen.getByTestId("location-display")).toHaveTextContent("/auth");
-      expect(screen.queryByText("LoginPage")).not.toBeInTheDocument();
+      expect(screen.getByText("LoginPage")).toBeInTheDocument();
+      expect(screen.getByTestId("location-display")).toHaveTextContent("/login");
     });
   });
 
@@ -1458,12 +1459,16 @@ describe("MobileShell Phase 2 workspace", () => {
       expect(store.get(visibleMobileSessionIdAtom)).toBe("sess_2");
     });
 
-    store.set(pendingFocusSessionAtom, "sess_1");
+    await act(async () => {
+      store.set(pendingFocusSessionAtom, "sess_1");
+    });
 
     await waitFor(() => {
       expect(screen.getByTestId("mobile-session-card")).toHaveTextContent("sess_1");
     });
-    expect(store.get(visibleMobileSessionIdAtom)).toBe("sess_1");
+    await waitFor(() => {
+      expect(store.get(visibleMobileSessionIdAtom)).toBe("sess_1");
+    });
 
     unmount();
 
