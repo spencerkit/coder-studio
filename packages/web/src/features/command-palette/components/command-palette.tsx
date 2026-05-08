@@ -15,6 +15,7 @@ import {
   orderedWorkspacesAtom,
   resolvedActiveWorkspaceIdAtom,
 } from "../../../atoms/workspaces";
+import { Sheet } from "../../../components/ui";
 import { useViewport } from "../../../hooks/use-viewport";
 import { useTranslation } from "../../../lib/i18n";
 import { formatWorkspaceLabel } from "../../notifications/format";
@@ -24,7 +25,6 @@ import {
   sidebarCollapsedAtom,
   terminalPanelVisibleAtom,
 } from "../../workspace/atoms";
-import { MobileSheet } from "../../workspace/views/mobile/mobile-sheet";
 import { WorkspaceLaunchModal } from "../../workspace/views/shared/workspace-launch-modal";
 
 interface Command {
@@ -212,7 +212,7 @@ export function CommandPalette() {
 
   if (isMobile) {
     return (
-      <MobileSheet
+      <Sheet
         title="Quick Actions"
         kicker={t("command.palette").toUpperCase()}
         onClose={() => setIsOpen(false)}

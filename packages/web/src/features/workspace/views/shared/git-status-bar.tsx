@@ -3,7 +3,16 @@ import { useAtomValue } from "jotai";
 import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Diff, RefreshCw, X } from "lucide-react";
 import { type FC, useLayoutEffect, useState } from "react";
 import { localeAtom } from "../../../../atoms/app-ui";
-import { Input } from "../../../../components/ui";
+import {
+  Button,
+  IconButton,
+  Input,
+  Modal,
+  ModalBody,
+  ModalFooter,
+  ModalHeader,
+  ModalTitle,
+} from "../../../../components/ui";
 import { formatDate, type LocaleCode, useTranslation } from "../../../../lib/i18n";
 import { useGitSyncActions } from "../../actions/use-git-actions";
 import { gitFetchAtomFamily } from "../../atoms";
@@ -101,6 +110,7 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({
         : t("git.fetch_in_progress");
   const isSyncingAuthAction = Boolean(authIntent && syncingIntent === authIntent);
   const isDialogLocked = isSyncingCurrentAction || isSyncingAuthAction;
+  const isDialogOpen = Boolean(pendingAction || authPrompt);
 
   const openConfirm = (intent: GitSyncIntent, count: number) => {
     if (count <= 0) {
@@ -116,6 +126,12 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({
     }
     setPendingAction(null);
     clearAuthPrompt();
+  };
+
+  const handleOpenChange = (open: boolean) => {
+    if (!open) {
+      closeConfirm();
+    }
   };
 
   const confirmSync = async () => {
@@ -213,135 +229,121 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({
         </button>
       </div>
 
-      {pendingAction || authPrompt ? (
-        <div className="modal-overlay" onClick={closeConfirm}>
-          <div
-            className="modal-card git-status-bar__confirm"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="modal-header">
-              <div className="modal-title">
-                <AlertTriangle size={16} />
-                <h3>
-                  {authPrompt
-                    ? dialogIntent === "push"
-                      ? t("git.push_confirm_title")
-                      : dialogIntent === "pull"
-                        ? t("git.pull_confirm_title")
-                        : t("git.fetch_label")
-                    : confirmTitle}
-                </h3>
-              </div>
-              <button
-                className="btn btn-ghost btn-sm"
-                onClick={closeConfirm}
-                aria-label={t("action.close")}
-                type="button"
-                disabled={isDialogLocked}
-              >
-                <X size={14} />
-              </button>
-            </div>
+      <Modal
+        className="git-status-bar__confirm"
+        dismissible={!isDialogLocked}
+        open={isDialogOpen}
+        onOpenChange={handleOpenChange}
+      >
+        <ModalHeader>
+          <ModalTitle>
+            <AlertTriangle size={16} />
+            <span>
+              {authPrompt
+                ? dialogIntent === "push"
+                  ? t("git.push_confirm_title")
+                  : dialogIntent === "pull"
+                    ? t("git.pull_confirm_title")
+                    : t("git.fetch_label")
+                : confirmTitle}
+            </span>
+          </ModalTitle>
+          <IconButton
+            aria-label={t("action.close")}
+            disabled={isDialogLocked}
+            icon={<X size={14} />}
+            onClick={closeConfirm}
+            size="sm"
+          />
+        </ModalHeader>
 
-            <div className="modal-body">
-              {authPrompt ? (
-                authPrompt.details.canPrompt ? (
-                  <form
-                    id={authFormId}
-                    className="form-group"
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      void submitAuth();
-                    }}
-                  >
-                    <p>{getAuthPromptMessage(authPrompt.details)}</p>
-                    <span className="dialog-helper">{t("git.auth_helper_http")}</span>
-                    <label htmlFor={`git-auth-username-${workspaceId}`}>
-                      {t("git.auth_username")}
-                    </label>
-                    <Input
-                      id={`git-auth-username-${workspaceId}`}
-                      value={credentials.username}
-                      onChange={(event) =>
-                        setCredentials((previous) => ({
-                          ...previous,
-                          username: event.target.value,
-                        }))
-                      }
-                      placeholder={
-                        authPrompt.details.usernameHint ?? t("git.auth_username_placeholder")
-                      }
-                      autoFocus
-                      disabled={isSyncingAuthAction}
-                    />
-                    <label htmlFor={`git-auth-password-${workspaceId}`}>
-                      {t("git.auth_password")}
-                    </label>
-                    <Input
-                      id={`git-auth-password-${workspaceId}`}
-                      type="password"
-                      value={credentials.password}
-                      onChange={(event) =>
-                        setCredentials((previous) => ({
-                          ...previous,
-                          password: event.target.value,
-                        }))
-                      }
-                      placeholder={t("git.auth_password_placeholder")}
-                      disabled={isSyncingAuthAction}
-                    />
-                  </form>
-                ) : (
-                  <div className="form-group">
-                    <p>{getAuthPromptMessage(authPrompt.details)}</p>
-                    <span className="dialog-helper">{t("git.auth_helper_unsupported")}</span>
-                  </div>
-                )
-              ) : (
-                <>
-                  <p>{confirmMessage}</p>
-                  <p className="dialog-helper">{t("git.sync_confirm_helper")}</p>
-                </>
-              )}
-            </div>
-
-            <div className="modal-footer">
-              <button
-                className="btn btn-secondary"
-                onClick={closeConfirm}
-                type="button"
-                disabled={isDialogLocked}
+        <ModalBody>
+          {authPrompt ? (
+            authPrompt.details.canPrompt ? (
+              <form
+                id={authFormId}
+                className="form-group"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void submitAuth();
+                }}
               >
-                {t("action.cancel")}
-              </button>
-              {authPrompt ? (
-                <button
-                  className="btn btn-primary"
-                  form={authPrompt.details.canPrompt ? authFormId : undefined}
-                  type={authPrompt.details.canPrompt ? "submit" : "button"}
-                  disabled={
-                    !authPrompt.details.canPrompt ||
-                    isSyncingAuthAction ||
-                    !credentials.username.trim() ||
-                    !credentials.password
+                <p>{getAuthPromptMessage(authPrompt.details)}</p>
+                <span className="dialog-helper">{t("git.auth_helper_http")}</span>
+                <label htmlFor={`git-auth-username-${workspaceId}`}>{t("git.auth_username")}</label>
+                <Input
+                  id={`git-auth-username-${workspaceId}`}
+                  value={credentials.username}
+                  onChange={(event) =>
+                    setCredentials((previous) => ({
+                      ...previous,
+                      username: event.target.value,
+                    }))
                   }
-                >
-                  {isSyncingAuthAction ? authBusyLabel : authActionLabel}
-                </button>
-              ) : (
-                <button
-                  className="btn btn-primary"
-                  onClick={() => void confirmSync()}
-                  type="button"
-                  disabled={isSyncingCurrentAction}
-                >
-                  {isSyncingCurrentAction ? confirmActionBusyLabel : confirmActionLabel}
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      ) : null}
+                  placeholder={
+                    authPrompt.details.usernameHint ?? t("git.auth_username_placeholder")
+                  }
+                  autoFocus
+                  disabled={isSyncingAuthAction}
+                />
+                <label htmlFor={`git-auth-password-${workspaceId}`}>{t("git.auth_password")}</label>
+                <Input
+                  id={`git-auth-password-${workspaceId}`}
+                  type="password"
+                  value={credentials.password}
+                  onChange={(event) =>
+                    setCredentials((previous) => ({
+                      ...previous,
+                      password: event.target.value,
+                    }))
+                  }
+                  placeholder={t("git.auth_password_placeholder")}
+                  disabled={isSyncingAuthAction}
+                />
+              </form>
+            ) : (
+              <div className="form-group">
+                <p>{getAuthPromptMessage(authPrompt.details)}</p>
+                <span className="dialog-helper">{t("git.auth_helper_unsupported")}</span>
+              </div>
+            )
+          ) : (
+            <>
+              <p>{confirmMessage}</p>
+              <p className="dialog-helper">{t("git.sync_confirm_helper")}</p>
+            </>
+          )}
+        </ModalBody>
+
+        <ModalFooter>
+          <Button onClick={closeConfirm} disabled={isDialogLocked}>
+            {t("action.cancel")}
+          </Button>
+          {authPrompt ? (
+            <Button
+              variant="primary"
+              form={authPrompt.details.canPrompt ? authFormId : undefined}
+              type={authPrompt.details.canPrompt ? "submit" : "button"}
+              disabled={
+                !authPrompt.details.canPrompt ||
+                isSyncingAuthAction ||
+                !credentials.username.trim() ||
+                !credentials.password
+              }
+            >
+              {isSyncingAuthAction ? authBusyLabel : authActionLabel}
+            </Button>
+          ) : (
+            <Button
+              variant="primary"
+              onClick={() => void confirmSync()}
+              disabled={isSyncingCurrentAction}
+            >
+              {isSyncingCurrentAction ? confirmActionBusyLabel : confirmActionLabel}
+            </Button>
+          )}
+        </ModalFooter>
+      </Modal>
     </>
   );
 };

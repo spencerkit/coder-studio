@@ -230,6 +230,81 @@ describe("SettingsPage", () => {
     expect(screen.queryByRole("button", { name: "Codex" })).not.toBeInTheDocument();
   });
 
+  it("renders the notification toggles as labeled switches and disables sound when notifications are off", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "notifications.enabled": false,
+          "notifications.soundEnabled": true,
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+
+    const notificationsSwitch = await screen.findByRole("switch", { name: "启用完成通知" });
+    const soundSwitch = screen.getByRole("switch", { name: "通知声音" });
+
+    expect(notificationsSwitch).toHaveAttribute("aria-checked", "false");
+    expect(soundSwitch).toHaveAttribute("aria-checked", "true");
+    expect(soundSwitch).toBeDisabled();
+  });
+
+  it("preserves notification settings update payloads when the switches are toggled", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "notifications.enabled": true,
+          "notifications.soundEnabled": true,
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+
+    fireEvent.click(await screen.findByRole("switch", { name: "启用完成通知" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            notifications: {
+              enabled: false,
+            },
+          },
+        },
+        undefined
+      );
+    });
+
+    fireEvent.click(screen.getByRole("switch", { name: "启用完成通知" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("switch", { name: "通知声音" })).toBeEnabled();
+    });
+
+    fireEvent.click(screen.getByRole("switch", { name: "通知声音" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            notifications: {
+              soundEnabled: false,
+            },
+          },
+        },
+        undefined
+      );
+    });
+  });
+
   it("loads and saves supervisor evaluation timeout in seconds from general settings", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "settings.get") {
@@ -500,6 +575,9 @@ describe("SettingsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Providers" }));
 
     await waitFor(() => {
+      expect(screen.getByRole("tablist", { name: "Providers" })).toBeInTheDocument();
+      expect(screen.getByRole("tab", { name: "Claude" })).toHaveAttribute("aria-selected", "true");
+      expect(screen.getByRole("tab", { name: "Claude" })).toHaveClass("settings-provider-tab");
       expect(screen.getByLabelText("启动命令参数")).toBeInTheDocument();
     });
 
@@ -548,7 +626,7 @@ describe("SettingsPage", () => {
       );
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Codex" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Codex" }));
 
     await waitFor(() => {
       expect(screen.getByLabelText("启动命令参数")).toHaveValue(
@@ -1015,6 +1093,19 @@ describe("SettingsPage", () => {
     expect(screen.getByRole("button", { name: "中文" })).toHaveAttribute("aria-pressed", "false");
   });
 
+  it("renders the shortcuts category chooser with shared tab semantics and legacy classes", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({});
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+
+    fireEvent.click(await screen.findByRole("button", { name: "快捷键" }));
+
+    expect(screen.getByRole("tablist", { name: "快捷键" })).toHaveClass("shortcuts-category-tabs");
+    expect(screen.getByRole("tab", { name: "全局" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "全局" })).toHaveClass("shortcuts-category-tab");
+  });
+
   it("renders shortcut capture with shared input compatibility classes", async () => {
     const sendCommand = vi.fn().mockResolvedValue({});
     const store = createConnectedStore(sendCommand);
@@ -1039,6 +1130,37 @@ describe("SettingsPage", () => {
     expect(screen.getByText("⌘+K").tagName).toBe("KBD");
     expect(screen.getByText("⌘+K")).toHaveAttribute("role", "button");
     expect(screen.getByText("⌘+K")).toHaveAttribute("tabindex", "0");
+  });
+
+  it("renders the shortcut reset action with icon button compatibility classes", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({});
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+
+    fireEvent.click(await screen.findByRole("button", { name: "快捷键" }));
+    fireEvent.click(screen.getByText("⌘+K"));
+    fireEvent.keyDown(screen.getByPlaceholderText("按下快捷键..."), {
+      key: "j",
+      metaKey: true,
+    });
+
+    expect(screen.getByRole("button", { name: "重置为默认" })).toHaveClass(
+      "btn",
+      "btn-ghost",
+      "btn-sm"
+    );
+  });
+
+  it("renders the reset-all shortcut action with shared button semantics", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({});
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+
+    fireEvent.click(await screen.findByRole("button", { name: "快捷键" }));
+
+    expect(screen.getByRole("button", { name: "重置全部" })).toHaveAttribute("type", "button");
   });
 
   it("prefers browser history when leaving the mobile settings root", async () => {

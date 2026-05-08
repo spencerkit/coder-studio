@@ -1,5 +1,5 @@
 import type { Workspace } from "@coder-studio/core";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../atoms/app-ui";
@@ -15,6 +15,10 @@ const routerMocks = vi.hoisted(() => ({
   navigate: vi.fn(),
 }));
 
+const viewportMocks = vi.hoisted(() => ({
+  value: "desktop" as "desktop" | "mobile",
+}));
+
 vi.mock("react-router-dom", async () => {
   const actual = await vi.importActual<typeof import("react-router-dom")>("react-router-dom");
   return {
@@ -22,6 +26,10 @@ vi.mock("react-router-dom", async () => {
     useNavigate: () => routerMocks.navigate,
   };
 });
+
+vi.mock("../../components/ui/_internal/use-viewport", () => ({
+  useViewport: () => viewportMocks.value,
+}));
 
 vi.mock("./components/connection-status", () => ({
   ConnectionStatus: () => <div data-testid="connection-status" />,
@@ -57,6 +65,7 @@ function createWorkspace(id: string, path: string): Workspace {
 describe("TopBar", () => {
   beforeEach(() => {
     routerMocks.navigate.mockReset();
+    viewportMocks.value = "desktop";
   });
 
   it("renders tabs in workspace order and highlights the resolved active workspace", () => {
@@ -95,6 +104,50 @@ describe("TopBar", () => {
     expect(screen.getByText("No workspace open")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Quick Actions" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
+  });
+
+  it("shows shared tooltip content for bounded topbar actions on desktop without changing button names", () => {
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(workspacesLoadStateAtom, "ready");
+
+    render(
+      <Provider store={store}>
+        <TopBar />
+      </Provider>
+    );
+
+    const addWorkspace = screen.getByRole("button", { name: "New workspace" });
+    const settings = screen.getByRole("button", { name: "Settings" });
+
+    expect(addWorkspace).not.toHaveAttribute("title");
+    expect(settings).not.toHaveAttribute("title");
+
+    fireEvent.mouseEnter(addWorkspace);
+    expect(screen.getByRole("tooltip")).toHaveTextContent("New workspace");
+    fireEvent.mouseLeave(addWorkspace);
+
+    fireEvent.focus(settings);
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Settings");
+  });
+
+  it("does not render tooltip overlays for bounded topbar actions on mobile/coarse viewports", () => {
+    viewportMocks.value = "mobile";
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(workspacesLoadStateAtom, "ready");
+
+    render(
+      <Provider store={store}>
+        <TopBar />
+      </Provider>
+    );
+
+    const addWorkspace = screen.getByRole("button", { name: "New workspace" });
+    fireEvent.mouseEnter(addWorkspace);
+    fireEvent.focus(addWorkspace);
+
+    expect(screen.queryByRole("tooltip")).toBeNull();
   });
 
   it("marks terminal and files toggles with explicit active and muted states", () => {

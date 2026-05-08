@@ -93,4 +93,22 @@ describe("ToastContainer", () => {
     expect(document.querySelector(".toast-container--mobile")).toBeTruthy();
     expect(screen.getByText("Session done")).toBeInTheDocument();
   });
+
+  it("renders the shared toast compatibility structure and keeps close dismiss isolated from root clicks", () => {
+    renderWithToast({
+      kind: "error",
+      title: "Session failed",
+      body: "Claude · demo · 1m",
+      workspaceId: "ws-5",
+    });
+
+    expect(document.querySelector(".toast-container")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Dismiss" })).toHaveClass("toast__close");
+    expect(document.querySelector(".toast--error .toast__icon")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+
+    expect(navigate).not.toHaveBeenCalled();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
 });

@@ -122,22 +122,21 @@ describe("ProviderSettings desktop", () => {
   it("defaults to base settings and switches to config files explicitly", async () => {
     renderHarness();
 
+    expect(screen.getByRole("tablist", { name: "Providers" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Claude" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Claude" })).toHaveClass("settings-provider-tab");
+
     const input = await screen.findByLabelText("启动命令参数");
     expect(input).toHaveValue("--verbose");
     expect(input).toHaveClass("input", "textarea", "settings-provider-args-input");
 
-    expect(screen.getByRole("button", { name: "基础配置" })).toHaveAttribute(
-      "aria-pressed",
-      "true"
-    );
+    expect(screen.getByRole("tablist", { name: "配置" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "基础配置" })).toHaveAttribute("aria-selected", "true");
     expect(screen.queryByTestId("config-editor-claude")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "配置文件" }));
+    fireEvent.click(screen.getByRole("tab", { name: "配置文件" }));
 
-    expect(screen.getByRole("button", { name: "配置文件" })).toHaveAttribute(
-      "aria-pressed",
-      "true"
-    );
+    expect(screen.getByRole("tab", { name: "配置文件" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByTestId("config-editor-claude")).toBeInTheDocument();
     expect(screen.queryByLabelText("启动命令参数")).not.toBeInTheDocument();
   });
@@ -153,13 +152,10 @@ describe("ProviderSettings desktop", () => {
   it("keeps the config-files subview selected when switching providers", async () => {
     renderHarness();
 
-    fireEvent.click(screen.getByRole("button", { name: "配置文件" }));
-    fireEvent.click(screen.getByRole("button", { name: "Codex" }));
+    fireEvent.click(screen.getByRole("tab", { name: "配置文件" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Codex" }));
 
-    expect(screen.getByRole("button", { name: "配置文件" })).toHaveAttribute(
-      "aria-pressed",
-      "true"
-    );
+    expect(screen.getByRole("tab", { name: "配置文件" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByTestId("config-editor-codex")).toBeInTheDocument();
     expect(screen.queryByLabelText("启动命令参数")).not.toBeInTheDocument();
   });
@@ -190,7 +186,7 @@ describe("ProviderSettings desktop", () => {
 
     renderHarness({ sendCommand });
 
-    fireEvent.click(screen.getByRole("button", { name: "Codex" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Codex" }));
 
     codexPreview.resolve({ preview: "codex --sandbox" });
     await screen.findByText("codex --sandbox");
@@ -252,19 +248,19 @@ describe("ProviderSettings desktop", () => {
   it("keeps each provider config editor mounted once after first visit", async () => {
     renderHarness();
 
-    fireEvent.click(screen.getByRole("button", { name: "配置文件" }));
+    fireEvent.click(screen.getByRole("tab", { name: "配置文件" }));
     expect(screen.getByTestId("config-editor-claude")).toHaveAttribute("data-visible", "true");
 
-    fireEvent.click(screen.getByRole("button", { name: "基础配置" }));
-    fireEvent.click(screen.getByRole("button", { name: "配置文件" }));
+    fireEvent.click(screen.getByRole("tab", { name: "基础配置" }));
+    fireEvent.click(screen.getByRole("tab", { name: "配置文件" }));
 
     expect(editorMountSpy).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(screen.getByRole("button", { name: "Codex" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Codex" }));
     expect(screen.getByTestId("config-editor-codex")).toHaveAttribute("data-visible", "true");
     expect(editorMountSpy).toHaveBeenCalledTimes(2);
 
-    fireEvent.click(screen.getByRole("button", { name: "Claude" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Claude" }));
     expect(screen.getByTestId("config-editor-claude")).toHaveAttribute("data-visible", "true");
     expect(editorMountSpy).toHaveBeenCalledTimes(2);
   });
@@ -272,7 +268,7 @@ describe("ProviderSettings desktop", () => {
   it("switches the desktop config view into a fill-height editor layout", async () => {
     const { container } = renderHarness();
 
-    fireEvent.click(screen.getByRole("button", { name: "配置文件" }));
+    fireEvent.click(screen.getByRole("tab", { name: "配置文件" }));
 
     expect(container.querySelector(".settings-provider-section--config-active")).not.toBeNull();
     expect(container.querySelector(".settings-section--fill-height")).not.toBeNull();
@@ -309,7 +305,7 @@ describe("ProviderSettings mobile", () => {
     renderHarness({ isMobile: true });
 
     fireEvent.click(screen.getByRole("button", { name: /打开配置文件编辑/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Codex" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Codex" }));
 
     await waitFor(() => {
       expect(screen.getByLabelText("启动命令参数")).toHaveValue("--sandbox");

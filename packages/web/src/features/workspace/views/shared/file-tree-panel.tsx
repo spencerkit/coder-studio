@@ -1,7 +1,6 @@
 import type { FileNode } from "@coder-studio/core";
 import type { LucideIcon } from "lucide-react";
 import {
-  AlertTriangle,
   ChevronDown,
   ChevronRight,
   FileCode2,
@@ -19,7 +18,18 @@ import {
 } from "lucide-react";
 import type { FC } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Input, Tooltip } from "../../../../components/ui";
+import {
+  Button,
+  ConfirmDialog,
+  IconButton,
+  Input,
+  Modal,
+  ModalBody,
+  ModalFooter,
+  ModalHeader,
+  ModalTitle,
+  Tooltip,
+} from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import {
   type CreateDialogState,
@@ -441,6 +451,7 @@ const CreatePathModal: FC<CreatePathModalProps> = ({
   onDraftPathChange,
 }) => {
   const t = useTranslation();
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
   if (!dialog) {
     return null;
@@ -453,60 +464,59 @@ const CreatePathModal: FC<CreatePathModalProps> = ({
   const describedBy = [helperId, errorId].filter(Boolean).join(" ");
 
   return (
-    <div className="modal-overlay" onClick={onCancel}>
-      <div className="modal-card" onClick={(event) => event.stopPropagation()}>
-        <div className="modal-header">
-          <div className="modal-title">
-            {dialog.mode === "file" ? <FilePlus size={16} /> : <FolderPlus size={16} />}
-            <h3>{dialog.mode === "file" ? t("file.new_file") : t("file.new_folder")}</h3>
-          </div>
-          <button
-            className="btn btn-ghost btn-sm"
-            onClick={onCancel}
-            aria-label={t("action.close")}
-          >
-            <X size={14} />
-          </button>
-        </div>
-
-        <div className="modal-body">
-          <div className="form-group">
-            <label htmlFor="file-path">{t("file.path")}</label>
-            <Input
-              id="file-path"
-              value={dialog.draftPath}
-              onChange={(event) => onDraftPathChange(event.target.value)}
-              placeholder={dialog.mode === "file" ? "src/demo/new-file.ts" : "src/demo/new-folder"}
-              aria-describedby={describedBy}
-              invalid={Boolean(dialog.error)}
-              autoFocus
-            />
-            <span id={helperId} className="dialog-helper">
-              {helperText}
+    <Modal initialFocus={() => inputRef.current} onOpenChange={onCancel} open>
+      <ModalHeader>
+        <ModalTitle>
+          {dialog.mode === "file" ? (
+            <FilePlus aria-hidden="true" size={16} />
+          ) : (
+            <FolderPlus aria-hidden="true" size={16} />
+          )}
+          <span>{dialog.mode === "file" ? t("file.new_file") : t("file.new_folder")}</span>
+        </ModalTitle>
+        <IconButton
+          aria-label={t("action.close")}
+          icon={<X size={14} />}
+          onClick={onCancel}
+          size="sm"
+        />
+      </ModalHeader>
+      <ModalBody>
+        <div className="form-group">
+          <label htmlFor="file-path">{t("file.path")}</label>
+          <Input
+            id="file-path"
+            ref={inputRef}
+            value={dialog.draftPath}
+            onChange={(event) => onDraftPathChange(event.target.value)}
+            placeholder={dialog.mode === "file" ? "src/demo/new-file.ts" : "src/demo/new-folder"}
+            aria-describedby={describedBy}
+            invalid={Boolean(dialog.error)}
+            autoFocus
+          />
+          <span id={helperId} className="dialog-helper">
+            {helperText}
+          </span>
+          {dialog.error ? (
+            <span id={errorId} className="form-error" role="alert">
+              {dialog.error}
             </span>
-            {dialog.error ? (
-              <span id={errorId} className="form-error" role="alert">
-                {dialog.error}
-              </span>
-            ) : null}
-          </div>
+          ) : null}
         </div>
+      </ModalBody>
 
-        <div className="modal-footer">
-          <button className="btn btn-secondary" onClick={onCancel}>
-            {t("action.cancel")}
-          </button>
-          <button
-            className="btn btn-primary"
-            onClick={() => {
-              void onConfirm();
-            }}
-          >
-            {t("action.confirm")}
-          </button>
-        </div>
-      </div>
-    </div>
+      <ModalFooter>
+        <Button onClick={onCancel}>{t("action.cancel")}</Button>
+        <Button
+          variant="primary"
+          onClick={() => {
+            void onConfirm();
+          }}
+        >
+          {t("action.confirm")}
+        </Button>
+      </ModalFooter>
+    </Modal>
   );
 };
 
@@ -524,46 +534,28 @@ const DeleteFileModal: FC<DeleteFileModalProps> = ({ pendingDelete, onCancel, on
   }
 
   return (
-    <div className="modal-overlay" onClick={onCancel}>
-      <div className="modal-card" onClick={(event) => event.stopPropagation()}>
-        <div className="modal-header">
-          <div className="modal-title">
-            <AlertTriangle size={16} />
-            <h3>{t("file.delete")}</h3>
-          </div>
-          <button
-            className="btn btn-ghost btn-sm"
-            onClick={onCancel}
-            aria-label={t("action.close")}
-          >
-            <X size={14} />
-          </button>
-        </div>
-
-        <div className="modal-body">
+    <ConfirmDialog
+      open
+      onOpenChange={onCancel}
+      title={t("file.delete")}
+      description={
+        <>
           <p>{t("file.delete_confirm", { name: pendingDelete.name })}</p>
           {pendingDelete.error ? (
             <span className="form-error" role="alert">
               {pendingDelete.error}
             </span>
           ) : null}
-        </div>
-
-        <div className="modal-footer">
-          <button className="btn btn-secondary" onClick={onCancel}>
-            {t("action.cancel")}
-          </button>
-          <button
-            className="btn btn-danger"
-            onClick={() => {
-              void onConfirm();
-            }}
-          >
-            {t("action.confirm")}
-          </button>
-        </div>
-      </div>
-    </div>
+        </>
+      }
+      cancelText={t("action.cancel")}
+      closeLabel={t("action.close")}
+      confirmText={t("action.confirm")}
+      onConfirm={() => {
+        void onConfirm();
+      }}
+      tone="danger"
+    />
   );
 };
 

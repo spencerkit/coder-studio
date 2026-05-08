@@ -1,6 +1,7 @@
 import { useSetAtom } from "jotai";
 import { ChevronsUp, FilePlus, FolderPlus } from "lucide-react";
 import { type FC, useEffect, useRef, useState } from "react";
+import { Tab, TabList, Tabs } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { AgentPanes } from "../../../agent-panes";
 import { CodeEditorHost } from "../../../code-editor/views/shared/code-editor-host";
@@ -104,28 +105,20 @@ export const WorkspaceDesktopView: FC = () => {
             >
               <div className="nav-panel workspace-sidebar-panel">
                 <div className="workspace-sidebar-panel__header">
-                  <div
-                    className="workspace-sidebar-panel__tabs"
-                    role="tablist"
-                    aria-label="Sidebar tabs"
+                  <Tabs
+                    aria-label="Workspace sections"
+                    onValueChange={setSidebarTab}
+                    value={sidebarTab}
                   >
-                    <button
-                      type="button"
-                      className={`workspace-sidebar-panel__tab ${
-                        sidebarTab === "files" ? "active" : ""
-                      }`}
-                      onClick={() => setSidebarTab("files")}
-                    >
-                      <span>{t("file.title")}</span>
-                    </button>
-                    <button
-                      type="button"
-                      className={`workspace-sidebar-panel__tab ${sidebarTab === "git" ? "active" : ""}`}
-                      onClick={() => setSidebarTab("git")}
-                    >
-                      <span>{t("label.git")}</span>
-                    </button>
-                  </div>
+                    <TabList className="workspace-sidebar-panel__tabs">
+                      <Tab className="workspace-sidebar-panel__tab panel-tab" value="files">
+                        <span>{t("file.title")}</span>
+                      </Tab>
+                      <Tab className="workspace-sidebar-panel__tab panel-tab" value="git">
+                        <span>{t("label.git")}</span>
+                      </Tab>
+                    </TabList>
+                  </Tabs>
 
                   <div className="workspace-sidebar-panel__actions">
                     {sidebarTab === "files" ? (

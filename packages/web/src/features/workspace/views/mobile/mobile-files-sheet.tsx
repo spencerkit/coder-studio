@@ -1,4 +1,5 @@
 import { ChevronsUp, FilePlus, FolderPlus } from "lucide-react";
+import { Tab, TabList, Tabs } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import {
   CodeEditorHost,
@@ -81,30 +82,20 @@ export function MobileFilesSheet({
   return (
     <div className="mobile-files-sheet mobile-files-sheet--root">
       <div className="mobile-files-sheet__segmented">
-        <div
-          className="mobile-files-sheet__tabs"
-          role="tablist"
+        <Tabs
           aria-label={t("mobile.files.tabs")}
+          onValueChange={(tab) => onTabChange?.(tab as "files" | "git")}
+          value={activeTab}
         >
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === "files"}
-            className={`mobile-files-sheet__segment ${activeTab === "files" ? "active" : ""}`}
-            onClick={() => onTabChange?.("files")}
-          >
-            <span>{t("file.title")}</span>
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === "git"}
-            className={`mobile-files-sheet__segment ${activeTab === "git" ? "active" : ""}`}
-            onClick={() => onTabChange?.("git")}
-          >
-            <span>{t("label.git")}</span>
-          </button>
-        </div>
+          <TabList className="mobile-files-sheet__tabs">
+            <Tab className="mobile-files-sheet__segment panel-tab" value="files">
+              <span>{t("file.title")}</span>
+            </Tab>
+            <Tab className="mobile-files-sheet__segment panel-tab" value="git">
+              <span>{t("label.git")}</span>
+            </Tab>
+          </TabList>
+        </Tabs>
 
         {activeTab === "files" ? (
           <div className="mobile-files-sheet__tab-actions">

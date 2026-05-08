@@ -1379,10 +1379,12 @@ describe("GitPanel", () => {
 
     fireEvent.click(within(row as HTMLElement).getByTitle("放弃"));
 
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(screen.getByText("放弃文件更改")).toBeInTheDocument();
     expect(
       screen.getByText("确定要放弃 “src/app/AppController.tsx” 的更改吗？")
     ).toBeInTheDocument();
+    expect(screen.getByText("此操作不可恢复。")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "取消" }));
 
@@ -1424,7 +1426,8 @@ describe("GitPanel", () => {
     expect(row).not.toBeNull();
 
     fireEvent.click(within(row as HTMLElement).getByTitle("放弃"));
-    const modal = screen.getByText("放弃文件更改").closest(".modal-card");
+    const dialog = screen.getByRole("dialog");
+    const modal = dialog.closest(".modal-card") ?? dialog;
     expect(modal).not.toBeNull();
     fireEvent.click(within(modal as HTMLElement).getByRole("button", { name: /^放弃$/ }));
 
@@ -1473,10 +1476,12 @@ describe("GitPanel", () => {
 
     fireEvent.click(within(changesSection as HTMLElement).getByTitle("放弃全部"));
 
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(screen.getByText("放弃所有更改")).toBeInTheDocument();
     expect(screen.getByText("确定要放弃 3 个文件的更改吗？")).toBeInTheDocument();
 
-    const modal = screen.getByText("放弃所有更改").closest(".modal-card");
+    const dialog = screen.getByRole("dialog");
+    const modal = dialog.closest(".modal-card") ?? dialog;
     expect(modal).not.toBeNull();
     fireEvent.click(within(modal as HTMLElement).getByRole("button", { name: /^放弃$/ }));
 
@@ -1494,6 +1499,54 @@ describe("GitPanel", () => {
         undefined
       );
     });
+  });
+
+  it("renders discard confirmation actions with shared button compatibility classes", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return status;
+      }
+      if (op === "git.branches") {
+        return {
+          current: "feature/ai-agent",
+          branches: [],
+        };
+      }
+      if (op === "git.diff") {
+        return {
+          diff: "diff --git a/src/auth/AuthGate.tsx b/src/auth/AuthGate.tsx",
+        };
+      }
+      return {};
+    });
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    fireEvent.click(await screen.findByTitle("Discard All"));
+
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByText("This action cannot be undone.")).toBeInTheDocument();
+    const cancelButton = screen.getByRole("button", { name: "Cancel" });
+    const modal = cancelButton.closest(".modal-card") ?? screen.getByRole("dialog");
+    expect(modal).not.toBeNull();
+
+    expect(cancelButton).toHaveClass("btn", "btn-secondary");
+    expect(within(modal as HTMLElement).getByRole("button", { name: /^Discard$/ })).toHaveClass(
+      "btn",
+      "btn-danger"
+    );
+    expect(within(modal as HTMLElement).getByRole("button", { name: "Close" })).toHaveClass(
+      "btn",
+      "btn-ghost",
+      "btn-sm"
+    );
   });
 
   it("allows discarding a staged file after confirmation", async () => {
@@ -1528,7 +1581,9 @@ describe("GitPanel", () => {
     expect(row).not.toBeNull();
 
     fireEvent.click(within(row as HTMLElement).getByTitle("放弃"));
-    const modal = screen.getByText("放弃文件更改").closest(".modal-card");
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    const dialog = screen.getByRole("dialog");
+    const modal = dialog.closest(".modal-card") ?? dialog;
     expect(modal).not.toBeNull();
     fireEvent.click(within(modal as HTMLElement).getByRole("button", { name: /^放弃$/ }));
 
@@ -1542,6 +1597,58 @@ describe("GitPanel", () => {
         undefined
       );
     });
+  });
+
+  it("requires explicit confirmation before discarding all changes", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return status;
+      }
+      if (op === "git.branches") {
+        return {
+          current: "feature/ai-agent",
+          branches: [],
+        };
+      }
+      if (op === "git.diff") {
+        return {
+          diff: "diff --git a/src/auth/AuthGate.tsx b/src/auth/AuthGate.tsx",
+        };
+      }
+      return {};
+    });
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    fireEvent.click(await screen.findByTitle("Discard All"));
+
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+
+    expect(sendCommand).not.toHaveBeenCalledWith(
+      "git.discard",
+      {
+        workspaceId: "ws-test",
+        paths: [
+          "src/auth/AuthGate.tsx",
+          "src/app/AppController.tsx",
+          "src/legacy/deprecated.ts",
+          "tests/supervisor.test.ts",
+        ],
+      },
+      undefined
+    );
   });
 
   it("renders translated Chinese panel copy when locale is zh", async () => {

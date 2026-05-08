@@ -88,6 +88,7 @@ describe("GitStatusBar", () => {
     fireEvent.click(screen.getByRole("button", { name: "Push" }));
 
     expect(screen.getByText("Push Changes")).toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(
       screen.getByText("Do you want to push 2 local commits to the remote?")
     ).toBeInTheDocument();
@@ -140,6 +141,30 @@ describe("GitStatusBar", () => {
     fireEvent.click(screen.getByRole("button", { name: "取消" }));
 
     expect(sendCommand).not.toHaveBeenCalledWith("git.pull", { workspaceId: "ws-test" });
+  });
+
+  it("renders sync dialog text actions with shared button compatibility classes", async () => {
+    const sendCommand = vi.fn();
+
+    renderStatusBar({ sendCommand });
+
+    fireEvent.click(screen.getByRole("button", { name: "Push" }));
+
+    const modal = screen.getByText("Push Changes").closest(".modal-card");
+    expect(modal).not.toBeNull();
+    expect(within(modal as HTMLElement).getByRole("button", { name: "Cancel" })).toHaveClass(
+      "btn",
+      "btn-secondary"
+    );
+    expect(within(modal as HTMLElement).getByRole("button", { name: "Push" })).toHaveClass(
+      "btn",
+      "btn-primary"
+    );
+    expect(within(modal as HTMLElement).getByRole("button", { name: "Close" })).toHaveClass(
+      "btn",
+      "btn-ghost",
+      "btn-sm"
+    );
   });
 
   it("renders push and pull actions as disabled when commit counts are zero", () => {
@@ -230,6 +255,7 @@ describe("GitStatusBar", () => {
     fireEvent.click(within(confirmModal as HTMLElement).getByRole("button", { name: "Push" }));
 
     const usernameInput = await screen.findByLabelText("Username");
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(usernameInput).toHaveClass("input");
     expect(usernameInput).toHaveValue("alice");
     expect(screen.getByLabelText("Password or token")).toHaveClass("input");
@@ -524,6 +550,7 @@ describe("GitStatusBar", () => {
     const closeButton = within(modal as HTMLElement).getByRole("button", { name: "Close" });
     expect(cancelButton).toBeDisabled();
     expect(closeButton).toBeDisabled();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
 
     fireEvent.click(cancelButton);
     expect(screen.getByText("Push Changes")).toBeInTheDocument();

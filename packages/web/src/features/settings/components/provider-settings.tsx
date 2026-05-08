@@ -1,7 +1,7 @@
 import { useAtomValue } from "jotai";
 import { type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from "react";
 import { connectionStatusAtom, dispatchCommandAtom } from "../../../atoms/connection";
-import { Textarea } from "../../../components/ui";
+import { SegmentedControl, Textarea } from "../../../components/ui";
 import { useTranslation } from "../../../lib/i18n";
 import { ConfigEditor, type ConfigType } from "./config-editor";
 
@@ -203,42 +203,36 @@ export function ProviderSettings({
     <div
       className={`settings-section ${useFillHeightLayout ? "settings-section--fill-height settings-provider-section--config-active" : ""}`}
     >
-      <div className="settings-provider-tabs">
-        {providers.map((entry) => (
-          <button
-            key={entry.id}
-            type="button"
-            className={`settings-provider-tab ${selectedProvider === entry.id ? "settings-provider-tab-active" : ""}`}
-            onClick={() => handleProviderSelect(entry.id)}
-          >
-            {entry.displayName}
-          </button>
-        ))}
-      </div>
+      <SegmentedControl
+        aria-label={t("settings.providers")}
+        className="settings-provider-tabs"
+        onChange={(nextValue) => handleProviderSelect(nextValue as ProviderInfo["id"])}
+        optionClassName="settings-provider-tab"
+        options={providers.map((entry) => ({
+          label: entry.displayName,
+          value: entry.id,
+        }))}
+        value={selectedProvider}
+      />
 
       {!isMobile ? (
-        <div
+        <SegmentedControl
           className="settings-provider-subnav"
-          role="tablist"
           aria-label={t("settings.provider.config")}
-        >
-          <button
-            type="button"
-            className={`settings-provider-subnav-button ${desktopView === "base" ? "settings-provider-subnav-button-active" : ""}`}
-            aria-pressed={desktopView === "base"}
-            onClick={() => setDesktopView("base")}
-          >
-            {t("settings.provider.base")}
-          </button>
-          <button
-            type="button"
-            className={`settings-provider-subnav-button ${desktopView === "config" ? "settings-provider-subnav-button-active" : ""}`}
-            aria-pressed={desktopView === "config"}
-            onClick={() => setDesktopView("config")}
-          >
-            {t("settings.provider.config_file")}
-          </button>
-        </div>
+          onChange={(nextValue) => setDesktopView(nextValue as ProviderDetailView)}
+          optionClassName="settings-provider-subnav-button"
+          options={[
+            {
+              label: t("settings.provider.base"),
+              value: "base",
+            },
+            {
+              label: t("settings.provider.config_file"),
+              value: "config",
+            },
+          ]}
+          value={desktopView}
+        />
       ) : null}
 
       {provider && showBase ? (

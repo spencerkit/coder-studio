@@ -13,7 +13,7 @@ import { useEffect, useRef, useState } from "react";
 import { pendingFocusSessionAtom } from "../../../../atoms/app-ui";
 import { sessionByIdAtomFamily } from "../../../../atoms/sessions";
 import { workspaceByIdAtomFamily } from "../../../../atoms/workspaces";
-import { StatusDot, Tag } from "../../../../components/ui";
+import { ProgressBar, StatusDot, Tag } from "../../../../components/ui";
 import { useSupervisor } from "../../../supervisor/actions/use-supervisor";
 import { ObjectiveDialog } from "../../../supervisor/views/shared/objective-dialog";
 import { SupervisorCard } from "../../../supervisor/views/shared/supervisor-card";
@@ -111,12 +111,14 @@ export const SessionCard: FC<SessionCardProps> = ({
       data-session-id={sessionId}
       onClick={handleCardClick}
     >
-      <div className="session-progress">
-        <div
-          className={`session-progress-bar ${getSessionProgressClass(session.state)}`}
-          style={{ width: `${progressWidth}%` }}
-        />
-      </div>
+      <ProgressBar
+        aria-hidden="true"
+        className="session-progress"
+        fillClassName={`session-progress-bar ${getSessionProgressClass(session.state)}`}
+        max={100}
+        tone={getSessionProgressTone(session.state)}
+        value={progressWidth}
+      />
 
       <div className="session-header">
         <div className="session-header-left">
@@ -223,6 +225,23 @@ function getProgressWidth(state: SessionState): number {
       return 100;
     default:
       return 8;
+  }
+}
+
+function getSessionProgressTone(
+  state: SessionState
+): "success" | "warning" | "error" | "info" | "neutral" {
+  switch (state) {
+    case "starting":
+      return "warning";
+    case "running":
+      return "info";
+    case "idle":
+      return "neutral";
+    case "ended":
+      return "success";
+    default:
+      return "neutral";
   }
 }
 

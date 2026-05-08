@@ -1,0 +1,15 @@
+.body {
+  gap: var(--sp-3);
+}
+
+.body :global(p) {
+  margin: 0;
+}
+
+.titleDanger {
+  color: var(--color-warning);
+}
+
+.iconDanger {
+  flex: none;
+}

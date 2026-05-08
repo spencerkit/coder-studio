@@ -1,7 +1,7 @@
 import { X } from "lucide-react";
 import type { FC } from "react";
 import { useMemo } from "react";
-import { Tooltip } from "../../../../components/ui";
+import { EmptyState, Tooltip } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { useGitDiffViewerActions } from "../../actions/use-git-actions";
 
@@ -96,12 +96,15 @@ export const GitDiffViewer: FC<GitDiffViewerProps> = ({
               ))}
             </div>
           ) : (
-            <div className="git-diff-empty">
-              <p className="git-diff-empty-title">{t("label.git")}</p>
-              <p className="git-diff-empty-body">
-                Select a staged or modified file on the left to inspect its diff.
-              </p>
-            </div>
+            <EmptyState
+              className="git-diff-empty"
+              description={
+                <p className="git-diff-empty-body">
+                  Select a staged or modified file on the left to inspect its diff.
+                </p>
+              }
+              title={<p className="git-diff-empty-title">{t("label.git")}</p>}
+            />
           )}
         </div>
       </div>

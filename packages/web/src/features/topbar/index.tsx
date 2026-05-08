@@ -11,6 +11,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { commandPaletteOpenAtom } from "../../atoms/app-ui";
 import { orderedWorkspacesAtom, resolvedActiveWorkspaceIdAtom } from "../../atoms/workspaces";
+import { Tooltip } from "../../components/ui";
 import { useTranslation } from "../../lib/i18n";
 import type { WorkspaceFullscreenController } from "../workspace/actions/use-workspace-fullscreen";
 import { sidebarCollapsedAtom, terminalPanelVisibleAtom } from "../workspace/atoms";
@@ -53,54 +54,61 @@ export const TopBar: FC<TopBarProps> = ({ fullscreenController }) => {
             <WorkspaceTab key={ws.id} workspace={ws} isActive={ws.id === activeWorkspaceId} />
           ))
         )}
-        <button
-          className="topbar-add"
-          onClick={() => setWorkspaceLaunchOpen(true)}
-          aria-label={t("tooltip.new_workspace")}
-          title={t("tooltip.new_workspace")}
-        >
-          <Plus size={14} />
-        </button>
+        <Tooltip content={t("tooltip.new_workspace")}>
+          <button
+            className="topbar-add"
+            onClick={() => setWorkspaceLaunchOpen(true)}
+            aria-label={t("tooltip.new_workspace")}
+          >
+            <Plus size={14} />
+          </button>
+        </Tooltip>
       </div>
 
       <div className="topbar-actions">
         <ConnectionStatus />
-        <button
-          className="topbar-btn topbar-quick-actions"
-          onClick={() => setCommandPaletteOpen(!commandPaletteOpen)}
-          aria-label={t("tooltip.quick_actions")}
-          title={t("tooltip.quick_actions")}
+        <Tooltip content={t("tooltip.quick_actions")}>
+          <button
+            className="topbar-btn topbar-quick-actions"
+            onClick={() => setCommandPaletteOpen(!commandPaletteOpen)}
+            aria-label={t("tooltip.quick_actions")}
+          >
+            <Search size={14} />
+            <span className="topbar-btn-label">{t("tooltip.quick_actions")}</span>
+          </button>
+        </Tooltip>
+        <Tooltip
+          content={terminalPanelVisible ? t("tooltip.hide_terminal") : t("tooltip.show_terminal")}
         >
-          <Search size={14} />
-          <span className="topbar-btn-label">{t("tooltip.quick_actions")}</span>
-        </button>
-        <button
-          className={`topbar-btn ${terminalPanelVisible ? "topbar-btn--active" : "topbar-btn--muted"}`}
-          onClick={() => setTerminalPanelVisible(!terminalPanelVisible)}
-          aria-label={
-            terminalPanelVisible ? t("tooltip.hide_terminal") : t("tooltip.show_terminal")
-          }
-          title={terminalPanelVisible ? t("tooltip.hide_terminal") : t("tooltip.show_terminal")}
-        >
-          <PanelBottom size={14} />
-        </button>
-        <button
-          className={`topbar-btn ${sidebarCollapsed ? "topbar-btn--muted" : "topbar-btn--active"}`}
-          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-          aria-label={sidebarCollapsed ? t("tooltip.show_files") : t("tooltip.hide_files")}
-          title={sidebarCollapsed ? t("tooltip.show_files") : t("tooltip.hide_files")}
-        >
-          <PanelLeft size={14} />
-        </button>
-        <button
-          className="topbar-btn"
-          onClick={() => navigate("/settings")}
-          aria-label={t("settings.title")}
-          title={t("settings.title")}
-          data-testid="settings-open"
-        >
-          <Settings size={14} />
-        </button>
+          <button
+            className={`topbar-btn ${terminalPanelVisible ? "topbar-btn--active" : "topbar-btn--muted"}`}
+            onClick={() => setTerminalPanelVisible(!terminalPanelVisible)}
+            aria-label={
+              terminalPanelVisible ? t("tooltip.hide_terminal") : t("tooltip.show_terminal")
+            }
+          >
+            <PanelBottom size={14} />
+          </button>
+        </Tooltip>
+        <Tooltip content={sidebarCollapsed ? t("tooltip.show_files") : t("tooltip.hide_files")}>
+          <button
+            className={`topbar-btn ${sidebarCollapsed ? "topbar-btn--muted" : "topbar-btn--active"}`}
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            aria-label={sidebarCollapsed ? t("tooltip.show_files") : t("tooltip.hide_files")}
+          >
+            <PanelLeft size={14} />
+          </button>
+        </Tooltip>
+        <Tooltip content={t("settings.title")}>
+          <button
+            className="topbar-btn"
+            onClick={() => navigate("/settings")}
+            aria-label={t("settings.title")}
+            data-testid="settings-open"
+          >
+            <Settings size={14} />
+          </button>
+        </Tooltip>
         <WorkspaceFullscreenButton
           controller={fullscreenController}
           className="topbar-btn"

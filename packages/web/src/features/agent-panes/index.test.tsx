@@ -706,6 +706,9 @@ describe("AgentPanes", () => {
     const claudeButton = await screen.findByRole("button", { name: /Claude/i });
     const codexButton = screen.getByRole("button", { name: /Codex/i });
 
+    expect(claudeButton).toHaveAttribute("type", "button");
+    expect(codexButton).toHaveAttribute("type", "button");
+
     fireEvent.click(claudeButton);
 
     await waitFor(() => {

@@ -125,6 +125,8 @@ describe("CodeEditorHost", () => {
     );
 
     expect(await screen.findByRole("alert")).toHaveTextContent("File not found");
+    expect(document.querySelector(".git-diff-empty")).toBeTruthy();
+    expect(screen.getByText("Failed to open file")).toHaveClass("git-diff-empty-title");
     expect(screen.queryByText(/connecting/i)).not.toBeInTheDocument();
   });
 

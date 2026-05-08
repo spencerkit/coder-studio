@@ -174,7 +174,7 @@ describe("WorkspacePage", () => {
     expect(screen.getByRole("button", { name: /^new file$|^新建文件$/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /refresh|刷新/i })).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Git" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Git" }));
 
     expect(screen.getByTestId("git-panel")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^new file$|^新建文件$/i })).toBeNull();
@@ -234,7 +234,9 @@ describe("WorkspacePage", () => {
     expect(branchButton).not.toBeNull();
     fireEvent.click(branchButton as HTMLElement);
 
-    expect(screen.getByRole("button", { name: "Git" })).toHaveClass("active");
+    expect(screen.getByRole("tablist", { name: "Workspace sections" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Git" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Git" })).toHaveClass("panel-tab", "active");
     expect(store.get(branchQuickPickAtom)).toEqual({
       visible: true,
       workspaceId: "ws-test",
@@ -547,7 +549,7 @@ describe("WorkspacePage", () => {
       </Provider>
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "Git" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Git" }));
 
     act(() => {
       store.set(gitDiffPreviewAtomFamily("ws-test"), {

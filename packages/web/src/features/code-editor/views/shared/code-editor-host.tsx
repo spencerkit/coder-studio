@@ -1,6 +1,6 @@
 import { AlertCircle, FileText, Image as ImageIcon, Save, X } from "lucide-react";
 import type { FC } from "react";
-import { Tooltip } from "../../../../components/ui";
+import { EmptyState, Tooltip } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { useCodeEditorActions } from "../../actions/use-code-editor-actions";
 import { ImagePreview } from "../../components/image-preview";
@@ -134,9 +134,10 @@ export const CodeEditorView: FC<CodeEditorViewProps> = ({ state, chrome = "full"
       <div className="workspace-git-view">
         <div className="code-editor workspace-git-editor">
           <div className="code-editor-body">
-            <div className="git-diff-empty">
-              <p className="git-diff-empty-title">{t("workspace.no_workspace")}</p>
-            </div>
+            <EmptyState
+              className="git-diff-empty"
+              title={<p className="git-diff-empty-title">{t("workspace.no_workspace")}</p>}
+            />
           </div>
         </div>
       </div>
@@ -203,19 +204,23 @@ export const CodeEditorView: FC<CodeEditorViewProps> = ({ state, chrome = "full"
               alt={currentFile.path}
             />
           ) : activeLoadError ? (
-            <div className="git-diff-empty" role="alert">
-              <p className="git-diff-empty-title">{t("code_editor.open_failed_title")}</p>
-              <p className="git-diff-empty-body">{activeLoadError}</p>
-            </div>
+            <EmptyState
+              className="git-diff-empty"
+              description={<p className="git-diff-empty-body">{activeLoadError}</p>}
+              role="alert"
+              title={<p className="git-diff-empty-title">{t("code_editor.open_failed_title")}</p>}
+            />
           ) : activeFilePath ? (
-            <div className="git-diff-empty">
-              <p className="git-diff-empty-title">{t("status.connecting")}…</p>
-            </div>
+            <EmptyState
+              className="git-diff-empty"
+              title={<p className="git-diff-empty-title">{t("status.connecting")}…</p>}
+            />
           ) : (
-            <div className="git-diff-empty">
-              <p className="git-diff-empty-title">{t("file.title")}</p>
-              <p className="git-diff-empty-body">{t("code_editor.empty_hint")}</p>
-            </div>
+            <EmptyState
+              className="git-diff-empty"
+              description={<p className="git-diff-empty-body">{t("code_editor.empty_hint")}</p>}
+              title={<p className="git-diff-empty-title">{t("file.title")}</p>}
+            />
           )}
         </div>
       </div>

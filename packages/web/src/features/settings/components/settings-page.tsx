@@ -20,7 +20,7 @@ import {
   serverInfoAtom,
 } from "../../../atoms/connection";
 import { resolvedActiveWorkspaceIdAtom } from "../../../atoms/workspaces";
-import { Input, Notice, Pill } from "../../../components/ui";
+import { Input, Notice, Pill, Switch } from "../../../components/ui";
 import { useViewport } from "../../../hooks/use-viewport";
 import { useTranslation } from "../../../lib/i18n";
 import { notificationPreferencesAtom } from "../../notifications/atoms";
@@ -476,6 +476,10 @@ function GeneralSettings({
   setSupervisorEvaluationTimeoutSec,
 }: GeneralSettingsProps) {
   const t = useTranslation();
+  const notificationsLabelId = useId();
+  const notificationsDescId = useId();
+  const soundLabelId = useId();
+  const soundDescId = useId();
   const dispatch = useAtomValue(dispatchCommandAtom);
   const setNotificationPreferences = useSetAtom(notificationPreferencesAtom);
   const [notificationPermission, setNotificationPermission] =
@@ -564,49 +568,53 @@ function GeneralSettings({
 
         <div className="settings-toggle-row">
           <div className="settings-toggle-info">
-            <span className="settings-toggle-label">{t("settings.notifications_enabled")}</span>
-            <span className="settings-toggle-desc">{t("settings.notifications_enabled_hint")}</span>
+            <span className="settings-toggle-label" id={notificationsLabelId}>
+              {t("settings.notifications_enabled")}
+            </span>
+            <span className="settings-toggle-desc" id={notificationsDescId}>
+              {t("settings.notifications_enabled_hint")}
+            </span>
           </div>
-          <label className="settings-toggle">
-            <input
-              type="checkbox"
-              checked={notificationsEnabled}
-              onChange={(e) => {
-                const nextEnabled = e.target.checked;
-                setNotificationsEnabled(nextEnabled);
-                syncNotificationPreferences({
-                  enabled: nextEnabled,
-                  soundEnabled,
-                });
-                void saveSettings({ notifications: { enabled: nextEnabled } });
-              }}
-            />
-            <span className="settings-toggle-slider" />
-          </label>
+          <Switch
+            aria-describedby={notificationsDescId}
+            aria-labelledby={notificationsLabelId}
+            checked={notificationsEnabled}
+            className="settings-toggle"
+            onCheckedChange={(nextEnabled) => {
+              setNotificationsEnabled(nextEnabled);
+              syncNotificationPreferences({
+                enabled: nextEnabled,
+                soundEnabled,
+              });
+              void saveSettings({ notifications: { enabled: nextEnabled } });
+            }}
+          />
         </div>
 
         <div className="settings-toggle-row">
           <div className="settings-toggle-info">
-            <span className="settings-toggle-label">{t("settings.notification_sound")}</span>
-            <span className="settings-toggle-desc">{t("settings.notification_sound_hint")}</span>
+            <span className="settings-toggle-label" id={soundLabelId}>
+              {t("settings.notification_sound")}
+            </span>
+            <span className="settings-toggle-desc" id={soundDescId}>
+              {t("settings.notification_sound_hint")}
+            </span>
           </div>
-          <label className="settings-toggle">
-            <input
-              type="checkbox"
-              checked={soundEnabled}
-              onChange={(e) => {
-                const nextSoundEnabled = e.target.checked;
-                setSoundEnabled(nextSoundEnabled);
-                syncNotificationPreferences({
-                  enabled: notificationsEnabled,
-                  soundEnabled: nextSoundEnabled,
-                });
-                void saveSettings({ notifications: { soundEnabled: nextSoundEnabled } });
-              }}
-              disabled={!notificationsEnabled}
-            />
-            <span className="settings-toggle-slider" />
-          </label>
+          <Switch
+            aria-describedby={soundDescId}
+            aria-labelledby={soundLabelId}
+            checked={soundEnabled}
+            className="settings-toggle"
+            disabled={!notificationsEnabled}
+            onCheckedChange={(nextSoundEnabled) => {
+              setSoundEnabled(nextSoundEnabled);
+              syncNotificationPreferences({
+                enabled: notificationsEnabled,
+                soundEnabled: nextSoundEnabled,
+              });
+              void saveSettings({ notifications: { soundEnabled: nextSoundEnabled } });
+            }}
+          />
         </div>
 
         <div className="settings-info-row">

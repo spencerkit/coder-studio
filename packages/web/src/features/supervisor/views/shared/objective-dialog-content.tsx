@@ -108,6 +108,7 @@ export function ObjectiveDialogContent({
             id="evaluator-provider"
             options={evaluatorOptions}
             value={draftEvaluatorProviderId}
+            aria-labelledby={evaluatorLabelId}
             aria-describedby={evaluatorHelperId}
             onValueChange={onDraftEvaluatorProviderChange}
           />

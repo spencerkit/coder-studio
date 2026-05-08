@@ -81,6 +81,10 @@ describe("GitDiffViewer", () => {
 
     expect(store.get(gitDiffPreviewAtomFamily("ws-test"))).toBeNull();
     expect(screen.getByText("Git")).toBeInTheDocument();
+    expect(document.querySelector(".git-diff-empty")).toBeTruthy();
+    expect(
+      screen.getByText("Select a staged or modified file on the left to inspect its diff.")
+    ).toHaveClass("git-diff-empty-body");
   });
 
   it("hides the internal close button when showCloseButton is false", async () => {

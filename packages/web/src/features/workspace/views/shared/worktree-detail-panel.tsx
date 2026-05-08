@@ -1,4 +1,5 @@
 import type { WorktreeInfo } from "@coder-studio/core";
+import { Tab, TabList, TabPanel, Tabs } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { useWorktreeActions } from "../../actions/use-workspace-launch-actions";
 
@@ -39,31 +40,29 @@ export function WorktreeDetailPanel({
         </div>
       </div>
 
-      <div className={`modal-tabs${mobile ? " mobile-worktree-sheet__tabs" : ""}`}>
-        {(["status", "diff", "tree"] as TabType[]).map((tab) => (
-          <button
-            key={tab}
-            className={`modal-tab ${activeTab === tab ? "active" : ""}`}
-            onClick={() => handleTabChange(tab)}
-          >
-            {tab === "status"
-              ? t("worktree.status_tab")
-              : tab === "diff"
-                ? t("worktree.diff_tab")
-                : t("worktree.tree_tab")}
-          </button>
-        ))}
-      </div>
-
-      <div
-        className={`modal-body worktree-content${mobile ? " mobile-worktree-sheet__content" : ""}`}
+      <Tabs
+        aria-label={t("worktree.title")}
+        onValueChange={(value) => handleTabChange(value as TabType)}
+        value={activeTab}
       >
-        {error ? <div className="worktree-error">{error}</div> : null}
-        {loading ? (
-          <div className="worktree-loading">{t("worktree.loading")}</div>
-        ) : (
-          <>
-            {activeTab === "status" ? (
+        <TabList className={`worktree-tabs${mobile ? " mobile-worktree-sheet__tabs" : ""}`}>
+          {(["status", "diff", "tree"] as TabType[]).map((tab) => (
+            <Tab key={tab} className="worktree-tab" value={tab}>
+              {tab === "status"
+                ? t("worktree.status_tab")
+                : tab === "diff"
+                  ? t("worktree.diff_tab")
+                  : t("worktree.tree_tab")}
+            </Tab>
+          ))}
+        </TabList>
+
+        <div className={mobile ? "mobile-worktree-sheet__content" : undefined}>
+          <TabPanel className="modal-body worktree-content" value="status">
+            {error ? <div className="worktree-error">{error}</div> : null}
+            {loading ? (
+              <div className="worktree-loading">{t("worktree.loading")}</div>
+            ) : (
               <div className="worktree-status-tab">
                 <div className="worktree-info-row">
                   <span className="worktree-info-label">{t("worktree.path")}</span>
@@ -117,9 +116,14 @@ export function WorktreeDetailPanel({
                   </div>
                 ) : null}
               </div>
-            ) : null}
+            )}
+          </TabPanel>
 
-            {activeTab === "diff" ? (
+          <TabPanel className="modal-body worktree-content" value="diff">
+            {error ? <div className="worktree-error">{error}</div> : null}
+            {loading ? (
+              <div className="worktree-loading">{t("worktree.loading")}</div>
+            ) : (
               <div className="worktree-diff-tab">
                 {diff ? (
                   <pre className="worktree-diff-output">{diff}</pre>
@@ -127,9 +131,14 @@ export function WorktreeDetailPanel({
                   <div className="worktree-empty">{t("git.no_changes")}</div>
                 )}
               </div>
-            ) : null}
+            )}
+          </TabPanel>
 
-            {activeTab === "tree" ? (
+          <TabPanel className="modal-body worktree-content" value="tree">
+            {error ? <div className="worktree-error">{error}</div> : null}
+            {loading ? (
+              <div className="worktree-loading">{t("worktree.loading")}</div>
+            ) : (
               <div className="worktree-tree-tab">
                 {tree.length > 0 ? (
                   <div className="worktree-tree">
@@ -146,10 +155,10 @@ export function WorktreeDetailPanel({
                   <div className="worktree-empty">{t("worktree.empty_tree")}</div>
                 )}
               </div>
-            ) : null}
-          </>
-        )}
-      </div>
+            )}
+          </TabPanel>
+        </div>
+      </Tabs>
     </>
   );
 }
