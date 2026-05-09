@@ -119,7 +119,7 @@ describe("WorktreeModal", () => {
     expect(screen.getByText("Latest Commit")).toBeInTheDocument();
   });
 
-  it("renders inside MobileSheet on mobile and still loads data when tabs change", async () => {
+  it("renders inside shared Sheet on mobile and still loads data when tabs change", async () => {
     viewportMocks.viewport = "mobile";
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "worktree.status") {

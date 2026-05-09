@@ -2,6 +2,7 @@ import { useAtomValue, useSetAtom } from "jotai";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { pendingFocusSessionAtom, visibleMobileSessionIdAtom } from "../../../../atoms/app-ui";
+import { Sheet } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { SessionCard } from "../../../agent-panes/views/shared/session-card";
 import { useCodeEditorActions } from "../../../code-editor/actions/use-code-editor-actions";
@@ -20,7 +21,6 @@ import { useVisualViewportInset } from "./hooks/use-visual-viewport-inset";
 import { MobileAgentSheet } from "./mobile-agent-sheet";
 import { MobileDock } from "./mobile-dock";
 import { MobileFilesSheet } from "./mobile-files-sheet";
-import { MobileSheet } from "./mobile-sheet";
 import { MobileTopBar } from "./mobile-topbar";
 import { MobileWorkspaceDrawer } from "./mobile-workspace-drawer";
 
@@ -297,7 +297,7 @@ export function WorkspaceMobileView() {
       ) : null}
 
       {sheetBody ? (
-        <MobileSheet
+        <Sheet
           title={sheetBody.title}
           body={sheetBody.body}
           onClose={() => {

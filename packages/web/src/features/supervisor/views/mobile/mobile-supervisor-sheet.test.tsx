@@ -192,7 +192,9 @@ describe("MobileSupervisorSheet", () => {
     await user.click(screen.getByRole("button", { name: "Enable Objective" }));
     await user.click(screen.getByRole("button", { name: "Evaluator Claude" }));
 
-    expect(screen.getByText("Evaluator")).toBeInTheDocument();
+    expect(document.querySelector(".mobile-inline-sheet .page-header__title")).toHaveTextContent(
+      "Evaluator"
+    );
     expect(document.querySelector(".mobile-inline-sheet")).toBeTruthy();
     expect(document.querySelectorAll(".mobile-sheet-layer")).toHaveLength(1);
 

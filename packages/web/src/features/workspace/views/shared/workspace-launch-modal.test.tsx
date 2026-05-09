@@ -200,7 +200,7 @@ describe("WorkspaceLaunchModal", () => {
     });
   });
 
-  it("renders inside MobileSheet on mobile while preserving browse and open behavior", async () => {
+  it("renders inside shared Sheet on mobile while preserving browse and open behavior", async () => {
     viewportMocks.viewport = "mobile";
     const onClose = vi.fn();
     const sendCommand = vi.fn().mockImplementation(async (op: string, args: { path?: string }) => {

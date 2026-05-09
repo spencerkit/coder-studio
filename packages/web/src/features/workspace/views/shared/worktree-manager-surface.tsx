@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Button, Input, Modal, ModalHeader, ModalTitle } from "../../../../components/ui";
+import { Button, Input, Modal, ModalHeader, ModalTitle, Sheet } from "../../../../components/ui";
 import { useViewport } from "../../../../hooks/use-viewport";
 import { useTranslation } from "../../../../lib/i18n";
 import { useWorktreeManagementActions } from "../../actions/use-worktree-management-actions";
-import { MobileSheet } from "../mobile/mobile-sheet";
 import { WorktreeDetailPanel } from "./worktree-detail-panel";
 
 type WorktreeManagerView = "list" | "detail" | "create" | "confirm-delete";
@@ -305,7 +304,7 @@ export function WorktreeManagerSurface({
     );
 
   return isMobile ? (
-    <MobileSheet
+    <Sheet
       kicker={t("worktree.title").toUpperCase()}
       title={title}
       body={<div className="worktree-manager-surface">{body}</div>}

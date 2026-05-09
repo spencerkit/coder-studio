@@ -1,8 +1,7 @@
 import { type ReactNode, useId, useMemo, useState } from "react";
-import { Tag } from "../../../components/ui";
+import { Sheet, Tag } from "../../../components/ui";
 import { useTranslation } from "../../../lib/i18n";
 import { PageHeader } from "../../shared/components/page-header";
-import { MobileSheet } from "../../workspace/views/mobile/mobile-sheet";
 
 export interface MobileSelectItemTrailingAction {
   id: string;
@@ -406,7 +405,7 @@ export function MobileSelectSheet({
   }
 
   return (
-    <MobileSheet
+    <Sheet
       title={title}
       body={<div className="mobile-select-sheet">{content}</div>}
       onClose={onClose}

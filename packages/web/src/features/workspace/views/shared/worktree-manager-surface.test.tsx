@@ -126,7 +126,7 @@ describe("WorktreeManagerSurface", () => {
     });
   });
 
-  it("uses MobileSheet chrome on mobile viewports", () => {
+  it("uses shared Sheet chrome on mobile viewports", () => {
     viewportMocks.viewport = "mobile";
 
     render(

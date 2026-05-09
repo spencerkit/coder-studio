@@ -89,7 +89,7 @@ describe("CommandPalette", () => {
     expect(routerMocks.navigate).toHaveBeenCalledWith("/workspace");
   });
 
-  it("renders inside MobileSheet on mobile and still filters commands", () => {
+  it("renders inside shared Sheet on mobile and still filters commands", () => {
     viewportMocks.viewport = "mobile";
 
     const store = createStore();

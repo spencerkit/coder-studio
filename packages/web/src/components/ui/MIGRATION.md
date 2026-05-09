@@ -22,7 +22,7 @@
 | EmptyState | 🟡 partial | feature-specific empty state blocks | bounded centered empty-state shells covered; broader workspace empty shells remain | 2026-05-09 |
 | Tabs | 🟡 partial | tab / pill patterns across features | workspace desktop/mobile/worktree bounded slice covered; broader navigation families remain | 2026-05-09 |
 | SegmentedControl | 🟡 partial | `.settings-provider-tabs`, `.settings-provider-tab`, `.settings-provider-subnav`, `.settings-provider-subnav-button`, `.shortcuts-category-tabs`, `.shortcuts-category-tab` | bounded settings selector families covered | 2026-05-09 |
-| Sheet | 🟡 partial | `.mobile-sheet*` | shared worktree/workspace-launch bounded slice covered; richer mobile sheet families remain | 2026-05-09 |
+| Sheet | 🟢 complete | `.mobile-sheet*` | 0 | 2026-05-09 |
 | Select | 🟡 in-flight | `.input`, `.mobile-select-*` | 2 | 2026-05-09 |
 | Popover | ⚫ not-started | new | — | — |
 | ActionMenu | ⚫ not-started | new | — | — |
@@ -57,4 +57,6 @@
 
 `Tooltip` now covers a broader bounded action-trigger batch: branch picker, topbar/workspace fullscreen, selected code-editor actions, file-tree delete/create actions, git-diff close, session/supervisor actions, the settings config-editor format action, workspace desktop/mobile file-toolbar actions, and terminal toolbar open/close actions all use the shared primitive from the public UI barrel. The shared primitive also preserves hover help for real disabled button triggers so these migrations do not regress existing affordances. Deferred tooltip-like families such as connection-status container labels, selected status-strip labels, and truncation/path titles remain intentionally outside this slice.
 
-`ProgressBar`, `EmptyState`, `Tabs`, `SegmentedControl`, `Switch`, and `Sheet` now have shared primitives in the public barrel and bounded caller adoption on `develop`, but they are not yet broad enough to count as fully complete across the migration inventory.
+`Sheet` now completes the mobile sheet-shell migration inventory: the mobile workspace files and terminal fullscreen sheets, mobile supervisor flows, mobile select sheet presentation, mobile worktree manager surface, workspace launch modal, worktree modal, and command palette all use the shared primitive from the public UI barrel while preserving the existing `mobile-sheet*` compatibility classes and caller-owned body/content modifiers.
+
+`ProgressBar`, `EmptyState`, `Tabs`, `SegmentedControl`, and `Switch` now have shared primitives in the public barrel and bounded caller adoption on `develop`, but they are not yet broad enough to count as fully complete across the migration inventory.
