@@ -1264,7 +1264,16 @@ export function XtermHost({
           });
         }
 
-        writeReplayBytes(write.bytes, () => {
+        if (write.kind === "historical") {
+          writeReplayBytes(write.bytes, () => {
+            markWriteRendered(write.seq);
+          });
+          continue;
+        }
+
+        // Chunks buffered while the snapshot/replay baseline was loading are
+        // still live PTY output and must keep xterm auto-responses enabled.
+        terminal.write(write.bytes, () => {
           markWriteRendered(write.seq);
         });
       }
