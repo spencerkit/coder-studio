@@ -3,7 +3,7 @@
 | Component | Status | Legacy classes | Callers left | Last update |
 |---|---|---|---:|---|
 | Button | 🟢 complete | `.btn .btn-*` | 0 | 2026-05-09 |
-| IconButton | 🟡 partial | `.btn` icon-only | bounded modal/dialog close, selected topbar/workspace/terminal icon-action flows, shortcut reset, and workspace file-toolbar actions covered; broader icon-action families remain | 2026-05-09 |
+| IconButton | 🟡 partial | `.btn` icon-only | bounded modal/dialog close, desktop/mobile topbar icon-only triggers, workspace fullscreen, selected terminal/workspace flows, shortcut reset, and workspace file-toolbar actions covered; broader icon-action families remain | 2026-05-09 |
 | Input | 🟢 complete | `.input` | 0 | 2026-05-09 |
 | Textarea | 🟢 complete | `.input.textarea` | 0 | 2026-05-09 |
 | Tag | 🟢 complete | `.badge .badge-*` | 0 | 2026-05-09 |
@@ -23,13 +23,15 @@
 | Tabs | 🟢 complete | `.panel-tabs`, `.panel-tab`, `.worktree-tabs`, `.worktree-tab`, feature-local workspace/terminal tab shells | 0 | 2026-05-09 |
 | SegmentedControl | 🟢 complete | `.settings-provider-tabs`, `.settings-provider-tab`, `.settings-provider-subnav`, `.settings-provider-subnav-button`, `.shortcuts-category-tabs`, `.shortcuts-category-tab` | 0 | 2026-05-09 |
 | Sheet | 🟢 complete | `.mobile-sheet*` | 0 | 2026-05-09 |
-| Select | 🟡 in-flight | `.input`, `.mobile-select-*` | 1 | 2026-05-09 |
-| Popover | 🟡 partial | new | desktop terminal selector and branch quick pick covered; broader custom-content dropdown and action-menu families remain | 2026-05-09 |
-| ActionMenu | ⚫ not-started | new | — | — |
+| Select | 🟢 complete | `.input`, `.mobile-select-*` | 0 | 2026-05-09 |
+| Popover | 🟡 partial | new | desktop terminal selector and branch quick pick covered; broader custom-content dropdown families remain | 2026-05-09 |
+| ActionMenu | 🟡 partial | new | mobile workspace topbar more-actions menu covered; broader desktop/topbar/command action families remain | 2026-05-09 |
 
 `Input` now completes the legacy `.input` single-line text-entry migration inventory: the auth password field, the settings supervisor timeout field, the git sync auth username/password fields, the worktree manager create-form branch/path fields, the file-tree create-path modal field, and the shortcuts capture input all use the shared primitive from the public UI barrel while preserving legacy `.input` compatibility classes and caller-owned layout hooks such as `auth-input`, `settings-input-compact`, and `shortcuts-capture`.
 
 `Button` now completes the legacy `.btn` / `.btn-*` migration inventory: the remaining worktree summary/manage flows now use the shared primitive from the public UI barrel, and the previous bounded migrations across auth, config actions, supervisor dialogs, git flows, file-tree dialogs, notifications, and shared mobile/desktop shells leave no feature-local raw `.btn` callsites behind. Legacy compatibility classes remain emitted by the shared primitive for zero-regression styling while ownership stays in the component.
+
+`IconButton` now covers a broader bounded icon-action slice: the desktop topbar add/settings/files/terminal triggers, the shared workspace fullscreen control, and the mobile topbar more-actions/fullscreen triggers all use the shared primitive from the public UI barrel while preserving caller-owned compatibility classes such as `topbar-add`, `topbar-btn*`, and `mobile-topbar__icon-button`. Broader icon-action families such as supervisor card controls and other deferred feature-specific shells remain intentionally outside this slice.
 
 `Textarea` now completes the bounded legacy `.input.textarea` migration inventory: the provider startup-args textarea and the supervisor objective textarea both use the shared primitive from the public UI barrel while preserving legacy `input` / `textarea` compatibility classes and caller-owned hooks such as `settings-provider-args-input`. The primitive also supports optional auto-resize for later adopters. The `git-panel` commit message field is intentionally not counted on this row because it is not part of the `.input.textarea` family selected for this slice, and standalone `.textarea` utility usage remains outside this row.
 
@@ -37,9 +39,11 @@
 
 `Badge` now completes the bounded legacy `.topbar-unread` migration inventory: the workspace tab unread counter uses the shared primitive from the public UI barrel while preserving the legacy compatibility class and count-capping behavior.
 
-`Select` now covers the bounded supervisor evaluator-provider selector family on both platforms plus the mobile fullscreen terminal switcher trigger: supervisor uses the shared primitive's interactive trigger path with a desktop `listbox` and a primitive-owned internal inline mobile `MobileSelectSheet` flow, while the terminal switcher continues to use the bounded external mobile trigger mode so it can keep richer caller-owned sheet rows and fixed naming such as "Switch terminal". The primitive preserves legacy `input` / `mobile-select-trigger*` compatibility classes and caller-owned hooks such as `terminal-selector-btn`. The row remains in-flight because one plain-select caller still remains, while richer custom-content families now move to `Popover` / future `ActionMenu` primitives instead of plain `Select`.
+`Select` now completes the bounded selector-family migration on both platforms: supervisor uses the shared primitive's interactive trigger path with a desktop `listbox` and a primitive-owned internal inline mobile `MobileSelectSheet` flow, while the terminal switcher continues to use the bounded external mobile trigger mode so it can keep richer caller-owned sheet rows and fixed naming such as "Switch terminal". The primitive preserves legacy `input` / `mobile-select-trigger*` compatibility classes and caller-owned hooks such as `terminal-selector-btn`, and no additional plain-select callers remain in this scoped inventory. Richer custom-content families now move to `Popover` / `ActionMenu` primitives instead of plain `Select`.
 
-`Popover` now covers a bounded desktop custom-content dropdown batch: the desktop terminal selector and workspace branch quick pick both use the shared primitive from the public UI barrel for click-to-toggle or ArrowDown-to-open trigger semantics, portaled non-modal dialog content, and outside-click / `Escape` dismissal while preserving legacy hooks such as `terminal-selector-btn`, `terminal-selector-dropdown`, `terminal-selector-item*`, `git-panel-status-strip__branch`, and `branch-quick-pick*`. The mobile fullscreen terminal switcher and mobile branch quick pick remain intentionally on their existing `Select` + `MobileSelectSheet` and global `MobileSelectSheet` paths, and broader action-menu families remain deferred to later slices.
+`Popover` now covers a bounded desktop custom-content dropdown batch: the desktop terminal selector and workspace branch quick pick both use the shared primitive from the public UI barrel for click-to-toggle or ArrowDown-to-open trigger semantics, portaled non-modal dialog content, and outside-click / `Escape` dismissal while preserving legacy hooks such as `terminal-selector-btn`, `terminal-selector-dropdown`, `terminal-selector-item*`, `git-panel-status-strip__branch`, and `branch-quick-pick*`. The mobile fullscreen terminal switcher and mobile branch quick pick remain intentionally on their existing `Select` + `MobileSelectSheet` and global `MobileSelectSheet` paths, while menu-list composition now moves into the new shared `ActionMenu` wrapper.
+
+`ActionMenu` now covers a bounded menu-list slice: the mobile workspace topbar replaces its direct settings icon with a shared more-actions trigger that opens a mobile `Sheet`-backed action list containing `Settings` and `Quick Actions`. The primitive owns the bounded action-list chrome and desktop menu/mobile sheet presentation, while the feature layer still owns trigger styling and command wiring such as `commandPaletteOpenAtom` and the existing settings navigation callback.
 
 `Notice` now completes the bounded legacy `.settings-page__notice*` migration inventory: the settings-page load-error shell uses the shared primitive from the public UI barrel while preserving the legacy `settings-page__notice*` compatibility classes and the caller-owned `settings-link` refresh action styling.
 

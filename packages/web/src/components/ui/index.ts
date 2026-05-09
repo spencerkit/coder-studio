@@ -1,3 +1,11 @@
+export type {
+  ActionMenuForceMode,
+  ActionMenuItem,
+  ActionMenuItemTone,
+  ActionMenuPlacement,
+  ActionMenuProps,
+} from "./action-menu";
+export { ActionMenu } from "./action-menu";
 export type { BadgeProps } from "./badge";
 export { Badge } from "./badge";
 export type { ButtonProps, ButtonSize, ButtonVariant } from "./button";

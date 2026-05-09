@@ -166,7 +166,9 @@
     },
     "topbar": {
       "switch_workspace": "Switch workspace",
-      "open_settings": "Open settings"
+      "open_settings": "Open settings",
+      "open_more_actions": "Open more actions",
+      "more_actions": "More Actions"
     },
     "sheet": {
       "dismiss": "Dismiss current sheet",

@@ -56,6 +56,7 @@ describe("WorkspaceFullscreenButton", () => {
     );
 
     const button = screen.getByRole("button", { name: "Enter Fullscreen" });
+    expect(button).toHaveClass("btn", "btn-ghost", "topbar-btn");
     expect(button).not.toHaveAttribute("title");
 
     fireEvent.mouseEnter(button);

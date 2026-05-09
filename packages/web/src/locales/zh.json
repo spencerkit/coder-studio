@@ -166,7 +166,9 @@
     },
     "topbar": {
       "switch_workspace": "切换工作区",
-      "open_settings": "打开设置"
+      "open_settings": "打开设置",
+      "open_more_actions": "打开更多操作",
+      "more_actions": "更多操作"
     },
     "sheet": {
       "dismiss": "关闭当前面板",

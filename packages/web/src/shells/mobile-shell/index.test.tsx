@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { createStore, Provider } from "jotai";
 import type { ReactNode } from "react";
 import { MemoryRouter, useLocation } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   authenticatedAtom,
   commandPaletteOpenAtom,
@@ -65,6 +65,7 @@ vi.mock("../../features/workspace/views/shared/branch-quick-pick", async () => {
       const quickPick = useAtomValue(branchQuickPickAtom);
       return quickPick.visible ? <div data-testid="branch-quick-pick-overlay-mock" /> : null;
     },
+    DesktopBranchQuickPickPopover: ({ children }: { children: ReactNode }) => children,
   };
 });
 
@@ -552,6 +553,19 @@ function renderMobileShell({
   return { store, sendCommand, sendTerminalInput, ...view };
 }
 
+beforeEach(() => {
+  window.matchMedia = vi.fn((query: string) => ({
+    matches: query === "(max-width: 899px), (pointer: coarse)",
+    media: query,
+    onchange: null,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+  })) as unknown as typeof window.matchMedia;
+});
+
 afterEach(() => {
   Object.defineProperty(window, "visualViewport", {
     configurable: true,
@@ -790,38 +804,70 @@ describe("MobileShell Phase 2 workspace", () => {
     });
   });
 
-  it("shows a direct settings entry instead of a more-actions menu", async () => {
+  it("shows a more-actions trigger instead of a direct settings entry", async () => {
     renderMobileShell({ initialEntry: "/workspace" });
 
-    expect(screen.getByRole("button", { name: "Open settings" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Open more actions" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Open quick actions" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open more actions" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open settings" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Quick Actions" })).not.toBeInTheDocument();
   });
 
-  it("opens settings directly from the mobile topbar", async () => {
+  it("preserves shared IconButton compatibility classes on mobile topbar icon-only triggers", async () => {
+    removeFullscreenApiForMobileShell();
+    renderMobileShell({ initialEntry: "/workspace" });
+
+    expect(screen.getByRole("button", { name: "Open more actions" })).toHaveClass(
+      "btn",
+      "btn-ghost",
+      "mobile-topbar__icon-button"
+    );
+    expect(screen.getByRole("button", { name: "Enter Fullscreen" })).toHaveClass(
+      "btn",
+      "btn-ghost",
+      "mobile-topbar__icon-button"
+    );
+  });
+
+  it("opens settings from the mobile topbar action menu", async () => {
     const user = userEvent.setup();
     renderMobileShell({ initialEntry: "/workspace" });
 
-    await user.click(screen.getByRole("button", { name: "Open settings" }));
+    await user.click(screen.getByRole("button", { name: "Open more actions" }));
+    expect(screen.getByRole("region", { name: "More Actions sheet" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("menuitem", { name: "Settings" }));
 
     expect(screen.getByText("SettingsPage")).toBeInTheDocument();
   });
 
-  it("shows a fullscreen toggle to the right of settings when the browser supports fullscreen", async () => {
+  it("opens quick actions from the mobile topbar action menu", async () => {
+    const user = userEvent.setup();
+    const { store } = renderMobileShell({ initialEntry: "/workspace" });
+
+    expect(store.get(commandPaletteOpenAtom)).toBe(false);
+
+    await user.click(screen.getByRole("button", { name: "Open more actions" }));
+    await user.click(screen.getByRole("menuitem", { name: "Quick Actions" }));
+
+    expect(store.get(commandPaletteOpenAtom)).toBe(true);
+    expect(screen.queryByRole("region", { name: "More Actions sheet" })).toBeNull();
+  });
+
+  it("shows a fullscreen toggle to the right of the more-actions trigger when the browser supports fullscreen", async () => {
     installFullscreenApiForMobileShell();
     renderMobileShell({ initialEntry: "/workspace" });
 
-    const settingsButton = screen.getByRole("button", { name: "Open settings" });
+    const moreActionsButton = screen.getByRole("button", { name: "Open more actions" });
     const fullscreenButton = await screen.findByRole("button", { name: "Enter Fullscreen" });
 
-    expect(settingsButton.nextElementSibling).toBe(fullscreenButton);
+    expect(moreActionsButton.parentElement?.nextElementSibling).toBe(fullscreenButton);
   });
 
   it("keeps the fullscreen toggle visible on mobile when the browser does not support fullscreen", async () => {
     removeFullscreenApiForMobileShell();
     renderMobileShell({ initialEntry: "/workspace" });
 
-    expect(screen.getByRole("button", { name: "Open settings" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open more actions" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Enter Fullscreen" })).toBeInTheDocument();
   });
 

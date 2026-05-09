@@ -15,7 +15,7 @@ import {
   orderedWorkspacesAtom,
   resolvedActiveWorkspaceIdAtom,
 } from "../../atoms/workspaces";
-import { TabList, Tabs, Tooltip } from "../../components/ui";
+import { IconButton, TabList, Tabs, Tooltip } from "../../components/ui";
 import { useTranslation } from "../../lib/i18n";
 import type { WorkspaceFullscreenController } from "../workspace/actions/use-workspace-fullscreen";
 import { sidebarCollapsedAtom, terminalPanelVisibleAtom } from "../workspace/atoms";
@@ -70,13 +70,12 @@ export const TopBar: FC<TopBarProps> = ({ fullscreenController }) => {
           </Tabs>
         )}
         <Tooltip content={t("tooltip.new_workspace")}>
-          <button
-            className="topbar-add"
-            onClick={() => setWorkspaceLaunchOpen(true)}
+          <IconButton
             aria-label={t("tooltip.new_workspace")}
-          >
-            <Plus size={14} />
-          </button>
+            className="topbar-add"
+            icon={<Plus size={14} />}
+            onClick={() => setWorkspaceLaunchOpen(true)}
+          />
         </Tooltip>
       </div>
 
@@ -95,34 +94,31 @@ export const TopBar: FC<TopBarProps> = ({ fullscreenController }) => {
         <Tooltip
           content={terminalPanelVisible ? t("tooltip.hide_terminal") : t("tooltip.show_terminal")}
         >
-          <button
-            className={`topbar-btn ${terminalPanelVisible ? "topbar-btn--active" : "topbar-btn--muted"}`}
-            onClick={() => setTerminalPanelVisible(!terminalPanelVisible)}
+          <IconButton
             aria-label={
               terminalPanelVisible ? t("tooltip.hide_terminal") : t("tooltip.show_terminal")
             }
-          >
-            <PanelBottom size={14} />
-          </button>
+            className={`topbar-btn ${terminalPanelVisible ? "topbar-btn--active" : "topbar-btn--muted"}`}
+            icon={<PanelBottom size={14} />}
+            onClick={() => setTerminalPanelVisible(!terminalPanelVisible)}
+          />
         </Tooltip>
         <Tooltip content={sidebarCollapsed ? t("tooltip.show_files") : t("tooltip.hide_files")}>
-          <button
-            className={`topbar-btn ${sidebarCollapsed ? "topbar-btn--muted" : "topbar-btn--active"}`}
-            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+          <IconButton
             aria-label={sidebarCollapsed ? t("tooltip.show_files") : t("tooltip.hide_files")}
-          >
-            <PanelLeft size={14} />
-          </button>
+            className={`topbar-btn ${sidebarCollapsed ? "topbar-btn--muted" : "topbar-btn--active"}`}
+            icon={<PanelLeft size={14} />}
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+          />
         </Tooltip>
         <Tooltip content={t("settings.title")}>
-          <button
-            className="topbar-btn"
-            onClick={() => navigate("/settings")}
+          <IconButton
             aria-label={t("settings.title")}
+            className="topbar-btn"
             data-testid="settings-open"
-          >
-            <Settings size={14} />
-          </button>
+            icon={<Settings size={14} />}
+            onClick={() => navigate("/settings")}
+          />
         </Tooltip>
         <WorkspaceFullscreenButton
           controller={fullscreenController}

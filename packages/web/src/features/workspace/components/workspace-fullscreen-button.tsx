@@ -1,5 +1,5 @@
 import { Maximize2, Minimize2 } from "lucide-react";
-import { Tooltip } from "../../../components/ui";
+import { IconButton, Tooltip } from "../../../components/ui";
 import { useTranslation } from "../../../lib/i18n";
 import type { WorkspaceFullscreenController } from "../actions/use-workspace-fullscreen";
 
@@ -29,17 +29,15 @@ export function WorkspaceFullscreenButton({
 
   return (
     <Tooltip content={label}>
-      <button
-        type="button"
-        className={className}
+      <IconButton
         aria-label={label}
+        className={className}
         data-testid={dataTestId}
+        icon={<Icon size={iconSize} />}
         onClick={() => {
           void controller.toggleFullscreen();
         }}
-      >
-        <Icon size={iconSize} />
-      </button>
+      />
     </Tooltip>
   );
 }

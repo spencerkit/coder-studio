@@ -186,6 +186,26 @@ describe("TopBar", () => {
     expect(screen.getByRole("button", { name: "Show Files" })).toHaveClass("topbar-btn--muted");
   });
 
+  it("preserves shared IconButton compatibility classes on bounded icon-only topbar actions", () => {
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(workspacesLoadStateAtom, "ready");
+    store.set(terminalPanelVisibleAtom, false);
+    store.set(sidebarCollapsedAtom, false);
+
+    render(
+      <Provider store={store}>
+        <TopBar />
+      </Provider>
+    );
+
+    expect(screen.getByRole("button", { name: "New workspace" })).toHaveClass("btn", "btn-ghost");
+    expect(screen.getByRole("button", { name: "Show Terminal" })).toHaveClass("btn", "btn-ghost");
+    expect(screen.getByRole("button", { name: "Hide Files" })).toHaveClass("btn", "btn-ghost");
+    expect(screen.getByRole("button", { name: "Settings" })).toHaveClass("btn", "btn-ghost");
+    expect(screen.getByRole("button", { name: "Quick Actions" })).not.toHaveClass("btn");
+  });
+
   it("renders the fullscreen toggle immediately to the right of settings when supported", () => {
     const store = createStore();
     store.set(localeAtom, "en");

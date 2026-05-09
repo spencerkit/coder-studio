@@ -1,5 +1,9 @@
 import type { Workspace } from "@coder-studio/core";
-import { Menu, Settings2 } from "lucide-react";
+import { useSetAtom } from "jotai";
+import { Menu, MoreHorizontal, Search, Settings2 } from "lucide-react";
+import { useState } from "react";
+import { commandPaletteOpenAtom } from "../../../../atoms/app-ui";
+import { ActionMenu, IconButton } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { formatWorkspaceLabel } from "../../../notifications/format";
 import type { WorkspaceFullscreenController } from "../../actions/use-workspace-fullscreen";
@@ -21,6 +25,8 @@ export function MobileTopBar({
   onToggleDrawer,
 }: MobileTopBarProps) {
   const t = useTranslation();
+  const setCommandPaletteOpen = useSetAtom(commandPaletteOpenAtom);
+  const [moreActionsOpen, setMoreActionsOpen] = useState(false);
   const workspaceLabel =
     formatWorkspaceLabel(activeWorkspace) || t("mobile.workspace_drawer.select_title");
 
@@ -45,16 +51,36 @@ export function MobileTopBar({
       </button>
 
       <div className="mobile-topbar__actions">
-        <button
-          type="button"
-          className="mobile-topbar__icon-button"
-          aria-label={t("mobile.topbar.open_settings")}
-          onClick={() => {
-            onOpenSettings();
-          }}
+        <ActionMenu
+          forceMode="mobile"
+          items={[
+            {
+              id: "settings",
+              label: t("settings.title"),
+              icon: <Settings2 size={16} />,
+              onSelect: () => {
+                onOpenSettings();
+              },
+            },
+            {
+              id: "quick-actions",
+              label: t("tooltip.quick_actions"),
+              icon: <Search size={16} />,
+              onSelect: () => {
+                setCommandPaletteOpen(true);
+              },
+            },
+          ]}
+          onOpenChange={setMoreActionsOpen}
+          open={moreActionsOpen}
+          title={t("mobile.topbar.more_actions")}
         >
-          <Settings2 size={18} />
-        </button>
+          <IconButton
+            aria-label={t("mobile.topbar.open_more_actions")}
+            className="mobile-topbar__icon-button"
+            icon={<MoreHorizontal size={18} />}
+          />
+        </ActionMenu>
         <WorkspaceFullscreenButton
           controller={fullscreenController}
           className="mobile-topbar__icon-button"
