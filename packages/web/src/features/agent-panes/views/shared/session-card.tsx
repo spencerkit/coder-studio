@@ -13,7 +13,7 @@ import { useEffect, useRef, useState } from "react";
 import { pendingFocusSessionAtom } from "../../../../atoms/app-ui";
 import { sessionByIdAtomFamily } from "../../../../atoms/sessions";
 import { workspaceByIdAtomFamily } from "../../../../atoms/workspaces";
-import { ProgressBar, StatusDot, Tag } from "../../../../components/ui";
+import { ProgressBar, StatusDot, Tag, Tooltip } from "../../../../components/ui";
 import { useSupervisor } from "../../../supervisor/actions/use-supervisor";
 import { ObjectiveDialog } from "../../../supervisor/views/shared/objective-dialog";
 import { SupervisorCard } from "../../../supervisor/views/shared/supervisor-card";
@@ -153,39 +153,43 @@ export const SessionCard: FC<SessionCardProps> = ({
             {showHeaderActions ? (
               <div className="session-header-actions">
                 {session.state === "running" ? (
+                  <Tooltip content="Stop">
+                    <button
+                      className="session-action-btn"
+                      onClick={() => void onStop?.()}
+                      aria-label="Stop"
+                    >
+                      <Square size={13} />
+                    </button>
+                  </Tooltip>
+                ) : null}
+                <Tooltip content="Split horizontal">
                   <button
                     className="session-action-btn"
-                    onClick={() => void onStop?.()}
-                    title="Stop"
-                    aria-label="Stop"
+                    onClick={() => onSplitHorizontal?.()}
+                    aria-label="Split horizontal"
                   >
-                    <Square size={13} />
+                    <FlipHorizontal size={13} />
                   </button>
-                ) : null}
-                <button
-                  className="session-action-btn"
-                  onClick={() => onSplitHorizontal?.()}
-                  title="Split horizontal"
-                  aria-label="Split horizontal"
-                >
-                  <FlipHorizontal size={13} />
-                </button>
-                <button
-                  className="session-action-btn"
-                  onClick={() => onSplitVertical?.()}
-                  title="Split vertical"
-                  aria-label="Split vertical"
-                >
-                  <FlipVertical size={13} />
-                </button>
-                <button
-                  className="session-action-btn session-action-btn-close"
-                  onClick={() => void onClose?.()}
-                  title="Close"
-                  aria-label="Close"
-                >
-                  <X size={14} />
-                </button>
+                </Tooltip>
+                <Tooltip content="Split vertical">
+                  <button
+                    className="session-action-btn"
+                    onClick={() => onSplitVertical?.()}
+                    aria-label="Split vertical"
+                  >
+                    <FlipVertical size={13} />
+                  </button>
+                </Tooltip>
+                <Tooltip content="Close">
+                  <button
+                    className="session-action-btn session-action-btn-close"
+                    onClick={() => void onClose?.()}
+                    aria-label="Close"
+                  >
+                    <X size={14} />
+                  </button>
+                </Tooltip>
               </div>
             ) : null}
           </div>

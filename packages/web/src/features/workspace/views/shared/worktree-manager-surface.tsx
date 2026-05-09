@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Input } from "../../../../components/ui";
+import { Button, Input } from "../../../../components/ui";
 import { useViewport } from "../../../../hooks/use-viewport";
 import { useTranslation } from "../../../../lib/i18n";
 import { useWorktreeManagementActions } from "../../actions/use-worktree-management-actions";
@@ -183,12 +183,12 @@ export function WorktreeManagerSurface({
         </div>
 
         <div className="worktree-manager__form-actions">
-          <button type="button" className="btn btn-secondary" onClick={() => setView("list")}>
+          <Button variant="secondary" onClick={() => setView("list")}>
             {t("action.cancel")}
-          </button>
-          <button type="submit" className="btn btn-primary" disabled={!canSubmit}>
+          </Button>
+          <Button type="submit" variant="primary" disabled={!canSubmit}>
             {t("worktree.create_submit")}
-          </button>
+          </Button>
         </div>
       </form>
     ) : view === "confirm-delete" && deleteTarget ? (
@@ -201,9 +201,8 @@ export function WorktreeManagerSurface({
         </p>
         <code className="worktree-manager__confirm-path">{deleteTarget.path}</code>
         <div className="worktree-manager__confirm-actions">
-          <button
-            type="button"
-            className="btn btn-secondary"
+          <Button
+            variant="secondary"
             onClick={() => {
               setRemoveError(null);
               setDeleteTargetPath(null);
@@ -211,10 +210,9 @@ export function WorktreeManagerSurface({
             }}
           >
             {t("action.cancel")}
-          </button>
-          <button
-            type="button"
-            className="btn btn-danger"
+          </Button>
+          <Button
+            variant="danger"
             onClick={() => {
               setRemoveError(null);
               void removeWorktreeByPath(deleteTarget.path, deleteTarget.status === "dirty").then(
@@ -231,7 +229,7 @@ export function WorktreeManagerSurface({
             }}
           >
             {deleteTarget.status === "dirty" ? t("worktree.force_remove") : t("common.delete")}
-          </button>
+          </Button>
         </div>
       </div>
     ) : (
@@ -240,13 +238,9 @@ export function WorktreeManagerSurface({
         {list.error ? (
           <div className="worktree-error">
             <div>{list.error}</div>
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              onClick={() => void loadWorktrees()}
-            >
+            <Button variant="secondary" size="sm" onClick={() => void loadWorktrees()}>
               {t("action.refresh")}
-            </button>
+            </Button>
           </div>
         ) : null}
         {list.loading && list.items.length === 0 ? (
@@ -288,10 +282,10 @@ export function WorktreeManagerSurface({
                 </button>
 
                 {!isCurrent && !isMainWorktree ? (
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm"
+                  <Button
                     aria-label={t("worktree.remove_row_label", { name: item.name })}
+                    size="sm"
+                    variant="ghost"
                     onClick={() => {
                       setRemoveError(null);
                       setDeleteTargetPath(item.path);
@@ -299,7 +293,7 @@ export function WorktreeManagerSurface({
                     }}
                   >
                     {t("common.delete")}
-                  </button>
+                  </Button>
                 ) : null}
               </div>
             );
@@ -318,9 +312,9 @@ export function WorktreeManagerSurface({
       onBack={view === "list" ? undefined : () => setView("list")}
       headerAction={
         view === "list" ? (
-          <button type="button" className="btn btn-primary btn-sm" onClick={openCreate}>
+          <Button size="sm" variant="primary" onClick={openCreate}>
             {t("worktree.new")}
-          </button>
+          </Button>
         ) : undefined
       }
       onClose={onClose}
@@ -337,21 +331,17 @@ export function WorktreeManagerSurface({
           </div>
           <div className="worktree-manager-surface__header-actions">
             {view === "list" ? (
-              <button type="button" className="btn btn-primary btn-sm" onClick={openCreate}>
+              <Button size="sm" variant="primary" onClick={openCreate}>
                 {t("worktree.new")}
-              </button>
+              </Button>
             ) : (
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm"
-                onClick={() => setView("list")}
-              >
+              <Button size="sm" variant="ghost" onClick={() => setView("list")}>
                 {t("action.back")}
-              </button>
+              </Button>
             )}
-            <button type="button" className="btn btn-ghost btn-sm" onClick={onClose}>
+            <Button size="sm" variant="ghost" onClick={onClose}>
               {t("action.close")}
-            </button>
+            </Button>
           </div>
         </div>
 

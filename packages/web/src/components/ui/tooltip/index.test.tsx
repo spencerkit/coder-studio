@@ -106,6 +106,30 @@ describe("Tooltip", () => {
     expect(trigger).not.toHaveAttribute("aria-describedby");
   });
 
+  it("shows tooltip content for disabled button triggers on hover", () => {
+    render(
+      <Tooltip content="Quick Actions">
+        <button type="button" disabled>
+          Trigger
+        </button>
+      </Tooltip>
+    );
+
+    const trigger = screen.getByRole("button", { name: "Trigger" });
+    const wrapper = trigger.parentElement;
+
+    expect(wrapper?.tagName).toBe("SPAN");
+
+    fireEvent.mouseEnter(wrapper!);
+
+    const tooltip = screen.getByRole("tooltip");
+    expect(tooltip).toHaveTextContent("Quick Actions");
+    expect(trigger).toHaveAttribute("aria-describedby", tooltip.getAttribute("id") ?? "");
+
+    fireEvent.mouseLeave(wrapper!);
+    expect(screen.queryByRole("tooltip")).toBeNull();
+  });
+
   it("keeps the tooltip within the viewport when the trigger is near the right edge", () => {
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
       this: HTMLElement

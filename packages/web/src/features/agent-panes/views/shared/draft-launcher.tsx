@@ -4,7 +4,7 @@ import { ArrowRight, Bot, FlipHorizontal, FlipVertical, Sparkles, X } from "luci
 import type { FC } from "react";
 import { dispatchCommandAtom } from "../../../../atoms/connection";
 import { sessionsAtom } from "../../../../atoms/sessions";
-import { Button, StatusDot, Tag } from "../../../../components/ui";
+import { Button, StatusDot, Tag, Tooltip } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { type ProviderId, useProviderLauncher } from "../../actions/use-provider-launcher";
 
@@ -131,30 +131,33 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
         </div>
 
         <div className="session-header-actions">
-          <button
-            className="session-action-btn"
-            onClick={handleSplitHorizontal}
-            title="Split horizontal"
-            aria-label="Split horizontal"
-          >
-            <FlipHorizontal size={13} />
-          </button>
-          <button
-            className="session-action-btn"
-            onClick={handleSplitVertical}
-            title="Split vertical"
-            aria-label="Split vertical"
-          >
-            <FlipVertical size={13} />
-          </button>
-          <button
-            className="session-action-btn session-action-btn-close"
-            onClick={handleClosePane}
-            title="Close"
-            aria-label="Close"
-          >
-            <X size={14} />
-          </button>
+          <Tooltip content="Split horizontal">
+            <button
+              className="session-action-btn"
+              onClick={handleSplitHorizontal}
+              aria-label="Split horizontal"
+            >
+              <FlipHorizontal size={13} />
+            </button>
+          </Tooltip>
+          <Tooltip content="Split vertical">
+            <button
+              className="session-action-btn"
+              onClick={handleSplitVertical}
+              aria-label="Split vertical"
+            >
+              <FlipVertical size={13} />
+            </button>
+          </Tooltip>
+          <Tooltip content="Close">
+            <button
+              className="session-action-btn session-action-btn-close"
+              onClick={handleClosePane}
+              aria-label="Close"
+            >
+              <X size={14} />
+            </button>
+          </Tooltip>
         </div>
       </div>
 

@@ -12,6 +12,7 @@ import {
   ModalFooter,
   ModalHeader,
   ModalTitle,
+  Tooltip,
 } from "../../../../components/ui";
 import { formatDate, type LocaleCode, useTranslation } from "../../../../lib/i18n";
 import { useGitSyncActions } from "../../actions/use-git-actions";
@@ -191,42 +192,47 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({
   return (
     <>
       <div className={`git-status-bar${inline ? " git-status-bar--inline" : ""}`}>
-        <span className="git-status-bar__item" title={t("git.statusbar.changes")}>
-          <Diff size={13} aria-hidden="true" />
-          <span className="git-status-bar__value">{changeCount}</span>
-        </span>
-        <button
-          className="git-status-bar__item git-status-bar__item--actionable git-status-bar__item--ahead"
-          title={t("git.statusbar.ahead")}
-          type="button"
-          aria-label={t("action.push")}
-          disabled={ahead <= 0}
-          onClick={() => openConfirm("push", ahead)}
-        >
-          <ArrowUpFromLine size={13} aria-hidden="true" />
-          <span className="git-status-bar__value">{ahead}</span>
-        </button>
-        <button
-          className="git-status-bar__item git-status-bar__item--actionable git-status-bar__item--behind"
-          title={t("git.statusbar.behind")}
-          type="button"
-          aria-label={t("action.pull")}
-          disabled={behind <= 0}
-          onClick={() => openConfirm("pull", behind)}
-        >
-          <ArrowDownToLine size={13} aria-hidden="true" />
-          <span className="git-status-bar__value">{behind}</span>
-        </button>
-        <button
-          className="git-status-bar__item git-status-bar__item--actionable"
-          title={fetchTitle}
-          type="button"
-          aria-label={fetchAriaLabel}
-          disabled={isFetching}
-          onClick={() => void refreshAfterFetch()}
-        >
-          <RefreshCw size={13} aria-hidden="true" className={isFetching ? "spin" : undefined} />
-        </button>
+        <Tooltip content={t("git.statusbar.changes")}>
+          <span className="git-status-bar__item">
+            <Diff size={13} aria-hidden="true" />
+            <span className="git-status-bar__value">{changeCount}</span>
+          </span>
+        </Tooltip>
+        <Tooltip content={t("git.statusbar.ahead")}>
+          <button
+            className="git-status-bar__item git-status-bar__item--actionable git-status-bar__item--ahead"
+            type="button"
+            aria-label={t("action.push")}
+            disabled={ahead <= 0}
+            onClick={() => openConfirm("push", ahead)}
+          >
+            <ArrowUpFromLine size={13} aria-hidden="true" />
+            <span className="git-status-bar__value">{ahead}</span>
+          </button>
+        </Tooltip>
+        <Tooltip content={t("git.statusbar.behind")}>
+          <button
+            className="git-status-bar__item git-status-bar__item--actionable git-status-bar__item--behind"
+            type="button"
+            aria-label={t("action.pull")}
+            disabled={behind <= 0}
+            onClick={() => openConfirm("pull", behind)}
+          >
+            <ArrowDownToLine size={13} aria-hidden="true" />
+            <span className="git-status-bar__value">{behind}</span>
+          </button>
+        </Tooltip>
+        <Tooltip content={fetchTitle}>
+          <button
+            className="git-status-bar__item git-status-bar__item--actionable"
+            type="button"
+            aria-label={fetchAriaLabel}
+            disabled={isFetching}
+            onClick={() => void refreshAfterFetch()}
+          >
+            <RefreshCw size={13} aria-hidden="true" className={isFetching ? "spin" : undefined} />
+          </button>
+        </Tooltip>
       </div>
 
       <Modal

@@ -651,10 +651,12 @@ describe("GitStatusBar", () => {
     });
 
     expect(store.get(toastsAtom)[0]?.title).toBe("Fetched from remote");
-    expect(screen.getByRole("button", { name: "Fetch" })).toHaveAttribute(
-      "title",
+    const fetchButton = screen.getByRole("button", { name: "Fetch" });
+    fireEvent.mouseEnter(fetchButton);
+    expect(screen.getByRole("tooltip")).toHaveTextContent(
       `Last fetched ${formatDate(lastFetchAt, "en")}`
     );
+    fireEvent.mouseLeave(fetchButton);
 
     nowSpy.mockRestore();
   });
@@ -766,7 +768,12 @@ describe("GitStatusBar", () => {
     });
 
     expect(screen.getByRole("button", { name: "获取中..." })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "获取中..." })).toHaveAttribute("title", "尚未获取");
+    const fetchButton = screen.getByRole("button", { name: "获取中..." });
+    const fetchWrapper = fetchButton.parentElement;
+    expect(fetchWrapper?.tagName).toBe("SPAN");
+    fireEvent.mouseEnter(fetchWrapper!);
+    expect(screen.getByRole("tooltip")).toHaveTextContent("尚未获取");
+    fireEvent.mouseLeave(fetchWrapper!);
 
     expect(resolveFetch).not.toBeNull();
     resolveFetch!();

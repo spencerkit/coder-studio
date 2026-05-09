@@ -1,7 +1,7 @@
 import { useStore } from "jotai";
 import { ChevronDown, Plus, Terminal, X } from "lucide-react";
 import { useState } from "react";
-import { Button, EmptyState } from "../../../../components/ui";
+import { Button, EmptyState, Tooltip } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { MobileSelectSheet } from "../../../mobile-select";
 import { useTerminalActions } from "../../actions/use-terminal-actions";
@@ -138,34 +138,36 @@ export function TerminalPanel({ chrome = "default" }: TerminalPanelProps) {
               ) : null}
 
               <div className="terminal-toolbar-actions">
-                <button
-                  className="panel-toolbar-btn"
-                  onClick={() => {
-                    if (!activeTerminalId) {
-                      return;
-                    }
+                <Tooltip content={t("action.close")}>
+                  <button
+                    className="panel-toolbar-btn"
+                    onClick={() => {
+                      if (!activeTerminalId) {
+                        return;
+                      }
 
-                    setSelectorSheetOpen(false);
-                    void handleCloseTerminal(activeTerminalId);
-                  }}
-                  aria-label={t("terminal.close_terminal")}
-                  title={t("action.close")}
-                >
-                  <X size={14} />
-                </button>
+                      setSelectorSheetOpen(false);
+                      void handleCloseTerminal(activeTerminalId);
+                    }}
+                    aria-label={t("terminal.close_terminal")}
+                  >
+                    <X size={14} />
+                  </button>
+                </Tooltip>
               </div>
             </>
           )}
 
           <div className="terminal-toolbar-actions">
-            <button
-              className="panel-toolbar-btn"
-              onClick={handleCreateTerminal}
-              aria-label={t("terminal.new_terminal")}
-              title={t("action.open")}
-            >
-              <Plus size={14} />
-            </button>
+            <Tooltip content={t("action.open")}>
+              <button
+                className="panel-toolbar-btn"
+                onClick={handleCreateTerminal}
+                aria-label={t("terminal.new_terminal")}
+              >
+                <Plus size={14} />
+              </button>
+            </Tooltip>
           </div>
         </div>
       </div>

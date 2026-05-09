@@ -244,7 +244,7 @@ describe("GitPanel", () => {
 
     expect(actionRow).not.toBeNull();
     expect(primaryButton).not.toBeNull();
-    expect(primaryButton?.parentElement).toBe(actionRow);
+    expect(actionRow).toContainElement(primaryButton);
     expect(actionRow?.querySelectorAll("button")).toHaveLength(1);
   });
 
@@ -283,7 +283,7 @@ describe("GitPanel", () => {
     await screen.findByText("Worktrees");
 
     expect(container.querySelector(".git-commit-actions")).not.toBeNull();
-    expect(container.querySelector(".git-commit-actions > .git-commit-primary")).not.toBeNull();
+    expect(container.querySelector(".git-commit-actions .git-commit-primary")).not.toBeNull();
     expect(container.querySelector(".git-commit-primary-mobile")).toBeNull();
     expect(container.querySelectorAll(".git-commit-actions button")).toHaveLength(1);
   });
@@ -975,7 +975,9 @@ describe("GitPanel", () => {
     const changesSection = (await screen.findByText("Changes")).closest(".git-panel-section");
     expect(changesSection).not.toBeNull();
 
-    fireEvent.click(within(changesSection as HTMLElement).getByTitle("Stage All"));
+    fireEvent.click(
+      within(changesSection as HTMLElement).getByRole("button", { name: "Stage All" })
+    );
 
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith(
@@ -1042,7 +1044,9 @@ describe("GitPanel", () => {
     const changesSection = (await screen.findByText("Changes")).closest(".git-panel-section");
     expect(changesSection).not.toBeNull();
 
-    fireEvent.click(within(changesSection as HTMLElement).getByTitle("Stage All"));
+    fireEvent.click(
+      within(changesSection as HTMLElement).getByRole("button", { name: "Stage All" })
+    );
 
     await waitFor(() => {
       expect(store.get(toastsAtom)[0]).toMatchObject({
@@ -1102,7 +1106,7 @@ describe("GitPanel", () => {
     const row = (await screen.findByText("AuthGate.tsx")).closest(".git-row");
     expect(row).not.toBeNull();
 
-    fireEvent.click(within(row as HTMLElement).getByTitle("Unstage"));
+    fireEvent.click(within(row as HTMLElement).getByRole("button", { name: "Unstage" }));
 
     await waitFor(() => {
       expect(store.get(toastsAtom)[0]).toMatchObject({
@@ -1162,7 +1166,7 @@ describe("GitPanel", () => {
     const row = (await screen.findByText("AppController.tsx")).closest(".git-row");
     expect(row).not.toBeNull();
 
-    fireEvent.click(within(row as HTMLElement).getByTitle("Stage"));
+    fireEvent.click(within(row as HTMLElement).getByRole("button", { name: "Stage" }));
 
     await waitFor(() => {
       expect(store.get(toastsAtom)[0]).toMatchObject({
@@ -1275,8 +1279,12 @@ describe("GitPanel", () => {
 
     expect(stagedSection).not.toBeNull();
     expect(changesSection).not.toBeNull();
-    expect(within(stagedSection as HTMLElement).queryByTitle("Discard All")).toBeNull();
-    expect(within(changesSection as HTMLElement).getByTitle("Discard All")).toBeInTheDocument();
+    expect(
+      within(stagedSection as HTMLElement).queryByRole("button", { name: "Discard All" })
+    ).toBeNull();
+    expect(
+      within(changesSection as HTMLElement).getByRole("button", { name: "Discard All" })
+    ).toBeInTheDocument();
   });
 
   it("discards only the merged changes group files after section confirmation", async () => {
@@ -1321,7 +1329,9 @@ describe("GitPanel", () => {
     const changesSection = (await screen.findByText("更改")).closest(".git-panel-section");
     expect(changesSection).not.toBeNull();
 
-    fireEvent.click(within(changesSection as HTMLElement).getByTitle("放弃全部"));
+    fireEvent.click(
+      within(changesSection as HTMLElement).getByRole("button", { name: "放弃全部" })
+    );
 
     expect(screen.getByText("放弃所有更改")).toBeInTheDocument();
     expect(screen.getByText("确定要放弃 3 个文件的更改吗？")).toBeInTheDocument();
@@ -1377,7 +1387,7 @@ describe("GitPanel", () => {
     const row = (await screen.findByText("AppController.tsx")).closest(".git-row");
     expect(row).not.toBeNull();
 
-    fireEvent.click(within(row as HTMLElement).getByTitle("放弃"));
+    fireEvent.click(within(row as HTMLElement).getByRole("button", { name: "放弃" }));
 
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(screen.getByText("放弃文件更改")).toBeInTheDocument();
@@ -1425,7 +1435,7 @@ describe("GitPanel", () => {
     const row = (await screen.findByText("AppController.tsx")).closest(".git-row");
     expect(row).not.toBeNull();
 
-    fireEvent.click(within(row as HTMLElement).getByTitle("放弃"));
+    fireEvent.click(within(row as HTMLElement).getByRole("button", { name: "放弃" }));
     const dialog = screen.getByRole("dialog");
     const modal = dialog.closest(".modal-card") ?? dialog;
     expect(modal).not.toBeNull();
@@ -1474,7 +1484,9 @@ describe("GitPanel", () => {
     const changesSection = (await screen.findByText("更改")).closest(".git-panel-section");
     expect(changesSection).not.toBeNull();
 
-    fireEvent.click(within(changesSection as HTMLElement).getByTitle("放弃全部"));
+    fireEvent.click(
+      within(changesSection as HTMLElement).getByRole("button", { name: "放弃全部" })
+    );
 
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(screen.getByText("放弃所有更改")).toBeInTheDocument();
@@ -1529,7 +1541,7 @@ describe("GitPanel", () => {
       </Provider>
     );
 
-    fireEvent.click(await screen.findByTitle("Discard All"));
+    fireEvent.click(await screen.findByRole("button", { name: "Discard All" }));
 
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(screen.getByText("This action cannot be undone.")).toBeInTheDocument();
@@ -1580,7 +1592,7 @@ describe("GitPanel", () => {
     const row = (await screen.findByText("AuthGate.tsx")).closest(".git-row");
     expect(row).not.toBeNull();
 
-    fireEvent.click(within(row as HTMLElement).getByTitle("放弃"));
+    fireEvent.click(within(row as HTMLElement).getByRole("button", { name: "放弃" }));
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     const dialog = screen.getByRole("dialog");
     const modal = dialog.closest(".modal-card") ?? dialog;
@@ -1627,7 +1639,7 @@ describe("GitPanel", () => {
       </Provider>
     );
 
-    fireEvent.click(await screen.findByTitle("Discard All"));
+    fireEvent.click(await screen.findByRole("button", { name: "Discard All" }));
 
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
@@ -1683,10 +1695,10 @@ describe("GitPanel", () => {
     expect(screen.getByText("更改")).toBeInTheDocument();
     expect(screen.queryByText("未跟踪")).toBeNull();
     expect(screen.getByPlaceholderText("输入提交信息...")).toBeInTheDocument();
-    expect(screen.queryByTitle("刷新")).not.toBeInTheDocument();
-    expect(screen.getByTitle("放弃全部")).toBeInTheDocument();
-    expect(screen.getAllByTitle("暂存全部")).toHaveLength(1);
-    expect(screen.getByTitle("取消暂存全部")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "刷新" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "放弃全部" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "暂存全部" })).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "取消暂存全部" })).toBeInTheDocument();
 
     const commitBlock = screen.getByPlaceholderText("输入提交信息...").closest(".git-commit-block");
     expect(commitBlock).not.toBeNull();
@@ -1744,9 +1756,8 @@ describe("GitPanel", () => {
 
     const row = (await screen.findByText("supervisor.test.ts")).closest(".git-row");
     expect(row).not.toBeNull();
-    expect(within(row as HTMLElement).queryByLabelText("Stage")).toBeNull();
-    expect(within(row as HTMLElement).getByTitle("Stage")).toBeInTheDocument();
-    expect(within(row as HTMLElement).getByTitle("Discard")).toBeInTheDocument();
+    expect(within(row as HTMLElement).getByRole("button", { name: "Stage" })).toBeInTheDocument();
+    expect(within(row as HTMLElement).getByRole("button", { name: "Discard" })).toBeInTheDocument();
   });
 
   it("persists the commit message draft across panel remount per workspace", async () => {
@@ -1849,7 +1860,7 @@ describe("GitPanel", () => {
       expect(textarea.value).toBe("feat: ship it");
     });
 
-    const commitButton = await screen.findByTitle("提交");
+    const commitButton = await screen.findByRole("button", { name: "提交" });
     fireEvent.click(commitButton);
 
     await waitFor(() => {

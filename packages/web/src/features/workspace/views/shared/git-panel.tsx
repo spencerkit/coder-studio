@@ -4,7 +4,7 @@ import { ArrowUp, ChevronDown, Minus, Plus, RotateCcw } from "lucide-react";
 import type { FC } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { localeAtom } from "../../../../atoms/app-ui";
-import { ConfirmDialog, Textarea } from "../../../../components/ui";
+import { ConfirmDialog, Textarea, Tooltip } from "../../../../components/ui";
 import { formatRelativeTime, useTranslation } from "../../../../lib/i18n";
 import {
   type GitChangeType,
@@ -125,16 +125,17 @@ export const GitPanel: FC<GitPanelProps> = ({
             />
 
             <div className="git-commit-actions">
-              <button
-                className="git-commit-primary"
-                onClick={() => void handleCommit()}
-                disabled={!canCommit}
-                title={canCommit ? t("git.commit") : t("git.nothing_staged")}
-                type="button"
-              >
-                <span>{t("git.commit")}</span>
-                <ArrowUp size={14} />
-              </button>
+              <Tooltip content={canCommit ? t("git.commit") : t("git.nothing_staged")}>
+                <button
+                  className="git-commit-primary"
+                  onClick={() => void handleCommit()}
+                  disabled={!canCommit}
+                  type="button"
+                >
+                  <span>{t("git.commit")}</span>
+                  <ArrowUp size={14} />
+                </button>
+              </Tooltip>
             </div>
           </section>
 
@@ -367,23 +368,25 @@ const GitChangeGroup: FC<GitChangeGroupProps> = ({
           </span>
         </button>
         <div className="git-panel-section-actions">
-          <button
-            type="button"
-            className="git-panel-section-link"
-            onClick={() => void onStageAll()}
-            title={stageActionLabel}
-          >
-            {stageActionLabel}
-          </button>
-          {title === "changes" ? (
+          <Tooltip content={stageActionLabel}>
             <button
               type="button"
               className="git-panel-section-link"
-              onClick={() => void onDiscardAll()}
-              title={t("git.discard_all")}
+              onClick={() => void onStageAll()}
             >
-              {t("git.discard_all")}
+              {stageActionLabel}
             </button>
+          </Tooltip>
+          {title === "changes" ? (
+            <Tooltip content={t("git.discard_all")}>
+              <button
+                type="button"
+                className="git-panel-section-link"
+                onClick={() => void onDiscardAll()}
+              >
+                {t("git.discard_all")}
+              </button>
+            </Tooltip>
           ) : null}
         </div>
       </div>
@@ -486,29 +489,33 @@ const GitChangeRow: FC<GitChangeRowProps> = ({
       </div>
 
       <div className="git-row-actions">
-        <button
-          className="git-row-action"
-          onClick={(event) => {
-            event.stopPropagation();
-            void handleToggleStage();
-          }}
-          title={type === "staged" ? t("git.unstage") : t("git.stage")}
-          type="button"
-        >
-          {type === "staged" ? <Minus size={12} /> : <Plus size={12} />}
-        </button>
+        <Tooltip content={type === "staged" ? t("git.unstage") : t("git.stage")}>
+          <button
+            className="git-row-action"
+            onClick={(event) => {
+              event.stopPropagation();
+              void handleToggleStage();
+            }}
+            aria-label={type === "staged" ? t("git.unstage") : t("git.stage")}
+            type="button"
+          >
+            {type === "staged" ? <Minus size={12} /> : <Plus size={12} />}
+          </button>
+        </Tooltip>
 
-        <button
-          className="git-row-action"
-          onClick={(event) => {
-            event.stopPropagation();
-            onRequestDiscard(change.path);
-          }}
-          title={t("git.discard")}
-          type="button"
-        >
-          <RotateCcw size={12} />
-        </button>
+        <Tooltip content={t("git.discard")}>
+          <button
+            className="git-row-action"
+            onClick={(event) => {
+              event.stopPropagation();
+              onRequestDiscard(change.path);
+            }}
+            aria-label={t("git.discard")}
+            type="button"
+          >
+            <RotateCcw size={12} />
+          </button>
+        </Tooltip>
       </div>
     </div>
   );

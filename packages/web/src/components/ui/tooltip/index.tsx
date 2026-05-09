@@ -29,6 +29,7 @@ interface Position {
 
 type TriggerProps = {
   "aria-describedby"?: string;
+  disabled?: boolean;
   onBlur?: (event: FocusEvent<HTMLElement>) => void;
   onFocus?: (event: FocusEvent<HTMLElement>) => void;
   onMouseEnter?: (event: MouseEvent<HTMLElement>) => void;
@@ -55,6 +56,7 @@ export function Tooltip({ children, content, disabled = false }: TooltipProps) {
 
   const isInteractive = !disabled && viewport === "desktop";
   const open = isInteractive && (hovered || focused);
+  const isDisabledTrigger = child.props.disabled === true;
   const existingDescribedBy = child.props["aria-describedby"];
   const describedBy = useMemo(() => {
     if (!open) {
@@ -82,35 +84,58 @@ export function Tooltip({ children, content, disabled = false }: TooltipProps) {
     });
   }, [open]);
 
-  const trigger = cloneElement(child, {
-    "aria-describedby": describedBy,
-    onBlur: (event: FocusEvent<HTMLElement>) => {
-      child.props.onBlur?.(event);
-      setFocused(false);
-    },
-    onFocus: (event: FocusEvent<HTMLElement>) => {
-      child.props.onFocus?.(event);
-      if (!event.defaultPrevented && isInteractive) {
-        triggerRef.current = event.currentTarget;
-        setFocused(true);
-      }
-    },
-    onMouseEnter: (event: MouseEvent<HTMLElement>) => {
-      child.props.onMouseEnter?.(event);
-      if (!event.defaultPrevented && isInteractive) {
-        triggerRef.current = event.currentTarget;
-        setHovered(true);
-      }
-    },
-    onMouseLeave: (event: MouseEvent<HTMLElement>) => {
-      child.props.onMouseLeave?.(event);
-      setHovered(false);
-    },
-  });
+  const trigger = isDisabledTrigger
+    ? cloneElement(child, {
+        "aria-describedby": describedBy,
+      })
+    : cloneElement(child, {
+        "aria-describedby": describedBy,
+        onBlur: (event: FocusEvent<HTMLElement>) => {
+          child.props.onBlur?.(event);
+          setFocused(false);
+        },
+        onFocus: (event: FocusEvent<HTMLElement>) => {
+          child.props.onFocus?.(event);
+          if (!event.defaultPrevented && isInteractive) {
+            triggerRef.current = event.currentTarget;
+            setFocused(true);
+          }
+        },
+        onMouseEnter: (event: MouseEvent<HTMLElement>) => {
+          child.props.onMouseEnter?.(event);
+          if (!event.defaultPrevented && isInteractive) {
+            triggerRef.current = event.currentTarget;
+            setHovered(true);
+          }
+        },
+        onMouseLeave: (event: MouseEvent<HTMLElement>) => {
+          child.props.onMouseLeave?.(event);
+          setHovered(false);
+        },
+      });
+
+  const renderedTrigger = isDisabledTrigger ? (
+    <span
+      className={styles.disabledTriggerWrapper}
+      onMouseEnter={(event: MouseEvent<HTMLSpanElement>) => {
+        if (!event.defaultPrevented && isInteractive) {
+          triggerRef.current = event.currentTarget;
+          setHovered(true);
+        }
+      }}
+      onMouseLeave={() => {
+        setHovered(false);
+      }}
+    >
+      {trigger}
+    </span>
+  ) : (
+    trigger
+  );
 
   return (
     <>
-      {trigger}
+      {renderedTrigger}
       {open ? (
         <Portal>
           <div

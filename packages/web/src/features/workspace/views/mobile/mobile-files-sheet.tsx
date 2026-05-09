@@ -1,5 +1,5 @@
 import { ChevronsUp, FilePlus, FolderPlus } from "lucide-react";
-import { Tab, TabList, Tabs } from "../../../../components/ui";
+import { Tab, TabList, Tabs, Tooltip } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import {
   CodeEditorHost,
@@ -99,33 +99,36 @@ export function MobileFilesSheet({
 
         {activeTab === "files" ? (
           <div className="mobile-files-sheet__tab-actions">
-            <button
-              type="button"
-              className="mobile-files-sheet__tab-action"
-              aria-label={t("file.new_file")}
-              title={t("file.new_file")}
-              onClick={onCreateFile}
-            >
-              <FilePlus size={14} />
-            </button>
-            <button
-              type="button"
-              className="mobile-files-sheet__tab-action"
-              aria-label={t("file.new_folder")}
-              title={t("file.new_folder")}
-              onClick={onCreateFolder}
-            >
-              <FolderPlus size={14} />
-            </button>
-            <button
-              type="button"
-              className="mobile-files-sheet__tab-action"
-              aria-label={t("file.collapse_all")}
-              title={t("file.collapse_all")}
-              onClick={onCollapseAll}
-            >
-              <ChevronsUp size={14} />
-            </button>
+            <Tooltip content={t("file.new_file")}>
+              <button
+                type="button"
+                className="mobile-files-sheet__tab-action"
+                aria-label={t("file.new_file")}
+                onClick={onCreateFile}
+              >
+                <FilePlus size={14} />
+              </button>
+            </Tooltip>
+            <Tooltip content={t("file.new_folder")}>
+              <button
+                type="button"
+                className="mobile-files-sheet__tab-action"
+                aria-label={t("file.new_folder")}
+                onClick={onCreateFolder}
+              >
+                <FolderPlus size={14} />
+              </button>
+            </Tooltip>
+            <Tooltip content={t("file.collapse_all")}>
+              <button
+                type="button"
+                className="mobile-files-sheet__tab-action"
+                aria-label={t("file.collapse_all")}
+                onClick={onCollapseAll}
+              >
+                <ChevronsUp size={14} />
+              </button>
+            </Tooltip>
           </div>
         ) : null}
       </div>

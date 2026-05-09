@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Button } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { useWorktreeManagementActions } from "../../actions/use-worktree-management-actions";
 import { WorktreeManagerSurface } from "./worktree-manager-surface";
@@ -46,20 +47,12 @@ export function WorktreesSummaryCard({ workspaceId }: WorktreesSummaryCardProps)
           </div>
 
           <div className="worktree-summary-card__actions">
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              onClick={() => setOpenView("list")}
-            >
+            <Button size="sm" variant="secondary" onClick={() => setOpenView("list")}>
               {t("worktree.manage")}
-            </button>
-            <button
-              type="button"
-              className="btn btn-primary btn-sm"
-              onClick={() => setOpenView("create")}
-            >
+            </Button>
+            <Button size="sm" variant="primary" onClick={() => setOpenView("create")}>
               {t("worktree.new")}
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -71,13 +64,9 @@ export function WorktreesSummaryCard({ workspaceId }: WorktreesSummaryCardProps)
         {list.error ? (
           <div className="worktree-error">
             <div>{list.error}</div>
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              onClick={() => void loadWorktrees()}
-            >
+            <Button size="sm" variant="secondary" onClick={() => void loadWorktrees()}>
               {t("action.refresh")}
-            </button>
+            </Button>
           </div>
         ) : null}
       </section>

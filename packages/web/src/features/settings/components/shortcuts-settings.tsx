@@ -7,7 +7,7 @@
 import { useAtom, useAtomValue } from "jotai";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { dispatchCommandAtom } from "../../../atoms/connection";
-import { Button, IconButton, Input, Kbd, SegmentedControl } from "../../../components/ui";
+import { Button, IconButton, Input, Kbd, SegmentedControl, Tooltip } from "../../../components/ui";
 import { useTranslation } from "../../../lib/i18n";
 import {
   customShortcutsAtom,
@@ -176,13 +176,14 @@ export function ShortcutsSettings() {
                       {formatShortcut(binding)}
                     </Kbd>
                     {isCustom && (
-                      <IconButton
-                        aria-label={resetShortcutLabel}
-                        icon="↺"
-                        onClick={() => handleReset(shortcut.id)}
-                        size="sm"
-                        title={resetShortcutLabel}
-                      />
+                      <Tooltip content={resetShortcutLabel}>
+                        <IconButton
+                          aria-label={resetShortcutLabel}
+                          icon="↺"
+                          onClick={() => handleReset(shortcut.id)}
+                          size="sm"
+                        />
+                      </Tooltip>
                     )}
                   </>
                 )}

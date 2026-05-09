@@ -1,7 +1,7 @@
 import { useSetAtom } from "jotai";
 import { ChevronsUp, FilePlus, FolderPlus } from "lucide-react";
 import { type FC, useEffect, useRef, useState } from "react";
-import { Tab, TabList, Tabs } from "../../../../components/ui";
+import { Tab, TabList, Tabs, Tooltip } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { AgentPanes } from "../../../agent-panes";
 import { CodeEditorHost } from "../../../code-editor/views/shared/code-editor-host";
@@ -123,33 +123,36 @@ export const WorkspaceDesktopView: FC = () => {
                   <div className="workspace-sidebar-panel__actions">
                     {sidebarTab === "files" ? (
                       <>
-                        <button
-                          type="button"
-                          className="panel-toolbar-btn"
-                          title={t("file.new_file")}
-                          aria-label={t("file.new_file")}
-                          onClick={handleOpenFileCreate}
-                        >
-                          <FilePlus size={14} />
-                        </button>
-                        <button
-                          type="button"
-                          className="panel-toolbar-btn"
-                          title={t("file.new_folder")}
-                          aria-label={t("file.new_folder")}
-                          onClick={handleOpenFolderCreate}
-                        >
-                          <FolderPlus size={14} />
-                        </button>
-                        <button
-                          type="button"
-                          className="panel-toolbar-btn"
-                          title={t("file.collapse_all")}
-                          aria-label={t("file.collapse_all")}
-                          onClick={() => setFileTreeCollapseVersion((value) => value + 1)}
-                        >
-                          <ChevronsUp size={14} />
-                        </button>
+                        <Tooltip content={t("file.new_file")}>
+                          <button
+                            type="button"
+                            className="panel-toolbar-btn"
+                            aria-label={t("file.new_file")}
+                            onClick={handleOpenFileCreate}
+                          >
+                            <FilePlus size={14} />
+                          </button>
+                        </Tooltip>
+                        <Tooltip content={t("file.new_folder")}>
+                          <button
+                            type="button"
+                            className="panel-toolbar-btn"
+                            aria-label={t("file.new_folder")}
+                            onClick={handleOpenFolderCreate}
+                          >
+                            <FolderPlus size={14} />
+                          </button>
+                        </Tooltip>
+                        <Tooltip content={t("file.collapse_all")}>
+                          <button
+                            type="button"
+                            className="panel-toolbar-btn"
+                            aria-label={t("file.collapse_all")}
+                            onClick={() => setFileTreeCollapseVersion((value) => value + 1)}
+                          >
+                            <ChevronsUp size={14} />
+                          </button>
+                        </Tooltip>
                       </>
                     ) : null}
                   </div>
