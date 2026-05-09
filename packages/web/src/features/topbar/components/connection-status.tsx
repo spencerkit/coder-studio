@@ -7,7 +7,7 @@
 import { useAtomValue } from "jotai";
 import type { FC } from "react";
 import { connectionStatusAtom } from "../../../atoms/connection";
-import { StatusDot } from "../../../components/ui";
+import { StatusDot, Tooltip } from "../../../components/ui";
 import { useTranslation } from "../../../lib/i18n";
 
 /**
@@ -26,21 +26,20 @@ export const ConnectionStatus: FC = () => {
 
   const statusClass = `connection-status-${status}`;
   const dotClass = `connection-status-dot connection-status-dot-${status}`;
+  const statusLabel = t(`status.${status}`);
 
   return (
-    <div
-      className={`connection-status ${statusClass}`}
-      title={t(`status.${status}`)}
-      aria-label={t(`status.${status}`)}
-    >
-      <StatusDot
-        tone={getConnectionStatusTone(status)}
-        size="sm"
-        pulse={shouldPulseConnectionStatus(status)}
-        className={dotClass}
-      />
-      <span className="connection-status-text">{t(`status.${status}`)}</span>
-    </div>
+    <Tooltip content={statusLabel}>
+      <div className={`connection-status ${statusClass}`} aria-label={statusLabel}>
+        <StatusDot
+          tone={getConnectionStatusTone(status)}
+          size="sm"
+          pulse={shouldPulseConnectionStatus(status)}
+          className={dotClass}
+        />
+        <span className="connection-status-text">{statusLabel}</span>
+      </div>
+    </Tooltip>
   );
 };
 

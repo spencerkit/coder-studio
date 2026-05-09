@@ -5,6 +5,7 @@ import { type FC, useLayoutEffect, useState } from "react";
 import { localeAtom } from "../../../../atoms/app-ui";
 import {
   Button,
+  ConfirmDialog,
   IconButton,
   Input,
   Modal,
@@ -111,7 +112,8 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({
         : t("git.fetch_in_progress");
   const isSyncingAuthAction = Boolean(authIntent && syncingIntent === authIntent);
   const isDialogLocked = isSyncingCurrentAction || isSyncingAuthAction;
-  const isDialogOpen = Boolean(pendingAction || authPrompt);
+  const showConfirmDialog = Boolean(pendingAction && !authPrompt);
+  const showAuthDialog = Boolean(authPrompt);
 
   const openConfirm = (intent: GitSyncIntent, count: number) => {
     if (count <= 0) {
@@ -235,37 +237,65 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({
         </Tooltip>
       </div>
 
-      <Modal
-        className="git-status-bar__confirm"
-        dismissible={!isDialogLocked}
-        open={isDialogOpen}
-        onOpenChange={handleOpenChange}
-      >
-        <ModalHeader>
-          <ModalTitle>
-            <AlertTriangle size={16} />
-            <span>
-              {authPrompt
-                ? dialogIntent === "push"
+      {showConfirmDialog ? (
+        <ConfirmDialog
+          className="git-status-bar__confirm"
+          dismissible={!isDialogLocked}
+          closeDisabled={isDialogLocked}
+          open
+          onOpenChange={handleOpenChange}
+          title={
+            <>
+              <AlertTriangle size={16} />
+              <span>{confirmTitle}</span>
+            </>
+          }
+          description={
+            <>
+              <p>{confirmMessage}</p>
+              <p className="dialog-helper">{t("git.sync_confirm_helper")}</p>
+            </>
+          }
+          cancelDisabled={isDialogLocked}
+          cancelText={t("action.cancel")}
+          closeLabel={t("action.close")}
+          confirmText={isSyncingCurrentAction ? confirmActionBusyLabel : confirmActionLabel}
+          confirmDisabled={isSyncingCurrentAction}
+          onConfirm={() => {
+            void confirmSync();
+          }}
+        />
+      ) : null}
+
+      {showAuthDialog ? (
+        <Modal
+          className="git-status-bar__confirm"
+          dismissible={!isDialogLocked}
+          open
+          onOpenChange={handleOpenChange}
+        >
+          <ModalHeader>
+            <ModalTitle>
+              <AlertTriangle size={16} />
+              <span>
+                {dialogIntent === "push"
                   ? t("git.push_confirm_title")
                   : dialogIntent === "pull"
                     ? t("git.pull_confirm_title")
-                    : t("git.fetch_label")
-                : confirmTitle}
-            </span>
-          </ModalTitle>
-          <IconButton
-            aria-label={t("action.close")}
-            disabled={isDialogLocked}
-            icon={<X size={14} />}
-            onClick={closeConfirm}
-            size="sm"
-          />
-        </ModalHeader>
+                    : t("git.fetch_label")}
+              </span>
+            </ModalTitle>
+            <IconButton
+              aria-label={t("action.close")}
+              disabled={isDialogLocked}
+              icon={<X size={14} />}
+              onClick={closeConfirm}
+              size="sm"
+            />
+          </ModalHeader>
 
-        <ModalBody>
-          {authPrompt ? (
-            authPrompt.details.canPrompt ? (
+          <ModalBody>
+            {authPrompt.details.canPrompt ? (
               <form
                 id={authFormId}
                 className="form-group"
@@ -312,20 +342,13 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({
                 <p>{getAuthPromptMessage(authPrompt.details)}</p>
                 <span className="dialog-helper">{t("git.auth_helper_unsupported")}</span>
               </div>
-            )
-          ) : (
-            <>
-              <p>{confirmMessage}</p>
-              <p className="dialog-helper">{t("git.sync_confirm_helper")}</p>
-            </>
-          )}
-        </ModalBody>
+            )}
+          </ModalBody>
 
-        <ModalFooter>
-          <Button onClick={closeConfirm} disabled={isDialogLocked}>
-            {t("action.cancel")}
-          </Button>
-          {authPrompt ? (
+          <ModalFooter>
+            <Button onClick={closeConfirm} disabled={isDialogLocked}>
+              {t("action.cancel")}
+            </Button>
             <Button
               variant="primary"
               form={authPrompt.details.canPrompt ? authFormId : undefined}
@@ -339,17 +362,9 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({
             >
               {isSyncingAuthAction ? authBusyLabel : authActionLabel}
             </Button>
-          ) : (
-            <Button
-              variant="primary"
-              onClick={() => void confirmSync()}
-              disabled={isSyncingCurrentAction}
-            >
-              {isSyncingCurrentAction ? confirmActionBusyLabel : confirmActionLabel}
-            </Button>
-          )}
-        </ModalFooter>
-      </Modal>
+          </ModalFooter>
+        </Modal>
+      ) : null}
     </>
   );
 };

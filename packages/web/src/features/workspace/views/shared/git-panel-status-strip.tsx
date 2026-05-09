@@ -1,5 +1,6 @@
 import type { GitStatus } from "@coder-studio/core";
 import { GitBranch } from "lucide-react";
+import { Tooltip } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { GitStatusBar } from "./git-status-bar";
 
@@ -28,20 +29,21 @@ export function GitPanelStatusStrip({
 
   return (
     <div className="git-panel-status-strip">
-      <button
-        type="button"
-        className="git-panel-status-strip__branch"
-        onClick={onOpenBranchSwitcher}
-        aria-label={`${t("git.current_branch")}: ${branchName}`}
-        title={branchName}
-        disabled={!onOpenBranchSwitcher}
-      >
-        <GitBranch size={11} />
-        <span className="git-panel-status-strip__branch-text">
-          {branchName}
-          {branchSummary ? ` · ${branchSummary}` : ""}
-        </span>
-      </button>
+      <Tooltip content={branchName}>
+        <button
+          type="button"
+          className="git-panel-status-strip__branch"
+          onClick={onOpenBranchSwitcher}
+          aria-label={`${t("git.current_branch")}: ${branchName}`}
+          disabled={!onOpenBranchSwitcher}
+        >
+          <GitBranch size={11} />
+          <span className="git-panel-status-strip__branch-text">
+            {branchName}
+            {branchSummary ? ` · ${branchSummary}` : ""}
+          </span>
+        </button>
+      </Tooltip>
       <div className="git-panel-status-strip__meta">
         <GitStatusBar workspaceId={workspaceId} gitState={gitState} inline />
       </div>

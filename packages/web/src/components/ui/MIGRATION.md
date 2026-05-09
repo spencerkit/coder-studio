@@ -9,19 +9,19 @@
 | Tag | 🟢 complete | `.badge .badge-*` | 0 | 2026-05-09 |
 | Badge | 🟢 complete | `.topbar-unread` | 0 | 2026-05-09 |
 | Pill | 🟢 complete | `.settings-pill*` | 0 | 2026-05-09 |
-| StatusDot | 🟡 partial | `.session-dot*`, `.connection-status-dot*` | 0 | 2026-05-09 |
+| StatusDot | 🟢 complete | `.session-dot*`, `.connection-status-dot*` | 0 | 2026-05-09 |
 | Kbd | 🟢 complete | `kbd`, `.shortcuts-key` | 0 | 2026-05-09 |
 | Spinner | 🟢 complete | `.animate-spin` | 0 | 2026-05-09 |
-| Switch | 🟡 partial | new | bounded settings notification toggles covered | 2026-05-09 |
+| Switch | 🟢 complete | new | 0 | 2026-05-09 |
 | Modal | 🟢 complete | `.modal-overlay .modal-card .modal-*` | 0 | 2026-05-09 |
 | ConfirmDialog | 🟡 partial | modal convenience wrapper | richer confirm/auth flows remain on raw `Modal` | 2026-05-09 |
 | Toast | 🟢 complete | `.toast*` | 0 | 2026-05-09 |
-| Tooltip | 🟡 partial | native `title` hover labels | branch picker, code-editor actions, file-tree actions, git-diff close, fullscreen, topbar actions, session/supervisor actions, selected settings actions, and workspace/terminal file-toolbar actions covered; truncation/path, connection-status/container, and selected status-strip titles remain deferred | 2026-05-09 |
-| ProgressBar | 🟡 partial | `--progress-height` patterns | broader progress families remain deferred | 2026-05-09 |
+| Tooltip | 🟡 partial | native `title` hover labels | branch picker, code-editor actions, file-tree actions, git-diff close, fullscreen, topbar actions, connection-status, git status-strip branch, session/supervisor actions, selected settings actions, and workspace/terminal file-toolbar actions covered; truncation/path and other non-action long-text titles remain deferred | 2026-05-09 |
+| ProgressBar | 🟢 complete | `--progress-height` patterns | 0 | 2026-05-09 |
 | Notice | 🟢 complete | `.settings-page__notice*` | 0 | 2026-05-09 |
 | EmptyState | 🟡 partial | feature-specific empty state blocks | bounded centered empty-state shells covered; broader workspace empty shells remain | 2026-05-09 |
 | Tabs | 🟡 partial | tab / pill patterns across features | workspace desktop/mobile/worktree bounded slice covered; broader navigation families remain | 2026-05-09 |
-| SegmentedControl | 🟡 partial | `.settings-provider-tabs`, `.settings-provider-tab`, `.settings-provider-subnav`, `.settings-provider-subnav-button`, `.shortcuts-category-tabs`, `.shortcuts-category-tab` | bounded settings selector families covered | 2026-05-09 |
+| SegmentedControl | 🟢 complete | `.settings-provider-tabs`, `.settings-provider-tab`, `.settings-provider-subnav`, `.settings-provider-subnav-button`, `.shortcuts-category-tabs`, `.shortcuts-category-tab` | 0 | 2026-05-09 |
 | Sheet | 🟢 complete | `.mobile-sheet*` | 0 | 2026-05-09 |
 | Select | 🟡 in-flight | `.input`, `.mobile-select-*` | 2 | 2026-05-09 |
 | Popover | ⚫ not-started | new | — | — |
@@ -45,7 +45,7 @@
 
 `Kbd` now completes the bounded keyboard-shortcut display slice: the settings shortcut bindings use the shared primitive from the public UI barrel while preserving the legacy `.shortcuts-key` compatibility class and interactive keyboard semantics.
 
-`StatusDot` now covers the bounded desktop status-indicator slice: the agent session cards and topbar connection status use the shared primitive with caller-owned layout hooks preserved. The row remains partial because other dot variants outside this bounded slice remain deferred.
+`StatusDot` now completes the bounded legacy status-dot inventory: the agent session cards, draft launcher, and topbar connection status all use the shared primitive with caller-owned layout hooks preserved, and no feature-local `session-dot*` / `connection-status-dot*` callsites remain outside shared adopters.
 
 `Spinner` now completes the bounded legacy `.animate-spin` migration inventory: feature callers use the shared primitive, and the only remaining `animate-spin` emission lives inside shared UI primitives for compatibility (`Spinner` itself and `Button` loading state). The workspace launch modal and settings config-editor loading states both use the shared primitive while preserving the legacy class for zero-regression styling.
 
@@ -55,8 +55,14 @@
 
 `Toast` now covers the bounded notification presenter in `features/notifications/toast-container.tsx`. The shared primitive owns the generic shell and compatibility classes, while Jotai queue state, auto-dismiss timing, icon selection, and workspace/session navigation remain in the feature layer by design.
 
-`Tooltip` now covers a broader bounded action-trigger batch: branch picker, topbar/workspace fullscreen, selected code-editor actions, file-tree delete/create actions, git-diff close, session/supervisor actions, the settings config-editor format action, workspace desktop/mobile file-toolbar actions, and terminal toolbar open/close actions all use the shared primitive from the public UI barrel. The shared primitive also preserves hover help for real disabled button triggers so these migrations do not regress existing affordances. Deferred tooltip-like families such as connection-status container labels, selected status-strip labels, and truncation/path titles remain intentionally outside this slice.
+`Switch` now completes the bounded boolean-toggle inventory: the settings notifications toggles use the shared primitive from the public UI barrel, and no additional feature-local switch implementations remain in the selected scope.
+
+`Tooltip` now covers a broader bounded action-trigger batch: branch picker, topbar/workspace fullscreen, selected code-editor actions, file-tree delete/create actions, git-diff close, connection-status hover copy, the git status-strip branch trigger, session/supervisor actions, the settings config-editor format action, workspace desktop/mobile file-toolbar actions, and terminal toolbar open/close actions all use the shared primitive from the public UI barrel. The shared primitive also preserves hover help for real disabled button triggers so these migrations do not regress existing affordances. Deferred tooltip-like families such as truncation/path and other non-action long-text titles remain intentionally outside this slice.
 
 `Sheet` now completes the mobile sheet-shell migration inventory: the mobile workspace files and terminal fullscreen sheets, mobile supervisor flows, mobile select sheet presentation, mobile worktree manager surface, workspace launch modal, worktree modal, and command palette all use the shared primitive from the public UI barrel while preserving the existing `mobile-sheet*` compatibility classes and caller-owned body/content modifiers.
 
-`ProgressBar`, `EmptyState`, `Tabs`, `SegmentedControl`, and `Switch` now have shared primitives in the public barrel and bounded caller adoption on `develop`, but they are not yet broad enough to count as fully complete across the migration inventory.
+`ProgressBar` now completes the bounded linear progress inventory: the agent session card progress meter uses the shared primitive from the public UI barrel while preserving the existing `session-progress*` compatibility hooks, and no additional feature-local `--progress-height` progress families remain in scope.
+
+`SegmentedControl` now completes the bounded selector-family inventory: provider chooser tabs, provider sub-navigation, and shortcuts category selectors all use the shared primitive from the public UI barrel while preserving the existing legacy compatibility classes for zero-regression styling.
+
+`EmptyState` and `Tabs` now have shared primitives in the public barrel and bounded caller adoption on `develop`, but their broader feature-specific families are not yet fully migrated across the inventory.

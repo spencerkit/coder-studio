@@ -179,6 +179,34 @@ describe("ConfirmDialog", () => {
     expect(onOpenChange).not.toHaveBeenCalled();
   });
 
+  it("can keep a visible but disabled close button while dismiss interactions stay locked", async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+
+    render(
+      <ConfirmDialog
+        open
+        dismissible={false}
+        cancelDisabled
+        closeDisabled
+        onOpenChange={onOpenChange}
+        title="Sync in progress"
+        description="Please wait for the current action to finish."
+        confirmText="Push"
+        cancelText="Cancel"
+        onConfirm={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole("button", { name: "Close" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
+
+    await user.click(document.body.querySelector(".modal-overlay") as HTMLElement);
+    await user.keyboard("{Escape}");
+
+    expect(onOpenChange).not.toHaveBeenCalled();
+  });
+
   it("invokes onConfirm without auto-closing and supports className and closeLabel", async () => {
     const user = userEvent.setup();
     const onConfirm = vi.fn();

@@ -13,6 +13,8 @@ type ConfirmButtonProps = Omit<ButtonProps, "children" | "onClick" | "variant">;
 export interface ConfirmDialogProps
   extends Pick<ModalProps, "className" | "dismissible" | "initialFocus" | "onOpenChange" | "open"> {
   readonly cancelText: ReactNode;
+  readonly cancelDisabled?: boolean;
+  readonly closeDisabled?: boolean;
   readonly closeLabel?: string;
   readonly confirmButtonProps?: ConfirmButtonProps;
   readonly confirmDisabled?: boolean;
@@ -29,8 +31,10 @@ const confirmVariantMap = {
 } as const;
 
 export function ConfirmDialog({
+  cancelDisabled = false,
   cancelText,
   className,
+  closeDisabled = false,
   closeLabel = "Close",
   confirmButtonProps,
   confirmDisabled = false,
@@ -65,10 +69,11 @@ export function ConfirmDialog({
           ) : null}
           <span>{title}</span>
         </ModalTitle>
-        {dismissible ? (
+        {dismissible || closeDisabled ? (
           <IconButton
             aria-label={closeLabel}
             className="modal-close"
+            disabled={closeDisabled}
             icon={<X size={14} />}
             onClick={() => onOpenChange(false)}
             size="sm"
@@ -79,7 +84,9 @@ export function ConfirmDialog({
       {description ? <ModalBody className={styles.body}>{description}</ModalBody> : null}
 
       <ModalFooter>
-        <Button onClick={() => onOpenChange(false)}>{cancelText}</Button>
+        <Button disabled={cancelDisabled} onClick={() => onOpenChange(false)}>
+          {cancelText}
+        </Button>
         <Button
           {...confirmButtonRest}
           className={confirmClassName}
