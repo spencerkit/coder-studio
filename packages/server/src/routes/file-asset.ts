@@ -21,12 +21,14 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { createReadStream } from "fs";
 import { realpath, stat } from "fs/promises";
+import { isAbsolute, relative } from "path";
 import { resolveSafe } from "../fs/file-io.js";
 import { getImageTypeInfo } from "../fs/image.js";
 import type { WorkspaceManager } from "../workspace/manager.js";
 
 function isPathInsideRoot(rootPath: string, targetPath: string): boolean {
-  return targetPath === rootPath || targetPath.startsWith(`${rootPath}/`);
+  const rel = relative(rootPath, targetPath);
+  return rel !== ".." && !rel.startsWith(`..${"/"}`) && !isAbsolute(rel);
 }
 
 interface FileAssetQuery {

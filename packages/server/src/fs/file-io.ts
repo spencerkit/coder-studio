@@ -4,7 +4,7 @@
 
 import { createHash } from "crypto";
 import { readFile as fsReadFile, writeFile as fsWriteFile, mkdir, rm, stat } from "fs/promises";
-import { dirname, resolve } from "path";
+import { dirname, isAbsolute, relative, resolve } from "path";
 import { getImageTypeInfo } from "./image.js";
 
 export interface FileReadTextResult {
@@ -88,8 +88,9 @@ export function resolveSafe(root: string, relPath: string): string {
   const absRoot = resolve(root);
   const abs = resolve(absRoot, relPath);
 
-  // Prevent path escape: resolved path must be under root
-  if (!abs.startsWith(absRoot + "/") && abs !== absRoot) {
+  // Prevent path escape: resolved path must stay inside the workspace root.
+  const rel = relative(absRoot, abs);
+  if (rel === ".." || rel.startsWith(`..${"/"}`) || isAbsolute(rel)) {
     throw { code: "path_escape", message: "Path escapes workspace root" };
   }
 
