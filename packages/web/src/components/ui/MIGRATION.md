@@ -3,7 +3,7 @@
 | Component | Status | Legacy classes | Callers left | Last update |
 |---|---|---|---:|---|
 | Button | 🟢 complete | `.btn .btn-*` | 0 | 2026-05-09 |
-| IconButton | 🟡 partial | `.btn` icon-only | bounded modal/dialog close and shortcut reset flows covered; broader icon-action families remain | 2026-05-09 |
+| IconButton | 🟡 partial | `.btn` icon-only | bounded modal/dialog close, selected topbar/workspace/terminal icon-action flows, shortcut reset, and workspace file-toolbar actions covered; broader icon-action families remain | 2026-05-09 |
 | Input | 🟢 complete | `.input` | 0 | 2026-05-09 |
 | Textarea | 🟢 complete | `.input.textarea` | 0 | 2026-05-09 |
 | Tag | 🟢 complete | `.badge .badge-*` | 0 | 2026-05-09 |
@@ -13,10 +13,10 @@
 | Kbd | 🟢 complete | `kbd`, `.shortcuts-key` | 0 | 2026-05-09 |
 | Spinner | 🟢 complete | `.animate-spin` | 0 | 2026-05-09 |
 | Switch | 🟡 partial | new | bounded settings notification toggles covered | 2026-05-09 |
-| Modal | 🟡 partial | `.modal-overlay .modal-card .modal-*` | raw modal families still exist outside current bounded callers | 2026-05-09 |
+| Modal | 🟢 complete | `.modal-overlay .modal-card .modal-*` | 0 | 2026-05-09 |
 | ConfirmDialog | 🟡 partial | modal convenience wrapper | richer confirm/auth flows remain on raw `Modal` | 2026-05-09 |
 | Toast | 🟢 complete | `.toast*` | 0 | 2026-05-09 |
-| Tooltip | 🟡 partial | native `title` hover labels | branch picker, code-editor actions, file-tree actions, git-diff close, fullscreen, topbar actions, session/supervisor icon actions, and workspace/terminal file-toolbar actions covered; truncation/path, connection-status/container, git-panel remain deferred | 2026-05-09 |
+| Tooltip | 🟡 partial | native `title` hover labels | branch picker, code-editor actions, file-tree actions, git-diff close, fullscreen, topbar actions, session/supervisor actions, selected settings actions, and workspace/terminal file-toolbar actions covered; truncation/path, connection-status/container, and selected status-strip titles remain deferred | 2026-05-09 |
 | ProgressBar | 🟡 partial | `--progress-height` patterns | broader progress families remain deferred | 2026-05-09 |
 | Notice | 🟢 complete | `.settings-page__notice*` | 0 | 2026-05-09 |
 | EmptyState | 🟡 partial | feature-specific empty state blocks | bounded centered empty-state shells covered; broader workspace empty shells remain | 2026-05-09 |
@@ -49,10 +49,12 @@
 
 `Spinner` now completes the bounded legacy `.animate-spin` migration inventory: feature callers use the shared primitive, and the only remaining `animate-spin` emission lives inside shared UI primitives for compatibility (`Spinner` itself and `Button` loading state). The workspace launch modal and settings config-editor loading states both use the shared primitive while preserving the legacy class for zero-regression styling.
 
-`Modal` and `ConfirmDialog` now cover the bounded desktop dialog slice used by the file tree create/delete flows, the objective dialog, the git sync confirm/auth dialogs, and the desktop worktree modal. These rows remain partial because richer modal families and some mobile dialog flows are intentionally still outside this bounded slice.
+`Modal` now completes the legacy raw modal-shell migration inventory: the file tree create flow, the objective dialog, the git sync auth flow, the desktop worktree modal, and the desktop worktree manager surface all use the shared primitive from the public UI barrel while preserving the legacy `modal-*` compatibility classes emitted by the primitive itself.
+
+`ConfirmDialog` now covers the bounded confirm-action slice used by the file tree delete flow and git sync confirm dialogs. The row remains partial because richer auth and action-confirmation flows still live on direct `Modal` composition by design.
 
 `Toast` now covers the bounded notification presenter in `features/notifications/toast-container.tsx`. The shared primitive owns the generic shell and compatibility classes, while Jotai queue state, auto-dismiss timing, icon selection, and workspace/session navigation remain in the feature layer by design.
 
-`Tooltip` now covers a broader bounded icon-trigger batch: branch picker, topbar/workspace fullscreen, selected code-editor actions, file-tree delete/create actions, git-diff close, session/supervisor header actions, workspace desktop/mobile file-toolbar actions, and terminal toolbar open/close actions all use the shared primitive from the public UI barrel. The shared primitive also preserves hover help for real disabled button triggers so these migrations do not regress existing affordances. Deferred tooltip-like families such as connection-status container labels, git-panel action families, and truncation/path titles remain intentionally outside this slice.
+`Tooltip` now covers a broader bounded action-trigger batch: branch picker, topbar/workspace fullscreen, selected code-editor actions, file-tree delete/create actions, git-diff close, session/supervisor actions, the settings config-editor format action, workspace desktop/mobile file-toolbar actions, and terminal toolbar open/close actions all use the shared primitive from the public UI barrel. The shared primitive also preserves hover help for real disabled button triggers so these migrations do not regress existing affordances. Deferred tooltip-like families such as connection-status container labels, selected status-strip labels, and truncation/path titles remain intentionally outside this slice.
 
 `ProgressBar`, `EmptyState`, `Tabs`, `SegmentedControl`, `Switch`, and `Sheet` now have shared primitives in the public barrel and bounded caller adoption on `develop`, but they are not yet broad enough to count as fully complete across the migration inventory.

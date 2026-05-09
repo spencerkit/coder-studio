@@ -58,7 +58,7 @@ export function WorktreeDetailPanel({
         </TabList>
 
         <div className={mobile ? "mobile-worktree-sheet__content" : undefined}>
-          <TabPanel className="modal-body worktree-content" value="status">
+          <TabPanel className="worktree-content" value="status">
             {error ? <div className="worktree-error">{error}</div> : null}
             {loading ? (
               <div className="worktree-loading">{t("worktree.loading")}</div>
@@ -119,7 +119,7 @@ export function WorktreeDetailPanel({
             )}
           </TabPanel>
 
-          <TabPanel className="modal-body worktree-content" value="diff">
+          <TabPanel className="worktree-content" value="diff">
             {error ? <div className="worktree-error">{error}</div> : null}
             {loading ? (
               <div className="worktree-loading">{t("worktree.loading")}</div>
@@ -134,7 +134,7 @@ export function WorktreeDetailPanel({
             )}
           </TabPanel>
 
-          <TabPanel className="modal-body worktree-content" value="tree">
+          <TabPanel className="worktree-content" value="tree">
             {error ? <div className="worktree-error">{error}</div> : null}
             {loading ? (
               <div className="worktree-loading">{t("worktree.loading")}</div>

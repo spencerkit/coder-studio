@@ -1,5 +1,5 @@
 import { ChevronsUp, FilePlus, FolderPlus } from "lucide-react";
-import { Tab, TabList, Tabs, Tooltip } from "../../../../components/ui";
+import { IconButton, Tab, TabList, Tabs, Tooltip } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import {
   CodeEditorHost,
@@ -100,34 +100,31 @@ export function MobileFilesSheet({
         {activeTab === "files" ? (
           <div className="mobile-files-sheet__tab-actions">
             <Tooltip content={t("file.new_file")}>
-              <button
-                type="button"
+              <IconButton
                 className="mobile-files-sheet__tab-action"
                 aria-label={t("file.new_file")}
+                icon={<FilePlus size={14} />}
                 onClick={onCreateFile}
-              >
-                <FilePlus size={14} />
-              </button>
+                size="sm"
+              />
             </Tooltip>
             <Tooltip content={t("file.new_folder")}>
-              <button
-                type="button"
+              <IconButton
                 className="mobile-files-sheet__tab-action"
                 aria-label={t("file.new_folder")}
+                icon={<FolderPlus size={14} />}
                 onClick={onCreateFolder}
-              >
-                <FolderPlus size={14} />
-              </button>
+                size="sm"
+              />
             </Tooltip>
             <Tooltip content={t("file.collapse_all")}>
-              <button
-                type="button"
+              <IconButton
                 className="mobile-files-sheet__tab-action"
                 aria-label={t("file.collapse_all")}
+                icon={<ChevronsUp size={14} />}
                 onClick={onCollapseAll}
-              >
-                <ChevronsUp size={14} />
-              </button>
+                size="sm"
+              />
             </Tooltip>
           </div>
         ) : null}

@@ -1,7 +1,7 @@
 import { useStore } from "jotai";
 import { ChevronDown, Plus, Terminal, X } from "lucide-react";
 import { useState } from "react";
-import { Button, EmptyState, Tooltip } from "../../../../components/ui";
+import { Button, EmptyState, IconButton, Tooltip } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { MobileSelectSheet } from "../../../mobile-select";
 import { useTerminalActions } from "../../actions/use-terminal-actions";
@@ -139,8 +139,10 @@ export function TerminalPanel({ chrome = "default" }: TerminalPanelProps) {
 
               <div className="terminal-toolbar-actions">
                 <Tooltip content={t("action.close")}>
-                  <button
+                  <IconButton
                     className="panel-toolbar-btn"
+                    aria-label={t("terminal.close_terminal")}
+                    icon={<X size={14} />}
                     onClick={() => {
                       if (!activeTerminalId) {
                         return;
@@ -149,10 +151,8 @@ export function TerminalPanel({ chrome = "default" }: TerminalPanelProps) {
                       setSelectorSheetOpen(false);
                       void handleCloseTerminal(activeTerminalId);
                     }}
-                    aria-label={t("terminal.close_terminal")}
-                  >
-                    <X size={14} />
-                  </button>
+                    size="sm"
+                  />
                 </Tooltip>
               </div>
             </>
@@ -160,13 +160,13 @@ export function TerminalPanel({ chrome = "default" }: TerminalPanelProps) {
 
           <div className="terminal-toolbar-actions">
             <Tooltip content={t("action.open")}>
-              <button
+              <IconButton
                 className="panel-toolbar-btn"
-                onClick={handleCreateTerminal}
                 aria-label={t("terminal.new_terminal")}
-              >
-                <Plus size={14} />
-              </button>
+                icon={<Plus size={14} />}
+                onClick={handleCreateTerminal}
+                size="sm"
+              />
             </Tooltip>
           </div>
         </div>

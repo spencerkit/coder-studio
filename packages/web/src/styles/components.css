@@ -3514,6 +3514,11 @@ body.is-resizing-panels * {
 }
 
 .worktree-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-5);
+  overflow-y: auto;
   min-height: 300px;
 }
 
@@ -8398,7 +8403,7 @@ textarea.input {
     overflow: hidden;
   }
 
-  .mobile-worktree-sheet__content .modal-body {
+  .mobile-worktree-sheet__content .worktree-content {
     flex: 1;
     min-height: 0;
   }

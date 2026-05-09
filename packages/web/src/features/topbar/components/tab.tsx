@@ -10,7 +10,7 @@ import { useSetAtom } from "jotai";
 import { X } from "lucide-react";
 import type { FC } from "react";
 import { activeWorkspaceIdAtom } from "../../../atoms/workspaces";
-import { Badge } from "../../../components/ui";
+import { Badge, IconButton } from "../../../components/ui";
 import { useTranslation } from "../../../lib/i18n";
 import { formatWorkspaceLabel } from "../../notifications/format";
 import { useWorkspaceCloseAction } from "../../workspace/actions/use-workspace-close-action";
@@ -65,13 +65,13 @@ export const WorkspaceTab: FC<WorkspaceTabProps> = ({ workspace, isActive }) => 
 
       <Badge count={workspace.unreadCount ?? 0} max={9} />
 
-      <button
+      <IconButton
         className="topbar-close"
-        onClick={handleClose}
         aria-label={t("action.close_workspace")}
-      >
-        <X size={14} />
-      </button>
+        icon={<X size={14} />}
+        onClick={handleClose}
+        size="sm"
+      />
     </div>
   );
 };

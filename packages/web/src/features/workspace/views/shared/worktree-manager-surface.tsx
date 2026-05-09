@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Button, Input } from "../../../../components/ui";
+import { Button, Input, Modal, ModalHeader, ModalTitle } from "../../../../components/ui";
 import { useViewport } from "../../../../hooks/use-viewport";
 import { useTranslation } from "../../../../lib/i18n";
 import { useWorktreeManagementActions } from "../../actions/use-worktree-management-actions";
@@ -39,6 +39,7 @@ export function WorktreeManagerSurface({
   const [removeError, setRemoveError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const initializedOpenViewRef = useRef(false);
+  const branchInputRef = useRef<HTMLInputElement | null>(null);
 
   const resetCreateForm = () => {
     setBranchDraft("");
@@ -156,6 +157,7 @@ export function WorktreeManagerSurface({
           </label>
           <Input
             id={`worktree-branch-${workspaceId}`}
+            ref={branchInputRef}
             value={branchDraft}
             onChange={(event) => setBranchDraft(event.target.value)}
             placeholder="feature/worktree-manager"
@@ -320,33 +322,38 @@ export function WorktreeManagerSurface({
       onClose={onClose}
     />
   ) : (
-    <div className="modal-overlay" onClick={onClose}>
-      <div
-        className="modal-card modal-card-lg worktree-manager-surface"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="modal-header">
-          <div className="worktree-header-info">
-            <h3>{title}</h3>
-          </div>
-          <div className="worktree-manager-surface__header-actions">
-            {view === "list" ? (
-              <Button size="sm" variant="primary" onClick={openCreate}>
-                {t("worktree.new")}
-              </Button>
-            ) : (
-              <Button size="sm" variant="ghost" onClick={() => setView("list")}>
-                {t("action.back")}
-              </Button>
-            )}
-            <Button size="sm" variant="ghost" onClick={onClose}>
-              {t("action.close")}
-            </Button>
-          </div>
+    <Modal
+      className="worktree-manager-surface"
+      initialFocus={() => (view === "create" ? branchInputRef.current : null)}
+      onOpenChange={(open) => {
+        if (!open) {
+          onClose();
+        }
+      }}
+      open
+      size="lg"
+    >
+      <ModalHeader>
+        <div className="worktree-header-info">
+          <ModalTitle>{title}</ModalTitle>
         </div>
+        <div className="worktree-manager-surface__header-actions">
+          {view === "list" ? (
+            <Button size="sm" variant="primary" onClick={openCreate}>
+              {t("worktree.new")}
+            </Button>
+          ) : (
+            <Button size="sm" variant="ghost" onClick={() => setView("list")}>
+              {t("action.back")}
+            </Button>
+          )}
+          <Button size="sm" variant="ghost" onClick={onClose}>
+            {t("action.close")}
+          </Button>
+        </div>
+      </ModalHeader>
 
-        {body}
-      </div>
-    </div>
+      {body}
+    </Modal>
   );
 }

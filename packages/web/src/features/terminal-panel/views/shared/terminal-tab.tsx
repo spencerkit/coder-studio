@@ -6,6 +6,7 @@
 
 import { useAtomValue } from "jotai";
 import { X } from "lucide-react";
+import { IconButton } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { terminalMetaAtomFamily } from "../../atoms";
 import { formatTerminalTitle } from "../../components/title-format";
@@ -29,9 +30,13 @@ export function TerminalTab({ id, index, isActive, onSelect, onClose }: Terminal
       <button className="terminal-tab-label" onClick={onSelect}>
         <span className="terminal-tab-title">{title}</span>
       </button>
-      <button className="terminal-tab-close" onClick={onClose}>
-        <X size={12} />
-      </button>
+      <IconButton
+        aria-label={t("action.close")}
+        className="terminal-tab-close"
+        icon={<X size={12} />}
+        onClick={onClose}
+        size="sm"
+      />
     </div>
   );
 }

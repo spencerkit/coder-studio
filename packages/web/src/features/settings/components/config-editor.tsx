@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { dispatchCommandAtom } from "../../../atoms/connection";
-import { Button, EmptyState, Spinner } from "../../../components/ui";
+import { Button, EmptyState, Spinner, Tooltip } from "../../../components/ui";
 import { useTranslation } from "../../../lib/i18n";
 import { MonacoHost } from "../../code-editor/components/monaco-host";
 import { pushToastAtom } from "../../notifications/atoms";
@@ -306,14 +306,12 @@ export function ConfigEditor({
 
             <div className="config-actions-right">
               {configType === "claude" && (
-                <Button
-                  size="sm"
-                  onClick={handleFormat}
-                  title={t("settings.config_files.format_hint")}
-                >
-                  <Sparkles size={14} />
-                  <span>{t("settings.config_files.format")}</span>
-                </Button>
+                <Tooltip content={t("settings.config_files.format_hint")}>
+                  <Button size="sm" onClick={handleFormat}>
+                    <Sparkles size={14} />
+                    <span>{t("settings.config_files.format")}</span>
+                  </Button>
+                </Tooltip>
               )}
               <Button size="sm" onClick={handleRevert} disabled={!isDirty || isSaving}>
                 {t("action.reset")}

@@ -140,6 +140,27 @@ describe("WorktreeManagerSurface", () => {
     expect(screen.getByRole("region", { name: "Worktrees sheet" })).toBeInTheDocument();
   });
 
+  it("uses shared Modal chrome on desktop viewports", () => {
+    const onClose = vi.fn();
+
+    render(
+      <Provider store={buildManagerStore(vi.fn(), worktrees, "/repo/main")}>
+        <WorktreeManagerSurface workspaceId="ws-1" openView="list" onClose={onClose} />
+      </Provider>
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Worktrees" });
+    expect(dialog).toHaveClass("modal-card", "modal-card-lg", "worktree-manager-surface");
+    expect(document.querySelector(".mobile-sheet--worktree")).toBeNull();
+
+    const overlay = document.querySelector(".modal-overlay");
+    expect(overlay).toBeTruthy();
+
+    fireEvent.click(overlay as Element);
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it("creates a worktree, reloads the list, and returns to list mode", async () => {
     const sendCommand = vi
       .fn()

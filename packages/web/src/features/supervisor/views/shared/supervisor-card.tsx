@@ -27,15 +27,16 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
   if (!supervisor) {
     return (
       <div className="supervisor-card supervisor-card-inactive">
-        <button
-          className="supervisor-enable-btn"
-          onClick={() => openDialog("enable")}
-          title={t("supervisor.action.enable")}
-          aria-label={t("supervisor.action.enable")}
-        >
-          <Eye size={13} />
-          <span>{t("supervisor.title")}</span>
-        </button>
+        <Tooltip content={t("supervisor.action.enable")}>
+          <button
+            className="supervisor-enable-btn"
+            onClick={() => openDialog("enable")}
+            aria-label={t("supervisor.action.enable")}
+          >
+            <Eye size={13} />
+            <span>{t("supervisor.title")}</span>
+          </button>
+        </Tooltip>
       </div>
     );
   }
