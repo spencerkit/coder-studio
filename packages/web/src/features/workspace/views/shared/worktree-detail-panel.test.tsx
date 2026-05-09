@@ -101,7 +101,7 @@ describe("WorktreeDetailPanel", () => {
       </Provider>
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "Diff" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Diff" }));
 
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith("worktree.diff", {

@@ -1,10 +1,10 @@
 import type { GitCommitSummary, GitFileChange, WorktreeInfo } from "@coder-studio/core";
 import { useAtomValue } from "jotai";
-import { AlertTriangle, ArrowUp, ChevronDown, Minus, Plus, RotateCcw, X } from "lucide-react";
+import { ArrowUp, ChevronDown, Minus, Plus, RotateCcw } from "lucide-react";
 import type { FC } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { localeAtom } from "../../../../atoms/app-ui";
-import { Textarea } from "../../../../components/ui";
+import { ConfirmDialog, Textarea } from "../../../../components/ui";
 import { formatRelativeTime, useTranslation } from "../../../../lib/i18n";
 import {
   type GitChangeType,
@@ -579,42 +579,24 @@ const GitDiscardConfirmModal: FC<GitDiscardConfirmModalProps> = ({
         });
 
   return (
-    <div className="modal-overlay" onClick={onCancel}>
-      <div className="modal-card" onClick={(event) => event.stopPropagation()}>
-        <div className="modal-header">
-          <div className="modal-title">
-            <AlertTriangle size={16} />
-            <h3>{title}</h3>
-          </div>
-          <button
-            className="btn btn-ghost btn-sm"
-            onClick={onCancel}
-            aria-label={t("action.close")}
-          >
-            <X size={14} />
-          </button>
-        </div>
-
-        <div className="modal-body">
+    <ConfirmDialog
+      open
+      onOpenChange={onCancel}
+      title={title}
+      description={
+        <>
           <p>{message}</p>
           <p className="dialog-helper">{t("git.discard_confirm_irreversible")}</p>
-        </div>
-
-        <div className="modal-footer">
-          <button className="btn btn-secondary" onClick={onCancel}>
-            {t("action.cancel")}
-          </button>
-          <button
-            className="btn btn-danger"
-            onClick={() => {
-              void onConfirm();
-            }}
-          >
-            {t("git.discard")}
-          </button>
-        </div>
-      </div>
-    </div>
+        </>
+      }
+      cancelText={t("action.cancel")}
+      closeLabel={t("action.close")}
+      confirmText={t("git.discard")}
+      onConfirm={() => {
+        void onConfirm();
+      }}
+      tone="danger"
+    />
   );
 };
 
