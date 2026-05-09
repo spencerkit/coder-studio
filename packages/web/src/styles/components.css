@@ -565,35 +565,6 @@
   flex-wrap: wrap;
 }
 
-.settings-pill {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  padding: var(--sp-2) var(--sp-4);
-  border-radius: var(--radius-full);
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  color: var(--text-secondary);
-  font-size: var(--text-base);
-  transition: all var(--duration-fast) var(--ease-out);
-}
-
-.settings-pill:hover:not(:disabled) {
-  background: var(--bg-hover);
-  border-color: var(--border-light);
-}
-
-.settings-pill-active {
-  background: var(--accent-blue);
-  border-color: var(--accent-blue);
-  color: var(--text-inverse);
-}
-
-.settings-pill-disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
 .settings-toggle-row {
   display: flex;
   align-items: center;

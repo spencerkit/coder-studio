@@ -4,6 +4,8 @@ export type { InputProps, InputSize } from "./input";
 export { Input } from "./input";
 export type { NoticeProps, NoticeTone } from "./notice";
 export { Notice } from "./notice";
+export type { PillProps } from "./pill";
+export { Pill } from "./pill";
 export type { SelectOption, SelectProps, SelectSize } from "./select";
 export { Select } from "./select";
 export type { TextareaProps, TextareaSize } from "./textarea";

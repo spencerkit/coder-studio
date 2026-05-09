@@ -134,6 +134,8 @@ describe("SettingsPage", () => {
     vi.clearAllMocks();
     routerMocks.navigate.mockReset();
     viewportMocks.viewport = "desktop";
+    window.localStorage.clear();
+    document.documentElement.removeAttribute("data-theme");
     notificationMocks.permission = "default";
     notificationMocks.requestPermission = vi.fn(async () => "default" as NotificationPermission);
     navigatorMocks.userAgent =
@@ -764,6 +766,153 @@ describe("SettingsPage", () => {
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "快捷键" })).toBeInTheDocument();
     });
+  });
+
+  it("renders appearance option groups through shared pills with group semantics", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "appearance.locale": "zh",
+          "appearance.terminalRenderer": "standard",
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "外观" }));
+
+    const darkThemePill = await screen.findByRole("button", { name: "深色" });
+    const lightThemePill = screen.getByRole("button", { name: "浅色" });
+    const standardRendererPill = screen.getByRole("button", { name: "标准" });
+    const chineseLanguagePill = screen.getByRole("button", { name: "中文" });
+
+    expect(
+      screen.getByRole("group", {
+        name: "主题",
+      })
+    ).toHaveAccessibleDescription("当前仅支持深色主题");
+    expect(darkThemePill).toHaveClass("settings-pill", "settings-pill-active");
+    expect(darkThemePill).toHaveAttribute("aria-pressed", "true");
+    expect(lightThemePill).toHaveClass("settings-pill");
+    expect(lightThemePill).toHaveAttribute("aria-pressed", "false");
+    expect(standardRendererPill).toHaveAttribute("aria-pressed", "true");
+    expect(chineseLanguagePill).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("updates theme selection through the shared appearance pills", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {};
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "外观" }));
+    fireEvent.click(await screen.findByRole("button", { name: "浅色" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            appearance: {
+              theme: "light",
+            },
+          },
+        },
+        undefined
+      );
+    });
+
+    expect(document.documentElement).toHaveAttribute("data-theme", "light");
+    expect(screen.getByRole("button", { name: "浅色" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "深色" })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("updates terminal renderer selection through the shared appearance pills", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "appearance.terminalRenderer": "standard",
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "外观" }));
+    fireEvent.click(await screen.findByRole("button", { name: "兼容模式" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            appearance: {
+              terminalRenderer: "compatibility",
+            },
+          },
+        },
+        undefined
+      );
+    });
+
+    expect(screen.getByRole("button", { name: "兼容模式" })).toHaveClass(
+      "settings-pill",
+      "settings-pill-active"
+    );
+    expect(screen.getByRole("button", { name: "兼容模式" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(screen.getByRole("button", { name: "标准" })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("updates language selection through the shared appearance pills", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "appearance.locale": "zh",
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "外观" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "中文" })).toHaveAttribute("aria-pressed", "true");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "English" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            appearance: {
+              locale: "en",
+            },
+          },
+        },
+        undefined
+      );
+    });
+
+    expect(screen.getByRole("button", { name: "English" })).toHaveClass(
+      "settings-pill",
+      "settings-pill-active"
+    );
+    expect(screen.getByRole("button", { name: "English" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "中文" })).toHaveAttribute("aria-pressed", "false");
   });
 
   it("prefers browser history when leaving the mobile settings root", async () => {

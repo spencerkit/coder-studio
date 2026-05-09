@@ -11,7 +11,7 @@ import {
 } from "@coder-studio/core";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { Check, ChevronRight } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { localeAtom, themeAtom } from "../../../atoms/app-ui";
 import {
@@ -20,7 +20,7 @@ import {
   serverInfoAtom,
 } from "../../../atoms/connection";
 import { resolvedActiveWorkspaceIdAtom } from "../../../atoms/workspaces";
-import { Input, Notice } from "../../../components/ui";
+import { Input, Notice, Pill } from "../../../components/ui";
 import { useViewport } from "../../../hooks/use-viewport";
 import { useTranslation } from "../../../lib/i18n";
 import { notificationPreferencesAtom } from "../../notifications/atoms";
@@ -156,11 +156,16 @@ export function SettingsPage() {
   const [locale, setLocale] = useAtom(localeAtom);
   const [theme, setTheme] = useAtom(themeAtom);
   const setNotificationPreferences = useSetAtom(notificationPreferencesAtom);
+  const settingsLoadFailedUnknownRef = useRef(settingsLoadFailedUnknown);
   const detailSection =
     navigationState.kind === "detail" ? navigationState.section : navigationState.lastSection;
   const availableSections = isMobile ? MOBILE_SETTINGS_SECTIONS : SETTINGS_SECTIONS;
   const activeSectionMeta =
     availableSections.find((section) => section.id === detailSection) ?? availableSections[0];
+
+  useEffect(() => {
+    settingsLoadFailedUnknownRef.current = settingsLoadFailedUnknown;
+  }, [settingsLoadFailedUnknown]);
 
   useEffect(() => {
     setNavigationState((state) => {
@@ -183,7 +188,7 @@ export function SettingsPage() {
       const result = await dispatch<Record<string, unknown>>("settings.get", {});
       if (!result.ok || !result.data) {
         if (!cancelled) {
-          setSettingsLoadError(result.error?.message ?? settingsLoadFailedUnknown);
+          setSettingsLoadError(result.error?.message ?? settingsLoadFailedUnknownRef.current);
         }
         return;
       }
@@ -226,14 +231,7 @@ export function SettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, [
-    connectionStatus,
-    dispatch,
-    setLocale,
-    setNotificationPreferences,
-    settingsLoadFailedUnknown,
-    settingsRefreshKey,
-  ]);
+  }, [connectionStatus, dispatch, setLocale, setNotificationPreferences, settingsRefreshKey]);
 
   useEffect(() => {
     if (detailSection !== "providers") {
@@ -707,6 +705,12 @@ function AppearanceSettings({
   setTheme,
 }: AppearanceSettingsProps) {
   const t = useTranslation();
+  const themeTitleId = useId();
+  const themeDescId = useId();
+  const terminalRendererTitleId = useId();
+  const terminalRendererDescId = useId();
+  const languageTitleId = useId();
+  const languageDescId = useId();
   const dispatch = useAtomValue(dispatchCommandAtom);
 
   const saveSettings = async (settings: Record<string, unknown>) => {
@@ -722,80 +726,107 @@ function AppearanceSettings({
   return (
     <div className="settings-section">
       <div className="settings-group">
-        <h3 className="settings-group-title">{t("settings.theme.title")}</h3>
-        <p className="settings-group-desc">{t("settings.theme.hint")}</p>
+        <h3 className="settings-group-title" id={themeTitleId}>
+          {t("settings.theme.title")}
+        </h3>
+        <p className="settings-group-desc" id={themeDescId}>
+          {t("settings.theme.hint")}
+        </p>
 
-        <div className="settings-pills">
-          <button
-            className={`settings-pill ${theme === "dark" ? "settings-pill-active" : ""}`}
+        <div
+          aria-describedby={themeDescId}
+          aria-labelledby={themeTitleId}
+          className="settings-pills"
+          role="group"
+        >
+          <Pill
+            active={theme === "dark"}
+            leadingIcon={theme === "dark" ? <Check size={12} /> : undefined}
             onClick={() => handleThemeChange("dark")}
           >
-            {theme === "dark" && <Check size={12} />}
-            <span>{t("settings.theme.dark")}</span>
-          </button>
-          <button
-            className={`settings-pill ${theme === "light" ? "settings-pill-active" : ""}`}
+            {t("settings.theme.dark")}
+          </Pill>
+          <Pill
+            active={theme === "light"}
+            leadingIcon={theme === "light" ? <Check size={12} /> : undefined}
             onClick={() => handleThemeChange("light")}
           >
-            {theme === "light" && <Check size={12} />}
-            <span>{t("settings.theme.light")}</span>
-          </button>
+            {t("settings.theme.light")}
+          </Pill>
         </div>
       </div>
 
       <div className="settings-group">
-        <h3 className="settings-group-title">{t("settings.terminal_renderer")}</h3>
-        <p className="settings-group-desc">{t("settings.terminal_renderer_hint")}</p>
+        <h3 className="settings-group-title" id={terminalRendererTitleId}>
+          {t("settings.terminal_renderer")}
+        </h3>
+        <p className="settings-group-desc" id={terminalRendererDescId}>
+          {t("settings.terminal_renderer_hint")}
+        </p>
 
-        <div className="settings-pills">
-          <button
-            className={`settings-pill ${terminalRenderer === "standard" ? "settings-pill-active" : ""}`}
+        <div
+          aria-describedby={terminalRendererDescId}
+          aria-labelledby={terminalRendererTitleId}
+          className="settings-pills"
+          role="group"
+        >
+          <Pill
+            active={terminalRenderer === "standard"}
+            leadingIcon={terminalRenderer === "standard" ? <Check size={12} /> : undefined}
             onClick={() => {
               setTerminalRenderer("standard");
               void saveSettings({ appearance: { terminalRenderer: "standard" } });
             }}
           >
-            {terminalRenderer === "standard" && <Check size={12} />}
-            <span>{t("settings.terminal_standard")}</span>
-          </button>
-          <button
-            className={`settings-pill ${terminalRenderer === "compatibility" ? "settings-pill-active" : ""}`}
+            {t("settings.terminal_standard")}
+          </Pill>
+          <Pill
+            active={terminalRenderer === "compatibility"}
+            leadingIcon={terminalRenderer === "compatibility" ? <Check size={12} /> : undefined}
             onClick={() => {
               setTerminalRenderer("compatibility");
               void saveSettings({ appearance: { terminalRenderer: "compatibility" } });
             }}
           >
-            {terminalRenderer === "compatibility" && <Check size={12} />}
-            <span>{t("settings.terminal_compatibility")}</span>
-          </button>
+            {t("settings.terminal_compatibility")}
+          </Pill>
         </div>
       </div>
 
       <div className="settings-group">
-        <h3 className="settings-group-title">{t("settings.language.title")}</h3>
-        <p className="settings-group-desc">{t("settings.language.hint")}</p>
+        <h3 className="settings-group-title" id={languageTitleId}>
+          {t("settings.language.title")}
+        </h3>
+        <p className="settings-group-desc" id={languageDescId}>
+          {t("settings.language.hint")}
+        </p>
 
-        <div className="settings-pills">
-          <button
-            className={`settings-pill ${locale === "zh" ? "settings-pill-active" : ""}`}
+        <div
+          aria-describedby={languageDescId}
+          aria-labelledby={languageTitleId}
+          className="settings-pills"
+          role="group"
+        >
+          <Pill
+            active={locale === "zh"}
+            leadingIcon={locale === "zh" ? <Check size={12} /> : undefined}
             onClick={() => {
               setLocale("zh");
               void saveSettings({ appearance: { locale: "zh" } });
             }}
           >
-            {locale === "zh" && <Check size={12} />}
-            <span>{t("settings.language.zh")}</span>
-          </button>
-          <button
-            className={`settings-pill ${locale === "en" ? "settings-pill-active" : ""}`}
+            {t("settings.language.zh")}
+          </Pill>
+          <Pill
+            active={locale === "en"}
+            leadingIcon={locale === "en" ? <Check size={12} /> : undefined}
             onClick={() => {
               setLocale("en");
               void saveSettings({ appearance: { locale: "en" } });
             }}
           >
-            {locale === "en" && <Check size={12} />}
-            <span>{t("settings.language.en")}</span>
-          </button>
+            {t("settings.language.en")}
+          </Pill>
         </div>
       </div>
     </div>

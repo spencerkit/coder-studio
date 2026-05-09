@@ -8,7 +8,7 @@
 | Textarea | 🟢 complete | `.input.textarea` | 0 | 2026-05-09 |
 | Tag | ⚫ not-started | `.badge .badge-*` | — | — |
 | Badge | ⚫ not-started | `.badge` | — | — |
-| Pill | ⚫ not-started | `.settings-pill*` | — | — |
+| Pill | 🟢 complete | `.settings-pill*` | 0 | 2026-05-09 |
 | StatusDot | ⚫ not-started | token-backed dot patterns | — | — |
 | Kbd | ⚫ not-started | `kbd` | — | — |
 | Spinner | ⚫ not-started | `.animate-spin` | — | — |
@@ -34,3 +34,5 @@
 `Select` now covers the bounded supervisor objective dialog evaluator-provider flow on both platforms: desktop uses the shared primitive's native `<select>` path while mobile uses its trigger mode to reopen the existing `MobileSelectSheet` flow, preserving legacy `input` / `mobile-select-trigger*` compatibility classes and the objective dialog's existing label, helper-text, and hook ids. The row remains in-flight because this slice only migrates the objective dialog evaluator-provider selector; deferred select-like callers still include the settings provider tabs/subnav families and the broader mobile select-trigger families outside this flow.
 
 `Notice` now completes the bounded legacy `.settings-page__notice*` migration inventory: the settings-page load-error shell uses the shared primitive from the public UI barrel while preserving the legacy `settings-page__notice*` compatibility classes and the caller-owned `settings-link` refresh action styling. Other notice-like alerts such as supervisor or worktree callouts remain intentionally outside this row because they do not belong to the `.settings-page__notice*` family selected for this slice.
+
+`Pill` now completes the bounded legacy `.settings-pill*` migration inventory: the settings appearance theme, terminal renderer, and language option groups use the shared primitive from the public UI barrel while preserving the legacy `settings-pill*` compatibility classes and the existing `settings-pills` layout hook. The primitive now owns the pill visuals locally, so the old global `.settings-pill*` style block is removed from `components.css` to avoid duplicate styling sources.

@@ -14,6 +14,7 @@
 | Textarea | 0 | `src/components/ui/index.ts` named export only | Shared multiline text entry with legacy `.input.textarea` compatibility |
 | Select | 2 | `src/components/ui/index.ts` named export only | Current bounded slice covers the supervisor evaluator selector family |
 | Notice | 1 | `src/components/ui/index.ts` named export only | Current bounded slice covers the settings load-error notice family |
+| Pill | 1 | `src/components/ui/index.ts` named export only | Current bounded slice covers the settings appearance option groups |
 
 ## 迁移状态
 见 `./MIGRATION.md`。
