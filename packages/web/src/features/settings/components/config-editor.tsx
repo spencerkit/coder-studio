@@ -264,9 +264,9 @@ export function ConfigEditor({
       <div className="config-card-header" onClick={handleToggle}>
         <div className="config-card-title">
           <FileJson2 size={16} />
-          <span className="config-card-path" title={configPath}>
-            {configPath}
-          </span>
+          <Tooltip content={configPath}>
+            <span className="config-card-path">{configPath}</span>
+          </Tooltip>
         </div>
         <div className="config-card-header-right">
           {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}

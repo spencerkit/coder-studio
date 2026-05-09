@@ -62,13 +62,19 @@ function renderConfigEditor(options?: {
 }
 
 describe("ConfigEditor", () => {
-  it("preserves the full config path in the header title when the visible path is truncated", async () => {
+  it("preserves the full config path in the header tooltip when the visible path is truncated", async () => {
     renderConfigEditor();
 
-    const path = await screen.findByTitle("/home/spencer/.claude/settings.json");
+    const path = await screen.findByText("/home/spencer/.claude/settings.json");
 
     expect(path).toHaveClass("config-card-path");
     expect(path).toHaveTextContent("/home/spencer/.claude/settings.json");
+    expect(path).not.toHaveAttribute("title");
+
+    fireEvent.mouseEnter(path);
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip).toHaveTextContent("/home/spencer/.claude/settings.json");
+    expect(path).toHaveAttribute("aria-describedby", tooltip.getAttribute("id") ?? "");
 
     await waitFor(() => {
       expect(screen.getByTestId("monaco-host")).toBeInTheDocument();

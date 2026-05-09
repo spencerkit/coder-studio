@@ -579,11 +579,12 @@ function GitHistoryRow({
       type="button"
       className={`git-history-row ${isCurrent ? "current" : ""}`}
       onClick={() => void onOpen(entry)}
-      title={entry.subject}
     >
       <span className="git-history-row__dot" aria-hidden="true" />
       <div className="git-history-row__copy">
-        <span className="git-history-row__title">{entry.subject}</span>
+        <Tooltip content={entry.subject}>
+          <span className="git-history-row__title">{entry.subject}</span>
+        </Tooltip>
         <span className="git-history-row__meta">
           {entry.shortSha} · {entry.authorName}
         </span>

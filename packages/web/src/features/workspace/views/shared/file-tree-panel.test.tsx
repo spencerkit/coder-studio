@@ -827,7 +827,7 @@ describe("FileTreePanel", () => {
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
   });
 
-  it("uses shared tooltips for file-tree action triggers while preserving row path titles", () => {
+  it("uses shared tooltips for file-tree action triggers and row path labels", () => {
     const store = createStore();
     store.set(wsClientAtom, { sendCommand: vi.fn().mockResolvedValue({}) } as never);
     store.set(
@@ -871,11 +871,12 @@ describe("FileTreePanel", () => {
     expect(newFolderButton).not.toHaveAttribute("title");
     expect(deleteDirectoryButton).not.toHaveAttribute("title");
     expect(deleteFileButton).not.toHaveAttribute("title");
-    expect(screen.getByText("src").closest(".tree-item")).toHaveAttribute("title", "src");
-    expect(screen.getByText("app.tsx").closest(".tree-item")).toHaveAttribute(
-      "title",
-      "src/app.tsx"
-    );
+    const directoryLabel = screen.getByText("src");
+    const fileLabel = screen.getByText("app.tsx");
+    expect(directoryLabel).not.toHaveAttribute("title");
+    expect(fileLabel).not.toHaveAttribute("title");
+    expect(directoryLabel.closest(".tree-item")).not.toHaveAttribute("title");
+    expect(fileLabel.closest(".tree-item")).not.toHaveAttribute("title");
 
     fireEvent.mouseEnter(newFileButton);
     expect(screen.getByRole("tooltip")).toHaveTextContent("file.new_file");
@@ -891,6 +892,14 @@ describe("FileTreePanel", () => {
     fireEvent.mouseLeave(deleteDirectoryButton);
     fireEvent.mouseEnter(deleteFileButton);
     expect(screen.getByRole("tooltip")).toHaveTextContent("file.delete");
+
+    fireEvent.mouseLeave(deleteFileButton);
+    fireEvent.mouseEnter(directoryLabel);
+    expect(screen.getByRole("tooltip")).toHaveTextContent("src");
+
+    fireEvent.mouseLeave(directoryLabel);
+    fireEvent.mouseEnter(fileLabel);
+    expect(screen.getByRole("tooltip")).toHaveTextContent("src/app.tsx");
   });
 
   it("keeps expanded directories populated after refreshing the file tree", async () => {

@@ -128,6 +128,29 @@ describe("SupervisorCard", () => {
     );
   });
 
+  it("uses the shared tooltip for the supervisor objective text", () => {
+    const store = createStore();
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+    store.set(supervisorsAtom, new Map([["sess-1", createSupervisor()]]));
+    store.set(supervisorCyclesAtom, new Map());
+
+    render(
+      <Provider store={store}>
+        <SupervisorCard sessionId="sess-1" workspaceId="ws-1" />
+      </Provider>
+    );
+
+    const objective = screen.getByText("Finish the server refactor");
+    expect(objective).not.toHaveAttribute("title");
+
+    fireEvent.mouseEnter(objective);
+    const tooltip = screen.getByRole("tooltip");
+    expect(tooltip).toHaveTextContent("Finish the server refactor");
+    expect(objective).toHaveAttribute("aria-describedby", tooltip.getAttribute("id") ?? "");
+  });
+
   it('shows "No guidance injected this cycle" for a completed cycle with no result and no errorReason', () => {
     const sendCommand = vi.fn().mockResolvedValue(undefined);
     const store = createStore();

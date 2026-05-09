@@ -70,7 +70,7 @@ describe("WorkspaceTab", () => {
     );
   }
 
-  it("renders the folder basename when workspace name is a full path", () => {
+  it("renders the folder basename and uses a shared tooltip for the full path", () => {
     const workspace = {
       ...createWorkspace("ws-2", "/home/spencer/workspace/coder-studio"),
       name: "/home/spencer/workspace/coder-studio",
@@ -80,11 +80,17 @@ describe("WorkspaceTab", () => {
 
     renderWorkspaceTab(store, workspace);
 
-    expect(screen.getByRole("tab", { name: "coder-studio" })).toHaveAttribute(
-      "title",
-      "/home/spencer/workspace/coder-studio"
-    );
+    const tab = screen.getByRole("tab", { name: "coder-studio" });
+    const label = screen.getByText("coder-studio");
+
+    expect(tab).not.toHaveAttribute("title");
+    expect(label).not.toHaveAttribute("title");
     expect(screen.queryByText("/home/spencer/workspace/coder-studio")).toBeNull();
+
+    fireEvent.mouseEnter(label);
+    const tooltip = screen.getByRole("tooltip");
+    expect(tooltip).toHaveTextContent("/home/spencer/workspace/coder-studio");
+    expect(label).toHaveAttribute("aria-describedby", tooltip.getAttribute("id") ?? "");
   });
 
   it("sets the active workspace without navigating when a tab is clicked", () => {

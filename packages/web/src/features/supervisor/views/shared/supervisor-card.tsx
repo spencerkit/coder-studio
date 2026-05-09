@@ -115,9 +115,9 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
       </div>
 
       <div className="supervisor-objective-row" onDoubleClick={() => openDialog("edit")}>
-        <span className="supervisor-objective-text" title={supervisor.objective}>
-          {supervisor.objective}
-        </span>
+        <Tooltip content={supervisor.objective}>
+          <span className="supervisor-objective-text">{supervisor.objective}</span>
+        </Tooltip>
         <span className="supervisor-provider-pill">{supervisor.evaluatorProviderId}</span>
       </div>
 

@@ -252,7 +252,6 @@ const FileSearchResultRow: FC<FileSearchResultRowProps> = ({
       className={`tree-item ${selectedPath === node.path ? "selected" : ""}`}
       onClick={() => onSelectFile(node.path)}
       style={{ paddingLeft: 12 }}
-      title={node.path}
     >
       <span className="tree-chevron" aria-hidden="true" />
 
@@ -261,8 +260,14 @@ const FileSearchResultRow: FC<FileSearchResultRowProps> = ({
       </span>
 
       <span className="tree-search-labels">
-        <span className="tree-label">{node.name}</span>
-        {dirName ? <span className="tree-search-path">{dirName}</span> : null}
+        <Tooltip content={node.path}>
+          <span className="tree-label">{node.name}</span>
+        </Tooltip>
+        {dirName ? (
+          <Tooltip content={node.path}>
+            <span className="tree-search-path">{dirName}</span>
+          </Tooltip>
+        ) : null}
       </span>
 
       <div className="tree-item-actions">
@@ -352,7 +357,6 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
         className={`tree-item ${selectedPath === node.path ? "selected" : ""}`}
         onClick={handleClick}
         style={{ paddingLeft }}
-        title={node.path}
       >
         <span className="tree-chevron" aria-hidden="true">
           {isFolder ? isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} /> : null}
@@ -362,7 +366,9 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
           <Icon size={14} />
         </span>
 
-        <span className="tree-label">{node.name}</span>
+        <Tooltip content={node.path}>
+          <span className="tree-label">{node.name}</span>
+        </Tooltip>
 
         <div className="tree-item-actions">
           {isFolder ? (

@@ -675,6 +675,49 @@ describe("GitPanel", () => {
     });
   });
 
+  it("uses the shared tooltip for long history subjects instead of native titles", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return status;
+      }
+
+      if (op === "git.branches") {
+        return { current: "feature/ai-agent", branches: [] };
+      }
+
+      if (op === "worktree.list") {
+        return { worktrees: [] };
+      }
+
+      if (op === "git.log") {
+        return { entries: historyEntries };
+      }
+
+      return {};
+    });
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedWorkspaceStore(store);
+
+    render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "History" }));
+
+    const subject = await screen.findByText("feat: refresh source control surface");
+    expect(subject).not.toHaveAttribute("title");
+    expect(subject.closest(".git-history-row")).not.toHaveAttribute("title");
+
+    fireEvent.mouseEnter(subject);
+    const tooltip = screen.getByRole("tooltip");
+    expect(tooltip).toHaveTextContent("feat: refresh source control surface");
+    expect(subject).toHaveAttribute("aria-describedby", tooltip.getAttribute("id") ?? "");
+  });
+
   it("renders the shared commit textarea styling in the updated panel shell", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "git.status") {
