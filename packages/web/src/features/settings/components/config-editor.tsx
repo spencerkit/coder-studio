@@ -142,7 +142,10 @@ export function ConfigEditor({
           kind: "success",
           title: t("settings.config_files.save_success"),
           body: result.data.backupPath
-            ? t("settings.config_files.backup_created", { path: result.data.backupPath })
+            ? t("settings.config_files.save_success_with_backup", {
+                configPath,
+                backupPath: result.data.backupPath,
+              })
             : undefined,
         });
         setFileExists(true);

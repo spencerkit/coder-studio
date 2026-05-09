@@ -4,6 +4,7 @@ import { createStore, Provider } from "jotai";
 import { describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../../atoms/app-ui";
 import { wsClientAtom } from "../../../atoms/connection";
+import { toastsAtom } from "../../notifications/atoms";
 import { ConfigEditor } from "./config-editor";
 
 vi.mock("../../code-editor/components/monaco-host", () => ({
@@ -51,6 +52,7 @@ function renderConfigEditor(options?: {
 
   return {
     sendCommand,
+    store,
     ...render(
       <Provider store={store}>
         <ConfigEditor configType="claude" fillHeight />
@@ -223,6 +225,37 @@ describe("ConfigEditor", () => {
 
     await waitFor(() => {
       expect(screen.queryByText("配置文件不存在，编辑并保存以创建。")).not.toBeInTheDocument();
+    });
+  });
+
+  it("describes source-file updates explicitly when a backup is created during save", async () => {
+    const user = userEvent.setup();
+    const backupPath = "/home/spencer/.claude/settings.bak.20260509-125019.json";
+    const { store } = renderConfigEditor({
+      onWriteConfigFile: async () => ({
+        success: true,
+        backupPath,
+      }),
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("monaco-host")).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Config editor content" }), {
+      target: { value: '{\n  "hooks": {\n    "enabled": true\n  }\n}' },
+    });
+
+    await user.click(screen.getByRole("button", { name: "保存" }));
+
+    await waitFor(() => {
+      expect(store.get(toastsAtom)).toHaveLength(1);
+    });
+
+    expect(store.get(toastsAtom)[0]).toMatchObject({
+      kind: "success",
+      title: "配置保存成功",
+      body: "已更新 /home/spencer/.claude/settings.json，并创建备份 /home/spencer/.claude/settings.bak.20260509-125019.json",
     });
   });
 });

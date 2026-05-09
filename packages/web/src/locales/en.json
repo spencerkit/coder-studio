@@ -524,6 +524,7 @@
       "unsaved_changes": "Unsaved changes",
       "saving": "Saving...",
       "save_success": "Config saved successfully",
+      "save_success_with_backup": "Updated {configPath} and created backup {backupPath}",
       "backup_created": "Backup saved to {path}",
       "save_failed": "Failed to save config",
       "load_failed": "Failed to load config",

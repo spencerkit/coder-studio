@@ -524,6 +524,7 @@
       "unsaved_changes": "未保存的更改",
       "saving": "保存中...",
       "save_success": "配置保存成功",
+      "save_success_with_backup": "已更新 {configPath}，并创建备份 {backupPath}",
       "backup_created": "备份已保存到 {path}",
       "save_failed": "配置保存失败",
       "load_failed": "配置加载失败",
