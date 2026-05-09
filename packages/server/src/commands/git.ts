@@ -28,6 +28,9 @@ const gitHttpAuthSchema = z.object({
   username: z.string(),
   password: z.string(),
 });
+const gitCommitRevisionSchema = z
+  .string()
+  .regex(/^[0-9a-fA-F]{7,64}$/, "Invalid git commit revision");
 
 const GIT_BACKGROUND_FETCH_TIMEOUT_MS = 30 * 1000;
 
@@ -122,7 +125,7 @@ registerCommand(
   "git.show",
   z.object({
     workspaceId: z.string(),
-    sha: z.string().min(1),
+    sha: gitCommitRevisionSchema,
   }),
   async (args, ctx) => {
     const workspace = ctx.workspaceMgr.get(args.workspaceId);
@@ -272,13 +275,17 @@ registerCommand(
     auth: gitHttpAuthSchema.optional(),
     background: z.boolean().optional(),
   }),
-  async (args, ctx) => {
+  async (args, ctx, clientId) => {
     const workspace = ctx.workspaceMgr.get(args.workspaceId);
     if (!workspace) {
       throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
     }
 
     try {
+      // AutoFetchScheduler already holds the per-workspace lock before it
+      // dispatches an internal background fetch. Client-originated requests
+      // must still serialize through the shared network-operation gate.
+      const isInternalBackgroundFetch = args.background === true && !clientId;
       const runFetch = () =>
         runGitFetch(workspace.path, {
           remote: args.remote,
@@ -286,7 +293,7 @@ registerCommand(
           auth: args.auth,
           timeoutMs: args.background ? GIT_BACKGROUND_FETCH_TIMEOUT_MS : undefined,
         });
-      const result = args.background
+      const result = isInternalBackgroundFetch
         ? await runFetch()
         : await runGitNetworkOperation(ctx, args.workspaceId, runFetch);
       ctx.workspaceMgr.recordFetch(args.workspaceId);

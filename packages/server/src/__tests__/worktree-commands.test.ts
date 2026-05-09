@@ -18,6 +18,7 @@ const execFileAsync = promisify(execFile);
 async function initRepo(dir: string) {
   await mkdir(dir, { recursive: true });
   await execFileAsync("git", ["init"], { cwd: dir });
+  await execFileAsync("git", ["branch", "-M", "main"], { cwd: dir });
   await execFileAsync("git", ["config", "user.name", "Test"], { cwd: dir });
   await execFileAsync("git", ["config", "user.email", "test@example.com"], { cwd: dir });
   await writeFile(join(dir, "README.md"), "# repo\n");
@@ -198,6 +199,176 @@ describe("Worktree Commands", () => {
           worktreeChanged: true,
         }),
       ])
+    );
+  });
+
+  it("creates a new worktree branch when the branch does not already exist", async () => {
+    const createdPath = join(
+      tmpdir(),
+      `worktree-command-new-branch-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    );
+    tempPaths.push(createdPath);
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "worktree-create-new-branch",
+        op: "worktree.create",
+        args: {
+          workspaceId,
+          branch: "feature/new-worktree-branch",
+          path: createdPath,
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.data).toEqual(
+      expect.objectContaining({
+        worktree: expect.objectContaining({
+          path: createdPath,
+          branch: "refs/heads/feature/new-worktree-branch",
+        }),
+      })
+    );
+  });
+
+  it("keeps existing start-points detached instead of creating a new local branch", async () => {
+    const remoteDir = join(
+      tmpdir(),
+      `worktree-command-remote-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    );
+    tempPaths.push(remoteDir);
+
+    await execFileAsync("git", ["init", "--bare", remoteDir], { cwd: repoDir });
+    await execFileAsync("git", ["remote", "add", "origin", remoteDir], { cwd: repoDir });
+    await execFileAsync("git", ["push", "-u", "origin", "main"], { cwd: repoDir });
+    await execFileAsync("git", ["fetch", "origin"], { cwd: repoDir });
+    await execFileAsync("git", ["tag", "v1"], { cwd: repoDir });
+    const { stdout: headSha } = await execFileAsync("git", ["rev-parse", "HEAD"], {
+      cwd: repoDir,
+    });
+
+    for (const branch of ["origin/main", "v1", headSha.trim()]) {
+      const createdPath = join(
+        tmpdir(),
+        `worktree-command-start-point-${branch.replace(/[^a-zA-Z0-9]+/g, "-")}-${Date.now()}-${Math.random().toString(36).slice(2)}`
+      );
+      tempPaths.push(createdPath);
+
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: `worktree-create-start-point-${branch}`,
+          op: "worktree.create",
+          args: {
+            workspaceId,
+            branch,
+            path: createdPath,
+          },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.data).toEqual(
+        expect.objectContaining({
+          worktree: expect.objectContaining({
+            path: createdPath,
+            branch: "detached HEAD",
+          }),
+        })
+      );
+    }
+  });
+
+  it("rejects removing a worktree that is currently open as a workspace", async () => {
+    const linkedPath = join(
+      tmpdir(),
+      `worktree-command-open-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    );
+    tempPaths.push(linkedPath);
+
+    await execFileAsync("git", ["branch", "feature/open-worktree"], { cwd: repoDir });
+    await execFileAsync("git", ["worktree", "add", linkedPath, "feature/open-worktree"], {
+      cwd: repoDir,
+    });
+
+    const linkedWorkspace = await workspaceMgr.open({ path: linkedPath });
+
+    const removeResult = await dispatch(
+      {
+        kind: "command",
+        id: "worktree-remove-open-workspace",
+        op: "worktree.remove",
+        args: {
+          workspaceId,
+          worktreePath: linkedPath,
+        },
+      },
+      ctx
+    );
+
+    expect(removeResult.ok).toBe(false);
+    expect(removeResult.error?.code).toBe("worktree_in_use");
+    expect(removeResult.error?.message).toContain(linkedPath);
+    expect(workspaceMgr.get(linkedWorkspace.id)?.path).toBe(linkedPath);
+  });
+
+  it("does not emit worktreeChanged for related workspaces closed during removal", async () => {
+    const createdPath = join(
+      tmpdir(),
+      `worktree-command-race-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    );
+    const observerPath = join(
+      tmpdir(),
+      `worktree-command-observer-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    );
+    tempPaths.push(createdPath, observerPath);
+
+    await execFileAsync("git", ["branch", "feature/remove-race-target"], { cwd: repoDir });
+    await execFileAsync("git", ["branch", "feature/remove-race"], { cwd: repoDir });
+    await execFileAsync("git", ["worktree", "add", createdPath, "feature/remove-race-target"], {
+      cwd: repoDir,
+    });
+    await execFileAsync("git", ["worktree", "add", observerPath, "feature/remove-race"], {
+      cwd: repoDir,
+    });
+    const linkedWorkspace = await workspaceMgr.open({ path: observerPath });
+
+    const emitted: Array<{ workspaceId: string; worktreeChanged?: boolean }> = [];
+    eventBus.on("git.state.changed", (event) => emitted.push(event));
+
+    const originalGet = workspaceMgr.get.bind(workspaceMgr);
+    workspaceMgr.get = ((id: string) =>
+      id === linkedWorkspace.id ? undefined : originalGet(id)) as typeof workspaceMgr.get;
+
+    const removeResult = await dispatch(
+      {
+        kind: "command",
+        id: "worktree-remove-closed-related",
+        op: "worktree.remove",
+        args: {
+          workspaceId,
+          worktreePath: createdPath,
+        },
+      },
+      ctx
+    );
+
+    expect(removeResult.ok).toBe(true);
+    expect(emitted).toContainEqual(
+      expect.objectContaining({
+        workspaceId,
+        worktreeChanged: true,
+      })
+    );
+    expect(emitted).not.toContainEqual(
+      expect.objectContaining({
+        workspaceId: linkedWorkspace.id,
+        worktreeChanged: true,
+      })
     );
   });
 });

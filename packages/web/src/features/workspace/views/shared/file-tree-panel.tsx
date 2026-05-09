@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import type { FC } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Input } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import {
   type CreateDialogState,
@@ -440,8 +441,11 @@ const CreatePathModal: FC<CreatePathModalProps> = ({
     return null;
   }
 
+  const helperId = "file-path-helper";
+  const errorId = dialog.error ? "file-path-error" : undefined;
   const helperText =
     dialog.mode === "file" ? t("file.path_helper_file") : t("file.path_helper_folder");
+  const describedBy = [helperId, errorId].filter(Boolean).join(" ");
 
   return (
     <div className="modal-overlay" onClick={onCancel}>
@@ -463,17 +467,20 @@ const CreatePathModal: FC<CreatePathModalProps> = ({
         <div className="modal-body">
           <div className="form-group">
             <label htmlFor="file-path">{t("file.path")}</label>
-            <input
+            <Input
               id="file-path"
-              className="input"
               value={dialog.draftPath}
               onChange={(event) => onDraftPathChange(event.target.value)}
               placeholder={dialog.mode === "file" ? "src/demo/new-file.ts" : "src/demo/new-folder"}
+              aria-describedby={describedBy}
+              invalid={Boolean(dialog.error)}
               autoFocus
             />
-            <span className="dialog-helper">{helperText}</span>
+            <span id={helperId} className="dialog-helper">
+              {helperText}
+            </span>
             {dialog.error ? (
-              <span className="form-error" role="alert">
+              <span id={errorId} className="form-error" role="alert">
                 {dialog.error}
               </span>
             ) : null}

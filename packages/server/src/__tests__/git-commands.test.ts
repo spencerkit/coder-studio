@@ -189,6 +189,24 @@ describe("Git Commands", () => {
     expect((result.data as { diff: string }).diff).toContain("-export const value = 1;");
   });
 
+  it("rejects git.show revisions that are not commit SHAs", async () => {
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "git-show-invalid",
+        op: "git.show",
+        args: {
+          workspaceId,
+          sha: "--stat",
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("validation_error");
+  });
+
   it("discards modified tracked files", async () => {
     const result = await dispatch(
       {
@@ -438,6 +456,78 @@ describe("Git Commands", () => {
           args: { workspaceId, remote: "origin" },
         },
         ctx
+      );
+
+      await writeFile(releaseFile, "ok");
+
+      const [pushResult, fetchResult] = await Promise.all([pushPromise, fetchPromise]);
+      expect(pushResult.ok).toBe(true);
+      expect(fetchResult.ok).toBe(true);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("serializes background fetch behind an in-flight foreground operation", async () => {
+    const pushWrapperDir = join(testDir, "bin-fetch-bg-serialize");
+    await mkdir(pushWrapperDir, { recursive: true });
+    const realGit = (await execFileAsync("sh", ["-lc", "command -v git"])).stdout.trim();
+    await writeFile(
+      join(pushWrapperDir, "git"),
+      [
+        "#!/bin/sh",
+        'if [ "$1" = "push" ]; then',
+        '  while [ ! -f "$CODER_STUDIO_RELEASE_PUSH_FILE" ]; do',
+        "    sleep 0.05",
+        "  done",
+        '  printf "push ok\\n"',
+        "  exit 0",
+        "fi",
+        'if [ "$1" = "fetch" ]; then',
+        '  if [ ! -f "$CODER_STUDIO_RELEASE_PUSH_FILE" ]; then',
+        '    printf "fetch raced with push\\n" >&2',
+        "    exit 99",
+        "  fi",
+        '  printf "fetch ok\\n"',
+        "  exit 0",
+        "fi",
+        `exec ${JSON.stringify(realGit)} "$@"`,
+        "",
+      ].join("\n"),
+      { mode: 0o700 }
+    );
+
+    const releaseFile = join(testDir, "release-push-bg");
+    await execFileAsync("git", ["remote", "add", "origin", "https://example.com/openai/demo.git"], {
+      cwd: testDir,
+    }).catch(() => {});
+
+    const originalPath = process.env.PATH ?? "";
+    vi.stubEnv("PATH", `${pushWrapperDir}:${originalPath}`);
+    vi.stubEnv("CODER_STUDIO_RELEASE_PUSH_FILE", releaseFile);
+
+    try {
+      const pushPromise = dispatch(
+        {
+          kind: "command",
+          id: "git-push-lock-bg",
+          op: "git.push",
+          args: { workspaceId, remote: "origin" },
+        },
+        ctx
+      );
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const fetchPromise = dispatch(
+        {
+          kind: "command",
+          id: "git-fetch-lock-bg",
+          op: "git.fetch",
+          args: { workspaceId, remote: "origin", background: true },
+        },
+        ctx,
+        "client-1"
       );
 
       await writeFile(releaseFile, "ok");

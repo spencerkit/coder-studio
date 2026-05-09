@@ -4,8 +4,8 @@
 |---|---|---|---:|---|
 | Button | 🟡 in-flight | `.btn .btn-*` | 30 | 2026-05-06 |
 | IconButton | ⚫ not-started | `.btn` icon-only | — | — |
-| Input | ⚫ not-started | `.input` | — | — |
-| Textarea | ⚫ not-started | `.input.textarea` | — | — |
+| Input | 🟢 complete | `.input` | 0 | 2026-05-09 |
+| Textarea | 🟢 complete | `.input.textarea` | 0 | 2026-05-09 |
 | Tag | ⚫ not-started | `.badge .badge-*` | — | — |
 | Badge | ⚫ not-started | `.badge` | — | — |
 | Pill | ⚫ not-started | `.settings-pill*` | — | — |
@@ -18,11 +18,19 @@
 | Toast | ⚫ not-started | `.toast*` | — | — |
 | Tooltip | ⚫ not-started | new | — | — |
 | ProgressBar | ⚫ not-started | `--progress-height` patterns | — | — |
-| Notice | ⚫ not-started | `.settings-page__notice*` | — | — |
+| Notice | 🟢 complete | `.settings-page__notice*` | 0 | 2026-05-09 |
 | EmptyState | ⚫ not-started | feature-specific empty state blocks | — | — |
 | Tabs | ⚫ not-started | tab / pill patterns across features | — | — |
 | SegmentedControl | ⚫ not-started | `.settings-pill*` | — | — |
-| Select | ⚫ not-started | `.input`, `.mobile-select-*` | — | — |
+| Select | 🟡 in-flight | `.input`, `.mobile-select-*` | 2 | 2026-05-09 |
 | Popover | ⚫ not-started | new | — | — |
 | ActionMenu | ⚫ not-started | new | — | — |
 | Sheet | ⚫ not-started | mobile sheet shells | — | — |
+
+`Input` now completes the legacy `.input` single-line text-entry migration inventory: the auth password field, the settings supervisor timeout field, the git sync auth username/password fields, the worktree manager create-form branch/path fields, the file-tree create-path modal field, and the shortcuts capture input all use the shared primitive from the public UI barrel while preserving legacy `.input` compatibility classes and caller-owned layout hooks such as `auth-input`, `settings-input-compact`, and `shortcuts-capture`.
+
+`Textarea` now completes the bounded legacy `.input.textarea` migration inventory: the provider startup-args textarea and the supervisor objective textarea both use the shared primitive from the public UI barrel while preserving legacy `input` / `textarea` compatibility classes and caller-owned hooks such as `settings-provider-args-input`. The `git-panel` commit message field is intentionally not counted on this row because it is not part of the `.input.textarea` family selected for this slice, and standalone `.textarea` utility usage remains outside this row.
+
+`Select` now covers the bounded supervisor objective dialog evaluator-provider flow on both platforms: desktop uses the shared primitive's native `<select>` path while mobile uses its trigger mode to reopen the existing `MobileSelectSheet` flow, preserving legacy `input` / `mobile-select-trigger*` compatibility classes and the objective dialog's existing label, helper-text, and hook ids. The row remains in-flight because this slice only migrates the objective dialog evaluator-provider selector; deferred select-like callers still include the settings provider tabs/subnav families and the broader mobile select-trigger families outside this flow.
+
+`Notice` now completes the bounded legacy `.settings-page__notice*` migration inventory: the settings-page load-error shell uses the shared primitive from the public UI barrel while preserving the legacy `settings-page__notice*` compatibility classes and the caller-owned `settings-link` refresh action styling. Other notice-like alerts such as supervisor or worktree callouts remain intentionally outside this row because they do not belong to the `.settings-page__notice*` family selected for this slice.

@@ -1,16 +1,46 @@
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
 
 const HOST = "127.0.0.1";
-const SERVER_PORT = 43185;
-const WEB_PORT = 53185;
+async function reservePort(host: string): Promise<number> {
+  return await new Promise<number>((resolve, reject) => {
+    const server = createServer();
+
+    server.once("error", reject);
+    server.listen(0, host, () => {
+      const address = server.address();
+      if (!address || typeof address === "string") {
+        server.close();
+        reject(new Error("Failed to reserve an ephemeral port for git auto-fetch e2e"));
+        return;
+      }
+
+      const { port } = address;
+      server.close((closeError) => {
+        if (closeError) {
+          reject(closeError);
+          return;
+        }
+
+        resolve(port);
+      });
+    });
+  });
+}
+
+const SERVER_PORT = await reservePort(HOST);
+const WEB_PORT = await reservePort(HOST);
 const BACKEND_HTTP_URL = `http://${HOST}:${SERVER_PORT}`;
 const BASE_URL = `http://${HOST}:${WEB_PORT}`;
 const REMOTE_BRANCH_NAME = "feature/auto-fetch-remote";
 const REMOTE_BRANCH_REF = `origin/${REMOTE_BRANCH_NAME}`;
+const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+const WEB_ROOT = join(REPO_ROOT, "packages", "web");
 
 let sandboxDir: string;
 let dbPath: string;
@@ -113,7 +143,7 @@ test.describe("git auto-fetch acceptance", () => {
       "pnpm",
       ["exec", "tsx", "e2e/fixtures/seed-git-auto-fetch-db.ts", dbPath, workspacesRoot],
       {
-        cwd: "/home/spencer/workspace/coder-studio",
+        cwd: REPO_ROOT,
         env: process.env,
         stdio: ["ignore", "pipe", "pipe"],
       }
@@ -135,7 +165,7 @@ test.describe("git auto-fetch acceptance", () => {
     });
 
     backendProcess = startProcess("pnpm", ["exec", "tsx", "packages/server/src/server.ts"], {
-      cwd: "/home/spencer/workspace/coder-studio",
+      cwd: REPO_ROOT,
       env: {
         HOST,
         PORT: String(SERVER_PORT),
@@ -151,7 +181,7 @@ test.describe("git auto-fetch acceptance", () => {
       "pnpm",
       ["exec", "vite", "--host", HOST, "--port", String(WEB_PORT)],
       {
-        cwd: "/home/spencer/workspace/coder-studio/packages/web",
+        cwd: WEB_ROOT,
         env: {
           NODE_ENV: "development",
           VITE_BACKEND_HTTP_URL: BACKEND_HTTP_URL,
@@ -170,7 +200,17 @@ test.describe("git auto-fetch acceptance", () => {
       }
 
       child.kill("SIGTERM");
-      await new Promise((resolve) => child.once("exit", resolve));
+      await Promise.race([
+        new Promise((resolve) => child.once("exit", resolve)),
+        new Promise((resolve) =>
+          setTimeout(() => {
+            if (!child.killed) {
+              child.kill("SIGKILL");
+            }
+            resolve(undefined);
+          }, 5000)
+        ),
+      ]);
     };
 
     await kill(webProcess);
@@ -188,15 +228,17 @@ test.describe("git auto-fetch acceptance", () => {
     await page.goto("/workspace");
     await expect(page.getByTestId("workspace-resolving-shell")).toHaveCount(0, { timeout: 20000 });
 
-    const branchButton = page.getByRole("button", {
-      name: "Open branch switcher for main",
-    });
+    const branchButton = page
+      .locator(".workspace-status-bar")
+      .getByRole("button", { name: /^(Current Branch|当前分支): .+$/ });
     await expect(branchButton).toBeVisible({ timeout: 20000 });
+    await expect(branchButton).toHaveAttribute("title", "main", { timeout: 20000 });
 
     await branchButton.click();
     await expect(page.locator(".branch-quick-pick-overlay")).toBeVisible();
     await expect(page.locator(".branch-quick-pick-name").filter({ hasText: /^main$/ })).toHaveCount(
-      1
+      1,
+      { timeout: 15000 }
     );
     await expect(
       page
@@ -211,7 +253,9 @@ test.describe("git auto-fetch acceptance", () => {
     await page.keyboard.press("Escape");
     await expect(page.locator(".branch-quick-pick-overlay")).toHaveCount(0);
 
-    const fetchButton = page.locator(".git-status-bar > button").first();
+    const fetchButton = page.locator(".git-status-bar").getByRole("button", {
+      name: /^(Fetch|获取)$/,
+    });
     await expect(fetchButton).toHaveAttribute("title", /^(Never fetched|尚未获取)$/);
 
     await fetchButton.click();

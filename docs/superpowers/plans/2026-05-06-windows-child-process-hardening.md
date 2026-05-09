@@ -16,12 +16,13 @@
 - Modify: `packages/server/src/provider-runtime/command-check.ts` - extend command lookup execution so `execFile()` can receive `windowsHide: true`.
 - Modify: `packages/server/src/provider-runtime/install-manager.ts` - thread `windowsHide: true` through provider auto-install `execFile()` calls.
 - Modify: `packages/server/src/workspace/runtime-check.ts` - thread `windowsHide: true` through git/node runtime checks.
+- Modify: `packages/server/src/server.ts` - preserve the new `execFile(..., options)` signature when wiring `ProviderInstallManager` in production.
 - Modify: `packages/server/src/git/cli.ts` - add `windowsHide: true` to git subprocess execution.
 - Modify: `packages/cli/src/browser.ts` - add `windowsHide: true` to the browser-launch `spawn()` path on Windows.
 - Modify: `packages/server/src/__tests__/provider-runtime/command-check.test.ts` - assert Windows lookup uses `where` and passes `windowsHide: true`.
 - Modify: `packages/server/src/__tests__/provider-runtime/install-manager.test.ts` - assert install steps pass `windowsHide: true` into the injected executor.
 - Modify: `packages/server/src/__tests__/workspace/runtime-check.test.ts` - assert runtime checks pass `windowsHide: true` into the injected executor.
-- Modify: `packages/server/src/__tests__/git/cli.test.ts` - assert git subprocesses use `windowsHide: true`.
+- Create: `packages/server/src/git/cli.windows.test.ts` - isolate `runGit()` from the existing integration-heavy git test file and assert `windowsHide: true`.
 - Create: `packages/server/src/supervisor/evaluator.windows.test.ts` - isolate the `spawn()` call and assert `windowsHide: true` is present.
 - Create: `packages/cli/src/browser.test.ts` - isolate the browser-launch `spawn()` call and assert `windowsHide: true` is present.
 - Modify: `.github/workflows/ci.yml` - add a `windows-latest` job for targeted tests/build verification.
@@ -32,7 +33,7 @@
 - Modify: `packages/server/src/__tests__/provider-runtime/command-check.test.ts`
 - Modify: `packages/server/src/__tests__/provider-runtime/install-manager.test.ts`
 - Modify: `packages/server/src/__tests__/workspace/runtime-check.test.ts`
-- Modify: `packages/server/src/__tests__/git/cli.test.ts`
+- Create: `packages/server/src/git/cli.windows.test.ts`
 - Create: `packages/server/src/supervisor/evaluator.windows.test.ts`
 - Create: `packages/cli/src/browser.test.ts`
 
@@ -65,27 +66,42 @@ const execFile = vi.fn(async (_file: string, _args: string[], options?: { window
 });
 ```
 
-- [ ] **Step 3: Add a git executor test that proves `runGit()` hides Windows windows**
+- [ ] **Step 3: Add an isolated git executor test that proves `runGit()` hides Windows windows**
 
-Add a targeted mock-based test in `packages/server/src/__tests__/git/cli.test.ts`:
+Create `packages/server/src/git/cli.windows.test.ts` instead of patching the existing `packages/server/src/__tests__/git/cli.test.ts`. The existing test file already imports `runGit` at module scope, so a late `vi.doMock("child_process")` would not reliably replace the cached dependency. Use a dedicated isolated file:
 
 ```ts
-it("passes windowsHide to execFile for git commands", async () => {
-  const execFileMock = vi.fn((_file, _args, options, callback) => {
-    callback(null, "ok", "");
-    return { stdin: null } as never;
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const { execFileMock } = vi.hoisted(() => ({
+  execFileMock: vi.fn(),
+}));
+
+vi.mock("child_process", () => ({
+  execFile: execFileMock,
+}));
+
+describe("runGit windows options", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    execFileMock.mockReset();
+    execFileMock.mockImplementation((_file, _args, _options, callback) => {
+      callback(null, "ok", "");
+      return { stdin: null } as never;
+    });
   });
 
-  vi.doMock("child_process", () => ({ execFile: execFileMock }));
-  const { runGit } = await import("../../git/cli.js");
+it("passes windowsHide to execFile for git commands", async () => {
+    const { runGit } = await import("./cli.js");
 
-  await expect(runGit("/repo", ["status"])).resolves.toEqual({ stdout: "ok", stderr: "" });
-  expect(execFileMock).toHaveBeenCalledWith(
-    "git",
-    ["status"],
-    expect.objectContaining({ windowsHide: true }),
-    expect.any(Function)
-  );
+    await expect(runGit("/repo", ["status"])).resolves.toEqual({ stdout: "ok", stderr: "" });
+    expect(execFileMock).toHaveBeenCalledWith(
+      "git",
+      ["status"],
+      expect.objectContaining({ windowsHide: true }),
+      expect.any(Function)
+    );
+  });
 });
 ```
 
@@ -131,7 +147,7 @@ pnpm --filter @coder-studio/server vitest run \
   src/__tests__/provider-runtime/command-check.test.ts \
   src/__tests__/provider-runtime/install-manager.test.ts \
   src/__tests__/workspace/runtime-check.test.ts \
-  src/__tests__/git/cli.test.ts \
+  src/git/cli.windows.test.ts \
   src/supervisor/evaluator.windows.test.ts
 
 pnpm --filter @spencer-kit/coder-studio vitest run src/browser.test.ts
@@ -146,7 +162,7 @@ git add \
   packages/server/src/__tests__/provider-runtime/command-check.test.ts \
   packages/server/src/__tests__/provider-runtime/install-manager.test.ts \
   packages/server/src/__tests__/workspace/runtime-check.test.ts \
-  packages/server/src/__tests__/git/cli.test.ts \
+  packages/server/src/git/cli.windows.test.ts \
   packages/server/src/supervisor/evaluator.windows.test.ts \
   packages/cli/src/browser.test.ts
 git commit -m "test: cover windows child process options"
@@ -159,6 +175,7 @@ git commit -m "test: cover windows child process options"
 - Modify: `packages/server/src/provider-runtime/command-check.ts`
 - Modify: `packages/server/src/provider-runtime/install-manager.ts`
 - Modify: `packages/server/src/workspace/runtime-check.ts`
+- Modify: `packages/server/src/server.ts`
 - Modify: `packages/server/src/git/cli.ts`
 - Modify: `packages/cli/src/browser.ts`
 
@@ -204,7 +221,20 @@ await execFile(lookup, [command], { windowsHide: true });
 
 Apply the same pattern to provider install and runtime check calls.
 
-- [ ] **Step 3: Add `windowsHide: true` to direct `spawn()`/`execFile()` runtime call sites**
+- [ ] **Step 3: Preserve the new `execFile(..., options)` signature in server wiring**
+
+Update `packages/server/src/server.ts` so the production `ProviderInstallManager` adapter does not drop the third argument:
+
+```ts
+const providerInstallMgr = new ProviderInstallManager(providerRegistry, {
+  ...providerRuntimeDeps,
+  execFile: (file, args, options) => execFileAsync(file, args, options),
+});
+```
+
+This step matters even though the lower-level install-manager tests inject their own executor. Without this wiring change, the plan could produce passing unit tests while the real server path still omits `windowsHide: true`.
+
+- [ ] **Step 4: Add `windowsHide: true` to direct `spawn()`/`execFile()` runtime call sites**
 
 Update:
 
@@ -253,7 +283,7 @@ const child = spawn(command, args, {
 });
 ```
 
-- [ ] **Step 4: Re-run the targeted tests to verify they pass**
+- [ ] **Step 5: Re-run the targeted tests to verify they pass**
 
 Run:
 
@@ -262,7 +292,7 @@ pnpm --filter @coder-studio/server vitest run \
   src/__tests__/provider-runtime/command-check.test.ts \
   src/__tests__/provider-runtime/install-manager.test.ts \
   src/__tests__/workspace/runtime-check.test.ts \
-  src/__tests__/git/cli.test.ts \
+  src/git/cli.windows.test.ts \
   src/supervisor/evaluator.windows.test.ts
 
 pnpm --filter @spencer-kit/coder-studio vitest run src/browser.test.ts
@@ -270,7 +300,7 @@ pnpm --filter @spencer-kit/coder-studio vitest run src/browser.test.ts
 
 Expected: PASS with every non-PTY child process now explicitly hiding its console window on Windows.
 
-- [ ] **Step 5: Commit the runtime hardening changes**
+- [ ] **Step 6: Commit the runtime hardening changes**
 
 ```bash
 git add \
@@ -278,6 +308,7 @@ git add \
   packages/server/src/provider-runtime/command-check.ts \
   packages/server/src/provider-runtime/install-manager.ts \
   packages/server/src/workspace/runtime-check.ts \
+  packages/server/src/server.ts \
   packages/server/src/git/cli.ts \
   packages/cli/src/browser.ts
 git commit -m "fix: hide windows console windows for background subprocesses"
@@ -368,7 +399,7 @@ Update `.github/workflows/ci.yml` to keep the existing Ubuntu job and add a focu
       - name: Run targeted Windows tests
         run: |
           pnpm --filter @coder-studio/providers test -- --run src/claude/definition.test.ts src/codex/definition.test.ts
-          pnpm --filter @coder-studio/server test -- --run src/__tests__/provider-runtime/command-check.test.ts src/__tests__/provider-runtime/install-manager.test.ts src/__tests__/workspace/runtime-check.test.ts src/__tests__/git/cli.test.ts src/supervisor/evaluator.windows.test.ts src/__tests__/session-commands.test.ts src/__tests__/session-integration.test.ts
+          pnpm --filter @coder-studio/server test -- --run src/__tests__/provider-runtime/command-check.test.ts src/__tests__/provider-runtime/install-manager.test.ts src/__tests__/workspace/runtime-check.test.ts src/git/cli.windows.test.ts src/supervisor/evaluator.windows.test.ts src/__tests__/session-commands.test.ts src/__tests__/session-integration.test.ts
           pnpm --filter @spencer-kit/coder-studio test -- --run src/browser.test.ts src/bin.test.ts src/pm2-control.test.ts src/server-control.test.ts
 
       - name: Build server and cli packages
@@ -407,5 +438,5 @@ git commit -m "ci: add windows runtime verification"
 - [ ] Provider session startup is explicitly kept cross-platform and unchanged; the plan only hardens non-PTY subprocesses.
 - [ ] `execFile` is retained for one-shot commands; the plan does not switch to `exec`, because `exec` would introduce an unnecessary shell layer.
 - [ ] `spawn` call sites are only used where streaming/detached behavior is already needed, and the plan adds `windowsHide: true` there as well.
+- [ ] The production `createServer()` wiring preserves the new `execFile(..., options)` signature so unit-test-only adapters do not mask a real Windows regression.
 - [ ] The plan distinguishes what code inspection and CI can prove from what still requires manual Windows desktop validation.
-

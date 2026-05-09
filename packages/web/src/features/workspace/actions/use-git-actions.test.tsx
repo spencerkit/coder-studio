@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { act, renderHook } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import type { ReactNode } from "react";

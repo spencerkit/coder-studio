@@ -22,17 +22,48 @@ function slugifyBranchName(branch: string) {
 }
 
 function buildSuggestedWorktreePath(workspacePath: string, branch: string) {
-  const normalized = workspacePath.replace(/\/+$/, "") || workspacePath;
-  const lastSlash = normalized.lastIndexOf("/");
-  const parent = lastSlash > 0 ? normalized.slice(0, lastSlash) : "";
-  const base = lastSlash >= 0 ? normalized.slice(lastSlash + 1) : normalized;
+  const raw = workspacePath.trim();
+  const normalized = raw.replace(/[\\/]+$/, "") || raw;
+  const separator = raw.includes("\\") ? "\\" : "/";
+  const driveRootMatch = /^([A-Za-z]:)([\\/]*)(.*)$/.exec(raw);
+  const uncRootMatch = /^(\\\\|\/\/)([^\\/]+)[\\/]+([^\\/]+)(?:[\\/]+(.*))?$/.exec(raw);
+  let prefix = "";
+  let rest = normalized;
+
+  if (driveRootMatch) {
+    prefix = `${driveRootMatch[1]}${separator}`;
+    rest = driveRootMatch[3].replace(/[\\/]+$/, "").replace(/^[\\/]+/, "");
+  } else if (uncRootMatch) {
+    prefix = `${uncRootMatch[1]}${uncRootMatch[2]}${separator}${uncRootMatch[3]}${separator}`;
+    rest = (uncRootMatch[4] ?? "").replace(/[\\/]+$/, "").replace(/^[\\/]+/, "");
+  } else if (normalized.startsWith("/") || normalized.startsWith("\\")) {
+    prefix = normalized[0];
+    rest = normalized.replace(/^[\\/]+/, "");
+  }
+
+  const parts = rest.split(/[\\/]+/).filter(Boolean);
+  const base = parts.pop() ?? "worktree";
+  const parent = parts.length > 0 ? `${parts.join(separator)}${separator}` : "";
   const suffix = slugifyBranchName(branch || "worktree");
-  return `${parent}/${base}-${suffix}`;
+  return `${prefix}${parent}${base}-${suffix}`;
 }
 
 function normalizeWorktreePathInput(path: string) {
   const trimmed = path.trim();
-  return trimmed.replace(/\/+$/, "") || "/";
+  if (!trimmed) {
+    return "";
+  }
+
+  if (/^[A-Za-z]:[\\/]+$/.test(trimmed)) {
+    return `${trimmed.slice(0, 2)}${trimmed.includes("\\") ? "\\" : "/"}`;
+  }
+
+  const normalized = trimmed.replace(/[\\/]+$/, "");
+  return normalized || trimmed;
+}
+
+function isAbsoluteWorktreePath(path: string) {
+  return /^(?:\/|[A-Za-z]:[\\/]|\\\\)/.test(path);
 }
 
 export function useWorktreeManagementActions(workspaceId: string) {
@@ -75,6 +106,15 @@ export function useWorktreeManagementActions(workspaceId: string) {
   const createWorktree = useCallback(
     async (branch: string, path: string) => {
       const normalizedPath = normalizeWorktreePathInput(path);
+      if (!normalizedPath || !isAbsoluteWorktreePath(normalizedPath)) {
+        const message = t("worktree.create_path_absolute_required");
+        pushToast({
+          kind: "error",
+          title: t("worktree.create_failed_title"),
+          body: message,
+        });
+        return { ok: false as const, error: message };
+      }
       const result = await dispatch<{ worktree: WorktreeInfo }>("worktree.create", {
         workspaceId,
         branch,

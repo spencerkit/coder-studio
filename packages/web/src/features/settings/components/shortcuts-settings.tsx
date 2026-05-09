@@ -7,6 +7,7 @@
 import { useAtom, useAtomValue } from "jotai";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { dispatchCommandAtom } from "../../../atoms/connection";
+import { Input } from "../../../components/ui";
 import { useTranslation } from "../../../lib/i18n";
 import {
   customShortcutsAtom,
@@ -132,6 +133,8 @@ export function ShortcutsSettings() {
           const binding = getEffectiveBinding(shortcut.id, customBindings);
           const isCustom = customBindings[shortcut.id] !== undefined;
           const isEditing = editingId === shortcut.id;
+          const shortcutNameId = `shortcut-name-${shortcut.id}`;
+          const shortcutDescriptionId = `shortcut-description-${shortcut.id}`;
 
           return (
             <div
@@ -139,17 +142,24 @@ export function ShortcutsSettings() {
               className={`shortcuts-item ${isCustom ? "shortcuts-item-custom" : ""}`}
             >
               <div className="shortcuts-info">
-                <span className="shortcuts-name">{shortcut.name}</span>
-                <span className="shortcuts-desc">{shortcut.description}</span>
+                <span id={shortcutNameId} className="shortcuts-name">
+                  {shortcut.name}
+                </span>
+                <span id={shortcutDescriptionId} className="shortcuts-desc">
+                  {shortcut.description}
+                </span>
               </div>
 
               <div className="shortcuts-binding">
                 {isEditing ? (
-                  <input
+                  <Input
                     ref={inputRef}
                     type="text"
-                    className="input shortcuts-capture"
+                    className="shortcuts-capture"
+                    aria-labelledby={shortcutNameId}
+                    aria-describedby={shortcutDescriptionId}
                     placeholder="按下快捷键..."
+                    autoFocus
                     onKeyDown={(e) => handleKeyCapture(e, shortcut.id)}
                     onBlur={() => setEditingId(null)}
                     readOnly

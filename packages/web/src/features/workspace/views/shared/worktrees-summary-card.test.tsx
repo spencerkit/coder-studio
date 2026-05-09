@@ -91,4 +91,32 @@ describe("WorktreesSummaryCard", () => {
 
     expect(await screen.findByText("Create Worktree")).toBeInTheDocument();
   });
+
+  it("allows manually retrying worktree.list after an initial load failure", async () => {
+    const sendCommand = vi.fn(async (op: string) => {
+      if (op === "worktree.list") {
+        throw new Error("boom");
+      }
+
+      return {};
+    });
+
+    render(
+      <Provider store={buildSummaryStore(sendCommand, "/repo/main")}>
+        <WorktreesSummaryCard workspaceId="ws-1" />
+      </Provider>
+    );
+
+    expect(await screen.findByText("boom")).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(sendCommand.mock.calls.filter(([op]) => op === "worktree.list")).toHaveLength(1);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+
+    await waitFor(() => {
+      expect(sendCommand.mock.calls.filter(([op]) => op === "worktree.list")).toHaveLength(2);
+    });
+  });
 });

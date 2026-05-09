@@ -375,6 +375,56 @@ describe("FileTreePanel", () => {
     expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/demo/new-file.ts");
   });
 
+  it("renders the create-path modal field with shared input compatibility classes", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({ ok: true });
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(fileTreeAtomFamily("ws-test"), new Map([[".", []]]));
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel
+          workspaceId="ws-test"
+          createRequest={{ id: 1, mode: "file", baseDir: null }}
+        />
+      </Provider>
+    );
+
+    const input = await screen.findByLabelText("file.path");
+
+    expect(input).toHaveClass("input");
+    expect(input).toHaveAttribute("placeholder", "src/demo/new-file.ts");
+  });
+
+  it("connects file create helper and error text to the shared input", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({ ok: true });
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(fileTreeAtomFamily("ws-test"), new Map([[".", []]]));
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel
+          workspaceId="ws-test"
+          createRequest={{ id: 1, mode: "file", baseDir: null }}
+        />
+      </Provider>
+    );
+
+    const input = await screen.findByLabelText("file.path");
+    const helper = screen.getByText("file.path_helper_file");
+
+    expect(input).toHaveAttribute("aria-describedby", helper.id);
+    expect(input).toHaveAttribute("aria-invalid", "false");
+
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+
+    const error = await screen.findByRole("alert");
+
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(input).toHaveAttribute("aria-describedby", `${helper.id} ${error.id}`);
+  });
+
   it("opens the new folder dialog from a directory action and pre-fills the directory prefix", async () => {
     const sendCommand = vi.fn().mockResolvedValue({ ok: true });
     const store = createStore();

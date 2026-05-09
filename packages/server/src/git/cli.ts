@@ -213,7 +213,13 @@ export async function getGitHistory(cwd: string, limit = 5): Promise<GitCommitSu
  * Get the full patch for a specific commit.
  */
 export async function getGitCommitDiff(cwd: string, sha: string): Promise<string> {
-  const { stdout } = await runGit(cwd, ["show", "--format=medium", "--no-color", sha]);
+  const { stdout } = await runGit(cwd, [
+    "show",
+    "--format=medium",
+    "--no-color",
+    "--end-of-options",
+    sha,
+  ]);
   return stdout;
 }
 

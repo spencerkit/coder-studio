@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Input } from "../../../../components/ui";
 import { useViewport } from "../../../../hooks/use-viewport";
 import { useTranslation } from "../../../../lib/i18n";
 import { useWorktreeManagementActions } from "../../actions/use-worktree-management-actions";
@@ -110,7 +111,9 @@ export function WorktreeManagerSurface({
         ? t("worktree.create_title")
         : t("worktree.list_title");
 
-  const canSubmit = branchDraft.trim().length > 0 && pathDraft.trim().startsWith("/");
+  const canSubmit =
+    branchDraft.trim().length > 0 && /^(?:\/|[A-Za-z]:[\\/]|\\\\)/.test(pathDraft.trim());
+  const pathHintId = `worktree-path-hint-${workspaceId}`;
 
   const openCreate = () => {
     resetCreateForm();
@@ -151,9 +154,8 @@ export function WorktreeManagerSurface({
           >
             {t("worktree.branch")}
           </label>
-          <input
+          <Input
             id={`worktree-branch-${workspaceId}`}
-            className="input"
             value={branchDraft}
             onChange={(event) => setBranchDraft(event.target.value)}
             placeholder="feature/worktree-manager"
@@ -165,17 +167,19 @@ export function WorktreeManagerSurface({
           <label className="worktree-manager__field-label" htmlFor={`worktree-path-${workspaceId}`}>
             {t("worktree.path")}
           </label>
-          <input
+          <Input
             id={`worktree-path-${workspaceId}`}
-            className="input"
             value={pathDraft}
             onChange={(event) => {
               setPathTouched(true);
               setPathDraft(event.target.value);
             }}
             placeholder="/home/spencer/workspace/coder-studio-feature-worktree-manager"
+            aria-describedby={pathHintId}
           />
-          <span className="worktree-manager__field-hint">{t("worktree.create_path_hint")}</span>
+          <span id={pathHintId} className="worktree-manager__field-hint">
+            {t("worktree.create_path_hint")}
+          </span>
         </div>
 
         <div className="worktree-manager__form-actions">
@@ -233,10 +237,21 @@ export function WorktreeManagerSurface({
     ) : (
       <div className="worktree-manager__list">
         {notice ? <div className="worktree-error">{notice}</div> : null}
-        {list.error ? <div className="worktree-error">{list.error}</div> : null}
+        {list.error ? (
+          <div className="worktree-error">
+            <div>{list.error}</div>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => void loadWorktrees()}
+            >
+              {t("action.refresh")}
+            </button>
+          </div>
+        ) : null}
         {list.loading && list.items.length === 0 ? (
           <div className="worktree-loading">{t("worktree.loading")}</div>
-        ) : list.items.length === 0 ? (
+        ) : list.error && list.items.length === 0 ? null : list.items.length === 0 ? (
           <div className="worktree-empty">{t("worktree.list_empty")}</div>
         ) : (
           list.items.map((item, index) => {

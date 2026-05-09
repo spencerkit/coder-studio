@@ -157,7 +157,41 @@ describe("SettingsPage", () => {
       expect(screen.getByText("设置加载失败")).toBeInTheDocument();
     });
 
+    expect(screen.getByRole("alert")).toHaveClass(
+      "settings-page__notice",
+      "settings-page__notice--error"
+    );
+    expect(screen.getByText("设置加载失败")).toHaveClass("settings-page__notice-title");
     expect(screen.getByText("settings exploded")).toBeInTheDocument();
+    expect(screen.getByText("settings exploded")).toHaveClass("settings-page__notice-message");
+    expect(document.querySelector(".settings-page__notice-copy")).toBeTruthy();
+    const alert = screen.getByRole("alert");
+    expect(within(alert).getByRole("button", { name: "刷新" })).toHaveClass("settings-link");
+  });
+
+  it("refreshes settings when the load-error notice action is pressed", async () => {
+    const sendCommand = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("settings exploded"))
+      .mockResolvedValueOnce({});
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+
+    const refreshButton = await screen.findByRole("button", { name: "刷新" });
+    const callCountBeforeRefresh = sendCommand.mock.calls.length;
+
+    await act(async () => {
+      fireEvent.click(refreshButton);
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledTimes(callCountBeforeRefresh + 1);
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText("设置加载失败")).not.toBeInTheDocument();
+    });
   });
 
   it("renders the footer version from server metadata", () => {
@@ -247,6 +281,23 @@ describe("SettingsPage", () => {
 
     expect(field).toHaveClass("settings-config-field--inline");
     expect(control).not.toBeNull();
+  });
+
+  it("renders the supervisor timeout control with shared input compatibility classes", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "supervisor.evaluationTimeoutSec": 600,
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+
+    const input = await screen.findByLabelText("Supervisor 超时（秒）");
+    expect(input).toHaveClass("input", "settings-input-compact");
   });
 
   it("does not save supervisor timeout for non-integer numeric strings", async () => {

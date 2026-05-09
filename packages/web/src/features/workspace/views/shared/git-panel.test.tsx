@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import type { GitStatus } from "@coder-studio/core";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
@@ -1007,6 +1009,184 @@ describe("GitPanel", () => {
         title: "Stage failed",
         body: expect.stringContaining("index.lock"),
       });
+    });
+  });
+
+  it("shows an error toast with the unstage title when row-level unstage fails", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return status;
+      }
+      if (op === "git.branches") {
+        return {
+          current: "feature/ai-agent",
+          branches: [],
+        };
+      }
+      if (op === "git.diff") {
+        return {
+          diff: "diff --git a/src/auth/AuthGate.tsx b/src/auth/AuthGate.tsx",
+        };
+      }
+      if (op === "git.log") {
+        return {
+          entries: [],
+        };
+      }
+      if (op === "worktree.list") {
+        return {
+          worktrees: [],
+        };
+      }
+      if (op === "git.unstage") {
+        throw new CommandResultError({
+          code: "git_locked",
+          message: "fatal: Unable to create '.git/index.lock': File exists.",
+        });
+      }
+
+      return {};
+    });
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedWorkspaceStore(store);
+
+    render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    const row = (await screen.findByText("AuthGate.tsx")).closest(".git-row");
+    expect(row).not.toBeNull();
+
+    fireEvent.click(within(row as HTMLElement).getByTitle("Unstage"));
+
+    await waitFor(() => {
+      expect(store.get(toastsAtom)[0]).toMatchObject({
+        kind: "error",
+        title: "Unstage failed",
+        body: expect.stringContaining("index.lock"),
+      });
+    });
+  });
+
+  it("shows an error toast with the stage title when row-level stage fails", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return status;
+      }
+      if (op === "git.branches") {
+        return {
+          current: "feature/ai-agent",
+          branches: [],
+        };
+      }
+      if (op === "git.diff") {
+        return {
+          diff: "diff --git a/src/auth/AuthGate.tsx b/src/auth/AuthGate.tsx",
+        };
+      }
+      if (op === "git.log") {
+        return {
+          entries: [],
+        };
+      }
+      if (op === "worktree.list") {
+        return {
+          worktrees: [],
+        };
+      }
+      if (op === "git.stage") {
+        throw new CommandResultError({
+          code: "git_locked",
+          message: "fatal: Unable to create '.git/index.lock': File exists.",
+        });
+      }
+
+      return {};
+    });
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedWorkspaceStore(store);
+
+    render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    const row = (await screen.findByText("AppController.tsx")).closest(".git-row");
+    expect(row).not.toBeNull();
+
+    fireEvent.click(within(row as HTMLElement).getByTitle("Stage"));
+
+    await waitFor(() => {
+      expect(store.get(toastsAtom)[0]).toMatchObject({
+        kind: "error",
+        title: "Stage failed",
+        body: expect.stringContaining("index.lock"),
+      });
+    });
+  });
+
+  it("allows manually retrying worktree.list after the initial load fails", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return status;
+      }
+
+      if (op === "git.branches") {
+        return { current: "feature/ai-agent", branches: [] };
+      }
+
+      if (op === "git.log") {
+        return { entries: [] };
+      }
+
+      if (op === "git.diff") {
+        return {
+          diff: "diff --git a/src/auth/AuthGate.tsx b/src/auth/AuthGate.tsx",
+        };
+      }
+
+      if (op === "worktree.list") {
+        throw new Error("boom");
+      }
+
+      return {};
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedWorkspaceStore(store);
+
+    render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    expect(await screen.findByText("Worktrees")).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(sendCommand.mock.calls.filter(([op]) => op === "worktree.list")).toHaveLength(1);
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(sendCommand.mock.calls.filter(([op]) => op === "worktree.list")).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Worktrees0" }));
+    expect(await screen.findByText("boom")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+
+    await waitFor(() => {
+      expect(sendCommand.mock.calls.filter(([op]) => op === "worktree.list")).toHaveLength(2);
     });
   });
 

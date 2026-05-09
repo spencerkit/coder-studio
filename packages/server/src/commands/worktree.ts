@@ -2,6 +2,7 @@
  * Worktree Commands (Phase 3)
  */
 
+import path from "node:path";
 import { z } from "zod";
 import {
   createWorktree,
@@ -38,8 +39,18 @@ async function findRelatedWorkspaceIds(
 
 function emitWorktreeChangedForWorkspaceIds(ctx: CommandContext, workspaceIds: string[]) {
   for (const workspaceId of workspaceIds) {
+    if (!ctx.workspaceMgr.get(workspaceId)) {
+      continue;
+    }
     emitGitStateChanged(ctx, workspaceId, { worktreeChanged: true });
   }
+}
+
+function isWorkspaceOpenForPath(ctx: CommandContext, workspacePath: string): boolean {
+  const targetPath = path.resolve(workspacePath);
+  return ctx.workspaceMgr
+    .list()
+    .some((openWorkspace) => path.resolve(openWorkspace.path) === targetPath);
 }
 
 // worktree.list
@@ -137,6 +148,13 @@ registerCommand(
 
     const relatedWorkspaceIds = await findRelatedWorkspaceIds(ctx, workspace.path);
     const worktreePath = await resolveWorktreePath(workspace.path, args.worktreePath);
+    if (isWorkspaceOpenForPath(ctx, worktreePath)) {
+      throw {
+        code: "worktree_in_use",
+        message: `Cannot remove an open worktree workspace: ${worktreePath}`,
+      };
+    }
+
     await removeWorktree(workspace.path, worktreePath, args.force);
     emitWorktreeChangedForWorkspaceIds(ctx, relatedWorkspaceIds);
     return {};

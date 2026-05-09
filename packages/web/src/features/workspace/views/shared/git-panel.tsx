@@ -2,7 +2,7 @@ import type { GitCommitSummary, GitFileChange, WorktreeInfo } from "@coder-studi
 import { useAtomValue } from "jotai";
 import { AlertTriangle, ArrowUp, ChevronDown, Minus, Plus, RotateCcw, X } from "lucide-react";
 import type { FC } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { localeAtom } from "../../../../atoms/app-ui";
 import { formatRelativeTime, useTranslation } from "../../../../lib/i18n";
 import {
@@ -46,7 +46,6 @@ export const GitPanel: FC<GitPanelProps> = ({
     handleRequestDiscardPaths,
     handleRequestDiscardSingle,
     handleStagePaths,
-    handleUnstageAll,
     handleUnstagePaths,
     openHistoryDiff,
     openDiff,
@@ -62,6 +61,7 @@ export const GitPanel: FC<GitPanelProps> = ({
   const [worktreeSurfaceView, setWorktreeSurfaceView] = useState<"list" | "create" | null>(null);
   const [worktreesExpanded, setWorktreesExpanded] = useState(false);
   const [historyExpanded, setHistoryExpanded] = useState(false);
+  const worktreeAutoLoadAttemptedRef = useRef(false);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>(() =>
     isMobile
       ? {
@@ -75,10 +75,20 @@ export const GitPanel: FC<GitPanelProps> = ({
   );
 
   useEffect(() => {
-    if (!hasWorkspace || list.lastLoadedAt || list.loading) {
+    worktreeAutoLoadAttemptedRef.current = false;
+  }, [workspaceId]);
+
+  useEffect(() => {
+    if (!hasWorkspace) {
+      worktreeAutoLoadAttemptedRef.current = false;
       return;
     }
 
+    if (list.lastLoadedAt || list.loading || worktreeAutoLoadAttemptedRef.current) {
+      return;
+    }
+
+    worktreeAutoLoadAttemptedRef.current = true;
     void loadWorktrees();
   }, [hasWorkspace, list.lastLoadedAt, list.loading, loadWorktrees]);
 
@@ -157,7 +167,16 @@ export const GitPanel: FC<GitPanelProps> = ({
                 {list.loading && list.items.length === 0 ? (
                   <div className="git-panel-empty">{t("worktree.loading")}</div>
                 ) : list.error ? (
-                  <div className="git-panel-empty">{list.error}</div>
+                  <div className="git-panel-empty">
+                    <span>{list.error}</span>
+                    <button
+                      type="button"
+                      className="git-panel-section-link"
+                      onClick={() => void loadWorktrees()}
+                    >
+                      {t("action.refresh")}
+                    </button>
+                  </div>
                 ) : list.items.length === 0 ? (
                   <div className="git-panel-empty">{t("worktree.list_empty")}</div>
                 ) : (
@@ -305,6 +324,7 @@ interface GitChangeGroupProps {
     op: "git.stage" | "git.unstage" | "git.discard" | "git.commit",
     args: Record<string, unknown>,
     errorMessage: string,
+    errorTitle: string,
     afterSuccess?: () => void
   ) => Promise<boolean>;
   onStageAll: () => Promise<void>;
@@ -399,6 +419,7 @@ interface GitChangeRowProps {
     op: "git.stage" | "git.unstage" | "git.discard" | "git.commit",
     args: Record<string, unknown>,
     errorMessage: string,
+    errorTitle: string,
     afterSuccess?: () => void
   ) => Promise<boolean>;
   onRequestDiscard: (path: string) => void;
@@ -426,12 +447,18 @@ const GitChangeRow: FC<GitChangeRowProps> = ({
       await onRunMutation(
         "git.unstage",
         { workspaceId, paths: [change.path] },
-        "Failed to unstage:"
+        "Failed to unstage:",
+        t("git.unstage_failed_title")
       );
       return;
     }
 
-    await onRunMutation("git.stage", { workspaceId, paths: [change.path] }, "Failed to stage:");
+    await onRunMutation(
+      "git.stage",
+      { workspaceId, paths: [change.path] },
+      "Failed to stage:",
+      t("git.stage_failed_title")
+    );
   };
 
   return (

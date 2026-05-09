@@ -10,6 +10,10 @@
 | Component | Tier | Public API | Notes |
 |---|---|---|---|
 | Button | 0 | `src/components/ui/index.ts` named export only | `primary / secondary / ghost / danger` × `sm / md / lg` |
+| Input | 0 | `src/components/ui/index.ts` named export only | Shared single-line text entry with legacy `.input` compatibility |
+| Textarea | 0 | `src/components/ui/index.ts` named export only | Shared multiline text entry with legacy `.input.textarea` compatibility |
+| Select | 2 | `src/components/ui/index.ts` named export only | Current bounded slice covers the supervisor evaluator selector family |
+| Notice | 1 | `src/components/ui/index.ts` named export only | Current bounded slice covers the settings load-error notice family |
 
 ## 迁移状态
 见 `./MIGRATION.md`。

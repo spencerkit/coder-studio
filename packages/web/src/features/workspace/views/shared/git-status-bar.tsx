@@ -3,6 +3,7 @@ import { useAtomValue } from "jotai";
 import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Diff, RefreshCw, X } from "lucide-react";
 import { type FC, useLayoutEffect, useState } from "react";
 import { localeAtom } from "../../../../atoms/app-ui";
+import { Input } from "../../../../components/ui";
 import { formatDate, type LocaleCode, useTranslation } from "../../../../lib/i18n";
 import { useGitSyncActions } from "../../actions/use-git-actions";
 import { gitFetchAtomFamily } from "../../atoms";
@@ -258,9 +259,8 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({
                     <label htmlFor={`git-auth-username-${workspaceId}`}>
                       {t("git.auth_username")}
                     </label>
-                    <input
+                    <Input
                       id={`git-auth-username-${workspaceId}`}
-                      className="input"
                       value={credentials.username}
                       onChange={(event) =>
                         setCredentials((previous) => ({
@@ -277,9 +277,8 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({
                     <label htmlFor={`git-auth-password-${workspaceId}`}>
                       {t("git.auth_password")}
                     </label>
-                    <input
+                    <Input
                       id={`git-auth-password-${workspaceId}`}
-                      className="input"
                       type="password"
                       value={credentials.password}
                       onChange={(event) =>

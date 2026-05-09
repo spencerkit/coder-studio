@@ -1,11 +1,18 @@
-import { AlertTriangle, ChevronDown, Eye, Pencil, PowerOff } from "lucide-react";
+import { AlertTriangle, Eye, Pencil, PowerOff } from "lucide-react";
 import { useId } from "react";
+import { Select, type SelectOption, Textarea } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import {
   OBJECTIVE_DIALOG_EVALUATOR_OPTIONS,
   type ObjectiveDialogEvaluatorProviderId,
   type ObjectiveDialogMode,
 } from "../../actions/use-objective-dialog-state";
+
+const evaluatorOptions: ReadonlyArray<SelectOption<ObjectiveDialogEvaluatorProviderId>> =
+  OBJECTIVE_DIALOG_EVALUATOR_OPTIONS.map((option) => ({
+    value: option.id,
+    label: option.label,
+  }));
 
 interface ObjectiveDialogContentProps {
   mode: ObjectiveDialogMode;
@@ -36,12 +43,9 @@ export function ObjectiveDialogContent({
   mobileEvaluatorPicker,
 }: ObjectiveDialogContentProps) {
   const t = useTranslation();
+  const objectiveHelperId = useId();
   const evaluatorLabelId = useId();
   const evaluatorHelperId = useId();
-  const evaluatorValueId = useId();
-  const selectedEvaluatorLabel =
-    OBJECTIVE_DIALOG_EVALUATOR_OPTIONS.find((option) => option.id === draftEvaluatorProviderId)
-      ?.label ?? draftEvaluatorProviderId;
 
   if (mode === "disable") {
     return (
@@ -65,16 +69,19 @@ export function ObjectiveDialogContent({
     <>
       <div className="form-group">
         <label htmlFor="objective">{t("supervisor.field.objective")}</label>
-        <textarea
+        <Textarea
           id="objective"
-          className="input textarea"
+          size="lg"
           rows={5}
           value={draftObjective}
           onChange={(event) => onDraftObjectiveChange(event.target.value)}
+          aria-describedby={objectiveHelperId}
           placeholder={t("supervisor.field.objective_placeholder")}
           autoFocus
         />
-        <span className="dialog-helper">{t("supervisor.field.objective_helper")}</span>
+        <span id={objectiveHelperId} className="dialog-helper">
+          {t("supervisor.field.objective_helper")}
+        </span>
       </div>
 
       <div className="form-group">
@@ -87,39 +94,23 @@ export function ObjectiveDialogContent({
           {t("supervisor.field.evaluator")}
         </label>
         {mobileEvaluatorPicker?.isMobile ? (
-          <>
-            <button
-              id="evaluator-provider-trigger"
-              type="button"
-              className="input mobile-select-trigger"
-              aria-labelledby={`${evaluatorLabelId} ${evaluatorValueId}`}
-              aria-describedby={evaluatorHelperId}
-              aria-haspopup="dialog"
-              onClick={mobileEvaluatorPicker.onOpen}
-            >
-              <span id={evaluatorValueId} className="mobile-select-trigger__value">
-                {selectedEvaluatorLabel}
-              </span>
-              <ChevronDown size={16} className="mobile-select-trigger__icon" aria-hidden="true" />
-            </button>
-          </>
-        ) : (
-          <select
-            id="evaluator-provider"
-            className="input"
+          <Select
+            mobile
+            id="evaluator-provider-trigger"
+            options={evaluatorOptions}
             value={draftEvaluatorProviderId}
-            onChange={(event) =>
-              onDraftEvaluatorProviderChange(
-                event.target.value as ObjectiveDialogEvaluatorProviderId
-              )
-            }
-          >
-            {OBJECTIVE_DIALOG_EVALUATOR_OPTIONS.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+            aria-labelledby={evaluatorLabelId}
+            aria-describedby={evaluatorHelperId}
+            onOpen={mobileEvaluatorPicker.onOpen}
+          />
+        ) : (
+          <Select
+            id="evaluator-provider"
+            options={evaluatorOptions}
+            value={draftEvaluatorProviderId}
+            aria-describedby={evaluatorHelperId}
+            onValueChange={onDraftEvaluatorProviderChange}
+          />
         )}
         <span id={evaluatorHelperId} className="dialog-helper">
           {t("supervisor.field.evaluator_helper")}

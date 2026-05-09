@@ -178,7 +178,18 @@ export async function createWorktree(
   branch: string,
   worktreePath: string
 ): Promise<WorktreeInfo> {
-  await runGit(repoPath, ["worktree", "add", worktreePath, branch]);
+  let createArgs = ["worktree", "add", worktreePath, branch];
+  try {
+    await runGit(repoPath, ["rev-parse", "--verify", "--quiet", `${branch}^{commit}`]);
+  } catch (error) {
+    if (error instanceof GitError) {
+      createArgs = ["worktree", "add", "-b", branch, worktreePath];
+    } else {
+      throw error;
+    }
+  }
+
+  await runGit(repoPath, createArgs);
 
   const worktrees = await listWorktrees(repoPath);
   const normalizedRequested = normalizeWorktreePath(worktreePath);

@@ -2,7 +2,7 @@ import { useAtom, useAtomValue } from "jotai";
 import { useEffect, useState } from "react";
 import { authenticatedAtom, localeAtom } from "../../atoms/app-ui";
 import { authEnabledAtom } from "../../atoms/connection";
-import { Button } from "../../components/ui";
+import { Button, Input } from "../../components/ui";
 import { useViewport } from "../../hooks/use-viewport";
 import { formatDate, useTranslation } from "../../lib/i18n";
 
@@ -151,11 +151,13 @@ export function LoginPage() {
           <p className="auth-status-detail">{error ?? statusDetail}</p>
         </div>
         <form className="auth-form" onSubmit={handleSubmit}>
-          <input
-            className="input auth-input"
+          <Input
+            className="auth-input"
             type="password"
+            size="lg"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            aria-label={t("settings.auth.password")}
             placeholder={t("settings.auth.password")}
           />
           <Button

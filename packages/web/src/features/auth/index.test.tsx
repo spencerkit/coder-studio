@@ -54,10 +54,26 @@ describe("LoginPage", () => {
       </Provider>
     );
 
-    await screen.findByPlaceholderText("密码");
+    await screen.findByLabelText("密码");
 
     expect(screen.getByText("输入密码后继续进入当前工作区。")).toBeInTheDocument();
     expect(screen.getByText("请输入当前部署配置的访问密码。")).toBeInTheDocument();
+  });
+
+  it("renders the auth password field with shared input compatibility classes", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ authEnabled: true, authenticated: false }),
+    }) as unknown as typeof fetch;
+
+    render(
+      <Provider>
+        <LoginPage />
+      </Provider>
+    );
+
+    const input = await screen.findByLabelText("密码");
+    expect(input).toHaveClass("input", "input-lg", "auth-input");
   });
 
   it("marks the user authenticated when auth is disabled on the server", async () => {
@@ -109,7 +125,7 @@ describe("LoginPage", () => {
       </Provider>
     );
 
-    const input = await screen.findByPlaceholderText("密码");
+    const input = await screen.findByLabelText("密码");
     fireEvent.change(input, { target: { value: "sekrit" } });
     expect(input).toHaveValue("sekrit");
     expect(screen.getByRole("button", { name: "确认" })).toBeEnabled();
@@ -143,7 +159,7 @@ describe("LoginPage", () => {
       </Provider>
     );
 
-    const input = await screen.findByPlaceholderText("密码");
+    const input = await screen.findByLabelText("密码");
     fireEvent.change(input, { target: { value: "bad" } });
     expect(input).toHaveValue("bad");
     expect(screen.getByRole("button", { name: "确认" })).toBeEnabled();
@@ -185,7 +201,7 @@ describe("LoginPage", () => {
       </Provider>
     );
 
-    const input = await screen.findByPlaceholderText("密码");
+    const input = await screen.findByLabelText("密码");
     fireEvent.change(input, { target: { value: "bad" } });
     fireEvent.click(screen.getByRole("button", { name: "确认" }));
 
@@ -244,7 +260,7 @@ describe("LoginPage", () => {
       </Provider>
     );
 
-    const input = await screen.findByPlaceholderText("Password");
+    const input = await screen.findByLabelText("Password");
     fireEvent.change(input, { target: { value: "bad" } });
     fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
 
@@ -272,7 +288,7 @@ describe("LoginPage", () => {
       </Provider>
     );
 
-    await screen.findByPlaceholderText("密码");
+    await screen.findByLabelText("密码");
 
     expect(document.querySelector(".welcome-container--mobile")).toBeTruthy();
     expect(document.querySelector(".auth-screen--mobile")).toBeTruthy();

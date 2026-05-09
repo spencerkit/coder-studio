@@ -20,6 +20,7 @@ import {
   serverInfoAtom,
 } from "../../../atoms/connection";
 import { resolvedActiveWorkspaceIdAtom } from "../../../atoms/workspaces";
+import { Input, Notice } from "../../../components/ui";
 import { useViewport } from "../../../hooks/use-viewport";
 import { useTranslation } from "../../../lib/i18n";
 import { notificationPreferencesAtom } from "../../notifications/atoms";
@@ -365,19 +366,21 @@ export function SettingsPage() {
             className={`settings-content ${isMobile ? "settings-content--mobile" : ""} ${contentLayoutMode === "fill-height" ? "settings-content--fill-height" : ""}`}
           >
             {settingsLoadError && (
-              <div className="settings-page__notice settings-page__notice--error" role="alert">
-                <div className="settings-page__notice-copy">
-                  <span className="settings-page__notice-title">{t("settings.load_failed")}</span>
-                  <span className="settings-page__notice-message">{settingsLoadError}</span>
-                </div>
-                <button
-                  type="button"
-                  className="settings-link"
-                  onClick={() => setSettingsRefreshKey((value) => value + 1)}
-                >
-                  {t("action.refresh")}
-                </button>
-              </div>
+              <Notice
+                role="alert"
+                tone="error"
+                title={t("settings.load_failed")}
+                message={settingsLoadError}
+                action={
+                  <button
+                    type="button"
+                    className="settings-link"
+                    onClick={() => setSettingsRefreshKey((value) => value + 1)}
+                  >
+                    {t("action.refresh")}
+                  </button>
+                }
+              />
             )}
             {renderContent()}
           </main>
@@ -648,15 +651,15 @@ function GeneralSettings({
             {t("settings.supervisor.evaluation_timeout")}
           </label>
           <div className="settings-config-control">
-            <input
+            <Input
               id="supervisor-evaluation-timeout"
-              className="input settings-input-compact"
+              className="settings-input-compact"
               type="number"
               min={1}
               max={MAX_SUPERVISOR_EVALUATION_TIMEOUT_SEC}
               step={1}
               inputMode="numeric"
-              aria-invalid={supervisorTimeoutError ? "true" : "false"}
+              invalid={Boolean(supervisorTimeoutError)}
               value={supervisorTimeoutDraft}
               onChange={(event) => {
                 setSupervisorTimeoutDraft(event.target.value);

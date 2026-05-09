@@ -142,6 +142,14 @@ describe("ProviderSettings desktop", () => {
     expect(screen.queryByLabelText("启动命令参数")).not.toBeInTheDocument();
   });
 
+  it("renders startup args with shared textarea compatibility classes", async () => {
+    renderHarness();
+
+    const textarea = await screen.findByLabelText("启动命令参数");
+    expect(textarea).toHaveClass("input", "textarea", "settings-provider-args-input");
+    expect(textarea).toHaveAttribute("rows", "4");
+  });
+
   it("keeps the config-files subview selected when switching providers", async () => {
     renderHarness();
 

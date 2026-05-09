@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "../../../../lib/i18n";
 import { useWorktreeManagementActions } from "../../actions/use-worktree-management-actions";
 import { WorktreeManagerSurface } from "./worktree-manager-surface";
@@ -12,12 +12,25 @@ export function WorktreesSummaryCard({ workspaceId }: WorktreesSummaryCardProps)
   const { currentWorktree, dirtyCount, hasWorkspace, list, loadWorktrees } =
     useWorktreeManagementActions(workspaceId);
   const [openView, setOpenView] = useState<"list" | "create" | null>(null);
+  const worktreeAutoLoadAttemptedRef = useRef(false);
 
   useEffect(() => {
-    if (hasWorkspace && !list.lastLoadedAt && !list.loading && !list.error) {
-      void loadWorktrees();
+    worktreeAutoLoadAttemptedRef.current = false;
+  }, [workspaceId]);
+
+  useEffect(() => {
+    if (!hasWorkspace) {
+      worktreeAutoLoadAttemptedRef.current = false;
+      return;
     }
-  }, [hasWorkspace, list.error, list.lastLoadedAt, list.loading, loadWorktrees]);
+
+    if (list.lastLoadedAt || list.loading || worktreeAutoLoadAttemptedRef.current) {
+      return;
+    }
+
+    worktreeAutoLoadAttemptedRef.current = true;
+    void loadWorktrees();
+  }, [hasWorkspace, list.lastLoadedAt, list.loading, loadWorktrees]);
 
   return (
     <>
@@ -55,7 +68,18 @@ export function WorktreesSummaryCard({ workspaceId }: WorktreesSummaryCardProps)
           <span>{t("worktree.summary_dirty", { count: dirtyCount })}</span>
         </div>
 
-        {list.error ? <div className="worktree-error">{list.error}</div> : null}
+        {list.error ? (
+          <div className="worktree-error">
+            <div>{list.error}</div>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => void loadWorktrees()}
+            >
+              {t("action.refresh")}
+            </button>
+          </div>
+        ) : null}
       </section>
 
       <WorktreeManagerSurface

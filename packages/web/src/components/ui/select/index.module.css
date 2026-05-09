@@ -1,0 +1,23 @@
+.native {
+  width: 100%;
+  cursor: pointer;
+}
+
+.mobileTrigger {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  text-align: left;
+}
+
+.mobileValue {
+  min-width: 0;
+  flex: 1;
+}
+
+.mobileIcon {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}

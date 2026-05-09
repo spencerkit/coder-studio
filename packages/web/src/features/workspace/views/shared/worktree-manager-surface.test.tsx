@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import type { GitStatus, Workspace, WorktreeInfo } from "@coder-studio/core";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
@@ -201,6 +203,27 @@ describe("WorktreeManagerSurface", () => {
     expect(await screen.findByText("feature/new-worktree")).toBeInTheDocument();
   });
 
+  it("renders the create form fields with shared input compatibility classes", () => {
+    render(
+      <Provider store={buildManagerStore(vi.fn(), worktrees, "/repo/main")}>
+        <WorktreeManagerSurface workspaceId="ws-1" openView="create" onClose={vi.fn()} />
+      </Provider>
+    );
+
+    const branchInput = screen.getByLabelText("Branch");
+    const pathInput = screen.getByLabelText("Path");
+
+    expect(branchInput).toHaveClass("input");
+    expect(branchInput).toHaveAttribute("placeholder", "feature/worktree-manager");
+
+    expect(pathInput).toHaveClass("input");
+    expect(pathInput).toHaveAttribute(
+      "placeholder",
+      "/home/spencer/workspace/coder-studio-feature-worktree-manager"
+    );
+    expect(pathInput).toHaveAttribute("aria-describedby", "worktree-path-hint-ws-1");
+  });
+
   it("requires a force confirmation for dirty worktree removal", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "worktree.remove") return {};
@@ -255,6 +278,69 @@ describe("WorktreeManagerSurface", () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     expect(sendCommand.mock.calls.filter(([op]) => op === "worktree.list")).toHaveLength(1);
+  });
+
+  it("allows manually retrying worktree.list after an initial load failure", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "worktree.list") {
+        throw new Error("boom");
+      }
+
+      return {};
+    });
+
+    render(
+      <Provider
+        store={buildManagerStore(sendCommand, [], "/repo/main", {
+          lastLoadedAt: undefined,
+        })}
+      >
+        <WorktreeManagerSurface workspaceId="ws-1" openView="list" onClose={vi.fn()} />
+      </Provider>
+    );
+
+    expect(await screen.findByText("boom")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+
+    await waitFor(() => {
+      expect(sendCommand.mock.calls.filter(([op]) => op === "worktree.list")).toHaveLength(2);
+    });
+  });
+
+  it("recovers from a worktree.list retry after an initial load failure", async () => {
+    let attempts = 0;
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "worktree.list") {
+        attempts += 1;
+        if (attempts === 1) {
+          throw new Error("boom");
+        }
+
+        return { worktrees };
+      }
+
+      return {};
+    });
+
+    render(
+      <Provider
+        store={buildManagerStore(sendCommand, [], "/repo/main", {
+          lastLoadedAt: undefined,
+        })}
+      >
+        <WorktreeManagerSurface workspaceId="ws-1" openView="list" onClose={vi.fn()} />
+      </Provider>
+    );
+
+    expect(await screen.findByText("boom")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+
+    await waitFor(() => {
+      expect(screen.queryByText("boom")).not.toBeInTheDocument();
+      expect(screen.getByText("feature/x")).toBeInTheDocument();
+    });
   });
 
   it("normalizes a trailing slash before creating a worktree", async () => {
@@ -316,6 +402,128 @@ describe("WorktreeManagerSurface", () => {
         undefined
       );
     });
+  });
+
+  it("allows creating a worktree with a Windows absolute path", async () => {
+    const sendCommand = vi
+      .fn()
+      .mockImplementation(async (op: string, args: Record<string, string>) => {
+        if (op === "worktree.create") {
+          return {
+            worktree: {
+              name: "feature/new-worktree",
+              path: args.path,
+              branch: args.branch,
+              commit: "aaa1111",
+              status: "clean",
+            },
+          };
+        }
+
+        if (op === "worktree.list") {
+          return { worktrees };
+        }
+
+        return {};
+      });
+
+    render(
+      <Provider store={buildManagerStore(sendCommand, worktrees, "C:/repo/main")}>
+        <WorktreeManagerSurface workspaceId="ws-1" openView="create" onClose={vi.fn()} />
+      </Provider>
+    );
+
+    fireEvent.change(screen.getByLabelText("Branch"), {
+      target: { value: "feature/new-worktree" },
+    });
+    fireEvent.change(screen.getByLabelText("Path"), {
+      target: { value: "C:\\repo\\main-feature-new-worktree" },
+    });
+
+    expect(screen.getByRole("button", { name: "Create" })).not.toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "worktree.create",
+        expect.objectContaining({
+          workspaceId: "ws-1",
+          branch: "feature/new-worktree",
+          path: "C:\\repo\\main-feature-new-worktree",
+        }),
+        undefined
+      );
+    });
+  });
+
+  it("preserves a Windows drive root when normalizing a worktree path", async () => {
+    const sendCommand = vi
+      .fn()
+      .mockImplementation(async (op: string, args: Record<string, string>) => {
+        if (op === "worktree.create") {
+          return {
+            worktree: {
+              name: "feature/new-worktree",
+              path: args.path,
+              branch: args.branch,
+              commit: "aaa1111",
+              status: "clean",
+            },
+          };
+        }
+
+        if (op === "worktree.list") {
+          return { worktrees };
+        }
+
+        return {};
+      });
+
+    render(
+      <Provider store={buildManagerStore(sendCommand, worktrees, "C:\\repo\\main")}>
+        <WorktreeManagerSurface workspaceId="ws-1" openView="create" onClose={vi.fn()} />
+      </Provider>
+    );
+
+    fireEvent.change(screen.getByLabelText("Branch"), {
+      target: { value: "feature/new-worktree" },
+    });
+    fireEvent.change(screen.getByLabelText("Path"), {
+      target: { value: "C:\\" },
+    });
+
+    expect(screen.getByRole("button", { name: "Create" })).not.toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "worktree.create",
+        expect.objectContaining({
+          workspaceId: "ws-1",
+          branch: "feature/new-worktree",
+          path: "C:\\",
+        }),
+        undefined
+      );
+    });
+  });
+
+  it("keeps UNC share prefixes when suggesting a worktree path", () => {
+    render(
+      <Provider store={buildManagerStore(vi.fn(), worktrees, "\\\\server\\share\\repo")}>
+        <WorktreeManagerSurface workspaceId="ws-1" openView="create" onClose={vi.fn()} />
+      </Provider>
+    );
+
+    fireEvent.change(screen.getByLabelText("Branch"), {
+      target: { value: "feature/new-worktree" },
+    });
+
+    expect(screen.getByLabelText("Path")).toHaveValue(
+      "\\\\server\\share\\repo-feature-new-worktree"
+    );
   });
 
   it("does not offer removing the main worktree from a linked workspace", () => {

@@ -321,6 +321,43 @@ describe("GitStatusBar", () => {
     });
   });
 
+  it("renders git auth credential fields with shared input compatibility classes", async () => {
+    let pushAttempts = 0;
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.push") {
+        pushAttempts += 1;
+        if (pushAttempts === 1) {
+          throw new CommandResultError({
+            code: "git_auth_required",
+            message: "Authentication is required",
+            details: {
+              operation: "push",
+              remote: "origin",
+              remoteLabel: "origin (github.com)",
+              host: "github.com",
+              reason: "missing_credentials",
+              authMode: "username_password",
+              canPrompt: true,
+              usernameHint: "alice",
+            },
+          });
+        }
+
+        return { success: true, message: "Push completed successfully" };
+      }
+
+      throw new Error(`Unexpected command: ${op}`);
+    });
+
+    renderStatusBar({ sendCommand });
+
+    fireEvent.click(screen.getByRole("button", { name: "Push" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Push" })[1] as HTMLElement);
+
+    expect(await screen.findByLabelText("Username")).toHaveClass("input");
+    expect(screen.getByLabelText("Password or token")).toHaveClass("input");
+  });
+
   it("shows unsupported auth guidance when the remote cannot prompt in-app", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "git.push") {

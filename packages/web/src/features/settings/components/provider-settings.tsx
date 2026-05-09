@@ -1,6 +1,7 @@
 import { useAtomValue } from "jotai";
 import { type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from "react";
 import { connectionStatusAtom, dispatchCommandAtom } from "../../../atoms/connection";
+import { Textarea } from "../../../components/ui";
 import { useTranslation } from "../../../lib/i18n";
 import { ConfigEditor, type ConfigType } from "./config-editor";
 
@@ -251,9 +252,9 @@ export function ProviderSettings({
               <label className="settings-config-label" htmlFor="provider-startup-args">
                 {t("settings.provider.startup_args")}
               </label>
-              <textarea
+              <Textarea
                 id="provider-startup-args"
-                className="input settings-provider-args-input"
+                className="settings-provider-args-input"
                 rows={4}
                 placeholder={t("settings.provider.startup_args_placeholder")}
                 value={additionalArgsText}
