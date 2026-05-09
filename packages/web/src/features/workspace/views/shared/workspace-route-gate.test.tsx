@@ -25,6 +25,8 @@ describe("WorkspaceRouteGate", () => {
       </Provider>
     );
 
+    expect(screen.getByTestId("workspace-resolving-shell")).toBeInTheDocument();
+    expect(screen.getByText("Workspace")).toBeInTheDocument();
     expect(screen.getByText("Loading workspaces")).toBeInTheDocument();
     expect(screen.queryByText("ready")).not.toBeInTheDocument();
   });
@@ -43,6 +45,8 @@ describe("WorkspaceRouteGate", () => {
       </Provider>
     );
 
+    expect(document.querySelector(".workspace-resolving-shell")).not.toBeNull();
+    expect(screen.getByText("Workspace")).toBeInTheDocument();
     expect(screen.getByText("Failed to load workspaces")).toBeInTheDocument();
     expect(screen.getByText("Failed to fetch workspace list")).toBeInTheDocument();
     expect(screen.queryByText("ready")).not.toBeInTheDocument();
