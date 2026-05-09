@@ -685,6 +685,106 @@ describe("FileTreePanel", () => {
     expect(screen.queryByText("AppController.tsx")).not.toBeInTheDocument();
   });
 
+  it("uses shared tooltip behavior for the search result delete action", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args: { query?: string }) => {
+      if (op === "file.search") {
+        const query = args.query?.toLowerCase() ?? "";
+        const files = [{ path: "src/app.tsx", name: "app.tsx", kind: "file" }].filter((item) =>
+          item.name.toLowerCase().includes(query)
+        );
+
+        return { files };
+      }
+
+      return { ok: true };
+    });
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    fireEvent.change(screen.getByPlaceholderText("action.search_files"), {
+      target: { value: "app" },
+    });
+
+    const deleteButton = await screen.findByRole("button", {
+      name: "file.delete src/app.tsx",
+    });
+    expect(deleteButton).not.toHaveAttribute("title");
+
+    fireEvent.mouseEnter(deleteButton);
+
+    const tooltip = screen.getByRole("tooltip");
+    expect(tooltip).toHaveTextContent("file.delete");
+    expect(deleteButton).toHaveAttribute("aria-describedby", tooltip.getAttribute("id") ?? "");
+  });
+
+  it("uses shared tooltips for file-tree action triggers while preserving row path titles", () => {
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand: vi.fn().mockResolvedValue({}) } as never);
+    store.set(
+      fileTreeAtomFamily("ws-test"),
+      new Map([
+        [
+          ".",
+          [
+            {
+              path: "src",
+              name: "src",
+              kind: "dir",
+              children: [],
+            },
+            {
+              path: "src/app.tsx",
+              name: "app.tsx",
+              kind: "file",
+            },
+          ],
+        ],
+      ])
+    );
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    const newFileButton = screen.getByRole("button", { name: "file.new_file src" });
+    const newFolderButton = screen.getByRole("button", { name: "file.new_folder src" });
+    const deleteDirectoryButton = screen.getByRole("button", { name: "file.delete src" });
+    const deleteFileButton = screen.getByRole("button", { name: "file.delete src/app.tsx" });
+
+    expect(newFileButton).not.toHaveAttribute("title");
+    expect(newFolderButton).not.toHaveAttribute("title");
+    expect(deleteDirectoryButton).not.toHaveAttribute("title");
+    expect(deleteFileButton).not.toHaveAttribute("title");
+    expect(screen.getByText("src").closest(".tree-item")).toHaveAttribute("title", "src");
+    expect(screen.getByText("app.tsx").closest(".tree-item")).toHaveAttribute(
+      "title",
+      "src/app.tsx"
+    );
+
+    fireEvent.mouseEnter(newFileButton);
+    expect(screen.getByRole("tooltip")).toHaveTextContent("file.new_file");
+
+    fireEvent.mouseLeave(newFileButton);
+    fireEvent.mouseEnter(newFolderButton);
+    expect(screen.getByRole("tooltip")).toHaveTextContent("file.new_folder");
+
+    fireEvent.mouseLeave(newFolderButton);
+    fireEvent.mouseEnter(deleteDirectoryButton);
+    expect(screen.getByRole("tooltip")).toHaveTextContent("file.delete");
+
+    fireEvent.mouseLeave(deleteDirectoryButton);
+    fireEvent.mouseEnter(deleteFileButton);
+    expect(screen.getByRole("tooltip")).toHaveTextContent("file.delete");
+  });
+
   it("keeps expanded directories populated after refreshing the file tree", async () => {
     let libReadCount = 0;
     const sendCommand = vi

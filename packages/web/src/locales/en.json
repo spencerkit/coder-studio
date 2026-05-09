@@ -332,6 +332,7 @@
     "discard_confirm_irreversible": "This action cannot be undone.",
     "commit_failed_title": "Commit failed",
     "branch": "Branch",
+    "switch_branch": "Switch Branch",
     "current_branch": "Current Branch",
     "no_branch": "Not on any branch",
     "ahead": "{count} commits ahead",
