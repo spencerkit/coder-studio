@@ -708,6 +708,12 @@ function AppearanceSettings({
   setTheme,
 }: AppearanceSettingsProps) {
   const t = useTranslation();
+  const themeTitleId = useId();
+  const themeDescId = useId();
+  const terminalRendererTitleId = useId();
+  const terminalRendererDescId = useId();
+  const languageTitleId = useId();
+  const languageDescId = useId();
   const dispatch = useAtomValue(dispatchCommandAtom);
 
   const saveSettings = async (settings: Record<string, unknown>) => {
@@ -723,10 +729,19 @@ function AppearanceSettings({
   return (
     <div className="settings-section">
       <div className="settings-group">
-        <h3 className="settings-group-title">{t("settings.theme.title")}</h3>
-        <p className="settings-group-desc">{t("settings.theme.hint")}</p>
+        <h3 className="settings-group-title" id={themeTitleId}>
+          {t("settings.theme.title")}
+        </h3>
+        <p className="settings-group-desc" id={themeDescId}>
+          {t("settings.theme.hint")}
+        </p>
 
-        <div className="settings-pills">
+        <div
+          aria-describedby={themeDescId}
+          aria-labelledby={themeTitleId}
+          className="settings-pills"
+          role="group"
+        >
           <Pill
             leadingIcon={theme === "dark" ? <Check size={12} /> : undefined}
             onClick={() => handleThemeChange("dark")}
@@ -745,10 +760,19 @@ function AppearanceSettings({
       </div>
 
       <div className="settings-group">
-        <h3 className="settings-group-title">{t("settings.terminal_renderer")}</h3>
-        <p className="settings-group-desc">{t("settings.terminal_renderer_hint")}</p>
+        <h3 className="settings-group-title" id={terminalRendererTitleId}>
+          {t("settings.terminal_renderer")}
+        </h3>
+        <p className="settings-group-desc" id={terminalRendererDescId}>
+          {t("settings.terminal_renderer_hint")}
+        </p>
 
-        <div className="settings-pills">
+        <div
+          aria-describedby={terminalRendererDescId}
+          aria-labelledby={terminalRendererTitleId}
+          className="settings-pills"
+          role="group"
+        >
           <Pill
             leadingIcon={terminalRenderer === "standard" ? <Check size={12} /> : undefined}
             onClick={() => {
@@ -773,10 +797,19 @@ function AppearanceSettings({
       </div>
 
       <div className="settings-group">
-        <h3 className="settings-group-title">{t("settings.language.title")}</h3>
-        <p className="settings-group-desc">{t("settings.language.hint")}</p>
+        <h3 className="settings-group-title" id={languageTitleId}>
+          {t("settings.language.title")}
+        </h3>
+        <p className="settings-group-desc" id={languageDescId}>
+          {t("settings.language.hint")}
+        </p>
 
-        <div className="settings-pills">
+        <div
+          aria-describedby={languageDescId}
+          aria-labelledby={languageTitleId}
+          className="settings-pills"
+          role="group"
+        >
           <Pill
             leadingIcon={locale === "zh" ? <Check size={12} /> : undefined}
             onClick={() => {

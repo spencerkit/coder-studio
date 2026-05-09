@@ -34,6 +34,7 @@ describe("Pill", () => {
     render(<Pill leadingIcon={<span data-testid="pill-icon">*</span>}>English</Pill>);
 
     expect(screen.getByTestId("pill-icon")).toBeInTheDocument();
+    expect(screen.getByTestId("pill-icon").parentElement).toHaveAttribute("aria-hidden", "true");
   });
 
   it("respects disabled state and legacy disabled class", () => {

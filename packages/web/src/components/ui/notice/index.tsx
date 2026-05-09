@@ -1,5 +1,4 @@
 import clsx from "clsx";
-import { X } from "lucide-react";
 import type { HTMLAttributes, ReactNode } from "react";
 import styles from "./index.module.css";
 
@@ -7,11 +6,8 @@ export type NoticeTone = "info" | "success" | "warning" | "error";
 
 export interface NoticeProps extends Omit<HTMLAttributes<HTMLDivElement>, "title"> {
   readonly actionLabel?: string;
-  readonly dismissLabel?: string;
-  readonly dismissible?: boolean;
   readonly message?: ReactNode;
   readonly onAction?: () => void;
-  readonly onDismiss?: () => void;
   readonly title?: ReactNode;
   readonly tone?: NoticeTone;
 }
@@ -33,11 +29,8 @@ const legacyToneClassMap: Record<NoticeTone, string | undefined> = {
 export function Notice({
   actionLabel,
   className,
-  dismissible = false,
-  dismissLabel = "Dismiss",
   message,
   onAction,
-  onDismiss,
   title,
   tone = "info",
   ...props
@@ -71,17 +64,6 @@ export function Notice({
           type="button"
         >
           {actionLabel}
-        </button>
-      ) : null}
-
-      {dismissible && onDismiss ? (
-        <button
-          aria-label={dismissLabel}
-          className={clsx(styles.dismiss, "settings-page__notice-dismiss")}
-          onClick={onDismiss}
-          type="button"
-        >
-          <X size={14} />
         </button>
       ) : null}
     </div>

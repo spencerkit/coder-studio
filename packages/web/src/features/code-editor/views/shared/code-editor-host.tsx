@@ -1,6 +1,6 @@
 import { AlertCircle, FileText, Image as ImageIcon, Save, X } from "lucide-react";
 import type { FC } from "react";
-import { EmptyState } from "../../../../components/ui";
+import { EmptyState, Tooltip } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { useCodeEditorActions } from "../../actions/use-code-editor-actions";
 import { ImagePreview } from "../../components/image-preview";
@@ -49,15 +49,16 @@ export const CodeEditorHeaderActions: FC<CodeEditorHeaderActionsProps> = ({
     return (
       <div className="mobile-sheet__header-actions">
         {isSvgTextBacked ? (
-          <button
-            type="button"
-            className="mobile-sheet__action mobile-sheet__action--icon"
-            onClick={toggleSvgTextMode}
-            title={toggleModeTitle}
-            aria-label={toggleModeTitle}
-          >
-            {isImageFile ? <FileText size={16} /> : <ImageIcon size={16} />}
-          </button>
+          <Tooltip content={toggleModeTitle}>
+            <button
+              type="button"
+              className="mobile-sheet__action mobile-sheet__action--icon"
+              onClick={toggleSvgTextMode}
+              aria-label={toggleModeTitle}
+            >
+              {isImageFile ? <FileText size={16} /> : <ImageIcon size={16} />}
+            </button>
+          </Tooltip>
         ) : null}
         <button
           type="button"
@@ -75,37 +76,40 @@ export const CodeEditorHeaderActions: FC<CodeEditorHeaderActionsProps> = ({
   return (
     <div className="code-mode-toggle">
       {isSvgTextBacked && (
+        <Tooltip content={toggleModeTitle}>
+          <button
+            type="button"
+            className="code-mode-btn"
+            onClick={toggleSvgTextMode}
+            aria-label={toggleModeTitle}
+          >
+            {isImageFile ? <FileText size={12} /> : <ImageIcon size={12} />}
+            <span>{toggleModeLabel}</span>
+          </button>
+        </Tooltip>
+      )}
+      <Tooltip content={saveLabel} disabled={!canSave}>
         <button
           type="button"
           className="code-mode-btn"
-          onClick={toggleSvgTextMode}
-          title={toggleModeTitle}
-          aria-label={toggleModeTitle}
+          onClick={handleSave}
+          disabled={!canSave}
+          aria-label={saveLabel}
         >
-          {isImageFile ? <FileText size={12} /> : <ImageIcon size={12} />}
-          <span>{toggleModeLabel}</span>
+          <Save size={12} />
+          <span>{saveLabel}</span>
         </button>
-      )}
-      <button
-        type="button"
-        className="code-mode-btn"
-        onClick={handleSave}
-        disabled={!canSave}
-        title={saveLabel}
-        aria-label={saveLabel}
-      >
-        <Save size={12} />
-        <span>{saveLabel}</span>
-      </button>
-      <button
-        type="button"
-        className="code-mode-btn"
-        onClick={handleClose}
-        title={t("action.close")}
-        aria-label={t("action.close")}
-      >
-        <X size={12} />
-      </button>
+      </Tooltip>
+      <Tooltip content={t("action.close")}>
+        <button
+          type="button"
+          className="code-mode-btn"
+          onClick={handleClose}
+          aria-label={t("action.close")}
+        >
+          <X size={12} />
+        </button>
+      </Tooltip>
     </div>
   );
 };

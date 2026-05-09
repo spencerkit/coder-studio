@@ -1,5 +1,4 @@
-.pill,
-:global(.settings-pill) {
+.pill {
   display: inline-flex;
   align-items: center;
   gap: var(--sp-2);
@@ -16,21 +15,18 @@
     color var(--duration-fast) var(--ease-out);
 }
 
-.pill:hover:not(:disabled),
-:global(.settings-pill):hover:not(:disabled) {
+.pill:hover:not(:disabled) {
   background: var(--bg-hover);
   border-color: var(--border-light);
 }
 
-.pill:focus-visible,
-:global(.settings-pill):focus-visible {
+.pill:focus-visible {
   outline: none;
   border-color: var(--accent-blue);
   box-shadow: 0 0 0 1px rgba(108, 182, 255, 0.4);
 }
 
-.active,
-:global(.settings-pill-active) {
+.active {
   background: var(--accent-blue);
   border-color: var(--accent-blue);
   color: var(--text-inverse);
@@ -41,8 +37,7 @@
   align-items: center;
 }
 
-.pill:disabled,
-:global(.settings-pill-disabled) {
+.pill:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }

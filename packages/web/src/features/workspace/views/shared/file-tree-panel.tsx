@@ -28,6 +28,7 @@ import {
   ModalFooter,
   ModalHeader,
   ModalTitle,
+  Tooltip,
 } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import {
@@ -247,18 +248,19 @@ const FileSearchResultRow: FC<FileSearchResultRowProps> = ({
       </span>
 
       <div className="tree-item-actions">
-        <button
-          aria-label={`${t("file.delete")} ${node.path}`}
-          className="git-row-action"
-          onClick={(event) => {
-            event.stopPropagation();
-            onRequestDelete(node.path, node.name);
-          }}
-          title={t("file.delete")}
-          type="button"
-        >
-          <Trash2 size={12} />
-        </button>
+        <Tooltip content={t("file.delete")}>
+          <button
+            aria-label={`${t("file.delete")} ${node.path}`}
+            className="git-row-action"
+            onClick={(event) => {
+              event.stopPropagation();
+              onRequestDelete(node.path, node.name);
+            }}
+            type="button"
+          >
+            <Trash2 size={12} />
+          </button>
+        </Tooltip>
       </div>
     </div>
   );
@@ -348,30 +350,48 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
         <div className="tree-item-actions">
           {isFolder ? (
             <>
-              <button
-                aria-label={`${t("file.new_file")} ${node.path}`}
-                className="git-row-action"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onRequestCreate("file", node.path);
-                }}
-                title={t("file.new_file")}
-                type="button"
-              >
-                <FilePlus size={12} />
-              </button>
-              <button
-                aria-label={`${t("file.new_folder")} ${node.path}`}
-                className="git-row-action"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onRequestCreate("folder", node.path);
-                }}
-                title={t("file.new_folder")}
-                type="button"
-              >
-                <FolderPlus size={12} />
-              </button>
+              <Tooltip content={t("file.new_file")}>
+                <button
+                  aria-label={`${t("file.new_file")} ${node.path}`}
+                  className="git-row-action"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onRequestCreate("file", node.path);
+                  }}
+                  type="button"
+                >
+                  <FilePlus size={12} />
+                </button>
+              </Tooltip>
+              <Tooltip content={t("file.new_folder")}>
+                <button
+                  aria-label={`${t("file.new_folder")} ${node.path}`}
+                  className="git-row-action"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onRequestCreate("folder", node.path);
+                  }}
+                  type="button"
+                >
+                  <FolderPlus size={12} />
+                </button>
+              </Tooltip>
+              <Tooltip content={t("file.delete")}>
+                <button
+                  aria-label={`${t("file.delete")} ${node.path}`}
+                  className="git-row-action"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onRequestDelete(node.path, node.name);
+                  }}
+                  type="button"
+                >
+                  <Trash2 size={12} />
+                </button>
+              </Tooltip>
+            </>
+          ) : (
+            <Tooltip content={t("file.delete")}>
               <button
                 aria-label={`${t("file.delete")} ${node.path}`}
                 className="git-row-action"
@@ -379,25 +399,11 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
                   event.stopPropagation();
                   onRequestDelete(node.path, node.name);
                 }}
-                title={t("file.delete")}
                 type="button"
               >
                 <Trash2 size={12} />
               </button>
-            </>
-          ) : (
-            <button
-              aria-label={`${t("file.delete")} ${node.path}`}
-              className="git-row-action"
-              onClick={(event) => {
-                event.stopPropagation();
-                onRequestDelete(node.path, node.name);
-              }}
-              title={t("file.delete")}
-              type="button"
-            >
-              <Trash2 size={12} />
-            </button>
+            </Tooltip>
           )}
         </div>
       </div>

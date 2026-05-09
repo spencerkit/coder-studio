@@ -38,45 +38,25 @@ describe("Notice", () => {
   it("renders optional action and dismiss controls", async () => {
     const user = userEvent.setup();
     const onAction = vi.fn();
-    const onDismiss = vi.fn();
 
     render(
       <Notice
         actionLabel="Refresh"
-        dismissible
         message="Retry the request."
         onAction={onAction}
-        onDismiss={onDismiss}
         title="Settings load failed"
         tone="warning"
       />
     );
 
     await user.click(screen.getByRole("button", { name: "Refresh" }));
-    await user.click(screen.getByRole("button", { name: "Dismiss" }));
 
     expect(onAction).toHaveBeenCalledTimes(1);
-    expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 
-  it("does not render a dismiss button without an onDismiss handler", () => {
-    render(<Notice dismissible message="Retry the request." title="Settings load failed" />);
+  it("does not render an action button without both action props", () => {
+    render(<Notice message="Retry the request." title="Settings load failed" />);
 
-    expect(screen.queryByRole("button", { name: "Dismiss" })).toBeNull();
-  });
-
-  it("supports config drift compatibility classes", () => {
-    render(
-      <Notice
-        className="config-drift-banner__notice"
-        message="Backed up config to /tmp/config.toml.bak"
-        tone="info"
-      />
-    );
-
-    const notice = document.querySelector(".config-drift-banner__notice");
-    expect(notice).toBeTruthy();
-    expect(notice).toHaveTextContent("Backed up config to /tmp/config.toml.bak");
-    expect(notice).not.toHaveClass("settings-page__notice--error");
+    expect(screen.queryByRole("button")).toBeNull();
   });
 });

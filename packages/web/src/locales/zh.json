@@ -332,6 +332,7 @@
     "discard_confirm_irreversible": "此操作不可恢复。",
     "commit_failed_title": "提交失败",
     "branch": "分支",
+    "switch_branch": "切换分支",
     "current_branch": "当前分支",
     "no_branch": "不在任何分支上",
     "ahead": "领先 {count} 个提交",
