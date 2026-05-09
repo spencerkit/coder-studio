@@ -1,6 +1,6 @@
 import { AlertCircle, FileText, Image as ImageIcon, Save, X } from "lucide-react";
 import type { FC } from "react";
-import { EmptyState, Tooltip } from "../../../../components/ui";
+import { EmptyState, IconButton, Tooltip } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { useCodeEditorActions } from "../../actions/use-code-editor-actions";
 import { ImagePreview } from "../../components/image-preview";
@@ -50,14 +50,12 @@ export const CodeEditorHeaderActions: FC<CodeEditorHeaderActionsProps> = ({
       <div className="mobile-sheet__header-actions">
         {isSvgTextBacked ? (
           <Tooltip content={toggleModeTitle}>
-            <button
-              type="button"
-              className="mobile-sheet__action mobile-sheet__action--icon"
-              onClick={toggleSvgTextMode}
+            <IconButton
               aria-label={toggleModeTitle}
-            >
-              {isImageFile ? <FileText size={16} /> : <ImageIcon size={16} />}
-            </button>
+              className="mobile-sheet__action mobile-sheet__action--icon"
+              icon={isImageFile ? <FileText size={16} /> : <ImageIcon size={16} />}
+              onClick={toggleSvgTextMode}
+            />
           </Tooltip>
         ) : null}
         <button
@@ -101,14 +99,13 @@ export const CodeEditorHeaderActions: FC<CodeEditorHeaderActionsProps> = ({
         </button>
       </Tooltip>
       <Tooltip content={t("action.close")}>
-        <button
-          type="button"
-          className="code-mode-btn"
-          onClick={handleClose}
+        <IconButton
           aria-label={t("action.close")}
-        >
-          <X size={12} />
-        </button>
+          className="code-mode-btn"
+          icon={<X size={12} />}
+          onClick={handleClose}
+          size="sm"
+        />
       </Tooltip>
     </div>
   );

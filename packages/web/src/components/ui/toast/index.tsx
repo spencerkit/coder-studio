@@ -1,6 +1,7 @@
 import clsx from "clsx";
 import { X } from "lucide-react";
 import type { HTMLAttributes, ReactNode } from "react";
+import { IconButton } from "../icon-button";
 import styles from "./index.module.css";
 
 export type ToastTone = "success" | "error" | "warning" | "info";
@@ -115,17 +116,16 @@ export function Toast({
         </button>
       ) : null}
 
-      <button
+      <IconButton
         aria-label={closeLabel}
         className={clsx(styles.close, "toast__close")}
+        icon={<X size={14} />}
         onClick={(event) => {
           event.stopPropagation();
           onDismiss();
         }}
-        type="button"
-      >
-        <X size={14} />
-      </button>
+        size="sm"
+      />
     </div>
   );
 }

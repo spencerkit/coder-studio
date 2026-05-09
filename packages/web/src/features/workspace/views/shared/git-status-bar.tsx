@@ -225,15 +225,16 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({
           </button>
         </Tooltip>
         <Tooltip content={fetchTitle}>
-          <button
-            className="git-status-bar__item git-status-bar__item--actionable"
-            type="button"
+          <IconButton
             aria-label={fetchAriaLabel}
+            className="git-status-bar__item git-status-bar__item--actionable"
             disabled={isFetching}
+            icon={
+              <RefreshCw size={13} aria-hidden="true" className={isFetching ? "spin" : undefined} />
+            }
             onClick={() => void refreshAfterFetch()}
-          >
-            <RefreshCw size={13} aria-hidden="true" className={isFetching ? "spin" : undefined} />
-          </button>
+            size="sm"
+          />
         </Tooltip>
       </div>
 

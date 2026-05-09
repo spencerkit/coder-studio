@@ -3,6 +3,7 @@ import { useSetAtom } from "jotai";
 import { X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { activeWorkspaceIdAtom } from "../../../../atoms/workspaces";
+import { IconButton } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { formatWorkspaceLabel } from "../../../notifications/format";
 import { useWorkspaceCloseAction } from "../../actions/use-workspace-close-action";
@@ -76,10 +77,10 @@ export function MobileWorkspaceDrawer({
                   <span className="mobile-workspace-drawer__item-name">{displayName}</span>
                   <span className="mobile-workspace-drawer__item-path">{workspace.path}</span>
                 </button>
-                <button
-                  type="button"
-                  className="mobile-workspace-drawer__item-close"
+                <IconButton
                   aria-label={t("mobile.workspace_drawer.close_workspace", { name: displayName })}
+                  className="mobile-workspace-drawer__item-close"
+                  icon={<X size={16} />}
                   onClick={() => {
                     void closeWorkspace(workspace.id, { navigateHomeWhenEmpty: true }).then(
                       (closed) => {
@@ -89,9 +90,8 @@ export function MobileWorkspaceDrawer({
                       }
                     );
                   }}
-                >
-                  <X size={16} />
-                </button>
+                  size="lg"
+                />
               </div>
             );
           })}

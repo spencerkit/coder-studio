@@ -1,5 +1,5 @@
 import { ArrowUp, Folder, Home, X } from "lucide-react";
-import { Sheet, Spinner } from "../../../../components/ui";
+import { IconButton, Sheet, Spinner } from "../../../../components/ui";
 import { useViewport } from "../../../../hooks/use-viewport";
 import { useTranslation } from "../../../../lib/i18n";
 import { useWorkspaceLaunchActions } from "../../actions/use-workspace-launch-actions";
@@ -149,15 +149,13 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
             <div className="launch-hint">{launchHint}</div>
           </div>
           <div className="launch-header-right">
-            <div
-              className="launch-close-btn"
-              onClick={onClose}
-              role="button"
-              tabIndex={0}
+            <IconButton
               aria-label={t("action.close")}
-            >
-              <X size={16} />
-            </div>
+              className="launch-close-btn"
+              icon={<X size={16} />}
+              onClick={onClose}
+              size="sm"
+            />
           </div>
         </div>
 

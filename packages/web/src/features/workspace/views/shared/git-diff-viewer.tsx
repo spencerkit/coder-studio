@@ -1,7 +1,7 @@
 import { X } from "lucide-react";
 import type { FC } from "react";
 import { useMemo } from "react";
-import { EmptyState, Tooltip } from "../../../../components/ui";
+import { EmptyState, IconButton, Tooltip } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { useGitDiffViewerActions } from "../../actions/use-git-actions";
 
@@ -72,14 +72,13 @@ export const GitDiffViewer: FC<GitDiffViewerProps> = ({
           {preview && showCloseButton ? (
             <div className="code-mode-toggle">
               <Tooltip content={t("action.close")}>
-                <button
-                  type="button"
-                  className="code-mode-btn"
-                  onClick={handleClose}
+                <IconButton
                   aria-label={t("action.close")}
-                >
-                  <X size={12} />
-                </button>
+                  className="code-mode-btn"
+                  icon={<X size={12} />}
+                  onClick={handleClose}
+                  size="sm"
+                />
               </Tooltip>
             </div>
           ) : null}

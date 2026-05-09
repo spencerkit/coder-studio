@@ -49,7 +49,7 @@ describe("Toast", () => {
     );
 
     const closeButton = screen.getByRole("button", { name: "Close notification" });
-    expect(closeButton).toHaveClass("toast__close");
+    expect(closeButton).toHaveClass("btn", "btn-ghost", "btn-sm", "toast__close");
 
     await user.click(closeButton);
 

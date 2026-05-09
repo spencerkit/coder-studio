@@ -88,6 +88,35 @@ describe("WorkspaceLaunchModal", () => {
     expect(await screen.findByText("coder-studio")).toBeInTheDocument();
   });
 
+  it("uses shared IconButton compatibility classes for the desktop close action", () => {
+    const onClose = vi.fn();
+    const store = createStore();
+
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn().mockResolvedValue({
+        currentPath: "/home/spencer",
+        parentPath: "/home",
+        directories: [],
+      }),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <WorkspaceLaunchModal onClose={onClose} />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    const closeButton = screen.getByRole("button", { name: "Close" });
+
+    expect(closeButton).toHaveClass("btn", "btn-ghost", "btn-sm", "launch-close-btn");
+
+    fireEvent.click(closeButton);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it("opens the selected host directory without showing runtime target choices", async () => {
     const onClose = vi.fn();
     const sendCommand = vi.fn().mockImplementation(async (op: string, args: { path?: string }) => {

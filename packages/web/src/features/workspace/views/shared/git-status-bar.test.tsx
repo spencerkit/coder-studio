@@ -50,6 +50,14 @@ describe("GitStatusBar", () => {
     const toolbar = screen.getByRole("button", { name: "Fetch" }).closest(".git-status-bar");
     expect(toolbar).not.toBeNull();
 
+    expect(screen.getByRole("button", { name: "Fetch" })).toHaveClass(
+      "btn",
+      "btn-ghost",
+      "btn-sm",
+      "git-status-bar__item",
+      "git-status-bar__item--actionable"
+    );
+
     const buttons = within(toolbar as HTMLElement).getAllByRole("button");
     expect(buttons.at(-1)).toHaveAccessibleName("Fetch");
   });

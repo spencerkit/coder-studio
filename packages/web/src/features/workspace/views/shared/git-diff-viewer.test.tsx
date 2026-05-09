@@ -72,6 +72,7 @@ describe("GitDiffViewer", () => {
     );
 
     const closeButton = screen.getByRole("button", { name: /close|关闭/i });
+    expect(closeButton).toHaveClass("btn", "btn-ghost", "btn-sm", "code-mode-btn");
     expect(closeButton).not.toHaveAttribute("title");
 
     fireEvent.mouseEnter(closeButton);
