@@ -1057,6 +1057,101 @@ describe("GitPanel", () => {
     });
   });
 
+  it("preserves shared IconButton classes, tooltip copy, and row click isolation for row actions", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return status;
+      }
+      if (op === "git.branches") {
+        return {
+          current: "feature/ai-agent",
+          branches: [],
+        };
+      }
+      if (op === "git.diff") {
+        return {
+          diff: "diff --git a/src/auth/AuthGate.tsx b/src/auth/AuthGate.tsx",
+        };
+      }
+      if (op === "git.log") {
+        return {
+          entries: [],
+        };
+      }
+      if (op === "worktree.list") {
+        return {
+          worktrees: [],
+        };
+      }
+
+      return {};
+    });
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedWorkspaceStore(store);
+
+    render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    const stagedRow = (await screen.findByText("AuthGate.tsx")).closest(".git-row");
+    expect(stagedRow).not.toBeNull();
+
+    const unstageButton = within(stagedRow as HTMLElement).getByRole("button", { name: "Unstage" });
+    expect(unstageButton).toHaveClass("btn", "btn-ghost", "btn-sm", "git-row-action");
+    expect(unstageButton).not.toHaveAttribute("title");
+
+    fireEvent.mouseEnter(unstageButton);
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Unstage");
+    fireEvent.mouseLeave(unstageButton);
+    expect(screen.queryByRole("tooltip")).toBeNull();
+
+    const changedRow = screen.getByText("AppController.tsx").closest(".git-row");
+    expect(changedRow).not.toBeNull();
+
+    const stageButton = within(changedRow as HTMLElement).getByRole("button", { name: "Stage" });
+    const discardButton = within(changedRow as HTMLElement).getByRole("button", {
+      name: "Discard",
+    });
+    const initialDiffCallCount = sendCommand.mock.calls.filter(([op]) => op === "git.diff").length;
+
+    expect(stageButton).toHaveClass("btn", "btn-ghost", "btn-sm", "git-row-action");
+    expect(discardButton).toHaveClass("btn", "btn-ghost", "btn-sm", "git-row-action");
+    expect(stageButton).not.toHaveAttribute("title");
+    expect(discardButton).not.toHaveAttribute("title");
+
+    fireEvent.focus(discardButton);
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Discard");
+    fireEvent.blur(discardButton);
+
+    fireEvent.click(discardButton);
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(sendCommand.mock.calls.filter(([op]) => op === "git.diff")).toHaveLength(
+      initialDiffCallCount
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(stageButton);
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "git.stage",
+        {
+          workspaceId: "ws-test",
+          paths: ["src/app/AppController.tsx"],
+        },
+        undefined
+      );
+    });
+
+    expect(sendCommand.mock.calls.filter(([op]) => op === "git.diff")).toHaveLength(
+      initialDiffCallCount
+    );
+  });
+
   it("shows an error toast with the unstage title when row-level unstage fails", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "git.status") {
@@ -1105,6 +1200,18 @@ describe("GitPanel", () => {
 
     const row = (await screen.findByText("AuthGate.tsx")).closest(".git-row");
     expect(row).not.toBeNull();
+    expect(within(row as HTMLElement).getByRole("button", { name: "Unstage" })).toHaveClass(
+      "btn",
+      "btn-ghost",
+      "btn-sm",
+      "git-row-action"
+    );
+    expect(within(row as HTMLElement).getByRole("button", { name: "Discard" })).toHaveClass(
+      "btn",
+      "btn-ghost",
+      "btn-sm",
+      "git-row-action"
+    );
 
     fireEvent.click(within(row as HTMLElement).getByRole("button", { name: "Unstage" }));
 
@@ -1756,8 +1863,18 @@ describe("GitPanel", () => {
 
     const row = (await screen.findByText("supervisor.test.ts")).closest(".git-row");
     expect(row).not.toBeNull();
-    expect(within(row as HTMLElement).getByRole("button", { name: "Stage" })).toBeInTheDocument();
-    expect(within(row as HTMLElement).getByRole("button", { name: "Discard" })).toBeInTheDocument();
+    expect(within(row as HTMLElement).getByRole("button", { name: "Stage" })).toHaveClass(
+      "btn",
+      "btn-ghost",
+      "btn-sm",
+      "git-row-action"
+    );
+    expect(within(row as HTMLElement).getByRole("button", { name: "Discard" })).toHaveClass(
+      "btn",
+      "btn-ghost",
+      "btn-sm",
+      "git-row-action"
+    );
   });
 
   it("persists the commit message draft across panel remount per workspace", async () => {

@@ -1,10 +1,10 @@
 import type { GitCommitSummary, GitFileChange, WorktreeInfo } from "@coder-studio/core";
 import { useAtomValue } from "jotai";
 import { ArrowUp, ChevronDown, Minus, Plus, RotateCcw } from "lucide-react";
-import type { FC } from "react";
+import type { FC, MouseEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { localeAtom } from "../../../../atoms/app-ui";
-import { ConfirmDialog, Textarea, Tooltip } from "../../../../components/ui";
+import { ConfirmDialog, IconButton, Textarea, Tooltip } from "../../../../components/ui";
 import { formatRelativeTime, useTranslation } from "../../../../lib/i18n";
 import {
   type GitChangeType,
@@ -445,6 +445,9 @@ const GitChangeRow: FC<GitChangeRowProps> = ({
   const dirName = pathParts.length > 1 ? `${pathParts.slice(0, -1).join("/")}/` : "";
   const badge = getChangeBadge(change, type);
   const tone = getChangeTone(change, type);
+  const toggleStageLabel = type === "staged" ? t("git.unstage") : t("git.stage");
+  const discardLabel = t("git.discard");
+  const toggleStageIcon = type === "staged" ? <Minus size={12} /> : <Plus size={12} />;
 
   const handleToggleStage = async () => {
     if (type === "staged") {
@@ -463,6 +466,16 @@ const GitChangeRow: FC<GitChangeRowProps> = ({
       "Failed to stage:",
       t("git.stage_failed_title")
     );
+  };
+
+  const handleToggleStageClick = (event: MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    void handleToggleStage();
+  };
+
+  const handleDiscardClick = (event: MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    onRequestDiscard(change.path);
   };
 
   return (
@@ -489,32 +502,28 @@ const GitChangeRow: FC<GitChangeRowProps> = ({
       </div>
 
       <div className="git-row-actions">
-        <Tooltip content={type === "staged" ? t("git.unstage") : t("git.stage")}>
-          <button
+        <Tooltip content={toggleStageLabel}>
+          <IconButton
+            aria-label={toggleStageLabel}
             className="git-row-action"
-            onClick={(event) => {
-              event.stopPropagation();
-              void handleToggleStage();
-            }}
-            aria-label={type === "staged" ? t("git.unstage") : t("git.stage")}
+            icon={toggleStageIcon}
+            onClick={handleToggleStageClick}
+            size="sm"
             type="button"
-          >
-            {type === "staged" ? <Minus size={12} /> : <Plus size={12} />}
-          </button>
+            variant="ghost"
+          />
         </Tooltip>
 
-        <Tooltip content={t("git.discard")}>
-          <button
+        <Tooltip content={discardLabel}>
+          <IconButton
+            aria-label={discardLabel}
             className="git-row-action"
-            onClick={(event) => {
-              event.stopPropagation();
-              onRequestDiscard(change.path);
-            }}
-            aria-label={t("git.discard")}
+            icon={<RotateCcw size={12} />}
+            onClick={handleDiscardClick}
+            size="sm"
             type="button"
-          >
-            <RotateCcw size={12} />
-          </button>
+            variant="ghost"
+          />
         </Tooltip>
       </div>
     </div>

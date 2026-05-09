@@ -498,6 +498,46 @@ describe("SessionCard", () => {
     expect(onSplitVertical).toHaveBeenCalledTimes(1);
   });
 
+  it("uses shared IconButton compatibility classes for header actions", () => {
+    const { store } = createSessionStore({
+      terminalId: "term-live",
+      state: "running",
+      endedAt: undefined,
+    });
+
+    render(
+      <Provider store={store}>
+        <SessionCard sessionId="sess_123456" />
+      </Provider>
+    );
+
+    expect(screen.getByRole("button", { name: "Stop" })).toHaveClass(
+      "btn",
+      "btn-ghost",
+      "btn-sm",
+      "session-action-btn"
+    );
+    expect(screen.getByRole("button", { name: "Split horizontal" })).toHaveClass(
+      "btn",
+      "btn-ghost",
+      "btn-sm",
+      "session-action-btn"
+    );
+    expect(screen.getByRole("button", { name: "Split vertical" })).toHaveClass(
+      "btn",
+      "btn-ghost",
+      "btn-sm",
+      "session-action-btn"
+    );
+    expect(screen.getByRole("button", { name: "Close" })).toHaveClass(
+      "btn",
+      "btn-ghost",
+      "btn-sm",
+      "session-action-btn",
+      "session-action-btn-close"
+    );
+  });
+
   it("persists activeSessionId when the card is clicked", async () => {
     const sendCommand = vi.fn().mockResolvedValue({
       ok: true,

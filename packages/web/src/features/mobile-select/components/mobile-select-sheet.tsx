@@ -1,4 +1,5 @@
 import { type ReactNode, useId, useMemo, useState } from "react";
+import { IconButton } from "../../../components/ui";
 import { Sheet } from "../../../components/ui/sheet";
 import { Tag } from "../../../components/ui/tag";
 import { useTranslation } from "../../../lib/i18n";
@@ -291,24 +292,23 @@ export function MobileSelectSheet({
                               data-selected={isSelected ? "true" : "false"}
                             >
                               {optionButton}
-                              <button
-                                type="button"
+                              <IconButton
+                                aria-label={item.trailingAction.ariaLabel}
                                 className={`mobile-select-sheet__item-side-action ${
                                   item.trailingAction.tone === "danger"
                                     ? "mobile-select-sheet__item-side-action--danger"
                                     : ""
                                 }`}
-                                aria-label={item.trailingAction.ariaLabel}
                                 disabled={item.disabled || item.trailingAction.disabled}
+                                icon={
+                                  <span className="mobile-select-sheet__item-side-action-icon">
+                                    {item.trailingAction.icon}
+                                  </span>
+                                }
                                 onClick={() => handleTrailingAction(item.trailingAction.onAction)}
-                              >
-                                <span
-                                  className="mobile-select-sheet__item-side-action-icon"
-                                  aria-hidden="true"
-                                >
-                                  {item.trailingAction.icon}
-                                </span>
-                              </button>
+                                size="lg"
+                                variant="ghost"
+                              />
                             </div>
                           );
                         })

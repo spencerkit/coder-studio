@@ -287,13 +287,70 @@ describe("MobileSelectSheet", () => {
 
     expect(row).not.toBeNull();
 
-    await user.click(
-      within(row as HTMLElement).getByRole("button", { name: "Close Current Session" })
+    const trailingAction = within(row as HTMLElement).getByRole("button", {
+      name: "Close Current Session",
+    });
+
+    expect(trailingAction).toHaveClass(
+      "btn",
+      "btn-ghost",
+      "btn-lg",
+      "mobile-select-sheet__item-side-action"
     );
+
+    await user.click(trailingAction);
 
     expect(onCloseSession).toHaveBeenCalledTimes(1);
     expect(onSelect).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("preserves danger tone and disabled behavior on trailing icon actions", async () => {
+    const user = userEvent.setup();
+    const onAction = vi.fn();
+
+    renderWithEnglishLocale(
+      <MobileSelectSheet
+        title="Agent Sessions"
+        sections={[
+          {
+            kind: "options",
+            id: "sessions",
+            items: [
+              {
+                id: "sess_2",
+                label: "Codex",
+                trailingAction: {
+                  id: "close-current",
+                  ariaLabel: "Close Current Session",
+                  disabled: true,
+                  icon: <span aria-hidden="true">x</span>,
+                  onAction,
+                  tone: "danger",
+                },
+              },
+            ],
+          },
+        ]}
+        onSelect={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+
+    const trailingAction = screen.getByRole("button", { name: "Close Current Session" });
+
+    expect(trailingAction).toHaveClass(
+      "btn",
+      "btn-ghost",
+      "btn-lg",
+      "mobile-select-sheet__item-side-action",
+      "mobile-select-sheet__item-side-action--danger"
+    );
+    expect(trailingAction).toBeDisabled();
+
+    await user.click(trailingAction);
+
+    expect(onAction).not.toHaveBeenCalled();
   });
 
   it("keeps selected state on the row background and does not render a check icon", () => {

@@ -756,10 +756,11 @@ describe("FileTreePanel", () => {
     });
     const store = createStore();
     store.set(wsClientAtom, { sendCommand } as never);
+    const onSelectFile = vi.fn();
 
     render(
       <Provider store={store}>
-        <FileTreePanel workspaceId="ws-test" />
+        <FileTreePanel workspaceId="ws-test" onSelectFile={onSelectFile} />
       </Provider>
     );
 
@@ -770,6 +771,7 @@ describe("FileTreePanel", () => {
     const deleteButton = await screen.findByRole("button", {
       name: "file.delete src/app.tsx",
     });
+    expect(deleteButton).toHaveClass("btn", "btn-ghost", "btn-sm", "git-row-action");
     expect(deleteButton).not.toHaveAttribute("title");
 
     fireEvent.mouseEnter(deleteButton);
@@ -777,6 +779,11 @@ describe("FileTreePanel", () => {
     const tooltip = screen.getByRole("tooltip");
     expect(tooltip).toHaveTextContent("file.delete");
     expect(deleteButton).toHaveAttribute("aria-describedby", tooltip.getAttribute("id") ?? "");
+
+    fireEvent.click(deleteButton);
+
+    expect(onSelectFile).not.toHaveBeenCalled();
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
   });
 
   it("uses shared tooltips for file-tree action triggers while preserving row path titles", () => {
@@ -815,6 +822,10 @@ describe("FileTreePanel", () => {
     const deleteDirectoryButton = screen.getByRole("button", { name: "file.delete src" });
     const deleteFileButton = screen.getByRole("button", { name: "file.delete src/app.tsx" });
 
+    expect(newFileButton).toHaveClass("btn", "btn-ghost", "btn-sm", "git-row-action");
+    expect(newFolderButton).toHaveClass("btn", "btn-ghost", "btn-sm", "git-row-action");
+    expect(deleteDirectoryButton).toHaveClass("btn", "btn-ghost", "btn-sm", "git-row-action");
+    expect(deleteFileButton).toHaveClass("btn", "btn-ghost", "btn-sm", "git-row-action");
     expect(newFileButton).not.toHaveAttribute("title");
     expect(newFolderButton).not.toHaveAttribute("title");
     expect(deleteDirectoryButton).not.toHaveAttribute("title");

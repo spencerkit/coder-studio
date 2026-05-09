@@ -13,7 +13,7 @@ import { useEffect, useRef, useState } from "react";
 import { pendingFocusSessionAtom } from "../../../../atoms/app-ui";
 import { sessionByIdAtomFamily } from "../../../../atoms/sessions";
 import { workspaceByIdAtomFamily } from "../../../../atoms/workspaces";
-import { ProgressBar, StatusDot, Tag, Tooltip } from "../../../../components/ui";
+import { IconButton, ProgressBar, StatusDot, Tag, Tooltip } from "../../../../components/ui";
 import { useSupervisor } from "../../../supervisor/actions/use-supervisor";
 import { ObjectiveDialog } from "../../../supervisor/views/shared/objective-dialog";
 import { SupervisorCard } from "../../../supervisor/views/shared/supervisor-card";
@@ -154,41 +154,41 @@ export const SessionCard: FC<SessionCardProps> = ({
               <div className="session-header-actions">
                 {session.state === "running" ? (
                   <Tooltip content="Stop">
-                    <button
-                      className="session-action-btn"
-                      onClick={() => void onStop?.()}
+                    <IconButton
                       aria-label="Stop"
-                    >
-                      <Square size={13} />
-                    </button>
+                      className="session-action-btn"
+                      icon={<Square size={13} />}
+                      onClick={() => void onStop?.()}
+                      size="sm"
+                    />
                   </Tooltip>
                 ) : null}
                 <Tooltip content="Split horizontal">
-                  <button
-                    className="session-action-btn"
-                    onClick={() => onSplitHorizontal?.()}
+                  <IconButton
                     aria-label="Split horizontal"
-                  >
-                    <FlipHorizontal size={13} />
-                  </button>
+                    className="session-action-btn"
+                    icon={<FlipHorizontal size={13} />}
+                    onClick={() => onSplitHorizontal?.()}
+                    size="sm"
+                  />
                 </Tooltip>
                 <Tooltip content="Split vertical">
-                  <button
-                    className="session-action-btn"
-                    onClick={() => onSplitVertical?.()}
+                  <IconButton
                     aria-label="Split vertical"
-                  >
-                    <FlipVertical size={13} />
-                  </button>
+                    className="session-action-btn"
+                    icon={<FlipVertical size={13} />}
+                    onClick={() => onSplitVertical?.()}
+                    size="sm"
+                  />
                 </Tooltip>
                 <Tooltip content="Close">
-                  <button
-                    className="session-action-btn session-action-btn-close"
-                    onClick={() => void onClose?.()}
+                  <IconButton
                     aria-label="Close"
-                  >
-                    <X size={14} />
-                  </button>
+                    className="session-action-btn session-action-btn-close"
+                    icon={<X size={14} />}
+                    onClick={() => void onClose?.()}
+                    size="sm"
+                  />
                 </Tooltip>
               </div>
             ) : null}
