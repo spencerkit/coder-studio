@@ -4,14 +4,18 @@
  * Main navigation bar with workspace tabs, quick actions, and settings.
  */
 
-import { useAtom, useAtomValue } from "jotai";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { PanelBottom, PanelLeft, Plus, Search, Settings } from "lucide-react";
 import type { FC } from "react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { commandPaletteOpenAtom } from "../../atoms/app-ui";
-import { orderedWorkspacesAtom, resolvedActiveWorkspaceIdAtom } from "../../atoms/workspaces";
-import { Tooltip } from "../../components/ui";
+import {
+  activeWorkspaceIdAtom,
+  orderedWorkspacesAtom,
+  resolvedActiveWorkspaceIdAtom,
+} from "../../atoms/workspaces";
+import { TabList, Tabs, Tooltip } from "../../components/ui";
 import { useTranslation } from "../../lib/i18n";
 import type { WorkspaceFullscreenController } from "../workspace/actions/use-workspace-fullscreen";
 import { sidebarCollapsedAtom, terminalPanelVisibleAtom } from "../workspace/atoms";
@@ -37,6 +41,8 @@ export const TopBar: FC<TopBarProps> = ({ fullscreenController }) => {
   const navigate = useNavigate();
   const workspaceList = useAtomValue(orderedWorkspacesAtom);
   const activeWorkspaceId = useAtomValue(resolvedActiveWorkspaceIdAtom);
+  const selectedWorkspaceId = activeWorkspaceId ?? workspaceList[0]?.id ?? "";
+  const setActiveWorkspace = useSetAtom(activeWorkspaceIdAtom);
   const [commandPaletteOpen, setCommandPaletteOpen] = useAtom(commandPaletteOpenAtom);
   const [terminalPanelVisible, setTerminalPanelVisible] = useAtom(terminalPanelVisibleAtom);
   const [sidebarCollapsed, setSidebarCollapsed] = useAtom(sidebarCollapsedAtom);
@@ -50,9 +56,18 @@ export const TopBar: FC<TopBarProps> = ({ fullscreenController }) => {
             <span className="topbar-hint">{t("workspace.no_workspace")}</span>
           </div>
         ) : (
-          workspaceList.map((ws) => (
-            <WorkspaceTab key={ws.id} workspace={ws} isActive={ws.id === activeWorkspaceId} />
-          ))
+          <Tabs
+            aria-label={t("workspace.tabs")}
+            className="topbar-tabs-nav"
+            onValueChange={setActiveWorkspace}
+            value={selectedWorkspaceId}
+          >
+            <TabList className="topbar-tablist">
+              {workspaceList.map((ws) => (
+                <WorkspaceTab key={ws.id} workspace={ws} isActive={ws.id === selectedWorkspaceId} />
+              ))}
+            </TabList>
+          </Tabs>
         )}
         <Tooltip content={t("tooltip.new_workspace")}>
           <button

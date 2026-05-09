@@ -20,11 +20,11 @@
 | ProgressBar | 🟢 complete | `--progress-height` patterns | 0 | 2026-05-09 |
 | Notice | 🟢 complete | `.settings-page__notice*` | 0 | 2026-05-09 |
 | EmptyState | 🟡 partial | feature-specific empty state blocks | centered shared shells plus workspace desktop/mobile no-session or no-workspace empties covered; richer workspace resolving/card shells remain | 2026-05-09 |
-| Tabs | 🟡 partial | tab / pill patterns across features | workspace desktop/mobile/worktree bounded slice covered; broader navigation families remain | 2026-05-09 |
+| Tabs | 🟢 complete | `.panel-tabs`, `.panel-tab`, `.worktree-tabs`, `.worktree-tab`, feature-local workspace/terminal tab shells | 0 | 2026-05-09 |
 | SegmentedControl | 🟢 complete | `.settings-provider-tabs`, `.settings-provider-tab`, `.settings-provider-subnav`, `.settings-provider-subnav-button`, `.shortcuts-category-tabs`, `.shortcuts-category-tab` | 0 | 2026-05-09 |
 | Sheet | 🟢 complete | `.mobile-sheet*` | 0 | 2026-05-09 |
-| Select | 🟡 in-flight | `.input`, `.mobile-select-*` | 2 | 2026-05-09 |
-| Popover | ⚫ not-started | new | — | — |
+| Select | 🟡 in-flight | `.input`, `.mobile-select-*` | 1 | 2026-05-09 |
+| Popover | 🟡 partial | new | desktop terminal selector and branch quick pick covered; broader custom-content dropdown and action-menu families remain | 2026-05-09 |
 | ActionMenu | ⚫ not-started | new | — | — |
 
 `Input` now completes the legacy `.input` single-line text-entry migration inventory: the auth password field, the settings supervisor timeout field, the git sync auth username/password fields, the worktree manager create-form branch/path fields, the file-tree create-path modal field, and the shortcuts capture input all use the shared primitive from the public UI barrel while preserving legacy `.input` compatibility classes and caller-owned layout hooks such as `auth-input`, `settings-input-compact`, and `shortcuts-capture`.
@@ -37,7 +37,9 @@
 
 `Badge` now completes the bounded legacy `.topbar-unread` migration inventory: the workspace tab unread counter uses the shared primitive from the public UI barrel while preserving the legacy compatibility class and count-capping behavior.
 
-`Select` now covers the bounded supervisor objective dialog evaluator-provider flow on both platforms: desktop uses the shared primitive's native `<select>` path while mobile uses its trigger mode to reopen the existing `MobileSelectSheet` flow, preserving legacy `input` / `mobile-select-trigger*` compatibility classes and the objective dialog's existing label, helper-text, and hook ids. The row remains in-flight because this slice only migrates the objective dialog evaluator-provider selector; deferred select-like callers still include other broader selector families outside this flow.
+`Select` now covers the bounded supervisor evaluator-provider selector family on both platforms plus the mobile fullscreen terminal switcher trigger: supervisor uses the shared primitive's interactive trigger path with a desktop `listbox` and a primitive-owned internal inline mobile `MobileSelectSheet` flow, while the terminal switcher continues to use the bounded external mobile trigger mode so it can keep richer caller-owned sheet rows and fixed naming such as "Switch terminal". The primitive preserves legacy `input` / `mobile-select-trigger*` compatibility classes and caller-owned hooks such as `terminal-selector-btn`. The row remains in-flight because one plain-select caller still remains, while richer custom-content families now move to `Popover` / future `ActionMenu` primitives instead of plain `Select`.
+
+`Popover` now covers a bounded desktop custom-content dropdown batch: the desktop terminal selector and workspace branch quick pick both use the shared primitive from the public UI barrel for click-to-toggle or ArrowDown-to-open trigger semantics, portaled non-modal dialog content, and outside-click / `Escape` dismissal while preserving legacy hooks such as `terminal-selector-btn`, `terminal-selector-dropdown`, `terminal-selector-item*`, `git-panel-status-strip__branch`, and `branch-quick-pick*`. The mobile fullscreen terminal switcher and mobile branch quick pick remain intentionally on their existing `Select` + `MobileSelectSheet` and global `MobileSelectSheet` paths, and broader action-menu families remain deferred to later slices.
 
 `Notice` now completes the bounded legacy `.settings-page__notice*` migration inventory: the settings-page load-error shell uses the shared primitive from the public UI barrel while preserving the legacy `settings-page__notice*` compatibility classes and the caller-owned `settings-link` refresh action styling.
 
@@ -67,4 +69,4 @@
 
 `EmptyState` now covers a broader bounded shell slice: config editor, terminal panel, git diff/code editor/image preview empties, the desktop workspace no-workspace shell, and the mobile agent empty shell all use the shared primitive from the public UI barrel. Richer workspace resolving/card shells and other feature-owned empty-state chromes remain intentionally deferred.
 
-`Tabs` now have a shared primitive in the public barrel and bounded caller adoption on `develop`, but broader feature-specific navigation families are not yet fully migrated across the inventory.
+`Tabs` now complete the bounded tab-navigation inventory: workspace desktop/mobile/worktree surfaces, the topbar workspace switcher, and the desktop terminal session tabs all use the shared primitive from the public UI barrel while preserving legacy compatibility classes and feature-owned closable-tab shells where secondary close actions must remain siblings of the tab trigger for valid DOM and keyboard semantics.

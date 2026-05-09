@@ -2,9 +2,7 @@ import { useSetAtom } from "jotai";
 import { useEffect, useState } from "react";
 import { Button, Sheet } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
-import { MobileSelectSheet } from "../../../mobile-select";
 import {
-  OBJECTIVE_DIALOG_EVALUATOR_OPTIONS,
   type ObjectiveDialogEvaluatorProviderId,
   type ObjectiveDialogMode,
   useObjectiveDialogState,
@@ -29,7 +27,6 @@ export function MobileSupervisorSheet({
 }: MobileSupervisorSheetProps) {
   const t = useTranslation();
   const [detailMode, setDetailMode] = useState<ObjectiveDialogMode | null>(null);
-  const [evaluatorPickerOpen, setEvaluatorPickerOpen] = useState(false);
   const setDialog = useSetAtom(supervisorDialogAtom);
   const {
     dialog,
@@ -45,7 +42,6 @@ export function MobileSupervisorSheet({
 
   useEffect(() => {
     if (!dialog.open || dialog.sessionId !== sessionId) {
-      setEvaluatorPickerOpen(false);
       setDetailMode(null);
       return;
     }
@@ -71,12 +67,10 @@ export function MobileSupervisorSheet({
         title={copy.title}
         kicker={t("supervisor.title")}
         onBack={() => {
-          setEvaluatorPickerOpen(false);
           close();
           setDetailMode(null);
         }}
         onClose={() => {
-          setEvaluatorPickerOpen(false);
           close();
           setDetailMode(null);
           onClose();
@@ -103,43 +97,13 @@ export function MobileSupervisorSheet({
               onDraftEvaluatorProviderChange={(draftEvaluatorProviderId) =>
                 updateDraft({ draftEvaluatorProviderId })
               }
-              mobileEvaluatorPicker={{
-                isMobile: true,
-                onOpen: () => setEvaluatorPickerOpen(true),
-              }}
             />
-            {evaluatorPickerOpen ? (
-              <MobileSelectSheet
-                title={t("supervisor.field.evaluator")}
-                presentation="inline"
-                sections={[
-                  {
-                    kind: "options",
-                    id: "evaluator-providers",
-                    items: OBJECTIVE_DIALOG_EVALUATOR_OPTIONS.map((option) => ({
-                      id: option.id,
-                      label: option.label,
-                    })),
-                  },
-                ]}
-                selectedId={dialog.draftEvaluatorProviderId}
-                onBack={() => setEvaluatorPickerOpen(false)}
-                onClose={() => setEvaluatorPickerOpen(false)}
-                onSelect={(id) => {
-                  updateDraft({
-                    draftEvaluatorProviderId: id as ObjectiveDialogEvaluatorProviderId,
-                  });
-                  setEvaluatorPickerOpen(false);
-                }}
-              />
-            ) : null}
           </div>
         }
         footer={
           <div className="mobile-supervisor-sheet__footer">
             <Button
               onClick={() => {
-                setEvaluatorPickerOpen(false);
                 close();
                 setDetailMode(null);
               }}

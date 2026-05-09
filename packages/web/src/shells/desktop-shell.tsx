@@ -16,7 +16,6 @@ import { ToastContainer } from "../features/notifications";
 import { SettingsPage } from "../features/settings";
 import { WelcomePage } from "../features/welcome";
 import { WorkspaceDesktopView } from "../features/workspace/views/desktop/workspace-desktop-view";
-import { BranchQuickPick } from "../features/workspace/views/shared/branch-quick-pick";
 import { WorkspaceRouteGate } from "../features/workspace/views/shared/workspace-route-gate";
 import { useBootstrap } from "../hooks/use-bootstrap";
 import { ConnectionStatusBanner } from "./shared/connection-status-banner";
@@ -65,7 +64,6 @@ export function DesktopShell() {
       </main>
 
       <CommandPalette />
-      <BranchQuickPick />
       <ToastContainer />
     </div>
   );

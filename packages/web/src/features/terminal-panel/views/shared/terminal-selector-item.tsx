@@ -33,7 +33,7 @@ export function TerminalSelectorItem({
 
   return (
     <div className={`terminal-selector-item ${isActive ? "terminal-selector-item-active" : ""}`}>
-      <button className="terminal-selector-item-trigger" onClick={onSelect}>
+      <button type="button" className="terminal-selector-item-trigger" onClick={onSelect}>
         <span className="terminal-selector-item-title">{title}</span>
       </button>
       <IconButton

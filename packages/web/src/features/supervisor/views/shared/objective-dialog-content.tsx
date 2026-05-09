@@ -21,10 +21,6 @@ interface ObjectiveDialogContentProps {
   disableObjective: string;
   onDraftObjectiveChange: (value: string) => void;
   onDraftEvaluatorProviderChange: (value: ObjectiveDialogEvaluatorProviderId) => void;
-  mobileEvaluatorPicker?: {
-    onOpen: () => void;
-    isMobile: boolean;
-  };
 }
 
 export function ObjectiveDialogModeIcon({ mode }: { mode: ObjectiveDialogMode }) {
@@ -40,7 +36,6 @@ export function ObjectiveDialogContent({
   disableObjective,
   onDraftObjectiveChange,
   onDraftEvaluatorProviderChange,
-  mobileEvaluatorPicker,
 }: ObjectiveDialogContentProps) {
   const t = useTranslation();
   const objectiveHelperId = useId();
@@ -85,34 +80,20 @@ export function ObjectiveDialogContent({
       </div>
 
       <div className="form-group">
-        <label
-          id={evaluatorLabelId}
-          htmlFor={
-            mobileEvaluatorPicker?.isMobile ? "evaluator-provider-trigger" : "evaluator-provider"
-          }
-        >
+        <label id={evaluatorLabelId} htmlFor="evaluator-provider">
           {t("supervisor.field.evaluator")}
         </label>
-        {mobileEvaluatorPicker?.isMobile ? (
-          <Select
-            mobile
-            id="evaluator-provider-trigger"
-            options={evaluatorOptions}
-            value={draftEvaluatorProviderId}
-            aria-labelledby={evaluatorLabelId}
-            aria-describedby={evaluatorHelperId}
-            onOpen={mobileEvaluatorPicker.onOpen}
-          />
-        ) : (
-          <Select
-            id="evaluator-provider"
-            options={evaluatorOptions}
-            value={draftEvaluatorProviderId}
-            aria-labelledby={evaluatorLabelId}
-            aria-describedby={evaluatorHelperId}
-            onValueChange={onDraftEvaluatorProviderChange}
-          />
-        )}
+        <Select
+          id="evaluator-provider"
+          desktopMode="listbox"
+          mobileSheetTitle={t("supervisor.field.evaluator")}
+          mobileSheetPresentation="inline"
+          options={evaluatorOptions}
+          value={draftEvaluatorProviderId}
+          aria-labelledby={evaluatorLabelId}
+          aria-describedby={evaluatorHelperId}
+          onValueChange={onDraftEvaluatorProviderChange}
+        />
         <span id={evaluatorHelperId} className="dialog-helper">
           {t("supervisor.field.evaluator_helper")}
         </span>

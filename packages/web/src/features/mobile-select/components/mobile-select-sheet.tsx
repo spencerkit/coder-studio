@@ -1,5 +1,6 @@
 import { type ReactNode, useId, useMemo, useState } from "react";
-import { Sheet, Tag } from "../../../components/ui";
+import { Sheet } from "../../../components/ui/sheet";
+import { Tag } from "../../../components/ui/tag";
 import { useTranslation } from "../../../lib/i18n";
 import { PageHeader } from "../../shared/components/page-header";
 

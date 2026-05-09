@@ -98,6 +98,7 @@
   },
   "workspace": {
     "title": "工作区",
+    "tabs": "工作区标签",
     "open": "打开",
     "close": "关闭",
     "path": "路径",

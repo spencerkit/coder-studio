@@ -1,7 +1,16 @@
 import { useStore } from "jotai";
 import { ChevronDown, Plus, Terminal, X } from "lucide-react";
-import { useState } from "react";
-import { Button, EmptyState, IconButton, Tooltip } from "../../../../components/ui";
+import { useEffect, useState } from "react";
+import {
+  Button,
+  EmptyState,
+  IconButton,
+  Popover,
+  Select,
+  TabList,
+  Tabs,
+  Tooltip,
+} from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { MobileSelectSheet } from "../../../mobile-select";
 import { useTerminalActions } from "../../actions/use-terminal-actions";
@@ -28,6 +37,7 @@ interface TerminalPanelProps {
 export function TerminalPanel({ chrome = "default" }: TerminalPanelProps) {
   const t = useTranslation();
   const store = useStore();
+  const [desktopSelectorOpen, setDesktopSelectorOpen] = useState(false);
   const [selectorSheetOpen, setSelectorSheetOpen] = useState(false);
   const {
     activeTerminalId,
@@ -45,9 +55,25 @@ export function TerminalPanel({ chrome = "default" }: TerminalPanelProps) {
     activeTerminalIndex >= 0 ? activeTerminalIndex : 0,
     t("terminal.shell")
   );
+  const selectedTerminalId = activeTerminalId ?? terminalIds[0] ?? "";
   const isMobileFullscreen = chrome === "mobile-fullscreen";
   const showSelector = hasTerminals && (!isMobileFullscreen || terminalIds.length > 1);
   const showTabs = terminalIds.length > 1 && !isMobileFullscreen;
+  const terminalSelectorOptions = terminalIds.map((id, index) => {
+    const terminalMeta = store.get(terminalMetaAtomFamily(id));
+
+    return {
+      value: id,
+      label: formatTerminalTitle(terminalMeta, index, t("terminal.shell")),
+    };
+  });
+
+  useEffect(() => {
+    if (!showSelector || terminalIds.length <= 1) {
+      setDesktopSelectorOpen(false);
+      setSelectorSheetOpen(false);
+    }
+  }, [showSelector, terminalIds.length]);
 
   return (
     <div
@@ -70,23 +96,74 @@ export function TerminalPanel({ chrome = "default" }: TerminalPanelProps) {
             <>
               {showSelector ? (
                 <div className="terminal-selector">
-                  <button
-                    className="terminal-selector-btn"
-                    aria-label={
-                      isMobileFullscreen ? t("terminal.selector.switch") : activeTerminalTitle
-                    }
-                    aria-expanded={isMobileFullscreen ? selectorSheetOpen : undefined}
-                    onClick={() => {
-                      if (!isMobileFullscreen) {
-                        return;
-                      }
+                  {isMobileFullscreen ? (
+                    <Select
+                      mobile
+                      aria-label={t("terminal.selector.switch")}
+                      aria-expanded={selectorSheetOpen}
+                      className="terminal-selector-btn"
+                      includeValueInAriaLabel={false}
+                      options={terminalSelectorOptions}
+                      value={selectedTerminalId}
+                      valueLabel={activeTerminalTitle}
+                      onClick={(event) => {
+                        if (!selectorSheetOpen) {
+                          return;
+                        }
 
-                      setSelectorSheetOpen((value) => !value);
-                    }}
-                  >
-                    <span>{activeTerminalTitle}</span>
-                    <ChevronDown size={12} />
-                  </button>
+                        event.preventDefault();
+                        setSelectorSheetOpen(false);
+                      }}
+                      onOpen={() => setSelectorSheetOpen(true)}
+                    />
+                  ) : terminalIds.length > 1 ? (
+                    <Popover
+                      content={
+                        <>
+                          {terminalIds.map((id, index) => (
+                            <TerminalSelectorItem
+                              key={id}
+                              id={id}
+                              index={index}
+                              isActive={id === activeTerminalId}
+                              onSelect={() => {
+                                handleSwitchTerminal(id);
+                                setDesktopSelectorOpen(false);
+                              }}
+                              onClose={() => {
+                                setDesktopSelectorOpen(false);
+                                void handleCloseTerminal(id);
+                              }}
+                            />
+                          ))}
+                        </>
+                      }
+                      contentClassName="terminal-selector-dropdown"
+                      forceMode="desktop"
+                      open={desktopSelectorOpen}
+                      placement="bottom-end"
+                      title={t("terminal.selector.title")}
+                      onOpenChange={setDesktopSelectorOpen}
+                    >
+                      <button
+                        type="button"
+                        className="terminal-selector-btn"
+                        aria-label={activeTerminalTitle}
+                      >
+                        <span>{activeTerminalTitle}</span>
+                        <ChevronDown size={12} />
+                      </button>
+                    </Popover>
+                  ) : (
+                    <button
+                      type="button"
+                      className="terminal-selector-btn"
+                      aria-label={activeTerminalTitle}
+                    >
+                      <span>{activeTerminalTitle}</span>
+                      <ChevronDown size={12} />
+                    </button>
+                  )}
 
                   {isMobileFullscreen ? (
                     selectorSheetOpen ? (
@@ -96,19 +173,12 @@ export function TerminalPanel({ chrome = "default" }: TerminalPanelProps) {
                           {
                             kind: "options",
                             id: "terminals",
-                            items: terminalIds.map((id, index) => {
-                              const terminalMeta = store.get(terminalMetaAtomFamily(id));
-                              const label = formatTerminalTitle(
-                                terminalMeta,
-                                index,
-                                t("terminal.shell")
-                              );
-
+                            items: terminalSelectorOptions.map((option, index) => {
                               return {
-                                id,
-                                label,
+                                id: option.value,
+                                label: option.label,
                                 meta:
-                                  id === activeTerminalId
+                                  option.value === activeTerminalId
                                     ? t("terminal.selector.current")
                                     : t("terminal.selector.indexed", { index: index + 1 }),
                               };
@@ -120,19 +190,6 @@ export function TerminalPanel({ chrome = "default" }: TerminalPanelProps) {
                         onClose={() => setSelectorSheetOpen(false)}
                       />
                     ) : null
-                  ) : terminalIds.length > 1 ? (
-                    <div className="terminal-selector-dropdown">
-                      {terminalIds.map((id, index) => (
-                        <TerminalSelectorItem
-                          key={id}
-                          id={id}
-                          index={index}
-                          isActive={id === activeTerminalId}
-                          onSelect={() => handleSwitchTerminal(id)}
-                          onClose={() => handleCloseTerminal(id)}
-                        />
-                      ))}
-                    </div>
                   ) : null}
                 </div>
               ) : null}
@@ -148,6 +205,7 @@ export function TerminalPanel({ chrome = "default" }: TerminalPanelProps) {
                         return;
                       }
 
+                      setDesktopSelectorOpen(false);
                       setSelectorSheetOpen(false);
                       void handleCloseTerminal(activeTerminalId);
                     }}
@@ -193,18 +251,25 @@ export function TerminalPanel({ chrome = "default" }: TerminalPanelProps) {
         ) : (
           <>
             {showTabs ? (
-              <div className="bottom-terminal-tabs">
-                {terminalIds.map((id, index) => (
-                  <TerminalTab
-                    key={id}
-                    id={id}
-                    index={index}
-                    isActive={id === activeTerminalId}
-                    onSelect={() => handleSwitchTerminal(id)}
-                    onClose={() => handleCloseTerminal(id)}
-                  />
-                ))}
-              </div>
+              <Tabs
+                aria-label={t("terminal.selector.title")}
+                className="bottom-terminal-tabs-nav"
+                onValueChange={handleSwitchTerminal}
+                value={selectedTerminalId}
+              >
+                <TabList className="bottom-terminal-tabs">
+                  {terminalIds.map((id, index) => (
+                    <TerminalTab
+                      key={id}
+                      id={id}
+                      index={index}
+                      isActive={id === selectedTerminalId}
+                      onSelect={() => handleSwitchTerminal(id)}
+                      onClose={() => handleCloseTerminal(id)}
+                    />
+                  ))}
+                </TabList>
+              </Tabs>
             ) : null}
             {activeTerminalMeta && activeWorkspaceId && (
               <div className="bottom-terminal-xterm">

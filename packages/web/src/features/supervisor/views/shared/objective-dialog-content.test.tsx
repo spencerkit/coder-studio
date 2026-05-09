@@ -1,13 +1,32 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ObjectiveDialogContent } from "./objective-dialog-content";
 
 vi.mock("../../../../lib/i18n", () => ({
   useTranslation: () => (key: string) => key,
 }));
 
+function setMatchMediaMock(predicate: (query: string) => boolean) {
+  const matchMedia = vi.fn((query: string) => ({
+    matches: predicate(query),
+    media: query,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  }));
+
+  window.matchMedia = matchMedia as unknown as typeof window.matchMedia;
+}
+
+afterEach(() => {
+  delete (window as typeof window & { matchMedia?: typeof window.matchMedia }).matchMedia;
+});
+
 describe("ObjectiveDialogContent", () => {
-  it("renders shared textarea and desktop select primitives with helper text wiring", () => {
+  it("renders shared textarea and desktop select trigger primitives with helper text wiring", () => {
     render(
       <ObjectiveDialogContent
         mode="edit"
@@ -29,13 +48,14 @@ describe("ObjectiveDialogContent", () => {
       textarea.getAttribute("aria-describedby")
     );
 
-    const select = screen.getByRole("combobox", { name: "supervisor.field.evaluator" });
-    expect(select).toHaveClass("input");
-    expect(select).toHaveValue("claude");
-    expect(select).toHaveAttribute("aria-describedby");
+    const trigger = screen.getByRole("button", {
+      name: "supervisor.field.evaluator Claude",
+    });
+    expect(trigger).toHaveClass("input", "mobile-select-trigger");
+    expect(trigger).toHaveAttribute("aria-describedby");
     expect(screen.getByText("supervisor.field.evaluator_helper")).toHaveAttribute(
       "id",
-      select.getAttribute("aria-describedby")
+      trigger.getAttribute("aria-describedby")
     );
   });
 
@@ -60,7 +80,8 @@ describe("ObjectiveDialogContent", () => {
     expect(textarea).toHaveAttribute("placeholder", "supervisor.field.objective_placeholder");
   });
 
-  it("keeps evaluator selection behavior unchanged on desktop", () => {
+  it("keeps evaluator selection behavior unchanged on desktop", async () => {
+    const user = userEvent.setup();
     const onDraftEvaluatorProviderChange = vi.fn();
 
     render(
@@ -74,15 +95,25 @@ describe("ObjectiveDialogContent", () => {
       />
     );
 
-    fireEvent.change(screen.getByRole("combobox", { name: "supervisor.field.evaluator" }), {
-      target: { value: "codex" },
-    });
+    await user.click(screen.getByRole("button", { name: "supervisor.field.evaluator Claude" }));
+
+    const listbox = screen.getByRole("listbox", { name: "supervisor.field.evaluator" });
+    expect(within(listbox).getByRole("option", { name: "Claude" })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+
+    await user.click(within(listbox).getByRole("option", { name: "Codex" }));
 
     expect(onDraftEvaluatorProviderChange).toHaveBeenCalledWith("codex");
   });
 
-  it("renders the mobile evaluator trigger with dialog semantics", () => {
-    const onOpen = vi.fn();
+  it("renders the mobile evaluator trigger with an inline sheet owned by the shared select", async () => {
+    const user = userEvent.setup();
+    const onDraftEvaluatorProviderChange = vi.fn();
+    setMatchMediaMock(
+      (query) => query.includes("max-width: 899px") || query.includes("pointer: coarse")
+    );
 
     render(
       <ObjectiveDialogContent
@@ -91,11 +122,7 @@ describe("ObjectiveDialogContent", () => {
         draftEvaluatorProviderId="codex"
         disableObjective=""
         onDraftObjectiveChange={vi.fn()}
-        onDraftEvaluatorProviderChange={vi.fn()}
-        mobileEvaluatorPicker={{
-          isMobile: true,
-          onOpen,
-        }}
+        onDraftEvaluatorProviderChange={onDraftEvaluatorProviderChange}
       />
     );
 
@@ -106,7 +133,16 @@ describe("ObjectiveDialogContent", () => {
     expect(trigger).toHaveAttribute("aria-haspopup", "dialog");
     expect(trigger).toHaveAttribute("aria-describedby");
 
-    fireEvent.click(trigger);
-    expect(onOpen).toHaveBeenCalledTimes(1);
+    await user.click(trigger);
+
+    await waitFor(() => {
+      expect(document.querySelector(".mobile-inline-sheet")).toBeTruthy();
+    });
+    expect(document.querySelector(".mobile-inline-sheet .page-header__title")).toHaveTextContent(
+      "supervisor.field.evaluator"
+    );
+
+    await user.click(screen.getByRole("button", { name: "Codex" }));
+    expect(onDraftEvaluatorProviderChange).toHaveBeenCalledWith("codex");
   });
 });

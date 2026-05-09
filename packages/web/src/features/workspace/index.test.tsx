@@ -195,6 +195,16 @@ describe("WorkspacePage", () => {
         };
       }
 
+      if (op === "git.branches") {
+        return {
+          current: "feature/refactor-ts",
+          branches: [
+            { name: "feature/refactor-ts", isCurrent: true, isRemote: false },
+            { name: "origin/main", isCurrent: false, isRemote: true },
+          ],
+        };
+      }
+
       return [];
     });
 
@@ -237,6 +247,9 @@ describe("WorkspacePage", () => {
     expect(screen.getByRole("tablist", { name: "Workspace sections" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Git" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tab", { name: "Git" })).toHaveClass("panel-tab", "active");
+    expect(
+      await screen.findByPlaceholderText("Search branches or create new branch...")
+    ).toBeInTheDocument();
     expect(store.get(branchQuickPickAtom)).toEqual({
       visible: true,
       workspaceId: "ws-test",

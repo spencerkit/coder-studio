@@ -19,6 +19,7 @@
 | Modal | 1 | `src/components/ui/index.ts` named export only | `Modal` + `ModalHeader / ModalTitle / ModalBody / ModalFooter`，保留 legacy `modal-*` 兼容类 |
 | Notice | 1 | `src/components/ui/index.ts` named export only | Current bounded slice covers the settings load-error notice family |
 | Pill | 1 | `src/components/ui/index.ts` named export only | Current bounded slice covers the settings appearance option groups |
+| Popover | 2 | `src/components/ui/index.ts` named export only | Current bounded slice covers the desktop terminal selector and branch quick pick custom-content dropdown families |
 | ProgressBar | 1 | `src/components/ui/index.ts` named export only | Shared bounded linear progress shell with optional ARIA progress semantics |
 | SegmentedControl | 1 | `src/components/ui/index.ts` named export only | Shared compact selector used by provider chooser/subnav and shortcuts categories |
 | Select | 2 | `src/components/ui/index.ts` named export only | Current bounded slice covers the supervisor evaluator selector family |

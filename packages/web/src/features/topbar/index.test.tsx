@@ -70,6 +70,7 @@ describe("TopBar", () => {
 
   it("renders tabs in workspace order and highlights the resolved active workspace", () => {
     const store = createStore();
+    store.set(localeAtom, "en");
     store.set(workspacesAtom, {
       "ws-a": createWorkspace("ws-a", "/tmp/a"),
       "ws-b": createWorkspace("ws-b", "/tmp/b"),
@@ -88,6 +89,7 @@ describe("TopBar", () => {
     expect(tabs.map((tab) => tab.textContent)).toEqual(["ws-b", "ws-a"]);
     expect(tabs[0]?.getAttribute("data-active")).toBe("true");
     expect(tabs[1]?.getAttribute("data-active")).toBe("false");
+    expect(screen.getByRole("tablist", { name: "Workspace tabs" })).toBeInTheDocument();
   });
 
   it("uses translated labels when locale is set to en", () => {

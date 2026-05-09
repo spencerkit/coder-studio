@@ -18,6 +18,8 @@ export type { NoticeProps, NoticeTone } from "./notice";
 export { Notice } from "./notice";
 export type { PillProps } from "./pill";
 export { Pill } from "./pill";
+export type { PopoverForceMode, PopoverPlacement, PopoverProps } from "./popover";
+export { Popover } from "./popover";
 export type { ProgressBarProps, ProgressBarTone } from "./progress-bar";
 export { ProgressBar } from "./progress-bar";
 export type {

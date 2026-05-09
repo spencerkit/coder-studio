@@ -98,6 +98,7 @@
   },
   "workspace": {
     "title": "Workspace",
+    "tabs": "Workspace tabs",
     "open": "Open",
     "close": "Close",
     "path": "Path",

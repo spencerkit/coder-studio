@@ -6620,10 +6620,23 @@ textarea.input {
   gap: 3px;
 }
 
+.topbar-tabs-nav,
+.topbar-tablist {
+  flex: 1;
+  min-width: 0;
+}
+
+.topbar-tab-shell {
+  position: relative;
+  display: flex;
+  min-width: 0;
+}
+
 .topbar-tab {
   height: 29px;
   gap: 6px;
-  padding: 0 10px 0 12px;
+  justify-content: flex-start;
+  padding: 0 32px 0 12px;
   border-radius: 7px;
 }
 
@@ -6644,8 +6657,22 @@ textarea.input {
 .topbar-close {
   width: 18px;
   height: 18px;
-  margin-left: 2px;
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  margin-left: 0;
   border-radius: 4px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%);
+  z-index: 1;
+}
+
+.topbar-tab-shell.active .topbar-close,
+.topbar-tab-shell:hover .topbar-close,
+.topbar-tab-shell:focus-within .topbar-close {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .topbar-add,
@@ -6693,6 +6720,10 @@ textarea.input {
   border-radius: 4px;
 }
 
+.bottom-terminal-tabs-nav {
+  min-width: 0;
+}
+
 .bottom-terminal-tabs {
   gap: 2px;
   padding: 0 12px;
@@ -6701,33 +6732,60 @@ textarea.input {
   border-bottom: 1px solid var(--border);
 }
 
+.terminal-tab-shell {
+  position: relative;
+  display: flex;
+  min-width: 0;
+}
+
 .terminal-tab {
   height: 26px;
   margin-top: 0;
-  padding: 0 8px;
+  min-width: 0;
+  justify-content: flex-start;
+  padding: 0 28px 0 8px;
   border-radius: 0;
   border-bottom: 2px solid transparent;
   background: transparent;
-}
-
-.terminal-tab-active {
-  background: transparent;
-  border-bottom-color: var(--accent-blue);
-}
-
-.terminal-tab-label {
   color: var(--text-tertiary);
 }
 
-.terminal-tab-active .terminal-tab-label {
+.terminal-tab:hover {
+  color: var(--text-secondary);
+}
+
+.terminal-tab.active,
+.terminal-tab-active {
+  background: transparent;
+  border-bottom-color: var(--accent-blue);
   color: var(--text-primary);
+}
+
+.terminal-tab-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .terminal-tab-close {
   width: 18px;
   height: 18px;
+  position: absolute;
+  top: 50%;
+  right: 4px;
   border-radius: 4px;
   color: var(--text-tertiary);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.terminal-tab-shell.active .terminal-tab-close,
+.terminal-tab-shell:hover .terminal-tab-close,
+.terminal-tab-shell:focus-within .terminal-tab-close {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .terminal-tab-close:hover {
@@ -7329,18 +7387,6 @@ textarea.input {
 }
 
 /* ========== Branch Quick Pick ========== */
-.branch-quick-pick-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding-top: var(--sp-16);
-  z-index: calc(var(--z-modal) + 1);
-  animation: fadeIn var(--duration-fast) var(--ease-out);
-}
-
 .branch-quick-pick {
   width: 100%;
   max-width: 540px;
