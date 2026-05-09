@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Button,
+  ConfirmDialog,
   EmptyState,
   Input,
   Modal,
@@ -134,6 +135,11 @@ export function WorktreeManagerSurface({
   const canSubmit =
     branchDraft.trim().length > 0 && /^(?:\/|[A-Za-z]:[\\/]|\\\\)/.test(pathDraft.trim());
   const pathHintId = `worktree-path-hint-${workspaceId}`;
+  const closeDeleteConfirm = () => {
+    setRemoveError(null);
+    setDeleteTargetPath(null);
+    setView("list");
+  };
 
   const openCreate = () => {
     resetCreateForm();
@@ -141,6 +147,22 @@ export function WorktreeManagerSurface({
     setSelectedPath(null);
     setNotice(null);
     setView("create");
+  };
+
+  const submitDeleteConfirm = () => {
+    if (!deleteTarget) {
+      return;
+    }
+
+    setRemoveError(null);
+    void removeWorktreeByPath(deleteTarget.path, deleteTarget.status === "dirty").then((result) => {
+      if (result.ok) {
+        closeDeleteConfirm();
+        return;
+      }
+
+      setRemoveError(result.error);
+    });
   };
 
   const body =
@@ -222,31 +244,13 @@ export function WorktreeManagerSurface({
         </p>
         <code className="worktree-manager__confirm-path">{deleteTarget.path}</code>
         <div className="worktree-manager__confirm-actions">
-          <Button
-            variant="secondary"
-            onClick={() => {
-              setRemoveError(null);
-              setDeleteTargetPath(null);
-              setView("list");
-            }}
-          >
+          <Button variant="secondary" onClick={closeDeleteConfirm}>
             {t("action.cancel")}
           </Button>
           <Button
             variant="danger"
             onClick={() => {
-              setRemoveError(null);
-              void removeWorktreeByPath(deleteTarget.path, deleteTarget.status === "dirty").then(
-                (result) => {
-                  if (result.ok) {
-                    setDeleteTargetPath(null);
-                    setView("list");
-                    return;
-                  }
-
-                  setRemoveError(result.error);
-                }
-              );
+              submitDeleteConfirm();
             }}
           >
             {deleteTarget.status === "dirty" ? t("worktree.force_remove") : t("common.delete")}
@@ -326,6 +330,39 @@ export function WorktreeManagerSurface({
         )}
       </div>
     );
+
+  if (!isMobile && view === "confirm-delete" && deleteTarget) {
+    return (
+      <ConfirmDialog
+        open
+        className="worktree-manager-surface"
+        title={t("common.delete")}
+        description={
+          <div className="worktree-manager__confirm">
+            {removeError ? <div className="worktree-error">{removeError}</div> : null}
+            <p>
+              {deleteTarget.status === "dirty"
+                ? t("worktree.remove_force_confirm")
+                : t("worktree.remove_confirm")}
+            </p>
+            <code className="worktree-manager__confirm-path">{deleteTarget.path}</code>
+          </div>
+        }
+        cancelText={t("action.cancel")}
+        closeLabel={t("action.close")}
+        confirmText={
+          deleteTarget.status === "dirty" ? t("worktree.force_remove") : t("common.delete")
+        }
+        onOpenChange={(open) => {
+          if (!open) {
+            closeDeleteConfirm();
+          }
+        }}
+        onConfirm={submitDeleteConfirm}
+        tone="danger"
+      />
+    );
+  }
 
   return isMobile ? (
     <Sheet

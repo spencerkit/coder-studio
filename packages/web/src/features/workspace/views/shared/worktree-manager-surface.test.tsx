@@ -272,7 +272,9 @@ describe("WorktreeManagerSurface", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Remove feature/x" }));
+    expect(screen.getByRole("dialog", { name: "Delete" })).toBeInTheDocument();
     expect(screen.getByText("Force remove dirty worktree?")).toBeInTheDocument();
+    expect(screen.getByText("/repo/feature-x")).toHaveClass("worktree-manager__confirm-path");
     fireEvent.click(screen.getByRole("button", { name: "Force Remove" }));
 
     await waitFor(() => {
@@ -286,6 +288,83 @@ describe("WorktreeManagerSurface", () => {
         undefined
       );
     });
+  });
+
+  it("uses the shared confirm dialog copy for clean worktree removal and returns to list on cancel", () => {
+    const cleanRemovableWorktrees: WorktreeInfo[] = [
+      worktrees[0]!,
+      {
+        name: "feature/y",
+        path: "/repo/feature-y",
+        branch: "feature/y",
+        commit: "ghi9012",
+        status: "clean",
+      },
+    ];
+
+    render(
+      <Provider store={buildManagerStore(vi.fn(), cleanRemovableWorktrees, "/repo/main")}>
+        <WorktreeManagerSurface workspaceId="ws-1" openView="list" onClose={vi.fn()} />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove feature/y" }));
+
+    expect(screen.getByRole("dialog", { name: "Delete" })).toBeInTheDocument();
+    expect(screen.getByText("Remove worktree?")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
+    expect(screen.getByText("/repo/feature-y")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(screen.queryByRole("dialog", { name: "Delete" })).toBeNull();
+    expect(screen.getByText("feature/y")).toBeInTheDocument();
+  });
+
+  it("keeps removal errors visible inside the shared confirm dialog until dismissed", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "worktree.remove") {
+        throw new Error("permission denied");
+      }
+
+      return {};
+    });
+
+    render(
+      <Provider store={buildManagerStore(sendCommand, worktrees, "/repo/main")}>
+        <WorktreeManagerSurface workspaceId="ws-1" openView="list" onClose={vi.fn()} />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove feature/x" }));
+    fireEvent.click(screen.getByRole("button", { name: "Force Remove" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Delete" });
+    expect(dialog).toBeInTheDocument();
+    expect(screen.getByText("permission denied")).toBeInTheDocument();
+    expect(screen.getByText("Force remove dirty worktree?")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(screen.queryByRole("dialog", { name: "Delete" })).toBeNull();
+    expect(screen.getByText("feature/x")).toBeInTheDocument();
+  });
+
+  it("keeps mobile worktree removal inside the shared sheet instead of opening a dialog", () => {
+    viewportMocks.viewport = "mobile";
+
+    render(
+      <Provider store={buildManagerStore(vi.fn(), worktrees, "/repo/main")}>
+        <WorktreeManagerSurface workspaceId="ws-1" openView="list" onClose={vi.fn()} />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove feature/x" }));
+
+    expect(screen.queryByRole("dialog", { name: "Delete" })).toBeNull();
+    expect(screen.getByRole("region", { name: "Worktrees sheet" })).toBeInTheDocument();
+    expect(screen.getByText("Force remove dirty worktree?")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Force Remove" })).toBeInTheDocument();
   });
 
   it("does not retry worktree.list in a loop after an initial load failure", async () => {

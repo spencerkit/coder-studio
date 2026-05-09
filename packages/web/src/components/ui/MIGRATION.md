@@ -14,7 +14,7 @@
 | Spinner | 🟢 complete | `.animate-spin` | 0 | 2026-05-09 |
 | Switch | 🟢 complete | new | 0 | 2026-05-09 |
 | Modal | 🟢 complete | `.modal-overlay .modal-card .modal-*` | 0 | 2026-05-09 |
-| ConfirmDialog | 🟡 partial | modal convenience wrapper | richer confirm/auth flows remain on raw `Modal` | 2026-05-09 |
+| ConfirmDialog | 🟡 partial | modal convenience wrapper | file-tree delete, git sync confirm dialogs, and worktree-manager delete confirmation covered; richer confirm/auth flows remain on raw `Modal` | 2026-05-09 |
 | Toast | 🟢 complete | `.toast*` | 0 | 2026-05-09 |
 | Tooltip | 🟢 complete | native `title` hover labels | 0 | 2026-05-09 |
 | ProgressBar | 🟢 complete | `--progress-height` patterns | 0 | 2026-05-09 |
@@ -57,7 +57,7 @@
 
 `Modal` now completes the legacy raw modal-shell migration inventory: the file tree create flow, the objective dialog, the git sync auth flow, the desktop worktree modal, and the desktop worktree manager surface all use the shared primitive from the public UI barrel while preserving the legacy `modal-*` compatibility classes emitted by the primitive itself.
 
-`ConfirmDialog` now covers the bounded confirm-action slice used by the file tree delete flow and git sync confirm dialogs. The row remains partial because richer auth and action-confirmation flows still live on direct `Modal` composition by design.
+`ConfirmDialog` now covers the bounded confirm-action slice used by the file tree delete flow, git sync confirm dialogs, and the worktree-manager delete confirmation. The row remains partial because richer auth and action-confirmation flows still live on direct `Modal` composition by design.
 
 `Toast` now covers the bounded notification presenter in `features/notifications/toast-container.tsx`. The shared primitive owns the generic shell and compatibility classes, while Jotai queue state, auto-dismiss timing, icon selection, and workspace/session navigation remain in the feature layer by design.
 
