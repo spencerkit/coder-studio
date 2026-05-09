@@ -21,6 +21,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Button,
   ConfirmDialog,
+  EmptyState,
   IconButton,
   Input,
   Modal,
@@ -37,6 +38,29 @@ import {
   type PendingDeleteState,
   useFileActions,
 } from "../../actions/use-file-actions";
+
+const fileTreeEmptyStateStyle = {
+  minHeight: "auto",
+  padding: "var(--sp-4)",
+  gap: 0,
+};
+
+const fileTreeEmptyStateTitleStyle = {
+  margin: 0,
+  color: "var(--text-tertiary)",
+  fontSize: "inherit",
+  fontWeight: "var(--font-normal)",
+};
+
+function FileTreeEmptyState({ title }: { title: string }) {
+  return (
+    <EmptyState
+      className="file-tree-empty"
+      style={fileTreeEmptyStateStyle}
+      title={<p style={fileTreeEmptyStateTitleStyle}>{title}</p>}
+    />
+  );
+}
 
 interface FileTreePanelProps {
   workspaceId: string;
@@ -155,9 +179,7 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
         <div className="file-tree">
           {hasSearch ? (
             searchLoading ? (
-              <div className="file-tree-empty">
-                <p>{t("common.loading")}</p>
-              </div>
+              <FileTreeEmptyState title={t("common.loading")} />
             ) : searchResults.length > 0 ? (
               searchResults.map((node) => (
                 <FileSearchResultRow
@@ -169,9 +191,7 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
                 />
               ))
             ) : (
-              <div className="file-tree-empty">
-                <p>{t("command.no_results")}</p>
-              </div>
+              <FileTreeEmptyState title={t("command.no_results")} />
             )
           ) : fileTree && fileTree.size > 0 ? (
             treeNodes.map((node) => (
@@ -189,9 +209,7 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
               />
             ))
           ) : (
-            <div className="file-tree-empty">
-              <p>{isLoading ? t("common.loading") : t("file.title")}</p>
-            </div>
+            <FileTreeEmptyState title={isLoading ? t("common.loading") : t("file.title")} />
           )}
         </div>
       </div>

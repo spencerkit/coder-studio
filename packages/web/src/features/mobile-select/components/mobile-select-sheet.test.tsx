@@ -464,6 +464,33 @@ describe("MobileSelectSheet", () => {
     expect(onCreate).toHaveBeenCalledWith("feature/mobile-select");
   });
 
+  it("renders the empty state through the shared primitive while preserving the feature shell hook", () => {
+    renderWithEnglishLocale(
+      <MobileSelectSheet
+        title="Branch"
+        sections={[{ kind: "options", id: "branches", items: [] }]}
+        emptyText="No branches found"
+        onSelect={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+
+    const emptyState = document.querySelector(".mobile-select-sheet__empty");
+    const emptyStateStyle = emptyState?.getAttribute("style") ?? "";
+    const emptyStateTitleStyle = emptyState?.firstElementChild?.getAttribute("style") ?? "";
+
+    expect(emptyState).not.toBeNull();
+    expect(emptyState).toHaveTextContent("No branches found");
+    expect(emptyStateStyle).toContain("min-height: auto");
+    expect(emptyStateStyle).toContain("padding: var(--sp-6) var(--sp-4)");
+    expect(emptyStateStyle).toContain("gap: 0");
+    expect(emptyState?.childElementCount).toBe(1);
+    expect(emptyState?.firstElementChild).toHaveTextContent("No branches found");
+    expect(emptyState?.firstElementChild?.tagName).toBe("DIV");
+    expect(emptyStateTitleStyle).toContain("color: var(--text-tertiary)");
+    expect(emptyStateTitleStyle).toContain("font-weight: var(--font-normal)");
+  });
+
   it("keeps the sheet open when closeOnSelect is false", async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();

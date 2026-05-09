@@ -1,10 +1,16 @@
 import type { GitCommitSummary, GitFileChange, WorktreeInfo } from "@coder-studio/core";
 import { useAtomValue } from "jotai";
 import { ArrowUp, ChevronDown, Minus, Plus, RotateCcw } from "lucide-react";
-import type { FC, MouseEvent } from "react";
+import type { FC, MouseEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { localeAtom } from "../../../../atoms/app-ui";
-import { ConfirmDialog, IconButton, Textarea, Tooltip } from "../../../../components/ui";
+import {
+  ConfirmDialog,
+  EmptyState,
+  IconButton,
+  Textarea,
+  Tooltip,
+} from "../../../../components/ui";
 import { formatRelativeTime, useTranslation } from "../../../../lib/i18n";
 import {
   type GitChangeType,
@@ -14,6 +20,35 @@ import {
 import { useWorktreeManagementActions } from "../../actions/use-worktree-management-actions";
 import type { GitDiffPreview } from "../../atoms";
 import { WorktreeManagerSurface } from "./worktree-manager-surface";
+
+const gitPanelEmptyStateStyle = {
+  minHeight: "auto",
+  padding: "12px 0",
+  gap: "4px",
+};
+
+const gitPanelEmptyStateTitleStyle = {
+  margin: 0,
+  color: "var(--text-tertiary)",
+  fontSize: "inherit",
+  fontWeight: "var(--font-normal)",
+};
+
+interface GitPanelEmptyStateProps {
+  title: string;
+  action?: ReactNode;
+}
+
+function GitPanelEmptyState({ title, action }: GitPanelEmptyStateProps) {
+  return (
+    <EmptyState
+      action={action}
+      className="git-panel-empty"
+      style={gitPanelEmptyStateStyle}
+      title={<p style={gitPanelEmptyStateTitleStyle}>{title}</p>}
+    />
+  );
+}
 
 interface GitPanelProps {
   workspaceId: string;
@@ -167,20 +202,22 @@ export const GitPanel: FC<GitPanelProps> = ({
             {worktreesExpanded ? (
               <div className="git-panel-section-body">
                 {list.loading && list.items.length === 0 ? (
-                  <div className="git-panel-empty">{t("worktree.loading")}</div>
+                  <GitPanelEmptyState title={t("worktree.loading")} />
                 ) : list.error ? (
-                  <div className="git-panel-empty">
-                    <span>{list.error}</span>
-                    <button
-                      type="button"
-                      className="git-panel-section-link"
-                      onClick={() => void loadWorktrees()}
-                    >
-                      {t("action.refresh")}
-                    </button>
-                  </div>
+                  <GitPanelEmptyState
+                    action={
+                      <button
+                        type="button"
+                        className="git-panel-section-link"
+                        onClick={() => void loadWorktrees()}
+                      >
+                        {t("action.refresh")}
+                      </button>
+                    }
+                    title={list.error}
+                  />
                 ) : list.items.length === 0 ? (
-                  <div className="git-panel-empty">{t("worktree.list_empty")}</div>
+                  <GitPanelEmptyState title={t("worktree.list_empty")} />
                 ) : (
                   list.items.map((worktree) => (
                     <button
@@ -249,14 +286,10 @@ export const GitPanel: FC<GitPanelProps> = ({
                   />
                 ))
               ) : (
-                <div className="git-panel-empty">
-                  {isLoading ? t("common.loading") : t("git.no_changes")}
-                </div>
+                <GitPanelEmptyState title={isLoading ? t("common.loading") : t("git.no_changes")} />
               )
             ) : (
-              <div className="git-panel-empty">
-                {isLoading ? t("common.loading") : t("git.no_changes")}
-              </div>
+              <GitPanelEmptyState title={isLoading ? t("common.loading") : t("git.no_changes")} />
             )}
           </div>
 
@@ -278,9 +311,9 @@ export const GitPanel: FC<GitPanelProps> = ({
             {historyExpanded ? (
               <div className="git-panel-section-body">
                 {historyLoading && history.length === 0 ? (
-                  <div className="git-panel-empty">{t("common.loading")}</div>
+                  <GitPanelEmptyState title={t("common.loading")} />
                 ) : history.length === 0 ? (
-                  <div className="git-panel-empty">{t("git.no_commits")}</div>
+                  <GitPanelEmptyState title={t("git.no_commits")} />
                 ) : (
                   history.map((entry, index) => (
                     <GitHistoryRow

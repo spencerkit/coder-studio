@@ -15,7 +15,7 @@ import {
   orderedWorkspacesAtom,
   resolvedActiveWorkspaceIdAtom,
 } from "../../../atoms/workspaces";
-import { Sheet } from "../../../components/ui";
+import { EmptyState, Sheet } from "../../../components/ui";
 import { useViewport } from "../../../hooks/use-viewport";
 import { useTranslation } from "../../../lib/i18n";
 import { formatWorkspaceLabel } from "../../notifications/format";
@@ -36,6 +36,18 @@ interface Command {
 }
 
 type ShellKind = "desktop" | "mobile";
+
+const commandPaletteEmptyStateStyle = {
+  minHeight: "auto",
+  padding: "var(--sp-8)",
+  gap: 0,
+};
+
+const commandPaletteEmptyStateTitleStyle = {
+  margin: 0,
+  color: "var(--text-tertiary)",
+  fontWeight: "var(--font-normal)",
+};
 
 /**
  * Command Palette
@@ -196,7 +208,11 @@ export function CommandPalette() {
           </div>
         ))
       ) : (
-        <div className="command-palette-empty">{t("command.no_results")}</div>
+        <EmptyState
+          className="command-palette-empty"
+          style={commandPaletteEmptyStateStyle}
+          title={<p style={commandPaletteEmptyStateTitleStyle}>{t("command.no_results")}</p>}
+        />
       )}
     </div>
   );

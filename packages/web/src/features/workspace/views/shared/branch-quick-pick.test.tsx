@@ -433,7 +433,73 @@ describe("BranchQuickPick", () => {
 
     renderQuickPick();
 
-    expect(screen.getByText("Loading branches...")).toBeInTheDocument();
+    const emptyStateTitle = screen.getByText("Loading branches...");
+
+    expect(emptyStateTitle.tagName).toBe("P");
+    expect(emptyStateTitle.closest(".branch-quick-pick-empty")).toBeTruthy();
+  });
+
+  it("shows the shared idle empty state when there are no branches yet", async () => {
+    sendCommandMock.mockImplementation(async (op: string) => {
+      if (op === "git.branches") {
+        return {
+          current: "",
+          branches: [],
+        };
+      }
+
+      if (op === "git.status") {
+        return gitStatus;
+      }
+
+      return undefined;
+    });
+    store.set(gitBranchListAtomFamily("ws-test"), {
+      current: "",
+      branches: [],
+      loading: false,
+    });
+
+    renderQuickPick();
+
+    const emptyStateTitle = await screen.findByText("Type to search branches");
+
+    expect(emptyStateTitle.tagName).toBe("P");
+    expect(emptyStateTitle.closest(".branch-quick-pick-empty")).toBeTruthy();
+  });
+
+  it("shows the shared filtered empty state when the search has no display items", async () => {
+    sendCommandMock.mockImplementation(async (op: string) => {
+      if (op === "git.branches") {
+        return {
+          current: "",
+          branches: [],
+        };
+      }
+
+      if (op === "git.status") {
+        return gitStatus;
+      }
+
+      return undefined;
+    });
+    store.set(branchQuickPickAtom, {
+      visible: true,
+      workspaceId: "ws-test",
+      inputValue: "   ",
+    });
+    store.set(gitBranchListAtomFamily("ws-test"), {
+      current: "",
+      branches: [],
+      loading: false,
+    });
+
+    renderQuickPick();
+
+    const emptyStateTitle = await screen.findByText("No branches found");
+
+    expect(emptyStateTitle.tagName).toBe("P");
+    expect(emptyStateTitle.closest(".branch-quick-pick-empty")).toBeTruthy();
   });
 
   it("shows all branches when input is empty", async () => {

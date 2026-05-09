@@ -117,6 +117,32 @@ describe("WorkspaceLaunchModal", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("renders the shared empty state when the current directory has no child directories", async () => {
+    const store = createStore();
+
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn().mockResolvedValue({
+        currentPath: "/home/spencer",
+        parentPath: "/home",
+        directories: [],
+      }),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <WorkspaceLaunchModal onClose={vi.fn()} />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    const emptyMessage = await screen.findByText("No directories found");
+
+    expect(emptyMessage).toBeInTheDocument();
+    expect(emptyMessage.closest(".directory-empty")).toBeTruthy();
+  });
+
   it("opens the selected host directory without showing runtime target choices", async () => {
     const onClose = vi.fn();
     const sendCommand = vi.fn().mockImplementation(async (op: string, args: { path?: string }) => {

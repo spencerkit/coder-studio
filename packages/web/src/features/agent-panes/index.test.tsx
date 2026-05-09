@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../atoms/app-ui";
 import { connectionStatusAtom, wsClientAtom } from "../../atoms/connection";
 import { sessionsAtom } from "../../atoms/sessions";
-import { activeWorkspaceIdAtom } from "../../atoms/workspaces";
+import { activeWorkspaceIdAtom, workspacesLoadStateAtom } from "../../atoms/workspaces";
 import { seedReadyWorkspaceState } from "../../test-utils/workspace-state";
 import { LEGACY_PANE_LAYOUT_STORAGE_KEY_PREFIX, paneLayoutAtomFamily } from "./atoms/pane-layout";
 import { AgentPanes } from "./index";
@@ -151,6 +151,26 @@ describe("AgentPanes", () => {
   afterEach(() => {
     vi.useRealTimers();
     window.localStorage.clear();
+  });
+
+  it("renders the shared empty state when no workspace is active", () => {
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(connectionStatusAtom, "connected");
+    store.set(workspacesLoadStateAtom, "ready");
+    store.set(activeWorkspaceIdAtom, null);
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn(),
+      subscribe: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <AgentPanes />
+      </Provider>
+    );
+
+    expect(screen.getByText("No workspace open")).toBeInTheDocument();
   });
 
   it("splits the active session pane when session-card requests a split", async () => {

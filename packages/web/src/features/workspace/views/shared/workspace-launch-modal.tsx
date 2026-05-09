@@ -1,5 +1,5 @@
 import { ArrowUp, Folder, Home, X } from "lucide-react";
-import { IconButton, Sheet, Spinner } from "../../../../components/ui";
+import { EmptyState, IconButton, Sheet, Spinner } from "../../../../components/ui";
 import { useViewport } from "../../../../hooks/use-viewport";
 import { useTranslation } from "../../../../lib/i18n";
 import { useWorkspaceLaunchActions } from "../../actions/use-workspace-launch-actions";
@@ -7,6 +7,18 @@ import { useWorkspaceLaunchActions } from "../../actions/use-workspace-launch-ac
 interface WorkspaceLaunchModalProps {
   onClose: () => void;
 }
+
+const directoryEmptyStateStyle = {
+  minHeight: "auto",
+  padding: "var(--sp-6)",
+  gap: 0,
+};
+
+const directoryEmptyStateTitleStyle = {
+  margin: 0,
+  color: "var(--text-tertiary)",
+  fontWeight: "var(--font-normal)",
+};
 
 export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
   const isMobile = useViewport() === "mobile";
@@ -65,7 +77,13 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
               <Spinner label={t("common.loading")} />
             </div>
           ) : directories.length === 0 ? (
-            <div className="directory-empty">{t("workspace.launch.no_directories")}</div>
+            <EmptyState
+              className="directory-empty"
+              style={directoryEmptyStateStyle}
+              title={
+                <p style={directoryEmptyStateTitleStyle}>{t("workspace.launch.no_directories")}</p>
+              }
+            />
           ) : (
             directories.map((dir) => (
               <div

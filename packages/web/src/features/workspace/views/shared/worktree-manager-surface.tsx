@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Button, Input, Modal, ModalHeader, ModalTitle, Sheet } from "../../../../components/ui";
+import {
+  Button,
+  EmptyState,
+  Input,
+  Modal,
+  ModalHeader,
+  ModalTitle,
+  Sheet,
+} from "../../../../components/ui";
 import { useViewport } from "../../../../hooks/use-viewport";
 import { useTranslation } from "../../../../lib/i18n";
 import { useWorktreeManagementActions } from "../../actions/use-worktree-management-actions";
@@ -12,6 +20,18 @@ interface WorktreeManagerSurfaceProps {
   openView: "list" | "create" | null;
   onClose: () => void;
 }
+
+const worktreeListEmptyStateStyle = {
+  minHeight: "auto",
+  padding: "var(--sp-4) 0",
+  gap: 0,
+};
+
+const worktreeListEmptyStateTitleStyle = {
+  margin: 0,
+  color: "var(--text-tertiary)",
+  fontWeight: "var(--font-normal)",
+};
 
 export function WorktreeManagerSurface({
   workspaceId,
@@ -247,7 +267,11 @@ export function WorktreeManagerSurface({
         {list.loading && list.items.length === 0 ? (
           <div className="worktree-loading">{t("worktree.loading")}</div>
         ) : list.error && list.items.length === 0 ? null : list.items.length === 0 ? (
-          <div className="worktree-empty">{t("worktree.list_empty")}</div>
+          <EmptyState
+            className="worktree-empty"
+            style={worktreeListEmptyStateStyle}
+            title={<p style={worktreeListEmptyStateTitleStyle}>{t("worktree.list_empty")}</p>}
+          />
         ) : (
           list.items.map((item, index) => {
             const isCurrent = currentWorktree?.path === item.path;

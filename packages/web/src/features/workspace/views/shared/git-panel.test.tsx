@@ -538,6 +538,67 @@ describe("GitPanel", () => {
     expect(screen.queryByRole("button", { name: "Show all history" })).toBeNull();
   });
 
+  it("renders compact shared empty shells for clean changes and empty history", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return {
+          ...status,
+          staged: [],
+          modified: [],
+          untracked: [],
+          deleted: [],
+        };
+      }
+
+      if (op === "git.branches") {
+        return { current: "feature/ai-agent", branches: [] };
+      }
+
+      if (op === "worktree.list") {
+        return { worktrees: [] };
+      }
+
+      if (op === "git.log") {
+        return { entries: [] };
+      }
+
+      return {};
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedWorkspaceStore(store);
+
+    render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    const noChanges = await screen.findByText("No changes");
+    const changesShell = noChanges.closest(".git-panel-empty");
+
+    expect(changesShell).not.toBeNull();
+    expect(changesShell).toHaveStyle({
+      minHeight: "auto",
+      padding: "12px 0",
+      gap: "4px",
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "History" }));
+
+    const noCommits = await screen.findByText("No commits yet");
+    const historyShell = noCommits.closest(".git-panel-empty");
+
+    expect(historyShell).not.toBeNull();
+    expect(historyShell).toHaveStyle({
+      minHeight: "auto",
+      padding: "12px 0",
+      gap: "4px",
+    });
+  });
+
   it("opens a commit diff when a history row is clicked", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string, args: unknown) => {
       if (op === "git.status") {
@@ -1333,7 +1394,15 @@ describe("GitPanel", () => {
     expect(sendCommand.mock.calls.filter(([op]) => op === "worktree.list")).toHaveLength(1);
 
     fireEvent.click(screen.getByRole("button", { name: "Worktrees0" }));
-    expect(await screen.findByText("boom")).toBeInTheDocument();
+    const errorText = await screen.findByText("boom");
+    const errorShell = errorText.closest(".git-panel-empty");
+
+    expect(errorShell).not.toBeNull();
+    expect(errorShell).toHaveStyle({
+      minHeight: "auto",
+      padding: "12px 0",
+      gap: "4px",
+    });
 
     fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
 

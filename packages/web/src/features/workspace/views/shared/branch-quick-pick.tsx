@@ -1,12 +1,34 @@
 import { useAtomValue, useSetAtom } from "jotai";
 import { Check, Plus } from "lucide-react";
 import { type KeyboardEvent, type ReactElement, useEffect, useRef } from "react";
-import { Popover, Tag } from "../../../../components/ui";
+import { EmptyState, Popover, Tag } from "../../../../components/ui";
 import { useViewport } from "../../../../hooks/use-viewport";
 import { useTranslation } from "../../../../lib/i18n";
 import { MobileSelectSheet } from "../../../mobile-select";
 import { useBranchQuickPickActions } from "../../actions/use-git-actions";
 import { branchQuickPickAtom } from "../../atoms";
+
+const branchQuickPickEmptyStateStyle = {
+  minHeight: "auto",
+  padding: "var(--sp-8)",
+  gap: 0,
+};
+
+const branchQuickPickEmptyStateTitleStyle = {
+  margin: 0,
+  color: "var(--text-tertiary)",
+  fontWeight: "var(--font-normal)",
+};
+
+function BranchQuickPickEmptyState({ title }: { title: string }) {
+  return (
+    <EmptyState
+      className="branch-quick-pick-empty"
+      style={branchQuickPickEmptyStateStyle}
+      title={<p style={branchQuickPickEmptyStateTitleStyle}>{title}</p>}
+    />
+  );
+}
 
 function BranchQuickPickContent() {
   const {
@@ -97,7 +119,7 @@ function BranchQuickPickContent() {
 
       <div className="branch-quick-pick-list" ref={listRef}>
         {branchList.loading ? (
-          <div className="branch-quick-pick-empty">Loading branches...</div>
+          <BranchQuickPickEmptyState title="Loading branches..." />
         ) : displayItems.length > 0 ? (
           displayItems.map((item, index) => (
             <div
@@ -143,9 +165,9 @@ function BranchQuickPickContent() {
             </div>
           ))
         ) : (
-          <div className="branch-quick-pick-empty">
-            {inputValue ? "No branches found" : "Type to search branches"}
-          </div>
+          <BranchQuickPickEmptyState
+            title={inputValue ? "No branches found" : "Type to search branches"}
+          />
         )}
       </div>
 

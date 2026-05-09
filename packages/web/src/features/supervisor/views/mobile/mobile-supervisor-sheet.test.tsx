@@ -94,7 +94,13 @@ describe("MobileSupervisorSheet", () => {
       </Provider>
     );
 
-    expect(screen.getByText("Supervisor is not enabled")).toBeInTheDocument();
+    const emptyState = screen
+      .getByText("Supervisor is not enabled")
+      .closest(".mobile-supervisor-sheet__empty");
+
+    expect(emptyState).not.toBeNull();
+    expect(emptyState).toHaveTextContent("Supervisor");
+    expect(emptyState).toHaveTextContent("Supervisor is not enabled");
 
     fireEvent.click(screen.getByRole("button", { name: "Enable Objective" }));
 

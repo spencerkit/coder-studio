@@ -1,6 +1,6 @@
 import { useSetAtom } from "jotai";
 import { useEffect, useState } from "react";
-import { Button, Sheet } from "../../../../components/ui";
+import { Button, EmptyState, Sheet } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import {
   type ObjectiveDialogEvaluatorProviderId,
@@ -19,6 +19,23 @@ interface MobileSupervisorSheetProps {
   workspaceId: string;
   onClose: () => void;
 }
+
+const mobileSupervisorEmptyStateStyle = {
+  minHeight: 0,
+  padding: "var(--sp-4)",
+  gap: "var(--sp-2)",
+  alignItems: "stretch",
+  textAlign: "left",
+};
+
+const mobileSupervisorEmptySlotStyle = {
+  width: "auto",
+  maxWidth: "none",
+  color: "inherit",
+  fontSize: "inherit",
+  fontWeight: "inherit",
+  lineHeight: "inherit",
+};
 
 export function MobileSupervisorSheet({
   sessionId,
@@ -146,13 +163,27 @@ export function MobileSupervisorSheet({
               </div>
             </>
           ) : (
-            <div className="mobile-supervisor-sheet__empty">
-              <h3>{t("supervisor.title")}</h3>
-              <p>{t("supervisor.empty")}</p>
-              <Button variant="primary" onClick={() => openDetail("enable")}>
-                {t("supervisor.action.enable_objective")}
-              </Button>
-            </div>
+            <EmptyState
+              className="mobile-supervisor-sheet__empty"
+              style={mobileSupervisorEmptyStateStyle}
+              title={
+                <div style={mobileSupervisorEmptySlotStyle}>
+                  <h3>{t("supervisor.title")}</h3>
+                </div>
+              }
+              description={
+                <div style={mobileSupervisorEmptySlotStyle}>
+                  <p>{t("supervisor.empty")}</p>
+                </div>
+              }
+              action={
+                <div style={{ width: "100%" }}>
+                  <Button variant="primary" onClick={() => openDetail("enable")}>
+                    {t("supervisor.action.enable_objective")}
+                  </Button>
+                </div>
+              }
+            />
           )}
         </div>
       }

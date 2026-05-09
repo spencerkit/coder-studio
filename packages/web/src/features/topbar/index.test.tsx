@@ -103,7 +103,10 @@ describe("TopBar", () => {
       </Provider>
     );
 
-    expect(screen.getByText("No workspace open")).toBeInTheDocument();
+    const emptyState = screen.getByText("No workspace open").closest(".topbar-empty-state");
+
+    expect(emptyState).not.toBeNull();
+    expect(emptyState).toHaveTextContent("No workspace open");
     expect(screen.getByRole("button", { name: "Quick Actions" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
   });

@@ -1,5 +1,5 @@
 import { type ReactNode, useId, useMemo, useState } from "react";
-import { IconButton } from "../../../components/ui";
+import { EmptyState, IconButton } from "../../../components/ui";
 import { Sheet } from "../../../components/ui/sheet";
 import { Tag } from "../../../components/ui/tag";
 import { useTranslation } from "../../../lib/i18n";
@@ -79,6 +79,19 @@ export interface MobileSelectSheetProps {
   onSelect: (id: string) => void | Promise<void>;
   onClose: () => void;
 }
+
+const mobileSelectEmptyStateStyle = {
+  minHeight: "auto",
+  padding: "var(--sp-6) var(--sp-4)",
+  gap: 0,
+};
+
+const mobileSelectEmptyStateTitleStyle = {
+  color: "var(--text-tertiary)",
+  fontSize: "inherit",
+  fontWeight: "var(--font-normal)",
+  lineHeight: "inherit",
+};
 
 export function MobileSelectSheet({
   title,
@@ -383,7 +396,11 @@ export function MobileSelectSheet({
             ) : null}
 
             {!hasVisibleItems && !canCreate ? (
-              <div className="mobile-select-sheet__empty">{resolvedEmptyText}</div>
+              <EmptyState
+                className="mobile-select-sheet__empty"
+                style={mobileSelectEmptyStateStyle}
+                title={<div style={mobileSelectEmptyStateTitleStyle}>{resolvedEmptyText}</div>}
+              />
             ) : null}
           </>
         )}

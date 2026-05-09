@@ -576,7 +576,14 @@ describe("FileTreePanel", () => {
       </Provider>
     );
 
-    expect((await screen.findAllByText("common.loading")).length).toBeGreaterThan(0);
+    const loadingStates = await screen.findAllByText("common.loading");
+    expect(loadingStates.length).toBeGreaterThan(0);
+
+    const loadingStateTitle = loadingStates[0];
+    expect(loadingStateTitle?.tagName).toBe("P");
+
+    const loadingShell = loadingStateTitle?.closest(".file-tree-empty");
+    expect(loadingShell).not.toBeNull();
   });
 
   it("loads children for default-expanded root directories", async () => {
@@ -739,6 +746,40 @@ describe("FileTreePanel", () => {
 
     expect(await screen.findByText("README.md")).toBeInTheDocument();
     expect(screen.queryByText("AppController.tsx")).not.toBeInTheDocument();
+  });
+
+  it("renders the compact shared empty shell for search misses", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args: { query?: string }) => {
+      if (op === "file.search") {
+        const query = args.query?.toLowerCase() ?? "";
+        const files = [{ path: "src/app.tsx", name: "app.tsx", kind: "file" }].filter((item) =>
+          item.name.toLowerCase().includes(query)
+        );
+
+        return { files };
+      }
+
+      return { ok: true };
+    });
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    fireEvent.change(screen.getByPlaceholderText("action.search_files"), {
+      target: { value: "zzz" },
+    });
+
+    const emptyText = await screen.findByText("command.no_results");
+    expect(emptyText.tagName).toBe("P");
+
+    const emptyShell = emptyText.closest(".file-tree-empty");
+
+    expect(emptyShell).not.toBeNull();
   });
 
   it("uses shared tooltip behavior for the search result delete action", async () => {

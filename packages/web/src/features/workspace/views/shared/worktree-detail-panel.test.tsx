@@ -112,4 +112,67 @@ describe("WorktreeDetailPanel", () => {
 
     expect(await screen.findByText("diff --git a/src/app.tsx b/src/app.tsx")).toBeInTheDocument();
   });
+
+  it("renders shared empty states for empty diff and tree tabs", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "worktree.status") {
+        return {
+          status: {
+            branch: "feature/mobile-sheet",
+            ahead: 0,
+            behind: 0,
+            headSha: "abc1234567890",
+            headShortSha: "abc1234",
+            headSubject: "Initial mobile sheet setup",
+            staged: [],
+            modified: [],
+            untracked: [],
+            deleted: [],
+          },
+        };
+      }
+
+      if (op === "worktree.diff") {
+        return {
+          diff: "",
+        };
+      }
+
+      if (op === "worktree.tree") {
+        return {
+          tree: [],
+        };
+      }
+
+      return {};
+    });
+
+    render(
+      <Provider store={buildStore(sendCommand)}>
+        <WorktreeDetailPanel workspaceId="ws-1" worktree={worktree} />
+      </Provider>
+    );
+
+    fireEvent.click(await screen.findByRole("tab", { name: "Diff" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith("worktree.diff", {
+        workspaceId: "ws-1",
+        worktreePath: worktree.path,
+      });
+    });
+
+    expect(await screen.findByText("No changes")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Tree" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith("worktree.tree", {
+        workspaceId: "ws-1",
+        worktreePath: worktree.path,
+      });
+    });
+
+    expect(await screen.findByText("Empty tree")).toBeInTheDocument();
+  });
 });

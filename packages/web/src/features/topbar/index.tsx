@@ -15,7 +15,7 @@ import {
   orderedWorkspacesAtom,
   resolvedActiveWorkspaceIdAtom,
 } from "../../atoms/workspaces";
-import { IconButton, TabList, Tabs, Tooltip } from "../../components/ui";
+import { EmptyState, IconButton, TabList, Tabs, Tooltip } from "../../components/ui";
 import { useTranslation } from "../../lib/i18n";
 import type { WorkspaceFullscreenController } from "../workspace/actions/use-workspace-fullscreen";
 import { sidebarCollapsedAtom, terminalPanelVisibleAtom } from "../workspace/atoms";
@@ -27,6 +27,19 @@ import { WorkspaceTab } from "./components/tab";
 interface TopBarProps {
   fullscreenController?: WorkspaceFullscreenController;
 }
+
+const topbarEmptyStateStyle = {
+  width: "auto",
+  minHeight: "auto",
+  padding: 0,
+  gap: 0,
+};
+
+const topbarEmptyStateTitleStyle = {
+  color: "var(--text-tertiary)",
+  fontSize: "var(--text-sm)",
+  fontWeight: "var(--font-normal)",
+};
 
 /**
  * TopBar Component
@@ -52,9 +65,15 @@ export const TopBar: FC<TopBarProps> = ({ fullscreenController }) => {
     <header className="app-topbar">
       <div className="topbar-tabs">
         {workspaceList.length === 0 ? (
-          <div className="topbar-empty-state">
-            <span className="topbar-hint">{t("workspace.no_workspace")}</span>
-          </div>
+          <EmptyState
+            className="topbar-empty-state"
+            style={topbarEmptyStateStyle}
+            title={
+              <span className="topbar-hint" style={topbarEmptyStateTitleStyle}>
+                {t("workspace.no_workspace")}
+              </span>
+            }
+          />
         ) : (
           <Tabs
             aria-label={t("workspace.tabs")}

@@ -1,5 +1,5 @@
 import type { WorktreeInfo } from "@coder-studio/core";
-import { Tab, TabList, TabPanel, Tabs } from "../../../../components/ui";
+import { EmptyState, Tab, TabList, TabPanel, Tabs } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { useWorktreeActions } from "../../actions/use-workspace-launch-actions";
 
@@ -10,6 +10,18 @@ interface WorktreeDetailPanelProps {
   worktree: WorktreeInfo;
   mobile?: boolean;
 }
+
+const worktreeEmptyStateStyle = {
+  minHeight: "auto",
+  padding: "var(--sp-4)",
+  gap: 0,
+};
+
+const worktreeEmptyStateTitleStyle = {
+  margin: 0,
+  color: "var(--text-tertiary)",
+  fontWeight: "var(--font-normal)",
+};
 
 export function WorktreeDetailPanel({
   workspaceId,
@@ -128,7 +140,11 @@ export function WorktreeDetailPanel({
                 {diff ? (
                   <pre className="worktree-diff-output">{diff}</pre>
                 ) : (
-                  <div className="worktree-empty">{t("git.no_changes")}</div>
+                  <EmptyState
+                    className="worktree-empty"
+                    style={worktreeEmptyStateStyle}
+                    title={<p style={worktreeEmptyStateTitleStyle}>{t("git.no_changes")}</p>}
+                  />
                 )}
               </div>
             )}
@@ -152,7 +168,11 @@ export function WorktreeDetailPanel({
                     ))}
                   </div>
                 ) : (
-                  <div className="worktree-empty">{t("worktree.empty_tree")}</div>
+                  <EmptyState
+                    className="worktree-empty"
+                    style={worktreeEmptyStateStyle}
+                    title={<p style={worktreeEmptyStateTitleStyle}>{t("worktree.empty_tree")}</p>}
+                  />
                 )}
               </div>
             )}

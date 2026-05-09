@@ -161,6 +161,19 @@ describe("WorktreeManagerSurface", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("renders the shared empty state when the worktree list is empty", () => {
+    render(
+      <Provider store={buildManagerStore(vi.fn(), [], "/repo/main")}>
+        <WorktreeManagerSurface workspaceId="ws-1" openView="list" onClose={vi.fn()} />
+      </Provider>
+    );
+
+    const emptyMessage = screen.getByText("No worktrees");
+
+    expect(emptyMessage).toBeInTheDocument();
+    expect(emptyMessage.closest(".worktree-empty")).toBeTruthy();
+  });
+
   it("creates a worktree, reloads the list, and returns to list mode", async () => {
     const sendCommand = vi
       .fn()
