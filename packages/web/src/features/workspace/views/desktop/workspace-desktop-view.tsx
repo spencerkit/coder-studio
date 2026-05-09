@@ -1,7 +1,7 @@
 import { useSetAtom } from "jotai";
 import { ChevronsUp, FilePlus, FolderPlus } from "lucide-react";
 import { type FC, useEffect, useRef, useState } from "react";
-import { IconButton, Tab, TabList, Tabs, Tooltip } from "../../../../components/ui";
+import { EmptyState, IconButton, Tab, TabList, Tabs, Tooltip } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { AgentPanes } from "../../../agent-panes";
 import { CodeEditorHost } from "../../../code-editor/views/shared/code-editor-host";
@@ -79,7 +79,10 @@ export const WorkspaceDesktopView: FC = () => {
       <div className="workspace-page workspace-page-empty">
         <div className="workspace-empty-content">
           <div className="workspace-empty-inner">
-            <p>{t("workspace.no_workspace")}</p>
+            <EmptyState
+              style={{ minHeight: "auto", padding: 0 }}
+              title={<p>{t("workspace.no_workspace")}</p>}
+            />
           </div>
         </div>
       </div>

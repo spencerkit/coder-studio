@@ -19,7 +19,7 @@
 | Tooltip | 🟡 partial | native `title` hover labels | branch picker, code-editor actions, file-tree actions, git-diff close, fullscreen, topbar actions, connection-status, git status-strip branch, session/supervisor actions, selected settings actions, and workspace/terminal file-toolbar actions covered; truncation/path and other non-action long-text titles remain deferred | 2026-05-09 |
 | ProgressBar | 🟢 complete | `--progress-height` patterns | 0 | 2026-05-09 |
 | Notice | 🟢 complete | `.settings-page__notice*` | 0 | 2026-05-09 |
-| EmptyState | 🟡 partial | feature-specific empty state blocks | bounded centered empty-state shells covered; broader workspace empty shells remain | 2026-05-09 |
+| EmptyState | 🟡 partial | feature-specific empty state blocks | centered shared shells plus workspace desktop/mobile no-session or no-workspace empties covered; richer workspace resolving/card shells remain | 2026-05-09 |
 | Tabs | 🟡 partial | tab / pill patterns across features | workspace desktop/mobile/worktree bounded slice covered; broader navigation families remain | 2026-05-09 |
 | SegmentedControl | 🟢 complete | `.settings-provider-tabs`, `.settings-provider-tab`, `.settings-provider-subnav`, `.settings-provider-subnav-button`, `.shortcuts-category-tabs`, `.shortcuts-category-tab` | 0 | 2026-05-09 |
 | Sheet | 🟢 complete | `.mobile-sheet*` | 0 | 2026-05-09 |
@@ -65,4 +65,6 @@
 
 `SegmentedControl` now completes the bounded selector-family inventory: provider chooser tabs, provider sub-navigation, and shortcuts category selectors all use the shared primitive from the public UI barrel while preserving the existing legacy compatibility classes for zero-regression styling.
 
-`EmptyState` and `Tabs` now have shared primitives in the public barrel and bounded caller adoption on `develop`, but their broader feature-specific families are not yet fully migrated across the inventory.
+`EmptyState` now covers a broader bounded shell slice: config editor, terminal panel, git diff/code editor/image preview empties, the desktop workspace no-workspace shell, and the mobile agent empty shell all use the shared primitive from the public UI barrel. Richer workspace resolving/card shells and other feature-owned empty-state chromes remain intentionally deferred.
+
+`Tabs` now have a shared primitive in the public barrel and bounded caller adoption on `develop`, but broader feature-specific navigation families are not yet fully migrated across the inventory.

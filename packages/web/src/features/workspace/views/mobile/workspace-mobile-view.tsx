@@ -2,7 +2,7 @@ import { useAtomValue, useSetAtom } from "jotai";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { pendingFocusSessionAtom, visibleMobileSessionIdAtom } from "../../../../atoms/app-ui";
-import { Sheet } from "../../../../components/ui";
+import { EmptyState, Sheet } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { SessionCard } from "../../../agent-panes/views/shared/session-card";
 import { useCodeEditorActions } from "../../../code-editor/actions/use-code-editor-actions";
@@ -238,17 +238,24 @@ export function WorkspaceMobileView() {
           ) : (
             <section className="mobile-shell__agent-empty" data-testid="mobile-agent-empty">
               <div className="mobile-shell__empty-content">
-                <div className="mobile-shell__placeholder-copy">
-                  <p>{t("mobile.empty.start_session")}</p>
-                  <p>{t("mobile.empty.files_terminal_hint")}</p>
-                </div>
-                <button
-                  type="button"
-                  className="mobile-shell__empty-cta"
-                  onClick={() => setAgentSheetOpen(true)}
-                >
-                  {t("action.create_session")}
-                </button>
+                <EmptyState
+                  style={{ minHeight: "auto", padding: 0 }}
+                  title={<p>{t("mobile.empty.start_session")}</p>}
+                  description={
+                    <div className="mobile-shell__placeholder-copy">
+                      <p>{t("mobile.empty.files_terminal_hint")}</p>
+                    </div>
+                  }
+                  action={
+                    <button
+                      type="button"
+                      className="mobile-shell__empty-cta"
+                      onClick={() => setAgentSheetOpen(true)}
+                    >
+                      {t("action.create_session")}
+                    </button>
+                  }
+                />
               </div>
             </section>
           )}
