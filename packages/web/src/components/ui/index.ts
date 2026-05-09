@@ -10,3 +10,5 @@ export type { SelectOption, SelectProps, SelectSize } from "./select";
 export { Select } from "./select";
 export type { TextareaProps, TextareaSize } from "./textarea";
 export { Textarea } from "./textarea";
+export type { TooltipProps } from "./tooltip";
+export { Tooltip } from "./tooltip";

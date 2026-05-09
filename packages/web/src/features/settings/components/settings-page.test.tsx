@@ -792,7 +792,17 @@ describe("SettingsPage", () => {
       screen.getByRole("group", {
         name: "主题",
       })
-    ).toHaveAccessibleDescription("当前仅支持深色主题");
+    ).toHaveAccessibleDescription("选择应用主题");
+    expect(
+      screen.getByRole("group", {
+        name: "终端渲染器",
+      })
+    ).toHaveAccessibleDescription("选择终端渲染模式");
+    expect(
+      screen.getByRole("group", {
+        name: "语言",
+      })
+    ).toHaveAccessibleDescription("选择界面语言");
     expect(darkThemePill).toHaveClass("settings-pill", "settings-pill-active");
     expect(darkThemePill).toHaveAttribute("aria-pressed", "true");
     expect(lightThemePill).toHaveClass("settings-pill");
@@ -873,6 +883,52 @@ describe("SettingsPage", () => {
     expect(screen.getByRole("button", { name: "标准" })).toHaveAttribute("aria-pressed", "false");
   });
 
+  it("preserves terminal renderer selection when a stale settings load resolves afterward", async () => {
+    let resolveSettingsGet: ((value: Record<string, unknown>) => void) | undefined;
+    const settingsGetPromise = new Promise<Record<string, unknown>>((resolve) => {
+      resolveSettingsGet = resolve;
+    });
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return await settingsGetPromise;
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "外观" }));
+    fireEvent.click(await screen.findByRole("button", { name: "兼容模式" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            appearance: {
+              terminalRenderer: "compatibility",
+            },
+          },
+        },
+        undefined
+      );
+    });
+
+    await act(async () => {
+      resolveSettingsGet?.({
+        "appearance.locale": "zh",
+        "appearance.terminalRenderer": "standard",
+      });
+      await settingsGetPromise;
+    });
+
+    expect(screen.getByRole("button", { name: "兼容模式" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(screen.getByRole("button", { name: "标准" })).toHaveAttribute("aria-pressed", "false");
+  });
+
   it("updates language selection through the shared appearance pills", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "settings.get") {
@@ -911,6 +967,49 @@ describe("SettingsPage", () => {
       "settings-pill",
       "settings-pill-active"
     );
+    expect(screen.getByRole("button", { name: "English" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "中文" })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("preserves language selection when a stale settings load resolves afterward", async () => {
+    let resolveSettingsGet: ((value: Record<string, unknown>) => void) | undefined;
+    const settingsGetPromise = new Promise<Record<string, unknown>>((resolve) => {
+      resolveSettingsGet = resolve;
+    });
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return await settingsGetPromise;
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "外观" }));
+    fireEvent.click(await screen.findByRole("button", { name: "English" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            appearance: {
+              locale: "en",
+            },
+          },
+        },
+        undefined
+      );
+    });
+
+    await act(async () => {
+      resolveSettingsGet?.({
+        "appearance.locale": "zh",
+        "appearance.terminalRenderer": "standard",
+      });
+      await settingsGetPromise;
+    });
+
     expect(screen.getByRole("button", { name: "English" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "中文" })).toHaveAttribute("aria-pressed", "false");
   });

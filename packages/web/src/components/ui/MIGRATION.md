@@ -16,12 +16,12 @@
 | Modal | ⚫ not-started | `.modal-overlay .modal-card .modal-*` | — | — |
 | ConfirmDialog | ⚫ not-started | modal convenience wrapper | — | — |
 | Toast | ⚫ not-started | `.toast*` | — | — |
-| Tooltip | ⚫ not-started | new | — | — |
+| Tooltip | 🟡 partial | native `title` hover labels | branch picker, code-editor actions, file-tree actions, and git-diff close covered; truncation/path, connection-status/container, git-panel remain deferred | 2026-05-09 |
 | ProgressBar | ⚫ not-started | `--progress-height` patterns | — | — |
 | Notice | 🟢 complete | `.settings-page__notice*` | 0 | 2026-05-09 |
 | EmptyState | ⚫ not-started | feature-specific empty state blocks | — | — |
 | Tabs | ⚫ not-started | tab / pill patterns across features | — | — |
-| SegmentedControl | ⚫ not-started | `.settings-pill*` | — | — |
+| SegmentedControl | ⚫ not-started | `.settings-provider-tabs`, `.settings-provider-tab`, `.settings-provider-subnav`, `.settings-provider-subnav-button`, `.shortcuts-category-tabs`, `.shortcuts-category-tab` | — | — |
 | Select | 🟡 in-flight | `.input`, `.mobile-select-*` | 2 | 2026-05-09 |
 | Popover | ⚫ not-started | new | — | — |
 | ActionMenu | ⚫ not-started | new | — | — |

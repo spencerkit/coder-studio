@@ -144,7 +144,7 @@ export function SettingsPage() {
   const [supervisorEvaluationTimeoutSec, setSupervisorEvaluationTimeoutSec] = useState(
     DEFAULT_SUPERVISOR_EVALUATION_TIMEOUT_SEC
   );
-  const [terminalRenderer, setTerminalRenderer] = useState<"standard" | "compatibility">(
+  const [terminalRenderer, setTerminalRendererState] = useState<"standard" | "compatibility">(
     "standard"
   );
   const [providerAdditionalArgsById, setProviderAdditionalArgsById] = useState<
@@ -153,10 +153,14 @@ export function SettingsPage() {
   const [contentLayoutMode, setContentLayoutMode] = useState<SettingsContentLayoutMode>("default");
   const [settingsLoadError, setSettingsLoadError] = useState<string | null>(null);
   const [settingsRefreshKey, setSettingsRefreshKey] = useState(0);
-  const [locale, setLocale] = useAtom(localeAtom);
+  const [locale, setLocaleState] = useAtom(localeAtom);
   const [theme, setTheme] = useAtom(themeAtom);
   const setNotificationPreferences = useSetAtom(notificationPreferencesAtom);
   const settingsLoadFailedUnknownRef = useRef(settingsLoadFailedUnknown);
+  const appearanceSelectionVersionRef = useRef({
+    locale: 0,
+    terminalRenderer: 0,
+  });
   const detailSection =
     navigationState.kind === "detail" ? navigationState.section : navigationState.lastSection;
   const availableSections = isMobile ? MOBILE_SETTINGS_SECTIONS : SETTINGS_SECTIONS;
@@ -185,6 +189,9 @@ export function SettingsPage() {
     let cancelled = false;
 
     const loadSettings = async () => {
+      const appearanceSelectionVersionAtRequestStart = {
+        ...appearanceSelectionVersionRef.current,
+      };
       const result = await dispatch<Record<string, unknown>>("settings.get", {});
       if (!result.ok || !result.data) {
         if (!cancelled) {
@@ -219,10 +226,20 @@ export function SettingsPage() {
         settings["appearance.terminalRenderer"] === "standard" ||
         settings["appearance.terminalRenderer"] === "compatibility"
       ) {
-        setTerminalRenderer(settings["appearance.terminalRenderer"]);
+        if (
+          appearanceSelectionVersionRef.current.terminalRenderer ===
+          appearanceSelectionVersionAtRequestStart.terminalRenderer
+        ) {
+          setTerminalRendererState(settings["appearance.terminalRenderer"]);
+        }
       }
       if (settings["appearance.locale"] === "zh" || settings["appearance.locale"] === "en") {
-        setLocale(settings["appearance.locale"]);
+        if (
+          appearanceSelectionVersionRef.current.locale ===
+          appearanceSelectionVersionAtRequestStart.locale
+        ) {
+          setLocaleState(settings["appearance.locale"]);
+        }
       }
       setProviderAdditionalArgsById(loadProviderAdditionalArgs(settings, providers));
     };
@@ -231,7 +248,17 @@ export function SettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, [connectionStatus, dispatch, setLocale, setNotificationPreferences, settingsRefreshKey]);
+  }, [connectionStatus, dispatch, setLocaleState, setNotificationPreferences, settingsRefreshKey]);
+
+  const handleLocaleSelection = (value: "zh" | "en") => {
+    appearanceSelectionVersionRef.current.locale += 1;
+    setLocaleState(value);
+  };
+
+  const handleTerminalRendererSelection = (value: "standard" | "compatibility") => {
+    appearanceSelectionVersionRef.current.terminalRenderer += 1;
+    setTerminalRendererState(value);
+  };
 
   useEffect(() => {
     if (detailSection !== "providers") {
@@ -277,9 +304,9 @@ export function SettingsPage() {
         return (
           <AppearanceSettings
             locale={locale}
-            setLocale={setLocale}
+            setLocale={handleLocaleSelection}
             terminalRenderer={terminalRenderer}
-            setTerminalRenderer={setTerminalRenderer}
+            setTerminalRenderer={handleTerminalRendererSelection}
             theme={theme}
             setTheme={setTheme}
           />
