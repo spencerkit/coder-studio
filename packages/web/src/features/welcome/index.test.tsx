@@ -79,6 +79,7 @@ describe("WelcomePage", () => {
 
     expect(document.querySelector(".welcome-container--mobile")).toBeTruthy();
     expect(document.querySelector(".welcome-card--mobile")).toBeTruthy();
+    expect(document.querySelector(".welcome-card.welcome-card--mobile")).toBeTruthy();
   });
 
   it("renders translated English copy when locale is set to en", () => {
@@ -97,5 +98,7 @@ describe("WelcomePage", () => {
     expect(screen.getByRole("heading", { name: "Welcome to Coder Studio" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open Workspace" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
+    expect(document.querySelector(".welcome-divider")).toBeTruthy();
+    expect(document.querySelectorAll(".welcome-feature")).toHaveLength(3);
   });
 });

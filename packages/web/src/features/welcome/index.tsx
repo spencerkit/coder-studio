@@ -9,6 +9,7 @@ import { GitBranch, Plus, Settings, Terminal, Zap } from "lucide-react";
 import type { FC } from "react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { EmptyState } from "../../components/ui";
 import { useViewport } from "../../hooks/use-viewport";
 import { useTranslation } from "../../lib/i18n";
 import { WorkspaceLaunchModal } from "../workspace/views/shared/workspace-launch-modal";
@@ -18,6 +19,12 @@ interface FeatureItem {
   title: string;
   description: string;
 }
+
+const welcomeEmptyStateStyle = {
+  minHeight: "auto",
+  padding: 0,
+  gap: "var(--sp-5)",
+};
 
 /**
  * Welcome Page
@@ -63,13 +70,23 @@ export const WelcomePage: FC = () => {
     <>
       <div className={`welcome-container ${isMobile ? "welcome-container--mobile" : ""}`}>
         <div className={`welcome-card ${isMobile ? "welcome-card--mobile" : ""}`}>
-          <div className="welcome-kicker">{t("welcome.kicker")}</div>
-          <h1 className="welcome-title">{t("welcome.title")}</h1>
-          <p className="welcome-body">{t("welcome.description")}</p>
-          <button className="welcome-btn" onClick={handleOpenWorkspace}>
-            <Plus size={18} />
-            <span>{t("action.open_workspace")}</span>
-          </button>
+          <EmptyState
+            style={welcomeEmptyStateStyle}
+            title={
+              <div>
+                <div className="welcome-kicker">{t("welcome.kicker")}</div>
+                <h1 className="welcome-title">{t("welcome.title")}</h1>
+              </div>
+            }
+            description={<p className="welcome-body">{t("welcome.description")}</p>}
+            action={
+              <button className="welcome-btn" onClick={handleOpenWorkspace}>
+                <Plus size={18} />
+                <span>{t("action.open_workspace")}</span>
+              </button>
+            }
+          />
+
           <button className="welcome-link" onClick={handleOpenSettings}>
             <Settings size={14} />
             <span>{t("action.settings")}</span>
