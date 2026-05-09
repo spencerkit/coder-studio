@@ -1,5 +1,5 @@
 import { ArrowUpCircle, Eye, Pause, Pencil, Play, PowerOff } from "lucide-react";
-import { Tooltip } from "../../../../components/ui";
+import { IconButton, Tooltip } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { useSupervisorActions } from "../../actions/use-supervisor-actions";
 
@@ -53,63 +53,63 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
 
         <div className="supervisor-actions">
           <Tooltip content={t("supervisor.action.edit_objective")}>
-            <button
-              className="supervisor-icon-btn"
-              onClick={() => openDialog("edit")}
+            <IconButton
               aria-label={t("supervisor.action.edit_objective")}
-            >
-              <Pencil size={12} />
-            </button>
+              className="supervisor-icon-btn"
+              icon={<Pencil size={12} />}
+              onClick={() => openDialog("edit")}
+              size="sm"
+            />
           </Tooltip>
 
           {supervisor.state === "paused" ? (
             <Tooltip content={t("supervisor.action.resume")}>
-              <button
+              <IconButton
+                aria-label={t("supervisor.action.resume")}
                 className="supervisor-icon-btn"
+                icon={<Play size={12} />}
                 onClick={() => {
                   void handleResume();
                 }}
-                aria-label={t("supervisor.action.resume")}
-              >
-                <Play size={12} />
-              </button>
+                size="sm"
+              />
             </Tooltip>
           ) : (
             <Tooltip content={t("supervisor.action.pause")}>
-              <button
+              <IconButton
+                aria-label={t("supervisor.action.pause")}
                 className="supervisor-icon-btn"
                 disabled={isBusy}
+                icon={<Pause size={12} />}
                 onClick={() => {
                   void handlePause();
                 }}
-                aria-label={t("supervisor.action.pause")}
-              >
-                <Pause size={12} />
-              </button>
+                size="sm"
+              />
             </Tooltip>
           )}
 
           <Tooltip content={t("supervisor.action.trigger")}>
-            <button
+            <IconButton
+              aria-label={t("supervisor.action.trigger")}
               className="supervisor-icon-btn"
               disabled={isBusy}
+              icon={<ArrowUpCircle size={12} />}
               onClick={() => {
                 void handleTrigger();
               }}
-              aria-label={t("supervisor.action.trigger")}
-            >
-              <ArrowUpCircle size={12} />
-            </button>
+              size="sm"
+            />
           </Tooltip>
 
           <Tooltip content={t("supervisor.action.disable")}>
-            <button
-              className="supervisor-icon-btn supervisor-icon-btn-danger"
-              onClick={() => openDialog("disable")}
+            <IconButton
               aria-label={t("supervisor.action.disable")}
-            >
-              <PowerOff size={12} />
-            </button>
+              className="supervisor-icon-btn supervisor-icon-btn-danger"
+              icon={<PowerOff size={12} />}
+              onClick={() => openDialog("disable")}
+              size="sm"
+            />
           </Tooltip>
         </div>
       </div>
