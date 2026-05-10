@@ -122,6 +122,9 @@ describe("WorkspacePage", () => {
       document.querySelector(".workspace-status-bar .git-panel-status-strip__branch-text")
     ).toHaveTextContent("feature/refactor-ts");
     expect(document.querySelector(".workspace-page > .workspace-status-bar")).not.toBeNull();
+    expect(document.querySelector(".workspace-status-bar .git-panel-status-strip")).toHaveClass(
+      "git-panel-status-strip--start"
+    );
     expect(document.querySelector(".workspace-sidebar-panel__tab-count")).toBeNull();
   });
 

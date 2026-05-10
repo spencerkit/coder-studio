@@ -218,6 +218,7 @@ export const WorkspaceDesktopView: FC = () => {
       </div>
 
       <WorkspaceStatusBar
+        align="start"
         workspaceId={workspace.id}
         gitState={gitState}
         onOpenBranchSwitcher={handleOpenBranchSwitcher}

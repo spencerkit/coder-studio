@@ -6,6 +6,7 @@ interface WorkspaceStatusBarProps {
   gitState: GitStatus | null | undefined;
   onOpenBranchSwitcher?: () => void;
   flush?: boolean;
+  align?: "start" | "end";
 }
 
 export function WorkspaceStatusBar({
@@ -13,11 +14,12 @@ export function WorkspaceStatusBar({
   gitState,
   onOpenBranchSwitcher,
   flush = false,
+  align = "end",
 }: WorkspaceStatusBarProps) {
   return (
     <div className={`workspace-status-bar${flush ? " workspace-status-bar--flush" : ""}`}>
       <GitPanelStatusStrip
-        align={flush ? "end" : "start"}
+        align={align}
         workspaceId={workspaceId}
         gitState={gitState}
         onOpenBranchSwitcher={onOpenBranchSwitcher}
