@@ -10,6 +10,7 @@ import {
 } from "../../../atoms/connection";
 import { activeWorkspaceIdAtom } from "../../../atoms/workspaces";
 import { CommandResultError } from "../../../ws/client";
+import { terminalPreferencesAtom } from "../../terminal-panel/preferences";
 import { SettingsPage } from "./settings-page";
 
 const viewportMocks = vi.hoisted(() => ({
@@ -1020,6 +1021,103 @@ describe("SettingsPage", () => {
       "true"
     );
     expect(screen.getByRole("button", { name: "标准" })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("renders the copy-on-select switch from loaded appearance settings", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "appearance.terminalCopyOnSelect": true,
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "外观" }));
+
+    expect(await screen.findByRole("switch", { name: "选中自动复制" })).toHaveAttribute(
+      "aria-checked",
+      "true"
+    );
+    expect(store.get(terminalPreferencesAtom)).toEqual({ copyOnSelect: true });
+  });
+
+  it("updates copy-on-select through the appearance switch and syncs the global atom", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "appearance.terminalCopyOnSelect": false,
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "外观" }));
+    fireEvent.click(await screen.findByRole("switch", { name: "选中自动复制" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            appearance: {
+              terminalCopyOnSelect: true,
+            },
+          },
+        },
+        undefined
+      );
+    });
+
+    expect(store.get(terminalPreferencesAtom)).toEqual({ copyOnSelect: true });
+  });
+
+  it("preserves copy-on-select when a stale settings load resolves afterward", async () => {
+    let resolveSettingsGet: ((value: Record<string, unknown>) => void) | undefined;
+    const settingsGetPromise = new Promise<Record<string, unknown>>((resolve) => {
+      resolveSettingsGet = resolve;
+    });
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return await settingsGetPromise;
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "外观" }));
+    fireEvent.click(await screen.findByRole("switch", { name: "选中自动复制" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            appearance: {
+              terminalCopyOnSelect: true,
+            },
+          },
+        },
+        undefined
+      );
+    });
+
+    await act(async () => {
+      resolveSettingsGet?.({
+        "appearance.terminalCopyOnSelect": false,
+      });
+      await settingsGetPromise;
+    });
+
+    expect(screen.getByRole("switch", { name: "选中自动复制" })).toHaveAttribute(
+      "aria-checked",
+      "true"
+    );
   });
 
   it("updates language selection through the shared appearance pills", async () => {

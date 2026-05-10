@@ -25,6 +25,10 @@ import { useViewport } from "../../../hooks/use-viewport";
 import { useTranslation } from "../../../lib/i18n";
 import { notificationPreferencesAtom } from "../../notifications/atoms";
 import { MobilePageHeader } from "../../shared/components/mobile-page-header";
+import {
+  resolveTerminalCopyOnSelectSetting,
+  terminalPreferencesAtom,
+} from "../../terminal-panel/preferences";
 import { type ProviderInfo, ProviderSettings } from "./provider-settings";
 import { resolveSettingsExitTargetFromBrowserHistory } from "./settings-navigation";
 import {
@@ -147,6 +151,7 @@ export function SettingsPage() {
   const [terminalRenderer, setTerminalRendererState] = useState<"standard" | "compatibility">(
     "standard"
   );
+  const [terminalCopyOnSelect, setTerminalCopyOnSelectState] = useState(false);
   const [providerAdditionalArgsById, setProviderAdditionalArgsById] = useState<
     Record<string, string>
   >({});
@@ -156,10 +161,12 @@ export function SettingsPage() {
   const [locale, setLocaleState] = useAtom(localeAtom);
   const [theme, setTheme] = useAtom(themeAtom);
   const setNotificationPreferences = useSetAtom(notificationPreferencesAtom);
+  const setTerminalPreferences = useSetAtom(terminalPreferencesAtom);
   const settingsLoadFailedUnknownRef = useRef(settingsLoadFailedUnknown);
   const appearanceSelectionVersionRef = useRef({
     locale: 0,
     terminalRenderer: 0,
+    terminalCopyOnSelect: 0,
   });
   const detailSection =
     navigationState.kind === "detail" ? navigationState.section : navigationState.lastSection;
@@ -233,6 +240,14 @@ export function SettingsPage() {
           setTerminalRendererState(settings["appearance.terminalRenderer"]);
         }
       }
+      if (typeof settings["appearance.terminalCopyOnSelect"] === "boolean") {
+        if (
+          appearanceSelectionVersionRef.current.terminalCopyOnSelect ===
+          appearanceSelectionVersionAtRequestStart.terminalCopyOnSelect
+        ) {
+          setTerminalCopyOnSelectState(settings["appearance.terminalCopyOnSelect"]);
+        }
+      }
       if (settings["appearance.locale"] === "zh" || settings["appearance.locale"] === "en") {
         if (
           appearanceSelectionVersionRef.current.locale ===
@@ -241,6 +256,9 @@ export function SettingsPage() {
           setLocaleState(settings["appearance.locale"]);
         }
       }
+      setTerminalPreferences({
+        copyOnSelect: resolveTerminalCopyOnSelectSetting(settings),
+      });
       setProviderAdditionalArgsById(loadProviderAdditionalArgs(settings, providers));
     };
 
@@ -248,7 +266,14 @@ export function SettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, [connectionStatus, dispatch, setLocaleState, setNotificationPreferences, settingsRefreshKey]);
+  }, [
+    connectionStatus,
+    dispatch,
+    setLocaleState,
+    setNotificationPreferences,
+    setTerminalPreferences,
+    settingsRefreshKey,
+  ]);
 
   const handleLocaleSelection = (value: "zh" | "en") => {
     appearanceSelectionVersionRef.current.locale += 1;
@@ -258,6 +283,12 @@ export function SettingsPage() {
   const handleTerminalRendererSelection = (value: "standard" | "compatibility") => {
     appearanceSelectionVersionRef.current.terminalRenderer += 1;
     setTerminalRendererState(value);
+  };
+
+  const handleTerminalCopyOnSelectSelection = (value: boolean) => {
+    appearanceSelectionVersionRef.current.terminalCopyOnSelect += 1;
+    setTerminalCopyOnSelectState(value);
+    setTerminalPreferences({ copyOnSelect: value });
   };
 
   useEffect(() => {
@@ -307,6 +338,8 @@ export function SettingsPage() {
             setLocale={handleLocaleSelection}
             terminalRenderer={terminalRenderer}
             setTerminalRenderer={handleTerminalRendererSelection}
+            terminalCopyOnSelect={terminalCopyOnSelect}
+            setTerminalCopyOnSelect={handleTerminalCopyOnSelectSelection}
             theme={theme}
             setTheme={setTheme}
           />
@@ -727,6 +760,8 @@ interface AppearanceSettingsProps {
   setLocale: (value: "zh" | "en") => void;
   terminalRenderer: "standard" | "compatibility";
   setTerminalRenderer: (value: "standard" | "compatibility") => void;
+  terminalCopyOnSelect: boolean;
+  setTerminalCopyOnSelect: (value: boolean) => void;
   theme: "dark" | "light";
   setTheme: (value: "dark" | "light") => void;
 }
@@ -736,6 +771,8 @@ function AppearanceSettings({
   setLocale,
   terminalRenderer,
   setTerminalRenderer,
+  terminalCopyOnSelect,
+  setTerminalCopyOnSelect,
   theme,
   setTheme,
 }: AppearanceSettingsProps) {
@@ -744,6 +781,8 @@ function AppearanceSettings({
   const themeDescId = useId();
   const terminalRendererTitleId = useId();
   const terminalRendererDescId = useId();
+  const copyOnSelectLabelId = useId();
+  const copyOnSelectDescId = useId();
   const languageTitleId = useId();
   const languageDescId = useId();
   const dispatch = useAtomValue(dispatchCommandAtom);
@@ -825,6 +864,27 @@ function AppearanceSettings({
           >
             {t("settings.terminal_compatibility")}
           </Pill>
+        </div>
+
+        <div className="settings-toggle-row">
+          <div className="settings-toggle-info">
+            <span className="settings-toggle-label" id={copyOnSelectLabelId}>
+              {t("settings.copy_on_select")}
+            </span>
+            <span className="settings-toggle-desc" id={copyOnSelectDescId}>
+              {t("settings.copy_on_select_hint")}
+            </span>
+          </div>
+          <Switch
+            aria-describedby={copyOnSelectDescId}
+            aria-labelledby={copyOnSelectLabelId}
+            checked={terminalCopyOnSelect}
+            className="settings-toggle"
+            onCheckedChange={(nextValue) => {
+              setTerminalCopyOnSelect(nextValue);
+              void saveSettings({ appearance: { terminalCopyOnSelect: nextValue } });
+            }}
+          />
         </div>
       </div>
 
