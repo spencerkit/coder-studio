@@ -4,7 +4,12 @@ import { createStore, Provider } from "jotai";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../../../atoms/app-ui";
 import { wsClientAtom } from "../../../../atoms/connection";
-import { activeWorkspaceIdAtom } from "../../../../atoms/workspaces";
+import {
+  activeWorkspaceIdAtom,
+  workspaceOrderAtom,
+  workspacesAtom,
+  workspacesLoadStateAtom,
+} from "../../../../atoms/workspaces";
 import { WorktreeModal } from "./worktree-modal";
 
 const viewportMocks = vi.hoisted(() => ({
@@ -22,6 +27,22 @@ const worktree: WorktreeInfo = {
   commit: "abc1234",
   status: "dirty",
 };
+
+function createWorkspace(id: string) {
+  return {
+    id,
+    name: id,
+    path: `/tmp/${id}`,
+    targetRuntime: "native" as const,
+    openedAt: 1,
+    lastActiveAt: 1,
+    uiState: {
+      leftPanelWidth: 280,
+      bottomPanelHeight: 200,
+      focusMode: false,
+    },
+  };
+}
 
 describe("WorktreeModal", () => {
   afterEach(() => {
@@ -92,8 +113,14 @@ describe("WorktreeModal", () => {
     });
 
     const store = createStore();
+    const workspace = createWorkspace("ws-1");
     store.set(localeAtom, "en");
     store.set(activeWorkspaceIdAtom, "ws-1");
+    store.set(workspacesAtom, {
+      [workspace.id]: workspace,
+    });
+    store.set(workspaceOrderAtom, [workspace.id]);
+    store.set(workspacesLoadStateAtom, "ready");
     store.set(wsClientAtom, {
       sendCommand,
       subscribe: vi.fn(() => () => {}),
@@ -117,6 +144,73 @@ describe("WorktreeModal", () => {
     expect(screen.getByRole("tab", { name: "Status" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tab", { name: "Status" })).toHaveClass("worktree-tab", "active");
     expect(screen.getByText("Latest Commit")).toBeInTheDocument();
+  });
+
+  it("does not render without an explicit workspace until the workspace list is ready", () => {
+    const store = createStore();
+    const workspace = createWorkspace("ws-1");
+
+    store.set(localeAtom, "en");
+    store.set(activeWorkspaceIdAtom, workspace.id);
+    store.set(workspacesAtom, {
+      [workspace.id]: workspace,
+    });
+    store.set(workspaceOrderAtom, [workspace.id]);
+    store.set(workspacesLoadStateAtom, "loading");
+
+    const { container } = render(
+      <Provider store={store}>
+        <WorktreeModal worktree={worktree} onClose={vi.fn()} />
+      </Provider>
+    );
+
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("falls back to the first ordered workspace when the requested workspace is missing", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({
+      status: {
+        branch: "feature/mobile-sheet",
+        ahead: 0,
+        behind: 0,
+        headSha: "abc1234567890",
+        headShortSha: "abc1234",
+        headSubject: "Initial mobile sheet setup",
+        staged: [],
+        modified: [],
+        untracked: [],
+        deleted: [],
+      },
+    });
+
+    const store = createStore();
+    const fallbackWorkspace = createWorkspace("ws-fallback");
+    const otherWorkspace = createWorkspace("ws-other");
+    store.set(localeAtom, "en");
+    store.set(activeWorkspaceIdAtom, "ws-missing");
+    store.set(workspacesAtom, {
+      [fallbackWorkspace.id]: fallbackWorkspace,
+      [otherWorkspace.id]: otherWorkspace,
+    });
+    store.set(workspaceOrderAtom, [fallbackWorkspace.id, otherWorkspace.id]);
+    store.set(workspacesLoadStateAtom, "ready");
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <WorktreeModal worktree={worktree} onClose={vi.fn()} />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith("worktree.status", {
+        workspaceId: fallbackWorkspace.id,
+        worktreePath: "/tmp/coder-studio-feature",
+      });
+    });
   });
 
   it("renders inside shared Sheet on mobile and still loads data when tabs change", async () => {

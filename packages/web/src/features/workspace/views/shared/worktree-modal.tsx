@@ -1,7 +1,7 @@
 import type { WorktreeInfo } from "@coder-studio/core";
 import { useAtomValue } from "jotai";
 import { X } from "lucide-react";
-import { activeWorkspaceIdAtom } from "../../../../atoms/workspaces";
+import { resolvedActiveWorkspaceIdAtom } from "../../../../atoms/workspaces";
 import {
   IconButton,
   Modal,
@@ -22,7 +22,7 @@ interface WorktreeModalProps {
 
 export function WorktreeModal({ workspaceId, worktree, onClose }: WorktreeModalProps) {
   const isMobile = useViewport() === "mobile";
-  const activeWorkspaceId = useAtomValue(activeWorkspaceIdAtom);
+  const activeWorkspaceId = useAtomValue(resolvedActiveWorkspaceIdAtom);
   const t = useTranslation();
   const resolvedWorkspaceId = workspaceId ?? activeWorkspaceId;
 
