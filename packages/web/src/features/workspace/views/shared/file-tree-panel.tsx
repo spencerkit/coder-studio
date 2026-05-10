@@ -689,8 +689,40 @@ function getNodeIcon(node: FileNode, isExpanded: boolean): LucideIcon {
 
 function getNodeToneClass(node: FileNode, isExpanded: boolean) {
   if (node.kind === "dir") {
-    return isExpanded ? "folder-open" : "folder";
+    return "folder";
   }
 
-  return "file";
+  const ext = node.name.split(".").pop()?.toLowerCase();
+
+  switch (ext) {
+    case "ts":
+    case "tsx":
+    case "js":
+    case "jsx":
+    case "mjs":
+    case "cjs":
+    case "py":
+    case "go":
+    case "rs":
+    case "java":
+      return "code";
+    case "json":
+    case "yaml":
+    case "yml":
+    case "toml":
+    case "lock":
+      return "data";
+    case "md":
+    case "txt":
+      return "doc";
+    case "png":
+    case "jpg":
+    case "jpeg":
+    case "gif":
+    case "svg":
+    case "webp":
+      return "media";
+    default:
+      return "file";
+  }
 }

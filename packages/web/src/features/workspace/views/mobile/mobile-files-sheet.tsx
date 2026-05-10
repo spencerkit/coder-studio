@@ -88,10 +88,10 @@ export function MobileFilesSheet({
           value={activeTab}
         >
           <TabList className="mobile-files-sheet__tabs">
-            <Tab className="mobile-files-sheet__segment panel-tab" value="files">
+            <Tab className="mobile-files-sheet__segment" value="files">
               <span>{t("file.title")}</span>
             </Tab>
-            <Tab className="mobile-files-sheet__segment panel-tab" value="git">
+            <Tab className="mobile-files-sheet__segment" value="git">
               <span>{t("label.git")}</span>
             </Tab>
           </TabList>

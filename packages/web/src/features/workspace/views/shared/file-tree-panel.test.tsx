@@ -339,6 +339,77 @@ describe("FileTreePanel", () => {
     });
   });
 
+  it("restores per-type icon tone classes for tree rows and search results", async () => {
+    const searchFiles = [
+      { path: "src/app.tsx", name: "app.tsx", kind: "file" },
+      { path: "src/config.json", name: "config.json", kind: "file" },
+      { path: "src/README.md", name: "README.md", kind: "file" },
+      { path: "src/logo.svg", name: "logo.svg", kind: "file" },
+      { path: "src/notes.bin", name: "notes.bin", kind: "file" },
+    ];
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args: { query?: string }) => {
+      if (op === "file.search") {
+        const query = args.query?.toLowerCase() ?? "";
+        return {
+          files: searchFiles.filter((item) => item.name.toLowerCase().includes(query)),
+        };
+      }
+
+      return { ok: true };
+    });
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(
+      fileTreeAtomFamily("ws-test"),
+      new Map([
+        [
+          ".",
+          [
+            {
+              path: "src",
+              name: "src",
+              kind: "dir",
+              children: [
+                { path: "src/app.tsx", name: "app.tsx", kind: "file" },
+                { path: "src/config.json", name: "config.json", kind: "file" },
+                { path: "src/README.md", name: "README.md", kind: "file" },
+                { path: "src/logo.svg", name: "logo.svg", kind: "file" },
+                { path: "src/notes.bin", name: "notes.bin", kind: "file" },
+              ],
+            },
+          ],
+        ],
+      ])
+    );
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    const folderLabel = screen.getByText("src");
+    expect(folderLabel.previousElementSibling).toHaveClass("tree-icon", "folder");
+
+    await screen.findByText("app.tsx");
+
+    expect(screen.getByText("app.tsx").previousElementSibling).toHaveClass("tree-icon", "code");
+    expect(screen.getByText("config.json").previousElementSibling).toHaveClass("tree-icon", "data");
+    expect(screen.getByText("README.md").previousElementSibling).toHaveClass("tree-icon", "doc");
+    expect(screen.getByText("logo.svg").previousElementSibling).toHaveClass("tree-icon", "media");
+    expect(screen.getByText("notes.bin").previousElementSibling).toHaveClass("tree-icon", "file");
+
+    fireEvent.change(screen.getByPlaceholderText("action.search_files"), {
+      target: { value: "logo" },
+    });
+
+    const searchLabel = await screen.findByText("logo.svg");
+    expect(searchLabel.closest(".tree-search-labels")?.previousElementSibling).toHaveClass(
+      "tree-icon",
+      "media"
+    );
+  });
+
   it("opens the new file dialog from the toolbar and dispatches file.create", async () => {
     const sendCommand = vi
       .fn()

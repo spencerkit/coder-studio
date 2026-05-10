@@ -244,9 +244,11 @@ describe("WorkspacePage", () => {
     expect(branchButton).not.toBeNull();
     fireEvent.click(branchButton as HTMLElement);
 
+    const gitTab = screen.getByRole("tab", { name: "Git" });
     expect(screen.getByRole("tablist", { name: "Workspace sections" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Git" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("tab", { name: "Git" })).toHaveClass("panel-tab", "active");
+    expect(gitTab).toHaveAttribute("aria-selected", "true");
+    expect(gitTab).toHaveClass("workspace-sidebar-panel__tab", "active");
+    expect(gitTab).not.toHaveClass("panel-tab");
     expect(
       await screen.findByPlaceholderText("Search branches or create new branch...")
     ).toBeInTheDocument();
@@ -255,6 +257,62 @@ describe("WorkspacePage", () => {
       workspaceId: "ws-test",
       inputValue: "",
     });
+  });
+
+  it("uses workspace sidebar-specific tab styling without legacy panel-tab classes", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return {
+          branch: "main",
+          ahead: 0,
+          behind: 0,
+          staged: [],
+          modified: [],
+          deleted: [],
+          untracked: [],
+        };
+      }
+
+      return [];
+    });
+
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedReadyWorkspaceState(store, {
+      "ws-test": {
+        id: "ws-test",
+        path: "/home/spencer/workspace/coder-studio",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/workspace"]}>
+          <Routes>
+            <Route path="/workspace" element={<WorkspaceDesktopView />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>
+    );
+
+    await screen.findByTestId("file-tree-panel");
+
+    const filesTab = screen.getByRole("tab", { name: /Files|文件/i });
+    const gitTab = screen.getByRole("tab", { name: "Git" });
+
+    expect(filesTab).toHaveClass("workspace-sidebar-panel__tab", "active");
+    expect(filesTab).not.toHaveClass("panel-tab");
+    expect(gitTab).toHaveClass("workspace-sidebar-panel__tab");
+    expect(gitTab).not.toHaveClass("panel-tab");
   });
 
   it("does not render a duplicate worktree entry button in the desktop git header", async () => {

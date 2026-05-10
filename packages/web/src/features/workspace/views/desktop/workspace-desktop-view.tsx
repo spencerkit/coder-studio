@@ -114,10 +114,10 @@ export const WorkspaceDesktopView: FC = () => {
                     value={sidebarTab}
                   >
                     <TabList className="workspace-sidebar-panel__tabs">
-                      <Tab className="workspace-sidebar-panel__tab panel-tab" value="files">
+                      <Tab className="workspace-sidebar-panel__tab" value="files">
                         <span>{t("file.title")}</span>
                       </Tab>
-                      <Tab className="workspace-sidebar-panel__tab panel-tab" value="git">
+                      <Tab className="workspace-sidebar-panel__tab" value="git">
                         <span>{t("label.git")}</span>
                       </Tab>
                     </TabList>

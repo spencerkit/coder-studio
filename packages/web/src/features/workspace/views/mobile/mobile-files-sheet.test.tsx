@@ -70,4 +70,20 @@ describe("MobileFilesSheet", () => {
     ).toBeTruthy();
     expect(searchInput).toBeInTheDocument();
   });
+
+  it("uses the mobile segmented tab styling without legacy panel-tab classes", () => {
+    render(
+      <Provider store={createStore()}>
+        <MobileFilesSheet workspaceId="ws-test" route={{ kind: "root" }} activeTab="git" />
+      </Provider>
+    );
+
+    const filesTab = screen.getByRole("tab", { name: "Files" });
+    const gitTab = screen.getByRole("tab", { name: "Git" });
+
+    expect(filesTab).toHaveClass("mobile-files-sheet__segment");
+    expect(filesTab).not.toHaveClass("panel-tab");
+    expect(gitTab).toHaveClass("mobile-files-sheet__segment", "active");
+    expect(gitTab).not.toHaveClass("panel-tab");
+  });
 });
