@@ -551,6 +551,10 @@ export async function runGitCheckout(
   }
 ): Promise<{ success: boolean; message: string; branch?: string }> {
   const args = ["checkout"];
+  const formatCheckoutError = (error: unknown, fallbackMessage: string) =>
+    error instanceof GitError
+      ? error.stderr.trim() || error.message || fallbackMessage
+      : fallbackMessage;
 
   // Detect remote branch refs by querying actual configured remotes
   let isRemoteRef = false;
@@ -584,10 +588,10 @@ export async function runGitCheckout(
 
       // For remote branch checkout, we know the branch name from the ref
       return { success: true, message, branch: branchName };
-    } catch {
+    } catch (error) {
       return {
         success: false,
-        message: `Failed to checkout remote branch '${ref}'`,
+        message: formatCheckoutError(error, `Failed to checkout remote branch '${ref}'`),
       };
     }
   } else {
@@ -607,10 +611,10 @@ export async function runGitCheckout(
       const message = stdout || stderr || `Checkout to ${ref} completed`;
 
       return { success: true, message, branch };
-    } catch {
+    } catch (error) {
       return {
         success: false,
-        message: `Failed to checkout '${ref}'`,
+        message: formatCheckoutError(error, `Failed to checkout '${ref}'`),
       };
     }
   }

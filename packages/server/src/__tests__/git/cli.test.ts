@@ -953,6 +953,32 @@ describe("runGitCheckout", () => {
     const { stdout } = await execFileAsync("git", ["branch", "--show-current"], { cwd: testDir });
     expect(stdout.trim()).toBe("feature/login-page");
   });
+
+  it("returns the underlying git error when checkout is blocked by another worktree", async () => {
+    await writeFile(join(testDir, "README.md"), "test");
+    await execFileAsync("git", ["add", "."], { cwd: testDir });
+    await execFileAsync("git", ["commit", "-m", "initial"], { cwd: testDir });
+
+    const linkedWorktreeDir = await mkdtemp(join(tmpdir(), "git-linked-worktree-"));
+    try {
+      await execFileAsync("git", ["branch", "feature/worktree-branch"], { cwd: testDir });
+      await execFileAsync(
+        "git",
+        ["worktree", "add", linkedWorktreeDir, "feature/worktree-branch"],
+        {
+          cwd: testDir,
+        }
+      );
+
+      const result = await runGitCheckout(testDir, "feature/worktree-branch");
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain("already used by worktree");
+      expect(result.message).toContain(linkedWorktreeDir);
+    } finally {
+      await rm(linkedWorktreeDir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("runGitPush", () => {
