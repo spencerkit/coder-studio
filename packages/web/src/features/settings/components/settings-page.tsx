@@ -240,13 +240,21 @@ export function SettingsPage() {
           setTerminalRendererState(settings["appearance.terminalRenderer"]);
         }
       }
+      const resolvedTerminalCopyOnSelect = resolveTerminalCopyOnSelectSetting(settings);
       if (typeof settings["appearance.terminalCopyOnSelect"] === "boolean") {
         if (
           appearanceSelectionVersionRef.current.terminalCopyOnSelect ===
           appearanceSelectionVersionAtRequestStart.terminalCopyOnSelect
         ) {
           setTerminalCopyOnSelectState(settings["appearance.terminalCopyOnSelect"]);
+          setTerminalPreferences({
+            copyOnSelect: resolvedTerminalCopyOnSelect,
+          });
         }
+      } else {
+        setTerminalPreferences({
+          copyOnSelect: resolvedTerminalCopyOnSelect,
+        });
       }
       if (settings["appearance.locale"] === "zh" || settings["appearance.locale"] === "en") {
         if (
@@ -256,9 +264,6 @@ export function SettingsPage() {
           setLocaleState(settings["appearance.locale"]);
         }
       }
-      setTerminalPreferences({
-        copyOnSelect: resolveTerminalCopyOnSelectSetting(settings),
-      });
       setProviderAdditionalArgsById(loadProviderAdditionalArgs(settings, providers));
     };
 

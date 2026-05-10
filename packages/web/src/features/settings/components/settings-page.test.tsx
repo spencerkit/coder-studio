@@ -1118,6 +1118,7 @@ describe("SettingsPage", () => {
       "aria-checked",
       "true"
     );
+    expect(store.get(terminalPreferencesAtom)).toEqual({ copyOnSelect: true });
   });
 
   it("updates language selection through the shared appearance pills", async () => {
