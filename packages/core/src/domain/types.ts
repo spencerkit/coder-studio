@@ -124,6 +124,7 @@ export interface GitBranch {
   isRemote: boolean; // Whether it's a remote branch
   isCurrent: boolean; // Whether it's the current branch
   remote?: string; // Remote name (e.g., "origin")
+  linkedWorktreePath?: string; // Path of another worktree using this branch, if any
 }
 
 export interface WorktreeInfo {

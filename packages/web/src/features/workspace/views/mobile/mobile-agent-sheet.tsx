@@ -155,6 +155,7 @@ export function MobileAgentSheet({
 
   return (
     <MobileSelectSheet
+      className="mobile-select-sheet--command"
       title={mode === "sessions" ? t("mobile.agent.title") : t("session.provider_select")}
       sections={mode === "sessions" ? sessionSections : providerSections}
       selectedId={mode === "sessions" ? (activeSession?.id ?? null) : null}

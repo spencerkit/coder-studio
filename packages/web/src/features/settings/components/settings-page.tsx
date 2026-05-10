@@ -24,7 +24,7 @@ import { Input, Notice, Pill, Switch } from "../../../components/ui";
 import { useViewport } from "../../../hooks/use-viewport";
 import { useTranslation } from "../../../lib/i18n";
 import { notificationPreferencesAtom } from "../../notifications/atoms";
-import { PageHeader } from "../../shared/components/page-header";
+import { MobilePageHeader } from "../../shared/components/mobile-page-header";
 import { type ProviderInfo, ProviderSettings } from "./provider-settings";
 import { resolveSettingsExitTargetFromBrowserHistory } from "./settings-navigation";
 import {
@@ -322,7 +322,7 @@ export function SettingsPage() {
           />
         );
       case "shortcuts":
-        return isMobile ? null : <ShortcutsSettings />;
+        return <ShortcutsSettings />;
       default:
         return null;
     }
@@ -357,7 +357,7 @@ export function SettingsPage() {
   return (
     <div className={`settings-page ${isMobile ? "settings-page--mobile" : ""}`}>
       <header className="settings-header">
-        <PageHeader
+        <MobilePageHeader
           title={headerTitle}
           titleAs="div"
           onBack={handleBack}

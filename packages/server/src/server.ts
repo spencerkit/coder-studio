@@ -17,6 +17,7 @@ import { EventBus } from "./bus/event-bus.js";
 import { ensureDataDir, parseServerConfig, type ServerConfig } from "./config.js";
 import { AutoFetchScheduler } from "./git/auto-fetch.js";
 import { runCommandAsString } from "./provider-runtime/command-runner.js";
+import { createE2EProviderMockOverrides } from "./provider-runtime/e2e-provider-mock.js";
 import { ProviderInstallManager } from "./provider-runtime/install-manager.js";
 import type { RuntimeStatusDeps } from "./provider-runtime/runtime-status.js";
 import { SessionManager } from "./session/manager.js";
@@ -136,6 +137,7 @@ export async function createServer(
         console.warn("[uploads] cascade cleanup failed", { wsId: workspaceId, err })
       ),
   });
+  workspaceMgr.hydrateWatchers();
 
   const authSessionRepo = new AuthSessionRepo(db);
   const authLoginBlockRepo = new AuthLoginBlockRepo(db);
@@ -180,10 +182,15 @@ export async function createServer(
   await sessionMgr.hydrate();
   await supervisorMgr.hydrate();
 
-  const providerRuntimeDeps: RuntimeStatusDeps = {};
+  const providerMockOverrides = createE2EProviderMockOverrides();
+  const providerRuntimeDeps: RuntimeStatusDeps = providerMockOverrides
+    ? {
+        commandExists: providerMockOverrides.commandExists,
+      }
+    : {};
   const providerInstallMgr = new ProviderInstallManager(providerRegistry, {
     ...providerRuntimeDeps,
-    runCommand: runCommandAsString,
+    runCommand: providerMockOverrides?.runCommand ?? runCommandAsString,
   });
 
   commandContext = {

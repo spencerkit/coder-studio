@@ -551,6 +551,10 @@ export async function runGitCheckout(
   }
 ): Promise<{ success: boolean; message: string; branch?: string }> {
   const args = ["checkout"];
+  const formatCheckoutError = (error: unknown, fallbackMessage: string) =>
+    error instanceof GitError
+      ? error.stderr.trim() || error.message || fallbackMessage
+      : fallbackMessage;
 
   // Detect remote branch refs by querying actual configured remotes
   let isRemoteRef = false;
@@ -568,7 +572,15 @@ export async function runGitCheckout(
   if (isRemoteRef && !options?.createBranch) {
     const remoteSeparatorIndex = ref.indexOf("/");
     const branchName = remoteSeparatorIndex >= 0 ? ref.slice(remoteSeparatorIndex + 1) : ref;
-    args.push("-b", branchName, ref);
+
+    try {
+      await runGit(cwd, ["show-ref", "--verify", "--quiet", `refs/heads/${branchName}`]);
+      const { stdout, stderr } = await runGit(cwd, ["checkout", branchName]);
+      const message = stdout || stderr || `Checkout to ${branchName} completed`;
+      return { success: true, message, branch: branchName };
+    } catch {
+      args.push("-b", branchName, ref);
+    }
 
     try {
       const { stdout, stderr } = await runGit(cwd, args);
@@ -576,10 +588,10 @@ export async function runGitCheckout(
 
       // For remote branch checkout, we know the branch name from the ref
       return { success: true, message, branch: branchName };
-    } catch {
+    } catch (error) {
       return {
         success: false,
-        message: `Failed to checkout remote branch '${ref}'`,
+        message: formatCheckoutError(error, `Failed to checkout remote branch '${ref}'`),
       };
     }
   } else {
@@ -599,10 +611,10 @@ export async function runGitCheckout(
       const message = stdout || stderr || `Checkout to ${ref} completed`;
 
       return { success: true, message, branch };
-    } catch {
+    } catch (error) {
       return {
         success: false,
-        message: `Failed to checkout '${ref}'`,
+        message: formatCheckoutError(error, `Failed to checkout '${ref}'`),
       };
     }
   }
@@ -644,18 +656,35 @@ export async function runGitListBranches(cwd: string): Promise<{
 }> {
   // Get local branches
   const { stdout: localOutput } = await runGit(cwd, ["branch", "--list"]);
+  const { stdout: localVerboseOutput } = await runGit(cwd, ["branch", "--list", "-vv"]);
 
   // Get remote branches
   const { stdout: remoteOutput } = await runGit(cwd, ["branch", "-r"]);
 
   const branches: GitBranch[] = [];
   let current = "";
+  const linkedWorktreePathsByBranch = new Map<string, string>();
+
+  const localVerboseLines = localVerboseOutput.split("\n").filter((line) => line.trim());
+  for (const line of localVerboseLines) {
+    const normalizedLine = line.replace(/^[*+ ]\s+/, "");
+    const branchMatch = normalizedLine.match(/^([^\s]+)\s+/);
+    const worktreeMatch = line.match(/\((.+?)\)\s/);
+    if (!branchMatch?.[1] || !worktreeMatch?.[1]) {
+      continue;
+    }
+
+    const worktreePath = worktreeMatch[1];
+    if (worktreePath.startsWith("/") || worktreePath.startsWith("~")) {
+      linkedWorktreePathsByBranch.set(branchMatch[1], worktreePath);
+    }
+  }
 
   // Parse local branches
   const localLines = localOutput.split("\n").filter((line) => line.trim());
   for (const line of localLines) {
     const isCurrent = line.startsWith("*");
-    const name = line.replace(/^\*?\s+/, "").trim();
+    const name = line.replace(/^[*+ ]\s+/, "").trim();
 
     // Skip detached HEAD indicator
     if (name.startsWith("(HEAD detached")) {
@@ -665,10 +694,15 @@ export async function runGitListBranches(cwd: string): Promise<{
       continue; // Don't add to branches array
     }
 
+    if (linkedWorktreePathsByBranch.has(name) && !isCurrent) {
+      continue;
+    }
+
     branches.push({
       name,
       isRemote: false,
       isCurrent,
+      linkedWorktreePath: linkedWorktreePathsByBranch.get(name),
     });
     if (isCurrent) {
       current = name;

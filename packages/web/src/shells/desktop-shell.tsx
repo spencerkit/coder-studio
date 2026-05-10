@@ -7,8 +7,7 @@
 
 import { useAtomValue } from "jotai";
 import { Route, Routes, useLocation } from "react-router-dom";
-import { authEnabledAtom, connectionStatusAtom } from "../atoms";
-import { authenticatedAtom } from "../atoms/app-ui";
+import { authEnabledAtom } from "../atoms";
 import { EmptyState } from "../components/ui";
 import { LoginPage } from "../features/auth";
 import { CommandPalette } from "../features/command-palette";
@@ -32,20 +31,17 @@ const appLoadingEmptyStateStyle = {
 
 export function DesktopShell() {
   useBootstrap();
-  const authenticated = useAtomValue(authenticatedAtom);
   const authEnabled = useAtomValue(authEnabledAtom);
   const location = useLocation();
-  const authRequired = authEnabled === true;
   const authUnknown = authEnabled === null;
-  const shouldShowLogin = authRequired && !authenticated && location.pathname === "/login";
-  !shouldShowLogin && !authUnknown && !location.pathname.startsWith("/settings");
+  const shouldBypassAuthLoading = location.pathname.startsWith("/settings");
 
   return (
     <div className="app">
       <ConnectionStatusBanner />
 
       <main className="main-content">
-        {authUnknown ? (
+        {authUnknown && !shouldBypassAuthLoading ? (
           <div className="app-loading-shell">
             <div className="app-loading-card">
               <EmptyState

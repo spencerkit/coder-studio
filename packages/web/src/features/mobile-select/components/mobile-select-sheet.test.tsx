@@ -232,7 +232,7 @@ describe("MobileSelectSheet", () => {
       />
     );
 
-    const header = document.querySelector(".mobile-inline-sheet__header .page-header");
+    const header = document.querySelector(".mobile-inline-sheet__header .mobile-page-header");
     const leading = header?.querySelector(".page-header__leading");
 
     expect(header).not.toBeNull();
@@ -448,7 +448,8 @@ describe("MobileSelectSheet", () => {
         sections={[{ kind: "options", id: "branches", items: [] }]}
         create={{
           visible: true,
-          label: (query) => `Create branch: ${query}`,
+          label: () => "Create branch",
+          description: (query) => query,
           onCreate,
         }}
         onSelect={vi.fn()}
@@ -459,7 +460,10 @@ describe("MobileSelectSheet", () => {
     fireEvent.change(screen.getByPlaceholderText("Search branches"), {
       target: { value: "feature/mobile-select" },
     });
-    await user.click(screen.getByRole("button", { name: "Create branch: feature/mobile-select" }));
+    expect(screen.getByRole("button", { name: "Create branch" })).toHaveAccessibleDescription(
+      "feature/mobile-select"
+    );
+    await user.click(screen.getByRole("button", { name: "Create branch" }));
 
     expect(onCreate).toHaveBeenCalledWith("feature/mobile-select");
   });
@@ -556,7 +560,8 @@ describe("MobileSelectSheet", () => {
         ]}
         create={{
           visible: true,
-          label: (query) => `Create branch: ${query}`,
+          label: () => "Create branch",
+          description: (query) => query,
           disabled: (query) => query.includes("main"),
           onCreate,
         }}
@@ -571,12 +576,13 @@ describe("MobileSelectSheet", () => {
 
     const option = screen.getByRole("button", { name: "main" });
     const action = screen.getByRole("button", { name: "Refresh" });
-    const create = screen.getByRole("button", { name: "Create branch: main" });
+    const create = screen.getByRole("button", { name: "Create branch" });
 
     expect(option).toBeDisabled();
     expect(option).toHaveAccessibleDescription("Protected branch");
     expect(action).toBeDisabled();
     expect(create).toBeDisabled();
+    expect(create).toHaveAccessibleDescription("main");
 
     await user.click(option);
     await user.click(action);

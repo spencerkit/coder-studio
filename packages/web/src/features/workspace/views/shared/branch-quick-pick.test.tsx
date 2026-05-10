@@ -5,6 +5,7 @@ import { createStore, Provider, useSetAtom } from "jotai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../../../atoms/app-ui";
 import { wsClientAtom } from "../../../../atoms/connection";
+import { toastsAtom } from "../../../notifications/atoms";
 import { branchQuickPickAtom, gitBranchListAtomFamily } from "../../atoms";
 import { BranchQuickPick, DesktopBranchQuickPickPopover } from "./branch-quick-pick";
 
@@ -170,6 +171,56 @@ describe("BranchQuickPick", () => {
     expect(screen.getByRole("button", { name: "main" })).toHaveAttribute("aria-pressed", "true");
   });
 
+  it("highlights the real current branch when the mobile picker opens", () => {
+    viewportMocks.viewport = "mobile";
+    store.set(gitBranchListAtomFamily("ws-test"), {
+      current: "feature/ui",
+      branches: [
+        { name: "feature/auth", isCurrent: false, isRemote: false },
+        { name: "feature/ui", isCurrent: true, isRemote: false },
+        { name: "main", isCurrent: false, isRemote: false },
+      ],
+      loading: false,
+    });
+
+    renderQuickPick();
+
+    expect(screen.getByRole("button", { name: "feature/ui" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(screen.getByRole("button", { name: "feature/auth" })).toHaveAttribute(
+      "aria-pressed",
+      "false"
+    );
+    expect(screen.getByRole("button", { name: "feature/ui" })).toHaveAccessibleDescription(
+      "Current Branch"
+    );
+    expect(screen.getByText("Current Branch")).toBeInTheDocument();
+  });
+
+  it("hides branches that are already checked out in another worktree on mobile", () => {
+    viewportMocks.viewport = "mobile";
+    store.set(gitBranchListAtomFamily("ws-test"), {
+      current: "develop",
+      branches: [
+        {
+          name: "chore/e2e-specs-reorg",
+          isCurrent: false,
+          isRemote: false,
+          linkedWorktreePath: "/tmp/e2e-specs-reorg",
+        },
+        { name: "develop", isCurrent: true, isRemote: false },
+      ],
+      loading: false,
+    });
+
+    renderQuickPick();
+
+    expect(screen.queryByRole("button", { name: "chore/e2e-specs-reorg" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "develop" })).toBeInTheDocument();
+  });
+
   it("does not keep the current branch selected when mobile focus moves to create branch", async () => {
     viewportMocks.viewport = "mobile";
     store.set(branchQuickPickAtom, {
@@ -181,8 +232,10 @@ describe("BranchQuickPick", () => {
     renderQuickPick();
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Create branch: m" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Create branch" })).toBeInTheDocument();
     });
+
+    expect(screen.getByRole("button", { name: "Create branch" })).toHaveAccessibleDescription("m");
 
     fireEvent.keyDown(screen.getByPlaceholderText("Search branches or create new branch..."), {
       key: "ArrowDown",
@@ -277,6 +330,50 @@ describe("BranchQuickPick", () => {
     });
   });
 
+  it("shows an error toast and keeps the picker open when checkout fails", async () => {
+    viewportMocks.viewport = "mobile";
+    sendCommandMock.mockImplementation(async (op: string) => {
+      if (op === "git.checkout") {
+        return {
+          success: false,
+          message: "Branch is already used by another worktree",
+        };
+      }
+
+      if (op === "git.branches") {
+        return {
+          current: "main",
+          branches: [
+            { name: "main", isCurrent: true, isRemote: false },
+            { name: "feature/auth", isCurrent: false, isRemote: false },
+          ],
+        };
+      }
+
+      if (op === "git.status") {
+        return gitStatus;
+      }
+
+      return undefined;
+    });
+
+    renderQuickPick();
+
+    fireEvent.click(screen.getByRole("button", { name: "feature/auth" }));
+
+    await waitFor(() => {
+      expect(store.get(toastsAtom)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: "error",
+            body: "Branch is already used by another worktree",
+          }),
+        ])
+      );
+    });
+    expect(store.get(branchQuickPickAtom).visible).toBe(true);
+  });
+
   it("requires confirmation before creating a new branch on Enter", async () => {
     renderQuickPick();
 
@@ -347,9 +444,12 @@ describe("BranchQuickPick", () => {
 
     const input = screen.getByPlaceholderText("Search branches or create new branch...");
 
-    await user.click(screen.getByRole("button", { name: "Create branch: m" }));
+    await user.click(screen.getByRole("button", { name: "Create branch" }));
 
-    expect(screen.getByRole("button", { name: "Confirm create branch: m" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Confirm create branch" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Confirm create branch" })
+    ).toHaveAccessibleDescription("m");
 
     fireEvent.keyDown(input, { key: "Enter" });
 

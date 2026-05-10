@@ -930,6 +930,7 @@ export function useBranchQuickPickActions() {
   const quickPickState = useAtomValue(branchQuickPickAtom);
   const setQuickPick = useSetAtom(branchQuickPickAtom);
   const dispatch = useAtomValue(dispatchCommandAtom);
+  const pushToast = useSetAtom(pushToastAtom);
   const workspaceId = quickPickState.workspaceId;
   const branchList = useAtomValue(gitBranchListAtomFamily(workspaceId ?? ""));
   const setBranchList = useSetAtom(gitBranchListAtomFamily(workspaceId ?? ""));
@@ -942,13 +943,6 @@ export function useBranchQuickPickActions() {
   useEffect(() => {
     setInputValue(quickPickState.inputValue);
   }, [quickPickState.inputValue]);
-
-  useEffect(() => {
-    if (quickPickState.visible) {
-      setSelectedIndex(0);
-      setPendingCreateBranchName(null);
-    }
-  }, [quickPickState.visible]);
 
   useEffect(() => {
     if (!quickPickState.visible || !workspaceId) {
@@ -1018,10 +1012,17 @@ export function useBranchQuickPickActions() {
 
   const filteredBranches = useMemo(
     () =>
-      branchList.branches.filter((branch) =>
-        branch.name.toLowerCase().includes(inputValue.toLowerCase())
+      branchList.branches.filter(
+        (branch) =>
+          (branch.isCurrent || !branch.linkedWorktreePath) &&
+          branch.name.toLowerCase().includes(inputValue.toLowerCase())
       ),
     [branchList.branches, inputValue]
+  );
+
+  const isBranchSelectable = useCallback(
+    (branch: GitBranch) => branch.isCurrent || !branch.linkedWorktreePath,
+    []
   );
 
   const exactMatch = filteredBranches.find(
@@ -1062,6 +1063,32 @@ export function useBranchQuickPickActions() {
     return items;
   }, [branchList.loading, exactMatch, filteredBranches, pendingCreateBranchName, t, trimmedInput]);
 
+  const currentBranchIndex = useMemo(
+    () =>
+      displayItems.findIndex(
+        (item) =>
+          item.type === "branch" &&
+          item.branch &&
+          (item.branch.isCurrent || item.branch.name === branchList.current)
+      ),
+    [branchList.current, displayItems]
+  );
+
+  useEffect(() => {
+    if (!quickPickState.visible) {
+      return;
+    }
+
+    setPendingCreateBranchName(null);
+
+    if (trimmedInput) {
+      setSelectedIndex(0);
+      return;
+    }
+
+    setSelectedIndex(currentBranchIndex >= 0 ? currentBranchIndex : 0);
+  }, [currentBranchIndex, quickPickState.visible, trimmedInput]);
+
   const handleClose = useCallback(() => {
     setPendingCreateBranchName(null);
     setQuickPick({
@@ -1090,14 +1117,20 @@ export function useBranchQuickPickActions() {
       });
 
       if (!result.ok || !result.data?.success) {
-        console.error("Failed to checkout branch:", result.error?.message ?? result.data?.message);
+        const errorMessage = result.error?.message ?? result.data?.message;
+        console.error("Failed to checkout branch:", errorMessage);
+        pushToast({
+          kind: "error",
+          title: t("git.quick_pick.checkout_failed_title"),
+          body: errorMessage || t("git.quick_pick.checkout_failed_body", { name: branchName }),
+        });
         return;
       }
 
       await refreshBranchState();
       handleClose();
     },
-    [dispatch, handleClose, refreshBranchState, workspaceId]
+    [dispatch, handleClose, pushToast, refreshBranchState, t, workspaceId]
   );
 
   const handleBranchCreate = useCallback(
@@ -1113,14 +1146,20 @@ export function useBranchQuickPickActions() {
       });
 
       if (!result.ok || !result.data?.success) {
-        console.error("Failed to create branch:", result.error?.message ?? result.data?.message);
+        const errorMessage = result.error?.message ?? result.data?.message;
+        console.error("Failed to create branch:", errorMessage);
+        pushToast({
+          kind: "error",
+          title: t("git.quick_pick.create_failed_title"),
+          body: errorMessage || t("git.quick_pick.create_failed_body", { name: branchName }),
+        });
         return;
       }
 
       await refreshBranchState();
       handleClose();
     },
-    [dispatch, handleClose, refreshBranchState, workspaceId]
+    [dispatch, handleClose, pushToast, refreshBranchState, t, workspaceId]
   );
 
   return {
@@ -1132,6 +1171,7 @@ export function useBranchQuickPickActions() {
     handleClose,
     handleRequestBranchCreate,
     inputValue,
+    isBranchSelectable,
     pendingCreateBranchName,
     quickPickState,
     selectedIndex,

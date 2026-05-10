@@ -748,11 +748,14 @@ describe("SettingsPage", () => {
 
     const pageHeaderLeading = () =>
       document.querySelector(".settings-header .page-header__leading") as HTMLElement | null;
+    const mobileHeader = () =>
+      document.querySelector(".settings-header .mobile-page-header") as HTMLElement | null;
 
     expect(screen.getByRole("button", { name: "Providers" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "快捷键" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "快捷键" })).toBeInTheDocument();
     expect(screen.queryByText("通知")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("启动命令参数")).not.toBeInTheDocument();
+    expect(mobileHeader()).not.toBeNull();
     expect(pageHeaderLeading()).not.toBeNull();
     expect(within(pageHeaderLeading() as HTMLElement).getByText("设置")).toBeInTheDocument();
 
@@ -770,6 +773,17 @@ describe("SettingsPage", () => {
 
     expect(screen.getByRole("button", { name: "Providers" })).toBeInTheDocument();
     expect(screen.queryByLabelText("启动命令参数")).not.toBeInTheDocument();
+    expect(within(pageHeaderLeading() as HTMLElement).getByText("设置")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "快捷键" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("tablist", { name: "快捷键" })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "返回" }));
+
+    expect(screen.getByRole("button", { name: "快捷键" })).toBeInTheDocument();
     expect(within(pageHeaderLeading() as HTMLElement).getByText("设置")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Providers" }));

@@ -1,5 +1,5 @@
 import { useAtomValue } from "jotai";
-import { Route, Routes } from "react-router-dom";
+import { Route, Routes, useLocation } from "react-router-dom";
 import { authEnabledAtom } from "../../atoms/connection";
 import { EmptyState } from "../../components/ui";
 import { LoginPage } from "../../features/auth";
@@ -26,14 +26,16 @@ const appLoadingEmptyStateStyle = {
 export function MobileShell() {
   useBootstrap();
   const authEnabled = useAtomValue(authEnabledAtom);
+  const location = useLocation();
   const authUnknown = authEnabled === null;
+  const shouldBypassAuthLoading = location.pathname.startsWith("/settings");
 
   return (
     <div className="app">
       <ConnectionStatusBanner />
 
       <main className="main-content">
-        {authUnknown ? (
+        {authUnknown && !shouldBypassAuthLoading ? (
           <div className="app-loading-shell">
             <div className="app-loading-card">
               <EmptyState

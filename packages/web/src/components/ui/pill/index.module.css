@@ -1,14 +1,18 @@
 .pill {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  min-width: 0;
   gap: var(--sp-2);
-  padding: var(--sp-2) var(--sp-4);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-full);
-  background: var(--bg-surface);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
   color: var(--text-secondary);
   font-family: var(--font-sans);
-  font-size: var(--text-base);
+  font-size: var(--text-sm);
+  line-height: 1.4;
   transition:
     background var(--duration-fast) var(--ease-out),
     border-color var(--duration-fast) var(--ease-out),
@@ -17,24 +21,26 @@
 
 .pill:hover:not(:disabled) {
   background: var(--bg-hover);
-  border-color: var(--border-light);
+  border-color: color-mix(in srgb, var(--border-light) 72%, transparent);
+  color: var(--text-primary);
 }
 
 .pill:focus-visible {
   outline: none;
-  border-color: var(--accent-blue);
-  box-shadow: 0 0 0 1px rgba(108, 182, 255, 0.4);
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-blue) 35%, transparent);
 }
 
 .active {
-  background: var(--accent-blue);
-  border-color: var(--accent-blue);
-  color: var(--text-inverse);
+  background: var(--bg-active);
+  border-color: var(--border-focus);
+  color: var(--text-primary);
 }
 
 .icon {
   display: inline-flex;
   align-items: center;
+  color: inherit;
 }
 
 .pill:disabled {

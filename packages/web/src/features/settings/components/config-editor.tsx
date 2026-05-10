@@ -16,6 +16,7 @@ import {
   ChevronUp,
   Circle,
   FileJson2,
+  FileWarning,
   Sparkles,
   XCircle,
 } from "lucide-react";
@@ -301,7 +302,7 @@ export function ConfigEditor({
                   {t("settings.config_files.file_not_found_hint")}
                 </div>
               }
-              icon={<div className="config-empty-icon">📭</div>}
+              icon={<FileWarning className="config-empty-icon" size={16} />}
               title={
                 <div className="config-empty-title">
                   {t("settings.config_files.file_not_found")}

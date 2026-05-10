@@ -14,6 +14,7 @@ import {
   getGitHistory,
   getGitStatus,
   runGit,
+  runGitCheckout,
   runGitFetch,
   runGitPull,
   runGitPush,
@@ -432,10 +433,12 @@ describe("GitError", () => {
 describe("runGitListBranches", () => {
   let testDir: string;
   let remoteDir: string;
+  let linkedWorktreeDir: string;
 
   beforeEach(async () => {
     testDir = join(tmpdir(), `git-test-${Date.now()}`);
     remoteDir = join(tmpdir(), `git-remote-${Date.now()}`);
+    linkedWorktreeDir = join(tmpdir(), `git-linked-worktree-${Date.now()}`);
     await mkdir(testDir);
 
     // Initialize git repo
@@ -452,6 +455,11 @@ describe("runGitListBranches", () => {
     }
     try {
       await rmdir(remoteDir, { recursive: true });
+    } catch {
+      // Ignore cleanup errors
+    }
+    try {
+      await rmdir(linkedWorktreeDir, { recursive: true });
     } catch {
       // Ignore cleanup errors
     }
@@ -601,6 +609,33 @@ describe("runGitListBranches", () => {
 
     await rm(testDir, { recursive: true });
   });
+
+  it("omits local branches that are checked out in another worktree", async () => {
+    await writeFile(join(testDir, "README.md"), "test");
+    await execFileAsync("git", ["add", "."], { cwd: testDir });
+    await execFileAsync("git", ["commit", "-m", "initial"], { cwd: testDir });
+
+    const defaultBranch = await getCurrentBranch(testDir);
+    await execFileAsync("git", ["branch", "feature/worktree-branch"], { cwd: testDir });
+    await execFileAsync("git", ["worktree", "add", linkedWorktreeDir, "feature/worktree-branch"], {
+      cwd: testDir,
+    });
+
+    const { runGitListBranches } = await import("../../git/cli.js");
+    const result = await runGitListBranches(testDir);
+
+    expect(result.current).toBe(defaultBranch);
+    expect(result.branches).not.toContainEqual(
+      expect.objectContaining({
+        name: "feature/worktree-branch",
+      })
+    );
+    expect(result.branches).not.toContainEqual(
+      expect.objectContaining({
+        name: expect.stringMatching(/^\+\s/),
+      })
+    );
+  });
 });
 
 describe("getGitStatus", () => {
@@ -679,6 +714,42 @@ describe("getGitStatus", () => {
     expect(status.headSubject).toBe("detached subject");
 
     await rm(testDir, { recursive: true, force: true });
+  });
+});
+
+describe("runGitCheckout", () => {
+  it("switches to an existing local branch when selecting a remote branch with the same short name", async () => {
+    const testDir = await mkdtemp(join(tmpdir(), "git-checkout-remote-existing-local-"));
+    const remoteDir = await mkdtemp(join(tmpdir(), "git-checkout-remote-existing-local-remote-"));
+
+    await execFileAsync("git", ["init"], { cwd: testDir });
+    await execFileAsync("git", ["config", "user.name", "Test"], { cwd: testDir });
+    await execFileAsync("git", ["config", "user.email", "test@example.com"], { cwd: testDir });
+    await writeFile(join(testDir, "README.md"), "test");
+    await execFileAsync("git", ["add", "."], { cwd: testDir });
+    await execFileAsync("git", ["commit", "-m", "initial"], { cwd: testDir });
+
+    await execFileAsync("git", ["init", "--bare"], { cwd: remoteDir });
+    await execFileAsync("git", ["remote", "add", "origin", remoteDir], { cwd: testDir });
+
+    await execFileAsync("git", ["checkout", "-b", "feature/login"], { cwd: testDir });
+    await execFileAsync("git", ["push", "-u", "origin", "feature/login"], { cwd: testDir });
+    await execFileAsync("git", ["checkout", "master"], { cwd: testDir });
+
+    const result = await runGitCheckout(testDir, "origin/feature/login");
+
+    expect(result).toMatchObject({
+      success: true,
+      branch: "feature/login",
+    });
+    await expect(
+      execFileAsync("git", ["rev-parse", "--abbrev-ref", "HEAD"], { cwd: testDir })
+    ).resolves.toMatchObject({
+      stdout: "feature/login\n",
+    });
+
+    await rm(testDir, { recursive: true });
+    await rm(remoteDir, { recursive: true });
   });
 });
 
@@ -881,6 +952,32 @@ describe("runGitCheckout", () => {
     // Verify we're on the correct branch
     const { stdout } = await execFileAsync("git", ["branch", "--show-current"], { cwd: testDir });
     expect(stdout.trim()).toBe("feature/login-page");
+  });
+
+  it("returns the underlying git error when checkout is blocked by another worktree", async () => {
+    await writeFile(join(testDir, "README.md"), "test");
+    await execFileAsync("git", ["add", "."], { cwd: testDir });
+    await execFileAsync("git", ["commit", "-m", "initial"], { cwd: testDir });
+
+    const linkedWorktreeDir = await mkdtemp(join(tmpdir(), "git-linked-worktree-"));
+    try {
+      await execFileAsync("git", ["branch", "feature/worktree-branch"], { cwd: testDir });
+      await execFileAsync(
+        "git",
+        ["worktree", "add", linkedWorktreeDir, "feature/worktree-branch"],
+        {
+          cwd: testDir,
+        }
+      );
+
+      const result = await runGitCheckout(testDir, "feature/worktree-branch");
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain("already used by worktree");
+      expect(result.message).toContain(linkedWorktreeDir);
+    } finally {
+      await rm(linkedWorktreeDir, { recursive: true, force: true });
+    }
   });
 });
 

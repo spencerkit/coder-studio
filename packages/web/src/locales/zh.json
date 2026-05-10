@@ -166,9 +166,7 @@
     },
     "topbar": {
       "switch_workspace": "切换工作区",
-      "open_settings": "打开设置",
-      "open_more_actions": "打开更多操作",
-      "more_actions": "更多操作"
+      "open_settings": "打开设置"
     },
     "sheet": {
       "dismiss": "关闭当前面板",
@@ -384,6 +382,14 @@
       "loading": "正在加载分支...",
       "empty_filtered": "未找到分支",
       "empty_idle": "输入以搜索分支",
+      "in_use": "占用中",
+      "worktree_in_use": "已在其他工作区中签出",
+      "checkout_failed_title": "切换分支失败",
+      "checkout_failed_body": "无法切换到 {name}。",
+      "create_failed_title": "创建分支失败",
+      "create_failed_body": "无法创建 {name}。",
+      "create_label": "创建分支",
+      "confirm_create_label": "确认创建分支",
       "create": "创建分支：{name}",
       "confirm_create": "确认创建分支：{name}"
     },
@@ -494,7 +500,9 @@
       "back_to_base": "返回基础配置",
       "startup_args": "启动命令参数",
       "startup_args_hint": "每行填写一个启动参数，保存后会追加到 Provider 启动命令后面。",
-      "startup_args_placeholder": "--verbose\n--debug"
+      "startup_args_placeholder": "--verbose\n--debug",
+      "command_preview_title": "命令预览",
+      "command_preview_hint": "预览当前 Provider 最终生效的启动命令"
     },
     "theme": {
       "title": "主题",

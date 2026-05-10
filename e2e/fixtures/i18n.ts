@@ -58,3 +58,17 @@ export function translateForE2E(
 
   return text;
 }
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export function translatePatternForE2E(
+  key: E2ETranslationKey,
+  params?: Record<string, string | number>
+): RegExp {
+  const en = translateForE2E(key, "en", params);
+  const zh = translateForE2E(key, "zh", params);
+  const values = [...new Set([en, zh])].map(escapeRegExp);
+  return new RegExp(`^(?:${values.join("|")})$`);
+}

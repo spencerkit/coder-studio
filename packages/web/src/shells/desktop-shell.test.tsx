@@ -82,6 +82,20 @@ describe("DesktopShell auth gating", () => {
     expect(screen.queryByText("LoginPage")).not.toBeInTheDocument();
   });
 
+  it("renders SettingsPage on /settings while auth status is still unknown", () => {
+    window.history.replaceState({}, "", "/settings");
+
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(authEnabledAtom, null);
+    store.set(authenticatedAtom, false);
+
+    renderShell(store);
+
+    expect(screen.getByText("SettingsPage")).toBeInTheDocument();
+    expect(screen.queryByText("正在连接工作区...")).not.toBeInTheDocument();
+  });
+
   it("redirects / to /login when auth is enabled and user is unauthenticated", async () => {
     const store = createStore();
     store.set(connectionStatusAtom, "connected");

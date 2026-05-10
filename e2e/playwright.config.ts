@@ -11,6 +11,11 @@ const sandboxDir =
   mkdtempSync(join(tmpdir(), "coder-studio-phase1-acceptance-"));
 const dataDir = process.env.CODER_STUDIO_PHASE1_DATA_DIR ?? join(sandboxDir, "coder-studio.db");
 const runtimeDir = process.env.CODER_STUDIO_PHASE1_RUNTIME_DIR ?? join(sandboxDir, "runtime");
+const providerMockDir =
+  process.env.CODER_STUDIO_E2E_PROVIDER_MOCK_DIR ?? join(sandboxDir, "provider-mock");
+const providerMockBinDir = join(providerMockDir, "bin");
+const providerMockStatePath = join(providerMockDir, "state.json");
+const providerMockDebugLogPath = join(providerMockDir, "debug.log");
 
 async function reservePort(host: string): Promise<number> {
   return await new Promise<number>((resolve, reject) => {
@@ -53,6 +58,7 @@ if (ownsPhase1Sandbox) {
   process.env.CODER_STUDIO_PHASE1_RUNTIME_DIR = runtimeDir;
   process.env.CODER_STUDIO_PHASE1_SERVER_PORT = String(SERVER_PORT);
   process.env.CODER_STUDIO_PHASE1_WEB_PORT = String(WEB_PORT);
+  process.env.CODER_STUDIO_E2E_PROVIDER_MOCK_DIR = providerMockDir;
 
   process.on("exit", () => {
     rmSync(sandboxDir, { recursive: true, force: true });
@@ -80,6 +86,10 @@ export default defineConfig({
         DATA_DIR: dataDir,
         RUNTIME_DIR: runtimeDir,
         NO_AUTH: "true",
+        CODER_STUDIO_E2E_PROVIDER_STATE_PATH: providerMockStatePath,
+        CODER_STUDIO_E2E_PROVIDER_BIN_DIR: providerMockBinDir,
+        CODER_STUDIO_E2E_PROVIDER_DEBUG_LOG_PATH: providerMockDebugLogPath,
+        PATH: `${providerMockBinDir}:${process.env.PATH ?? ""}`,
       },
     },
     {

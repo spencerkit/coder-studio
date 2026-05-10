@@ -166,9 +166,7 @@
     },
     "topbar": {
       "switch_workspace": "Switch workspace",
-      "open_settings": "Open settings",
-      "open_more_actions": "Open more actions",
-      "more_actions": "More Actions"
+      "open_settings": "Open settings"
     },
     "sheet": {
       "dismiss": "Dismiss current sheet",
@@ -384,6 +382,14 @@
       "loading": "Loading branches...",
       "empty_filtered": "No branches found",
       "empty_idle": "Type to search branches",
+      "in_use": "In Use",
+      "worktree_in_use": "Checked out in another worktree",
+      "checkout_failed_title": "Failed to switch branch",
+      "checkout_failed_body": "Could not switch to {name}.",
+      "create_failed_title": "Failed to create branch",
+      "create_failed_body": "Could not create {name}.",
+      "create_label": "Create branch",
+      "confirm_create_label": "Confirm create branch",
       "create": "Create branch: {name}",
       "confirm_create": "Confirm create branch: {name}"
     },
@@ -494,7 +500,9 @@
       "back_to_base": "Back to Base Settings",
       "startup_args": "Startup Command Args",
       "startup_args_hint": "Enter one startup argument per line. Each saved line is appended to the provider launch command.",
-      "startup_args_placeholder": "--verbose\n--debug"
+      "startup_args_placeholder": "--verbose\n--debug",
+      "command_preview_title": "Command Preview",
+      "command_preview_hint": "Preview the effective provider launch command"
     },
     "theme": {
       "title": "Theme",

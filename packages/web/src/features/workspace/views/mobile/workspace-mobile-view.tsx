@@ -239,21 +239,29 @@ export function WorkspaceMobileView() {
             <section className="mobile-shell__agent-empty" data-testid="mobile-agent-empty">
               <div className="mobile-shell__empty-content">
                 <EmptyState
-                  style={{ minHeight: "auto", padding: 0 }}
-                  title={<p>{t("mobile.empty.start_session")}</p>}
+                  className="mobile-shell__empty-state"
+                  style={{ minHeight: "auto" }}
+                  title={
+                    <div className="mobile-shell__empty-heading">
+                      <span className="mobile-shell__empty-kicker">{t("label.agent")}</span>
+                      <p className="mobile-shell__empty-title">{t("mobile.empty.start_session")}</p>
+                    </div>
+                  }
                   description={
                     <div className="mobile-shell__placeholder-copy">
                       <p>{t("mobile.empty.files_terminal_hint")}</p>
                     </div>
                   }
                   action={
-                    <button
-                      type="button"
-                      className="mobile-shell__empty-cta"
-                      onClick={() => setAgentSheetOpen(true)}
-                    >
-                      {t("action.create_session")}
-                    </button>
+                    <div className="mobile-shell__empty-action-row">
+                      <button
+                        type="button"
+                        className="mobile-shell__empty-cta"
+                        onClick={() => setAgentSheetOpen(true)}
+                      >
+                        {t("action.create_session")}
+                      </button>
+                    </div>
                   }
                 />
               </div>

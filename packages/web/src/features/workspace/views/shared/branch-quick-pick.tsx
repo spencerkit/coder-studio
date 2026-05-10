@@ -31,6 +31,7 @@ function BranchQuickPickEmptyState({ title }: { title: string }) {
 }
 
 function BranchQuickPickContent() {
+  const t = useTranslation();
   const {
     branchList,
     displayItems,
@@ -39,6 +40,7 @@ function BranchQuickPickContent() {
     handleClose,
     handleRequestBranchCreate,
     inputValue,
+    isBranchSelectable,
     selectedIndex,
     setInputValue,
     setPendingCreateBranchName,
@@ -84,6 +86,9 @@ function BranchQuickPickContent() {
         if (displayItems[selectedIndex]) {
           const item = displayItems[selectedIndex];
           if (item.type === "branch" && item.branch) {
+            if (!isBranchSelectable(item.branch)) {
+              return;
+            }
             void handleBranchSelect(item.branch.name);
           } else if (item.type === "create") {
             handleRequestBranchCreate(trimmedInput);
@@ -129,6 +134,9 @@ function BranchQuickPickContent() {
               }`}
               onClick={() => {
                 if (item.type === "branch" && item.branch) {
+                  if (!isBranchSelectable(item.branch)) {
+                    return;
+                  }
                   void handleBranchSelect(item.branch.name);
                 } else if (item.type === "create") {
                   handleRequestBranchCreate(trimmedInput);
@@ -147,6 +155,12 @@ function BranchQuickPickContent() {
                   )}
 
                   <span className="branch-quick-pick-name">{item.branch.name}</span>
+
+                  {item.branch.linkedWorktreePath && !item.branch.isCurrent && (
+                    <Tag color="neutral" caps={false} className="branch-quick-pick-badge">
+                      {t("git.quick_pick.in_use")}
+                    </Tag>
+                  )}
 
                   {item.branch.isRemote && (
                     <Tag color="neutral" caps={false} className="branch-quick-pick-badge">
@@ -235,6 +249,7 @@ export function BranchQuickPick() {
     handleClose,
     handleRequestBranchCreate,
     inputValue,
+    isBranchSelectable,
     quickPickState,
     selectedIndex,
     setInputValue,
@@ -258,6 +273,9 @@ export function BranchQuickPick() {
         if (displayItems[selectedIndex]) {
           const item = displayItems[selectedIndex];
           if (item.type === "branch" && item.branch) {
+            if (!isBranchSelectable(item.branch)) {
+              return;
+            }
             void handleBranchSelect(item.branch.name);
           } else if (item.type === "create") {
             handleRequestBranchCreate(trimmedInput);
@@ -289,7 +307,14 @@ export function BranchQuickPick() {
     .map((item) => ({
       id: item.branch!.name,
       label: item.branch!.name,
+      icon: item.branch!.isCurrent ? <Check size={14} /> : undefined,
+      meta: item.branch!.isCurrent
+        ? t("git.current_branch")
+        : item.branch!.linkedWorktreePath
+          ? t("git.quick_pick.worktree_in_use")
+          : undefined,
       badge: item.branch!.isRemote ? t("git.branch_remote") : undefined,
+      disabled: !isBranchSelectable(item.branch!),
     }));
   const createItem = displayItems.find(
     (item) => item.type === "create" || item.type === "confirm-create"
@@ -298,6 +323,7 @@ export function BranchQuickPick() {
   return (
     <div onKeyDown={handleKeyDown}>
       <MobileSelectSheet
+        className="mobile-select-sheet--command"
         title={t("git.branch")}
         searchable
         searchPlaceholder={t("git.quick_pick.search_placeholder")}
@@ -314,13 +340,18 @@ export function BranchQuickPick() {
             items: branchItems,
           },
         ]}
+        closeOnSelect={false}
         selectedId={selectedId}
         loading={branchList.loading}
         loadingText={t("git.quick_pick.loading")}
         emptyText={inputValue ? t("git.quick_pick.empty_filtered") : t("git.quick_pick.empty_idle")}
         create={{
           visible: Boolean(trimmedInput) && !hasExactMatch,
-          label: () => createItem?.label ?? t("git.quick_pick.create", { name: trimmedInput }),
+          label: () =>
+            createItem?.type === "confirm-create"
+              ? t("git.quick_pick.confirm_create_label")
+              : t("git.quick_pick.create_label"),
+          description: () => trimmedInput,
           onCreate: async () => {
             if (createItem?.type === "confirm-create") {
               await handleBranchCreate(trimmedInput);

@@ -1,7 +1,8 @@
+import clsx from "clsx";
 import { type ReactNode, useId, useMemo, useState } from "react";
 import { EmptyState, IconButton, Sheet, Tag } from "../../../components/ui";
 import { useTranslation } from "../../../lib/i18n";
-import { PageHeader } from "../../shared/components/page-header";
+import { MobilePageHeader } from "../../shared/components/mobile-page-header";
 
 export interface MobileSelectItemTrailingAction {
   id: string;
@@ -54,6 +55,7 @@ export type MobileSelectSection = MobileSelectOptionSection | MobileSelectAction
 export interface MobileSelectCreateConfig {
   visible: boolean;
   label: (query: string) => string;
+  description?: (query: string) => string | undefined;
   disabled?: (query: string) => boolean;
   onCreate: (query: string) => void | Promise<void>;
 }
@@ -61,6 +63,7 @@ export interface MobileSelectCreateConfig {
 export interface MobileSelectSheetProps {
   title: string;
   sections: MobileSelectSection[];
+  className?: string;
   selectedId?: string | null;
   presentation?: "sheet" | "inline";
   searchable?: boolean;
@@ -107,6 +110,7 @@ const mobileSelectEmptyStateTitleStyle = {
 export function MobileSelectSheet({
   title,
   sections,
+  className,
   selectedId,
   presentation = "sheet",
   searchable = false,
@@ -127,6 +131,7 @@ export function MobileSelectSheet({
   const [uncontrolledQuery, setUncontrolledQuery] = useState("");
   const searchId = useId();
   const query = searchValue ?? uncontrolledQuery;
+  const trimmedQuery = query.trim();
   const normalizedQuery = query.trim().toLowerCase();
   const resolvedLoadingText = loadingText ?? t("common.loading");
   const resolvedEmptyText = emptyText ?? t("command.no_results");
@@ -168,8 +173,8 @@ export function MobileSelectSheet({
   }, [normalizedQuery, sections]);
 
   const hasVisibleItems = filteredSections.some((section) => section.items.length > 0);
-  const canCreate = Boolean(create?.visible && query.trim());
-  const createDisabled = Boolean(canCreate && create?.disabled?.(query.trim()));
+  const canCreate = Boolean(create?.visible && trimmedQuery);
+  const createDisabled = Boolean(canCreate && create?.disabled?.(trimmedQuery));
 
   const runAsyncHandler = (
     context: "select" | "action" | "create",
@@ -198,11 +203,11 @@ export function MobileSelectSheet({
   };
 
   const handleCreate = () => {
-    if (!create || !query.trim()) {
+    if (!create || !trimmedQuery) {
       return;
     }
 
-    runAsyncHandler("create", () => create.onCreate(query.trim()));
+    runAsyncHandler("create", () => create.onCreate(trimmedQuery));
   };
 
   const content = (
@@ -388,19 +393,30 @@ export function MobileSelectSheet({
                 <div className="mobile-select-sheet__list">
                   {(() => {
                     const labelId = "mobile-select-create-label";
+                    const descriptionId = "mobile-select-create-description";
+                    const description = create?.description?.(trimmedQuery);
 
                     return (
                       <button
                         type="button"
                         className="mobile-select-sheet__item mobile-select-sheet__item--create"
                         aria-labelledby={labelId}
+                        aria-describedby={description ? descriptionId : undefined}
                         disabled={createDisabled}
                         onClick={handleCreate}
                       >
                         <span className="mobile-select-sheet__item-copy">
                           <span id={labelId} className="mobile-select-sheet__item-label">
-                            {create?.label(query.trim())}
+                            {create?.label(trimmedQuery)}
                           </span>
+                          {description ? (
+                            <span
+                              id={descriptionId}
+                              className="mobile-select-sheet__item-description"
+                            >
+                              {description}
+                            </span>
+                          ) : null}
                         </span>
                       </button>
                     );
@@ -427,10 +443,17 @@ export function MobileSelectSheet({
       <div className="mobile-inline-sheet" role="dialog" aria-label={title}>
         <div className="mobile-inline-sheet__handle" aria-hidden="true" />
         <div className="mobile-inline-sheet__header">
-          <PageHeader title={title} titleAs="h3" onBack={onBack} backLabel={t("action.back")} />
+          <MobilePageHeader
+            title={title}
+            titleAs="h3"
+            onBack={onBack}
+            backLabel={t("action.back")}
+          />
         </div>
         <div className="mobile-inline-sheet__body">
-          <div className="mobile-select-sheet mobile-select-sheet--inline">{content}</div>
+          <div className={clsx("mobile-select-sheet", "mobile-select-sheet--inline", className)}>
+            {content}
+          </div>
         </div>
       </div>
     );
@@ -439,7 +462,7 @@ export function MobileSelectSheet({
   return (
     <Sheet
       title={title}
-      body={<div className="mobile-select-sheet">{content}</div>}
+      body={<div className={clsx("mobile-select-sheet", className)}>{content}</div>}
       onClose={onClose}
       kicker={kicker}
       onBack={onBack}

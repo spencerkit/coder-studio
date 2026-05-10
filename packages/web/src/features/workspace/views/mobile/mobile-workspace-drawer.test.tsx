@@ -34,6 +34,8 @@ vi.mock("../../../../lib/i18n", () => ({
         return `Switch to ${params?.name ?? ""}`;
       case "mobile.workspace_drawer.close_workspace":
         return `Close ${params?.name ?? ""}`;
+      case "action.close":
+        return "Close";
       case "tooltip.new_workspace":
         return "New Workspace";
       default:
@@ -93,5 +95,94 @@ describe("MobileWorkspaceDrawer", () => {
     await waitFor(() => {
       expect(onClose).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it("renders a visible dismiss control for closing the drawer", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    const store = createStore();
+
+    render(
+      <Provider store={store}>
+        <MobileWorkspaceDrawer
+          activeWorkspaceId="ws-1"
+          isOpen
+          onClose={onClose}
+          onOpenWorkspaceLauncher={vi.fn()}
+          workspaces={[
+            {
+              id: "ws-1",
+              path: "/tmp/demo",
+              targetRuntime: "native",
+              openedAt: 1,
+              lastActiveAt: 1,
+              uiState: {
+                leftPanelWidth: 320,
+                bottomPanelHeight: 240,
+                focusMode: false,
+              },
+            },
+          ]}
+        />
+      </Provider>
+    );
+
+    const dismissButton = screen.getByRole("button", { name: "Close" });
+
+    expect(dismissButton).toHaveClass("mobile-workspace-drawer__dismiss");
+
+    await user.click(dismissButton);
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("marks the active workspace with a clear current state", () => {
+    const store = createStore();
+
+    render(
+      <Provider store={store}>
+        <MobileWorkspaceDrawer
+          activeWorkspaceId="ws-1"
+          isOpen
+          onClose={vi.fn()}
+          onOpenWorkspaceLauncher={vi.fn()}
+          workspaces={[
+            {
+              id: "ws-1",
+              path: "/tmp/demo",
+              targetRuntime: "native",
+              openedAt: 1,
+              lastActiveAt: 1,
+              uiState: {
+                leftPanelWidth: 320,
+                bottomPanelHeight: 240,
+                focusMode: false,
+              },
+            },
+            {
+              id: "ws-2",
+              path: "/tmp/other",
+              targetRuntime: "native",
+              openedAt: 2,
+              lastActiveAt: 2,
+              uiState: {
+                leftPanelWidth: 320,
+                bottomPanelHeight: 240,
+                focusMode: false,
+              },
+            },
+          ]}
+        />
+      </Provider>
+    );
+
+    expect(screen.getByRole("button", { name: "Switch to demo" })).toHaveAttribute(
+      "aria-current",
+      "page"
+    );
+    expect(screen.getByText("Current")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Switch to other" })).not.toHaveAttribute(
+      "aria-current"
+    );
   });
 });
