@@ -61,6 +61,9 @@ describe("GitPanelStatusStrip", () => {
     fireEvent.mouseEnter(branchButton!);
 
     expect(screen.getByRole("tooltip")).toHaveTextContent("feature/tooltip-migration");
+    expect(branchButton).toHaveTextContent("feature/tooltip-migration");
+    expect(branchButton).not.toHaveTextContent("↑2");
+    expect(branchButton).not.toHaveTextContent("↓1");
   });
 
   it("opens the desktop branch quick pick from ArrowDown without changing the button semantics", async () => {
@@ -134,5 +137,34 @@ describe("GitPanelStatusStrip", () => {
     await waitFor(() => {
       expect(input).toHaveFocus();
     });
+  });
+
+  it("uses start alignment for desktop footer status strips when requested", () => {
+    const store = createStore();
+    store.set(localeAtom, "en");
+
+    const { container } = render(
+      <Provider store={store}>
+        <GitPanelStatusStrip
+          align="start"
+          workspaceId="ws-1"
+          gitState={{
+            branch: "develop",
+            ahead: 2,
+            behind: 1,
+            staged: [],
+            modified: [],
+            deleted: [],
+            untracked: [],
+          }}
+          onOpenBranchSwitcher={vi.fn()}
+        />
+      </Provider>
+    );
+
+    expect(container.querySelector(".git-panel-status-strip")).toHaveClass(
+      "git-panel-status-strip",
+      "git-panel-status-strip--start"
+    );
   });
 });

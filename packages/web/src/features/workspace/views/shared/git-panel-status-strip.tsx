@@ -11,6 +11,7 @@ interface GitPanelStatusStripProps {
   workspaceId: string;
   gitState: GitStatus | null | undefined;
   onOpenBranchSwitcher?: () => void;
+  align?: "start" | "end";
 }
 
 interface BranchTriggerProps {
@@ -50,10 +51,7 @@ function BranchTrigger({
         disabled={disabled}
       >
         <GitBranch size={11} />
-        <span className="git-panel-status-strip__branch-text">
-          {branchName}
-          {branchSummary ? ` · ${branchSummary}` : ""}
-        </span>
+        <span className="git-panel-status-strip__branch-text">{branchName}</span>
       </button>
     </Tooltip>
   );
@@ -63,6 +61,7 @@ export function GitPanelStatusStrip({
   workspaceId,
   gitState,
   onOpenBranchSwitcher,
+  align = "end",
 }: GitPanelStatusStripProps) {
   const t = useTranslation();
   const viewport = useViewport();
@@ -88,7 +87,7 @@ export function GitPanelStatusStrip({
   );
 
   return (
-    <div className="git-panel-status-strip">
+    <div className={`git-panel-status-strip git-panel-status-strip--${align}`}>
       {viewport === "desktop" && onOpenBranchSwitcher ? (
         <DesktopBranchQuickPickPopover
           workspaceId={workspaceId}

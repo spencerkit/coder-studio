@@ -10170,6 +10170,22 @@ textarea.input {
   margin-left: auto;
 }
 
+.git-panel-status-strip--start {
+  justify-content: flex-start;
+}
+
+.git-panel-status-strip--start .git-panel-status-strip__meta {
+  margin-left: 0;
+}
+
+.git-panel-status-strip--end {
+  justify-content: space-between;
+}
+
+.git-panel-status-strip--end .git-panel-status-strip__meta {
+  margin-left: auto;
+}
+
 .git-panel-status-strip .git-status-bar {
   gap: 4px;
 }

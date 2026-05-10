@@ -17,6 +17,7 @@ export function WorkspaceStatusBar({
   return (
     <div className={`workspace-status-bar${flush ? " workspace-status-bar--flush" : ""}`}>
       <GitPanelStatusStrip
+        align={flush ? "end" : "start"}
         workspaceId={workspaceId}
         gitState={gitState}
         onOpenBranchSwitcher={onOpenBranchSwitcher}
