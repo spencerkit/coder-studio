@@ -52,12 +52,44 @@ const fileTreeEmptyStateTitleStyle = {
   fontWeight: "var(--font-normal)",
 };
 
+const fileTreeInlineStateStyle = {
+  display: "block",
+  width: "auto",
+  minHeight: "auto",
+  padding: 0,
+  gap: 0,
+  textAlign: "left" as const,
+};
+
+const fileTreeInlineStateTitleStyle = {
+  margin: 0,
+  color: "inherit",
+  fontSize: "inherit",
+  fontWeight: "inherit",
+};
+
 function FileTreeEmptyState({ title }: { title: string }) {
   return (
     <EmptyState
       className="file-tree-empty"
       style={fileTreeEmptyStateStyle}
       title={<p style={fileTreeEmptyStateTitleStyle}>{title}</p>}
+    />
+  );
+}
+
+function FileTreeInlineState({
+  className,
+  title,
+}: {
+  className: "tree-empty-hint" | "tree-loading";
+  title: string;
+}) {
+  return (
+    <EmptyState
+      className={className}
+      style={fileTreeInlineStateStyle}
+      title={<p style={fileTreeInlineStateTitleStyle}>{title}</p>}
     />
   );
 }
@@ -444,13 +476,13 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
             />
           ))}
           {node.children.length === 0 && !isLoadingDir && (
-            <div className="tree-empty-hint">{t("file.empty_directory")}</div>
+            <FileTreeInlineState className="tree-empty-hint" title={t("file.empty_directory")} />
           )}
         </div>
       )}
 
       {isFolder && isExpanded && !node.children && isLoadingDir === node.path && (
-        <div className="tree-loading">{t("common.loading")}</div>
+        <FileTreeInlineState className="tree-loading" title={t("common.loading")} />
       )}
     </>
   );

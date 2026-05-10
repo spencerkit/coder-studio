@@ -9,18 +9,18 @@
 ## 已实现组件
 | Component | Tier | Public API | Notes |
 |---|---|---|---|
-| ActionMenu | 2 | `src/components/ui/index.ts` named export only | Shared bounded action-list shell with desktop menu/mobile sheet presentation; current feature inventory is covered by the mobile workspace topbar more-actions menu slice |
+| ActionMenu | 2 | `src/components/ui/index.ts` named export only | Shared bounded action-list shell with desktop menu/mobile sheet presentation; the current bounded feature inventory is complete |
 | Button | 0 | `src/components/ui/index.ts` named export only | `primary / secondary / ghost / danger` × `sm / md / lg` |
 | Badge | 0 | `src/components/ui/index.ts` named export only | Shared count badge with legacy `topbar-unread` compatibility |
-| ConfirmDialog | 1 | `src/components/ui/index.ts` named export only | Shared confirm/cancel wrapper for the bounded destructive-flow slice; richer auth/form/custom confirmation flows remain on raw `Modal` |
-| EmptyState | 1 | `src/components/ui/index.ts` named export only | Shared centered empty-state shell with `title / description / icon / action` slots |
+| ConfirmDialog | 1 | `src/components/ui/index.ts` named export only | Shared confirm/cancel wrapper for the bounded destructive-flow slice; the current bounded feature inventory is complete |
+| EmptyState | 1 | `src/components/ui/index.ts` named export only | Shared centered empty-state shell with `title / description / icon / action` slots; the current bounded empty-state inventory is complete |
 | IconButton | 0 | `src/components/ui/index.ts` named export only | `ghost / filled` × `sm / md / lg`，保留 legacy `btn` icon-only 兼容类；当前已覆盖 bounded topbar / fullscreen / close-action slice |
 | Input | 0 | `src/components/ui/index.ts` named export only | Shared single-line text entry with legacy `.input` compatibility |
 | Kbd | 0 | `src/components/ui/index.ts` named export only | Shared keyboard shortcut primitive with legacy `.shortcuts-key` compatibility |
 | Modal | 1 | `src/components/ui/index.ts` named export only | `Modal` + `ModalHeader / ModalTitle / ModalBody / ModalFooter`，保留 legacy `modal-*` 兼容类 |
 | Notice | 1 | `src/components/ui/index.ts` named export only | Current bounded slice covers the settings load-error notice family |
 | Pill | 1 | `src/components/ui/index.ts` named export only | Current bounded slice covers the settings appearance option groups |
-| Popover | 2 | `src/components/ui/index.ts` named export only | Current bounded feature inventory covers the desktop anchored terminal selector and branch quick pick; menu-list composition now lives in `ActionMenu` |
+| Popover | 2 | `src/components/ui/index.ts` named export only | Current bounded feature inventory is complete for desktop anchored custom-content dropdowns; menu-list composition lives in `ActionMenu` |
 | ProgressBar | 1 | `src/components/ui/index.ts` named export only | Shared bounded linear progress shell with optional ARIA progress semantics |
 | SegmentedControl | 1 | `src/components/ui/index.ts` named export only | Shared compact selector used by provider chooser/subnav and shortcuts categories |
 | Select | 2 | `src/components/ui/index.ts` named export only | Current bounded slice now completes the scoped selector family for supervisor and terminal mobile-sheet trigger flows |

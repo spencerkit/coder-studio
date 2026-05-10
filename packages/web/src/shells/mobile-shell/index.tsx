@@ -1,6 +1,7 @@
 import { useAtomValue } from "jotai";
 import { Route, Routes } from "react-router-dom";
 import { authEnabledAtom } from "../../atoms/connection";
+import { EmptyState } from "../../components/ui";
 import { LoginPage } from "../../features/auth";
 import { CommandPalette } from "../../features/command-palette";
 import { NotFoundPage } from "../../features/not-found";
@@ -12,6 +13,15 @@ import { BranchQuickPick } from "../../features/workspace/views/shared/branch-qu
 import { WorkspaceRouteGate } from "../../features/workspace/views/shared/workspace-route-gate";
 import { useBootstrap } from "../../hooks/use-bootstrap";
 import { ConnectionStatusBanner } from "../shared/connection-status-banner";
+
+const appLoadingEmptyStateStyle = {
+  minHeight: "auto",
+  padding: 0,
+  gap: "var(--sp-3)",
+  alignItems: "stretch",
+  justifyContent: "flex-start",
+  textAlign: "left" as const,
+};
 
 export function MobileShell() {
   useBootstrap();
@@ -26,11 +36,20 @@ export function MobileShell() {
         {authUnknown ? (
           <div className="app-loading-shell">
             <div className="app-loading-card">
-              <div className="app-loading-kicker">CODER STUDIO</div>
-              <h1 className="app-loading-title">正在连接工作区...</h1>
-              <p className="app-loading-desc">
-                正在同步认证与连接状态，随后会自动进入当前 workspace。
-              </p>
+              <EmptyState
+                style={appLoadingEmptyStateStyle}
+                title={
+                  <div>
+                    <div className="app-loading-kicker">CODER STUDIO</div>
+                    <h1 className="app-loading-title">正在连接工作区...</h1>
+                  </div>
+                }
+                description={
+                  <p className="app-loading-desc">
+                    正在同步认证与连接状态，随后会自动进入当前 workspace。
+                  </p>
+                }
+              />
             </div>
           </div>
         ) : (

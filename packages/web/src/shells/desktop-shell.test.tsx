@@ -77,6 +77,8 @@ describe("DesktopShell auth gating", () => {
     renderShell(store);
 
     expect(screen.getByText("正在连接工作区...")).toBeInTheDocument();
+    expect(document.querySelector(".app-loading-shell")).toBeTruthy();
+    expect(screen.getByText("CODER STUDIO").closest(".app-loading-card")).toBeTruthy();
     expect(screen.queryByText("LoginPage")).not.toBeInTheDocument();
   });
 

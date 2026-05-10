@@ -708,7 +708,49 @@ describe("FileTreePanel", () => {
       </Provider>
     );
 
-    expect(screen.getByText("file.empty_directory")).toBeInTheDocument();
+    const emptyDirectoryState = screen.getByText("file.empty_directory");
+
+    expect(emptyDirectoryState.tagName).toBe("P");
+    expect(emptyDirectoryState.closest(".tree-empty-hint")).toBeTruthy();
+  });
+
+  it("uses translated loading copy for expanded folders while children are still loading", async () => {
+    const sendCommand = vi.fn().mockImplementation(
+      () =>
+        new Promise(() => {
+          // Keep the directory request pending so the inline loading state remains visible.
+        })
+    );
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(
+      fileTreeAtomFamily("ws-test"),
+      new Map([
+        [
+          ".",
+          [
+            {
+              path: "docs",
+              name: "docs",
+              kind: "dir",
+            },
+          ],
+        ],
+      ])
+    );
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByText("docs"));
+
+    const loadingState = await screen.findByText("common.loading");
+
+    expect(loadingState.tagName).toBe("P");
+    expect(loadingState.closest(".tree-loading")).toBeTruthy();
   });
 
   it("filters loaded files by fuzzy filename search", async () => {
