@@ -1899,7 +1899,6 @@ describe("MobileShell Phase 2 workspace", () => {
     await user.click(screen.getByRole("button", { name: "Open Files sheet" }));
     await user.click(screen.getByRole("tab", { name: "Git" }));
     expect(screen.getByRole("tab", { name: "Git" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("tab", { name: "Git" })).toHaveClass("panel-tab", "active");
     await user.click(screen.getByRole("button", { name: "mock-git-panel" }));
 
     expect(screen.getByTestId("mobile-git-diff-viewer")).toBeInTheDocument();
@@ -1924,7 +1923,7 @@ describe("MobileShell Phase 2 workspace", () => {
 
     await user.click(screen.getByRole("button", { name: "Open Files sheet" }));
     await user.click(screen.getByRole("tab", { name: "Git" }));
-    expect(screen.getByRole("tab", { name: "Git" })).toHaveClass("panel-tab", "active");
+    expect(screen.getByRole("tab", { name: "Git" })).toHaveAttribute("aria-selected", "true");
     await user.click(screen.getByRole("button", { name: "mock-git-panel" }));
 
     expect(screen.getByTestId("mobile-git-diff-viewer")).toBeInTheDocument();
@@ -1944,7 +1943,7 @@ describe("MobileShell Phase 2 workspace", () => {
 
     await user.click(screen.getByRole("button", { name: "Open Files sheet" }));
     await user.click(screen.getByRole("tab", { name: "Git" }));
-    expect(screen.getByRole("tab", { name: "Git" })).toHaveClass("panel-tab", "active");
+    expect(screen.getByRole("tab", { name: "Git" })).toHaveAttribute("aria-selected", "true");
 
     store.set(gitDiffPreviewAtomFamily("ws-1"), {
       path: "src/app.tsx",
