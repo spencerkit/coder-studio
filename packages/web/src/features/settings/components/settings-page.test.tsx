@@ -1108,9 +1108,7 @@ describe("SettingsPage", () => {
     });
 
     await act(async () => {
-      resolveSettingsGet?.({
-        "appearance.terminalCopyOnSelect": false,
-      });
+      resolveSettingsGet?.({});
       await settingsGetPromise;
     });
 

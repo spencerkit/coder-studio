@@ -240,18 +240,12 @@ export function SettingsPage() {
           setTerminalRendererState(settings["appearance.terminalRenderer"]);
         }
       }
-      const resolvedTerminalCopyOnSelect = resolveTerminalCopyOnSelectSetting(settings);
-      if (typeof settings["appearance.terminalCopyOnSelect"] === "boolean") {
-        if (
-          appearanceSelectionVersionRef.current.terminalCopyOnSelect ===
-          appearanceSelectionVersionAtRequestStart.terminalCopyOnSelect
-        ) {
-          setTerminalCopyOnSelectState(settings["appearance.terminalCopyOnSelect"]);
-          setTerminalPreferences({
-            copyOnSelect: resolvedTerminalCopyOnSelect,
-          });
-        }
-      } else {
+      if (
+        appearanceSelectionVersionRef.current.terminalCopyOnSelect ===
+        appearanceSelectionVersionAtRequestStart.terminalCopyOnSelect
+      ) {
+        const resolvedTerminalCopyOnSelect = resolveTerminalCopyOnSelectSetting(settings);
+        setTerminalCopyOnSelectState(resolvedTerminalCopyOnSelect);
         setTerminalPreferences({
           copyOnSelect: resolvedTerminalCopyOnSelect,
         });
