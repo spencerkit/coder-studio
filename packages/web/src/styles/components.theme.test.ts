@@ -154,6 +154,23 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(stylesheet).not.toContain("\n.agent-provider-card[disabled] {\n");
   });
 
+  it("keeps draft launcher provider cards adaptive inside narrow panes", () => {
+    const launcher = getLastRuleBlock(".agent-draft-launcher");
+    const content = getLastRuleBlock(".agent-draft-content");
+    const providerCard = getLastRuleBlock(".agent-provider-card");
+    const providerBody = getLastRuleBlock(".agent-provider-card-body");
+    const providerArrow = getLastRuleBlock(".agent-provider-card-arrow");
+
+    expect(launcher).toContain("container-type: inline-size");
+    expect(content).toContain("max-width: 100%");
+    expect(providerCard).toContain("min-width: 0");
+    expect(providerBody).toContain("width: 100%");
+    expect(providerArrow).toContain("flex-shrink: 0");
+    expect(stylesheet).toMatch(
+      /@container\s*\(max-width:\s*36rem\)\s*\{[\s\S]*?\.agent-draft-providers\s*\{[\s\S]*?grid-template-columns:\s*1fr;[\s\S]*?\}/
+    );
+  });
+
   it("keeps mobile sheet bodies as flex columns so sheet content can fill the viewport", () => {
     const sheetBody = getLastRuleBlock(".mobile-sheet__body");
     const sheetBodyChildren = getLastRuleBlock(".mobile-sheet__body > *");

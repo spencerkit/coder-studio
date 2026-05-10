@@ -4694,12 +4694,14 @@ textarea.input {
 }
 
 .agent-draft-launcher {
+  container-type: inline-size;
   background:
     radial-gradient(circle at center, rgba(108, 182, 255, 0.08), transparent 30%), transparent;
 }
 
 .agent-draft-content {
   width: min(680px, calc(100% - 48px));
+  max-width: 100%;
   align-items: stretch;
   gap: var(--sp-4);
   padding: var(--sp-8) var(--sp-6);
@@ -4735,6 +4737,7 @@ textarea.input {
 
 .agent-provider-card {
   height: auto;
+  min-width: 0;
   align-items: flex-start;
   justify-content: flex-start;
   padding: var(--sp-4);
@@ -4777,6 +4780,7 @@ textarea.input {
 .agent-provider-card-body {
   display: flex;
   flex-direction: column;
+  width: 100%;
   gap: 6px;
   min-width: 0;
 }
@@ -4846,6 +4850,18 @@ textarea.input {
   margin-left: auto;
   align-self: center;
   color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+@container (max-width: 36rem) {
+  .agent-draft-content {
+    width: 100%;
+    padding-inline: var(--sp-4);
+  }
+
+  .agent-draft-providers {
+    grid-template-columns: 1fr;
+  }
 }
 
 .session-card {
