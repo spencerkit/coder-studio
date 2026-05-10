@@ -16,7 +16,7 @@
 
 **New files:**
 - `packages/web/src/shells/shared/use-workspace-bootstrap.ts` — shared bootstrap/navigation hook extracted from desktop shell
-- `packages/web/src/shells/mobile-shell/mobile-topbar.tsx` — workspace pill, connection text, more-actions trigger
+- `packages/web/src/shells/mobile-shell/mobile-topbar.tsx` — workspace pill, connection text, direct settings trigger
 - `packages/web/src/shells/mobile-shell/mobile-dock.tsx` — Files / Terminal dock buttons
 - `packages/web/src/shells/mobile-shell/mobile-sheet.tsx` — generic fullscreen mobile sheet with backdrop + close affordance
 - `packages/web/src/shells/mobile-shell/mobile-workspace-drawer.tsx` — workspace list drawer with workspace switching and secondary actions
@@ -29,7 +29,7 @@
 
 **No changes in Phase 1:**
 - `features/agent-panes`, `features/terminal-panel`, `features/workspace/*`, `features/code-editor/*`
-- command-palette mobile sheet conversion
+- command-palette mobile sheet conversion and workspace-topbar exposure
 - gesture hooks for swipe/drag interactions beyond tap/backdrop close
 
 ---
@@ -170,8 +170,7 @@ Render:
 Responsibilities:
 - workspace pill showing active workspace name
 - connection label (`已连接`, `连接中`, `重连中`, `离线`, `另一个标签页已激活`)
-- `⋯` button toggling a small action menu
-- action menu items for Settings and Quick Actions
+- direct settings icon button
 
 - [ ] **Step 4: Implement `MobileWorkspaceDrawer`**
 

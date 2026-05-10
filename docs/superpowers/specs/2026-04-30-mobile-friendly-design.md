@@ -59,7 +59,7 @@
 | D3 | **断点：`max-width: 899px` OR `pointer: coarse`** | 双条件覆盖外接键鼠 iPad、带触屏小笔记本两种边角 |
 | D4 | **桌面 split 状态在移动端只读，不回写** | 移动端只是不同的"取景器"，不污染桌面布局 |
 | D5 | **Files / Git 同 sheet 复用桌面 panel-tabs 结构** | 镜像桌面信息架构，零改动复用 |
-| D6 | **Dock = Files + Terminal 二项极简** | Editor 是 file 的 consequence、Git 合并进 Files、Supervisor 走 chat 顶徽章、Settings/CP 进 topbar `⋯` |
+| D6 | **Dock = Files + Terminal 二项极简** | Editor 是 file 的 consequence、Git 合并进 Files、Supervisor 走 chat 顶徽章、Settings 走 topbar 直达按钮 |
 | D7 | **Supervisor 改为 chat 上方的状态徽章** | Supervisor 是 agent 执行 objective 的伴生概念，与 chat 强相关，不必占 dock 槽位 |
 | D8 | **Settings 走整屏路由 + nav stack；其他二级走 sheet** | Settings 有真实层级 + URL 语义，路由优于 sheet；其他无层级用 sheet 一致 |
 | D9 | **同时只有一个 sheet 存在** | 切换 dock item 时新 sheet 替换旧 sheet，避免多层嵌套引发"我在哪一层"焦虑 |
@@ -118,7 +118,7 @@ return viewport === 'mobile' ? <MobileShell /> : <DesktopShell />;
 
 ```
 ┌──────────────────────────────────────────┐
-│ ☰  my-app ▾           ● 已连接    ⋯      │  topbar           44px
+│ ☰  my-app ▾           ● 已连接    ⚙      │  topbar           44px
 ├──────────────────────────────────────────┤
 │ [● Claude] [⏳ Codex²] [✓ Gemini]   +    │  agent chips      44px
 │                                  📍 3/8  │  supervisor 徽章（条件显示）
@@ -140,7 +140,7 @@ return viewport === 'mobile' ? <MobileShell /> : <DesktopShell />;
 |---|---|
 | 左 | `☰` + 当前 workspace 名 + `▾`（pill，整体可点 ≥ 44×44px） |
 | 中 | 连接状态点 + 文字（已连接 / 重连中 / 离线） |
-| 右 | `⋯` 溢出菜单：Settings / 主题 / 命令面板 / 帮助 / 登出 |
+| 右 | `Settings` 直达按钮（图标） |
 
 ### 3.3 Workspace 抽屉（点 pill 触发）
 
@@ -353,7 +353,7 @@ drawer 永远盖过 sheet，sheet 永远盖过 chat。
 | Auth / Login | 居中 modal | **整屏路由**，卡片 100% 宽 + 上下 padding | 仅 CSS |
 | Welcome | 主区居中 | **整屏路由**，按钮纵向 stack、字号放大 | 仅 CSS |
 | Settings | 居中 modal + 左右栏分类 | **整屏路由 + nav stack**：分类 → 详情，返回箭头回列表 | 加一层 nav stack 包装 |
-| Command Palette | 浮层 modal | **整屏 sheet**，topbar `⋯` 触发 | sheet 容器 + 触摸优化 |
+| Command Palette | 浮层 modal | **整屏 sheet**，通过独立入口触发，不挂在 workspace topbar 更多菜单下 | sheet 容器 + 触摸优化 |
 | Branch quick pick | 浮层 | 半屏 sheet（在 Git sheet 内 push） | sheet 容器 |
 | Workspace launch modal | 居中 modal | **整屏 sheet**（多步表单） | sheet 容器 |
 | Worktree modal | 居中 modal | 同上 | sheet 容器 |
