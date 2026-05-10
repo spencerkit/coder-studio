@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.3
+
+### Patch Changes
+
+- [#27](https://github.com/spencerkit/coder-studio/pull/27) [`4521ccd`](https://github.com/spencerkit/coder-studio/commit/4521ccd288d9dcbf77e486e118b6c09721a65eab) Thanks [@pallyoung](https://github.com/pallyoung)! - Fix the mobile workspace Git tab tests so CI no longer fails on stale legacy class assertions after the shared tab styling migration.
+
+## 0.3.2
+
+### Patch Changes
+
+- [#24](https://github.com/spencerkit/coder-studio/pull/24) [`23ca9a6`](https://github.com/spencerkit/coder-studio/commit/23ca9a6ca8b6060106ff370b248efb9ff464e3cb) Thanks [@pallyoung](https://github.com/pallyoung)! - Fix the bundled web favicon assets by regenerating the PNG and ICO files directly from the SVG source so the icon keeps transparent edges without the visible border artifact.
+
 ## 0.3.1
 
 ### Patch Changes
