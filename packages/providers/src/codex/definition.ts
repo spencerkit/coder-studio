@@ -1,17 +1,8 @@
 import type { ProviderConfig, ProviderDefinition } from "@coder-studio/core";
 
 import { type CodexConfig, codexConfigSchema } from "./config-schema.js";
-import { resolveCodexTranscriptPath } from "./resolve-transcript.js";
 import { idleDebounceMs, idlePromptPatterns, sessionIdPatterns } from "./stdout-heuristics.js";
 import { buildCodexSupervisorEvalCommand } from "./supervisor-eval.js";
-
-function notifyArgv(bridgeScriptPath?: string): string[] {
-  if (!bridgeScriptPath) {
-    return [];
-  }
-
-  return ["-c", `notify=${JSON.stringify(["node", bridgeScriptPath])}`];
-}
 
 export const codexInstallMetadata = {
   prerequisites: ["npm"],
@@ -88,7 +79,7 @@ export const codexDefinition: ProviderDefinition = {
     const cfg = codexConfigSchema.parse(config);
 
     return {
-      argv: ["codex", ...notifyArgv(ctx.bridgeScriptPath), ...cfg.additionalArgs],
+      argv: ["codex", ...cfg.additionalArgs],
       env: {
         ...cfg.envVars,
         CODER_STUDIO_SESSION_ID: ctx.sessionId,
@@ -97,27 +88,8 @@ export const codexDefinition: ProviderDefinition = {
     };
   },
 
-  buildResumeCommand(config: ProviderConfig, ctx, resumeId) {
-    const cfg = codexConfigSchema.parse(config);
-
-    return {
-      argv: [
-        "codex",
-        "resume",
-        resumeId,
-        ...notifyArgv(ctx.bridgeScriptPath),
-        ...cfg.additionalArgs,
-      ],
-      env: {
-        ...cfg.envVars,
-        CODER_STUDIO_SESSION_ID: ctx.sessionId,
-      },
-      cwd: ctx.workspacePath,
-    };
-  },
-
+  // Full mode: no resume support yet (Codex CLI may support it later)
   buildSupervisorEvalCommand: buildCodexSupervisorEvalCommand,
-  resolveTranscriptPath: resolveCodexTranscriptPath,
 
   // ===== Configuration =====
   configSchema: codexConfigSchema,

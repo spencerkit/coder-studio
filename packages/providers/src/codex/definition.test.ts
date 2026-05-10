@@ -113,42 +113,6 @@ describe("Codex Provider Definition", () => {
       expect(result.argv.some((a: string) => a.startsWith("notify="))).toBe(false);
     });
 
-    it("injects notify bridge arguments when bridgeScriptPath is provided", () => {
-      const config: ProviderConfig = { additionalArgs: ["--flag"], envVars: {} };
-      const ctx = {
-        sessionId: "session-123",
-        workspacePath: "/workspace",
-        bridgeScriptPath: "/home/test/.coder-studio/hooks/codex-bridge.js",
-      };
-
-      const result = codexDefinition.buildCommand(config, ctx);
-
-      expect(result.argv).toEqual([
-        "codex",
-        "-c",
-        'notify=["node","/home/test/.coder-studio/hooks/codex-bridge.js"]',
-        "--flag",
-      ]);
-    });
-
-    it("keeps notify injection ahead of additional args with paths that contain spaces", () => {
-      const config: ProviderConfig = { additionalArgs: ["--flag"], envVars: {} };
-      const ctx = {
-        sessionId: "session-123",
-        workspacePath: "/workspace",
-        bridgeScriptPath: "/home/with space/codex bridge.js",
-      };
-
-      const result = codexDefinition.buildCommand(config, ctx);
-
-      expect(result.argv).toEqual([
-        "codex",
-        "-c",
-        'notify=["node","/home/with space/codex bridge.js"]',
-        "--flag",
-      ]);
-    });
-
     it("should include additional arguments and env vars", () => {
       const config: ProviderConfig = {
         additionalArgs: ["--flag"],
@@ -165,40 +129,6 @@ describe("Codex Provider Definition", () => {
       expect(result.argv).toEqual(["codex", "--flag"]);
       expect(result.env.TOKEN).toBe("abc");
       expect(result.env.CODER_STUDIO_SESSION_ID).toBe("session-123");
-    });
-  });
-
-  describe("buildResumeCommand", () => {
-    it("builds a resume command and retains notify bridge injection", () => {
-      const config: ProviderConfig = { additionalArgs: ["--flag"], envVars: { TOKEN: "abc" } };
-      const ctx = {
-        sessionId: "session-123",
-        workspacePath: "/workspace",
-        bridgeScriptPath: "/bridge.js",
-      };
-
-      const result = codexDefinition.buildResumeCommand?.(config, ctx, "thread-uuid-1");
-
-      expect(result).toEqual({
-        argv: ["codex", "resume", "thread-uuid-1", "-c", 'notify=["node","/bridge.js"]', "--flag"],
-        env: {
-          TOKEN: "abc",
-          CODER_STUDIO_SESSION_ID: "session-123",
-        },
-        cwd: "/workspace",
-      });
-    });
-
-    it("omits notify injection on resume when bridgeScriptPath is missing", () => {
-      const config: ProviderConfig = { additionalArgs: ["--flag"], envVars: {} };
-      const ctx = {
-        sessionId: "session-123",
-        workspacePath: "/workspace",
-      };
-
-      const result = codexDefinition.buildResumeCommand?.(config, ctx, "thread-uuid-1");
-
-      expect(result?.argv).toEqual(["codex", "resume", "thread-uuid-1", "--flag"]);
     });
   });
 
@@ -267,17 +197,11 @@ describe("Codex Provider Definition", () => {
       expect(codexDefinition.idleHeuristics?.idleDebounceMs).toBe(3000);
     });
 
-    it("keeps legacy hook fields absent while exposing resume and transcript resolution", () => {
+    it("does not expose legacy hooks or transcript helpers", () => {
       expect("hooks" in codexDefinition).toBe(false);
-      expect(codexDefinition.buildResumeCommand).toBeTypeOf("function");
-      expect(codexDefinition.resolveTranscriptPath).toBeTypeOf("function");
+      expect("buildResumeCommand" in codexDefinition).toBe(false);
+      expect("resolveTranscriptPath" in codexDefinition).toBe(false);
       expect("readTranscriptExcerpt" in codexDefinition).toBe(false);
-    });
-  });
-
-  describe("resolveTranscriptPath", () => {
-    it("returns undefined when providerSessionId is absent", () => {
-      expect(codexDefinition.resolveTranscriptPath?.({ id: "sess-1" })).toBeUndefined();
     });
   });
 });
