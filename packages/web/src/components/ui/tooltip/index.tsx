@@ -73,14 +73,24 @@ export function Tooltip({ children, content, disabled = false }: TooltipProps) {
 
     const triggerRect = triggerRef.current.getBoundingClientRect();
     const tooltipRect = tooltipRef.current.getBoundingClientRect();
+    const viewportPadding = 8;
     const centeredLeft = triggerRect.left + triggerRect.width / 2 - tooltipRect.width / 2;
-    const maxLeft = Math.max(8, window.innerWidth - tooltipRect.width - 8);
-    const left = Math.min(maxLeft, Math.max(8, centeredLeft));
-    const top = triggerRect.top - tooltipRect.height - 8;
+    const maxLeft = Math.max(
+      viewportPadding,
+      window.innerWidth - tooltipRect.width - viewportPadding
+    );
+    const left = Math.min(maxLeft, Math.max(viewportPadding, centeredLeft));
+    const aboveTop = triggerRect.top - tooltipRect.height - viewportPadding;
+    const belowTop = triggerRect.bottom + viewportPadding;
+    const maxTop = Math.max(
+      viewportPadding,
+      window.innerHeight - tooltipRect.height - viewportPadding
+    );
+    const top = aboveTop >= viewportPadding ? aboveTop : Math.min(maxTop, belowTop);
 
     setPosition({
       left,
-      top: Math.max(8, top),
+      top: Math.max(viewportPadding, top),
     });
   }, [open]);
 

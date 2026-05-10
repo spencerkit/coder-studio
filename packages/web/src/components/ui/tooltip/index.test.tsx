@@ -176,6 +176,52 @@ describe("Tooltip", () => {
     });
   });
 
+  it("places the tooltip below the trigger when there is not enough room above", () => {
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+      this: HTMLElement
+    ) {
+      if (this.getAttribute("role") === "tooltip") {
+        return {
+          x: 0,
+          y: 0,
+          top: 0,
+          left: 0,
+          right: 96,
+          bottom: 24,
+          width: 96,
+          height: 24,
+          toJSON: () => ({}),
+        } as DOMRect;
+      }
+
+      return {
+        x: 120,
+        y: 12,
+        top: 12,
+        left: 120,
+        right: 160,
+        bottom: 44,
+        width: 40,
+        height: 32,
+        toJSON: () => ({}),
+      } as DOMRect;
+    });
+    vi.stubGlobal("innerWidth", 1024);
+    vi.stubGlobal("innerHeight", 768);
+
+    render(
+      <Tooltip content="Settings">
+        <button type="button">Trigger</button>
+      </Tooltip>
+    );
+
+    fireEvent.mouseEnter(screen.getByRole("button", { name: "Trigger" }));
+
+    expect(screen.getByRole("tooltip")).toHaveStyle({
+      top: "52px",
+    });
+  });
+
   it("becomes a no-op wrapper on mobile/coarse viewports", () => {
     viewportMock.value = "mobile";
 
