@@ -98,9 +98,11 @@ function seedWorkspaces(
 describe("AppProviders lifecycle recovery", () => {
   const originalFetch = globalThis.fetch;
   const originalVisibilityState = Object.getOwnPropertyDescriptor(document, "visibilityState");
+  const originalTerminalPreferences = localStorage.getItem("ui.terminalPreferences");
 
   beforeEach(() => {
     resetAppProvidersSingletonsForTests();
+    localStorage.removeItem("ui.terminalPreferences");
     globalThis.fetch = vi.fn().mockResolvedValue({
       json: async () => ({ authEnabled: false }),
     }) as unknown as typeof fetch;
@@ -134,6 +136,11 @@ describe("AppProviders lifecycle recovery", () => {
     resetAppProvidersSingletonsForTests();
     globalThis.fetch = originalFetch;
     vi.restoreAllMocks();
+    if (originalTerminalPreferences === null) {
+      localStorage.removeItem("ui.terminalPreferences");
+    } else {
+      localStorage.setItem("ui.terminalPreferences", originalTerminalPreferences);
+    }
     if (originalVisibilityState) {
       Object.defineProperty(document, "visibilityState", originalVisibilityState);
     } else {
