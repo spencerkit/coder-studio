@@ -53,6 +53,11 @@ export function useWorkspaceSessions(
     }
 
     let cancelled = false;
+    const workspaceSessionIdsAtRequestStart = new Set(
+      Object.values(store.get(sessionsAtom))
+        .filter((session) => session.workspaceId === workspace.id)
+        .map((session) => session.id)
+    );
 
     dispatch<Session[]>("session.list", { workspaceId: workspace.id })
       .then((result) => {
@@ -62,13 +67,24 @@ export function useWorkspaceSessions(
         }
 
         const nextSessions = result.data;
+        const currentWorkspaceSessions = Object.values(store.get(sessionsAtom)).filter(
+          (session) => session.workspaceId === workspace.id
+        );
+        const preservedLateSessions = currentWorkspaceSessions.filter(
+          (session) =>
+            !workspaceSessionIdsAtRequestStart.has(session.id) &&
+            !nextSessions.some((nextSession) => nextSession.id === session.id)
+        );
+        // Preserve sessions that were added after this fetch started so an older bootstrap
+        // response cannot revert a freshly launched session back into the draft launcher.
+        const mergedSessions = [...nextSessions, ...preservedLateSessions];
 
         setSessions((prev) => {
           const next = Object.fromEntries(
             Object.entries(prev).filter(([, session]) => session.workspaceId !== workspace.id)
           );
 
-          for (const session of nextSessions) {
+          for (const session of mergedSessions) {
             next[session.id] = session;
           }
 
@@ -81,10 +97,10 @@ export function useWorkspaceSessions(
         const baseLayout =
           workspacePaneLayout ?? legacyPaneLayout ?? currentLayout ?? defaultPaneLayout;
         const displayableSessionIds = new Set(
-          nextSessions.filter((session) => session.state !== "draft").map((session) => session.id)
+          mergedSessions.filter((session) => session.state !== "draft").map((session) => session.id)
         );
 
-        const displayableSessions = nextSessions.filter((session) => session.state !== "draft");
+        const displayableSessions = mergedSessions.filter((session) => session.state !== "draft");
         const sanitized = sanitizePaneLayout(baseLayout, displayableSessionIds);
         let nextLayout = sanitized;
         if (sanitized !== currentLayout) {
