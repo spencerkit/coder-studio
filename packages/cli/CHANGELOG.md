@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.4
+
+### Patch Changes
+
+- [#29](https://github.com/spencerkit/coder-studio/pull/29) [`257f258`](https://github.com/spencerkit/coder-studio/commit/257f258899c3595497e5a1ae72e7047ed1aced74) Thanks [@pallyoung](https://github.com/pallyoung)! - Refresh the published workspace screenshots in the README and help guides so they match the current desktop and mobile editor shell UI.
+
 ## 0.3.3
 
 ### Patch Changes
