@@ -4,6 +4,7 @@
 
 import { DatabaseSync } from "node:sqlite";
 import type { DomainEvent } from "@coder-studio/core";
+import chokidar, { type FSWatcher } from "chokidar";
 import { mkdir, rmdir } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -20,6 +21,7 @@ describe("WorkspaceManager", () => {
     emit: (event: DomainEvent) => void;
     on: () => () => void;
   };
+  let watchSpy: ReturnType<typeof vi.spyOn<typeof chokidar, "watch">>;
 
   beforeEach(async () => {
     // Create test directory
@@ -53,10 +55,18 @@ describe("WorkspaceManager", () => {
       on: () => () => {},
     };
 
+    watchSpy = vi.spyOn(chokidar, "watch").mockReturnValue({
+      on() {
+        return this;
+      },
+      close: vi.fn().mockResolvedValue(undefined),
+    } as unknown as FSWatcher);
+
     manager = new WorkspaceManager({ db, eventBus });
   });
 
   afterEach(async () => {
+    watchSpy.mockRestore();
     try {
       db.close();
       await rmdir(testDir);
@@ -221,6 +231,46 @@ describe("WorkspaceManager", () => {
       manager.recordFetch(workspace.id);
 
       expect(autoFetch.recordSuccess).toHaveBeenCalledWith(workspace.id);
+    });
+  });
+
+  describe("hydrateWatchers", () => {
+    it("starts file watchers for persisted workspaces", async () => {
+      const persisted = await manager.open({ path: testDir });
+      const broadcaster = { broadcast: vi.fn() };
+      const restoredManager = new WorkspaceManager({ db, eventBus, broadcaster });
+
+      restoredManager.hydrateWatchers();
+
+      expect(watchSpy).toHaveBeenCalledTimes(1);
+      expect(watchSpy).toHaveBeenCalledWith(
+        testDir,
+        expect.objectContaining({
+          ignoreInitial: true,
+          persistent: true,
+        })
+      );
+      expect(
+        (restoredManager as unknown as { watchers: Map<string, unknown> }).watchers.has(
+          persisted.id
+        )
+      ).toBe(true);
+    });
+
+    it("does not create duplicate watchers when called multiple times", async () => {
+      const persisted = await manager.open({ path: testDir });
+      const broadcaster = { broadcast: vi.fn() };
+      const restoredManager = new WorkspaceManager({ db, eventBus, broadcaster });
+
+      restoredManager.hydrateWatchers();
+      restoredManager.hydrateWatchers();
+
+      expect(watchSpy).toHaveBeenCalledTimes(1);
+      expect(
+        (restoredManager as unknown as { watchers: Map<string, unknown> }).watchers.has(
+          persisted.id
+        )
+      ).toBe(true);
     });
   });
 

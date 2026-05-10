@@ -60,6 +60,12 @@ export class WorkspaceManager {
     );
   }
 
+  hydrateWatchers(): void {
+    for (const workspace of this.list()) {
+      this.startWatcher(workspace.id, workspace.path);
+    }
+  }
+
   updateUiState(workspaceId: string, uiState: Workspace["uiState"]): void {
     const workspace = this.get(workspaceId);
     if (!workspace) {

@@ -136,6 +136,7 @@ export async function createServer(
         console.warn("[uploads] cascade cleanup failed", { wsId: workspaceId, err })
       ),
   });
+  workspaceMgr.hydrateWatchers();
 
   const authSessionRepo = new AuthSessionRepo(db);
   const authLoginBlockRepo = new AuthLoginBlockRepo(db);
