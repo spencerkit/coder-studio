@@ -5,6 +5,7 @@ import { createStore, Provider, useSetAtom } from "jotai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../../../atoms/app-ui";
 import { wsClientAtom } from "../../../../atoms/connection";
+import { toastsAtom } from "../../../notifications/atoms";
 import { branchQuickPickAtom, gitBranchListAtomFamily } from "../../atoms";
 import { BranchQuickPick, DesktopBranchQuickPickPopover } from "./branch-quick-pick";
 
@@ -198,6 +199,28 @@ describe("BranchQuickPick", () => {
     expect(screen.getByText("Current Branch")).toBeInTheDocument();
   });
 
+  it("hides branches that are already checked out in another worktree on mobile", () => {
+    viewportMocks.viewport = "mobile";
+    store.set(gitBranchListAtomFamily("ws-test"), {
+      current: "develop",
+      branches: [
+        {
+          name: "chore/e2e-specs-reorg",
+          isCurrent: false,
+          isRemote: false,
+          linkedWorktreePath: "/tmp/e2e-specs-reorg",
+        },
+        { name: "develop", isCurrent: true, isRemote: false },
+      ],
+      loading: false,
+    });
+
+    renderQuickPick();
+
+    expect(screen.queryByRole("button", { name: "chore/e2e-specs-reorg" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "develop" })).toBeInTheDocument();
+  });
+
   it("does not keep the current branch selected when mobile focus moves to create branch", async () => {
     viewportMocks.viewport = "mobile";
     store.set(branchQuickPickAtom, {
@@ -305,6 +328,50 @@ describe("BranchQuickPick", () => {
     await waitFor(() => {
       expect(store.get(branchQuickPickAtom).visible).toBe(false);
     });
+  });
+
+  it("shows an error toast and keeps the picker open when checkout fails", async () => {
+    viewportMocks.viewport = "mobile";
+    sendCommandMock.mockImplementation(async (op: string) => {
+      if (op === "git.checkout") {
+        return {
+          success: false,
+          message: "Branch is already used by another worktree",
+        };
+      }
+
+      if (op === "git.branches") {
+        return {
+          current: "main",
+          branches: [
+            { name: "main", isCurrent: true, isRemote: false },
+            { name: "feature/auth", isCurrent: false, isRemote: false },
+          ],
+        };
+      }
+
+      if (op === "git.status") {
+        return gitStatus;
+      }
+
+      return undefined;
+    });
+
+    renderQuickPick();
+
+    fireEvent.click(screen.getByRole("button", { name: "feature/auth" }));
+
+    await waitFor(() => {
+      expect(store.get(toastsAtom)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: "error",
+            body: "Branch is already used by another worktree",
+          }),
+        ])
+      );
+    });
+    expect(store.get(branchQuickPickAtom).visible).toBe(true);
   });
 
   it("requires confirmation before creating a new branch on Enter", async () => {

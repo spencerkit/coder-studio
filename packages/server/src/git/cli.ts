@@ -568,7 +568,15 @@ export async function runGitCheckout(
   if (isRemoteRef && !options?.createBranch) {
     const remoteSeparatorIndex = ref.indexOf("/");
     const branchName = remoteSeparatorIndex >= 0 ? ref.slice(remoteSeparatorIndex + 1) : ref;
-    args.push("-b", branchName, ref);
+
+    try {
+      await runGit(cwd, ["show-ref", "--verify", "--quiet", `refs/heads/${branchName}`]);
+      const { stdout, stderr } = await runGit(cwd, ["checkout", branchName]);
+      const message = stdout || stderr || `Checkout to ${branchName} completed`;
+      return { success: true, message, branch: branchName };
+    } catch {
+      args.push("-b", branchName, ref);
+    }
 
     try {
       const { stdout, stderr } = await runGit(cwd, args);
@@ -644,12 +652,29 @@ export async function runGitListBranches(cwd: string): Promise<{
 }> {
   // Get local branches
   const { stdout: localOutput } = await runGit(cwd, ["branch", "--list"]);
+  const { stdout: localVerboseOutput } = await runGit(cwd, ["branch", "--list", "-vv"]);
 
   // Get remote branches
   const { stdout: remoteOutput } = await runGit(cwd, ["branch", "-r"]);
 
   const branches: GitBranch[] = [];
   let current = "";
+  const linkedWorktreePathsByBranch = new Map<string, string>();
+
+  const localVerboseLines = localVerboseOutput.split("\n").filter((line) => line.trim());
+  for (const line of localVerboseLines) {
+    const normalizedLine = line.replace(/^[*+ ]\s+/, "");
+    const branchMatch = normalizedLine.match(/^([^\s]+)\s+/);
+    const worktreeMatch = line.match(/\((.+?)\)\s/);
+    if (!branchMatch?.[1] || !worktreeMatch?.[1]) {
+      continue;
+    }
+
+    const worktreePath = worktreeMatch[1];
+    if (worktreePath.startsWith("/") || worktreePath.startsWith("~")) {
+      linkedWorktreePathsByBranch.set(branchMatch[1], worktreePath);
+    }
+  }
 
   // Parse local branches
   const localLines = localOutput.split("\n").filter((line) => line.trim());
@@ -665,10 +690,15 @@ export async function runGitListBranches(cwd: string): Promise<{
       continue; // Don't add to branches array
     }
 
+    if (linkedWorktreePathsByBranch.has(name) && !isCurrent) {
+      continue;
+    }
+
     branches.push({
       name,
       isRemote: false,
       isCurrent,
+      linkedWorktreePath: linkedWorktreePathsByBranch.get(name),
     });
     if (isCurrent) {
       current = name;
