@@ -70,6 +70,6 @@ export default defineConfig({
     env: {
       NODE_ENV: "test",
     },
-    setupFiles: ["./src/test-utils/setup.ts"],
+    setupFiles: [path.resolve(__dirname, "./src/test-utils/setup.ts")],
   },
 });

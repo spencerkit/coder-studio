@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import type { GitStatus } from "@coder-studio/core";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
