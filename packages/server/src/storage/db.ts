@@ -33,7 +33,7 @@ const SCHEMA_PATH = join(import.meta.dirname, "migrations", "001_init.sql");
 const SCHEMA_SQL = readFileSync(SCHEMA_PATH, "utf-8");
 
 const LEGACY_TABLES = ["hook_registrations", "_migrations"] as const;
-const LEGACY_SESSION_COLUMNS = ["resume_id", "transcript_path"] as const;
+const LEGACY_SESSION_COLUMNS = ["resume_id"] as const;
 
 function normalizeSql(sql: string | null): string {
   return (sql ?? "").replace(/\s+/g, " ").trim();

@@ -934,6 +934,32 @@ describe("Session Integration", () => {
       );
     });
 
+    it("preserves persisted transcript path when hydrating a stale session", async () => {
+      sessionDb.listHydratable = vi.fn().mockReturnValue([
+        {
+          id: "sess-hydrate-transcript",
+          workspaceId: "ws-1",
+          terminalId: "term-stale",
+          providerId: "claude",
+          state: "running",
+          capability: "full",
+          startedAt: 100,
+          lastActiveAt: 200,
+          transcriptPath: "/tmp/transcripts/sess-hydrate-transcript.jsonl",
+        },
+      ]);
+
+      await sessionMgr.hydrate();
+
+      expect(sessionMgr.get("sess-hydrate-transcript")).toEqual(
+        expect.objectContaining({
+          id: "sess-hydrate-transcript",
+          state: "ended",
+          transcriptPath: "/tmp/transcripts/sess-hydrate-transcript.jsonl",
+        })
+      );
+    });
+
     it("marks persisted non-resumable sessions as ended when hydrating without a live terminal", async () => {
       sessionDb.listHydratable = vi.fn().mockReturnValue([
         {

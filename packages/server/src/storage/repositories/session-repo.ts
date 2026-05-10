@@ -16,6 +16,7 @@ export interface SessionRow {
   last_active_at: number;
   completion_percent: number | null;
   error_reason: string | null;
+  transcript_path: string | null;
   archived: number; // SQLite uses 0/1 for boolean
   title: string | null;
   draft?: string | null;
@@ -34,6 +35,7 @@ export function rowToSession(row: SessionRow): Session {
     endedAt: row.ended_at ?? undefined,
     completionPercent: row.completion_percent ?? undefined,
     errorReason: row.error_reason ?? undefined,
+    transcriptPath: row.transcript_path ?? undefined,
     title: row.title ?? undefined,
     ...(row.draft != null ? { draft: row.draft } : {}),
   };
@@ -52,6 +54,7 @@ export function sessionToRow(session: Session & { draft?: string }): SessionRow 
     ended_at: session.endedAt ?? null,
     completion_percent: session.completionPercent ?? null,
     error_reason: session.errorReason ?? null,
+    transcript_path: session.transcriptPath ?? null,
     archived: 0,
     draft: session.draft ?? null,
     title: session.title ?? null,
@@ -72,6 +75,7 @@ export interface NewSession {
   lastActiveAt: number;
   completionPercent?: number;
   errorReason?: string;
+  transcriptPath?: string;
 }
 
 /**
@@ -127,8 +131,20 @@ export class SessionRepo {
    */
   create(session: NewSession): Session {
     const stmt = this.db.prepare(`
-      INSERT INTO sessions (id, workspace_id, terminal_id, provider_id, capability, state, started_at, last_active_at, completion_percent, error_reason)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO sessions (
+        id,
+        workspace_id,
+        terminal_id,
+        provider_id,
+        capability,
+        state,
+        started_at,
+        last_active_at,
+        completion_percent,
+        error_reason,
+        transcript_path
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
@@ -141,7 +157,8 @@ export class SessionRepo {
       session.startedAt,
       session.lastActiveAt,
       session.completionPercent ?? null,
-      session.errorReason ?? null
+      session.errorReason ?? null,
+      session.transcriptPath ?? null
     );
 
     return this.findById(session.id)!;

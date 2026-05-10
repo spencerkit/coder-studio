@@ -1,5 +1,6 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
-import type { SessionState } from "./types";
+import type { ProviderDefinition } from "../provider/definition";
+import type { Session, SessionState } from "./types";
 import { deriveSessionTitle, SESSION_TITLE_MAX_LENGTH } from "./types";
 
 describe("deriveSessionTitle", () => {
@@ -40,5 +41,32 @@ describe("SessionState", () => {
     expectTypeOf<SessionState>().toEqualTypeOf<
       "draft" | "starting" | "running" | "idle" | "ended"
     >();
+  });
+});
+
+describe("notify-hook groundwork types", () => {
+  it("allows sessions to carry an optional transcript path", () => {
+    expectTypeOf<Session>().toMatchTypeOf<{
+      transcriptPath?: string;
+    }>();
+  });
+
+  it("allows provider definitions to opt into future resume and transcript helpers", () => {
+    expectTypeOf<ProviderDefinition>().toMatchTypeOf<{
+      buildResumeCommand?: (
+        config: unknown,
+        ctx: { sessionId: string; workspacePath: string; bridgeScriptPath?: string },
+        resumeId: string
+      ) => {
+        argv: string[];
+        env: Record<string, string>;
+        cwd: string;
+      };
+      resolveTranscriptPath?: (session: {
+        id: string;
+        transcriptPath?: string;
+        providerSessionId?: string;
+      }) => Promise<string | undefined> | string | undefined;
+    }>();
   });
 });

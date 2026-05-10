@@ -49,7 +49,7 @@ describe("database schema baseline", () => {
       name: string;
     }>;
     expect(sessionColumns.find((column) => column.name === "resume_id")).toBeUndefined();
-    expect(sessionColumns.find((column) => column.name === "transcript_path")).toBeUndefined();
+    expect(sessionColumns.find((column) => column.name === "transcript_path")).toBeDefined();
     expect(sessionColumns.find((column) => column.name === "title")).toBeDefined();
 
     const indexNames = (
@@ -120,32 +120,6 @@ describe("database schema baseline", () => {
     expect(() => openDatabase(dbPath)).toThrow(/Legacy database schema detected/);
   });
 
-  it("rejects a legacy database schema that still contains transcript_path", async () => {
-    const { openDatabase } = await import("./db");
-
-    const db = new DatabaseSync(dbPath);
-    db.exec(`
-      CREATE TABLE sessions (
-        id TEXT PRIMARY KEY,
-        workspace_id TEXT NOT NULL,
-        terminal_id TEXT NOT NULL,
-        provider_id TEXT NOT NULL,
-        capability TEXT NOT NULL,
-        state TEXT NOT NULL,
-        started_at INTEGER NOT NULL,
-        ended_at INTEGER,
-        last_active_at INTEGER NOT NULL,
-        completion_percent INTEGER,
-        error_reason TEXT,
-        archived BOOLEAN DEFAULT 0,
-        transcript_path TEXT
-      );
-    `);
-    db.close();
-
-    expect(() => openDatabase(dbPath)).toThrow(/Legacy database schema detected/);
-  });
-
   it("rejects a legacy database schema that still contains _migrations", async () => {
     const { openDatabase } = await import("./db");
 
@@ -207,6 +181,7 @@ describe("database schema baseline", () => {
         last_active_at INTEGER NOT NULL,
         completion_percent INTEGER,
         error_reason TEXT,
+        transcript_path TEXT,
         archived BOOLEAN DEFAULT 0
       );
 
@@ -289,6 +264,7 @@ describe("database schema baseline", () => {
         last_active_at INTEGER NOT NULL,
         completion_percent INTEGER,
         error_reason TEXT,
+        transcript_path TEXT,
         archived BOOLEAN DEFAULT 0
       );
     `);

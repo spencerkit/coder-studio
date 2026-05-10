@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   last_active_at INTEGER NOT NULL,
   completion_percent INTEGER,
   error_reason TEXT,
+  transcript_path TEXT,
   archived BOOLEAN DEFAULT 0,
   title TEXT
 );
