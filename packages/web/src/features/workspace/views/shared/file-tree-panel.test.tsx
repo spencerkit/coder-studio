@@ -940,7 +940,7 @@ describe("FileTreePanel", () => {
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
   });
 
-  it("uses shared tooltips for file-tree action triggers and row path labels", () => {
+  it("uses shared tooltips for file-tree action triggers without showing row path labels", () => {
     const store = createStore();
     store.set(wsClientAtom, { sendCommand: vi.fn().mockResolvedValue({}) } as never);
     store.set(
@@ -1008,11 +1008,11 @@ describe("FileTreePanel", () => {
 
     fireEvent.mouseLeave(deleteFileButton);
     fireEvent.mouseEnter(directoryLabel);
-    expect(screen.getByRole("tooltip")).toHaveTextContent("src");
+    expect(screen.queryByRole("tooltip")).toBeNull();
 
     fireEvent.mouseLeave(directoryLabel);
     fireEvent.mouseEnter(fileLabel);
-    expect(screen.getByRole("tooltip")).toHaveTextContent("src/app.tsx");
+    expect(screen.queryByRole("tooltip")).toBeNull();
   });
 
   it("keeps expanded directories populated after refreshing the file tree", async () => {

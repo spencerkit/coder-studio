@@ -292,14 +292,8 @@ const FileSearchResultRow: FC<FileSearchResultRowProps> = ({
       </span>
 
       <span className="tree-search-labels">
-        <Tooltip content={node.path}>
-          <span className="tree-label">{node.name}</span>
-        </Tooltip>
-        {dirName ? (
-          <Tooltip content={node.path}>
-            <span className="tree-search-path">{dirName}</span>
-          </Tooltip>
-        ) : null}
+        <span className="tree-label">{node.name}</span>
+        {dirName ? <span className="tree-search-path">{dirName}</span> : null}
       </span>
 
       <div className="tree-item-actions">
@@ -398,9 +392,7 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
           <Icon size={14} />
         </span>
 
-        <Tooltip content={node.path}>
-          <span className="tree-label">{node.name}</span>
-        </Tooltip>
+        <span className="tree-label">{node.name}</span>
 
         <div className="tree-item-actions">
           {isFolder ? (
