@@ -9652,7 +9652,7 @@ textarea.input {
   color: var(--text-tertiary);
 }
 
-.file-tree-shell .tree-icon {
+.file-tree-shell .tree-icon.file {
   color: var(--text-secondary);
 }
 
