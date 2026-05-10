@@ -13,8 +13,10 @@ import { localeAtom, themeAtom } from "../../../atoms/app-ui";
 import { wsClientAtom } from "../../../atoms/connection";
 import { JotaiProvider } from "../../../test-utils/jotai-provider";
 import type { TerminalReplayPayload, TerminalSnapshotPayload } from "../../../ws/client";
+import { toastsAtom } from "../../notifications/atoms";
 import { terminalOutputAtomFamily } from "../atoms";
 import type { HydrationRequestHandle, HydrationTier } from "../hydration-coordinator";
+import { terminalPreferencesAtom } from "../preferences";
 import { TERMINAL_REPLAY_TIMEOUT_MS } from "../replay-state";
 import { trimWrittenChunks, XtermHost } from "../views/shared/xterm-host";
 
@@ -141,7 +143,10 @@ const mockTerminal = {
   open: vi.fn(),
   onData: vi.fn(() => vi.fn()), // Return dispose function
   onResize: vi.fn(() => vi.fn()),
+  onSelectionChange: vi.fn(() => vi.fn()),
   attachCustomKeyEventHandler: vi.fn(),
+  hasSelection: vi.fn(() => false),
+  getSelection: vi.fn(() => ""),
   write: vi.fn(),
   writeln: vi.fn(),
   scrollLines: vi.fn(),
@@ -249,6 +254,180 @@ describe("XtermHost", () => {
     // Check that the xterm-host container is rendered
     const hostContainer = container.querySelector(".xterm-host");
     expect(hostContainer).toBeTruthy();
+  });
+
+  it("copies the terminal selection on desktop pointerup when copy-on-select is enabled", async () => {
+    const store = createStore();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    const clipboard = {
+      writeText,
+    } satisfies Pick<Clipboard, "writeText">;
+
+    store.set(localeAtom, "en");
+    store.set(terminalPreferencesAtom, { copyOnSelect: true });
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn().mockResolvedValue({ status: "ok" }),
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => "connected"),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: clipboard,
+    });
+
+    const { container } = render(
+      <Provider store={store}>
+        <XtermHost terminalId="copy-enabled-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    mockTerminal.hasSelection.mockReturnValue(true);
+    mockTerminal.getSelection.mockReturnValue("selected text");
+
+    const selectionHandler = mockTerminal.onSelectionChange.mock.calls[0]?.[0] as
+      | (() => void)
+      | undefined;
+
+    await act(async () => {
+      selectionHandler?.();
+    });
+
+    fireEvent.pointerUp(container.querySelector(".xterm-host")!);
+
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith("selected text");
+    });
+  });
+
+  it("does not copy when copy-on-select is disabled", async () => {
+    const store = createStore();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+
+    store.set(localeAtom, "en");
+    store.set(terminalPreferencesAtom, { copyOnSelect: false });
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn().mockResolvedValue({ status: "ok" }),
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => "connected"),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText } satisfies Pick<Clipboard, "writeText">,
+    });
+
+    const { container } = render(
+      <Provider store={store}>
+        <XtermHost terminalId="copy-disabled-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    mockTerminal.hasSelection.mockReturnValue(true);
+    mockTerminal.getSelection.mockReturnValue("selected text");
+
+    const selectionHandler = mockTerminal.onSelectionChange.mock.calls[0]?.[0] as
+      | (() => void)
+      | undefined;
+
+    await act(async () => {
+      selectionHandler?.();
+    });
+
+    fireEvent.pointerUp(container.querySelector(".xterm-host")!);
+
+    await waitFor(() => {
+      expect(writeText).not.toHaveBeenCalled();
+    });
+  });
+
+  it("does not copy on mobile even when the preference is enabled", async () => {
+    viewportMocks.viewport = "mobile";
+
+    const store = createStore();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+
+    store.set(localeAtom, "en");
+    store.set(terminalPreferencesAtom, { copyOnSelect: true });
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn().mockResolvedValue({ status: "ok" }),
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => "connected"),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText } satisfies Pick<Clipboard, "writeText">,
+    });
+
+    const { container } = render(
+      <Provider store={store}>
+        <XtermHost terminalId="copy-mobile-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    mockTerminal.hasSelection.mockReturnValue(true);
+    mockTerminal.getSelection.mockReturnValue("selected text");
+
+    const selectionHandler = mockTerminal.onSelectionChange.mock.calls[0]?.[0] as
+      | (() => void)
+      | undefined;
+
+    await act(async () => {
+      selectionHandler?.();
+    });
+
+    fireEvent.pointerUp(container.querySelector(".xterm-host")!);
+
+    await waitFor(() => {
+      expect(writeText).not.toHaveBeenCalled();
+    });
+  });
+
+  it("pushes only one error toast within the throttle window when clipboard writes fail", async () => {
+    const store = createStore();
+    const writeText = vi.fn().mockRejectedValue(new Error("clipboard failed"));
+
+    store.set(localeAtom, "zh");
+    store.set(terminalPreferencesAtom, { copyOnSelect: true });
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn().mockResolvedValue({ status: "ok" }),
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => "connected"),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText } satisfies Pick<Clipboard, "writeText">,
+    });
+
+    const { container } = render(
+      <Provider store={store}>
+        <XtermHost terminalId="copy-error-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    mockTerminal.hasSelection.mockReturnValue(true);
+    mockTerminal.getSelection.mockReturnValue("selected text");
+
+    const selectionHandler = mockTerminal.onSelectionChange.mock.calls[0]?.[0] as
+      | (() => void)
+      | undefined;
+
+    await act(async () => {
+      selectionHandler?.();
+    });
+
+    fireEvent.pointerUp(container.querySelector(".xterm-host")!);
+    fireEvent.pointerUp(container.querySelector(".xterm-host")!);
+
+    await waitFor(() => {
+      expect(store.get(toastsAtom)).toHaveLength(1);
+    });
+    expect(store.get(toastsAtom)[0]).toMatchObject({
+      kind: "error",
+      title: "自动复制失败",
+    });
   });
 
   it("shows upload overlay and disables stdin while an upload is pending", async () => {
