@@ -6684,6 +6684,11 @@ textarea.input {
   z-index: 1;
 }
 
+.topbar-close:hover:not(:disabled),
+.topbar-close:active:not(:disabled) {
+  transform: translateY(-50%);
+}
+
 .topbar-tab-shell.active .topbar-close,
 .topbar-tab-shell:hover .topbar-close,
 .topbar-tab-shell:focus-within .topbar-close {
