@@ -15,7 +15,6 @@ export interface SessionUpdatePatch {
   endedAt?: number;
   completionPercent?: number;
   errorReason?: string;
-  transcriptPath?: string;
   lastActiveAt?: number;
   title?: string;
 }

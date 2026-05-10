@@ -190,7 +190,6 @@ export class SessionManager {
         endedAt: session.endedAt,
         completionPercent: session.completionPercent,
         errorReason: session.errorReason,
-        transcriptPath: session.transcriptPath,
       });
 
       this.sessions.set(session.id, hydrated);
@@ -669,7 +668,6 @@ class ActiveSession {
   endedAt?: number;
   completionPercent?: number;
   errorReason?: string;
-  transcriptPath?: string;
   exitCode?: number;
   draft?: string;
   title?: string;
@@ -691,7 +689,6 @@ class ActiveSession {
     endedAt?: number;
     completionPercent?: number;
     errorReason?: string;
-    transcriptPath?: string;
   }) {
     this.id = data.id;
     this.workspaceId = data.workspaceId;
@@ -706,7 +703,6 @@ class ActiveSession {
     this.endedAt = data.endedAt;
     this.completionPercent = data.completionPercent;
     this.errorReason = data.errorReason;
-    this.transcriptPath = data.transcriptPath;
   }
 
   toDTO(): Session {
@@ -722,7 +718,6 @@ class ActiveSession {
       endedAt: this.endedAt,
       completionPercent: this.completionPercent,
       errorReason: this.errorReason,
-      transcriptPath: this.transcriptPath,
       title: this.title,
     };
   }

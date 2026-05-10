@@ -296,21 +296,8 @@ function createSessionDatabase(db: Database) {
   return {
     insert: (session: SessionRow) => {
       db.prepare(`
-        INSERT INTO sessions (
-          id,
-          workspace_id,
-          terminal_id,
-          provider_id,
-          state,
-          capability,
-          started_at,
-          last_active_at,
-          completion_percent,
-          error_reason,
-          transcript_path,
-          title
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO sessions (id, workspace_id, terminal_id, provider_id, state, capability, started_at, last_active_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         session.id,
         session.workspace_id,
@@ -319,11 +306,7 @@ function createSessionDatabase(db: Database) {
         session.state,
         session.capability,
         session.started_at,
-        session.last_active_at,
-        session.completion_percent,
-        session.error_reason,
-        session.transcript_path,
-        session.title
+        session.last_active_at
       );
     },
     update: (id: string, patch: Record<string, unknown>) => {
@@ -337,7 +320,6 @@ function createSessionDatabase(db: Database) {
         "ended_at",
         "completion_percent",
         "error_reason",
-        "transcript_path",
         "last_active_at",
         "title",
       ]);

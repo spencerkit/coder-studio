@@ -49,16 +49,6 @@ export interface ProviderDefinition {
     cwd: string;
   };
 
-  buildResumeCommand?(
-    config: ProviderConfig,
-    ctx: LaunchContext,
-    resumeId: string
-  ): {
-    argv: string[];
-    env: Record<string, string>;
-    cwd: string;
-  };
-
   buildSupervisorEvalCommand?(
     config: ProviderConfig,
     req: SupervisorEvalCommandRequest
@@ -76,12 +66,6 @@ export interface ProviderDefinition {
   // Runtime requirements
   requiredCommands: string[];
 
-  resolveTranscriptPath?(session: {
-    id: string;
-    transcriptPath?: string;
-    providerSessionId?: string;
-  }): Promise<string | undefined> | string | undefined;
-
   /** PTY-output-based idle detection used by the session manager. */
   idleHeuristics?: IdleHeuristics;
 }
@@ -89,5 +73,4 @@ export interface ProviderDefinition {
 export interface LaunchContext {
   sessionId: string;
   workspacePath: string;
-  bridgeScriptPath?: string;
 }

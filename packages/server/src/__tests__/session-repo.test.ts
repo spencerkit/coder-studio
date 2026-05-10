@@ -100,24 +100,6 @@ describe("SessionRepo", () => {
 
       expect(result.completionPercent).toBe(50);
     });
-
-    it("should persist and read transcript path", () => {
-      const newSession: NewSession = {
-        id: "s-transcript",
-        workspaceId: "ws-1",
-        terminalId: "t-1",
-        providerId: "claude-cli",
-        state: "running",
-        capability: "full",
-        startedAt: Date.now(),
-        lastActiveAt: Date.now(),
-        transcriptPath: "/tmp/transcripts/s-transcript.jsonl",
-      };
-
-      const result = repo.create(newSession);
-
-      expect(result.transcriptPath).toBe("/tmp/transcripts/s-transcript.jsonl");
-    });
   });
 
   describe("listByWorkspace", () => {
