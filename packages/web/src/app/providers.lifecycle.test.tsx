@@ -10,6 +10,7 @@ import {
   workspacesAtom,
   workspacesLoadStateAtom,
 } from "../atoms/workspaces";
+import { terminalPreferencesAtom } from "../features/terminal-panel/preferences";
 import {
   fileTreeStaleAtomFamily,
   gitBranchListAtomFamily,
@@ -372,6 +373,38 @@ describe("AppProviders lifecycle recovery", () => {
     await vi.waitFor(() => {
       expect(wsState.client?.connect).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it("hydrates terminal copy-on-select preferences from settings.get once connected", async () => {
+    const store = createStore();
+    setVisibilityState("visible");
+
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "appearance.terminalCopyOnSelect": true,
+        };
+      }
+
+      return undefined;
+    });
+    wsState.client!.sendCommand = sendCommand;
+
+    renderProviders(store);
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
+
+    act(() => {
+      wsState.client?.statusHandler?.("connected");
+    });
+
+    await vi.waitFor(() => {
+      expect(store.get(terminalPreferencesAtom)).toEqual({ copyOnSelect: true });
+    });
+
+    expect(sendCommand).toHaveBeenCalledWith("settings.get", {}, undefined);
   });
 
   it("marks the session authenticated when /auth/status confirms an existing server session", async () => {

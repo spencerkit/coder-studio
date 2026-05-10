@@ -40,6 +40,10 @@ import { useSessionNotifications } from "../features/notifications";
 import { supervisorCyclesAtom, supervisorsAtom } from "../features/supervisor/atoms";
 import { terminalMetaAtomFamily } from "../features/terminal-panel/atoms";
 import {
+  resolveTerminalCopyOnSelectSetting,
+  terminalPreferencesAtom,
+} from "../features/terminal-panel/preferences";
+import {
   editorRefreshTokenAtomFamily,
   fileTreeStaleAtomFamily,
   gitBranchListAtomFamily,
@@ -173,6 +177,7 @@ export function AppProviders({ children }: AppProvidersProps) {
   // Supervisor state atoms
   const setSupervisors = useSetAtom(supervisorsAtom);
   const setSupervisorCycles = useSetAtom(supervisorCyclesAtom);
+  const setTerminalPreferences = useSetAtom(terminalPreferencesAtom);
 
   // Get Jotai store for writing to atomFamily atoms
   const store = useStore();
@@ -196,6 +201,31 @@ export function AppProviders({ children }: AppProvidersProps) {
   useEffect(() => {
     dispatchRef.current = dispatch;
   }, [dispatch]);
+
+  useEffect(() => {
+    if (connectionStatus !== "connected") {
+      return;
+    }
+
+    let cancelled = false;
+
+    const hydrateTerminalPreferences = async () => {
+      const result = await dispatch<Record<string, unknown>>("settings.get", {});
+      if (cancelled || !result.ok || !result.data) {
+        return;
+      }
+
+      setTerminalPreferences({
+        copyOnSelect: resolveTerminalCopyOnSelectSetting(result.data),
+      });
+    };
+
+    void hydrateTerminalPreferences();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [connectionStatus, dispatch, setTerminalPreferences]);
 
   useEffect(() => {
     activeWorkspaceIdRef.current = activeWorkspaceId;
