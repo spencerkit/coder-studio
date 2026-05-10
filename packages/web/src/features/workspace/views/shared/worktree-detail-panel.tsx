@@ -23,6 +23,16 @@ const worktreeEmptyStateTitleStyle = {
   fontWeight: "var(--font-normal)",
 };
 
+function WorktreeLoadingState({ title }: { title: string }) {
+  return (
+    <EmptyState
+      className="worktree-loading"
+      style={worktreeEmptyStateStyle}
+      title={<p style={worktreeEmptyStateTitleStyle}>{title}</p>}
+    />
+  );
+}
+
 export function WorktreeDetailPanel({
   workspaceId,
   worktree,
@@ -73,7 +83,7 @@ export function WorktreeDetailPanel({
           <TabPanel className="worktree-content" value="status">
             {error ? <div className="worktree-error">{error}</div> : null}
             {loading ? (
-              <div className="worktree-loading">{t("worktree.loading")}</div>
+              <WorktreeLoadingState title={t("worktree.loading")} />
             ) : (
               <div className="worktree-status-tab">
                 <div className="worktree-info-row">
@@ -134,7 +144,7 @@ export function WorktreeDetailPanel({
           <TabPanel className="worktree-content" value="diff">
             {error ? <div className="worktree-error">{error}</div> : null}
             {loading ? (
-              <div className="worktree-loading">{t("worktree.loading")}</div>
+              <WorktreeLoadingState title={t("worktree.loading")} />
             ) : (
               <div className="worktree-diff-tab">
                 {diff ? (
@@ -153,7 +163,7 @@ export function WorktreeDetailPanel({
           <TabPanel className="worktree-content" value="tree">
             {error ? <div className="worktree-error">{error}</div> : null}
             {loading ? (
-              <div className="worktree-loading">{t("worktree.loading")}</div>
+              <WorktreeLoadingState title={t("worktree.loading")} />
             ) : (
               <div className="worktree-tree-tab">
                 {tree.length > 0 ? (

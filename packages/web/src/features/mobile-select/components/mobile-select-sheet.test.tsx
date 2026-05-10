@@ -588,7 +588,7 @@ describe("MobileSelectSheet", () => {
     expect(onCreate).not.toHaveBeenCalled();
   });
 
-  it("renders loading state separately from the empty state", () => {
+  it("renders the loading state through the shared primitive while preserving the feature shell hook", () => {
     renderWithEnglishLocale(
       <MobileSelectSheet
         title="Branch"
@@ -599,7 +599,12 @@ describe("MobileSelectSheet", () => {
       />
     );
 
+    const loadingState = document.querySelector(".mobile-select-sheet__loading");
+
     expect(screen.getByRole("status")).toHaveTextContent("Loading...");
-    expect(screen.queryByText("No results found")).not.toBeInTheDocument();
+    expect(loadingState).not.toBeNull();
+    expect(loadingState).toHaveAttribute("role", "status");
+    expect(loadingState).toHaveTextContent("Loading...");
+    expect(document.querySelector(".mobile-select-sheet__empty")).toBeNull();
   });
 });

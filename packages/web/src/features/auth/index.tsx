@@ -2,9 +2,17 @@ import { useAtom, useAtomValue } from "jotai";
 import { useEffect, useState } from "react";
 import { authenticatedAtom, localeAtom } from "../../atoms/app-ui";
 import { authEnabledAtom } from "../../atoms/connection";
-import { Button, Input } from "../../components/ui";
+import { Button, EmptyState, Input } from "../../components/ui";
 import { useViewport } from "../../hooks/use-viewport";
 import { formatDate, useTranslation } from "../../lib/i18n";
+
+const authEmptyStateStyle = {
+  minHeight: "auto",
+  padding: 0,
+  gap: "var(--sp-5)",
+  alignItems: "stretch",
+  textAlign: "left" as const,
+};
 
 export function LoginPage() {
   const t = useTranslation();
@@ -143,9 +151,16 @@ export function LoginPage() {
           .filter(Boolean)
           .join(" ")}
       >
-        <div className="welcome-kicker">CODER STUDIO</div>
-        <h1 className="welcome-title">{t("app.name")}</h1>
-        <p className="welcome-body auth-card-desc">{description}</p>
+        <EmptyState
+          style={authEmptyStateStyle}
+          title={
+            <div>
+              <div className="welcome-kicker">CODER STUDIO</div>
+              <h1 className="welcome-title">{t("app.name")}</h1>
+            </div>
+          }
+          description={<p className="welcome-body auth-card-desc">{description}</p>}
+        />
         <div className={statusPanelClassName}>
           <div className="auth-status-eyebrow">{t("auth.status_title")}</div>
           <p className="auth-status-detail">{error ?? statusDetail}</p>

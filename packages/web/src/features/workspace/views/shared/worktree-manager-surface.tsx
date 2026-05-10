@@ -34,6 +34,16 @@ const worktreeListEmptyStateTitleStyle = {
   fontWeight: "var(--font-normal)",
 };
 
+function WorktreeListLoadingState({ title }: { title: string }) {
+  return (
+    <EmptyState
+      className="worktree-loading"
+      style={worktreeListEmptyStateStyle}
+      title={<p style={worktreeListEmptyStateTitleStyle}>{title}</p>}
+    />
+  );
+}
+
 export function WorktreeManagerSurface({
   workspaceId,
   openView,
@@ -269,7 +279,7 @@ export function WorktreeManagerSurface({
           </div>
         ) : null}
         {list.loading && list.items.length === 0 ? (
-          <div className="worktree-loading">{t("worktree.loading")}</div>
+          <WorktreeListLoadingState title={t("worktree.loading")} />
         ) : list.error && list.items.length === 0 ? null : list.items.length === 0 ? (
           <EmptyState
             className="worktree-empty"

@@ -48,6 +48,19 @@ interface ConfigWriteResult {
 
 type SaveStatus = "saved" | "dirty" | "saving" | "error";
 
+const configCardLoadingStateStyle = {
+  minHeight: "200px",
+  padding: 0,
+  gap: 0,
+};
+
+const configCardLoadingTitleStyle = {
+  margin: 0,
+  color: "var(--text-tertiary)",
+  fontSize: "var(--text-base)",
+  fontWeight: "var(--font-normal)",
+};
+
 export function ConfigEditor({
   configType,
   visible = true,
@@ -242,7 +255,11 @@ export function ConfigEditor({
   if (isLoading) {
     return (
       <div className="config-card">
-        <div className="config-card-loading">{t("common.loading")}</div>
+        <EmptyState
+          className="config-card-loading"
+          style={configCardLoadingStateStyle}
+          title={<p style={configCardLoadingTitleStyle}>{t("common.loading")}</p>}
+        />
       </div>
     );
   }

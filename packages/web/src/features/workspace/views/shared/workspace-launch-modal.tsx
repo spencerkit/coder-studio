@@ -14,10 +14,27 @@ const directoryEmptyStateStyle = {
   gap: 0,
 };
 
+const directoryLoadingStateStyle = {
+  padding: "var(--sp-8)",
+  gap: "var(--sp-2)",
+};
+
 const directoryEmptyStateTitleStyle = {
   margin: 0,
   color: "var(--text-tertiary)",
   fontWeight: "var(--font-normal)",
+};
+
+const visuallyHiddenTitleStyle = {
+  position: "absolute" as const,
+  width: "1px",
+  height: "1px",
+  padding: 0,
+  margin: "-1px",
+  overflow: "hidden",
+  clip: "rect(0, 0, 0, 0)",
+  whiteSpace: "nowrap" as const,
+  border: 0,
 };
 
 export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
@@ -73,9 +90,12 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
 
         <div className="fp-dir-list">
           {browsing ? (
-            <div className="directory-loading">
-              <Spinner label={t("common.loading")} />
-            </div>
+            <EmptyState
+              className="directory-loading"
+              icon={<Spinner label={t("common.loading")} />}
+              style={directoryLoadingStateStyle}
+              title={<span style={visuallyHiddenTitleStyle}>{t("common.loading")}</span>}
+            />
           ) : directories.length === 0 ? (
             <EmptyState
               className="directory-empty"

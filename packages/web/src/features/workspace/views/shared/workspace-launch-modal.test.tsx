@@ -369,6 +369,10 @@ describe("WorkspaceLaunchModal", () => {
     );
 
     const spinner = screen.getByRole("status", { name: "Loading..." });
+    const loadingShell = container.querySelector(".directory-loading");
+
+    expect(screen.getByText("Loading...")).toBeInTheDocument();
+    expect(loadingShell).toBeTruthy();
     expect(spinner).toHaveClass("animate-spin");
     expect(container.querySelector(".directory-loading .animate-spin")).toBe(spinner);
   });

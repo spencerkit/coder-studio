@@ -174,6 +174,24 @@ describe("WorktreeManagerSurface", () => {
     expect(emptyMessage.closest(".worktree-empty")).toBeTruthy();
   });
 
+  it("renders the shared loading shell when the worktree list is pending", () => {
+    render(
+      <Provider
+        store={buildManagerStore(vi.fn(), [], "/repo/main", {
+          loading: true,
+          lastLoadedAt: undefined,
+        })}
+      >
+        <WorktreeManagerSurface workspaceId="ws-1" openView="list" onClose={vi.fn()} />
+      </Provider>
+    );
+
+    const loadingMessage = screen.getByText("Loading...");
+
+    expect(loadingMessage).toBeInTheDocument();
+    expect(loadingMessage.closest(".worktree-loading")).toBeTruthy();
+  });
+
   it("creates a worktree, reloads the list, and returns to list mode", async () => {
     const sendCommand = vi
       .fn()

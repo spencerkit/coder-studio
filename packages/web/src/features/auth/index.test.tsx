@@ -28,7 +28,7 @@ describe("LoginPage", () => {
   it("renders the shared card layout while auth status is loading", async () => {
     globalThis.fetch = vi.fn(() => new Promise(() => {})) as typeof fetch;
 
-    render(
+    const { container } = render(
       <Provider>
         <LoginPage />
       </Provider>
@@ -38,6 +38,8 @@ describe("LoginPage", () => {
     expect(document.querySelector(".welcome-card")).toBeTruthy();
     expect(document.querySelector(".auth-form")).toBeTruthy();
     expect(document.querySelector(".auth-status-panel")).toBeTruthy();
+    expect(container.querySelector(".auth-card-shell > .auth-status-panel")).toBeTruthy();
+    expect(container.querySelector(".auth-card-shell > .auth-form")).toBeTruthy();
     expect(screen.getByRole("button")).toBeDisabled();
     expect(screen.getAllByText("连接中").length).toBeGreaterThan(0);
   });

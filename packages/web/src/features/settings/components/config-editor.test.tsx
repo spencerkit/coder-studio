@@ -81,6 +81,34 @@ describe("ConfigEditor", () => {
     });
   });
 
+  it("renders the shared loading shell while the config file request is pending", () => {
+    const sendCommand = vi.fn(
+      () =>
+        new Promise(() => {
+          return undefined;
+        })
+    );
+
+    const store = createStore();
+    store.set(localeAtom, "zh");
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe: vi.fn(() => () => {}),
+    } as never);
+
+    const { container } = render(
+      <Provider store={store}>
+        <ConfigEditor configType="claude" fillHeight />
+      </Provider>
+    );
+
+    const loadingMessage = screen.getByText("加载中...");
+
+    expect(loadingMessage).toBeInTheDocument();
+    expect(loadingMessage.closest(".config-card-loading")).toBeTruthy();
+    expect(container.querySelector(".config-card-loading")).toBeTruthy();
+  });
+
   it("shows save status in the footer and removes the footer collapse button", async () => {
     const { container } = renderConfigEditor();
 

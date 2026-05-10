@@ -84,6 +84,19 @@ const mobileSelectEmptyStateStyle = {
   gap: 0,
 };
 
+const mobileSelectLoadingStateStyle = {
+  minHeight: "auto",
+  padding: "var(--sp-6) var(--sp-4)",
+  gap: 0,
+};
+
+const mobileSelectLoadingStateTitleStyle = {
+  color: "var(--text-secondary)",
+  fontSize: "inherit",
+  fontWeight: "var(--font-normal)",
+  lineHeight: "inherit",
+};
+
 const mobileSelectEmptyStateTitleStyle = {
   color: "var(--text-tertiary)",
   fontSize: "inherit",
@@ -212,9 +225,12 @@ export function MobileSelectSheet({
 
       <div className="mobile-select-sheet__content">
         {loading ? (
-          <div className="mobile-select-sheet__loading" role="status">
-            {resolvedLoadingText}
-          </div>
+          <EmptyState
+            className="mobile-select-sheet__loading"
+            role="status"
+            style={mobileSelectLoadingStateStyle}
+            title={<div style={mobileSelectLoadingStateTitleStyle}>{resolvedLoadingText}</div>}
+          />
         ) : (
           <>
             {filteredSections.map((section) => {

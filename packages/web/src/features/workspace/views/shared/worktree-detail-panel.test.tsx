@@ -175,4 +175,23 @@ describe("WorktreeDetailPanel", () => {
 
     expect(await screen.findByText("Empty tree")).toBeInTheDocument();
   });
+
+  it("renders the shared loading shell while worktree detail data is pending", () => {
+    const sendCommand = vi.fn(
+      () =>
+        new Promise(() => {
+          // Keep the request pending so the loading shell remains visible.
+        })
+    );
+
+    render(
+      <Provider store={buildStore(sendCommand)}>
+        <WorktreeDetailPanel workspaceId="ws-1" worktree={worktree} />
+      </Provider>
+    );
+
+    const loadingTexts = screen.getAllByText("Loading...");
+    expect(loadingTexts).toHaveLength(3);
+    expect(document.querySelectorAll(".worktree-loading")).toHaveLength(3);
+  });
 });
