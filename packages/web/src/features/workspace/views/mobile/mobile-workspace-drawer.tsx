@@ -1,6 +1,6 @@
 import type { Workspace } from "@coder-studio/core";
 import { useSetAtom } from "jotai";
-import { Plus, X } from "lucide-react";
+import { Check, Plus, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { activeWorkspaceIdAtom } from "../../../../atoms/workspaces";
 import { IconButton } from "../../../../components/ui";
@@ -63,17 +63,19 @@ export function MobileWorkspaceDrawer({
         <div className="mobile-workspace-drawer__list">
           {workspaces.map((workspace) => {
             const displayName = formatWorkspaceLabel(workspace) || workspace.id;
+            const isActive = workspace.id === activeWorkspaceId;
 
             return (
               <div
                 key={workspace.id}
                 className={`mobile-workspace-drawer__item ${
-                  workspace.id === activeWorkspaceId ? "mobile-workspace-drawer__item--active" : ""
+                  isActive ? "mobile-workspace-drawer__item--active" : ""
                 }`}
               >
                 <button
                   type="button"
                   className="mobile-workspace-drawer__item-main"
+                  aria-current={isActive ? "page" : undefined}
                   aria-label={t("mobile.workspace_drawer.switch_to_workspace", {
                     name: displayName,
                   })}
@@ -83,7 +85,15 @@ export function MobileWorkspaceDrawer({
                     onClose();
                   }}
                 >
-                  <span className="mobile-workspace-drawer__item-name">{displayName}</span>
+                  <span className="mobile-workspace-drawer__item-name-row">
+                    <span className="mobile-workspace-drawer__item-name">{displayName}</span>
+                    {isActive ? (
+                      <span className="mobile-workspace-drawer__item-state">
+                        <Check size={12} />
+                        <span>Current</span>
+                      </span>
+                    ) : null}
+                  </span>
                   <span className="mobile-workspace-drawer__item-path">{workspace.path}</span>
                 </button>
                 <IconButton

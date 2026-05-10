@@ -135,4 +135,54 @@ describe("MobileWorkspaceDrawer", () => {
 
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it("marks the active workspace with a clear current state", () => {
+    const store = createStore();
+
+    render(
+      <Provider store={store}>
+        <MobileWorkspaceDrawer
+          activeWorkspaceId="ws-1"
+          isOpen
+          onClose={vi.fn()}
+          onOpenWorkspaceLauncher={vi.fn()}
+          workspaces={[
+            {
+              id: "ws-1",
+              path: "/tmp/demo",
+              targetRuntime: "native",
+              openedAt: 1,
+              lastActiveAt: 1,
+              uiState: {
+                leftPanelWidth: 320,
+                bottomPanelHeight: 240,
+                focusMode: false,
+              },
+            },
+            {
+              id: "ws-2",
+              path: "/tmp/other",
+              targetRuntime: "native",
+              openedAt: 2,
+              lastActiveAt: 2,
+              uiState: {
+                leftPanelWidth: 320,
+                bottomPanelHeight: 240,
+                focusMode: false,
+              },
+            },
+          ]}
+        />
+      </Provider>
+    );
+
+    expect(screen.getByRole("button", { name: "Switch to demo" })).toHaveAttribute(
+      "aria-current",
+      "page"
+    );
+    expect(screen.getByText("Current")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Switch to other" })).not.toHaveAttribute(
+      "aria-current"
+    );
+  });
 });
