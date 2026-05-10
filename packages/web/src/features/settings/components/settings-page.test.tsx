@@ -1076,6 +1076,34 @@ describe("SettingsPage", () => {
     expect(store.get(terminalPreferencesAtom)).toEqual({ copyOnSelect: true });
   });
 
+  it("renders copy-on-select from the terminal preferences atom before settings load resolves", async () => {
+    let resolveSettingsGet: ((value: Record<string, unknown>) => void) | undefined;
+    const settingsGetPromise = new Promise<Record<string, unknown>>((resolve) => {
+      resolveSettingsGet = resolve;
+    });
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return await settingsGetPromise;
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+    store.set(terminalPreferencesAtom, { copyOnSelect: true });
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "外观" }));
+
+    expect(await screen.findByRole("switch", { name: "选中自动复制" })).toHaveAttribute(
+      "aria-checked",
+      "true"
+    );
+
+    await act(async () => {
+      resolveSettingsGet?.({});
+      await settingsGetPromise;
+    });
+  });
+
   it("preserves copy-on-select when a stale settings load resolves afterward", async () => {
     let resolveSettingsGet: ((value: Record<string, unknown>) => void) | undefined;
     const settingsGetPromise = new Promise<Record<string, unknown>>((resolve) => {

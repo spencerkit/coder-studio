@@ -151,7 +151,6 @@ export function SettingsPage() {
   const [terminalRenderer, setTerminalRendererState] = useState<"standard" | "compatibility">(
     "standard"
   );
-  const [terminalCopyOnSelect, setTerminalCopyOnSelectState] = useState(false);
   const [providerAdditionalArgsById, setProviderAdditionalArgsById] = useState<
     Record<string, string>
   >({});
@@ -160,6 +159,7 @@ export function SettingsPage() {
   const [settingsRefreshKey, setSettingsRefreshKey] = useState(0);
   const [locale, setLocaleState] = useAtom(localeAtom);
   const [theme, setTheme] = useAtom(themeAtom);
+  const terminalPreferences = useAtomValue(terminalPreferencesAtom);
   const setNotificationPreferences = useSetAtom(notificationPreferencesAtom);
   const setTerminalPreferences = useSetAtom(terminalPreferencesAtom);
   const settingsLoadFailedUnknownRef = useRef(settingsLoadFailedUnknown);
@@ -245,7 +245,6 @@ export function SettingsPage() {
         appearanceSelectionVersionAtRequestStart.terminalCopyOnSelect
       ) {
         const resolvedTerminalCopyOnSelect = resolveTerminalCopyOnSelectSetting(settings);
-        setTerminalCopyOnSelectState(resolvedTerminalCopyOnSelect);
         setTerminalPreferences({
           copyOnSelect: resolvedTerminalCopyOnSelect,
         });
@@ -286,7 +285,6 @@ export function SettingsPage() {
 
   const handleTerminalCopyOnSelectSelection = (value: boolean) => {
     appearanceSelectionVersionRef.current.terminalCopyOnSelect += 1;
-    setTerminalCopyOnSelectState(value);
     setTerminalPreferences({ copyOnSelect: value });
   };
 
@@ -337,7 +335,7 @@ export function SettingsPage() {
             setLocale={handleLocaleSelection}
             terminalRenderer={terminalRenderer}
             setTerminalRenderer={handleTerminalRendererSelection}
-            terminalCopyOnSelect={terminalCopyOnSelect}
+            terminalCopyOnSelect={terminalPreferences.copyOnSelect}
             setTerminalCopyOnSelect={handleTerminalCopyOnSelectSelection}
             theme={theme}
             setTheme={setTheme}
