@@ -15,6 +15,7 @@ import {
   orderedWorkspacesAtom,
   resolvedActiveWorkspaceIdAtom,
 } from "../../../atoms/workspaces";
+import { EmptyState, Sheet } from "../../../components/ui";
 import { useViewport } from "../../../hooks/use-viewport";
 import { useTranslation } from "../../../lib/i18n";
 import { formatWorkspaceLabel } from "../../notifications/format";
@@ -24,7 +25,6 @@ import {
   sidebarCollapsedAtom,
   terminalPanelVisibleAtom,
 } from "../../workspace/atoms";
-import { MobileSheet } from "../../workspace/views/mobile/mobile-sheet";
 import { WorkspaceLaunchModal } from "../../workspace/views/shared/workspace-launch-modal";
 
 interface Command {
@@ -36,6 +36,18 @@ interface Command {
 }
 
 type ShellKind = "desktop" | "mobile";
+
+const commandPaletteEmptyStateStyle = {
+  minHeight: "auto",
+  padding: "var(--sp-8)",
+  gap: 0,
+};
+
+const commandPaletteEmptyStateTitleStyle = {
+  margin: 0,
+  color: "var(--text-tertiary)",
+  fontWeight: "var(--font-normal)",
+};
 
 /**
  * Command Palette
@@ -196,7 +208,11 @@ export function CommandPalette() {
           </div>
         ))
       ) : (
-        <div className="command-palette-empty">{t("command.no_results")}</div>
+        <EmptyState
+          className="command-palette-empty"
+          style={commandPaletteEmptyStateStyle}
+          title={<p style={commandPaletteEmptyStateTitleStyle}>{t("command.no_results")}</p>}
+        />
       )}
     </div>
   );
@@ -212,7 +228,7 @@ export function CommandPalette() {
 
   if (isMobile) {
     return (
-      <MobileSheet
+      <Sheet
         title="Quick Actions"
         kicker={t("command.palette").toUpperCase()}
         onClose={() => setIsOpen(false)}

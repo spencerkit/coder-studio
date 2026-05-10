@@ -43,6 +43,10 @@ describe("resolveSafe", () => {
   it("should reject absolute path escape", () => {
     expect(() => resolveSafe(testDir, "/etc/passwd")).toThrow();
   });
+
+  it("should allow paths when the workspace root is /", () => {
+    expect(resolveSafe("/", "tmp/file.txt")).toBe("/tmp/file.txt");
+  });
 });
 
 describe("readFile", () => {

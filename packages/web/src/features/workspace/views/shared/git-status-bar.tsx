@@ -1,13 +1,29 @@
 import type { GitStatus } from "@coder-studio/core";
-import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Diff, X } from "lucide-react";
+import { useAtomValue } from "jotai";
+import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Diff, RefreshCw, X } from "lucide-react";
 import { type FC, useLayoutEffect, useState } from "react";
-import { useTranslation } from "../../../../lib/i18n";
+import { localeAtom } from "../../../../atoms/app-ui";
+import {
+  Button,
+  ConfirmDialog,
+  IconButton,
+  Input,
+  Modal,
+  ModalBody,
+  ModalFooter,
+  ModalHeader,
+  ModalTitle,
+  Tooltip,
+} from "../../../../components/ui";
+import { formatDate, type LocaleCode, useTranslation } from "../../../../lib/i18n";
 import { useGitSyncActions } from "../../actions/use-git-actions";
+import { gitFetchAtomFamily } from "../../atoms";
 
 interface GitStatusBarProps {
   workspaceId: string;
   gitState: GitStatus | null;
   inline?: boolean;
+  onRefresh?: () => void;
 }
 
 type GitSyncIntent = "push" | "pull";
@@ -17,12 +33,20 @@ interface SyncDialogState {
   count: number;
 }
 
-export const GitStatusBar: FC<GitStatusBarProps> = ({ workspaceId, gitState, inline = false }) => {
+export const GitStatusBar: FC<GitStatusBarProps> = ({
+  workspaceId,
+  gitState,
+  inline = false,
+  onRefresh,
+}) => {
   const t = useTranslation();
+  const locale = useAtomValue(localeAtom) as LocaleCode;
+  const fetchState = useAtomValue(gitFetchAtomFamily(workspaceId));
   const {
     authPrompt,
     clearAuthPrompt,
     getAuthPromptMessage,
+    handleFetch,
     handlePull,
     handlePush,
     syncingIntent,
@@ -55,6 +79,13 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({ workspaceId, gitState, inl
 
   const ahead = gitState.ahead;
   const behind = gitState.behind;
+  const isFetching = fetchState.status === "fetching";
+  const fetchTitle = fetchState.lastFetchAt
+    ? t("git.fetch_last_at", {
+        when: formatDate(fetchState.lastFetchAt, locale),
+      })
+    : t("git.fetch_last_never");
+  const fetchAriaLabel = isFetching ? t("git.fetch_in_progress") : t("git.fetch_label");
   const confirmTitle =
     pendingAction?.intent === "push" ? t("git.push_confirm_title") : t("git.pull_confirm_title");
   const confirmMessage =
@@ -66,11 +97,23 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({ workspaceId, gitState, inl
     pendingAction?.intent === "push" ? t("git.push_in_progress") : t("git.pull_in_progress");
   const isSyncingCurrentAction = Boolean(pendingAction && syncingIntent === pendingAction.intent);
   const authIntent = authPrompt?.intent;
-  const authActionLabel = authIntent === "push" ? t("action.push") : t("action.pull");
+  const dialogIntent = authIntent ?? pendingAction?.intent ?? "pull";
+  const authActionLabel =
+    authIntent === "push"
+      ? t("action.push")
+      : authIntent === "pull"
+        ? t("action.pull")
+        : t("git.fetch_label");
   const authBusyLabel =
-    authIntent === "push" ? t("git.push_in_progress") : t("git.pull_in_progress");
+    authIntent === "push"
+      ? t("git.push_in_progress")
+      : authIntent === "pull"
+        ? t("git.pull_in_progress")
+        : t("git.fetch_in_progress");
   const isSyncingAuthAction = Boolean(authIntent && syncingIntent === authIntent);
   const isDialogLocked = isSyncingCurrentAction || isSyncingAuthAction;
+  const showConfirmDialog = Boolean(pendingAction && !authPrompt);
+  const showAuthDialog = Boolean(authPrompt);
 
   const openConfirm = (intent: GitSyncIntent, count: number) => {
     if (count <= 0) {
@@ -86,6 +129,12 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({ workspaceId, gitState, inl
     }
     setPendingAction(null);
     clearAuthPrompt();
+  };
+
+  const handleOpenChange = (open: boolean) => {
+    if (!open) {
+      closeConfirm();
+    }
   };
 
   const confirmSync = async () => {
@@ -121,167 +170,201 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({ workspaceId, gitState, inl
       return;
     }
 
-    const success = authPrompt.intent === "push" ? await handlePush(auth) : await handlePull(auth);
+    const success =
+      authPrompt.intent === "push"
+        ? await handlePush(auth)
+        : authPrompt.intent === "pull"
+          ? await handlePull(auth)
+          : await handleFetch(auth);
 
     if (success) {
       clearAuthPrompt();
       setPendingAction(null);
+      onRefresh?.();
+    }
+  };
+
+  const refreshAfterFetch = async () => {
+    const success = await handleFetch();
+    if (success) {
+      onRefresh?.();
     }
   };
 
   return (
     <>
       <div className={`git-status-bar${inline ? " git-status-bar--inline" : ""}`}>
-        <span className="git-status-bar__item" title={t("git.statusbar.changes")}>
-          <Diff size={13} aria-hidden="true" />
-          <span className="git-status-bar__value">{changeCount}</span>
-        </span>
-        <button
-          className="git-status-bar__item git-status-bar__item--actionable git-status-bar__item--ahead"
-          title={t("git.statusbar.ahead")}
-          type="button"
-          aria-label={t("action.push")}
-          disabled={ahead <= 0}
-          onClick={() => openConfirm("push", ahead)}
-        >
-          <ArrowUpFromLine size={13} aria-hidden="true" />
-          <span className="git-status-bar__value">{ahead}</span>
-        </button>
-        <button
-          className="git-status-bar__item git-status-bar__item--actionable git-status-bar__item--behind"
-          title={t("git.statusbar.behind")}
-          type="button"
-          aria-label={t("action.pull")}
-          disabled={behind <= 0}
-          onClick={() => openConfirm("pull", behind)}
-        >
-          <ArrowDownToLine size={13} aria-hidden="true" />
-          <span className="git-status-bar__value">{behind}</span>
-        </button>
+        <Tooltip content={t("git.statusbar.changes")}>
+          <span className="git-status-bar__item">
+            <Diff size={13} aria-hidden="true" />
+            <span className="git-status-bar__value">{changeCount}</span>
+          </span>
+        </Tooltip>
+        <Tooltip content={t("git.statusbar.ahead")}>
+          <button
+            className="git-status-bar__item git-status-bar__item--actionable git-status-bar__item--ahead"
+            type="button"
+            aria-label={t("action.push")}
+            disabled={ahead <= 0}
+            onClick={() => openConfirm("push", ahead)}
+          >
+            <ArrowUpFromLine size={13} aria-hidden="true" />
+            <span className="git-status-bar__value">{ahead}</span>
+          </button>
+        </Tooltip>
+        <Tooltip content={t("git.statusbar.behind")}>
+          <button
+            className="git-status-bar__item git-status-bar__item--actionable git-status-bar__item--behind"
+            type="button"
+            aria-label={t("action.pull")}
+            disabled={behind <= 0}
+            onClick={() => openConfirm("pull", behind)}
+          >
+            <ArrowDownToLine size={13} aria-hidden="true" />
+            <span className="git-status-bar__value">{behind}</span>
+          </button>
+        </Tooltip>
+        <Tooltip content={fetchTitle}>
+          <IconButton
+            aria-label={fetchAriaLabel}
+            className="git-status-bar__item git-status-bar__item--actionable"
+            disabled={isFetching}
+            icon={
+              <RefreshCw size={13} aria-hidden="true" className={isFetching ? "spin" : undefined} />
+            }
+            onClick={() => void refreshAfterFetch()}
+            size="sm"
+          />
+        </Tooltip>
       </div>
 
-      {pendingAction ? (
-        <div className="modal-overlay" onClick={closeConfirm}>
-          <div
-            className="modal-card git-status-bar__confirm"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="modal-header">
-              <div className="modal-title">
-                <AlertTriangle size={16} />
-                <h3>{confirmTitle}</h3>
-              </div>
-              <button
-                className="btn btn-ghost btn-sm"
-                onClick={closeConfirm}
-                aria-label={t("action.close")}
-                type="button"
-                disabled={isDialogLocked}
-              >
-                <X size={14} />
-              </button>
-            </div>
+      {showConfirmDialog ? (
+        <ConfirmDialog
+          className="git-status-bar__confirm"
+          dismissible={!isDialogLocked}
+          closeDisabled={isDialogLocked}
+          open
+          onOpenChange={handleOpenChange}
+          title={
+            <>
+              <AlertTriangle size={16} />
+              <span>{confirmTitle}</span>
+            </>
+          }
+          description={
+            <>
+              <p>{confirmMessage}</p>
+              <p className="dialog-helper">{t("git.sync_confirm_helper")}</p>
+            </>
+          }
+          cancelDisabled={isDialogLocked}
+          cancelText={t("action.cancel")}
+          closeLabel={t("action.close")}
+          confirmText={isSyncingCurrentAction ? confirmActionBusyLabel : confirmActionLabel}
+          confirmDisabled={isSyncingCurrentAction}
+          onConfirm={() => {
+            void confirmSync();
+          }}
+        />
+      ) : null}
 
-            <div className="modal-body">
-              {authPrompt ? (
-                authPrompt.details.canPrompt ? (
-                  <form
-                    id={authFormId}
-                    className="form-group"
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      void submitAuth();
-                    }}
-                  >
-                    <p>{getAuthPromptMessage(authPrompt.details)}</p>
-                    <span className="dialog-helper">{t("git.auth_helper_http")}</span>
-                    <label htmlFor={`git-auth-username-${workspaceId}`}>
-                      {t("git.auth_username")}
-                    </label>
-                    <input
-                      id={`git-auth-username-${workspaceId}`}
-                      className="input"
-                      value={credentials.username}
-                      onChange={(event) =>
-                        setCredentials((previous) => ({
-                          ...previous,
-                          username: event.target.value,
-                        }))
-                      }
-                      placeholder={
-                        authPrompt.details.usernameHint ?? t("git.auth_username_placeholder")
-                      }
-                      autoFocus
-                      disabled={isSyncingAuthAction}
-                    />
-                    <label htmlFor={`git-auth-password-${workspaceId}`}>
-                      {t("git.auth_password")}
-                    </label>
-                    <input
-                      id={`git-auth-password-${workspaceId}`}
-                      className="input"
-                      type="password"
-                      value={credentials.password}
-                      onChange={(event) =>
-                        setCredentials((previous) => ({
-                          ...previous,
-                          password: event.target.value,
-                        }))
-                      }
-                      placeholder={t("git.auth_password_placeholder")}
-                      disabled={isSyncingAuthAction}
-                    />
-                  </form>
-                ) : (
-                  <div className="form-group">
-                    <p>{getAuthPromptMessage(authPrompt.details)}</p>
-                    <span className="dialog-helper">{t("git.auth_helper_unsupported")}</span>
-                  </div>
-                )
-              ) : (
-                <>
-                  <p>{confirmMessage}</p>
-                  <p className="dialog-helper">{t("git.sync_confirm_helper")}</p>
-                </>
-              )}
-            </div>
+      {showAuthDialog ? (
+        <Modal
+          className="git-status-bar__confirm"
+          dismissible={!isDialogLocked}
+          open
+          onOpenChange={handleOpenChange}
+        >
+          <ModalHeader>
+            <ModalTitle>
+              <AlertTriangle size={16} />
+              <span>
+                {dialogIntent === "push"
+                  ? t("git.push_confirm_title")
+                  : dialogIntent === "pull"
+                    ? t("git.pull_confirm_title")
+                    : t("git.fetch_label")}
+              </span>
+            </ModalTitle>
+            <IconButton
+              aria-label={t("action.close")}
+              disabled={isDialogLocked}
+              icon={<X size={14} />}
+              onClick={closeConfirm}
+              size="sm"
+            />
+          </ModalHeader>
 
-            <div className="modal-footer">
-              <button
-                className="btn btn-secondary"
-                onClick={closeConfirm}
-                type="button"
-                disabled={isDialogLocked}
+          <ModalBody>
+            {authPrompt.details.canPrompt ? (
+              <form
+                id={authFormId}
+                className="form-group"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void submitAuth();
+                }}
               >
-                {t("action.cancel")}
-              </button>
-              {authPrompt ? (
-                <button
-                  className="btn btn-primary"
-                  form={authPrompt.details.canPrompt ? authFormId : undefined}
-                  type={authPrompt.details.canPrompt ? "submit" : "button"}
-                  disabled={
-                    !authPrompt.details.canPrompt ||
-                    isSyncingAuthAction ||
-                    !credentials.username.trim() ||
-                    !credentials.password
+                <p>{getAuthPromptMessage(authPrompt.details)}</p>
+                <span className="dialog-helper">{t("git.auth_helper_http")}</span>
+                <label htmlFor={`git-auth-username-${workspaceId}`}>{t("git.auth_username")}</label>
+                <Input
+                  id={`git-auth-username-${workspaceId}`}
+                  value={credentials.username}
+                  onChange={(event) =>
+                    setCredentials((previous) => ({
+                      ...previous,
+                      username: event.target.value,
+                    }))
                   }
-                >
-                  {isSyncingAuthAction ? authBusyLabel : authActionLabel}
-                </button>
-              ) : (
-                <button
-                  className="btn btn-primary"
-                  onClick={() => void confirmSync()}
-                  type="button"
-                  disabled={isSyncingCurrentAction}
-                >
-                  {isSyncingCurrentAction ? confirmActionBusyLabel : confirmActionLabel}
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
+                  placeholder={
+                    authPrompt.details.usernameHint ?? t("git.auth_username_placeholder")
+                  }
+                  autoFocus
+                  disabled={isSyncingAuthAction}
+                />
+                <label htmlFor={`git-auth-password-${workspaceId}`}>{t("git.auth_password")}</label>
+                <Input
+                  id={`git-auth-password-${workspaceId}`}
+                  type="password"
+                  value={credentials.password}
+                  onChange={(event) =>
+                    setCredentials((previous) => ({
+                      ...previous,
+                      password: event.target.value,
+                    }))
+                  }
+                  placeholder={t("git.auth_password_placeholder")}
+                  disabled={isSyncingAuthAction}
+                />
+              </form>
+            ) : (
+              <div className="form-group">
+                <p>{getAuthPromptMessage(authPrompt.details)}</p>
+                <span className="dialog-helper">{t("git.auth_helper_unsupported")}</span>
+              </div>
+            )}
+          </ModalBody>
+
+          <ModalFooter>
+            <Button onClick={closeConfirm} disabled={isDialogLocked}>
+              {t("action.cancel")}
+            </Button>
+            <Button
+              variant="primary"
+              form={authPrompt.details.canPrompt ? authFormId : undefined}
+              type={authPrompt.details.canPrompt ? "submit" : "button"}
+              disabled={
+                !authPrompt.details.canPrompt ||
+                isSyncingAuthAction ||
+                !credentials.username.trim() ||
+                !credentials.password
+              }
+            >
+              {isSyncingAuthAction ? authBusyLabel : authActionLabel}
+            </Button>
+          </ModalFooter>
+        </Modal>
       ) : null}
     </>
   );

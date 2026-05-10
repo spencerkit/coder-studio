@@ -2892,7 +2892,7 @@ describe("XtermHost", () => {
     global.cancelAnimationFrame = originalCancelAnimationFrame;
   });
 
-  it("does not send xterm query responses produced by live chunks flushed after snapshot hydration", async () => {
+  it("still sends xterm query responses produced by live chunks flushed after snapshot hydration", async () => {
     const store = createStore();
     const snapshotChunk = new TextEncoder().encode("snapshot\n");
     const queuedLiveChunk = new TextEncoder().encode("queued query\x1b[6n");
@@ -2989,7 +2989,126 @@ describe("XtermHost", () => {
       expect(mockTerminal.write.mock.calls[0]?.[0]).toBe(snapshotChunk);
       expect(mockTerminal.write).toHaveBeenCalledWith(queuedLiveChunk, expect.any(Function));
     });
-    expect(sendTerminalInput).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(sendTerminalInput).toHaveBeenCalledWith(
+        "snapshot-flush-query-terminal",
+        new TextEncoder().encode("\x1b[12;3R"),
+        "typing",
+        undefined
+      );
+    });
+
+    global.requestAnimationFrame = originalRequestAnimationFrame;
+    global.cancelAnimationFrame = originalCancelAnimationFrame;
+  });
+
+  it("still sends xterm query responses for queued supervisor-style live chunks flushed after snapshot hydration", async () => {
+    const store = createStore();
+    const snapshotChunk = new TextEncoder().encode("snapshot\n");
+    const queuedLiveChunk = new TextEncoder().encode(
+      "\x1b[200~[Supervisor] continue with the next fix\x1b[201~\r\x1b[6n"
+    );
+    const sendCommand = vi.fn().mockImplementation((op: string) => {
+      if (op === "terminal.snapshot") {
+        return Promise.resolve({
+          status: "ok",
+          transport: "binary",
+          streamId: 904,
+          size: snapshotChunk.byteLength,
+          seq: 100,
+          cols: 132,
+          rows: 36,
+          source: "headless",
+          bytes: snapshotChunk,
+        } satisfies TerminalSnapshotPayload);
+      }
+
+      return Promise.resolve({ status: "ok" });
+    });
+    const sendTerminalInput = vi.fn().mockResolvedValue(undefined);
+    let subscriptionHandler: ((topic: string, payload: unknown, seq: number) => void) | undefined;
+    const subscribe = vi.fn((topics: string[], handler: typeof subscriptionHandler) => {
+      subscriptionHandler = handler;
+      return vi.fn();
+    });
+    const rafCallbacks: FrameRequestCallback[] = [];
+    const originalRequestAnimationFrame = global.requestAnimationFrame;
+    const originalCancelAnimationFrame = global.cancelAnimationFrame;
+    let onDataCallback: ((data: string) => void) | undefined;
+
+    mockTerminal.cols = 132;
+    mockTerminal.rows = 36;
+    mockTerminal.onData.mockImplementation((callback: (data: string) => void) => {
+      onDataCallback = callback;
+      return vi.fn();
+    });
+    mockTerminal.write.mockImplementation((data: Uint8Array | string, callback?: () => void) => {
+      if (data === queuedLiveChunk) {
+        onDataCallback?.("\x1b[12;3R");
+      }
+      callback?.();
+    });
+
+    global.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      rafCallbacks.push(callback);
+      return rafCallbacks.length;
+    }) as typeof requestAnimationFrame;
+    global.cancelAnimationFrame = vi.fn() as typeof cancelAnimationFrame;
+
+    store.set(wsClientAtom, {
+      sendCommand,
+      sendTerminalInput,
+      subscribe,
+      getStatus: vi.fn(() => "connected"),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost
+          terminalId="snapshot-flush-supervisor-terminal"
+          workspaceId="test-workspace"
+          terminalKind="agent"
+        />
+      </Provider>
+    );
+
+    await act(async () => {
+      subscriptionHandler?.(
+        Topics.terminalOutput("test-workspace", "snapshot-flush-supervisor-terminal"),
+        {
+          transport: "binary",
+          streamId: 905,
+          size: queuedLiveChunk.byteLength,
+          bytes: queuedLiveChunk,
+        },
+        100 + queuedLiveChunk.byteLength
+      );
+      await Promise.resolve();
+    });
+
+    expect(mockTerminal.write).not.toHaveBeenCalled();
+
+    await act(async () => {
+      const callback = rafCallbacks.shift();
+      callback?.(16);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(mockTerminal.write.mock.calls[0]?.[0]).toBe(snapshotChunk);
+      expect(mockTerminal.write).toHaveBeenCalledWith(queuedLiveChunk, expect.any(Function));
+    });
+    await waitFor(() => {
+      expect(sendTerminalInput).toHaveBeenCalledWith(
+        "snapshot-flush-supervisor-terminal",
+        new TextEncoder().encode("\x1b[12;3R"),
+        "typing",
+        undefined
+      );
+    });
 
     global.requestAnimationFrame = originalRequestAnimationFrame;
     global.cancelAnimationFrame = originalCancelAnimationFrame;

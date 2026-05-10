@@ -4,6 +4,14 @@ import { describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../../atoms/app-ui";
 import { WorkspaceFullscreenButton } from "./workspace-fullscreen-button";
 
+const viewportMocks = vi.hoisted(() => ({
+  value: "desktop" as "desktop" | "mobile",
+}));
+
+vi.mock("../../../components/ui/_internal/use-viewport", () => ({
+  useViewport: () => viewportMocks.value,
+}));
+
 function renderWithEnglish(ui: React.ReactElement) {
   const store = createStore();
   store.set(localeAtom, "en");
@@ -47,7 +55,14 @@ describe("WorkspaceFullscreenButton", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Enter Fullscreen" }));
+    const button = screen.getByRole("button", { name: "Enter Fullscreen" });
+    expect(button).toHaveClass("btn", "btn-ghost", "topbar-btn");
+    expect(button).not.toHaveAttribute("title");
+
+    fireEvent.mouseEnter(button);
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Enter Fullscreen");
+
+    fireEvent.click(button);
 
     expect(toggleFullscreen).toHaveBeenCalledTimes(1);
   });
@@ -76,5 +91,30 @@ describe("WorkspaceFullscreenButton", () => {
     );
 
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it("does not render tooltip overlays on mobile/coarse viewports", () => {
+    viewportMocks.value = "mobile";
+
+    renderWithEnglish(
+      <WorkspaceFullscreenButton
+        controller={{
+          supported: true,
+          isFullscreen: false,
+          enterFullscreen: vi.fn(),
+          exitFullscreen: vi.fn(),
+          toggleFullscreen: vi.fn(),
+        }}
+        className="topbar-btn"
+        iconSize={14}
+      />
+    );
+
+    const button = screen.getByRole("button", { name: "Enter Fullscreen" });
+    fireEvent.mouseEnter(button);
+    fireEvent.focus(button);
+
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    viewportMocks.value = "desktop";
   });
 });

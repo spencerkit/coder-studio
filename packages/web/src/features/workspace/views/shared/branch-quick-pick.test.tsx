@@ -1,20 +1,43 @@
 import type { GitStatus } from "@coder-studio/core";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { createStore, Provider } from "jotai";
+import { createStore, Provider, useSetAtom } from "jotai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../../../atoms/app-ui";
 import { wsClientAtom } from "../../../../atoms/connection";
 import { branchQuickPickAtom, gitBranchListAtomFamily } from "../../atoms";
-import { BranchQuickPick } from "./branch-quick-pick";
+import { BranchQuickPick, DesktopBranchQuickPickPopover } from "./branch-quick-pick";
 
 const viewportMocks = vi.hoisted(() => ({
   viewport: "desktop" as "desktop" | "mobile",
 }));
+const activeElementState = {
+  current: null as HTMLElement | null,
+};
+const originalFocus = HTMLElement.prototype.focus;
 
 vi.mock("../../../../hooks/use-viewport", () => ({
   useViewport: () => viewportMocks.viewport,
 }));
+
+function DesktopQuickPickHarness({ workspaceId = "ws-test" }: { workspaceId?: string }) {
+  const setQuickPick = useSetAtom(branchQuickPickAtom);
+
+  return (
+    <DesktopBranchQuickPickPopover
+      workspaceId={workspaceId}
+      onOpenBranchSwitcher={() =>
+        setQuickPick({
+          visible: true,
+          workspaceId,
+          inputValue: "",
+        })
+      }
+    >
+      <button type="button">Branches</button>
+    </DesktopBranchQuickPickPopover>
+  );
+}
 
 describe("BranchQuickPick", () => {
   let store: ReturnType<typeof createStore>;
@@ -31,6 +54,19 @@ describe("BranchQuickPick", () => {
   };
 
   beforeEach(() => {
+    activeElementState.current = document.body;
+    Object.defineProperty(document, "activeElement", {
+      configurable: true,
+      get: () => activeElementState.current,
+    });
+    Object.defineProperty(HTMLElement.prototype, "focus", {
+      configurable: true,
+      writable: true,
+      value: function focus() {
+        activeElementState.current = this;
+      },
+    });
+
     store = createStore();
     store.set(localeAtom, "en");
     sendCommandMock = vi.fn().mockImplementation(async (op: string) => {
@@ -82,16 +118,25 @@ describe("BranchQuickPick", () => {
   });
 
   afterEach(() => {
+    Object.defineProperty(HTMLElement.prototype, "focus", {
+      configurable: true,
+      writable: true,
+      value: originalFocus,
+    });
+    delete (document as Document & { activeElement?: Element }).activeElement;
     vi.restoreAllMocks();
     viewportMocks.viewport = "desktop";
   });
 
-  it("filters branches by input text", async () => {
+  const renderQuickPick = () =>
     render(
       <Provider store={store}>
-        <BranchQuickPick />
+        {viewportMocks.viewport === "mobile" ? <BranchQuickPick /> : <DesktopQuickPickHarness />}
       </Provider>
     );
+
+  it("filters branches by input text", async () => {
+    renderQuickPick();
 
     const input = screen.getByPlaceholderText("Search branches or create new branch...");
     expect(input).toBeInTheDocument();
@@ -116,11 +161,7 @@ describe("BranchQuickPick", () => {
   it("renders the shared MobileSelectSheet shell for branch quick pick", () => {
     viewportMocks.viewport = "mobile";
 
-    render(
-      <Provider store={store}>
-        <BranchQuickPick />
-      </Provider>
-    );
+    renderQuickPick();
 
     expect(screen.getByRole("region", { name: "Branch sheet" })).toBeInTheDocument();
     expect(
@@ -137,11 +178,7 @@ describe("BranchQuickPick", () => {
       inputValue: "m",
     });
 
-    render(
-      <Provider store={store}>
-        <BranchQuickPick />
-      </Provider>
-    );
+    renderQuickPick();
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Create branch: m" })).toBeInTheDocument();
@@ -158,22 +195,24 @@ describe("BranchQuickPick", () => {
     viewportMocks.viewport = "mobile";
     store.set(localeAtom, "zh");
 
-    render(
-      <Provider store={store}>
-        <BranchQuickPick />
-      </Provider>
-    );
+    renderQuickPick();
 
     expect(screen.getByRole("region", { name: "分支面板" })).toBeInTheDocument();
     expect(screen.getByPlaceholderText("搜索分支或创建新分支...")).toBeInTheDocument();
   });
 
-  it("shows create option for non-existent branch", async () => {
-    render(
-      <Provider store={store}>
-        <BranchQuickPick />
-      </Provider>
+  it("renders the remote branch label with shared tag compatibility classes", () => {
+    renderQuickPick();
+
+    expect(screen.getByText("Remote")).toHaveClass(
+      "badge",
+      "badge-gray",
+      "branch-quick-pick-badge"
     );
+  });
+
+  it("shows create option for non-existent branch", async () => {
+    renderQuickPick();
 
     const input = screen.getByPlaceholderText("Search branches or create new branch...");
 
@@ -193,11 +232,7 @@ describe("BranchQuickPick", () => {
   });
 
   it("checks out branch on Enter key", async () => {
-    render(
-      <Provider store={store}>
-        <BranchQuickPick />
-      </Provider>
-    );
+    renderQuickPick();
 
     const input = screen.getByPlaceholderText("Search branches or create new branch...");
 
@@ -243,11 +278,7 @@ describe("BranchQuickPick", () => {
   });
 
   it("requires confirmation before creating a new branch on Enter", async () => {
-    render(
-      <Provider store={store}>
-        <BranchQuickPick />
-      </Provider>
-    );
+    renderQuickPick();
 
     const input = screen.getByPlaceholderText("Search branches or create new branch...");
 
@@ -312,11 +343,7 @@ describe("BranchQuickPick", () => {
       inputValue: "m",
     });
 
-    render(
-      <Provider store={store}>
-        <BranchQuickPick />
-      </Provider>
-    );
+    renderQuickPick();
 
     const input = screen.getByPlaceholderText("Search branches or create new branch...");
 
@@ -349,11 +376,7 @@ describe("BranchQuickPick", () => {
   });
 
   it("navigates with arrow keys", async () => {
-    render(
-      <Provider store={store}>
-        <BranchQuickPick />
-      </Provider>
-    );
+    renderQuickPick();
 
     const input = screen.getByPlaceholderText("Search branches or create new branch...");
 
@@ -379,11 +402,7 @@ describe("BranchQuickPick", () => {
   });
 
   it("closes on Escape key", async () => {
-    render(
-      <Provider store={store}>
-        <BranchQuickPick />
-      </Provider>
-    );
+    renderQuickPick();
 
     const input = screen.getByPlaceholderText("Search branches or create new branch...");
 
@@ -395,21 +414,11 @@ describe("BranchQuickPick", () => {
     });
   });
 
-  it("closes when clicking overlay", async () => {
-    render(
-      <Provider store={store}>
-        <BranchQuickPick />
-      </Provider>
-    );
+  it("closes when clicking outside the desktop popover", async () => {
+    renderQuickPick();
 
-    const overlay = document.querySelector(".branch-quick-pick-overlay");
-    expect(overlay).toBeTruthy();
+    fireEvent.pointerDown(document.body);
 
-    if (overlay) {
-      fireEvent.click(overlay);
-    }
-
-    // Wait for state update
     await waitFor(() => {
       expect(store.get(branchQuickPickAtom).visible).toBe(false);
     });
@@ -422,21 +431,79 @@ describe("BranchQuickPick", () => {
       loading: true,
     });
 
-    render(
-      <Provider store={store}>
-        <BranchQuickPick />
-      </Provider>
-    );
+    renderQuickPick();
 
-    expect(screen.getByText("Loading branches...")).toBeInTheDocument();
+    const emptyStateTitle = screen.getByText("Loading branches...");
+
+    expect(emptyStateTitle.tagName).toBe("P");
+    expect(emptyStateTitle.closest(".branch-quick-pick-empty")).toBeTruthy();
+  });
+
+  it("shows the shared idle empty state when there are no branches yet", async () => {
+    sendCommandMock.mockImplementation(async (op: string) => {
+      if (op === "git.branches") {
+        return {
+          current: "",
+          branches: [],
+        };
+      }
+
+      if (op === "git.status") {
+        return gitStatus;
+      }
+
+      return undefined;
+    });
+    store.set(gitBranchListAtomFamily("ws-test"), {
+      current: "",
+      branches: [],
+      loading: false,
+    });
+
+    renderQuickPick();
+
+    const emptyStateTitle = await screen.findByText("Type to search branches");
+
+    expect(emptyStateTitle.tagName).toBe("P");
+    expect(emptyStateTitle.closest(".branch-quick-pick-empty")).toBeTruthy();
+  });
+
+  it("shows the shared filtered empty state when the search has no display items", async () => {
+    sendCommandMock.mockImplementation(async (op: string) => {
+      if (op === "git.branches") {
+        return {
+          current: "",
+          branches: [],
+        };
+      }
+
+      if (op === "git.status") {
+        return gitStatus;
+      }
+
+      return undefined;
+    });
+    store.set(branchQuickPickAtom, {
+      visible: true,
+      workspaceId: "ws-test",
+      inputValue: "   ",
+    });
+    store.set(gitBranchListAtomFamily("ws-test"), {
+      current: "",
+      branches: [],
+      loading: false,
+    });
+
+    renderQuickPick();
+
+    const emptyStateTitle = await screen.findByText("No branches found");
+
+    expect(emptyStateTitle.tagName).toBe("P");
+    expect(emptyStateTitle.closest(".branch-quick-pick-empty")).toBeTruthy();
   });
 
   it("shows all branches when input is empty", async () => {
-    render(
-      <Provider store={store}>
-        <BranchQuickPick />
-      </Provider>
-    );
+    renderQuickPick();
 
     expect(screen.getByText("main")).toBeInTheDocument();
     expect(screen.getByText("feature/auth")).toBeInTheDocument();
@@ -445,11 +512,7 @@ describe("BranchQuickPick", () => {
   });
 
   it("shows current branch indicator", () => {
-    render(
-      <Provider store={store}>
-        <BranchQuickPick />
-      </Provider>
-    );
+    renderQuickPick();
 
     // The current branch should have a check icon
     const mainBranchItem = screen.getByText("main").closest(".branch-quick-pick-item");
@@ -459,11 +522,7 @@ describe("BranchQuickPick", () => {
   });
 
   it("shows remote badge for remote branches", () => {
-    render(
-      <Provider store={store}>
-        <BranchQuickPick />
-      </Provider>
-    );
+    renderQuickPick();
 
     // Remote branch should show "Remote" badge
     const remoteBranchItem = screen.getByText("origin/develop").closest(".branch-quick-pick-item");
@@ -477,11 +536,7 @@ describe("BranchQuickPick", () => {
       inputValue: "",
     });
 
-    render(
-      <Provider store={store}>
-        <BranchQuickPick />
-      </Provider>
-    );
+    renderQuickPick();
 
     expect(
       screen.queryByPlaceholderText("Search branches or create new branch...")
@@ -491,11 +546,7 @@ describe("BranchQuickPick", () => {
   it("handles checkout failure gracefully", async () => {
     sendCommandMock.mockRejectedValueOnce(new Error("Checkout failed"));
 
-    render(
-      <Provider store={store}>
-        <BranchQuickPick />
-      </Provider>
-    );
+    renderQuickPick();
 
     const input = screen.getByPlaceholderText("Search branches or create new branch...");
 
@@ -534,11 +585,7 @@ describe("BranchQuickPick", () => {
       return undefined;
     });
 
-    render(
-      <Provider store={store}>
-        <BranchQuickPick />
-      </Provider>
-    );
+    renderQuickPick();
 
     const input = screen.getByPlaceholderText("Search branches or create new branch...");
 
@@ -562,5 +609,50 @@ describe("BranchQuickPick", () => {
     });
 
     expect(store.get(branchQuickPickAtom).visible).toBe(true);
+  });
+
+  it("opens the desktop popover from the trigger and autofocuses the input", async () => {
+    store.set(branchQuickPickAtom, {
+      visible: false,
+      workspaceId: "ws-test",
+      inputValue: "",
+    });
+
+    renderQuickPick();
+
+    fireEvent.click(screen.getByRole("button", { name: "Branches" }));
+
+    const input = await screen.findByPlaceholderText("Search branches or create new branch...");
+    expect(store.get(branchQuickPickAtom)).toEqual({
+      visible: true,
+      workspaceId: "ws-test",
+      inputValue: "",
+    });
+    await waitFor(() => {
+      expect(input).toHaveFocus();
+    });
+  });
+
+  it("closes the desktop popover when the trigger is clicked again", async () => {
+    store.set(branchQuickPickAtom, {
+      visible: false,
+      workspaceId: "ws-test",
+      inputValue: "",
+    });
+
+    renderQuickPick();
+
+    const trigger = screen.getByRole("button", { name: "Branches" });
+    fireEvent.click(trigger);
+    await screen.findByPlaceholderText("Search branches or create new branch...");
+
+    fireEvent.click(trigger);
+
+    await waitFor(() => {
+      expect(store.get(branchQuickPickAtom).visible).toBe(false);
+    });
+    expect(
+      screen.queryByPlaceholderText("Search branches or create new branch...")
+    ).not.toBeInTheDocument();
   });
 });

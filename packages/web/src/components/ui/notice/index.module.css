@@ -1,0 +1,56 @@
+.notice {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  margin: 0 0 var(--sp-5);
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+}
+
+.info {
+  border-color: color-mix(in srgb, var(--color-info) 24%, transparent);
+  background: color-mix(in srgb, var(--color-info) 6%, var(--bg-surface));
+}
+
+.success {
+  border-color: color-mix(in srgb, var(--color-success) 24%, transparent);
+  background: color-mix(in srgb, var(--color-success) 6%, var(--bg-surface));
+}
+
+.warning {
+  border-color: color-mix(in srgb, var(--accent-amber) 35%, transparent);
+  background: color-mix(in srgb, var(--accent-amber) 8%, var(--bg-surface));
+}
+
+.error {
+  border-color: color-mix(in srgb, var(--color-error) 36%, transparent);
+  background: color-mix(in srgb, var(--color-error) 10%, var(--bg-surface));
+}
+
+.copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.title {
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+}
+
+.message {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  word-break: break-word;
+}
+
+.action {
+  flex-shrink: 0;
+  align-self: center;
+}

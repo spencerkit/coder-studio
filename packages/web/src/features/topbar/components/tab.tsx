@@ -10,6 +10,7 @@ import { useSetAtom } from "jotai";
 import { X } from "lucide-react";
 import type { FC } from "react";
 import { activeWorkspaceIdAtom } from "../../../atoms/workspaces";
+import { Badge, IconButton, Tab, Tooltip } from "../../../components/ui";
 import { useTranslation } from "../../../lib/i18n";
 import { formatWorkspaceLabel } from "../../notifications/format";
 import { useWorkspaceCloseAction } from "../../workspace/actions/use-workspace-close-action";
@@ -44,37 +45,21 @@ export const WorkspaceTab: FC<WorkspaceTabProps> = ({ workspace, isActive }) => 
   };
 
   return (
-    <div
-      className={`topbar-tab ${isActive ? "active" : ""}`}
-      onClick={handleClick}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          handleClick();
-        }
-      }}
-      role="button"
-      tabIndex={0}
-      aria-selected={isActive}
-      title={workspace.path || workspace.id}
-    >
-      <span className={`topbar-dot ${workspace.isActive ? "active" : "idle"}`} />
-
-      <span className="topbar-tab-name">{displayName}</span>
-
-      {workspace.unreadCount && workspace.unreadCount > 0 ? (
-        <span className="topbar-unread">
-          {workspace.unreadCount > 9 ? "9+" : workspace.unreadCount}
-        </span>
-      ) : null}
-
-      <button
+    <div className={`topbar-tab-shell ${isActive ? "active" : ""}`} role="presentation">
+      <Tab className="topbar-tab" onClick={handleClick} value={workspace.id}>
+        <span className={`topbar-dot ${workspace.isActive ? "active" : "idle"}`} />
+        <Tooltip content={workspace.path || workspace.id}>
+          <span className="topbar-tab-name">{displayName}</span>
+        </Tooltip>
+        <Badge count={workspace.unreadCount ?? 0} max={9} />
+      </Tab>
+      <IconButton
         className="topbar-close"
-        onClick={handleClose}
         aria-label={t("action.close_workspace")}
-      >
-        <X size={14} />
-      </button>
+        icon={<X size={14} />}
+        onClick={handleClose}
+        size="sm"
+      />
     </div>
   );
 };

@@ -37,6 +37,7 @@
 - `packages/web/package.json` — add `clsx`
 - `pnpm-lock.yaml` — lockfile update for `clsx`
 - `packages/web/src/hooks/use-viewport.ts` — compatibility re-export from the new `_internal` hook
+- `packages/web/src/hooks/use-viewport.test.ts` — keep the legacy import path covered after the behavioral change
 - `packages/web/src/app.test.tsx` — coarse-pointer expectation flips from desktop to mobile
 - `packages/web/src/features/auth/index.tsx` — replace raw submit `<button className="btn btn-primary btn-lg auth-submit">` with `<Button>`
 
@@ -56,24 +57,44 @@
 
 Run from repo root:
 ```bash
-grep -rn 'className="btn[^\"]*"' /home/spencer/workspace/coder-studio/packages/web/src --include='*.tsx' | wc -l
+pnpm --filter @coder-studio/web exec sh -lc \
+  "rg -n 'className=.*(^|[^A-Za-z0-9_-])btn([^A-Za-z0-9_-]|$)' src --glob '*.tsx' | wc -l"
 ```
 
-Expected: `29`.
+Expected: `31`.
 
-If the count is not `29`, stop and update the plan before proceeding. `MIGRATION.md` in later tasks depends on this number.
+This count intentionally covers both plain string classNames and template-string classNames such as
+``className={`btn ${isDanger ? "btn-danger" : "btn-primary"}`}``.
 
-- [ ] **Step 2: Run the two suites that characterize the first migration seam**
+If the count is not `31`, stop and update the plan before proceeding. `MIGRATION.md` in later tasks depends on this number.
+
+- [ ] **Step 2: Run the three suites that characterize the first migration seam**
 
 ```bash
-pnpm --filter @coder-studio/web exec vitest run src/app.test.tsx src/features/auth/index.test.tsx
+pnpm --filter @coder-studio/web exec vitest run \
+  src/hooks/use-viewport.test.ts \
+  src/app.test.tsx \
+  src/features/auth/index.test.tsx
 ```
 
 Expected: all tests pass.
 
-This is the characterization baseline for the viewport hook and the login submit button. If either suite is red before any code changes, stop and surface the failure instead of continuing.
+This is the characterization baseline for the viewport hook and the login submit button. If any suite is red before any code changes, stop and surface the failure instead of continuing.
 
-- [ ] **Step 3: Record the current commit hash for rollback**
+- [ ] **Step 3: Capture a pre-migration Button screenshot baseline**
+
+Run from repo root:
+```bash
+pnpm --dir e2e exec playwright screenshot --device="Desktop Chrome" \
+  "file://$(pwd)/packages/web/auth-preview.html" \
+  /tmp/ui-button-auth-submit-before.png
+```
+
+Expected: PASS, and `/tmp/ui-button-auth-submit-before.png` exists.
+
+This file is a disposable local artifact. Do not add it to git. It is the visual baseline for the auth submit button before the `Button` migration.
+
+- [ ] **Step 4: Record the current commit hash for rollback**
 
 ```bash
 git rev-parse HEAD
@@ -101,7 +122,7 @@ Create this file exactly:
 # Coder Studio UI
 
 ## 总则
-- 已落地的基础组件统一从 `@/components/ui` 引入。
+- 已落地的基础组件统一从 public barrel（当前文件路径为 `src/components/ui/index.ts`）引入，不允许深链到组件子路径。
 - 所有颜色、间距、字号、圆角、阴影、动效必须来自 `src/styles/tokens.css`。
 - 业务代码禁止新增 `btn btn-*`、`input` 这类旧式全局 className；未迁移的遗留调用点只允许原样保留，不允许扩散。
 - PC / 移动差异默认由 token 或共享内部逻辑解决，业务代码不直接写 `matchMedia`。
@@ -122,7 +143,7 @@ Create this file exactly:
 
 | Component | Status | Legacy classes | Callers left | Last update |
 |---|---|---|---:|---|
-| Button | ⚫ not-started | `.btn .btn-*` | 29 | 2026-05-06 |
+| Button | ⚫ not-started | `.btn .btn-*` | 31 | 2026-05-06 |
 | IconButton | ⚫ not-started | `.btn` icon-only | — | — |
 | Input | ⚫ not-started | `.input` | — | — |
 | Textarea | ⚫ not-started | `.input.textarea` | — | — |
@@ -178,6 +199,7 @@ Expected: one new commit containing exactly the two new markdown files.
 - Create: `packages/web/src/components/ui/_internal/use-viewport.ts`
 - Create: `packages/web/src/components/ui/_internal/use-viewport.test.tsx`
 - Modify: `packages/web/src/hooks/use-viewport.ts`
+- Modify: `packages/web/src/hooks/use-viewport.test.ts`
 - Modify: `packages/web/src/app.test.tsx`
 
 **Goal:** One hook implementation, one combined media query, no immediate import churn in features.
@@ -299,17 +321,60 @@ it("renders MobileShell on wide coarse-pointer devices", () => {
 });
 ```
 
+Replace `packages/web/src/hooks/use-viewport.test.ts` with this exact compatibility test:
+
+```ts
+import { renderHook } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useViewport } from "./use-viewport";
+
+const VIEWPORT_QUERY = "(max-width: 899px), (pointer: coarse)";
+
+describe("useViewport compatibility re-export", () => {
+  let originalMatchMedia: typeof window.matchMedia;
+
+  beforeEach(() => {
+    originalMatchMedia = window.matchMedia;
+  });
+
+  afterEach(() => {
+    window.matchMedia = originalMatchMedia;
+  });
+
+  it("keeps wide coarse-pointer devices on the mobile branch through the legacy import path", () => {
+    const matchMedia = vi.fn((query: string) => ({
+      matches: query === VIEWPORT_QUERY,
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+    }));
+
+    window.matchMedia = matchMedia as unknown as typeof window.matchMedia;
+
+    const { result } = renderHook(() => useViewport());
+
+    expect(matchMedia).toHaveBeenCalledWith(VIEWPORT_QUERY);
+    expect(result.current).toBe("mobile");
+  });
+});
+```
+
 - [ ] **Step 2: Run the targeted tests and confirm they fail**
 
 ```bash
-pnpm --filter @coder-studio/web exec vitest run src/components/ui/_internal/use-viewport.test.tsx src/app.test.tsx
+pnpm --filter @coder-studio/web exec vitest run \
+  src/components/ui/_internal/use-viewport.test.tsx \
+  src/hooks/use-viewport.test.ts \
+  src/app.test.tsx
 ```
 
 Expected: FAIL.
 
 Accept either failure mode:
 - `Failed to resolve import "./use-viewport"` from the new test file, because the file does not exist yet
-- the updated coarse-pointer `app.test.tsx` assertion failing because the old hook still returns `desktop`
+- the updated compatibility test or updated coarse-pointer `app.test.tsx` assertion failing because the old hook still returns `desktop`
 
 Do not proceed until the suite is red.
 
@@ -374,7 +439,10 @@ export type { Viewport } from "../components/ui/_internal/use-viewport";
 - [ ] **Step 4: Run the targeted tests again and confirm they pass**
 
 ```bash
-pnpm --filter @coder-studio/web exec vitest run src/components/ui/_internal/use-viewport.test.tsx src/app.test.tsx
+pnpm --filter @coder-studio/web exec vitest run \
+  src/components/ui/_internal/use-viewport.test.tsx \
+  src/hooks/use-viewport.test.ts \
+  src/app.test.tsx
 ```
 
 Expected: PASS.
@@ -386,6 +454,7 @@ git add \
   packages/web/src/components/ui/_internal/use-viewport.ts \
   packages/web/src/components/ui/_internal/use-viewport.test.tsx \
   packages/web/src/hooks/use-viewport.ts \
+  packages/web/src/hooks/use-viewport.test.ts \
   packages/web/src/app.test.tsx
 git commit -m "refactor: centralize web viewport hook"
 ```
@@ -472,6 +541,16 @@ describe("Button", () => {
 
     await user.click(button);
     expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it("calls onClick when enabled", async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+
+    render(<Button onClick={onClick}>Run</Button>);
+
+    await user.click(screen.getByRole("button", { name: "Run" }));
+    expect(onClick).toHaveBeenCalledTimes(1);
   });
 
   it("renders leading and trailing icons", () => {
@@ -582,7 +661,7 @@ const ButtonContent = ({
 }: Pick<ButtonBaseProps, "children" | "leadingIcon" | "loading" | "trailingIcon">) => {
   return (
     <>
-      {loading ? <span aria-hidden="true" className={styles.spinner} /> : null}
+      {loading ? <span aria-hidden="true" className={clsx(styles.spinner, "animate-spin")} /> : null}
       {leadingIcon ? (
         <span aria-hidden="true" className={styles.icon}>
           {leadingIcon}
@@ -705,18 +784,19 @@ Create `packages/web/src/components/ui/button/index.module.css`:
     color var(--duration-normal) var(--ease-out),
     box-shadow var(--duration-normal) var(--ease-out),
     transform var(--duration-fast) var(--ease-out);
+  cursor: pointer;
 }
 
 .btn:focus-visible,
 :global(.btn):focus-visible {
   box-shadow:
-    0 0 0 2px var(--bg-page),
-    0 0 0 4px rgba(108, 182, 255, 0.35);
+    0 0 0 calc(var(--sp-1) / 2) var(--bg-page),
+    0 0 0 var(--sp-1) var(--border-focus);
 }
 
 .btn:hover:not(:disabled):not([aria-disabled="true"]),
 :global(.btn):hover:not(:disabled):not([aria-disabled="true"]) {
-  transform: translateY(-1px);
+  transform: translateY(calc(var(--sp-1) / -4));
 }
 
 .btn:disabled,
@@ -736,7 +816,7 @@ Create `packages/web/src/components/ui/button/index.module.css`:
 
 .primary:hover:not(:disabled):not([aria-disabled="true"]),
 :global(.btn-primary):hover:not(:disabled):not([aria-disabled="true"]) {
-  background: color-mix(in srgb, var(--accent-blue) 84%, white 16%);
+  background: color-mix(in srgb, var(--accent-blue) 84%, var(--bg-surface) 16%);
 }
 
 .secondary,
@@ -775,7 +855,7 @@ Create `packages/web/src/components/ui/button/index.module.css`:
 
 .sm,
 :global(.btn-sm) {
-  height: 24px;
+  height: var(--btn-height-sm);
   min-height: var(--touch-target-min);
   padding: 0 var(--sp-2);
   border-radius: var(--radius-sm);
@@ -784,7 +864,7 @@ Create `packages/web/src/components/ui/button/index.module.css`:
 
 .lg,
 :global(.btn-lg) {
-  height: 40px;
+  height: var(--btn-height-lg);
   min-height: var(--touch-target-min);
   padding: 0 var(--sp-6);
   border-radius: var(--radius-lg);
@@ -806,24 +886,23 @@ Create `packages/web/src/components/ui/button/index.module.css`:
 }
 
 .spinner {
-  width: 12px;
-  height: 12px;
-  border: 2px solid color-mix(in srgb, currentColor 30%, transparent 70%);
+  width: var(--sp-3);
+  height: var(--sp-3);
+  border: calc(var(--sp-1) / 2) solid color-mix(in srgb, currentColor 30%, var(--bg-page) 70%);
   border-top-color: currentColor;
   border-radius: var(--radius-full);
-  animation: spin 1s linear infinite;
 }
 ```
 
 Create `packages/web/src/components/ui/button/README.md`:
 
-```md
+````md
 # Button
 
 ## 使用
-```tsx
-import { Button } from "@/components/ui";
+从 `src/components/ui/index.ts` 的 public barrel 导入后使用：
 
+```tsx
 <Button variant="primary" size="md">保存</Button>
 ```
 
@@ -841,7 +920,7 @@ import { Button } from "@/components/ui";
 - `danger` 只用于破坏性操作。
 - `loading` 只会对原生 `<button>` 强制 `disabled`；对于 `<a>`，只会加 `aria-busy`。
 - 新代码不要再写 `btn btn-*`。
-```
+````
 
 Create `packages/web/src/components/ui/index.ts`:
 
@@ -893,11 +972,11 @@ pnpm --filter @coder-studio/web exec vitest run src/features/auth/index.test.tsx
 
 Expected: PASS.
 
-Do not add a new LoginPage test here. This is a behavior-preserving refactor, and the existing auth suite already exercises the submit button's enabled/disabled and submit behavior.
+Do not add a new LoginPage behavior test here. This is a behavior-preserving refactor, and the existing auth suite already exercises the submit button's enabled/disabled and submit behavior.
 
 - [ ] **Step 2: Replace the raw submit button with `<Button>` and update the migration docs**
 
-In `packages/web/src/features/auth/index.tsx`, add the new import directly below the atom imports:
+In `packages/web/src/features/auth/index.tsx`, add the new import directly below the atom imports. Use the current repo-relative path to the public barrel; do not deep-import from `components/ui/button`:
 
 ```tsx
 import { Button } from "../../components/ui";
@@ -933,15 +1012,15 @@ In `packages/web/src/components/ui/README.md`, replace the `## 已实现组件` 
 
 ```md
 ## 已实现组件
-| Component | Tier | Import | Notes |
+| Component | Tier | Public API | Notes |
 |---|---|---|---|
-| Button | 0 | `import { Button } from "@/components/ui"` | `primary / secondary / ghost / danger` × `sm / md / lg` |
+| Button | 0 | `src/components/ui/index.ts` named export only | `primary / secondary / ghost / danger` × `sm / md / lg` |
 ```
 
 In `packages/web/src/components/ui/MIGRATION.md`, update the `Button` row to this exact line:
 
 ```md
-| Button | 🟡 in-flight | `.btn .btn-*` | 28 | 2026-05-06 |
+| Button | 🟡 in-flight | `.btn .btn-*` | 30 | 2026-05-06 |
 ```
 
 - [ ] **Step 3: Verify the feature still behaves the same, and verify the caller count dropped by one**
@@ -955,12 +1034,26 @@ Expected: PASS.
 
 Then run:
 ```bash
-grep -rn 'className="btn[^\"]*"' /home/spencer/workspace/coder-studio/packages/web/src --include='*.tsx' | wc -l
+pnpm --filter @coder-studio/web exec sh -lc \
+  "rg -n 'className=.*(^|[^A-Za-z0-9_-])btn([^A-Za-z0-9_-]|$)' src --glob '*.tsx' | wc -l"
 ```
 
-Expected: `28`.
+Expected: `30`.
 
-- [ ] **Step 4: Commit the first real migration**
+- [ ] **Step 4: Capture the post-migration auth-preview screenshot and compare it to baseline**
+
+Run from repo root:
+```bash
+pnpm --dir e2e exec playwright screenshot --device="Desktop Chrome" \
+  "file://$(pwd)/packages/web/auth-preview.html" \
+  /tmp/ui-button-auth-submit-after.png
+```
+
+Expected: PASS, and `/tmp/ui-button-auth-submit-after.png` exists.
+
+Compare `/tmp/ui-button-auth-submit-before.png` and `/tmp/ui-button-auth-submit-after.png`. Accept only subpixel antialiasing drift. Reject spacing, height, radius, color, or alignment changes around `.auth-submit`.
+
+- [ ] **Step 5: Commit the first real migration**
 
 ```bash
 git add \
@@ -1000,7 +1093,13 @@ Expected: PASS.
 pnpm lint
 ```
 
-Expected: PASS.
+Expected: no errors, and no new diagnostics in touched files.
+
+Two pre-existing warnings are acceptable if they are still the only diagnostics:
+- `packages/web/src/features/terminal-panel/__tests__/xterm-host.test.tsx:1355`
+- `packages/web/src/features/terminal-panel/__tests__/xterm-host.test.tsx:1680`
+
+If lint output changes beyond those existing warnings, stop and investigate before continuing.
 
 - [ ] **Step 4: Review the final diff and verify scope stayed tight**
 
@@ -1015,6 +1114,7 @@ packages/web/package.json
 pnpm-lock.yaml
 packages/web/src/app.test.tsx
 packages/web/src/hooks/use-viewport.ts
+packages/web/src/hooks/use-viewport.test.ts
 packages/web/src/features/auth/index.tsx
 packages/web/src/components/ui/README.md
 packages/web/src/components/ui/MIGRATION.md
@@ -1036,8 +1136,10 @@ No other files should change in Plan 1A.
 ### Coverage check
 - `components/ui/` bootstrap docs: covered by Task 2 and Task 5
 - single `useViewport()` source of truth: covered by Task 3
+- legacy `src/hooks/use-viewport` import path remains covered after the behavioral change: covered by Task 1 and Task 3
 - first typed primitive `Button`: covered by Task 4
 - one real caller migration: covered by Task 5
+- visual before/after checkpoint for the reference migration: covered by Task 1 and Task 5
 - no `components.css` deletion yet: preserved by scope and verification in Task 6
 - TDD / characterization-first flow: Task 3 and Task 4 are red → green; Task 5 uses characterization tests for a pure refactor
 

@@ -8,7 +8,7 @@ interface PageHeaderProps {
   onBack?: () => void;
   backLabel?: string;
   backAriaLabel?: string;
-  kicker?: string | null;
+  kicker?: ReactNode;
   rightSlot?: ReactNode;
   titleAs?: PageHeaderTitleElement;
 }

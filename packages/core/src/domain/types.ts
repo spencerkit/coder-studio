@@ -103,9 +103,20 @@ export interface GitStatus {
   deleted: GitFileChange[];
 }
 
+export type GitChangeStatus = "added" | "modified" | "deleted" | "renamed" | "untracked";
+
 export interface GitFileChange {
   path: string;
   oldPath?: string; // for renames
+  status?: GitChangeStatus;
+}
+
+export interface GitCommitSummary {
+  sha: string;
+  shortSha: string;
+  subject: string;
+  authorName: string;
+  authoredAt: number;
 }
 
 export interface GitBranch {

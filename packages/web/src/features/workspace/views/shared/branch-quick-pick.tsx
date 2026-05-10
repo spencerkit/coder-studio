@@ -1,13 +1,36 @@
+import { useAtomValue, useSetAtom } from "jotai";
 import { Check, Plus } from "lucide-react";
-import { type KeyboardEvent, type MouseEvent, useEffect, useRef } from "react";
+import { type KeyboardEvent, type ReactElement, useEffect, useRef } from "react";
+import { EmptyState, Popover, Tag } from "../../../../components/ui";
 import { useViewport } from "../../../../hooks/use-viewport";
 import { useTranslation } from "../../../../lib/i18n";
 import { MobileSelectSheet } from "../../../mobile-select";
 import { useBranchQuickPickActions } from "../../actions/use-git-actions";
+import { branchQuickPickAtom } from "../../atoms";
 
-export function BranchQuickPick() {
-  const viewport = useViewport();
-  const t = useTranslation();
+const branchQuickPickEmptyStateStyle = {
+  minHeight: "auto",
+  padding: "var(--sp-8)",
+  gap: 0,
+};
+
+const branchQuickPickEmptyStateTitleStyle = {
+  margin: 0,
+  color: "var(--text-tertiary)",
+  fontWeight: "var(--font-normal)",
+};
+
+function BranchQuickPickEmptyState({ title }: { title: string }) {
+  return (
+    <EmptyState
+      className="branch-quick-pick-empty"
+      style={branchQuickPickEmptyStateStyle}
+      title={<p style={branchQuickPickEmptyStateTitleStyle}>{title}</p>}
+    />
+  );
+}
+
+function BranchQuickPickContent() {
   const {
     branchList,
     displayItems,
@@ -16,7 +39,6 @@ export function BranchQuickPick() {
     handleClose,
     handleRequestBranchCreate,
     inputValue,
-    quickPickState,
     selectedIndex,
     setInputValue,
     setPendingCreateBranchName,
@@ -27,13 +49,17 @@ export function BranchQuickPick() {
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (quickPickState.visible) {
+    const focusTimeout = window.setTimeout(() => {
       inputRef.current?.focus();
-    }
-  }, [quickPickState.visible]);
+    }, 0);
+
+    return () => {
+      window.clearTimeout(focusTimeout);
+    };
+  }, []);
 
   useEffect(() => {
-    if (viewport === "mobile" || !listRef.current) {
+    if (!listRef.current) {
       return;
     }
 
@@ -41,7 +67,7 @@ export function BranchQuickPick() {
       `.branch-quick-pick-item:nth-child(${selectedIndex + 1})`
     );
     selectedElement?.scrollIntoView({ block: "nearest" });
-  }, [selectedIndex, viewport]);
+  }, [selectedIndex]);
 
   const handleKeyDown = (event: KeyboardEvent) => {
     switch (event.key) {
@@ -73,96 +99,182 @@ export function BranchQuickPick() {
     }
   };
 
-  if (!quickPickState.visible) {
-    return null;
+  return (
+    <>
+      <div className="branch-quick-pick-search">
+        <input
+          ref={inputRef}
+          type="text"
+          className="branch-quick-pick-input"
+          placeholder="Search branches or create new branch..."
+          value={inputValue}
+          onChange={(event) => {
+            setInputValue(event.target.value);
+            setPendingCreateBranchName(null);
+            setSelectedIndex(0);
+          }}
+          onKeyDown={handleKeyDown}
+        />
+      </div>
+
+      <div className="branch-quick-pick-list" ref={listRef}>
+        {branchList.loading ? (
+          <BranchQuickPickEmptyState title="Loading branches..." />
+        ) : displayItems.length > 0 ? (
+          displayItems.map((item, index) => (
+            <div
+              key={item.type === "branch" ? item.branch?.name : "create"}
+              className={`branch-quick-pick-item ${
+                index === selectedIndex ? "branch-quick-pick-item-selected" : ""
+              }`}
+              onClick={() => {
+                if (item.type === "branch" && item.branch) {
+                  void handleBranchSelect(item.branch.name);
+                } else if (item.type === "create") {
+                  handleRequestBranchCreate(trimmedInput);
+                } else if (item.type === "confirm-create") {
+                  void handleBranchCreate(trimmedInput);
+                }
+              }}
+              onMouseEnter={() => setSelectedIndex(index)}
+            >
+              {item.type === "branch" && item.branch ? (
+                <>
+                  {item.branch.isCurrent && (
+                    <span className="branch-quick-pick-check">
+                      <Check size={14} />
+                    </span>
+                  )}
+
+                  <span className="branch-quick-pick-name">{item.branch.name}</span>
+
+                  {item.branch.isRemote && (
+                    <Tag color="neutral" caps={false} className="branch-quick-pick-badge">
+                      Remote
+                    </Tag>
+                  )}
+                </>
+              ) : (
+                <>
+                  <span className="branch-quick-pick-create-icon">
+                    <Plus size={14} />
+                  </span>
+                  <span className="branch-quick-pick-create-label">{item.label}</span>
+                </>
+              )}
+            </div>
+          ))
+        ) : (
+          <BranchQuickPickEmptyState
+            title={inputValue ? "No branches found" : "Type to search branches"}
+          />
+        )}
+      </div>
+
+      <div className="branch-quick-pick-hint">
+        <span>↑↓ Navigate</span>
+        <span>↵ Select</span>
+        <span>Esc Close</span>
+      </div>
+    </>
+  );
+}
+
+interface DesktopBranchQuickPickPopoverProps {
+  children: ReactElement;
+  workspaceId: string;
+  onOpenBranchSwitcher?: () => void;
+}
+
+export function DesktopBranchQuickPickPopover({
+  children,
+  workspaceId,
+  onOpenBranchSwitcher,
+}: DesktopBranchQuickPickPopoverProps) {
+  const viewport = useViewport();
+  const t = useTranslation();
+  const quickPickState = useAtomValue(branchQuickPickAtom);
+  const setQuickPick = useSetAtom(branchQuickPickAtom);
+
+  if (viewport === "mobile" || !onOpenBranchSwitcher) {
+    return children;
   }
 
-  if (viewport !== "mobile") {
-    const handleOverlayClick = (event: MouseEvent) => {
-      if (event.target === event.currentTarget) {
+  return (
+    <Popover
+      content={<BranchQuickPickContent />}
+      contentClassName="branch-quick-pick"
+      forceMode="desktop"
+      onOpenChange={(open) => {
+        if (open) {
+          onOpenBranchSwitcher();
+          return;
+        }
+
+        setQuickPick({
+          visible: false,
+          inputValue: "",
+        });
+      }}
+      open={quickPickState.visible && quickPickState.workspaceId === workspaceId}
+      title={t("git.branch")}
+    >
+      {children}
+    </Popover>
+  );
+}
+
+export function BranchQuickPick() {
+  const viewport = useViewport();
+  const t = useTranslation();
+  const {
+    branchList,
+    displayItems,
+    handleBranchCreate,
+    handleBranchSelect,
+    handleClose,
+    handleRequestBranchCreate,
+    inputValue,
+    quickPickState,
+    selectedIndex,
+    setInputValue,
+    setPendingCreateBranchName,
+    setSelectedIndex,
+    trimmedInput,
+  } = useBranchQuickPickActions();
+
+  const handleKeyDown = (event: KeyboardEvent) => {
+    switch (event.key) {
+      case "ArrowDown":
+        event.preventDefault();
+        setSelectedIndex((prev) => (prev < displayItems.length - 1 ? prev + 1 : prev));
+        break;
+      case "ArrowUp":
+        event.preventDefault();
+        setSelectedIndex((prev) => (prev > 0 ? prev - 1 : prev));
+        break;
+      case "Enter":
+        event.preventDefault();
+        if (displayItems[selectedIndex]) {
+          const item = displayItems[selectedIndex];
+          if (item.type === "branch" && item.branch) {
+            void handleBranchSelect(item.branch.name);
+          } else if (item.type === "create") {
+            handleRequestBranchCreate(trimmedInput);
+          } else if (item.type === "confirm-create") {
+            void handleBranchCreate(trimmedInput);
+          }
+        }
+        break;
+      case "Escape":
+        event.preventDefault();
         handleClose();
-      }
-    };
+        break;
+    }
+  };
 
-    return (
-      <div className="branch-quick-pick-overlay" onClick={handleOverlayClick}>
-        <div className="branch-quick-pick">
-          <div className="branch-quick-pick-search">
-            <input
-              ref={inputRef}
-              type="text"
-              className="branch-quick-pick-input"
-              placeholder="Search branches or create new branch..."
-              value={inputValue}
-              onChange={(event) => {
-                setInputValue(event.target.value);
-                setPendingCreateBranchName(null);
-                setSelectedIndex(0);
-              }}
-              onKeyDown={handleKeyDown}
-            />
-          </div>
-
-          <div className="branch-quick-pick-list" ref={listRef}>
-            {branchList.loading ? (
-              <div className="branch-quick-pick-empty">Loading branches...</div>
-            ) : displayItems.length > 0 ? (
-              displayItems.map((item, index) => (
-                <div
-                  key={item.type === "branch" ? item.branch?.name : "create"}
-                  className={`branch-quick-pick-item ${
-                    index === selectedIndex ? "branch-quick-pick-item-selected" : ""
-                  }`}
-                  onClick={() => {
-                    if (item.type === "branch" && item.branch) {
-                      void handleBranchSelect(item.branch.name);
-                    } else if (item.type === "create") {
-                      handleRequestBranchCreate(trimmedInput);
-                    } else if (item.type === "confirm-create") {
-                      void handleBranchCreate(trimmedInput);
-                    }
-                  }}
-                  onMouseEnter={() => setSelectedIndex(index)}
-                >
-                  {item.type === "branch" && item.branch ? (
-                    <>
-                      {item.branch.isCurrent && (
-                        <span className="branch-quick-pick-check">
-                          <Check size={14} />
-                        </span>
-                      )}
-
-                      <span className="branch-quick-pick-name">{item.branch.name}</span>
-
-                      {item.branch.isRemote && (
-                        <span className="branch-quick-pick-badge">Remote</span>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      <span className="branch-quick-pick-create-icon">
-                        <Plus size={14} />
-                      </span>
-                      <span className="branch-quick-pick-create-label">{item.label}</span>
-                    </>
-                  )}
-                </div>
-              ))
-            ) : (
-              <div className="branch-quick-pick-empty">
-                {inputValue ? "No branches found" : "Type to search branches"}
-              </div>
-            )}
-          </div>
-
-          <div className="branch-quick-pick-hint">
-            <span>↑↓ Navigate</span>
-            <span>↵ Select</span>
-            <span>Esc Close</span>
-          </div>
-        </div>
-      </div>
-    );
+  if (!quickPickState.visible || viewport !== "mobile") {
+    return null;
   }
 
   const selectedItem = displayItems[selectedIndex] ?? null;

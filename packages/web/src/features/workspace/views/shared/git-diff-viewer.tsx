@@ -1,6 +1,7 @@
 import { X } from "lucide-react";
 import type { FC } from "react";
 import { useMemo } from "react";
+import { EmptyState, IconButton, Tooltip } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { useGitDiffViewerActions } from "../../actions/use-git-actions";
 
@@ -66,19 +67,19 @@ export const GitDiffViewer: FC<GitDiffViewerProps> = ({
       <div className="code-editor workspace-git-editor">
         <div className="code-editor-header">
           <span className="code-file-path">
-            {preview?.path ?? "Select a changed file to inspect"}
+            {preview?.title ?? preview?.path ?? "Select a changed file to inspect"}
           </span>
           {preview && showCloseButton ? (
             <div className="code-mode-toggle">
-              <button
-                type="button"
-                className="code-mode-btn"
-                onClick={handleClose}
-                title={t("action.close")}
-                aria-label={t("action.close")}
-              >
-                <X size={12} />
-              </button>
+              <Tooltip content={t("action.close")}>
+                <IconButton
+                  aria-label={t("action.close")}
+                  className="code-mode-btn"
+                  icon={<X size={12} />}
+                  onClick={handleClose}
+                  size="sm"
+                />
+              </Tooltip>
             </div>
           ) : null}
         </div>
@@ -94,12 +95,15 @@ export const GitDiffViewer: FC<GitDiffViewerProps> = ({
               ))}
             </div>
           ) : (
-            <div className="git-diff-empty">
-              <p className="git-diff-empty-title">{t("label.git")}</p>
-              <p className="git-diff-empty-body">
-                Select a staged or modified file on the left to inspect its diff.
-              </p>
-            </div>
+            <EmptyState
+              className="git-diff-empty"
+              description={
+                <p className="git-diff-empty-body">
+                  Select a staged or modified file on the left to inspect its diff.
+                </p>
+              }
+              title={<p className="git-diff-empty-title">{t("label.git")}</p>}
+            />
           )}
         </div>
       </div>

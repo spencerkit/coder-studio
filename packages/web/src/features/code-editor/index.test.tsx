@@ -14,6 +14,14 @@ import {
 } from "../workspace/atoms";
 import { CodeEditorHost } from "./views/shared/code-editor-host";
 
+const viewportMocks = vi.hoisted(() => ({
+  value: "desktop" as "desktop" | "mobile",
+}));
+
+vi.mock("../../components/ui/_internal/use-viewport", () => ({
+  useViewport: () => viewportMocks.value,
+}));
+
 // Monaco is not happy in jsdom; stub it so we only assert our own chrome.
 vi.mock("./components/monaco-host", () => ({
   MonacoHost: ({ content }: { content: string }) => <div data-testid="monaco-host">{content}</div>,
@@ -78,6 +86,7 @@ function setupStore(options?: {
 describe("CodeEditorHost", () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    viewportMocks.value = "desktop";
   });
 
   it("fetches file contents via file.read when activeFile has no cached buffer", async () => {
@@ -116,6 +125,8 @@ describe("CodeEditorHost", () => {
     );
 
     expect(await screen.findByRole("alert")).toHaveTextContent("File not found");
+    expect(document.querySelector(".git-diff-empty")).toBeTruthy();
+    expect(screen.getByText("Failed to open file")).toHaveClass("git-diff-empty-title");
     expect(screen.queryByText(/connecting/i)).not.toBeInTheDocument();
   });
 
@@ -166,6 +177,11 @@ describe("CodeEditorHost", () => {
     expect(store.get(activeFilePathAtomFamily("ws-1"))).toBe("src/c.ts");
 
     const closeBtn = screen.getByRole("button", { name: "Close" });
+    expect(closeBtn).not.toHaveAttribute("title");
+
+    fireEvent.mouseEnter(closeBtn);
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Close");
+
     fireEvent.click(closeBtn);
 
     expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
@@ -232,6 +248,38 @@ describe("CodeEditorHost", () => {
     // Save button must be disabled for images (nothing to write back).
     const saveBtn = screen.getByRole("button", { name: "Save File" });
     expect(saveBtn).toBeDisabled();
+    expect(saveBtn).not.toHaveAttribute("title");
+
+    fireEvent.mouseEnter(saveBtn);
+    fireEvent.focus(saveBtn);
+    expect(screen.queryByRole("tooltip")).toBeNull();
+  });
+
+  it("shows the save tooltip on desktop for a text buffer", async () => {
+    const { store } = setupStore({
+      activePath: "src/save.ts",
+      openFiles: {
+        "src/save.ts": {
+          kind: "text",
+          path: "src/save.ts",
+          content: "content",
+          baseHash: "h",
+          isDirty: true,
+        },
+      },
+    });
+
+    render(
+      <Provider store={store}>
+        <CodeEditorHost />
+      </Provider>
+    );
+
+    const saveBtn = screen.getByRole("button", { name: "Save File" });
+    expect(saveBtn).not.toHaveAttribute("title");
+
+    fireEvent.mouseEnter(saveBtn);
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Save File");
   });
 
   it("reloads a clean text buffer after an external refresh signal changes the file on disk", async () => {
@@ -421,6 +469,11 @@ describe("CodeEditorHost", () => {
       expect(screen.getByTestId("image-preview")).toBeInTheDocument();
 
       const toggleBtn = screen.getByRole("button", { name: "Edit as text" });
+      expect(toggleBtn).not.toHaveAttribute("title");
+
+      fireEvent.mouseEnter(toggleBtn);
+      expect(screen.getByRole("tooltip")).toHaveTextContent("Edit as text");
+
       fireEvent.click(toggleBtn);
 
       // After the fetch resolves we should be viewing it in Monaco with the

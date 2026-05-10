@@ -1,0 +1,77 @@
+.triggerWrapper {
+  display: inline-flex;
+}
+
+.content {
+  position: fixed;
+  z-index: var(--z-dropdown);
+  min-width: 200px;
+  max-width: min(320px, calc(100vw - (var(--sp-4) * 2)));
+  padding: var(--sp-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-lg);
+}
+
+.menu {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  min-height: 44px;
+  padding: var(--sp-3);
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.item:hover,
+.item:focus-visible {
+  background: var(--bg-surface-hover);
+  outline: none;
+}
+
+.itemDanger {
+  color: var(--color-error);
+}
+
+.itemDanger:hover,
+.itemDanger:focus-visible {
+  background: color-mix(in srgb, var(--color-error) 10%, var(--bg-surface));
+}
+
+.itemDisabled {
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.itemDisabled:hover,
+.itemDisabled:focus-visible {
+  background: transparent;
+}
+
+.itemIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: inherit;
+}
+
+.itemLabel {
+  flex: 1 1 auto;
+  min-width: 0;
+}

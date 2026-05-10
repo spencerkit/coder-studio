@@ -134,6 +134,8 @@ describe("SettingsPage", () => {
     vi.clearAllMocks();
     routerMocks.navigate.mockReset();
     viewportMocks.viewport = "desktop";
+    window.localStorage.clear();
+    document.documentElement.removeAttribute("data-theme");
     notificationMocks.permission = "default";
     notificationMocks.requestPermission = vi.fn(async () => "default" as NotificationPermission);
     navigatorMocks.userAgent =
@@ -147,80 +149,6 @@ describe("SettingsPage", () => {
     window.history.replaceState({ idx: 0 }, "", "/settings");
   });
 
-  it("shows the config drift banner inside settings when codex findings exist", async () => {
-    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
-      if (op === "settings.get") {
-        return {
-          externalConfigAudit: {
-            codex: {
-              configPath: "/home/spencer/.codex/config.toml",
-              exists: true,
-              findings: [
-                {
-                  id: "toml_notify",
-                  type: "toml_notify",
-                  severity: "warn",
-                  startLine: 11,
-                  endLine: 14,
-                  snippet: 'notify = ["agent-notify", "codex"]',
-                  message: "top-level notify conflicts with injected notify",
-                },
-              ],
-            },
-          },
-        };
-      }
-      return {};
-    });
-    const store = createConnectedStore(sendCommand);
-
-    renderSettingsPage(store);
-
-    await waitFor(() => {
-      expect(screen.getByText("Codex 配置冲突（1 项）")).toBeInTheDocument();
-    });
-  });
-
-  it("keeps the embedded config drift banner detailed on mobile settings", async () => {
-    viewportMocks.viewport = "mobile";
-
-    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
-      if (op === "settings.get") {
-        return {
-          externalConfigAudit: {
-            codex: {
-              configPath: "/home/spencer/.codex/config.toml",
-              exists: true,
-              findings: [
-                {
-                  id: "toml_notify",
-                  type: "toml_notify",
-                  severity: "warn",
-                  startLine: 11,
-                  endLine: 14,
-                  snippet: 'notify = ["agent-notify", "codex"]',
-                  message: "top-level notify conflicts with injected notify",
-                },
-              ],
-            },
-          },
-        };
-      }
-      return {};
-    });
-    const store = createConnectedStore(sendCommand);
-
-    renderSettingsPage(store);
-
-    fireEvent.click(screen.getByRole("button", { name: "通用" }));
-
-    await waitFor(() => {
-      expect(screen.getByText("Codex 配置冲突（1 项）")).toBeInTheDocument();
-    });
-
-    expect(screen.getByRole("button", { name: "展开" })).toBeInTheDocument();
-  });
-
   it("shows an explicit error when settings loading fails", async () => {
     const sendCommand = vi.fn().mockRejectedValue(new Error("settings exploded"));
     const store = createConnectedStore(sendCommand);
@@ -231,7 +159,41 @@ describe("SettingsPage", () => {
       expect(screen.getByText("设置加载失败")).toBeInTheDocument();
     });
 
+    expect(screen.getByRole("alert")).toHaveClass(
+      "settings-page__notice",
+      "settings-page__notice--error"
+    );
+    expect(screen.getByText("设置加载失败")).toHaveClass("settings-page__notice-title");
     expect(screen.getByText("settings exploded")).toBeInTheDocument();
+    expect(screen.getByText("settings exploded")).toHaveClass("settings-page__notice-message");
+    expect(document.querySelector(".settings-page__notice-copy")).toBeTruthy();
+    const alert = screen.getByRole("alert");
+    expect(within(alert).getByRole("button", { name: "刷新" })).toHaveClass("settings-link");
+  });
+
+  it("refreshes settings when the load-error notice action is pressed", async () => {
+    const sendCommand = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("settings exploded"))
+      .mockResolvedValueOnce({});
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+
+    const refreshButton = await screen.findByRole("button", { name: "刷新" });
+    const callCountBeforeRefresh = sendCommand.mock.calls.length;
+
+    await act(async () => {
+      fireEvent.click(refreshButton);
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledTimes(callCountBeforeRefresh + 1);
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText("设置加载失败")).not.toBeInTheDocument();
+    });
   });
 
   it("renders the footer version from server metadata", () => {
@@ -266,6 +228,81 @@ describe("SettingsPage", () => {
     expect(screen.queryByText("选择默认的 Agent Provider")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Claude" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Codex" })).not.toBeInTheDocument();
+  });
+
+  it("renders the notification toggles as labeled switches and disables sound when notifications are off", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "notifications.enabled": false,
+          "notifications.soundEnabled": true,
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+
+    const notificationsSwitch = await screen.findByRole("switch", { name: "启用完成通知" });
+    const soundSwitch = screen.getByRole("switch", { name: "通知声音" });
+
+    expect(notificationsSwitch).toHaveAttribute("aria-checked", "false");
+    expect(soundSwitch).toHaveAttribute("aria-checked", "true");
+    expect(soundSwitch).toBeDisabled();
+  });
+
+  it("preserves notification settings update payloads when the switches are toggled", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "notifications.enabled": true,
+          "notifications.soundEnabled": true,
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+
+    fireEvent.click(await screen.findByRole("switch", { name: "启用完成通知" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            notifications: {
+              enabled: false,
+            },
+          },
+        },
+        undefined
+      );
+    });
+
+    fireEvent.click(screen.getByRole("switch", { name: "启用完成通知" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("switch", { name: "通知声音" })).toBeEnabled();
+    });
+
+    fireEvent.click(screen.getByRole("switch", { name: "通知声音" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            notifications: {
+              soundEnabled: false,
+            },
+          },
+        },
+        undefined
+      );
+    });
   });
 
   it("loads and saves supervisor evaluation timeout in seconds from general settings", async () => {
@@ -319,8 +356,26 @@ describe("SettingsPage", () => {
     const field = input.closest(".settings-config-field");
     const control = input.closest(".settings-config-control");
 
+    expect(input).toHaveClass("input", "settings-input-compact");
     expect(field).toHaveClass("settings-config-field--inline");
     expect(control).not.toBeNull();
+  });
+
+  it("renders the supervisor timeout control with shared input compatibility classes", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "supervisor.evaluationTimeoutSec": 600,
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+
+    const input = await screen.findByLabelText("Supervisor 超时（秒）");
+    expect(input).toHaveClass("input", "settings-input-compact");
   });
 
   it("does not save supervisor timeout for non-integer numeric strings", async () => {
@@ -520,6 +575,9 @@ describe("SettingsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Providers" }));
 
     await waitFor(() => {
+      expect(screen.getByRole("tablist", { name: "Providers" })).toBeInTheDocument();
+      expect(screen.getByRole("tab", { name: "Claude" })).toHaveAttribute("aria-selected", "true");
+      expect(screen.getByRole("tab", { name: "Claude" })).toHaveClass("settings-provider-tab");
       expect(screen.getByLabelText("启动命令参数")).toBeInTheDocument();
     });
 
@@ -531,7 +589,7 @@ describe("SettingsPage", () => {
 
     const argsInput = screen.getByLabelText("启动命令参数");
     expect(argsInput).toHaveValue("--verbose");
-    expect(argsInput).toHaveClass("settings-provider-args-input");
+    expect(argsInput).toHaveClass("input", "textarea", "settings-provider-args-input");
 
     fireEvent.change(argsInput, {
       target: {
@@ -568,7 +626,7 @@ describe("SettingsPage", () => {
       );
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Codex" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Codex" }));
 
     await waitFor(() => {
       expect(screen.getByLabelText("启动命令参数")).toHaveValue(
@@ -787,6 +845,322 @@ describe("SettingsPage", () => {
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "快捷键" })).toBeInTheDocument();
     });
+  });
+
+  it("renders appearance option groups through shared pills with group semantics", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "appearance.locale": "zh",
+          "appearance.terminalRenderer": "standard",
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "外观" }));
+
+    const darkThemePill = await screen.findByRole("button", { name: "深色" });
+    const lightThemePill = screen.getByRole("button", { name: "浅色" });
+    const standardRendererPill = screen.getByRole("button", { name: "标准" });
+    const chineseLanguagePill = screen.getByRole("button", { name: "中文" });
+
+    expect(
+      screen.getByRole("group", {
+        name: "主题",
+      })
+    ).toHaveAccessibleDescription("选择应用主题");
+    expect(
+      screen.getByRole("group", {
+        name: "终端渲染器",
+      })
+    ).toHaveAccessibleDescription("选择终端渲染模式");
+    expect(
+      screen.getByRole("group", {
+        name: "语言",
+      })
+    ).toHaveAccessibleDescription("选择界面语言");
+    expect(darkThemePill).toHaveClass("settings-pill", "settings-pill-active");
+    expect(darkThemePill).toHaveAttribute("aria-pressed", "true");
+    expect(lightThemePill).toHaveClass("settings-pill");
+    expect(lightThemePill).toHaveAttribute("aria-pressed", "false");
+    expect(standardRendererPill).toHaveAttribute("aria-pressed", "true");
+    expect(chineseLanguagePill).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("updates theme selection through the shared appearance pills", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {};
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "外观" }));
+    fireEvent.click(await screen.findByRole("button", { name: "浅色" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            appearance: {
+              theme: "light",
+            },
+          },
+        },
+        undefined
+      );
+    });
+
+    expect(document.documentElement).toHaveAttribute("data-theme", "light");
+    expect(screen.getByRole("button", { name: "浅色" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "深色" })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("updates terminal renderer selection through the shared appearance pills", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "appearance.terminalRenderer": "standard",
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "外观" }));
+    fireEvent.click(await screen.findByRole("button", { name: "兼容模式" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            appearance: {
+              terminalRenderer: "compatibility",
+            },
+          },
+        },
+        undefined
+      );
+    });
+
+    expect(screen.getByRole("button", { name: "兼容模式" })).toHaveClass(
+      "settings-pill",
+      "settings-pill-active"
+    );
+    expect(screen.getByRole("button", { name: "兼容模式" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(screen.getByRole("button", { name: "标准" })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("preserves terminal renderer selection when a stale settings load resolves afterward", async () => {
+    let resolveSettingsGet: ((value: Record<string, unknown>) => void) | undefined;
+    const settingsGetPromise = new Promise<Record<string, unknown>>((resolve) => {
+      resolveSettingsGet = resolve;
+    });
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return await settingsGetPromise;
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "外观" }));
+    fireEvent.click(await screen.findByRole("button", { name: "兼容模式" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            appearance: {
+              terminalRenderer: "compatibility",
+            },
+          },
+        },
+        undefined
+      );
+    });
+
+    await act(async () => {
+      resolveSettingsGet?.({
+        "appearance.locale": "zh",
+        "appearance.terminalRenderer": "standard",
+      });
+      await settingsGetPromise;
+    });
+
+    expect(screen.getByRole("button", { name: "兼容模式" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(screen.getByRole("button", { name: "标准" })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("updates language selection through the shared appearance pills", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "appearance.locale": "zh",
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "外观" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "中文" })).toHaveAttribute("aria-pressed", "true");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "English" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            appearance: {
+              locale: "en",
+            },
+          },
+        },
+        undefined
+      );
+    });
+
+    expect(screen.getByRole("button", { name: "English" })).toHaveClass(
+      "settings-pill",
+      "settings-pill-active"
+    );
+    expect(screen.getByRole("button", { name: "English" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "中文" })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("preserves language selection when a stale settings load resolves afterward", async () => {
+    let resolveSettingsGet: ((value: Record<string, unknown>) => void) | undefined;
+    const settingsGetPromise = new Promise<Record<string, unknown>>((resolve) => {
+      resolveSettingsGet = resolve;
+    });
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return await settingsGetPromise;
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "外观" }));
+    fireEvent.click(await screen.findByRole("button", { name: "English" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            appearance: {
+              locale: "en",
+            },
+          },
+        },
+        undefined
+      );
+    });
+
+    await act(async () => {
+      resolveSettingsGet?.({
+        "appearance.locale": "zh",
+        "appearance.terminalRenderer": "standard",
+      });
+      await settingsGetPromise;
+    });
+
+    expect(screen.getByRole("button", { name: "English" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "中文" })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("renders the shortcuts category chooser with shared tab semantics and legacy classes", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({});
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+
+    fireEvent.click(await screen.findByRole("button", { name: "快捷键" }));
+
+    expect(screen.getByRole("tablist", { name: "快捷键" })).toHaveClass("shortcuts-category-tabs");
+    expect(screen.getByRole("tab", { name: "全局" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "全局" })).toHaveClass("shortcuts-category-tab");
+  });
+
+  it("renders shortcut capture with shared input compatibility classes", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({});
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+
+    fireEvent.click(await screen.findByRole("button", { name: "快捷键" }));
+    fireEvent.click(screen.getByText("⌘+K"));
+
+    expect(screen.getByPlaceholderText("按下快捷键...")).toHaveClass("input", "shortcuts-capture");
+  });
+
+  it("uses the shared kbd primitive compatibility class and interactive semantics for shortcut bindings", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({});
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+
+    fireEvent.click(await screen.findByRole("button", { name: "快捷键" }));
+
+    expect(screen.getByText("⌘+K")).toHaveClass("shortcuts-key");
+    expect(screen.getByText("⌘+K").tagName).toBe("KBD");
+    expect(screen.getByText("⌘+K")).toHaveAttribute("role", "button");
+    expect(screen.getByText("⌘+K")).toHaveAttribute("tabindex", "0");
+  });
+
+  it("renders the shortcut reset action with icon button compatibility classes", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({});
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+
+    fireEvent.click(await screen.findByRole("button", { name: "快捷键" }));
+    fireEvent.click(screen.getByText("⌘+K"));
+    fireEvent.keyDown(screen.getByPlaceholderText("按下快捷键..."), {
+      key: "j",
+      metaKey: true,
+    });
+
+    expect(screen.getByRole("button", { name: "重置为默认" })).toHaveClass(
+      "btn",
+      "btn-ghost",
+      "btn-sm"
+    );
+  });
+
+  it("renders the reset-all shortcut action with shared button semantics", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({});
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+
+    fireEvent.click(await screen.findByRole("button", { name: "快捷键" }));
+
+    expect(screen.getByRole("button", { name: "重置全部" })).toHaveAttribute("type", "button");
   });
 
   it("prefers browser history when leaving the mobile settings root", async () => {

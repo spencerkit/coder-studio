@@ -88,6 +88,26 @@
 
 切换到 Git 标签可以看到当前分支名称和文件变更列表。文件前面的图标表示状态（新增、修改、删除等）。
 
+### 获取远程分支
+
+左侧面板标题里的分支名按钮会打开分支选择器，显示本地分支和远程分支。状态栏里的 **Fetch** 按钮会立即执行一次远程 `git fetch`，并刷新分支列表。
+
+当页面处于前台、且当前工作区正显示在界面上时，Coder Studio 还会为这个活动工作区周期性执行远程 fetch，用来让分支选择器里的远程分支保持最新。
+
+#### 高级：调整自动 fetch 周期
+
+高级设置键 `git.autofetchPeriodSec` 控制活动工作区的周期性远程 fetch，默认值是 `180` 秒；设为 `0` 会关闭周期性 fetch，但不会影响打开工作区时的自动 fetch，也不会影响手动点击 **Fetch**。
+
+当前设置页还没有这个高级键的图形化入口。如需手动调整，可以直接写入本地运行时数据库的 `user_settings` 表。默认数据库通常位于 `~/.coder-studio/data/coder-studio.db`；如果你通过 `coder-studio config --data-dir ...` 改过数据目录，请使用你自己的数据库路径。
+
+```bash
+sqlite3 ~/.coder-studio/data/coder-studio.db "
+INSERT INTO user_settings (key, value)
+VALUES ('git.autofetchPeriodSec', '60')
+ON CONFLICT(key) DO UPDATE SET value = excluded.value;
+"
+```
+
 ### 查看变更内容
 
 点击 Git 列表中的某个文件，中央区域会显示差异视图。

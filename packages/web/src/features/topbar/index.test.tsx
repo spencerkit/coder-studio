@@ -1,5 +1,5 @@
 import type { Workspace } from "@coder-studio/core";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../atoms/app-ui";
@@ -15,6 +15,10 @@ const routerMocks = vi.hoisted(() => ({
   navigate: vi.fn(),
 }));
 
+const viewportMocks = vi.hoisted(() => ({
+  value: "desktop" as "desktop" | "mobile",
+}));
+
 vi.mock("react-router-dom", async () => {
   const actual = await vi.importActual<typeof import("react-router-dom")>("react-router-dom");
   return {
@@ -22,6 +26,10 @@ vi.mock("react-router-dom", async () => {
     useNavigate: () => routerMocks.navigate,
   };
 });
+
+vi.mock("../../components/ui/_internal/use-viewport", () => ({
+  useViewport: () => viewportMocks.value,
+}));
 
 vi.mock("./components/connection-status", () => ({
   ConnectionStatus: () => <div data-testid="connection-status" />,
@@ -57,10 +65,12 @@ function createWorkspace(id: string, path: string): Workspace {
 describe("TopBar", () => {
   beforeEach(() => {
     routerMocks.navigate.mockReset();
+    viewportMocks.value = "desktop";
   });
 
   it("renders tabs in workspace order and highlights the resolved active workspace", () => {
     const store = createStore();
+    store.set(localeAtom, "en");
     store.set(workspacesAtom, {
       "ws-a": createWorkspace("ws-a", "/tmp/a"),
       "ws-b": createWorkspace("ws-b", "/tmp/b"),
@@ -79,6 +89,7 @@ describe("TopBar", () => {
     expect(tabs.map((tab) => tab.textContent)).toEqual(["ws-b", "ws-a"]);
     expect(tabs[0]?.getAttribute("data-active")).toBe("true");
     expect(tabs[1]?.getAttribute("data-active")).toBe("false");
+    expect(screen.getByRole("tablist", { name: "Workspace tabs" })).toBeInTheDocument();
   });
 
   it("uses translated labels when locale is set to en", () => {
@@ -92,9 +103,56 @@ describe("TopBar", () => {
       </Provider>
     );
 
-    expect(screen.getByText("No workspace open")).toBeInTheDocument();
+    const emptyState = screen.getByText("No workspace open").closest(".topbar-empty-state");
+
+    expect(emptyState).not.toBeNull();
+    expect(emptyState).toHaveTextContent("No workspace open");
     expect(screen.getByRole("button", { name: "Quick Actions" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
+  });
+
+  it("shows shared tooltip content for bounded topbar actions on desktop without changing button names", () => {
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(workspacesLoadStateAtom, "ready");
+
+    render(
+      <Provider store={store}>
+        <TopBar />
+      </Provider>
+    );
+
+    const addWorkspace = screen.getByRole("button", { name: "New workspace" });
+    const settings = screen.getByRole("button", { name: "Settings" });
+
+    expect(addWorkspace).not.toHaveAttribute("title");
+    expect(settings).not.toHaveAttribute("title");
+
+    fireEvent.mouseEnter(addWorkspace);
+    expect(screen.getByRole("tooltip")).toHaveTextContent("New workspace");
+    fireEvent.mouseLeave(addWorkspace);
+
+    fireEvent.focus(settings);
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Settings");
+  });
+
+  it("does not render tooltip overlays for bounded topbar actions on mobile/coarse viewports", () => {
+    viewportMocks.value = "mobile";
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(workspacesLoadStateAtom, "ready");
+
+    render(
+      <Provider store={store}>
+        <TopBar />
+      </Provider>
+    );
+
+    const addWorkspace = screen.getByRole("button", { name: "New workspace" });
+    fireEvent.mouseEnter(addWorkspace);
+    fireEvent.focus(addWorkspace);
+
+    expect(screen.queryByRole("tooltip")).toBeNull();
   });
 
   it("marks terminal and files toggles with explicit active and muted states", () => {
@@ -129,6 +187,26 @@ describe("TopBar", () => {
 
     expect(screen.getByRole("button", { name: "Hide Terminal" })).toHaveClass("topbar-btn--active");
     expect(screen.getByRole("button", { name: "Show Files" })).toHaveClass("topbar-btn--muted");
+  });
+
+  it("preserves shared IconButton compatibility classes on bounded icon-only topbar actions", () => {
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(workspacesLoadStateAtom, "ready");
+    store.set(terminalPanelVisibleAtom, false);
+    store.set(sidebarCollapsedAtom, false);
+
+    render(
+      <Provider store={store}>
+        <TopBar />
+      </Provider>
+    );
+
+    expect(screen.getByRole("button", { name: "New workspace" })).toHaveClass("btn", "btn-ghost");
+    expect(screen.getByRole("button", { name: "Show Terminal" })).toHaveClass("btn", "btn-ghost");
+    expect(screen.getByRole("button", { name: "Hide Files" })).toHaveClass("btn", "btn-ghost");
+    expect(screen.getByRole("button", { name: "Settings" })).toHaveClass("btn", "btn-ghost");
+    expect(screen.getByRole("button", { name: "Quick Actions" })).not.toHaveClass("btn");
   });
 
   it("renders the fullscreen toggle immediately to the right of settings when supported", () => {

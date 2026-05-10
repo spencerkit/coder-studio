@@ -4,7 +4,12 @@ import { createStore, Provider } from "jotai";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../../../atoms/app-ui";
 import { wsClientAtom } from "../../../../atoms/connection";
-import { activeWorkspaceIdAtom } from "../../../../atoms/workspaces";
+import {
+  activeWorkspaceIdAtom,
+  workspaceOrderAtom,
+  workspacesAtom,
+  workspacesLoadStateAtom,
+} from "../../../../atoms/workspaces";
 import { WorktreeModal } from "./worktree-modal";
 
 const viewportMocks = vi.hoisted(() => ({
@@ -22,6 +27,22 @@ const worktree: WorktreeInfo = {
   commit: "abc1234",
   status: "dirty",
 };
+
+function createWorkspace(id: string) {
+  return {
+    id,
+    name: id,
+    path: `/tmp/${id}`,
+    targetRuntime: "native" as const,
+    openedAt: 1,
+    lastActiveAt: 1,
+    uiState: {
+      leftPanelWidth: 280,
+      bottomPanelHeight: 200,
+      focusMode: false,
+    },
+  };
+}
 
 describe("WorktreeModal", () => {
   afterEach(() => {
@@ -55,7 +76,7 @@ describe("WorktreeModal", () => {
 
     render(
       <Provider store={store}>
-        <WorktreeModal worktree={worktree} onClose={vi.fn()} />
+        <WorktreeModal workspaceId="ws-1" worktree={worktree} onClose={vi.fn()} />
       </Provider>
     );
 
@@ -68,12 +89,131 @@ describe("WorktreeModal", () => {
 
     expect(document.querySelector(".modal-overlay")).toBeTruthy();
     expect(document.querySelector(".mobile-sheet")).toBeNull();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(screen.getByText("Latest Commit")).toBeInTheDocument();
     expect(screen.getByText("abc1234")).toBeInTheDocument();
     expect(screen.getByText("Initial mobile sheet setup")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Close" })).toHaveClass("btn", "btn-ghost", "btn-sm");
   });
 
-  it("renders inside MobileSheet on mobile and still loads data when tabs change", async () => {
+  it("keeps the large modal size and tab content on desktop viewports", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({
+      status: {
+        branch: "feature/mobile-sheet",
+        ahead: 0,
+        behind: 0,
+        headSha: "abc1234567890",
+        headShortSha: "abc1234",
+        headSubject: "Initial mobile sheet setup",
+        staged: [],
+        modified: [],
+        untracked: [],
+        deleted: [],
+      },
+    });
+
+    const store = createStore();
+    const workspace = createWorkspace("ws-1");
+    store.set(localeAtom, "en");
+    store.set(activeWorkspaceIdAtom, "ws-1");
+    store.set(workspacesAtom, {
+      [workspace.id]: workspace,
+    });
+    store.set(workspaceOrderAtom, [workspace.id]);
+    store.set(workspacesLoadStateAtom, "ready");
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <WorktreeModal worktree={worktree} onClose={vi.fn()} />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith("worktree.status", {
+        workspaceId: "ws-1",
+        worktreePath: "/tmp/coder-studio-feature",
+      });
+    });
+
+    expect(screen.getByRole("dialog")).toHaveClass("modal-card", "modal-card-lg");
+    expect(screen.getByRole("tablist", { name: "Worktree" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Status" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Status" })).toHaveClass("worktree-tab", "active");
+    expect(screen.getByText("Latest Commit")).toBeInTheDocument();
+  });
+
+  it("does not render without an explicit workspace until the workspace list is ready", () => {
+    const store = createStore();
+    const workspace = createWorkspace("ws-1");
+
+    store.set(localeAtom, "en");
+    store.set(activeWorkspaceIdAtom, workspace.id);
+    store.set(workspacesAtom, {
+      [workspace.id]: workspace,
+    });
+    store.set(workspaceOrderAtom, [workspace.id]);
+    store.set(workspacesLoadStateAtom, "loading");
+
+    const { container } = render(
+      <Provider store={store}>
+        <WorktreeModal worktree={worktree} onClose={vi.fn()} />
+      </Provider>
+    );
+
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("falls back to the first ordered workspace when the requested workspace is missing", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({
+      status: {
+        branch: "feature/mobile-sheet",
+        ahead: 0,
+        behind: 0,
+        headSha: "abc1234567890",
+        headShortSha: "abc1234",
+        headSubject: "Initial mobile sheet setup",
+        staged: [],
+        modified: [],
+        untracked: [],
+        deleted: [],
+      },
+    });
+
+    const store = createStore();
+    const fallbackWorkspace = createWorkspace("ws-fallback");
+    const otherWorkspace = createWorkspace("ws-other");
+    store.set(localeAtom, "en");
+    store.set(activeWorkspaceIdAtom, "ws-missing");
+    store.set(workspacesAtom, {
+      [fallbackWorkspace.id]: fallbackWorkspace,
+      [otherWorkspace.id]: otherWorkspace,
+    });
+    store.set(workspaceOrderAtom, [fallbackWorkspace.id, otherWorkspace.id]);
+    store.set(workspacesLoadStateAtom, "ready");
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <WorktreeModal worktree={worktree} onClose={vi.fn()} />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith("worktree.status", {
+        workspaceId: fallbackWorkspace.id,
+        worktreePath: "/tmp/coder-studio-feature",
+      });
+    });
+  });
+
+  it("renders inside shared Sheet on mobile and still loads data when tabs change", async () => {
     viewportMocks.viewport = "mobile";
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "worktree.status") {
@@ -118,7 +258,7 @@ describe("WorktreeModal", () => {
 
     render(
       <Provider store={store}>
-        <WorktreeModal worktree={worktree} onClose={vi.fn()} />
+        <WorktreeModal workspaceId="ws-1" worktree={worktree} onClose={vi.fn()} />
       </Provider>
     );
 
@@ -131,8 +271,11 @@ describe("WorktreeModal", () => {
 
     expect(document.querySelector(".mobile-sheet")).toBeTruthy();
     expect(document.querySelector(".modal-overlay")).toBeNull();
+    expect(
+      document.querySelector(".mobile-worktree-sheet__content .worktree-content")
+    ).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Diff" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Diff" }));
 
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith("worktree.diff", {
@@ -170,7 +313,7 @@ describe("WorktreeModal", () => {
 
     render(
       <Provider store={store}>
-        <WorktreeModal worktree={worktree} onClose={vi.fn()} />
+        <WorktreeModal workspaceId="ws-1" worktree={worktree} onClose={vi.fn()} />
       </Provider>
     );
 
@@ -181,7 +324,7 @@ describe("WorktreeModal", () => {
       });
     });
 
-    expect(screen.getByRole("button", { name: "状态" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "状态" })).toBeInTheDocument();
     expect(screen.getByText("路径")).toBeInTheDocument();
     expect(screen.getByText("最新提交")).toBeInTheDocument();
     expect(screen.getByText("初始移动端面板")).toBeInTheDocument();

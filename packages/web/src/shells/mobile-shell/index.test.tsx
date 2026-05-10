@@ -1,10 +1,10 @@
 import type { Session } from "@coder-studio/core";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createStore, Provider } from "jotai";
 import type { ReactNode } from "react";
 import { MemoryRouter, useLocation } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   authenticatedAtom,
   commandPaletteOpenAtom,
@@ -65,6 +65,7 @@ vi.mock("../../features/workspace/views/shared/branch-quick-pick", async () => {
       const quickPick = useAtomValue(branchQuickPickAtom);
       return quickPick.visible ? <div data-testid="branch-quick-pick-overlay-mock" /> : null;
     },
+    DesktopBranchQuickPickPopover: ({ children }: { children: ReactNode }) => children,
   };
 });
 
@@ -74,10 +75,6 @@ vi.mock("../../features/auth", () => ({
 
 vi.mock("../../features/not-found", () => ({
   NotFoundPage: () => <div>Page not found</div>,
-}));
-
-vi.mock("../../features/config-drift-banner", () => ({
-  ConfigDriftBanner: () => null,
 }));
 
 vi.mock("../../features/agent-panes", () => ({
@@ -556,6 +553,19 @@ function renderMobileShell({
   return { store, sendCommand, sendTerminalInput, ...view };
 }
 
+beforeEach(() => {
+  window.matchMedia = vi.fn((query: string) => ({
+    matches: query === "(max-width: 899px), (pointer: coarse)",
+    media: query,
+    onchange: null,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+  })) as unknown as typeof window.matchMedia;
+});
+
 afterEach(() => {
   Object.defineProperty(window, "visualViewport", {
     configurable: true,
@@ -592,13 +602,54 @@ describe("MobileShell Phase 2 workspace", () => {
     expect(screen.queryByRole("textbox", { name: "Agent composer" })).not.toBeInTheDocument();
   });
 
+  it("renders the shared workspace footer below the mobile dock", async () => {
+    const sendCommand = vi.fn(async (op: string) => {
+      if (op === "session.list") {
+        return [];
+      }
+
+      if (op === "git.status") {
+        return {
+          branch: "feature/mobile-footer",
+          ahead: 1,
+          behind: 0,
+          staged: [],
+          modified: [{ path: "src/app.tsx", status: "modified" }],
+          deleted: [],
+          untracked: [],
+        };
+      }
+
+      return undefined;
+    });
+
+    renderMobileShell({ initialEntry: "/workspace", sendCommand });
+
+    await waitFor(() => {
+      expect(
+        document.querySelector(".mobile-shell__bottom-stack .git-panel-status-strip__branch-text")
+      ).toHaveTextContent("feature/mobile-footer");
+    });
+
+    expect(
+      document.querySelector(".mobile-shell__bottom-stack .workspace-status-bar")
+    ).not.toBeNull();
+    expect(
+      document.querySelector(".mobile-shell__bottom-stack .git-panel-status-strip__branch-text")
+    ).toHaveTextContent("feature/mobile-footer");
+    expect(document.querySelector(".mobile-shell__bottom-stack")?.lastElementChild).toHaveClass(
+      "workspace-status-bar"
+    );
+  });
+
   it("opens and closes the files sheet", async () => {
     const user = userEvent.setup();
     renderMobileShell({ initialEntry: "/workspace" });
 
     await user.click(screen.getByRole("button", { name: "Open Files sheet" }));
 
-    expect(screen.getByRole("tab", { name: "Files" })).toBeInTheDocument();
+    expect(screen.getByRole("tablist", { name: "Files sheet tabs" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Files" })).toHaveAttribute("aria-selected", "true");
     expect(screen.queryByRole("button", { name: "Close current sheet" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /back|返回/i }));
@@ -606,45 +657,47 @@ describe("MobileShell Phase 2 workspace", () => {
     expect(screen.queryByRole("tab", { name: "Files" })).not.toBeInTheDocument();
   });
 
-  it("shows the current branch name in the files sheet", async () => {
-    const user = userEvent.setup();
+  it("shows the current branch name in the shared workspace footer", async () => {
     const { store } = renderMobileShell({ initialEntry: "/workspace" });
 
-    store.set(gitStateAtomFamily("ws-1"), {
-      branch: "feature/mobile-branch-pill",
-      ahead: 0,
-      behind: 0,
-      staged: [],
-      modified: [],
-      deleted: [],
-      untracked: [],
+    act(() => {
+      store.set(gitStateAtomFamily("ws-1"), {
+        branch: "feature/mobile-branch-pill",
+        ahead: 0,
+        behind: 0,
+        staged: [],
+        modified: [],
+        deleted: [],
+        untracked: [],
+      });
     });
-
-    await user.click(screen.getByRole("button", { name: "Open Files sheet" }));
 
     expect(
-      screen.getByRole("button", { name: "Current Branch: feature/mobile-branch-pill" })
-    ).toBeInTheDocument();
+      document.querySelector(".mobile-shell__bottom-stack .git-panel-status-strip__branch-text")
+    ).toHaveTextContent("feature/mobile-branch-pill");
   });
 
-  it("opens branch quick pick from the mobile branch pill", async () => {
+  it("opens branch quick pick from the shared mobile footer", async () => {
     const user = userEvent.setup();
     const { store } = renderMobileShell({ initialEntry: "/workspace" });
 
-    store.set(gitStateAtomFamily("ws-1"), {
-      branch: "feature/mobile-branch-pill",
-      ahead: 0,
-      behind: 0,
-      staged: [],
-      modified: [],
-      deleted: [],
-      untracked: [],
+    act(() => {
+      store.set(gitStateAtomFamily("ws-1"), {
+        branch: "feature/mobile-branch-pill",
+        ahead: 0,
+        behind: 0,
+        staged: [],
+        modified: [],
+        deleted: [],
+        untracked: [],
+      });
     });
 
-    await user.click(screen.getByRole("button", { name: "Open Files sheet" }));
-    await user.click(
-      screen.getByRole("button", { name: "Current Branch: feature/mobile-branch-pill" })
+    const branchButton = document.querySelector(
+      ".mobile-shell__bottom-stack .git-panel-status-strip__branch"
     );
+    expect(branchButton).not.toBeNull();
+    await user.click(branchButton as HTMLElement);
 
     expect(store.get(branchQuickPickAtom)).toEqual({
       visible: true,
@@ -751,38 +804,70 @@ describe("MobileShell Phase 2 workspace", () => {
     });
   });
 
-  it("shows a direct settings entry instead of a more-actions menu", async () => {
+  it("shows a more-actions trigger instead of a direct settings entry", async () => {
     renderMobileShell({ initialEntry: "/workspace" });
 
-    expect(screen.getByRole("button", { name: "Open settings" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Open more actions" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Open quick actions" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open more actions" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open settings" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Quick Actions" })).not.toBeInTheDocument();
   });
 
-  it("opens settings directly from the mobile topbar", async () => {
+  it("preserves shared IconButton compatibility classes on mobile topbar icon-only triggers", async () => {
+    removeFullscreenApiForMobileShell();
+    renderMobileShell({ initialEntry: "/workspace" });
+
+    expect(screen.getByRole("button", { name: "Open more actions" })).toHaveClass(
+      "btn",
+      "btn-ghost",
+      "mobile-topbar__icon-button"
+    );
+    expect(screen.getByRole("button", { name: "Enter Fullscreen" })).toHaveClass(
+      "btn",
+      "btn-ghost",
+      "mobile-topbar__icon-button"
+    );
+  });
+
+  it("opens settings from the mobile topbar action menu", async () => {
     const user = userEvent.setup();
     renderMobileShell({ initialEntry: "/workspace" });
 
-    await user.click(screen.getByRole("button", { name: "Open settings" }));
+    await user.click(screen.getByRole("button", { name: "Open more actions" }));
+    expect(screen.getByRole("region", { name: "More Actions sheet" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("menuitem", { name: "Settings" }));
 
     expect(screen.getByText("SettingsPage")).toBeInTheDocument();
   });
 
-  it("shows a fullscreen toggle to the right of settings when the browser supports fullscreen", async () => {
+  it("opens quick actions from the mobile topbar action menu", async () => {
+    const user = userEvent.setup();
+    const { store } = renderMobileShell({ initialEntry: "/workspace" });
+
+    expect(store.get(commandPaletteOpenAtom)).toBe(false);
+
+    await user.click(screen.getByRole("button", { name: "Open more actions" }));
+    await user.click(screen.getByRole("menuitem", { name: "Quick Actions" }));
+
+    expect(store.get(commandPaletteOpenAtom)).toBe(true);
+    expect(screen.queryByRole("region", { name: "More Actions sheet" })).toBeNull();
+  });
+
+  it("shows a fullscreen toggle to the right of the more-actions trigger when the browser supports fullscreen", async () => {
     installFullscreenApiForMobileShell();
     renderMobileShell({ initialEntry: "/workspace" });
 
-    const settingsButton = screen.getByRole("button", { name: "Open settings" });
+    const moreActionsButton = screen.getByRole("button", { name: "Open more actions" });
     const fullscreenButton = await screen.findByRole("button", { name: "Enter Fullscreen" });
 
-    expect(settingsButton.nextElementSibling).toBe(fullscreenButton);
+    expect(moreActionsButton.parentElement?.nextElementSibling).toBe(fullscreenButton);
   });
 
   it("keeps the fullscreen toggle visible on mobile when the browser does not support fullscreen", async () => {
     removeFullscreenApiForMobileShell();
     renderMobileShell({ initialEntry: "/workspace" });
 
-    expect(screen.getByRole("button", { name: "Open settings" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open more actions" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Enter Fullscreen" })).toBeInTheDocument();
   });
 
@@ -824,7 +909,27 @@ describe("MobileShell Phase 2 workspace", () => {
     expect(screen.queryByRole("button", { name: "Switch workspace" })).not.toBeInTheDocument();
   });
 
-  it("does not bootstrap workspaces from / on mobile when auth is enabled and user is unauthenticated", () => {
+  it("shows a shared loading shell on mobile while auth status is still unknown", () => {
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(authEnabledAtom, null);
+    store.set(authenticatedAtom, false);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/"]}>
+          <MobileShell />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    expect(screen.getByText("正在连接工作区...")).toBeInTheDocument();
+    expect(document.querySelector(".app-loading-shell")).toBeTruthy();
+    expect(screen.getByText("CODER STUDIO").closest(".app-loading-card")).toBeTruthy();
+    expect(screen.queryByText("LoginPage")).not.toBeInTheDocument();
+  });
+
+  it("does not bootstrap workspaces from / on mobile before redirecting to /login when auth is enabled and user is unauthenticated", async () => {
     const sendCommand = vi.fn();
     const store = createStore();
     store.set(connectionStatusAtom, "connected");
@@ -855,9 +960,11 @@ describe("MobileShell Phase 2 workspace", () => {
       </Provider>
     );
 
-    expect(screen.getByText("WelcomePage")).toBeInTheDocument();
-    expect(screen.getByTestId("location-display")).toHaveTextContent("/");
-    expect(sendCommand).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(screen.getByText("LoginPage")).toBeInTheDocument();
+      expect(screen.getByTestId("location-display")).toHaveTextContent("/login");
+      expect(sendCommand).not.toHaveBeenCalled();
+    });
   });
 
   it("keeps the explicit /login route on mobile when auth is enabled and user is unauthenticated", async () => {
@@ -914,7 +1021,7 @@ describe("MobileShell Phase 2 workspace", () => {
     expect(screen.getByText("Page not found")).toBeInTheDocument();
   });
 
-  it("does not rewrite /auth to /login on mobile when auth is required and user is unauthenticated", async () => {
+  it("rewrites /auth to /login on mobile when auth is required and user is unauthenticated", async () => {
     const store = createStore();
     store.set(connectionStatusAtom, "connected");
     store.set(authEnabledAtom, true);
@@ -930,9 +1037,8 @@ describe("MobileShell Phase 2 workspace", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("Page not found")).toBeInTheDocument();
-      expect(screen.getByTestId("location-display")).toHaveTextContent("/auth");
-      expect(screen.queryByText("LoginPage")).not.toBeInTheDocument();
+      expect(screen.getByText("LoginPage")).toBeInTheDocument();
+      expect(screen.getByTestId("location-display")).toHaveTextContent("/login");
     });
   });
 
@@ -1448,7 +1554,9 @@ describe("MobileShell Phase 2 workspace", () => {
 
     expect(screen.getByTestId("mobile-session-card")).toHaveTextContent("sess_2");
 
-    store.set(pendingFocusSessionAtom, "sess_1");
+    await act(async () => {
+      store.set(pendingFocusSessionAtom, "sess_1");
+    });
 
     await waitFor(() => {
       expect(screen.getByTestId("mobile-session-card")).toHaveTextContent("sess_1");
@@ -1462,12 +1570,16 @@ describe("MobileShell Phase 2 workspace", () => {
       expect(store.get(visibleMobileSessionIdAtom)).toBe("sess_2");
     });
 
-    store.set(pendingFocusSessionAtom, "sess_1");
+    await act(async () => {
+      store.set(pendingFocusSessionAtom, "sess_1");
+    });
 
     await waitFor(() => {
       expect(screen.getByTestId("mobile-session-card")).toHaveTextContent("sess_1");
     });
-    expect(store.get(visibleMobileSessionIdAtom)).toBe("sess_1");
+    await waitFor(() => {
+      expect(store.get(visibleMobileSessionIdAtom)).toBe("sess_1");
+    });
 
     unmount();
 
@@ -1786,9 +1898,23 @@ describe("MobileShell Phase 2 workspace", () => {
 
     await user.click(screen.getByRole("button", { name: "Open Files sheet" }));
     await user.click(screen.getByRole("tab", { name: "Git" }));
+    expect(screen.getByRole("tab", { name: "Git" })).toHaveAttribute("aria-selected", "true");
     await user.click(screen.getByRole("button", { name: "mock-git-panel" }));
 
     expect(screen.getByTestId("mobile-git-diff-viewer")).toBeInTheDocument();
+  });
+
+  it("shows file actions in the tab row only on the files tab", async () => {
+    const user = userEvent.setup();
+    renderMobileShell();
+
+    await user.click(screen.getByRole("button", { name: "Open Files sheet" }));
+    expect(screen.getByRole("button", { name: /^new file$|^新建文件$/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /refresh|刷新/i })).toBeNull();
+
+    await user.click(screen.getByRole("tab", { name: "Git" }));
+
+    expect(screen.queryByRole("button", { name: /^new file$|^新建文件$/i })).toBeNull();
   });
 
   it("returns to the session content when closing the diff viewer", async () => {
@@ -1797,6 +1923,7 @@ describe("MobileShell Phase 2 workspace", () => {
 
     await user.click(screen.getByRole("button", { name: "Open Files sheet" }));
     await user.click(screen.getByRole("tab", { name: "Git" }));
+    expect(screen.getByRole("tab", { name: "Git" })).toHaveAttribute("aria-selected", "true");
     await user.click(screen.getByRole("button", { name: "mock-git-panel" }));
 
     expect(screen.getByTestId("mobile-git-diff-viewer")).toBeInTheDocument();
@@ -1816,6 +1943,7 @@ describe("MobileShell Phase 2 workspace", () => {
 
     await user.click(screen.getByRole("button", { name: "Open Files sheet" }));
     await user.click(screen.getByRole("tab", { name: "Git" }));
+    expect(screen.getByRole("tab", { name: "Git" })).toHaveAttribute("aria-selected", "true");
 
     store.set(gitDiffPreviewAtomFamily("ws-1"), {
       path: "src/app.tsx",

@@ -12,9 +12,10 @@ import type {
   Supervisor,
   SupervisorCycle,
   Workspace,
+  WorktreeInfo,
 } from "@coder-studio/core";
 import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
-import type { Store } from "jotai/vanilla";
+import type { Store } from "jotai/vanilla/store";
 import { useEffect, useRef } from "react";
 import {
   authEnabledAtom,
@@ -34,6 +35,7 @@ import {
 } from "../atoms";
 import { authenticatedAtom } from "../atoms/app-ui";
 import type { DispatchCommand } from "../atoms/connection";
+import { activeWorkspaceIdAtom } from "../atoms/workspaces";
 import { useSessionNotifications } from "../features/notifications";
 import { supervisorCyclesAtom, supervisorsAtom } from "../features/supervisor/atoms";
 import { terminalMetaAtomFamily } from "../features/terminal-panel/atoms";
@@ -42,6 +44,7 @@ import {
   fileTreeStaleAtomFamily,
   gitBranchListAtomFamily,
   gitStateAtomFamily,
+  worktreeListAtomFamily,
 } from "../features/workspace/atoms";
 import type { ConnectionStatus, EventListener } from "../ws";
 import { resolveWsUrl, WsClient } from "../ws";
@@ -51,18 +54,25 @@ import { resolveWsUrl, WsClient } from "../ws";
  * Prevents duplicate connections in React StrictMode.
  */
 let globalWsClient: WsClient | null = null;
-let pendingDisconnectTimer: NodeJS.Timeout | null = null;
+let pendingDisconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
 interface WorkspaceRefreshHint {
   refreshGit: boolean;
   refreshBranches: boolean;
+  refreshWorktrees: boolean;
   markTreeStale: boolean;
   refreshEditorBuffers: boolean;
+}
+
+interface WorkspaceActivityState {
+  mode: "active" | "inactive";
+  workspaceId: string | null;
 }
 
 const DEFAULT_REFRESH_HINT: WorkspaceRefreshHint = {
   refreshGit: false,
   refreshBranches: false,
+  refreshWorktrees: false,
   markTreeStale: false,
   refreshEditorBuffers: false,
 };
@@ -86,6 +96,7 @@ function mergeRefreshHints(
   return {
     refreshGit: current.refreshGit || Boolean(next.refreshGit),
     refreshBranches: current.refreshBranches || Boolean(next.refreshBranches),
+    refreshWorktrees: current.refreshWorktrees || Boolean(next.refreshWorktrees),
     markTreeStale: current.markTreeStale || Boolean(next.markTreeStale),
     refreshEditorBuffers: current.refreshEditorBuffers || Boolean(next.refreshEditorBuffers),
   };
@@ -112,7 +123,8 @@ function parseWorkspaceRefreshHint(
       workspaceId,
       hint: {
         refreshGit: true,
-        refreshBranches: false,
+        refreshBranches: data.reason === "git_metadata",
+        refreshWorktrees: data.reason === "git_metadata",
         markTreeStale: shouldMarkTreeStaleForFsReason(data.reason),
         refreshEditorBuffers: data.reason === "fs_change" || data.reason === "file_content",
       },
@@ -122,6 +134,7 @@ function parseWorkspaceRefreshHint(
   const data = (payload ?? {}) as {
     treeChanged?: boolean;
     branchChanged?: boolean;
+    worktreeChanged?: boolean;
   };
 
   return {
@@ -129,6 +142,7 @@ function parseWorkspaceRefreshHint(
     hint: {
       refreshGit: true,
       refreshBranches: Boolean(data.branchChanged),
+      refreshWorktrees: Boolean(data.worktreeChanged),
       markTreeStale: Boolean(data.treeChanged),
       refreshEditorBuffers: Boolean(data.treeChanged),
     },
@@ -143,6 +157,8 @@ export function AppProviders({ children }: AppProvidersProps) {
   const [, setWsClient] = useAtom(wsClientAtom);
   const authEnabled = useAtomValue(authEnabledAtom);
   const authenticated = useAtomValue(authenticatedAtom);
+  const connectionStatus = useAtomValue(connectionStatusAtom);
+  const activeWorkspaceId = useAtomValue(activeWorkspaceIdAtom);
   const setConnectionStatus = useSetAtom(connectionStatusAtom);
   const setConnectionError = useSetAtom(connectionErrorAtom);
   const setServerInfo = useSetAtom(serverInfoAtom);
@@ -167,13 +183,27 @@ export function AppProviders({ children }: AppProvidersProps) {
   // Use refs to avoid stale closures in event handlers
   const wsClientRef = useRef<WsClient | null>(null);
   const dispatchRef = useRef<DispatchCommand>(dispatch);
-  const refreshTimersRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  const refreshTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const refreshHintsRef = useRef<Map<string, WorkspaceRefreshHint>>(new Map());
+  const activeWorkspaceIdRef = useRef<string | null>(activeWorkspaceId);
+  const connectionStatusRef = useRef<ConnectionStatus>(connectionStatus);
+  const workspaceActivityRef = useRef<WorkspaceActivityState>({
+    mode: "inactive",
+    workspaceId: null,
+  });
 
   // Keep dispatchRef in sync
   useEffect(() => {
     dispatchRef.current = dispatch;
   }, [dispatch]);
+
+  useEffect(() => {
+    activeWorkspaceIdRef.current = activeWorkspaceId;
+  }, [activeWorkspaceId]);
+
+  useEffect(() => {
+    connectionStatusRef.current = connectionStatus;
+  }, [connectionStatus]);
 
   // Initialize theme from localStorage
   useEffect(() => {
@@ -246,6 +276,10 @@ export function AppProviders({ children }: AppProvidersProps) {
       if (status === "disconnected" || status === "rejected") {
         setIsWriter(false);
       }
+
+      if (status === "connected") {
+        syncWorkspaceActivity(true);
+      }
     };
 
     const refreshGitState = (workspaceId: string) => {
@@ -259,6 +293,60 @@ export function AppProviders({ children }: AppProvidersProps) {
         .catch((error) => {
           console.error("[Git Status] git.status command threw error:", error);
         });
+    };
+
+    const sendWorkspaceDeactivate = () => {
+      const currentState = workspaceActivityRef.current;
+      if (currentState.mode === "inactive") {
+        return;
+      }
+      const client = wsClientRef.current;
+      if (!client) {
+        return;
+      }
+      workspaceActivityRef.current = {
+        mode: "inactive",
+        workspaceId: null,
+      };
+      void client.sendCommand("workspace.deactivate", {}).catch(() => {});
+    };
+
+    const sendWorkspaceActivate = (workspaceId: string) => {
+      const currentState = workspaceActivityRef.current;
+      if (currentState.mode === "active" && currentState.workspaceId === workspaceId) {
+        return;
+      }
+      const client = wsClientRef.current;
+      if (!client) {
+        return;
+      }
+      workspaceActivityRef.current = {
+        mode: "active",
+        workspaceId,
+      };
+      void client.sendCommand("workspace.activate", { workspaceId }).catch(() => {});
+    };
+
+    const syncWorkspaceActivity = (force = false) => {
+      if (document.visibilityState === "hidden") {
+        sendWorkspaceDeactivate();
+        return;
+      }
+
+      const workspaceId = activeWorkspaceIdRef.current;
+      if (!workspaceId) {
+        sendWorkspaceDeactivate();
+        return;
+      }
+
+      if (force) {
+        workspaceActivityRef.current = {
+          mode: "inactive",
+          workspaceId: null,
+        };
+      }
+
+      sendWorkspaceActivate(workspaceId);
     };
 
     const refreshBranchState = (workspaceId: string) => {
@@ -282,6 +370,40 @@ export function AppProviders({ children }: AppProvidersProps) {
         })
         .catch((error) => {
           console.error("[Git Branches] git.branches command threw error:", error);
+        });
+    };
+
+    const refreshWorktreeList = (workspaceId: string) => {
+      store.set(worktreeListAtomFamily(workspaceId), (prev) => ({
+        ...prev,
+        loading: true,
+        error: undefined,
+      }));
+      dispatchRef
+        .current<{ worktrees: WorktreeInfo[] }>("worktree.list", { workspaceId })
+        .then((result) => {
+          if (result.ok && result.data && Array.isArray(result.data.worktrees)) {
+            store.set(worktreeListAtomFamily(workspaceId), {
+              items: result.data.worktrees,
+              loading: false,
+              lastLoadedAt: Date.now(),
+            });
+            return;
+          }
+
+          store.set(worktreeListAtomFamily(workspaceId), (prev) => ({
+            ...prev,
+            loading: false,
+            error: result.error?.message ?? prev.error,
+          }));
+        })
+        .catch((error) => {
+          console.error("[Worktree List] worktree.list command threw error:", error);
+          store.set(worktreeListAtomFamily(workspaceId), (prev) => ({
+            ...prev,
+            loading: false,
+            error: error instanceof Error ? error.message : String(error),
+          }));
         });
     };
 
@@ -313,6 +435,9 @@ export function AppProviders({ children }: AppProvidersProps) {
         }
         if (queuedHint.refreshBranches) {
           refreshBranchState(workspaceId);
+        }
+        if (queuedHint.refreshWorktrees) {
+          refreshWorktreeList(workspaceId);
         }
       }, 60);
 
@@ -361,6 +486,7 @@ export function AppProviders({ children }: AppProvidersProps) {
       }
 
       const handleVisibilityChange = () => {
+        syncWorkspaceActivity();
         if (document.visibilityState === "visible") {
           wsClientRef.current?.recoverConnection("visibility_resume");
         }
@@ -369,6 +495,8 @@ export function AppProviders({ children }: AppProvidersProps) {
       const handleOnline = () => {
         wsClientRef.current?.recoverConnection("network_online");
       };
+
+      syncWorkspaceActivity();
 
       document.addEventListener("visibilitychange", handleVisibilityChange);
       window.addEventListener("online", handleOnline);
@@ -414,6 +542,7 @@ export function AppProviders({ children }: AppProvidersProps) {
     });
 
     const handleVisibilityChange = () => {
+      syncWorkspaceActivity();
       if (document.visibilityState === "visible") {
         wsClientRef.current?.recoverConnection("visibility_resume");
       }
@@ -422,6 +551,8 @@ export function AppProviders({ children }: AppProvidersProps) {
     const handleOnline = () => {
       wsClientRef.current?.recoverConnection("network_online");
     };
+
+    syncWorkspaceActivity();
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("online", handleOnline);
@@ -462,6 +593,74 @@ export function AppProviders({ children }: AppProvidersProps) {
     authEnabled,
     authenticated,
   ]);
+
+  useEffect(() => {
+    if (authEnabled === null) {
+      return;
+    }
+
+    if (authEnabled === true && !authenticated) {
+      workspaceActivityRef.current = {
+        mode: "inactive",
+        workspaceId: null,
+      };
+      return;
+    }
+
+    if (connectionStatus !== "connected") {
+      return;
+    }
+
+    if (document.visibilityState === "hidden") {
+      if (workspaceActivityRef.current.mode !== "inactive") {
+        const client = wsClientRef.current;
+        if (!client) {
+          return;
+        }
+        workspaceActivityRef.current = {
+          mode: "inactive",
+          workspaceId: null,
+        };
+        void client.sendCommand("workspace.deactivate", {}).catch(() => {});
+      }
+      return;
+    }
+
+    if (!activeWorkspaceId) {
+      if (workspaceActivityRef.current.mode !== "inactive") {
+        const client = wsClientRef.current;
+        if (!client) {
+          return;
+        }
+        workspaceActivityRef.current = {
+          mode: "inactive",
+          workspaceId: null,
+        };
+        void client.sendCommand("workspace.deactivate", {}).catch(() => {});
+      }
+      return;
+    }
+
+    if (
+      workspaceActivityRef.current.mode === "active" &&
+      workspaceActivityRef.current.workspaceId === activeWorkspaceId
+    ) {
+      return;
+    }
+
+    const client = wsClientRef.current;
+    if (!client) {
+      return;
+    }
+
+    workspaceActivityRef.current = {
+      mode: "active",
+      workspaceId: activeWorkspaceId,
+    };
+    void client
+      .sendCommand("workspace.activate", { workspaceId: activeWorkspaceId })
+      .catch(() => {});
+  }, [activeWorkspaceId, authEnabled, authenticated, connectionStatus]);
 
   return <>{children}</>;
 }
@@ -648,15 +847,16 @@ export function routeEventToAtom(topic: string, payload: unknown, store: Store):
             return next;
           });
         } else if (data.supervisor) {
+          const supervisor = data.supervisor;
           store.set(supervisorsAtom, (prev: Map<string, Supervisor>) => {
             const next = new Map(prev);
-            next.set(data.supervisor.sessionId, data.supervisor);
+            next.set(supervisor.sessionId, supervisor);
             return next;
           });
-          if (Array.isArray(data.supervisor.cycles)) {
+          if (Array.isArray(supervisor.cycles)) {
             store.set(supervisorCyclesAtom, (prev: Map<string, SupervisorCycle[]>) => {
               const next = new Map(prev);
-              next.set(data.supervisor!.id, data.supervisor!.cycles);
+              next.set(supervisor.id, supervisor.cycles);
               return next;
             });
           }

@@ -7,6 +7,7 @@
 import { useAtom, useAtomValue } from "jotai";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { dispatchCommandAtom } from "../../../atoms/connection";
+import { Button, IconButton, Input, Kbd, SegmentedControl, Tooltip } from "../../../components/ui";
 import { useTranslation } from "../../../lib/i18n";
 import {
   customShortcutsAtom,
@@ -27,6 +28,7 @@ const CATEGORY_LABELS: Record<ShortcutCategory, string> = {
 export function ShortcutsSettings() {
   const t = useTranslation();
   const dispatch = useAtomValue(dispatchCommandAtom);
+  const resetShortcutLabel = t("settings.shortcuts.reset_hint");
   const [customBindings, setCustomBindings] = useAtom(customShortcutsAtom);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState<ShortcutCategory>("global");
@@ -114,17 +116,18 @@ export function ShortcutsSettings() {
   return (
     <div className="settings-section">
       {/* Category Tabs */}
-      <div className="shortcuts-category-tabs">
-        {(Object.keys(CATEGORY_LABELS) as ShortcutCategory[]).map((category) => (
-          <button
-            key={category}
-            className={`shortcuts-category-tab ${activeCategory === category ? "active" : ""}`}
-            onClick={() => setActiveCategory(category)}
-          >
-            {CATEGORY_LABELS[category]}
-          </button>
-        ))}
-      </div>
+      <SegmentedControl
+        aria-label={t("settings.shortcuts.title")}
+        className="shortcuts-category-tabs"
+        onChange={(nextValue) => setActiveCategory(nextValue as ShortcutCategory)}
+        optionClassName="shortcuts-category-tab"
+        options={(Object.keys(CATEGORY_LABELS) as ShortcutCategory[]).map((category) => ({
+          label: CATEGORY_LABELS[category],
+          value: category,
+        }))}
+        size="sm"
+        value={activeCategory}
+      />
 
       {/* Shortcuts List */}
       <div className="shortcuts-list">
@@ -132,6 +135,8 @@ export function ShortcutsSettings() {
           const binding = getEffectiveBinding(shortcut.id, customBindings);
           const isCustom = customBindings[shortcut.id] !== undefined;
           const isEditing = editingId === shortcut.id;
+          const shortcutNameId = `shortcut-name-${shortcut.id}`;
+          const shortcutDescriptionId = `shortcut-description-${shortcut.id}`;
 
           return (
             <div
@@ -139,34 +144,46 @@ export function ShortcutsSettings() {
               className={`shortcuts-item ${isCustom ? "shortcuts-item-custom" : ""}`}
             >
               <div className="shortcuts-info">
-                <span className="shortcuts-name">{shortcut.name}</span>
-                <span className="shortcuts-desc">{shortcut.description}</span>
+                <span id={shortcutNameId} className="shortcuts-name">
+                  {shortcut.name}
+                </span>
+                <span id={shortcutDescriptionId} className="shortcuts-desc">
+                  {shortcut.description}
+                </span>
               </div>
 
               <div className="shortcuts-binding">
                 {isEditing ? (
-                  <input
+                  <Input
                     ref={inputRef}
                     type="text"
-                    className="input shortcuts-capture"
+                    className="shortcuts-capture"
+                    aria-labelledby={shortcutNameId}
+                    aria-describedby={shortcutDescriptionId}
                     placeholder="按下快捷键..."
+                    autoFocus
                     onKeyDown={(e) => handleKeyCapture(e, shortcut.id)}
                     onBlur={() => setEditingId(null)}
                     readOnly
                   />
                 ) : (
                   <>
-                    <kbd className="shortcuts-key" onClick={() => setEditingId(shortcut.id)}>
+                    <Kbd
+                      className="shortcuts-key"
+                      interactive
+                      onClick={() => setEditingId(shortcut.id)}
+                    >
                       {formatShortcut(binding)}
-                    </kbd>
+                    </Kbd>
                     {isCustom && (
-                      <button
-                        className="btn btn-ghost btn-sm"
-                        onClick={() => handleReset(shortcut.id)}
-                        title="重置为默认"
-                      >
-                        ↺
-                      </button>
+                      <Tooltip content={resetShortcutLabel}>
+                        <IconButton
+                          aria-label={resetShortcutLabel}
+                          icon="↺"
+                          onClick={() => handleReset(shortcut.id)}
+                          size="sm"
+                        />
+                      </Tooltip>
                     )}
                   </>
                 )}
@@ -178,9 +195,9 @@ export function ShortcutsSettings() {
 
       {/* Reset All */}
       <div className="shortcuts-footer">
-        <button className="btn btn-secondary" onClick={handleResetAll}>
+        <Button onClick={handleResetAll} variant="secondary">
           {t("settings.shortcuts.reset_all")}
-        </button>
+        </Button>
       </div>
     </div>
   );

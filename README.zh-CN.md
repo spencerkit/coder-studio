@@ -1,119 +1,169 @@
 # Coder Studio
 
+<div align="center">
+
+**AI 编程工作台 · 浏览器访问 · 跨设备协作 · 本地运行**
+
+[![npm version](https://img.shields.io/npm/v/@spencer-kit/coder-studio.svg)](https://www.npmjs.com/package/@spencer-kit/coder-studio)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D24.0.0-green.svg)](https://nodejs.org/)
+
+</div>
+
+---
+
 > Deploy once, code everywhere.
 >
-> Deploy your coding workspace once, then keep working anywhere.
+> 一次部署，随处编码。
 
-[English README](README.md)
+[English](README.md) | [文档](docs/help/quick-start.md) | [GitHub](https://github.com/spencerkit/coder-studio)
 
-Coder Studio 让你把 AI coding workspace 启动在自己的机器上，然后在任何地点、任何设备上继续使用它。Claude Code 或 Codex、文件、Git、终端都留在同一个浏览器工作台里，你的工作流不再被固定在某一张桌子前或某一台设备上。
+**Coder Studio** 是一个浏览器端的 AI 编程工作台，运行在你本地的机器上。从任何设备的浏览器访问你的开发环境 —— 在通勤路上用手机查看进度，在平板上审阅代码改动，或在多台电脑之间无缝切换。
 
-你可以在办公室发起任务，在通勤路上用手机看进度，在外面用平板审阅改动，回到家再用另一台电脑继续接着做。还是同一个 workspace，还是同一份上下文，不需要重新接管环境。
+## ✨ 核心特性
+
+- 🌐 **浏览器工作台** — 无需桌面应用，任何现代浏览器都能使用
+- 📱 **跨设备连续性** — 在桌面端开始，移动端继续，自由切换设备
+- 🤖 **多 Agent 支持** — 同时运行 Claude Code 和 OpenAI Codex 会话
+- 🔧 **一体化环境** — 终端、文件编辑器、Git 查看器和 AI Agent 统一界面
+- 🔒 **本地运行隐私保护** — 代码保留在你自己的机器上，不依赖云 IDE
+- ⚡ **实时同步** — 所有连接设备的实时工作区状态
 
 ![工作区界面](docs/help/assets/screenshot-workspace-overview.png)
 
-## 为什么是 Coder Studio
+---
 
-- **一次部署，随处继续**：服务启动一次，后续可以在不同设备、不同场景之间无缝切换
-- **同一个工作台跨设备延续**：不是远程看日志，而是在同一个 workspace 里继续查看 Agent、代码、Git 和终端
-- **Agent + Code + Git + Terminal 一体化**：减少在 CLI、编辑器、diff 工具和终端之间来回切换
-- **支持 Claude Code / Codex**：按任务选择合适的 Agent，在同一工作区内并行协作
-- **本地运行，数据可控**：服务运行在你自己的机器上，代码和会话数据不依赖第三方云编辑器
+## 🎯 为什么选择 Coder Studio
 
-## 它解决什么问题
+| 特性 | 优势 |
+|------|------|
+| **一次部署，随处继续** | 启动服务一次，在设备间切换不中断工作流 |
+| **统一工作台** | Agent、代码、Git、终端在一处 —— 不再频繁切换应用 |
+| **多 Agent 支持** | 同时运行 Claude Code 和 Codex 会话 |
+| **本地优先 & 隐私** | 运行在你自己的机器上，代码永不离开设备 |
+| **零配置浏览器访问** | 无需桌面客户端，任何设备打开 URL 即可 |
 
-传统的 AI coding workflow 往往绑定在一台正在运行 CLI 的电脑上：
+---
 
-- Agent 在跑，但你人必须守在原来的设备前
-- 换个场景，就很难继续查看上下文和执行状态
-- 手机上能收到通知，但看不到完整的 coding workspace
-- 跨设备切换通常意味着重新接管环境，而不是继续工作
-
-Coder Studio 的目标就是把这件事变成：
-
-`Deploy once, code everywhere.`
-
-## 快速开始
+## 🚀 快速开始
 
 ```bash
+# 全局安装
 npm install -g @spencer-kit/coder-studio
+
+# 启动工作台
 coder-studio open
 ```
 
-然后只需要 3 步：
+浏览器会自动打开。选择你的项目文件夹，开始使用 Claude Code 或 OpenAI Codex。
 
-1. 在浏览器里点击 **打开工作区**
-2. 选择你的项目目录并创建 Claude 或 Codex 会话
-3. 开始和 Agent 协作，同时查看文件、Git 变更和终端输出
+> **还没安装 AI CLI？** 你仍然可以浏览文件和使用终端。之后随时安装 Claude Code 或 Codex。
 
-> 没有安装 Provider CLI 也可以先打开界面浏览文件和终端，之后再补装。详细步骤见 [Provider 配置指南](docs/help/providers.md)。
+---
 
-## 你可以怎么用它
+## 💡 使用场景
 
-| 场景 | 你可以怎么做 |
-|------|--------------|
-| 在办公室开始任务 | 启动服务，打开项目，创建 Claude 或 Codex 会话，让 Agent 先开始工作 |
-| 通勤路上查看进度 | 用手机浏览器打开同一个工作台，查看 Agent 输出、当前状态和 Git 变化 |
-| 在外面轻量审阅 | 用平板浏览文件、看 diff、确认终端输出，不用回到原电脑前 |
-| 回到另一台设备继续 | 在新的设备上接入同一个 workspace，直接延续刚才的上下文 |
-| 团队共享查看 | 同一局域网内的同事可通过浏览器查看当前工作状态 |
+### 远程友好开发
 
-## 你可以用它做什么
+- 在办公室启动 Agent 任务，通勤路上用手机查看进度
+- 在平板上审阅代码改动，无需打开笔记本电脑
+- 在家用电脑继续工作，零配置切换
 
-- 在一个工作区里同时运行多个 Agent 会话
-- 在 Agent 工作时实时查看文件树、编辑器和 Git diff
-- 打开 Shell 终端独立验证 Agent 的结果
-- 在桌面端使用完整多面板布局和快捷键
-- 在手机或平板上随时查看工作区和会话进度
-- 通过设置页管理主题、语言、快捷键和 Provider 参数
+### 团队协作
 
-## 跨设备工作
+- 与同一网络的队友分享工作区 URL
+- 无需屏幕共享进行代码审阅 —— 直接打开链接
+- 实时向相关人员展示 Agent 进度
 
-Coder Studio 运行在标准浏览器里，不依赖桌面客户端：
+### AI 辅助编程
 
-- **桌面端**：适合完整编码、编辑文件、查看 diff、管理多个面板
-- **平板端**：适合轻量审阅、追踪 Agent 进度、浏览项目状态
-- **手机端**：适合随时查看会话状态、终端输出和工作区变化
+- 并行运行多个 Claude Code 或 Codex 会话
+- 在移动端远程监控 Agent 进度
+- 终端、编辑器和 Git 视图统一在一个界面
 
-同一个服务地址，可以在不同设备之间切换访问；界面会根据屏幕自动适配。
+---
 
-**PC 端工作区**
+## 📱 跨设备体验
 
-![PC 端工作区](docs/help/assets/screenshot-pc.png)
+| 设备 | 适用场景 |
+|------|----------|
+| 🖥️ **桌面端** | 完整编码会话、文件编辑、diff 审阅、面板管理 |
+| 📱 **平板端** | 代码审阅、Agent 进度追踪、文件浏览 |
+| 📲 **手机端** | 快速状态检查、终端输出监控、会话查看 |
 
-**移动端工作区**
+同一个工作区 URL 在所有设备上通用 —— 界面自动适配。
+
+**桌面端界面**
+
+![桌面端工作区](docs/help/assets/screenshot-pc.png)
+
+**移动端界面**
 
 ![移动端工作区](docs/help/assets/screenshot-mobile.png)
 
-## 核心能力
+---
 
-- **Workspace**：一个工作区对应一个本地项目目录，包含文件、终端、Git 和会话
-- **Session**：每个会话对应一个独立的 Claude 或 Codex Agent 运行
-- **Terminal**：同时支持 Shell 终端和 Agent 终端
-- **Git View**：直接在工作区内查看分支、变更文件和 diff
-- **Settings**：统一管理主题、语言、快捷键和 Provider 启动参数
+## 🛠️ 功能概览
 
-## 文档
-
-- [快速开始](docs/help/quick-start.md) — 从安装到第一次启动
-- [App 功能总览](docs/help/app-overview.md) — 核心概念与能力说明
-- [Provider 配置](docs/help/providers.md) — Claude Code / Codex CLI 安装与配置
-- [桌面端使用指南](docs/help/desktop-guide.md) — PC 端界面与操作
-- [移动端使用指南](docs/help/mobile-guide.md) — 手机 / 平板操作指南
-- [常见工作流](docs/help/workflows.md) — 任务式操作指南
-- [排障指南](docs/help/troubleshooting.md) — 常见问题与排查
-- [CLI 参考](docs/help/cli.md) — 命令行命令速查
-
-## 安装要求
-
-| 依赖 | 说明 |
+| 功能 | 描述 |
 |------|------|
-| Node.js >= 24.0.0 | 运行 Coder Studio 服务 |
-| Claude Code CLI 或 OpenAI Codex CLI | 创建 Agent 会话时需要，未安装时仍可先使用文件和终端能力 |
+| **多 Agent 会话** | 同时运行 Claude Code 和 Codex 会话 |
+| **集成编辑器** | Monaco 驱动的代码编辑器，支持语法高亮 |
+| **Git 集成** | 在工作区内查看分支、diff 和变更文件 |
+| **Shell 终端** | 完整 PTY 终端，运行命令和验证 Agent 输出 |
+| **响应式 UI** | 桌面端、平板端和手机端布局自动适配 |
+| **会话历史** | 恢复之前的会话，完整上下文保留 |
+| **深色/浅色主题** | 可自定义外观和快捷键 |
 
-## 贡献者说明
+---
 
-以下内容面向仓库贡献者，普通用户可以直接参考上面的快速开始和产品文档。
+## 📋 系统要求
+
+| 依赖 | 版本 | 说明 |
+|------|------|------|
+| Node.js | ≥ 24.0.0 | 运行 Coder Studio 必需 |
+| Claude Code CLI | 最新版 | 可选 —— 用于 Claude Agent 会话 |
+| OpenAI Codex CLI | 最新版 | 可选 —— 用于 Codex Agent 会话 |
+
+---
+
+## 📚 文档
+
+| 资源 | 描述 |
+|------|------|
+| [快速开始](docs/help/quick-start.md) | 从安装到第一个工作区 |
+| [功能总览](docs/help/app-overview.md) | 核心概念和功能 |
+| [Provider 配置](docs/help/providers.md) | Claude Code / Codex CLI 安装 |
+| [桌面端指南](docs/help/desktop-guide.md) | PC 界面和快捷键 |
+| [移动端指南](docs/help/mobile-guide.md) | 手机/平板使用 |
+| [常用工作流](docs/help/workflows.md) | 任务式教程 |
+| [故障排除](docs/help/troubleshooting.md) | 常见问题和修复 |
+| [CLI 参考](docs/help/cli.md) | 命令行选项 |
+
+---
+
+## 👥 谁适合使用
+
+- **AI 编程深度用户** — 每天使用 Claude Code / Codex，想要更好的会话管理
+- **多设备开发者** — 频繁在办公室、家和移动设备之间切换
+- **远程优先团队** — 需要无需屏幕共享即可分享工作进度
+- **注重隐私的开发者** — 希望代码留在本地机器，不依赖云 IDE
+
+---
+
+## 🔮 路线图
+
+- [ ] Web 终端流式优化
+- [ ] 会话回放和历史导航
+- [ ] 多工作区管理
+- [ ] 插件系统支持自定义集成
+- [ ] 工作区偏好云同步
+
+---
+
+## 🤝 贡献
+
+欢迎贡献！查看 [贡献指南](CONTRIBUTING.md) 了解详情。
 
 ### 本地开发
 
@@ -123,31 +173,30 @@ pnpm install
 pnpm dev
 ```
 
-### 常用命令
-
-```bash
-pnpm acceptance:phase1
-pnpm build:cli
-pnpm lint
-pnpm lint:fix
-pnpm format
-pnpm check
-```
-
 ### 技术栈
 
-- Frontend: React + Vite + Jotai
-- Backend: Fastify + WebSocket
-- Terminal: xterm.js + node-pty
-- Editor: Monaco Editor
-- Storage: SQLite (`node:sqlite`)
+| 层级 | 技术 |
+|------|------|
+| 前端 | React, Vite, Jotai |
+| 后端 | Fastify, WebSocket |
+| 终端 | xterm.js, node-pty |
+| 编辑器 | Monaco Editor |
+| 存储 | SQLite (node:sqlite) |
 
 ### 开发文档
 
 - [PRD](docs/PRD.zh-CN.md)
-- [Design Spec](docs/superpowers/specs/2026-04-13-coder-studio-design.md)
-- [更多开发文档](docs/)
+- [设计规范](docs/superpowers/specs/2026-04-13-coder-studio-design.md)
+- [更多文档](docs/)
 
-## License
+---
 
-MIT
+## 📄 许可证
+
+MIT 许可证 —— 查看 [LICENSE](LICENSE) 了解详情。
+
+---
+
+## 🔍 关键词
+
+`AI 编程助手` `浏览器 IDE` `Claude Code` `Codex` `远程开发` `网页 IDE` `自托管 IDE` `跨设备编程` `AI Agent 工作区` `本地优先开发` `移动端编程` `平板编程` `开发者工具` `浏览器终端` `Git 网页界面` `Monaco 编辑器` `WebSocket 终端` `AI 结对编程` `随处编程` `云 IDE 替代`

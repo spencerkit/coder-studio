@@ -1,12 +1,41 @@
-import { ArrowUp, Folder, Home, Loader2, X } from "lucide-react";
+import { ArrowUp, Folder, Home, X } from "lucide-react";
+import { EmptyState, IconButton, Sheet, Spinner } from "../../../../components/ui";
 import { useViewport } from "../../../../hooks/use-viewport";
 import { useTranslation } from "../../../../lib/i18n";
 import { useWorkspaceLaunchActions } from "../../actions/use-workspace-launch-actions";
-import { MobileSheet } from "../mobile/mobile-sheet";
 
 interface WorkspaceLaunchModalProps {
   onClose: () => void;
 }
+
+const directoryEmptyStateStyle = {
+  minHeight: "auto",
+  padding: "var(--sp-6)",
+  gap: 0,
+};
+
+const directoryLoadingStateStyle = {
+  padding: "var(--sp-8)",
+  gap: "var(--sp-2)",
+};
+
+const directoryEmptyStateTitleStyle = {
+  margin: 0,
+  color: "var(--text-tertiary)",
+  fontWeight: "var(--font-normal)",
+};
+
+const visuallyHiddenTitleStyle = {
+  position: "absolute" as const,
+  width: "1px",
+  height: "1px",
+  padding: 0,
+  margin: "-1px",
+  overflow: "hidden",
+  clip: "rect(0, 0, 0, 0)",
+  whiteSpace: "nowrap" as const,
+  border: 0,
+};
 
 export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
   const isMobile = useViewport() === "mobile";
@@ -61,11 +90,20 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
 
         <div className="fp-dir-list">
           {browsing ? (
-            <div className="directory-loading">
-              <Loader2 size={16} className="animate-spin" />
-            </div>
+            <EmptyState
+              className="directory-loading"
+              icon={<Spinner label={t("common.loading")} />}
+              style={directoryLoadingStateStyle}
+              title={<span style={visuallyHiddenTitleStyle}>{t("common.loading")}</span>}
+            />
           ) : directories.length === 0 ? (
-            <div className="directory-empty">{t("workspace.launch.no_directories")}</div>
+            <EmptyState
+              className="directory-empty"
+              style={directoryEmptyStateStyle}
+              title={
+                <p style={directoryEmptyStateTitleStyle}>{t("workspace.launch.no_directories")}</p>
+              }
+            />
           ) : (
             directories.map((dir) => (
               <div
@@ -126,7 +164,7 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
 
   if (isMobile) {
     return (
-      <MobileSheet
+      <Sheet
         kicker={t("workspace.launch.kicker")}
         title={launchTitle}
         body={launchBody}
@@ -149,15 +187,13 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
             <div className="launch-hint">{launchHint}</div>
           </div>
           <div className="launch-header-right">
-            <div
-              className="launch-close-btn"
-              onClick={onClose}
-              role="button"
-              tabIndex={0}
+            <IconButton
               aria-label={t("action.close")}
-            >
-              <X size={16} />
-            </div>
+              className="launch-close-btn"
+              icon={<X size={16} />}
+              onClick={onClose}
+              size="sm"
+            />
           </div>
         </div>
 

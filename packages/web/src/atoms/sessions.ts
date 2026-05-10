@@ -7,7 +7,7 @@
 import type { Session, SessionState } from "@coder-studio/core";
 import { atom } from "jotai";
 import { atomFamily } from "jotai-family";
-import { activeWorkspaceIdAtom } from "./workspaces";
+import { resolvedActiveWorkspaceIdAtom } from "./workspaces";
 
 /**
  * All sessions (server state projection)
@@ -40,7 +40,7 @@ export function setActiveWorkspaceIdGetter(_getter: () => string | null): void {
 }
 
 export const activeSessionAtom = atom((get) => {
-  const wsId = get(activeWorkspaceIdAtom);
+  const wsId = get(resolvedActiveWorkspaceIdAtom);
   if (!wsId) return null;
   const sessions = get(sessionsByWorkspaceAtomFamily(wsId));
   return sessions.find((s) => s.state === "running" || s.state === "idle") ?? null;

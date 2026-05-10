@@ -11,7 +11,7 @@ import {
 } from "@coder-studio/core";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { Check, ChevronRight } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { localeAtom, themeAtom } from "../../../atoms/app-ui";
 import {
@@ -20,9 +20,9 @@ import {
   serverInfoAtom,
 } from "../../../atoms/connection";
 import { resolvedActiveWorkspaceIdAtom } from "../../../atoms/workspaces";
+import { Input, Notice, Pill, Switch } from "../../../components/ui";
 import { useViewport } from "../../../hooks/use-viewport";
 import { useTranslation } from "../../../lib/i18n";
-import { ConfigDriftBanner } from "../../config-drift-banner";
 import { notificationPreferencesAtom } from "../../notifications/atoms";
 import { PageHeader } from "../../shared/components/page-header";
 import { type ProviderInfo, ProviderSettings } from "./provider-settings";
@@ -144,7 +144,7 @@ export function SettingsPage() {
   const [supervisorEvaluationTimeoutSec, setSupervisorEvaluationTimeoutSec] = useState(
     DEFAULT_SUPERVISOR_EVALUATION_TIMEOUT_SEC
   );
-  const [terminalRenderer, setTerminalRenderer] = useState<"standard" | "compatibility">(
+  const [terminalRenderer, setTerminalRendererState] = useState<"standard" | "compatibility">(
     "standard"
   );
   const [providerAdditionalArgsById, setProviderAdditionalArgsById] = useState<
@@ -153,14 +153,23 @@ export function SettingsPage() {
   const [contentLayoutMode, setContentLayoutMode] = useState<SettingsContentLayoutMode>("default");
   const [settingsLoadError, setSettingsLoadError] = useState<string | null>(null);
   const [settingsRefreshKey, setSettingsRefreshKey] = useState(0);
-  const [locale, setLocale] = useAtom(localeAtom);
+  const [locale, setLocaleState] = useAtom(localeAtom);
   const [theme, setTheme] = useAtom(themeAtom);
   const setNotificationPreferences = useSetAtom(notificationPreferencesAtom);
+  const settingsLoadFailedUnknownRef = useRef(settingsLoadFailedUnknown);
+  const appearanceSelectionVersionRef = useRef({
+    locale: 0,
+    terminalRenderer: 0,
+  });
   const detailSection =
     navigationState.kind === "detail" ? navigationState.section : navigationState.lastSection;
   const availableSections = isMobile ? MOBILE_SETTINGS_SECTIONS : SETTINGS_SECTIONS;
   const activeSectionMeta =
     availableSections.find((section) => section.id === detailSection) ?? availableSections[0];
+
+  useEffect(() => {
+    settingsLoadFailedUnknownRef.current = settingsLoadFailedUnknown;
+  }, [settingsLoadFailedUnknown]);
 
   useEffect(() => {
     setNavigationState((state) => {
@@ -180,10 +189,13 @@ export function SettingsPage() {
     let cancelled = false;
 
     const loadSettings = async () => {
+      const appearanceSelectionVersionAtRequestStart = {
+        ...appearanceSelectionVersionRef.current,
+      };
       const result = await dispatch<Record<string, unknown>>("settings.get", {});
       if (!result.ok || !result.data) {
         if (!cancelled) {
-          setSettingsLoadError(result.error?.message ?? settingsLoadFailedUnknown);
+          setSettingsLoadError(result.error?.message ?? settingsLoadFailedUnknownRef.current);
         }
         return;
       }
@@ -214,10 +226,20 @@ export function SettingsPage() {
         settings["appearance.terminalRenderer"] === "standard" ||
         settings["appearance.terminalRenderer"] === "compatibility"
       ) {
-        setTerminalRenderer(settings["appearance.terminalRenderer"]);
+        if (
+          appearanceSelectionVersionRef.current.terminalRenderer ===
+          appearanceSelectionVersionAtRequestStart.terminalRenderer
+        ) {
+          setTerminalRendererState(settings["appearance.terminalRenderer"]);
+        }
       }
       if (settings["appearance.locale"] === "zh" || settings["appearance.locale"] === "en") {
-        setLocale(settings["appearance.locale"]);
+        if (
+          appearanceSelectionVersionRef.current.locale ===
+          appearanceSelectionVersionAtRequestStart.locale
+        ) {
+          setLocaleState(settings["appearance.locale"]);
+        }
       }
       setProviderAdditionalArgsById(loadProviderAdditionalArgs(settings, providers));
     };
@@ -226,14 +248,17 @@ export function SettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, [
-    connectionStatus,
-    dispatch,
-    setLocale,
-    setNotificationPreferences,
-    settingsLoadFailedUnknown,
-    settingsRefreshKey,
-  ]);
+  }, [connectionStatus, dispatch, setLocaleState, setNotificationPreferences, settingsRefreshKey]);
+
+  const handleLocaleSelection = (value: "zh" | "en") => {
+    appearanceSelectionVersionRef.current.locale += 1;
+    setLocaleState(value);
+  };
+
+  const handleTerminalRendererSelection = (value: "standard" | "compatibility") => {
+    appearanceSelectionVersionRef.current.terminalRenderer += 1;
+    setTerminalRendererState(value);
+  };
 
   useEffect(() => {
     if (detailSection !== "providers") {
@@ -279,9 +304,9 @@ export function SettingsPage() {
         return (
           <AppearanceSettings
             locale={locale}
-            setLocale={setLocale}
+            setLocale={handleLocaleSelection}
             terminalRenderer={terminalRenderer}
-            setTerminalRenderer={setTerminalRenderer}
+            setTerminalRenderer={handleTerminalRendererSelection}
             theme={theme}
             setTheme={setTheme}
           />
@@ -366,21 +391,22 @@ export function SettingsPage() {
             className={`settings-content ${isMobile ? "settings-content--mobile" : ""} ${contentLayoutMode === "fill-height" ? "settings-content--fill-height" : ""}`}
           >
             {settingsLoadError && (
-              <div className="settings-page__notice settings-page__notice--error" role="alert">
-                <div className="settings-page__notice-copy">
-                  <span className="settings-page__notice-title">{t("settings.load_failed")}</span>
-                  <span className="settings-page__notice-message">{settingsLoadError}</span>
-                </div>
-                <button
-                  type="button"
-                  className="settings-link"
-                  onClick={() => setSettingsRefreshKey((value) => value + 1)}
-                >
-                  {t("action.refresh")}
-                </button>
-              </div>
+              <Notice
+                role="alert"
+                tone="error"
+                title={t("settings.load_failed")}
+                message={settingsLoadError}
+                action={
+                  <button
+                    type="button"
+                    className="settings-link"
+                    onClick={() => setSettingsRefreshKey((value) => value + 1)}
+                  >
+                    {t("action.refresh")}
+                  </button>
+                }
+              />
             )}
-            <ConfigDriftBanner variant="embedded" showLoadError={!settingsLoadError} />
             {renderContent()}
           </main>
         </div>
@@ -450,6 +476,10 @@ function GeneralSettings({
   setSupervisorEvaluationTimeoutSec,
 }: GeneralSettingsProps) {
   const t = useTranslation();
+  const notificationsLabelId = useId();
+  const notificationsDescId = useId();
+  const soundLabelId = useId();
+  const soundDescId = useId();
   const dispatch = useAtomValue(dispatchCommandAtom);
   const setNotificationPreferences = useSetAtom(notificationPreferencesAtom);
   const [notificationPermission, setNotificationPermission] =
@@ -538,49 +568,53 @@ function GeneralSettings({
 
         <div className="settings-toggle-row">
           <div className="settings-toggle-info">
-            <span className="settings-toggle-label">{t("settings.notifications_enabled")}</span>
-            <span className="settings-toggle-desc">{t("settings.notifications_enabled_hint")}</span>
+            <span className="settings-toggle-label" id={notificationsLabelId}>
+              {t("settings.notifications_enabled")}
+            </span>
+            <span className="settings-toggle-desc" id={notificationsDescId}>
+              {t("settings.notifications_enabled_hint")}
+            </span>
           </div>
-          <label className="settings-toggle">
-            <input
-              type="checkbox"
-              checked={notificationsEnabled}
-              onChange={(e) => {
-                const nextEnabled = e.target.checked;
-                setNotificationsEnabled(nextEnabled);
-                syncNotificationPreferences({
-                  enabled: nextEnabled,
-                  soundEnabled,
-                });
-                void saveSettings({ notifications: { enabled: nextEnabled } });
-              }}
-            />
-            <span className="settings-toggle-slider" />
-          </label>
+          <Switch
+            aria-describedby={notificationsDescId}
+            aria-labelledby={notificationsLabelId}
+            checked={notificationsEnabled}
+            className="settings-toggle"
+            onCheckedChange={(nextEnabled) => {
+              setNotificationsEnabled(nextEnabled);
+              syncNotificationPreferences({
+                enabled: nextEnabled,
+                soundEnabled,
+              });
+              void saveSettings({ notifications: { enabled: nextEnabled } });
+            }}
+          />
         </div>
 
         <div className="settings-toggle-row">
           <div className="settings-toggle-info">
-            <span className="settings-toggle-label">{t("settings.notification_sound")}</span>
-            <span className="settings-toggle-desc">{t("settings.notification_sound_hint")}</span>
+            <span className="settings-toggle-label" id={soundLabelId}>
+              {t("settings.notification_sound")}
+            </span>
+            <span className="settings-toggle-desc" id={soundDescId}>
+              {t("settings.notification_sound_hint")}
+            </span>
           </div>
-          <label className="settings-toggle">
-            <input
-              type="checkbox"
-              checked={soundEnabled}
-              onChange={(e) => {
-                const nextSoundEnabled = e.target.checked;
-                setSoundEnabled(nextSoundEnabled);
-                syncNotificationPreferences({
-                  enabled: notificationsEnabled,
-                  soundEnabled: nextSoundEnabled,
-                });
-                void saveSettings({ notifications: { soundEnabled: nextSoundEnabled } });
-              }}
-              disabled={!notificationsEnabled}
-            />
-            <span className="settings-toggle-slider" />
-          </label>
+          <Switch
+            aria-describedby={soundDescId}
+            aria-labelledby={soundLabelId}
+            checked={soundEnabled}
+            className="settings-toggle"
+            disabled={!notificationsEnabled}
+            onCheckedChange={(nextSoundEnabled) => {
+              setSoundEnabled(nextSoundEnabled);
+              syncNotificationPreferences({
+                enabled: notificationsEnabled,
+                soundEnabled: nextSoundEnabled,
+              });
+              void saveSettings({ notifications: { soundEnabled: nextSoundEnabled } });
+            }}
+          />
         </div>
 
         <div className="settings-info-row">
@@ -650,15 +684,15 @@ function GeneralSettings({
             {t("settings.supervisor.evaluation_timeout")}
           </label>
           <div className="settings-config-control">
-            <input
+            <Input
               id="supervisor-evaluation-timeout"
-              className="input settings-input-compact"
+              className="settings-input-compact"
               type="number"
               min={1}
               max={MAX_SUPERVISOR_EVALUATION_TIMEOUT_SEC}
               step={1}
               inputMode="numeric"
-              aria-invalid={supervisorTimeoutError ? "true" : "false"}
+              invalid={Boolean(supervisorTimeoutError)}
               value={supervisorTimeoutDraft}
               onChange={(event) => {
                 setSupervisorTimeoutDraft(event.target.value);
@@ -706,6 +740,12 @@ function AppearanceSettings({
   setTheme,
 }: AppearanceSettingsProps) {
   const t = useTranslation();
+  const themeTitleId = useId();
+  const themeDescId = useId();
+  const terminalRendererTitleId = useId();
+  const terminalRendererDescId = useId();
+  const languageTitleId = useId();
+  const languageDescId = useId();
   const dispatch = useAtomValue(dispatchCommandAtom);
 
   const saveSettings = async (settings: Record<string, unknown>) => {
@@ -721,80 +761,107 @@ function AppearanceSettings({
   return (
     <div className="settings-section">
       <div className="settings-group">
-        <h3 className="settings-group-title">{t("settings.theme.title")}</h3>
-        <p className="settings-group-desc">{t("settings.theme.hint")}</p>
+        <h3 className="settings-group-title" id={themeTitleId}>
+          {t("settings.theme.title")}
+        </h3>
+        <p className="settings-group-desc" id={themeDescId}>
+          {t("settings.theme.hint")}
+        </p>
 
-        <div className="settings-pills">
-          <button
-            className={`settings-pill ${theme === "dark" ? "settings-pill-active" : ""}`}
+        <div
+          aria-describedby={themeDescId}
+          aria-labelledby={themeTitleId}
+          className="settings-pills"
+          role="group"
+        >
+          <Pill
+            leadingIcon={theme === "dark" ? <Check size={12} /> : undefined}
             onClick={() => handleThemeChange("dark")}
+            active={theme === "dark"}
           >
-            {theme === "dark" && <Check size={12} />}
-            <span>{t("settings.theme.dark")}</span>
-          </button>
-          <button
-            className={`settings-pill ${theme === "light" ? "settings-pill-active" : ""}`}
+            {t("settings.theme.dark")}
+          </Pill>
+          <Pill
+            leadingIcon={theme === "light" ? <Check size={12} /> : undefined}
             onClick={() => handleThemeChange("light")}
+            active={theme === "light"}
           >
-            {theme === "light" && <Check size={12} />}
-            <span>{t("settings.theme.light")}</span>
-          </button>
+            {t("settings.theme.light")}
+          </Pill>
         </div>
       </div>
 
       <div className="settings-group">
-        <h3 className="settings-group-title">{t("settings.terminal_renderer")}</h3>
-        <p className="settings-group-desc">{t("settings.terminal_renderer_hint")}</p>
+        <h3 className="settings-group-title" id={terminalRendererTitleId}>
+          {t("settings.terminal_renderer")}
+        </h3>
+        <p className="settings-group-desc" id={terminalRendererDescId}>
+          {t("settings.terminal_renderer_hint")}
+        </p>
 
-        <div className="settings-pills">
-          <button
-            className={`settings-pill ${terminalRenderer === "standard" ? "settings-pill-active" : ""}`}
+        <div
+          aria-describedby={terminalRendererDescId}
+          aria-labelledby={terminalRendererTitleId}
+          className="settings-pills"
+          role="group"
+        >
+          <Pill
+            leadingIcon={terminalRenderer === "standard" ? <Check size={12} /> : undefined}
             onClick={() => {
               setTerminalRenderer("standard");
               void saveSettings({ appearance: { terminalRenderer: "standard" } });
             }}
+            active={terminalRenderer === "standard"}
           >
-            {terminalRenderer === "standard" && <Check size={12} />}
-            <span>{t("settings.terminal_standard")}</span>
-          </button>
-          <button
-            className={`settings-pill ${terminalRenderer === "compatibility" ? "settings-pill-active" : ""}`}
+            {t("settings.terminal_standard")}
+          </Pill>
+          <Pill
+            leadingIcon={terminalRenderer === "compatibility" ? <Check size={12} /> : undefined}
             onClick={() => {
               setTerminalRenderer("compatibility");
               void saveSettings({ appearance: { terminalRenderer: "compatibility" } });
             }}
+            active={terminalRenderer === "compatibility"}
           >
-            {terminalRenderer === "compatibility" && <Check size={12} />}
-            <span>{t("settings.terminal_compatibility")}</span>
-          </button>
+            {t("settings.terminal_compatibility")}
+          </Pill>
         </div>
       </div>
 
       <div className="settings-group">
-        <h3 className="settings-group-title">{t("settings.language.title")}</h3>
-        <p className="settings-group-desc">{t("settings.language.hint")}</p>
+        <h3 className="settings-group-title" id={languageTitleId}>
+          {t("settings.language.title")}
+        </h3>
+        <p className="settings-group-desc" id={languageDescId}>
+          {t("settings.language.hint")}
+        </p>
 
-        <div className="settings-pills">
-          <button
-            className={`settings-pill ${locale === "zh" ? "settings-pill-active" : ""}`}
+        <div
+          aria-describedby={languageDescId}
+          aria-labelledby={languageTitleId}
+          className="settings-pills"
+          role="group"
+        >
+          <Pill
+            leadingIcon={locale === "zh" ? <Check size={12} /> : undefined}
             onClick={() => {
               setLocale("zh");
               void saveSettings({ appearance: { locale: "zh" } });
             }}
+            active={locale === "zh"}
           >
-            {locale === "zh" && <Check size={12} />}
-            <span>{t("settings.language.zh")}</span>
-          </button>
-          <button
-            className={`settings-pill ${locale === "en" ? "settings-pill-active" : ""}`}
+            {t("settings.language.zh")}
+          </Pill>
+          <Pill
+            leadingIcon={locale === "en" ? <Check size={12} /> : undefined}
             onClick={() => {
               setLocale("en");
               void saveSettings({ appearance: { locale: "en" } });
             }}
+            active={locale === "en"}
           >
-            {locale === "en" && <Check size={12} />}
-            <span>{t("settings.language.en")}</span>
-          </button>
+            {t("settings.language.en")}
+          </Pill>
         </div>
       </div>
     </div>

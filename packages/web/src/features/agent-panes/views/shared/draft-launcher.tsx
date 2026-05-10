@@ -4,6 +4,7 @@ import { ArrowRight, Bot, FlipHorizontal, FlipVertical, Sparkles, X } from "luci
 import type { FC } from "react";
 import { dispatchCommandAtom } from "../../../../atoms/connection";
 import { sessionsAtom } from "../../../../atoms/sessions";
+import { Button, IconButton, StatusDot, Tag, Tooltip } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { type ProviderId, useProviderLauncher } from "../../actions/use-provider-launcher";
 
@@ -118,40 +119,45 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
     <div className="session-card agent-pane">
       <div className="session-header">
         <div className="session-header-left">
-          <span className="session-dot session-dot-idle" />
+          <StatusDot tone="neutral" className="session-dot session-dot-idle" />
           <div className="session-header-copy">
             <div className="session-title-row">
               <span className="session-title">{t("session.provider_select") || "New Session"}</span>
-              <span className="session-state-badge badge badge-gray">DRAFT</span>
+              <Tag color="neutral" className="session-state-badge">
+                DRAFT
+              </Tag>
             </div>
           </div>
         </div>
 
         <div className="session-header-actions">
-          <button
-            className="session-action-btn"
-            onClick={handleSplitHorizontal}
-            title="Split horizontal"
-            aria-label="Split horizontal"
-          >
-            <FlipHorizontal size={13} />
-          </button>
-          <button
-            className="session-action-btn"
-            onClick={handleSplitVertical}
-            title="Split vertical"
-            aria-label="Split vertical"
-          >
-            <FlipVertical size={13} />
-          </button>
-          <button
-            className="session-action-btn session-action-btn-close"
-            onClick={handleClosePane}
-            title="Close"
-            aria-label="Close"
-          >
-            <X size={14} />
-          </button>
+          <Tooltip content="Split horizontal">
+            <IconButton
+              aria-label="Split horizontal"
+              className="session-action-btn"
+              icon={<FlipHorizontal size={13} />}
+              onClick={handleSplitHorizontal}
+              size="sm"
+            />
+          </Tooltip>
+          <Tooltip content="Split vertical">
+            <IconButton
+              aria-label="Split vertical"
+              className="session-action-btn"
+              icon={<FlipVertical size={13} />}
+              onClick={handleSplitVertical}
+              size="sm"
+            />
+          </Tooltip>
+          <Tooltip content="Close">
+            <IconButton
+              aria-label="Close"
+              className="session-action-btn session-action-btn-close"
+              icon={<X size={14} />}
+              onClick={handleClosePane}
+              size="sm"
+            />
+          </Tooltip>
         </div>
       </div>
 
@@ -190,15 +196,17 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
                 state.installJob?.status === "running";
 
               return (
-                <button
+                <Button
                   key={provider.id}
-                  className={`btn btn-secondary agent-provider-card ${provider.className}`}
+                  className={`agent-provider-card ${provider.className}`}
                   disabled={isAnyProviderBusy}
+                  leadingIcon={<span className="agent-provider-card-icon">{provider.icon}</span>}
                   onClick={() => {
                     void launch(provider.id);
                   }}
+                  trailingIcon={<ArrowRight size={16} className="agent-provider-card-arrow" />}
+                  variant="secondary"
                 >
-                  <span className="agent-provider-card-icon">{provider.icon}</span>
                   <span className="agent-provider-card-body">
                     <span className="agent-provider-card-title-row">
                       <span className="agent-provider-card-title">{provider.title}</span>
@@ -222,8 +230,7 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
                       </span>
                     ) : null}
                   </span>
-                  <ArrowRight size={16} className="agent-provider-card-arrow" />
-                </button>
+                </Button>
               );
             })}
           </div>

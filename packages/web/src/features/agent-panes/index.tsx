@@ -8,6 +8,7 @@
 import { useAtomValue } from "jotai";
 import type { FC } from "react";
 import { activeWorkspaceAtom } from "../../atoms/workspaces";
+import { EmptyState } from "../../components/ui";
 import { useTranslation } from "../../lib/i18n";
 import { usePaneActions } from "./actions/use-pane-actions";
 import { useSessionActions } from "./actions/use-session-actions";
@@ -31,6 +32,12 @@ interface AgentPanesProps {
   hydrateSessions?: boolean;
 }
 
+const emptyStateTitleStyle = {
+  margin: 0,
+  color: "var(--text-tertiary)",
+  fontWeight: "var(--font-normal)",
+};
+
 export const AgentPanes: FC<AgentPanesProps> = ({ hydrateSessions = true }) => {
   const t = useTranslation();
   const workspace = useAtomValue(activeWorkspaceAtom);
@@ -48,7 +55,10 @@ export const AgentPanes: FC<AgentPanesProps> = ({ hydrateSessions = true }) => {
   if (!workspace) {
     return (
       <div className="agent-panes-empty">
-        <p>{t("workspace.no_workspace")}</p>
+        <EmptyState
+          style={{ padding: 0 }}
+          title={<p style={emptyStateTitleStyle}>{t("workspace.no_workspace")}</p>}
+        />
       </div>
     );
   }

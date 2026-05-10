@@ -89,7 +89,7 @@ describe("CommandPalette", () => {
     expect(routerMocks.navigate).toHaveBeenCalledWith("/workspace");
   });
 
-  it("renders inside MobileSheet on mobile and still filters commands", () => {
+  it("renders inside shared Sheet on mobile and still filters commands", () => {
     viewportMocks.viewport = "mobile";
 
     const store = createStore();
@@ -146,6 +146,32 @@ describe("CommandPalette", () => {
     expect(
       screen.getByText("Settings", { selector: ".command-palette-item-label" })
     ).toBeInTheDocument();
+  });
+
+  it("renders the shared empty state shell for no command results", () => {
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(commandPaletteOpenAtom, true);
+    store.set(workspacesAtom, {
+      "ws-1": createWorkspace("ws-1", "/tmp/one"),
+    });
+    store.set(workspaceOrderAtom, ["ws-1"]);
+    store.set(workspacesLoadStateAtom, "ready");
+
+    render(
+      <Provider store={store}>
+        <CommandPalette />
+      </Provider>
+    );
+
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "__missing-command__" },
+    });
+
+    const emptyStateTitle = screen.getByText("No results found");
+
+    expect(emptyStateTitle.tagName).toBe("P");
+    expect(emptyStateTitle.closest(".command-palette-empty")).toBeTruthy();
   });
 
   it("keeps desktop-only layout commands available on desktop and executes them", () => {

@@ -1,10 +1,8 @@
 import { useSetAtom } from "jotai";
 import { useEffect, useState } from "react";
+import { Button, EmptyState, Sheet } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
-import { MobileSelectSheet } from "../../../mobile-select";
-import { MobileSheet } from "../../../workspace/views/mobile/mobile-sheet";
 import {
-  OBJECTIVE_DIALOG_EVALUATOR_OPTIONS,
   type ObjectiveDialogEvaluatorProviderId,
   type ObjectiveDialogMode,
   useObjectiveDialogState,
@@ -22,6 +20,23 @@ interface MobileSupervisorSheetProps {
   onClose: () => void;
 }
 
+const mobileSupervisorEmptyStateStyle = {
+  minHeight: 0,
+  padding: "var(--sp-4)",
+  gap: "var(--sp-2)",
+  alignItems: "stretch",
+  textAlign: "left",
+};
+
+const mobileSupervisorEmptySlotStyle = {
+  width: "auto",
+  maxWidth: "none",
+  color: "inherit",
+  fontSize: "inherit",
+  fontWeight: "inherit",
+  lineHeight: "inherit",
+};
+
 export function MobileSupervisorSheet({
   sessionId,
   workspaceId,
@@ -29,7 +44,6 @@ export function MobileSupervisorSheet({
 }: MobileSupervisorSheetProps) {
   const t = useTranslation();
   const [detailMode, setDetailMode] = useState<ObjectiveDialogMode | null>(null);
-  const [evaluatorPickerOpen, setEvaluatorPickerOpen] = useState(false);
   const setDialog = useSetAtom(supervisorDialogAtom);
   const {
     dialog,
@@ -46,7 +60,6 @@ export function MobileSupervisorSheet({
   useEffect(() => {
     if (!dialog.open || dialog.sessionId !== sessionId) {
       setDetailMode(null);
-      setEvaluatorPickerOpen(false);
       return;
     }
 
@@ -62,49 +75,19 @@ export function MobileSupervisorSheet({
       draftEvaluatorProviderId:
         (supervisor?.evaluatorProviderId as ObjectiveDialogEvaluatorProviderId) ?? "claude",
     });
-    setEvaluatorPickerOpen(false);
     setDetailMode(nextMode);
   };
 
-  if (detailMode && evaluatorPickerOpen) {
-    return (
-      <MobileSelectSheet
-        title={t("supervisor.field.evaluator")}
-        sections={[
-          {
-            kind: "options",
-            id: "evaluator-providers",
-            items: OBJECTIVE_DIALOG_EVALUATOR_OPTIONS.map((option) => ({
-              id: option.id,
-              label: option.label,
-            })),
-          },
-        ]}
-        selectedId={dialog.draftEvaluatorProviderId}
-        onBack={() => setEvaluatorPickerOpen(false)}
-        onClose={() => setEvaluatorPickerOpen(false)}
-        onSelect={(id) => {
-          updateDraft({
-            draftEvaluatorProviderId: id as ObjectiveDialogEvaluatorProviderId,
-          });
-          setEvaluatorPickerOpen(false);
-        }}
-      />
-    );
-  }
-
   if (detailMode) {
     return (
-      <MobileSheet
+      <Sheet
         title={copy.title}
         kicker={t("supervisor.title")}
         onBack={() => {
-          setEvaluatorPickerOpen(false);
           close();
           setDetailMode(null);
         }}
         onClose={() => {
-          setEvaluatorPickerOpen(false);
           close();
           setDetailMode(null);
           onClose();
@@ -131,34 +114,28 @@ export function MobileSupervisorSheet({
               onDraftEvaluatorProviderChange={(draftEvaluatorProviderId) =>
                 updateDraft({ draftEvaluatorProviderId })
               }
-              mobileEvaluatorPicker={{
-                onOpen: () => setEvaluatorPickerOpen(true),
-                isMobile: true,
-              }}
             />
           </div>
         }
         footer={
           <div className="mobile-supervisor-sheet__footer">
-            <button
-              className="btn btn-secondary"
+            <Button
               onClick={() => {
-                setEvaluatorPickerOpen(false);
                 close();
                 setDetailMode(null);
               }}
             >
               {t("action.cancel")}
-            </button>
-            <button
-              className={`btn ${isDisable ? "btn-danger" : "btn-primary"}`}
+            </Button>
+            <Button
+              variant={isDisable ? "danger" : "primary"}
               onClick={() => {
                 void confirm();
               }}
               disabled={!isDisable && !dialog.draftObjective.trim()}
             >
               {copy.confirm}
-            </button>
+            </Button>
           </div>
         }
       />
@@ -166,7 +143,7 @@ export function MobileSupervisorSheet({
   }
 
   return (
-    <MobileSheet
+    <Sheet
       title={t("supervisor.title")}
       kicker={t("supervisor.title")}
       onClose={onClose}
@@ -177,22 +154,36 @@ export function MobileSupervisorSheet({
             <>
               <SupervisorCard sessionId={sessionId} workspaceId={workspaceId} />
               <div className="mobile-supervisor-sheet__actions">
-                <button className="btn btn-secondary" onClick={() => openDetail("edit")}>
+                <Button onClick={() => openDetail("edit")}>
                   {t("supervisor.action.edit_objective")}
-                </button>
-                <button className="btn btn-secondary" onClick={() => openDetail("disable")}>
+                </Button>
+                <Button onClick={() => openDetail("disable")}>
                   {t("supervisor.action.disable")}
-                </button>
+                </Button>
               </div>
             </>
           ) : (
-            <div className="mobile-supervisor-sheet__empty">
-              <h3>{t("supervisor.title")}</h3>
-              <p>{t("supervisor.empty")}</p>
-              <button className="btn btn-primary" onClick={() => openDetail("enable")}>
-                {t("supervisor.action.enable_objective")}
-              </button>
-            </div>
+            <EmptyState
+              className="mobile-supervisor-sheet__empty"
+              style={mobileSupervisorEmptyStateStyle}
+              title={
+                <div style={mobileSupervisorEmptySlotStyle}>
+                  <h3>{t("supervisor.title")}</h3>
+                </div>
+              }
+              description={
+                <div style={mobileSupervisorEmptySlotStyle}>
+                  <p>{t("supervisor.empty")}</p>
+                </div>
+              }
+              action={
+                <div style={{ width: "100%" }}>
+                  <Button variant="primary" onClick={() => openDetail("enable")}>
+                    {t("supervisor.action.enable_objective")}
+                  </Button>
+                </div>
+              }
+            />
           )}
         </div>
       }

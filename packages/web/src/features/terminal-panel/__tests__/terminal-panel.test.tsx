@@ -1,5 +1,5 @@
 import { Topics } from "@coder-studio/core";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createStore, Provider } from "jotai";
 import { MemoryRouter } from "react-router-dom";
@@ -197,6 +197,183 @@ describe("TerminalPanel", () => {
     expect(consoleSpy).not.toHaveBeenCalled();
   });
 
+  it("renders shared tab semantics for desktop terminal tabs and supports keyboard switching", async () => {
+    const store = createStore();
+    const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
+      handlers.push(handler);
+      return () => {
+        handlers = handlers.filter((candidate) => candidate !== handler);
+      };
+    });
+    const sendCommand = vi.fn().mockImplementation((op: string) => {
+      if (op === "terminal.list") {
+        return Promise.resolve([
+          {
+            id: "term_1",
+            workspaceId: "ws-test",
+            kind: "shell",
+            title: "Workspace Shell",
+            cwd: "/tmp/ws-test",
+            argv: ["/bin/bash"],
+            cols: 120,
+            rows: 30,
+            alive: true,
+            createdAt: 1,
+          },
+          {
+            id: "term_2",
+            workspaceId: "ws-test",
+            kind: "shell",
+            title: "Workspace Shell 2",
+            cwd: "/tmp/ws-test",
+            argv: ["/bin/bash"],
+            cols: 120,
+            rows: 30,
+            alive: true,
+            createdAt: 2,
+          },
+        ]);
+      }
+
+      return Promise.resolve([]);
+    });
+
+    seedReadyWorkspaceState(store, {
+      "ws-test": {
+        id: "ws-test",
+        path: "/tmp/ws-test",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+    store.set(bottomPanelHeightAtom, 240);
+    setEnglishLocale(store);
+    store.set(wsClientAtom, { subscribe, sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <TerminalPanel />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    const tablist = await screen.findByRole("tablist", { name: "Terminal Sessions" });
+    const firstTab = screen.getByRole("tab", { name: "Workspace Shell" });
+    const secondTab = screen.getByRole("tab", { name: "Workspace Shell 2" });
+
+    expect(tablist).toHaveClass("bottom-terminal-tabs");
+    expect(firstTab).toHaveAttribute("aria-selected", "true");
+    expect(secondTab).toHaveAttribute("aria-selected", "false");
+
+    firstTab.focus();
+    fireEvent.keyDown(firstTab, { key: "ArrowRight" });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("xterm-host")).toHaveTextContent("term_2");
+    });
+
+    expect(screen.getByRole("tab", { name: "Workspace Shell 2" })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+  });
+
+  it("closes an inactive terminal tab without switching to it first", async () => {
+    const user = userEvent.setup();
+    const store = createStore();
+    const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
+      handlers.push(handler);
+      return () => {
+        handlers = handlers.filter((candidate) => candidate !== handler);
+      };
+    });
+    const sendCommand = vi.fn().mockImplementation((op: string) => {
+      if (op === "terminal.list") {
+        return Promise.resolve([
+          {
+            id: "term_1",
+            workspaceId: "ws-test",
+            kind: "shell",
+            title: "Workspace Shell",
+            cwd: "/tmp/ws-test",
+            argv: ["/bin/bash"],
+            cols: 120,
+            rows: 30,
+            alive: true,
+            createdAt: 1,
+          },
+          {
+            id: "term_2",
+            workspaceId: "ws-test",
+            kind: "shell",
+            title: "Workspace Shell 2",
+            cwd: "/tmp/ws-test",
+            argv: ["/bin/bash"],
+            cols: 120,
+            rows: 30,
+            alive: true,
+            createdAt: 2,
+          },
+        ]);
+      }
+
+      return Promise.resolve(undefined);
+    });
+
+    seedReadyWorkspaceState(store, {
+      "ws-test": {
+        id: "ws-test",
+        path: "/tmp/ws-test",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+    store.set(bottomPanelHeightAtom, 240);
+    setEnglishLocale(store);
+    store.set(wsClientAtom, { subscribe, sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <TerminalPanel />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    const inactiveTab = await screen.findByRole("tab", { name: "Workspace Shell 2" });
+    const inactiveShell = inactiveTab.closest(".terminal-tab-shell");
+
+    expect(inactiveShell).not.toBeNull();
+    await user.click(within(inactiveShell as HTMLElement).getByRole("button", { name: "Close" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "terminal.close",
+        {
+          terminalId: "term_2",
+        },
+        undefined
+      );
+    });
+
+    expect(screen.getByTestId("xterm-host")).toHaveTextContent("term_1");
+    expect(screen.queryByRole("tab", { name: "Workspace Shell 2" })).toBeNull();
+    expect(screen.queryByRole("tablist", { name: "Terminal Sessions" })).toBeNull();
+  });
+
   it("shows an error toast when terminal creation fails", async () => {
     const store = createStore();
     const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
@@ -300,6 +477,55 @@ describe("TerminalPanel", () => {
     expect(screen.getByText("No terminals")).toBeInTheDocument();
     expect(screen.queryByTestId("xterm-host")).not.toBeInTheDocument();
     expect(consoleSpy).not.toHaveBeenCalled();
+  });
+
+  it("renders the empty-state create action with shared button compatibility classes", async () => {
+    const store = createStore();
+    const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
+      handlers.push(handler);
+      return () => {
+        handlers = handlers.filter((candidate) => candidate !== handler);
+      };
+    });
+    const sendCommand = vi.fn().mockResolvedValue([]);
+
+    seedReadyWorkspaceState(store, {
+      "ws-test": {
+        id: "ws-test",
+        path: "/tmp/ws-test",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+    store.set(bottomPanelHeightAtom, 240);
+    setEnglishLocale(store);
+    store.set(wsClientAtom, { subscribe, sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <TerminalPanel />
+      </Provider>
+    );
+
+    const emptyState = await screen.findByText("No terminals");
+    const emptyPanel = emptyState.closest(".bottom-terminal-empty");
+    expect(emptyPanel).not.toBeNull();
+    expect(document.querySelector(".bottom-terminal-empty")).toBeTruthy();
+    expect(
+      within(emptyPanel as HTMLElement).getByText(
+        "Launch a shell to inspect files, run commands, and verify changes without leaving the workspace."
+      )
+    ).toHaveClass("bottom-terminal-empty-hint");
+
+    expect(
+      within(emptyPanel as HTMLElement).getByRole("button", { name: "New Terminal" })
+    ).toHaveClass("btn", "btn-primary", "btn-sm");
   });
 
   it("caches terminal output to atom for shell terminals before xterm-host subscribes", async () => {
@@ -567,9 +793,18 @@ describe("TerminalPanel", () => {
       expect(screen.getByTestId("xterm-host")).toHaveTextContent("term_1");
     });
 
-    await user.click(screen.getByRole("button", { name: "Switch terminal" }));
+    const trigger = screen.getByRole("button", { name: "Switch terminal" });
+    expect(trigger).toHaveAccessibleName("Switch terminal");
+    expect(trigger).toHaveClass("terminal-selector-btn", "input", "mobile-select-trigger");
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+
+    await user.click(trigger);
 
     expect(screen.getByRole("region", { name: "Terminal Sessions sheet" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Switch terminal" })).toHaveAttribute(
+      "aria-expanded",
+      "true"
+    );
     expect(
       screen.getByRole("button", {
         name: "Workspace Shell",
@@ -583,5 +818,250 @@ describe("TerminalPanel", () => {
       })
     ).toBeInTheDocument();
     expect(document.querySelector(".terminal-selector-dropdown")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Switch terminal Workspace Shell" })).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Switch terminal" }));
+    expect(
+      screen.queryByRole("region", { name: "Terminal Sessions sheet" })
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Switch terminal" })).toHaveAttribute(
+      "aria-expanded",
+      "false"
+    );
+
+    await user.click(screen.getByRole("button", { name: "Switch terminal" }));
+    await user.click(
+      screen.getByRole("button", {
+        name: "Workspace Shell 2",
+        description: "Terminal 2",
+      })
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("xterm-host")).toHaveTextContent("term_2");
+    });
+
+    const updatedTrigger = screen.getByRole("button", { name: "Switch terminal" });
+    expect(updatedTrigger).toHaveTextContent("Workspace Shell 2");
+    expect(updatedTrigger).toHaveAccessibleName("Switch terminal");
+    expect(updatedTrigger).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("uses Popover for the desktop terminal selector open/select/close flow", async () => {
+    const user = userEvent.setup();
+    const store = createStore();
+    const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
+      handlers.push(handler);
+      return () => {
+        handlers = handlers.filter((candidate) => candidate !== handler);
+      };
+    });
+    const sendCommand = vi.fn().mockImplementation((op: string) => {
+      if (op === "terminal.list") {
+        return Promise.resolve([
+          {
+            id: "term_1",
+            workspaceId: "ws-test",
+            kind: "shell",
+            title: "Workspace Shell",
+            cwd: "/tmp/ws-test",
+            argv: ["/bin/bash"],
+            cols: 120,
+            rows: 30,
+            alive: true,
+            createdAt: 1,
+          },
+          {
+            id: "term_2",
+            workspaceId: "ws-test",
+            kind: "shell",
+            title: "Workspace Shell 2",
+            cwd: "/tmp/ws-test",
+            argv: ["/bin/bash"],
+            cols: 120,
+            rows: 30,
+            alive: true,
+            createdAt: 2,
+          },
+        ]);
+      }
+
+      return Promise.resolve([]);
+    });
+
+    seedReadyWorkspaceState(store, {
+      "ws-test": {
+        id: "ws-test",
+        path: "/tmp/ws-test",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+    store.set(bottomPanelHeightAtom, 240);
+    setEnglishLocale(store);
+    store.set(wsClientAtom, { subscribe, sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <TerminalPanel />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("xterm-host")).toHaveTextContent("term_1");
+    });
+
+    const getSelectorTrigger = () =>
+      Array.from(document.querySelectorAll<HTMLButtonElement>(".terminal-selector-btn"))[0];
+
+    const trigger = getSelectorTrigger();
+    expect(trigger).toBeTruthy();
+    expect(trigger).toHaveTextContent("Workspace Shell");
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+
+    await user.click(trigger!);
+
+    const dialog = screen.getByRole("dialog", { name: "Terminal Sessions" });
+    expect(dialog).toHaveAttribute("aria-modal", "false");
+    expect(dialog).toHaveClass("terminal-selector-dropdown");
+    expect(document.body).toContainElement(dialog);
+    expect(getSelectorTrigger()).toHaveAttribute("aria-expanded", "true");
+
+    await user.click(within(dialog).getByRole("button", { name: "Workspace Shell 2" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("xterm-host")).toHaveTextContent("term_2");
+    });
+
+    expect(screen.queryByRole("dialog", { name: "Terminal Sessions" })).toBeNull();
+    expect(getSelectorTrigger()).toHaveTextContent("Workspace Shell 2");
+    expect(getSelectorTrigger()).toHaveAttribute("aria-expanded", "false");
+
+    await user.click(getSelectorTrigger()!);
+    expect(screen.getByRole("dialog", { name: "Terminal Sessions" })).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Terminal Sessions" })).toBeNull();
+    expect(getSelectorTrigger()).toHaveAttribute("aria-expanded", "false");
+
+    await user.click(getSelectorTrigger()!);
+    expect(screen.getByRole("dialog", { name: "Terminal Sessions" })).toBeInTheDocument();
+
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByRole("dialog", { name: "Terminal Sessions" })).toBeNull();
+    expect(getSelectorTrigger()).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("closes an inactive terminal from the desktop selector close action", async () => {
+    const user = userEvent.setup();
+    const store = createStore();
+    const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
+      handlers.push(handler);
+      return () => {
+        handlers = handlers.filter((candidate) => candidate !== handler);
+      };
+    });
+    const sendCommand = vi.fn().mockImplementation((op: string) => {
+      if (op === "terminal.list") {
+        return Promise.resolve([
+          {
+            id: "term_1",
+            workspaceId: "ws-test",
+            kind: "shell",
+            title: "Workspace Shell",
+            cwd: "/tmp/ws-test",
+            argv: ["/bin/bash"],
+            cols: 120,
+            rows: 30,
+            alive: true,
+            createdAt: 1,
+          },
+          {
+            id: "term_2",
+            workspaceId: "ws-test",
+            kind: "shell",
+            title: "Workspace Shell 2",
+            cwd: "/tmp/ws-test",
+            argv: ["/bin/bash"],
+            cols: 120,
+            rows: 30,
+            alive: true,
+            createdAt: 2,
+          },
+        ]);
+      }
+
+      return Promise.resolve(undefined);
+    });
+
+    seedReadyWorkspaceState(store, {
+      "ws-test": {
+        id: "ws-test",
+        path: "/tmp/ws-test",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+    store.set(bottomPanelHeightAtom, 240);
+    setEnglishLocale(store);
+    store.set(wsClientAtom, { subscribe, sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <TerminalPanel />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("xterm-host")).toHaveTextContent("term_1");
+    });
+
+    const trigger = Array.from(
+      document.querySelectorAll<HTMLButtonElement>(".terminal-selector-btn")
+    )[0];
+    expect(trigger).toBeTruthy();
+
+    await user.click(trigger!);
+
+    const dialog = screen.getByRole("dialog", { name: "Terminal Sessions" });
+    const inactiveItem = within(dialog)
+      .getByText("Workspace Shell 2")
+      .closest(".terminal-selector-item");
+
+    expect(inactiveItem).not.toBeNull();
+
+    await user.click(within(inactiveItem as HTMLElement).getByRole("button", { name: "Close" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "terminal.close",
+        {
+          terminalId: "term_2",
+        },
+        undefined
+      );
+    });
+
+    expect(screen.getByTestId("xterm-host")).toHaveTextContent("term_1");
+    expect(screen.queryByRole("dialog", { name: "Terminal Sessions" })).toBeNull();
+    expect(Array.from(document.querySelectorAll(".terminal-selector-btn"))[0]).toHaveTextContent(
+      "Workspace Shell"
+    );
   });
 });

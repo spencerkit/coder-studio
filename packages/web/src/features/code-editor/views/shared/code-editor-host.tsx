@@ -1,5 +1,6 @@
 import { AlertCircle, FileText, Image as ImageIcon, Save, X } from "lucide-react";
 import type { FC } from "react";
+import { EmptyState, IconButton, Tooltip } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { useCodeEditorActions } from "../../actions/use-code-editor-actions";
 import { ImagePreview } from "../../components/image-preview";
@@ -48,15 +49,14 @@ export const CodeEditorHeaderActions: FC<CodeEditorHeaderActionsProps> = ({
     return (
       <div className="mobile-sheet__header-actions">
         {isSvgTextBacked ? (
-          <button
-            type="button"
-            className="mobile-sheet__action mobile-sheet__action--icon"
-            onClick={toggleSvgTextMode}
-            title={toggleModeTitle}
-            aria-label={toggleModeTitle}
-          >
-            {isImageFile ? <FileText size={16} /> : <ImageIcon size={16} />}
-          </button>
+          <Tooltip content={toggleModeTitle}>
+            <IconButton
+              aria-label={toggleModeTitle}
+              className="mobile-sheet__action mobile-sheet__action--icon"
+              icon={isImageFile ? <FileText size={16} /> : <ImageIcon size={16} />}
+              onClick={toggleSvgTextMode}
+            />
+          </Tooltip>
         ) : null}
         <button
           type="button"
@@ -74,37 +74,39 @@ export const CodeEditorHeaderActions: FC<CodeEditorHeaderActionsProps> = ({
   return (
     <div className="code-mode-toggle">
       {isSvgTextBacked && (
+        <Tooltip content={toggleModeTitle}>
+          <button
+            type="button"
+            className="code-mode-btn"
+            onClick={toggleSvgTextMode}
+            aria-label={toggleModeTitle}
+          >
+            {isImageFile ? <FileText size={12} /> : <ImageIcon size={12} />}
+            <span>{toggleModeLabel}</span>
+          </button>
+        </Tooltip>
+      )}
+      <Tooltip content={saveLabel} disabled={!canSave}>
         <button
           type="button"
           className="code-mode-btn"
-          onClick={toggleSvgTextMode}
-          title={toggleModeTitle}
-          aria-label={toggleModeTitle}
+          onClick={handleSave}
+          disabled={!canSave}
+          aria-label={saveLabel}
         >
-          {isImageFile ? <FileText size={12} /> : <ImageIcon size={12} />}
-          <span>{toggleModeLabel}</span>
+          <Save size={12} />
+          <span>{saveLabel}</span>
         </button>
-      )}
-      <button
-        type="button"
-        className="code-mode-btn"
-        onClick={handleSave}
-        disabled={!canSave}
-        title={saveLabel}
-        aria-label={saveLabel}
-      >
-        <Save size={12} />
-        <span>{saveLabel}</span>
-      </button>
-      <button
-        type="button"
-        className="code-mode-btn"
-        onClick={handleClose}
-        title={t("action.close")}
-        aria-label={t("action.close")}
-      >
-        <X size={12} />
-      </button>
+      </Tooltip>
+      <Tooltip content={t("action.close")}>
+        <IconButton
+          aria-label={t("action.close")}
+          className="code-mode-btn"
+          icon={<X size={12} />}
+          onClick={handleClose}
+          size="sm"
+        />
+      </Tooltip>
     </div>
   );
 };
@@ -129,9 +131,10 @@ export const CodeEditorView: FC<CodeEditorViewProps> = ({ state, chrome = "full"
       <div className="workspace-git-view">
         <div className="code-editor workspace-git-editor">
           <div className="code-editor-body">
-            <div className="git-diff-empty">
-              <p className="git-diff-empty-title">{t("workspace.no_workspace")}</p>
-            </div>
+            <EmptyState
+              className="git-diff-empty"
+              title={<p className="git-diff-empty-title">{t("workspace.no_workspace")}</p>}
+            />
           </div>
         </div>
       </div>
@@ -198,19 +201,23 @@ export const CodeEditorView: FC<CodeEditorViewProps> = ({ state, chrome = "full"
               alt={currentFile.path}
             />
           ) : activeLoadError ? (
-            <div className="git-diff-empty" role="alert">
-              <p className="git-diff-empty-title">{t("code_editor.open_failed_title")}</p>
-              <p className="git-diff-empty-body">{activeLoadError}</p>
-            </div>
+            <EmptyState
+              className="git-diff-empty"
+              description={<p className="git-diff-empty-body">{activeLoadError}</p>}
+              role="alert"
+              title={<p className="git-diff-empty-title">{t("code_editor.open_failed_title")}</p>}
+            />
           ) : activeFilePath ? (
-            <div className="git-diff-empty">
-              <p className="git-diff-empty-title">{t("status.connecting")}…</p>
-            </div>
+            <EmptyState
+              className="git-diff-empty"
+              title={<p className="git-diff-empty-title">{t("status.connecting")}…</p>}
+            />
           ) : (
-            <div className="git-diff-empty">
-              <p className="git-diff-empty-title">{t("file.title")}</p>
-              <p className="git-diff-empty-body">{t("code_editor.empty_hint")}</p>
-            </div>
+            <EmptyState
+              className="git-diff-empty"
+              description={<p className="git-diff-empty-body">{t("code_editor.empty_hint")}</p>}
+              title={<p className="git-diff-empty-title">{t("file.title")}</p>}
+            />
           )}
         </div>
       </div>

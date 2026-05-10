@@ -13,6 +13,11 @@ function normalizeWorktreePath(worktreePath: string): string {
   return path.resolve(worktreePath);
 }
 
+export async function getGitCommonDirPath(repoPath: string): Promise<string> {
+  const { stdout } = await runGit(repoPath, ["rev-parse", "--git-common-dir"]);
+  return normalizeWorktreePath(path.resolve(repoPath, stdout.trim()));
+}
+
 export async function resolveWorktreePath(repoPath: string, worktreePath: string): Promise<string> {
   const normalizedRequested = normalizeWorktreePath(worktreePath);
   const worktrees = await listWorktrees(repoPath);
@@ -171,12 +176,24 @@ export async function getWorktreeTree(worktreePath: string): Promise<FileNode[]>
 export async function createWorktree(
   repoPath: string,
   branch: string,
-  path: string
+  worktreePath: string
 ): Promise<WorktreeInfo> {
-  await runGit(repoPath, ["worktree", "add", path, branch]);
+  let createArgs = ["worktree", "add", worktreePath, branch];
+  try {
+    await runGit(repoPath, ["rev-parse", "--verify", "--quiet", `${branch}^{commit}`]);
+  } catch (error) {
+    if (error instanceof GitError) {
+      createArgs = ["worktree", "add", "-b", branch, worktreePath];
+    } else {
+      throw error;
+    }
+  }
+
+  await runGit(repoPath, createArgs);
 
   const worktrees = await listWorktrees(repoPath);
-  const created = worktrees.find((wt) => wt.path === path);
+  const normalizedRequested = normalizeWorktreePath(worktreePath);
+  const created = worktrees.find((wt) => normalizeWorktreePath(wt.path) === normalizedRequested);
 
   if (!created) {
     throw new Error("Failed to find created worktree");

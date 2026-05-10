@@ -127,6 +127,21 @@ describe("/api/file", () => {
     await rm(outsideDir, { recursive: true, force: true });
   });
 
+  it("streams images when the workspace root is /", async () => {
+    const filePath = join(testDir, "pixel.png");
+    await writeFile(filePath, PNG_BYTES);
+    app = await buildApp("/");
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/api/file?workspaceId=ws-1&path=${filePath.slice(1)}`,
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["content-type"]).toBe("image/png");
+    expect(res.headers["content-length"]).toBe(String(PNG_BYTES.length));
+  });
+
   it("returns 404 when the file does not exist", async () => {
     app = await buildApp(testDir);
 

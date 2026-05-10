@@ -1,0 +1,15 @@
+.triggerWrapper {
+  display: inline-flex;
+  max-width: 100%;
+}
+
+.content {
+  position: fixed;
+  display: block;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
+  margin-top: 0;
+  overflow: auto;
+  outline: none;
+  z-index: var(--z-dropdown);
+}

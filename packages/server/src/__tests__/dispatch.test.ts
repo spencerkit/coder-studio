@@ -5,6 +5,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import type { CommandContext } from "../ws/dispatch.js";
+import "../commands/workspace-activity.js";
 import { dispatch, getRegisteredCommands, registerCommand } from "../ws/dispatch.js";
 
 describe("Command Dispatch", () => {
@@ -18,6 +19,10 @@ describe("Command Dispatch", () => {
       eventBus: {},
       broadcaster: {},
       db: {},
+      autoFetch: {
+        registerViewer: vi.fn(),
+        unregisterViewer: vi.fn(),
+      },
     } as CommandContext;
   });
 
@@ -128,9 +133,11 @@ describe("Command Dispatch", () => {
       expect(result.error?.message).toBe("Custom error occurred");
     });
 
-    it("resolves every debounced git.status request with the coalesced result", async () => {
-      vi.useFakeTimers();
-      const handler = vi.fn().mockResolvedValue({ branch: "main" });
+    it("dispatches each git.status request independently without coalescing", async () => {
+      const handler = vi
+        .fn()
+        .mockResolvedValueOnce({ branch: "main" })
+        .mockResolvedValueOnce({ branch: "feature/next" });
       registerCommand("git.status", z.object({ workspaceId: z.string() }), handler);
 
       const resolvedIds: string[] = [];
@@ -159,13 +166,42 @@ describe("Command Dispatch", () => {
         return result;
       });
 
-      await vi.advanceTimersByTimeAsync(500);
-      await Promise.resolve();
-
-      expect(handler).toHaveBeenCalledTimes(1);
-      expect(resolvedIds).toEqual(["git-status-1", "git-status-2"]);
       await expect(first).resolves.toMatchObject({ ok: true, data: { branch: "main" } });
-      await expect(second).resolves.toMatchObject({ ok: true, data: { branch: "main" } });
+      await expect(second).resolves.toMatchObject({ ok: true, data: { branch: "feature/next" } });
+      expect(handler).toHaveBeenCalledTimes(2);
+      expect(resolvedIds).toEqual(["git-status-1", "git-status-2"]);
+    });
+
+    it("registers the active workspace with autoFetch on workspace.activate", async () => {
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "workspace-activate-1",
+          op: "workspace.activate",
+          args: { workspaceId: "ws-test" },
+        },
+        ctx,
+        "client-1"
+      );
+
+      expect(result.ok).toBe(true);
+      expect(ctx.autoFetch.registerViewer).toHaveBeenCalledWith("client-1", "ws-test");
+    });
+
+    it("unregisters the active workspace from autoFetch on workspace.deactivate", async () => {
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "workspace-deactivate-1",
+          op: "workspace.deactivate",
+          args: {},
+        },
+        ctx,
+        "client-1"
+      );
+
+      expect(result.ok).toBe(true);
+      expect(ctx.autoFetch.unregisterViewer).toHaveBeenCalledWith("client-1");
     });
   });
 });

@@ -55,6 +55,29 @@ describe("MobileSelectSheet", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("renders item badges with the shared tag compatibility classes without forcing all caps", () => {
+    renderWithEnglishLocale(
+      <MobileSelectSheet
+        title="Branches"
+        sections={[
+          {
+            kind: "options",
+            id: "branches",
+            items: [{ id: "origin/main", label: "origin/main", badge: "Remote" }],
+          },
+        ]}
+        onSelect={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("Remote")).toHaveClass(
+      "badge",
+      "badge-gray",
+      "mobile-select-sheet__item-badge"
+    );
+  });
+
   it("waits for async onSelect to settle before closing when closeOnSelect is true", async () => {
     const user = userEvent.setup();
     let resolveSelect: (() => void) | null = null;
@@ -264,13 +287,70 @@ describe("MobileSelectSheet", () => {
 
     expect(row).not.toBeNull();
 
-    await user.click(
-      within(row as HTMLElement).getByRole("button", { name: "Close Current Session" })
+    const trailingAction = within(row as HTMLElement).getByRole("button", {
+      name: "Close Current Session",
+    });
+
+    expect(trailingAction).toHaveClass(
+      "btn",
+      "btn-ghost",
+      "btn-lg",
+      "mobile-select-sheet__item-side-action"
     );
+
+    await user.click(trailingAction);
 
     expect(onCloseSession).toHaveBeenCalledTimes(1);
     expect(onSelect).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("preserves danger tone and disabled behavior on trailing icon actions", async () => {
+    const user = userEvent.setup();
+    const onAction = vi.fn();
+
+    renderWithEnglishLocale(
+      <MobileSelectSheet
+        title="Agent Sessions"
+        sections={[
+          {
+            kind: "options",
+            id: "sessions",
+            items: [
+              {
+                id: "sess_2",
+                label: "Codex",
+                trailingAction: {
+                  id: "close-current",
+                  ariaLabel: "Close Current Session",
+                  disabled: true,
+                  icon: <span aria-hidden="true">x</span>,
+                  onAction,
+                  tone: "danger",
+                },
+              },
+            ],
+          },
+        ]}
+        onSelect={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+
+    const trailingAction = screen.getByRole("button", { name: "Close Current Session" });
+
+    expect(trailingAction).toHaveClass(
+      "btn",
+      "btn-ghost",
+      "btn-lg",
+      "mobile-select-sheet__item-side-action",
+      "mobile-select-sheet__item-side-action--danger"
+    );
+    expect(trailingAction).toBeDisabled();
+
+    await user.click(trailingAction);
+
+    expect(onAction).not.toHaveBeenCalled();
   });
 
   it("keeps selected state on the row background and does not render a check icon", () => {
@@ -384,6 +464,33 @@ describe("MobileSelectSheet", () => {
     expect(onCreate).toHaveBeenCalledWith("feature/mobile-select");
   });
 
+  it("renders the empty state through the shared primitive while preserving the feature shell hook", () => {
+    renderWithEnglishLocale(
+      <MobileSelectSheet
+        title="Branch"
+        sections={[{ kind: "options", id: "branches", items: [] }]}
+        emptyText="No branches found"
+        onSelect={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+
+    const emptyState = document.querySelector(".mobile-select-sheet__empty");
+    const emptyStateStyle = emptyState?.getAttribute("style") ?? "";
+    const emptyStateTitleStyle = emptyState?.firstElementChild?.getAttribute("style") ?? "";
+
+    expect(emptyState).not.toBeNull();
+    expect(emptyState).toHaveTextContent("No branches found");
+    expect(emptyStateStyle).toContain("min-height: auto");
+    expect(emptyStateStyle).toContain("padding: var(--sp-6) var(--sp-4)");
+    expect(emptyStateStyle).toContain("gap: 0");
+    expect(emptyState?.childElementCount).toBe(1);
+    expect(emptyState?.firstElementChild).toHaveTextContent("No branches found");
+    expect(emptyState?.firstElementChild?.tagName).toBe("DIV");
+    expect(emptyStateTitleStyle).toContain("color: var(--text-tertiary)");
+    expect(emptyStateTitleStyle).toContain("font-weight: var(--font-normal)");
+  });
+
   it("keeps the sheet open when closeOnSelect is false", async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
@@ -481,7 +588,7 @@ describe("MobileSelectSheet", () => {
     expect(onCreate).not.toHaveBeenCalled();
   });
 
-  it("renders loading state separately from the empty state", () => {
+  it("renders the loading state through the shared primitive while preserving the feature shell hook", () => {
     renderWithEnglishLocale(
       <MobileSelectSheet
         title="Branch"
@@ -492,7 +599,12 @@ describe("MobileSelectSheet", () => {
       />
     );
 
+    const loadingState = document.querySelector(".mobile-select-sheet__loading");
+
     expect(screen.getByRole("status")).toHaveTextContent("Loading...");
-    expect(screen.queryByText("No results found")).not.toBeInTheDocument();
+    expect(loadingState).not.toBeNull();
+    expect(loadingState).toHaveAttribute("role", "status");
+    expect(loadingState).toHaveTextContent("Loading...");
+    expect(document.querySelector(".mobile-select-sheet__empty")).toBeNull();
   });
 });

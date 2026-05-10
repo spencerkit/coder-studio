@@ -28,7 +28,7 @@ describe("LoginPage", () => {
   it("renders the shared card layout while auth status is loading", async () => {
     globalThis.fetch = vi.fn(() => new Promise(() => {})) as typeof fetch;
 
-    render(
+    const { container } = render(
       <Provider>
         <LoginPage />
       </Provider>
@@ -38,6 +38,8 @@ describe("LoginPage", () => {
     expect(document.querySelector(".welcome-card")).toBeTruthy();
     expect(document.querySelector(".auth-form")).toBeTruthy();
     expect(document.querySelector(".auth-status-panel")).toBeTruthy();
+    expect(container.querySelector(".auth-card-shell > .auth-status-panel")).toBeTruthy();
+    expect(container.querySelector(".auth-card-shell > .auth-form")).toBeTruthy();
     expect(screen.getByRole("button")).toBeDisabled();
     expect(screen.getAllByText("连接中").length).toBeGreaterThan(0);
   });
@@ -54,10 +56,27 @@ describe("LoginPage", () => {
       </Provider>
     );
 
-    await screen.findByPlaceholderText("密码");
+    await screen.findByLabelText("密码");
 
     expect(screen.getByText("输入密码后继续进入当前工作区。")).toBeInTheDocument();
     expect(screen.getByText("请输入当前部署配置的访问密码。")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("密码")).toHaveClass("input", "auth-input");
+  });
+
+  it("renders the auth password field with shared input compatibility classes", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ authEnabled: true, authenticated: false }),
+    }) as unknown as typeof fetch;
+
+    render(
+      <Provider>
+        <LoginPage />
+      </Provider>
+    );
+
+    const input = await screen.findByLabelText("密码");
+    expect(input).toHaveClass("input", "input-lg", "auth-input");
   });
 
   it("marks the user authenticated when auth is disabled on the server", async () => {
@@ -109,7 +128,7 @@ describe("LoginPage", () => {
       </Provider>
     );
 
-    const input = await screen.findByPlaceholderText("密码");
+    const input = await screen.findByLabelText("密码");
     fireEvent.change(input, { target: { value: "sekrit" } });
     expect(input).toHaveValue("sekrit");
     expect(screen.getByRole("button", { name: "确认" })).toBeEnabled();
@@ -143,7 +162,7 @@ describe("LoginPage", () => {
       </Provider>
     );
 
-    const input = await screen.findByPlaceholderText("密码");
+    const input = await screen.findByLabelText("密码");
     fireEvent.change(input, { target: { value: "bad" } });
     expect(input).toHaveValue("bad");
     expect(screen.getByRole("button", { name: "确认" })).toBeEnabled();
@@ -185,7 +204,7 @@ describe("LoginPage", () => {
       </Provider>
     );
 
-    const input = await screen.findByPlaceholderText("密码");
+    const input = await screen.findByLabelText("密码");
     fireEvent.change(input, { target: { value: "bad" } });
     fireEvent.click(screen.getByRole("button", { name: "确认" }));
 
@@ -244,7 +263,7 @@ describe("LoginPage", () => {
       </Provider>
     );
 
-    const input = await screen.findByPlaceholderText("Password");
+    const input = await screen.findByLabelText("Password");
     fireEvent.change(input, { target: { value: "bad" } });
     fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
 
@@ -272,7 +291,7 @@ describe("LoginPage", () => {
       </Provider>
     );
 
-    await screen.findByPlaceholderText("密码");
+    await screen.findByLabelText("密码");
 
     expect(document.querySelector(".welcome-container--mobile")).toBeTruthy();
     expect(document.querySelector(".auth-screen--mobile")).toBeTruthy();

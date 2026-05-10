@@ -5,9 +5,18 @@ import { wsClientAtom } from "../../../../atoms/connection";
 import { gitDiffPreviewAtomFamily } from "../../atoms";
 import { GitDiffViewer } from "./git-diff-viewer";
 
+const viewportMocks = vi.hoisted(() => ({
+  value: "desktop" as "desktop" | "mobile",
+}));
+
+vi.mock("../../../../components/ui/_internal/use-viewport", () => ({
+  useViewport: () => viewportMocks.value,
+}));
+
 describe("GitDiffViewer", () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    viewportMocks.value = "desktop";
   });
 
   it("shows raw patch content only and does not request file preview content", async () => {
@@ -62,10 +71,21 @@ describe("GitDiffViewer", () => {
       </Provider>
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /close|关闭/i }));
+    const closeButton = screen.getByRole("button", { name: /close|关闭/i });
+    expect(closeButton).toHaveClass("btn", "btn-ghost", "btn-sm", "code-mode-btn");
+    expect(closeButton).not.toHaveAttribute("title");
+
+    fireEvent.mouseEnter(closeButton);
+    expect(screen.getByRole("tooltip")).toHaveTextContent(/close|关闭/i);
+
+    fireEvent.click(closeButton);
 
     expect(store.get(gitDiffPreviewAtomFamily("ws-test"))).toBeNull();
     expect(screen.getByText("Git")).toBeInTheDocument();
+    expect(document.querySelector(".git-diff-empty")).toBeTruthy();
+    expect(
+      screen.getByText("Select a staged or modified file on the left to inspect its diff.")
+    ).toHaveClass("git-diff-empty-body");
   });
 
   it("hides the internal close button when showCloseButton is false", async () => {

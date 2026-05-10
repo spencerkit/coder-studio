@@ -154,6 +154,23 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(stylesheet).not.toContain("\n.agent-provider-card[disabled] {\n");
   });
 
+  it("keeps draft launcher provider cards adaptive inside narrow panes", () => {
+    const launcher = getLastRuleBlock(".agent-draft-launcher");
+    const content = getLastRuleBlock(".agent-draft-content");
+    const providerCard = getLastRuleBlock(".agent-provider-card");
+    const providerBody = getLastRuleBlock(".agent-provider-card-body");
+    const providerArrow = getLastRuleBlock(".agent-provider-card-arrow");
+
+    expect(launcher).toContain("container-type: inline-size");
+    expect(content).toContain("max-width: 100%");
+    expect(providerCard).toContain("min-width: 0");
+    expect(providerBody).toContain("width: 100%");
+    expect(providerArrow).toContain("flex-shrink: 0");
+    expect(stylesheet).toMatch(
+      /@container\s*\(max-width:\s*36rem\)\s*\{[\s\S]*?\.agent-draft-providers\s*\{[\s\S]*?grid-template-columns:\s*1fr;[\s\S]*?\}/
+    );
+  });
+
   it("keeps mobile sheet bodies as flex columns so sheet content can fill the viewport", () => {
     const sheetBody = getLastRuleBlock(".mobile-sheet__body");
     const sheetBodyChildren = getLastRuleBlock(".mobile-sheet__body > *");
@@ -162,6 +179,40 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(sheetBody).toContain("flex-direction: column");
     expect(sheetBodyChildren).toContain("flex: 1");
     expect(sheetBodyChildren).toContain("min-height: 0");
+  });
+
+  it("keeps the shared mobile workspace viewport flush with the bottom footer", () => {
+    const viewport = getLastRuleBlock(".mobile-shell__viewport");
+    const compactViewport = getLastRuleBlock(
+      ".mobile-shell--landscape-compact .mobile-shell__viewport"
+    );
+
+    expect(viewport).toContain(
+      "padding: var(--sp-2) var(--mobile-safe-right) 0 var(--mobile-safe-left)"
+    );
+    expect(viewport).not.toContain("var(--sp-3) var(--mobile-safe-left)");
+    expect(compactViewport).toContain("padding-bottom: 0");
+  });
+
+  it("pins the mobile workspace and fullscreen sheets to the viewport with a scrolling middle region", () => {
+    const mobileShell = getLastGroupedRuleBlock(/\.mobile-shell\s*\{([^}]*)\}/g);
+    const fullscreenSheet = getLastGroupedRuleBlock(
+      /\.mobile-sheet\.mobile-sheet--fullscreen\s*\{([^}]*)\}/g
+    );
+    const fullscreenFooter = getLastGroupedRuleBlock(
+      /\.mobile-sheet\.mobile-sheet--fullscreen\s+\.mobile-sheet__footer\s*\{([^}]*)\}/g
+    );
+    const sheetBody = getLastRuleBlock(".mobile-sheet__body");
+
+    expect(mobileShell).toContain("height: 100dvh");
+    expect(mobileShell).toContain("overflow: hidden");
+    expect(fullscreenSheet).toContain("height: 100dvh");
+    expect(fullscreenSheet).toContain("overflow: hidden");
+    expect(fullscreenSheet).toContain(
+      "padding: calc(var(--mobile-safe-top) + var(--sp-2)) var(--mobile-safe-right) 0"
+    );
+    expect(fullscreenFooter).toContain("padding-bottom: var(--mobile-safe-bottom)");
+    expect(sheetBody).toContain("overflow-y: auto");
   });
 
   it("keeps fullscreen mobile sheet headers aligned to a settings-style back and title row", () => {
@@ -217,6 +268,22 @@ describe("components.css theme-sensitive surfaces", () => {
     const mobileDock = getLastRuleBlock(".mobile-dock");
 
     expect(mobileDock).toContain("grid-template-columns: repeat(3, minmax(0, 1fr))");
+  });
+
+  it("keeps git panel sections stretched to the parent width with a full-width toggle hit area", () => {
+    const section = getLastGroupedRuleBlock(
+      /\.git-panel-section,\s*\.git-panel-section-header,\s*\.git-panel-section-body\s*\{([^}]*)\}/g
+    );
+    const toggle = getLastRuleBlock(".git-panel-section-toggle");
+    const desktopPanel = getLastRuleBlock(".git-panel--desktop");
+
+    expect(section).toContain("min-width: 0");
+    expect(section).toContain("width: 100%");
+    expect(toggle).toContain("display: flex");
+    expect(toggle).toContain("flex: 1 1 auto");
+    expect(toggle).toContain("width: 100%");
+    expect(toggle).toContain("justify-content: flex-start");
+    expect(desktopPanel).toContain("width: 100%");
   });
 
   it("keeps session header badges on a single line by truncating the title first", () => {

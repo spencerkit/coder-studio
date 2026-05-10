@@ -184,7 +184,10 @@ describe("FileTreePanel", () => {
       </Provider>
     );
 
-    fireEvent.change(await screen.findByLabelText("file.path"), {
+    const pathInput = await screen.findByLabelText("file.path");
+    expect(pathInput).toHaveClass("input");
+
+    fireEvent.change(pathInput, {
       target: { value: "src/demo/new-file.ts" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
@@ -336,6 +339,77 @@ describe("FileTreePanel", () => {
     });
   });
 
+  it("restores per-type icon tone classes for tree rows and search results", async () => {
+    const searchFiles = [
+      { path: "src/app.tsx", name: "app.tsx", kind: "file" },
+      { path: "src/config.json", name: "config.json", kind: "file" },
+      { path: "src/README.md", name: "README.md", kind: "file" },
+      { path: "src/logo.svg", name: "logo.svg", kind: "file" },
+      { path: "src/notes.bin", name: "notes.bin", kind: "file" },
+    ];
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args: { query?: string }) => {
+      if (op === "file.search") {
+        const query = args.query?.toLowerCase() ?? "";
+        return {
+          files: searchFiles.filter((item) => item.name.toLowerCase().includes(query)),
+        };
+      }
+
+      return { ok: true };
+    });
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(
+      fileTreeAtomFamily("ws-test"),
+      new Map([
+        [
+          ".",
+          [
+            {
+              path: "src",
+              name: "src",
+              kind: "dir",
+              children: [
+                { path: "src/app.tsx", name: "app.tsx", kind: "file" },
+                { path: "src/config.json", name: "config.json", kind: "file" },
+                { path: "src/README.md", name: "README.md", kind: "file" },
+                { path: "src/logo.svg", name: "logo.svg", kind: "file" },
+                { path: "src/notes.bin", name: "notes.bin", kind: "file" },
+              ],
+            },
+          ],
+        ],
+      ])
+    );
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    const folderLabel = screen.getByText("src");
+    expect(folderLabel.previousElementSibling).toHaveClass("tree-icon", "folder");
+
+    await screen.findByText("app.tsx");
+
+    expect(screen.getByText("app.tsx").previousElementSibling).toHaveClass("tree-icon", "code");
+    expect(screen.getByText("config.json").previousElementSibling).toHaveClass("tree-icon", "data");
+    expect(screen.getByText("README.md").previousElementSibling).toHaveClass("tree-icon", "doc");
+    expect(screen.getByText("logo.svg").previousElementSibling).toHaveClass("tree-icon", "media");
+    expect(screen.getByText("notes.bin").previousElementSibling).toHaveClass("tree-icon", "file");
+
+    fireEvent.change(screen.getByPlaceholderText("action.search_files"), {
+      target: { value: "logo" },
+    });
+
+    const searchLabel = await screen.findByText("logo.svg");
+    expect(searchLabel.closest(".tree-search-labels")?.previousElementSibling).toHaveClass(
+      "tree-icon",
+      "media"
+    );
+  });
+
   it("opens the new file dialog from the toolbar and dispatches file.create", async () => {
     const sendCommand = vi
       .fn()
@@ -354,7 +428,8 @@ describe("FileTreePanel", () => {
       </Provider>
     );
 
-    expect(await screen.findByLabelText("file.path")).toBeInTheDocument();
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByLabelText("file.path")).toHaveClass("input");
 
     fireEvent.change(screen.getByLabelText("file.path"), {
       target: { value: "src/demo/new-file.ts" },
@@ -373,6 +448,87 @@ describe("FileTreePanel", () => {
     });
 
     expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/demo/new-file.ts");
+  });
+
+  it("does not create a file until the confirmation action is clicked", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({ ok: true });
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(fileTreeAtomFamily("ws-test"), new Map([[".", []]]));
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel
+          workspaceId="ws-test"
+          createRequest={{ id: 1, mode: "file", baseDir: null }}
+        />
+      </Provider>
+    );
+
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    const pathInput = screen.getByLabelText("file.path");
+    expect(pathInput).toHaveClass("input");
+    expect(pathInput).toHaveAttribute("placeholder", "src/demo/new-file.ts");
+
+    fireEvent.change(pathInput, { target: { value: "src/demo/new-file.ts" } });
+
+    expect(sendCommand).not.toHaveBeenCalledWith(
+      "file.create",
+      {
+        workspaceId: "ws-test",
+        path: "src/demo/new-file.ts",
+      },
+      undefined
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+
+    expect(sendCommand).not.toHaveBeenCalledWith(
+      "file.create",
+      {
+        workspaceId: "ws-test",
+        path: "src/demo/new-file.ts",
+      },
+      undefined
+    );
+  });
+
+  it("connects file create helper and error text to the shared input", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({ ok: true });
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(fileTreeAtomFamily("ws-test"), new Map([[".", []]]));
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel
+          workspaceId="ws-test"
+          createRequest={{ id: 1, mode: "file", baseDir: null }}
+        />
+      </Provider>
+    );
+
+    const input = await screen.findByLabelText("file.path");
+    const helper = screen.getByText("file.path_helper_file");
+
+    expect(input).toHaveAttribute("aria-describedby", helper.id);
+    expect(input).toHaveAttribute("aria-invalid", "false");
+    expect(screen.getByRole("button", { name: "action.close" })).toHaveClass(
+      "btn",
+      "btn-ghost",
+      "btn-sm"
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+
+    const error = await screen.findByRole("alert");
+
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(input).toHaveAttribute("aria-describedby", `${helper.id} ${error.id}`);
   });
 
   it("opens the new folder dialog from a directory action and pre-fills the directory prefix", async () => {
@@ -451,7 +607,28 @@ describe("FileTreePanel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "file.new_folder src" }));
 
-    expect(await screen.findByLabelText("file.path")).toBeInTheDocument();
+    expect(await screen.findByLabelText("file.path")).toHaveClass("input");
+  });
+
+  it("renders file dialog actions with shared button compatibility classes", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({ ok: true });
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(fileTreeAtomFamily("ws-test"), new Map([[".", []]]));
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel
+          workspaceId="ws-test"
+          createRequest={{ id: 1, mode: "file", baseDir: null }}
+        />
+      </Provider>
+    );
+
+    await screen.findByLabelText("file.path");
+
+    expect(screen.getByRole("button", { name: "Cancel" })).toHaveClass("btn", "btn-secondary");
+    expect(screen.getByRole("button", { name: "Confirm" })).toHaveClass("btn", "btn-primary");
   });
 
   it("uses translated loading copy while the tree is still being fetched", async () => {
@@ -470,7 +647,14 @@ describe("FileTreePanel", () => {
       </Provider>
     );
 
-    expect(await screen.findByText("common.loading")).toBeInTheDocument();
+    const loadingStates = await screen.findAllByText("common.loading");
+    expect(loadingStates.length).toBeGreaterThan(0);
+
+    const loadingStateTitle = loadingStates[0];
+    expect(loadingStateTitle?.tagName).toBe("P");
+
+    const loadingShell = loadingStateTitle?.closest(".file-tree-empty");
+    expect(loadingShell).not.toBeNull();
   });
 
   it("loads children for default-expanded root directories", async () => {
@@ -522,6 +706,52 @@ describe("FileTreePanel", () => {
     expect(await screen.findByText("index.ts")).toBeInTheDocument();
   });
 
+  it("collapses expanded directories when the external collapse trigger changes", () => {
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand: vi.fn().mockResolvedValue({}) } as never);
+    store.set(
+      fileTreeAtomFamily("ws-test"),
+      new Map([
+        [
+          ".",
+          [
+            {
+              path: "src",
+              name: "src",
+              kind: "dir",
+            },
+          ],
+        ],
+        [
+          "src",
+          [
+            {
+              path: "src/index.ts",
+              name: "index.ts",
+              kind: "file",
+            },
+          ],
+        ],
+      ])
+    );
+
+    const { rerender } = render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" collapseVersion={0} />
+      </Provider>
+    );
+
+    expect(screen.getByText("index.ts")).toBeInTheDocument();
+
+    rerender(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" collapseVersion={1} />
+      </Provider>
+    );
+
+    expect(screen.queryByText("index.ts")).not.toBeInTheDocument();
+  });
+
   it("uses translated empty-directory copy for expanded folders with no children", () => {
     const sendCommand = vi.fn().mockResolvedValue({ ok: true });
     const store = createStore();
@@ -549,7 +779,49 @@ describe("FileTreePanel", () => {
       </Provider>
     );
 
-    expect(screen.getByText("file.empty_directory")).toBeInTheDocument();
+    const emptyDirectoryState = screen.getByText("file.empty_directory");
+
+    expect(emptyDirectoryState.tagName).toBe("P");
+    expect(emptyDirectoryState.closest(".tree-empty-hint")).toBeTruthy();
+  });
+
+  it("uses translated loading copy for expanded folders while children are still loading", async () => {
+    const sendCommand = vi.fn().mockImplementation(
+      () =>
+        new Promise(() => {
+          // Keep the directory request pending so the inline loading state remains visible.
+        })
+    );
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(
+      fileTreeAtomFamily("ws-test"),
+      new Map([
+        [
+          ".",
+          [
+            {
+              path: "docs",
+              name: "docs",
+              kind: "dir",
+            },
+          ],
+        ],
+      ])
+    );
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByText("docs"));
+
+    const loadingState = await screen.findByText("common.loading");
+
+    expect(loadingState.tagName).toBe("P");
+    expect(loadingState.closest(".tree-loading")).toBeTruthy();
   });
 
   it("filters loaded files by fuzzy filename search", async () => {
@@ -587,6 +859,160 @@ describe("FileTreePanel", () => {
 
     expect(await screen.findByText("README.md")).toBeInTheDocument();
     expect(screen.queryByText("AppController.tsx")).not.toBeInTheDocument();
+  });
+
+  it("renders the compact shared empty shell for search misses", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args: { query?: string }) => {
+      if (op === "file.search") {
+        const query = args.query?.toLowerCase() ?? "";
+        const files = [{ path: "src/app.tsx", name: "app.tsx", kind: "file" }].filter((item) =>
+          item.name.toLowerCase().includes(query)
+        );
+
+        return { files };
+      }
+
+      return { ok: true };
+    });
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    fireEvent.change(screen.getByPlaceholderText("action.search_files"), {
+      target: { value: "zzz" },
+    });
+
+    const emptyText = await screen.findByText("command.no_results");
+    expect(emptyText.tagName).toBe("P");
+
+    const emptyShell = emptyText.closest(".file-tree-empty");
+
+    expect(emptyShell).not.toBeNull();
+  });
+
+  it("uses shared tooltip behavior for the search result delete action", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args: { query?: string }) => {
+      if (op === "file.search") {
+        const query = args.query?.toLowerCase() ?? "";
+        const files = [{ path: "src/app.tsx", name: "app.tsx", kind: "file" }].filter((item) =>
+          item.name.toLowerCase().includes(query)
+        );
+
+        return { files };
+      }
+
+      return { ok: true };
+    });
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+    const onSelectFile = vi.fn();
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" onSelectFile={onSelectFile} />
+      </Provider>
+    );
+
+    fireEvent.change(screen.getByPlaceholderText("action.search_files"), {
+      target: { value: "app" },
+    });
+
+    const deleteButton = await screen.findByRole("button", {
+      name: "file.delete src/app.tsx",
+    });
+    expect(deleteButton).toHaveClass("btn", "btn-ghost", "btn-sm", "git-row-action");
+    expect(deleteButton).not.toHaveAttribute("title");
+
+    fireEvent.mouseEnter(deleteButton);
+
+    const tooltip = screen.getByRole("tooltip");
+    expect(tooltip).toHaveTextContent("file.delete");
+    expect(deleteButton).toHaveAttribute("aria-describedby", tooltip.getAttribute("id") ?? "");
+
+    fireEvent.click(deleteButton);
+
+    expect(onSelectFile).not.toHaveBeenCalled();
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("uses shared tooltips for file-tree action triggers without showing row path labels", () => {
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand: vi.fn().mockResolvedValue({}) } as never);
+    store.set(
+      fileTreeAtomFamily("ws-test"),
+      new Map([
+        [
+          ".",
+          [
+            {
+              path: "src",
+              name: "src",
+              kind: "dir",
+              children: [],
+            },
+            {
+              path: "src/app.tsx",
+              name: "app.tsx",
+              kind: "file",
+            },
+          ],
+        ],
+      ])
+    );
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    const newFileButton = screen.getByRole("button", { name: "file.new_file src" });
+    const newFolderButton = screen.getByRole("button", { name: "file.new_folder src" });
+    const deleteDirectoryButton = screen.getByRole("button", { name: "file.delete src" });
+    const deleteFileButton = screen.getByRole("button", { name: "file.delete src/app.tsx" });
+
+    expect(newFileButton).toHaveClass("btn", "btn-ghost", "btn-sm", "git-row-action");
+    expect(newFolderButton).toHaveClass("btn", "btn-ghost", "btn-sm", "git-row-action");
+    expect(deleteDirectoryButton).toHaveClass("btn", "btn-ghost", "btn-sm", "git-row-action");
+    expect(deleteFileButton).toHaveClass("btn", "btn-ghost", "btn-sm", "git-row-action");
+    expect(newFileButton).not.toHaveAttribute("title");
+    expect(newFolderButton).not.toHaveAttribute("title");
+    expect(deleteDirectoryButton).not.toHaveAttribute("title");
+    expect(deleteFileButton).not.toHaveAttribute("title");
+    const directoryLabel = screen.getByText("src");
+    const fileLabel = screen.getByText("app.tsx");
+    expect(directoryLabel).not.toHaveAttribute("title");
+    expect(fileLabel).not.toHaveAttribute("title");
+    expect(directoryLabel.closest(".tree-item")).not.toHaveAttribute("title");
+    expect(fileLabel.closest(".tree-item")).not.toHaveAttribute("title");
+
+    fireEvent.mouseEnter(newFileButton);
+    expect(screen.getByRole("tooltip")).toHaveTextContent("file.new_file");
+
+    fireEvent.mouseLeave(newFileButton);
+    fireEvent.mouseEnter(newFolderButton);
+    expect(screen.getByRole("tooltip")).toHaveTextContent("file.new_folder");
+
+    fireEvent.mouseLeave(newFolderButton);
+    fireEvent.mouseEnter(deleteDirectoryButton);
+    expect(screen.getByRole("tooltip")).toHaveTextContent("file.delete");
+
+    fireEvent.mouseLeave(deleteDirectoryButton);
+    fireEvent.mouseEnter(deleteFileButton);
+    expect(screen.getByRole("tooltip")).toHaveTextContent("file.delete");
+
+    fireEvent.mouseLeave(deleteFileButton);
+    fireEvent.mouseEnter(directoryLabel);
+    expect(screen.queryByRole("tooltip")).toBeNull();
+
+    fireEvent.mouseLeave(directoryLabel);
+    fireEvent.mouseEnter(fileLabel);
+    expect(screen.queryByRole("tooltip")).toBeNull();
   });
 
   it("keeps expanded directories populated after refreshing the file tree", async () => {
@@ -693,6 +1119,7 @@ describe("FileTreePanel", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "file.delete src/app.tsx" }));
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
     fireEvent.click(await screen.findByRole("button", { name: "Confirm" }));
 
     await waitFor(() => {
@@ -755,7 +1182,15 @@ describe("FileTreePanel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "file.delete src" }));
 
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toBeInTheDocument();
     expect(await screen.findByText('Are you sure you want to delete "src"?')).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Confirm" })).toHaveClass("btn", "btn-danger");
+    expect(screen.getByRole("button", { name: "action.close" })).toHaveClass(
+      "btn",
+      "btn-ghost",
+      "btn-sm"
+    );
     fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
 
     await waitFor(() => {
@@ -831,6 +1266,7 @@ describe("FileTreePanel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "file.delete src/app.tsx" }));
 
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
     expect(
       await screen.findByText('Are you sure you want to delete "app.tsx"?')
     ).toBeInTheDocument();
@@ -857,5 +1293,83 @@ describe("FileTreePanel", () => {
         isDirty: false,
       },
     });
+  });
+
+  it("does not render a panel footer on mobile", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({
+      path: "/workspace",
+      children: [
+        {
+          path: "README.md",
+          name: "README.md",
+          kind: "file",
+        },
+      ],
+    });
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(fileTreeAtomFamily("ws-test"), new Map([[".", []]]));
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" variant="mobile" />
+      </Provider>
+    );
+
+    expect(screen.getByLabelText("action.search_files")).toBeInTheDocument();
+    expect(document.querySelector(".git-panel-status-strip")).toBeNull();
+    expect(document.querySelector(".file-tree-status-strip")).toBeNull();
+    expect(screen.queryByText("file.visible_count")).toBeNull();
+  });
+
+  it("requires explicit confirmation before deleting a file", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({ ok: true });
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(
+      fileTreeAtomFamily("ws-test"),
+      new Map([
+        [
+          ".",
+          [
+            {
+              path: "src/app.tsx",
+              name: "app.tsx",
+              kind: "file",
+            },
+          ],
+        ],
+      ])
+    );
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "file.delete src/app.tsx" }));
+
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Confirm" })).toHaveClass("btn", "btn-danger");
+    expect(screen.getByRole("button", { name: "action.close" })).toHaveClass(
+      "btn",
+      "btn-ghost",
+      "btn-sm"
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+
+    expect(sendCommand).not.toHaveBeenCalledWith(
+      "file.delete",
+      {
+        workspaceId: "ws-test",
+        path: "src/app.tsx",
+      },
+      undefined
+    );
   });
 });

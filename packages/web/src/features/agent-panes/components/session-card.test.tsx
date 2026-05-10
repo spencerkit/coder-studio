@@ -169,6 +169,67 @@ describe("SessionCard", () => {
     expect(screen.queryByRole("button", { name: "Close" })).not.toBeInTheDocument();
   });
 
+  it("preserves the legacy session status dot classes", () => {
+    const { store } = createSessionStore({
+      terminalId: "term-live",
+      state: "running",
+      endedAt: undefined,
+    });
+
+    const { container } = render(
+      <Provider store={store}>
+        <SessionCard sessionId="sess_123456" />
+      </Provider>
+    );
+
+    expect(container.querySelector(".session-dot.session-dot-running")).not.toBeNull();
+    expect(container.querySelector(".session-dot.session-dot-running")).toHaveAttribute(
+      "aria-hidden",
+      "true"
+    );
+  });
+
+  it("renders a decorative session status strip with legacy session classes", () => {
+    const { store } = createSessionStore({
+      terminalId: "term-live",
+      state: "running",
+      endedAt: undefined,
+    });
+
+    const { container } = render(
+      <Provider store={store}>
+        <SessionCard sessionId="sess_123456" />
+      </Provider>
+    );
+
+    const progress = container.querySelector(".session-progress");
+    const fill = container.querySelector(".session-progress-bar.session-progress-running");
+
+    expect(progress).toHaveAttribute("aria-hidden", "true");
+    expect(progress).not.toHaveAttribute("role");
+    expect(progress).not.toHaveAttribute("aria-valuemin");
+    expect(progress).not.toHaveAttribute("aria-valuemax");
+    expect(progress).not.toHaveAttribute("aria-valuenow");
+    expect(fill).toHaveStyle({ "--progress-bar-width": "42%" });
+  });
+
+  it("renders migrated provider and state tags with legacy badge compatibility classes", () => {
+    const { store } = createSessionStore({
+      terminalId: "term-live",
+      state: "running",
+      endedAt: undefined,
+    });
+
+    render(
+      <Provider store={store}>
+        <SessionCard sessionId="sess_123456" />
+      </Provider>
+    );
+
+    expect(screen.getByText("Codex")).toHaveClass("badge", "badge-blue", "session-provider-badge");
+    expect(screen.getByText("Running")).toHaveClass("badge", "badge-green", "session-state-badge");
+  });
+
   it("renders a header accessory on the right side of the session header", () => {
     const { store } = createSessionStore({
       terminalId: "term-live",
@@ -435,6 +496,46 @@ describe("SessionCard", () => {
 
     expect(onSplitHorizontal).toHaveBeenCalledTimes(1);
     expect(onSplitVertical).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses shared IconButton compatibility classes for header actions", () => {
+    const { store } = createSessionStore({
+      terminalId: "term-live",
+      state: "running",
+      endedAt: undefined,
+    });
+
+    render(
+      <Provider store={store}>
+        <SessionCard sessionId="sess_123456" />
+      </Provider>
+    );
+
+    expect(screen.getByRole("button", { name: "Stop" })).toHaveClass(
+      "btn",
+      "btn-ghost",
+      "btn-sm",
+      "session-action-btn"
+    );
+    expect(screen.getByRole("button", { name: "Split horizontal" })).toHaveClass(
+      "btn",
+      "btn-ghost",
+      "btn-sm",
+      "session-action-btn"
+    );
+    expect(screen.getByRole("button", { name: "Split vertical" })).toHaveClass(
+      "btn",
+      "btn-ghost",
+      "btn-sm",
+      "session-action-btn"
+    );
+    expect(screen.getByRole("button", { name: "Close" })).toHaveClass(
+      "btn",
+      "btn-ghost",
+      "btn-sm",
+      "session-action-btn",
+      "session-action-btn-close"
+    );
   });
 
   it("persists activeSessionId when the card is clicked", async () => {

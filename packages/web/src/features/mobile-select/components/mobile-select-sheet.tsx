@@ -1,7 +1,7 @@
 import { type ReactNode, useId, useMemo, useState } from "react";
+import { EmptyState, IconButton, Sheet, Tag } from "../../../components/ui";
 import { useTranslation } from "../../../lib/i18n";
 import { PageHeader } from "../../shared/components/page-header";
-import { MobileSheet } from "../../workspace/views/mobile/mobile-sheet";
 
 export interface MobileSelectItemTrailingAction {
   id: string;
@@ -77,6 +77,32 @@ export interface MobileSelectSheetProps {
   onSelect: (id: string) => void | Promise<void>;
   onClose: () => void;
 }
+
+const mobileSelectEmptyStateStyle = {
+  minHeight: "auto",
+  padding: "var(--sp-6) var(--sp-4)",
+  gap: 0,
+};
+
+const mobileSelectLoadingStateStyle = {
+  minHeight: "auto",
+  padding: "var(--sp-6) var(--sp-4)",
+  gap: 0,
+};
+
+const mobileSelectLoadingStateTitleStyle = {
+  color: "var(--text-secondary)",
+  fontSize: "inherit",
+  fontWeight: "var(--font-normal)",
+  lineHeight: "inherit",
+};
+
+const mobileSelectEmptyStateTitleStyle = {
+  color: "var(--text-tertiary)",
+  fontSize: "inherit",
+  fontWeight: "var(--font-normal)",
+  lineHeight: "inherit",
+};
 
 export function MobileSelectSheet({
   title,
@@ -199,9 +225,12 @@ export function MobileSelectSheet({
 
       <div className="mobile-select-sheet__content">
         {loading ? (
-          <div className="mobile-select-sheet__loading" role="status">
-            {resolvedLoadingText}
-          </div>
+          <EmptyState
+            className="mobile-select-sheet__loading"
+            role="status"
+            style={mobileSelectLoadingStateStyle}
+            title={<div style={mobileSelectLoadingStateTitleStyle}>{resolvedLoadingText}</div>}
+          />
         ) : (
           <>
             {filteredSections.map((section) => {
@@ -264,9 +293,13 @@ export function MobileSelectSheet({
                                 ) : null}
                               </span>
                               {item.badge ? (
-                                <span className="mobile-select-sheet__item-badge">
+                                <Tag
+                                  color="neutral"
+                                  caps={false}
+                                  className="mobile-select-sheet__item-badge"
+                                >
                                   {item.badge}
-                                </span>
+                                </Tag>
                               ) : null}
                             </button>
                           );
@@ -286,24 +319,23 @@ export function MobileSelectSheet({
                               data-selected={isSelected ? "true" : "false"}
                             >
                               {optionButton}
-                              <button
-                                type="button"
+                              <IconButton
+                                aria-label={item.trailingAction.ariaLabel}
                                 className={`mobile-select-sheet__item-side-action ${
                                   item.trailingAction.tone === "danger"
                                     ? "mobile-select-sheet__item-side-action--danger"
                                     : ""
                                 }`}
-                                aria-label={item.trailingAction.ariaLabel}
                                 disabled={item.disabled || item.trailingAction.disabled}
+                                icon={
+                                  <span className="mobile-select-sheet__item-side-action-icon">
+                                    {item.trailingAction.icon}
+                                  </span>
+                                }
                                 onClick={() => handleTrailingAction(item.trailingAction.onAction)}
-                              >
-                                <span
-                                  className="mobile-select-sheet__item-side-action-icon"
-                                  aria-hidden="true"
-                                >
-                                  {item.trailingAction.icon}
-                                </span>
-                              </button>
+                                size="lg"
+                                variant="ghost"
+                              />
                             </div>
                           );
                         })
@@ -378,7 +410,11 @@ export function MobileSelectSheet({
             ) : null}
 
             {!hasVisibleItems && !canCreate ? (
-              <div className="mobile-select-sheet__empty">{resolvedEmptyText}</div>
+              <EmptyState
+                className="mobile-select-sheet__empty"
+                style={mobileSelectEmptyStateStyle}
+                title={<div style={mobileSelectEmptyStateTitleStyle}>{resolvedEmptyText}</div>}
+              />
             ) : null}
           </>
         )}
@@ -401,7 +437,7 @@ export function MobileSelectSheet({
   }
 
   return (
-    <MobileSheet
+    <Sheet
       title={title}
       body={<div className="mobile-select-sheet">{content}</div>}
       onClose={onClose}

@@ -1,7 +1,6 @@
 import type { FileNode } from "@coder-studio/core";
 import type { LucideIcon } from "lucide-react";
 import {
-  AlertTriangle,
   ChevronDown,
   ChevronRight,
   FileCode2,
@@ -19,6 +18,19 @@ import {
 } from "lucide-react";
 import type { FC } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Button,
+  ConfirmDialog,
+  EmptyState,
+  IconButton,
+  Input,
+  Modal,
+  ModalBody,
+  ModalFooter,
+  ModalHeader,
+  ModalTitle,
+  Tooltip,
+} from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import {
   type CreateDialogState,
@@ -27,12 +39,70 @@ import {
   useFileActions,
 } from "../../actions/use-file-actions";
 
+const fileTreeEmptyStateStyle = {
+  minHeight: "auto",
+  padding: "var(--sp-4)",
+  gap: 0,
+};
+
+const fileTreeEmptyStateTitleStyle = {
+  margin: 0,
+  color: "var(--text-tertiary)",
+  fontSize: "inherit",
+  fontWeight: "var(--font-normal)",
+};
+
+const fileTreeInlineStateStyle = {
+  display: "block",
+  width: "auto",
+  minHeight: "auto",
+  padding: 0,
+  gap: 0,
+  textAlign: "left" as const,
+};
+
+const fileTreeInlineStateTitleStyle = {
+  margin: 0,
+  color: "inherit",
+  fontSize: "inherit",
+  fontWeight: "inherit",
+};
+
+function FileTreeEmptyState({ title }: { title: string }) {
+  return (
+    <EmptyState
+      className="file-tree-empty"
+      style={fileTreeEmptyStateStyle}
+      title={<p style={fileTreeEmptyStateTitleStyle}>{title}</p>}
+    />
+  );
+}
+
+function FileTreeInlineState({
+  className,
+  title,
+}: {
+  className: "tree-empty-hint" | "tree-loading";
+  title: string;
+}) {
+  return (
+    <EmptyState
+      className={className}
+      style={fileTreeInlineStateStyle}
+      title={<p style={fileTreeInlineStateTitleStyle}>{title}</p>}
+    />
+  );
+}
+
 interface FileTreePanelProps {
   workspaceId: string;
   refreshToken?: number;
   createRequest?: CreateRequest | null;
   onCreateRequestConsumed?: () => void;
   onSelectFile?: (path: string) => void;
+  onVisibleCountChange?: (count: number, loading: boolean) => void;
+  collapseVersion?: number;
+  variant?: "desktop" | "mobile";
 }
 
 export const FileTreePanel: FC<FileTreePanelProps> = ({
@@ -41,6 +111,9 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
   createRequest = null,
   onCreateRequestConsumed,
   onSelectFile,
+  onVisibleCountChange,
+  collapseVersion = 0,
+  variant = "desktop",
 }) => {
   const t = useTranslation();
   const {
@@ -77,6 +150,10 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
   const [searchLoading, setSearchLoading] = useState(false);
   const searchRequestIdRef = useRef(0);
   const hasSearch = searchQuery.length > 0;
+  const visibleFileCount = useMemo(
+    () => (hasSearch ? searchResults.length : countVisibleFiles(treeNodes)),
+    [hasSearch, searchResults.length, treeNodes]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -111,9 +188,13 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
     };
   }, [hasSearch, loadSearchResults, searchQuery]);
 
+  useEffect(() => {
+    onVisibleCountChange?.(visibleFileCount, searchLoading || isLoading);
+  }, [isLoading, onVisibleCountChange, searchLoading, visibleFileCount]);
+
   return (
     <>
-      <div className="file-tree-shell">
+      <div className={`file-tree-shell file-tree-shell--${variant}`}>
         <label className="file-tree-search" htmlFor={`file-tree-search-${workspaceId}`}>
           <Search size={14} className="file-tree-search-icon" aria-hidden="true" />
           <input
@@ -130,9 +211,7 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
         <div className="file-tree">
           {hasSearch ? (
             searchLoading ? (
-              <div className="file-tree-empty">
-                <p>{t("common.loading")}</p>
-              </div>
+              <FileTreeEmptyState title={t("common.loading")} />
             ) : searchResults.length > 0 ? (
               searchResults.map((node) => (
                 <FileSearchResultRow
@@ -144,9 +223,7 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
                 />
               ))
             ) : (
-              <div className="file-tree-empty">
-                <p>{t("command.no_results")}</p>
-              </div>
+              <FileTreeEmptyState title={t("command.no_results")} />
             )
           ) : fileTree && fileTree.size > 0 ? (
             treeNodes.map((node) => (
@@ -160,12 +237,11 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
                 onSelectFile={handleSelectFile}
                 onLoadChildren={loadChildren}
                 isLoadingDir={isLoadingDir}
+                collapseVersion={collapseVersion}
               />
             ))
           ) : (
-            <div className="file-tree-empty">
-              <p>{isLoading ? t("common.loading") : t("file.title")}</p>
-            </div>
+            <FileTreeEmptyState title={isLoading ? t("common.loading") : t("file.title")} />
           )}
         </div>
       </div>
@@ -208,11 +284,10 @@ const FileSearchResultRow: FC<FileSearchResultRowProps> = ({
       className={`tree-item ${selectedPath === node.path ? "selected" : ""}`}
       onClick={() => onSelectFile(node.path)}
       style={{ paddingLeft: 12 }}
-      title={node.path}
     >
       <span className="tree-chevron" aria-hidden="true" />
 
-      <span className={`tree-icon ${getFileToneClass(node)}`}>
+      <span className={`tree-icon ${getNodeToneClass(node, false)}`}>
         <Icon size={14} />
       </span>
 
@@ -222,18 +297,18 @@ const FileSearchResultRow: FC<FileSearchResultRowProps> = ({
       </span>
 
       <div className="tree-item-actions">
-        <button
-          aria-label={`${t("file.delete")} ${node.path}`}
-          className="git-row-action"
-          onClick={(event) => {
-            event.stopPropagation();
-            onRequestDelete(node.path, node.name);
-          }}
-          title={t("file.delete")}
-          type="button"
-        >
-          <Trash2 size={12} />
-        </button>
+        <Tooltip content={t("file.delete")}>
+          <IconButton
+            aria-label={`${t("file.delete")} ${node.path}`}
+            className="git-row-action"
+            icon={<Trash2 size={12} />}
+            onClick={(event) => {
+              event.stopPropagation();
+              onRequestDelete(node.path, node.name);
+            }}
+            size="sm"
+          />
+        </Tooltip>
       </div>
     </div>
   );
@@ -248,6 +323,7 @@ interface FileTreeNodeProps {
   onSelectFile: (path: string) => void;
   onLoadChildren: (dirPath: string) => void;
   isLoadingDir: string | null;
+  collapseVersion: number;
 }
 
 const FileTreeNode: FC<FileTreeNodeProps> = ({
@@ -259,6 +335,7 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
   onSelectFile,
   onLoadChildren,
   isLoadingDir,
+  collapseVersion,
 }) => {
   const t = useTranslation();
   const isFolder = node.kind === "dir";
@@ -280,6 +357,12 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
     }
   }, [isFolder, isExpanded, node.children, node.path, onLoadChildren]);
 
+  useEffect(() => {
+    if (collapseVersion > 0) {
+      setIsExpanded(false);
+    }
+  }, [collapseVersion]);
+
   const handleClick = () => {
     if (isFolder) {
       if (!isExpanded) {
@@ -291,7 +374,7 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
     }
   };
 
-  const paddingLeft = depth * 14 + 12;
+  const paddingLeft = depth * 14 + 16;
   const Icon = getNodeIcon(node, isExpanded);
 
   return (
@@ -300,13 +383,12 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
         className={`tree-item ${selectedPath === node.path ? "selected" : ""}`}
         onClick={handleClick}
         style={{ paddingLeft }}
-        title={node.path}
       >
         <span className="tree-chevron" aria-hidden="true">
           {isFolder ? isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} /> : null}
         </span>
 
-        <span className={`tree-icon ${getFileToneClass(node)}`}>
+        <span className={`tree-icon ${getNodeToneClass(node, isExpanded)}`}>
           <Icon size={14} />
         </span>
 
@@ -315,56 +397,56 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
         <div className="tree-item-actions">
           {isFolder ? (
             <>
-              <button
-                aria-label={`${t("file.new_file")} ${node.path}`}
-                className="git-row-action"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onRequestCreate("file", node.path);
-                }}
-                title={t("file.new_file")}
-                type="button"
-              >
-                <FilePlus size={12} />
-              </button>
-              <button
-                aria-label={`${t("file.new_folder")} ${node.path}`}
-                className="git-row-action"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onRequestCreate("folder", node.path);
-                }}
-                title={t("file.new_folder")}
-                type="button"
-              >
-                <FolderPlus size={12} />
-              </button>
-              <button
+              <Tooltip content={t("file.new_file")}>
+                <IconButton
+                  aria-label={`${t("file.new_file")} ${node.path}`}
+                  className="git-row-action"
+                  icon={<FilePlus size={12} />}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onRequestCreate("file", node.path);
+                  }}
+                  size="sm"
+                />
+              </Tooltip>
+              <Tooltip content={t("file.new_folder")}>
+                <IconButton
+                  aria-label={`${t("file.new_folder")} ${node.path}`}
+                  className="git-row-action"
+                  icon={<FolderPlus size={12} />}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onRequestCreate("folder", node.path);
+                  }}
+                  size="sm"
+                />
+              </Tooltip>
+              <Tooltip content={t("file.delete")}>
+                <IconButton
+                  aria-label={`${t("file.delete")} ${node.path}`}
+                  className="git-row-action"
+                  icon={<Trash2 size={12} />}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onRequestDelete(node.path, node.name);
+                  }}
+                  size="sm"
+                />
+              </Tooltip>
+            </>
+          ) : (
+            <Tooltip content={t("file.delete")}>
+              <IconButton
                 aria-label={`${t("file.delete")} ${node.path}`}
                 className="git-row-action"
+                icon={<Trash2 size={12} />}
                 onClick={(event) => {
                   event.stopPropagation();
                   onRequestDelete(node.path, node.name);
                 }}
-                title={t("file.delete")}
-                type="button"
-              >
-                <Trash2 size={12} />
-              </button>
-            </>
-          ) : (
-            <button
-              aria-label={`${t("file.delete")} ${node.path}`}
-              className="git-row-action"
-              onClick={(event) => {
-                event.stopPropagation();
-                onRequestDelete(node.path, node.name);
-              }}
-              title={t("file.delete")}
-              type="button"
-            >
-              <Trash2 size={12} />
-            </button>
+                size="sm"
+              />
+            </Tooltip>
           )}
         </div>
       </div>
@@ -382,16 +464,17 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
               onSelectFile={onSelectFile}
               onLoadChildren={onLoadChildren}
               isLoadingDir={isLoadingDir}
+              collapseVersion={collapseVersion}
             />
           ))}
           {node.children.length === 0 && !isLoadingDir && (
-            <div className="tree-empty-hint">{t("file.empty_directory")}</div>
+            <FileTreeInlineState className="tree-empty-hint" title={t("file.empty_directory")} />
           )}
         </div>
       )}
 
       {isFolder && isExpanded && !node.children && isLoadingDir === node.path && (
-        <div className="tree-loading">{t("common.loading")}</div>
+        <FileTreeInlineState className="tree-loading" title={t("common.loading")} />
       )}
     </>
   );
@@ -411,66 +494,72 @@ const CreatePathModal: FC<CreatePathModalProps> = ({
   onDraftPathChange,
 }) => {
   const t = useTranslation();
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
   if (!dialog) {
     return null;
   }
 
+  const helperId = "file-path-helper";
+  const errorId = dialog.error ? "file-path-error" : undefined;
   const helperText =
     dialog.mode === "file" ? t("file.path_helper_file") : t("file.path_helper_folder");
+  const describedBy = [helperId, errorId].filter(Boolean).join(" ");
 
   return (
-    <div className="modal-overlay" onClick={onCancel}>
-      <div className="modal-card" onClick={(event) => event.stopPropagation()}>
-        <div className="modal-header">
-          <div className="modal-title">
-            {dialog.mode === "file" ? <FilePlus size={16} /> : <FolderPlus size={16} />}
-            <h3>{dialog.mode === "file" ? t("file.new_file") : t("file.new_folder")}</h3>
-          </div>
-          <button
-            className="btn btn-ghost btn-sm"
-            onClick={onCancel}
-            aria-label={t("action.close")}
-          >
-            <X size={14} />
-          </button>
+    <Modal initialFocus={() => inputRef.current} onOpenChange={onCancel} open>
+      <ModalHeader>
+        <ModalTitle>
+          {dialog.mode === "file" ? (
+            <FilePlus aria-hidden="true" size={16} />
+          ) : (
+            <FolderPlus aria-hidden="true" size={16} />
+          )}
+          <span>{dialog.mode === "file" ? t("file.new_file") : t("file.new_folder")}</span>
+        </ModalTitle>
+        <IconButton
+          aria-label={t("action.close")}
+          icon={<X size={14} />}
+          onClick={onCancel}
+          size="sm"
+        />
+      </ModalHeader>
+      <ModalBody>
+        <div className="form-group">
+          <label htmlFor="file-path">{t("file.path")}</label>
+          <Input
+            id="file-path"
+            ref={inputRef}
+            value={dialog.draftPath}
+            onChange={(event) => onDraftPathChange(event.target.value)}
+            placeholder={dialog.mode === "file" ? "src/demo/new-file.ts" : "src/demo/new-folder"}
+            aria-describedby={describedBy}
+            invalid={Boolean(dialog.error)}
+            autoFocus
+          />
+          <span id={helperId} className="dialog-helper">
+            {helperText}
+          </span>
+          {dialog.error ? (
+            <span id={errorId} className="form-error" role="alert">
+              {dialog.error}
+            </span>
+          ) : null}
         </div>
+      </ModalBody>
 
-        <div className="modal-body">
-          <div className="form-group">
-            <label htmlFor="file-path">{t("file.path")}</label>
-            <input
-              id="file-path"
-              className="input"
-              value={dialog.draftPath}
-              onChange={(event) => onDraftPathChange(event.target.value)}
-              placeholder={dialog.mode === "file" ? "src/demo/new-file.ts" : "src/demo/new-folder"}
-              autoFocus
-            />
-            <span className="dialog-helper">{helperText}</span>
-            {dialog.error ? (
-              <span className="form-error" role="alert">
-                {dialog.error}
-              </span>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="modal-footer">
-          <button className="btn btn-secondary" onClick={onCancel}>
-            {t("action.cancel")}
-          </button>
-          <button
-            className="btn btn-primary"
-            onClick={() => {
-              void onConfirm();
-            }}
-          >
-            {t("action.confirm")}
-          </button>
-        </div>
-      </div>
-    </div>
+      <ModalFooter>
+        <Button onClick={onCancel}>{t("action.cancel")}</Button>
+        <Button
+          variant="primary"
+          onClick={() => {
+            void onConfirm();
+          }}
+        >
+          {t("action.confirm")}
+        </Button>
+      </ModalFooter>
+    </Modal>
   );
 };
 
@@ -488,50 +577,42 @@ const DeleteFileModal: FC<DeleteFileModalProps> = ({ pendingDelete, onCancel, on
   }
 
   return (
-    <div className="modal-overlay" onClick={onCancel}>
-      <div className="modal-card" onClick={(event) => event.stopPropagation()}>
-        <div className="modal-header">
-          <div className="modal-title">
-            <AlertTriangle size={16} />
-            <h3>{t("file.delete")}</h3>
-          </div>
-          <button
-            className="btn btn-ghost btn-sm"
-            onClick={onCancel}
-            aria-label={t("action.close")}
-          >
-            <X size={14} />
-          </button>
-        </div>
-
-        <div className="modal-body">
+    <ConfirmDialog
+      open
+      onOpenChange={onCancel}
+      title={t("file.delete")}
+      description={
+        <>
           <p>{t("file.delete_confirm", { name: pendingDelete.name })}</p>
           {pendingDelete.error ? (
             <span className="form-error" role="alert">
               {pendingDelete.error}
             </span>
           ) : null}
-        </div>
-
-        <div className="modal-footer">
-          <button className="btn btn-secondary" onClick={onCancel}>
-            {t("action.cancel")}
-          </button>
-          <button
-            className="btn btn-danger"
-            onClick={() => {
-              void onConfirm();
-            }}
-          >
-            {t("action.confirm")}
-          </button>
-        </div>
-      </div>
-    </div>
+        </>
+      }
+      cancelText={t("action.cancel")}
+      closeLabel={t("action.close")}
+      confirmText={t("action.confirm")}
+      onConfirm={() => {
+        void onConfirm();
+      }}
+      tone="danger"
+    />
   );
 };
 
 export default FileTreePanel;
+
+function countVisibleFiles(nodes: FileNode[]): number {
+  return nodes.reduce((count, node) => {
+    if (node.kind === "file") {
+      return count + 1;
+    }
+
+    return count + countVisibleFiles(node.children ?? []);
+  }, 0);
+}
 
 function buildNestedTree(treeMap: Map<string, FileNode[]>): FileNode[] {
   const attachChildren = (nodes: FileNode[]): FileNode[] =>
@@ -598,7 +679,7 @@ function getNodeIcon(node: FileNode, isExpanded: boolean): LucideIcon {
   }
 }
 
-function getFileToneClass(node: FileNode) {
+function getNodeToneClass(node: FileNode, isExpanded: boolean) {
   if (node.kind === "dir") {
     return "folder";
   }
@@ -610,10 +691,18 @@ function getFileToneClass(node: FileNode) {
     case "tsx":
     case "js":
     case "jsx":
+    case "mjs":
+    case "cjs":
+    case "py":
+    case "go":
+    case "rs":
+    case "java":
       return "code";
     case "json":
     case "yaml":
     case "yml":
+    case "toml":
+    case "lock":
       return "data";
     case "md":
     case "txt":
