@@ -30,6 +30,8 @@ describe("Sheet", () => {
     expect(document.querySelector(".mobile-sheet__body")).toBeTruthy();
     expect(document.querySelector(".mobile-sheet__footer")).toBeTruthy();
     expect(screen.getByText("Body")).toBeInTheDocument();
+    expect(screen.getByText("Quick Actions")).toBeInTheDocument();
+    expect(screen.queryByText("COMMAND PALETTE")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Done" })).toBeInTheDocument();
   });
 
@@ -89,6 +91,7 @@ describe("Sheet", () => {
 
     expect(document.querySelector(".mobile-sheet--fullscreen")).toBeTruthy();
     expect(document.querySelector(".mobile-sheet--launch")).toBeTruthy();
+    expect(document.querySelector(".mobile-sheet__header .mobile-page-header")).toBeTruthy();
     expect(document.querySelector(".mobile-sheet__body--flush")).toBeTruthy();
     expect(document.querySelector(".mobile-sheet__body--fullscreen")).toBeTruthy();
     expect(document.querySelector(".mobile-launch-sheet")).toBeTruthy();

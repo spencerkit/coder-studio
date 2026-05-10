@@ -7,7 +7,6 @@ import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   authenticatedAtom,
-  commandPaletteOpenAtom,
   localeAtom,
   pendingFocusSessionAtom,
   visibleMobileSessionIdAtom,
@@ -804,11 +803,11 @@ describe("MobileShell Phase 2 workspace", () => {
     });
   });
 
-  it("shows a more-actions trigger instead of a direct settings entry", async () => {
+  it("shows a direct settings entry instead of a more-actions trigger", async () => {
     renderMobileShell({ initialEntry: "/workspace" });
 
-    expect(screen.getByRole("button", { name: "Open more actions" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Open settings" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open settings" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open more actions" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Quick Actions" })).not.toBeInTheDocument();
   });
 
@@ -816,7 +815,7 @@ describe("MobileShell Phase 2 workspace", () => {
     removeFullscreenApiForMobileShell();
     renderMobileShell({ initialEntry: "/workspace" });
 
-    expect(screen.getByRole("button", { name: "Open more actions" })).toHaveClass(
+    expect(screen.getByRole("button", { name: "Open settings" })).toHaveClass(
       "btn",
       "btn-ghost",
       "mobile-topbar__icon-button"
@@ -828,46 +827,30 @@ describe("MobileShell Phase 2 workspace", () => {
     );
   });
 
-  it("opens settings from the mobile topbar action menu", async () => {
+  it("opens settings from the direct mobile topbar button", async () => {
     const user = userEvent.setup();
     renderMobileShell({ initialEntry: "/workspace" });
 
-    await user.click(screen.getByRole("button", { name: "Open more actions" }));
-    expect(screen.getByRole("region", { name: "More Actions sheet" })).toBeInTheDocument();
-
-    await user.click(screen.getByRole("menuitem", { name: "Settings" }));
+    await user.click(screen.getByRole("button", { name: "Open settings" }));
 
     expect(screen.getByText("SettingsPage")).toBeInTheDocument();
   });
 
-  it("opens quick actions from the mobile topbar action menu", async () => {
-    const user = userEvent.setup();
-    const { store } = renderMobileShell({ initialEntry: "/workspace" });
-
-    expect(store.get(commandPaletteOpenAtom)).toBe(false);
-
-    await user.click(screen.getByRole("button", { name: "Open more actions" }));
-    await user.click(screen.getByRole("menuitem", { name: "Quick Actions" }));
-
-    expect(store.get(commandPaletteOpenAtom)).toBe(true);
-    expect(screen.queryByRole("region", { name: "More Actions sheet" })).toBeNull();
-  });
-
-  it("shows a fullscreen toggle to the right of the more-actions trigger when the browser supports fullscreen", async () => {
+  it("shows a fullscreen toggle to the right of the settings trigger when the browser supports fullscreen", async () => {
     installFullscreenApiForMobileShell();
     renderMobileShell({ initialEntry: "/workspace" });
 
-    const moreActionsButton = screen.getByRole("button", { name: "Open more actions" });
+    const settingsButton = screen.getByRole("button", { name: "Open settings" });
     const fullscreenButton = await screen.findByRole("button", { name: "Enter Fullscreen" });
 
-    expect(moreActionsButton.parentElement?.nextElementSibling).toBe(fullscreenButton);
+    expect(settingsButton.nextElementSibling).toBe(fullscreenButton);
   });
 
   it("keeps the fullscreen toggle visible on mobile when the browser does not support fullscreen", async () => {
     removeFullscreenApiForMobileShell();
     renderMobileShell({ initialEntry: "/workspace" });
 
-    expect(screen.getByRole("button", { name: "Open more actions" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open settings" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Enter Fullscreen" })).toBeInTheDocument();
   });
 
@@ -927,6 +910,26 @@ describe("MobileShell Phase 2 workspace", () => {
     expect(document.querySelector(".app-loading-shell")).toBeTruthy();
     expect(screen.getByText("CODER STUDIO").closest(".app-loading-card")).toBeTruthy();
     expect(screen.queryByText("LoginPage")).not.toBeInTheDocument();
+  });
+
+  it("renders SettingsPage on mobile /settings while auth status is still unknown", () => {
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(authEnabledAtom, null);
+    store.set(authenticatedAtom, false);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/settings"]}>
+          <LocationProbe />
+          <MobileShell />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    expect(screen.getByText("SettingsPage")).toBeInTheDocument();
+    expect(screen.getByTestId("location-display")).toHaveTextContent("/settings");
+    expect(screen.queryByText("正在连接工作区...")).not.toBeInTheDocument();
   });
 
   it("does not bootstrap workspaces from / on mobile before redirecting to /login when auth is enabled and user is unauthenticated", async () => {

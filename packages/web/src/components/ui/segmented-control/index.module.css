@@ -60,6 +60,10 @@
 
 :global(.settings-provider-tabs) {
   margin-bottom: var(--sp-6);
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
 }
 
 :global(.settings-provider-subnav) {
@@ -76,15 +80,17 @@
   padding-left: 0;
   padding-right: 0;
   padding-top: 0;
+  background: transparent;
 }
 
 :global(.settings-provider-tab) {
-  background: var(--bg-surface);
-  border-color: var(--border);
+  background: transparent;
+  border-color: transparent;
 }
 
 :global(.settings-provider-tab.active) {
-  border-color: var(--accent-blue);
+  background: var(--bg-active);
+  border-color: var(--border-focus);
 }
 
 :global(.settings-provider-subnav-button) {
@@ -92,19 +98,24 @@
 }
 
 :global(.settings-provider-subnav-button.active) {
-  background: var(--bg-hover);
-  border-color: var(--border-light);
+  background: var(--bg-active);
+  border-color: var(--border-focus);
 }
 
 :global(.shortcuts-category-tabs) {
   margin-bottom: var(--sp-4);
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
 }
 
 :global(.shortcuts-category-tab) {
-  background: var(--bg-hover);
+  background: transparent;
+  border-color: transparent;
 }
 
 :global(.shortcuts-category-tab.active) {
-  background: color-mix(in srgb, var(--accent-blue) 18%, var(--bg-surface));
-  border-color: transparent;
+  background: var(--bg-active);
+  border-color: var(--border-focus);
 }

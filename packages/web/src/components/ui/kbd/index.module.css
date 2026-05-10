@@ -1,11 +1,14 @@
 .kbd,
 :global(.shortcuts-key) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-width: 80px;
   padding: var(--sp-2) var(--sp-3);
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--bg-hover);
-  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--bg-input) 82%, var(--bg-surface) 18%);
+  color: var(--text-primary);
   font-family: var(--font-mono);
   font-size: var(--text-sm);
   text-align: center;
@@ -13,13 +16,14 @@
 
 .interactive:hover,
 :global(.shortcuts-key):hover {
-  border-color: var(--accent-blue);
+  border-color: var(--border-focus);
+  background: var(--bg-active);
 }
 
 .kbd:focus-visible,
 :global(.shortcuts-key):focus-visible {
   outline: none;
-  border-color: var(--accent-blue);
+  border-color: var(--border-focus);
   box-shadow: 0 0 0 1px rgba(108, 182, 255, 0.4);
 }
 

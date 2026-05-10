@@ -944,13 +944,6 @@ export function useBranchQuickPickActions() {
   }, [quickPickState.inputValue]);
 
   useEffect(() => {
-    if (quickPickState.visible) {
-      setSelectedIndex(0);
-      setPendingCreateBranchName(null);
-    }
-  }, [quickPickState.visible]);
-
-  useEffect(() => {
     if (!quickPickState.visible || !workspaceId) {
       return;
     }
@@ -1061,6 +1054,32 @@ export function useBranchQuickPickActions() {
 
     return items;
   }, [branchList.loading, exactMatch, filteredBranches, pendingCreateBranchName, t, trimmedInput]);
+
+  const currentBranchIndex = useMemo(
+    () =>
+      displayItems.findIndex(
+        (item) =>
+          item.type === "branch" &&
+          item.branch &&
+          (item.branch.isCurrent || item.branch.name === branchList.current)
+      ),
+    [branchList.current, displayItems]
+  );
+
+  useEffect(() => {
+    if (!quickPickState.visible) {
+      return;
+    }
+
+    setPendingCreateBranchName(null);
+
+    if (trimmedInput) {
+      setSelectedIndex(0);
+      return;
+    }
+
+    setSelectedIndex(currentBranchIndex >= 0 ? currentBranchIndex : 0);
+  }, [currentBranchIndex, quickPickState.visible, trimmedInput]);
 
   const handleClose = useCallback(() => {
     setPendingCreateBranchName(null);

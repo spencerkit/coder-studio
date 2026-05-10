@@ -44,6 +44,8 @@ export function ProviderSettings({
   const t = useTranslation();
   const dispatch = useAtomValue(dispatchCommandAtom);
   const connectionStatus = useAtomValue(connectionStatusAtom);
+  const commandPreviewTitle = t("settings.provider.command_preview_title");
+  const commandPreviewHint = t("settings.provider.command_preview_hint");
   const [selectedProvider, setSelectedProvider] = useState<ProviderInfo["id"]>(
     providers[0]?.id ?? "claude"
   );
@@ -265,8 +267,8 @@ export function ProviderSettings({
           </div>
 
           <div className="settings-group">
-            <h3 className="settings-group-title">Command Preview</h3>
-            <p className="settings-group-desc">Preview of the effective provider command</p>
+            <h3 className="settings-group-title">{commandPreviewTitle}</h3>
+            <p className="settings-group-desc">{commandPreviewHint}</p>
             <div className="settings-config-field">
               <code className="settings-command-preview">{currentPreview}</code>
             </div>

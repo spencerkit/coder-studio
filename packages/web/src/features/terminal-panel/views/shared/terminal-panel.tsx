@@ -168,6 +168,7 @@ export function TerminalPanel({ chrome = "default" }: TerminalPanelProps) {
                   {isMobileFullscreen ? (
                     selectorSheetOpen ? (
                       <MobileSelectSheet
+                        className="mobile-select-sheet--command"
                         title={t("terminal.selector.title")}
                         sections={[
                           {

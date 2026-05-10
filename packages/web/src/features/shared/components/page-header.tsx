@@ -1,9 +1,10 @@
+import clsx from "clsx";
 import { ArrowLeft } from "lucide-react";
 import type { ReactNode } from "react";
 
 type PageHeaderTitleElement = "div" | "h1" | "h2" | "h3" | "span";
 
-interface PageHeaderProps {
+export interface PageHeaderProps {
   title: string;
   onBack?: () => void;
   backLabel?: string;
@@ -11,6 +12,7 @@ interface PageHeaderProps {
   kicker?: ReactNode;
   rightSlot?: ReactNode;
   titleAs?: PageHeaderTitleElement;
+  className?: string;
 }
 
 export function PageHeader({
@@ -21,11 +23,12 @@ export function PageHeader({
   kicker,
   rightSlot,
   titleAs = "h2",
+  className,
 }: PageHeaderProps) {
   const TitleTag = titleAs;
 
   return (
-    <div className="page-header">
+    <div className={clsx("page-header", className)}>
       <div className="page-header__leading">
         {onBack ? (
           <button

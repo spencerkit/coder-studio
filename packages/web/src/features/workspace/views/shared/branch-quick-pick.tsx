@@ -289,6 +289,8 @@ export function BranchQuickPick() {
     .map((item) => ({
       id: item.branch!.name,
       label: item.branch!.name,
+      icon: item.branch!.isCurrent ? <Check size={14} /> : undefined,
+      meta: item.branch!.isCurrent ? t("git.current_branch") : undefined,
       badge: item.branch!.isRemote ? t("git.branch_remote") : undefined,
     }));
   const createItem = displayItems.find(
@@ -298,6 +300,7 @@ export function BranchQuickPick() {
   return (
     <div onKeyDown={handleKeyDown}>
       <MobileSelectSheet
+        className="mobile-select-sheet--command"
         title={t("git.branch")}
         searchable
         searchPlaceholder={t("git.quick_pick.search_placeholder")}
@@ -320,7 +323,11 @@ export function BranchQuickPick() {
         emptyText={inputValue ? t("git.quick_pick.empty_filtered") : t("git.quick_pick.empty_idle")}
         create={{
           visible: Boolean(trimmedInput) && !hasExactMatch,
-          label: () => createItem?.label ?? t("git.quick_pick.create", { name: trimmedInput }),
+          label: () =>
+            createItem?.type === "confirm-create"
+              ? t("git.quick_pick.confirm_create_label")
+              : t("git.quick_pick.create_label"),
+          description: () => trimmedInput,
           onCreate: async () => {
             if (createItem?.type === "confirm-create") {
               await handleBranchCreate(trimmedInput);

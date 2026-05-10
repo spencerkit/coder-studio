@@ -1,6 +1,6 @@
 import type { Workspace } from "@coder-studio/core";
 import { useSetAtom } from "jotai";
-import { X } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { activeWorkspaceIdAtom } from "../../../../atoms/workspaces";
 import { IconButton } from "../../../../components/ui";
@@ -45,10 +45,19 @@ export function MobileWorkspaceDrawer({
         aria-label={t("mobile.workspace_drawer.aria_label")}
       >
         <div className="mobile-workspace-drawer__header">
-          <div className="mobile-workspace-drawer__kicker">{t("label.workspace")}</div>
-          <h2 className="mobile-workspace-drawer__title">
-            {t("mobile.workspace_drawer.select_title")}
-          </h2>
+          <div className="mobile-workspace-drawer__header-copy">
+            <div className="mobile-workspace-drawer__kicker">{t("label.workspace")}</div>
+            <h2 className="mobile-workspace-drawer__title">
+              {t("mobile.workspace_drawer.select_title")}
+            </h2>
+          </div>
+          <IconButton
+            aria-label={t("action.close")}
+            className="mobile-workspace-drawer__dismiss"
+            icon={<X size={16} />}
+            onClick={onClose}
+            size="lg"
+          />
         </div>
 
         <div className="mobile-workspace-drawer__list">
@@ -106,7 +115,8 @@ export function MobileWorkspaceDrawer({
               onClose();
             }}
           >
-            {t("tooltip.new_workspace")}
+            <Plus size={14} />
+            <span>{t("tooltip.new_workspace")}</span>
           </button>
         </div>
       </aside>

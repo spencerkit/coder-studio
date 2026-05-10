@@ -170,6 +170,34 @@ describe("BranchQuickPick", () => {
     expect(screen.getByRole("button", { name: "main" })).toHaveAttribute("aria-pressed", "true");
   });
 
+  it("highlights the real current branch when the mobile picker opens", () => {
+    viewportMocks.viewport = "mobile";
+    store.set(gitBranchListAtomFamily("ws-test"), {
+      current: "feature/ui",
+      branches: [
+        { name: "feature/auth", isCurrent: false, isRemote: false },
+        { name: "feature/ui", isCurrent: true, isRemote: false },
+        { name: "main", isCurrent: false, isRemote: false },
+      ],
+      loading: false,
+    });
+
+    renderQuickPick();
+
+    expect(screen.getByRole("button", { name: "feature/ui" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(screen.getByRole("button", { name: "feature/auth" })).toHaveAttribute(
+      "aria-pressed",
+      "false"
+    );
+    expect(screen.getByRole("button", { name: "feature/ui" })).toHaveAccessibleDescription(
+      "Current Branch"
+    );
+    expect(screen.getByText("Current Branch")).toBeInTheDocument();
+  });
+
   it("does not keep the current branch selected when mobile focus moves to create branch", async () => {
     viewportMocks.viewport = "mobile";
     store.set(branchQuickPickAtom, {
@@ -181,8 +209,10 @@ describe("BranchQuickPick", () => {
     renderQuickPick();
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Create branch: m" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Create branch" })).toBeInTheDocument();
     });
+
+    expect(screen.getByRole("button", { name: "Create branch" })).toHaveAccessibleDescription("m");
 
     fireEvent.keyDown(screen.getByPlaceholderText("Search branches or create new branch..."), {
       key: "ArrowDown",
@@ -347,9 +377,12 @@ describe("BranchQuickPick", () => {
 
     const input = screen.getByPlaceholderText("Search branches or create new branch...");
 
-    await user.click(screen.getByRole("button", { name: "Create branch: m" }));
+    await user.click(screen.getByRole("button", { name: "Create branch" }));
 
-    expect(screen.getByRole("button", { name: "Confirm create branch: m" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Confirm create branch" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Confirm create branch" })
+    ).toHaveAccessibleDescription("m");
 
     fireEvent.keyDown(input, { key: "Enter" });
 
