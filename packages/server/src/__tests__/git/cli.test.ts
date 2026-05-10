@@ -432,10 +432,12 @@ describe("GitError", () => {
 describe("runGitListBranches", () => {
   let testDir: string;
   let remoteDir: string;
+  let linkedWorktreeDir: string;
 
   beforeEach(async () => {
     testDir = join(tmpdir(), `git-test-${Date.now()}`);
     remoteDir = join(tmpdir(), `git-remote-${Date.now()}`);
+    linkedWorktreeDir = join(tmpdir(), `git-linked-worktree-${Date.now()}`);
     await mkdir(testDir);
 
     // Initialize git repo
@@ -452,6 +454,11 @@ describe("runGitListBranches", () => {
     }
     try {
       await rmdir(remoteDir, { recursive: true });
+    } catch {
+      // Ignore cleanup errors
+    }
+    try {
+      await rmdir(linkedWorktreeDir, { recursive: true });
     } catch {
       // Ignore cleanup errors
     }
@@ -600,6 +607,33 @@ describe("runGitListBranches", () => {
     expect(result.current).toBe("feature/login");
 
     await rm(testDir, { recursive: true });
+  });
+
+  it("strips linked worktree markers from local branch names", async () => {
+    await writeFile(join(testDir, "README.md"), "test");
+    await execFileAsync("git", ["add", "."], { cwd: testDir });
+    await execFileAsync("git", ["commit", "-m", "initial"], { cwd: testDir });
+
+    const defaultBranch = await getCurrentBranch(testDir);
+    await execFileAsync("git", ["branch", "feature/worktree-branch"], { cwd: testDir });
+    await execFileAsync("git", ["worktree", "add", linkedWorktreeDir, "feature/worktree-branch"], {
+      cwd: testDir,
+    });
+
+    const { runGitListBranches } = await import("../../git/cli.js");
+    const result = await runGitListBranches(testDir);
+
+    expect(result.current).toBe(defaultBranch);
+    expect(result.branches).toContainEqual({
+      name: "feature/worktree-branch",
+      isRemote: false,
+      isCurrent: false,
+    });
+    expect(result.branches).not.toContainEqual(
+      expect.objectContaining({
+        name: expect.stringMatching(/^\+\s/),
+      })
+    );
   });
 });
 

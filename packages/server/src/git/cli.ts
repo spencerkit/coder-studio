@@ -655,7 +655,7 @@ export async function runGitListBranches(cwd: string): Promise<{
   const localLines = localOutput.split("\n").filter((line) => line.trim());
   for (const line of localLines) {
     const isCurrent = line.startsWith("*");
-    const name = line.replace(/^\*?\s+/, "").trim();
+    const name = line.replace(/^[*+ ]\s+/, "").trim();
 
     // Skip detached HEAD indicator
     if (name.startsWith("(HEAD detached")) {
