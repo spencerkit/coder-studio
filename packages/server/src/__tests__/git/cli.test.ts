@@ -918,6 +918,10 @@ describe("runGitPush", () => {
     const result = await runGitPush(testDir);
 
     expect(result.success).toBe(true);
+    expect(result.message).toBe("Push completed successfully");
+    expect(result.remote).toBe("origin");
+    expect(result.branch).toBe("feature/push-test");
+    expect(result.updated).toBe(true);
 
     const { stdout: upstreamOutput } = await execFileAsync(
       "git",
@@ -932,6 +936,23 @@ describe("runGitPush", () => {
       { cwd: remoteDir }
     );
     expect(remoteOutput).toContain("feature/push-test");
+  });
+
+  it("returns a stable no-op summary when push is already up to date", async () => {
+    await writeFile(join(testDir, "README.md"), "init\n");
+    await execFileAsync("git", ["add", "."], { cwd: testDir });
+    await execFileAsync("git", ["commit", "-m", "initial"], { cwd: testDir });
+    await execFileAsync("git", ["remote", "add", "origin", remoteDir], { cwd: testDir });
+    const defaultBranch = await getCurrentBranch(testDir);
+    await execFileAsync("git", ["push", "-u", "origin", defaultBranch], { cwd: testDir });
+
+    const result = await runGitPush(testDir);
+
+    expect(result.success).toBe(true);
+    expect(result.message).toBe("Push completed successfully");
+    expect(result.remote).toBe("origin");
+    expect(result.branch).toBe(defaultBranch);
+    expect(result.updated).toBe(false);
   });
 
   it("persists successful HTTP credentials through the configured credential helper", async () => {
@@ -1250,6 +1271,10 @@ describe("runGitPull", () => {
     const result = await runGitPull(primaryDir);
 
     expect(result.success).toBe(true);
+    expect(result.message).toBe("Pull completed successfully");
+    expect(result.remote).toBe("origin");
+    expect(result.branch).toBe(contributorBranch);
+    expect(result.updated).toBe(true);
 
     const { stdout } = await execFileAsync("git", ["rev-parse", "@{upstream}"], {
       cwd: primaryDir,
@@ -1258,5 +1283,15 @@ describe("runGitPull", () => {
       cwd: primaryDir,
     });
     expect(headStdout.trim()).toBe(stdout.trim());
+  });
+
+  it("returns a stable no-op summary when pull is already up to date", async () => {
+    const result = await runGitPull(primaryDir);
+
+    expect(result.success).toBe(true);
+    expect(result.message).toBe("Pull completed successfully");
+    expect(result.remote).toBe("origin");
+    expect(result.branch).toBe(await getCurrentBranch(primaryDir));
+    expect(result.updated).toBe(false);
   });
 });

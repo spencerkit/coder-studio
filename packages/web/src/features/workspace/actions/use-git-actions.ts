@@ -43,6 +43,9 @@ interface GitCheckoutResult {
 interface GitSyncResult {
   success: boolean;
   message: string;
+  remote?: string;
+  branch?: string;
+  updated?: boolean;
   updatedFiles?: string[];
 }
 
@@ -76,6 +79,13 @@ const GIT_OPERATION_LABELS: Record<"push" | "pull" | "fetch", string> = {
   fetch: "git.operation_fetch",
 };
 
+function formatGitSyncTarget(remote?: string, branch?: string): string | null {
+  if (remote && branch) {
+    return `${remote}/${branch}`;
+  }
+  return null;
+}
+
 export function useGitSyncActions(workspaceId: string) {
   const t = useTranslation();
   const dispatch = useAtomValue(dispatchCommandAtom);
@@ -105,6 +115,34 @@ export function useGitSyncActions(workspaceId: string) {
       }
 
       return t("git.auth_required_message", { remote: details.remoteLabel });
+    },
+    [t]
+  );
+
+  const getSuccessToastBody = useCallback(
+    (
+      op: "git.push" | "git.pull" | "git.fetch",
+      result: GitSyncResult,
+      fallbackSuccessBody?: string
+    ) => {
+      if (op === "git.fetch") {
+        return result.message || fallbackSuccessBody;
+      }
+
+      const target = formatGitSyncTarget(result.remote, result.branch);
+      if (target) {
+        if (op === "git.push") {
+          return result.updated
+            ? t("git.push_success_target", { target })
+            : t("git.sync_up_to_date", { target });
+        }
+
+        return result.updated
+          ? t("git.pull_success_target", { target })
+          : t("git.sync_up_to_date", { target });
+      }
+
+      return result.message || fallbackSuccessBody;
     },
     [t]
   );
@@ -261,7 +299,7 @@ export function useGitSyncActions(workspaceId: string) {
         pushToast({
           kind: "success",
           title: options.successTitle,
-          body: result.data.message || options.fallbackSuccessBody,
+          body: getSuccessToastBody(op, result.data, options.fallbackSuccessBody),
         });
 
         return true;
@@ -272,6 +310,7 @@ export function useGitSyncActions(workspaceId: string) {
     [
       authPrompt,
       dispatch,
+      getSuccessToastBody,
       pushToast,
       refreshBranchState,
       setFetchState,

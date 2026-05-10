@@ -34,6 +34,14 @@ export interface GitHttpAuth {
   password: string;
 }
 
+interface GitSyncSuccessResult {
+  success: boolean;
+  message: string;
+  remote?: string;
+  branch?: string;
+  updated?: boolean;
+}
+
 export interface GitAuthFailureDetails {
   operation: "push" | "pull" | "fetch";
   remote?: string;
@@ -306,7 +314,7 @@ export async function runGitPush(
     force?: boolean;
     auth?: GitHttpAuth;
   }
-): Promise<{ success: boolean; message: string }> {
+): Promise<GitSyncSuccessResult> {
   const args = ["push"];
   let remote = options?.remote;
   let branch = options?.branch;
@@ -335,6 +343,8 @@ export async function runGitPush(
     remote = (await getPreferredRemote(cwd)) ?? undefined;
   }
 
+  const summaryBranch = branch ?? (await getCurrentBranchName(cwd));
+
   if (remote && branch) {
     args.push(remote, `HEAD:${branch}`);
   } else if (remote) {
@@ -355,10 +365,13 @@ export async function runGitPush(
       await persistGitHttpCredentials(cwd, options.auth, remoteMetadata);
     }
 
-    // Combine output for message
-    const message = stdout || stderr || "Push completed successfully";
-
-    return { success: true, message };
+    return {
+      success: true,
+      message: "Push completed successfully",
+      remote,
+      branch: summaryBranch,
+      updated: !isPushUpToDate(stdout, stderr),
+    };
   } catch (error) {
     throw normalizeGitAuthFailure(error, {
       operation: "push",
@@ -381,7 +394,7 @@ export async function runGitPull(
     branch?: string;
     auth?: GitHttpAuth;
   }
-): Promise<{ success: boolean; message: string; updatedFiles?: string[] }> {
+): Promise<GitSyncSuccessResult & { updatedFiles?: string[] }> {
   const args = ["pull"];
   let remote = options?.remote;
   let branch = options?.branch;
@@ -395,6 +408,8 @@ export async function runGitPull(
   if (!remote && branch) {
     remote = (await getPreferredRemote(cwd)) ?? "origin";
   }
+
+  const summaryBranch = branch ?? (await getCurrentBranchName(cwd));
 
   if (remote && branch) {
     args.push(remote, branch);
@@ -430,9 +445,14 @@ export async function runGitPull(
       }
     }
 
-    const message = stdout || stderr || "Pull completed successfully";
-
-    return { success: true, message, updatedFiles };
+    return {
+      success: true,
+      message: "Pull completed successfully",
+      remote,
+      branch: summaryBranch,
+      updated: !isPullUpToDate(stdout, stderr),
+      updatedFiles,
+    };
   } catch (error) {
     throw normalizeGitAuthFailure(error, {
       operation: "pull",
@@ -705,6 +725,24 @@ async function resolveRemoteBranchTarget(
   } catch {
     return null;
   }
+}
+
+async function getCurrentBranchName(cwd: string): Promise<string | undefined> {
+  try {
+    const { stdout } = await runGit(cwd, ["branch", "--show-current"]);
+    const branch = stdout.trim();
+    return branch || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function isPushUpToDate(stdout: string, stderr: string): boolean {
+  return /Everything up-to-date/i.test(`${stdout}\n${stderr}`);
+}
+
+function isPullUpToDate(stdout: string, stderr: string): boolean {
+  return /Already up[ -]to[ -]date\.?/i.test(`${stdout}\n${stderr}`);
 }
 
 async function getPreferredRemote(cwd: string): Promise<string | null> {

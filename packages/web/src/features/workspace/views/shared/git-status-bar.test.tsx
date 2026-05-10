@@ -71,7 +71,13 @@ describe("GitStatusBar", () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "git.push") {
         await pushPromise;
-        return { success: true, message: "Push completed successfully" };
+        return {
+          success: true,
+          message: "Push completed successfully",
+          remote: "origin",
+          branch: "main",
+          updated: true,
+        };
       }
 
       if (op === "git.branches") {
@@ -126,6 +132,7 @@ describe("GitStatusBar", () => {
 
     expect(store.get(gitStateAtomFamily("ws-test"))?.ahead).toBe(0);
     expect(store.get(toastsAtom)[0]?.title).toBe("Push completed");
+    expect(store.get(toastsAtom)[0]?.body).toBe("Pushed to origin/main");
   });
 
   it("shows pull confirmation and does not dispatch when cancelled", async () => {
@@ -149,6 +156,58 @@ describe("GitStatusBar", () => {
     fireEvent.click(screen.getByRole("button", { name: "取消" }));
 
     expect(sendCommand).not.toHaveBeenCalledWith("git.pull", { workspaceId: "ws-test" });
+  });
+
+  it("formats a short localized no-op pull success body", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.pull") {
+        return {
+          success: true,
+          message: "Pull completed successfully",
+          remote: "origin",
+          branch: "main",
+          updated: false,
+        };
+      }
+
+      if (op === "git.branches") {
+        return {
+          current: "main",
+          branches: [{ name: "main", isRemote: false, isCurrent: true }],
+        };
+      }
+
+      if (op === "git.status") {
+        return {
+          ...baseStatus,
+          behind: 0,
+        };
+      }
+
+      throw new Error(`Unexpected command: ${op}`);
+    });
+
+    const { store } = renderStatusBar({
+      locale: "zh",
+      status: {
+        ...baseStatus,
+        ahead: 0,
+        behind: 1,
+      },
+      sendCommand,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "拉取" }));
+    const modal = screen.getByText("拉取更改").closest(".modal-card");
+    expect(modal).not.toBeNull();
+    fireEvent.click(within(modal as HTMLElement).getByRole("button", { name: "拉取" }));
+
+    await waitFor(() => {
+      expect(store.get(toastsAtom)[0]).toMatchObject({
+        title: "拉取完成",
+        body: "origin/main 已是最新",
+      });
+    });
   });
 
   it("renders sync dialog text actions with shared button compatibility classes", async () => {
