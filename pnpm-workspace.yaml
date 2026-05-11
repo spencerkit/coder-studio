@@ -1,6 +1,7 @@
 packages:
   - 'packages/*'
   - 'e2e'
+  - 'e2e-ui'
 allowBuilds:
   esbuild: true
   node-pty: true

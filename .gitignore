@@ -56,6 +56,8 @@ data-wl
 # E2E test runner scripts (ad-hoc)
 e2e/playwright.session.config.ts
 e2e/run-session-tests.*
+e2e-ui/output/
+e2e-ui/test-results/
 .playwright-cli/
 /superpowers/
 /.superpowers/
