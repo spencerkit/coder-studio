@@ -855,10 +855,6 @@ export function XtermHost({
     setShiftArmed(nextShiftArmed);
   }, []);
 
-  const focusTerminal = useCallback(() => {
-    terminalRef.current?.focus();
-  }, []);
-
   const pushCopyOnSelectFailureToast = useCallback(() => {
     const now = Date.now();
     if (now - lastCopyOnSelectFailureAtRef.current < TERMINAL_COPY_ON_SELECT_ERROR_THROTTLE_MS) {
@@ -1987,10 +1983,15 @@ export function XtermHost({
    * Focus terminal when it becomes active
    */
   useEffect(() => {
-    if (meta?.alive && terminalRef.current) {
+    if (
+      viewport !== "mobile" &&
+      hydrationState.kind === "granted" &&
+      meta?.alive &&
+      terminalRef.current
+    ) {
       terminalRef.current.focus();
     }
-  }, [meta?.alive]);
+  }, [hydrationState.kind, meta?.alive, viewport]);
 
   const showMobileInputBar = viewport === "mobile" && isInteractive;
   const mobileInputDisabled = !isInteractive || uploadBusy || connectionStatus !== "connected";
@@ -2012,30 +2013,26 @@ export function XtermHost({
 
   const handleSoftKeyPress = useCallback(
     async (key: SoftTerminalKeyId) => {
-      focusTerminal();
       const nextShiftArmed = shiftArmedRef.current;
       if (nextShiftArmed) {
         updateShiftArmed(false);
       }
       await handleInput(getSoftTerminalInputBytes(key, { shift: nextShiftArmed }));
     },
-    [focusTerminal, handleInput, updateShiftArmed]
+    [handleInput, updateShiftArmed]
   );
 
   const handleCtrlTap = useCallback(() => {
-    focusTerminal();
     updateCtrlMode(toggleCtrlMode(ctrlModeRef.current));
-  }, [focusTerminal, updateCtrlMode]);
+  }, [updateCtrlMode]);
 
   const handleCtrlLongPress = useCallback(() => {
-    focusTerminal();
     updateCtrlMode(lockCtrlMode());
-  }, [focusTerminal, updateCtrlMode]);
+  }, [updateCtrlMode]);
 
   const handleShiftTap = useCallback(() => {
-    focusTerminal();
     updateShiftArmed(!shiftArmedRef.current);
-  }, [focusTerminal, updateShiftArmed]);
+  }, [updateShiftArmed]);
 
   const showReplayOverlay =
     replayUiState.kind !== "ready" && (viewport === "mobile" || hydrationState.kind === "granted");

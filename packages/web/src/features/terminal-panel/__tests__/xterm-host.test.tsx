@@ -14,7 +14,7 @@ import { wsClientAtom } from "../../../atoms/connection";
 import { JotaiProvider } from "../../../test-utils/jotai-provider";
 import type { TerminalReplayPayload, TerminalSnapshotPayload } from "../../../ws/client";
 import { toastsAtom } from "../../notifications/atoms";
-import { terminalOutputAtomFamily } from "../atoms";
+import { terminalMetaAtomFamily, terminalOutputAtomFamily } from "../atoms";
 import type { HydrationRequestHandle, HydrationTier } from "../hydration-coordinator";
 import { terminalPreferencesAtom } from "../preferences";
 import { TERMINAL_REPLAY_TIMEOUT_MS } from "../replay-state";
@@ -1502,7 +1502,7 @@ describe("XtermHost", () => {
     expect(screen.queryByRole("button", { name: "Escape" })).not.toBeInTheDocument();
   });
 
-  it("routes soft-key presses through sendTerminalInput and refocuses the xterm instance", async () => {
+  it("routes soft-key presses through sendTerminalInput without refocusing the xterm instance", async () => {
     viewportMocks.viewport = "mobile";
     const store = createStore();
     const user = userEvent.setup();
@@ -1533,6 +1533,96 @@ describe("XtermHost", () => {
         undefined
       );
     });
+    expect(mockTerminal.focus).not.toHaveBeenCalled();
+  });
+
+  it("routes touch soft-key presses through sendTerminalInput without relying on xterm focus", async () => {
+    viewportMocks.viewport = "mobile";
+    const store = createStore();
+    const sendTerminalInput = vi.fn().mockResolvedValue(undefined);
+
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn().mockResolvedValue({ status: "ok" }),
+      sendTerminalInput,
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => "connected"),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="mobile-touch-escape-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    const escapeButton = screen.getByRole("button", { name: "Escape" });
+    fireEvent.pointerDown(escapeButton, { pointerType: "touch" });
+    fireEvent.pointerUp(escapeButton, { pointerType: "touch" });
+
+    await waitFor(() => {
+      expect(sendTerminalInput).toHaveBeenLastCalledWith(
+        "mobile-touch-escape-terminal",
+        new TextEncoder().encode("\x1b"),
+        "typing",
+        undefined
+      );
+    });
+
+    expect(sendTerminalInput).toHaveBeenCalledTimes(1);
+    expect(mockTerminal.focus).not.toHaveBeenCalled();
+  });
+
+  it("does not auto-focus a live terminal on mobile", () => {
+    viewportMocks.viewport = "mobile";
+    const store = createStore();
+
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn().mockResolvedValue({ status: "ok" }),
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => "connected"),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+    store.set(terminalMetaAtomFamily("mobile-alive-terminal"), {
+      id: "mobile-alive-terminal",
+      workspaceId: "test-workspace",
+      kind: "shell",
+      alive: true,
+    });
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="mobile-alive-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    expect(mockTerminal.focus).not.toHaveBeenCalled();
+  });
+
+  it("still auto-focuses a live terminal on desktop", () => {
+    const store = createStore();
+
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn().mockResolvedValue({ status: "ok" }),
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => "connected"),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+    store.set(terminalMetaAtomFamily("desktop-alive-terminal"), {
+      id: "desktop-alive-terminal",
+      workspaceId: "test-workspace",
+      kind: "shell",
+      alive: true,
+    });
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="desktop-alive-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
     expect(mockTerminal.focus).toHaveBeenCalled();
   });
 
