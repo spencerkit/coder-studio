@@ -1,6 +1,6 @@
 {
   "name": "@spencer-kit/coder-studio",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "type": "module",
   "description": "Deploy once, code everywhere. Browser-based AI coding workspace for Claude Code and Codex.",
   "main": "./src/index.ts",
