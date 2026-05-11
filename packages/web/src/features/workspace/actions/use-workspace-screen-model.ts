@@ -149,6 +149,16 @@ export function useWorkspaceScreenModel() {
       .filter((session): session is NonNullable<typeof session> => Boolean(session));
   }, [paneLayout, sessions]);
 
+  const mobileAgentSessions = useMemo(() => {
+    const orderedSessionIds = new Set(orderedSessions.map((session) => session.id));
+    return [
+      ...orderedSessions,
+      ...sessions.filter(
+        (session) => session.state !== "draft" && !orderedSessionIds.has(session.id)
+      ),
+    ];
+  }, [orderedSessions, sessions]);
+
   const preferredSessionId = workspace?.uiState?.activeSessionId ?? null;
 
   useEffect(() => {
@@ -190,9 +200,20 @@ export function useWorkspaceScreenModel() {
   const activeSession =
     orderedSessions.find((session) => session.id === mobileActiveSessionId) ?? null;
 
-  const selectMobileSession = useCallback((sessionId: string | null) => {
-    setMobileActiveSessionId(sessionId);
-  }, []);
+  const selectMobileSession = useCallback(
+    (sessionId: string | null) => {
+      if (
+        sessionId &&
+        !orderedSessions.some((session) => session.id === sessionId) &&
+        sessions.some((session) => session.id === sessionId && session.state !== "draft")
+      ) {
+        paneActions.appendSession(sessionId, mobileActiveSessionId, "vertical");
+      }
+
+      setMobileActiveSessionId(sessionId);
+    },
+    [mobileActiveSessionId, orderedSessions, paneActions, sessions]
+  );
 
   const handleMobileSessionCreated = useCallback(
     (sessionId: string) => {
@@ -254,6 +275,7 @@ export function useWorkspaceScreenModel() {
     handleMobileSessionCreated,
     mainAreaMode,
     mobileActiveSessionId,
+    mobileAgentSessions,
     mobileFilesRoute,
     mobileSheet,
     openMobileSheet,

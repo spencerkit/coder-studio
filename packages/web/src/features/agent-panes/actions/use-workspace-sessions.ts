@@ -13,6 +13,7 @@ import {
   readLegacyPaneLayout,
 } from "../atoms/pane-layout";
 import {
+  appendSessionToLayout,
   collectSessionIds,
   createFallbackPaneLayout,
   sanitizePaneLayout,
@@ -99,32 +100,46 @@ export function useWorkspaceSessions(
         const displayableSessionIds = new Set(
           mergedSessions.filter((session) => session.state !== "draft").map((session) => session.id)
         );
-
         const displayableSessions = mergedSessions.filter((session) => session.state !== "draft");
         const sanitized = sanitizePaneLayout(baseLayout, displayableSessionIds);
         let nextLayout = sanitized;
-        if (sanitized !== currentLayout) {
-          setPaneLayout(sanitized);
+        const referencedSessionIds = new Set(collectSessionIds(nextLayout));
+        const missingLiveSessionIds = mergedSessions
+          .filter(
+            (session) =>
+              session.state !== "draft" &&
+              session.state !== "ended" &&
+              !referencedSessionIds.has(session.id)
+          )
+          .map((session) => session.id);
+
+        if (missingLiveSessionIds.length > 0) {
+          nextLayout = appendMissingSessions(nextLayout, missingLiveSessionIds);
         }
 
-        const hasAnySessionInLayout = collectSessionIds(sanitized).length > 0;
+        const hasAnySessionInLayout = collectSessionIds(nextLayout).length > 0;
         if (!hasAnySessionInLayout) {
           if (displayableSessions.length > 0) {
             nextLayout = createFallbackPaneLayout(displayableSessions.map((session) => session.id));
-            setPaneLayout(nextLayout);
           }
         }
 
-        if (!workspacePaneLayout) {
-          const shouldPersistLayout =
-            legacyPaneLayout !== null || collectSessionIds(nextLayout).length > 0;
-          if (shouldPersistLayout) {
-            void persistUiState({ paneLayout: nextLayout }).then((persisted) => {
-              if (persisted && legacyPaneLayout !== null) {
-                clearLegacyPaneLayout(workspace.id);
-              }
-            });
-          }
+        if (nextLayout !== currentLayout) {
+          setPaneLayout(nextLayout);
+        }
+
+        const shouldPersistHydratedLayout =
+          !workspacePaneLayout || legacyPaneLayout !== null || missingLiveSessionIds.length > 0;
+        const hasPersistableLayout =
+          legacyPaneLayout !== null || collectSessionIds(nextLayout).length > 0;
+        if (shouldPersistHydratedLayout && hasPersistableLayout) {
+          // If hydration had to repair a stale server layout, persist the repaired
+          // tree immediately so later uiState writes do not re-clobber it.
+          void persistUiState({ paneLayout: nextLayout }).then((persisted) => {
+            if (persisted && legacyPaneLayout !== null) {
+              clearLegacyPaneLayout(workspace.id);
+            }
+          });
         }
       })
       .catch((error) => {
@@ -166,4 +181,17 @@ function normalizePaneLayout(layout: Workspace["uiState"]["paneLayout"]): PaneNo
     ...layout,
     children: layout.children?.map((child) => normalizePaneLayout(child) ?? defaultPaneLayout),
   };
+}
+
+function appendMissingSessions(layout: PaneNode, sessionIds: string[]): PaneNode {
+  let nextLayout = layout;
+  const initialSessionIds = collectSessionIds(nextLayout);
+  let anchorSessionId = initialSessionIds[initialSessionIds.length - 1] ?? null;
+
+  for (const sessionId of sessionIds) {
+    nextLayout = appendSessionToLayout(nextLayout, sessionId, anchorSessionId, "horizontal");
+    anchorSessionId = sessionId;
+  }
+
+  return nextLayout;
 }

@@ -40,6 +40,7 @@ export function WorkspaceMobileView() {
     handleOpenBranchSwitcher,
     gitState,
     mobileActiveSessionId,
+    mobileAgentSessions,
     mobileFilesRoute,
     mobileSheet,
     openMobileSheet,
@@ -291,8 +292,8 @@ export function WorkspaceMobileView() {
         <MobileAgentSheet
           activeSessionId={mobileActiveSessionId}
           activeWorkspaceId={activeWorkspaceId}
-          defaultMode={orderedSessions.length === 0 ? "create" : "list"}
-          sessions={orderedSessions}
+          defaultMode={mobileAgentSessions.length === 0 ? "create" : "list"}
+          sessions={mobileAgentSessions}
           onClose={() => setAgentSheetOpen(false)}
           onCloseSession={closeMobileSession}
           onSelectSession={selectMobileSession}
