@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.5
+
+### Patch Changes
+
+- [#31](https://github.com/spencerkit/coder-studio/pull/31) [`3139ef4`](https://github.com/spencerkit/coder-studio/commit/3139ef444400ed9064a0304b520c1c5aa475ebdb) Thanks [@pallyoung](https://github.com/pallyoung)! - Fix terminal websocket recovery so buffered PTY output is replayed after silent disconnects, including probe-based recovery and keepalive handling.
+
 ## 0.3.4
 
 ### Patch Changes
