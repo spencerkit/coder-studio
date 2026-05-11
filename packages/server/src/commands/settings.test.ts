@@ -67,6 +67,31 @@ describe("settings commands", () => {
     ).toEqual({ value: "600" });
   });
 
+  it("settings.update persists appearance.terminalCopyOnSelect into user_settings", async () => {
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "settings-update-terminal-copy-on-select",
+        op: "settings.update",
+        args: {
+          settings: {
+            appearance: {
+              terminalCopyOnSelect: true,
+            },
+          },
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(
+      db
+        .prepare("SELECT value FROM user_settings WHERE key = ?")
+        .get("appearance.terminalCopyOnSelect")
+    ).toEqual({ value: "true" });
+  });
+
   it("settings.update rejects fractional supervisor timeout values", async () => {
     const result = await dispatch(
       {
@@ -268,6 +293,26 @@ describe("settings commands", () => {
       "notifications.enabled": true,
       "supervisor.evaluationTimeoutSec": 900,
     });
+  });
+
+  it("settings.get reads appearance.terminalCopyOnSelect from user_settings", async () => {
+    db.prepare("INSERT INTO user_settings (key, value) VALUES (?, ?)").run(
+      "appearance.terminalCopyOnSelect",
+      "true"
+    );
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "settings-get-terminal-copy-on-select",
+        op: "settings.get",
+        args: {},
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.data?.["appearance.terminalCopyOnSelect"]).toBe(true);
   });
 
   it("settings.get normalizes invalid persisted supervisor timeout values", async () => {

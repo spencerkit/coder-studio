@@ -476,6 +476,10 @@
     },
     "terminal_renderer": "Terminal Renderer",
     "terminal_renderer_hint": "Choose terminal rendering mode",
+    "copy_on_select": "Copy on select",
+    "copy_on_select_hint": "Automatically copy selected text to the system clipboard in desktop terminals",
+    "copy_on_select_failed_title": "Copy on select failed",
+    "copy_on_select_failed_body": "Use Ctrl/Cmd+C to copy manually",
     "terminal_standard": "Standard",
     "terminal_compatibility": "Compatibility Mode",
     "provider": {

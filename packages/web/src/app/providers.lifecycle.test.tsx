@@ -10,6 +10,7 @@ import {
   workspacesAtom,
   workspacesLoadStateAtom,
 } from "../atoms/workspaces";
+import { terminalPreferencesAtom } from "../features/terminal-panel/preferences";
 import {
   fileTreeStaleAtomFamily,
   gitBranchListAtomFamily,
@@ -97,9 +98,11 @@ function seedWorkspaces(
 describe("AppProviders lifecycle recovery", () => {
   const originalFetch = globalThis.fetch;
   const originalVisibilityState = Object.getOwnPropertyDescriptor(document, "visibilityState");
+  const originalTerminalPreferences = localStorage.getItem("ui.terminalPreferences");
 
   beforeEach(() => {
     resetAppProvidersSingletonsForTests();
+    localStorage.removeItem("ui.terminalPreferences");
     globalThis.fetch = vi.fn().mockResolvedValue({
       json: async () => ({ authEnabled: false }),
     }) as unknown as typeof fetch;
@@ -133,6 +136,11 @@ describe("AppProviders lifecycle recovery", () => {
     resetAppProvidersSingletonsForTests();
     globalThis.fetch = originalFetch;
     vi.restoreAllMocks();
+    if (originalTerminalPreferences === null) {
+      localStorage.removeItem("ui.terminalPreferences");
+    } else {
+      localStorage.setItem("ui.terminalPreferences", originalTerminalPreferences);
+    }
     if (originalVisibilityState) {
       Object.defineProperty(document, "visibilityState", originalVisibilityState);
     } else {
@@ -372,6 +380,131 @@ describe("AppProviders lifecycle recovery", () => {
     await vi.waitFor(() => {
       expect(wsState.client?.connect).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it("hydrates terminal copy-on-select preferences from settings.get once connected", async () => {
+    const store = createStore();
+    setVisibilityState("visible");
+
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "appearance.terminalCopyOnSelect": true,
+        };
+      }
+
+      return undefined;
+    });
+    wsState.client!.sendCommand = sendCommand;
+
+    renderProviders(store);
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
+
+    act(() => {
+      wsState.client?.statusHandler?.("connected");
+    });
+
+    await vi.waitFor(() => {
+      expect(store.get(terminalPreferencesAtom)).toEqual({ copyOnSelect: true });
+    });
+
+    expect(sendCommand).toHaveBeenCalledWith("settings.get", {}, undefined);
+  });
+
+  it("preserves a newer local terminal copy-on-select update when startup hydration resolves later", async () => {
+    const store = createStore();
+    setVisibilityState("visible");
+
+    let resolveSettingsGet: ((value: Record<string, unknown>) => void) | undefined;
+    const settingsGetPromise = new Promise<Record<string, unknown>>((resolve) => {
+      resolveSettingsGet = resolve;
+    });
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return await settingsGetPromise;
+      }
+
+      return undefined;
+    });
+    wsState.client!.sendCommand = sendCommand;
+
+    renderProviders(store);
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
+
+    act(() => {
+      wsState.client?.statusHandler?.("connected");
+    });
+
+    await vi.waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith("settings.get", {}, undefined);
+    });
+
+    act(() => {
+      store.set(terminalPreferencesAtom, { copyOnSelect: true });
+    });
+
+    await act(async () => {
+      resolveSettingsGet?.({});
+      await settingsGetPromise;
+    });
+
+    expect(store.get(terminalPreferencesAtom)).toEqual({ copyOnSelect: true });
+  });
+
+  it("preserves an ABA local terminal copy-on-select update when startup hydration resolves later", async () => {
+    const store = createStore();
+    setVisibilityState("visible");
+
+    act(() => {
+      store.set(terminalPreferencesAtom, { copyOnSelect: true });
+    });
+
+    let resolveSettingsGet: ((value: Record<string, unknown>) => void) | undefined;
+    const settingsGetPromise = new Promise<Record<string, unknown>>((resolve) => {
+      resolveSettingsGet = resolve;
+    });
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return await settingsGetPromise;
+      }
+
+      return undefined;
+    });
+    wsState.client!.sendCommand = sendCommand;
+
+    renderProviders(store);
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
+
+    act(() => {
+      wsState.client?.statusHandler?.("connected");
+    });
+
+    await vi.waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith("settings.get", {}, undefined);
+    });
+
+    act(() => {
+      store.set(terminalPreferencesAtom, { copyOnSelect: false });
+      store.set(terminalPreferencesAtom, { copyOnSelect: true });
+    });
+
+    await act(async () => {
+      resolveSettingsGet?.({
+        "appearance.terminalCopyOnSelect": false,
+      });
+      await settingsGetPromise;
+    });
+
+    expect(store.get(terminalPreferencesAtom)).toEqual({ copyOnSelect: true });
   });
 
   it("marks the session authenticated when /auth/status confirms an existing server session", async () => {
