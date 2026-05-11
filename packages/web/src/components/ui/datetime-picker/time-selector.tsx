@@ -1,6 +1,5 @@
 import clsx from "clsx";
-import { useId } from "react";
-import { Select, type SelectOption } from "../select";
+import { Input } from "../input";
 import styles from "./index.module.css";
 
 interface TimeSelectorProps {
@@ -11,23 +10,6 @@ interface TimeSelectorProps {
   readonly disabled?: boolean;
 }
 
-function generateHourOptions(): ReadonlyArray<SelectOption<string>> {
-  return Array.from({ length: 24 }, (_, i) => ({
-    value: String(i),
-    label: String(i).padStart(2, "0"),
-  }));
-}
-
-function generateMinuteOptions(): ReadonlyArray<SelectOption<string>> {
-  return Array.from({ length: 60 }, (_, i) => ({
-    value: String(i),
-    label: String(i).padStart(2, "0"),
-  }));
-}
-
-const HOUR_OPTIONS = generateHourOptions();
-const MINUTE_OPTIONS = generateMinuteOptions();
-
 export function TimeSelector({
   hour,
   minute,
@@ -35,36 +17,50 @@ export function TimeSelector({
   onMinuteChange,
   disabled = false,
 }: TimeSelectorProps) {
-  const hourId = useId();
-  const minuteId = useId();
+  const hourStr = String(hour).padStart(2, "0");
+  const minuteStr = String(minute).padStart(2, "0");
+
+  const handleHourChange = (value: string) => {
+    const parsed = parseInt(value, 10);
+    if (!isNaN(parsed) && parsed >= 0 && parsed <= 23) {
+      onHourChange(parsed);
+    }
+  };
+
+  const handleMinuteChange = (value: string) => {
+    const parsed = parseInt(value, 10);
+    if (!isNaN(parsed) && parsed >= 0 && parsed <= 59) {
+      onMinuteChange(parsed);
+    }
+  };
 
   return (
     <div className={styles.timeSelector}>
       <div className={styles.timeField}>
-        <label htmlFor={hourId} className={styles.timeLabel}>
-          Hour
-        </label>
-        <Select
-          id={hourId}
+        <label className={styles.timeLabel}>Hour</label>
+        <Input
+          type="number"
+          min={0}
+          max={23}
           size="sm"
-          options={HOUR_OPTIONS}
-          value={String(hour)}
-          onValueChange={(value) => onHourChange(Number(value))}
+          value={hourStr}
+          onChange={(e) => handleHourChange(e.target.value)}
           disabled={disabled}
+          className={styles.timeInput}
         />
       </div>
       <span className={styles.timeSeparator}>:</span>
       <div className={styles.timeField}>
-        <label htmlFor={minuteId} className={styles.timeLabel}>
-          Minute
-        </label>
-        <Select
-          id={minuteId}
+        <label className={styles.timeLabel}>Minute</label>
+        <Input
+          type="number"
+          min={0}
+          max={59}
           size="sm"
-          options={MINUTE_OPTIONS}
-          value={String(minute)}
-          onValueChange={(value) => onMinuteChange(Number(value))}
+          value={minuteStr}
+          onChange={(e) => handleMinuteChange(e.target.value)}
           disabled={disabled}
+          className={styles.timeInput}
         />
       </div>
     </div>

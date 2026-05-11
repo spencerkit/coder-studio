@@ -255,3 +255,16 @@
 }
 
 /* Additional i18n keys needed */
+
+.timeInput {
+  width: 100%;
+  text-align: center;
+}
+
+.popoverContent {
+  max-width: 320px;
+}
+
+.sheetBody {
+  max-width: 100%;
+}
