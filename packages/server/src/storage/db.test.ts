@@ -19,6 +19,7 @@ describe("database schema baseline", () => {
 
   it("creates the current schema baseline without migration bookkeeping", async () => {
     const { openDatabase, closeDatabase } = await import("./db");
+    const { CURRENT_SCHEMA_VERSION } = await import("./schema-version");
 
     const db = openDatabase(dbPath);
 
@@ -76,11 +77,32 @@ describe("database schema baseline", () => {
       ])
     );
 
+    const userVersion = db.prepare("PRAGMA user_version").get() as { user_version: number };
+    expect(userVersion.user_version).toBe(CURRENT_SCHEMA_VERSION);
+
     closeDatabase(db);
+  });
+
+  it("restamps the current schema when user_version is reset to zero", async () => {
+    const { openDatabase, closeDatabase } = await import("./db");
+    const { CURRENT_SCHEMA_VERSION } = await import("./schema-version");
+
+    const db = openDatabase(dbPath);
+    closeDatabase(db);
+
+    const rawDb = new DatabaseSync(dbPath);
+    rawDb.exec("PRAGMA user_version = 0");
+    rawDb.close();
+
+    const reopened = openDatabase(dbPath);
+    const userVersion = reopened.prepare("PRAGMA user_version").get() as { user_version: number };
+    expect(userVersion.user_version).toBe(CURRENT_SCHEMA_VERSION);
+    closeDatabase(reopened);
   });
 
   it("rejects a legacy database schema that still contains resume_id with a typed incompatible-schema error", async () => {
     const { openDatabase } = await import("./db");
+    const { IncompatibleSchemaError } = await import("./schema-version");
 
     const db = new DatabaseSync(dbPath);
     db.exec(`
@@ -102,11 +124,21 @@ describe("database schema baseline", () => {
     `);
     db.close();
 
-    expect(() => openDatabase(dbPath)).toThrow(/db_incompatible_schema/);
+    let thrown: unknown;
+    try {
+      openDatabase(dbPath);
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(IncompatibleSchemaError);
+    expect(thrown).toMatchObject({ code: "db_incompatible_schema" });
+    expect((thrown as Error).message).toContain("db_incompatible_schema");
   });
 
   it("rejects a legacy database schema that still contains hook_registrations with a typed incompatible-schema error", async () => {
     const { openDatabase } = await import("./db");
+    const { IncompatibleSchemaError } = await import("./schema-version");
 
     const db = new DatabaseSync(dbPath);
     db.exec(`
@@ -117,11 +149,21 @@ describe("database schema baseline", () => {
     `);
     db.close();
 
-    expect(() => openDatabase(dbPath)).toThrow(/db_incompatible_schema/);
+    let thrown: unknown;
+    try {
+      openDatabase(dbPath);
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(IncompatibleSchemaError);
+    expect(thrown).toMatchObject({ code: "db_incompatible_schema" });
+    expect((thrown as Error).message).toContain("db_incompatible_schema");
   });
 
   it("rejects a legacy database schema that still contains transcript_path with a typed incompatible-schema error", async () => {
     const { openDatabase } = await import("./db");
+    const { IncompatibleSchemaError } = await import("./schema-version");
 
     const db = new DatabaseSync(dbPath);
     db.exec(`
@@ -143,11 +185,21 @@ describe("database schema baseline", () => {
     `);
     db.close();
 
-    expect(() => openDatabase(dbPath)).toThrow(/db_incompatible_schema/);
+    let thrown: unknown;
+    try {
+      openDatabase(dbPath);
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(IncompatibleSchemaError);
+    expect(thrown).toMatchObject({ code: "db_incompatible_schema" });
+    expect((thrown as Error).message).toContain("db_incompatible_schema");
   });
 
   it("rejects a legacy database schema that still contains _migrations with a typed incompatible-schema error", async () => {
     const { openDatabase } = await import("./db");
+    const { IncompatibleSchemaError } = await import("./schema-version");
 
     const db = new DatabaseSync(dbPath);
     db.exec(`
@@ -159,7 +211,16 @@ describe("database schema baseline", () => {
     `);
     db.close();
 
-    expect(() => openDatabase(dbPath)).toThrow(/db_incompatible_schema/);
+    let thrown: unknown;
+    try {
+      openDatabase(dbPath);
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(IncompatibleSchemaError);
+    expect(thrown).toMatchObject({ code: "db_incompatible_schema" });
+    expect((thrown as Error).message).toContain("db_incompatible_schema");
   });
 
   it("rejects a non-empty database whose schema does not match the current baseline", async () => {

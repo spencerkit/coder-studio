@@ -35,7 +35,7 @@ const CURRENT_SCHEMA_PATH = join(import.meta.dirname, "migrations", "001_init.sq
 
 export const CURRENT_SCHEMA_SQL = readFileSync(CURRENT_SCHEMA_PATH, "utf-8");
 
-const V1_SCHEMA_SQL = `
+export const V1_SCHEMA_SQL = `
 CREATE TABLE workspaces (
   id TEXT PRIMARY KEY,
   path TEXT NOT NULL UNIQUE,
