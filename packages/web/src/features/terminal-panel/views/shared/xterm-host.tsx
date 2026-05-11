@@ -17,6 +17,7 @@ import { themeAtom } from "../../../../atoms/app-ui";
 import { dispatchCommandAtom, wsClientAtom } from "../../../../atoms/connection";
 import { useViewport } from "../../../../hooks/use-viewport";
 import { useTranslation } from "../../../../lib/i18n";
+import { getThemeById } from "../../../../theme";
 import type { ConnectionStatus, TerminalBinaryPayload } from "../../../../ws/client";
 import { pushToastAtom } from "../../../notifications/atoms";
 import type { OutputBuffer } from "../../atoms";
@@ -213,66 +214,6 @@ function getTouchScrollPxPerLine(terminal: Terminal, container: HTMLElement): nu
   }
 
   return MOBILE_TOUCH_SCROLL_FALLBACK_PX_PER_LINE;
-}
-
-/**
- * Aurora Mint terminal themes for xterm.js.
- * These mirror the light/dark tokens so terminals stay legible when the user
- * switches themes without needing a full remount.
- */
-const AURORA_MINT_THEMES = {
-  dark: {
-    background: "#0b1218",
-    foreground: "#e5edf3",
-    cursor: "#78d7b2",
-    cursorAccent: "#0b1218",
-    selectionBackground: "#1e3040",
-    selectionForeground: "#e5edf3",
-    black: "#0a1014",
-    red: "#ff9eb0",
-    green: "#78d7b2",
-    yellow: "#f1b86a",
-    blue: "#6cb6ff",
-    magenta: "#c792ea",
-    cyan: "#78d7b2",
-    white: "#9fb0bc",
-    brightBlack: "#4a5b6a",
-    brightRed: "#ff9eb0",
-    brightGreen: "#78d7b2",
-    brightYellow: "#f1b86a",
-    brightBlue: "#6cb6ff",
-    brightMagenta: "#c792ea",
-    brightCyan: "#78d7b2",
-    brightWhite: "#e5edf3",
-  },
-  light: {
-    background: "#fafbfc",
-    foreground: "#1f2328",
-    cursor: "#0969da",
-    cursorAccent: "#fafbfc",
-    selectionBackground: "#dde4ea",
-    selectionForeground: "#1f2328",
-    black: "#24292f",
-    red: "#cf222e",
-    green: "#1a7f37",
-    yellow: "#9a6700",
-    blue: "#0969da",
-    magenta: "#8250df",
-    cyan: "#1b7c83",
-    white: "#57606a",
-    brightBlack: "#8b949e",
-    brightRed: "#cf222e",
-    brightGreen: "#1a7f37",
-    brightYellow: "#9a6700",
-    brightBlue: "#0969da",
-    brightMagenta: "#8250df",
-    brightCyan: "#1b7c83",
-    brightWhite: "#1f2328",
-  },
-};
-
-function getTerminalTheme(theme: "dark" | "light") {
-  return AURORA_MINT_THEMES[theme];
 }
 
 function shouldBypassPtyForKeyboardPaste(event: KeyboardEvent): boolean {
@@ -585,7 +526,7 @@ export function XtermHost({
 
   useEffect(() => {
     if (terminalRef.current) {
-      terminalRef.current.options.theme = getTerminalTheme(uiTheme);
+      terminalRef.current.options.theme = getThemeById(uiTheme).terminalTheme;
     }
   }, [uiTheme]);
 
@@ -1092,7 +1033,7 @@ export function XtermHost({
     // characters used by TUIs (claude, codex) render as a continuous frame
     // with no gaps between rows.
     const terminal = new Terminal({
-      theme: getTerminalTheme(initialThemeRef.current),
+      theme: getThemeById(initialThemeRef.current).terminalTheme,
       fontFamily: "JetBrains Mono, Fira Code, SF Mono, monospace",
       fontSize: 11,
       scrollback: 5000,

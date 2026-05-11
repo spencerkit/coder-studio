@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { localeAtom, themeAtom } from "../../../atoms/app-ui";
 import { wsClientAtom } from "../../../atoms/connection";
 import { JotaiProvider } from "../../../test-utils/jotai-provider";
+import { getThemeById } from "../../../theme";
 import type { TerminalReplayPayload, TerminalSnapshotPayload } from "../../../ws/client";
 import { toastsAtom } from "../../notifications/atoms";
 import { terminalMetaAtomFamily, terminalOutputAtomFamily } from "../atoms";
@@ -834,6 +835,7 @@ describe("XtermHost", () => {
     hydrationCoordinatorMocks.autoGrant = false;
     const store = createStore();
     store.set(localeAtom, "en");
+    store.set(themeAtom, "mint-dark");
     store.set(wsClientAtom, {
       sendCommand: vi.fn().mockImplementation((op: string) => {
         if (op === "terminal.replay") {
@@ -854,7 +856,7 @@ describe("XtermHost", () => {
     );
 
     await act(async () => {
-      store.set(themeAtom, "light");
+      store.set(themeAtom, "mint-light");
     });
 
     await act(async () => {
@@ -866,10 +868,7 @@ describe("XtermHost", () => {
     const { Terminal } = await import("@xterm/xterm");
     expect(Terminal).toHaveBeenCalledWith(
       expect.objectContaining({
-        theme: expect.objectContaining({
-          background: "#fafbfc",
-          foreground: "#1f2328",
-        }),
+        theme: expect.objectContaining(getThemeById("mint-light").terminalTheme),
       })
     );
   });
@@ -1091,23 +1090,17 @@ describe("XtermHost", () => {
       </JotaiProvider>
     );
 
-    // Terminal should be called with Aurora Mint theme
     expect(Terminal).toHaveBeenCalledWith(
       expect.objectContaining({
-        theme: expect.objectContaining({
-          background: "#0b1218",
-          foreground: "#e5edf3",
-          cursor: "#78d7b2",
-          selectionBackground: "#1e3040",
-        }),
+        theme: expect.objectContaining(getThemeById("mint-dark").terminalTheme),
       })
     );
   });
 
-  it("creates xterm instance with a light theme when ui theme is light", async () => {
+  it("creates xterm instance with the mint-light palette when ui theme is mint-light", async () => {
     const { Terminal } = await import("@xterm/xterm");
     const store = createStore();
-    store.set(themeAtom, "light");
+    store.set(themeAtom, "mint-light");
 
     render(
       <Provider store={store}>
@@ -1117,18 +1110,14 @@ describe("XtermHost", () => {
 
     expect(Terminal).toHaveBeenCalledWith(
       expect.objectContaining({
-        theme: expect.objectContaining({
-          background: "#fafbfc",
-          foreground: "#1f2328",
-          cursor: "#0969da",
-          selectionBackground: "#dde4ea",
-        }),
+        theme: expect.objectContaining(getThemeById("mint-light").terminalTheme),
       })
     );
   });
 
-  it("updates the live xterm theme when the ui theme changes", async () => {
+  it("updates the live xterm theme when the ui theme changes to graphite-light", async () => {
     const store = createStore();
+    store.set(themeAtom, "mint-dark");
 
     render(
       <Provider store={store}>
@@ -1137,19 +1126,34 @@ describe("XtermHost", () => {
     );
 
     await act(async () => {
-      store.set(themeAtom, "light");
+      store.set(themeAtom, "graphite-light");
     });
 
     await waitFor(() => {
       expect(mockTerminal.options).toEqual(
         expect.objectContaining({
-          theme: expect.objectContaining({
-            background: "#fafbfc",
-            foreground: "#1f2328",
-          }),
+          theme: expect.objectContaining(getThemeById("graphite-light").terminalTheme),
         })
       );
     });
+  });
+
+  it("uses the high-contrast dark terminal palette for hc-dark", async () => {
+    const { Terminal } = await import("@xterm/xterm");
+    const store = createStore();
+    store.set(themeAtom, "hc-dark");
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="hc-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    expect(Terminal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        theme: expect.objectContaining(getThemeById("hc-dark").terminalTheme),
+      })
+    );
   });
 
   it("uses JetBrains Mono font family", async () => {
