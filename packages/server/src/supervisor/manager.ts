@@ -14,6 +14,7 @@ import type { EventBus } from "../bus/event-bus.js";
 import type { SessionManager } from "../session/manager.js";
 import type { ProviderConfigRepo } from "../storage/repositories/provider-config-repo.js";
 import type { SettingsRepo } from "../storage/repositories/settings-repo.js";
+import type { SupervisorCycleAttemptRepo } from "../storage/repositories/supervisor-cycle-attempt-repo.js";
 import type { SupervisorCycleRepo } from "../storage/repositories/supervisor-cycle-repo.js";
 import type { SupervisorRepo } from "../storage/repositories/supervisor-repo.js";
 import type { TerminalManager } from "../terminal/manager.js";
@@ -28,6 +29,7 @@ import {
   SupervisorInjector,
 } from "./injector.js";
 import { SupervisorScheduler } from "./scheduler.js";
+import { getSupervisorRetrySettings } from "./settings.js";
 
 const NOOP_LOGGER: FastifyBaseLogger = {
   child: () => NOOP_LOGGER,
@@ -50,11 +52,21 @@ type SessionLifecycleEvent = Extract<DomainEvent, { type: "session.lifecycle" }>
 interface StartedCycle {
   cycle: SupervisorCycle;
   context: SupervisorEvaluationContext;
+  retry: SupervisorRetrySnapshot;
+  trigger: "turn_completed" | "manual" | "scheduled";
 }
 
 interface DeferredCompletion {
   promise: Promise<void>;
   resolve: () => void;
+}
+
+interface SupervisorRetrySnapshot {
+  retryEnabled: boolean;
+  retryMaxCount: number;
+  retryDelayMs: number;
+  retryOnTimeout: boolean;
+  retryOnEvaluatorError: boolean;
 }
 
 export interface SupervisorManagerDeps {
@@ -65,9 +77,17 @@ export interface SupervisorManagerDeps {
   sessionMgr: SessionManager;
   providerRegistry: ProviderDefinition[];
   providerConfigRepo: ProviderConfigRepo;
+  git?: {
+    getStatusSummary?: typeof import("../git/cli.js").getGitStatusSummary;
+    getDiffStatSummary?: typeof import("../git/cli.js").getGitDiffStatSummary;
+  };
   settingsRepo: Pick<SettingsRepo, "get">;
   supervisorRepo: SupervisorRepo;
   cycleRepo: SupervisorCycleRepo;
+  cycleAttemptRepo: Pick<
+    SupervisorCycleAttemptRepo,
+    "create" | "update" | "listForCycle" | "deleteForCycle"
+  >;
   logger?: FastifyBaseLogger;
   config?: SupervisorConfig;
 }
@@ -77,11 +97,17 @@ export interface CreateSupervisorRequest {
   workspaceId: string;
   objective: string;
   evaluatorProviderId: string;
+  evaluatorModel?: string;
+  maxSupervisionCount?: number;
+  scheduledAt?: number;
 }
 
 export interface UpdateSupervisorRequest {
   objective?: string;
   evaluatorProviderId?: string;
+  evaluatorModel?: string | null;
+  maxSupervisionCount?: number;
+  scheduledAt?: number | null;
 }
 
 function createDeferredCompletion(): DeferredCompletion {
@@ -98,6 +124,10 @@ function generateSupervisorId(): string {
 
 function generateCycleId(): string {
   return `cycle_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function generateAttemptId(): string {
+  return `attempt_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 }
 
 function messageOf(error: unknown, fallback: string): string {
@@ -127,6 +157,7 @@ export class SupervisorManager {
   private readonly supervisorsBySession = new Map<string, string>();
   private readonly inFlight = new Set<string>();
   private readonly pendingDeletes = new Set<string>();
+  private readonly pendingPauses = new Set<string>();
   private readonly evaluationAbortControllers = new Map<string, AbortController>();
   private readonly inFlightCompletions = new Map<string, DeferredCompletion>();
   private readonly scheduler: SupervisorScheduler;
@@ -146,6 +177,7 @@ export class SupervisorManager {
       terminalMgr: deps.terminalMgr,
       providerRegistry: deps.providerRegistry,
       logger: this.logger,
+      git: deps.git,
     });
     this.evaluator = new SupervisorEvaluator({
       providerRegistry: deps.providerRegistry,
@@ -164,10 +196,19 @@ export class SupervisorManager {
       onTurnCompleted: (sessionId) => {
         const supervisorId = this.supervisorsBySession.get(sessionId);
         if (supervisorId) {
-          void this.runEvaluation(supervisorId).catch((error) => {
+          void this.runEvaluation(supervisorId, "turn_completed").catch((error) => {
             this.logger.warn({ err: error, supervisorId }, "Supervisor auto-evaluation failed");
           });
         }
+      },
+      listScheduledSupervisors: () => this.listScheduledSupervisors(),
+      onScheduledDue: (supervisorId) => {
+        void this.runEvaluation(supervisorId, "scheduled").catch((error) => {
+          this.logger.warn(
+            { err: error, supervisorId },
+            "Supervisor scheduled auto-evaluation failed"
+          );
+        });
       },
     });
   }
@@ -232,6 +273,7 @@ export class SupervisorManager {
     );
 
     this.scheduler.start();
+    this.scheduler.refresh();
   }
 
   stop(): void {
@@ -316,6 +358,10 @@ export class SupervisorManager {
         state: "idle",
         objective: req.objective.trim(),
         evaluatorProviderId: req.evaluatorProviderId,
+        evaluatorModel: req.evaluatorModel?.trim() || undefined,
+        maxSupervisionCount: req.maxSupervisionCount ?? 0,
+        completedSupervisionCount: 0,
+        scheduledAt: req.scheduledAt,
         createdAt: now,
         updatedAt: now,
       })
@@ -323,6 +369,7 @@ export class SupervisorManager {
 
     this.storeSnapshot(supervisor);
     this.broadcastState(supervisor, "created");
+    this.scheduler.refresh();
     return supervisor;
   }
 
@@ -337,6 +384,12 @@ export class SupervisorManager {
       this.deps.supervisorRepo.update(id, {
         objective: patch.objective !== undefined ? patch.objective.trim() : current.objective,
         evaluatorProviderId: patch.evaluatorProviderId ?? current.evaluatorProviderId,
+        evaluatorModel:
+          patch.evaluatorModel === undefined
+            ? current.evaluatorModel
+            : patch.evaluatorModel?.trim() || null,
+        maxSupervisionCount: patch.maxSupervisionCount ?? current.maxSupervisionCount,
+        scheduledAt: patch.scheduledAt === undefined ? current.scheduledAt : patch.scheduledAt,
         state: current.state === "error" ? "idle" : current.state,
         errorReason: null,
         updatedAt: Date.now(),
@@ -345,10 +398,16 @@ export class SupervisorManager {
 
     this.storeSnapshot(updated);
     this.broadcastState(updated, "updated");
+    this.scheduler.refresh();
     return updated;
   }
 
   async pause(id: string): Promise<Supervisor> {
+    if (this.inFlight.has(id)) {
+      this.pendingPauses.add(id);
+      this.evaluationAbortControllers.get(id)?.abort();
+    }
+
     const updated = this.attachCycles(
       this.deps.supervisorRepo.update(id, {
         state: "paused",
@@ -358,6 +417,7 @@ export class SupervisorManager {
 
     this.storeSnapshot(updated);
     this.broadcastState(updated, "state_changed");
+    this.scheduler.refresh();
     return updated;
   }
 
@@ -372,6 +432,7 @@ export class SupervisorManager {
 
     this.storeSnapshot(updated);
     this.broadcastState(updated, "state_changed");
+    this.scheduler.refresh();
     return updated;
   }
 
@@ -382,6 +443,7 @@ export class SupervisorManager {
       this.pendingDeletes.add(id);
       this.evaluationAbortControllers.get(id)?.abort();
       await this.inFlightCompletions.get(id)?.promise;
+      this.scheduler.refresh();
       return;
     }
 
@@ -422,8 +484,11 @@ export class SupervisorManager {
    * auto trigger path (scheduler) and for tests that want to observe the
    * final cycle outcome.
    */
-  async runEvaluation(supervisorId: string): Promise<SupervisorCycle | null> {
-    const started = await this.beginCycle(supervisorId, "turn_completed");
+  async runEvaluation(
+    supervisorId: string,
+    trigger: "turn_completed" | "scheduled" = "turn_completed"
+  ): Promise<SupervisorCycle | null> {
+    const started = await this.beginCycle(supervisorId, trigger);
     if (!started) {
       return null;
     }
@@ -443,7 +508,7 @@ export class SupervisorManager {
    */
   private async beginCycle(
     id: string,
-    trigger: "turn_completed" | "manual"
+    trigger: "turn_completed" | "manual" | "scheduled"
   ): Promise<StartedCycle | null> {
     const supervisor = this.requireSupervisor(id);
     const session = this.deps.sessionMgr.get(supervisor.sessionId);
@@ -475,11 +540,44 @@ export class SupervisorManager {
       return null;
     }
 
+    if (supervisor.state === "stopped") {
+      if (trigger === "manual") {
+        throw {
+          code: "supervisor_stopped",
+          message: `Supervisor ${id} is stopped`,
+        };
+      }
+      return null;
+    }
+
     if (
-      trigger === "turn_completed" &&
+      (trigger === "turn_completed" || trigger === "scheduled") &&
       (supervisor.state !== "idle" || (session.state !== "running" && session.state !== "idle"))
     ) {
       return null;
+    }
+
+    if (
+      supervisor.maxSupervisionCount > 0 &&
+      supervisor.completedSupervisionCount >= supervisor.maxSupervisionCount
+    ) {
+      const stopped = this.attachCycles(
+        this.deps.supervisorRepo.update(id, {
+          state: "stopped",
+          stopReason: "max_supervision_count_reached",
+          updatedAt: Date.now(),
+        })
+      );
+      this.storeSnapshot(stopped);
+      this.broadcastState(stopped, "state_changed");
+      this.scheduler.refresh();
+      return null;
+    }
+
+    if (trigger === "scheduled") {
+      if (supervisor.scheduledAt === undefined || supervisor.scheduledAt > Date.now()) {
+        return null;
+      }
     }
 
     // Manual trigger: fail fast if the session can't receive injection yet.
@@ -498,6 +596,7 @@ export class SupervisorManager {
     this.inFlightCompletions.set(id, createDeferredCompletion());
 
     try {
+      const retrySettings = getSupervisorRetrySettings(this.deps.settingsRepo);
       const context = await this.contextBuilder.build(supervisor);
       if (
         trigger === "turn_completed" &&
@@ -511,12 +610,15 @@ export class SupervisorManager {
       const evaluatingSupervisor = this.attachCycles(
         this.deps.supervisorRepo.update(supervisor.id, {
           state: "evaluating",
+          scheduledAt: trigger === "scheduled" ? null : (supervisor.scheduledAt ?? undefined),
+          stopReason: null,
           errorReason: null,
           updatedAt: Date.now(),
         })
       );
       this.storeSnapshot(evaluatingSupervisor);
       this.broadcastState(evaluatingSupervisor, "state_changed");
+      this.scheduler.refresh();
 
       const activeCycle = this.deps.cycleRepo.create({
         id: generateCycleId(),
@@ -532,7 +634,18 @@ export class SupervisorManager {
       });
       this.broadcastCycle(evaluatingSupervisor, activeCycle, "created");
 
-      return { cycle: activeCycle, context };
+      return {
+        cycle: activeCycle,
+        context,
+        trigger,
+        retry: {
+          retryEnabled: retrySettings.retryEnabled,
+          retryMaxCount: retrySettings.retryMaxCount,
+          retryDelayMs: retrySettings.retryDelaySec * 1000,
+          retryOnTimeout: retrySettings.retryOnTimeout,
+          retryOnEvaluatorError: retrySettings.retryOnEvaluatorError,
+        },
+      };
     } catch (error: unknown) {
       // Error happened BEFORE we created a cycle (usually contextBuilder or
       // the state→evaluating write). Make sure we don't leave the
@@ -555,100 +668,22 @@ export class SupervisorManager {
     try {
       const supervisorForEval =
         this.supervisors.get(supervisorId) ?? this.requireSupervisor(supervisorId);
-
-      const evaluation = await this.evaluator.evaluate(supervisorForEval, context, {
-        signal: this.evaluationAbortControllers.get(supervisorId)?.signal,
-      });
-
-      let injected = false;
-      let injectedText: string | undefined;
-      let cycleResult: string | undefined;
-      let injectionError: string | undefined;
-
-      if (evaluation.message.trim()) {
-        const injectingSupervisor = this.attachCycles(
-          this.deps.supervisorRepo.update(supervisorId, {
-            state: "injecting",
-            updatedAt: Date.now(),
-          })
-        );
-        this.storeSnapshot(injectingSupervisor);
-        this.broadcastState(injectingSupervisor, "state_changed");
-
-        // Fetch dedupeWindow + 1 so we can safely drop the in-flight cycle
-        // (already persisted via cycleRepo.create above) before passing the
-        // previous N cycles into the injector's dedupe check.
-        const recentCycles = this.deps.cycleRepo
-          .listRecentForSupervisor(supervisorId, this.config.guidanceDedupeWindow + 1)
-          .filter((cycle) => cycle.id !== activeCycle.id);
-
-        try {
-          const injection = await this.injector.inject(
-            injectingSupervisor,
-            {
-              message: evaluation.message,
-            },
-            recentCycles
-          );
-          injected = injection.injected;
-          injectedText = injection.injected ? injection.text : undefined;
-          cycleResult = injection.injected
-            ? injection.text
-            : `Skipped duplicate: ${injection.text}`;
-        } catch (error) {
-          // Injection failed (e.g. session gone away). Keep the evaluation
-          // result but mark the cycle as failed instead of 'injected'.
-          injectionError = messageOf(error, "Injection failed");
-          this.logger.warn(
-            { err: error, supervisorId, cycleId: activeCycle.id },
-            "Supervisor injection failed"
-          );
-        }
-      }
-
-      const finalStatus: CycleStatus = injectionError
-        ? "failed"
-        : injected
-          ? "injected"
-          : "completed";
-
-      const finishedCycle = this.deps.cycleRepo.update(activeCycle.id, {
-        status: finalStatus,
-        result: cycleResult ?? null,
-        injectedGuidance: injectedText,
-        errorReason: injectionError ?? null,
-        completedAt: Date.now(),
-      });
-
-      const latestState = this.supervisors.get(supervisorId)?.state;
-      const nextState: SupervisorState =
-        latestState === "paused" ? "paused" : injectionError ? "error" : "idle";
-      const finishedSupervisor = this.attachCycles(
-        this.deps.supervisorRepo.update(supervisorId, {
-          state: nextState,
-          lastCycleAt: finishedCycle.completedAt,
-          lastEvaluatedTurnId: context.lastTurnId ?? undefined,
-          errorReason: injectionError ?? null,
-          updatedAt: Date.now(),
-        })
-      );
-
-      this.storeSnapshot(finishedSupervisor);
-      this.broadcastCycle(finishedSupervisor, finishedCycle, "updated");
-      this.broadcastState(finishedSupervisor, "state_changed");
-      this.deps.cycleRepo.pruneOldest(supervisorId, this.config.maxCyclesPerSession);
+      const signal = this.evaluationAbortControllers.get(supervisorId)?.signal;
+      const evaluation = await this.executeCycleWithRetry(started, supervisorForEval, signal);
+      const finalized = this.finalizeSuccessfulCycle(activeCycle, context, evaluation);
 
       if (this.pendingDeletes.has(supervisorId)) {
         this.pendingDeletes.delete(supervisorId);
-        this.deleteNow(finishedSupervisor);
+        this.deleteNow(finalized.supervisor);
       }
 
-      return finishedCycle;
+      return finalized.cycle;
     } catch (error: unknown) {
       if (isSupervisorEvalAborted(error)) {
+        const cancelled = this.pendingPauses.has(supervisorId);
         const abortedCycle = this.deps.cycleRepo.update(activeCycle.id, {
-          status: "failed",
-          errorReason: messageOf(error, "Supervisor evaluator aborted"),
+          status: cancelled ? "cancelled" : "failed",
+          errorReason: cancelled ? null : messageOf(error, "Supervisor evaluator aborted"),
           completedAt: Date.now(),
         });
 
@@ -663,10 +698,12 @@ export class SupervisorManager {
         }
 
         const latestState = this.supervisors.get(supervisorId)?.state;
-        const nextState: SupervisorState = latestState === "paused" ? "paused" : "idle";
+        const nextState: SupervisorState =
+          cancelled || latestState === "paused" ? "paused" : "idle";
         const recoveredSupervisor = this.attachCycles(
           this.deps.supervisorRepo.update(supervisorId, {
             state: nextState,
+            stopReason: null,
             errorReason: null,
             updatedAt: Date.now(),
           })
@@ -676,6 +713,8 @@ export class SupervisorManager {
         this.broadcastCycle(recoveredSupervisor, abortedCycle, "updated");
         this.broadcastState(recoveredSupervisor, "state_changed");
         this.deps.cycleRepo.pruneOldest(supervisorId, this.config.maxCyclesPerSession);
+        this.scheduler.refresh();
+        this.pendingPauses.delete(supervisorId);
 
         return abortedCycle;
       }
@@ -695,6 +734,7 @@ export class SupervisorManager {
       const failedSupervisor = this.attachCycles(
         this.deps.supervisorRepo.update(supervisorId, {
           state: "error",
+          stopReason: null,
           errorReason: reason,
           updatedAt: Date.now(),
         })
@@ -711,8 +751,166 @@ export class SupervisorManager {
 
       throw error;
     } finally {
+      this.pendingPauses.delete(supervisorId);
       this.releaseInFlight(supervisorId);
     }
+  }
+
+  private async executeCycleWithRetry(
+    started: StartedCycle,
+    supervisor: Supervisor,
+    signal?: AbortSignal
+  ): Promise<{
+    objectiveComplete: boolean;
+    injected: boolean;
+    injectedText?: string;
+    cycleResult?: string;
+  }> {
+    for (let attemptIndex = 0; ; attemptIndex += 1) {
+      const attempt = this.deps.cycleAttemptRepo.create({
+        id: generateAttemptId(),
+        cycleId: started.cycle.id,
+        attemptIndex,
+        status: "evaluating",
+        startedAt: Date.now(),
+      });
+
+      try {
+        const evaluation = await this.evaluator.evaluate(supervisor, started.context, { signal });
+        this.deps.cycleAttemptRepo.update(attempt.id, {
+          status: "completed",
+          completedAt: Date.now(),
+          providerModel: supervisor.evaluatorModel ?? null,
+        });
+
+        if (evaluation.objectiveComplete) {
+          return {
+            objectiveComplete: true,
+            injected: false,
+            cycleResult: evaluation.message,
+          };
+        }
+
+        if (!evaluation.message.trim()) {
+          return {
+            objectiveComplete: false,
+            injected: false,
+          };
+        }
+
+        if (signal?.aborted || this.pendingPauses.has(supervisor.id)) {
+          throw { code: "supervisor_eval_aborted", message: "Supervisor evaluator aborted" };
+        }
+
+        const injectingSupervisor = this.attachCycles(
+          this.deps.supervisorRepo.update(supervisor.id, {
+            state: "injecting",
+            updatedAt: Date.now(),
+          })
+        );
+        this.storeSnapshot(injectingSupervisor);
+        this.broadcastState(injectingSupervisor, "state_changed");
+
+        const recentCycles = this.deps.cycleRepo
+          .listRecentForSupervisor(supervisor.id, this.config.guidanceDedupeWindow + 1)
+          .filter((cycle) => cycle.id !== started.cycle.id);
+
+        const injection = await this.injector.inject(
+          injectingSupervisor,
+          {
+            message: evaluation.message,
+          },
+          recentCycles,
+          { signal }
+        );
+
+        return {
+          objectiveComplete: false,
+          injected: injection.injected,
+          injectedText: injection.injected ? injection.text : undefined,
+          cycleResult: injection.injected ? injection.text : `Skipped duplicate: ${injection.text}`,
+        };
+      } catch (error) {
+        if (isSupervisorEvalAborted(error)) {
+          this.deps.cycleAttemptRepo.update(attempt.id, {
+            status: this.pendingPauses.has(supervisor.id) ? "cancelled" : "failed",
+            completedAt: Date.now(),
+            errorReason: this.pendingPauses.has(supervisor.id)
+              ? null
+              : messageOf(error, "Supervisor evaluator aborted"),
+          });
+          throw error;
+        }
+
+        const reason = messageOf(error, "Supervisor evaluation failed");
+        this.deps.cycleAttemptRepo.update(attempt.id, {
+          status: "failed",
+          completedAt: Date.now(),
+          errorReason: reason,
+        });
+
+        if (!this.shouldRetryAttempt(error, attemptIndex, started.retry)) {
+          throw error;
+        }
+
+        await this.sleep(started.retry.retryDelayMs, signal);
+
+        const evaluatingSupervisor = this.attachCycles(
+          this.deps.supervisorRepo.update(supervisor.id, {
+            state: "evaluating",
+            updatedAt: Date.now(),
+          })
+        );
+        this.storeSnapshot(evaluatingSupervisor);
+        this.broadcastState(evaluatingSupervisor, "state_changed");
+      }
+    }
+  }
+
+  private finalizeSuccessfulCycle(
+    activeCycle: SupervisorCycle,
+    context: SupervisorEvaluationContext,
+    result: {
+      objectiveComplete: boolean;
+      injected: boolean;
+      injectedText?: string;
+      cycleResult?: string;
+    }
+  ): { cycle: SupervisorCycle; supervisor: Supervisor } {
+    const finalStatus: CycleStatus = result.injected
+      ? "injected"
+      : result.objectiveComplete
+        ? "completed"
+        : "completed";
+
+    const finishedCycle = this.deps.cycleRepo.update(activeCycle.id, {
+      status: finalStatus,
+      result: result.cycleResult ?? null,
+      injectedGuidance: result.injectedText ?? null,
+      errorReason: null,
+      completedAt: Date.now(),
+    });
+
+    const finishedSupervisor = this.attachCycles(
+      this.deps.supervisorRepo.update(activeCycle.supervisorId, {
+        state: result.objectiveComplete ? "stopped" : "idle",
+        completedSupervisionCount:
+          (this.supervisors.get(activeCycle.supervisorId)?.completedSupervisionCount ?? 0) + 1,
+        stopReason: result.objectiveComplete ? "objective_complete" : null,
+        lastCycleAt: finishedCycle.completedAt,
+        lastEvaluatedTurnId: context.lastTurnId ?? undefined,
+        errorReason: null,
+        updatedAt: Date.now(),
+      })
+    );
+
+    this.storeSnapshot(finishedSupervisor);
+    this.broadcastCycle(finishedSupervisor, finishedCycle, "updated");
+    this.broadcastState(finishedSupervisor, "state_changed");
+    this.deps.cycleRepo.pruneOldest(activeCycle.supervisorId, this.config.maxCyclesPerSession);
+    this.scheduler.refresh();
+
+    return { cycle: finishedCycle, supervisor: finishedSupervisor };
   }
 
   /**
@@ -785,6 +983,20 @@ export class SupervisorManager {
     };
   }
 
+  private listScheduledSupervisors(): Array<{ supervisorId: string; scheduledAt: number }> {
+    return Array.from(this.supervisors.values())
+      .filter(
+        (supervisor) =>
+          supervisor.state === "idle" &&
+          typeof supervisor.scheduledAt === "number" &&
+          Number.isFinite(supervisor.scheduledAt)
+      )
+      .map((supervisor) => ({
+        supervisorId: supervisor.id,
+        scheduledAt: supervisor.scheduledAt!,
+      }));
+  }
+
   private storeSnapshot(supervisor: Supervisor): void {
     this.supervisors.set(supervisor.id, supervisor);
     this.supervisorsBySession.set(supervisor.sessionId, supervisor.id);
@@ -795,7 +1007,9 @@ export class SupervisorManager {
     this.supervisors.delete(supervisor.id);
     this.supervisorsBySession.delete(supervisor.sessionId);
     this.pendingDeletes.delete(supervisor.id);
+    this.pendingPauses.delete(supervisor.id);
     this.releaseInFlight(supervisor.id);
+    this.scheduler.refresh();
 
     this.deps.broadcaster.broadcast(
       Topics.supervisorState(supervisor.workspaceId, supervisor.sessionId),
@@ -840,6 +1054,60 @@ export class SupervisorManager {
       Topics.supervisorCycle(supervisor.workspaceId, supervisor.sessionId),
       { cycle, event }
     );
+  }
+
+  private shouldRetryAttempt(
+    error: unknown,
+    attemptIndex: number,
+    retry: SupervisorRetrySnapshot
+  ): boolean {
+    if (!retry.retryEnabled) {
+      return false;
+    }
+    if (attemptIndex >= retry.retryMaxCount) {
+      return false;
+    }
+
+    const code =
+      error && typeof error === "object" && "code" in error
+        ? (error as { code?: unknown }).code
+        : undefined;
+
+    if (code === "supervisor_eval_timeout") {
+      return retry.retryOnTimeout;
+    }
+
+    if (code === "supervisor_eval_failed") {
+      return retry.retryOnEvaluatorError;
+    }
+
+    return false;
+  }
+
+  private async sleep(delayMs: number, signal?: AbortSignal): Promise<void> {
+    if (delayMs <= 0) {
+      return;
+    }
+
+    if (signal?.aborted) {
+      throw { code: "supervisor_eval_aborted", message: "Supervisor evaluator aborted" };
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        signal?.removeEventListener("abort", onAbort);
+        resolve();
+      }, delayMs);
+      timer.unref?.();
+
+      const onAbort = () => {
+        clearTimeout(timer);
+        signal?.removeEventListener("abort", onAbort);
+        reject({ code: "supervisor_eval_aborted", message: "Supervisor evaluator aborted" });
+      };
+
+      signal?.addEventListener("abort", onAbort, { once: true });
+    });
   }
 }
 

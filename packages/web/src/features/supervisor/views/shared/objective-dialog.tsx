@@ -28,6 +28,7 @@ export function ObjectiveDialog({ workspaceId, sessionId }: ObjectiveDialogProps
     copy,
     isDisable,
     disableObjective,
+    isMaxSupervisionCountValid,
     close,
     updateDraft,
     confirm,
@@ -62,11 +63,22 @@ export function ObjectiveDialog({ workspaceId, sessionId }: ObjectiveDialogProps
           mode={mode}
           draftObjective={dialog.draftObjective}
           draftEvaluatorProviderId={dialog.draftEvaluatorProviderId}
+          draftEvaluatorModel={dialog.draftEvaluatorModel}
+          draftMaxSupervisionCount={dialog.draftMaxSupervisionCount}
+          draftScheduledAt={dialog.draftScheduledAt}
+          isMaxSupervisionCountValid={isMaxSupervisionCountValid}
           disableObjective={disableObjective}
           onDraftObjectiveChange={(draftObjective) => updateDraft({ draftObjective })}
           onDraftEvaluatorProviderChange={(draftEvaluatorProviderId) =>
             updateDraft({ draftEvaluatorProviderId })
           }
+          onDraftEvaluatorModelChange={(draftEvaluatorModel) =>
+            updateDraft({ draftEvaluatorModel })
+          }
+          onDraftMaxSupervisionCountChange={(draftMaxSupervisionCount) =>
+            updateDraft({ draftMaxSupervisionCount })
+          }
+          onDraftScheduledAtChange={(draftScheduledAt) => updateDraft({ draftScheduledAt })}
         />
       </ModalBody>
 
@@ -77,7 +89,7 @@ export function ObjectiveDialog({ workspaceId, sessionId }: ObjectiveDialogProps
           onClick={() => {
             void confirm();
           }}
-          disabled={!isDisable && !dialog.draftObjective.trim()}
+          disabled={!isDisable && (!dialog.draftObjective.trim() || !isMaxSupervisionCountValid)}
         >
           {copy.confirm}
         </Button>

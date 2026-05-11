@@ -6,8 +6,20 @@
 
 import {
   DEFAULT_SUPERVISOR_EVALUATION_TIMEOUT_SEC,
+  DEFAULT_SUPERVISOR_RETRY_DELAY_SEC,
+  DEFAULT_SUPERVISOR_RETRY_ENABLED,
+  DEFAULT_SUPERVISOR_RETRY_MAX_COUNT,
+  DEFAULT_SUPERVISOR_RETRY_ON_EVALUATOR_ERROR,
+  DEFAULT_SUPERVISOR_RETRY_ON_TIMEOUT,
   MAX_SUPERVISOR_EVALUATION_TIMEOUT_SEC,
+  MAX_SUPERVISOR_RETRY_DELAY_SEC,
+  MAX_SUPERVISOR_RETRY_MAX_COUNT,
   resolveSupervisorEvaluationTimeoutSec,
+  resolveSupervisorRetryDelaySec,
+  resolveSupervisorRetryEnabled,
+  resolveSupervisorRetryMaxCount,
+  resolveSupervisorRetryOnEvaluatorError,
+  resolveSupervisorRetryOnTimeout,
 } from "@coder-studio/core";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { Check, ChevronRight } from "lucide-react";
@@ -148,6 +160,21 @@ export function SettingsPage() {
   const [supervisorEvaluationTimeoutSec, setSupervisorEvaluationTimeoutSec] = useState(
     DEFAULT_SUPERVISOR_EVALUATION_TIMEOUT_SEC
   );
+  const [supervisorRetryEnabled, setSupervisorRetryEnabled] = useState(
+    DEFAULT_SUPERVISOR_RETRY_ENABLED
+  );
+  const [supervisorRetryMaxCount, setSupervisorRetryMaxCount] = useState(
+    DEFAULT_SUPERVISOR_RETRY_MAX_COUNT
+  );
+  const [supervisorRetryDelaySec, setSupervisorRetryDelaySec] = useState(
+    DEFAULT_SUPERVISOR_RETRY_DELAY_SEC
+  );
+  const [supervisorRetryOnTimeout, setSupervisorRetryOnTimeout] = useState(
+    DEFAULT_SUPERVISOR_RETRY_ON_TIMEOUT
+  );
+  const [supervisorRetryOnEvaluatorError, setSupervisorRetryOnEvaluatorError] = useState(
+    DEFAULT_SUPERVISOR_RETRY_ON_EVALUATOR_ERROR
+  );
   const [terminalRenderer, setTerminalRendererState] = useState<"standard" | "compatibility">(
     "standard"
   );
@@ -218,6 +245,19 @@ export function SettingsPage() {
       }
       setSupervisorEvaluationTimeoutSec(
         resolveSupervisorEvaluationTimeoutSec(settings["supervisor.evaluationTimeoutSec"])
+      );
+      setSupervisorRetryEnabled(resolveSupervisorRetryEnabled(settings["supervisor.retryEnabled"]));
+      setSupervisorRetryMaxCount(
+        resolveSupervisorRetryMaxCount(settings["supervisor.retryMaxCount"])
+      );
+      setSupervisorRetryDelaySec(
+        resolveSupervisorRetryDelaySec(settings["supervisor.retryDelaySec"])
+      );
+      setSupervisorRetryOnTimeout(
+        resolveSupervisorRetryOnTimeout(settings["supervisor.retryOnTimeout"])
+      );
+      setSupervisorRetryOnEvaluatorError(
+        resolveSupervisorRetryOnEvaluatorError(settings["supervisor.retryOnEvaluatorError"])
       );
       setNotificationPreferences({
         enabled:
@@ -327,6 +367,16 @@ export function SettingsPage() {
             setSoundEnabled={setSoundEnabled}
             supervisorEvaluationTimeoutSec={supervisorEvaluationTimeoutSec}
             setSupervisorEvaluationTimeoutSec={setSupervisorEvaluationTimeoutSec}
+            supervisorRetryEnabled={supervisorRetryEnabled}
+            setSupervisorRetryEnabled={setSupervisorRetryEnabled}
+            supervisorRetryMaxCount={supervisorRetryMaxCount}
+            setSupervisorRetryMaxCount={setSupervisorRetryMaxCount}
+            supervisorRetryDelaySec={supervisorRetryDelaySec}
+            setSupervisorRetryDelaySec={setSupervisorRetryDelaySec}
+            supervisorRetryOnTimeout={supervisorRetryOnTimeout}
+            setSupervisorRetryOnTimeout={setSupervisorRetryOnTimeout}
+            supervisorRetryOnEvaluatorError={supervisorRetryOnEvaluatorError}
+            setSupervisorRetryOnEvaluatorError={setSupervisorRetryOnEvaluatorError}
             terminalRenderer={terminalRenderer}
             setTerminalRenderer={handleTerminalRendererSelection}
             terminalCopyOnSelect={terminalPreferences.copyOnSelect}
@@ -480,6 +530,16 @@ interface GeneralSettingsProps {
   setSoundEnabled: (value: boolean) => void;
   supervisorEvaluationTimeoutSec: number;
   setSupervisorEvaluationTimeoutSec: (value: number) => void;
+  supervisorRetryEnabled: boolean;
+  setSupervisorRetryEnabled: (value: boolean) => void;
+  supervisorRetryMaxCount: number;
+  setSupervisorRetryMaxCount: (value: number) => void;
+  supervisorRetryDelaySec: number;
+  setSupervisorRetryDelaySec: (value: number) => void;
+  supervisorRetryOnTimeout: boolean;
+  setSupervisorRetryOnTimeout: (value: boolean) => void;
+  supervisorRetryOnEvaluatorError: boolean;
+  setSupervisorRetryOnEvaluatorError: (value: boolean) => void;
   terminalRenderer: "standard" | "compatibility";
   setTerminalRenderer: (value: "standard" | "compatibility") => void;
   terminalCopyOnSelect: boolean;
@@ -504,6 +564,34 @@ function parseSupervisorTimeoutInput(value: string): number | null {
   return parsed;
 }
 
+function parseSupervisorRetryMaxCountInput(value: string): number | null {
+  const trimmed = value.trim();
+  if (!/^\d+$/.test(trimmed)) {
+    return null;
+  }
+
+  const parsed = Number(trimmed);
+  if (!Number.isSafeInteger(parsed) || parsed < 0 || parsed > MAX_SUPERVISOR_RETRY_MAX_COUNT) {
+    return null;
+  }
+
+  return parsed;
+}
+
+function parseSupervisorRetryDelayInput(value: string): number | null {
+  const trimmed = value.trim();
+  if (!/^\d+$/.test(trimmed)) {
+    return null;
+  }
+
+  const parsed = Number(trimmed);
+  if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > MAX_SUPERVISOR_RETRY_DELAY_SEC) {
+    return null;
+  }
+
+  return parsed;
+}
+
 function GeneralSettings({
   isMobile,
   notificationsEnabled,
@@ -512,6 +600,16 @@ function GeneralSettings({
   setSoundEnabled,
   supervisorEvaluationTimeoutSec,
   setSupervisorEvaluationTimeoutSec,
+  supervisorRetryEnabled,
+  setSupervisorRetryEnabled,
+  supervisorRetryMaxCount,
+  setSupervisorRetryMaxCount,
+  supervisorRetryDelaySec,
+  setSupervisorRetryDelaySec,
+  supervisorRetryOnTimeout,
+  setSupervisorRetryOnTimeout,
+  supervisorRetryOnEvaluatorError,
+  setSupervisorRetryOnEvaluatorError,
   terminalRenderer,
   setTerminalRenderer,
   terminalCopyOnSelect,
@@ -536,6 +634,16 @@ function GeneralSettings({
     String(supervisorEvaluationTimeoutSec)
   );
   const [supervisorTimeoutError, setSupervisorTimeoutError] = useState<string | null>(null);
+  const [supervisorRetryMaxCountDraft, setSupervisorRetryMaxCountDraft] = useState(
+    String(supervisorRetryMaxCount)
+  );
+  const [supervisorRetryDelayDraft, setSupervisorRetryDelayDraft] = useState(
+    String(supervisorRetryDelaySec)
+  );
+  const [supervisorRetryMaxCountError, setSupervisorRetryMaxCountError] = useState<string | null>(
+    null
+  );
+  const [supervisorRetryDelayError, setSupervisorRetryDelayError] = useState<string | null>(null);
 
   const saveSettings = async (settings: Record<string, unknown>) => {
     return await dispatch("settings.update", { settings });
@@ -561,8 +669,24 @@ function GeneralSettings({
   }, [supervisorEvaluationTimeoutSec]);
 
   useEffect(() => {
+    setSupervisorRetryMaxCountDraft(String(supervisorRetryMaxCount));
+  }, [supervisorRetryMaxCount]);
+
+  useEffect(() => {
+    setSupervisorRetryDelayDraft(String(supervisorRetryDelaySec));
+  }, [supervisorRetryDelaySec]);
+
+  useEffect(() => {
     setSupervisorTimeoutError(null);
   }, [supervisorEvaluationTimeoutSec]);
+
+  useEffect(() => {
+    setSupervisorRetryMaxCountError(null);
+  }, [supervisorRetryMaxCount]);
+
+  useEffect(() => {
+    setSupervisorRetryDelayError(null);
+  }, [supervisorRetryDelaySec]);
 
   const requestNotificationPermission = async () => {
     if ("Notification" in window) {
@@ -604,6 +728,78 @@ function GeneralSettings({
     setSupervisorEvaluationTimeoutSec(parsed);
     setSupervisorTimeoutDraft(String(parsed));
     setSupervisorTimeoutError(null);
+  };
+
+  const commitSupervisorRetryMaxCount = async () => {
+    const parsed = parseSupervisorRetryMaxCountInput(supervisorRetryMaxCountDraft);
+    if (parsed === null) {
+      setSupervisorRetryMaxCountDraft(String(supervisorRetryMaxCount));
+      setSupervisorRetryMaxCountError(
+        t("settings.supervisor.retry_max_count_validation_error", {
+          max: MAX_SUPERVISOR_RETRY_MAX_COUNT,
+        })
+      );
+      return;
+    }
+
+    if (parsed === supervisorRetryMaxCount) {
+      setSupervisorRetryMaxCountDraft(String(parsed));
+      setSupervisorRetryMaxCountError(null);
+      return;
+    }
+
+    const result = await saveSettings({
+      supervisor: {
+        retryMaxCount: parsed,
+      },
+    });
+
+    if (!result.ok) {
+      setSupervisorRetryMaxCountDraft(String(supervisorRetryMaxCount));
+      setSupervisorRetryMaxCountError(
+        result.error?.message || t("settings.config_files.save_failed")
+      );
+      return;
+    }
+
+    setSupervisorRetryMaxCount(parsed);
+    setSupervisorRetryMaxCountDraft(String(parsed));
+    setSupervisorRetryMaxCountError(null);
+  };
+
+  const commitSupervisorRetryDelay = async () => {
+    const parsed = parseSupervisorRetryDelayInput(supervisorRetryDelayDraft);
+    if (parsed === null) {
+      setSupervisorRetryDelayDraft(String(supervisorRetryDelaySec));
+      setSupervisorRetryDelayError(
+        t("settings.supervisor.retry_delay_validation_error", {
+          max: MAX_SUPERVISOR_RETRY_DELAY_SEC,
+        })
+      );
+      return;
+    }
+
+    if (parsed === supervisorRetryDelaySec) {
+      setSupervisorRetryDelayDraft(String(parsed));
+      setSupervisorRetryDelayError(null);
+      return;
+    }
+
+    const result = await saveSettings({
+      supervisor: {
+        retryDelaySec: parsed,
+      },
+    });
+
+    if (!result.ok) {
+      setSupervisorRetryDelayDraft(String(supervisorRetryDelaySec));
+      setSupervisorRetryDelayError(result.error?.message || t("settings.config_files.save_failed"));
+      return;
+    }
+
+    setSupervisorRetryDelaySec(parsed);
+    setSupervisorRetryDelayDraft(String(parsed));
+    setSupervisorRetryDelayError(null);
   };
 
   return (
@@ -822,6 +1018,147 @@ function GeneralSettings({
               {supervisorTimeoutError}
             </span>
           ) : null}
+        </div>
+
+        <div className="settings-toggle-row">
+          <div className="settings-toggle-info">
+            <span className="settings-toggle-label" id="supervisor-retry-enabled-label">
+              {t("settings.supervisor.retry_enabled")}
+            </span>
+            <span className="settings-toggle-desc" id="supervisor-retry-enabled-desc">
+              {t("settings.supervisor.retry_enabled_hint")}
+            </span>
+          </div>
+          <Switch
+            aria-describedby="supervisor-retry-enabled-desc"
+            aria-labelledby="supervisor-retry-enabled-label"
+            checked={supervisorRetryEnabled}
+            className="settings-toggle"
+            onCheckedChange={(nextValue) => {
+              setSupervisorRetryEnabled(nextValue);
+              void saveSettings({ supervisor: { retryEnabled: nextValue } });
+            }}
+          />
+        </div>
+
+        <div className="settings-config-field settings-config-field--inline">
+          <label className="settings-config-label" htmlFor="supervisor-retry-max-count">
+            {t("settings.supervisor.retry_max_count")}
+          </label>
+          <div className="settings-config-control">
+            <Input
+              id="supervisor-retry-max-count"
+              className="settings-input-compact"
+              type="number"
+              min={0}
+              max={MAX_SUPERVISOR_RETRY_MAX_COUNT}
+              step={1}
+              inputMode="numeric"
+              invalid={Boolean(supervisorRetryMaxCountError)}
+              value={supervisorRetryMaxCountDraft}
+              onChange={(event) => {
+                setSupervisorRetryMaxCountDraft(event.target.value);
+                if (supervisorRetryMaxCountError) {
+                  setSupervisorRetryMaxCountError(null);
+                }
+              }}
+              onBlur={() => {
+                void commitSupervisorRetryMaxCount();
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  void commitSupervisorRetryMaxCount();
+                }
+              }}
+            />
+          </div>
+          {supervisorRetryMaxCountError ? (
+            <span className="form-error" role="alert">
+              {supervisorRetryMaxCountError}
+            </span>
+          ) : null}
+        </div>
+
+        <div className="settings-config-field settings-config-field--inline">
+          <label className="settings-config-label" htmlFor="supervisor-retry-delay-sec">
+            {t("settings.supervisor.retry_delay_sec")}
+          </label>
+          <div className="settings-config-control">
+            <Input
+              id="supervisor-retry-delay-sec"
+              className="settings-input-compact"
+              type="number"
+              min={1}
+              max={MAX_SUPERVISOR_RETRY_DELAY_SEC}
+              step={1}
+              inputMode="numeric"
+              invalid={Boolean(supervisorRetryDelayError)}
+              value={supervisorRetryDelayDraft}
+              onChange={(event) => {
+                setSupervisorRetryDelayDraft(event.target.value);
+                if (supervisorRetryDelayError) {
+                  setSupervisorRetryDelayError(null);
+                }
+              }}
+              onBlur={() => {
+                void commitSupervisorRetryDelay();
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  void commitSupervisorRetryDelay();
+                }
+              }}
+            />
+          </div>
+          {supervisorRetryDelayError ? (
+            <span className="form-error" role="alert">
+              {supervisorRetryDelayError}
+            </span>
+          ) : null}
+        </div>
+
+        <div className="settings-toggle-row">
+          <div className="settings-toggle-info">
+            <span className="settings-toggle-label" id="supervisor-retry-on-timeout-label">
+              {t("settings.supervisor.retry_on_timeout")}
+            </span>
+            <span className="settings-toggle-desc" id="supervisor-retry-on-timeout-desc">
+              {t("settings.supervisor.retry_on_timeout_hint")}
+            </span>
+          </div>
+          <Switch
+            aria-describedby="supervisor-retry-on-timeout-desc"
+            aria-labelledby="supervisor-retry-on-timeout-label"
+            checked={supervisorRetryOnTimeout}
+            className="settings-toggle"
+            onCheckedChange={(nextValue) => {
+              setSupervisorRetryOnTimeout(nextValue);
+              void saveSettings({ supervisor: { retryOnTimeout: nextValue } });
+            }}
+          />
+        </div>
+
+        <div className="settings-toggle-row">
+          <div className="settings-toggle-info">
+            <span className="settings-toggle-label" id="supervisor-retry-on-evaluator-error-label">
+              {t("settings.supervisor.retry_on_evaluator_error")}
+            </span>
+            <span className="settings-toggle-desc" id="supervisor-retry-on-evaluator-error-desc">
+              {t("settings.supervisor.retry_on_evaluator_error_hint")}
+            </span>
+          </div>
+          <Switch
+            aria-describedby="supervisor-retry-on-evaluator-error-desc"
+            aria-labelledby="supervisor-retry-on-evaluator-error-label"
+            checked={supervisorRetryOnEvaluatorError}
+            className="settings-toggle"
+            onCheckedChange={(nextValue) => {
+              setSupervisorRetryOnEvaluatorError(nextValue);
+              void saveSettings({ supervisor: { retryOnEvaluatorError: nextValue } });
+            }}
+          />
         </div>
       </div>
     </div>

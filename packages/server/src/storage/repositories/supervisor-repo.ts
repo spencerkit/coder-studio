@@ -28,8 +28,8 @@ export interface NewSupervisor {
   objective: string;
   evaluatorProviderId: string;
   evaluatorModel?: string;
-  maxSupervisionCount?: number;
-  completedSupervisionCount?: number;
+  maxSupervisionCount: number;
+  completedSupervisionCount: number;
   scheduledAt?: number;
   stopReason?: SupervisorStopReason;
   lastCycleAt?: number;

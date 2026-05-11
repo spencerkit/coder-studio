@@ -216,8 +216,12 @@ describe("main", () => {
       );
       expect(verifyLocalDatabaseCompatibility).toHaveBeenCalledTimes(2);
       expect(startManagedServer).toHaveBeenCalledTimes(1);
-      expect(verifyLocalDatabaseCompatibility.mock.invocationCallOrder[0]).toBeLessThan(
-        startManagedServer.mock.invocationCallOrder[0]
+      const verifyOrder = verifyLocalDatabaseCompatibility.mock.invocationCallOrder[0];
+      const startOrder = startManagedServer.mock.invocationCallOrder[0];
+      expect(verifyOrder).toBeDefined();
+      expect(startOrder).toBeDefined();
+      expect(verifyOrder ?? Number.POSITIVE_INFINITY).toBeLessThan(
+        startOrder ?? Number.POSITIVE_INFINITY
       );
       expect(existsSync(dbPath)).toBe(false);
     } finally {

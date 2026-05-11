@@ -87,6 +87,21 @@ describe("SupervisorInjector", () => {
 
     expect(sendInputSpy).not.toHaveBeenCalled();
   });
+
+  it("does not send input when the abort signal is already cancelled", async () => {
+    const sendInputSpy = vi.fn();
+    const injector = makeInjector(sendInputSpy);
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      injector.inject(supervisor, { message: "go" }, [], { signal: controller.signal })
+    ).rejects.toMatchObject({
+      code: "supervisor_eval_aborted",
+    });
+
+    expect(sendInputSpy).not.toHaveBeenCalled();
+  });
 });
 
 describe("describeNonInjectableState", () => {

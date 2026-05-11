@@ -30,7 +30,10 @@ type MutableSupervisorManager = SupervisorManager & {
   contextBuilder: SupervisorContextBuilder & { logger: TestLogger };
   evaluator: SupervisorEvaluator & { logger: TestLogger };
   injector: SupervisorInjector;
-  runEvaluation: (supervisorId: string) => Promise<SupervisorCycle | null>;
+  runEvaluation: (
+    supervisorId: string,
+    trigger?: "turn_completed" | "scheduled"
+  ) => Promise<SupervisorCycle | null>;
 };
 
 const PROVIDER_INSTALL = {
@@ -86,6 +89,17 @@ function applySupervisorPatch(current: Supervisor, patch: SupervisorUpdatePatch)
     ...(patch.evaluatorProviderId !== undefined
       ? { evaluatorProviderId: patch.evaluatorProviderId }
       : {}),
+    ...(patch.evaluatorModel !== undefined
+      ? { evaluatorModel: patch.evaluatorModel ?? undefined }
+      : {}),
+    ...(patch.maxSupervisionCount !== undefined
+      ? { maxSupervisionCount: patch.maxSupervisionCount }
+      : {}),
+    ...(patch.completedSupervisionCount !== undefined
+      ? { completedSupervisionCount: patch.completedSupervisionCount }
+      : {}),
+    ...(patch.scheduledAt !== undefined ? { scheduledAt: patch.scheduledAt ?? undefined } : {}),
+    ...(patch.stopReason !== undefined ? { stopReason: patch.stopReason ?? undefined } : {}),
     ...(patch.lastCycleAt !== undefined ? { lastCycleAt: patch.lastCycleAt ?? undefined } : {}),
     ...(patch.lastEvaluatedTurnId !== undefined
       ? { lastEvaluatedTurnId: patch.lastEvaluatedTurnId ?? undefined }
@@ -115,6 +129,19 @@ function applyCyclePatch(
 function createManagerDeps() {
   const supervisors = new Map<string, Supervisor>();
   const cyclesBySupervisor = new Map<string, SupervisorCycle[]>();
+  const attemptsByCycle = new Map<
+    string,
+    Array<{
+      id: string;
+      cycleId: string;
+      attemptIndex: number;
+      status: "evaluating" | "completed" | "failed" | "cancelled";
+      startedAt: number;
+      completedAt?: number;
+      errorReason?: string;
+      providerModel?: string;
+    }>
+  >();
   const logger: TestLogger = {
     info: vi.fn(),
     warn: vi.fn(),
@@ -143,7 +170,12 @@ function createManagerDeps() {
 
   const supervisorRepo = {
     create: vi.fn((value: NewSupervisor) => {
-      const supervisor: Supervisor = { ...value, cycles: [] };
+      const supervisor: Supervisor = {
+        ...value,
+        maxSupervisionCount: value.maxSupervisionCount ?? 0,
+        completedSupervisionCount: value.completedSupervisionCount ?? 0,
+        cycles: [],
+      };
       supervisors.set(supervisor.id, { ...supervisor, cycles: [] });
       return hydrateSupervisor(supervisor);
     }),
@@ -197,6 +229,48 @@ function createManagerDeps() {
     pruneOldest: vi.fn(),
   };
 
+  const cycleAttemptRepo = {
+    create: vi.fn((attempt) => {
+      const next = [...(attemptsByCycle.get(attempt.cycleId) ?? []), attempt].sort(
+        (left, right) => left.attemptIndex - right.attemptIndex
+      );
+      attemptsByCycle.set(attempt.cycleId, next);
+      return attempt;
+    }),
+    update: vi.fn((id, patch) => {
+      for (const [cycleId, attempts] of attemptsByCycle.entries()) {
+        const index = attempts.findIndex((attempt) => attempt.id === id);
+        if (index === -1) {
+          continue;
+        }
+
+        const updated = {
+          ...attempts[index]!,
+          ...(patch.status !== undefined ? { status: patch.status } : {}),
+          ...(patch.completedAt !== undefined
+            ? { completedAt: patch.completedAt ?? undefined }
+            : {}),
+          ...(patch.errorReason !== undefined
+            ? { errorReason: patch.errorReason ?? undefined }
+            : {}),
+          ...(patch.providerModel !== undefined
+            ? { providerModel: patch.providerModel ?? undefined }
+            : {}),
+        };
+        const next = [...attempts];
+        next[index] = updated;
+        attemptsByCycle.set(cycleId, next);
+        return updated;
+      }
+
+      throw new Error(`Attempt not found: ${id}`);
+    }),
+    listForCycle: vi.fn((cycleId: string) => [...(attemptsByCycle.get(cycleId) ?? [])]),
+    deleteForCycle: vi.fn((cycleId: string) => {
+      attemptsByCycle.delete(cycleId);
+    }),
+  };
+
   return {
     eventBus: { on: vi.fn(() => () => {}), emit: vi.fn() },
     broadcaster: { broadcast: vi.fn() },
@@ -212,6 +286,10 @@ function createManagerDeps() {
       getRenderedSnapshot: vi.fn(async () => "headless snapshot output"),
       getLatestSubmittedUserInput: vi.fn(() => "run the tests"),
       sendInput: vi.fn(),
+    },
+    git: {
+      getStatusSummary: vi.fn(async () => ""),
+      getDiffStatSummary: vi.fn(async () => ""),
     },
     providerRegistry: [
       createProvider({
@@ -229,6 +307,7 @@ function createManagerDeps() {
     logger,
     supervisorRepo,
     cycleRepo,
+    cycleAttemptRepo,
     codexBuildSupervisorEvalCommand,
   };
 }
@@ -244,6 +323,7 @@ describe("SupervisorManager cycle triggers", () => {
     deps = createManagerDeps();
     manager = new SupervisorManager(deps as unknown as SupervisorManagerDeps);
     await manager.hydrate();
+    vi.useRealTimers();
   });
 
   it("passes the provided logger to context builder and evaluator", () => {
@@ -294,6 +374,203 @@ describe("SupervisorManager cycle triggers", () => {
     expect(updated?.cycles).toHaveLength(1);
     expect(updated?.cycles[0]?.trigger).toBe("turn_completed");
     expect(updated?.cycles[0]?.status).toBe("injected");
+  });
+
+  it("stops the supervisor when evaluator returns objective complete", async () => {
+    const supervisor = await manager.create({
+      sessionId: "sess-stop",
+      workspaceId: "ws-1",
+      objective: "Finish the migration",
+      evaluatorProviderId: "codex",
+      maxSupervisionCount: 0,
+    });
+
+    vi.spyOn(getManagerInternals().evaluator, "evaluate").mockResolvedValueOnce({
+      message: "[objective complete]",
+      objectiveComplete: true,
+    });
+
+    const finished = await getManagerInternals().runEvaluation(supervisor.id, "turn_completed");
+
+    expect(finished?.status).toBe("completed");
+    expect(finished?.result).toBe("[objective complete]");
+    expect(manager.get(supervisor.id)?.state).toBe("stopped");
+    expect(manager.get(supervisor.id)?.stopReason).toBe("objective_complete");
+  });
+
+  it("retries evaluator timeout up to the global retry budget", async () => {
+    vi.useFakeTimers();
+    deps.settingsRepo.get = vi.fn((key: string) => {
+      switch (key) {
+        case "supervisor.retryEnabled":
+          return true;
+        case "supervisor.retryMaxCount":
+          return 2;
+        case "supervisor.retryDelaySec":
+          return 1;
+        case "supervisor.retryOnTimeout":
+          return true;
+        case "supervisor.retryOnEvaluatorError":
+          return false;
+        default:
+          return undefined;
+      }
+    });
+
+    const supervisor = await manager.create({
+      sessionId: "sess-retry-timeout",
+      workspaceId: "ws-1",
+      objective: "Ship the fix",
+      evaluatorProviderId: "codex",
+    });
+
+    vi.spyOn(getManagerInternals().evaluator, "evaluate")
+      .mockRejectedValueOnce({ code: "supervisor_eval_timeout", message: "timed out" })
+      .mockResolvedValueOnce({ message: "Run tests", objectiveComplete: false });
+
+    const pending = getManagerInternals().runEvaluation(supervisor.id, "turn_completed");
+    for (let index = 0; index < 20; index += 1) {
+      await Promise.resolve();
+      if (
+        deps.cycleAttemptRepo.update.mock.calls.some(
+          ([, patch]: [string, { status?: string }]) => patch.status === "failed"
+        )
+      ) {
+        break;
+      }
+    }
+    await vi.advanceTimersByTimeAsync(1000);
+    const finished = await pending;
+
+    expect(finished?.status).toBe("injected");
+    expect(deps.cycleAttemptRepo.listForCycle(finished!.id)).toHaveLength(2);
+  });
+
+  it("stops before starting an extra cycle when maxSupervisionCount is reached", async () => {
+    const supervisor = await manager.create({
+      sessionId: "sess-max-count",
+      workspaceId: "ws-1",
+      objective: "Ship the fix",
+      evaluatorProviderId: "codex",
+      maxSupervisionCount: 1,
+    });
+
+    const first = await getManagerInternals().runEvaluation(supervisor.id, "turn_completed");
+    expect(first?.status).toBe("injected");
+
+    const second = await getManagerInternals().runEvaluation(supervisor.id, "turn_completed");
+    expect(second).toBeNull();
+    expect(manager.get(supervisor.id)?.state).toBe("stopped");
+    expect(manager.get(supervisor.id)?.stopReason).toBe("max_supervision_count_reached");
+  });
+
+  it("does not consume maxSupervisionCount when an in-flight cycle is paused and cancelled", async () => {
+    const supervisor = await manager.create({
+      sessionId: "sess-max-count-paused",
+      workspaceId: "ws-1",
+      objective: "Ship the fix",
+      evaluatorProviderId: "codex",
+      maxSupervisionCount: 1,
+    });
+    const managerInternals = getManagerInternals();
+
+    const evaluate = vi.spyOn(managerInternals.evaluator, "evaluate").mockImplementation(
+      async (
+        _supervisor: Supervisor,
+        _context: SupervisorEvaluationContext,
+        options?: { signal?: AbortSignal }
+      ) =>
+        await new Promise<SupervisorResult>((_resolve, reject) => {
+          const signal = options?.signal;
+          const abort = () =>
+            reject({
+              code: "supervisor_eval_aborted",
+              message: "Supervisor evaluator aborted",
+            });
+
+          if (!signal) {
+            reject(new Error("Missing abort signal"));
+            return;
+          }
+          if (signal.aborted) {
+            abort();
+            return;
+          }
+
+          signal.addEventListener("abort", abort, { once: true });
+        })
+    );
+
+    const cycle = await manager.triggerEvaluation(supervisor.id);
+    await waitFor(() => {
+      expect(evaluate).toHaveBeenCalledTimes(1);
+    });
+
+    await manager.pause(supervisor.id);
+    await waitFor(() => {
+      expect(
+        manager.get(supervisor.id)?.cycles.find((entry) => entry.id === cycle.id)?.status
+      ).toBe("cancelled");
+    });
+
+    expect(manager.get(supervisor.id)?.completedSupervisionCount).toBe(0);
+
+    await manager.resume(supervisor.id);
+    evaluate.mockResolvedValueOnce({ message: "Run tests", objectiveComplete: false });
+
+    const finished = await managerInternals.runEvaluation(supervisor.id, "turn_completed");
+
+    expect(finished?.status).toBe("injected");
+    expect(manager.get(supervisor.id)?.completedSupervisionCount).toBe(1);
+    expect(manager.get(supervisor.id)?.stopReason).toBeUndefined();
+  });
+
+  it("creates scheduled cycles and consumes scheduledAt once the cycle starts", async () => {
+    const supervisor = await manager.create({
+      sessionId: "sess-scheduled",
+      workspaceId: "ws-1",
+      objective: "Ship the fix",
+      evaluatorProviderId: "codex",
+      scheduledAt: Date.now() - 1_000,
+    });
+
+    const finished = await getManagerInternals().runEvaluation(supervisor.id, "scheduled");
+
+    expect(finished?.trigger).toBe("scheduled");
+    expect(manager.get(supervisor.id)?.scheduledAt).toBeUndefined();
+  });
+
+  it("retries a due scheduled run until the session becomes runnable", async () => {
+    vi.useFakeTimers();
+    let sessionState: Session["state"] = "starting";
+    vi.mocked(deps.sessionMgr.get).mockImplementation((sessionId: string) =>
+      createSessionRecord(sessionId, { state: sessionState })
+    );
+    vi.spyOn(getManagerInternals().evaluator, "evaluate").mockResolvedValueOnce({
+      message: "Run tests",
+      objectiveComplete: false,
+    });
+
+    const supervisor = await manager.create({
+      sessionId: "sess-scheduled-retry",
+      workspaceId: "ws-1",
+      objective: "Ship the fix",
+      evaluatorProviderId: "codex",
+      scheduledAt: Date.now() + 1_000,
+    });
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(manager.get(supervisor.id)?.cycles).toHaveLength(0);
+
+    sessionState = "running";
+    await vi.advanceTimersByTimeAsync(1_000);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(manager.get(supervisor.id)?.cycles[0]?.trigger).toBe("scheduled");
+    expect(manager.get(supervisor.id)?.cycles[0]?.status).toBe("injected");
+
+    expect(manager.get(supervisor.id)?.scheduledAt).toBeUndefined();
   });
 
   it("persists duplicate-suppressed guidance as a cycle result without marking it injected", async () => {
@@ -513,6 +790,93 @@ describe("SupervisorManager cycle triggers", () => {
       )
     ).toBe(false);
     expect(deps.logger.error).not.toHaveBeenCalled();
+  });
+
+  it("pauses an in-flight evaluation by cancelling the cycle", async () => {
+    const supervisor = await manager.create({
+      sessionId: "sess-pause",
+      workspaceId: "ws-1",
+      objective: "Ship the fix",
+      evaluatorProviderId: "codex",
+    });
+    const managerInternals = getManagerInternals();
+
+    const evaluate = vi.spyOn(managerInternals.evaluator, "evaluate").mockImplementation(
+      async (
+        _supervisor: Supervisor,
+        _context: SupervisorEvaluationContext,
+        options?: { signal?: AbortSignal }
+      ) =>
+        await new Promise<SupervisorResult>((_resolve, reject) => {
+          const signal = options?.signal;
+          const abort = () =>
+            reject({
+              code: "supervisor_eval_aborted",
+              message: "Supervisor evaluator aborted",
+            });
+
+          if (!signal) {
+            reject(new Error("Missing abort signal"));
+            return;
+          }
+          if (signal.aborted) {
+            abort();
+            return;
+          }
+
+          signal.addEventListener("abort", abort, { once: true });
+        })
+    );
+
+    const cycle = await manager.triggerEvaluation(supervisor.id);
+    await waitFor(() => {
+      expect(evaluate).toHaveBeenCalledTimes(1);
+    });
+
+    await manager.pause(supervisor.id);
+    await waitFor(() => {
+      expect(
+        manager.get(supervisor.id)?.cycles.find((entry) => entry.id === cycle.id)?.status
+      ).toBe("cancelled");
+    });
+
+    expect(manager.get(supervisor.id)?.state).toBe("paused");
+  });
+
+  it("does not inject guidance when pause lands after evaluation but before sendInput", async () => {
+    const supervisor = await manager.create({
+      sessionId: "sess-pause-race",
+      workspaceId: "ws-1",
+      objective: "Ship the fix",
+      evaluatorProviderId: "codex",
+    });
+    const managerInternals = getManagerInternals();
+    const originalUpdate = deps.supervisorRepo.update.getMockImplementation();
+    let pauseTriggered = false;
+
+    if (!originalUpdate) {
+      throw new Error("Missing supervisorRepo.update implementation");
+    }
+
+    deps.supervisorRepo.update.mockImplementation((id: string, patch: SupervisorUpdatePatch) => {
+      const updated = originalUpdate(id, patch);
+      if (!pauseTriggered && id === supervisor.id && patch.state === "injecting") {
+        pauseTriggered = true;
+        void manager.pause(supervisor.id);
+      }
+      return updated;
+    });
+
+    vi.spyOn(managerInternals.evaluator, "evaluate").mockResolvedValueOnce({
+      message: "Run tests",
+      objectiveComplete: false,
+    });
+
+    const finished = await managerInternals.runEvaluation(supervisor.id, "turn_completed");
+
+    expect(finished?.status).toBe("cancelled");
+    expect(manager.get(supervisor.id)?.state).toBe("paused");
+    expect(deps.sessionMgr.sendInput).not.toHaveBeenCalled();
   });
 });
 

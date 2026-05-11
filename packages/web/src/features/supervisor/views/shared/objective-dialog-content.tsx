@@ -1,6 +1,6 @@
 import { AlertTriangle, Eye, Pencil, PowerOff } from "lucide-react";
 import { useId } from "react";
-import { Select, type SelectOption, Textarea } from "../../../../components/ui";
+import { Input, Select, type SelectOption, Textarea } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import {
   OBJECTIVE_DIALOG_EVALUATOR_OPTIONS,
@@ -18,9 +18,16 @@ interface ObjectiveDialogContentProps {
   mode: ObjectiveDialogMode;
   draftObjective: string;
   draftEvaluatorProviderId: ObjectiveDialogEvaluatorProviderId;
+  draftEvaluatorModel: string;
+  draftMaxSupervisionCount: string;
+  draftScheduledAt: string;
+  isMaxSupervisionCountValid: boolean;
   disableObjective: string;
   onDraftObjectiveChange: (value: string) => void;
   onDraftEvaluatorProviderChange: (value: ObjectiveDialogEvaluatorProviderId) => void;
+  onDraftEvaluatorModelChange: (value: string) => void;
+  onDraftMaxSupervisionCountChange: (value: string) => void;
+  onDraftScheduledAtChange: (value: string) => void;
 }
 
 export function ObjectiveDialogModeIcon({ mode }: { mode: ObjectiveDialogMode }) {
@@ -33,14 +40,24 @@ export function ObjectiveDialogContent({
   mode,
   draftObjective,
   draftEvaluatorProviderId,
+  draftEvaluatorModel,
+  draftMaxSupervisionCount,
+  draftScheduledAt,
+  isMaxSupervisionCountValid,
   disableObjective,
   onDraftObjectiveChange,
   onDraftEvaluatorProviderChange,
+  onDraftEvaluatorModelChange,
+  onDraftMaxSupervisionCountChange,
+  onDraftScheduledAtChange,
 }: ObjectiveDialogContentProps) {
   const t = useTranslation();
   const objectiveHelperId = useId();
   const evaluatorLabelId = useId();
   const evaluatorHelperId = useId();
+  const evaluatorModelHelperId = useId();
+  const maxSupervisionCountHelperId = useId();
+  const scheduledAtHelperId = useId();
 
   if (mode === "disable") {
     return (
@@ -96,6 +113,55 @@ export function ObjectiveDialogContent({
         />
         <span id={evaluatorHelperId} className="dialog-helper">
           {t("supervisor.field.evaluator_helper")}
+        </span>
+      </div>
+
+      <div className="form-group">
+        <label htmlFor="evaluator-model">{t("supervisor.field.evaluator_model")}</label>
+        <Input
+          id="evaluator-model"
+          size="lg"
+          value={draftEvaluatorModel}
+          onChange={(event) => onDraftEvaluatorModelChange(event.target.value)}
+          aria-describedby={evaluatorModelHelperId}
+          placeholder={t("supervisor.field.evaluator_model_placeholder")}
+        />
+        <span id={evaluatorModelHelperId} className="dialog-helper">
+          {t("supervisor.field.evaluator_model_helper")}
+        </span>
+      </div>
+
+      <div className="form-group">
+        <label htmlFor="max-supervision-count">{t("supervisor.field.max_supervision_count")}</label>
+        <Input
+          id="max-supervision-count"
+          size="lg"
+          type="number"
+          min={0}
+          step={1}
+          value={draftMaxSupervisionCount}
+          onChange={(event) => onDraftMaxSupervisionCountChange(event.target.value)}
+          invalid={!isMaxSupervisionCountValid}
+          aria-invalid={!isMaxSupervisionCountValid}
+          aria-describedby={maxSupervisionCountHelperId}
+        />
+        <span id={maxSupervisionCountHelperId} className="dialog-helper">
+          {t("supervisor.field.max_supervision_count_helper")}
+        </span>
+      </div>
+
+      <div className="form-group">
+        <label htmlFor="scheduled-at">{t("supervisor.field.scheduled_at")}</label>
+        <Input
+          id="scheduled-at"
+          size="lg"
+          type="datetime-local"
+          value={draftScheduledAt}
+          onChange={(event) => onDraftScheduledAtChange(event.target.value)}
+          aria-describedby={scheduledAtHelperId}
+        />
+        <span id={scheduledAtHelperId} className="dialog-helper">
+          {t("supervisor.field.scheduled_at_helper")}
         </span>
       </div>
     </>

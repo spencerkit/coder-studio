@@ -108,6 +108,7 @@ describe("Supervisor integration", () => {
     supervisorManager.evaluator = {
       evaluate: async () => ({
         message: "",
+        objectiveComplete: false,
       }),
     };
   });

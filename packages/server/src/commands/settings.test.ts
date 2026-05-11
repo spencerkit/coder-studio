@@ -43,6 +43,11 @@ describe("settings commands", () => {
             },
             supervisor: {
               evaluationTimeoutSec: 600,
+              retryEnabled: true,
+              retryMaxCount: 3,
+              retryDelaySec: 10,
+              retryOnTimeout: true,
+              retryOnEvaluatorError: false,
             },
           },
         },
@@ -65,6 +70,23 @@ describe("settings commands", () => {
         .prepare("SELECT value FROM user_settings WHERE key = ?")
         .get("supervisor.evaluationTimeoutSec")
     ).toEqual({ value: "600" });
+    expect(
+      db.prepare("SELECT value FROM user_settings WHERE key = ?").get("supervisor.retryEnabled")
+    ).toEqual({ value: "true" });
+    expect(
+      db.prepare("SELECT value FROM user_settings WHERE key = ?").get("supervisor.retryMaxCount")
+    ).toEqual({ value: "3" });
+    expect(
+      db.prepare("SELECT value FROM user_settings WHERE key = ?").get("supervisor.retryDelaySec")
+    ).toEqual({ value: "10" });
+    expect(
+      db.prepare("SELECT value FROM user_settings WHERE key = ?").get("supervisor.retryOnTimeout")
+    ).toEqual({ value: "true" });
+    expect(
+      db
+        .prepare("SELECT value FROM user_settings WHERE key = ?")
+        .get("supervisor.retryOnEvaluatorError")
+    ).toEqual({ value: "false" });
   });
 
   it("settings.update persists appearance.terminalCopyOnSelect into user_settings", async () => {
@@ -141,6 +163,30 @@ describe("settings commands", () => {
       db
         .prepare("SELECT value FROM user_settings WHERE key = ?")
         .get("supervisor.evaluationTimeoutSec")
+    ).toBeUndefined();
+  });
+
+  it("settings.update rejects retryDelaySec values below the supported minimum", async () => {
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "settings-update-supervisor-retry-delay-too-small",
+        op: "settings.update",
+        args: {
+          settings: {
+            supervisor: {
+              retryDelaySec: 0,
+            },
+          },
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("validation_error");
+    expect(
+      db.prepare("SELECT value FROM user_settings WHERE key = ?").get("supervisor.retryDelaySec")
     ).toBeUndefined();
   });
 
@@ -276,6 +322,26 @@ describe("settings commands", () => {
       "supervisor.evaluationTimeoutSec",
       "900"
     );
+    db.prepare("INSERT INTO user_settings (key, value) VALUES (?, ?)").run(
+      "supervisor.retryEnabled",
+      "true"
+    );
+    db.prepare("INSERT INTO user_settings (key, value) VALUES (?, ?)").run(
+      "supervisor.retryMaxCount",
+      "4"
+    );
+    db.prepare("INSERT INTO user_settings (key, value) VALUES (?, ?)").run(
+      "supervisor.retryDelaySec",
+      "15"
+    );
+    db.prepare("INSERT INTO user_settings (key, value) VALUES (?, ?)").run(
+      "supervisor.retryOnTimeout",
+      "false"
+    );
+    db.prepare("INSERT INTO user_settings (key, value) VALUES (?, ?)").run(
+      "supervisor.retryOnEvaluatorError",
+      "true"
+    );
 
     const result = await dispatch(
       {
@@ -292,6 +358,11 @@ describe("settings commands", () => {
       defaultProviderId: "codex",
       "notifications.enabled": true,
       "supervisor.evaluationTimeoutSec": 900,
+      "supervisor.retryEnabled": true,
+      "supervisor.retryMaxCount": 4,
+      "supervisor.retryDelaySec": 15,
+      "supervisor.retryOnTimeout": false,
+      "supervisor.retryOnEvaluatorError": true,
     });
   });
 

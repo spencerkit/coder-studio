@@ -49,8 +49,16 @@ export class SupervisorInjector {
   async inject(
     supervisor: Supervisor,
     input: { message: string },
-    recentCycles: SupervisorCycle[]
+    recentCycles: SupervisorCycle[],
+    options: { signal?: AbortSignal } = {}
   ): Promise<{ injected: boolean; text: string }> {
+    if (options.signal?.aborted) {
+      throw {
+        code: "supervisor_eval_aborted",
+        message: "Supervisor evaluator aborted",
+      };
+    }
+
     const session = this.deps.sessionMgr.get(supervisor.sessionId);
     if (!session) {
       throw {
@@ -77,6 +85,13 @@ export class SupervisorInjector {
 
     if (duplicate) {
       return { injected: false, text };
+    }
+
+    if (options.signal?.aborted) {
+      throw {
+        code: "supervisor_eval_aborted",
+        message: "Supervisor evaluator aborted",
+      };
     }
 
     // Wrap with bracketed-paste so the TUI doesn't interpret any embedded

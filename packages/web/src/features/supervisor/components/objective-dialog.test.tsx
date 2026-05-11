@@ -20,6 +20,43 @@ afterEach(() => {
 });
 
 describe("ObjectiveDialog", () => {
+  const createDialogState = (
+    overrides: Partial<{
+      open: boolean;
+      sessionId: string | null;
+      mode: "enable" | "edit" | "disable";
+      draftObjective: string;
+      draftEvaluatorProviderId: "claude" | "codex";
+      draftEvaluatorModel: string;
+      draftMaxSupervisionCount: string;
+      draftScheduledAt: string;
+    }> = {}
+  ) => ({
+    open: true,
+    sessionId: "sess-1",
+    mode: "enable" as const,
+    draftObjective: "",
+    draftEvaluatorProviderId: "claude" as const,
+    draftEvaluatorModel: "",
+    draftMaxSupervisionCount: "0",
+    draftScheduledAt: "",
+    ...overrides,
+  });
+
+  const createSupervisor = () => ({
+    id: "sup-1",
+    sessionId: "sess-1",
+    workspaceId: "ws-1",
+    state: "idle" as const,
+    objective: "Finish the server refactor",
+    evaluatorProviderId: "claude",
+    maxSupervisionCount: 0,
+    completedSupervisionCount: 0,
+    cycles: [],
+    createdAt: 1,
+    updatedAt: 1,
+  });
+
   it("submits evaluatorProviderId during enable", async () => {
     const user = userEvent.setup();
     const sendCommand = vi.fn().mockResolvedValue(undefined);
@@ -27,13 +64,13 @@ describe("ObjectiveDialog", () => {
     window.localStorage.setItem("ui.locale", JSON.stringify("en"));
     store.set(localeAtom, "en");
     store.set(wsClientAtom, { sendCommand } as never);
-    store.set(supervisorDialogAtom, {
-      open: true,
-      sessionId: "sess-1",
-      mode: "enable",
-      draftObjective: "Finish the server refactor",
-      draftEvaluatorProviderId: "codex",
-    });
+    store.set(
+      supervisorDialogAtom,
+      createDialogState({
+        draftObjective: "Finish the server refactor",
+        draftEvaluatorProviderId: "codex",
+      })
+    );
     store.set(supervisorsAtom, new Map());
 
     render(
@@ -54,10 +91,40 @@ describe("ObjectiveDialog", () => {
           workspaceId: "ws-1",
           objective: "Finish the server refactor",
           evaluatorProviderId: "claude",
+          evaluatorModel: undefined,
+          maxSupervisionCount: 0,
+          scheduledAt: undefined,
         },
         undefined
       );
     });
+  });
+
+  it("blocks submit when maxSupervisionCount is invalid instead of coercing to unlimited", async () => {
+    const user = userEvent.setup();
+    const sendCommand = vi.fn().mockResolvedValue(undefined);
+    const store = createStore();
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(
+      supervisorDialogAtom,
+      createDialogState({
+        draftObjective: "Finish the server refactor",
+        draftMaxSupervisionCount: "-1",
+      })
+    );
+    store.set(supervisorsAtom, new Map());
+
+    render(
+      <Provider store={store}>
+        <ObjectiveDialog workspaceId="ws-1" />
+      </Provider>
+    );
+
+    await user.click(screen.getByRole("button", { name: "Enable" }));
+
+    expect(sendCommand).not.toHaveBeenCalled();
   });
 
   it("renders the evaluator field through the shared select trigger with label and helper wiring", () => {
@@ -65,13 +132,12 @@ describe("ObjectiveDialog", () => {
     window.localStorage.setItem("ui.locale", JSON.stringify("en"));
     store.set(localeAtom, "en");
     store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
-    store.set(supervisorDialogAtom, {
-      open: true,
-      sessionId: "sess-1",
-      mode: "enable",
-      draftObjective: "Ship phase 4B1",
-      draftEvaluatorProviderId: "claude",
-    });
+    store.set(
+      supervisorDialogAtom,
+      createDialogState({
+        draftObjective: "Ship phase 4B1",
+      })
+    );
     store.set(supervisorsAtom, new Map());
 
     render(
@@ -94,13 +160,12 @@ describe("ObjectiveDialog", () => {
     window.localStorage.setItem("ui.locale", JSON.stringify("en"));
     store.set(localeAtom, "en");
     store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
-    store.set(supervisorDialogAtom, {
-      open: true,
-      sessionId: "sess-1",
-      mode: "enable",
-      draftObjective: "Ship phase 4B1",
-      draftEvaluatorProviderId: "claude",
-    });
+    store.set(
+      supervisorDialogAtom,
+      createDialogState({
+        draftObjective: "Ship phase 4B1",
+      })
+    );
     store.set(supervisorsAtom, new Map());
 
     render(
@@ -117,32 +182,13 @@ describe("ObjectiveDialog", () => {
     window.localStorage.setItem("ui.locale", JSON.stringify("en"));
     store.set(localeAtom, "en");
     store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
-    store.set(supervisorDialogAtom, {
-      open: true,
-      sessionId: "sess-1",
-      mode: "disable",
-      draftObjective: "",
-      draftEvaluatorProviderId: "claude",
-    });
     store.set(
-      supervisorsAtom,
-      new Map([
-        [
-          "sess-1",
-          {
-            id: "sup-1",
-            sessionId: "sess-1",
-            workspaceId: "ws-1",
-            state: "idle",
-            objective: "Finish the server refactor",
-            evaluatorProviderId: "claude",
-            cycles: [],
-            createdAt: 1,
-            updatedAt: 1,
-          },
-        ],
-      ])
+      supervisorDialogAtom,
+      createDialogState({
+        mode: "disable",
+      })
     );
+    store.set(supervisorsAtom, new Map([["sess-1", createSupervisor()]]));
 
     render(
       <Provider store={store}>
@@ -160,13 +206,12 @@ describe("ObjectiveDialog", () => {
     window.localStorage.setItem("ui.locale", JSON.stringify("en"));
     store.set(localeAtom, "en");
     store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
-    store.set(supervisorDialogAtom, {
-      open: true,
-      sessionId: "sess-1",
-      mode: "disable",
-      draftObjective: "",
-      draftEvaluatorProviderId: "claude",
-    });
+    store.set(
+      supervisorDialogAtom,
+      createDialogState({
+        mode: "disable",
+      })
+    );
     store.set(supervisorsAtom, new Map());
 
     render(
@@ -184,13 +229,12 @@ describe("ObjectiveDialog", () => {
     window.localStorage.setItem("ui.locale", JSON.stringify("en"));
     store.set(localeAtom, "en");
     store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
-    store.set(supervisorDialogAtom, {
-      open: true,
-      sessionId: "sess-1",
-      mode: "disable",
-      draftObjective: "",
-      draftEvaluatorProviderId: "claude",
-    });
+    store.set(
+      supervisorDialogAtom,
+      createDialogState({
+        mode: "disable",
+      })
+    );
     store.set(supervisorsAtom, new Map());
 
     render(
@@ -207,13 +251,12 @@ describe("ObjectiveDialog", () => {
     window.localStorage.setItem("ui.locale", JSON.stringify("en"));
     store.set(localeAtom, "en");
     store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
-    store.set(supervisorDialogAtom, {
-      open: true,
-      sessionId: "sess-1",
-      mode: "enable",
-      draftObjective: "Ship phase 4B1",
-      draftEvaluatorProviderId: "claude",
-    });
+    store.set(
+      supervisorDialogAtom,
+      createDialogState({
+        draftObjective: "Ship phase 4B1",
+      })
+    );
     store.set(supervisorsAtom, new Map());
 
     render(
@@ -230,13 +273,12 @@ describe("ObjectiveDialog", () => {
     window.localStorage.setItem("ui.locale", JSON.stringify("en"));
     store.set(localeAtom, "en");
     store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
-    store.set(supervisorDialogAtom, {
-      open: true,
-      sessionId: "sess-1",
-      mode: "enable",
-      draftObjective: "Ship phase 4B1",
-      draftEvaluatorProviderId: "claude",
-    });
+    store.set(
+      supervisorDialogAtom,
+      createDialogState({
+        draftObjective: "Ship phase 4B1",
+      })
+    );
     store.set(supervisorsAtom, new Map());
 
     render(
@@ -254,13 +296,12 @@ describe("ObjectiveDialog", () => {
     window.localStorage.setItem("ui.locale", JSON.stringify("en"));
     store.set(localeAtom, "en");
     store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
-    store.set(supervisorDialogAtom, {
-      open: true,
-      sessionId: "sess-1",
-      mode: "enable",
-      draftObjective: "Ship phase 4B1",
-      draftEvaluatorProviderId: "claude",
-    });
+    store.set(
+      supervisorDialogAtom,
+      createDialogState({
+        draftObjective: "Ship phase 4B1",
+      })
+    );
     store.set(supervisorsAtom, new Map());
 
     const { container } = render(

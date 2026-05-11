@@ -340,6 +340,120 @@ describe("SettingsPage", () => {
     });
   });
 
+  it("loads and saves supervisor retry settings from general settings", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "supervisor.retryEnabled": true,
+          "supervisor.retryMaxCount": 3,
+          "supervisor.retryDelaySec": 10,
+          "supervisor.retryOnTimeout": true,
+          "supervisor.retryOnEvaluatorError": false,
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+
+    const retryEnabled = await screen.findByRole("switch", { name: "启用 Supervisor 重试" });
+    const retryMaxCount = screen.getByLabelText("最大重试次数");
+    const retryDelaySec = screen.getByLabelText("重试间隔（秒）");
+    const retryOnTimeout = screen.getByRole("switch", { name: "超时后重试" });
+    const retryOnEvaluatorError = screen.getByRole("switch", { name: "评估器异常后重试" });
+
+    expect(retryEnabled).toHaveAttribute("aria-checked", "true");
+    expect(retryOnTimeout).toHaveAttribute("aria-checked", "true");
+    expect(retryOnEvaluatorError).toHaveAttribute("aria-checked", "false");
+    await waitFor(() => {
+      expect(retryMaxCount).toHaveValue(3);
+      expect(retryDelaySec).toHaveValue(10);
+    });
+
+    fireEvent.click(retryEnabled);
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            supervisor: {
+              retryEnabled: false,
+            },
+          },
+        },
+        undefined
+      );
+    });
+
+    fireEvent.change(retryMaxCount, { target: { value: "5" } });
+    fireEvent.blur(retryMaxCount);
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            supervisor: {
+              retryMaxCount: 5,
+            },
+          },
+        },
+        undefined
+      );
+    });
+
+    fireEvent.change(retryDelaySec, { target: { value: "30" } });
+    fireEvent.blur(retryDelaySec);
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            supervisor: {
+              retryDelaySec: 30,
+            },
+          },
+        },
+        undefined
+      );
+    });
+
+    fireEvent.click(retryOnTimeout);
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            supervisor: {
+              retryOnTimeout: false,
+            },
+          },
+        },
+        undefined
+      );
+    });
+
+    fireEvent.click(retryOnEvaluatorError);
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            supervisor: {
+              retryOnEvaluatorError: true,
+            },
+          },
+        },
+        undefined
+      );
+    });
+  });
+
   it("renders the supervisor timeout control as an inline settings row", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "settings.get") {
