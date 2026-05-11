@@ -244,6 +244,20 @@ describe("XtermHost", () => {
     expect(consoleSpy).toHaveBeenCalledWith("Failed to dispose xterm instance:", expect.any(Error));
   });
 
+  it("does not crash on unmount when onSelectionChange returns a disposable object", () => {
+    mockTerminal.onSelectionChange.mockImplementationOnce(() => ({
+      dispose: vi.fn(),
+    }));
+
+    const { unmount } = render(
+      <JotaiProvider>
+        <XtermHost terminalId="selection-disposable-terminal" workspaceId="test-workspace" />
+      </JotaiProvider>
+    );
+
+    expect(() => unmount()).not.toThrow();
+  });
+
   it("renders without crashing", () => {
     const { container } = render(
       <JotaiProvider>
