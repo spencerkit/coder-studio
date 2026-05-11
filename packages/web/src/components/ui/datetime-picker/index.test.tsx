@@ -161,3 +161,22 @@ describe("DateTimePicker", () => {
     expect(trigger).toHaveAttribute("aria-describedby", "helper");
   });
 });
+
+describe("DateTimePicker popover rendering", () => {
+  it("renders desktop popover content when viewport is desktop", () => {
+    setMatchMediaMock(() => false);
+
+    render(
+      <DateTimePicker value="2026-05-11T14:30" onValueChange={vi.fn()} label="Scheduled At" />
+    );
+
+    const trigger = screen.getByRole("button", { name: "Scheduled At" });
+    fireEvent.click(trigger);
+
+    const dialog = screen.getByRole("dialog", { name: "Scheduled At" });
+    expect(dialog).toBeInTheDocument();
+
+    // Verify popover content is rendered
+    expect(dialog.className).toContain("content");
+  });
+});
