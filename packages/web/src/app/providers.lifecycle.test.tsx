@@ -135,6 +135,7 @@ describe("AppProviders lifecycle recovery", () => {
   afterEach(() => {
     resetAppProvidersSingletonsForTests();
     globalThis.fetch = originalFetch;
+    vi.useRealTimers();
     vi.restoreAllMocks();
     if (originalTerminalPreferences === null) {
       localStorage.removeItem("ui.terminalPreferences");
@@ -319,6 +320,75 @@ describe("AppProviders lifecycle recovery", () => {
 
         expect(wsState.client?.recoverConnection).toHaveBeenCalledWith("network_online");
       });
+  });
+
+  it("recovers the websocket when the window regains focus while already visible", () => {
+    setVisibilityState("visible");
+    renderProviders();
+
+    return vi
+      .waitFor(() => {
+        expect(wsState.client?.connect).toHaveBeenCalled();
+      })
+      .then(() => {
+        act(() => {
+          window.dispatchEvent(new Event("focus"));
+        });
+
+        expect(wsState.client?.recoverConnection).toHaveBeenCalledWith("visibility_resume");
+      });
+  });
+
+  it("recovers the websocket when the page is shown again while visible", () => {
+    setVisibilityState("visible");
+    renderProviders();
+
+    return vi
+      .waitFor(() => {
+        expect(wsState.client?.connect).toHaveBeenCalled();
+      })
+      .then(() => {
+        act(() => {
+          window.dispatchEvent(new Event("pageshow"));
+        });
+
+        expect(wsState.client?.recoverConnection).toHaveBeenCalledWith("visibility_resume");
+      });
+  });
+
+  it("coalesces back-to-back foreground recovery signals", async () => {
+    setVisibilityState("visible");
+    renderProviders();
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
+
+    wsState.client?.recoverConnection.mockClear();
+    vi.useFakeTimers();
+
+    act(() => {
+      window.dispatchEvent(new Event("focus"));
+    });
+
+    expect(wsState.client?.recoverConnection).toHaveBeenCalledTimes(1);
+    expect(wsState.client?.recoverConnection).toHaveBeenLastCalledWith("visibility_resume");
+
+    act(() => {
+      vi.advanceTimersByTime(100);
+      window.dispatchEvent(new Event("pageshow"));
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+
+    expect(wsState.client?.recoverConnection).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      vi.advanceTimersByTime(250);
+      window.dispatchEvent(new Event("focus"));
+    });
+
+    expect(wsState.client?.recoverConnection).toHaveBeenCalledTimes(2);
+    expect(wsState.client?.recoverConnection).toHaveBeenLastCalledWith("visibility_resume");
   });
 
   it("hydrates authEnabled and authenticated from /auth/status instead of trusting stale local state", async () => {

@@ -80,6 +80,7 @@ const DEFAULT_REFRESH_HINT: WorkspaceRefreshHint = {
   markTreeStale: false,
   refreshEditorBuffers: false,
 };
+const FOREGROUND_RECOVERY_COOLDOWN_MS = 250;
 
 function shouldMarkTreeStaleForFsReason(reason?: string): boolean {
   return reason === "fs_change";
@@ -192,6 +193,7 @@ export function AppProviders({ children }: AppProvidersProps) {
   const refreshHintsRef = useRef<Map<string, WorkspaceRefreshHint>>(new Map());
   const activeWorkspaceIdRef = useRef<string | null>(activeWorkspaceId);
   const connectionStatusRef = useRef<ConnectionStatus>(connectionStatus);
+  const lastForegroundRecoveryAtRef = useRef<number | null>(null);
   const workspaceActivityRef = useRef<WorkspaceActivityState>({
     mode: "inactive",
     workspaceId: null,
@@ -388,6 +390,48 @@ export function AppProviders({ children }: AppProvidersProps) {
       sendWorkspaceActivate(workspaceId);
     };
 
+    const triggerForegroundRecovery = () => {
+      syncWorkspaceActivity();
+      if (document.visibilityState !== "visible") {
+        lastForegroundRecoveryAtRef.current = null;
+        return;
+      }
+
+      const now = Date.now();
+      const lastForegroundRecoveryAt = lastForegroundRecoveryAtRef.current;
+      if (
+        lastForegroundRecoveryAt !== null &&
+        now - lastForegroundRecoveryAt < FOREGROUND_RECOVERY_COOLDOWN_MS
+      ) {
+        return;
+      }
+
+      lastForegroundRecoveryAtRef.current = now;
+      wsClientRef.current?.recoverConnection("visibility_resume");
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        lastForegroundRecoveryAtRef.current = null;
+        syncWorkspaceActivity();
+        return;
+      }
+
+      triggerForegroundRecovery();
+    };
+
+    const handleWindowFocus = () => {
+      triggerForegroundRecovery();
+    };
+
+    const handlePageShow = () => {
+      triggerForegroundRecovery();
+    };
+
+    const handleOnline = () => {
+      wsClientRef.current?.recoverConnection("network_online");
+    };
+
     const refreshBranchState = (workspaceId: string) => {
       dispatchRef
         .current<{ current: string; branches: GitBranch[] }>("git.branches", { workspaceId })
@@ -524,24 +568,17 @@ export function AppProviders({ children }: AppProvidersProps) {
         globalWsClient.recoverConnection("manual_retry");
       }
 
-      const handleVisibilityChange = () => {
-        syncWorkspaceActivity();
-        if (document.visibilityState === "visible") {
-          wsClientRef.current?.recoverConnection("visibility_resume");
-        }
-      };
-
-      const handleOnline = () => {
-        wsClientRef.current?.recoverConnection("network_online");
-      };
-
       syncWorkspaceActivity();
 
       document.addEventListener("visibilitychange", handleVisibilityChange);
+      window.addEventListener("focus", handleWindowFocus);
+      window.addEventListener("pageshow", handlePageShow);
       window.addEventListener("online", handleOnline);
 
       return () => {
         document.removeEventListener("visibilitychange", handleVisibilityChange);
+        window.removeEventListener("focus", handleWindowFocus);
+        window.removeEventListener("pageshow", handlePageShow);
         window.removeEventListener("online", handleOnline);
         unsubscribeStatus();
         unsubscribeEvents();
@@ -580,25 +617,18 @@ export function AppProviders({ children }: AppProvidersProps) {
       setConnectionError(err.message || "Connection failed");
     });
 
-    const handleVisibilityChange = () => {
-      syncWorkspaceActivity();
-      if (document.visibilityState === "visible") {
-        wsClientRef.current?.recoverConnection("visibility_resume");
-      }
-    };
-
-    const handleOnline = () => {
-      wsClientRef.current?.recoverConnection("network_online");
-    };
-
     syncWorkspaceActivity();
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("focus", handleWindowFocus);
+    window.addEventListener("pageshow", handlePageShow);
     window.addEventListener("online", handleOnline);
 
     // Cleanup on unmount
     return () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("focus", handleWindowFocus);
+      window.removeEventListener("pageshow", handlePageShow);
       window.removeEventListener("online", handleOnline);
       unsubscribeStatus();
       unsubscribeEvents();
