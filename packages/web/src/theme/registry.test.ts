@@ -3,6 +3,7 @@ import { THEME_IDS, THEMES } from "./index";
 
 describe("theme registry", () => {
   it("contains the first-phase theme ids", () => {
+    expect(THEMES).toHaveLength(8);
     expect(THEME_IDS).toEqual(
       expect.arrayContaining([
         "mint-dark",
@@ -40,16 +41,32 @@ describe("theme registry", () => {
 
     for (const theme of THEMES) {
       expect(ids.has(theme.pairedThemeId)).toBe(true);
+      expect(THEMES.find((candidate) => candidate.id === theme.pairedThemeId)?.pairedThemeId).toBe(
+        theme.id
+      );
     }
   });
 
-  it("flags high contrast themes explicitly", () => {
-    const highContrastThemes = THEMES.filter((theme) => theme.family === "hc");
+  it("defines one dark and one light theme for each family", () => {
+    expect(
+      THEMES.reduce<Record<string, string[]>>((families, theme) => {
+        const variants = families[theme.family] ?? [];
+        variants.push(theme.kind);
+        families[theme.family] = variants;
+        return families;
+      }, {})
+    ).toEqual({
+      mint: ["dark", "light"],
+      graphite: ["dark", "light"],
+      nord: ["dark", "light"],
+      hc: ["dark", "light"],
+    });
+  });
 
-    expect(highContrastThemes).toHaveLength(2);
-
-    for (const theme of highContrastThemes) {
-      expect(theme.isHighContrast).toBe(true);
+  it("keeps derived attributes aligned with ids and families", () => {
+    for (const theme of THEMES) {
+      expect(theme.documentThemeAttr).toBe(theme.id);
+      expect(theme.isHighContrast).toBe(theme.family === "hc");
     }
   });
 });

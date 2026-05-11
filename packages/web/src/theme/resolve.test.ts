@@ -13,6 +13,8 @@ describe("resolveStoredThemeId", () => {
     expect(resolveStoredThemeId("light")).toBe("mint-light");
     expect(resolveStoredThemeId("mint-dark")).toBe("mint-dark");
     expect(resolveStoredThemeId("missing-theme")).toBe("mint-dark");
+    expect(resolveStoredThemeId("__proto__")).toBe("mint-dark");
+    expect(resolveStoredThemeId("toString")).toBe("mint-dark");
   });
 });
 

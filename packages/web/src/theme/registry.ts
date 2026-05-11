@@ -29,13 +29,13 @@ export interface TerminalThemeDefinition {
 export interface MonacoThemeDefinition {
   base: "vs" | "vs-dark" | "hc-black" | "hc-light";
   inherit: boolean;
-  rules: Array<{
+  rules: ReadonlyArray<{
     token: string;
     foreground?: string;
     background?: string;
     fontStyle?: string;
   }>;
-  colors: Record<string, string>;
+  colors: Readonly<Record<string, string>>;
 }
 
 export interface AppThemeDefinition {
@@ -100,7 +100,7 @@ const mintLightTerminal: TerminalThemeDefinition = {
   brightWhite: "#1f2328",
 };
 
-const THEMES_REGISTRY: AppThemeDefinition[] = [
+const THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
   {
     id: "mint-dark",
     family: "mint",
@@ -450,4 +450,4 @@ const THEMES_REGISTRY: AppThemeDefinition[] = [
 ];
 
 export const THEMES = THEMES_REGISTRY;
-export const THEME_IDS = THEMES_REGISTRY.map((theme) => theme.id);
+export const THEME_IDS = THEMES_REGISTRY.map((theme) => theme.id) as readonly string[];

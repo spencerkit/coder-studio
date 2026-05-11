@@ -17,7 +17,7 @@ export function resolveStoredThemeId(value: unknown): string {
     return DEFAULT_THEME_ID;
   }
 
-  if (value in LEGACY_THEME_ID_MAP) {
+  if (Object.hasOwn(LEGACY_THEME_ID_MAP, value)) {
     return LEGACY_THEME_ID_MAP[value as keyof typeof LEGACY_THEME_ID_MAP];
   }
 
