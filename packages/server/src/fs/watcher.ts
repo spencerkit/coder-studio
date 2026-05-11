@@ -22,6 +22,7 @@ export class WorkspaceWatcher {
   private dirtyTimer: NodeJS.Timeout | null = null;
   private firstDirtyTime: number | null = null;
   private pendingReason: "fs_change" | "git_metadata" | null = null;
+  private pendingWorktreeChanged = false;
   private readonly DEBOUNCE_MS = 200;
   private readonly MAX_WAIT_MS = 1_000;
 
@@ -52,6 +53,10 @@ export class WorkspaceWatcher {
       this.firstDirtyTime = now;
     }
 
+    if (changedPath && this.isWorktreeMetadataPath(changedPath)) {
+      this.pendingWorktreeChanged = true;
+    }
+
     if (changedPath && !this.isGitMetadataPath(changedPath)) {
       this.pendingReason = "fs_change";
     } else if (changedPath && this.pendingReason !== "fs_change") {
@@ -74,13 +79,24 @@ export class WorkspaceWatcher {
     this.broadcaster?.broadcast(Topics.workspaceFsDirty(this.workspaceId), {
       reason: this.pendingReason ?? "fs_change",
     });
+    if (this.pendingWorktreeChanged) {
+      this.broadcaster?.broadcast(Topics.workspaceGitState(this.workspaceId), {
+        worktreeChanged: true,
+      });
+    }
     this.dirtyTimer = null;
     this.firstDirtyTime = null;
     this.pendingReason = null;
+    this.pendingWorktreeChanged = false;
   }
 
   private isGitMetadataPath(changedPath: string): boolean {
     return changedPath.replace(/\\/g, "/").includes("/.git/");
+  }
+
+  private isWorktreeMetadataPath(changedPath: string): boolean {
+    const normalized = changedPath.replace(/\\/g, "/");
+    return normalized.includes("/.git/worktrees");
   }
 
   /**
