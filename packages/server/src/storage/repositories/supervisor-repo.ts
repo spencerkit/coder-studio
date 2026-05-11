@@ -1,4 +1,4 @@
-import type { Supervisor, SupervisorState } from "@coder-studio/core";
+import type { Supervisor, SupervisorState, SupervisorStopReason } from "@coder-studio/core";
 import type { Database } from "../database.js";
 
 interface SupervisorRow {
@@ -8,6 +8,11 @@ interface SupervisorRow {
   state: SupervisorState;
   objective: string;
   evaluator_provider_id: string;
+  evaluator_model: string | null;
+  max_supervision_count: number;
+  completed_supervision_count: number;
+  scheduled_at: number | null;
+  stop_reason: SupervisorStopReason | null;
   last_cycle_at: number | null;
   last_evaluated_turn_id: string | null;
   error_reason: string | null;
@@ -22,6 +27,11 @@ export interface NewSupervisor {
   state: SupervisorState;
   objective: string;
   evaluatorProviderId: string;
+  evaluatorModel?: string;
+  maxSupervisionCount?: number;
+  completedSupervisionCount?: number;
+  scheduledAt?: number;
+  stopReason?: SupervisorStopReason;
   lastCycleAt?: number;
   lastEvaluatedTurnId?: string;
   errorReason?: string;
@@ -33,6 +43,11 @@ export interface SupervisorUpdatePatch {
   state?: SupervisorState;
   objective?: string;
   evaluatorProviderId?: string;
+  evaluatorModel?: string | null;
+  maxSupervisionCount?: number;
+  completedSupervisionCount?: number;
+  scheduledAt?: number | null;
+  stopReason?: SupervisorStopReason | null;
   lastCycleAt?: number | null;
   lastEvaluatedTurnId?: string | null;
   errorReason?: string | null;
@@ -45,8 +60,8 @@ export class SupervisorRepo {
   create(input: NewSupervisor): Supervisor {
     this.db
       .prepare(
-        `INSERT INTO supervisors (id, session_id, workspace_id, state, objective, evaluator_provider_id, last_cycle_at, last_evaluated_turn_id, error_reason, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO supervisors (id, session_id, workspace_id, state, objective, evaluator_provider_id, evaluator_model, max_supervision_count, completed_supervision_count, scheduled_at, stop_reason, last_cycle_at, last_evaluated_turn_id, error_reason, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         input.id,
@@ -55,6 +70,11 @@ export class SupervisorRepo {
         input.state,
         input.objective,
         input.evaluatorProviderId,
+        input.evaluatorModel ?? null,
+        input.maxSupervisionCount ?? 0,
+        input.completedSupervisionCount ?? 0,
+        input.scheduledAt ?? null,
+        input.stopReason ?? null,
         input.lastCycleAt ?? null,
         input.lastEvaluatedTurnId ?? null,
         input.errorReason ?? null,
@@ -105,6 +125,26 @@ export class SupervisorRepo {
       assignments.push("evaluator_provider_id = @evaluatorProviderId");
       params.evaluatorProviderId = patch.evaluatorProviderId;
     }
+    if (patch.evaluatorModel !== undefined) {
+      assignments.push("evaluator_model = @evaluatorModel");
+      params.evaluatorModel = patch.evaluatorModel;
+    }
+    if (patch.maxSupervisionCount !== undefined) {
+      assignments.push("max_supervision_count = @maxSupervisionCount");
+      params.maxSupervisionCount = patch.maxSupervisionCount;
+    }
+    if (patch.completedSupervisionCount !== undefined) {
+      assignments.push("completed_supervision_count = @completedSupervisionCount");
+      params.completedSupervisionCount = patch.completedSupervisionCount;
+    }
+    if (patch.scheduledAt !== undefined) {
+      assignments.push("scheduled_at = @scheduledAt");
+      params.scheduledAt = patch.scheduledAt;
+    }
+    if (patch.stopReason !== undefined) {
+      assignments.push("stop_reason = @stopReason");
+      params.stopReason = patch.stopReason;
+    }
     if (patch.lastCycleAt !== undefined) {
       assignments.push("last_cycle_at = @lastCycleAt");
       params.lastCycleAt = patch.lastCycleAt;
@@ -141,6 +181,11 @@ export class SupervisorRepo {
       state: row.state,
       objective: row.objective,
       evaluatorProviderId: row.evaluator_provider_id,
+      evaluatorModel: row.evaluator_model ?? undefined,
+      maxSupervisionCount: row.max_supervision_count,
+      completedSupervisionCount: row.completed_supervision_count,
+      scheduledAt: row.scheduled_at ?? undefined,
+      stopReason: row.stop_reason ?? undefined,
       cycles: [],
       lastCycleAt: row.last_cycle_at ?? undefined,
       lastEvaluatedTurnId: row.last_evaluated_turn_id ?? undefined,

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   closeDatabase,
   openDatabase,
+  SupervisorCycleAttemptRepo,
   SupervisorCycleRepo,
   SupervisorRepo,
 } from "../storage/index.js";
@@ -14,6 +15,7 @@ describe("SupervisorRepo", () => {
   let db: ReturnType<typeof openDatabase>;
   let supervisorRepo: SupervisorRepo;
   let cycleRepo: SupervisorCycleRepo;
+  let attemptRepo: SupervisorCycleAttemptRepo;
 
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), "supervisor-repo-"));
@@ -31,6 +33,7 @@ describe("SupervisorRepo", () => {
 
     supervisorRepo = new SupervisorRepo(db);
     cycleRepo = new SupervisorCycleRepo(db);
+    attemptRepo = new SupervisorCycleAttemptRepo(db);
   });
 
   afterEach(() => {
@@ -54,6 +57,34 @@ describe("SupervisorRepo", () => {
     const stored = supervisorRepo.getBySessionId("sess-1");
     expect(stored?.evaluatorProviderId).toBe("codex");
     expect(stored?.lastEvaluatedTurnId).toBe("turn-7");
+  });
+
+  it("persists supervisor execution policy fields", () => {
+    supervisorRepo.create({
+      id: "sup-1",
+      sessionId: "sess-1",
+      workspaceId: "ws-1",
+      state: "stopped",
+      objective: "Stop when objective is complete",
+      evaluatorProviderId: "codex",
+      evaluatorModel: "gpt-5",
+      maxSupervisionCount: 8,
+      completedSupervisionCount: 3,
+      scheduledAt: 1234,
+      stopReason: "objective_complete",
+      createdAt: 10,
+      updatedAt: 11,
+    });
+
+    const stored = supervisorRepo.findById("sup-1");
+    expect(stored).toMatchObject({
+      state: "stopped",
+      evaluatorModel: "gpt-5",
+      maxSupervisionCount: 8,
+      completedSupervisionCount: 3,
+      scheduledAt: 1234,
+      stopReason: "objective_complete",
+    });
   });
 
   it("rejects a supervisor whose workspace does not match its session workspace", () => {
@@ -167,6 +198,37 @@ describe("SupervisorRepo", () => {
     expect(updated.lastCycleAt).toBeUndefined();
     expect(updated.lastEvaluatedTurnId).toBeUndefined();
     expect(updated.errorReason).toBeUndefined();
+  });
+
+  it("can clear nullable execution policy fields when explicit null is passed", () => {
+    supervisorRepo.create({
+      id: "sup-1",
+      sessionId: "sess-1",
+      workspaceId: "ws-1",
+      state: "idle",
+      objective: "Clear execution policy fields",
+      evaluatorProviderId: "claude",
+      evaluatorModel: "gpt-5-mini",
+      maxSupervisionCount: 6,
+      completedSupervisionCount: 2,
+      scheduledAt: 45,
+      stopReason: "max_supervision_count_reached",
+      createdAt: 10,
+      updatedAt: 10,
+    });
+
+    const updated = supervisorRepo.update("sup-1", {
+      evaluatorModel: null,
+      scheduledAt: null,
+      stopReason: null,
+      updatedAt: 11,
+    });
+
+    expect(updated.evaluatorModel).toBeUndefined();
+    expect(updated.maxSupervisionCount).toBe(6);
+    expect(updated.completedSupervisionCount).toBe(2);
+    expect(updated.scheduledAt).toBeUndefined();
+    expect(updated.stopReason).toBeUndefined();
   });
 
   it("preserves omitted cycle fields during update", () => {
@@ -302,5 +364,136 @@ describe("SupervisorRepo", () => {
     expect(cycles).toHaveLength(100);
     expect(cycles.some((cycle) => cycle.id === "cycle-0")).toBe(false);
     expect(cycles[0]?.id).toBe("cycle-100");
+  });
+
+  it("accepts new cycle enum values", () => {
+    supervisorRepo.create({
+      id: "sup-1",
+      sessionId: "sess-1",
+      workspaceId: "ws-1",
+      state: "idle",
+      objective: "Allow scheduled cancelled cycle",
+      evaluatorProviderId: "claude",
+      createdAt: 10,
+      updatedAt: 10,
+    });
+
+    const cycle = cycleRepo.create({
+      id: "cycle-1",
+      supervisorId: "sup-1",
+      sessionId: "sess-1",
+      status: "cancelled",
+      trigger: "scheduled",
+      evidenceSource: "headless_snapshot",
+      objective: "Allow scheduled cancelled cycle",
+      evaluatorProviderId: "claude",
+      createdAt: 12,
+    });
+
+    expect(cycle.status).toBe("cancelled");
+    expect(cycle.trigger).toBe("scheduled");
+  });
+
+  it("stores attempts ordered by attemptIndex ascending", () => {
+    supervisorRepo.create({
+      id: "sup-1",
+      sessionId: "sess-1",
+      workspaceId: "ws-1",
+      state: "idle",
+      objective: "Track attempts",
+      evaluatorProviderId: "claude",
+      createdAt: 10,
+      updatedAt: 10,
+    });
+    cycleRepo.create({
+      id: "cycle-1",
+      supervisorId: "sup-1",
+      sessionId: "sess-1",
+      status: "evaluating",
+      trigger: "manual",
+      evidenceSource: "headless_snapshot",
+      objective: "Track attempts",
+      evaluatorProviderId: "claude",
+      createdAt: 10,
+    });
+
+    attemptRepo.create({
+      id: "attempt-2",
+      cycleId: "cycle-1",
+      attemptIndex: 2,
+      status: "failed",
+      startedAt: 30,
+      completedAt: 31,
+      errorReason: "second failed",
+      providerModel: "gpt-5-mini",
+    });
+    attemptRepo.create({
+      id: "attempt-0",
+      cycleId: "cycle-1",
+      attemptIndex: 0,
+      status: "completed",
+      startedAt: 10,
+      completedAt: 11,
+      providerModel: "gpt-5",
+    });
+    attemptRepo.create({
+      id: "attempt-1",
+      cycleId: "cycle-1",
+      attemptIndex: 1,
+      status: "cancelled",
+      startedAt: 20,
+      completedAt: 21,
+      errorReason: "interrupted",
+    });
+
+    const attempts = attemptRepo.listForCycle("cycle-1");
+    expect(attempts.map((attempt) => attempt.id)).toEqual(["attempt-0", "attempt-1", "attempt-2"]);
+    expect(attempts.map((attempt) => attempt.attemptIndex)).toEqual([0, 1, 2]);
+  });
+
+  it("updates attempts and clears nullable fields", () => {
+    supervisorRepo.create({
+      id: "sup-1",
+      sessionId: "sess-1",
+      workspaceId: "ws-1",
+      state: "idle",
+      objective: "Update attempts",
+      evaluatorProviderId: "claude",
+      createdAt: 10,
+      updatedAt: 10,
+    });
+    cycleRepo.create({
+      id: "cycle-1",
+      supervisorId: "sup-1",
+      sessionId: "sess-1",
+      status: "evaluating",
+      trigger: "manual",
+      evidenceSource: "headless_snapshot",
+      objective: "Update attempts",
+      evaluatorProviderId: "claude",
+      createdAt: 10,
+    });
+    attemptRepo.create({
+      id: "attempt-1",
+      cycleId: "cycle-1",
+      attemptIndex: 0,
+      status: "failed",
+      startedAt: 20,
+      completedAt: 21,
+      errorReason: "transient",
+      providerModel: "gpt-5-mini",
+    });
+
+    const updated = attemptRepo.update("attempt-1", {
+      status: "completed",
+      completedAt: null,
+      errorReason: null,
+      providerModel: null,
+    });
+
+    expect(updated.status).toBe("completed");
+    expect(updated.completedAt).toBeUndefined();
+    expect(updated.errorReason).toBeUndefined();
+    expect(updated.providerModel).toBeUndefined();
   });
 });
