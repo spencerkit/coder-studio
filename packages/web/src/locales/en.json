@@ -667,8 +667,8 @@
     "action": {
       "enable": "Enable Supervisor",
       "enable_objective": "Enable Objective",
-      "edit_objective": "Edit Objective",
-      "disable": "Disable Supervisor",
+      "edit_objective": "Edit Supervisor",
+      "disable": "Disable",
       "pause": "Pause",
       "resume": "Resume",
       "trigger": "Trigger Evaluation",
