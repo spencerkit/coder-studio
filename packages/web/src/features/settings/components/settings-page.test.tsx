@@ -801,6 +801,38 @@ describe("SettingsPage", () => {
     expect(screen.queryByLabelText("启动命令参数")).not.toBeInTheDocument();
   });
 
+  it("uses a scrollable mobile detail layout for secondary settings pages without fill-height classes", async () => {
+    viewportMocks.viewport = "mobile";
+    const sendCommand = vi.fn().mockResolvedValue({});
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "通用" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("通知")).toBeInTheDocument();
+    });
+
+    const detailBody = document.querySelector(".settings-body--mobile");
+    const detailContent = document.querySelector(".settings-content--mobile");
+
+    expect(detailBody).not.toBeNull();
+    expect(detailContent).not.toBeNull();
+    expect(document.querySelector(".settings-body--mobile-detail")).not.toBeNull();
+    expect(document.querySelector(".settings-content--mobile-detail")).not.toBeNull();
+    expect(document.querySelector(".settings-body--mobile.settings-body--fill-height")).toBeNull();
+    expect(
+      document.querySelector(".settings-content--mobile.settings-content--fill-height")
+    ).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "返回" }));
+
+    expect(screen.getByRole("button", { name: "Providers" })).toBeInTheDocument();
+    expect(document.querySelector(".settings-body--mobile")).toBeNull();
+    expect(document.querySelector(".settings-body--mobile-detail")).toBeNull();
+    expect(document.querySelector(".settings-content--mobile-detail")).toBeNull();
+  });
+
   it("shows provider base settings first on mobile and enters config files through the secondary action", async () => {
     viewportMocks.viewport = "mobile";
     const sendCommand = vi.fn().mockImplementation(async (op: string, args: unknown) => {
