@@ -79,7 +79,7 @@ describe("database schema baseline", () => {
     closeDatabase(db);
   });
 
-  it("rejects a legacy database schema that still contains resume_id", async () => {
+  it("rejects a legacy database schema that still contains resume_id with a typed incompatible-schema error", async () => {
     const { openDatabase } = await import("./db");
 
     const db = new DatabaseSync(dbPath);
@@ -102,10 +102,10 @@ describe("database schema baseline", () => {
     `);
     db.close();
 
-    expect(() => openDatabase(dbPath)).toThrow(/Legacy database schema detected/);
+    expect(() => openDatabase(dbPath)).toThrow(/db_incompatible_schema/);
   });
 
-  it("rejects a legacy database schema that still contains hook_registrations", async () => {
+  it("rejects a legacy database schema that still contains hook_registrations with a typed incompatible-schema error", async () => {
     const { openDatabase } = await import("./db");
 
     const db = new DatabaseSync(dbPath);
@@ -117,10 +117,10 @@ describe("database schema baseline", () => {
     `);
     db.close();
 
-    expect(() => openDatabase(dbPath)).toThrow(/Legacy database schema detected/);
+    expect(() => openDatabase(dbPath)).toThrow(/db_incompatible_schema/);
   });
 
-  it("rejects a legacy database schema that still contains transcript_path", async () => {
+  it("rejects a legacy database schema that still contains transcript_path with a typed incompatible-schema error", async () => {
     const { openDatabase } = await import("./db");
 
     const db = new DatabaseSync(dbPath);
@@ -143,10 +143,10 @@ describe("database schema baseline", () => {
     `);
     db.close();
 
-    expect(() => openDatabase(dbPath)).toThrow(/Legacy database schema detected/);
+    expect(() => openDatabase(dbPath)).toThrow(/db_incompatible_schema/);
   });
 
-  it("rejects a legacy database schema that still contains _migrations", async () => {
+  it("rejects a legacy database schema that still contains _migrations with a typed incompatible-schema error", async () => {
     const { openDatabase } = await import("./db");
 
     const db = new DatabaseSync(dbPath);
@@ -159,7 +159,7 @@ describe("database schema baseline", () => {
     `);
     db.close();
 
-    expect(() => openDatabase(dbPath)).toThrow(/Legacy database schema detected/);
+    expect(() => openDatabase(dbPath)).toThrow(/db_incompatible_schema/);
   });
 
   it("rejects a non-empty database whose schema does not match the current baseline", async () => {

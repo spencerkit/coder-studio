@@ -58,16 +58,13 @@ function detectLegacySchema(db: Database): string[] {
   return reasons;
 }
 
-function assertNoLegacySchema(db: Database, dbPath: string): void {
+function throwIfLegacySchema(db: Database, dbPath: string): void {
   const reasons = detectLegacySchema(db);
   if (reasons.length === 0) {
     return;
   }
 
-  throw new Error(
-    `Legacy database schema detected at ${dbPath}: ${reasons.join(", ")}. ` +
-      "This build no longer supports automatic database upgrades. Delete the local database file and restart."
-  );
+  throw new IncompatibleSchemaError(dbPath, `legacy schema detected (${reasons.join(", ")})`);
 }
 
 function initializeSchema(db: Database): void {
@@ -112,7 +109,7 @@ function assertCurrentSchema(db: Database, dbPath: string): void {
 }
 
 function initializeOrUpgradeSchema(db: Database, dbPath: string): void {
-  assertNoLegacySchema(db, dbPath);
+  throwIfLegacySchema(db, dbPath);
 
   const detection = detectSchema(db);
 
