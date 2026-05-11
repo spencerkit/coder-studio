@@ -331,6 +331,7 @@ export function SettingsPage() {
       case "appearance":
         return (
           <AppearanceSettings
+            isMobile={isMobile}
             locale={locale}
             setLocale={handleLocaleSelection}
             terminalRenderer={terminalRenderer}
@@ -753,6 +754,7 @@ function GeneralSettings({
 }
 
 interface AppearanceSettingsProps {
+  isMobile: boolean;
   locale: string;
   setLocale: (value: "zh" | "en") => void;
   terminalRenderer: "standard" | "compatibility";
@@ -764,6 +766,7 @@ interface AppearanceSettingsProps {
 }
 
 function AppearanceSettings({
+  isMobile,
   locale,
   setLocale,
   terminalRenderer,
@@ -863,26 +866,28 @@ function AppearanceSettings({
           </Pill>
         </div>
 
-        <div className="settings-toggle-row">
-          <div className="settings-toggle-info">
-            <span className="settings-toggle-label" id={copyOnSelectLabelId}>
-              {t("settings.copy_on_select")}
-            </span>
-            <span className="settings-toggle-desc" id={copyOnSelectDescId}>
-              {t("settings.copy_on_select_hint")}
-            </span>
+        {isMobile ? null : (
+          <div className="settings-toggle-row">
+            <div className="settings-toggle-info">
+              <span className="settings-toggle-label" id={copyOnSelectLabelId}>
+                {t("settings.copy_on_select")}
+              </span>
+              <span className="settings-toggle-desc" id={copyOnSelectDescId}>
+                {t("settings.copy_on_select_hint")}
+              </span>
+            </div>
+            <Switch
+              aria-describedby={copyOnSelectDescId}
+              aria-labelledby={copyOnSelectLabelId}
+              checked={terminalCopyOnSelect}
+              className="settings-toggle"
+              onCheckedChange={(nextValue) => {
+                setTerminalCopyOnSelect(nextValue);
+                void saveSettings({ appearance: { terminalCopyOnSelect: nextValue } });
+              }}
+            />
           </div>
-          <Switch
-            aria-describedby={copyOnSelectDescId}
-            aria-labelledby={copyOnSelectLabelId}
-            checked={terminalCopyOnSelect}
-            className="settings-toggle"
-            onCheckedChange={(nextValue) => {
-              setTerminalCopyOnSelect(nextValue);
-              void saveSettings({ appearance: { terminalCopyOnSelect: nextValue } });
-            }}
-          />
-        </div>
+        )}
       </div>
 
       <div className="settings-group">

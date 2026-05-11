@@ -905,6 +905,44 @@ describe("SettingsPage", () => {
     expect(chineseLanguagePill).toHaveAttribute("aria-pressed", "true");
   });
 
+  it("keeps copy-on-select visible on desktop appearance settings", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "appearance.terminalCopyOnSelect": true,
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "外观" }));
+
+    expect(await screen.findByRole("switch", { name: "选中自动复制" })).toBeInTheDocument();
+  });
+
+  it("does not show copy-on-select on mobile appearance settings", async () => {
+    viewportMocks.viewport = "mobile";
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "appearance.terminalCopyOnSelect": true,
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "外观" }));
+
+    await screen.findByText("主题");
+
+    expect(screen.queryByRole("switch", { name: "选中自动复制" })).not.toBeInTheDocument();
+    expect(screen.queryByText("选中自动复制")).not.toBeInTheDocument();
+  });
+
   it("updates theme selection through the shared appearance pills", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "settings.get") {

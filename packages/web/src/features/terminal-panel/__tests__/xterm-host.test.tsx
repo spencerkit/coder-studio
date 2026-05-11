@@ -293,11 +293,124 @@ describe("XtermHost", () => {
       selectionHandler?.();
     });
 
-    fireEvent.pointerUp(container.querySelector(".xterm-host")!);
+    fireEvent.pointerDown(container.querySelector(".xterm-host")!, {
+      pointerType: "mouse",
+      pointerId: 1,
+    });
+    fireEvent.pointerUp(container.querySelector(".xterm-host")!, {
+      pointerType: "mouse",
+      pointerId: 1,
+    });
 
     await waitFor(() => {
       expect(writeText).toHaveBeenCalledWith("selected text");
     });
+  });
+
+  it("copies the terminal selection when desktop mouse pointerup ends outside the host", async () => {
+    const store = createStore();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    const clipboard = {
+      writeText,
+    } satisfies Pick<Clipboard, "writeText">;
+
+    store.set(localeAtom, "en");
+    store.set(terminalPreferencesAtom, { copyOnSelect: true });
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn().mockResolvedValue({ status: "ok" }),
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => "connected"),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: clipboard,
+    });
+
+    const { container } = render(
+      <Provider store={store}>
+        <XtermHost terminalId="copy-outside-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    mockTerminal.hasSelection.mockReturnValue(true);
+    mockTerminal.getSelection.mockReturnValue("selected text");
+
+    const selectionHandler = mockTerminal.onSelectionChange.mock.calls[0]?.[0] as
+      | (() => void)
+      | undefined;
+
+    await act(async () => {
+      selectionHandler?.();
+    });
+
+    fireEvent.pointerDown(container.querySelector(".xterm-host")!, {
+      pointerType: "mouse",
+      pointerId: 1,
+    });
+    fireEvent.pointerUp(document.body, { pointerType: "mouse", pointerId: 1 });
+
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith("selected text");
+    });
+  });
+
+  it("does not copy on desktop when a stale tracked mouse pointerId is reused outside the host", async () => {
+    const store = createStore();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    const clipboard = {
+      writeText,
+    } satisfies Pick<Clipboard, "writeText">;
+
+    store.set(localeAtom, "en");
+    store.set(terminalPreferencesAtom, { copyOnSelect: true });
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn().mockResolvedValue({ status: "ok" }),
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => "connected"),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: clipboard,
+    });
+
+    const { container } = render(
+      <Provider store={store}>
+        <XtermHost terminalId="copy-stale-pointer-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    mockTerminal.hasSelection.mockReturnValue(true);
+    mockTerminal.getSelection.mockReturnValue("selected text");
+
+    const selectionHandler = mockTerminal.onSelectionChange.mock.calls[0]?.[0] as
+      | (() => void)
+      | undefined;
+
+    await act(async () => {
+      selectionHandler?.();
+    });
+
+    fireEvent.pointerDown(container.querySelector(".xterm-host")!, {
+      pointerType: "mouse",
+      pointerId: 1,
+    });
+
+    fireEvent.pointerDown(document.body, {
+      pointerType: "mouse",
+      pointerId: 1,
+    });
+    fireEvent.pointerUp(document.body, {
+      pointerType: "mouse",
+      pointerId: 1,
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(writeText).not.toHaveBeenCalled();
   });
 
   it("does not copy when copy-on-select is disabled", async () => {
@@ -382,6 +495,49 @@ describe("XtermHost", () => {
     await waitFor(() => {
       expect(writeText).not.toHaveBeenCalled();
     });
+  });
+
+  it("does not copy on desktop for touch or pen pointerup events", async () => {
+    const store = createStore();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+
+    store.set(localeAtom, "en");
+    store.set(terminalPreferencesAtom, { copyOnSelect: true });
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn().mockResolvedValue({ status: "ok" }),
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => "connected"),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText } satisfies Pick<Clipboard, "writeText">,
+    });
+
+    const { container } = render(
+      <Provider store={store}>
+        <XtermHost terminalId="copy-pointer-type-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    mockTerminal.hasSelection.mockReturnValue(true);
+    mockTerminal.getSelection.mockReturnValue("selected text");
+
+    const selectionHandler = mockTerminal.onSelectionChange.mock.calls[0]?.[0] as
+      | (() => void)
+      | undefined;
+
+    await act(async () => {
+      selectionHandler?.();
+    });
+
+    await act(async () => {
+      fireEvent.pointerUp(container.querySelector(".xterm-host")!, { pointerType: "touch" });
+      fireEvent.pointerUp(container.querySelector(".xterm-host")!, { pointerType: "pen" });
+      await Promise.resolve();
+    });
+
+    expect(writeText).not.toHaveBeenCalled();
   });
 
   it("pushes only one error toast within the throttle window when clipboard writes fail", async () => {

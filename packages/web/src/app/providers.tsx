@@ -208,10 +208,18 @@ export function AppProviders({ children }: AppProvidersProps) {
     }
 
     let cancelled = false;
+    let localTerminalPreferencesUpdated = false;
+    const unsubscribeTerminalPreferences = store.sub(terminalPreferencesAtom, () => {
+      localTerminalPreferencesUpdated = true;
+    });
 
     const hydrateTerminalPreferences = async () => {
       const result = await dispatch<Record<string, unknown>>("settings.get", {});
       if (cancelled || !result.ok || !result.data) {
+        return;
+      }
+
+      if (localTerminalPreferencesUpdated) {
         return;
       }
 
@@ -224,8 +232,9 @@ export function AppProviders({ children }: AppProvidersProps) {
 
     return () => {
       cancelled = true;
+      unsubscribeTerminalPreferences();
     };
-  }, [connectionStatus, dispatch, setTerminalPreferences]);
+  }, [connectionStatus, dispatch, setTerminalPreferences, store]);
 
   useEffect(() => {
     activeWorkspaceIdRef.current = activeWorkspaceId;

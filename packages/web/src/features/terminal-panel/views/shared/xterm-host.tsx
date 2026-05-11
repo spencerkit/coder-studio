@@ -474,6 +474,7 @@ export function XtermHost({
   const reconnectRecoveryTriggerRef = useRef<(() => void) | null>(null);
   const selectedTextRef = useRef("");
   const lastCopyOnSelectFailureAtRef = useRef(0);
+  const copyOnSelectPointerIdRef = useRef<number | null>(null);
   const touchScrollStateRef = useRef<{
     activeTouchId: number | null;
     lastClientY: number;
@@ -1793,17 +1794,73 @@ export function XtermHost({
 
   useEffect(() => {
     const container = containerRef.current;
-    if (!container || viewport === "mobile" || !terminalPreferences.copyOnSelect) {
+    if (
+      !container ||
+      typeof document === "undefined" ||
+      viewport === "mobile" ||
+      !terminalPreferences.copyOnSelect
+    ) {
       return;
     }
 
-    const handlePointerUp = () => {
+    const handlePointerDown = (event: PointerEvent) => {
+      if (event.pointerType === "touch" || event.pointerType === "pen") {
+        return;
+      }
+
+      copyOnSelectPointerIdRef.current = event.pointerId;
+    };
+
+    const handleDocumentPointerDown = (event: PointerEvent) => {
+      if (event.pointerType === "touch" || event.pointerType === "pen") {
+        return;
+      }
+
+      const pressTarget = event.target;
+      if (pressTarget instanceof Node && container.contains(pressTarget)) {
+        return;
+      }
+
+      if (copyOnSelectPointerIdRef.current === event.pointerId) {
+        copyOnSelectPointerIdRef.current = null;
+      }
+    };
+
+    const clearTrackedPointer = (event: PointerEvent) => {
+      if (copyOnSelectPointerIdRef.current === event.pointerId) {
+        copyOnSelectPointerIdRef.current = null;
+      }
+    };
+
+    const handlePointerUp = (event: PointerEvent) => {
+      if (event.pointerType === "touch" || event.pointerType === "pen") {
+        return;
+      }
+
+      const releaseTarget = event.target;
+      const releasedInsideHost = releaseTarget instanceof Node && container.contains(releaseTarget);
+      const releasedTrackedPointer =
+        copyOnSelectPointerIdRef.current !== null &&
+        copyOnSelectPointerIdRef.current === event.pointerId;
+
+      copyOnSelectPointerIdRef.current = null;
+      if (!releasedInsideHost && !releasedTrackedPointer) {
+        return;
+      }
+
       void copySelectionOnSelect();
     };
 
-    container.addEventListener("pointerup", handlePointerUp);
+    container.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("pointerdown", handleDocumentPointerDown);
+    document.addEventListener("pointerup", handlePointerUp);
+    document.addEventListener("pointercancel", clearTrackedPointer);
     return () => {
-      container.removeEventListener("pointerup", handlePointerUp);
+      copyOnSelectPointerIdRef.current = null;
+      container.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("pointerdown", handleDocumentPointerDown);
+      document.removeEventListener("pointerup", handlePointerUp);
+      document.removeEventListener("pointercancel", clearTrackedPointer);
     };
   }, [copySelectionOnSelect, terminalPreferences.copyOnSelect, viewport]);
 
