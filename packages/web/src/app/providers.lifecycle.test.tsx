@@ -512,6 +512,7 @@ describe("AppProviders lifecycle recovery", () => {
 
     await vi.waitFor(() => {
       expect(document.documentElement.getAttribute("data-theme")).toBe("mint-light");
+      expect(localStorage.getItem("ui.themeId")).toBe(JSON.stringify("mint-light"));
     });
   });
 
@@ -580,6 +581,38 @@ describe("AppProviders lifecycle recovery", () => {
     await vi.waitFor(() => {
       expect(document.documentElement.getAttribute("data-theme")).toBe("graphite-dark");
       expect(store.get(themeAtom)).toBe("graphite-dark");
+    });
+  });
+
+  it("falls back to legacy server appearance.theme when themeId is absent", async () => {
+    const store = createStore();
+    setVisibilityState("visible");
+
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "appearance.theme": "light",
+        };
+      }
+
+      return undefined;
+    });
+    wsState.client!.sendCommand = sendCommand;
+
+    renderProviders(store);
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
+
+    act(() => {
+      wsState.client?.statusHandler?.("connected");
+    });
+
+    await vi.waitFor(() => {
+      expect(document.documentElement.getAttribute("data-theme")).toBe("mint-light");
+      expect(store.get(themeAtom)).toBe("mint-light");
+      expect(localStorage.getItem("ui.themeId")).toBe(JSON.stringify("mint-light"));
     });
   });
 

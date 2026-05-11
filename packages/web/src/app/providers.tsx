@@ -280,8 +280,10 @@ export function AppProviders({ children }: AppProvidersProps) {
 
   // Initialize theme from localStorage
   useEffect(() => {
-    applyResolvedTheme(readStoredThemePreference());
-  }, []);
+    const resolvedThemeId = applyResolvedTheme(readStoredThemePreference());
+    setTheme(resolvedThemeId);
+    localStorage.setItem(THEME_ID_STORAGE_KEY, JSON.stringify(resolvedThemeId));
+  }, [setTheme]);
 
   useEffect(() => {
     if (connectionStatus !== "connected") {
