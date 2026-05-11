@@ -35,6 +35,14 @@ import { resolvedActiveWorkspaceIdAtom } from "../../../atoms/workspaces";
 import { Input, Notice, Pill, Switch } from "../../../components/ui";
 import { useViewport } from "../../../hooks/use-viewport";
 import { useTranslation } from "../../../lib/i18n";
+import {
+  getThemeById,
+  getThemeFamily,
+  getThemeIdForFamilyVariant,
+  getThemeVariant,
+  resolveStoredThemeId,
+  type ThemeFamily,
+} from "../../../theme";
 import { notificationPreferencesAtom } from "../../notifications/atoms";
 import { MobilePageHeader } from "../../shared/components/mobile-page-header";
 import {
@@ -65,6 +73,8 @@ type SettingsNavigationState =
 type SettingsContentLayoutMode = "default" | "fill-height";
 
 const DEFAULT_SETTINGS_SECTION: SettingsSection = SETTINGS_SECTIONS[0].id;
+const THEME_FAMILIES: ReadonlyArray<ThemeFamily> = ["mint", "graphite", "nord", "hc"];
+const THEME_VARIANTS = ["dark", "light"] as const;
 
 function isStandaloneWebApp(): boolean {
   if (typeof window === "undefined") {
@@ -297,6 +307,14 @@ export function SettingsPage() {
           setLocaleState(settings["appearance.locale"]);
         }
       }
+      const resolvedThemeId = resolveStoredThemeId(
+        settings["appearance.themeId"] ?? settings["appearance.theme"]
+      );
+      setTheme(resolvedThemeId);
+      document.documentElement.setAttribute(
+        "data-theme",
+        getThemeById(resolvedThemeId).documentThemeAttr
+      );
       setProviderAdditionalArgsById(loadProviderAdditionalArgs(settings, providers));
     };
 
@@ -310,6 +328,7 @@ export function SettingsPage() {
     setLocaleState,
     setNotificationPreferences,
     setTerminalPreferences,
+    setTheme,
     settingsRefreshKey,
   ]);
 
@@ -1168,26 +1187,46 @@ function GeneralSettings({
 interface AppearanceSettingsProps {
   locale: string;
   setLocale: (value: "zh" | "en") => void;
-  theme: "dark" | "light";
-  setTheme: (value: "dark" | "light") => void;
+  theme: string;
+  setTheme: (value: string) => void;
 }
 
 function AppearanceSettings({ locale, setLocale, theme, setTheme }: AppearanceSettingsProps) {
   const t = useTranslation();
   const themeTitleId = useId();
   const themeDescId = useId();
+  const themeFamilyTitleId = useId();
+  const themeVariantTitleId = useId();
   const languageTitleId = useId();
   const languageDescId = useId();
   const dispatch = useAtomValue(dispatchCommandAtom);
+  const currentThemeId = resolveStoredThemeId(theme);
+  const currentThemeFamily = getThemeFamily(currentThemeId);
+  const currentThemeVariant = getThemeVariant(currentThemeId);
 
   const saveSettings = async (settings: Record<string, unknown>) => {
     await dispatch("settings.update", { settings });
   };
 
-  const handleThemeChange = (newTheme: "dark" | "light") => {
-    setTheme(newTheme);
-    document.documentElement.setAttribute("data-theme", newTheme);
-    void saveSettings({ appearance: { theme: newTheme } });
+  const handleThemeChange = (nextThemeId: string) => {
+    const resolvedTheme = getThemeById(nextThemeId);
+    setTheme(resolvedTheme.id);
+    document.documentElement.setAttribute("data-theme", resolvedTheme.documentThemeAttr);
+    void saveSettings({ appearance: { themeId: resolvedTheme.id } });
+  };
+
+  const handleThemeFamilyChange = (family: ThemeFamily) => {
+    const nextThemeId = getThemeIdForFamilyVariant(family, currentThemeVariant);
+    if (nextThemeId) {
+      handleThemeChange(nextThemeId);
+    }
+  };
+
+  const handleThemeVariantChange = (variant: (typeof THEME_VARIANTS)[number]) => {
+    const nextThemeId = getThemeIdForFamilyVariant(currentThemeFamily, variant);
+    if (nextThemeId) {
+      handleThemeChange(nextThemeId);
+    }
   };
 
   return (
@@ -1200,26 +1239,46 @@ function AppearanceSettings({ locale, setLocale, theme, setTheme }: AppearanceSe
           {t("settings.theme.hint")}
         </p>
 
+        <h3 className="settings-group-title" id={themeFamilyTitleId}>
+          {t("settings.theme.family")}
+        </h3>
         <div
           aria-describedby={themeDescId}
-          aria-labelledby={themeTitleId}
+          aria-labelledby={themeFamilyTitleId}
           className="settings-pills"
           role="group"
         >
-          <Pill
-            leadingIcon={theme === "dark" ? <Check size={12} /> : undefined}
-            onClick={() => handleThemeChange("dark")}
-            active={theme === "dark"}
-          >
-            {t("settings.theme.dark")}
-          </Pill>
-          <Pill
-            leadingIcon={theme === "light" ? <Check size={12} /> : undefined}
-            onClick={() => handleThemeChange("light")}
-            active={theme === "light"}
-          >
-            {t("settings.theme.light")}
-          </Pill>
+          {THEME_FAMILIES.map((family) => (
+            <Pill
+              key={family}
+              leadingIcon={currentThemeFamily === family ? <Check size={12} /> : undefined}
+              onClick={() => handleThemeFamilyChange(family)}
+              active={currentThemeFamily === family}
+            >
+              {t(`settings.theme.family_${family}`)}
+            </Pill>
+          ))}
+        </div>
+
+        <h3 className="settings-group-title" id={themeVariantTitleId}>
+          {t("settings.theme.variant")}
+        </h3>
+        <div
+          aria-describedby={themeDescId}
+          aria-labelledby={themeVariantTitleId}
+          className="settings-pills"
+          role="group"
+        >
+          {THEME_VARIANTS.map((variant) => (
+            <Pill
+              key={variant}
+              leadingIcon={currentThemeVariant === variant ? <Check size={12} /> : undefined}
+              onClick={() => handleThemeVariantChange(variant)}
+              active={currentThemeVariant === variant}
+            >
+              {t(`settings.theme.variant_${variant}`)}
+            </Pill>
+          ))}
         </div>
       </div>
 

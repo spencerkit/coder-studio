@@ -553,7 +553,15 @@
       "dark": "深色",
       "light": "浅色",
       "system": "跟随系统",
-      "hint": "选择应用主题"
+      "hint": "选择应用主题",
+      "family": "主题系列",
+      "variant": "明暗模式",
+      "family_mint": "Mint",
+      "family_graphite": "Graphite",
+      "family_nord": "Nord",
+      "family_hc": "高对比",
+      "variant_dark": "深色",
+      "variant_light": "浅色"
     },
     "language": {
       "title": "语言",

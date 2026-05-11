@@ -1022,13 +1022,19 @@ describe("SettingsPage", () => {
     renderSettingsPage(store);
     fireEvent.click(screen.getByRole("button", { name: "外观" }));
 
-    const darkThemePill = await screen.findByRole("button", { name: "深色" });
-    const lightThemePill = screen.getByRole("button", { name: "浅色" });
+    const mintThemePill = await screen.findByRole("button", { name: "Mint" });
+    const darkVariantPill = screen.getByRole("button", { name: "深色" });
+    const lightVariantPill = screen.getByRole("button", { name: "浅色" });
     const chineseLanguagePill = screen.getByRole("button", { name: "中文" });
 
     expect(
       screen.getByRole("group", {
-        name: "主题",
+        name: "主题系列",
+      })
+    ).toHaveAccessibleDescription("选择应用主题");
+    expect(
+      screen.getByRole("group", {
+        name: "明暗模式",
       })
     ).toHaveAccessibleDescription("选择应用主题");
     expect(
@@ -1038,10 +1044,9 @@ describe("SettingsPage", () => {
     ).toHaveAccessibleDescription("选择界面语言");
     expect(screen.queryByRole("group", { name: "终端渲染器" })).not.toBeInTheDocument();
     expect(screen.queryByRole("switch", { name: "选中自动复制" })).not.toBeInTheDocument();
-    expect(darkThemePill).toHaveClass("settings-pill", "settings-pill-active");
-    expect(darkThemePill).toHaveAttribute("aria-pressed", "true");
-    expect(lightThemePill).toHaveClass("settings-pill");
-    expect(lightThemePill).toHaveAttribute("aria-pressed", "false");
+    expect(mintThemePill).toHaveAttribute("aria-pressed", "true");
+    expect(darkVariantPill).toHaveAttribute("aria-pressed", "true");
+    expect(lightVariantPill).toHaveAttribute("aria-pressed", "false");
     expect(chineseLanguagePill).toHaveAttribute("aria-pressed", "true");
   });
 
@@ -1107,7 +1112,8 @@ describe("SettingsPage", () => {
     expect(screen.queryByText("选中自动复制")).not.toBeInTheDocument();
   });
 
-  it("updates theme selection through the shared appearance pills", async () => {
+  it("updates theme family and variant through the shared appearance pills", async () => {
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "settings.get") {
         return {};
@@ -1117,8 +1123,16 @@ describe("SettingsPage", () => {
     const store = createConnectedStore(sendCommand);
 
     renderSettingsPage(store);
-    fireEvent.click(screen.getByRole("button", { name: "外观" }));
-    fireEvent.click(await screen.findByRole("button", { name: "浅色" }));
+    fireEvent.click(screen.getByRole("button", { name: "Appearance" }));
+
+    expect(await screen.findByRole("button", { name: "Mint" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Graphite" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Nord" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "High Contrast" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Dark" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Light" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Graphite" }));
 
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith(
@@ -1126,7 +1140,7 @@ describe("SettingsPage", () => {
         {
           settings: {
             appearance: {
-              theme: "light",
+              themeId: "graphite-dark",
             },
           },
         },
@@ -1134,9 +1148,53 @@ describe("SettingsPage", () => {
       );
     });
 
-    expect(document.documentElement).toHaveAttribute("data-theme", "light");
-    expect(screen.getByRole("button", { name: "浅色" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: "深色" })).toHaveAttribute("aria-pressed", "false");
+    expect(document.documentElement).toHaveAttribute("data-theme", "graphite-dark");
+
+    fireEvent.click(screen.getByRole("button", { name: "Light" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            appearance: {
+              themeId: "graphite-light",
+            },
+          },
+        },
+        undefined
+      );
+    });
+
+    expect(document.documentElement).toHaveAttribute("data-theme", "graphite-light");
+    expect(screen.getByRole("button", { name: "Graphite" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(screen.getByRole("button", { name: "Light" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Dark" })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("hydrates theme family and variant from settings.get themeId", async () => {
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "appearance.themeId": "nord-light",
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "Appearance" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Nord" })).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByRole("button", { name: "Light" })).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByRole("button", { name: "Dark" })).toHaveAttribute("aria-pressed", "false");
+    });
   });
 
   it("updates terminal renderer selection through the shared general pills", async () => {

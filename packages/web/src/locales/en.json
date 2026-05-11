@@ -553,7 +553,15 @@
       "dark": "Dark",
       "light": "Light",
       "system": "System",
-      "hint": "Choose app theme"
+      "hint": "Choose app theme",
+      "family": "Theme Family",
+      "variant": "Variant",
+      "family_mint": "Mint",
+      "family_graphite": "Graphite",
+      "family_nord": "Nord",
+      "family_hc": "High Contrast",
+      "variant_dark": "Dark",
+      "variant_light": "Light"
     },
     "language": {
       "title": "Language",
