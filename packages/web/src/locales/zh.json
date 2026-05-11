@@ -3,6 +3,8 @@
     "today": "今天",
     "tomorrow": "明天",
     "next_week": "下周",
+    "prev_month": "上一月",
+    "next_month": "下一月",
     "clear": "清空",
     "confirm": "确认",
     "select_date": "选择日期",

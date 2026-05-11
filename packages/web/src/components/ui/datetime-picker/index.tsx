@@ -5,7 +5,9 @@ import { formatDate, useTranslation } from "../../../lib/i18n";
 import { useViewport } from "../_internal/use-viewport";
 import { Popover } from "../popover";
 import { Sheet } from "../sheet";
+import { CalendarGrid } from "./calendar-grid";
 import styles from "./index.module.css";
+import { TimeSelector } from "./time-selector";
 
 export type DateTimePickerSize = "sm" | "md" | "lg";
 
@@ -64,25 +66,65 @@ export function DateTimePicker({
   const t = useTranslation();
   const viewport = useViewport();
   const triggerId = useId();
-  const contentId = useId();
   const [open, setOpen] = useState(false);
-  const [draftDate, setDraftDate] = useState<Date | null>(() => parseLocalDateTime(value));
 
-  useEffect(() => {
-    setDraftDate(parseLocalDateTime(value));
+  // Initialize draft from value
+  const getInitialDraft = useCallback(() => {
+    const parsed = parseLocalDateTime(value);
+    if (parsed) {
+      return {
+        year: parsed.getFullYear(),
+        month: parsed.getMonth(),
+        day: parsed.getDate(),
+        hour: parsed.getHours(),
+        minute: parsed.getMinutes(),
+      };
+    }
+    const now = new Date();
+    return {
+      year: now.getFullYear(),
+      month: now.getMonth(),
+      day: now.getDate(),
+      hour: now.getHours(),
+      minute: 0,
+    };
   }, [value]);
 
+  const [draft, setDraft] = useState(getInitialDraft);
+
+  // Update draft when value changes externally
+  useEffect(() => {
+    setDraft(getInitialDraft());
+  }, [value, getInitialDraft]);
+
+  const handleDateSelect = useCallback((date: Date) => {
+    setDraft((prev) => ({
+      ...prev,
+      year: date.getFullYear(),
+      month: date.getMonth(),
+      day: date.getDate(),
+    }));
+  }, []);
+
+  const handleMonthChange = useCallback((year: number, month: number) => {
+    setDraft((prev) => ({ ...prev, year, month }));
+  }, []);
+
+  const handleHourChange = useCallback((hour: number) => {
+    setDraft((prev) => ({ ...prev, hour }));
+  }, []);
+
+  const handleMinuteChange = useCallback((minute: number) => {
+    setDraft((prev) => ({ ...prev, minute }));
+  }, []);
+
   const handleConfirm = useCallback(() => {
-    if (draftDate) {
-      onValueChange(formatLocalDateTime(draftDate));
-    } else {
-      onValueChange("");
-    }
+    const date = new Date(draft.year, draft.month, draft.day, draft.hour, draft.minute);
+    onValueChange(formatLocalDateTime(date));
     setOpen(false);
-  }, [draftDate, onValueChange]);
+  }, [draft, onValueChange]);
 
   const handleClear = useCallback(() => {
-    setDraftDate(null);
     onValueChange("");
     setOpen(false);
   }, [onValueChange]);
@@ -108,7 +150,6 @@ export function DateTimePicker({
       disabled={disabled}
       aria-haspopup={isMobile ? "dialog" : "menu"}
       aria-expanded={open}
-      aria-controls={open ? contentId : undefined}
       aria-label={label}
       aria-describedby={ariaDescribedBy}
       className={triggerClasses}
@@ -119,19 +160,31 @@ export function DateTimePicker({
     </button>
   );
 
+  const selectedDate = value ? parseLocalDateTime(value) : null;
+  const calendarMinDate = minDate
+    ? new Date(minDate.getFullYear(), minDate.getMonth(), minDate.getDate())
+    : undefined;
+
   const content: ReactNode = (
     <div className={styles.content}>
-      <div className={styles.header}>
-        <span className={styles.title}>{label}</span>
-      </div>
       <div className={styles.body}>
-        {/* Calendar grid placeholder */}
-        <div className={styles.calendar}>
-          <span>Calendar Grid</span>
-        </div>
-        {/* Time selector placeholder */}
-        <div className={styles.time}>
-          <span>Time Selector</span>
+        <CalendarGrid
+          year={draft.year}
+          month={draft.month}
+          selectedDate={selectedDate}
+          minDate={calendarMinDate}
+          maxDate={maxDate}
+          onDateSelect={handleDateSelect}
+          onMonthChange={handleMonthChange}
+        />
+        <div className={styles.timeSection}>
+          <span className={styles.timeLabel}>{t("datetime.select_time")}</span>
+          <TimeSelector
+            hour={draft.hour}
+            minute={draft.minute}
+            onHourChange={handleHourChange}
+            onMinuteChange={handleMinuteChange}
+          />
         </div>
       </div>
       <div className={styles.actions}>

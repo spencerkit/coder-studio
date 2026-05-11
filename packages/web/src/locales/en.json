@@ -3,6 +3,8 @@
     "today": "Today",
     "tomorrow": "Tomorrow",
     "next_week": "Next Week",
+    "prev_month": "Previous Month",
+    "next_month": "Next Month",
     "clear": "Clear",
     "confirm": "Confirm",
     "select_date": "Select Date",
