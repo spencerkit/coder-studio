@@ -7,10 +7,10 @@ interface PerformanceWithMemory extends Performance {
 }
 
 test.describe("@phase4 quality acceptance", () => {
-  test("P4-01 light theme tokens defined", async ({ page }) => {
+  test("P4-01 named theme tokens defined", async ({ page }) => {
     await page.goto("/");
 
-    // Verify light theme tokens exist in CSS
+    // Verify named theme token blocks exist in CSS
     const tokensExist = true;
     expect(tokensExist).toBe(true);
   });
@@ -36,11 +36,11 @@ test.describe("@phase4 quality acceptance", () => {
   test("P4-03 theme persisted to localStorage", async ({ page }) => {
     await page.goto("/");
 
-    // Theme should be stored in localStorage (default is 'dark')
+    // Theme should be stored in localStorage as a themeId.
     // atomWithStorage may not immediately write default value
-    const theme = await page.evaluate(() => localStorage.getItem("ui.theme"));
+    const theme = await page.evaluate(() => localStorage.getItem("ui.themeId"));
     // Either the theme is stored or it will be stored when user interacts
-    expect(theme === null || theme === '"dark"' || theme === "dark").toBe(true);
+    expect(theme === null || theme === '"mint-dark"' || theme === "mint-dark").toBe(true);
   });
 
   test("P4-04 performance optimizations configured", async ({ page }) => {
@@ -302,12 +302,12 @@ test.describe("@phase4 quality acceptance", () => {
   test("P4-28 theme persistence after restart", async ({ page }) => {
     await page.goto("/");
     // Set theme
-    await page.evaluate(() => localStorage.setItem("ui.theme", '"light"'));
+    await page.evaluate(() => localStorage.setItem("ui.themeId", '"mint-light"'));
     await page.reload();
-    const theme = await page.evaluate(() => localStorage.getItem("ui.theme"));
-    expect(theme).toBe('"light"');
+    const theme = await page.evaluate(() => localStorage.getItem("ui.themeId"));
+    expect(theme).toBe('"mint-light"');
     // Cleanup
-    await page.evaluate(() => localStorage.setItem("ui.theme", '"dark"'));
+    await page.evaluate(() => localStorage.setItem("ui.themeId", '"mint-dark"'));
   });
 
   test("P4-29 locale persistence", async ({ page }) => {

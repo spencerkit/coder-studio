@@ -1,5 +1,7 @@
+import { THEME_IDS, type ThemeKind } from "../theme";
+
 export type UiPreviewSceneDevice = "desktop" | "mobile";
-export type UiPreviewSceneTheme = "dark" | "light";
+export type UiPreviewSceneTheme = (typeof THEME_IDS)[number];
 export type UiPreviewSceneLocale = "zh" | "en";
 export type UiPreviewCategory =
   | "page"
@@ -28,6 +30,19 @@ export interface UiPreviewSceneMetadata {
   };
 }
 
+const THEME_IDS_BY_KIND = {
+  dark: THEME_IDS.filter((themeId) => themeId.endsWith("-dark")),
+  light: THEME_IDS.filter((themeId) => themeId.endsWith("-light")),
+} satisfies Record<ThemeKind, readonly string[]>;
+
+function allThemeIds(): UiPreviewSceneTheme[] {
+  return [...THEME_IDS] as UiPreviewSceneTheme[];
+}
+
+function themeIdsForKinds(...kinds: ThemeKind[]): UiPreviewSceneTheme[] {
+  return kinds.flatMap((kind) => THEME_IDS_BY_KIND[kind]) as UiPreviewSceneTheme[];
+}
+
 export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
   {
     id: "welcome",
@@ -36,7 +51,7 @@ export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
     source: "real-route",
     description: "Welcome page on the real / route under the preview harness.",
     devices: ["desktop", "mobile"],
-    themes: ["dark", "light"],
+    themes: allThemeIds(),
     locales: ["zh", "en"],
     capture: { selector: ".welcome-card" },
   },
@@ -47,7 +62,7 @@ export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
     source: "real-route",
     description: "Settings page at /settings with deterministic settings.get data.",
     devices: ["desktop", "mobile"],
-    themes: ["dark", "light"],
+    themes: allThemeIds(),
     locales: ["zh", "en"],
     capture: { selector: ".settings-page", settingsSection: "general" },
   },
@@ -58,7 +73,7 @@ export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
     source: "real-route",
     description: "Settings appearance section using route-backed production UI.",
     devices: ["desktop", "mobile"],
-    themes: ["dark", "light"],
+    themes: allThemeIds(),
     locales: ["zh", "en"],
     capture: { selector: ".settings-page", settingsSection: "appearance" },
   },
@@ -69,7 +84,7 @@ export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
     source: "real-route",
     description: "Settings providers section with fixed provider args.",
     devices: ["desktop", "mobile"],
-    themes: ["dark", "light"],
+    themes: allThemeIds(),
     locales: ["zh", "en"],
     capture: { selector: ".settings-page", settingsSection: "providers" },
   },
@@ -80,7 +95,7 @@ export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
     source: "real-route",
     description: "Settings shortcuts section with the keyboard shortcut list and category tabs.",
     devices: ["desktop", "mobile"],
-    themes: ["dark", "light"],
+    themes: allThemeIds(),
     locales: ["zh", "en"],
     capture: { selector: ".settings-page", settingsSection: "shortcuts" },
   },
@@ -91,7 +106,7 @@ export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
     source: "real-route",
     description: "Mobile settings root list before drilling into any subsection.",
     devices: ["mobile"],
-    themes: ["dark", "light"],
+    themes: allThemeIds(),
     locales: ["zh", "en"],
     capture: { selector: ".settings-mobile-list" },
   },
@@ -102,7 +117,7 @@ export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
     source: "real-route",
     description: "Top-level shell shown while auth state is still unresolved before routes render.",
     devices: ["desktop", "mobile"],
-    themes: ["dark", "light"],
+    themes: allThemeIds(),
     locales: ["zh", "en"],
     capture: { selector: ".app-loading-shell" },
   },
@@ -113,7 +128,7 @@ export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
     source: "real-route",
     description: "Desktop workspace shell with seeded workspace, git status, and file tree.",
     devices: ["desktop"],
-    themes: ["dark", "light"],
+    themes: themeIdsForKinds("dark", "light"),
     locales: ["zh", "en"],
     capture: { selector: ".workspace-page" },
   },
@@ -124,7 +139,7 @@ export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
     source: "real-route",
     description: "Mobile workspace shell with seeded workspace and no active sessions.",
     devices: ["mobile"],
-    themes: ["dark", "light"],
+    themes: themeIdsForKinds("dark", "light"),
     locales: ["zh", "en"],
     capture: { selector: "[data-testid='mobile-shell']" },
   },
@@ -135,7 +150,7 @@ export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
     source: "real-route",
     description: "Login/auth page component on the real /login route under preview harness.",
     devices: ["desktop", "mobile"],
-    themes: ["dark", "light"],
+    themes: allThemeIds(),
     locales: ["zh", "en"],
     capture: { selector: ".auth-card-shell" },
   },
@@ -146,7 +161,7 @@ export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
     source: "real-route",
     description: "Not found page for an unknown route path.",
     devices: ["desktop", "mobile"],
-    themes: ["dark", "light"],
+    themes: allThemeIds(),
     locales: ["zh", "en"],
     capture: { selector: ".welcome-card" },
   },
@@ -157,7 +172,7 @@ export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
     source: "real-route",
     description: "Shared workspace route error shell when workspace list loading fails.",
     devices: ["desktop", "mobile"],
-    themes: ["dark", "light"],
+    themes: allThemeIds(),
     locales: ["zh", "en"],
     capture: { selector: ".workspace-resolving-card" },
   },
@@ -168,7 +183,7 @@ export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
     source: "showcase",
     description: "Workspace open modal with fixed browse/open responses.",
     devices: ["desktop", "mobile"],
-    themes: ["dark", "light"],
+    themes: allThemeIds(),
     locales: ["zh", "en"],
     capture: { selector: ".launch-modal, .mobile-sheet--launch" },
   },
@@ -179,7 +194,7 @@ export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
     source: "showcase",
     description: "Command palette forced open with a seeded active workspace.",
     devices: ["desktop", "mobile"],
-    themes: ["dark", "light"],
+    themes: allThemeIds(),
     locales: ["zh", "en"],
     capture: { selector: ".command-palette, .command-palette-sheet" },
   },
@@ -190,7 +205,7 @@ export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
     source: "showcase",
     description: "Branch picker opened via seeded branchQuickPick atom and fake git.branches data.",
     devices: ["mobile"],
-    themes: ["dark", "light"],
+    themes: allThemeIds(),
     locales: ["zh", "en"],
     capture: { selector: ".mobile-select-sheet--command" },
   },
@@ -201,7 +216,7 @@ export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
     source: "showcase",
     description: "Success and error toasts for visual review.",
     devices: ["desktop", "mobile"],
-    themes: ["dark", "light"],
+    themes: allThemeIds(),
     locales: ["zh", "en"],
     capture: { selector: ".toast-container" },
   },
@@ -212,7 +227,7 @@ export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
     source: "showcase",
     description: "Opened mobile workspace drawer with two example workspaces.",
     devices: ["mobile"],
-    themes: ["dark", "light"],
+    themes: allThemeIds(),
     locales: ["zh", "en"],
     capture: { selector: ".mobile-workspace-drawer" },
   },
@@ -223,7 +238,7 @@ export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
     source: "showcase",
     description: "Static mobile files sheet chrome for screenshot comparison.",
     devices: ["mobile"],
-    themes: ["dark", "light"],
+    themes: allThemeIds(),
     locales: ["zh", "en"],
     capture: { selector: ".mobile-sheet--files" },
   },
@@ -235,7 +250,7 @@ export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
     description:
       "Mobile terminal fullscreen sheet using xterm placeholder chrome instead of live ws runtime.",
     devices: ["mobile"],
-    themes: ["dark", "light"],
+    themes: allThemeIds(),
     locales: ["zh", "en"],
     capture: { selector: ".mobile-sheet--terminal" },
   },
@@ -246,7 +261,7 @@ export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
     source: "showcase",
     description: "Mobile supervisor sheet with a seeded supervisor state.",
     devices: ["mobile"],
-    themes: ["dark", "light"],
+    themes: allThemeIds(),
     locales: ["zh", "en"],
     capture: { selector: ".mobile-supervisor-sheet" },
   },
@@ -257,7 +272,7 @@ export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
     source: "showcase",
     description: "Desktop supervisor objective dialog opened by atom seed.",
     devices: ["desktop"],
-    themes: ["dark", "light"],
+    themes: allThemeIds(),
     locales: ["zh", "en"],
     capture: { selector: ".supervisor-dialog" },
   },
@@ -268,7 +283,7 @@ export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
     source: "showcase",
     description: "Worktree manager surface with seeded worktree list, status, diff, and tree.",
     devices: ["desktop", "mobile"],
-    themes: ["dark", "light"],
+    themes: allThemeIds(),
     locales: ["zh", "en"],
     capture: { selector: ".worktree-manager-surface, .mobile-sheet--worktree" },
   },
@@ -279,7 +294,7 @@ export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
     source: "showcase",
     description: "Generic destructive confirm dialog for screenshot review.",
     devices: ["desktop"],
-    themes: ["dark", "light"],
+    themes: allThemeIds(),
     locales: ["zh", "en"],
     capture: { selector: ".modal-card" },
   },
@@ -290,7 +305,7 @@ export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
     source: "showcase",
     description: "Inline settings error state for provider/config failures.",
     devices: ["desktop", "mobile"],
-    themes: ["dark", "light"],
+    themes: allThemeIds(),
     locales: ["zh", "en"],
     capture: { selector: ".settings-page__notice" },
   },
@@ -301,7 +316,7 @@ export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
     source: "showcase",
     description: "Shared destructive confirm dialog used by the file tree when deleting a file.",
     devices: ["desktop", "mobile"],
-    themes: ["dark", "light"],
+    themes: allThemeIds(),
     locales: ["zh", "en"],
     capture: { selector: ".modal-card" },
   },
@@ -312,7 +327,7 @@ export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
     source: "showcase",
     description: "Shared empty-state shell.",
     devices: ["desktop", "mobile"],
-    themes: ["dark", "light"],
+    themes: allThemeIds(),
     locales: ["zh", "en"],
     capture: { selector: ".welcome-card" },
   },
@@ -323,7 +338,7 @@ export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
     source: "showcase",
     description: "Workspace resolving/loading shell.",
     devices: ["desktop", "mobile"],
-    themes: ["dark", "light"],
+    themes: allThemeIds(),
     locales: ["zh", "en"],
     capture: { selector: ".workspace-resolving-card" },
   },

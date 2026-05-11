@@ -26,10 +26,10 @@ describe("UiPreviewApp", () => {
   });
 
   it("renders the welcome scene and applies theme/lang to the document", async () => {
-    renderPreview("?scene=welcome&theme=light&locale=en&device=desktop");
+    renderPreview("?scene=welcome&theme=mint-light&locale=en&device=desktop");
 
     expect(await screen.findByRole("button", { name: /open workspace/i })).toBeInTheDocument();
-    expect(document.documentElement).toHaveAttribute("data-theme", "light");
+    expect(document.documentElement).toHaveAttribute("data-theme", "mint-light");
     expect(document.documentElement).toHaveAttribute("lang", "en");
     expect(document.body.dataset.uiPreviewDevice).toBe("desktop");
   });

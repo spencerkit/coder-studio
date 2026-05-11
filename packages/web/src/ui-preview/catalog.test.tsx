@@ -31,7 +31,7 @@ function renderScene(sceneId: string, device: "desktop" | "mobile" = "desktop") 
   }
 
   installMatchMedia(device);
-  const context = { theme: "dark" as const, locale: "en" as const, device };
+  const context = { theme: "mint-dark" as const, locale: "en" as const, device };
   const store = buildUiPreviewStore(scene.seed(context));
   const router = scene.router(context);
 
@@ -82,7 +82,7 @@ describe("UI preview catalog", () => {
   it("marks settings section scenes for capture-time navigation", () => {
     const scene = getUiPreviewScene("settings-appearance");
     expect(
-      scene?.router({ theme: "dark", locale: "en", device: "desktop" }).initialEntries
+      scene?.router({ theme: "mint-dark", locale: "en", device: "desktop" }).initialEntries
     ).toEqual(["/settings"]);
     expect(scene?.capture?.settingsSection).toBe("appearance");
   });

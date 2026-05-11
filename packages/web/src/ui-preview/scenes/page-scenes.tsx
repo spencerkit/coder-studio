@@ -55,7 +55,7 @@ function buildSettingsSeed(context: UiPreviewSceneContext) {
         "notifications.soundEnabled": true,
         "supervisor.evaluationTimeoutSec": 600,
         "appearance.locale": context.locale,
-        "appearance.theme": context.theme,
+        "appearance.themeId": context.theme,
         "appearance.terminalRenderer": "standard",
         "providers.claude.additionalArgs": ["--verbose"],
         "providers.codex.additionalArgs": ["--sandbox", "workspace-write"],

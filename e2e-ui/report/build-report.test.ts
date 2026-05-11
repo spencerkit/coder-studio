@@ -11,10 +11,10 @@ describe("build-report", () => {
         source: "real-route",
         description: "Welcome page",
       },
-      screenshotPath: "screenshots/page/welcome/desktop__dark__zh.png",
+      screenshotPath: "screenshots/page/welcome/desktop__mint-light__zh.png",
       variant: {
         device: "desktop",
-        theme: "dark",
+        theme: "mint-light",
         locale: "zh",
       },
     });
@@ -22,9 +22,9 @@ describe("build-report", () => {
     expect(entry).toMatchObject({
       id: "welcome",
       category: "page",
-      path: "screenshots/page/welcome/desktop__dark__zh.png",
+      path: "screenshots/page/welcome/desktop__mint-light__zh.png",
       device: "desktop",
-      theme: "dark",
+      theme: "mint-light",
       locale: "zh",
     });
   });
@@ -37,15 +37,15 @@ describe("build-report", () => {
         category: "page",
         source: "real-route",
         device: "desktop",
-        theme: "dark",
+        theme: "mint-light",
         locale: "zh",
-        path: "screenshots/page/welcome/desktop__dark__zh.png",
+        path: "screenshots/page/welcome/desktop__mint-light__zh.png",
         description: "Welcome page",
       },
     ]);
 
     expect(html).toContain("UI Preview Report");
-    expect(html).toContain("screenshots/page/welcome/desktop__dark__zh.png");
+    expect(html).toContain("screenshots/page/welcome/desktop__mint-light__zh.png");
     expect(html).toContain('data-category="page"');
   });
 });

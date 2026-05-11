@@ -2,7 +2,7 @@ import { UI_PREVIEW_SCENE_METADATA } from "../../packages/web/src/ui-preview/sce
 
 export interface UiCaptureVariant {
   device: "desktop" | "mobile";
-  theme: "dark" | "light";
+  theme: string;
   locale: "zh" | "en";
 }
 
