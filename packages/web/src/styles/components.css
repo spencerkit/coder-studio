@@ -9724,6 +9724,13 @@ textarea.input {
     background: var(--bg-page);
   }
 
+  .settings-body--mobile-detail {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    flex-direction: column;
+  }
+
   .settings-body--mobile.settings-body--fill-height {
     display: flex;
     flex: 1;
@@ -9739,6 +9746,12 @@ textarea.input {
   .settings-content--mobile {
     padding: var(--sp-4);
     padding-bottom: var(--sp-5);
+  }
+
+  .settings-content--mobile-detail {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
   }
 
   .settings-page--mobile .settings-content--mobile-root {

@@ -381,6 +381,7 @@ export function SettingsPage() {
   );
 
   const shouldShowMobileRoot = isMobile && navigationState.kind === "root";
+  const isMobileDetailView = isMobile && navigationState.kind === "detail";
   const headerTitle = isMobile
     ? t(shouldShowMobileRoot ? "settings.title" : activeSectionMeta.labelKey)
     : t("settings.title");
@@ -400,7 +401,7 @@ export function SettingsPage() {
         renderMobileRoot()
       ) : (
         <div
-          className={`settings-body ${isMobile ? "settings-body--mobile" : ""} ${contentLayoutMode === "fill-height" ? "settings-body--fill-height" : ""}`}
+          className={`settings-body ${isMobile ? "settings-body--mobile" : ""} ${isMobileDetailView ? "settings-body--mobile-detail" : ""} ${contentLayoutMode === "fill-height" ? "settings-body--fill-height" : ""}`}
         >
           {isMobile ? null : (
             <aside className="settings-sidebar">
@@ -419,7 +420,7 @@ export function SettingsPage() {
           )}
 
           <main
-            className={`settings-content ${isMobile ? "settings-content--mobile" : ""} ${contentLayoutMode === "fill-height" ? "settings-content--fill-height" : ""}`}
+            className={`settings-content ${isMobile ? "settings-content--mobile" : ""} ${isMobileDetailView ? "settings-content--mobile-detail" : ""} ${contentLayoutMode === "fill-height" ? "settings-content--fill-height" : ""}`}
           >
             {settingsLoadError && (
               <Notice
