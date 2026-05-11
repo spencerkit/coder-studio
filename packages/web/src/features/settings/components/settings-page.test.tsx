@@ -1197,6 +1197,100 @@ describe("SettingsPage", () => {
     });
   });
 
+  it("falls back to legacy appearance.theme when themeId is absent in settings load", async () => {
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "appearance.theme": "light",
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "Appearance" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Mint" })).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByRole("button", { name: "Light" })).toHaveAttribute("aria-pressed", "true");
+      expect(document.documentElement).toHaveAttribute("data-theme", "mint-light");
+    });
+  });
+
+  it("does not reset the current theme when settings load omits theme values", async () => {
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    window.localStorage.setItem("ui.themeId", JSON.stringify("graphite-light"));
+    document.documentElement.setAttribute("data-theme", "graphite-light");
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {};
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "Appearance" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Graphite" })).toHaveAttribute(
+        "aria-pressed",
+        "true"
+      );
+      expect(screen.getByRole("button", { name: "Light" })).toHaveAttribute("aria-pressed", "true");
+      expect(document.documentElement).toHaveAttribute("data-theme", "graphite-light");
+    });
+  });
+
+  it("preserves a newer local theme selection when a stale settings load resolves afterward", async () => {
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    let resolveSettingsGet: ((value: Record<string, unknown>) => void) | undefined;
+    const settingsGetPromise = new Promise<Record<string, unknown>>((resolve) => {
+      resolveSettingsGet = resolve;
+    });
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return await settingsGetPromise;
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "Appearance" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Graphite" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            appearance: {
+              themeId: "graphite-dark",
+            },
+          },
+        },
+        undefined
+      );
+    });
+
+    await act(async () => {
+      resolveSettingsGet?.({
+        "appearance.themeId": "nord-light",
+      });
+      await settingsGetPromise;
+    });
+
+    expect(screen.getByRole("button", { name: "Graphite" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(screen.getByRole("button", { name: "Dark" })).toHaveAttribute("aria-pressed", "true");
+    expect(document.documentElement).toHaveAttribute("data-theme", "graphite-dark");
+  });
+
   it("updates terminal renderer selection through the shared general pills", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "settings.get") {

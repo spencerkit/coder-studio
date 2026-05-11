@@ -201,6 +201,7 @@ export function SettingsPage() {
   const setTerminalPreferences = useSetAtom(terminalPreferencesAtom);
   const settingsLoadFailedUnknownRef = useRef(settingsLoadFailedUnknown);
   const appearanceSelectionVersionRef = useRef({
+    theme: 0,
     locale: 0,
     terminalRenderer: 0,
     terminalCopyOnSelect: 0,
@@ -307,14 +308,23 @@ export function SettingsPage() {
           setLocaleState(settings["appearance.locale"]);
         }
       }
-      const resolvedThemeId = resolveStoredThemeId(
-        settings["appearance.themeId"] ?? settings["appearance.theme"]
-      );
-      setTheme(resolvedThemeId);
-      document.documentElement.setAttribute(
-        "data-theme",
-        getThemeById(resolvedThemeId).documentThemeAttr
-      );
+      const hasServerThemeSetting =
+        Object.hasOwn(settings, "appearance.themeId") ||
+        Object.hasOwn(settings, "appearance.theme");
+      if (
+        hasServerThemeSetting &&
+        appearanceSelectionVersionRef.current.theme ===
+          appearanceSelectionVersionAtRequestStart.theme
+      ) {
+        const resolvedThemeId = resolveStoredThemeId(
+          settings["appearance.themeId"] ?? settings["appearance.theme"]
+        );
+        setTheme(resolvedThemeId);
+        document.documentElement.setAttribute(
+          "data-theme",
+          getThemeById(resolvedThemeId).documentThemeAttr
+        );
+      }
       setProviderAdditionalArgsById(loadProviderAdditionalArgs(settings, providers));
     };
 
@@ -335,6 +345,11 @@ export function SettingsPage() {
   const handleLocaleSelection = (value: "zh" | "en") => {
     appearanceSelectionVersionRef.current.locale += 1;
     setLocaleState(value);
+  };
+
+  const handleThemeSelection = (value: string) => {
+    appearanceSelectionVersionRef.current.theme += 1;
+    setTheme(value);
   };
 
   const handleTerminalRendererSelection = (value: "standard" | "compatibility") => {
@@ -408,7 +423,7 @@ export function SettingsPage() {
             locale={locale}
             setLocale={handleLocaleSelection}
             theme={theme}
-            setTheme={setTheme}
+            setTheme={handleThemeSelection}
           />
         );
       case "providers":
@@ -1210,6 +1225,10 @@ function AppearanceSettings({ locale, setLocale, theme, setTheme }: AppearanceSe
 
   const handleThemeChange = (nextThemeId: string) => {
     const resolvedTheme = getThemeById(nextThemeId);
+    if (resolvedTheme.id === currentThemeId) {
+      return;
+    }
+
     setTheme(resolvedTheme.id);
     document.documentElement.setAttribute("data-theme", resolvedTheme.documentThemeAttr);
     void saveSettings({ appearance: { themeId: resolvedTheme.id } });
