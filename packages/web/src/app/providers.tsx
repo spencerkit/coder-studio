@@ -33,7 +33,7 @@ import {
   workspacesLoadStateAtom,
   wsClientAtom,
 } from "../atoms";
-import { authenticatedAtom } from "../atoms/app-ui";
+import { authenticatedAtom, themeAtom } from "../atoms/app-ui";
 import type { DispatchCommand } from "../atoms/connection";
 import { activeWorkspaceIdAtom } from "../atoms/workspaces";
 import { useSessionNotifications } from "../features/notifications";
@@ -50,6 +50,7 @@ import {
   gitStateAtomFamily,
   worktreeListAtomFamily,
 } from "../features/workspace/atoms";
+import { getThemeById, resolveStoredThemeId } from "../theme";
 import type { ConnectionStatus, EventListener } from "../ws";
 import { resolveWsUrl, WsClient } from "../ws";
 
@@ -81,9 +82,39 @@ const DEFAULT_REFRESH_HINT: WorkspaceRefreshHint = {
   refreshEditorBuffers: false,
 };
 const FOREGROUND_RECOVERY_COOLDOWN_MS = 250;
+const THEME_ID_STORAGE_KEY = "ui.themeId";
+const LEGACY_THEME_STORAGE_KEY = "ui.theme";
 
 function shouldMarkTreeStaleForFsReason(reason?: string): boolean {
   return reason === "fs_change";
+}
+
+function readStoredThemePreference(): unknown {
+  const storedThemeId = localStorage.getItem(THEME_ID_STORAGE_KEY);
+  if (storedThemeId !== null) {
+    try {
+      return JSON.parse(storedThemeId);
+    } catch {
+      return undefined;
+    }
+  }
+
+  const legacyTheme = localStorage.getItem(LEGACY_THEME_STORAGE_KEY);
+  if (legacyTheme !== null) {
+    try {
+      return JSON.parse(legacyTheme);
+    } catch {
+      return undefined;
+    }
+  }
+
+  return undefined;
+}
+
+function applyResolvedTheme(themeId: unknown): string {
+  const resolvedTheme = getThemeById(resolveStoredThemeId(themeId));
+  document.documentElement.setAttribute("data-theme", resolvedTheme.documentThemeAttr);
+  return resolvedTheme.id;
 }
 
 export function resetAppProvidersSingletonsForTests() {
@@ -160,6 +191,7 @@ interface AppProvidersProps {
 
 export function AppProviders({ children }: AppProvidersProps) {
   const [, setWsClient] = useAtom(wsClientAtom);
+  const setTheme = useSetAtom(themeAtom);
   const authEnabled = useAtomValue(authEnabledAtom);
   const authenticated = useAtomValue(authenticatedAtom);
   const connectionStatus = useAtomValue(connectionStatusAtom);
@@ -248,18 +280,39 @@ export function AppProviders({ children }: AppProvidersProps) {
 
   // Initialize theme from localStorage
   useEffect(() => {
-    const savedTheme = localStorage.getItem("ui.theme");
-    if (savedTheme) {
-      try {
-        const theme = JSON.parse(savedTheme);
-        if (theme === "light" || theme === "dark") {
-          document.documentElement.setAttribute("data-theme", theme);
-        }
-      } catch {
-        // Ignore parse errors
-      }
-    }
+    applyResolvedTheme(readStoredThemePreference());
   }, []);
+
+  useEffect(() => {
+    if (connectionStatus !== "connected") {
+      return;
+    }
+
+    let cancelled = false;
+
+    const hydrateTheme = async () => {
+      const result = await dispatch<Record<string, unknown>>("settings.get", {});
+      if (cancelled || !result.ok || !result.data) {
+        return;
+      }
+
+      const settings = result.data;
+      const resolvedThemeId = applyResolvedTheme(
+        settings["appearance.themeId"] ??
+          settings["appearance.theme"] ??
+          readStoredThemePreference()
+      );
+
+      setTheme(resolvedThemeId);
+      localStorage.setItem(THEME_ID_STORAGE_KEY, JSON.stringify(resolvedThemeId));
+    };
+
+    void hydrateTheme();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [connectionStatus, dispatch, setTheme]);
 
   useEffect(() => {
     const loadAuthStatus = async () => {

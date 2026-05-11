@@ -114,6 +114,29 @@ describe("settings commands", () => {
     ).toEqual({ value: "true" });
   });
 
+  it("settings.update persists appearance.themeId into user_settings", async () => {
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "settings-update-theme-id",
+        op: "settings.update",
+        args: {
+          settings: {
+            appearance: {
+              themeId: "graphite-light",
+            },
+          },
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(
+      db.prepare("SELECT value FROM user_settings WHERE key = ?").get("appearance.themeId")
+    ).toEqual({ value: '"graphite-light"' });
+  });
+
   it("settings.update rejects fractional supervisor timeout values", async () => {
     const result = await dispatch(
       {
@@ -384,6 +407,28 @@ describe("settings commands", () => {
 
     expect(result.ok).toBe(true);
     expect(result.data?.["appearance.terminalCopyOnSelect"]).toBe(true);
+  });
+
+  it("settings.get returns appearance.themeId from user_settings", async () => {
+    db.prepare("INSERT INTO user_settings (key, value) VALUES (?, ?)").run(
+      "appearance.themeId",
+      '"nord-dark"'
+    );
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "settings-get-theme-id",
+        op: "settings.get",
+        args: {},
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.data).toMatchObject({
+      "appearance.themeId": "nord-dark",
+    });
   });
 
   it("settings.get normalizes invalid persisted supervisor timeout values", async () => {

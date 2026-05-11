@@ -2,7 +2,7 @@ import type { Workspace } from "@coder-studio/core";
 import { act, render } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { authenticatedAtom } from "../atoms/app-ui";
+import { authenticatedAtom, themeAtom } from "../atoms/app-ui";
 import { authEnabledAtom, connectionStatusAtom } from "../atoms/connection";
 import {
   activeWorkspaceIdAtom,
@@ -98,10 +98,16 @@ function seedWorkspaces(
 describe("AppProviders lifecycle recovery", () => {
   const originalFetch = globalThis.fetch;
   const originalVisibilityState = Object.getOwnPropertyDescriptor(document, "visibilityState");
+  const originalDocumentTheme = document.documentElement.getAttribute("data-theme");
+  const originalLegacyTheme = localStorage.getItem("ui.theme");
+  const originalThemeId = localStorage.getItem("ui.themeId");
   const originalTerminalPreferences = localStorage.getItem("ui.terminalPreferences");
 
   beforeEach(() => {
     resetAppProvidersSingletonsForTests();
+    document.documentElement.removeAttribute("data-theme");
+    localStorage.removeItem("ui.theme");
+    localStorage.removeItem("ui.themeId");
     localStorage.removeItem("ui.terminalPreferences");
     globalThis.fetch = vi.fn().mockResolvedValue({
       json: async () => ({ authEnabled: false }),
@@ -141,6 +147,21 @@ describe("AppProviders lifecycle recovery", () => {
       localStorage.removeItem("ui.terminalPreferences");
     } else {
       localStorage.setItem("ui.terminalPreferences", originalTerminalPreferences);
+    }
+    if (originalLegacyTheme === null) {
+      localStorage.removeItem("ui.theme");
+    } else {
+      localStorage.setItem("ui.theme", originalLegacyTheme);
+    }
+    if (originalThemeId === null) {
+      localStorage.removeItem("ui.themeId");
+    } else {
+      localStorage.setItem("ui.themeId", originalThemeId);
+    }
+    if (originalDocumentTheme === null) {
+      document.documentElement.removeAttribute("data-theme");
+    } else {
+      document.documentElement.setAttribute("data-theme", originalDocumentTheme);
     }
     if (originalVisibilityState) {
       Object.defineProperty(document, "visibilityState", originalVisibilityState);
@@ -482,6 +503,84 @@ describe("AppProviders lifecycle recovery", () => {
     });
 
     expect(sendCommand).toHaveBeenCalledWith("settings.get", {}, undefined);
+  });
+
+  it("bootstraps the document theme from legacy ui.theme localStorage", async () => {
+    localStorage.setItem("ui.theme", JSON.stringify("light"));
+
+    renderProviders();
+
+    await vi.waitFor(() => {
+      expect(document.documentElement.getAttribute("data-theme")).toBe("mint-light");
+    });
+  });
+
+  it("hydrates appearance.themeId from settings.get and updates the document theme and atom", async () => {
+    const store = createStore();
+    setVisibilityState("visible");
+
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "appearance.themeId": "graphite-dark",
+        };
+      }
+
+      return undefined;
+    });
+    wsState.client!.sendCommand = sendCommand;
+
+    renderProviders(store);
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
+
+    act(() => {
+      wsState.client?.statusHandler?.("connected");
+    });
+
+    await vi.waitFor(() => {
+      expect(document.documentElement.getAttribute("data-theme")).toBe("graphite-dark");
+      expect(store.get(themeAtom)).toBe("graphite-dark");
+      expect(localStorage.getItem("ui.themeId")).toBe(JSON.stringify("graphite-dark"));
+    });
+  });
+
+  it("prefers server-provided appearance.themeId over legacy ui.theme localStorage", async () => {
+    const store = createStore();
+    setVisibilityState("visible");
+    localStorage.setItem("ui.theme", JSON.stringify("light"));
+
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "appearance.themeId": "graphite-dark",
+        };
+      }
+
+      return undefined;
+    });
+    wsState.client!.sendCommand = sendCommand;
+
+    renderProviders(store);
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
+
+    await vi.waitFor(() => {
+      expect(document.documentElement.getAttribute("data-theme")).toBe("mint-light");
+    });
+
+    act(() => {
+      wsState.client?.statusHandler?.("connected");
+    });
+
+    await vi.waitFor(() => {
+      expect(document.documentElement.getAttribute("data-theme")).toBe("graphite-dark");
+      expect(store.get(themeAtom)).toBe("graphite-dark");
+    });
   });
 
   it("preserves a newer local terminal copy-on-select update when startup hydration resolves later", async () => {
