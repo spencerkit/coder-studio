@@ -11,5 +11,5 @@
   margin-top: 0;
   overflow: auto;
   outline: none;
-  z-index: var(--z-dropdown);
+  z-index: var(--z-modal);
 }
