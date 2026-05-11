@@ -54,10 +54,6 @@ export const themeAtom = atomWithStorage<string>(THEME_ID_STORAGE_KEY, "mint-dar
   getOnInit: true,
 });
 
-export function resolveStoredThemeAtomValue(value: unknown): string {
-  return resolveStoredThemeId(value);
-}
-
 /**
  * Locale preference
  * Persisted: ui.locale
