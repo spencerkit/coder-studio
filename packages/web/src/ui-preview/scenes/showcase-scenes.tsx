@@ -35,6 +35,8 @@ const supervisor: Supervisor = {
   state: "idle",
   objective: "Review UI regressions before shipping",
   evaluatorProviderId: "claude",
+  maxSupervisionCount: 0,
+  completedSupervisionCount: 0,
   cycles: [],
   createdAt: 1,
   updatedAt: 1,

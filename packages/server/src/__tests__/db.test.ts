@@ -1,9 +1,14 @@
-import type { DatabaseSync } from "node:sqlite";
+import { DatabaseSync } from "node:sqlite";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { closeDatabase, openDatabase } from "../storage/index.js";
+import {
+  CURRENT_SCHEMA_VERSION,
+  IncompatibleSchemaError,
+  V1_SCHEMA_SQL,
+} from "../storage/schema-version.js";
 
 describe("Database", () => {
   let db: DatabaseSync;
@@ -57,6 +62,14 @@ describe("Database", () => {
       expect(result).toBeUndefined();
     });
 
+    it("should stamp user_version on fresh empty database initialization", () => {
+      const dbPath = join(tempDir, "fresh.db");
+      db = openDatabase(dbPath);
+
+      const userVersion = db.prepare("PRAGMA user_version").get() as { user_version: number };
+      expect(userVersion.user_version).toBe(CURRENT_SCHEMA_VERSION);
+    });
+
     it("should keep the schema stable on subsequent opens", () => {
       const dbPath = join(tempDir, "test.db");
 
@@ -85,6 +98,79 @@ describe("Database", () => {
       expect(tables.map((table) => table.name)).not.toContain("_migrations");
     });
 
+    it("should upgrade a known v1 supervisor schema to v2 when user_version is unset", () => {
+      const dbPath = join(tempDir, "v1.db");
+      const rawDb = new DatabaseSync(dbPath);
+      rawDb.exec("PRAGMA user_version = 0");
+      rawDb.exec(V1_SCHEMA_SQL);
+      rawDb.close();
+
+      db = openDatabase(dbPath);
+
+      const userVersion = db.prepare("PRAGMA user_version").get() as { user_version: number };
+      expect(userVersion.user_version).toBe(2);
+
+      const supervisorColumns = db.prepare("PRAGMA table_info(supervisors)").all() as Array<{
+        name: string;
+      }>;
+      expect(supervisorColumns.map((column) => column.name)).toEqual(
+        expect.arrayContaining([
+          "evaluator_model",
+          "max_supervision_count",
+          "completed_supervision_count",
+          "scheduled_at",
+          "stop_reason",
+        ])
+      );
+
+      const upgradedTable = db
+        .prepare(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name='supervisor_cycle_attempts'"
+        )
+        .get() as { name: string } | undefined;
+      expect(upgradedTable?.name).toBe("supervisor_cycle_attempts");
+
+      const upgradedIndex = db
+        .prepare(
+          "SELECT name FROM sqlite_master WHERE type='index' AND name='idx_supervisor_cycle_attempts_cycle'"
+        )
+        .get() as { name: string } | undefined;
+      expect(upgradedIndex?.name).toBe("idx_supervisor_cycle_attempts_cycle");
+    });
+
+    it("should restamp user_version for an already-current schema when it is unset", () => {
+      const dbPath = join(tempDir, "current-unstamped.db");
+      db = openDatabase(dbPath);
+      closeDatabase(db);
+
+      const rawDb = new DatabaseSync(dbPath);
+      rawDb.exec("PRAGMA user_version = 0");
+      rawDb.close();
+
+      db = openDatabase(dbPath);
+
+      const userVersion = db.prepare("PRAGMA user_version").get() as { user_version: number };
+      expect(userVersion.user_version).toBe(CURRENT_SCHEMA_VERSION);
+    });
+
+    it("should throw a typed incompatible-schema error for unknown schemas", () => {
+      const dbPath = join(tempDir, "incompatible.db");
+      const rawDb = new DatabaseSync(dbPath);
+      rawDb.exec("CREATE TABLE unexpected_table (id TEXT PRIMARY KEY)");
+      rawDb.close();
+
+      let thrown: unknown;
+      try {
+        openDatabase(dbPath);
+      } catch (error) {
+        thrown = error;
+      }
+
+      expect(thrown).toBeInstanceOf(IncompatibleSchemaError);
+      expect(thrown).toMatchObject({ code: "db_incompatible_schema" });
+      expect((thrown as Error).message).toContain("db_incompatible_schema");
+    });
+
     it("should create all required tables", () => {
       const dbPath = join(tempDir, "test.db");
       db = openDatabase(dbPath);
@@ -104,6 +190,7 @@ describe("Database", () => {
           "auth_sessions",
           "supervisors",
           "supervisor_cycles",
+          "supervisor_cycle_attempts",
           "auth_login_blocks",
           "auth_login_failures",
         ])
@@ -134,6 +221,7 @@ describe("Database", () => {
           "idx_supervisors_id_session",
           "idx_supervisor_cycles_supervisor",
           "idx_supervisor_cycles_session",
+          "idx_supervisor_cycle_attempts_cycle",
           "idx_auth_login_blocks_blocked_until",
           "idx_auth_login_failures_ip_failed_at",
         ])

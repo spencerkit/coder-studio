@@ -132,6 +132,9 @@ export interface UiPreviewSeed {
     mode: "enable" | "edit" | "disable";
     draftObjective: string;
     draftEvaluatorProviderId: "claude" | "codex";
+    draftEvaluatorModel?: string;
+    draftMaxSupervisionCount?: string;
+    draftScheduledAt?: string;
   };
   commands?: UiPreviewCommands;
 }
@@ -360,13 +363,23 @@ export function buildUiPreviewStore(seed: UiPreviewSeed): Store {
   store.set(toastsAtom, seed.toasts ?? []);
   store.set(
     supervisorDialogAtom,
-    seed.supervisorDialog ?? {
-      open: false,
-      sessionId: null,
-      mode: "enable",
-      draftObjective: "",
-      draftEvaluatorProviderId: "claude",
-    }
+    seed.supervisorDialog
+      ? {
+          draftEvaluatorModel: "",
+          draftMaxSupervisionCount: "0",
+          draftScheduledAt: "",
+          ...seed.supervisorDialog,
+        }
+      : {
+          open: false,
+          sessionId: null,
+          mode: "enable",
+          draftObjective: "",
+          draftEvaluatorProviderId: "claude",
+          draftEvaluatorModel: "",
+          draftMaxSupervisionCount: "0",
+          draftScheduledAt: "",
+        }
   );
   store.set(supervisorsAtom, new Map(Object.entries(seed.supervisorBySessionId ?? {})));
   store.set(supervisorCyclesAtom, new Map());

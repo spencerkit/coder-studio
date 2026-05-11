@@ -28,6 +28,7 @@ import { AuthSessionRepo } from "./storage/repositories/auth-session-repo.js";
 import { ProviderConfigRepo } from "./storage/repositories/provider-config-repo.js";
 import { rowToSession, type SessionRow } from "./storage/repositories/session-repo.js";
 import { SettingsRepo } from "./storage/repositories/settings-repo.js";
+import { SupervisorCycleAttemptRepo } from "./storage/repositories/supervisor-cycle-attempt-repo.js";
 import { SupervisorCycleRepo } from "./storage/repositories/supervisor-cycle-repo.js";
 import { SupervisorRepo } from "./storage/repositories/supervisor-repo.js";
 import { SupervisorManager } from "./supervisor/manager.js";
@@ -168,6 +169,7 @@ export async function createServer(
 
   const supervisorRepo = new SupervisorRepo(db);
   const cycleRepo = new SupervisorCycleRepo(db);
+  const cycleAttemptRepo = new SupervisorCycleAttemptRepo(db);
   supervisorMgr = new SupervisorManager({
     eventBus,
     broadcaster: wsHub,
@@ -179,6 +181,7 @@ export async function createServer(
     settingsRepo,
     supervisorRepo,
     cycleRepo,
+    cycleAttemptRepo,
     logger: app.log,
   });
   await sessionMgr.hydrate();

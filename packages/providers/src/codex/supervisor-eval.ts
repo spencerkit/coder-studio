@@ -26,6 +26,7 @@ export function buildCodexSupervisorEvalCommand(
       "-s",
       "read-only",
       "--skip-git-repo-check",
+      ...(req.model ? ["-m", req.model] : []),
       ...cfg.additionalArgs,
       req.prompt,
     ],

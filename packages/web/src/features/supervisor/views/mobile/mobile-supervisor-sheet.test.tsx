@@ -24,6 +24,43 @@ function setMatchMediaMock(predicate: (query: string) => boolean) {
 describe("MobileSupervisorSheet", () => {
   let originalMatchMedia: typeof window.matchMedia;
 
+  const createDialogState = (
+    overrides: Partial<{
+      open: boolean;
+      sessionId: string | null;
+      mode: "enable" | "edit" | "disable";
+      draftObjective: string;
+      draftEvaluatorProviderId: "claude" | "codex";
+      draftEvaluatorModel: string;
+      draftMaxSupervisionCount: string;
+      draftScheduledAt: string;
+    }> = {}
+  ) => ({
+    open: false,
+    sessionId: null,
+    mode: "enable" as const,
+    draftObjective: "",
+    draftEvaluatorProviderId: "claude" as const,
+    draftEvaluatorModel: "",
+    draftMaxSupervisionCount: "0",
+    draftScheduledAt: "",
+    ...overrides,
+  });
+
+  const createSupervisor = () => ({
+    id: "sup-1",
+    sessionId: "sess-1",
+    workspaceId: "ws-1",
+    state: "idle" as const,
+    objective: "Reduce mobile regression bugs",
+    evaluatorProviderId: "claude",
+    maxSupervisionCount: 0,
+    completedSupervisionCount: 0,
+    cycles: [],
+    createdAt: 1,
+    updatedAt: 1,
+  });
+
   beforeEach(() => {
     originalMatchMedia = window.matchMedia;
     setMatchMediaMock(
@@ -41,25 +78,7 @@ describe("MobileSupervisorSheet", () => {
     window.localStorage.setItem("ui.locale", JSON.stringify("en"));
     store.set(localeAtom, "en");
     store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
-    store.set(
-      supervisorsAtom,
-      new Map([
-        [
-          "sess-1",
-          {
-            id: "sup-1",
-            sessionId: "sess-1",
-            workspaceId: "ws-1",
-            state: "idle",
-            objective: "Reduce mobile regression bugs",
-            evaluatorProviderId: "claude",
-            cycles: [],
-            createdAt: 1,
-            updatedAt: 1,
-          },
-        ],
-      ])
-    );
+    store.set(supervisorsAtom, new Map([["sess-1", createSupervisor()]]));
 
     render(
       <Provider store={store}>
@@ -121,6 +140,9 @@ describe("MobileSupervisorSheet", () => {
           workspaceId: "ws-1",
           objective: "Reduce mobile regression bugs",
           evaluatorProviderId: "claude",
+          evaluatorModel: undefined,
+          maxSupervisionCount: 0,
+          scheduledAt: undefined,
         },
         undefined
       );
@@ -133,13 +155,7 @@ describe("MobileSupervisorSheet", () => {
     store.set(localeAtom, "en");
     store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
     store.set(supervisorsAtom, new Map());
-    store.set(supervisorDialogAtom, {
-      open: false,
-      sessionId: null,
-      mode: "enable",
-      draftObjective: "",
-      draftEvaluatorProviderId: "claude",
-    });
+    store.set(supervisorDialogAtom, createDialogState());
 
     render(
       <Provider store={store}>

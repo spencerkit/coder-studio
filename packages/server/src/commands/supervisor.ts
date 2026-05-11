@@ -8,6 +8,9 @@ const createSupervisorSchema = z
     workspaceId: z.string(),
     objective: supervisorObjectiveSchema,
     evaluatorProviderId: z.string(),
+    evaluatorModel: z.string().trim().min(1).max(200).optional(),
+    maxSupervisionCount: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
+    scheduledAt: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
   })
   .strict();
 const updateSupervisorSchema = z
@@ -15,11 +18,19 @@ const updateSupervisorSchema = z
     id: z.string(),
     objective: supervisorObjectiveSchema.optional(),
     evaluatorProviderId: z.string().optional(),
+    evaluatorModel: z.string().trim().min(1).max(200).nullable().optional(),
+    maxSupervisionCount: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
+    scheduledAt: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).nullable().optional(),
   })
   .strict()
   .refine(
-    (input) => input.objective !== undefined || input.evaluatorProviderId !== undefined,
-    "objective or evaluatorProviderId is required"
+    (input) =>
+      input.objective !== undefined ||
+      input.evaluatorProviderId !== undefined ||
+      input.evaluatorModel !== undefined ||
+      input.maxSupervisionCount !== undefined ||
+      input.scheduledAt !== undefined,
+    "at least one supervisor field is required"
   );
 const sessionIdSchema = z.object({ sessionId: z.string() });
 const supervisorIdSchema = z.object({ id: z.string() });
@@ -32,6 +43,9 @@ registerCommand("supervisor.create", createSupervisorSchema, async (args, ctx) =
       workspaceId: args.workspaceId,
       objective: args.objective,
       evaluatorProviderId: args.evaluatorProviderId,
+      evaluatorModel: args.evaluatorModel,
+      maxSupervisionCount: args.maxSupervisionCount,
+      scheduledAt: args.scheduledAt,
     }),
   };
 });
@@ -47,6 +61,9 @@ registerCommand("supervisor.update", updateSupervisorSchema, async (args, ctx) =
     supervisor: await ctx.supervisorMgr.update(args.id, {
       objective: args.objective,
       evaluatorProviderId: args.evaluatorProviderId,
+      evaluatorModel: args.evaluatorModel,
+      maxSupervisionCount: args.maxSupervisionCount,
+      scheduledAt: args.scheduledAt,
     }),
   };
 });

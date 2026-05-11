@@ -470,9 +470,19 @@
     "permission_limited_hint": "Even with notification permission allowed, this mobile browser may still fail to show system notifications reliably.",
     "supervisor": {
       "title": "Supervisor",
-      "hint": "Maximum time the supervisor evaluator can run before the server aborts it.",
+      "hint": "Configure supervisor evaluation timeout and global retry behavior. Retry rules apply to all supervisors.",
       "evaluation_timeout": "Supervisor Evaluation Timeout (seconds)",
-      "validation_error": "Enter a whole number between 1 and {max} seconds."
+      "validation_error": "Enter a whole number between 1 and {max} seconds.",
+      "retry_enabled": "Enable Supervisor Retries",
+      "retry_enabled_hint": "Automatically retry when evaluation times out or the evaluator fails.",
+      "retry_max_count": "Max Retry Count",
+      "retry_max_count_validation_error": "Enter a whole number between 0 and {max}.",
+      "retry_delay_sec": "Retry Delay (seconds)",
+      "retry_delay_validation_error": "Enter a whole number between 1 and {max} seconds.",
+      "retry_on_timeout": "Retry On Timeout",
+      "retry_on_timeout_hint": "Retry automatically after evaluation timeout.",
+      "retry_on_evaluator_error": "Retry On Evaluator Error",
+      "retry_on_evaluator_error_hint": "Retry automatically when the evaluator process or runtime fails."
     },
     "terminal_renderer": "Terminal Renderer",
     "terminal_renderer_hint": "Choose terminal rendering mode",
@@ -586,16 +596,27 @@
       "evaluating": "Evaluating",
       "injecting": "Injecting",
       "paused": "Paused",
-      "error": "Error"
+      "error": "Error",
+      "stopped": "Stopped"
     },
     "trigger": {
       "manual": "MANUAL",
-      "auto": "AUTO"
+      "auto": "AUTO",
+      "scheduled": "SCHEDULED"
     },
     "cycle": {
       "no_guidance": "No guidance injected this cycle",
       "evaluating": "Evaluating...",
-      "waiting": "Waiting for evaluation result"
+      "waiting": "Waiting for evaluation result",
+      "cancelled": "Cancelled"
+    },
+    "stop_reason": {
+      "objective_complete": "Objective complete. Supervisor stopped automatically.",
+      "max_supervision_count_reached": "Reached the configured max supervision count."
+    },
+    "meta": {
+      "title": "Execution policy",
+      "no_cap": "No cap"
     },
     "field": {
       "objective": "Objective",
@@ -603,7 +624,14 @@
       "objective_placeholder": "Describe what Supervisor should watch, for example:\n- Finish implementing user authentication\n- Fix all failing unit tests\n- Reduce P95 latency below 100ms",
       "objective_helper": "The more specific and measurable the target, the better the evaluation. Include completion criteria when possible.",
       "evaluator": "Evaluator",
-      "evaluator_helper": "The provider that evaluates progress and suggests the next step. It can differ from the execution provider."
+      "evaluator_helper": "The provider that evaluates progress and suggests the next step. It can differ from the execution provider.",
+      "evaluator_model": "Evaluator Model",
+      "evaluator_model_placeholder": "Optional model override, for example o3 or gpt-5",
+      "evaluator_model_helper": "Leave blank to use the provider's default supervisor evaluation model behavior.",
+      "max_supervision_count": "Max Supervision Count",
+      "max_supervision_count_helper": "Set to 0 for no explicit cap. Evaluation can still stop earlier if the objective is complete.",
+      "scheduled_at": "Scheduled Run Time",
+      "scheduled_at_helper": "Optional one-shot automatic run time. Leave blank to rely only on turn-completed supervision."
     },
     "action": {
       "enable": "Enable Supervisor",

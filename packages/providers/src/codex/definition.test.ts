@@ -179,6 +179,24 @@ describe("Codex Provider Definition", () => {
       expect(promptIdx).toBe(argv.length - 1);
       expect(configIdx).toBeLessThan(promptIdx);
     });
+
+    it("passes the model override through to codex exec", () => {
+      const result = codexDefinition.buildSupervisorEvalCommand?.(
+        {
+          model: "gpt-4.1",
+          additionalArgs: [],
+          envVars: {},
+        },
+        {
+          prompt: "Return strict JSON",
+          sessionId: "sess-1",
+          workspacePath: "/workspace",
+          model: "o3",
+        }
+      );
+
+      expect(result?.argv).toEqual(expect.arrayContaining(["-m", "o3"]));
+    });
   });
 
   describe("defaultConfig", () => {

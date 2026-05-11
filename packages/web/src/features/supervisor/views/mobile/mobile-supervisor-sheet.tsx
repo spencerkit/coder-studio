@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Button, EmptyState, Sheet } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import {
+  formatScheduledAtInput,
   type ObjectiveDialogEvaluatorProviderId,
   type ObjectiveDialogMode,
   useObjectiveDialogState,
@@ -74,6 +75,9 @@ export function MobileSupervisorSheet({
       draftObjective: supervisor?.objective ?? "",
       draftEvaluatorProviderId:
         (supervisor?.evaluatorProviderId as ObjectiveDialogEvaluatorProviderId) ?? "claude",
+      draftEvaluatorModel: supervisor?.evaluatorModel ?? "",
+      draftMaxSupervisionCount: String(supervisor?.maxSupervisionCount ?? 0),
+      draftScheduledAt: formatScheduledAtInput(supervisor?.scheduledAt),
     });
     setDetailMode(nextMode);
   };
@@ -109,11 +113,21 @@ export function MobileSupervisorSheet({
               mode={mode}
               draftObjective={dialog.draftObjective}
               draftEvaluatorProviderId={dialog.draftEvaluatorProviderId}
+              draftEvaluatorModel={dialog.draftEvaluatorModel}
+              draftMaxSupervisionCount={dialog.draftMaxSupervisionCount}
+              draftScheduledAt={dialog.draftScheduledAt}
               disableObjective={disableObjective}
               onDraftObjectiveChange={(draftObjective) => updateDraft({ draftObjective })}
               onDraftEvaluatorProviderChange={(draftEvaluatorProviderId) =>
                 updateDraft({ draftEvaluatorProviderId })
               }
+              onDraftEvaluatorModelChange={(draftEvaluatorModel) =>
+                updateDraft({ draftEvaluatorModel })
+              }
+              onDraftMaxSupervisionCountChange={(draftMaxSupervisionCount) =>
+                updateDraft({ draftMaxSupervisionCount })
+              }
+              onDraftScheduledAtChange={(draftScheduledAt) => updateDraft({ draftScheduledAt })}
             />
           </div>
         }

@@ -3233,6 +3233,41 @@ body.is-resizing-panels * {
   text-transform: lowercase;
 }
 
+.supervisor-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: var(--sp-2);
+  margin: 0;
+}
+
+.supervisor-meta-item {
+  min-width: 0;
+  padding: var(--sp-1) var(--sp-2);
+  background: color-mix(in srgb, var(--bg-surface) 82%, var(--bg-page) 18%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.supervisor-meta-label {
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.4;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.supervisor-meta-value {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+  color: var(--text-secondary);
+}
+
 /* Latest-cycle banner */
 .supervisor-history-list {
   display: flex;

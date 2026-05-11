@@ -1,4 +1,7 @@
 import type { Server, ServerConfig } from "@coder-studio/server";
+import { closeDatabase, openDatabase, parseServerConfig } from "@coder-studio/server";
+import { mkdirSync } from "fs";
+import { dirname } from "path";
 import { fileURLToPath } from "url";
 import { readCliConfig } from "./config-store.js";
 import { getStaticAssetsDir, hasWebAssets } from "./embed.js";
@@ -33,6 +36,16 @@ export const buildServerConfig = (): Partial<ServerConfig> => {
 
   console.warn(MISSING_WEB_ASSETS_WARNING);
   return config;
+};
+
+export const verifyLocalDatabaseCompatibility = (): void => {
+  const config = parseServerConfig(buildServerConfig());
+  if (config.dataDir !== ":memory:") {
+    mkdirSync(dirname(config.dataDir), { recursive: true });
+  }
+
+  const db = openDatabase(config.dataDir);
+  closeDatabase(db);
 };
 
 const createShutdownHandler = (server: Server) => async () => {
