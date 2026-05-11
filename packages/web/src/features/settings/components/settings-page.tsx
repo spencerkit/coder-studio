@@ -118,9 +118,9 @@ function loadProviderAdditionalArgs(
  * PRD §13:
  *   - Two-column layout: sidebar (200px) + content area
  *   - Navigation sections: General, Provider (per provider), Appearance
- *   - General: notifications
+ *   - General: notifications, terminal behavior
  *   - Provider: config fields and command preview
- *   - Appearance: theme, terminal renderer, language
+ *   - Appearance: theme, language
  */
 export function SettingsPage() {
   const t = useTranslation();
@@ -320,24 +320,24 @@ export function SettingsPage() {
       case "general":
         return (
           <GeneralSettings
+            isMobile={isMobile}
             notificationsEnabled={notificationsEnabled}
             setNotificationsEnabled={setNotificationsEnabled}
             soundEnabled={soundEnabled}
             setSoundEnabled={setSoundEnabled}
             supervisorEvaluationTimeoutSec={supervisorEvaluationTimeoutSec}
             setSupervisorEvaluationTimeoutSec={setSupervisorEvaluationTimeoutSec}
+            terminalRenderer={terminalRenderer}
+            setTerminalRenderer={handleTerminalRendererSelection}
+            terminalCopyOnSelect={terminalPreferences.copyOnSelect}
+            setTerminalCopyOnSelect={handleTerminalCopyOnSelectSelection}
           />
         );
       case "appearance":
         return (
           <AppearanceSettings
-            isMobile={isMobile}
             locale={locale}
             setLocale={handleLocaleSelection}
-            terminalRenderer={terminalRenderer}
-            setTerminalRenderer={handleTerminalRendererSelection}
-            terminalCopyOnSelect={terminalPreferences.copyOnSelect}
-            setTerminalCopyOnSelect={handleTerminalCopyOnSelectSelection}
             theme={theme}
             setTheme={setTheme}
           />
@@ -472,12 +472,17 @@ function SettingsNavItem({ icon, label, active, onClick }: SettingsNavItemProps)
 }
 
 interface GeneralSettingsProps {
+  isMobile: boolean;
   notificationsEnabled: boolean;
   setNotificationsEnabled: (value: boolean) => void;
   soundEnabled: boolean;
   setSoundEnabled: (value: boolean) => void;
   supervisorEvaluationTimeoutSec: number;
   setSupervisorEvaluationTimeoutSec: (value: number) => void;
+  terminalRenderer: "standard" | "compatibility";
+  setTerminalRenderer: (value: "standard" | "compatibility") => void;
+  terminalCopyOnSelect: boolean;
+  setTerminalCopyOnSelect: (value: boolean) => void;
 }
 
 function parseSupervisorTimeoutInput(value: string): number | null {
@@ -499,18 +504,27 @@ function parseSupervisorTimeoutInput(value: string): number | null {
 }
 
 function GeneralSettings({
+  isMobile,
   notificationsEnabled,
   setNotificationsEnabled,
   soundEnabled,
   setSoundEnabled,
   supervisorEvaluationTimeoutSec,
   setSupervisorEvaluationTimeoutSec,
+  terminalRenderer,
+  setTerminalRenderer,
+  terminalCopyOnSelect,
+  setTerminalCopyOnSelect,
 }: GeneralSettingsProps) {
   const t = useTranslation();
   const notificationsLabelId = useId();
   const notificationsDescId = useId();
   const soundLabelId = useId();
   const soundDescId = useId();
+  const terminalRendererTitleId = useId();
+  const terminalRendererDescId = useId();
+  const copyOnSelectLabelId = useId();
+  const copyOnSelectDescId = useId();
   const dispatch = useAtomValue(dispatchCommandAtom);
   const setNotificationPreferences = useSetAtom(notificationPreferencesAtom);
   const [notificationPermission, setNotificationPermission] =
@@ -707,130 +721,6 @@ function GeneralSettings({
       </div>
 
       <div className="settings-group">
-        <h3 className="settings-group-title">{t("settings.supervisor.title")}</h3>
-        <p className="settings-group-desc">{t("settings.supervisor.hint")}</p>
-
-        <div className="settings-config-field settings-config-field--inline">
-          <label className="settings-config-label" htmlFor="supervisor-evaluation-timeout">
-            {t("settings.supervisor.evaluation_timeout")}
-          </label>
-          <div className="settings-config-control">
-            <Input
-              id="supervisor-evaluation-timeout"
-              className="settings-input-compact"
-              type="number"
-              min={1}
-              max={MAX_SUPERVISOR_EVALUATION_TIMEOUT_SEC}
-              step={1}
-              inputMode="numeric"
-              invalid={Boolean(supervisorTimeoutError)}
-              value={supervisorTimeoutDraft}
-              onChange={(event) => {
-                setSupervisorTimeoutDraft(event.target.value);
-                if (supervisorTimeoutError) {
-                  setSupervisorTimeoutError(null);
-                }
-              }}
-              onBlur={() => {
-                void commitSupervisorTimeout();
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  void commitSupervisorTimeout();
-                }
-              }}
-            />
-          </div>
-          {supervisorTimeoutError ? (
-            <span className="form-error" role="alert">
-              {supervisorTimeoutError}
-            </span>
-          ) : null}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-interface AppearanceSettingsProps {
-  isMobile: boolean;
-  locale: string;
-  setLocale: (value: "zh" | "en") => void;
-  terminalRenderer: "standard" | "compatibility";
-  setTerminalRenderer: (value: "standard" | "compatibility") => void;
-  terminalCopyOnSelect: boolean;
-  setTerminalCopyOnSelect: (value: boolean) => void;
-  theme: "dark" | "light";
-  setTheme: (value: "dark" | "light") => void;
-}
-
-function AppearanceSettings({
-  isMobile,
-  locale,
-  setLocale,
-  terminalRenderer,
-  setTerminalRenderer,
-  terminalCopyOnSelect,
-  setTerminalCopyOnSelect,
-  theme,
-  setTheme,
-}: AppearanceSettingsProps) {
-  const t = useTranslation();
-  const themeTitleId = useId();
-  const themeDescId = useId();
-  const terminalRendererTitleId = useId();
-  const terminalRendererDescId = useId();
-  const copyOnSelectLabelId = useId();
-  const copyOnSelectDescId = useId();
-  const languageTitleId = useId();
-  const languageDescId = useId();
-  const dispatch = useAtomValue(dispatchCommandAtom);
-
-  const saveSettings = async (settings: Record<string, unknown>) => {
-    await dispatch("settings.update", { settings });
-  };
-
-  const handleThemeChange = (newTheme: "dark" | "light") => {
-    setTheme(newTheme);
-    document.documentElement.setAttribute("data-theme", newTheme);
-    void saveSettings({ appearance: { theme: newTheme } });
-  };
-
-  return (
-    <div className="settings-section">
-      <div className="settings-group">
-        <h3 className="settings-group-title" id={themeTitleId}>
-          {t("settings.theme.title")}
-        </h3>
-        <p className="settings-group-desc" id={themeDescId}>
-          {t("settings.theme.hint")}
-        </p>
-
-        <div
-          aria-describedby={themeDescId}
-          aria-labelledby={themeTitleId}
-          className="settings-pills"
-          role="group"
-        >
-          <Pill
-            leadingIcon={theme === "dark" ? <Check size={12} /> : undefined}
-            onClick={() => handleThemeChange("dark")}
-            active={theme === "dark"}
-          >
-            {t("settings.theme.dark")}
-          </Pill>
-          <Pill
-            leadingIcon={theme === "light" ? <Check size={12} /> : undefined}
-            onClick={() => handleThemeChange("light")}
-            active={theme === "light"}
-          >
-            {t("settings.theme.light")}
-          </Pill>
-        </div>
-      </div>
-
-      <div className="settings-group">
         <h3 className="settings-group-title" id={terminalRendererTitleId}>
           {t("settings.terminal_renderer")}
         </h3>
@@ -888,6 +778,111 @@ function AppearanceSettings({
             />
           </div>
         )}
+      </div>
+
+      <div className="settings-group">
+        <h3 className="settings-group-title">{t("settings.supervisor.title")}</h3>
+        <p className="settings-group-desc">{t("settings.supervisor.hint")}</p>
+
+        <div className="settings-config-field settings-config-field--inline">
+          <label className="settings-config-label" htmlFor="supervisor-evaluation-timeout">
+            {t("settings.supervisor.evaluation_timeout")}
+          </label>
+          <div className="settings-config-control">
+            <Input
+              id="supervisor-evaluation-timeout"
+              className="settings-input-compact"
+              type="number"
+              min={1}
+              max={MAX_SUPERVISOR_EVALUATION_TIMEOUT_SEC}
+              step={1}
+              inputMode="numeric"
+              invalid={Boolean(supervisorTimeoutError)}
+              value={supervisorTimeoutDraft}
+              onChange={(event) => {
+                setSupervisorTimeoutDraft(event.target.value);
+                if (supervisorTimeoutError) {
+                  setSupervisorTimeoutError(null);
+                }
+              }}
+              onBlur={() => {
+                void commitSupervisorTimeout();
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  void commitSupervisorTimeout();
+                }
+              }}
+            />
+          </div>
+          {supervisorTimeoutError ? (
+            <span className="form-error" role="alert">
+              {supervisorTimeoutError}
+            </span>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface AppearanceSettingsProps {
+  locale: string;
+  setLocale: (value: "zh" | "en") => void;
+  theme: "dark" | "light";
+  setTheme: (value: "dark" | "light") => void;
+}
+
+function AppearanceSettings({ locale, setLocale, theme, setTheme }: AppearanceSettingsProps) {
+  const t = useTranslation();
+  const themeTitleId = useId();
+  const themeDescId = useId();
+  const languageTitleId = useId();
+  const languageDescId = useId();
+  const dispatch = useAtomValue(dispatchCommandAtom);
+
+  const saveSettings = async (settings: Record<string, unknown>) => {
+    await dispatch("settings.update", { settings });
+  };
+
+  const handleThemeChange = (newTheme: "dark" | "light") => {
+    setTheme(newTheme);
+    document.documentElement.setAttribute("data-theme", newTheme);
+    void saveSettings({ appearance: { theme: newTheme } });
+  };
+
+  return (
+    <div className="settings-section">
+      <div className="settings-group">
+        <h3 className="settings-group-title" id={themeTitleId}>
+          {t("settings.theme.title")}
+        </h3>
+        <p className="settings-group-desc" id={themeDescId}>
+          {t("settings.theme.hint")}
+        </p>
+
+        <div
+          aria-describedby={themeDescId}
+          aria-labelledby={themeTitleId}
+          className="settings-pills"
+          role="group"
+        >
+          <Pill
+            leadingIcon={theme === "dark" ? <Check size={12} /> : undefined}
+            onClick={() => handleThemeChange("dark")}
+            active={theme === "dark"}
+          >
+            {t("settings.theme.dark")}
+          </Pill>
+          <Pill
+            leadingIcon={theme === "light" ? <Check size={12} /> : undefined}
+            onClick={() => handleThemeChange("light")}
+            active={theme === "light"}
+          >
+            {t("settings.theme.light")}
+          </Pill>
+        </div>
       </div>
 
       <div className="settings-group">

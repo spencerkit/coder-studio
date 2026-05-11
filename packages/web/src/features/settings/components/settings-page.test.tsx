@@ -867,7 +867,6 @@ describe("SettingsPage", () => {
       if (op === "settings.get") {
         return {
           "appearance.locale": "zh",
-          "appearance.terminalRenderer": "standard",
         };
       }
       return {};
@@ -879,7 +878,6 @@ describe("SettingsPage", () => {
 
     const darkThemePill = await screen.findByRole("button", { name: "深色" });
     const lightThemePill = screen.getByRole("button", { name: "浅色" });
-    const standardRendererPill = screen.getByRole("button", { name: "标准" });
     const chineseLanguagePill = screen.getByRole("button", { name: "中文" });
 
     expect(
@@ -889,23 +887,43 @@ describe("SettingsPage", () => {
     ).toHaveAccessibleDescription("选择应用主题");
     expect(
       screen.getByRole("group", {
-        name: "终端渲染器",
-      })
-    ).toHaveAccessibleDescription("选择终端渲染模式");
-    expect(
-      screen.getByRole("group", {
         name: "语言",
       })
     ).toHaveAccessibleDescription("选择界面语言");
+    expect(screen.queryByRole("group", { name: "终端渲染器" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("switch", { name: "选中自动复制" })).not.toBeInTheDocument();
     expect(darkThemePill).toHaveClass("settings-pill", "settings-pill-active");
     expect(darkThemePill).toHaveAttribute("aria-pressed", "true");
     expect(lightThemePill).toHaveClass("settings-pill");
     expect(lightThemePill).toHaveAttribute("aria-pressed", "false");
-    expect(standardRendererPill).toHaveAttribute("aria-pressed", "true");
     expect(chineseLanguagePill).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("keeps copy-on-select visible on desktop appearance settings", async () => {
+  it("renders terminal option groups through shared pills in general settings", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "appearance.terminalRenderer": "standard",
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "通用" }));
+
+    const standardRendererPill = await screen.findByRole("button", { name: "标准" });
+
+    expect(
+      screen.getByRole("group", {
+        name: "终端渲染器",
+      })
+    ).toHaveAccessibleDescription("选择终端渲染模式");
+    expect(standardRendererPill).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("keeps copy-on-select visible on desktop general settings", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "settings.get") {
         return {
@@ -917,12 +935,12 @@ describe("SettingsPage", () => {
     const store = createConnectedStore(sendCommand);
 
     renderSettingsPage(store);
-    fireEvent.click(screen.getByRole("button", { name: "外观" }));
+    fireEvent.click(screen.getByRole("button", { name: "通用" }));
 
     expect(await screen.findByRole("switch", { name: "选中自动复制" })).toBeInTheDocument();
   });
 
-  it("does not show copy-on-select on mobile appearance settings", async () => {
+  it("does not show copy-on-select on mobile general settings", async () => {
     viewportMocks.viewport = "mobile";
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "settings.get") {
@@ -935,9 +953,9 @@ describe("SettingsPage", () => {
     const store = createConnectedStore(sendCommand);
 
     renderSettingsPage(store);
-    fireEvent.click(screen.getByRole("button", { name: "外观" }));
+    fireEvent.click(screen.getByRole("button", { name: "通用" }));
 
-    await screen.findByText("主题");
+    await screen.findByText("通知");
 
     expect(screen.queryByRole("switch", { name: "选中自动复制" })).not.toBeInTheDocument();
     expect(screen.queryByText("选中自动复制")).not.toBeInTheDocument();
@@ -975,7 +993,7 @@ describe("SettingsPage", () => {
     expect(screen.getByRole("button", { name: "深色" })).toHaveAttribute("aria-pressed", "false");
   });
 
-  it("updates terminal renderer selection through the shared appearance pills", async () => {
+  it("updates terminal renderer selection through the shared general pills", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "settings.get") {
         return {
@@ -987,7 +1005,7 @@ describe("SettingsPage", () => {
     const store = createConnectedStore(sendCommand);
 
     renderSettingsPage(store);
-    fireEvent.click(screen.getByRole("button", { name: "外观" }));
+    fireEvent.click(screen.getByRole("button", { name: "通用" }));
     fireEvent.click(await screen.findByRole("button", { name: "兼容模式" }));
 
     await waitFor(() => {
@@ -1015,7 +1033,7 @@ describe("SettingsPage", () => {
     expect(screen.getByRole("button", { name: "标准" })).toHaveAttribute("aria-pressed", "false");
   });
 
-  it("preserves terminal renderer selection when a stale settings load resolves afterward", async () => {
+  it("preserves terminal renderer selection when a stale settings load resolves afterward in general settings", async () => {
     let resolveSettingsGet: ((value: Record<string, unknown>) => void) | undefined;
     const settingsGetPromise = new Promise<Record<string, unknown>>((resolve) => {
       resolveSettingsGet = resolve;
@@ -1029,7 +1047,7 @@ describe("SettingsPage", () => {
     const store = createConnectedStore(sendCommand);
 
     renderSettingsPage(store);
-    fireEvent.click(screen.getByRole("button", { name: "外观" }));
+    fireEvent.click(screen.getByRole("button", { name: "通用" }));
     fireEvent.click(await screen.findByRole("button", { name: "兼容模式" }));
 
     await waitFor(() => {
@@ -1061,7 +1079,7 @@ describe("SettingsPage", () => {
     expect(screen.getByRole("button", { name: "标准" })).toHaveAttribute("aria-pressed", "false");
   });
 
-  it("renders the copy-on-select switch from loaded appearance settings", async () => {
+  it("renders the copy-on-select switch from loaded general settings", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "settings.get") {
         return {
@@ -1073,16 +1091,18 @@ describe("SettingsPage", () => {
     const store = createConnectedStore(sendCommand);
 
     renderSettingsPage(store);
-    fireEvent.click(screen.getByRole("button", { name: "外观" }));
+    fireEvent.click(screen.getByRole("button", { name: "通用" }));
 
-    expect(await screen.findByRole("switch", { name: "选中自动复制" })).toHaveAttribute(
-      "aria-checked",
-      "true"
-    );
+    await waitFor(() => {
+      expect(screen.getByRole("switch", { name: "选中自动复制" })).toHaveAttribute(
+        "aria-checked",
+        "true"
+      );
+    });
     expect(store.get(terminalPreferencesAtom)).toEqual({ copyOnSelect: true });
   });
 
-  it("updates copy-on-select through the appearance switch and syncs the global atom", async () => {
+  it("updates copy-on-select through the general switch and syncs the global atom", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "settings.get") {
         return {
@@ -1094,7 +1114,7 @@ describe("SettingsPage", () => {
     const store = createConnectedStore(sendCommand);
 
     renderSettingsPage(store);
-    fireEvent.click(screen.getByRole("button", { name: "外观" }));
+    fireEvent.click(screen.getByRole("button", { name: "通用" }));
     fireEvent.click(await screen.findByRole("switch", { name: "选中自动复制" }));
 
     await waitFor(() => {
@@ -1114,7 +1134,7 @@ describe("SettingsPage", () => {
     expect(store.get(terminalPreferencesAtom)).toEqual({ copyOnSelect: true });
   });
 
-  it("renders copy-on-select from the terminal preferences atom before settings load resolves", async () => {
+  it("renders copy-on-select from the terminal preferences atom before general settings load resolves", async () => {
     let resolveSettingsGet: ((value: Record<string, unknown>) => void) | undefined;
     const settingsGetPromise = new Promise<Record<string, unknown>>((resolve) => {
       resolveSettingsGet = resolve;
@@ -1129,7 +1149,7 @@ describe("SettingsPage", () => {
     store.set(terminalPreferencesAtom, { copyOnSelect: true });
 
     renderSettingsPage(store);
-    fireEvent.click(screen.getByRole("button", { name: "外观" }));
+    fireEvent.click(screen.getByRole("button", { name: "通用" }));
 
     expect(await screen.findByRole("switch", { name: "选中自动复制" })).toHaveAttribute(
       "aria-checked",
@@ -1142,7 +1162,7 @@ describe("SettingsPage", () => {
     });
   });
 
-  it("preserves copy-on-select when a stale settings load resolves afterward", async () => {
+  it("preserves copy-on-select when a stale general settings load resolves afterward", async () => {
     let resolveSettingsGet: ((value: Record<string, unknown>) => void) | undefined;
     const settingsGetPromise = new Promise<Record<string, unknown>>((resolve) => {
       resolveSettingsGet = resolve;
@@ -1156,7 +1176,7 @@ describe("SettingsPage", () => {
     const store = createConnectedStore(sendCommand);
 
     renderSettingsPage(store);
-    fireEvent.click(screen.getByRole("button", { name: "外观" }));
+    fireEvent.click(screen.getByRole("button", { name: "通用" }));
     fireEvent.click(await screen.findByRole("switch", { name: "选中自动复制" }));
 
     await waitFor(() => {
