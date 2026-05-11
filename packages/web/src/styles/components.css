@@ -9312,6 +9312,8 @@ textarea.input {
     min-height: 0;
     flex-direction: column;
     gap: var(--sp-4);
+    padding: var(--sp-4);
+    padding-bottom: var(--sp-5);
   }
 
   .mobile-supervisor-sheet__actions,
@@ -9319,6 +9321,34 @@ textarea.input {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--sp-2);
+  }
+
+  .mobile-supervisor-sheet__footer {
+    width: 100%;
+    padding: var(--sp-2);
+    border: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
+    border-radius: 16px;
+    background: color-mix(in srgb, var(--bg-surface) 96%, var(--bg-page));
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--fg-white) 6%, transparent);
+  }
+
+  .mobile-supervisor-sheet.mobile-sheet--fullscreen .mobile-sheet__footer {
+    padding: var(--sp-2) var(--sp-4) calc(var(--mobile-safe-bottom) + var(--sp-4));
+  }
+
+  .mobile-supervisor-sheet__actions > .btn,
+  .mobile-supervisor-sheet__footer > .btn {
+    min-height: 44px;
+    box-shadow: none;
+  }
+
+  .mobile-supervisor-sheet__footer > * {
+    width: 100%;
+  }
+
+  .mobile-supervisor-sheet__footer > .btn:hover:not(:disabled) {
+    transform: none;
+    box-shadow: none;
   }
 
   .mobile-supervisor-sheet__detail-header {

@@ -470,6 +470,39 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(launchActionButton).toContain("box-shadow: none");
   });
 
+  it("keeps mobile supervisor sheets aligned with the shared fullscreen page spacing and action sizing", () => {
+    const supervisorRoot = getLastRuleBlock(".mobile-supervisor-sheet__root").replace(/\s+/g, " ");
+    const supervisorDetail = getLastRuleBlock(".mobile-supervisor-sheet__detail").replace(
+      /\s+/g,
+      " "
+    );
+    const supervisorFullscreenFooter = getLastRuleBlock(
+      ".mobile-supervisor-sheet.mobile-sheet--fullscreen .mobile-sheet__footer"
+    ).replace(/\s+/g, " ");
+    const supervisorActionButton = getLastRuleBlock(
+      ".mobile-supervisor-sheet__actions > .btn"
+    ).replace(/\s+/g, " ");
+    const supervisorFooterButton = getLastRuleBlock(
+      ".mobile-supervisor-sheet__footer > .btn"
+    ).replace(/\s+/g, " ");
+
+    expect(supervisorRoot).toContain("padding: var(--sp-4)");
+    expect(supervisorRoot).toContain("padding-bottom: var(--sp-5)");
+    expect(supervisorDetail).toContain("padding: var(--sp-4)");
+    expect(supervisorDetail).toContain("padding-bottom: var(--sp-5)");
+    expect(supervisorFullscreenFooter).toContain(
+      "padding: var(--sp-2) var(--sp-4) calc(var(--mobile-safe-bottom) + var(--sp-4))"
+    );
+    expect(supervisorActionButton).toContain("min-height: 44px");
+    expect(supervisorFooterButton).toContain("min-height: 44px");
+    expect(supervisorFooterButton).toContain("box-shadow: none");
+    expect(getLastRuleBlock(".mobile-supervisor-sheet__footer")).toContain("padding: var(--sp-2)");
+    expect(getLastRuleBlock(".mobile-supervisor-sheet__footer")).toContain("border-radius: 16px");
+    expect(getLastRuleBlock(".mobile-supervisor-sheet__footer")).toContain(
+      "background: color-mix("
+    );
+  });
+
   it("keeps the mobile workspace home screen aligned to settings chrome and editor-pane empty states", () => {
     const topbar = getLastRuleBlock(".mobile-topbar").replace(/\s+/g, " ");
     const emptyStage = getLastRuleBlock(".mobile-shell__agent-empty").replace(/\s+/g, " ");
