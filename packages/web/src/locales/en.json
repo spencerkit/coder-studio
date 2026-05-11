@@ -662,7 +662,7 @@
       "max_supervision_count_helper": "Set to 0 for no explicit cap. Evaluation can still stop earlier if the objective is complete.",
       "scheduled_at_placeholder": "Choose when to run",
       "scheduled_at": "Scheduled Run Time",
-      "scheduled_at_helper": "Optional one-shot automatic run time. Leave blank to rely only on turn-completed supervision."
+      "scheduled_at_helper": "Specify when to run the first evaluation. After the scheduled time, evaluations will trigger automatically at the end of each conversation turn. Leave blank to trigger automatically at the end of each turn."
     },
     "action": {
       "enable": "Enable Supervisor",

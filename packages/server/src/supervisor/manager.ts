@@ -574,6 +574,19 @@ export class SupervisorManager {
       return null;
     }
 
+    // If scheduled execution is set but the scheduled time has not arrived yet,
+    // skip turn_completed triggers. Only after the scheduled time passes will
+    // turn_completed triggers proceed with evaluation.
+    if (trigger === "turn_completed") {
+      if (
+        supervisor.scheduledAt !== undefined &&
+        supervisor.scheduledAt !== null &&
+        supervisor.scheduledAt > Date.now()
+      ) {
+        return null;
+      }
+    }
+
     if (trigger === "scheduled") {
       if (supervisor.scheduledAt === undefined || supervisor.scheduledAt > Date.now()) {
         return null;

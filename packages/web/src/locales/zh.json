@@ -662,7 +662,7 @@
       "max_supervision_count_helper": "填 0 表示不设上限。若目标已达成，评估仍可提前停止。",
       "scheduled_at_placeholder": "选择执行时间",
       "scheduled_at": "定时执行时间",
-      "scheduled_at_helper": "可选的一次性自动执行时间。留空则仅依赖 turn-completed 自动监督。"
+      "scheduled_at_helper": "指定首次执行时间。到达后开始执行评估，之后每轮对话结束自动触发。留空则每轮对话结束自动触发评估。"
     },
     "action": {
       "enable": "启用 Supervisor",
