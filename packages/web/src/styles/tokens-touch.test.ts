@@ -21,6 +21,17 @@ function getRuleBlock(selector: string): string {
 }
 
 describe("tokens.css touch tokens", () => {
+  it("defines named theme blocks for all built-in themes", () => {
+    expect(stylesheet).toContain(':root,\n[data-theme="mint-dark"]');
+    expect(stylesheet).toContain('[data-theme="mint-light"]');
+    expect(stylesheet).toContain('[data-theme="graphite-dark"]');
+    expect(stylesheet).toContain('[data-theme="graphite-light"]');
+    expect(stylesheet).toContain('[data-theme="nord-dark"]');
+    expect(stylesheet).toContain('[data-theme="nord-light"]');
+    expect(stylesheet).toContain('[data-theme="hc-dark"]');
+    expect(stylesheet).toContain('[data-theme="hc-light"]');
+  });
+
   it("defines desktop-default touch target tokens on :root", () => {
     const root = getRuleBlock(":root");
 

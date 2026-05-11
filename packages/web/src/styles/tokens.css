@@ -2,46 +2,10 @@
  * Aurora Mint Design System - Design Tokens
  *
  * All UI code MUST use these tokens. Never hardcode colors, spacing, or other values.
- * Phase 4 light theme will add [data-theme="light"] overrides.
+ * Theme-specific colors live in named [data-theme] blocks.
  */
 
 :root {
-  /* ========== Backgrounds ========== */
-  --bg-page: #0a1014;
-  --bg-surface: #11181f;
-  --bg-sidebar: #0d141a;
-  --bg-terminal: #0b1218;
-  --bg-hover: #1a2632;
-  --bg-active: #1e3040;
-  --bg-disabled: #151f28;
-  --bg-input: #0d141a;
-
-  /* ========== Borders ========== */
-  --border: #1e2a35;
-  --border-light: #263545;
-  --border-focus: #6cb6ff;
-  --border-error: #ff9eb0;
-
-  /* ========== Text ========== */
-  --text-primary: #e5edf3;
-  --text-secondary: #9fb0bc;
-  --text-tertiary: #728492;
-  --text-disabled: #4a5b6a;
-  --text-inverse: #0a1014;
-
-  /* ========== Accents ========== */
-  --accent-blue: #6cb6ff;
-  --accent-green: #78d7b2;
-  --accent-amber: #f1b86a;
-  --accent-pink: #ff9eb0;
-  --accent-purple: #c792ea;
-
-  /* ========== Semantic Colors ========== */
-  --color-success: #78d7b2;
-  --color-warning: #f1b86a;
-  --color-error: #ff9eb0;
-  --color-info: #6cb6ff;
-
   /* ========== Spacing (4px grid system) ========== */
   --sp-1: 4px;
   --sp-2: 8px;
@@ -86,13 +50,6 @@
   --font-medium: 500;
   --font-semibold: 600;
   --font-bold: 700;
-
-  /* ========== Shadows ========== */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
-  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.6);
-  --shadow-xl: 0 16px 48px rgba(0, 0, 0, 0.7);
-  --shadow-glow: 0 0 12px rgba(120, 215, 178, 0.3);
 
   /* ========== Transitions ========== */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
@@ -163,7 +120,6 @@
 
   /* Scrollbar */
   --scrollbar-width: 8px;
-  --scrollbar-thumb: var(--border-light);
   --scrollbar-track: transparent;
 
   /* ========== Touch / Pointer (Mobile-Friendly Phase 0) ========== */
@@ -175,9 +131,57 @@
   --touch-hit-slop: 0px;
 }
 
-/* ========== Phase 4: Light Theme ========== */
-[data-theme="light"] {
-  /* Backgrounds - inverted for light mode */
+:root,
+[data-theme="mint-dark"] {
+  /* ========== Backgrounds ========== */
+  --bg-page: #0a1014;
+  --bg-surface: #11181f;
+  --bg-sidebar: #0d141a;
+  --bg-terminal: #0b1218;
+  --bg-hover: #1a2632;
+  --bg-active: #1e3040;
+  --bg-disabled: #151f28;
+  --bg-input: #0d141a;
+
+  /* ========== Borders ========== */
+  --border: #1e2a35;
+  --border-light: #263545;
+  --border-focus: #6cb6ff;
+  --border-error: #ff9eb0;
+
+  /* ========== Text ========== */
+  --text-primary: #e5edf3;
+  --text-secondary: #9fb0bc;
+  --text-tertiary: #728492;
+  --text-disabled: #4a5b6a;
+  --text-inverse: #0a1014;
+
+  /* ========== Accents ========== */
+  --accent-blue: #6cb6ff;
+  --accent-green: #78d7b2;
+  --accent-amber: #f1b86a;
+  --accent-pink: #ff9eb0;
+  --accent-purple: #c792ea;
+
+  /* ========== Semantic Colors ========== */
+  --color-success: #78d7b2;
+  --color-warning: #f1b86a;
+  --color-error: #ff9eb0;
+  --color-info: #6cb6ff;
+
+  /* ========== Shadows ========== */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.6);
+  --shadow-xl: 0 16px 48px rgba(0, 0, 0, 0.7);
+  --shadow-glow: 0 0 12px rgba(120, 215, 178, 0.3);
+
+  /* Scrollbar */
+  --scrollbar-thumb: #263545;
+}
+
+[data-theme="mint-light"] {
+  /* ========== Backgrounds ========== */
   --bg-page: #f8fafb;
   --bg-surface: #ffffff;
   --bg-sidebar: #f4f6f8;
@@ -187,33 +191,33 @@
   --bg-disabled: #f0f3f6;
   --bg-input: #ffffff;
 
-  /* Borders */
+  /* ========== Borders ========== */
   --border: #d0d7de;
   --border-light: #e1e4e8;
   --border-focus: #0969da;
   --border-error: #cf222e;
 
-  /* Text */
+  /* ========== Text ========== */
   --text-primary: #1f2328;
   --text-secondary: #57606a;
   --text-tertiary: #8b949e;
   --text-disabled: #6e7681;
   --text-inverse: #ffffff;
 
-  /* Accents - adjusted for light mode visibility */
+  /* ========== Accents ========== */
   --accent-blue: #0969da;
   --accent-green: #1a7f37;
   --accent-amber: #9a6700;
   --accent-pink: #cf222e;
   --accent-purple: #8250df;
 
-  /* Semantic Colors */
+  /* ========== Semantic Colors ========== */
   --color-success: #1a7f37;
   --color-warning: #9a6700;
   --color-error: #cf222e;
   --color-info: #0969da;
 
-  /* Shadows - lighter for light mode */
+  /* ========== Shadows ========== */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.08);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1);
   --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.12);
@@ -222,6 +226,294 @@
 
   /* Scrollbar */
   --scrollbar-thumb: #d0d7de;
+}
+
+[data-theme="graphite-dark"] {
+  /* ========== Backgrounds ========== */
+  --bg-page: #0d1014;
+  --bg-surface: #14171c;
+  --bg-sidebar: #101318;
+  --bg-terminal: #111317;
+  --bg-hover: #1c2026;
+  --bg-active: #252b33;
+  --bg-disabled: #161a20;
+  --bg-input: #101318;
+
+  /* ========== Borders ========== */
+  --border: #2a3038;
+  --border-light: #353c46;
+  --border-focus: #9bb8ff;
+  --border-error: #ffa198;
+
+  /* ========== Text ========== */
+  --text-primary: #e6e6e6;
+  --text-secondary: #a8b0ba;
+  --text-tertiary: #7d8590;
+  --text-disabled: #5d6672;
+  --text-inverse: #111317;
+
+  /* ========== Accents ========== */
+  --accent-blue: #7aa2f7;
+  --accent-green: #8ddb8c;
+  --accent-amber: #dcb86a;
+  --accent-pink: #ff7b72;
+  --accent-purple: #c099ff;
+
+  /* ========== Semantic Colors ========== */
+  --color-success: #8ddb8c;
+  --color-warning: #dcb86a;
+  --color-error: #ff7b72;
+  --color-info: #7aa2f7;
+
+  /* ========== Shadows ========== */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.42);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.54);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.64);
+  --shadow-xl: 0 16px 48px rgba(0, 0, 0, 0.74);
+  --shadow-glow: 0 0 12px rgba(122, 162, 247, 0.24);
+
+  /* Scrollbar */
+  --scrollbar-thumb: #353c46;
+}
+
+[data-theme="graphite-light"] {
+  /* ========== Backgrounds ========== */
+  --bg-page: #edf1f5;
+  --bg-surface: #ffffff;
+  --bg-sidebar: #e7ebf0;
+  --bg-terminal: #f3f4f6;
+  --bg-hover: #dde3ea;
+  --bg-active: #d2d9e2;
+  --bg-disabled: #eef2f6;
+  --bg-input: #ffffff;
+
+  /* ========== Borders ========== */
+  --border: #c7d0da;
+  --border-light: #d8dee6;
+  --border-focus: #2563eb;
+  --border-error: #d14343;
+
+  /* ========== Text ========== */
+  --text-primary: #1f2933;
+  --text-secondary: #52606d;
+  --text-tertiary: #7b8794;
+  --text-disabled: #9aa5b1;
+  --text-inverse: #ffffff;
+
+  /* ========== Accents ========== */
+  --accent-blue: #1d4ed8;
+  --accent-green: #15803d;
+  --accent-amber: #a16207;
+  --accent-pink: #d14343;
+  --accent-purple: #7c3aed;
+
+  /* ========== Semantic Colors ========== */
+  --color-success: #15803d;
+  --color-warning: #a16207;
+  --color-error: #d14343;
+  --color-info: #1d4ed8;
+
+  /* ========== Shadows ========== */
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.08);
+  --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.1);
+  --shadow-lg: 0 8px 32px rgba(15, 23, 42, 0.12);
+  --shadow-xl: 0 16px 48px rgba(15, 23, 42, 0.16);
+  --shadow-glow: 0 0 12px rgba(29, 78, 216, 0.18);
+
+  /* Scrollbar */
+  --scrollbar-thumb: #c7d0da;
+}
+
+[data-theme="nord-dark"] {
+  /* ========== Backgrounds ========== */
+  --bg-page: #242933;
+  --bg-surface: #2e3440;
+  --bg-sidebar: #282e39;
+  --bg-terminal: #2e3440;
+  --bg-hover: #384152;
+  --bg-active: #434c5e;
+  --bg-disabled: #2b313c;
+  --bg-input: #272d38;
+
+  /* ========== Borders ========== */
+  --border: #4c566a;
+  --border-light: #616e88;
+  --border-focus: #88c0d0;
+  --border-error: #d08770;
+
+  /* ========== Text ========== */
+  --text-primary: #d8dee9;
+  --text-secondary: #b5c1d2;
+  --text-tertiary: #7b88a1;
+  --text-disabled: #616e88;
+  --text-inverse: #2e3440;
+
+  /* ========== Accents ========== */
+  --accent-blue: #81a1c1;
+  --accent-green: #a3be8c;
+  --accent-amber: #ebcb8b;
+  --accent-pink: #bf616a;
+  --accent-purple: #b48ead;
+
+  /* ========== Semantic Colors ========== */
+  --color-success: #a3be8c;
+  --color-warning: #ebcb8b;
+  --color-error: #bf616a;
+  --color-info: #88c0d0;
+
+  /* ========== Shadows ========== */
+  --shadow-sm: 0 1px 2px rgba(17, 24, 39, 0.36);
+  --shadow-md: 0 4px 12px rgba(17, 24, 39, 0.46);
+  --shadow-lg: 0 8px 32px rgba(17, 24, 39, 0.58);
+  --shadow-xl: 0 16px 48px rgba(17, 24, 39, 0.68);
+  --shadow-glow: 0 0 12px rgba(136, 192, 208, 0.26);
+
+  /* Scrollbar */
+  --scrollbar-thumb: #4c566a;
+}
+
+[data-theme="nord-light"] {
+  /* ========== Backgrounds ========== */
+  --bg-page: #e8ecf2;
+  --bg-surface: #eceff4;
+  --bg-sidebar: #e1e7ef;
+  --bg-terminal: #eceff4;
+  --bg-hover: #dde3eb;
+  --bg-active: #d8dee9;
+  --bg-disabled: #edf1f6;
+  --bg-input: #f7f9fc;
+
+  /* ========== Borders ========== */
+  --border: #c6ceda;
+  --border-light: #d8dee9;
+  --border-focus: #5e81ac;
+  --border-error: #bf616a;
+
+  /* ========== Text ========== */
+  --text-primary: #2e3440;
+  --text-secondary: #4c566a;
+  --text-tertiary: #7b88a1;
+  --text-disabled: #93a0b7;
+  --text-inverse: #ffffff;
+
+  /* ========== Accents ========== */
+  --accent-blue: #5e81ac;
+  --accent-green: #4c7a5b;
+  --accent-amber: #a77f2f;
+  --accent-pink: #bf616a;
+  --accent-purple: #8f5b9c;
+
+  /* ========== Semantic Colors ========== */
+  --color-success: #4c7a5b;
+  --color-warning: #a77f2f;
+  --color-error: #bf616a;
+  --color-info: #5e81ac;
+
+  /* ========== Shadows ========== */
+  --shadow-sm: 0 1px 2px rgba(46, 52, 64, 0.08);
+  --shadow-md: 0 4px 12px rgba(46, 52, 64, 0.1);
+  --shadow-lg: 0 8px 32px rgba(46, 52, 64, 0.12);
+  --shadow-xl: 0 16px 48px rgba(46, 52, 64, 0.15);
+  --shadow-glow: 0 0 12px rgba(94, 129, 172, 0.2);
+
+  /* Scrollbar */
+  --scrollbar-thumb: #c6ceda;
+}
+
+[data-theme="hc-dark"] {
+  /* ========== Backgrounds ========== */
+  --bg-page: #000000;
+  --bg-surface: #000000;
+  --bg-sidebar: #000000;
+  --bg-terminal: #000000;
+  --bg-hover: #141414;
+  --bg-active: #264f78;
+  --bg-disabled: #0d0d0d;
+  --bg-input: #000000;
+
+  /* ========== Borders ========== */
+  --border: #ffffff;
+  --border-light: #ffff00;
+  --border-focus: #ffff00;
+  --border-error: #ff4d4d;
+
+  /* ========== Text ========== */
+  --text-primary: #ffffff;
+  --text-secondary: #f0f0f0;
+  --text-tertiary: #d0d0d0;
+  --text-disabled: #8f8f8f;
+  --text-inverse: #000000;
+
+  /* ========== Accents ========== */
+  --accent-blue: #66b3ff;
+  --accent-green: #00ff7f;
+  --accent-amber: #ffff66;
+  --accent-pink: #ff4d4d;
+  --accent-purple: #ff7fff;
+
+  /* ========== Semantic Colors ========== */
+  --color-success: #00ff7f;
+  --color-warning: #ffff66;
+  --color-error: #ff4d4d;
+  --color-info: #66b3ff;
+
+  /* ========== Shadows ========== */
+  --shadow-sm: 0 0 0 1px rgba(255, 255, 255, 0.55);
+  --shadow-md: 0 0 0 1px rgba(255, 255, 255, 0.72);
+  --shadow-lg: 0 0 0 2px rgba(255, 255, 255, 0.72);
+  --shadow-xl: 0 0 0 3px rgba(255, 255, 255, 0.8);
+  --shadow-glow: 0 0 0 2px rgba(255, 255, 0, 0.52);
+
+  /* Scrollbar */
+  --scrollbar-thumb: #ffffff;
+}
+
+[data-theme="hc-light"] {
+  /* ========== Backgrounds ========== */
+  --bg-page: #ffffff;
+  --bg-surface: #ffffff;
+  --bg-sidebar: #ffffff;
+  --bg-terminal: #ffffff;
+  --bg-hover: #eef4ff;
+  --bg-active: #add6ff;
+  --bg-disabled: #f3f3f3;
+  --bg-input: #ffffff;
+
+  /* ========== Borders ========== */
+  --border: #000000;
+  --border-light: #5c5c5c;
+  --border-focus: #0037da;
+  --border-error: #b00020;
+
+  /* ========== Text ========== */
+  --text-primary: #000000;
+  --text-secondary: #111111;
+  --text-tertiary: #333333;
+  --text-disabled: #5c5c5c;
+  --text-inverse: #ffffff;
+
+  /* ========== Accents ========== */
+  --accent-blue: #0037da;
+  --accent-green: #006b3c;
+  --accent-amber: #7a5c00;
+  --accent-pink: #b00020;
+  --accent-purple: #7a00cc;
+
+  /* ========== Semantic Colors ========== */
+  --color-success: #006b3c;
+  --color-warning: #7a5c00;
+  --color-error: #b00020;
+  --color-info: #0037da;
+
+  /* ========== Shadows ========== */
+  --shadow-sm: 0 0 0 1px rgba(0, 0, 0, 0.18);
+  --shadow-md: 0 0 0 1px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 0 0 2px rgba(0, 0, 0, 0.32);
+  --shadow-xl: 0 0 0 3px rgba(0, 0, 0, 0.36);
+  --shadow-glow: 0 0 0 2px rgba(0, 55, 218, 0.3);
+
+  /* Scrollbar */
+  --scrollbar-thumb: #5c5c5c;
 }
 
 /* ========== Mobile / Touch Override (Phase 0) ========== */
