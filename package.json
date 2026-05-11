@@ -23,7 +23,7 @@
     "acceptance:phase1": "pnpm --dir e2e exec playwright test --config playwright.config.ts --grep @phase1",
     "acceptance:phase1:update-baseline": "pnpm --dir e2e exec playwright test --config playwright.config.ts --grep @phase1 --update-snapshots",
     "acceptance:phase1:report": "node e2e/fixtures/report-writer.ts phase-1",
-    "e2e-ui": "sh -c 'rm -rf e2e-ui/output e2e-ui/test-results; pnpm --dir e2e-ui exec playwright test --config playwright.config.ts; status=$?; pnpm --dir e2e-ui exec tsx report/build-report.ts; exit $status'",
+    "e2e-ui": "tsx scripts/e2e-ui.ts",
     "lint": "biome lint .",
     "lint:fix": "biome lint --write .",
     "format": "biome format --write .",
