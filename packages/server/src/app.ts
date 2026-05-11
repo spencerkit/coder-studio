@@ -87,6 +87,34 @@ export async function buildFastifyApp(deps: AppDeps): Promise<FastifyInstance> {
     })
   );
 
+  // CSP Header Injection (optional, controlled by `relaxCsp` config)
+  //
+  // xterm.js and Monaco Editor internally use `eval` and `new Function` for
+  // performance optimizations (e.g., JIT-compiled rendering loops). When a
+  // browser extension (e.g., uBlock Origin, AdGuard) injects a strict CSP,
+  // these libraries silently fail:
+  // - xterm.js: terminal shows only "[Process exited with code 0]"
+  // - Monaco Editor: code editor panel renders blank
+  //
+  // When `relaxCsp: true`, we inject a permissive CSP header that allows
+  // 'unsafe-eval' and 'unsafe-inline', plus WebSocket connections (ws:/wss:).
+  // This is intended for local development scenarios where browser extensions
+  // interfere. For production, leave this disabled and configure CSP at the
+  // reverse proxy level.
+  if (deps.config.relaxCsp) {
+    app.addHook("onRequest", async (_request, reply) => {
+      reply.header(
+        "Content-Security-Policy",
+        "default-src 'self'; " +
+          "script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
+          "style-src 'self' 'unsafe-inline'; " +
+          "connect-src 'self' ws: wss:; " +
+          "img-src 'self' data: blob:; " +
+          "font-src 'self' data:;"
+      );
+    });
+  }
+
   await app.register(compress);
 
   await app.register(multipart, {
