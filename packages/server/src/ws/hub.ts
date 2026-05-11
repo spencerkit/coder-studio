@@ -320,6 +320,10 @@ export class WsHub implements Broadcaster {
    */
   pingAll(): void {
     for (const client of this.clients.values()) {
+      if (!client.alive) {
+        client.close(1011, "keepalive_timeout");
+        continue;
+      }
       client.ping();
     }
   }

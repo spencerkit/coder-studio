@@ -13,6 +13,7 @@ import type { FastifyRequest } from "fastify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import WebSocket from "ws";
 import { EventBus } from "../bus/event-bus.js";
+import "../commands/connection.js";
 import "../commands/terminal.js";
 import { clearPendingTerminalInput } from "../commands/terminal.js";
 import type { ServerConfig } from "../config.js";
@@ -34,6 +35,7 @@ type MockSocket = {
 
 type MessageHandler = ((data: Buffer, isBinary?: boolean) => void) | undefined;
 type CloseHandler = (() => void) | undefined;
+type PongHandler = (() => void) | undefined;
 
 type ResultMessage = Extract<ServerToClient, { kind: "result" }>;
 
@@ -88,6 +90,11 @@ const getMessageHandler = (socket: MockSocket): MessageHandler =>
 const getCloseHandler = (socket: MockSocket): CloseHandler =>
   socket.on.mock.calls.find((call: unknown[]) => call[0] === "close")?.[1] as
     | CloseHandler
+    | undefined;
+
+const getPongHandler = (socket: MockSocket): PongHandler =>
+  socket.on.mock.calls.find((call: unknown[]) => call[0] === "pong")?.[1] as
+    | PongHandler
     | undefined;
 
 const subscribeToAllTopics = (socket: MockSocket) => {
@@ -433,6 +440,86 @@ describe("WsHub", () => {
     hub.pingAll();
 
     expect(socket.ping).toHaveBeenCalled();
+  });
+
+  it("handles connection.probe commands", async () => {
+    const socket = createMockSocket();
+    hub.handleConnection(socket as never, createMockRequest());
+    const messageHandler = getMessageHandler(socket);
+    socket.send.mockClear();
+
+    messageHandler?.(
+      Buffer.from(
+        JSON.stringify({
+          kind: "command",
+          id: "00000000-0000-4000-8000-000000000001",
+          op: "connection.probe",
+          args: {},
+        })
+      )
+    );
+
+    await Promise.resolve();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(findResultMessage(socket, "00000000-0000-4000-8000-000000000001")).toMatchObject({
+      ok: true,
+      data: {
+        ok: true,
+      },
+    });
+  });
+
+  it("closes clients that stay unresponsive across keepalive sweeps", () => {
+    const socket = createMockSocket();
+    hub.handleConnection(socket as never, createMockRequest());
+
+    hub.pingAll();
+    expect(socket.ping).toHaveBeenCalledTimes(1);
+    expect(socket.close).not.toHaveBeenCalled();
+
+    hub.pingAll();
+    expect(socket.close).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not close clients that answer the previous keepalive ping", () => {
+    const socket = createMockSocket();
+    hub.handleConnection(socket as never, createMockRequest());
+    const pongHandler = getPongHandler(socket);
+
+    hub.pingAll();
+    pongHandler?.();
+    hub.pingAll();
+
+    expect(socket.ping).toHaveBeenCalledTimes(2);
+    expect(socket.close).not.toHaveBeenCalled();
+  });
+
+  it("treats inbound commands as proof of life before the next keepalive sweep", async () => {
+    const socket = createMockSocket();
+    hub.handleConnection(socket as never, createMockRequest());
+    const messageHandler = getMessageHandler(socket);
+
+    hub.pingAll();
+
+    messageHandler?.(
+      Buffer.from(
+        JSON.stringify({
+          kind: "command",
+          id: "00000000-0000-4000-8000-000000000002",
+          op: "connection.probe",
+          args: {},
+        })
+      )
+    );
+
+    await Promise.resolve();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    hub.pingAll();
+
+    expect(socket.close).not.toHaveBeenCalled();
+    expect(socket.ping).toHaveBeenCalledTimes(2);
   });
 
   it("should return null for writer (deprecated - use FencingManager)", () => {

@@ -4449,6 +4449,78 @@ describe("XtermHost", () => {
     });
   });
 
+  it("replays terminal history when websocket recovery succeeds without a status transition", async () => {
+    const store = createStore();
+    const initialReplayChunk = new TextEncoder().encode("initial replay\n");
+    const recoveredReplayChunk = new TextEncoder().encode("recovered after probe\n");
+    let recoveryHandler:
+      | ((trigger: "visibility_resume" | "network_online" | "manual_retry" | "reconnected") => void)
+      | undefined;
+    let replayCount = 0;
+    const sendCommand = vi
+      .fn()
+      .mockImplementation((op: string, args: { terminalId?: string; lastSeq?: number }) => {
+        if (op !== "terminal.replay") {
+          return Promise.resolve({ status: "ok" });
+        }
+
+        replayCount += 1;
+        if (replayCount === 1) {
+          expect(args.lastSeq).toBe(0);
+          return Promise.resolve({
+            status: "ok",
+            transport: "binary",
+            streamId: 980,
+            size: initialReplayChunk.byteLength,
+            seq: 100,
+            bytes: initialReplayChunk,
+          } satisfies TerminalReplayPayload);
+        }
+
+        expect(args.lastSeq).toBe(100);
+        return Promise.resolve({
+          status: "ok",
+          transport: "binary",
+          streamId: 981,
+          size: recoveredReplayChunk.byteLength,
+          seq: 126,
+          bytes: recoveredReplayChunk,
+        } satisfies TerminalReplayPayload);
+      });
+
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe: vi.fn(() => vi.fn()),
+      getStatus: vi.fn(() => "connected"),
+      onStatus: vi.fn(() => () => {}),
+      onRecovery: vi.fn((handler: typeof recoveryHandler) => {
+        recoveryHandler = handler;
+        return () => {};
+      }),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="probe-recovery-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expectTerminalWriteData(initialReplayChunk);
+    });
+
+    await act(async () => {
+      recoveryHandler?.("network_online");
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(replayCount).toBe(2);
+      expectTerminalWriteData(recoveredReplayChunk);
+    });
+  });
+
   it("waits for reconnect replay bytes to finish rendering before starting another reconnect recovery", async () => {
     const store = createStore();
     const initialReplayChunk = new TextEncoder().encode("initial replay\n");
@@ -4570,6 +4642,125 @@ describe("XtermHost", () => {
     await waitFor(() => {
       expect(replayCount).toBe(3);
       expectTerminalWriteData(laterReconnectChunk);
+    });
+  });
+
+  it("queues probe-triggered recovery that arrives while historical recovery writes are still in flight", async () => {
+    const store = createStore();
+    const initialReplayChunk = new TextEncoder().encode("initial replay\n");
+    const delayedReconnectReplay = new TextEncoder().encode("delayed reconnect replay\n");
+    const queuedProbeReplay = new TextEncoder().encode("queued probe recovery\n");
+    let recoveryHandler:
+      | ((trigger: "visibility_resume" | "network_online" | "manual_retry" | "reconnected") => void)
+      | undefined;
+    let replayCount = 0;
+    let releaseDelayedReconnectWrite: (() => void) | undefined;
+
+    mockTerminal.write.mockImplementation((data: Uint8Array | string, callback?: () => void) => {
+      if (data === delayedReconnectReplay) {
+        releaseDelayedReconnectWrite = callback;
+        return;
+      }
+      callback?.();
+    });
+
+    const sendCommand = vi
+      .fn()
+      .mockImplementation((op: string, args: { terminalId?: string; lastSeq?: number }) => {
+        if (op !== "terminal.replay") {
+          return Promise.resolve({ status: "ok" });
+        }
+
+        replayCount += 1;
+        if (replayCount === 1) {
+          expect(args.lastSeq).toBe(0);
+          return Promise.resolve({
+            status: "ok",
+            transport: "binary",
+            streamId: 982,
+            size: initialReplayChunk.byteLength,
+            seq: 100,
+            bytes: initialReplayChunk,
+          } satisfies TerminalReplayPayload);
+        }
+
+        if (replayCount === 2) {
+          expect(args.lastSeq).toBe(100);
+          return Promise.resolve({
+            status: "ok",
+            transport: "binary",
+            streamId: 983,
+            size: delayedReconnectReplay.byteLength,
+            seq: 200,
+            bytes: delayedReconnectReplay,
+          } satisfies TerminalReplayPayload);
+        }
+
+        expect(args.lastSeq).toBe(200);
+        return Promise.resolve({
+          status: "ok",
+          transport: "binary",
+          streamId: 984,
+          size: queuedProbeReplay.byteLength,
+          seq: 240,
+          bytes: queuedProbeReplay,
+        } satisfies TerminalReplayPayload);
+      });
+
+    mockTerminal.cols = 132;
+    mockTerminal.rows = 36;
+
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe: vi.fn(() => vi.fn()),
+      getStatus: vi.fn(() => "connected"),
+      onStatus: vi.fn(() => () => {}),
+      onRecovery: vi.fn((handler: typeof recoveryHandler) => {
+        recoveryHandler = handler;
+        return () => {};
+      }),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="queued-probe-recovery-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expectTerminalWriteData(initialReplayChunk);
+    });
+
+    await act(async () => {
+      recoveryHandler?.("network_online");
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(replayCount).toBe(2);
+      expectTerminalWriteData(delayedReconnectReplay);
+    });
+
+    expect(typeof releaseDelayedReconnectWrite).toBe("function");
+
+    await act(async () => {
+      recoveryHandler?.("visibility_resume");
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(replayCount).toBe(2);
+
+    await act(async () => {
+      releaseDelayedReconnectWrite?.();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(replayCount).toBe(3);
+      expectTerminalWriteData(queuedProbeReplay);
     });
   });
 

@@ -64,8 +64,14 @@ export class WsClient {
     this.setupSocketHandlers();
   }
 
+  private markAlive(): void {
+    this.isAlive = true;
+  }
+
   private setupSocketHandlers(): void {
     this.socket.on("message", (data: Buffer, isBinary: boolean) => {
+      this.markAlive();
+
       if (isBinary) {
         this.messageHandler?.(data);
         return;
@@ -87,7 +93,7 @@ export class WsClient {
     });
 
     this.socket.on("pong", () => {
-      this.isAlive = true;
+      this.markAlive();
     });
   }
 

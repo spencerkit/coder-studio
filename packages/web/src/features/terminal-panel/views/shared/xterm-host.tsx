@@ -1892,6 +1892,26 @@ export function XtermHost({
     return unsubscribe;
   }, [wsClient]);
 
+  useEffect(() => {
+    if (!wsClient || typeof wsClient.onRecovery !== "function") {
+      return;
+    }
+
+    return wsClient.onRecovery((trigger) => {
+      if (trigger === "reconnected") {
+        return;
+      }
+
+      pendingRecoveryModeRef.current = "reconnect";
+
+      if (coldStartStateRef.current === "in-flight") {
+        return;
+      }
+
+      reconnectRecoveryTriggerRef.current?.();
+    });
+  }, [wsClient]);
+
   /**
    * Write new output chunks to terminal
    */
