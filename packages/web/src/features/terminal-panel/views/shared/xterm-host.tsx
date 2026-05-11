@@ -11,18 +11,14 @@
 import { type TerminalInputActivity, Topics } from "@coder-studio/core";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
-import { useAtom, useAtomValue } from "jotai";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { themeAtom } from "../../../../atoms/app-ui";
 import { dispatchCommandAtom, wsClientAtom } from "../../../../atoms/connection";
 import { useViewport } from "../../../../hooks/use-viewport";
 import { useTranslation } from "../../../../lib/i18n";
-import type {
-  ConnectionStatus,
-  TerminalBinaryPayload,
-  TerminalReplayPayload,
-  TerminalSnapshotPayload,
-} from "../../../../ws/client";
+import type { ConnectionStatus, TerminalBinaryPayload } from "../../../../ws/client";
+import { pushToastAtom } from "../../../notifications/atoms";
 import type { OutputBuffer } from "../../atoms";
 import { terminalMetaAtomFamily, terminalOutputAtomFamily } from "../../atoms";
 import {
@@ -39,6 +35,7 @@ import {
   type SoftTerminalKeyId,
   toggleCtrlMode,
 } from "../../mobile/virtual-terminal-keys";
+import { terminalPreferencesAtom } from "../../preferences";
 import {
   classifyReplayFailure,
   TERMINAL_REPLAY_TIMEOUT_MS,
@@ -54,6 +51,7 @@ const MOBILE_TOUCH_MOMENTUM_STOP_VELOCITY_PX_PER_MS = 0.02;
 const MOBILE_TOUCH_MOMENTUM_FRICTION_PER_FRAME = 0.92;
 const MOBILE_TOUCH_MOMENTUM_FRAME_MS = 16;
 const TERMINAL_FOCUS_REPORTING_BYTES = new Set(["\x1b[I", "\x1b[O"]);
+const TERMINAL_COPY_ON_SELECT_ERROR_THROTTLE_MS = 3_000;
 
 interface TerminalInputDraftState {
   nextDraft: string;
@@ -431,8 +429,10 @@ export function XtermHost({
   const t = useTranslation();
   const viewport = useViewport();
   const uiTheme = useAtomValue(themeAtom);
+  const terminalPreferences = useAtomValue(terminalPreferencesAtom);
   const wsClient = useAtomValue(wsClientAtom);
   const dispatch = useAtomValue(dispatchCommandAtom);
+  const pushToast = useSetAtom(pushToastAtom);
   const [outputAtom, setOutputAtom] = useAtom(terminalOutputAtomFamily(terminalId));
   const meta = useAtomValue(terminalMetaAtomFamily(terminalId));
   const terminalKind = terminalKindProp ?? meta?.kind ?? "shell";
@@ -472,6 +472,9 @@ export function XtermHost({
   const hydrationHandleRef = useRef<HydrationRequestHandle | null>(null);
   const hydrationReleasedRef = useRef(false);
   const reconnectRecoveryTriggerRef = useRef<(() => void) | null>(null);
+  const selectedTextRef = useRef("");
+  const lastCopyOnSelectFailureAtRef = useRef(0);
+  const copyOnSelectPointerIdRef = useRef<number | null>(null);
   const touchScrollStateRef = useRef<{
     activeTouchId: number | null;
     lastClientY: number;
@@ -856,6 +859,42 @@ export function XtermHost({
     terminalRef.current?.focus();
   }, []);
 
+  const pushCopyOnSelectFailureToast = useCallback(() => {
+    const now = Date.now();
+    if (now - lastCopyOnSelectFailureAtRef.current < TERMINAL_COPY_ON_SELECT_ERROR_THROTTLE_MS) {
+      return;
+    }
+
+    lastCopyOnSelectFailureAtRef.current = now;
+    pushToast({
+      kind: "error",
+      title: t("settings.copy_on_select_failed_title"),
+      body: t("settings.copy_on_select_failed_body"),
+    });
+  }, [pushToast, t]);
+
+  const copySelectionOnSelect = useCallback(async () => {
+    if (viewport === "mobile" || !terminalPreferences.copyOnSelect) {
+      return;
+    }
+
+    const terminal = terminalRef.current;
+    if (!terminal?.hasSelection()) {
+      return;
+    }
+
+    const selection = selectedTextRef.current || terminal.getSelection();
+    if (!selection) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(selection);
+    } catch {
+      pushCopyOnSelectFailureToast();
+    }
+  }, [pushCopyOnSelectFailureToast, terminalPreferences.copyOnSelect, viewport]);
+
   /**
    * Handle user input - dispatch to server
    */
@@ -1076,6 +1115,12 @@ export function XtermHost({
     terminal.onData((data) => {
       void handleInputRef.current(data);
     });
+    const selectionChangeDisposable =
+      typeof terminal.onSelectionChange === "function"
+        ? terminal.onSelectionChange(() => {
+            selectedTextRef.current = terminal.hasSelection() ? terminal.getSelection() : "";
+          })
+        : undefined;
     terminal.attachCustomKeyEventHandler((event) => !shouldBypassPtyForKeyboardPaste(event));
 
     terminal.open(containerRef.current);
@@ -1733,6 +1778,11 @@ export function XtermHost({
         terminalRef.current = null;
         fitAddonRef.current = null;
       }
+      if (typeof selectionChangeDisposable === "function") {
+        selectionChangeDisposable();
+      } else {
+        selectionChangeDisposable?.dispose?.();
+      }
     };
   }, [
     dispatch,
@@ -1745,6 +1795,78 @@ export function XtermHost({
     workspaceId,
     wsClient,
   ]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (
+      !container ||
+      typeof document === "undefined" ||
+      viewport === "mobile" ||
+      !terminalPreferences.copyOnSelect
+    ) {
+      return;
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (event.pointerType === "touch" || event.pointerType === "pen") {
+        return;
+      }
+
+      copyOnSelectPointerIdRef.current = event.pointerId;
+    };
+
+    const handleDocumentPointerDown = (event: PointerEvent) => {
+      if (event.pointerType === "touch" || event.pointerType === "pen") {
+        return;
+      }
+
+      const pressTarget = event.target;
+      if (pressTarget instanceof Node && container.contains(pressTarget)) {
+        return;
+      }
+
+      if (copyOnSelectPointerIdRef.current === event.pointerId) {
+        copyOnSelectPointerIdRef.current = null;
+      }
+    };
+
+    const clearTrackedPointer = (event: PointerEvent) => {
+      if (copyOnSelectPointerIdRef.current === event.pointerId) {
+        copyOnSelectPointerIdRef.current = null;
+      }
+    };
+
+    const handlePointerUp = (event: PointerEvent) => {
+      if (event.pointerType === "touch" || event.pointerType === "pen") {
+        return;
+      }
+
+      const releaseTarget = event.target;
+      const releasedInsideHost = releaseTarget instanceof Node && container.contains(releaseTarget);
+      const releasedTrackedPointer =
+        copyOnSelectPointerIdRef.current !== null &&
+        copyOnSelectPointerIdRef.current === event.pointerId;
+
+      copyOnSelectPointerIdRef.current = null;
+      if (!releasedInsideHost && !releasedTrackedPointer) {
+        return;
+      }
+
+      void copySelectionOnSelect();
+    };
+
+    container.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("pointerdown", handleDocumentPointerDown);
+    document.addEventListener("pointerup", handlePointerUp);
+    document.addEventListener("pointercancel", clearTrackedPointer);
+    return () => {
+      copyOnSelectPointerIdRef.current = null;
+      container.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("pointerdown", handleDocumentPointerDown);
+      document.removeEventListener("pointerup", handlePointerUp);
+      document.removeEventListener("pointercancel", clearTrackedPointer);
+    };
+  }, [copySelectionOnSelect, terminalPreferences.copyOnSelect, viewport]);
 
   useEffect(() => {
     if (!wsClient || typeof wsClient.onStatus !== "function") {
@@ -1768,6 +1890,26 @@ export function XtermHost({
     });
 
     return unsubscribe;
+  }, [wsClient]);
+
+  useEffect(() => {
+    if (!wsClient || typeof wsClient.onRecovery !== "function") {
+      return;
+    }
+
+    return wsClient.onRecovery((trigger) => {
+      if (trigger === "reconnected") {
+        return;
+      }
+
+      pendingRecoveryModeRef.current = "reconnect";
+
+      if (coldStartStateRef.current === "in-flight") {
+        return;
+      }
+
+      reconnectRecoveryTriggerRef.current?.();
+    });
   }, [wsClient]);
 
   /**

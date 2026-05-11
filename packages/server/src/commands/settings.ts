@@ -48,6 +48,7 @@ const SettingsSchema = z.object({
     .object({
       theme: z.enum(["dark"]).optional(),
       terminalRenderer: z.enum(["standard", "compatibility"]).optional(),
+      terminalCopyOnSelect: z.boolean().optional(),
       locale: z.enum(["zh", "en"]).optional(),
     })
     .optional(),

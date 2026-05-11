@@ -476,6 +476,10 @@
     },
     "terminal_renderer": "终端渲染器",
     "terminal_renderer_hint": "选择终端渲染模式",
+    "copy_on_select": "选中自动复制",
+    "copy_on_select_hint": "在桌面端终端中，选中文本后自动复制到系统剪贴板",
+    "copy_on_select_failed_title": "自动复制失败",
+    "copy_on_select_failed_body": "请使用 Ctrl/Cmd+C 手动复制",
     "terminal_standard": "标准",
     "terminal_compatibility": "兼容模式",
     "provider": {

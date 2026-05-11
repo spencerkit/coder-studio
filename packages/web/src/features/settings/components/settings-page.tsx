@@ -25,6 +25,10 @@ import { useViewport } from "../../../hooks/use-viewport";
 import { useTranslation } from "../../../lib/i18n";
 import { notificationPreferencesAtom } from "../../notifications/atoms";
 import { MobilePageHeader } from "../../shared/components/mobile-page-header";
+import {
+  resolveTerminalCopyOnSelectSetting,
+  terminalPreferencesAtom,
+} from "../../terminal-panel/preferences";
 import { type ProviderInfo, ProviderSettings } from "./provider-settings";
 import { resolveSettingsExitTargetFromBrowserHistory } from "./settings-navigation";
 import {
@@ -114,9 +118,9 @@ function loadProviderAdditionalArgs(
  * PRD §13:
  *   - Two-column layout: sidebar (200px) + content area
  *   - Navigation sections: General, Provider (per provider), Appearance
- *   - General: notifications
+ *   - General: notifications, terminal behavior
  *   - Provider: config fields and command preview
- *   - Appearance: theme, terminal renderer, language
+ *   - Appearance: theme, language
  */
 export function SettingsPage() {
   const t = useTranslation();
@@ -155,11 +159,14 @@ export function SettingsPage() {
   const [settingsRefreshKey, setSettingsRefreshKey] = useState(0);
   const [locale, setLocaleState] = useAtom(localeAtom);
   const [theme, setTheme] = useAtom(themeAtom);
+  const terminalPreferences = useAtomValue(terminalPreferencesAtom);
   const setNotificationPreferences = useSetAtom(notificationPreferencesAtom);
+  const setTerminalPreferences = useSetAtom(terminalPreferencesAtom);
   const settingsLoadFailedUnknownRef = useRef(settingsLoadFailedUnknown);
   const appearanceSelectionVersionRef = useRef({
     locale: 0,
     terminalRenderer: 0,
+    terminalCopyOnSelect: 0,
   });
   const detailSection =
     navigationState.kind === "detail" ? navigationState.section : navigationState.lastSection;
@@ -233,6 +240,15 @@ export function SettingsPage() {
           setTerminalRendererState(settings["appearance.terminalRenderer"]);
         }
       }
+      if (
+        appearanceSelectionVersionRef.current.terminalCopyOnSelect ===
+        appearanceSelectionVersionAtRequestStart.terminalCopyOnSelect
+      ) {
+        const resolvedTerminalCopyOnSelect = resolveTerminalCopyOnSelectSetting(settings);
+        setTerminalPreferences({
+          copyOnSelect: resolvedTerminalCopyOnSelect,
+        });
+      }
       if (settings["appearance.locale"] === "zh" || settings["appearance.locale"] === "en") {
         if (
           appearanceSelectionVersionRef.current.locale ===
@@ -248,7 +264,14 @@ export function SettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, [connectionStatus, dispatch, setLocaleState, setNotificationPreferences, settingsRefreshKey]);
+  }, [
+    connectionStatus,
+    dispatch,
+    setLocaleState,
+    setNotificationPreferences,
+    setTerminalPreferences,
+    settingsRefreshKey,
+  ]);
 
   const handleLocaleSelection = (value: "zh" | "en") => {
     appearanceSelectionVersionRef.current.locale += 1;
@@ -258,6 +281,11 @@ export function SettingsPage() {
   const handleTerminalRendererSelection = (value: "standard" | "compatibility") => {
     appearanceSelectionVersionRef.current.terminalRenderer += 1;
     setTerminalRendererState(value);
+  };
+
+  const handleTerminalCopyOnSelectSelection = (value: boolean) => {
+    appearanceSelectionVersionRef.current.terminalCopyOnSelect += 1;
+    setTerminalPreferences({ copyOnSelect: value });
   };
 
   useEffect(() => {
@@ -292,12 +320,17 @@ export function SettingsPage() {
       case "general":
         return (
           <GeneralSettings
+            isMobile={isMobile}
             notificationsEnabled={notificationsEnabled}
             setNotificationsEnabled={setNotificationsEnabled}
             soundEnabled={soundEnabled}
             setSoundEnabled={setSoundEnabled}
             supervisorEvaluationTimeoutSec={supervisorEvaluationTimeoutSec}
             setSupervisorEvaluationTimeoutSec={setSupervisorEvaluationTimeoutSec}
+            terminalRenderer={terminalRenderer}
+            setTerminalRenderer={handleTerminalRendererSelection}
+            terminalCopyOnSelect={terminalPreferences.copyOnSelect}
+            setTerminalCopyOnSelect={handleTerminalCopyOnSelectSelection}
           />
         );
       case "appearance":
@@ -305,8 +338,6 @@ export function SettingsPage() {
           <AppearanceSettings
             locale={locale}
             setLocale={handleLocaleSelection}
-            terminalRenderer={terminalRenderer}
-            setTerminalRenderer={handleTerminalRendererSelection}
             theme={theme}
             setTheme={setTheme}
           />
@@ -350,6 +381,7 @@ export function SettingsPage() {
   );
 
   const shouldShowMobileRoot = isMobile && navigationState.kind === "root";
+  const isMobileDetailView = isMobile && navigationState.kind === "detail";
   const headerTitle = isMobile
     ? t(shouldShowMobileRoot ? "settings.title" : activeSectionMeta.labelKey)
     : t("settings.title");
@@ -369,7 +401,7 @@ export function SettingsPage() {
         renderMobileRoot()
       ) : (
         <div
-          className={`settings-body ${isMobile ? "settings-body--mobile" : ""} ${contentLayoutMode === "fill-height" ? "settings-body--fill-height" : ""}`}
+          className={`settings-body ${isMobile ? "settings-body--mobile" : ""} ${isMobileDetailView ? "settings-body--mobile-detail" : ""} ${contentLayoutMode === "fill-height" ? "settings-body--fill-height" : ""}`}
         >
           {isMobile ? null : (
             <aside className="settings-sidebar">
@@ -388,7 +420,7 @@ export function SettingsPage() {
           )}
 
           <main
-            className={`settings-content ${isMobile ? "settings-content--mobile" : ""} ${contentLayoutMode === "fill-height" ? "settings-content--fill-height" : ""}`}
+            className={`settings-content ${isMobile ? "settings-content--mobile" : ""} ${isMobileDetailView ? "settings-content--mobile-detail" : ""} ${contentLayoutMode === "fill-height" ? "settings-content--fill-height" : ""}`}
           >
             {settingsLoadError && (
               <Notice
@@ -441,12 +473,17 @@ function SettingsNavItem({ icon, label, active, onClick }: SettingsNavItemProps)
 }
 
 interface GeneralSettingsProps {
+  isMobile: boolean;
   notificationsEnabled: boolean;
   setNotificationsEnabled: (value: boolean) => void;
   soundEnabled: boolean;
   setSoundEnabled: (value: boolean) => void;
   supervisorEvaluationTimeoutSec: number;
   setSupervisorEvaluationTimeoutSec: (value: number) => void;
+  terminalRenderer: "standard" | "compatibility";
+  setTerminalRenderer: (value: "standard" | "compatibility") => void;
+  terminalCopyOnSelect: boolean;
+  setTerminalCopyOnSelect: (value: boolean) => void;
 }
 
 function parseSupervisorTimeoutInput(value: string): number | null {
@@ -468,18 +505,27 @@ function parseSupervisorTimeoutInput(value: string): number | null {
 }
 
 function GeneralSettings({
+  isMobile,
   notificationsEnabled,
   setNotificationsEnabled,
   soundEnabled,
   setSoundEnabled,
   supervisorEvaluationTimeoutSec,
   setSupervisorEvaluationTimeoutSec,
+  terminalRenderer,
+  setTerminalRenderer,
+  terminalCopyOnSelect,
+  setTerminalCopyOnSelect,
 }: GeneralSettingsProps) {
   const t = useTranslation();
   const notificationsLabelId = useId();
   const notificationsDescId = useId();
   const soundLabelId = useId();
   const soundDescId = useId();
+  const terminalRendererTitleId = useId();
+  const terminalRendererDescId = useId();
+  const copyOnSelectLabelId = useId();
+  const copyOnSelectDescId = useId();
   const dispatch = useAtomValue(dispatchCommandAtom);
   const setNotificationPreferences = useSetAtom(notificationPreferencesAtom);
   const [notificationPermission, setNotificationPermission] =
@@ -676,6 +722,66 @@ function GeneralSettings({
       </div>
 
       <div className="settings-group">
+        <h3 className="settings-group-title" id={terminalRendererTitleId}>
+          {t("settings.terminal_renderer")}
+        </h3>
+        <p className="settings-group-desc" id={terminalRendererDescId}>
+          {t("settings.terminal_renderer_hint")}
+        </p>
+
+        <div
+          aria-describedby={terminalRendererDescId}
+          aria-labelledby={terminalRendererTitleId}
+          className="settings-pills"
+          role="group"
+        >
+          <Pill
+            leadingIcon={terminalRenderer === "standard" ? <Check size={12} /> : undefined}
+            onClick={() => {
+              setTerminalRenderer("standard");
+              void saveSettings({ appearance: { terminalRenderer: "standard" } });
+            }}
+            active={terminalRenderer === "standard"}
+          >
+            {t("settings.terminal_standard")}
+          </Pill>
+          <Pill
+            leadingIcon={terminalRenderer === "compatibility" ? <Check size={12} /> : undefined}
+            onClick={() => {
+              setTerminalRenderer("compatibility");
+              void saveSettings({ appearance: { terminalRenderer: "compatibility" } });
+            }}
+            active={terminalRenderer === "compatibility"}
+          >
+            {t("settings.terminal_compatibility")}
+          </Pill>
+        </div>
+
+        {isMobile ? null : (
+          <div className="settings-toggle-row">
+            <div className="settings-toggle-info">
+              <span className="settings-toggle-label" id={copyOnSelectLabelId}>
+                {t("settings.copy_on_select")}
+              </span>
+              <span className="settings-toggle-desc" id={copyOnSelectDescId}>
+                {t("settings.copy_on_select_hint")}
+              </span>
+            </div>
+            <Switch
+              aria-describedby={copyOnSelectDescId}
+              aria-labelledby={copyOnSelectLabelId}
+              checked={terminalCopyOnSelect}
+              className="settings-toggle"
+              onCheckedChange={(nextValue) => {
+                setTerminalCopyOnSelect(nextValue);
+                void saveSettings({ appearance: { terminalCopyOnSelect: nextValue } });
+              }}
+            />
+          </div>
+        )}
+      </div>
+
+      <div className="settings-group">
         <h3 className="settings-group-title">{t("settings.supervisor.title")}</h3>
         <p className="settings-group-desc">{t("settings.supervisor.hint")}</p>
 
@@ -725,25 +831,14 @@ function GeneralSettings({
 interface AppearanceSettingsProps {
   locale: string;
   setLocale: (value: "zh" | "en") => void;
-  terminalRenderer: "standard" | "compatibility";
-  setTerminalRenderer: (value: "standard" | "compatibility") => void;
   theme: "dark" | "light";
   setTheme: (value: "dark" | "light") => void;
 }
 
-function AppearanceSettings({
-  locale,
-  setLocale,
-  terminalRenderer,
-  setTerminalRenderer,
-  theme,
-  setTheme,
-}: AppearanceSettingsProps) {
+function AppearanceSettings({ locale, setLocale, theme, setTheme }: AppearanceSettingsProps) {
   const t = useTranslation();
   const themeTitleId = useId();
   const themeDescId = useId();
-  const terminalRendererTitleId = useId();
-  const terminalRendererDescId = useId();
   const languageTitleId = useId();
   const languageDescId = useId();
   const dispatch = useAtomValue(dispatchCommandAtom);
@@ -787,43 +882,6 @@ function AppearanceSettings({
             active={theme === "light"}
           >
             {t("settings.theme.light")}
-          </Pill>
-        </div>
-      </div>
-
-      <div className="settings-group">
-        <h3 className="settings-group-title" id={terminalRendererTitleId}>
-          {t("settings.terminal_renderer")}
-        </h3>
-        <p className="settings-group-desc" id={terminalRendererDescId}>
-          {t("settings.terminal_renderer_hint")}
-        </p>
-
-        <div
-          aria-describedby={terminalRendererDescId}
-          aria-labelledby={terminalRendererTitleId}
-          className="settings-pills"
-          role="group"
-        >
-          <Pill
-            leadingIcon={terminalRenderer === "standard" ? <Check size={12} /> : undefined}
-            onClick={() => {
-              setTerminalRenderer("standard");
-              void saveSettings({ appearance: { terminalRenderer: "standard" } });
-            }}
-            active={terminalRenderer === "standard"}
-          >
-            {t("settings.terminal_standard")}
-          </Pill>
-          <Pill
-            leadingIcon={terminalRenderer === "compatibility" ? <Check size={12} /> : undefined}
-            onClick={() => {
-              setTerminalRenderer("compatibility");
-              void saveSettings({ appearance: { terminalRenderer: "compatibility" } });
-            }}
-            active={terminalRenderer === "compatibility"}
-          >
-            {t("settings.terminal_compatibility")}
           </Pill>
         </div>
       </div>

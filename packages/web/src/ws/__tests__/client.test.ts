@@ -1237,6 +1237,71 @@ describe("web WsClient", () => {
     }
   });
 
+  it("probes an apparently connected socket during recovery and reconnects if the probe times out", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const client = new WsClient("ws://127.0.0.1:4173/ws");
+      const connectPromise = client.connect();
+      const firstSocket = MockWebSocket.instances[0]!;
+      firstSocket.triggerOpen();
+      await connectPromise;
+
+      client.recoverConnection("network_online");
+
+      const probeCommand = firstSocket.sent
+        .filter((entry): entry is string => typeof entry === "string")
+        .map((entry) => JSON.parse(entry))
+        .find((entry) => entry.kind === "command" && entry.op === "connection.probe");
+
+      expect(probeCommand).toBeTruthy();
+      expect(MockWebSocket.instances).toHaveLength(1);
+
+      await vi.advanceTimersByTimeAsync(2_501);
+
+      expect(client.getStatus()).toBe("reconnecting");
+      expect(MockWebSocket.instances).toHaveLength(1);
+
+      await vi.advanceTimersByTimeAsync(1_000);
+
+      expect(MockWebSocket.instances).toHaveLength(2);
+      expect(client.getStatus()).toBe("connecting");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps the current socket when the recovery probe succeeds", async () => {
+    const client = new WsClient("ws://127.0.0.1:4173/ws");
+    const connectPromise = client.connect();
+    const socket = MockWebSocket.instances[0]!;
+    socket.triggerOpen();
+    await connectPromise;
+
+    client.recoverConnection("visibility_resume");
+
+    const probeCommand = socket.sent
+      .filter((entry): entry is string => typeof entry === "string")
+      .map((entry) => JSON.parse(entry))
+      .find((entry) => entry.kind === "command" && entry.op === "connection.probe");
+
+    expect(probeCommand).toBeTruthy();
+
+    socket.triggerMessage({
+      kind: "result",
+      id: probeCommand.id,
+      ok: true,
+      data: {
+        ok: true,
+      },
+    });
+
+    await Promise.resolve();
+
+    expect(MockWebSocket.instances).toHaveLength(1);
+    expect(client.getStatus()).toBe("connected");
+  });
+
   it("dispatches wildcard subscriptions for nested workspace events", async () => {
     const client = new WsClient("ws://127.0.0.1:4173/ws");
     const handler = vi.fn();

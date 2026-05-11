@@ -44,6 +44,8 @@ import { WsHub } from "./ws/hub.js";
 
 import "./commands/index.js";
 
+const WS_KEEPALIVE_INTERVAL_MS = 15_000;
+
 export interface Server {
   app: FastifyInstance;
   stop: () => Promise<void>;
@@ -235,12 +237,18 @@ export async function createServer(
   }, STARTUP_GC_DELAY_MS);
   gcTimer.unref();
 
+  const wsKeepaliveTimer = setInterval(() => {
+    wsHub.pingAll();
+  }, WS_KEEPALIVE_INTERVAL_MS);
+  wsKeepaliveTimer.unref();
+
   let stopped = false;
   const stopServer = async () => {
     if (stopped) return;
     stopped = true;
 
     clearTimeout(gcTimer);
+    clearInterval(wsKeepaliveTimer);
     await app.close();
     autoFetch.stop();
     supervisorMgr.stop();
