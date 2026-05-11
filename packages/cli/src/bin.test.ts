@@ -13,6 +13,7 @@ const {
   readCliConfig,
   startManagedServer,
   startServer,
+  verifyLocalDatabaseCompatibility,
   stopRunningServer,
   writeCliConfig,
 } = vi.hoisted(() => ({
@@ -25,6 +26,7 @@ const {
   readCliConfig: vi.fn(),
   startManagedServer: vi.fn(),
   startServer: vi.fn(),
+  verifyLocalDatabaseCompatibility: vi.fn(),
   stopRunningServer: vi.fn(),
   writeCliConfig: vi.fn(),
 }));
@@ -50,6 +52,7 @@ vi.mock("./auth-control.js", () => ({
 
 vi.mock("./server-runner.js", () => ({
   startServer,
+  verifyLocalDatabaseCompatibility,
 }));
 
 vi.mock("./prompts.js", () => ({
@@ -69,6 +72,7 @@ beforeEach(() => {
   writeCliConfig.mockImplementation(() => undefined);
   startManagedServer.mockResolvedValue(undefined);
   startServer.mockResolvedValue({ stop: vi.fn() });
+  verifyLocalDatabaseCompatibility.mockImplementation(() => undefined);
   stopRunningServer.mockResolvedValue(false);
   clearAuthBlockByIp.mockResolvedValue(false);
   listAuthBlocks.mockResolvedValue([]);
@@ -147,6 +151,33 @@ describe("main", () => {
     expect(logSpy).toHaveBeenCalledWith("Starting Coder Studio Server in foreground...");
   });
 
+  it("prompts to delete and rebuild when foreground startup sees an incompatible schema", async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "cs-cli-db-rebuild-"));
+    const dbPath = join(tempDir, "coder-studio.db");
+    writeFileSync(dbPath, "broken", "utf-8");
+
+    const incompatibleError = Object.assign(new Error("schema mismatch"), {
+      code: "db_incompatible_schema",
+      dbPath,
+    });
+    startServer.mockRejectedValueOnce(incompatibleError).mockResolvedValueOnce({ stop: vi.fn() });
+    confirmYesNo.mockResolvedValue(true);
+
+    try {
+      await expect(main(["serve", "--foreground"])).resolves.toBeUndefined();
+
+      expect(confirmYesNo).toHaveBeenCalledWith(
+        expect.stringContaining("Delete and rebuild the local database")
+      );
+      expect(startServer).toHaveBeenCalledTimes(2);
+      expect(existsSync(dbPath)).toBe(false);
+    } finally {
+      if (existsSync(tempDir)) {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    }
+  });
+
   it("starts pm2-managed mode for bare serve", async () => {
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
@@ -159,6 +190,41 @@ describe("main", () => {
     });
     expect(logSpy).toHaveBeenCalledWith("Coder Studio server started in background.");
     expect(logSpy).toHaveBeenCalledWith("Run `coder-studio status` to inspect the server.");
+  });
+
+  it("preflights incompatible schemas before managed startup and rebuilds before launching pm2", async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "cs-cli-db-preflight-"));
+    const dbPath = join(tempDir, "coder-studio.db");
+    writeFileSync(dbPath, "broken", "utf-8");
+
+    const incompatibleError = Object.assign(new Error("schema mismatch"), {
+      code: "db_incompatible_schema",
+      dbPath,
+    });
+    verifyLocalDatabaseCompatibility
+      .mockImplementationOnce(() => {
+        throw incompatibleError;
+      })
+      .mockImplementationOnce(() => undefined);
+    confirmYesNo.mockResolvedValue(true);
+
+    try {
+      await main(["serve"]);
+
+      expect(confirmYesNo).toHaveBeenCalledWith(
+        expect.stringContaining("Delete and rebuild the local database")
+      );
+      expect(verifyLocalDatabaseCompatibility).toHaveBeenCalledTimes(2);
+      expect(startManagedServer).toHaveBeenCalledTimes(1);
+      expect(verifyLocalDatabaseCompatibility.mock.invocationCallOrder[0]).toBeLessThan(
+        startManagedServer.mock.invocationCallOrder[0]
+      );
+      expect(existsSync(dbPath)).toBe(false);
+    } finally {
+      if (existsSync(tempDir)) {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    }
   });
 
   it("prints status output for status command", async () => {
