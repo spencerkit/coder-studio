@@ -1,6 +1,12 @@
 import { AlertTriangle, Eye, Pencil, PowerOff } from "lucide-react";
 import { useId } from "react";
-import { Input, Select, type SelectOption, Textarea } from "../../../../components/ui";
+import {
+  DateTimePicker,
+  Input,
+  Select,
+  type SelectOption,
+  Textarea,
+} from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import {
   OBJECTIVE_DIALOG_EVALUATOR_OPTIONS,
@@ -152,12 +158,13 @@ export function ObjectiveDialogContent({
 
       <div className="form-group">
         <label htmlFor="scheduled-at">{t("supervisor.field.scheduled_at")}</label>
-        <Input
-          id="scheduled-at"
-          size="lg"
-          type="datetime-local"
+        <DateTimePicker
+          label={t("supervisor.field.scheduled_at")}
           value={draftScheduledAt}
-          onChange={(event) => onDraftScheduledAtChange(event.target.value)}
+          onValueChange={onDraftScheduledAtChange}
+          placeholder={t("supervisor.field.scheduled_at_placeholder")}
+          clearable
+          minDate={new Date()}
           aria-describedby={scheduledAtHelperId}
         />
         <span id={scheduledAtHelperId} className="dialog-helper">

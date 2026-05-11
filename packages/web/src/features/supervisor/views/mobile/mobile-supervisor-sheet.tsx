@@ -1,6 +1,6 @@
 import { useSetAtom } from "jotai";
 import { useEffect, useState } from "react";
-import { Button, EmptyState, Sheet } from "../../../../components/ui";
+import { Button, Sheet } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import {
   formatScheduledAtInput,
@@ -21,23 +21,6 @@ interface MobileSupervisorSheetProps {
   onClose: () => void;
 }
 
-const mobileSupervisorEmptyStateStyle = {
-  minHeight: 0,
-  padding: "var(--sp-4)",
-  gap: "var(--sp-2)",
-  alignItems: "stretch",
-  textAlign: "left",
-};
-
-const mobileSupervisorEmptySlotStyle = {
-  width: "auto",
-  maxWidth: "none",
-  color: "inherit",
-  fontSize: "inherit",
-  fontWeight: "inherit",
-  lineHeight: "inherit",
-};
-
 export function MobileSupervisorSheet({
   sessionId,
   workspaceId,
@@ -53,10 +36,49 @@ export function MobileSupervisorSheet({
     copy,
     isDisable,
     disableObjective,
+    isMaxSupervisionCountValid,
     close,
     updateDraft,
     confirm,
   } = useObjectiveDialogState({ workspaceId, sessionId });
+
+  useEffect(() => {
+    if (supervisor || detailMode) {
+      return;
+    }
+
+    setDialog((current) => {
+      if (current.sessionId === sessionId && current.mode === "enable" && !current.open) {
+        return current;
+      }
+
+      return {
+        open: false,
+        sessionId,
+        mode: "enable",
+        draftObjective:
+          current.sessionId === sessionId && current.mode === "enable"
+            ? current.draftObjective
+            : "",
+        draftEvaluatorProviderId:
+          current.sessionId === sessionId && current.mode === "enable"
+            ? current.draftEvaluatorProviderId
+            : "claude",
+        draftEvaluatorModel:
+          current.sessionId === sessionId && current.mode === "enable"
+            ? current.draftEvaluatorModel
+            : "",
+        draftMaxSupervisionCount:
+          current.sessionId === sessionId && current.mode === "enable"
+            ? current.draftMaxSupervisionCount
+            : "0",
+        draftScheduledAt:
+          current.sessionId === sessionId && current.mode === "enable"
+            ? current.draftScheduledAt
+            : "",
+      };
+    });
+  }, [detailMode, sessionId, setDialog, supervisor]);
 
   useEffect(() => {
     if (!dialog.open || dialog.sessionId !== sessionId) {
@@ -82,6 +104,69 @@ export function MobileSupervisorSheet({
     setDetailMode(nextMode);
   };
 
+  const detailBody = (
+    <div className="mobile-supervisor-sheet__detail">
+      <div className="mobile-supervisor-sheet__detail-header">
+        <span className="supervisor-dialog-header-icon" aria-hidden="true">
+          <ObjectiveDialogModeIcon mode={mode} />
+        </span>
+        <div>
+          <h3>{copy.title}</h3>
+          <p>{copy.subtitle}</p>
+        </div>
+      </div>
+      <ObjectiveDialogContent
+        mode={mode}
+        draftObjective={dialog.draftObjective}
+        draftEvaluatorProviderId={dialog.draftEvaluatorProviderId}
+        draftEvaluatorModel={dialog.draftEvaluatorModel}
+        draftMaxSupervisionCount={dialog.draftMaxSupervisionCount}
+        draftScheduledAt={dialog.draftScheduledAt}
+        isMaxSupervisionCountValid={isMaxSupervisionCountValid}
+        disableObjective={disableObjective}
+        onDraftObjectiveChange={(draftObjective) => updateDraft({ draftObjective })}
+        onDraftEvaluatorProviderChange={(draftEvaluatorProviderId) =>
+          updateDraft({ draftEvaluatorProviderId })
+        }
+        onDraftEvaluatorModelChange={(draftEvaluatorModel) => updateDraft({ draftEvaluatorModel })}
+        onDraftMaxSupervisionCountChange={(draftMaxSupervisionCount) =>
+          updateDraft({ draftMaxSupervisionCount })
+        }
+        onDraftScheduledAtChange={(draftScheduledAt) => updateDraft({ draftScheduledAt })}
+      />
+    </div>
+  );
+
+  const detailFooter = (
+    <div className="mobile-supervisor-sheet__footer">
+      <Button
+        onClick={() => {
+          close();
+          setDetailMode(null);
+          if (!supervisor) {
+            onClose();
+          }
+        }}
+      >
+        {t("action.cancel")}
+      </Button>
+      <Button
+        variant={isDisable ? "danger" : "primary"}
+        onClick={() => {
+          void (async () => {
+            const ok = await confirm();
+            if (ok && !supervisor) {
+              onClose();
+            }
+          })();
+        }}
+        disabled={!isDisable && !dialog.draftObjective.trim()}
+      >
+        {copy.confirm}
+      </Button>
+    </div>
+  );
+
   if (detailMode) {
     return (
       <Sheet
@@ -98,60 +183,27 @@ export function MobileSupervisorSheet({
         }}
         bodyClassName="mobile-sheet__body--supervisor-detail"
         contentClassName="mobile-supervisor-sheet mobile-supervisor-sheet--detail"
-        body={
-          <div className="mobile-supervisor-sheet__detail">
-            <div className="mobile-supervisor-sheet__detail-header">
-              <span className="supervisor-dialog-header-icon" aria-hidden="true">
-                <ObjectiveDialogModeIcon mode={mode} />
-              </span>
-              <div>
-                <h3>{copy.title}</h3>
-                <p>{copy.subtitle}</p>
-              </div>
-            </div>
-            <ObjectiveDialogContent
-              mode={mode}
-              draftObjective={dialog.draftObjective}
-              draftEvaluatorProviderId={dialog.draftEvaluatorProviderId}
-              draftEvaluatorModel={dialog.draftEvaluatorModel}
-              draftMaxSupervisionCount={dialog.draftMaxSupervisionCount}
-              draftScheduledAt={dialog.draftScheduledAt}
-              disableObjective={disableObjective}
-              onDraftObjectiveChange={(draftObjective) => updateDraft({ draftObjective })}
-              onDraftEvaluatorProviderChange={(draftEvaluatorProviderId) =>
-                updateDraft({ draftEvaluatorProviderId })
-              }
-              onDraftEvaluatorModelChange={(draftEvaluatorModel) =>
-                updateDraft({ draftEvaluatorModel })
-              }
-              onDraftMaxSupervisionCountChange={(draftMaxSupervisionCount) =>
-                updateDraft({ draftMaxSupervisionCount })
-              }
-              onDraftScheduledAtChange={(draftScheduledAt) => updateDraft({ draftScheduledAt })}
-            />
-          </div>
-        }
-        footer={
-          <div className="mobile-supervisor-sheet__footer">
-            <Button
-              onClick={() => {
-                close();
-                setDetailMode(null);
-              }}
-            >
-              {t("action.cancel")}
-            </Button>
-            <Button
-              variant={isDisable ? "danger" : "primary"}
-              onClick={() => {
-                void confirm();
-              }}
-              disabled={!isDisable && !dialog.draftObjective.trim()}
-            >
-              {copy.confirm}
-            </Button>
-          </div>
-        }
+        fullscreen
+        body={detailBody}
+        footer={detailFooter}
+      />
+    );
+  }
+
+  if (!supervisor) {
+    return (
+      <Sheet
+        title={copy.title}
+        kicker={t("supervisor.title")}
+        onClose={() => {
+          close();
+          onClose();
+        }}
+        bodyClassName="mobile-sheet__body--supervisor-detail"
+        contentClassName="mobile-supervisor-sheet mobile-supervisor-sheet--detail"
+        fullscreen
+        body={detailBody}
+        footer={detailFooter}
       />
     );
   }
@@ -162,6 +214,7 @@ export function MobileSupervisorSheet({
       kicker={t("supervisor.title")}
       onClose={onClose}
       contentClassName="mobile-supervisor-sheet mobile-supervisor-sheet--root"
+      fullscreen
       body={
         <div className="mobile-supervisor-sheet__root">
           {supervisor ? (
@@ -176,29 +229,7 @@ export function MobileSupervisorSheet({
                 </Button>
               </div>
             </>
-          ) : (
-            <EmptyState
-              className="mobile-supervisor-sheet__empty"
-              style={mobileSupervisorEmptyStateStyle}
-              title={
-                <div style={mobileSupervisorEmptySlotStyle}>
-                  <h3>{t("supervisor.title")}</h3>
-                </div>
-              }
-              description={
-                <div style={mobileSupervisorEmptySlotStyle}>
-                  <p>{t("supervisor.empty")}</p>
-                </div>
-              }
-              action={
-                <div style={{ width: "100%" }}>
-                  <Button variant="primary" onClick={() => openDetail("enable")}>
-                    {t("supervisor.action.enable_objective")}
-                  </Button>
-                </div>
-              }
-            />
-          )}
+          ) : null}
         </div>
       }
     />

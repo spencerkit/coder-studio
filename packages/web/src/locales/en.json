@@ -1,4 +1,32 @@
 {
+  "datetime": {
+    "today": "Today",
+    "tomorrow": "Tomorrow",
+    "next_week": "Next Week",
+    "clear": "Clear",
+    "confirm": "Confirm",
+    "select_date": "Select Date",
+    "select_time": "Select Time",
+    "january": "January",
+    "february": "February",
+    "march": "March",
+    "april": "April",
+    "may": "May",
+    "june": "June",
+    "july": "July",
+    "august": "August",
+    "september": "September",
+    "october": "October",
+    "november": "November",
+    "december": "December",
+    "sun": "Sun",
+    "mon": "Mon",
+    "tue": "Tue",
+    "wed": "Wed",
+    "thu": "Thu",
+    "fri": "Fri",
+    "sat": "Sat"
+  },
   "app": {
     "name": "Coder Studio",
     "description": "Agent-First Development Environment"
@@ -630,6 +658,7 @@
       "evaluator_model_helper": "Leave blank to use the provider's default supervisor evaluation model behavior.",
       "max_supervision_count": "Max Supervision Count",
       "max_supervision_count_helper": "Set to 0 for no explicit cap. Evaluation can still stop earlier if the objective is complete.",
+      "scheduled_at_placeholder": "Choose when to run",
       "scheduled_at": "Scheduled Run Time",
       "scheduled_at_helper": "Optional one-shot automatic run time. Leave blank to rely only on turn-completed supervision."
     },

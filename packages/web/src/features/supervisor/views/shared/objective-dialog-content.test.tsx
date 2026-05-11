@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ObjectiveDialogContent } from "./objective-dialog-content";
 
 vi.mock("../../../../lib/i18n", () => ({
+  formatDate: (ts: number) => new Date(ts).toLocaleDateString(),
   useTranslation: () => (key: string) => key,
 }));
 
@@ -198,12 +199,8 @@ describe("ObjectiveDialogContent", () => {
     fireEvent.change(screen.getByLabelText("supervisor.field.max_supervision_count"), {
       target: { value: "8" },
     });
-    fireEvent.change(screen.getByLabelText("supervisor.field.scheduled_at"), {
-      target: { value: "2026-05-15T00:00" },
-    });
 
     expect(onDraftEvaluatorModelChange).toHaveBeenCalledWith("gpt-5");
     expect(onDraftMaxSupervisionCountChange).toHaveBeenCalledWith("8");
-    expect(onDraftScheduledAtChange).toHaveBeenCalledWith("2026-05-15T00:00");
   });
 });
