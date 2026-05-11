@@ -1115,7 +1115,7 @@ export function XtermHost({
     terminal.onData((data) => {
       void handleInputRef.current(data);
     });
-    const disposeSelectionChange =
+    const selectionChangeDisposable =
       typeof terminal.onSelectionChange === "function"
         ? terminal.onSelectionChange(() => {
             selectedTextRef.current = terminal.hasSelection() ? terminal.getSelection() : "";
@@ -1778,7 +1778,11 @@ export function XtermHost({
         terminalRef.current = null;
         fitAddonRef.current = null;
       }
-      disposeSelectionChange?.();
+      if (typeof selectionChangeDisposable === "function") {
+        selectionChangeDisposable();
+      } else {
+        selectionChangeDisposable?.dispose?.();
+      }
     };
   }, [
     dispatch,
