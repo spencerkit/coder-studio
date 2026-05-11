@@ -1797,7 +1797,6 @@ describe("XtermHost", () => {
   it("clears buffered submitted text when the terminal instance changes", async () => {
     viewportMocks.viewport = "mobile";
     const store = createStore();
-    const user = userEvent.setup();
     const sendTerminalInput = vi.fn().mockResolvedValue(undefined);
 
     store.set(localeAtom, "en");
