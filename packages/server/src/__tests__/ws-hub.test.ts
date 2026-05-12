@@ -47,7 +47,12 @@ const TEST_CONFIG: Pick<ServerConfig, "auth" | "appVersion"> = {
 
 const createMockSocket = (): MockSocket => ({
   readyState: WebSocket.OPEN,
-  send: vi.fn(),
+  send: vi.fn((...args: unknown[]) => {
+    const callback = args.find((arg) => typeof arg === "function") as
+      | ((error?: Error) => void)
+      | undefined;
+    callback?.();
+  }),
   ping: vi.fn(),
   close: vi.fn(),
   on: vi.fn(),
@@ -246,12 +251,86 @@ describe("WsHub", () => {
     const claim = activationMgr.claim("client-b", clientB, createMockRequest());
     expect(claim.displacedWsClientId).toBe(clientA);
 
+    socketA.send.mockClear();
     hub.revokeAndCloseClient(clientA, claim.generation);
 
-    expect(socketA.send).toHaveBeenCalledWith(
-      expect.stringContaining('"topic":"activation.revoked"')
-    );
+    expect(parseSentEvents(socketA)).toEqual([
+      expect.objectContaining({
+        kind: "event",
+        topic: "activation.revoked",
+        data: {
+          reason: "displaced",
+          generation: claim.generation,
+        },
+      }),
+    ]);
     expect(socketA.close).toHaveBeenCalledWith(4001, "single_active_displaced");
+  });
+
+  it("no-ops when revoking a client that is already disconnected", () => {
+    const socket = createMockSocket();
+    hub.handleConnection(socket as never, createMockRequest());
+    socket.send.mockClear();
+
+    hub.revokeAndCloseClient("missing-client", 7);
+
+    expect(socket.send).not.toHaveBeenCalled();
+    expect(socket.close).not.toHaveBeenCalled();
+  });
+
+  it("cleans up activation and request metadata after a revoked client closes", () => {
+    const activationMgr = createActivationManager();
+    const onSocketClosedSpy = vi.spyOn(activationMgr, "onSocketClosed");
+    mockCommandContext = createCommandContext(eventBus, { activationMgr });
+    hub.destroy();
+    hub = createHub(eventBus, mockCommandContext);
+
+    const socketA = createMockSocket();
+    const socketB = createMockSocket();
+    hub.handleConnection(socketA as never, createMockRequest());
+    hub.handleConnection(socketB as never, createMockRequest());
+
+    const [clientA, clientB] = getConnectedClientIds([socketA, socketB]);
+    activationMgr.claim("client-a", clientA, createMockRequest());
+    const claim = activationMgr.claim("client-b", clientB, createMockRequest());
+    const closeHandler = getCloseHandler(socketA);
+
+    expect(hub.getRequestMetadata(clientA)).toBeDefined();
+
+    hub.revokeAndCloseClient(clientA, claim.generation);
+    closeHandler?.();
+
+    expect(onSocketClosedSpy).toHaveBeenCalledWith(clientA);
+    expect(hub.getRequestMetadata(clientA)).toBeUndefined();
+  });
+
+  it("sends activation.revoked before starting the close handshake", () => {
+    let sendCallback: ((error?: Error) => void) | undefined;
+    const socket = createMockSocket();
+    socket.send = vi.fn((...args: unknown[]) => {
+      sendCallback = args.find((arg) => typeof arg === "function") as
+        | ((error?: Error) => void)
+        | undefined;
+    });
+    hub.handleConnection(socket as never, createMockRequest());
+
+    const [clientId] = getConnectedClientIds([socket]);
+    socket.send.mockClear();
+
+    hub.revokeAndCloseClient(clientId, 9);
+
+    expect(parseSentEvents(socket)).toEqual([
+      expect.objectContaining({
+        kind: "event",
+        topic: "activation.revoked",
+        data: { reason: "displaced", generation: 9 },
+      }),
+    ]);
+    expect(socket.close).not.toHaveBeenCalled();
+
+    sendCallback?.();
+
+    expect(socket.close).toHaveBeenCalledWith(4001, "single_active_displaced");
   });
 
   it("should handle domain events", () => {

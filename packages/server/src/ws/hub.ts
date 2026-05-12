@@ -317,11 +317,15 @@ export class WsHub implements Broadcaster {
       return;
     }
 
-    client.sendEvent("activation.revoked", {
-      reason: "displaced",
-      generation,
-    });
-    client.close(4001, "single_active_displaced");
+    client.sendEventAndClose(
+      "activation.revoked",
+      {
+        reason: "displaced",
+        generation,
+      },
+      4001,
+      "single_active_displaced"
+    );
   }
 
   getRequestMetadata(clientId: ClientId): FastifyRequest | undefined {
