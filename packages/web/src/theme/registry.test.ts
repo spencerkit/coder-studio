@@ -92,4 +92,88 @@ describe("theme registry", () => {
       );
     }
   });
+
+  it("keeps light terminal palettes separated by theme family", () => {
+    const mintLight = THEMES.find((theme) => theme.id === "mint-light");
+    const graphiteLight = THEMES.find((theme) => theme.id === "graphite-light");
+    const nordLight = THEMES.find((theme) => theme.id === "nord-light");
+
+    expect(mintLight?.terminalTheme).toEqual(
+      expect.objectContaining({
+        background: "#fcfffd",
+        cursor: "#148a7a",
+        blue: "#148a7a",
+        cyan: "#0f766e",
+        selectionBackground: "#ddefe5",
+      })
+    );
+
+    expect(graphiteLight?.terminalTheme).toEqual(
+      expect.objectContaining({
+        background: "#f5f7fa",
+        cursor: "#315fdd",
+        blue: "#315fdd",
+        cyan: "#1f6f8b",
+        selectionBackground: "#d4dce5",
+      })
+    );
+
+    expect(nordLight?.terminalTheme).toEqual(
+      expect.objectContaining({
+        background: "#f1f5fa",
+        cursor: "#5b7fa8",
+        blue: "#5b7fa8",
+        cyan: "#4c7f99",
+        selectionBackground: "#d2ddea",
+      })
+    );
+  });
+
+  it("keeps light monaco palettes separated by theme family", () => {
+    const mintLight = THEMES.find((theme) => theme.id === "mint-light");
+    const graphiteLight = THEMES.find((theme) => theme.id === "graphite-light");
+    const nordLight = THEMES.find((theme) => theme.id === "nord-light");
+
+    expect(mintLight?.monaco.colors).toEqual(
+      expect.objectContaining({
+        "editor.background": "#fcfffd",
+        "editorCursor.foreground": "#148a7a",
+        "editor.selectionBackground": "#ddefe5",
+      })
+    );
+    expect(mintLight?.monaco.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ token: "string", foreground: "18794e" }),
+        expect.objectContaining({ token: "keyword", foreground: "148a7a" }),
+      ])
+    );
+
+    expect(graphiteLight?.monaco.colors).toEqual(
+      expect.objectContaining({
+        "editor.background": "#f5f7fa",
+        "editorCursor.foreground": "#315fdd",
+        "editor.selectionBackground": "#d4dce5",
+      })
+    );
+    expect(graphiteLight?.monaco.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ token: "string", foreground: "2f6f44" }),
+        expect.objectContaining({ token: "keyword", foreground: "315fdd" }),
+      ])
+    );
+
+    expect(nordLight?.monaco.colors).toEqual(
+      expect.objectContaining({
+        "editor.background": "#f1f5fa",
+        "editorCursor.foreground": "#5b7fa8",
+        "editor.selectionBackground": "#d2ddea",
+      })
+    );
+    expect(nordLight?.monaco.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ token: "string", foreground: "5d7a66" }),
+        expect.objectContaining({ token: "keyword", foreground: "5b7fa8" }),
+      ])
+    );
+  });
 });
