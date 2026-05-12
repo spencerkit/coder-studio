@@ -5,7 +5,6 @@ export interface ActivationLease {
   wsClientId: string;
   generation: number;
   issuedAt: number;
-  expiresAt: number;
   graceUntil: number | null;
   ip: string;
   userAgent: string;
@@ -19,14 +18,10 @@ export interface ActivationClaimResult {
 }
 
 export interface ActivationManagerOptions {
-  heartbeatMs: number;
-  leaseExpirationMs: number;
   graceMs: number;
 }
 
 const DEFAULT_OPTIONS: ActivationManagerOptions = {
-  heartbeatMs: 10_000,
-  leaseExpirationMs: 30_000,
   graceMs: 3_000,
 };
 
@@ -54,7 +49,6 @@ export class ActivationManager {
 
       activeLease.wsClientId = wsClientId;
       activeLease.graceUntil = null;
-      activeLease.expiresAt = now + this.options.leaseExpirationMs;
 
       return {
         active: true,
@@ -76,7 +70,6 @@ export class ActivationManager {
       wsClientId,
       generation: this.generation,
       issuedAt: now,
-      expiresAt: now + this.options.leaseExpirationMs,
       graceUntil: null,
       ip: request.ip,
       userAgent: request.headers["user-agent"] ?? "",
@@ -88,20 +81,6 @@ export class ActivationManager {
       recoveryMode,
       displacedWsClientId,
     };
-  }
-
-  heartbeat(clientInstanceId: string, generation: number): boolean {
-    const lease = this.getLease();
-    if (!lease) {
-      return false;
-    }
-
-    if (lease.clientInstanceId !== clientInstanceId || lease.generation !== generation) {
-      return false;
-    }
-
-    lease.expiresAt = Date.now() + this.options.leaseExpirationMs;
-    return true;
   }
 
   release(clientInstanceId: string, generation: number): void {
@@ -128,11 +107,6 @@ export class ActivationManager {
 
   getLease(): ActivationLease | null {
     if (!this.lease) {
-      return null;
-    }
-
-    if (Date.now() > this.lease.expiresAt) {
-      this.lease = null;
       return null;
     }
 

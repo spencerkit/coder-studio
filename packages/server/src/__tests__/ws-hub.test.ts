@@ -67,8 +67,6 @@ const createMockRequest = (): FastifyRequest =>
 
 const createActivationManager = () =>
   new ActivationManager({
-    heartbeatMs: 10_000,
-    leaseExpirationMs: 30_000,
     graceMs: 3_000,
   });
 

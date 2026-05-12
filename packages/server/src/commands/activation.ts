@@ -30,21 +30,6 @@ registerCommand(
 );
 
 registerCommand(
-  "activation.heartbeat",
-  z.object({ clientInstanceId: z.string(), generation: z.number().int().positive() }),
-  async (args, ctx, clientId) => {
-    const lease = ctx.activationMgr.getLease();
-    if (!clientId || !lease || lease.wsClientId !== clientId) {
-      return { ok: false };
-    }
-
-    return {
-      ok: ctx.activationMgr.heartbeat(args.clientInstanceId, args.generation),
-    };
-  }
-);
-
-registerCommand(
   "activation.release",
   z.object({ clientInstanceId: z.string(), generation: z.number().int().positive() }),
   async (args, ctx, clientId) => {

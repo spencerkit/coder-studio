@@ -113,6 +113,7 @@ describe("SupervisorEvaluator windows child-process options", () => {
 
     await expect(evaluator.evaluate(makeSupervisor(), makeContext())).resolves.toEqual({
       message: "Run pnpm vitest to verify",
+      objectiveComplete: false,
     });
 
     expect(spawnMock).toHaveBeenCalledWith(

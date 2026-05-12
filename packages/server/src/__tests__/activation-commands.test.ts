@@ -131,55 +131,6 @@ describe("activation commands", () => {
     });
   });
 
-  it("does not allow a stale websocket to heartbeat after same-client rebind", async () => {
-    const request = createMockRequest();
-    const broadcaster = {
-      broadcast: vi.fn(),
-      sendToClient: vi.fn(() => true),
-      sendBinaryToClient: vi.fn(() => true),
-      getRequestMetadata: vi.fn(() => request),
-    } satisfies Broadcaster;
-    const ctx = createBaseContext({ broadcaster });
-
-    await dispatch(
-      {
-        kind: "command",
-        id: "claim-1",
-        op: "activation.claim",
-        args: { clientInstanceId: "client-a" },
-      },
-      ctx,
-      "ws-a"
-    );
-
-    const rebound = await dispatch(
-      {
-        kind: "command",
-        id: "claim-2",
-        op: "activation.claim",
-        args: { clientInstanceId: "client-a" },
-      },
-      ctx,
-      "ws-b"
-    );
-
-    expect(rebound.ok).toBe(true);
-
-    const heartbeat = await dispatch(
-      {
-        kind: "command",
-        id: "heartbeat-stale",
-        op: "activation.heartbeat",
-        args: { clientInstanceId: "client-a", generation: 1 },
-      },
-      ctx,
-      "ws-a"
-    );
-
-    expect(heartbeat.ok).toBe(true);
-    expect(heartbeat.data).toEqual({ ok: false });
-  });
-
   it("does not allow a stale websocket to release after same-client rebind", async () => {
     const request = createMockRequest();
     const broadcaster = {
