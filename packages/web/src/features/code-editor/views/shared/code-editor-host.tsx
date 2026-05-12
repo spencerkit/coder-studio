@@ -188,6 +188,7 @@ export const CodeEditorView: FC<CodeEditorViewProps> = ({ state, chrome = "full"
           {isTextFile ? (
             <MonacoHost
               workspaceId={workspace.id}
+              workspaceRootPath={workspace.path}
               filePath={currentFile.path}
               content={currentFile.content}
               onContentChange={handleContentChange}

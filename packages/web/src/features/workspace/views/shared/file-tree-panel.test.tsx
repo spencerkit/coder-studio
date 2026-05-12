@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { createStore, Provider } from "jotai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { wsClientAtom } from "../../../../atoms/connection";
+import { pendingEditorNavigationAtomFamily } from "../../../code-editor/atoms";
 import {
   activeFilePathAtomFamily,
   fileTreeAtomFamily,
@@ -1013,6 +1014,44 @@ describe("FileTreePanel", () => {
     fireEvent.mouseLeave(directoryLabel);
     fireEvent.mouseEnter(fileLabel);
     expect(screen.queryByRole("tooltip")).toBeNull();
+  });
+
+  it("routes file-tree selection through the shared editor navigation path", async () => {
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand: vi.fn().mockResolvedValue({}) } as never);
+    store.set(
+      fileTreeAtomFamily("ws-test"),
+      new Map([
+        [
+          ".",
+          [
+            {
+              path: "src/app.tsx",
+              name: "app.tsx",
+              kind: "file",
+            },
+          ],
+        ],
+      ])
+    );
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    fireEvent.click(await screen.findByText("app.tsx"));
+
+    await waitFor(() => {
+      expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/app.tsx");
+    });
+
+    expect(store.get(pendingEditorNavigationAtomFamily("ws-test"))).toEqual({
+      workspaceId: "ws-test",
+      path: "src/app.tsx",
+      source: "file-tree",
+    });
   });
 
   it("keeps expanded directories populated after refreshing the file tree", async () => {

@@ -7,34 +7,96 @@ import { MonacoHost } from "./monaco-host";
 
 const {
   mockCreateEditor,
+  mockCreateModel,
   mockDefineTheme,
   mockSetModelLanguage,
   mockSetTheme,
   mockEditorInstance,
   mockWorker,
   mockAddCommand,
+  mockSetModel,
+  mockRegistryGetOrCreate,
+  modelState,
+  workspaceModelA,
+  workspaceModelB,
 } = vi.hoisted(() => {
+  const createMockModel = (initialValue: string, language = "typescript") => {
+    let currentValue = initialValue;
+
+    return {
+      language,
+      dispose: vi.fn(),
+      getValue: vi.fn(() => currentValue),
+      setValue: vi.fn((next: string) => {
+        currentValue = next;
+      }),
+    };
+  };
+
+  const modelState = {
+    current: null as null | ReturnType<typeof createMockModel>,
+  };
+  const workspaceModelA = createMockModel("export const a = 1;");
+  const workspaceModelB = createMockModel("export const b = 2;");
+  const mockCreateModel = vi.fn((value: string, language: string) =>
+    createMockModel(value, language)
+  );
   const mockAddCommand = vi.fn(() => undefined);
+  const mockSetModel = vi.fn((model: ReturnType<typeof createMockModel>) => {
+    modelState.current = model;
+  });
   const mockEditorInstance = {
     dispose: vi.fn(),
-    getModel: vi.fn(() => ({})),
-    getValue: vi.fn(() => "export const a = 1;"),
+    getModel: vi.fn(() => modelState.current),
+    getValue: vi.fn(() => modelState.current?.getValue() ?? ""),
     layout: vi.fn(),
     onDidChangeModelContent: vi.fn(() => ({ dispose: vi.fn() })),
     addCommand: mockAddCommand,
+    setModel: mockSetModel,
     setValue: vi.fn(),
   };
+  const mockRegistryGetOrCreate = vi.fn(({ path }: { path: string }) =>
+    path === "src/other.ts"
+      ? {
+          key: "/repo::src/other.ts",
+          uri: { toString: () => "file:///repo/src/other.ts" },
+          model: workspaceModelB,
+          language: "typescript",
+          path,
+        }
+      : {
+          key: "/repo::src/example.ts",
+          uri: { toString: () => "file:///repo/src/example.ts" },
+          model: workspaceModelA,
+          language: "typescript",
+          path,
+        }
+  );
 
   return {
     mockCreateEditor: vi.fn(() => mockEditorInstance),
+    mockCreateModel,
     mockDefineTheme: vi.fn(),
     mockSetModelLanguage: vi.fn(),
     mockSetTheme: vi.fn(),
     mockEditorInstance,
     mockWorker: class MockWorker {},
     mockAddCommand,
+    mockSetModel,
+    mockRegistryGetOrCreate,
+    modelState,
+    workspaceModelA,
+    workspaceModelB,
   };
 });
+
+vi.mock("../monaco/model-registry", () => ({
+  monacoModelRegistry: {
+    getOrCreate: mockRegistryGetOrCreate,
+    updateFromDisk: vi.fn(),
+    disposeWorkspace: vi.fn(),
+  },
+}));
 
 vi.mock("monaco-editor", () => ({
   KeyCode: {
@@ -45,6 +107,7 @@ vi.mock("monaco-editor", () => ({
   },
   editor: {
     create: mockCreateEditor,
+    createModel: mockCreateModel,
     defineTheme: mockDefineTheme,
     setModelLanguage: mockSetModelLanguage,
     setTheme: mockSetTheme,
@@ -62,14 +125,18 @@ vi.mock("monaco-editor/esm/vs/language/typescript/ts.worker?worker", () => ({
 describe("MonacoHost", () => {
   beforeEach(() => {
     mockCreateEditor.mockClear();
+    mockCreateModel.mockClear();
     mockDefineTheme.mockClear();
     mockSetModelLanguage.mockClear();
     mockSetTheme.mockClear();
     mockAddCommand.mockClear();
+    mockSetModel.mockClear();
+    mockRegistryGetOrCreate.mockClear();
     mockEditorInstance.dispose.mockClear();
     mockEditorInstance.getValue.mockClear();
     mockEditorInstance.layout.mockClear();
     mockEditorInstance.setValue.mockClear();
+    modelState.current = null;
   });
 
   it("creates the editor with a named Monaco theme when ui theme is mint-light", async () => {
@@ -79,7 +146,12 @@ describe("MonacoHost", () => {
 
     render(
       <Provider store={store}>
-        <MonacoHost workspaceId="ws-test" filePath="src/example.ts" content="export const a = 1;" />
+        <MonacoHost
+          workspaceId="ws-test"
+          workspaceRootPath="/repo"
+          filePath="src/example.ts"
+          content="export const a = 1;"
+        />
       </Provider>
     );
 
@@ -88,9 +160,7 @@ describe("MonacoHost", () => {
       expect(mockCreateEditor).toHaveBeenCalledWith(
         expect.any(HTMLDivElement),
         expect.objectContaining({
-          language: "typescript",
           theme: "coder-studio-mint-light",
-          value: "export const a = 1;",
         })
       );
     });
@@ -101,7 +171,12 @@ describe("MonacoHost", () => {
 
     render(
       <Provider store={store}>
-        <MonacoHost workspaceId="ws-test" filePath="src/example.ts" content="export const a = 1;" />
+        <MonacoHost
+          workspaceId="ws-test"
+          workspaceRootPath="/repo"
+          filePath="src/example.ts"
+          content="export const a = 1;"
+        />
       </Provider>
     );
 
@@ -125,6 +200,7 @@ describe("MonacoHost", () => {
       <Provider store={createStore()}>
         <MonacoHost
           workspaceId="ws-test"
+          workspaceRootPath="/repo"
           filePath="src/example.ts"
           content="export const a = 1;"
           onSave={onSave}
@@ -142,7 +218,8 @@ describe("MonacoHost", () => {
     const { rerender } = render(
       <Provider store={store}>
         <MonacoHost
-          workspaceId="config-editor-claude"
+          workspaceId="ws-test"
+          workspaceRootPath="/repo"
           filePath="config.json"
           content="{}"
           visible={false}
@@ -153,7 +230,8 @@ describe("MonacoHost", () => {
     rerender(
       <Provider store={store}>
         <MonacoHost
-          workspaceId="config-editor-claude"
+          workspaceId="ws-test"
+          workspaceRootPath="/repo"
           filePath="config.json"
           content="{}"
           visible
@@ -164,5 +242,46 @@ describe("MonacoHost", () => {
     await waitFor(() => {
       expect(mockEditorInstance.layout).toHaveBeenCalled();
     });
+  });
+
+  it("switches Monaco models instead of recreating the editor when the workspace file changes", async () => {
+    const store = createStore();
+    const { rerender } = render(
+      <Provider store={store}>
+        <MonacoHost
+          workspaceId="ws-test"
+          workspaceRootPath="/repo"
+          filePath="src/example.ts"
+          content="export const a = 1;"
+        />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(mockSetModel).toHaveBeenCalledWith(workspaceModelA);
+    });
+
+    rerender(
+      <Provider store={store}>
+        <MonacoHost
+          workspaceId="ws-test"
+          workspaceRootPath="/repo"
+          filePath="src/other.ts"
+          content="export const b = 2;"
+        />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(mockSetModel).toHaveBeenLastCalledWith(workspaceModelB);
+    });
+
+    expect(mockCreateEditor).toHaveBeenCalledTimes(1);
+    expect(mockRegistryGetOrCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceRootPath: "/repo",
+        path: "src/other.ts",
+      })
+    );
   });
 });

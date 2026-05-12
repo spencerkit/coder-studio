@@ -16,6 +16,7 @@ import type { FC } from "react";
 import { useEffect, useRef } from "react";
 import { themeAtom } from "../../../atoms/app-ui";
 import { getThemeById } from "../../../theme";
+import { monacoModelRegistry } from "../monaco/model-registry";
 
 const monacoGlobal = globalThis as typeof globalThis & {
   MonacoEnvironment?: monaco.Environment;
@@ -35,6 +36,7 @@ monacoGlobal.MonacoEnvironment ??= {
 
 interface MonacoHostProps {
   workspaceId?: string;
+  workspaceRootPath?: string;
   filePath: string;
   content: string;
   visible?: boolean;
@@ -55,6 +57,7 @@ export const MonacoHost: FC<MonacoHostProps> = ({
   // workspaceId is accepted for future per-workspace editor settings; Monaco
   // itself doesn't need it today.
   workspaceId: _workspaceId,
+  workspaceRootPath,
   filePath,
   content,
   visible = true,
@@ -65,9 +68,11 @@ export const MonacoHost: FC<MonacoHostProps> = ({
   const uiTheme = useAtomValue(themeAtom);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
+  const standaloneModelRef = useRef<monaco.editor.ITextModel | null>(null);
   const wasVisibleRef = useRef(visible);
   const onContentChangeRef = useRef(onContentChange);
   const onSaveRef = useRef(onSave);
+  const isWorkspaceBacked = Boolean(workspaceRootPath) && !standalone;
 
   useEffect(() => {
     onContentChangeRef.current = onContentChange;
@@ -92,8 +97,7 @@ export const MonacoHost: FC<MonacoHostProps> = ({
     if (!containerRef.current || editorRef.current) return;
 
     const editor = monaco.editor.create(containerRef.current, {
-      value: content,
-      language,
+      model: null,
       theme: editorTheme,
       fontSize: 13,
       fontFamily: "JetBrains Mono, monospace",
@@ -115,6 +119,8 @@ export const MonacoHost: FC<MonacoHostProps> = ({
       changeDisposable.dispose();
       editor.dispose();
       editorRef.current = null;
+      standaloneModelRef.current?.dispose();
+      standaloneModelRef.current = null;
     };
   }, []);
 
@@ -122,21 +128,36 @@ export const MonacoHost: FC<MonacoHostProps> = ({
     const editor = editorRef.current;
     if (!editor) return;
 
-    const model = editor.getModel();
-    if (model) {
-      monaco.editor.setModelLanguage(model, language);
+    if (isWorkspaceBacked && workspaceRootPath) {
+      const handle = monacoModelRegistry.getOrCreate({
+        workspaceRootPath,
+        path: filePath,
+        language,
+        content,
+      });
+      if (editor.getModel() !== handle.model) {
+        editor.setModel(handle.model);
+      }
+      return;
     }
-  }, [language]);
+
+    if (!standaloneModelRef.current) {
+      standaloneModelRef.current = monaco.editor.createModel(content, language);
+    }
+
+    const model = standaloneModelRef.current;
+    monaco.editor.setModelLanguage(model, language);
+    if (model.getValue() !== content) {
+      model.setValue(content);
+    }
+    if (editor.getModel() !== model) {
+      editor.setModel(model);
+    }
+  }, [content, filePath, isWorkspaceBacked, language, workspaceRootPath]);
 
   useEffect(() => {
     monaco.editor.setTheme(editorTheme);
   }, [editorTheme]);
-
-  useEffect(() => {
-    const editor = editorRef.current;
-    if (!editor || editor.getValue() === content) return;
-    editor.setValue(content);
-  }, [content]);
 
   useEffect(() => {
     const editor = editorRef.current;
@@ -154,7 +175,7 @@ export const MonacoHost: FC<MonacoHostProps> = ({
     <div
       ref={containerRef}
       className="monaco-host"
-      data-monaco-mode={standalone ? "standalone" : "workspace"}
+      data-monaco-mode={isWorkspaceBacked ? "workspace" : "standalone"}
     />
   );
 };
