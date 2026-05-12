@@ -18,7 +18,6 @@ export interface ServerConfig {
   dataDir: string;
   uploadsDir: string;
   logLevel: "trace" | "debug" | "info" | "warn" | "error";
-  relaxCsp: boolean;
   webRoot?: string;
   appVersion?: string;
   auth: {
@@ -122,7 +121,6 @@ export function parseServerConfig(overrides?: Partial<ServerConfig>): ServerConf
     dataDir,
     uploadsDir,
     logLevel: overrides?.logLevel ?? parseLogLevel(process.env.LOG_LEVEL) ?? "info",
-    relaxCsp: overrides?.relaxCsp ?? process.env.RELAX_CSP === "true",
     webRoot: overrides?.webRoot,
     appVersion:
       overrides?.appVersion ?? process.env.CODER_STUDIO_APP_VERSION ?? resolveDefaultAppVersion(),

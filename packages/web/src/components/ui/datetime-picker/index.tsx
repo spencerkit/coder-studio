@@ -1,7 +1,9 @@
 import clsx from "clsx";
+import { useAtomValue } from "jotai";
 import { Calendar } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useId, useState } from "react";
-import { formatDate, useTranslation } from "../../../lib/i18n";
+import { localeAtom } from "../../../atoms/app-ui";
+import { formatDate, type LocaleCode, useTranslation } from "../../../lib/i18n";
 import { useViewport } from "../_internal/use-viewport";
 import { Popover } from "../popover";
 import { Sheet } from "../sheet";
@@ -26,11 +28,29 @@ export interface DateTimePickerProps {
   readonly "aria-describedby"?: string;
 }
 
+interface DateTimeDraft {
+  readonly year: number;
+  readonly month: number;
+  readonly day: number;
+  readonly hour: number;
+  readonly minute: number;
+}
+
 function parseLocalDateTime(value: string): Date | null {
   if (!value) return null;
   const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value);
   if (!match) return null;
-  const [, year, month, day, hour, minute] = match.map(Number);
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+
+  if ([year, month, day, hour, minute].some(Number.isNaN)) {
+    return null;
+  }
+
   return new Date(year, month - 1, day, hour, minute);
 }
 
@@ -41,6 +61,64 @@ function formatLocalDateTime(date: Date): string {
   const hour = String(date.getHours()).padStart(2, "0");
   const minute = String(date.getMinutes()).padStart(2, "0");
   return `${year}-${month}-${day}T${hour}:${minute}`;
+}
+
+function startOfDay(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function truncateToMinute(date: Date): Date {
+  return new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+    date.getHours(),
+    date.getMinutes()
+  );
+}
+
+function getDaysInMonth(year: number, month: number): number {
+  return new Date(year, month + 1, 0).getDate();
+}
+
+function clampDay(year: number, month: number, day: number): number {
+  return Math.min(day, getDaysInMonth(year, month));
+}
+
+function createDraft(date: Date): DateTimeDraft {
+  return {
+    year: date.getFullYear(),
+    month: date.getMonth(),
+    day: date.getDate(),
+    hour: date.getHours(),
+    minute: date.getMinutes(),
+  };
+}
+
+function createDateFromDraft(draft: DateTimeDraft): Date {
+  return new Date(draft.year, draft.month, draft.day, draft.hour, draft.minute);
+}
+
+function clampDateToBounds(date: Date, minTime?: number, maxTime?: number): Date {
+  const timestamp = date.getTime();
+
+  if (minTime !== undefined && timestamp < minTime) {
+    return new Date(minTime);
+  }
+
+  if (maxTime !== undefined && timestamp > maxTime) {
+    return new Date(maxTime);
+  }
+
+  return date;
+}
+
+function isDateTimeDisabled(date: Date, minTime?: number, maxTime?: number): boolean {
+  const timestamp = date.getTime();
+
+  if (minTime !== undefined && timestamp < minTime) return true;
+  if (maxTime !== undefined && timestamp > maxTime) return true;
+  return false;
 }
 
 const sizeClassMap: Record<DateTimePickerSize, string | undefined> = {
@@ -64,38 +142,28 @@ export function DateTimePicker({
   "aria-describedby": ariaDescribedBy,
 }: DateTimePickerProps) {
   const t = useTranslation();
+  const locale = useAtomValue(localeAtom) as LocaleCode;
   const viewport = useViewport();
   const triggerId = useId();
   const [open, setOpen] = useState(false);
+  const effectiveMinTime = minDate ? truncateToMinute(minDate).getTime() : undefined;
+  const effectiveMaxTime = maxDate ? truncateToMinute(maxDate).getTime() : undefined;
 
-  // Initialize draft from value
-  const getInitialDraft = useCallback(() => {
-    const parsed = parseLocalDateTime(value);
+  const createInitialDraft = (currentValue: string) => {
+    const parsed = parseLocalDateTime(currentValue);
     if (parsed) {
-      return {
-        year: parsed.getFullYear(),
-        month: parsed.getMonth(),
-        day: parsed.getDate(),
-        hour: parsed.getHours(),
-        minute: parsed.getMinutes(),
-      };
+      return createDraft(parsed);
     }
-    const now = new Date();
-    return {
-      year: now.getFullYear(),
-      month: now.getMonth(),
-      day: now.getDate(),
-      hour: now.getHours(),
-      minute: 0,
-    };
-  }, [value]);
 
-  const [draft, setDraft] = useState(getInitialDraft);
+    const now = truncateToMinute(new Date());
+    return createDraft(clampDateToBounds(now, effectiveMinTime, effectiveMaxTime));
+  };
 
-  // Update draft when value changes externally
+  const [draft, setDraft] = useState(() => createInitialDraft(value));
+
   useEffect(() => {
-    setDraft(getInitialDraft());
-  }, [value, getInitialDraft]);
+    setDraft(createInitialDraft(value));
+  }, [value]);
 
   const handleDateSelect = useCallback((date: Date) => {
     setDraft((prev) => ({
@@ -107,7 +175,12 @@ export function DateTimePicker({
   }, []);
 
   const handleMonthChange = useCallback((year: number, month: number) => {
-    setDraft((prev) => ({ ...prev, year, month }));
+    setDraft((prev) => ({
+      ...prev,
+      year,
+      month,
+      day: clampDay(year, month, prev.day),
+    }));
   }, []);
 
   const handleHourChange = useCallback((hour: number) => {
@@ -118,19 +191,26 @@ export function DateTimePicker({
     setDraft((prev) => ({ ...prev, minute }));
   }, []);
 
+  const selectedDate = createDateFromDraft(draft);
+  const isConfirmDisabled = isDateTimeDisabled(selectedDate, effectiveMinTime, effectiveMaxTime);
+
   const handleConfirm = useCallback(() => {
-    const date = new Date(draft.year, draft.month, draft.day, draft.hour, draft.minute);
+    const date = createDateFromDraft(draft);
+    if (isDateTimeDisabled(date, effectiveMinTime, effectiveMaxTime)) {
+      return;
+    }
     onValueChange(formatLocalDateTime(date));
     setOpen(false);
-  }, [draft, onValueChange]);
+  }, [draft, effectiveMaxTime, effectiveMinTime, onValueChange]);
 
   const handleClear = useCallback(() => {
     onValueChange("");
     setOpen(false);
   }, [onValueChange]);
 
-  const displayValue = value
-    ? formatDate(parseLocalDateTime(value)?.getTime() ?? Date.now(), "en")
+  const parsedValue = parseLocalDateTime(value);
+  const displayValue = parsedValue
+    ? formatDate(parsedValue.getTime(), locale)
     : (placeholder ?? t("datetime.select_date"));
 
   const isMobile = viewport === "mobile";
@@ -160,10 +240,9 @@ export function DateTimePicker({
     </button>
   );
 
-  const selectedDate = value ? parseLocalDateTime(value) : null;
-  const calendarMinDate = minDate
-    ? new Date(minDate.getFullYear(), minDate.getMonth(), minDate.getDate())
-    : undefined;
+  const calendarSelectedDate = new Date(draft.year, draft.month, draft.day);
+  const calendarMinDate = minDate ? startOfDay(minDate) : undefined;
+  const calendarMaxDate = maxDate ? startOfDay(maxDate) : undefined;
 
   const content: ReactNode = (
     <div className={styles.content}>
@@ -171,9 +250,9 @@ export function DateTimePicker({
         <CalendarGrid
           year={draft.year}
           month={draft.month}
-          selectedDate={selectedDate}
+          selectedDate={calendarSelectedDate}
           minDate={calendarMinDate}
-          maxDate={maxDate}
+          maxDate={calendarMaxDate}
           onDateSelect={handleDateSelect}
           onMonthChange={handleMonthChange}
         />
@@ -193,7 +272,12 @@ export function DateTimePicker({
             {t("datetime.clear")}
           </button>
         ) : null}
-        <button type="button" className={styles.action} onClick={handleConfirm}>
+        <button
+          type="button"
+          className={styles.action}
+          onClick={handleConfirm}
+          disabled={isConfirmDisabled}
+        >
           {t("datetime.confirm")}
         </button>
       </div>

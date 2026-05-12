@@ -540,6 +540,28 @@ describe("SupervisorManager cycle triggers", () => {
     expect(manager.get(supervisor.id)?.scheduledAt).toBeUndefined();
   });
 
+  it("consumes an overdue scheduledAt when turn_completed runs first", async () => {
+    const supervisor = await manager.create({
+      sessionId: "sess-overdue-turn-completed",
+      workspaceId: "ws-1",
+      objective: "Ship the fix",
+      evaluatorProviderId: "codex",
+      scheduledAt: Date.now() - 1_000,
+    });
+
+    const managerInternals = getManagerInternals();
+    const evaluate = vi.spyOn(managerInternals.evaluator, "evaluate");
+
+    const first = await managerInternals.runEvaluation(supervisor.id, "turn_completed");
+    const second = await managerInternals.runEvaluation(supervisor.id, "scheduled");
+
+    expect(first?.trigger).toBe("turn_completed");
+    expect(second).toBeNull();
+    expect(manager.get(supervisor.id)?.scheduledAt).toBeUndefined();
+    expect(manager.get(supervisor.id)?.cycles).toHaveLength(1);
+    expect(evaluate).toHaveBeenCalledTimes(1);
+  });
+
   it("retries a due scheduled run until the session becomes runnable", async () => {
     vi.useFakeTimers();
     let sessionState: Session["state"] = "starting";
