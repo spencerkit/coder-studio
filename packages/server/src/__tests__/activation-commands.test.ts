@@ -104,6 +104,134 @@ describe("activation commands", () => {
     });
   });
 
+  it("rejects non-activation websocket commands when metadata lookup returns undefined", async () => {
+    const broadcaster = {
+      broadcast: vi.fn(),
+      sendToClient: vi.fn(() => true),
+      sendBinaryToClient: vi.fn(() => true),
+      getRequestMetadata: vi.fn(() => undefined),
+    } satisfies Broadcaster;
+    const ctx = createBaseContext({ broadcaster });
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "00000000-0000-4000-8000-000000000004",
+        op: "workspace.list",
+        args: {},
+      },
+      ctx,
+      "ws-a"
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toEqual({
+      code: "activation_required",
+      message: "This tab is no longer the active session",
+    });
+  });
+
+  it("does not allow a stale websocket to heartbeat after same-client rebind", async () => {
+    const request = createMockRequest();
+    const broadcaster = {
+      broadcast: vi.fn(),
+      sendToClient: vi.fn(() => true),
+      sendBinaryToClient: vi.fn(() => true),
+      getRequestMetadata: vi.fn(() => request),
+    } satisfies Broadcaster;
+    const ctx = createBaseContext({ broadcaster });
+
+    await dispatch(
+      {
+        kind: "command",
+        id: "claim-1",
+        op: "activation.claim",
+        args: { clientInstanceId: "client-a" },
+      },
+      ctx,
+      "ws-a"
+    );
+
+    const rebound = await dispatch(
+      {
+        kind: "command",
+        id: "claim-2",
+        op: "activation.claim",
+        args: { clientInstanceId: "client-a" },
+      },
+      ctx,
+      "ws-b"
+    );
+
+    expect(rebound.ok).toBe(true);
+
+    const heartbeat = await dispatch(
+      {
+        kind: "command",
+        id: "heartbeat-stale",
+        op: "activation.heartbeat",
+        args: { clientInstanceId: "client-a", generation: 1 },
+      },
+      ctx,
+      "ws-a"
+    );
+
+    expect(heartbeat.ok).toBe(true);
+    expect(heartbeat.data).toEqual({ ok: false });
+  });
+
+  it("does not allow a stale websocket to release after same-client rebind", async () => {
+    const request = createMockRequest();
+    const broadcaster = {
+      broadcast: vi.fn(),
+      sendToClient: vi.fn(() => true),
+      sendBinaryToClient: vi.fn(() => true),
+      getRequestMetadata: vi.fn(() => request),
+    } satisfies Broadcaster;
+    const ctx = createBaseContext({ broadcaster });
+
+    await dispatch(
+      {
+        kind: "command",
+        id: "claim-3",
+        op: "activation.claim",
+        args: { clientInstanceId: "client-a" },
+      },
+      ctx,
+      "ws-a"
+    );
+
+    await dispatch(
+      {
+        kind: "command",
+        id: "claim-4",
+        op: "activation.claim",
+        args: { clientInstanceId: "client-a" },
+      },
+      ctx,
+      "ws-b"
+    );
+
+    const release = await dispatch(
+      {
+        kind: "command",
+        id: "release-stale",
+        op: "activation.release",
+        args: { clientInstanceId: "client-a", generation: 1 },
+      },
+      ctx,
+      "ws-a"
+    );
+
+    expect(release.ok).toBe(true);
+    expect(release.data).toEqual({ ok: false });
+    expect(ctx.activationMgr.getLease()).toMatchObject({
+      clientInstanceId: "client-a",
+      wsClientId: "ws-b",
+      generation: 1,
+    });
+  });
+
   it("does not block direct internal dispatches without websocket request metadata", async () => {
     const ctx = createBaseContext();
 

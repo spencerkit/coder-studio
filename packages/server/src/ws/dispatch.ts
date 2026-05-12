@@ -85,9 +85,10 @@ export async function dispatch(
   ctx: CommandContext,
   clientId?: string
 ): Promise<Result> {
-  const requestMetadata = clientId ? ctx.broadcaster.getRequestMetadata?.(clientId) : undefined;
+  const isWsDispatch =
+    clientId !== undefined && typeof ctx.broadcaster.getRequestMetadata === "function";
 
-  if (requestMetadata && !ACTIVATION_ALLOWLIST.has(msg.op)) {
+  if (isWsDispatch && !ACTIVATION_ALLOWLIST.has(msg.op)) {
     const active = ctx.activationMgr.getLease();
     if (!active || active.wsClientId !== clientId) {
       return {
