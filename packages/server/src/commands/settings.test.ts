@@ -137,6 +137,31 @@ describe("settings commands", () => {
     ).toEqual({ value: '"graphite-light"' });
   });
 
+  it("settings.update persists legacy appearance.theme light during themeId migration", async () => {
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "settings-update-legacy-theme-light",
+        op: "settings.update",
+        args: {
+          settings: {
+            appearance: {
+              theme: "light",
+            },
+          },
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(
+      db.prepare("SELECT value FROM user_settings WHERE key = ?").get("appearance.theme")
+    ).toEqual({
+      value: '"light"',
+    });
+  });
+
   it("settings.update rejects fractional supervisor timeout values", async () => {
     const result = await dispatch(
       {

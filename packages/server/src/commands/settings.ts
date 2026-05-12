@@ -65,7 +65,7 @@ const SettingsSchema = z.object({
     .optional(),
   appearance: z
     .object({
-      theme: z.enum(["dark"]).optional(),
+      theme: z.enum(["dark", "light"]).optional(),
       themeId: z.string().optional(),
       terminalRenderer: z.enum(["standard", "compatibility"]).optional(),
       terminalCopyOnSelect: z.boolean().optional(),

@@ -616,6 +616,102 @@ describe("AppProviders lifecycle recovery", () => {
     });
   });
 
+  it("preserves a newer local theme selection when startup hydration resolves afterward", async () => {
+    const store = createStore();
+    setVisibilityState("visible");
+
+    let resolveSettingsGet: ((value: Record<string, unknown>) => void) | undefined;
+    const settingsGetPromise = new Promise<Record<string, unknown>>((resolve) => {
+      resolveSettingsGet = resolve;
+    });
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return await settingsGetPromise;
+      }
+
+      return undefined;
+    });
+    wsState.client!.sendCommand = sendCommand;
+
+    renderProviders(store);
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
+
+    act(() => {
+      wsState.client?.statusHandler?.("connected");
+    });
+
+    await vi.waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith("settings.get", {}, undefined);
+    });
+
+    act(() => {
+      store.set(themeAtom, "graphite-dark");
+    });
+
+    await act(async () => {
+      resolveSettingsGet?.({
+        "appearance.themeId": "nord-light",
+      });
+      await settingsGetPromise;
+    });
+
+    expect(document.documentElement.getAttribute("data-theme")).toBe("graphite-dark");
+    expect(store.get(themeAtom)).toBe("graphite-dark");
+    expect(localStorage.getItem("ui.themeId")).toBe(JSON.stringify("graphite-dark"));
+  });
+
+  it("preserves a persisted local theme selection when startup hydration returns a stale server theme", async () => {
+    const store = createStore();
+    setVisibilityState("visible");
+    localStorage.setItem("ui.themeId", JSON.stringify("graphite-dark"));
+
+    let resolveSettingsGet: ((value: Record<string, unknown>) => void) | undefined;
+    const settingsGetPromise = new Promise<Record<string, unknown>>((resolve) => {
+      resolveSettingsGet = resolve;
+    });
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return await settingsGetPromise;
+      }
+
+      return undefined;
+    });
+    wsState.client!.sendCommand = sendCommand;
+
+    renderProviders(store);
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
+
+    await vi.waitFor(() => {
+      expect(document.documentElement.getAttribute("data-theme")).toBe("graphite-dark");
+      expect(store.get(themeAtom)).toBe("graphite-dark");
+    });
+
+    act(() => {
+      wsState.client?.statusHandler?.("connected");
+    });
+
+    await vi.waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith("settings.get", {}, undefined);
+    });
+
+    await act(async () => {
+      resolveSettingsGet?.({
+        "appearance.themeId": "nord-light",
+      });
+      await settingsGetPromise;
+    });
+
+    expect(document.documentElement.getAttribute("data-theme")).toBe("graphite-dark");
+    expect(store.get(themeAtom)).toBe("graphite-dark");
+    expect(localStorage.getItem("ui.themeId")).toBe(JSON.stringify("graphite-dark"));
+  });
+
   it("preserves a newer local terminal copy-on-select update when startup hydration resolves later", async () => {
     const store = createStore();
     setVisibilityState("visible");

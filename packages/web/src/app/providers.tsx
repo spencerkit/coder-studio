@@ -74,6 +74,10 @@ interface WorkspaceActivityState {
   workspaceId: string | null;
 }
 
+interface AppearanceSelectionVersion {
+  theme: number;
+}
+
 const DEFAULT_REFRESH_HINT: WorkspaceRefreshHint = {
   refreshGit: false,
   refreshBranches: false,
@@ -191,7 +195,7 @@ interface AppProvidersProps {
 
 export function AppProviders({ children }: AppProvidersProps) {
   const [, setWsClient] = useAtom(wsClientAtom);
-  const setTheme = useSetAtom(themeAtom);
+  const [theme, setTheme] = useAtom(themeAtom);
   const authEnabled = useAtomValue(authEnabledAtom);
   const authenticated = useAtomValue(authenticatedAtom);
   const connectionStatus = useAtomValue(connectionStatusAtom);
@@ -230,6 +234,10 @@ export function AppProviders({ children }: AppProvidersProps) {
     mode: "inactive",
     workspaceId: null,
   });
+  const appearanceSelectionVersionRef = useRef<AppearanceSelectionVersion>({
+    theme: 0,
+  });
+  const preferPersistedThemeOnFirstHydrationRef = useRef(false);
 
   // Keep dispatchRef in sync
   useEffect(() => {
@@ -280,10 +288,18 @@ export function AppProviders({ children }: AppProvidersProps) {
 
   // Initialize theme from localStorage
   useEffect(() => {
+    preferPersistedThemeOnFirstHydrationRef.current =
+      localStorage.getItem(THEME_ID_STORAGE_KEY) !== null;
     const resolvedThemeId = applyResolvedTheme(readStoredThemePreference());
     setTheme(resolvedThemeId);
     localStorage.setItem(THEME_ID_STORAGE_KEY, JSON.stringify(resolvedThemeId));
   }, [setTheme]);
+
+  useEffect(() => {
+    const resolvedTheme = getThemeById(theme);
+    document.documentElement.setAttribute("data-theme", resolvedTheme.documentThemeAttr);
+    localStorage.setItem(THEME_ID_STORAGE_KEY, JSON.stringify(resolvedTheme.id));
+  }, [theme]);
 
   useEffect(() => {
     if (connectionStatus !== "connected") {
@@ -293,20 +309,34 @@ export function AppProviders({ children }: AppProvidersProps) {
     let cancelled = false;
 
     const hydrateTheme = async () => {
+      const appearanceSelectionVersionAtRequestStart = {
+        ...appearanceSelectionVersionRef.current,
+      };
       const result = await dispatch<Record<string, unknown>>("settings.get", {});
       if (cancelled || !result.ok || !result.data) {
         return;
       }
 
+      if (
+        appearanceSelectionVersionRef.current.theme !==
+        appearanceSelectionVersionAtRequestStart.theme
+      ) {
+        return;
+      }
+
+      if (preferPersistedThemeOnFirstHydrationRef.current) {
+        preferPersistedThemeOnFirstHydrationRef.current = false;
+        return;
+      }
+
       const settings = result.data;
-      const resolvedThemeId = applyResolvedTheme(
+      const resolvedThemeId = resolveStoredThemeId(
         settings["appearance.themeId"] ??
           settings["appearance.theme"] ??
           readStoredThemePreference()
       );
 
       setTheme(resolvedThemeId);
-      localStorage.setItem(THEME_ID_STORAGE_KEY, JSON.stringify(resolvedThemeId));
     };
 
     void hydrateTheme();
@@ -315,6 +345,16 @@ export function AppProviders({ children }: AppProvidersProps) {
       cancelled = true;
     };
   }, [connectionStatus, dispatch, setTheme]);
+
+  useEffect(() => {
+    const unsubscribeTheme = store.sub(themeAtom, () => {
+      appearanceSelectionVersionRef.current.theme += 1;
+    });
+
+    return () => {
+      unsubscribeTheme();
+    };
+  }, [store]);
 
   useEffect(() => {
     const loadAuthStatus = async () => {
