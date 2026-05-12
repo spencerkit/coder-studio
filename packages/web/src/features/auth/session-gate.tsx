@@ -1,11 +1,6 @@
-import { useAtomValue } from "jotai";
-import { useState } from "react";
-import { authEnabledAtom } from "../../atoms/connection";
 import { Button, EmptyState } from "../../components/ui";
-import { useActivation } from "../../hooks/use-activation";
 import { useViewport } from "../../hooks/use-viewport";
 import { useTranslation } from "../../lib/i18n";
-import { LoginPage } from "./index";
 
 const gateEmptyStateStyle = {
   minHeight: "auto",
@@ -15,28 +10,9 @@ const gateEmptyStateStyle = {
   textAlign: "left" as const,
 };
 
-export function SessionGatePage({ requestReentry }: { requestReentry?: () => Promise<boolean> }) {
+export function SessionGatePage() {
   const t = useTranslation();
-  const authEnabled = useAtomValue(authEnabledAtom);
-  const { claim } = useActivation();
   const isMobile = useViewport() === "mobile";
-  const [submitting, setSubmitting] = useState(false);
-
-  const handleReentry = async () => {
-    setSubmitting(true);
-    try {
-      const ok = requestReentry ? await requestReentry() : await claim();
-      if (ok) {
-        window.location.replace("/");
-      }
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  if (authEnabled === true) {
-    return <LoginPage onAuthenticated={handleReentry} />;
-  }
 
   return (
     <div
@@ -78,10 +54,9 @@ export function SessionGatePage({ requestReentry }: { requestReentry?: () => Pro
           variant="primary"
           size="lg"
           type="button"
-          disabled={submitting}
-          onClick={() => void handleReentry()}
+          onClick={() => window.location.replace("/")}
         >
-          {submitting ? t("auth.session_gate_reentering") : t("auth.session_gate_reenter")}
+          {t("auth.session_gate_reenter")}
         </Button>
       </div>
     </div>
