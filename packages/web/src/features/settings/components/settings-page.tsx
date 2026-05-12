@@ -978,28 +978,26 @@ function GeneralSettings({
           </Pill>
         </div>
 
-        {isMobile ? null : (
-          <div className="settings-toggle-row">
-            <div className="settings-toggle-info">
-              <span className="settings-toggle-label" id={copyOnSelectLabelId}>
-                {t("settings.copy_on_select")}
-              </span>
-              <span className="settings-toggle-desc" id={copyOnSelectDescId}>
-                {t("settings.copy_on_select_hint")}
-              </span>
-            </div>
-            <Switch
-              aria-describedby={copyOnSelectDescId}
-              aria-labelledby={copyOnSelectLabelId}
-              checked={terminalCopyOnSelect}
-              className="settings-toggle"
-              onCheckedChange={(nextValue) => {
-                setTerminalCopyOnSelect(nextValue);
-                void saveSettings({ appearance: { terminalCopyOnSelect: nextValue } });
-              }}
-            />
+        <div className="settings-toggle-row">
+          <div className="settings-toggle-info">
+            <span className="settings-toggle-label" id={copyOnSelectLabelId}>
+              {t("settings.copy_on_select")}
+            </span>
+            <span className="settings-toggle-desc" id={copyOnSelectDescId}>
+              {t("settings.copy_on_select_hint")}
+            </span>
           </div>
-        )}
+          <Switch
+            aria-describedby={copyOnSelectDescId}
+            aria-labelledby={copyOnSelectLabelId}
+            checked={terminalCopyOnSelect}
+            className="settings-toggle"
+            onCheckedChange={(nextValue) => {
+              setTerminalCopyOnSelect(nextValue);
+              void saveSettings({ appearance: { terminalCopyOnSelect: nextValue } });
+            }}
+          />
+        </div>
       </div>
 
       <div className="settings-group">

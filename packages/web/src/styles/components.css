@@ -9120,6 +9120,7 @@ textarea.input {
     flex-direction: column;
     min-height: 0;
     padding: var(--sp-3);
+    overflow: hidden;
     background: color-mix(in srgb, var(--bg-terminal) 94%, var(--bg-page) 6%);
     color: var(--text-primary);
     user-select: text;
@@ -9152,6 +9153,7 @@ textarea.input {
   .mobile-terminal-copy-mode__content {
     flex: 1;
     min-height: 0;
+    max-width: 100%;
     overflow: auto;
     user-select: text;
     -webkit-user-select: text;
@@ -9161,6 +9163,7 @@ textarea.input {
 
   .mobile-terminal-copy-mode__text {
     display: inline-block;
+    min-width: 100%;
     margin: 0;
     white-space: pre;
     user-select: text;

@@ -1078,7 +1078,7 @@ describe("SettingsPage", () => {
     expect(await screen.findByRole("switch", { name: "选中自动复制" })).toBeInTheDocument();
   });
 
-  it("does not show copy-on-select on mobile general settings", async () => {
+  it("shows copy-on-select on mobile general settings with mobile-specific hint", async () => {
     viewportMocks.viewport = "mobile";
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "settings.get") {
@@ -1093,10 +1093,8 @@ describe("SettingsPage", () => {
     renderSettingsPage(store);
     fireEvent.click(screen.getByRole("button", { name: "通用" }));
 
-    await screen.findByText("通知");
-
-    expect(screen.queryByRole("switch", { name: "选中自动复制" })).not.toBeInTheDocument();
-    expect(screen.queryByText("选中自动复制")).not.toBeInTheDocument();
+    expect(await screen.findByRole("switch", { name: "选中自动复制" })).toBeInTheDocument();
+    expect(screen.getByText("选中文本后自动复制到系统剪贴板")).toBeInTheDocument();
   });
 
   it("updates theme through a single shared appearance picker", async () => {

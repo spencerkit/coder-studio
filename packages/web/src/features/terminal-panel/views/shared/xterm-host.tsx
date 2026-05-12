@@ -963,6 +963,11 @@ export function XtermHost({
   );
 
   const enterMobileCopyMode = useCallback(() => {
+    if (!terminalPreferences.copyOnSelect) {
+      resetTouchStateRef.current();
+      return;
+    }
+
     const container = containerRef.current;
     const terminal = terminalRef.current;
 
@@ -998,7 +1003,7 @@ export function XtermHost({
     if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
       navigator.vibrate(10);
     }
-  }, [pushCopyModeFailureToast]);
+  }, [pushCopyModeFailureToast, terminalPreferences.copyOnSelect]);
 
   useEffect(() => {
     enterMobileCopyModeRef.current = enterMobileCopyMode;

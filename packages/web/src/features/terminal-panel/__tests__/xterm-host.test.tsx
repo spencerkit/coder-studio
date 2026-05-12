@@ -6920,6 +6920,7 @@ describe("XtermHost", () => {
     });
 
     store.set(localeAtom, "en");
+    store.set(terminalPreferencesAtom, { copyOnSelect: true });
     store.set(wsClientAtom, {
       sendCommand: vi.fn().mockResolvedValue({ ok: true, data: { status: "ok" } }),
       subscribe: vi.fn(() => () => {}),
@@ -7014,6 +7015,109 @@ describe("XtermHost", () => {
     vi.useRealTimers();
   });
 
+  it("does not enter mobile copy mode when copy-on-select is disabled", async () => {
+    vi.useFakeTimers();
+    viewportMocks.viewport = "mobile";
+
+    const originalMatchMedia = window.matchMedia;
+    const vibrate = vi.fn();
+    const store = createStore();
+
+    mockTerminal.cols = 4;
+    mockTerminal.rows = 2;
+
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query === "(pointer: coarse)",
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })) as typeof window.matchMedia;
+
+    Object.defineProperty(navigator, "vibrate", {
+      configurable: true,
+      value: vibrate,
+    });
+
+    store.set(localeAtom, "en");
+    store.set(terminalPreferencesAtom, { copyOnSelect: false });
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn().mockResolvedValue({ ok: true, data: { status: "ok" } }),
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => "connected"),
+      onStatus: vi.fn(() => () => {}),
+      sendTerminalInput: vi.fn().mockResolvedValue(undefined),
+    } as never);
+
+    const { container } = render(
+      <Provider store={store}>
+        <XtermHost terminalId="mobile-copy-mode-disabled-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    const host = container.querySelector(".xterm-host") as HTMLDivElement | null;
+    expect(host).toBeTruthy();
+
+    vi.spyOn(host!, "getBoundingClientRect").mockReturnValue({
+      width: 320,
+      height: 160,
+      top: 0,
+      right: 320,
+      bottom: 160,
+      left: 0,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    } as DOMRect);
+
+    const rowsElement = document.createElement("div");
+    rowsElement.className = "xterm-rows";
+    vi.spyOn(rowsElement, "getBoundingClientRect").mockReturnValue({
+      width: 200,
+      height: 40,
+      top: 12,
+      right: 212,
+      bottom: 52,
+      left: 8,
+      x: 8,
+      y: 12,
+      toJSON: () => ({}),
+    } as DOMRect);
+
+    const row = document.createElement("div");
+    const span = document.createElement("span");
+    span.textContent = "ab";
+    row.appendChild(span);
+    rowsElement.appendChild(row);
+    host!.appendChild(rowsElement);
+
+    const dispatchTouchEvent = (
+      type: string,
+      touches: Array<{ identifier: number; clientY: number }>,
+      changedTouches: Array<{ identifier: number; clientY: number }> = touches
+    ) => {
+      const event = new Event(type, { bubbles: true, cancelable: true });
+      Object.defineProperty(event, "touches", { value: touches });
+      Object.defineProperty(event, "changedTouches", { value: changedTouches });
+      host?.dispatchEvent(event);
+    };
+
+    dispatchTouchEvent("touchstart", [{ identifier: 1, clientY: 120 }]);
+
+    await act(async () => {
+      vi.advanceTimersByTime(500);
+    });
+
+    expect(container.querySelector(".mobile-terminal-copy-mode")).toBeNull();
+    expect(vibrate).not.toHaveBeenCalled();
+
+    window.matchMedia = originalMatchMedia;
+    vi.useRealTimers();
+  });
+
   it("does not enter mobile copy mode when the gesture becomes a scroll", async () => {
     vi.useFakeTimers();
     viewportMocks.viewport = "mobile";
@@ -7034,10 +7138,14 @@ describe("XtermHost", () => {
       dispatchEvent: vi.fn(),
     })) as typeof window.matchMedia;
 
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(terminalPreferencesAtom, { copyOnSelect: true });
+
     const { container } = render(
-      <JotaiProvider>
+      <Provider store={store}>
         <XtermHost terminalId="mobile-copy-mode-scroll-terminal" workspaceId="test-workspace" />
-      </JotaiProvider>
+      </Provider>
     );
 
     const host = container.querySelector(".xterm-host");
@@ -7095,13 +7203,17 @@ describe("XtermHost", () => {
       value: vibrate,
     });
 
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(terminalPreferencesAtom, { copyOnSelect: true });
+
     const { container } = render(
-      <JotaiProvider>
+      <Provider store={store}>
         <XtermHost
           terminalId="mobile-copy-mode-horizontal-drift-terminal"
           workspaceId="test-workspace"
         />
-      </JotaiProvider>
+      </Provider>
     );
 
     const host = container.querySelector(".xterm-host");
@@ -7190,6 +7302,7 @@ describe("XtermHost", () => {
     })) as typeof window.matchMedia;
 
     store.set(localeAtom, "en");
+    store.set(terminalPreferencesAtom, { copyOnSelect: true });
     store.set(wsClientAtom, {
       sendCommand: vi.fn().mockResolvedValue({ ok: true, data: { status: "ok" } }),
       subscribe: vi.fn(() => () => {}),
@@ -7306,13 +7419,17 @@ describe("XtermHost", () => {
     }) as typeof requestAnimationFrame;
     global.cancelAnimationFrame = vi.fn() as typeof cancelAnimationFrame;
 
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(terminalPreferencesAtom, { copyOnSelect: true });
+
     const { container } = render(
-      <JotaiProvider>
+      <Provider store={store}>
         <XtermHost
           terminalId="mobile-copy-mode-below-tolerance-momentum-terminal"
           workspaceId="test-workspace"
         />
-      </JotaiProvider>
+      </Provider>
     );
 
     const host = container.querySelector(".xterm-host");
@@ -7370,6 +7487,7 @@ describe("XtermHost", () => {
     })) as typeof window.matchMedia;
 
     store.set(localeAtom, "en");
+    store.set(terminalPreferencesAtom, { copyOnSelect: true });
     store.set(wsClientAtom, {
       sendCommand: vi.fn().mockResolvedValue({ ok: true, data: { status: "ok" } }),
       subscribe: vi.fn(() => () => {}),
@@ -7472,6 +7590,7 @@ describe("XtermHost", () => {
     })) as typeof window.matchMedia;
 
     store.set(localeAtom, "en");
+    store.set(terminalPreferencesAtom, { copyOnSelect: true });
     store.set(wsClientAtom, {
       sendCommand: vi.fn().mockResolvedValue({ ok: true, data: { status: "ok" } }),
       subscribe: vi.fn(() => () => {}),
@@ -7568,6 +7687,7 @@ describe("XtermHost", () => {
     })) as typeof window.matchMedia;
 
     store.set(localeAtom, "en");
+    store.set(terminalPreferencesAtom, { copyOnSelect: true });
     store.set(wsClientAtom, {
       sendCommand: vi.fn().mockResolvedValue({ ok: true, data: { status: "ok" } }),
       subscribe: vi.fn(() => () => {}),
@@ -7674,6 +7794,7 @@ describe("XtermHost", () => {
     })) as typeof window.matchMedia;
 
     store.set(localeAtom, "en");
+    store.set(terminalPreferencesAtom, { copyOnSelect: true });
     store.set(wsClientAtom, {
       sendCommand: vi.fn().mockResolvedValue({ ok: true, data: { status: "ok" } }),
       subscribe: vi.fn(() => () => {}),
@@ -7769,6 +7890,7 @@ describe("XtermHost", () => {
     })) as typeof window.matchMedia;
 
     store.set(localeAtom, "zh");
+    store.set(terminalPreferencesAtom, { copyOnSelect: true });
     store.set(wsClientAtom, {
       sendCommand: vi.fn().mockResolvedValue({ ok: true, data: { status: "ok" } }),
       subscribe: vi.fn(() => () => {}),
@@ -7903,6 +8025,7 @@ describe("XtermHost", () => {
     })) as typeof window.matchMedia;
 
     store.set(localeAtom, "en");
+    store.set(terminalPreferencesAtom, { copyOnSelect: true });
     store.set(wsClientAtom, {
       sendCommand: vi.fn().mockResolvedValue({ ok: true, data: { status: "ok" } }),
       subscribe: vi.fn(() => () => {}),
