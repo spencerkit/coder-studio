@@ -299,6 +299,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(overlay).toContain("position: absolute");
     expect(overlay).toContain("inset: 0");
     expect(overlay).toContain("z-index: 6");
+    expect(overlay).toContain("box-sizing: border-box");
     expect(overlay).toContain("overflow: hidden");
     expect(overlay).toContain("user-select: text");
     expect(overlay).toContain("-webkit-user-select: text");
@@ -306,11 +307,16 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(toolbar).toContain("align-items: center");
     expect(done).toContain("margin-left: auto");
     expect(content).toContain("overflow: auto");
+    expect(content).toContain("min-width: 0");
     expect(content).toContain("max-width: 100%");
+    expect(content).toContain("max-height: 100%");
     expect(content).toContain("-webkit-overflow-scrolling: touch");
     expect(content).toContain("user-select: text");
     expect(content).toContain("-webkit-user-select: text");
     expect(content).toContain("-webkit-touch-callout: default");
+    expect(text).toContain("display: block");
+    expect(text).toContain("width: max-content");
+    expect(text).toContain("max-width: 100%");
     expect(text).toContain("min-width: 100%");
     expect(text).toContain("white-space: pre");
     expect(text).toContain("user-select: text");
