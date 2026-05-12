@@ -19,7 +19,37 @@ export type CycleStatus =
 
 export type CycleTrigger = "turn_completed" | "manual" | "scheduled";
 
-export type SupervisorStopReason = "objective_complete" | "max_supervision_count_reached";
+export type SupervisorStopReason =
+  | "objective_complete"
+  | "max_supervision_count_reached"
+  | "supervisor_uncertain"
+  | "needs_user_input";
+
+export type SupervisorPlanStepStatus = "pending" | "in_progress" | "completed";
+
+export interface SupervisorPlanStep {
+  step: string;
+  status: SupervisorPlanStepStatus;
+}
+
+export interface SupervisorTargetMemory {
+  summary: string;
+  plan: SupervisorPlanStep[];
+  updatedAt: number;
+}
+
+export interface SupervisorCycleStepUpdate {
+  step: string;
+  status: SupervisorPlanStepStatus;
+}
+
+export interface SupervisorCycleTargetRecord {
+  cycleId: string;
+  targetId: string;
+  summary?: string;
+  stepUpdates: SupervisorCycleStepUpdate[];
+  createdAt: number;
+}
 
 export type SupervisorCycleAttemptStatus = "evaluating" | "completed" | "failed" | "cancelled";
 
@@ -65,6 +95,7 @@ export interface Supervisor {
   id: string;
   sessionId: string;
   workspaceId: string;
+  targetId: string;
   state: SupervisorState;
   objective: string;
   evaluatorProviderId: string;
@@ -73,6 +104,8 @@ export interface Supervisor {
   completedSupervisionCount: number;
   scheduledAt?: number;
   stopReason?: SupervisorStopReason;
+  currentTargetMemory?: SupervisorTargetMemory;
+  recentTargetCycles: SupervisorCycleTargetRecord[];
   cycles: SupervisorCycle[];
   lastCycleAt?: number;
   lastEvaluatedTurnId?: string;

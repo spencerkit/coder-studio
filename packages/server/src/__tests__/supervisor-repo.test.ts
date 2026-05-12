@@ -46,6 +46,7 @@ describe("SupervisorRepo", () => {
       id: "sup-1",
       sessionId: "sess-1",
       workspaceId: "ws-1",
+      targetId: "target-1",
       state: "idle",
       objective: "Finish supervisor persistence",
       evaluatorProviderId: "codex",
@@ -64,6 +65,7 @@ describe("SupervisorRepo", () => {
       id: "sup-1",
       sessionId: "sess-1",
       workspaceId: "ws-1",
+      targetId: "target-initial",
       state: "stopped",
       objective: "Stop when objective is complete",
       evaluatorProviderId: "codex",
@@ -87,6 +89,31 @@ describe("SupervisorRepo", () => {
     });
   });
 
+  it("persists targetId on create and update", () => {
+    supervisorRepo.create({
+      id: "sup-1",
+      sessionId: "sess-1",
+      workspaceId: "ws-1",
+      targetId: "target-alpha",
+      state: "idle",
+      objective: "Track target scope",
+      evaluatorProviderId: "codex",
+      createdAt: 10,
+      updatedAt: 10,
+    });
+
+    const created = supervisorRepo.findById("sup-1");
+    expect(created?.targetId).toBe("target-alpha");
+
+    const updated = supervisorRepo.update("sup-1", {
+      targetId: "target-beta",
+      updatedAt: 11,
+    });
+
+    expect(updated.targetId).toBe("target-beta");
+    expect(supervisorRepo.findById("sup-1")?.targetId).toBe("target-beta");
+  });
+
   it("rejects a supervisor whose workspace does not match its session workspace", () => {
     db.prepare(
       "INSERT INTO workspaces (id, path, target_runtime, opened_at, last_active_at, ui_state) VALUES (?, ?, ?, ?, ?, ?)"
@@ -103,6 +130,7 @@ describe("SupervisorRepo", () => {
         id: "sup-bad",
         sessionId: "sess-2",
         workspaceId: "ws-1",
+        targetId: "target-bad",
         state: "idle",
         objective: "This insert must fail",
         evaluatorProviderId: "claude",
@@ -124,6 +152,7 @@ describe("SupervisorRepo", () => {
       id: "sup-1",
       sessionId: "sess-1",
       workspaceId: "ws-1",
+      targetId: "target-1",
       state: "idle",
       objective: "Enforce supervisor/session integrity",
       evaluatorProviderId: "claude",
@@ -152,6 +181,7 @@ describe("SupervisorRepo", () => {
       id: "sup-1",
       sessionId: "sess-1",
       workspaceId: "ws-1",
+      targetId: "target-1",
       state: "idle",
       objective: "Keep nullable fields intact",
       evaluatorProviderId: "claude",
@@ -178,6 +208,7 @@ describe("SupervisorRepo", () => {
       id: "sup-1",
       sessionId: "sess-1",
       workspaceId: "ws-1",
+      targetId: "target-1",
       state: "idle",
       objective: "Clear nullable fields",
       evaluatorProviderId: "claude",
@@ -205,6 +236,7 @@ describe("SupervisorRepo", () => {
       id: "sup-1",
       sessionId: "sess-1",
       workspaceId: "ws-1",
+      targetId: "target-1",
       state: "idle",
       objective: "Clear execution policy fields",
       evaluatorProviderId: "claude",
@@ -236,6 +268,7 @@ describe("SupervisorRepo", () => {
       id: "sup-1",
       sessionId: "sess-1",
       workspaceId: "ws-1",
+      targetId: "target-1",
       state: "idle",
       objective: "Keep cycle fields intact",
       evaluatorProviderId: "claude",
@@ -276,6 +309,7 @@ describe("SupervisorRepo", () => {
       id: "sup-1",
       sessionId: "sess-1",
       workspaceId: "ws-1",
+      targetId: "target-1",
       state: "idle",
       objective: "Clear cycle fields",
       evaluatorProviderId: "claude",
@@ -336,6 +370,7 @@ describe("SupervisorRepo", () => {
       id: "sup-1",
       sessionId: "sess-1",
       workspaceId: "ws-1",
+      targetId: "target-1",
       state: "idle",
       objective: "Keep the newest 100 cycles",
       evaluatorProviderId: "claude",
@@ -371,6 +406,7 @@ describe("SupervisorRepo", () => {
       id: "sup-1",
       sessionId: "sess-1",
       workspaceId: "ws-1",
+      targetId: "target-1",
       state: "idle",
       objective: "Allow scheduled cancelled cycle",
       evaluatorProviderId: "claude",
@@ -399,6 +435,7 @@ describe("SupervisorRepo", () => {
       id: "sup-1",
       sessionId: "sess-1",
       workspaceId: "ws-1",
+      targetId: "target-1",
       state: "idle",
       objective: "Track attempts",
       evaluatorProviderId: "claude",
@@ -456,6 +493,7 @@ describe("SupervisorRepo", () => {
       id: "sup-1",
       sessionId: "sess-1",
       workspaceId: "ws-1",
+      targetId: "target-1",
       state: "idle",
       objective: "Update attempts",
       evaluatorProviderId: "claude",
