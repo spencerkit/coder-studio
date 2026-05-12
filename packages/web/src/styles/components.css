@@ -732,6 +732,7 @@
 
 .settings-nav-icon {
   flex-shrink: 0;
+  color: var(--icon-secondary);
 }
 
 .settings-nav-label {
@@ -1588,6 +1589,7 @@
 }
 
 .terminal-panel-empty-icon {
+  color: var(--icon-muted);
   opacity: 0.5;
 }
 
@@ -2230,8 +2232,8 @@ body.is-resizing-panels * {
   width: 32px;
   height: 32px;
   border-radius: var(--radius-md);
-  background: var(--bg-hover);
-  color: var(--accent-green);
+  background: var(--icon-surface-accent);
+  color: var(--icon-accent);
 }
 
 .welcome-feature-text {
@@ -3380,18 +3382,18 @@ body.is-resizing-panels * {
   width: 28px;
   height: 28px;
   border-radius: var(--radius-md);
-  background: rgba(120, 215, 178, 0.12);
-  color: var(--accent-green);
+  background: var(--icon-surface-success);
+  color: var(--icon-success);
 }
 
 .supervisor-dialog[data-mode="edit"] .supervisor-dialog-header-icon {
-  background: rgba(108, 182, 255, 0.12);
-  color: var(--accent-blue);
+  background: var(--icon-surface-info);
+  color: var(--icon-info);
 }
 
 .supervisor-dialog[data-mode="disable"] .supervisor-dialog-header-icon {
-  background: rgba(255, 158, 176, 0.12);
-  color: var(--accent-pink);
+  background: var(--icon-surface-error);
+  color: var(--icon-error);
 }
 
 .supervisor-dialog-subtitle {
@@ -3419,15 +3421,15 @@ body.is-resizing-panels * {
   display: flex;
   gap: var(--sp-3);
   padding: var(--sp-3);
-  background: rgba(255, 158, 176, 0.08);
-  border: 1px solid rgba(255, 158, 176, 0.35);
+  background: var(--icon-surface-error);
+  border: 1px solid color-mix(in srgb, var(--icon-error) 36%, var(--border));
   border-left-width: 2px;
   border-radius: var(--radius-md);
 }
 
 .supervisor-danger-callout-icon {
   flex-shrink: 0;
-  color: var(--accent-pink);
+  color: var(--icon-error);
   margin-top: 1px;
 }
 
@@ -4904,27 +4906,27 @@ textarea.input {
 }
 
 .tree-icon.folder {
-  color: var(--accent-amber);
+  color: var(--icon-file-folder);
 }
 
 .tree-icon.code {
-  color: var(--accent-blue);
+  color: var(--icon-file-code);
 }
 
 .tree-icon.data {
-  color: var(--accent-purple);
+  color: var(--icon-file-data);
 }
 
 .tree-icon.doc {
-  color: var(--text-secondary);
+  color: var(--icon-file-doc);
 }
 
 .tree-icon.media {
-  color: var(--accent-green);
+  color: var(--icon-file-media);
 }
 
 .tree-icon.file {
-  color: var(--text-tertiary);
+  color: var(--icon-file-default);
 }
 
 .tree-label {
@@ -5350,6 +5352,7 @@ textarea.input {
 }
 
 .bottom-terminal-empty-icon {
+  color: var(--icon-muted);
   opacity: 0.45;
 }
 
@@ -5501,19 +5504,19 @@ textarea.input {
 }
 
 .git-row-icon-staged {
-  color: var(--accent-blue);
+  color: var(--icon-git-staged);
 }
 
 .git-row-icon-modified {
-  color: var(--accent-amber);
+  color: var(--icon-git-modified);
 }
 
 .git-row-icon-deleted {
-  color: var(--accent-pink);
+  color: var(--icon-git-deleted);
 }
 
 .git-row-icon-untracked {
-  color: var(--text-tertiary);
+  color: var(--icon-git-untracked);
 }
 
 .git-row-name {
@@ -7608,7 +7611,9 @@ textarea.input {
   margin-bottom: var(--sp-2);
   font-size: var(--text-sm);
   opacity: 0.8;
-  color: var(--text-tertiary);
+  background: var(--icon-surface-subtle);
+  border-radius: var(--radius-md);
+  color: var(--icon-muted);
 }
 
 .config-empty-title {
@@ -8393,6 +8398,7 @@ textarea.input {
     justify-content: center;
     flex-shrink: 0;
     line-height: 1;
+    color: var(--icon-accent);
   }
 
   .mobile-supervisor-badge__icon svg {
@@ -8523,6 +8529,7 @@ textarea.input {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    color: currentColor;
   }
 
   .mobile-dock__icon svg {
@@ -9884,7 +9891,7 @@ textarea.input {
 
   .settings-mobile-item__icon {
     display: inline-flex;
-    color: var(--text-tertiary);
+    color: var(--icon-secondary);
   }
 
   .settings-mobile-item__label {

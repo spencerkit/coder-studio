@@ -63,6 +63,46 @@ function getLastRuleBlock(selector: string) {
 }
 
 describe("components.css theme-sensitive surfaces", () => {
+  it("routes file tree and git status icons through icon theme tokens", () => {
+    expect(getLastRuleBlock(".tree-icon.folder")).toContain("var(--icon-file-folder)");
+    expect(getLastRuleBlock(".tree-icon.code")).toContain("var(--icon-file-code)");
+    expect(getLastRuleBlock(".tree-icon.data")).toContain("var(--icon-file-data)");
+    expect(getLastRuleBlock(".tree-icon.doc")).toContain("var(--icon-file-doc)");
+    expect(getLastRuleBlock(".tree-icon.media")).toContain("var(--icon-file-media)");
+    expect(getLastRuleBlock(".tree-icon.file")).toContain("var(--icon-file-default)");
+    expect(getLastRuleBlock(".git-row-icon-staged")).toContain("var(--icon-git-staged)");
+    expect(getLastRuleBlock(".git-row-icon-modified")).toContain("var(--icon-git-modified)");
+    expect(getLastRuleBlock(".git-row-icon-deleted")).toContain("var(--icon-git-deleted)");
+    expect(getLastRuleBlock(".git-row-icon-untracked")).toContain("var(--icon-git-untracked)");
+  });
+
+  it("routes semantic icon classes through icon tokens", () => {
+    expect(getLastRuleBlock(".settings-mobile-item__icon")).toContain("var(--icon-secondary)");
+    expect(getLastRuleBlock(".settings-nav-icon")).toContain("var(--icon-secondary)");
+    expect(getLastRuleBlock(".terminal-panel-empty-icon")).toContain("var(--icon-muted)");
+    expect(getLastRuleBlock(".bottom-terminal-empty-icon")).toContain("var(--icon-muted)");
+    expect(getLastRuleBlock(".config-empty-icon")).toContain("var(--icon-muted)");
+  });
+
+  it("keeps icon surfaces on dedicated icon surface tokens", () => {
+    expect(getLastRuleBlock(".welcome-feature-icon")).toContain(
+      "background: var(--icon-surface-accent)"
+    );
+    expect(getLastRuleBlock(".welcome-feature-icon")).toContain("color: var(--icon-accent)");
+    expect(getLastRuleBlock(".config-empty-icon")).toContain(
+      "background: var(--icon-surface-subtle)"
+    );
+    expect(getLastRuleBlock(".supervisor-danger-callout")).toContain("var(--icon-surface-error)");
+    expect(getLastRuleBlock(".supervisor-danger-callout-icon")).toContain("var(--icon-error)");
+  });
+
+  it("keeps mobile icon intent scoped correctly", () => {
+    expect(getLastRuleBlock(".mobile-supervisor-badge__icon")).toContain(
+      "color: var(--icon-accent)"
+    );
+    expect(getLastRuleBlock(".mobile-dock__icon")).toContain("color: currentColor");
+  });
+
   it("exposes global mobile safe-area tokens so standalone mobile views keep their padding", () => {
     expect(tokensStylesheet).toContain("--mobile-safe-top: env(safe-area-inset-top, 0px);");
     expect(tokensStylesheet).toContain("--mobile-safe-right: env(safe-area-inset-right, 0px);");
@@ -411,7 +451,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(mobileItem).toContain("border-bottom: 1px solid var(--border)");
     expect(mobileItem).toContain("border-radius: 0");
     expect(mobileItem).toContain("background: transparent");
-    expect(mobileItemIcon).toContain("color: var(--text-tertiary)");
+    expect(mobileItemIcon).toContain("color: var(--icon-secondary)");
     expect(mobileItemArrow).toContain("color: var(--text-tertiary)");
   });
 
