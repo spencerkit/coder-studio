@@ -76,7 +76,7 @@ function createWsSendCommandMock(
       };
     }
 
-    if (op === "activation.heartbeat" || op === "activation.release") {
+    if (op === "activation.release") {
       return { ok: true };
     }
 
@@ -532,6 +532,34 @@ describe("AppProviders lifecycle recovery", () => {
       expect(store.get(activationGenerationAtom)).toBe(1);
       expect(store.get(activationReasonAtom)).toBeNull();
     });
+  });
+
+  it("does not send activation.heartbeat after the session becomes active", async () => {
+    const store = createStore();
+    setVisibilityState("visible");
+    vi.useFakeTimers();
+
+    renderProviders(store);
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
+
+    act(() => {
+      wsState.client?.statusHandler?.("connected");
+    });
+
+    await vi.waitFor(() => {
+      expect(store.get(activationStatusAtom)).toBe("active");
+    });
+
+    act(() => {
+      vi.advanceTimersByTime(60_000);
+    });
+
+    expect(
+      wsState.client?.sendCommand?.mock.calls.filter(([op]) => op === "activation.heartbeat") ?? []
+    ).toHaveLength(0);
   });
 
   it("disconnects and gates when activation.revoked is received", async () => {

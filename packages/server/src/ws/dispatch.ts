@@ -60,7 +60,6 @@ const handlers = new Map<string, CommandHandler>();
 const schemas = new Map<string, CommandSchema>();
 const ACTIVATION_ALLOWLIST = new Set([
   "activation.claim",
-  "activation.heartbeat",
   "activation.release",
   "connection.probe",
 ]);

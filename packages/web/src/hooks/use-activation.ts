@@ -8,8 +8,6 @@ import {
 } from "../atoms/activation";
 import { connectionStatusAtom, wsClientAtom } from "../atoms/connection";
 
-const HEARTBEAT_INTERVAL_MS = 10_000;
-
 interface ActivationClaimPayload {
   active: true;
   generation: number;
@@ -23,15 +21,7 @@ export function useActivation() {
   const [status, setStatus] = useAtom(activationStatusAtom);
   const [generation, setGeneration] = useAtom(activationGenerationAtom);
   const setReason = useSetAtom(activationReasonAtom);
-  const heartbeatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const claimInFlightRef = useRef<Promise<boolean> | null>(null);
-
-  const stopHeartbeat = () => {
-    if (heartbeatTimerRef.current) {
-      clearInterval(heartbeatTimerRef.current);
-      heartbeatTimerRef.current = null;
-    }
-  };
 
   const claim = useCallback(async (): Promise<boolean> => {
     if (!wsClient) {
@@ -78,38 +68,7 @@ export function useActivation() {
   }, [clientInstanceId, connectionStatus, setGeneration, setReason, setStatus, wsClient]);
 
   useEffect(() => {
-    stopHeartbeat();
-
-    if (!wsClient || status !== "active" || generation === null) {
-      return;
-    }
-
-    heartbeatTimerRef.current = setInterval(() => {
-      void wsClient
-        .sendCommand<{ ok: boolean }>("activation.heartbeat", {
-          clientInstanceId,
-          generation,
-        })
-        .then((result) => {
-          if (!result.ok) {
-            stopHeartbeat();
-            setStatus("gated");
-            setReason("heartbeat_rejected");
-          }
-        })
-        .catch(() => {
-          stopHeartbeat();
-        });
-    }, HEARTBEAT_INTERVAL_MS);
-
     return () => {
-      stopHeartbeat();
-    };
-  }, [clientInstanceId, generation, setReason, setStatus, status, wsClient]);
-
-  useEffect(() => {
-    return () => {
-      stopHeartbeat();
       if (!wsClient || generation === null) {
         return;
       }

@@ -16,8 +16,6 @@ describe("ActivationManager", () => {
   beforeEach(() => {
     vi.useRealTimers();
     manager = new ActivationManager({
-      heartbeatMs: 10_000,
-      leaseExpirationMs: 30_000,
       graceMs: 3_000,
     });
   });
@@ -71,15 +69,6 @@ describe("ActivationManager", () => {
     });
   });
 
-  it("rejects heartbeat for stale generations", () => {
-    const first = manager.claim("client-a", "ws-a", request);
-    manager.claim("client-b", "ws-b", request);
-
-    const ok = manager.heartbeat("client-a", first.generation);
-
-    expect(ok).toBe(false);
-  });
-
   it("ignores release for stale generations and clears only the current lease", () => {
     const first = manager.claim("client-a", "ws-a", request);
     const current = manager.claim("client-b", "ws-b", request);
@@ -91,34 +80,18 @@ describe("ActivationManager", () => {
     expect(manager.getLease()).toBeNull();
   });
 
-  it("nulls expired state when getLease is called after expiry", () => {
+  it("retains the active lease without idle expiration", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-05-12T00:00:00.000Z"));
 
-    manager.claim("client-a", "ws-a", request);
+    const lease = manager.claim("client-a", "ws-a", request);
 
-    vi.advanceTimersByTime(30_001);
+    vi.advanceTimersByTime(12 * 60 * 60 * 1000);
 
-    expect(manager.getLease()).toBeNull();
-    expect(manager.getLease()).toBeNull();
-  });
-
-  it("refreshes expiry on heartbeat for the active generation", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-05-12T00:00:00.000Z"));
-
-    const claim = manager.claim("client-a", "ws-a", request);
-    const beforeExpiresAt = manager.getLease()?.expiresAt;
-
-    expect(beforeExpiresAt).toBe(Date.now() + 30_000);
-
-    vi.advanceTimersByTime(5_000);
-
-    const ok = manager.heartbeat("client-a", claim.generation);
-    const after = manager.getLease();
-
-    expect(ok).toBe(true);
-    expect(after?.expiresAt).toBe(Date.now() + 30_000);
-    expect(after?.expiresAt).toBeGreaterThan(beforeExpiresAt ?? 0);
+    expect(manager.getLease()).toMatchObject({
+      clientInstanceId: "client-a",
+      wsClientId: "ws-a",
+      generation: lease.generation,
+    });
   });
 });
