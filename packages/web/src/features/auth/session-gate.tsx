@@ -1,6 +1,5 @@
 import { useAtomValue } from "jotai";
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { authEnabledAtom } from "../../atoms/connection";
 import { Button, EmptyState } from "../../components/ui";
 import { useActivation } from "../../hooks/use-activation";
@@ -18,7 +17,6 @@ const gateEmptyStateStyle = {
 
 export function SessionGatePage({ requestReentry }: { requestReentry?: () => Promise<boolean> }) {
   const t = useTranslation();
-  const navigate = useNavigate();
   const authEnabled = useAtomValue(authEnabledAtom);
   const { claim } = useActivation();
   const isMobile = useViewport() === "mobile";
@@ -29,7 +27,7 @@ export function SessionGatePage({ requestReentry }: { requestReentry?: () => Pro
     try {
       const ok = requestReentry ? await requestReentry() : await claim();
       if (ok) {
-        navigate("/", { replace: true });
+        window.location.replace("/");
       }
     } finally {
       setSubmitting(false);

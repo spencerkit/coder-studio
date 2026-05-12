@@ -1,16 +1,32 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { activationStatusAtom } from "../../atoms/activation";
 import { authEnabledAtom } from "../../atoms/connection";
 import { SessionGatePage } from "./session-gate";
 
 const originalFetch = globalThis.fetch;
+const originalLocation = window.location;
 
 describe("SessionGatePage", () => {
+  beforeEach(() => {
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: {
+        ...originalLocation,
+        replace: vi.fn(),
+        reload: vi.fn(),
+      },
+    });
+  });
+
   afterEach(() => {
     globalThis.fetch = originalFetch;
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: originalLocation,
+    });
   });
 
   it("shows a password form when auth is enabled", () => {
@@ -78,7 +94,7 @@ describe("SessionGatePage", () => {
     });
   });
 
-  it("navigates back to / after successful re-entry when auth is disabled", async () => {
+  it("reloads the app after successful re-entry when auth is disabled", async () => {
     const requestReentry = vi.fn().mockResolvedValue(true);
     const store = createStore();
     store.set(authEnabledAtom, false);
@@ -96,6 +112,7 @@ describe("SessionGatePage", () => {
 
     await waitFor(() => {
       expect(requestReentry).toHaveBeenCalledTimes(1);
+      expect(window.location.replace).toHaveBeenCalledWith("/");
     });
   });
 });
