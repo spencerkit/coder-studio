@@ -275,6 +275,33 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(xtermViewport).not.toContain("touch-action: none");
   });
 
+  it("mobile terminal copy mode overlay styles", () => {
+    const overlay = getLastRuleBlock(".mobile-terminal-copy-mode");
+    const toolbar = getLastRuleBlock(".mobile-terminal-copy-mode__toolbar");
+    const done = getLastRuleBlock(".mobile-terminal-copy-mode__done");
+    const content = getLastRuleBlock(".mobile-terminal-copy-mode__content");
+    const text = getLastRuleBlock(".mobile-terminal-copy-mode__text");
+
+    expect(overlay).toContain("position: absolute");
+    expect(overlay).toContain("inset: 0");
+    expect(overlay).toContain("z-index: 6");
+    expect(overlay).toContain("user-select: text");
+    expect(overlay).toContain("-webkit-user-select: text");
+    expect(toolbar).toContain("display: flex");
+    expect(toolbar).toContain("align-items: center");
+    expect(done).toContain("margin-left: auto");
+    expect(content).toContain("overflow: auto");
+    expect(content).toContain("-webkit-overflow-scrolling: touch");
+    expect(content).toContain("user-select: text");
+    expect(content).toContain("-webkit-user-select: text");
+    expect(content).toContain("-webkit-touch-callout: default");
+    expect(text).toContain("white-space: pre");
+    expect(text).toContain("user-select: text");
+    expect(text).toContain("-webkit-user-select: text");
+    expect(text).not.toContain("white-space: pre-wrap");
+    expect(text).not.toContain("word-break: break-word");
+  });
+
   it("keeps code editor header actions docked to the right edge", () => {
     expect(stylesheet).toMatch(
       /\.code-mode-toggle\s*\{[^}]*display:\s*inline-flex;[^}]*margin-left:\s*auto;[^}]*flex-shrink:\s*0;[^}]*\}/

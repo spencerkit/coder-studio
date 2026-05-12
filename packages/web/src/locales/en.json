@@ -259,6 +259,11 @@
     "create_failed_body": "The shell process could not be started. Check the server runtime and shell configuration.",
     "create_unavailable_title": "No workspace selected",
     "create_unavailable_body": "Open or switch to a workspace before creating a terminal.",
+    "copy_mode_title": "Copy Mode",
+    "copy_mode_hint": "Drag to select text",
+    "copy_mode_done": "Done",
+    "copy_mode_failed_title": "Couldn't enter copy mode",
+    "copy_mode_failed_body": "Try again, or scroll the terminal and long press again",
     "hide": "Hide Terminal",
     "show": "Show Terminal",
     "selector": {
@@ -622,7 +627,12 @@
     "status_title": "Access verification",
     "status_loading": "Checking the access state for this deployment.",
     "status_unavailable": "The authentication service is temporarily unavailable. Please try again shortly.",
-    "status_not_configured": "Authentication is not configured on this deployment."
+    "status_not_configured": "Authentication is not configured on this deployment.",
+    "session_gate_title": "SESSION GATE",
+    "session_gate_description": "This tab was displaced by another tab and must re-enter before continuing.",
+    "session_gate_detail": "The websocket connection has been closed. Recovery will reload fresh server state.",
+    "session_gate_reenter": "Re-enter",
+    "session_gate_reentering": "Re-entering"
   },
   "connection": {
     "title": "Connection",

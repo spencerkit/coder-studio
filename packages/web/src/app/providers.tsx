@@ -33,6 +33,11 @@ import {
   workspacesLoadStateAtom,
   wsClientAtom,
 } from "../atoms";
+import {
+  activationGenerationAtom,
+  activationReasonAtom,
+  activationStatusAtom,
+} from "../atoms/activation";
 import { authenticatedAtom, themeAtom } from "../atoms/app-ui";
 import type { DispatchCommand } from "../atoms/connection";
 import { activeWorkspaceIdAtom } from "../atoms/workspaces";
@@ -45,11 +50,14 @@ import {
 } from "../features/terminal-panel/preferences";
 import {
   editorRefreshTokenAtomFamily,
+  fileTreeAtomFamily,
   fileTreeStaleAtomFamily,
   gitBranchListAtomFamily,
   gitStateAtomFamily,
+  loadedDirsAtomFamily,
   worktreeListAtomFamily,
 } from "../features/workspace/atoms";
+import { useActivation } from "../hooks/use-activation";
 import { getThemeById, resolveStoredThemeId } from "../theme";
 import type { ConnectionStatus, EventListener } from "../ws";
 import { resolveWsUrl, WsClient } from "../ws";
@@ -142,6 +150,43 @@ function mergeRefreshHints(
   };
 }
 
+function resetServerProjectedState(store: Store): void {
+  const workspaceIds = store.get(workspaceOrderAtom);
+  const terminalIds = Object.values(store.get(sessionsAtom))
+    .map((session) => session.terminalId)
+    .filter((terminalId): terminalId is string => Boolean(terminalId));
+
+  store.set(workspacesAtom, {});
+  store.set(workspaceOrderAtom, []);
+  store.set(workspacesLoadStateAtom, "idle");
+  store.set(workspacesLoadErrorAtom, null);
+  store.set(sessionsAtom, {});
+  store.set(activeWorkspaceIdAtom, null);
+  store.set(supervisorsAtom, new Map());
+  store.set(supervisorCyclesAtom, new Map());
+
+  for (const workspaceId of workspaceIds) {
+    store.set(fileTreeAtomFamily(workspaceId), null);
+    store.set(loadedDirsAtomFamily(workspaceId), new Set());
+    store.set(gitStateAtomFamily(workspaceId), null);
+    store.set(gitBranchListAtomFamily(workspaceId), {
+      current: "",
+      branches: [],
+      loading: false,
+    });
+    store.set(worktreeListAtomFamily(workspaceId), {
+      items: [],
+      loading: false,
+    });
+    store.set(fileTreeStaleAtomFamily(workspaceId), false);
+    store.set(editorRefreshTokenAtomFamily(workspaceId), 0);
+  }
+
+  for (const terminalId of terminalIds) {
+    store.set(terminalMetaAtomFamily(terminalId), null);
+  }
+}
+
 function parseWorkspaceRefreshHint(
   topic: string,
   payload: unknown
@@ -219,6 +264,7 @@ export function AppProviders({ children }: AppProvidersProps) {
   // Get Jotai store for writing to atomFamily atoms
   const store = useStore();
   const dispatch = useAtomValue(dispatchCommandAtom);
+  const { claim } = useActivation();
 
   useSessionNotifications();
 
@@ -285,6 +331,18 @@ export function AppProviders({ children }: AppProvidersProps) {
   useEffect(() => {
     connectionStatusRef.current = connectionStatus;
   }, [connectionStatus]);
+
+  useEffect(() => {
+    if (connectionStatus !== "connected") {
+      return;
+    }
+
+    if (store.get(activationStatusAtom) === "gated") {
+      return;
+    }
+
+    void claim();
+  }, [claim, connectionStatus, store]);
 
   // Initialize theme from localStorage
   useEffect(() => {
@@ -486,6 +544,10 @@ export function AppProviders({ children }: AppProvidersProps) {
     };
 
     const triggerForegroundRecovery = () => {
+      if (store.get(activationStatusAtom) === "gated") {
+        return;
+      }
+
       syncWorkspaceActivity();
       if (document.visibilityState !== "visible") {
         lastForegroundRecoveryAtRef.current = null;
@@ -524,6 +586,10 @@ export function AppProviders({ children }: AppProvidersProps) {
     };
 
     const handleOnline = () => {
+      if (store.get(activationStatusAtom) === "gated") {
+        return;
+      }
+
       wsClientRef.current?.recoverConnection("network_online");
     };
 
@@ -624,6 +690,30 @@ export function AppProviders({ children }: AppProvidersProps) {
 
     // Event handler: route WS events to atoms
     const handleEvent: EventListener = (topic: string, payload: unknown, _seq: number) => {
+      if (topic === "activation.revoked") {
+        const data = (payload ?? {}) as {
+          reason?: string;
+          generation?: number;
+        };
+
+        store.set(activationStatusAtom, "gated");
+        store.set(
+          activationReasonAtom,
+          typeof data.reason === "string" && data.reason.length > 0 ? data.reason : "displaced"
+        );
+        store.set(
+          activationGenerationAtom,
+          typeof data.generation === "number" ? data.generation : null
+        );
+        resetServerProjectedState(store);
+        workspaceActivityRef.current = {
+          mode: "inactive",
+          workspaceId: null,
+        };
+        wsClientRef.current?.disconnect("single_active_displaced");
+        return;
+      }
+
       const refreshInfo = parseWorkspaceRefreshHint(topic, payload);
       if (refreshInfo) {
         queueWorkspaceRefresh(refreshInfo.workspaceId, refreshInfo.hint);
@@ -639,6 +729,7 @@ export function AppProviders({ children }: AppProvidersProps) {
     // Subscribe to all topics we care about
     const topics = [
       "connection.*", // Connection-level events
+      "activation.*",
       "workspace.*", // All workspace events (glob pattern)
     ];
 

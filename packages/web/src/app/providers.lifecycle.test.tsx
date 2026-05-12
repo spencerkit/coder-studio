@@ -2,8 +2,14 @@ import type { Workspace } from "@coder-studio/core";
 import { act, render } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  activationGenerationAtom,
+  activationReasonAtom,
+  activationStatusAtom,
+} from "../atoms/activation";
 import { authenticatedAtom, themeAtom } from "../atoms/app-ui";
 import { authEnabledAtom, connectionStatusAtom } from "../atoms/connection";
+import { sessionsAtom } from "../atoms/sessions";
 import {
   activeWorkspaceIdAtom,
   workspaceOrderAtom,
@@ -12,9 +18,11 @@ import {
 } from "../atoms/workspaces";
 import { terminalPreferencesAtom } from "../features/terminal-panel/preferences";
 import {
+  fileTreeAtomFamily,
   fileTreeStaleAtomFamily,
   gitBranchListAtomFamily,
   gitStateAtomFamily,
+  loadedDirsAtomFamily,
   worktreeListAtomFamily,
 } from "../features/workspace/atoms";
 import { AppProviders, resetAppProvidersSingletonsForTests } from "./providers";
@@ -54,6 +62,30 @@ function renderProviders(store = createStore()) {
   );
 
   return { store, ...rendered };
+}
+
+function createWsSendCommandMock(
+  handler?: (op: string, args: unknown) => Promise<unknown> | unknown
+) {
+  return vi.fn().mockImplementation(async (op: string, args: unknown) => {
+    if (op === "activation.claim") {
+      return {
+        active: true,
+        generation: 1,
+        recoveryMode: "fresh",
+      };
+    }
+
+    if (op === "activation.heartbeat" || op === "activation.release") {
+      return { ok: true };
+    }
+
+    if (handler) {
+      return await handler(op, args);
+    }
+
+    return undefined;
+  });
 }
 
 function setVisibilityState(value: "visible" | "hidden") {
@@ -134,7 +166,7 @@ describe("AppProviders lifecycle recovery", () => {
       }),
       getStatus: vi.fn(() => "disconnected"),
       recoverConnection: vi.fn(),
-      sendCommand: vi.fn().mockResolvedValue(undefined),
+      sendCommand: createWsSendCommandMock(),
     };
   });
 
@@ -471,6 +503,151 @@ describe("AppProviders lifecycle recovery", () => {
     await vi.waitFor(() => {
       expect(wsState.client?.connect).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it("claims activation when the websocket becomes connected", async () => {
+    const store = createStore();
+    setVisibilityState("visible");
+
+    renderProviders(store);
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
+
+    act(() => {
+      wsState.client?.statusHandler?.("connected");
+    });
+
+    await vi.waitFor(() => {
+      const claimCalls =
+        wsState.client?.sendCommand?.mock.calls.filter(([op]) => op === "activation.claim") ?? [];
+      expect(claimCalls.length).toBeGreaterThan(0);
+      expect(claimCalls[0]?.[1]).toEqual(
+        expect.objectContaining({
+          clientInstanceId: expect.any(String),
+        })
+      );
+      expect(store.get(activationStatusAtom)).toBe("active");
+      expect(store.get(activationGenerationAtom)).toBe(1);
+      expect(store.get(activationReasonAtom)).toBeNull();
+    });
+  });
+
+  it("disconnects and gates when activation.revoked is received", async () => {
+    const store = createStore();
+    seedWorkspaces(store, ["ws-1"], "ws-1");
+    act(() => {
+      store.set(activationStatusAtom, "active");
+      store.set(activationGenerationAtom, 1);
+      store.set(activationReasonAtom, null);
+      store.set(gitStateAtomFamily("ws-1"), {
+        branch: "feature/test",
+        ahead: 1,
+        behind: 0,
+        modified: [],
+        staged: [],
+        untracked: [],
+        deleted: [],
+      });
+      store.set(gitBranchListAtomFamily("ws-1"), {
+        current: "feature/test",
+        branches: [],
+        loading: false,
+      });
+      store.set(fileTreeAtomFamily("ws-1"), new Map([[".", []]]));
+      store.set(loadedDirsAtomFamily("ws-1"), new Set(["src"]));
+      store.set(worktreeListAtomFamily("ws-1"), {
+        items: [],
+        loading: false,
+        lastLoadedAt: Date.now(),
+      });
+      store.set(fileTreeStaleAtomFamily("ws-1"), true);
+      store.set(sessionsAtom, {
+        "session-1": {
+          id: "session-1",
+          workspaceId: "ws-1",
+          terminalId: "terminal-1",
+          providerId: "codex",
+          state: "running",
+          capability: "full",
+          startedAt: Date.now(),
+          lastActiveAt: Date.now(),
+        },
+      });
+    });
+
+    renderProviders(store);
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
+
+    act(() => {
+      wsState.client?.eventHandler?.(
+        "activation.revoked",
+        { reason: "displaced", generation: 2 },
+        1
+      );
+    });
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.disconnect).toHaveBeenCalledWith("single_active_displaced");
+      expect(store.get(activationStatusAtom)).toBe("gated");
+      expect(store.get(activationReasonAtom)).toBe("displaced");
+      expect(store.get(activationGenerationAtom)).toBe(2);
+      expect(store.get(workspacesLoadStateAtom)).toBe("idle");
+      expect(store.get(workspaceOrderAtom)).toEqual([]);
+      expect(store.get(workspacesAtom)).toEqual({});
+      expect(store.get(activeWorkspaceIdAtom)).toBeNull();
+      expect(store.get(fileTreeAtomFamily("ws-1"))).toBeNull();
+      expect(Array.from(store.get(loadedDirsAtomFamily("ws-1")))).toEqual([]);
+      expect(store.get(gitStateAtomFamily("ws-1"))).toBeNull();
+      expect(store.get(gitBranchListAtomFamily("ws-1")).current).toBe("");
+      expect(store.get(worktreeListAtomFamily("ws-1")).items).toEqual([]);
+      expect(store.get(fileTreeStaleAtomFamily("ws-1"))).toBe(false);
+      expect(store.get(sessionsAtom)).toEqual({});
+    });
+  });
+
+  it("does not auto-claim again while activation remains gated", async () => {
+    const store = createStore();
+
+    renderProviders(store);
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
+
+    act(() => {
+      store.set(activationStatusAtom, "gated");
+      wsState.client?.statusHandler?.("connected");
+    });
+
+    const claimCalls =
+      wsState.client?.sendCommand?.mock.calls.filter(([op]) => op === "activation.claim") ?? [];
+
+    expect(claimCalls).toHaveLength(0);
+  });
+
+  it("does not auto-recover the websocket from foreground signals while gated", async () => {
+    const store = createStore();
+    setVisibilityState("visible");
+
+    renderProviders(store);
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
+
+    act(() => {
+      store.set(activationStatusAtom, "gated");
+      window.dispatchEvent(new Event("focus"));
+      window.dispatchEvent(new Event("online"));
+      window.dispatchEvent(new Event("pageshow"));
+    });
+
+    expect(wsState.client?.recoverConnection).not.toHaveBeenCalled();
   });
 
   it("hydrates terminal copy-on-select preferences from settings.get once connected", async () => {

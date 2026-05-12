@@ -12,7 +12,14 @@ import { type TerminalInputActivity, Topics } from "@coder-studio/core";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  type MouseEvent as ReactMouseEvent,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { themeAtom } from "../../../../atoms/app-ui";
 import { dispatchCommandAtom, wsClientAtom } from "../../../../atoms/connection";
 import { useViewport } from "../../../../hooks/use-viewport";
@@ -27,6 +34,10 @@ import {
   type HydrationRequestHandle,
   type HydrationTier,
 } from "../../hydration-coordinator";
+import {
+  buildTerminalCopyModeSnapshot,
+  type TerminalCopyModeSnapshot,
+} from "../../mobile/copy-mode-snapshot";
 import { MobileTerminalInputBar } from "../../mobile/mobile-terminal-input-bar";
 import {
   applyCtrlModeToInput,
@@ -51,6 +62,8 @@ const MOBILE_TOUCH_MOMENTUM_MIN_VELOCITY_PX_PER_MS = 0.12;
 const MOBILE_TOUCH_MOMENTUM_STOP_VELOCITY_PX_PER_MS = 0.02;
 const MOBILE_TOUCH_MOMENTUM_FRICTION_PER_FRAME = 0.92;
 const MOBILE_TOUCH_MOMENTUM_FRAME_MS = 16;
+const MOBILE_COPY_MODE_LONG_PRESS_MS = 500;
+const MOBILE_COPY_MODE_MOVE_TOLERANCE_PX = 10;
 const TERMINAL_FOCUS_REPORTING_BYTES = new Set(["\x1b[I", "\x1b[O"]);
 const TERMINAL_COPY_ON_SELECT_ERROR_THROTTLE_MS = 3_000;
 
@@ -59,7 +72,7 @@ interface TerminalInputDraftState {
   submittedText?: string;
 }
 
-type TouchPointLike = Pick<Touch, "identifier" | "clientY">;
+type TouchPointLike = Pick<Touch, "identifier" | "clientX" | "clientY">;
 
 interface TouchScrollSample {
   clientY: number;
@@ -214,6 +227,29 @@ function getTouchScrollPxPerLine(terminal: Terminal, container: HTMLElement): nu
   }
 
   return MOBILE_TOUCH_SCROLL_FALLBACK_PX_PER_LINE;
+}
+
+function getMeasuredTerminalLineHeightPx(
+  terminal: Terminal,
+  container: HTMLElement,
+  rowsElement: HTMLElement | null
+): number {
+  if (rowsElement) {
+    const row = Array.from(rowsElement.children).find((child): child is HTMLElement => {
+      return child instanceof HTMLElement && child.getBoundingClientRect().height > 0;
+    });
+
+    if (row) {
+      return row.getBoundingClientRect().height;
+    }
+
+    const rowsHeight = rowsElement.getBoundingClientRect().height;
+    if (rowsHeight > 0 && terminal.rows > 0) {
+      return rowsHeight / terminal.rows;
+    }
+  }
+
+  return getTouchScrollPxPerLine(terminal, container);
 }
 
 function shouldBypassPtyForKeyboardPaste(event: KeyboardEvent): boolean {
@@ -416,6 +452,9 @@ export function XtermHost({
   const selectedTextRef = useRef("");
   const lastCopyOnSelectFailureAtRef = useRef(0);
   const copyOnSelectPointerIdRef = useRef<number | null>(null);
+  const enterMobileCopyModeRef = useRef<() => void>(() => {});
+  const resetTouchStateRef = useRef<() => void>(() => {});
+  const mobileCopyModeActiveRef = useRef(false);
   const touchScrollStateRef = useRef<{
     activeTouchId: number | null;
     lastClientY: number;
@@ -424,6 +463,7 @@ export function XtermHost({
     velocityPxPerMs: number;
     lastMomentumFrameAt: number;
     momentumFrameId: number | null;
+    gestureDidScroll: boolean;
     samples: TouchScrollSample[];
   }>({
     activeTouchId: null,
@@ -433,6 +473,7 @@ export function XtermHost({
     velocityPxPerMs: 0,
     lastMomentumFrameAt: 0,
     momentumFrameId: null,
+    gestureDidScroll: false,
     samples: [],
   });
 
@@ -440,6 +481,8 @@ export function XtermHost({
   const [hydrationState, setHydrationState] = useState<
     { kind: "idle" } | { kind: "queued"; queuePosition: number } | { kind: "granted" }
   >(viewport === "mobile" ? { kind: "granted" } : { kind: "idle" });
+  const [mobileCopyModeSnapshot, setMobileCopyModeSnapshot] =
+    useState<TerminalCopyModeSnapshot | null>(null);
   const [ctrlMode, setCtrlMode] = useState<CtrlMode>("off");
   const [shiftArmed, setShiftArmed] = useState(false);
   const ctrlModeRef = useRef<CtrlMode>("off");
@@ -531,6 +574,10 @@ export function XtermHost({
   }, [uiTheme]);
 
   useEffect(() => {
+    mobileCopyModeActiveRef.current = mobileCopyModeSnapshot !== null;
+  }, [mobileCopyModeSnapshot]);
+
+  useEffect(() => {
     const container = containerRef.current;
     if (!container || typeof window === "undefined" || typeof window.matchMedia !== "function") {
       return;
@@ -541,6 +588,21 @@ export function XtermHost({
     }
 
     const state = touchScrollStateRef.current;
+    let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+    let longPressTouchId: number | null = null;
+    let longPressStartClientX = 0;
+    let longPressStartClientY = 0;
+
+    const clearLongPressTimer = () => {
+      if (longPressTimer !== null) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+      }
+
+      longPressTouchId = null;
+      longPressStartClientX = 0;
+      longPressStartClientY = 0;
+    };
 
     const stopMomentumScroll = () => {
       if (state.momentumFrameId !== null) {
@@ -651,15 +713,24 @@ export function XtermHost({
     };
 
     const resetTouchState = () => {
+      clearLongPressTimer();
       stopMomentumScroll();
       state.activeTouchId = null;
       state.lastClientY = 0;
       state.carryPx = 0;
       state.pxPerLine = null;
+      state.gestureDidScroll = false;
       state.samples = [];
     };
 
+    resetTouchStateRef.current = resetTouchState;
+
     const handleTouchStart = (event: TouchEvent) => {
+      if (mobileCopyModeActiveRef.current) {
+        resetTouchState();
+        return;
+      }
+
       if (event.touches.length !== 1) {
         resetTouchState();
         return;
@@ -678,26 +749,64 @@ export function XtermHost({
       state.pxPerLine = terminalRef.current
         ? getTouchScrollPxPerLine(terminalRef.current, container)
         : MOBILE_TOUCH_SCROLL_FALLBACK_PX_PER_LINE;
+      state.gestureDidScroll = false;
       state.samples = [];
       recordTouchSample(touch.clientY, performance.now());
+      if (viewport === "mobile") {
+        longPressTouchId = touch.identifier;
+        longPressStartClientX = touch.clientX;
+        longPressStartClientY = touch.clientY;
+        longPressTimer = setTimeout(() => {
+          longPressTimer = null;
+          longPressTouchId = null;
+          longPressStartClientX = 0;
+          longPressStartClientY = 0;
+          state.activeTouchId = null;
+          state.lastClientY = 0;
+          state.carryPx = 0;
+          state.pxPerLine = null;
+          state.velocityPxPerMs = 0;
+          state.samples = [];
+          clearLongPressTimer();
+          enterMobileCopyModeRef.current();
+        }, MOBILE_COPY_MODE_LONG_PRESS_MS);
+      }
     };
 
     const handleTouchMove = (event: TouchEvent) => {
+      if (mobileCopyModeActiveRef.current) {
+        resetTouchState();
+        return;
+      }
+
       const touch = findTouchByIdentifier(event.changedTouches, state.activeTouchId);
       const terminal = terminalRef.current;
       if (!touch || !terminal) {
         return;
       }
 
+      if (longPressTouchId === touch.identifier) {
+        if (
+          Math.abs(touch.clientX - longPressStartClientX) > MOBILE_COPY_MODE_MOVE_TOLERANCE_PX ||
+          Math.abs(touch.clientY - longPressStartClientY) > MOBILE_COPY_MODE_MOVE_TOLERANCE_PX
+        ) {
+          clearLongPressTimer();
+        } else {
+          return;
+        }
+      }
+
       const base = terminal.buffer.active.baseY;
       if (base <= 0) {
         state.lastClientY = touch.clientY;
         state.carryPx = 0;
+        state.gestureDidScroll = false;
         state.samples = [];
         state.velocityPxPerMs = 0;
         return;
       }
 
+      state.gestureDidScroll = true;
       const deltaY = state.lastClientY - touch.clientY;
       state.lastClientY = touch.clientY;
       recordTouchSample(touch.clientY, performance.now());
@@ -710,18 +819,32 @@ export function XtermHost({
     };
 
     const handleTouchEnd = (event: TouchEvent) => {
+      if (mobileCopyModeActiveRef.current) {
+        resetTouchState();
+        return;
+      }
+
+      if (findTouchByIdentifier(event.changedTouches, longPressTouchId)) {
+        clearLongPressTimer();
+      }
+
       if (findTouchByIdentifier(event.changedTouches, state.activeTouchId)) {
+        const canStartMomentum = state.gestureDidScroll;
         const touch = findTouchByIdentifier(event.changedTouches, state.activeTouchId);
-        if (touch) {
+        if (touch && canStartMomentum) {
           recordTouchSample(touch.clientY, performance.now());
           updateVelocityFromSamples();
         }
 
         state.activeTouchId = null;
         state.lastClientY = 0;
+        state.gestureDidScroll = false;
         state.samples = [];
 
-        if (Math.abs(state.velocityPxPerMs) >= MOBILE_TOUCH_MOMENTUM_MIN_VELOCITY_PX_PER_MS) {
+        if (
+          canStartMomentum &&
+          Math.abs(state.velocityPxPerMs) >= MOBILE_TOUCH_MOMENTUM_MIN_VELOCITY_PX_PER_MS
+        ) {
           state.lastMomentumFrameAt = 0;
           state.momentumFrameId = requestAnimationFrame(stepMomentumScroll);
           return;
@@ -747,9 +870,10 @@ export function XtermHost({
       container.removeEventListener("touchmove", handleTouchMove);
       container.removeEventListener("touchend", handleTouchEnd);
       container.removeEventListener("touchcancel", handleTouchCancel);
+      resetTouchStateRef.current = () => {};
       resetTouchState();
     };
-  }, []);
+  }, [viewport]);
 
   const scheduleFit = useCallback(() => {
     if (fitFrameRef.current !== null) {
@@ -809,6 +933,87 @@ export function XtermHost({
       body: t("settings.copy_on_select_failed_body"),
     });
   }, [pushToast, t]);
+
+  const pushCopyModeFailureToast = useCallback(() => {
+    pushToast({
+      kind: "error",
+      title: t("terminal.copy_mode_failed_title"),
+      body: t("terminal.copy_mode_failed_body"),
+    });
+  }, [pushToast, t]);
+
+  const exitMobileCopyMode = useCallback(() => {
+    setMobileCopyModeSnapshot(null);
+  }, []);
+
+  const handleMobileCopyModeBackgroundClick = useCallback(
+    (event: ReactMouseEvent<HTMLDivElement>) => {
+      if (event.target !== event.currentTarget) {
+        return;
+      }
+
+      const selection = typeof window !== "undefined" ? window.getSelection() : null;
+      if (selection && selection.toString().length > 0) {
+        return;
+      }
+
+      exitMobileCopyMode();
+    },
+    [exitMobileCopyMode]
+  );
+
+  const enterMobileCopyMode = useCallback(() => {
+    const container = containerRef.current;
+    const terminal = terminalRef.current;
+
+    resetTouchStateRef.current();
+
+    if (!container || !terminal) {
+      pushCopyModeFailureToast();
+      return;
+    }
+
+    const rowsElement = container.querySelector(".xterm-rows");
+    const snapshot = buildTerminalCopyModeSnapshot({
+      rowsElement: rowsElement instanceof HTMLElement ? rowsElement : null,
+      cols: terminal.cols,
+      fontFamily:
+        typeof terminal.options.fontFamily === "string"
+          ? terminal.options.fontFamily
+          : "JetBrains Mono, Fira Code, SF Mono, monospace",
+      fontSize: typeof terminal.options.fontSize === "number" ? terminal.options.fontSize : 11,
+      lineHeightPx: getMeasuredTerminalLineHeightPx(
+        terminal,
+        container,
+        rowsElement instanceof HTMLElement ? rowsElement : null
+      ),
+    });
+
+    if (!snapshot) {
+      pushCopyModeFailureToast();
+      return;
+    }
+
+    setMobileCopyModeSnapshot(snapshot);
+    if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+      navigator.vibrate(10);
+    }
+  }, [pushCopyModeFailureToast]);
+
+  useEffect(() => {
+    enterMobileCopyModeRef.current = enterMobileCopyMode;
+  }, [enterMobileCopyMode]);
+
+  useEffect(() => {
+    if (viewport !== "mobile") {
+      setMobileCopyModeSnapshot(null);
+    }
+  }, [viewport]);
+
+  useLayoutEffect(() => {
+    resetTouchStateRef.current();
+    setMobileCopyModeSnapshot(null);
+  }, [terminalId, workspaceId]);
 
   const copySelectionOnSelect = useCallback(async () => {
     if (viewport === "mobile" || !terminalPreferences.copyOnSelect) {
@@ -2069,6 +2274,35 @@ export function XtermHost({
             ) : null}
             <div className="xterm-replay-overlay__title">{replayTitle}</div>
             {replayBody ? <div className="xterm-replay-overlay__body">{replayBody}</div> : null}
+          </div>
+        </div>
+      ) : null}
+      {viewport === "mobile" && mobileCopyModeSnapshot ? (
+        <div className="mobile-terminal-copy-mode">
+          <div className="mobile-terminal-copy-mode__toolbar">
+            <div className="mobile-terminal-copy-mode__title">{t("terminal.copy_mode_title")}</div>
+            <div className="mobile-terminal-copy-mode__hint">{t("terminal.copy_mode_hint")}</div>
+            <button
+              type="button"
+              className="mobile-terminal-copy-mode__done"
+              onClick={exitMobileCopyMode}
+            >
+              {t("terminal.copy_mode_done")}
+            </button>
+          </div>
+          <div
+            className="mobile-terminal-copy-mode__content"
+            onClick={handleMobileCopyModeBackgroundClick}
+          >
+            <div
+              className="mobile-terminal-copy-mode__text"
+              style={{
+                fontFamily: mobileCopyModeSnapshot.fontFamily,
+                fontSize: `${mobileCopyModeSnapshot.fontSize}px`,
+                lineHeight: `${mobileCopyModeSnapshot.lineHeightPx}px`,
+              }}
+              dangerouslySetInnerHTML={{ __html: mobileCopyModeSnapshot.html }}
+            />
           </div>
         </div>
       ) : null}

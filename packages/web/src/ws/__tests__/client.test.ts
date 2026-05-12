@@ -1214,6 +1214,26 @@ describe("web WsClient", () => {
     }
   });
 
+  it("marks the client rejected without reconnecting after single-active displacement", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const client = new WsClient("ws://127.0.0.1:4173/ws");
+      const connectPromise = client.connect();
+      const socket = MockWebSocket.instances[0]!;
+      socket.triggerOpen();
+      await connectPromise;
+
+      socket.triggerClose(4001, "single_active_displaced");
+
+      expect(client.getStatus()).toBe("rejected");
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(MockWebSocket.instances).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("can bypass reconnect backoff and reconnect immediately when recovery is requested", async () => {
     vi.useFakeTimers();
 

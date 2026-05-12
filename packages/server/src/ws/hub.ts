@@ -61,10 +61,13 @@ export interface Broadcaster {
   broadcast(topic: string, data: unknown): void;
   sendToClient(clientId: ClientId, msg: ServerToClient): boolean;
   sendBinaryToClient(clientId: ClientId, data: Buffer): boolean;
+  getRequestMetadata?(clientId: ClientId): FastifyRequest | undefined;
+  revokeAndCloseClient?(clientId: ClientId, generation: number): void;
 }
 
 export class WsHub implements Broadcaster {
   private clients = new Map<ClientId, WsClient>();
+  private clientRequests = new Map<ClientId, FastifyRequest>();
   private eventUnsubscribers: (() => void)[] = [];
   private nextStreamId = 1;
   // Per-client queue of waiters for the next inbound binary frame. The
@@ -88,9 +91,10 @@ export class WsHub implements Broadcaster {
   /**
    * Handle a new WebSocket connection
    */
-  handleConnection(socket: WebSocket, _req: FastifyRequest): void {
+  handleConnection(socket: WebSocket, req: FastifyRequest): void {
     const client = new WsClient(socket, uuidv4(), this.deps.logger);
     this.clients.set(client.id, client);
+    this.clientRequests.set(client.id, req);
 
     // Send initial connection metadata. Writer status is established later by
     // fencing.request, but the UI still needs the app version immediately.
@@ -252,8 +256,10 @@ export class WsHub implements Broadcaster {
    */
   private handleClose(client: WsClient): void {
     this.clients.delete(client.id);
+    this.clientRequests.delete(client.id);
     this.discardPendingBinaryWaiters(client.id);
     this.deps.commandContext?.autoFetch.unregisterViewer(client.id);
+    this.deps.commandContext?.activationMgr.onSocketClosed(client.id);
 
     // Release fencing tokens held by this client
     // FencingManager tracks by clientId internally
@@ -306,6 +312,27 @@ export class WsHub implements Broadcaster {
     return client.sendBinary(data);
   }
 
+  revokeAndCloseClient(clientId: ClientId, generation: number): void {
+    const client = this.clients.get(clientId);
+    if (!client) {
+      return;
+    }
+
+    client.sendEventAndClose(
+      "activation.revoked",
+      {
+        reason: "displaced",
+        generation,
+      },
+      4001,
+      "single_active_displaced"
+    );
+  }
+
+  getRequestMetadata(clientId: ClientId): FastifyRequest | undefined {
+    return this.clientRequests.get(clientId);
+  }
+
   /**
    * Get the current writer client
    * DEPRECATED: Writer tracking now handled by FencingManager
@@ -336,6 +363,7 @@ export class WsHub implements Broadcaster {
       client.close();
     }
     this.clients.clear();
+    this.clientRequests.clear();
   }
 
   /**

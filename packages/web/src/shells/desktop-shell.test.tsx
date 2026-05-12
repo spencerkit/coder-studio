@@ -2,6 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { BrowserRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { activationStatusAtom } from "../atoms/activation";
 import { authenticatedAtom, localeAtom } from "../atoms/app-ui";
 import { authEnabledAtom, connectionStatusAtom, wsClientAtom } from "../atoms/connection";
 import {
@@ -36,6 +37,10 @@ vi.mock("../features/auth", () => ({
   LoginPage: () => <div>LoginPage</div>,
 }));
 
+vi.mock("../features/auth/session-gate", () => ({
+  SessionGatePage: () => <div>SessionGatePage</div>,
+}));
+
 vi.mock("../features/not-found", () => ({
   NotFoundPage: () => <div>Page not found</div>,
 }));
@@ -48,6 +53,10 @@ vi.mock("../features/notifications", () => ({
 const originalFetch = globalThis.fetch;
 
 function renderShell(store: ReturnType<typeof createStore>) {
+  if (store.get(activationStatusAtom) === "idle") {
+    store.set(activationStatusAtom, "active");
+  }
+
   return render(
     <Provider store={store}>
       <BrowserRouter>
@@ -307,6 +316,34 @@ describe("DesktopShell auth gating", () => {
     expect(screen.getByText("正在重新连接...")).toBeInTheDocument();
   });
 
+  it("renders SessionGatePage on /session-gate", () => {
+    window.history.replaceState({}, "", "/session-gate");
+
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(authEnabledAtom, false);
+    store.set(authenticatedAtom, false);
+
+    renderShell(store);
+
+    expect(screen.getByText("SessionGatePage")).toBeInTheDocument();
+  });
+
+  it("redirects to /session-gate when activation is gated", async () => {
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(authEnabledAtom, false);
+    store.set(authenticatedAtom, true);
+    store.set(activationStatusAtom, "gated");
+
+    renderShell(store);
+
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/session-gate");
+      expect(screen.getByText("SessionGatePage")).toBeInTheDocument();
+    });
+  });
+
   it("redirects / to /workspace after auth resolves and workspace.list is non-empty", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "workspace.list") {
@@ -379,6 +416,25 @@ describe("DesktopShell auth gating", () => {
     await waitFor(() => {
       expect(window.location.pathname).toBe("/");
       expect(screen.getByText("WelcomePage")).toBeInTheDocument();
+    });
+  });
+
+  it("does not bootstrap workspaces until activation is active", async () => {
+    const sendCommand = vi.fn();
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(authEnabledAtom, false);
+    store.set(authenticatedAtom, true);
+    store.set(activationStatusAtom, "gated");
+    store.set(workspacesAtom, {});
+    store.set(workspaceOrderAtom, []);
+    store.set(workspacesLoadStateAtom, "idle");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    renderShell(store);
+
+    await waitFor(() => {
+      expect(sendCommand).not.toHaveBeenCalledWith("workspace.list", {}, undefined);
     });
   });
 
