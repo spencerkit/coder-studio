@@ -251,6 +251,58 @@ textarea::placeholder {
   color: var(--color-error);
 }
 
+/* Icon utilities */
+.icon-tone-primary {
+  color: var(--icon-primary);
+}
+.icon-tone-secondary {
+  color: var(--icon-secondary);
+}
+.icon-tone-muted {
+  color: var(--icon-muted);
+}
+.icon-tone-accent {
+  color: var(--icon-accent);
+}
+.icon-tone-success {
+  color: var(--icon-success);
+}
+.icon-tone-warning {
+  color: var(--icon-warning);
+}
+.icon-tone-error {
+  color: var(--icon-error);
+}
+.icon-tone-info {
+  color: var(--icon-info);
+}
+
+.icon-surface-subtle {
+  background: var(--icon-surface-subtle);
+}
+.icon-surface-accent {
+  background: var(--icon-surface-accent);
+}
+.icon-surface-success {
+  background: var(--icon-surface-success);
+}
+.icon-surface-warning {
+  background: var(--icon-surface-warning);
+}
+.icon-surface-error {
+  background: var(--icon-surface-error);
+}
+.icon-surface-info {
+  background: var(--icon-surface-info);
+}
+
+.icon-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+}
+
 /* Spacing utilities (using 4px grid) */
 .p-1 {
   padding: var(--sp-1);

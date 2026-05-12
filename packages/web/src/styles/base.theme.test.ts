@@ -33,4 +33,17 @@ describe("base.css theme-sensitive shells", () => {
     expect(card).toContain("var(--bg-surface)");
     expect(card).not.toContain("rgba(17, 24, 31, 0.96)");
   });
+
+  it("defines shared icon tone and surface utilities", () => {
+    const tone = getRuleBlock(".icon-tone-secondary");
+    const surface = getRuleBlock(".icon-surface-warning");
+    const chip = getRuleBlock(".icon-chip");
+
+    expect(tone).toContain("color: var(--icon-secondary)");
+    expect(surface).toContain("background: var(--icon-surface-warning)");
+    expect(chip).toContain("display: inline-flex");
+    expect(chip).toContain("align-items: center");
+    expect(chip).toContain("justify-content: center");
+    expect(chip).toContain("border-radius: var(--radius-md)");
+  });
 });
