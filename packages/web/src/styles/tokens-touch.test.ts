@@ -10,9 +10,17 @@ function getRuleBlock(selector: string): string {
   let match: RegExpExecArray | null = null;
 
   while ((match = matcher.exec(stylesheet)) !== null) {
-    const currentSelector = match[1].replace(/\/\*[\s\S]*?\*\//g, "").trim();
+    const selectors = match[1]
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .split(",")
+      .map((part) => part.trim());
 
-    if (currentSelector === selector) {
+    if (selectors.length === 1 && selectors[0] === selector) {
+      block = match[2];
+      continue;
+    }
+
+    if (!block && selectors.includes(selector)) {
       block = match[2];
     }
   }
@@ -26,6 +34,32 @@ function getCustomProperty(block: string, name: string): string | null {
 }
 
 describe("tokens.css touch tokens", () => {
+  const builtInThemes = [
+    "mint-dark",
+    "mint-light",
+    "graphite-dark",
+    "graphite-light",
+    "nord-dark",
+    "nord-light",
+    "hc-dark",
+    "hc-light",
+  ] as const;
+
+  const requiredIconTokens = [
+    "--icon-primary",
+    "--icon-secondary",
+    "--icon-muted",
+    "--icon-accent",
+    "--icon-success",
+    "--icon-warning",
+    "--icon-error",
+    "--icon-info",
+    "--icon-file-folder",
+    "--icon-git-deleted",
+    "--icon-surface-subtle",
+    "--icon-surface-error",
+  ] as const;
+
   it("defines named theme blocks for all built-in themes", () => {
     expect(stylesheet).toContain(':root,\n[data-theme="mint-dark"]');
     expect(stylesheet).toContain('[data-theme="mint-light"]');
@@ -97,5 +131,28 @@ describe("tokens.css touch tokens", () => {
     expect(getCustomProperty(nordLight, "--text-secondary")).toBe("#4d5a6f");
     expect(getCustomProperty(nordLight, "--accent-blue")).toBe("#5b7fa8");
     expect(getCustomProperty(nordLight, "--shadow-glow")).toBe("0 0 12px rgba(91, 127, 168, 0.18)");
+  });
+
+  it("defines required icon tokens for every built-in theme", () => {
+    for (const theme of builtInThemes) {
+      const block = getRuleBlock(`[data-theme="${theme}"]`);
+
+      for (const token of requiredIconTokens) {
+        expect(getCustomProperty(block, token), `${theme} should define ${token}`).not.toBeNull();
+      }
+    }
+  });
+
+  it("keeps light-theme icon tokens visually distinct across families", () => {
+    const mintLight = getRuleBlock('[data-theme="mint-light"]');
+    const graphiteLight = getRuleBlock('[data-theme="graphite-light"]');
+    const nordLight = getRuleBlock('[data-theme="nord-light"]');
+
+    expect(getCustomProperty(mintLight, "--icon-file-folder")).not.toBe(
+      getCustomProperty(graphiteLight, "--icon-file-folder")
+    );
+    expect(getCustomProperty(graphiteLight, "--icon-accent")).not.toBe(
+      getCustomProperty(nordLight, "--icon-accent")
+    );
   });
 });
