@@ -1236,10 +1236,12 @@ function AppearanceSettings({ locale, setLocale, theme, setTheme }: AppearanceSe
           {t("settings.theme.hint")}
         </p>
         <Select
+          desktopMode="listbox"
           id={themeSelectId}
           aria-describedby={themeDescId}
           aria-label={t("settings.theme.title")}
           className="settings-input-compact"
+          mobileSheetTitle={t("settings.theme.title")}
           options={themeOptions}
           value={currentThemeId}
           onValueChange={handleThemeChange}

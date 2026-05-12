@@ -1022,13 +1022,10 @@ describe("SettingsPage", () => {
     renderSettingsPage(store);
     fireEvent.click(screen.getByRole("button", { name: "外观" }));
 
-    const themePicker = await screen.findByRole("combobox", { name: "主题" });
+    const themePicker = await screen.findByRole("button", { name: "主题 Mint 深色" });
     const chineseLanguagePill = screen.getByRole("button", { name: "中文" });
 
     expect(themePicker).toHaveAccessibleDescription("选择应用主题");
-    expect(screen.getByRole("option", { name: "Mint 深色" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "Mint 浅色" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "高对比深色" })).toBeInTheDocument();
     expect(
       screen.getByRole("group", {
         name: "语言",
@@ -1036,7 +1033,7 @@ describe("SettingsPage", () => {
     ).toHaveAccessibleDescription("选择界面语言");
     expect(screen.queryByRole("group", { name: "终端渲染器" })).not.toBeInTheDocument();
     expect(screen.queryByRole("switch", { name: "选中自动复制" })).not.toBeInTheDocument();
-    expect(themePicker).toHaveValue("mint-dark");
+    expect(themePicker).toHaveAttribute("aria-haspopup", "listbox");
     expect(chineseLanguagePill).toHaveAttribute("aria-pressed", "true");
   });
 
@@ -1115,13 +1112,21 @@ describe("SettingsPage", () => {
     renderSettingsPage(store);
     fireEvent.click(screen.getByRole("button", { name: "Appearance" }));
 
-    const picker = await screen.findByRole("combobox", { name: "Theme" });
-    expect(screen.getByRole("option", { name: "Mint Dark" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "Graphite Dark" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "Graphite Light" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "Nord Light" })).toBeInTheDocument();
+    const picker = await screen.findByRole("button", { name: "Theme Mint Dark" });
+    expect(picker).toHaveAttribute("aria-haspopup", "listbox");
 
-    fireEvent.change(picker, { target: { value: "graphite-dark" } });
+    fireEvent.click(picker);
+
+    const listbox = await screen.findByRole("listbox", { name: "Theme" });
+    expect(within(listbox).getByRole("option", { name: "Mint Dark" })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+    expect(within(listbox).getByRole("option", { name: "Graphite Dark" })).toBeInTheDocument();
+    expect(within(listbox).getByRole("option", { name: "Graphite Light" })).toBeInTheDocument();
+    expect(within(listbox).getByRole("option", { name: "Nord Light" })).toBeInTheDocument();
+
+    fireEvent.click(within(listbox).getByRole("option", { name: "Graphite Dark" }));
 
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith(
@@ -1139,7 +1144,11 @@ describe("SettingsPage", () => {
 
     expect(document.documentElement).toHaveAttribute("data-theme", "graphite-dark");
 
-    fireEvent.change(picker, { target: { value: "graphite-light" } });
+    const updatedPicker = screen.getByRole("button", { name: "Theme Graphite Dark" });
+    fireEvent.click(updatedPicker);
+
+    const updatedListbox = await screen.findByRole("listbox", { name: "Theme" });
+    fireEvent.click(within(updatedListbox).getByRole("option", { name: "Graphite Light" }));
 
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith(
@@ -1156,7 +1165,7 @@ describe("SettingsPage", () => {
     });
 
     expect(document.documentElement).toHaveAttribute("data-theme", "graphite-light");
-    expect(picker).toHaveValue("graphite-light");
+    expect(screen.getByRole("button", { name: "Theme Graphite Light" })).toBeInTheDocument();
   });
 
   it("hydrates the single theme picker from settings.get themeId", async () => {
@@ -1175,7 +1184,7 @@ describe("SettingsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Appearance" }));
 
     await waitFor(() => {
-      expect(screen.getByRole("combobox", { name: "Theme" })).toHaveValue("nord-light");
+      expect(screen.getByRole("button", { name: "Theme Nord Light" })).toBeInTheDocument();
     });
   });
 
@@ -1195,7 +1204,7 @@ describe("SettingsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Appearance" }));
 
     await waitFor(() => {
-      expect(screen.getByRole("combobox", { name: "Theme" })).toHaveValue("mint-light");
+      expect(screen.getByRole("button", { name: "Theme Mint Light" })).toBeInTheDocument();
       expect(document.documentElement).toHaveAttribute("data-theme", "mint-light");
     });
   });
@@ -1216,7 +1225,7 @@ describe("SettingsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Appearance" }));
 
     await waitFor(() => {
-      expect(screen.getByRole("combobox", { name: "Theme" })).toHaveValue("graphite-light");
+      expect(screen.getByRole("button", { name: "Theme Graphite Light" })).toBeInTheDocument();
       expect(document.documentElement).toHaveAttribute("data-theme", "graphite-light");
     });
   });
@@ -1237,9 +1246,12 @@ describe("SettingsPage", () => {
 
     renderSettingsPage(store);
     fireEvent.click(screen.getByRole("button", { name: "Appearance" }));
-    fireEvent.change(await screen.findByRole("combobox", { name: "Theme" }), {
-      target: { value: "graphite-dark" },
-    });
+    fireEvent.click(await screen.findByRole("button", { name: "Theme Mint Dark" }));
+    fireEvent.click(
+      within(await screen.findByRole("listbox", { name: "Theme" })).getByRole("option", {
+        name: "Graphite Dark",
+      })
+    );
 
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith(
@@ -1262,7 +1274,7 @@ describe("SettingsPage", () => {
       await settingsGetPromise;
     });
 
-    expect(screen.getByRole("combobox", { name: "Theme" })).toHaveValue("graphite-dark");
+    expect(screen.getByRole("button", { name: "Theme Graphite Dark" })).toBeInTheDocument();
     expect(document.documentElement).toHaveAttribute("data-theme", "graphite-dark");
   });
 
