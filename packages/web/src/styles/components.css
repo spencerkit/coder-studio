@@ -9072,6 +9072,61 @@ textarea.input {
     border-top-right-radius: 18px;
   }
 
+  .mobile-terminal-copy-mode {
+    position: absolute;
+    inset: 0;
+    z-index: 6;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    padding: var(--sp-3);
+    background: color-mix(in srgb, var(--bg-terminal) 94%, var(--bg-page) 6%);
+    color: var(--text-primary);
+    user-select: text;
+    -webkit-user-select: text;
+  }
+
+  .mobile-terminal-copy-mode__toolbar {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding-bottom: var(--sp-3);
+  }
+
+  .mobile-terminal-copy-mode__title {
+    font-size: var(--text-sm);
+    font-weight: var(--font-semibold);
+    color: var(--text-primary);
+  }
+
+  .mobile-terminal-copy-mode__hint {
+    font-size: var(--text-xs);
+    color: var(--text-secondary);
+  }
+
+  .mobile-terminal-copy-mode__done {
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+
+  .mobile-terminal-copy-mode__content {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    user-select: text;
+    -webkit-user-select: text;
+    -webkit-touch-callout: default;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .mobile-terminal-copy-mode__text {
+    display: inline-block;
+    margin: 0;
+    white-space: pre;
+    user-select: text;
+    -webkit-user-select: text;
+  }
+
   .mobile-sheet--files,
   .mobile-sheet--terminal,
   .mobile-sheet--launch {
