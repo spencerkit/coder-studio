@@ -2121,7 +2121,6 @@ describe("XtermHost", () => {
   it("locks ctrl from the keyboard shortcut path and keeps applying control input", async () => {
     viewportMocks.viewport = "mobile";
     const store = createStore();
-    const user = userEvent.setup();
     const sendTerminalInput = vi.fn().mockResolvedValue(undefined);
 
     store.set(localeAtom, "en");
