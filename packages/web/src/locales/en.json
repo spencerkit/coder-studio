@@ -606,7 +606,12 @@
     "status_title": "Access verification",
     "status_loading": "Checking the access state for this deployment.",
     "status_unavailable": "The authentication service is temporarily unavailable. Please try again shortly.",
-    "status_not_configured": "Authentication is not configured on this deployment."
+    "status_not_configured": "Authentication is not configured on this deployment.",
+    "session_gate_title": "SESSION GATE",
+    "session_gate_description": "This tab was displaced by another tab and must re-enter before continuing.",
+    "session_gate_detail": "The websocket connection has been closed. Recovery will reload fresh server state.",
+    "session_gate_reenter": "Re-enter",
+    "session_gate_reentering": "Re-entering"
   },
   "connection": {
     "title": "Connection",

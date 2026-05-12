@@ -606,7 +606,12 @@
     "status_title": "访问验证",
     "status_loading": "正在检查当前部署的访问状态。",
     "status_unavailable": "暂时无法连接鉴权服务，请稍后重试。",
-    "status_not_configured": "当前部署未配置鉴权。"
+    "status_not_configured": "当前部署未配置鉴权。",
+    "session_gate_title": "SESSION GATE",
+    "session_gate_description": "当前标签页已被其他标签页接管，需要重新进入才能继续操作。",
+    "session_gate_detail": "已断开当前标签页连接，恢复后会重新同步最新数据。",
+    "session_gate_reenter": "重新进入",
+    "session_gate_reentering": "进入中"
   },
   "connection": {
     "title": "连接",

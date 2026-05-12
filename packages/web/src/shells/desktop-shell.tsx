@@ -10,6 +10,7 @@ import { Route, Routes, useLocation } from "react-router-dom";
 import { authEnabledAtom } from "../atoms";
 import { EmptyState } from "../components/ui";
 import { LoginPage } from "../features/auth";
+import { SessionGatePage } from "../features/auth/session-gate";
 import { CommandPalette } from "../features/command-palette";
 import { NotFoundPage } from "../features/not-found";
 import { ToastContainer } from "../features/notifications";
@@ -34,7 +35,8 @@ export function DesktopShell() {
   const authEnabled = useAtomValue(authEnabledAtom);
   const location = useLocation();
   const authUnknown = authEnabled === null;
-  const shouldBypassAuthLoading = location.pathname.startsWith("/settings");
+  const shouldBypassAuthLoading =
+    location.pathname.startsWith("/settings") || location.pathname === "/session-gate";
 
   return (
     <div className="app">
@@ -64,6 +66,7 @@ export function DesktopShell() {
           <Routes>
             <Route path="/" element={<WelcomePage />} />
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/session-gate" element={<SessionGatePage />} />
             <Route
               path="/workspace"
               element={
