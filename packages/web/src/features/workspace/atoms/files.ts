@@ -45,6 +45,7 @@ export interface OpenTextFile {
   kind: "text";
   path: string;
   content: string;
+  savedContent: string;
   baseHash: string;
   isDirty: boolean;
   language?: string;

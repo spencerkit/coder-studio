@@ -87,6 +87,7 @@ export function useCodeEditorActions() {
             kind: "text",
             path,
             content,
+            savedContent: content,
             baseHash: "",
             isDirty: false,
             viewingTextBackedImageAsText: true,
@@ -110,6 +111,7 @@ export function useCodeEditorActions() {
               kind: "text",
               path,
               content: data.content,
+              savedContent: data.content,
               baseHash: data.baseHash,
               isDirty: false,
               externalState: undefined,
@@ -157,6 +159,7 @@ export function useCodeEditorActions() {
           ...prev,
           [currentFile.path]: {
             ...prevFile,
+            savedContent: currentFile.content,
             baseHash: result.data!.newHash,
             isDirty: false,
             externalState: undefined,
@@ -188,7 +191,7 @@ export function useCodeEditorActions() {
           [currentFile.path]: {
             ...prevFile,
             content: newContent,
-            isDirty: newContent !== prevFile.content,
+            isDirty: newContent !== prevFile.savedContent,
           },
         };
       });
@@ -286,6 +289,7 @@ export function useCodeEditorActions() {
               kind: "text",
               path,
               content: nextData.content,
+              savedContent: nextData.content,
               baseHash: nextData.baseHash,
               isDirty: false,
               externalState: undefined,

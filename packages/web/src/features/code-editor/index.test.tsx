@@ -24,7 +24,22 @@ vi.mock("../../components/ui/_internal/use-viewport", () => ({
 
 // Monaco is not happy in jsdom; stub it so we only assert our own chrome.
 vi.mock("./components/monaco-host", () => ({
-  MonacoHost: ({ content }: { content: string }) => <div data-testid="monaco-host">{content}</div>,
+  MonacoHost: ({
+    content,
+    onContentChange,
+  }: {
+    content: string;
+    onContentChange?: (value: string) => void;
+  }) => (
+    <div>
+      <textarea
+        aria-label="Editor content"
+        onChange={(event) => onContentChange?.(event.target.value)}
+        value={content}
+      />
+      <div data-testid="monaco-host">{content}</div>
+    </div>
+  ),
 }));
 
 // ImagePreview mount would try to decode the <img>; in jsdom the load event
@@ -138,6 +153,7 @@ describe("CodeEditorHost", () => {
           kind: "text",
           path: "src/b.ts",
           content: "cached",
+          savedContent: "cached",
           baseHash: "h",
           isDirty: false,
         },
@@ -162,6 +178,7 @@ describe("CodeEditorHost", () => {
           kind: "text",
           path: "src/c.ts",
           content: "content",
+          savedContent: "content",
           baseHash: "h",
           isDirty: false,
         },
@@ -196,6 +213,7 @@ describe("CodeEditorHost", () => {
           kind: "text",
           path: "src/mobile.ts",
           content: "content",
+          savedContent: "content",
           baseHash: "h",
           isDirty: true,
         },
@@ -263,6 +281,7 @@ describe("CodeEditorHost", () => {
           kind: "text",
           path: "src/save.ts",
           content: "content",
+          savedContent: "content",
           baseHash: "h",
           isDirty: true,
         },
@@ -280,6 +299,46 @@ describe("CodeEditorHost", () => {
 
     fireEvent.mouseEnter(saveBtn);
     expect(screen.getByRole("tooltip")).toHaveTextContent("Save File");
+  });
+
+  it("clears dirty state when text returns to the last saved content", async () => {
+    const { store } = setupStore({ activePath: "src/revert.ts" });
+
+    render(
+      <Provider store={store}>
+        <CodeEditorHost />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("monaco-host")).toHaveTextContent("hello world");
+    });
+
+    const editor = screen.getByRole("textbox", { name: "Editor content" });
+
+    fireEvent.change(editor, {
+      target: { value: "hello world with edits" },
+    });
+
+    await waitFor(() => {
+      expect(store.get(openFilesAtomFamily("ws-1"))["src/revert.ts"]).toMatchObject({
+        content: "hello world with edits",
+        isDirty: true,
+      });
+    });
+
+    fireEvent.change(editor, {
+      target: { value: "hello world" },
+    });
+
+    await waitFor(() => {
+      expect(store.get(openFilesAtomFamily("ws-1"))["src/revert.ts"]).toMatchObject({
+        content: "hello world",
+        isDirty: false,
+      });
+    });
+
+    expect(screen.getByRole("button", { name: "Save File" })).toBeDisabled();
   });
 
   it("reloads a clean text buffer after an external refresh signal changes the file on disk", async () => {
@@ -339,6 +398,7 @@ describe("CodeEditorHost", () => {
           kind: "text",
           path: "src/dirty.ts",
           content: "local edits",
+          savedContent: "from disk",
           baseHash: "hash-1",
           isDirty: true,
         },
@@ -388,6 +448,7 @@ describe("CodeEditorHost", () => {
           kind: "text",
           path: "src/deleted.ts",
           content: "stale buffer",
+          savedContent: "stale buffer",
           baseHash: "hash-1",
           isDirty: false,
         },
