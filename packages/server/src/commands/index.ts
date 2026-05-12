@@ -6,6 +6,7 @@
 
 import "./workspace.js";
 import "./workspace-activity.js";
+import "./activation.js";
 import "./connection.js";
 import "./session.js";
 import "./terminal.js";
