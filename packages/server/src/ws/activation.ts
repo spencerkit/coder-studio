@@ -47,12 +47,11 @@ export class ActivationManager {
     const now = Date.now();
     const activeLease = this.getLease();
 
-    if (
-      activeLease &&
-      activeLease.clientInstanceId === clientInstanceId &&
-      activeLease.graceUntil !== null &&
-      now <= activeLease.graceUntil
-    ) {
+    if (activeLease && activeLease.clientInstanceId === clientInstanceId) {
+      const isGraceRecovery = activeLease.graceUntil !== null && now <= activeLease.graceUntil;
+      const displacedWsClientId =
+        isGraceRecovery || activeLease.wsClientId === wsClientId ? null : activeLease.wsClientId;
+
       activeLease.wsClientId = wsClientId;
       activeLease.graceUntil = null;
       activeLease.expiresAt = now + this.options.leaseExpirationMs;
@@ -61,7 +60,7 @@ export class ActivationManager {
         active: true,
         generation: activeLease.generation,
         recoveryMode: "grace_recover",
-        displacedWsClientId: null,
+        displacedWsClientId,
       };
     }
 
