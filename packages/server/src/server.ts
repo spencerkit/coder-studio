@@ -38,6 +38,7 @@ import type { TerminalDatabase } from "./terminal/types.js";
 import { deleteWorkspaceUploads, runStartupGc } from "./uploads/cleanup.js";
 import { STARTUP_GC_DELAY_MS } from "./uploads/constants.js";
 import { WorkspaceManager } from "./workspace/manager.js";
+import { ActivationManager } from "./ws/activation.js";
 import type { CommandContext } from "./ws/dispatch.js";
 import { dispatch } from "./ws/dispatch.js";
 import { FencingManager } from "./ws/fencing.js";
@@ -66,6 +67,7 @@ export async function createServer(
 
   const db = openDatabase(config.dataDir);
   const eventBus = new EventBus();
+  const activationMgr = new ActivationManager();
   const fencingMgr = new FencingManager();
   const wsHub = new WsHub({ eventBus, commandContext: null, config, fencingMgr });
   let workspaceMgr: WorkspaceManager;
@@ -211,6 +213,7 @@ export async function createServer(
     autoFetch,
     providerRuntimeDeps,
     providerInstallMgr,
+    activationMgr,
   };
 
   wsHub.setCommandContext(commandContext);

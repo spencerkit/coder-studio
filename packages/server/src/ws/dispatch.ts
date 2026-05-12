@@ -15,6 +15,7 @@ import type { Database } from "../storage/database.js";
 import type { SupervisorManager } from "../supervisor/manager.js";
 import type { TerminalManager } from "../terminal/manager.js";
 import type { WorkspaceManager } from "../workspace/manager.js";
+import type { ActivationManager } from "./activation.js";
 import type { FencingManager } from "./fencing.js";
 import type { Broadcaster } from "./hub.js";
 
@@ -34,6 +35,7 @@ export interface CommandContext {
   autoFetch: AutoFetchRuntime;
   providerRuntimeDeps?: RuntimeStatusDeps;
   providerInstallMgr?: ProviderInstallManager;
+  activationMgr: ActivationManager;
 }
 
 /**
@@ -56,6 +58,12 @@ const handlers = new Map<string, CommandHandler>();
  * Registry of all command schemas
  */
 const schemas = new Map<string, CommandSchema>();
+const ACTIVATION_ALLOWLIST = new Set([
+  "activation.claim",
+  "activation.heartbeat",
+  "activation.release",
+  "connection.probe",
+]);
 
 /**
  * Register a command handler
@@ -77,6 +85,21 @@ export async function dispatch(
   ctx: CommandContext,
   clientId?: string
 ): Promise<Result> {
+  if (!ACTIVATION_ALLOWLIST.has(msg.op)) {
+    const lease = ctx.activationMgr.getLease();
+    if (!clientId || !lease || lease.wsClientId !== clientId) {
+      return {
+        kind: "result",
+        id: msg.id,
+        ok: false,
+        error: {
+          code: "activation_required",
+          message: "This tab is no longer the active session",
+        },
+      };
+    }
+  }
+
   const handler = handlers.get(msg.op);
 
   if (!handler) {
