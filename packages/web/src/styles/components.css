@@ -2257,9 +2257,21 @@ body.is-resizing-panels * {
 .auth-screen {
   padding: var(--sp-8);
   background:
-    radial-gradient(circle at top, rgba(120, 215, 178, 0.08), transparent 34%),
-    radial-gradient(circle at bottom right, rgba(108, 182, 255, 0.1), transparent 30%),
-    linear-gradient(180deg, rgba(17, 24, 31, 0.96), rgba(10, 16, 20, 0.99));
+    radial-gradient(
+      circle at top,
+      color-mix(in srgb, var(--accent-green) 12%, transparent),
+      transparent 34%
+    ),
+    radial-gradient(
+      circle at bottom right,
+      color-mix(in srgb, var(--accent-blue) 14%, transparent),
+      transparent 30%
+    ),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--bg-page) 92%, var(--bg-surface) 8%),
+      var(--bg-page)
+    );
 }
 
 .auth-card-shell {
@@ -2268,9 +2280,13 @@ body.is-resizing-panels * {
   text-align: left;
   gap: var(--sp-4);
   padding: var(--sp-10);
-  background: linear-gradient(180deg, rgba(17, 24, 31, 0.96), rgba(13, 20, 26, 0.94));
-  border-color: color-mix(in srgb, var(--border) 88%, rgba(108, 182, 255, 0.18));
-  box-shadow: 0 24px 72px rgba(0, 0, 0, 0.42);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg-surface) 98%, white 2%),
+    color-mix(in srgb, var(--bg-surface) 88%, var(--bg-page) 12%)
+  );
+  border-color: color-mix(in srgb, var(--border) 88%, var(--accent-blue) 12%);
+  box-shadow: var(--shadow-xl);
 }
 
 .auth-card-shell .welcome-kicker,

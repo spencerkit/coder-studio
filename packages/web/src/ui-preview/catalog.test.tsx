@@ -74,6 +74,7 @@ describe("UI preview catalog", () => {
         "workspace-desktop",
         "workspace-mobile",
         "auth-preview",
+        "session-gate",
         "not-found",
       ])
     );
@@ -166,6 +167,13 @@ describe("UI preview catalog", () => {
 
     expect(await screen.findByText(/preview workspace load failure/i)).toBeInTheDocument();
     expect(document.querySelector(".workspace-resolving-card")).toBeTruthy();
+  });
+
+  it("renders the session gate scene through the shared auth shell", async () => {
+    renderScene("session-gate");
+
+    expect(await screen.findByRole("button", { name: /re-enter|重新进入/i })).toBeInTheDocument();
+    expect(document.querySelector(".auth-card-shell")).toBeTruthy();
   });
 
   it("renders the file-tree delete confirm scene with the shared danger dialog", async () => {

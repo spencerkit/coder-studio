@@ -146,6 +146,18 @@ export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
     capture: { selector: ".auth-card-shell" },
   },
   {
+    id: "session-gate",
+    title: "Session Gate",
+    category: "error",
+    source: "real-route",
+    description:
+      "Session gate shell shown when activation is displaced and the app requires re-entry.",
+    devices: ["desktop", "mobile"],
+    themes: allThemeIds(),
+    locales: ["zh", "en"],
+    capture: { selector: ".auth-card-shell" },
+  },
+  {
     id: "not-found",
     title: "Not Found",
     category: "page",

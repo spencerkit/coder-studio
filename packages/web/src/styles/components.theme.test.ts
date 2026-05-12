@@ -187,6 +187,20 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(bottomTerminalShell).not.toContain("rgba(17, 24, 31, 0.96)");
   });
 
+  it("keeps auth shells theme-aware instead of forcing dark gradients", () => {
+    const authScreen = getLastRuleBlock(".auth-screen");
+    const authCard = getLastRuleBlock(".auth-card-shell");
+
+    expect(authScreen).toContain("var(--bg-page)");
+    expect(authScreen).toContain("var(--accent-green)");
+    expect(authScreen).toContain("var(--accent-blue)");
+    expect(authScreen).not.toContain("rgba(17, 24, 31, 0.96)");
+    expect(authCard).toContain("var(--bg-surface)");
+    expect(authCard).toContain("var(--accent-blue)");
+    expect(authCard).toContain("var(--shadow-xl)");
+    expect(authCard).not.toContain("rgba(13, 20, 26, 0.94)");
+  });
+
   it("keeps quick actions sized to its label instead of icon-button width", () => {
     const quickActions = getLastRuleBlock(".topbar-quick-actions");
 
