@@ -7131,16 +7131,16 @@ textarea.input {
 }
 
 .toast--success .toast__icon {
-  color: var(--color-success);
+  color: var(--icon-success);
 }
 .toast--error .toast__icon {
-  color: var(--color-error);
+  color: var(--icon-error);
 }
 .toast--warning .toast__icon {
-  color: var(--color-warning);
+  color: var(--icon-warning);
 }
 .toast--info .toast__icon {
-  color: var(--color-info);
+  color: var(--icon-info);
 }
 
 .toast__icon {
@@ -7513,20 +7513,25 @@ textarea.input {
   white-space: nowrap;
 }
 
+.config-status__icon {
+  display: inline-flex;
+  align-items: center;
+}
+
 .config-status--success {
-  color: var(--color-success);
+  color: var(--icon-success);
 }
 
 .config-status--warning {
-  color: var(--color-warning, #f59e0b);
+  color: var(--icon-warning);
 }
 
 .config-status--info {
-  color: var(--color-info, #3b82f6);
+  color: var(--icon-info);
 }
 
 .config-status--error {
-  color: var(--color-error);
+  color: var(--icon-error);
 }
 
 /* Body */

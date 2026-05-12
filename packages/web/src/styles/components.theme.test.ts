@@ -20,6 +20,14 @@ const noticeStylesheet = readFileSync(
   `${process.cwd()}/src/components/ui/notice/index.module.css`,
   "utf8"
 );
+const toastStyles = readFileSync(
+  `${process.cwd()}/src/components/ui/toast/index.module.css`,
+  "utf8"
+);
+const confirmDialogStyles = readFileSync(
+  `${process.cwd()}/src/components/ui/confirm-dialog/index.module.css`,
+  "utf8"
+);
 
 function getLastGroupedRuleBlockFrom(source: string, pattern: RegExp) {
   const matches = Array.from(source.matchAll(pattern));
@@ -101,6 +109,42 @@ describe("components.css theme-sensitive surfaces", () => {
       "color: var(--icon-accent)"
     );
     expect(getLastRuleBlock(".mobile-dock__icon")).toContain("color: currentColor");
+  });
+
+  it("keeps toast icons on icon semantic tokens instead of raw status colors", () => {
+    expect(getLastRuleBlock(".toast--success .toast__icon")).toContain("var(--icon-success)");
+    expect(getLastRuleBlock(".toast--error .toast__icon")).toContain("var(--icon-error)");
+    expect(getLastRuleBlock(".toast--warning .toast__icon")).toContain("var(--icon-warning)");
+    expect(getLastRuleBlock(".toast--info .toast__icon")).toContain("var(--icon-info)");
+    expect(getLastRuleBlockFrom(toastStyles, ".success .icon")).toContain(
+      "background: var(--icon-surface-success)"
+    );
+    expect(getLastRuleBlockFrom(toastStyles, ".error .icon")).toContain(
+      "background: var(--icon-surface-error)"
+    );
+    expect(getLastRuleBlockFrom(toastStyles, ".warning .icon")).toContain(
+      "background: var(--icon-surface-warning)"
+    );
+    expect(getLastRuleBlockFrom(toastStyles, ".info .icon")).toContain(
+      "background: var(--icon-surface-info)"
+    );
+    expect(getLastRuleBlockFrom(toastStyles, ".success .icon")).toContain("var(--icon-success)");
+  });
+
+  it("keeps confirm dialog danger icons on icon tokens", () => {
+    expect(getLastRuleBlockFrom(confirmDialogStyles, ".titleDanger")).toContain(
+      "var(--icon-warning)"
+    );
+    expect(getLastRuleBlockFrom(confirmDialogStyles, ".iconDanger")).toContain(
+      "color: var(--icon-warning)"
+    );
+  });
+
+  it("keeps config status colors on icon tokens", () => {
+    expect(getLastRuleBlock(".config-status--success")).toContain("var(--icon-success)");
+    expect(getLastRuleBlock(".config-status--warning")).toContain("var(--icon-warning)");
+    expect(getLastRuleBlock(".config-status--info")).toContain("var(--icon-info)");
+    expect(getLastRuleBlock(".config-status--error")).toContain("var(--icon-error)");
   });
 
   it("exposes global mobile safe-area tokens so standalone mobile views keep their padding", () => {
