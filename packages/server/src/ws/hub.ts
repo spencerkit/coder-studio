@@ -311,6 +311,19 @@ export class WsHub implements Broadcaster {
     return client.sendBinary(data);
   }
 
+  revokeAndCloseClient(clientId: ClientId, generation: number): void {
+    const client = this.clients.get(clientId);
+    if (!client) {
+      return;
+    }
+
+    client.sendEvent("activation.revoked", {
+      reason: "displaced",
+      generation,
+    });
+    client.close(4001, "single_active_displaced");
+  }
+
   getRequestMetadata(clientId: ClientId): FastifyRequest | undefined {
     return this.clientRequests.get(clientId);
   }

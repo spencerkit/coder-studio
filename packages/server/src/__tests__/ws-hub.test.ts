@@ -20,6 +20,7 @@ import type { ServerConfig } from "../config.js";
 import type { SessionManager } from "../session/manager.js";
 import type { TerminalManager } from "../terminal/manager.js";
 import type { WorkspaceManager } from "../workspace/manager.js";
+import { ActivationManager } from "../ws/activation.js";
 import type { CommandContext } from "../ws/dispatch.js";
 import type { FencingManager } from "../ws/fencing.js";
 import { WsHub } from "../ws/hub.js";
@@ -59,7 +60,17 @@ const createMockRequest = (): FastifyRequest =>
     headers: { "user-agent": "test-agent" },
   }) as unknown as FastifyRequest;
 
-const createCommandContext = (eventBus: EventBus): CommandContext =>
+const createActivationManager = () =>
+  new ActivationManager({
+    heartbeatMs: 10_000,
+    leaseExpirationMs: 30_000,
+    graceMs: 3_000,
+  });
+
+const createCommandContext = (
+  eventBus: EventBus,
+  overrides: Partial<CommandContext> = {}
+): CommandContext =>
   ({
     workspaceMgr: {},
     sessionMgr: {},
@@ -72,13 +83,8 @@ const createCommandContext = (eventBus: EventBus): CommandContext =>
       registerViewer: vi.fn(),
       unregisterViewer: vi.fn(),
     },
-    activationMgr: {
-      getLease: vi.fn(() => null),
-      heartbeat: vi.fn(() => false),
-      release: vi.fn(),
-      onSocketClosed: vi.fn(),
-      claim: vi.fn(),
-    },
+    activationMgr: createActivationManager(),
+    ...overrides,
   }) as unknown as CommandContext;
 
 const createHub = (eventBus: EventBus, commandContext: CommandContext): WsHub =>
@@ -131,6 +137,12 @@ const findResultMessage = (socket: MockSocket, id: string): ResultMessage | unde
   parseSentEvents(socket).find(
     (message): message is ResultMessage => message.kind === "result" && message.id === id
   );
+
+const getConnectedClientIds = (sockets: MockSocket[]): string[] =>
+  sockets.map((socket) => {
+    const connected = parseSentEvents(socket)[0];
+    return (connected as Extract<ServerToClient, { kind: "event" }>).data.clientId as string;
+  });
 
 describe("WsHub", () => {
   let hub: WsHub;
@@ -215,6 +227,31 @@ describe("WsHub", () => {
     hub.broadcast("workspace.42.meta", { test: "data" });
 
     expect(socket.send).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends activation.revoked and closes the displaced client", () => {
+    const activationMgr = createActivationManager();
+    mockCommandContext = createCommandContext(eventBus, { activationMgr });
+    hub.destroy();
+    hub = createHub(eventBus, mockCommandContext);
+
+    const socketA = createMockSocket();
+    const socketB = createMockSocket();
+    hub.handleConnection(socketA as never, createMockRequest());
+    hub.handleConnection(socketB as never, createMockRequest());
+
+    const [clientA, clientB] = getConnectedClientIds([socketA, socketB]);
+    activationMgr.claim("client-a", clientA, createMockRequest());
+
+    const claim = activationMgr.claim("client-b", clientB, createMockRequest());
+    expect(claim.displacedWsClientId).toBe(clientA);
+
+    hub.revokeAndCloseClient(clientA, claim.generation);
+
+    expect(socketA.send).toHaveBeenCalledWith(
+      expect.stringContaining('"topic":"activation.revoked"')
+    );
+    expect(socketA.close).toHaveBeenCalledWith(4001, "single_active_displaced");
   });
 
   it("should handle domain events", () => {
