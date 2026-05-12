@@ -28,6 +28,7 @@
   display: block;
   width: 100%;
   height: 100%;
+  box-sizing: border-box;
   border-radius: var(--radius-full);
   background: var(--bg-hover);
   border: 1px solid var(--border);
@@ -55,20 +56,23 @@
 
 .thumb {
   position: absolute;
-  top: var(--switch-thumb-offset);
+  top: 50%;
   left: var(--switch-thumb-offset);
   width: var(--switch-thumb-size);
   height: var(--switch-thumb-size);
+  box-sizing: border-box;
   border-radius: 50%;
   background: var(--text-primary);
   box-shadow: var(--shadow-sm);
+  transform: translate3d(0, -50%, 0);
   transition:
     transform var(--duration-fast) var(--ease-out),
     background var(--duration-fast) var(--ease-out);
 }
 
 .checked .thumb {
-  transform: translateX(var(--switch-thumb-translate-x));
+  left: calc(100% - var(--switch-thumb-size) - var(--switch-thumb-offset));
+  transform: translate3d(0, -50%, 0);
 }
 
 .switch:disabled .track,
