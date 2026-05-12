@@ -46,7 +46,10 @@ describe("app routing", () => {
     rmSync(tempDir, { recursive: true, force: true });
   });
 
-  const createApp = async (authEnabled = false): Promise<FastifyInstance> => {
+  const createApp = async (
+    authEnabled = false,
+    extraConfig: Record<string, unknown> = {}
+  ): Promise<FastifyInstance> => {
     const eventBus = new EventBus();
     const fencingMgr = new FencingManager();
     const config = {
@@ -60,6 +63,7 @@ describe("app routing", () => {
         enabled: authEnabled,
         password: authEnabled ? "sekrit" : undefined,
       },
+      ...extraConfig,
     };
     const wsHub = new WsHub({
       eventBus,
@@ -171,6 +175,20 @@ describe("app routing", () => {
     expect(response.statusCode).toBe(200);
     expect(response.headers["content-type"]).toContain("text/html");
     expect(response.body).toContain('<div id="root">shell</div>');
+  });
+
+  it("does not emit a CSP header for the built entrypoint response", async () => {
+    const instance = await createApp();
+
+    const response = await instance.inject({
+      method: "GET",
+      url: "/index.html",
+      headers: {
+        accept: "text/html",
+      },
+    });
+
+    expect(response.headers["content-security-policy"]).toBeUndefined();
   });
 
   it("serves headers for the built entrypoint on HEAD /index.html", async () => {

@@ -9,6 +9,8 @@
     "confirm": "Confirm",
     "select_date": "Select Date",
     "select_time": "Select Time",
+    "hour": "Hour",
+    "minute": "Minute",
     "january": "January",
     "february": "February",
     "march": "March",

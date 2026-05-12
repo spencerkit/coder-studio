@@ -2165,9 +2165,11 @@ describe("MobileShell Phase 2 workspace", () => {
 
     await user.click(badge);
 
-    expect(screen.getByRole("region", { name: "Supervisor sheet" })).toBeInTheDocument();
-    expect(screen.getByText("Supervisor is not enabled")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Enable Objective" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Enable Supervisor", level: 2 })
+    ).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Objective" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Enable" })).toBeInTheDocument();
   });
 
   it("renders a reconnecting banner inside the mobile workspace scaffold", async () => {

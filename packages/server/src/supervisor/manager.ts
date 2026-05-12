@@ -620,10 +620,17 @@ export class SupervisorManager {
         return null;
       }
 
+      const shouldConsumeScheduledAt =
+        trigger === "scheduled" ||
+        (trigger === "turn_completed" &&
+          supervisor.scheduledAt !== undefined &&
+          supervisor.scheduledAt !== null &&
+          supervisor.scheduledAt <= Date.now());
+
       const evaluatingSupervisor = this.attachCycles(
         this.deps.supervisorRepo.update(supervisor.id, {
           state: "evaluating",
-          scheduledAt: trigger === "scheduled" ? null : (supervisor.scheduledAt ?? undefined),
+          scheduledAt: shouldConsumeScheduledAt ? null : (supervisor.scheduledAt ?? undefined),
           stopReason: null,
           errorReason: null,
           updatedAt: Date.now(),

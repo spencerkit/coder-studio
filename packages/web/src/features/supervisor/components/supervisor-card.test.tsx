@@ -104,7 +104,7 @@ describe("SupervisorCard", () => {
       </Provider>
     );
 
-    expect(screen.getByRole("button", { name: "Edit Objective" })).toHaveClass(
+    expect(screen.getByRole("button", { name: "Edit Supervisor" })).toHaveClass(
       "btn",
       "btn-ghost",
       "btn-sm",
@@ -122,7 +122,7 @@ describe("SupervisorCard", () => {
       "btn-sm",
       "supervisor-icon-btn"
     );
-    expect(screen.getByRole("button", { name: "Disable Supervisor" })).toHaveClass(
+    expect(screen.getByRole("button", { name: "Disable" })).toHaveClass(
       "btn",
       "btn-ghost",
       "btn-sm",

@@ -1,4 +1,5 @@
-import clsx from "clsx";
+import { useId } from "react";
+import { useTranslation } from "../../../lib/i18n";
 import { Input } from "../input";
 import styles from "./index.module.css";
 
@@ -17,6 +18,9 @@ export function TimeSelector({
   onMinuteChange,
   disabled = false,
 }: TimeSelectorProps) {
+  const t = useTranslation();
+  const hourId = useId();
+  const minuteId = useId();
   const hourStr = String(hour).padStart(2, "0");
   const minuteStr = String(minute).padStart(2, "0");
 
@@ -37,11 +41,15 @@ export function TimeSelector({
   return (
     <div className={styles.timeSelector}>
       <div className={styles.timeField}>
-        <label className={styles.timeLabel}>Hour</label>
+        <label htmlFor={hourId} className={styles.timeLabel}>
+          {t("datetime.hour")}
+        </label>
         <Input
+          id={hourId}
           type="number"
           min={0}
           max={23}
+          aria-label={t("datetime.hour")}
           size="sm"
           value={hourStr}
           onChange={(e) => handleHourChange(e.target.value)}
@@ -51,11 +59,15 @@ export function TimeSelector({
       </div>
       <span className={styles.timeSeparator}>:</span>
       <div className={styles.timeField}>
-        <label className={styles.timeLabel}>Minute</label>
+        <label htmlFor={minuteId} className={styles.timeLabel}>
+          {t("datetime.minute")}
+        </label>
         <Input
+          id={minuteId}
           type="number"
           min={0}
           max={59}
+          aria-label={t("datetime.minute")}
           size="sm"
           value={minuteStr}
           onChange={(e) => handleMinuteChange(e.target.value)}

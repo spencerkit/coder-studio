@@ -91,10 +91,10 @@ describe("MobileSupervisorSheet", () => {
 
     expect(screen.getByText("Reduce mobile regression bugs")).toBeInTheDocument();
     expect(
-      within(rootActions as HTMLElement).getByRole("button", { name: "Edit Objective" })
+      within(rootActions as HTMLElement).getByRole("button", { name: "Edit Supervisor" })
     ).toBeInTheDocument();
     expect(
-      within(rootActions as HTMLElement).getByRole("button", { name: "Disable Supervisor" })
+      within(rootActions as HTMLElement).getByRole("button", { name: "Disable" })
     ).toBeInTheDocument();
     expect(screen.queryByText("Supervisor is not enabled")).not.toBeInTheDocument();
     expect(
@@ -167,7 +167,7 @@ describe("MobileSupervisorSheet", () => {
     expect(rootActions).not.toBeNull();
 
     fireEvent.click(
-      within(rootActions as HTMLElement).getByRole("button", { name: "Edit Objective" })
+      within(rootActions as HTMLElement).getByRole("button", { name: "Edit Supervisor" })
     );
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
 
