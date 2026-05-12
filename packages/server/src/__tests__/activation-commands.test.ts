@@ -232,6 +232,44 @@ describe("activation commands", () => {
     });
   });
 
+  it("claiming from a second client revokes the previous websocket", async () => {
+    const request = createMockRequest();
+    const revokeAndCloseClient = vi.fn();
+    const ctx = createBaseContext({
+      broadcaster: {
+        broadcast: vi.fn(),
+        sendToClient: vi.fn(() => true),
+        sendBinaryToClient: vi.fn(() => true),
+        getRequestMetadata: vi.fn(() => request),
+        revokeAndCloseClient,
+      } as unknown as Broadcaster,
+    });
+
+    await dispatch(
+      {
+        kind: "command",
+        id: "00000000-0000-4000-8000-000000000003",
+        op: "activation.claim",
+        args: { clientInstanceId: "client-a" },
+      },
+      ctx,
+      "ws-a"
+    );
+
+    await dispatch(
+      {
+        kind: "command",
+        id: "00000000-0000-4000-8000-000000000004",
+        op: "activation.claim",
+        args: { clientInstanceId: "client-b" },
+      },
+      ctx,
+      "ws-b"
+    );
+
+    expect(revokeAndCloseClient).toHaveBeenCalledWith("ws-a", 2);
+  });
+
   it("does not block direct internal dispatches without websocket request metadata", async () => {
     const ctx = createBaseContext();
 

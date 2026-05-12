@@ -20,7 +20,12 @@ registerCommand(
       };
     }
 
-    return ctx.activationMgr.claim(args.clientInstanceId, clientId, request);
+    const claim = ctx.activationMgr.claim(args.clientInstanceId, clientId, request);
+    if (claim.displacedWsClientId) {
+      ctx.broadcaster.revokeAndCloseClient?.(claim.displacedWsClientId, claim.generation);
+    }
+
+    return claim;
   }
 );
 

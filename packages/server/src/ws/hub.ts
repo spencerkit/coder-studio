@@ -62,6 +62,7 @@ export interface Broadcaster {
   sendToClient(clientId: ClientId, msg: ServerToClient): boolean;
   sendBinaryToClient(clientId: ClientId, data: Buffer): boolean;
   getRequestMetadata?(clientId: ClientId): FastifyRequest | undefined;
+  revokeAndCloseClient?(clientId: ClientId, generation: number): void;
 }
 
 export class WsHub implements Broadcaster {
