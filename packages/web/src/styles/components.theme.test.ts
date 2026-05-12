@@ -84,12 +84,20 @@ describe("components.css theme-sensitive surfaces", () => {
     const activeTab = getLastRuleBlock(".topbar-tab.active");
     const emptyCard = getLastRuleBlock(".workspace-empty-inner");
     const resolvingCard = getLastRuleBlock(".workspace-resolving-card");
+    const sessionTerminal = getLastRuleBlock(".session-terminal");
+    const bottomTerminalShell = getLastRuleBlock(
+      ".workspace-main-area > .bottom-terminal > .bottom-terminal"
+    );
 
     expect(topbar).toContain("var(--bg-surface)");
     expect(activeTab).toContain("var(--bg-active)");
     expect(activeTab).not.toContain("rgba(45, 63, 79, 0.92)");
     expect(emptyCard).toContain("var(--bg-surface)");
     expect(resolvingCard).toContain("var(--bg-surface)");
+    expect(sessionTerminal).toContain("var(--bg-terminal)");
+    expect(sessionTerminal).not.toContain("rgba(11, 18, 24, 0.98)");
+    expect(bottomTerminalShell).toContain("var(--bg-terminal)");
+    expect(bottomTerminalShell).not.toContain("rgba(17, 24, 31, 0.96)");
   });
 
   it("keeps quick actions sized to its label instead of icon-button width", () => {

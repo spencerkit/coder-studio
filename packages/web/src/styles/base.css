@@ -485,9 +485,21 @@ textarea::placeholder {
   place-items: center;
   padding: var(--sp-8);
   background:
-    radial-gradient(circle at top, rgba(120, 215, 178, 0.08), transparent 36%),
-    radial-gradient(circle at bottom right, rgba(108, 182, 255, 0.1), transparent 34%),
-    linear-gradient(180deg, rgba(17, 24, 31, 0.92), rgba(10, 16, 20, 0.98));
+    radial-gradient(
+      circle at top,
+      color-mix(in srgb, var(--accent-green) 10%, transparent),
+      transparent 36%
+    ),
+    radial-gradient(
+      circle at bottom right,
+      color-mix(in srgb, var(--accent-blue) 12%, transparent),
+      transparent 34%
+    ),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--bg-page) 88%, var(--bg-surface) 12%),
+      var(--bg-page)
+    );
 }
 
 .app-loading-card {
@@ -495,8 +507,12 @@ textarea::placeholder {
   padding: var(--sp-8);
   border: 1px solid var(--border);
   border-radius: var(--radius-2xl);
-  background: linear-gradient(180deg, rgba(17, 24, 31, 0.96), rgba(13, 20, 26, 0.94));
-  box-shadow: 0 18px 56px rgba(0, 0, 0, 0.42);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg-surface) 98%, white 2%),
+    color-mix(in srgb, var(--bg-surface) 84%, var(--bg-page) 16%)
+  );
+  box-shadow: var(--shadow-xl);
 }
 
 .app-loading-kicker {

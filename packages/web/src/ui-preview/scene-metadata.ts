@@ -1,4 +1,4 @@
-import { THEME_IDS, type ThemeKind } from "../theme";
+import { THEME_IDS } from "../theme";
 
 export type UiPreviewSceneDevice = "desktop" | "mobile";
 export type UiPreviewSceneTheme = (typeof THEME_IDS)[number];
@@ -30,17 +30,8 @@ export interface UiPreviewSceneMetadata {
   };
 }
 
-const THEME_IDS_BY_KIND = {
-  dark: THEME_IDS.filter((themeId) => themeId.endsWith("-dark")),
-  light: THEME_IDS.filter((themeId) => themeId.endsWith("-light")),
-} satisfies Record<ThemeKind, readonly string[]>;
-
 function allThemeIds(): UiPreviewSceneTheme[] {
   return [...THEME_IDS] as UiPreviewSceneTheme[];
-}
-
-function themeIdsForKinds(...kinds: ThemeKind[]): UiPreviewSceneTheme[] {
-  return kinds.flatMap((kind) => THEME_IDS_BY_KIND[kind]) as UiPreviewSceneTheme[];
 }
 
 export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
@@ -128,7 +119,7 @@ export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
     source: "real-route",
     description: "Desktop workspace shell with seeded workspace, git status, and file tree.",
     devices: ["desktop"],
-    themes: themeIdsForKinds("dark", "light"),
+    themes: allThemeIds(),
     locales: ["zh", "en"],
     capture: { selector: ".workspace-page" },
   },
@@ -139,7 +130,7 @@ export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
     source: "real-route",
     description: "Mobile workspace shell with seeded workspace and no active sessions.",
     devices: ["mobile"],
-    themes: themeIdsForKinds("dark", "light"),
+    themes: allThemeIds(),
     locales: ["zh", "en"],
     capture: { selector: "[data-testid='mobile-shell']" },
   },

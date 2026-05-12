@@ -5914,7 +5914,11 @@ textarea.input {
   border-radius: 14px;
   box-shadow: var(--shadow-lg);
   overflow: hidden;
-  background: linear-gradient(180deg, rgba(17, 24, 31, 0.96), rgba(11, 18, 24, 0.99));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg-terminal) 96%, white 4%),
+    color-mix(in srgb, var(--bg-terminal) 88%, var(--bg-page) 12%)
+  );
 }
 
 .terminal-toolbar {
@@ -6284,7 +6288,11 @@ textarea.input {
 }
 
 .session-terminal {
-  background: linear-gradient(180deg, rgba(11, 18, 24, 0.98), rgba(9, 15, 20, 1));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg-terminal) 98%, white 2%),
+    color-mix(in srgb, var(--bg-terminal) 90%, var(--bg-page) 10%)
+  );
 }
 
 .workspace-empty-content,
