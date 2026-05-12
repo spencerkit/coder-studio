@@ -128,6 +128,22 @@ export class WsClient {
     }
   }
 
+  sendControlAndClose(msg: ServerToClient, code: number, reason: string): boolean {
+    if (this.socket.readyState !== WebSocket.OPEN) {
+      return false;
+    }
+
+    try {
+      this.socket.send(JSON.stringify(msg), () => {
+        this.socket.close(code, reason);
+      });
+      return true;
+    } catch (error) {
+      console.error(`Failed to send message to client ${this.id}:`, error);
+      return false;
+    }
+  }
+
   sendBinary(data: Buffer): boolean {
     if (this.socket.readyState !== WebSocket.OPEN) {
       return false;
@@ -311,6 +327,23 @@ export class WsClient {
       data,
     };
     return this.send(event);
+  }
+
+  sendEventAndClose(
+    topic: string,
+    data: unknown,
+    code: number,
+    reason: string,
+    seq: number = 0
+  ): boolean {
+    const event: Event = {
+      kind: "event",
+      topic,
+      seq,
+      timestamp: Date.now(),
+      data,
+    };
+    return this.sendControlAndClose(event, code, reason);
   }
 
   /**

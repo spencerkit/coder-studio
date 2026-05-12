@@ -85,9 +85,12 @@ export async function dispatch(
   ctx: CommandContext,
   clientId?: string
 ): Promise<Result> {
-  if (!ACTIVATION_ALLOWLIST.has(msg.op)) {
-    const lease = ctx.activationMgr.getLease();
-    if (!clientId || !lease || lease.wsClientId !== clientId) {
+  const isWsDispatch =
+    clientId !== undefined && typeof ctx.broadcaster.getRequestMetadata === "function";
+
+  if (isWsDispatch && !ACTIVATION_ALLOWLIST.has(msg.op)) {
+    const active = ctx.activationMgr.getLease();
+    if (!active || active.wsClientId !== clientId) {
       return {
         kind: "result",
         id: msg.id,
@@ -115,7 +118,6 @@ export async function dispatch(
   }
 
   try {
-    // Validate args with schema
     const schema = schemas.get(msg.op);
     let args = msg.args;
 
@@ -132,7 +134,6 @@ export async function dispatch(
       data,
     };
   } catch (error: unknown) {
-    // Normalize error
     const normalizedError = normalizeError(error);
 
     return {
@@ -156,7 +157,6 @@ function normalizeError(error: unknown): Result["error"] {
     errors?: unknown;
   };
 
-  // Zod validation error
   if (candidate.name === "ZodError") {
     return {
       code: "validation_error",
@@ -165,7 +165,6 @@ function normalizeError(error: unknown): Result["error"] {
     };
   }
 
-  // Custom error with code
   if (candidate.code) {
     return {
       code: candidate.code,
@@ -174,7 +173,6 @@ function normalizeError(error: unknown): Result["error"] {
     };
   }
 
-  // Generic error
   return {
     code: "internal_error",
     message: candidate.message || "An internal error occurred",

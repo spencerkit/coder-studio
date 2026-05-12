@@ -230,6 +230,14 @@ export class WsClient {
           return;
         }
 
+        if (
+          event.reason === "single_active_displaced" ||
+          event.reason === "activation_required" ||
+          event.reason === "activation_revoked"
+        ) {
+          this.isManualClose = true;
+        }
+
         this.handleClose(event.code, event.reason);
         this.rejectConnectDeferred(new Error(`WebSocket closed: ${event.reason || event.code}`));
       };
@@ -652,7 +660,6 @@ export class WsClient {
 
     // Check for rejection codes
     if (code === 4001 || code === 4002) {
-      // 4001: another_tab_active, 4002: takeover
       this.setStatus("rejected");
       return;
     }

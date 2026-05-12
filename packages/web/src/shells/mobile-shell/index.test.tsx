@@ -5,6 +5,7 @@ import { createStore, Provider } from "jotai";
 import type { ReactNode } from "react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { activationStatusAtom } from "../../atoms/activation";
 import {
   authenticatedAtom,
   localeAtom,
@@ -454,6 +455,7 @@ function renderMobileShell({
   window.localStorage.setItem("ui.locale", JSON.stringify(locale));
   const store = createStore();
   store.set(localeAtom, locale);
+  store.set(activationStatusAtom, "active");
   store.set(connectionStatusAtom, connectionStatus);
   store.set(reconnectAttemptCountAtom, reconnectAttempts);
   store.set(authEnabledAtom, false);
@@ -1067,6 +1069,7 @@ describe("MobileShell Phase 2 workspace", () => {
 
   it("shows a loading workspace gate instead of the mobile scaffold while workspaces are still loading", () => {
     const store = createStore();
+    store.set(activationStatusAtom, "active");
     store.set(connectionStatusAtom, "connected");
     store.set(authEnabledAtom, false);
     store.set(authenticatedAtom, true);
@@ -1087,6 +1090,7 @@ describe("MobileShell Phase 2 workspace", () => {
 
   it("shows a workspace load error gate instead of the mobile scaffold when bootstrap fails", () => {
     const store = createStore();
+    store.set(activationStatusAtom, "active");
     store.set(connectionStatusAtom, "connected");
     store.set(authEnabledAtom, false);
     store.set(authenticatedAtom, true);
@@ -1108,6 +1112,7 @@ describe("MobileShell Phase 2 workspace", () => {
 
   it("does not render the mobile scaffold before redirecting home when /workspace resolves to an empty workspace list", async () => {
     const store = createStore();
+    store.set(activationStatusAtom, "active");
     store.set(connectionStatusAtom, "connected");
     store.set(authEnabledAtom, false);
     store.set(authenticatedAtom, true);
@@ -1131,6 +1136,7 @@ describe("MobileShell Phase 2 workspace", () => {
 
   it("redirects /workspace home on mobile when the workspace list is ready but empty while reconnecting", async () => {
     const store = createStore();
+    store.set(activationStatusAtom, "active");
     store.set(connectionStatusAtom, "reconnecting");
     store.set(authEnabledAtom, false);
     store.set(authenticatedAtom, true);
