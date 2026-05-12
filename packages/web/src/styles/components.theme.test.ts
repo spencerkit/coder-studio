@@ -78,6 +78,9 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(getLastRuleBlock(".tree-icon.doc")).toContain("var(--icon-file-doc)");
     expect(getLastRuleBlock(".tree-icon.media")).toContain("var(--icon-file-media)");
     expect(getLastRuleBlock(".tree-icon.file")).toContain("var(--icon-file-default)");
+    expect(getLastRuleBlock(".file-tree-shell .tree-icon.file")).toContain(
+      "var(--icon-file-default)"
+    );
     expect(getLastRuleBlock(".git-row-icon-staged")).toContain("var(--icon-git-staged)");
     expect(getLastRuleBlock(".git-row-icon-modified")).toContain("var(--icon-git-modified)");
     expect(getLastRuleBlock(".git-row-icon-deleted")).toContain("var(--icon-git-deleted)");

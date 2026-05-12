@@ -10373,7 +10373,7 @@ textarea.input {
 }
 
 .file-tree-shell .tree-icon.file {
-  color: var(--text-secondary);
+  color: var(--icon-file-default);
 }
 
 .file-tree-shell .tree-label {
