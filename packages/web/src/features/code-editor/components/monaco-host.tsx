@@ -34,10 +34,11 @@ monacoGlobal.MonacoEnvironment ??= {
 };
 
 interface MonacoHostProps {
-  workspaceId: string;
+  workspaceId?: string;
   filePath: string;
   content: string;
   visible?: boolean;
+  standalone?: boolean;
   onContentChange?: (content: string) => void;
   onSave?: () => void | Promise<void>;
 }
@@ -57,6 +58,7 @@ export const MonacoHost: FC<MonacoHostProps> = ({
   filePath,
   content,
   visible = true,
+  standalone = false,
   onContentChange,
   onSave,
 }) => {
@@ -148,7 +150,13 @@ export const MonacoHost: FC<MonacoHostProps> = ({
     editor.layout();
   }, [visible]);
 
-  return <div ref={containerRef} className="monaco-host" />;
+  return (
+    <div
+      ref={containerRef}
+      className="monaco-host"
+      data-monaco-mode={standalone ? "standalone" : "workspace"}
+    />
+  );
 };
 
 /**

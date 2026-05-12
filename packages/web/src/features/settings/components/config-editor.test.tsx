@@ -16,7 +16,7 @@ vi.mock("../../code-editor/components/monaco-host", () => ({
     ...props
   }: {
     content: string;
-    onContentChange: (value: string) => void;
+    onContentChange?: (value: string) => void;
   }) => {
     monacoHostMock(props);
     return (
@@ -68,7 +68,7 @@ function renderConfigEditor(options?: {
 }
 
 describe("ConfigEditor", () => {
-  it("keeps MonacoHost in standalone syntax-only mode without workspace metadata", async () => {
+  it("uses MonacoHost in explicit standalone syntax-only mode", async () => {
     monacoHostMock.mockClear();
     renderConfigEditor();
 
@@ -76,12 +76,17 @@ describe("ConfigEditor", () => {
       expect(screen.getByTestId("monaco-host")).toBeInTheDocument();
     });
 
-    expect(monacoHostMock).toHaveBeenCalled();
-    expect(monacoHostMock).not.toHaveBeenCalledWith(
+    expect(monacoHostMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        workspaceRootPath: expect.anything(),
+        standalone: true,
+        filePath: "/home/spencer/.claude/settings.json",
+        visible: true,
       })
     );
+
+    const lastCall = monacoHostMock.mock.calls[monacoHostMock.mock.calls.length - 1]?.[0] ?? null;
+    expect(lastCall).not.toBeNull();
+    expect(lastCall).not.toHaveProperty("workspaceId");
   });
 
   it("preserves the full config path in the header tooltip when the visible path is truncated", async () => {
