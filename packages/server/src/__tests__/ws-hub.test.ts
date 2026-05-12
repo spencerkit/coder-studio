@@ -72,6 +72,13 @@ const createCommandContext = (eventBus: EventBus): CommandContext =>
       registerViewer: vi.fn(),
       unregisterViewer: vi.fn(),
     },
+    activationMgr: {
+      getLease: vi.fn(() => null),
+      heartbeat: vi.fn(() => false),
+      release: vi.fn(),
+      onSocketClosed: vi.fn(),
+      claim: vi.fn(),
+    },
   }) as unknown as CommandContext;
 
 const createHub = (eventBus: EventBus, commandContext: CommandContext): WsHub =>
