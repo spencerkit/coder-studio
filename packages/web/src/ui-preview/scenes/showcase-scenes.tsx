@@ -9,6 +9,7 @@ import {
   FileText,
   Folder,
   Image as ImageIcon,
+  Terminal,
 } from "lucide-react";
 import { ConfirmDialog, EmptyState, Notice, Sheet } from "../../components/ui";
 import { CommandPalette } from "../../features/command-palette";
@@ -220,6 +221,16 @@ export function createShowcaseScenes(): UiPreviewSceneDefinition[] {
                   <span>README.md</span>
                 </div>
               </div>
+              <EmptyState
+                className="bottom-terminal-empty"
+                description={
+                  <p className="bottom-terminal-empty-hint">
+                    Review the terminal empty-state icon and surface treatment.
+                  </p>
+                }
+                icon={<Terminal size={32} className="bottom-terminal-empty-icon" />}
+                title={<p className="bottom-terminal-empty-text">No terminal session</p>}
+              />
               <MobileDock activeItem="files" onSelectItem={() => {}} />
             </div>
           </div>
@@ -289,6 +300,16 @@ export function createShowcaseScenes(): UiPreviewSceneDefinition[] {
                 <span>untracked.ts</span>
               </div>
             </div>
+            <EmptyState
+              className="bottom-terminal-empty"
+              description={
+                <p className="bottom-terminal-empty-hint">
+                  Review the terminal empty-state icon and surface treatment.
+                </p>
+              }
+              icon={<Terminal size={32} className="bottom-terminal-empty-icon" />}
+              title={<p className="bottom-terminal-empty-text">No terminal session</p>}
+            />
           </div>
         ),
     }),

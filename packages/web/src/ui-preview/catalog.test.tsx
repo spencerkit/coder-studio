@@ -181,6 +181,7 @@ describe("UI preview catalog", () => {
     expect(await screen.findByText("packages")).toBeInTheDocument();
     expect(document.querySelector(".file-tree-shell")).toBeTruthy();
     expect(document.querySelector(".git-panel, .git-row")).toBeTruthy();
+    expect(document.querySelector(".bottom-terminal-empty")).toBeTruthy();
   });
 
   it("renders the toast icon review scene with four status tones", async () => {

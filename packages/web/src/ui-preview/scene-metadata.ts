@@ -244,7 +244,7 @@ export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
     devices: ["desktop", "mobile"],
     themes: allThemeIds(),
     locales: ["zh", "en"],
-    capture: { selector: ".supervisor-dialog, .mobile-sheet__content" },
+    capture: { selector: ".supervisor-dialog, .mobile-supervisor-sheet" },
   },
   {
     id: "mobile-workspace-drawer",
