@@ -32,17 +32,10 @@ import {
   serverInfoAtom,
 } from "../../../atoms/connection";
 import { resolvedActiveWorkspaceIdAtom } from "../../../atoms/workspaces";
-import { Input, Notice, Pill, Switch } from "../../../components/ui";
+import { Input, Notice, Pill, Select, Switch } from "../../../components/ui";
 import { useViewport } from "../../../hooks/use-viewport";
 import { useTranslation } from "../../../lib/i18n";
-import {
-  getThemeById,
-  getThemeFamily,
-  getThemeIdForFamilyVariant,
-  getThemeVariant,
-  resolveStoredThemeId,
-  type ThemeFamily,
-} from "../../../theme";
+import { getThemeById, resolveStoredThemeId, THEMES } from "../../../theme";
 import { notificationPreferencesAtom } from "../../notifications/atoms";
 import { MobilePageHeader } from "../../shared/components/mobile-page-header";
 import {
@@ -73,8 +66,6 @@ type SettingsNavigationState =
 type SettingsContentLayoutMode = "default" | "fill-height";
 
 const DEFAULT_SETTINGS_SECTION: SettingsSection = SETTINGS_SECTIONS[0].id;
-const THEME_FAMILIES: ReadonlyArray<ThemeFamily> = ["mint", "graphite", "nord", "hc"];
-const THEME_VARIANTS = ["dark", "light"] as const;
 
 function isStandaloneWebApp(): boolean {
   if (typeof window === "undefined") {
@@ -1210,14 +1201,15 @@ function AppearanceSettings({ locale, setLocale, theme, setTheme }: AppearanceSe
   const t = useTranslation();
   const themeTitleId = useId();
   const themeDescId = useId();
-  const themeFamilyTitleId = useId();
-  const themeVariantTitleId = useId();
+  const themeSelectId = useId();
   const languageTitleId = useId();
   const languageDescId = useId();
   const dispatch = useAtomValue(dispatchCommandAtom);
   const currentThemeId = resolveStoredThemeId(theme);
-  const currentThemeFamily = getThemeFamily(currentThemeId);
-  const currentThemeVariant = getThemeVariant(currentThemeId);
+  const themeOptions = THEMES.map((registeredTheme) => ({
+    value: registeredTheme.id,
+    label: t(registeredTheme.labelKey),
+  }));
 
   const saveSettings = async (settings: Record<string, unknown>) => {
     await dispatch("settings.update", { settings });
@@ -1234,20 +1226,6 @@ function AppearanceSettings({ locale, setLocale, theme, setTheme }: AppearanceSe
     void saveSettings({ appearance: { themeId: resolvedTheme.id } });
   };
 
-  const handleThemeFamilyChange = (family: ThemeFamily) => {
-    const nextThemeId = getThemeIdForFamilyVariant(family, currentThemeVariant);
-    if (nextThemeId) {
-      handleThemeChange(nextThemeId);
-    }
-  };
-
-  const handleThemeVariantChange = (variant: (typeof THEME_VARIANTS)[number]) => {
-    const nextThemeId = getThemeIdForFamilyVariant(currentThemeFamily, variant);
-    if (nextThemeId) {
-      handleThemeChange(nextThemeId);
-    }
-  };
-
   return (
     <div className="settings-section">
       <div className="settings-group">
@@ -1257,48 +1235,15 @@ function AppearanceSettings({ locale, setLocale, theme, setTheme }: AppearanceSe
         <p className="settings-group-desc" id={themeDescId}>
           {t("settings.theme.hint")}
         </p>
-
-        <h3 className="settings-group-title" id={themeFamilyTitleId}>
-          {t("settings.theme.family")}
-        </h3>
-        <div
+        <Select
+          id={themeSelectId}
           aria-describedby={themeDescId}
-          aria-labelledby={themeFamilyTitleId}
-          className="settings-pills"
-          role="group"
-        >
-          {THEME_FAMILIES.map((family) => (
-            <Pill
-              key={family}
-              leadingIcon={currentThemeFamily === family ? <Check size={12} /> : undefined}
-              onClick={() => handleThemeFamilyChange(family)}
-              active={currentThemeFamily === family}
-            >
-              {t(`settings.theme.family_${family}`)}
-            </Pill>
-          ))}
-        </div>
-
-        <h3 className="settings-group-title" id={themeVariantTitleId}>
-          {t("settings.theme.variant")}
-        </h3>
-        <div
-          aria-describedby={themeDescId}
-          aria-labelledby={themeVariantTitleId}
-          className="settings-pills"
-          role="group"
-        >
-          {THEME_VARIANTS.map((variant) => (
-            <Pill
-              key={variant}
-              leadingIcon={currentThemeVariant === variant ? <Check size={12} /> : undefined}
-              onClick={() => handleThemeVariantChange(variant)}
-              active={currentThemeVariant === variant}
-            >
-              {t(`settings.theme.variant_${variant}`)}
-            </Pill>
-          ))}
-        </div>
+          aria-label={t("settings.theme.title")}
+          className="settings-input-compact"
+          options={themeOptions}
+          value={currentThemeId}
+          onValueChange={handleThemeChange}
+        />
       </div>
 
       <div className="settings-group">
