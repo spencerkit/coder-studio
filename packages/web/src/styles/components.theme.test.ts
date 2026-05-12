@@ -298,6 +298,9 @@ describe("components.css theme-sensitive surfaces", () => {
   it("keeps mobile select row-side actions lightweight and token-driven", () => {
     const row = getLastRuleBlock(".mobile-select-sheet__item-row");
     const rowSelected = getLastRuleBlock('.mobile-select-sheet__item-row[data-selected="true"]');
+    const plainSelected = getLastRuleBlock(
+      '.mobile-select-sheet__list > [data-selected="true"] > .mobile-select-sheet__item'
+    );
     const commandSelected = getLastRuleBlock(
       '.mobile-select-sheet--command .mobile-select-sheet__list > [data-selected="true"] > .mobile-select-sheet__item'
     );
@@ -307,6 +310,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(row).toContain("display: flex");
     expect(row).toContain("padding: var(--sp-1) var(--sp-2)");
     expect(rowSelected).toContain("var(--accent-blue)");
+    expect(plainSelected).toContain("var(--accent-blue)");
     expect(commandSelected).toContain("var(--accent-blue) 12%");
     expect(commandSelected).toContain("inset 2px 0 0");
     expect(sideAction).toContain("width: 40px");

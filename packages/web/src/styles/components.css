@@ -269,6 +269,10 @@
   background: color-mix(in srgb, var(--accent-blue) 10%, var(--bg-surface));
 }
 
+.mobile-select-sheet__list > [data-selected="true"] > .mobile-select-sheet__item {
+  background: color-mix(in srgb, var(--accent-blue) 10%, var(--bg-surface));
+}
+
 .mobile-select-sheet__item-row:last-child {
   border-bottom: none;
 }
