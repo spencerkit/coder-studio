@@ -29,6 +29,29 @@ describe("build-report", () => {
     });
   });
 
+  it("keeps icon review scene manifest entries grouped by exact scene id and theme", () => {
+    const entry = buildManifestEntry({
+      scene: {
+        id: "toast-icon-review",
+        title: "Toast Icon Review",
+        category: "toast",
+        source: "showcase",
+        description: "Theme review for toast icons",
+      },
+      screenshotPath: "screenshots/toast/toast-icon-review/mobile__graphite-light__en.png",
+      variant: {
+        device: "mobile",
+        theme: "graphite-light",
+        locale: "en",
+      },
+    });
+
+    expect(entry).toMatchObject({
+      id: "toast-icon-review",
+      theme: "graphite-light",
+    });
+  });
+
   it("renders a report html shell with filters and grouped scenes", () => {
     const html = renderReportHtml([
       {

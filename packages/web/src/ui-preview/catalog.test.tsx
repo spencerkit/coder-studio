@@ -174,4 +174,19 @@ describe("UI preview catalog", () => {
     expect(await screen.findByText(/delete preview-file.ts/i)).toBeInTheDocument();
     expect(document.querySelector(".modal-card")).toBeTruthy();
   });
+
+  it("renders the workspace icon review scene with file tree and git status content", async () => {
+    renderScene("workspace-icon-review");
+
+    expect(await screen.findByText("packages")).toBeInTheDocument();
+    expect(document.querySelector(".file-tree-shell")).toBeTruthy();
+    expect(document.querySelector(".git-panel, .git-row")).toBeTruthy();
+  });
+
+  it("renders the toast icon review scene with four status tones", async () => {
+    renderScene("toast-icon-review");
+
+    expect(await screen.findByText("Workspace opened")).toBeInTheDocument();
+    expect(document.querySelectorAll(".toast").length).toBeGreaterThanOrEqual(4);
+  });
 });

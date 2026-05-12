@@ -1,10 +1,23 @@
 import type { FileNode, GitStatus, Supervisor, Workspace, WorktreeInfo } from "@coder-studio/core";
+import {
+  CircleAlert,
+  CircleCheckBig,
+  CircleDot,
+  File,
+  FileCode2,
+  FileJson2,
+  FileText,
+  Folder,
+  Image as ImageIcon,
+} from "lucide-react";
 import { ConfirmDialog, EmptyState, Notice, Sheet } from "../../components/ui";
 import { CommandPalette } from "../../features/command-palette";
 import { ToastContainer } from "../../features/notifications";
+import { MobileSupervisorBadge } from "../../features/supervisor/views/mobile/mobile-supervisor-badge";
 import { MobileSupervisorSheet } from "../../features/supervisor/views/mobile/mobile-supervisor-sheet";
 import { ObjectiveDialog } from "../../features/supervisor/views/shared/objective-dialog";
 import { XtermPlaceholder } from "../../features/terminal-panel/views/shared/xterm-placeholder";
+import { MobileDock } from "../../features/workspace/views/mobile/mobile-dock";
 import { MobileWorkspaceDrawer } from "../../features/workspace/views/mobile/mobile-workspace-drawer";
 import { BranchQuickPick } from "../../features/workspace/views/shared/branch-quick-pick";
 import { WorkspaceLaunchModal } from "../../features/workspace/views/shared/workspace-launch-modal";
@@ -165,6 +178,189 @@ export function createShowcaseScenes(): UiPreviewSceneDefinition[] {
         ],
       }),
       render: () => <ToastContainer />,
+    }),
+    scene("workspace-icon-review", {
+      router: () => ({ initialEntries: ["/workspace"], path: "/workspace" }),
+      seed: (context) => ({
+        ...context,
+        supervisorBySessionId: {
+          "session-preview-1": supervisor,
+        },
+      }),
+      render: (context) =>
+        context.device === "mobile" ? (
+          <div className="workspace-icon-review">
+            <div className="mobile-shell__stage">
+              <div className="flex items-center justify-between gap-3 p-3">
+                <MobileSupervisorBadge sessionId="session-preview-1" onOpen={() => {}} />
+              </div>
+              <div className="file-tree-shell file-tree-shell--mobile">
+                <div className="tree-item">
+                  <span className="tree-icon folder" aria-hidden="true">
+                    <Folder size={14} />
+                  </span>
+                  <span>packages</span>
+                </div>
+                <div className="tree-item">
+                  <span className="tree-icon code" aria-hidden="true">
+                    <FileCode2 size={14} />
+                  </span>
+                  <span>app.tsx</span>
+                </div>
+                <div className="tree-item">
+                  <span className="tree-icon data" aria-hidden="true">
+                    <FileJson2 size={14} />
+                  </span>
+                  <span>theme.json</span>
+                </div>
+                <div className="tree-item">
+                  <span className="tree-icon doc" aria-hidden="true">
+                    <FileText size={14} />
+                  </span>
+                  <span>README.md</span>
+                </div>
+              </div>
+              <MobileDock activeItem="files" onSelectItem={() => {}} />
+            </div>
+          </div>
+        ) : (
+          <div className="workspace-icon-review">
+            <div className="file-tree-shell">
+              <div className="tree-item">
+                <span className="tree-icon folder" aria-hidden="true">
+                  <Folder size={14} />
+                </span>
+                <span>packages</span>
+              </div>
+              <div className="tree-item">
+                <span className="tree-icon code" aria-hidden="true">
+                  <FileCode2 size={14} />
+                </span>
+                <span>app.tsx</span>
+              </div>
+              <div className="tree-item">
+                <span className="tree-icon data" aria-hidden="true">
+                  <FileJson2 size={14} />
+                </span>
+                <span>theme.json</span>
+              </div>
+              <div className="tree-item">
+                <span className="tree-icon doc" aria-hidden="true">
+                  <FileText size={14} />
+                </span>
+                <span>README.md</span>
+              </div>
+              <div className="tree-item">
+                <span className="tree-icon media" aria-hidden="true">
+                  <ImageIcon size={14} />
+                </span>
+                <span>logo.png</span>
+              </div>
+              <div className="tree-item">
+                <span className="tree-icon file" aria-hidden="true">
+                  <File size={14} />
+                </span>
+                <span>LICENSE</span>
+              </div>
+            </div>
+            <div className="git-panel">
+              <div className="git-row">
+                <span className="git-row-icon git-row-icon-staged" aria-hidden="true">
+                  <CircleCheckBig size={12} />
+                </span>
+                <span>staged.ts</span>
+              </div>
+              <div className="git-row">
+                <span className="git-row-icon git-row-icon-modified" aria-hidden="true">
+                  <CircleAlert size={12} />
+                </span>
+                <span>modified.ts</span>
+              </div>
+              <div className="git-row">
+                <span className="git-row-icon git-row-icon-deleted" aria-hidden="true">
+                  <CircleAlert size={12} />
+                </span>
+                <span>deleted.ts</span>
+              </div>
+              <div className="git-row">
+                <span className="git-row-icon git-row-icon-untracked" aria-hidden="true">
+                  <CircleDot size={12} />
+                </span>
+                <span>untracked.ts</span>
+              </div>
+            </div>
+          </div>
+        ),
+    }),
+    scene("toast-icon-review", {
+      router: () => ({ initialEntries: ["/"], path: "/" }),
+      seed: (context) => ({
+        ...context,
+        toasts: [
+          {
+            id: "toast-success",
+            kind: "success",
+            title: "Workspace opened",
+            body: "coder-studio is ready.",
+            createdAt: 1,
+            duration: 0,
+          },
+          {
+            id: "toast-warning",
+            kind: "warning",
+            title: "Unsaved config",
+            body: "Review pending changes before continuing.",
+            createdAt: 2,
+            duration: 0,
+          },
+          {
+            id: "toast-error",
+            kind: "error",
+            title: "Failed to refresh provider config",
+            body: "Retry after checking the provider settings.",
+            createdAt: 3,
+            duration: 0,
+          },
+          {
+            id: "toast-info",
+            kind: "info",
+            title: "Theme preview active",
+            body: "Comparing icon palettes across themes.",
+            createdAt: 4,
+            duration: 0,
+          },
+        ],
+      }),
+      render: () => <ToastContainer />,
+    }),
+    scene("supervisor-icon-review", {
+      router: () => ({ initialEntries: ["/workspace"], path: "/workspace" }),
+      seed: (context) => ({
+        ...context,
+        supervisorBySessionId: {
+          "session-preview-1": supervisor,
+        },
+        supervisorDialog: {
+          open: true,
+          sessionId: "session-preview-1",
+          mode: "disable",
+          draftObjective: supervisor.objective,
+          draftEvaluatorProviderId: "claude",
+          draftEvaluatorModel: "",
+          draftMaxSupervisionCount: "0",
+          draftScheduledAt: "",
+        },
+      }),
+      render: (context) =>
+        context.device === "mobile" ? (
+          <MobileSupervisorSheet
+            sessionId="session-preview-1"
+            workspaceId={workspace.id}
+            onClose={() => {}}
+          />
+        ) : (
+          <ObjectiveDialog workspaceId={workspace.id} sessionId="session-preview-1" />
+        ),
     }),
     scene("mobile-workspace-drawer", {
       router: () => ({ initialEntries: ["/workspace"], path: "/workspace" }),
