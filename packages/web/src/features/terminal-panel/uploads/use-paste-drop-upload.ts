@@ -121,6 +121,12 @@ export function usePasteDropUpload(opts: Options): PasteDropUploadActions {
 
     const clipboard = navigator.clipboard;
     if (!clipboard) {
+      pushToast({
+        kind: "error",
+        title: "Paste failed",
+        body: "Clipboard API not available",
+        duration: 3_000,
+      });
       return;
     }
 
@@ -146,17 +152,44 @@ export function usePasteDropUpload(opts: Options): PasteDropUploadActions {
           return;
         }
       }
-    } catch {
+    } catch (error) {
       // Fall back to text read below when image clipboard access is unsupported.
+      console.debug("Clipboard image read failed, trying text:", error);
     }
 
-    const readText = clipboard.readText?.bind(clipboard);
-    if (!readText) {
-      return;
-    }
+    try {
+      const readText = clipboard.readText?.bind(clipboard);
+      if (!readText) {
+        pushToast({
+          kind: "error",
+          title: "Paste failed",
+          body: "Clipboard text read not available",
+          duration: 3_000,
+        });
+        return;
+      }
 
-    await handleText(await readText());
-  }, [enabled, handleFiles, handleText]);
+      const text = await readText();
+      if (!text) {
+        pushToast({
+          kind: "info",
+          title: "Paste",
+          body: "Clipboard is empty",
+          duration: 2_000,
+        });
+        return;
+      }
+
+      await handleText(text);
+    } catch (_error) {
+      pushToast({
+        kind: "error",
+        title: "Paste failed",
+        body: "Could not read from clipboard. Please check permissions.",
+        duration: 3_000,
+      });
+    }
+  }, [enabled, handleFiles, handleText, pushToast]);
 
   useEffect(() => {
     const element = containerRef.current;

@@ -1354,10 +1354,10 @@
 .mobile-terminal-input-bar {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   flex-shrink: 0;
   min-width: 0;
-  padding: 2px var(--sp-3) 2px;
+  padding: 2px var(--sp-2) 2px;
   border-top: 1px solid color-mix(in srgb, var(--border) 36%, transparent);
   border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
   background: color-mix(in srgb, var(--bg-page) 90%, var(--bg-surface) 10%);
@@ -1367,8 +1367,8 @@
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 4px;
-  padding-right: 6px;
+  gap: 3px;
+  padding-right: 4px;
   border-right: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
 }
 
@@ -1378,7 +1378,7 @@
   justify-content: center;
   flex: 0 0 auto;
   min-height: 20px;
-  padding: 0 7px;
+  padding: 0 6px;
   border: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
   border-radius: 3px;
   background: color-mix(in srgb, var(--bg-page) 70%, var(--bg-surface) 30%);
@@ -1397,7 +1397,7 @@
   min-width: 0;
   flex: 1 1 auto;
   justify-content: flex-start;
-  gap: 3px;
+  gap: 2px;
   overflow-x: auto;
   padding: 0;
   border: none;
@@ -1418,7 +1418,7 @@
   flex: 0 0 auto;
   min-width: 0;
   min-height: 20px;
-  padding: 0 6px;
+  padding: 0 5px;
   border: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
   border-radius: 3px;
   background: color-mix(in srgb, var(--bg-page) 74%, var(--bg-surface) 26%);
