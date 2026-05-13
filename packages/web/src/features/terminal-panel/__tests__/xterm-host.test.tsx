@@ -246,6 +246,7 @@ const mockTerminal = {
   dispose: vi.fn(),
   focus: vi.fn(),
   loadAddon: vi.fn(),
+  cols: 80,
   buffer: {
     active: {
       viewportY: 0,
@@ -6998,6 +6999,7 @@ describe("XtermHost", () => {
     const vibrate = vi.fn();
     const store = createStore();
 
+    mockTerminal.cols = 80;
     mockTerminal.rows = 3;
     mockTerminal.buffer.active.viewportY = 10;
     setMockBufferLines([
@@ -7062,7 +7064,7 @@ describe("XtermHost", () => {
       rowHeight: 20,
     });
 
-    dispatchTouchEvent(host!, "touchstart", [{ identifier: 1, clientX: 40, clientY: 150 }]);
+    dispatchTouchEvent(host!, "touchstart", [{ identifier: 1, clientX: 6, clientY: 150 }]);
 
     await act(async () => {
       vi.advanceTimersByTime(500);
@@ -7094,6 +7096,7 @@ describe("XtermHost", () => {
     const vibrate = vi.fn();
     const store = createStore();
 
+    mockTerminal.cols = 80;
     mockTerminal.buffer.active.viewportY = 14;
     setMockBufferLines([[14, "", false]]);
 
@@ -7145,7 +7148,7 @@ describe("XtermHost", () => {
       rowHeight: 20,
     });
 
-    dispatchTouchEvent(host!, "touchstart", [{ identifier: 1, clientX: 40, clientY: 110 }]);
+    dispatchTouchEvent(host!, "touchstart", [{ identifier: 1, clientX: 20, clientY: 110 }]);
 
     await act(async () => {
       vi.advanceTimersByTime(500);
@@ -7177,6 +7180,7 @@ describe("XtermHost", () => {
     const vibrate = vi.fn();
     const store = createStore();
 
+    mockTerminal.cols = 80;
     mockTerminal.buffer.active.viewportY = 3;
     setMockBufferLines([[3, "disabled line", false]]);
 
@@ -7228,7 +7232,7 @@ describe("XtermHost", () => {
       rowHeight: 20,
     });
 
-    dispatchTouchEvent(host!, "touchstart", [{ identifier: 1, clientX: 40, clientY: 110 }]);
+    dispatchTouchEvent(host!, "touchstart", [{ identifier: 1, clientX: 20, clientY: 110 }]);
 
     await act(async () => {
       vi.advanceTimersByTime(500);
@@ -7248,6 +7252,7 @@ describe("XtermHost", () => {
 
     const originalMatchMedia = window.matchMedia;
     const writeText = vi.fn().mockResolvedValue(undefined);
+    mockTerminal.cols = 80;
     mockTerminal.rows = 20;
     mockTerminal.buffer.active.viewportY = 6;
     mockTerminal.buffer.active.baseY = 80;
@@ -7296,7 +7301,7 @@ describe("XtermHost", () => {
       }
     );
 
-    dispatchTouchEvent(host!, "touchstart", [{ identifier: 1, clientX: 40, clientY: 110 }]);
+    dispatchTouchEvent(host!, "touchstart", [{ identifier: 1, clientX: 20, clientY: 110 }]);
     dispatchTouchEvent(host!, "touchmove", [{ identifier: 1, clientX: 40, clientY: 88 }]);
 
     await act(async () => {
@@ -7318,6 +7323,7 @@ describe("XtermHost", () => {
     const originalMatchMedia = window.matchMedia;
     const writeText = vi.fn().mockResolvedValue(undefined);
     const vibrate = vi.fn();
+    mockTerminal.cols = 80;
     mockTerminal.rows = 20;
     mockTerminal.buffer.active.viewportY = 6;
     mockTerminal.buffer.active.baseY = 80;
@@ -7373,7 +7379,7 @@ describe("XtermHost", () => {
       }
     );
 
-    dispatchTouchEvent(host!, "touchstart", [{ identifier: 1, clientX: 40, clientY: 110 }]);
+    dispatchTouchEvent(host!, "touchstart", [{ identifier: 1, clientX: 20, clientY: 110 }]);
     dispatchTouchEvent(host!, "touchmove", [{ identifier: 1, clientX: 56, clientY: 110 }]);
 
     await act(async () => {
@@ -7477,6 +7483,7 @@ describe("XtermHost", () => {
     const vibrate = vi.fn();
     const store = createStore();
 
+    mockTerminal.cols = 80;
     mockTerminal.buffer.active.viewportY = 7;
     setMockBufferLines([[7, "toast line", false]]);
 
@@ -7528,7 +7535,7 @@ describe("XtermHost", () => {
       rowHeight: 20,
     });
 
-    dispatchTouchEvent(host!, "touchstart", [{ identifier: 1, clientX: 40, clientY: 110 }]);
+    dispatchTouchEvent(host!, "touchstart", [{ identifier: 1, clientX: 20, clientY: 110 }]);
 
     await act(async () => {
       vi.advanceTimersByTime(500);
@@ -7560,6 +7567,7 @@ describe("XtermHost", () => {
     const vibrate = vi.fn();
     const store = createStore();
 
+    mockTerminal.cols = 80;
     mockTerminal.buffer.active.viewportY = 9;
     setMockBufferLines([[10, "from coords", false]]);
 
@@ -7635,6 +7643,86 @@ describe("XtermHost", () => {
     vi.useRealTimers();
   });
 
+  it("mobile line copy does not copy when a long press lands in the blank area to the right of a short row", async () => {
+    vi.useFakeTimers();
+    viewportMocks.viewport = "mobile";
+
+    const originalMatchMedia = window.matchMedia;
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    const vibrate = vi.fn();
+    const store = createStore();
+
+    mockTerminal.cols = 80;
+    mockTerminal.buffer.active.viewportY = 12;
+    setMockBufferLines([[12, "short", false]]);
+
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query === "(pointer: coarse)",
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })) as typeof window.matchMedia;
+
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText } satisfies Pick<Clipboard, "writeText">,
+    });
+    Object.defineProperty(navigator, "vibrate", {
+      configurable: true,
+      value: vibrate,
+    });
+
+    store.set(localeAtom, "en");
+    store.set(terminalPreferencesAtom, { copyOnSelect: true });
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn().mockResolvedValue({ ok: true, data: { status: "ok" } }),
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => "connected"),
+      onStatus: vi.fn(() => () => {}),
+      sendTerminalInput: vi.fn().mockResolvedValue(undefined),
+    } as never);
+
+    const { container } = render(
+      <Provider store={store}>
+        <XtermHost
+          terminalId="mobile-line-copy-short-row-blank-area-terminal"
+          workspaceId="test-workspace"
+        />
+      </Provider>
+    );
+
+    const host = container.querySelector(".xterm-host") as HTMLDivElement | null;
+    expect(host).toBeTruthy();
+
+    const rowsElement = document.createElement("div");
+    rowsElement.className = "xterm-rows";
+    rowsElement.innerHTML = "<div><span>short</span></div>";
+    host!.appendChild(rowsElement);
+    stubRowsGeometry(host!, rowsElement, [rowsElement.firstElementChild as HTMLDivElement], {
+      rowsRect: { x: 0, y: 100, width: 320, height: 20 },
+      rowHeight: 20,
+    });
+
+    dispatchTouchEvent(host!, "touchstart", [{ identifier: 1, clientX: 220, clientY: 110 }]);
+
+    await act(async () => {
+      vi.advanceTimersByTime(500);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(writeText).not.toHaveBeenCalled();
+    expect(vibrate).not.toHaveBeenCalled();
+    expect(store.get(toastsAtom)).toEqual([]);
+
+    window.matchMedia = originalMatchMedia;
+    vi.useRealTimers();
+  });
+
   it("mobile line copy still succeeds after the row DOM is replaced before long press matures", async () => {
     vi.useFakeTimers();
     viewportMocks.viewport = "mobile";
@@ -7643,6 +7731,7 @@ describe("XtermHost", () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     const store = createStore();
 
+    mockTerminal.cols = 80;
     mockTerminal.buffer.active.viewportY = 4;
     setMockBufferLines([[5, "stable row text", false]]);
 

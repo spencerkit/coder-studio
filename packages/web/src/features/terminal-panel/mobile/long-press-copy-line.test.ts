@@ -4,12 +4,16 @@ import { getLogicalLineTextFromTouchPoint } from "./long-press-copy-line";
 
 interface MockBufferLine {
   isWrapped?: boolean;
+  getNoBgTrimmedLength(): number;
   translateToString(trimRight?: boolean): string;
 }
 
 function createBufferLine(text: string, isWrapped = false): MockBufferLine {
   return {
     isWrapped,
+    getNoBgTrimmedLength() {
+      return text.replace(/\s+$/u, "").length;
+    },
     translateToString(trimRight = false) {
       return trimRight ? text.replace(/\s+$/u, "") : text;
     },
@@ -17,9 +21,11 @@ function createBufferLine(text: string, isWrapped = false): MockBufferLine {
 }
 
 function createTerminal(
+  cols: number,
   viewportY: number,
   lines: Array<[row: number, line: MockBufferLine]>
 ): {
+  cols: number;
   buffer: {
     active: {
       viewportY: number;
@@ -29,6 +35,7 @@ function createTerminal(
 } {
   const byRow = new Map(lines);
   return {
+    cols,
     buffer: {
       active: {
         viewportY,
@@ -91,7 +98,7 @@ describe("getLogicalLineTextFromTouchPoint", () => {
         toJSON: () => ({}),
       }) as DOMRect;
 
-    const terminal = createTerminal(10, [[11, createBufferLine("beta")]]);
+    const terminal = createTerminal(16, 10, [[11, createBufferLine("beta")]]);
 
     expect(
       getLogicalLineTextFromTouchPoint({
@@ -145,7 +152,7 @@ describe("getLogicalLineTextFromTouchPoint", () => {
         toJSON: () => ({}),
       }) as DOMRect;
 
-    const terminal = createTerminal(20, [
+    const terminal = createTerminal(16, 20, [
       [20, createBufferLine("unrelated line")],
       [21, createBufferLine("prefix ", false)],
       [22, createBufferLine("middle ", true)],
@@ -192,7 +199,7 @@ describe("getLogicalLineTextFromTouchPoint", () => {
         toJSON: () => ({}),
       }) as DOMRect;
 
-    const terminal = createTerminal(30, [
+    const terminal = createTerminal(16, 30, [
       [30, createBufferLine("double  ", false)],
       [31, createBufferLine("space   ", true)],
     ]);
@@ -237,7 +244,7 @@ describe("getLogicalLineTextFromTouchPoint", () => {
         toJSON: () => ({}),
       }) as DOMRect;
 
-    const terminal = createTerminal(40, [[40, createBufferLine("alpha")]]);
+    const terminal = createTerminal(16, 40, [[40, createBufferLine("alpha")]]);
 
     expect(
       getLogicalLineTextFromTouchPoint({
@@ -279,7 +286,7 @@ describe("getLogicalLineTextFromTouchPoint", () => {
         toJSON: () => ({}),
       }) as DOMRect;
 
-    const terminal = createTerminal(50, [[51, createBufferLine("suffix   ", true)]]);
+    const terminal = createTerminal(16, 50, [[51, createBufferLine("suffix   ", true)]]);
 
     expect(
       getLogicalLineTextFromTouchPoint({
@@ -321,7 +328,7 @@ describe("getLogicalLineTextFromTouchPoint", () => {
         toJSON: () => ({}),
       }) as DOMRect;
 
-    const terminal = createTerminal(0, [[0, createBufferLine("ignored")]]);
+    const terminal = createTerminal(16, 0, [[0, createBufferLine("ignored")]]);
 
     expect(
       getLogicalLineTextFromTouchPoint({
@@ -363,7 +370,7 @@ describe("getLogicalLineTextFromTouchPoint", () => {
         toJSON: () => ({}),
       }) as DOMRect;
 
-    const terminal = createTerminal(60, [[62, createBufferLine("gamma")]]);
+    const terminal = createTerminal(16, 60, [[62, createBufferLine("gamma")]]);
 
     expect(
       getLogicalLineTextFromTouchPoint({
@@ -379,7 +386,6 @@ describe("getLogicalLineTextFromTouchPoint", () => {
 
   it("returns null when the touch point is inside a row band but outside the rendered text width", () => {
     const { rows, secondRow } = createRowsDom();
-    const secondRowText = secondRow.querySelector("span span") as HTMLSpanElement | null;
     document.body.appendChild(rows);
     rows.getBoundingClientRect = () =>
       ({
@@ -405,24 +411,54 @@ describe("getLogicalLineTextFromTouchPoint", () => {
         bottom: 140,
         toJSON: () => ({}),
       }) as DOMRect;
-    secondRowText!.getBoundingClientRect = () =>
+
+    const terminal = createTerminal(16, 70, [[71, createBufferLine("beta")]]);
+
+    expect(
+      getLogicalLineTextFromTouchPoint({
+        clientX: 180,
+        clientY: 130,
+        rowsElement: rows,
+        terminal,
+      })
+    ).toBeNull();
+
+    rows.remove();
+  });
+
+  it("returns null when terminal columns are unavailable for horizontal hit testing", () => {
+    const { rows, secondRow } = createRowsDom();
+    document.body.appendChild(rows);
+    rows.getBoundingClientRect = () =>
+      ({
+        x: 20,
+        y: 100,
+        top: 100,
+        left: 20,
+        width: 320,
+        height: 60,
+        right: 340,
+        bottom: 160,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    secondRow.getBoundingClientRect = () =>
       ({
         x: 20,
         y: 120,
         top: 120,
         left: 20,
-        width: 80,
+        width: 320,
         height: 20,
-        right: 100,
+        right: 340,
         bottom: 140,
         toJSON: () => ({}),
       }) as DOMRect;
 
-    const terminal = createTerminal(70, [[71, createBufferLine("beta")]]);
+    const terminal = createTerminal(0, 80, [[81, createBufferLine("beta")]]);
 
     expect(
       getLogicalLineTextFromTouchPoint({
-        clientX: 180,
+        clientX: 40,
         clientY: 130,
         rowsElement: rows,
         terminal,

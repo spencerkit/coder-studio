@@ -1,5 +1,6 @@
 interface BufferLineLike {
   isWrapped?: boolean;
+  getNoBgTrimmedLength?(): number;
   translateToString(trimRight?: boolean): string;
 }
 
@@ -9,6 +10,7 @@ interface ActiveBufferLike {
 }
 
 export interface TerminalLikeForLongPressCopy {
+  cols: number;
   buffer: {
     active: ActiveBufferLike;
   };
@@ -21,23 +23,34 @@ export interface GetLogicalLineTextFromTouchPointArgs {
   terminal: TerminalLikeForLongPressCopy;
 }
 
-function getRenderedTextBounds(rowElement: HTMLElement): { left: number; right: number } | null {
-  const spanRects = Array.from(rowElement.querySelectorAll("span"))
-    .map((span) => span.getBoundingClientRect())
-    .filter((rect) => rect.width > 0 && rect.height > 0);
-
-  if (spanRects.length === 0) {
-    return null;
+function getVisualRowContentLength(line: BufferLineLike): number {
+  if (typeof line.getNoBgTrimmedLength === "function") {
+    return line.getNoBgTrimmedLength();
   }
 
-  return {
-    left: Math.min(...spanRects.map((rect) => rect.left)),
-    right: Math.max(...spanRects.map((rect) => rect.right)),
-  };
+  return line.translateToString(true).length;
 }
 
-function getVisualRowIndexFromTouchPoint(
+function getVisualRowIndexFromTouchPoint(rowsElement: HTMLElement, clientY: number): number | null {
+  const rowElements = Array.from(rowsElement.children).filter(
+    (child): child is HTMLElement => child instanceof HTMLElement
+  );
+  for (let index = 0; index < rowElements.length; index += 1) {
+    const rowElement = rowElements[index];
+    const rowRect = rowElement.getBoundingClientRect();
+    if (clientY < rowRect.top || clientY > rowRect.bottom) {
+      continue;
+    }
+
+    return index;
+  }
+
+  return null;
+}
+
+function getBufferRowFromTouchPoint(
   rowsElement: HTMLElement,
+  terminal: TerminalLikeForLongPressCopy,
   clientX: number,
   clientY: number
 ): number | null {
@@ -51,25 +64,41 @@ function getVisualRowIndexFromTouchPoint(
     return null;
   }
 
-  const rowElements = Array.from(rowsElement.children).filter(
-    (child): child is HTMLElement => child instanceof HTMLElement
-  );
-  for (let index = 0; index < rowElements.length; index += 1) {
-    const rowElement = rowElements[index];
-    const rowRect = rowElement.getBoundingClientRect();
-    if (clientY < rowRect.top || clientY > rowRect.bottom) {
-      continue;
-    }
-
-    const renderedTextBounds = getRenderedTextBounds(rowElement);
-    const left = renderedTextBounds?.left ?? rowRect.left;
-    const right = renderedTextBounds?.right ?? rowRect.right;
-    if (clientX >= left && clientX <= right) {
-      return index;
-    }
+  const visualRowIndex = getVisualRowIndexFromTouchPoint(rowsElement, clientY);
+  if (visualRowIndex === null) {
+    return null;
   }
 
-  return null;
+  const bufferRow = terminal.buffer.active.viewportY + visualRowIndex;
+  const line = terminal.buffer.active.getLine(bufferRow);
+  if (!line) {
+    return null;
+  }
+
+  if (!Number.isFinite(terminal.cols) || terminal.cols <= 0 || rowsRect.width <= 0) {
+    return null;
+  }
+
+  const contentLength = getVisualRowContentLength(line);
+  if (contentLength === 0) {
+    return bufferRow;
+  }
+
+  const cellWidth = rowsRect.width / terminal.cols;
+  if (cellWidth <= 0) {
+    return null;
+  }
+
+  const columnIndex = Math.floor((clientX - rowsRect.left) / cellWidth);
+  if (columnIndex < 0 || columnIndex >= terminal.cols) {
+    return null;
+  }
+
+  if (columnIndex >= contentLength) {
+    return null;
+  }
+
+  return bufferRow;
 }
 
 function getLogicalLineTextFromBufferRow(
@@ -117,15 +146,15 @@ function getLogicalLineTextFromBufferRow(
 export function getLogicalLineTextFromTouchPoint(
   args: GetLogicalLineTextFromTouchPointArgs
 ): string | null {
-  const visualRowIndex = getVisualRowIndexFromTouchPoint(
+  const bufferRow = getBufferRowFromTouchPoint(
     args.rowsElement,
+    args.terminal,
     args.clientX,
     args.clientY
   );
-  if (visualRowIndex === null) {
+  if (bufferRow === null) {
     return null;
   }
 
-  const bufferRow = args.terminal.buffer.active.viewportY + visualRowIndex;
   return getLogicalLineTextFromBufferRow(args.terminal, bufferRow);
 }

@@ -4,6 +4,7 @@ import { openSettingsSection } from "../../fixtures/phase2-i18n";
 
 const MOBILE_VIEWPORT = { width: 430, height: 932 };
 const LONG_LINE_TEXT = "MOBILE_COPY_MODE_LONG_LINE_0123456789_".repeat(12);
+const SHORT_LINE_TEXT = "MOBILE_COPY_MODE_SHORT";
 
 function directoryRow(page: Page, name: string): Locator {
   return page
@@ -163,6 +164,20 @@ async function seedLongTerminalLine(page: Page): Promise<void> {
   );
 }
 
+async function seedShortTerminalLine(page: Page): Promise<void> {
+  const terminalInput = page.locator(".mobile-sheet--terminal .xterm textarea").first();
+  await expect(terminalInput).toBeVisible({ timeout: 10000 });
+  await terminalInput.click();
+  await page.keyboard.type(`printf '${SHORT_LINE_TEXT}\\n'`);
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".mobile-sheet--terminal .xterm-rows").first()).toContainText(
+    SHORT_LINE_TEXT,
+    {
+      timeout: 10000,
+    }
+  );
+}
+
 async function longPressTerminalRows(page: Page, rowIndex = 1): Promise<void> {
   const rows = page.locator(".mobile-sheet--terminal .xterm-rows").first();
   await expect(rows).toBeVisible({ timeout: 10000 });
@@ -212,6 +227,57 @@ async function findPrintedLineRowIndex(page: Page): Promise<number> {
     .locator(".mobile-sheet--terminal .xterm-rows > div")
     .allTextContents();
   return rowTexts.findIndex((text) => text.startsWith("MOBILE_COPY_MODE_LONG_LINE"));
+}
+
+async function findShortPrintedLineRowIndex(page: Page): Promise<number> {
+  const rowTexts = await page
+    .locator(".mobile-sheet--terminal .xterm-rows > div")
+    .allTextContents();
+  return rowTexts.findIndex((text) => text.startsWith(SHORT_LINE_TEXT));
+}
+
+async function longPressTerminalRowBlankRightSide(page: Page, rowIndex: number): Promise<void> {
+  const rows = page.locator(".mobile-sheet--terminal .xterm-rows").first();
+  await expect(rows).toBeVisible({ timeout: 10000 });
+
+  const targetRow = rows.locator(":scope > div").nth(rowIndex);
+  await expect(targetRow).toBeVisible({ timeout: 10000 });
+
+  const box = await targetRow.boundingBox();
+  expect(box).toBeTruthy();
+  if (!box) {
+    throw new Error("xterm row bounding box missing");
+  }
+
+  const x = box.x + Math.max(box.width - 12, box.width * 0.85);
+  const y = box.y + Math.min(16, Math.max(8, box.height / 2));
+
+  await targetRow.evaluate(
+    (node, { clientX, clientY }) => {
+      if (!(node instanceof HTMLElement)) {
+        throw new Error("xterm row missing");
+      }
+
+      const touches = [{ identifier: 1, clientX, clientY, target: node }];
+      const buildEvent = (
+        type: string,
+        activeTouches: typeof touches,
+        changedTouches = activeTouches
+      ) => {
+        const event = new Event(type, { bubbles: true, cancelable: true });
+        Object.defineProperty(event, "touches", { value: activeTouches });
+        Object.defineProperty(event, "targetTouches", { value: activeTouches });
+        Object.defineProperty(event, "changedTouches", { value: changedTouches });
+        return event;
+      };
+
+      node.dispatchEvent(buildEvent("touchstart", touches));
+      window.setTimeout(() => {
+        node.dispatchEvent(buildEvent("touchend", [], touches));
+      }, 650);
+    },
+    { clientX: x, clientY: y }
+  );
 }
 
 async function setMobileCopyOnSelect(page: Page, enabled: boolean): Promise<void> {
@@ -320,6 +386,35 @@ test.describe("mobile copy on select", () => {
     await longPressTerminalRows(page, printedLineRowIndex);
 
     await expect(page.locator(".mobile-terminal-copy-mode")).toHaveCount(0);
+    await expect(page.getByText(translateForE2E("terminal.copied_current_line", "en"))).toHaveCount(
+      0
+    );
+    await expect
+      .poll(async () => {
+        return page.evaluate(() => {
+          return (window as Window & { __mobileCopiedText?: string }).__mobileCopiedText ?? "";
+        });
+      })
+      .toBe("");
+  });
+
+  test("mobile long press does not copy when pressing the blank area to the right of a short row", async ({
+    page,
+  }) => {
+    await setMobileCopyOnSelect(page, true);
+    await openMobileWorkspace(page);
+    await openMobileTerminalSheet(page);
+    await ensureTerminalExists(page);
+    await seedShortTerminalLine(page);
+
+    await expect
+      .poll(async () => {
+        return findShortPrintedLineRowIndex(page);
+      })
+      .not.toBe(-1);
+    const printedLineRowIndex = await findShortPrintedLineRowIndex(page);
+    await longPressTerminalRowBlankRightSide(page, printedLineRowIndex);
+
     await expect(page.getByText(translateForE2E("terminal.copied_current_line", "en"))).toHaveCount(
       0
     );
