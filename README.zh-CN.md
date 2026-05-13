@@ -1,4 +1,10 @@
+<div align="center">
+
+<img src="docs/assets/logo.png" alt="Coder Studio Logo" width="128" height="128">
+
 # Coder Studio
+
+</div>
 
 <div align="center">
 
