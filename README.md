@@ -41,6 +41,9 @@
 
 ![Workspace Overview](docs/help/assets/screenshot-workspace-overview.png)
 
+![Demo](docs/assets/demo.gif)
+
+
 ---
 
 ## 🎯 Why Coder Studio

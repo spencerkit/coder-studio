@@ -41,6 +41,9 @@
 
 ![工作区界面](docs/help/assets/screenshot-workspace-overview.png)
 
+![Demo](docs/assets/demo.gif)
+
+
 ---
 
 ## 🎯 为什么选择 Coder Studio
