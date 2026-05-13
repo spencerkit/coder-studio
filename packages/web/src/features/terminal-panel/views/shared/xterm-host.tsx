@@ -2168,6 +2168,7 @@ export function XtermHost({
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  const [showPasteDialog, setShowPasteDialog] = useState(false);
   const pasteTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const handleMobilePaste = useCallback(async () => {
@@ -2177,32 +2178,36 @@ export function XtermHost({
         await handleClipboardPaste();
         return;
       } catch (error) {
-        console.debug("Clipboard API failed, trying fallback:", error);
+        console.debug("Clipboard API failed, showing paste dialog:", error);
       }
     }
 
-    // Fallback: use hidden textarea for manual paste
+    // Fallback: show paste dialog
+    setShowPasteDialog(true);
+  }, [handleClipboardPaste]);
+
+  const handlePasteDialogSubmit = useCallback(async () => {
     const textarea = pasteTextareaRef.current;
     if (!textarea) {
-      pushToast({
-        kind: "error",
-        title: t("terminal.mobile_paste_failed_title"),
-        body: t("terminal.mobile_paste_failed_body"),
-      });
       return;
     }
 
-    textarea.value = "";
-    textarea.focus();
-    textarea.select();
+    const text = textarea.value;
+    if (text) {
+      await sendTextToTerminal(text);
+      textarea.value = "";
+    }
 
-    pushToast({
-      kind: "info",
-      title: t("terminal.mobile_paste_manual_title"),
-      body: t("terminal.mobile_paste_manual_body"),
-      duration: 3_000,
-    });
-  }, [handleClipboardPaste, pushToast, t]);
+    setShowPasteDialog(false);
+  }, [sendTextToTerminal]);
+
+  const handlePasteDialogCancel = useCallback(() => {
+    const textarea = pasteTextareaRef.current;
+    if (textarea) {
+      textarea.value = "";
+    }
+    setShowPasteDialog(false);
+  }, []);
 
   const handleMobileUpload = useCallback(() => {
     fileInputRef.current?.click();
@@ -2277,17 +2282,6 @@ export function XtermHost({
           void handleFileInputChange(event);
         }}
       />
-      <textarea
-        ref={pasteTextareaRef}
-        hidden
-        onChange={async (event) => {
-          const text = event.currentTarget.value;
-          if (text) {
-            await sendTextToTerminal(text);
-            event.currentTarget.value = "";
-          }
-        }}
-      />
       <div
         ref={containerRef}
         className="xterm-host"
@@ -2325,6 +2319,44 @@ export function XtermHost({
           }}
         >
           Uploading…
+        </div>
+      ) : null}
+      {showPasteDialog ? (
+        <div
+          className="paste-dialog-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="paste-dialog-title"
+        >
+          <div className="paste-dialog">
+            <h3 id="paste-dialog-title" className="paste-dialog__title">
+              {t("terminal.paste_dialog_title")}
+            </h3>
+            <textarea
+              ref={pasteTextareaRef}
+              className="paste-dialog__textarea"
+              placeholder={t("terminal.paste_dialog_placeholder")}
+              autoFocus
+            />
+            <div className="paste-dialog__actions">
+              <button
+                type="button"
+                className="paste-dialog__button paste-dialog__button--secondary"
+                onClick={handlePasteDialogCancel}
+              >
+                {t("common.cancel")}
+              </button>
+              <button
+                type="button"
+                className="paste-dialog__button paste-dialog__button--primary"
+                onClick={() => {
+                  void handlePasteDialogSubmit();
+                }}
+              >
+                {t("terminal.paste_dialog_submit")}
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
       {viewport !== "mobile" && hydrationState.kind === "queued" ? (

@@ -262,10 +262,9 @@
     "copied_current_line": "Copied current line",
     "mobile_copy_current_line_failed_title": "Current line copy failed",
     "mobile_copy_current_line_failed_body": "Try long-pressing the current line again",
-    "mobile_paste_failed_title": "Paste failed",
-    "mobile_paste_failed_body": "Could not paste from clipboard",
-    "mobile_paste_manual_title": "Paste",
-    "mobile_paste_manual_body": "Please paste your text in the text area",
+    "paste_dialog_title": "Paste Text",
+    "paste_dialog_placeholder": "Paste your text here...",
+    "paste_dialog_submit": "Send",
     "hide": "Hide Terminal",
     "show": "Show Terminal",
     "selector": {

@@ -11154,3 +11154,87 @@ textarea.input {
 .mobile-sheet__footer .git-panel-status-strip {
   padding-top: 0;
 }
+
+/* ========== Paste Dialog ========== */
+.paste-dialog-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 10;
+}
+
+.paste-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  width: 90%;
+  max-width: 24rem;
+  padding: var(--sp-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl);
+}
+
+.paste-dialog__title {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+}
+
+.paste-dialog__textarea {
+  min-height: 6rem;
+  padding: var(--sp-3);
+  background: var(--bg-page);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  resize: vertical;
+}
+
+.paste-dialog__textarea:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-blue) 20%, transparent);
+}
+
+.paste-dialog__actions {
+  display: flex;
+  gap: var(--sp-2);
+  justify-content: flex-end;
+}
+
+.paste-dialog__button {
+  padding: var(--sp-2) var(--sp-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.paste-dialog__button--secondary {
+  background: var(--bg-page);
+  color: var(--text-secondary);
+}
+
+.paste-dialog__button--secondary:hover {
+  background: color-mix(in srgb, var(--bg-surface) 50%, var(--bg-page) 50%);
+}
+
+.paste-dialog__button--primary {
+  background: var(--accent-blue);
+  color: white;
+  border-color: var(--accent-blue);
+}
+
+.paste-dialog__button--primary:hover {
+  background: color-mix(in srgb, var(--accent-blue) 85%, white);
+}
