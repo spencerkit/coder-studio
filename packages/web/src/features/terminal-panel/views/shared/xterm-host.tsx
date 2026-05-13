@@ -715,12 +715,14 @@ export function XtermHost({
         longPressStartClientY = touch.clientY;
         const terminal = terminalRef.current;
         const rowsElement = container.querySelector(".xterm-rows");
+        const screenElement = container.querySelector(".xterm-screen");
         longPressLineText =
           terminal && rowsElement instanceof HTMLElement
             ? getLogicalLineTextFromTouchPoint({
                 clientX: touch.clientX,
                 clientY: touch.clientY,
                 rowsElement,
+                screenElement: screenElement instanceof HTMLElement ? screenElement : undefined,
                 terminal,
               })
             : null;

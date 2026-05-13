@@ -1,6 +1,5 @@
 interface BufferLineLike {
   isWrapped?: boolean;
-  getNoBgTrimmedLength?(): number;
   translateToString(trimRight?: boolean): string;
 }
 
@@ -20,14 +19,11 @@ export interface GetLogicalLineTextFromTouchPointArgs {
   clientX: number;
   clientY: number;
   rowsElement: HTMLElement;
+  screenElement?: HTMLElement;
   terminal: TerminalLikeForLongPressCopy;
 }
 
 function getVisualRowContentLength(line: BufferLineLike): number {
-  if (typeof line.getNoBgTrimmedLength === "function") {
-    return line.getNoBgTrimmedLength();
-  }
-
   return line.translateToString(true).length;
 }
 
@@ -50,11 +46,14 @@ function getVisualRowIndexFromTouchPoint(rowsElement: HTMLElement, clientY: numb
 
 function getBufferRowFromTouchPoint(
   rowsElement: HTMLElement,
+  screenElement: HTMLElement | undefined,
   terminal: TerminalLikeForLongPressCopy,
   clientX: number,
   clientY: number
 ): number | null {
   const rowsRect = rowsElement.getBoundingClientRect();
+  const horizontalBoundsElement = screenElement ?? rowsElement;
+  const horizontalRect = horizontalBoundsElement.getBoundingClientRect();
   if (
     clientX < rowsRect.left ||
     clientX > rowsRect.right ||
@@ -75,7 +74,7 @@ function getBufferRowFromTouchPoint(
     return null;
   }
 
-  if (!Number.isFinite(terminal.cols) || terminal.cols <= 0 || rowsRect.width <= 0) {
+  if (!Number.isFinite(terminal.cols) || terminal.cols <= 0 || horizontalRect.width <= 0) {
     return null;
   }
 
@@ -84,12 +83,16 @@ function getBufferRowFromTouchPoint(
     return bufferRow;
   }
 
-  const cellWidth = rowsRect.width / terminal.cols;
+  if (clientX < horizontalRect.left || clientX > horizontalRect.right) {
+    return null;
+  }
+
+  const cellWidth = horizontalRect.width / terminal.cols;
   if (cellWidth <= 0) {
     return null;
   }
 
-  const columnIndex = Math.floor((clientX - rowsRect.left) / cellWidth);
+  const columnIndex = Math.floor((clientX - horizontalRect.left) / cellWidth);
   if (columnIndex < 0 || columnIndex >= terminal.cols) {
     return null;
   }
@@ -148,6 +151,7 @@ export function getLogicalLineTextFromTouchPoint(
 ): string | null {
   const bufferRow = getBufferRowFromTouchPoint(
     args.rowsElement,
+    args.screenElement,
     args.terminal,
     args.clientX,
     args.clientY
