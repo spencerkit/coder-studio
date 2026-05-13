@@ -71,6 +71,8 @@ const hydrationCoordinatorMocks = vi.hoisted(() => {
 
 const uploadHookMocks = vi.hoisted(() => ({
   busy: false,
+  handleClipboardPaste: vi.fn().mockResolvedValue(undefined),
+  handleFiles: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../../../hooks/use-viewport", () => ({
@@ -91,7 +93,11 @@ vi.mock("../hydration-coordinator", async () => {
 });
 
 vi.mock("../uploads/use-paste-drop-upload", () => ({
-  usePasteDropUpload: vi.fn(() => ({ busy: uploadHookMocks.busy })),
+  usePasteDropUpload: vi.fn(() => ({
+    busy: uploadHookMocks.busy,
+    handleClipboardPaste: uploadHookMocks.handleClipboardPaste,
+    handleFiles: uploadHookMocks.handleFiles,
+  })),
 }));
 
 function expectReplayCall(mock: ReturnType<typeof vi.fn>, terminalId: string, lastSeq: number) {
@@ -303,6 +309,10 @@ describe("XtermHost", () => {
     hydrationCoordinatorMocks.listeners = new Set();
     hydrationCoordinatorMocks.resolveGranted = () => {};
     uploadHookMocks.busy = false;
+    uploadHookMocks.handleClipboardPaste.mockReset();
+    uploadHookMocks.handleClipboardPaste.mockResolvedValue(undefined);
+    uploadHookMocks.handleFiles.mockReset();
+    uploadHookMocks.handleFiles.mockResolvedValue(undefined);
     mockTerminal.options = {};
     mockTerminal.cols = undefined;
     mockTerminal.rows = undefined;
@@ -1648,6 +1658,70 @@ describe("XtermHost", () => {
     expect(screen.getByRole("button", { name: "Escape" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Shift" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Ctrl" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Paste" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Upload" })).toBeInTheDocument();
+  });
+
+  it("routes the mobile paste button through the upload hook clipboard handler", async () => {
+    viewportMocks.viewport = "mobile";
+    const store = createStore();
+    const user = userEvent.setup();
+
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn().mockResolvedValue({ status: "ok" }),
+      sendTerminalInput: vi.fn().mockResolvedValue(undefined),
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => "connected"),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="mobile-paste-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await user.click(screen.getByRole("button", { name: "Paste" }));
+
+    expect(uploadHookMocks.handleClipboardPaste).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens the hidden file picker from the mobile upload button and forwards selected files", async () => {
+    viewportMocks.viewport = "mobile";
+    const store = createStore();
+    const user = userEvent.setup();
+    const filePickerClickSpy = vi.spyOn(HTMLInputElement.prototype, "click");
+
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn().mockResolvedValue({ status: "ok" }),
+      sendTerminalInput: vi.fn().mockResolvedValue(undefined),
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => "connected"),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="mobile-upload-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await user.click(screen.getByRole("button", { name: "Upload" }));
+
+    expect(filePickerClickSpy).toHaveBeenCalledTimes(1);
+
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement | null;
+    expect(input).not.toBeNull();
+    const file = new File(["hello"], "clip.png", { type: "image/png" });
+
+    await act(async () => {
+      fireEvent.change(input!, { target: { files: [file] } });
+    });
+
+    expect(uploadHookMocks.handleFiles).toHaveBeenCalledWith([file]);
+    expect(input?.value).toBe("");
   });
 
   it("does not render the mobile soft-key handle when the terminal is read-only", () => {

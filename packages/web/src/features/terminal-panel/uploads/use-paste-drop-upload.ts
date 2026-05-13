@@ -11,7 +11,24 @@ interface Options {
   enabled: boolean;
 }
 
-export function usePasteDropUpload(opts: Options): { busy: boolean } {
+async function clipboardItemToFile(item: ClipboardItem): Promise<File | null> {
+  const fileType = item.types.find((type) => type.startsWith("image/"));
+  if (!fileType) {
+    return null;
+  }
+
+  const blob = await item.getType(fileType);
+  const extension = fileType.split("/")[1] ?? "png";
+  return new File([blob], `clipboard.${extension}`, { type: fileType });
+}
+
+export interface PasteDropUploadActions {
+  handleClipboardPaste: () => Promise<void>;
+  handleFiles: (files: File[]) => Promise<void>;
+  busy: boolean;
+}
+
+export function usePasteDropUpload(opts: Options): PasteDropUploadActions {
   const { containerRef, workspaceId, sendTextToTerminal, enabled } = opts;
   const [busy, setBusy] = useState(false);
   const inFlightCountRef = useRef(0);
@@ -21,46 +38,35 @@ export function usePasteDropUpload(opts: Options): { busy: boolean } {
   const flushChainRef = useRef(Promise.resolve());
   const pushToast = useSetAtom(pushToastAtom);
 
-  const flushCompletedSequences = useCallback(async () => {
-    while (completedTextsRef.current.has(nextSequenceToFlushRef.current)) {
-      const sequence = nextSequenceToFlushRef.current;
-      const text = completedTextsRef.current.get(sequence) ?? null;
-      completedTextsRef.current.delete(sequence);
-      nextSequenceToFlushRef.current += 1;
-
-      if (text) {
-        await sendTextToTerminal(text);
-      }
-    }
-  }, [sendTextToTerminal]);
-
   const settleSequence = useCallback(
     async (sequence: number, text: string | null) => {
       completedTextsRef.current.set(sequence, text);
-      flushChainRef.current = flushChainRef.current.then(() => flushCompletedSequences());
+      flushChainRef.current = flushChainRef.current.then(async () => {
+        while (completedTextsRef.current.has(nextSequenceToFlushRef.current)) {
+          const currentSequence = nextSequenceToFlushRef.current;
+          const currentText = completedTextsRef.current.get(currentSequence) ?? null;
+          completedTextsRef.current.delete(currentSequence);
+          nextSequenceToFlushRef.current += 1;
+
+          if (currentText) {
+            await sendTextToTerminal(currentText);
+          }
+        }
+      });
       await flushChainRef.current;
     },
-    [flushCompletedSequences]
+    [sendTextToTerminal]
   );
 
-  const handleFiles = useCallback(
-    async (files: File[]) => {
-      if (files.length === 0) {
-        return;
-      }
-
+  const runSequence = useCallback(
+    async (task: () => Promise<string | null>) => {
       const sequence = nextSequenceRef.current;
       nextSequenceRef.current += 1;
       inFlightCountRef.current += 1;
       setBusy(true);
-      try {
-        const uploaded = await uploadFiles({ workspaceId, files });
-        if (uploaded.length === 0) {
-          await settleSequence(sequence, null);
-          return;
-        }
 
-        const text = `${uploaded.map((file) => quoteShellSingle(file.path)).join(" ")} `;
+      try {
+        const text = await task();
         await settleSequence(sequence, text);
       } catch (error) {
         await settleSequence(sequence, null);
@@ -76,8 +82,81 @@ export function usePasteDropUpload(opts: Options): { busy: boolean } {
         setBusy(inFlightCountRef.current > 0);
       }
     },
-    [pushToast, settleSequence, workspaceId]
+    [pushToast, settleSequence]
   );
+
+  const handleFiles = useCallback(
+    async (files: File[]) => {
+      if (files.length === 0) {
+        return;
+      }
+
+      await runSequence(async () => {
+        const uploaded = await uploadFiles({ workspaceId, files });
+        if (uploaded.length === 0) {
+          return null;
+        }
+
+        return `${uploaded.map((file) => quoteShellSingle(file.path)).join(" ")} `;
+      });
+    },
+    [runSequence, workspaceId]
+  );
+
+  const handleText = useCallback(
+    async (text: string) => {
+      if (!text) {
+        return;
+      }
+
+      await runSequence(async () => text);
+    },
+    [runSequence]
+  );
+
+  const handleClipboardPaste = useCallback(async () => {
+    if (!enabled) {
+      return;
+    }
+
+    const clipboard = navigator.clipboard;
+    if (!clipboard) {
+      return;
+    }
+
+    try {
+      const readClipboardItems = (
+        clipboard as Clipboard & {
+          read?: () => Promise<ClipboardItem[]>;
+        }
+      ).read;
+
+      if (typeof readClipboardItems === "function") {
+        const items = await readClipboardItems.call(clipboard);
+        const files: File[] = [];
+        for (const item of items) {
+          const file = await clipboardItemToFile(item);
+          if (file) {
+            files.push(file);
+          }
+        }
+
+        if (files.length > 0) {
+          await handleFiles(files);
+          return;
+        }
+      }
+    } catch {
+      // Fall back to text read below when image clipboard access is unsupported.
+    }
+
+    const readText = clipboard.readText?.bind(clipboard);
+    if (!readText) {
+      return;
+    }
+
+    await handleText(await readText());
+  }, [enabled, handleFiles, handleText]);
 
   useEffect(() => {
     const element = containerRef.current;
@@ -125,5 +204,9 @@ export function usePasteDropUpload(opts: Options): { busy: boolean } {
     };
   }, [containerRef, enabled, handleFiles]);
 
-  return { busy };
+  return {
+    busy,
+    handleClipboardPaste,
+    handleFiles,
+  };
 }

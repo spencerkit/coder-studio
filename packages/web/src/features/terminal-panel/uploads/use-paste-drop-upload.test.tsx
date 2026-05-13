@@ -15,6 +15,13 @@ function makeFile(name: string, body = "x") {
   return new File([body], name, { type: "text/plain" });
 }
 
+function makeClipboardItem(type: string, blob: Blob): ClipboardItem {
+  return {
+    types: [type],
+    getType: vi.fn().mockResolvedValue(blob),
+  } as unknown as ClipboardItem;
+}
+
 async function flushAsyncWork() {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
@@ -149,6 +156,94 @@ describe("usePasteDropUpload", () => {
     });
 
     expect(sendInput.mock.calls[0]?.[0]).toBe("'/abs/a.txt' '/abs/b file.txt' ");
+  });
+
+  it("uploads image clipboard content through the explicit clipboard handler", async () => {
+    const store = createStore();
+    const clipboardRead = vi
+      .fn()
+      .mockResolvedValue([
+        makeClipboardItem("image/png", new Blob(["img"], { type: "image/png" })),
+      ]);
+    const clipboardReadText = vi.fn();
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        read: clipboardRead,
+        readText: clipboardReadText,
+      } satisfies Pick<Clipboard, "readText"> & { read: () => Promise<ClipboardItem[]> },
+    });
+
+    const { result } = renderHook(
+      () =>
+        usePasteDropUpload({
+          containerRef: { current: container },
+          workspaceId: "ws-1",
+          sendTextToTerminal: sendInput,
+          enabled: true,
+        }),
+      { wrapper: makeWrapper(store) }
+    );
+
+    await act(async () => {
+      await result.current.handleClipboardPaste();
+    });
+
+    expect(clipboardRead).toHaveBeenCalledTimes(1);
+    expect(clipboardReadText).not.toHaveBeenCalled();
+    expect(sendInput).toHaveBeenCalledWith("'/abs/a.txt' ");
+  });
+
+  it("falls back to clipboard text when no clipboard files are available", async () => {
+    const store = createStore();
+    const clipboardRead = vi.fn().mockResolvedValue([]);
+    const clipboardReadText = vi.fn().mockResolvedValue("ls -la");
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        read: clipboardRead,
+        readText: clipboardReadText,
+      } satisfies Pick<Clipboard, "readText"> & { read: () => Promise<ClipboardItem[]> },
+    });
+
+    const { result } = renderHook(
+      () =>
+        usePasteDropUpload({
+          containerRef: { current: container },
+          workspaceId: "ws-1",
+          sendTextToTerminal: sendInput,
+          enabled: true,
+        }),
+      { wrapper: makeWrapper(store) }
+    );
+
+    await act(async () => {
+      await result.current.handleClipboardPaste();
+    });
+
+    expect(clipboardRead).toHaveBeenCalledTimes(1);
+    expect(clipboardReadText).toHaveBeenCalledTimes(1);
+    expect(sendInput).toHaveBeenCalledWith("ls -la");
+  });
+
+  it("uploads files passed directly to the explicit file handler", async () => {
+    const store = createStore();
+    const { result } = renderHook(
+      () =>
+        usePasteDropUpload({
+          containerRef: { current: container },
+          workspaceId: "ws-1",
+          sendTextToTerminal: sendInput,
+          enabled: true,
+        }),
+      { wrapper: makeWrapper(store) }
+    );
+
+    await act(async () => {
+      await result.current.handleFiles([makeFile("a.txt")]);
+    });
+
+    expect(sendInput).toHaveBeenCalledWith("'/abs/a.txt' ");
   });
 
   it("falls through for non-file drop payloads", () => {

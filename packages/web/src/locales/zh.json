@@ -271,6 +271,8 @@
       "indexed": "终端 {index}"
     },
     "mobile_input": {
+      "paste": "粘贴",
+      "upload": "上传",
       "shortcuts": "终端快捷按键",
       "ctrl": "Ctrl",
       "ctrl_armed": "Ctrl 已待命",
