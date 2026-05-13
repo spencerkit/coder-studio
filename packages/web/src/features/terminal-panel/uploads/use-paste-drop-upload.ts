@@ -121,13 +121,7 @@ export function usePasteDropUpload(opts: Options): PasteDropUploadActions {
 
     const clipboard = navigator.clipboard;
     if (!clipboard) {
-      pushToast({
-        kind: "error",
-        title: "Paste failed",
-        body: "Clipboard API not available",
-        duration: 3_000,
-      });
-      return;
+      throw new Error("Clipboard API not available");
     }
 
     try {
@@ -160,13 +154,7 @@ export function usePasteDropUpload(opts: Options): PasteDropUploadActions {
     try {
       const readText = clipboard.readText?.bind(clipboard);
       if (!readText) {
-        pushToast({
-          kind: "error",
-          title: "Paste failed",
-          body: "Clipboard text read not available",
-          duration: 3_000,
-        });
-        return;
+        throw new Error("Clipboard text read not available");
       }
 
       const text = await readText();
@@ -181,13 +169,14 @@ export function usePasteDropUpload(opts: Options): PasteDropUploadActions {
       }
 
       await handleText(text);
-    } catch (_error) {
+    } catch (error) {
       pushToast({
         kind: "error",
         title: "Paste failed",
         body: "Could not read from clipboard. Please check permissions.",
         duration: 3_000,
       });
+      throw error;
     }
   }, [enabled, handleFiles, handleText, pushToast]);
 

@@ -2168,9 +2168,41 @@ export function XtermHost({
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const handleMobilePaste = useCallback(() => {
-    void handleClipboardPaste();
-  }, [handleClipboardPaste]);
+  const pasteTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const handleMobilePaste = useCallback(async () => {
+    // Try modern Clipboard API first
+    if (navigator.clipboard) {
+      try {
+        await handleClipboardPaste();
+        return;
+      } catch (error) {
+        console.debug("Clipboard API failed, trying fallback:", error);
+      }
+    }
+
+    // Fallback: use hidden textarea for manual paste
+    const textarea = pasteTextareaRef.current;
+    if (!textarea) {
+      pushToast({
+        kind: "error",
+        title: t("terminal.mobile_paste_failed_title"),
+        body: t("terminal.mobile_paste_failed_body"),
+      });
+      return;
+    }
+
+    textarea.value = "";
+    textarea.focus();
+    textarea.select();
+
+    pushToast({
+      kind: "info",
+      title: t("terminal.mobile_paste_manual_title"),
+      body: t("terminal.mobile_paste_manual_body"),
+      duration: 3_000,
+    });
+  }, [handleClipboardPaste, pushToast, t]);
 
   const handleMobileUpload = useCallback(() => {
     fileInputRef.current?.click();
@@ -2243,6 +2275,17 @@ export function XtermHost({
         hidden
         onChange={(event) => {
           void handleFileInputChange(event);
+        }}
+      />
+      <textarea
+        ref={pasteTextareaRef}
+        hidden
+        onChange={async (event) => {
+          const text = event.currentTarget.value;
+          if (text) {
+            await sendTextToTerminal(text);
+            event.currentTarget.value = "";
+          }
         }}
       />
       <div
