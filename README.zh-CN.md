@@ -41,7 +41,9 @@
 
 ![工作区界面](docs/help/assets/screenshot-workspace-overview.png)
 
-![Demo](docs/assets/demo.gif)
+[![观看演示视频](docs/assets/demo-poster.png)](docs/assets/demo.mp4)
+
+<div align="center">点击封面查看录制演示视频</div>
 
 
 ---

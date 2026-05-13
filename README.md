@@ -41,7 +41,9 @@
 
 ![Workspace Overview](docs/help/assets/screenshot-workspace-overview.png)
 
-![Demo](docs/assets/demo.gif)
+[![Watch Demo Video](docs/assets/demo-poster.png)](docs/assets/demo.mp4)
+
+<div align="center">Watch the recorded demo video</div>
 
 
 ---
