@@ -1353,6 +1353,8 @@
 
 .mobile-terminal-input-bar {
   display: flex;
+  align-items: center;
+  gap: 6px;
   flex-shrink: 0;
   min-width: 0;
   padding: 2px var(--sp-3) 2px;
@@ -1361,10 +1363,39 @@
   background: color-mix(in srgb, var(--bg-page) 90%, var(--bg-surface) 10%);
 }
 
+.mobile-terminal-input-bar__actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  padding-right: 6px;
+  border-right: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+}
+
+.mobile-terminal-input-bar__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-height: 20px;
+  padding: 0 7px;
+  border: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--bg-page) 70%, var(--bg-surface) 30%);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: var(--font-medium);
+  line-height: 1;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
 .mobile-terminal-input-bar__keys {
   display: flex;
   align-items: center;
   min-width: 0;
+  flex: 1 1 auto;
   justify-content: flex-start;
   gap: 3px;
   overflow-x: auto;
@@ -1438,7 +1469,8 @@
 }
 
 .mobile-terminal-input-bar__key:disabled,
-.mobile-terminal-input-bar__shift:disabled {
+.mobile-terminal-input-bar__shift:disabled,
+.mobile-terminal-input-bar__action:disabled {
   opacity: 0.52;
 }
 

@@ -273,6 +273,8 @@
       "indexed": "Terminal {index}"
     },
     "mobile_input": {
+      "paste": "Paste",
+      "upload": "Upload",
       "shortcuts": "Terminal shortcut keys",
       "ctrl": "Ctrl",
       "ctrl_armed": "Ctrl armed",

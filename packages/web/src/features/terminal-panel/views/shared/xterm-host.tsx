@@ -13,6 +13,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import {
+  type ChangeEvent as ReactChangeEvent,
   type MouseEvent as ReactMouseEvent,
   useCallback,
   useEffect,
@@ -1151,7 +1152,11 @@ export function XtermHost({
     [handleInput]
   );
 
-  const { busy: uploadBusy } = usePasteDropUpload({
+  const {
+    busy: uploadBusy,
+    handleClipboardPaste,
+    handleFiles,
+  } = usePasteDropUpload({
     containerRef,
     workspaceId,
     sendTextToTerminal,
@@ -2147,6 +2152,8 @@ export function XtermHost({
   const showMobileInputBar = viewport === "mobile" && isInteractive;
   const mobileInputDisabled = !isInteractive || uploadBusy || connectionStatus !== "connected";
   const mobileInputLabels = {
+    paste: t("terminal.mobile_input.paste"),
+    upload: t("terminal.mobile_input.upload"),
     shortcuts: t("terminal.mobile_input.shortcuts"),
     ctrl: t("terminal.mobile_input.ctrl"),
     ctrlArmed: t("terminal.mobile_input.ctrl_armed"),
@@ -2184,6 +2191,29 @@ export function XtermHost({
   const handleShiftTap = useCallback(() => {
     updateShiftArmed(!shiftArmedRef.current);
   }, [updateShiftArmed]);
+
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleMobilePaste = useCallback(() => {
+    void handleClipboardPaste();
+  }, [handleClipboardPaste]);
+
+  const handleMobileUpload = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  const handleFileInputChange = useCallback(
+    async (event: ReactChangeEvent<HTMLInputElement>) => {
+      const files = Array.from(event.currentTarget.files ?? []);
+      event.currentTarget.value = "";
+      if (files.length === 0) {
+        return;
+      }
+
+      await handleFiles(files);
+    },
+    [handleFiles]
+  );
 
   const showReplayOverlay =
     replayUiState.kind !== "ready" && (viewport === "mobile" || hydrationState.kind === "granted");
@@ -2227,8 +2257,20 @@ export function XtermHost({
           onCtrlTap={handleCtrlTap}
           onCtrlLongPress={handleCtrlLongPress}
           onShiftTap={handleShiftTap}
+          onPaste={handleMobilePaste}
+          onUpload={handleMobileUpload}
         />
       ) : null}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*,video/*,audio/*,text/plain,.txt,.md,.json,.csv"
+        multiple
+        hidden
+        onChange={(event) => {
+          void handleFileInputChange(event);
+        }}
+      />
       <div
         ref={containerRef}
         className="xterm-host"
