@@ -894,7 +894,7 @@ export function XtermHost({
       }
 
       const lineText = getLogicalLineTextFromTouchTarget({ target, terminal });
-      if (!lineText) {
+      if (lineText === null) {
         return;
       }
 
