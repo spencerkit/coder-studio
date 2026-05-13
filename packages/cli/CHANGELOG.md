@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.6
+
+### Patch Changes
+
+- [#33](https://github.com/spencerkit/coder-studio/pull/33) [`851bf21`](https://github.com/spencerkit/coder-studio/commit/851bf213567b638774a4c0bfd0197f07d0f16eeb) Thanks [@pallyoung](https://github.com/pallyoung)! - Fix the shared settings switch thumb alignment so the knob stays vertically centered and reaches the correct checked position.
+
 ## 0.3.5
 
 ### Patch Changes
