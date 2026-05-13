@@ -27,7 +27,7 @@ import {
   type HydrationRequestHandle,
   type HydrationTier,
 } from "../../hydration-coordinator";
-import { getLogicalLineTextFromTouchTarget } from "../../mobile/long-press-copy-line";
+import { getLogicalLineTextFromTouchPoint } from "../../mobile/long-press-copy-line";
 import { MobileTerminalInputBar } from "../../mobile/mobile-terminal-input-bar";
 import {
   applyCtrlModeToInput,
@@ -419,7 +419,7 @@ export function XtermHost({
   const selectedTextRef = useRef("");
   const lastCopyOnSelectFailureAtRef = useRef(0);
   const copyOnSelectPointerIdRef = useRef<number | null>(null);
-  const copyMobileLongPressRef = useRef<(target: EventTarget | null) => void>(() => {});
+  const copyMobileLongPressRef = useRef<(lineText: string | null) => void>(() => {});
   const resetTouchStateRef = useRef<() => void>(() => {});
   const touchScrollStateRef = useRef<{
     activeTouchId: number | null;
@@ -552,7 +552,7 @@ export function XtermHost({
     let longPressTouchId: number | null = null;
     let longPressStartClientX = 0;
     let longPressStartClientY = 0;
-    let longPressTarget: EventTarget | null = null;
+    let longPressLineText: string | null = null;
 
     const clearLongPressTimer = () => {
       if (longPressTimer !== null) {
@@ -563,7 +563,7 @@ export function XtermHost({
       longPressTouchId = null;
       longPressStartClientX = 0;
       longPressStartClientY = 0;
-      longPressTarget = null;
+      longPressLineText = null;
     };
 
     const stopMomentumScroll = () => {
@@ -713,10 +713,20 @@ export function XtermHost({
         longPressTouchId = touch.identifier;
         longPressStartClientX = touch.clientX;
         longPressStartClientY = touch.clientY;
-        longPressTarget = touch.target;
+        const terminal = terminalRef.current;
+        const rowsElement = container.querySelector(".xterm-rows");
+        longPressLineText =
+          terminal && rowsElement instanceof HTMLElement
+            ? getLogicalLineTextFromTouchPoint({
+                clientX: touch.clientX,
+                clientY: touch.clientY,
+                rowsElement,
+                terminal,
+              })
+            : null;
         longPressTimer = setTimeout(() => {
           longPressTimer = null;
-          const target = longPressTarget;
+          const lineText = longPressLineText;
           clearLongPressTimer();
           state.activeTouchId = null;
           state.lastClientY = 0;
@@ -724,7 +734,7 @@ export function XtermHost({
           state.pxPerLine = null;
           state.velocityPxPerMs = 0;
           state.samples = [];
-          copyMobileLongPressRef.current(target);
+          copyMobileLongPressRef.current(lineText);
         }, MOBILE_COPY_MODE_LONG_PRESS_MS);
       }
     };
@@ -876,24 +886,20 @@ export function XtermHost({
     pushToast({
       kind: "error",
       title: t("settings.copy_on_select_failed_title"),
-      body: t("settings.copy_on_select_failed_body"),
+      body:
+        viewport === "mobile"
+          ? t("terminal.mobile_copy_current_line_failed_body")
+          : t("settings.copy_on_select_failed_body"),
     });
-  }, [pushToast, t]);
+  }, [pushToast, t, viewport]);
 
   const copyMobileLongPress = useCallback(
-    async (target: EventTarget | null) => {
+    async (lineText: string | null) => {
       if (viewport !== "mobile" || !terminalPreferences.copyOnSelect) {
         return;
       }
 
       resetTouchStateRef.current();
-
-      const terminal = terminalRef.current;
-      if (!terminal) {
-        return;
-      }
-
-      const lineText = getLogicalLineTextFromTouchTarget({ target, terminal });
       if (lineText === null) {
         return;
       }
@@ -915,8 +921,8 @@ export function XtermHost({
   );
 
   useEffect(() => {
-    copyMobileLongPressRef.current = (target) => {
-      void copyMobileLongPress(target);
+    copyMobileLongPressRef.current = (lineText) => {
+      void copyMobileLongPress(lineText);
     };
   }, [copyMobileLongPress]);
 

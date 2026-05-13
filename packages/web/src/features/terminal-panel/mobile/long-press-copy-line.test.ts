@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { getLogicalLineTextFromTouchTarget } from "./long-press-copy-line";
+import { getLogicalLineTextFromTouchPoint } from "./long-press-copy-line";
 
 interface MockBufferLine {
   isWrapped?: boolean;
@@ -57,26 +57,93 @@ function createRowsDom() {
 
   return {
     rows,
-    secondTarget: secondRow.querySelector("span span") as HTMLSpanElement,
-    thirdTarget: thirdRow.querySelector("span span") as HTMLSpanElement,
+    secondRow,
+    thirdRow,
   };
 }
 
-describe("getLogicalLineTextFromTouchTarget", () => {
+describe("getLogicalLineTextFromTouchPoint", () => {
   it("maps the touched visual row through viewportY", () => {
-    const { rows, secondTarget } = createRowsDom();
+    const { rows, secondRow } = createRowsDom();
     document.body.appendChild(rows);
+    rows.getBoundingClientRect = () =>
+      ({
+        x: 20,
+        y: 100,
+        top: 100,
+        left: 20,
+        width: 320,
+        height: 60,
+        right: 340,
+        bottom: 160,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    secondRow.getBoundingClientRect = () =>
+      ({
+        x: 20,
+        y: 120,
+        top: 120,
+        left: 20,
+        width: 320,
+        height: 20,
+        right: 340,
+        bottom: 140,
+        toJSON: () => ({}),
+      }) as DOMRect;
 
     const terminal = createTerminal(10, [[11, createBufferLine("beta")]]);
 
-    expect(getLogicalLineTextFromTouchTarget({ target: secondTarget, terminal })).toBe("beta");
+    expect(
+      getLogicalLineTextFromTouchPoint({
+        clientX: 40,
+        clientY: 130,
+        rowsElement: rows,
+        terminal,
+      })
+    ).toBe("beta");
 
     rows.remove();
   });
 
   it("walks upward and downward across wrapped rows and trims only the final segment", () => {
-    const { rows, thirdTarget } = createRowsDom();
+    const { rows, secondRow, thirdRow } = createRowsDom();
     document.body.appendChild(rows);
+    rows.getBoundingClientRect = () =>
+      ({
+        x: 20,
+        y: 100,
+        top: 100,
+        left: 20,
+        width: 320,
+        height: 60,
+        right: 340,
+        bottom: 160,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    secondRow.getBoundingClientRect = () =>
+      ({
+        x: 20,
+        y: 120,
+        top: 120,
+        left: 20,
+        width: 320,
+        height: 20,
+        right: 340,
+        bottom: 140,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    thirdRow.getBoundingClientRect = () =>
+      ({
+        x: 20,
+        y: 140,
+        top: 140,
+        left: 20,
+        width: 320,
+        height: 20,
+        right: 340,
+        bottom: 160,
+        toJSON: () => ({}),
+      }) as DOMRect;
 
     const terminal = createTerminal(20, [
       [20, createBufferLine("unrelated line")],
@@ -85,65 +152,228 @@ describe("getLogicalLineTextFromTouchTarget", () => {
       [23, createBufferLine("suffix   ", true)],
     ]);
 
-    expect(getLogicalLineTextFromTouchTarget({ target: thirdTarget, terminal })).toBe(
-      "prefix middle suffix"
-    );
+    expect(
+      getLogicalLineTextFromTouchPoint({
+        clientX: 40,
+        clientY: 150,
+        rowsElement: rows,
+        terminal,
+      })
+    ).toBe("prefix middle suffix");
 
     rows.remove();
   });
 
   it("preserves meaningful internal spaces from wrapped intermediate segments", () => {
-    const { rows, secondTarget } = createRowsDom();
+    const { rows, secondRow } = createRowsDom();
     document.body.appendChild(rows);
+    rows.getBoundingClientRect = () =>
+      ({
+        x: 20,
+        y: 100,
+        top: 100,
+        left: 20,
+        width: 320,
+        height: 60,
+        right: 340,
+        bottom: 160,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    secondRow.getBoundingClientRect = () =>
+      ({
+        x: 20,
+        y: 120,
+        top: 120,
+        left: 20,
+        width: 320,
+        height: 20,
+        right: 340,
+        bottom: 140,
+        toJSON: () => ({}),
+      }) as DOMRect;
 
     const terminal = createTerminal(30, [
       [30, createBufferLine("double  ", false)],
       [31, createBufferLine("space   ", true)],
     ]);
 
-    expect(getLogicalLineTextFromTouchTarget({ target: secondTarget, terminal })).toBe(
-      "double  space"
-    );
+    expect(
+      getLogicalLineTextFromTouchPoint({
+        clientX: 40,
+        clientY: 130,
+        rowsElement: rows,
+        terminal,
+      })
+    ).toBe("double  space");
 
     rows.remove();
   });
 
   it("returns null when the mapped buffer row is missing", () => {
-    const { rows, secondTarget } = createRowsDom();
+    const { rows, secondRow } = createRowsDom();
     document.body.appendChild(rows);
+    rows.getBoundingClientRect = () =>
+      ({
+        x: 20,
+        y: 100,
+        top: 100,
+        left: 20,
+        width: 320,
+        height: 60,
+        right: 340,
+        bottom: 160,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    secondRow.getBoundingClientRect = () =>
+      ({
+        x: 20,
+        y: 120,
+        top: 120,
+        left: 20,
+        width: 320,
+        height: 20,
+        right: 340,
+        bottom: 140,
+        toJSON: () => ({}),
+      }) as DOMRect;
 
     const terminal = createTerminal(40, [[40, createBufferLine("alpha")]]);
 
-    expect(getLogicalLineTextFromTouchTarget({ target: secondTarget, terminal })).toBeNull();
+    expect(
+      getLogicalLineTextFromTouchPoint({
+        clientX: 40,
+        clientY: 130,
+        rowsElement: rows,
+        terminal,
+      })
+    ).toBeNull();
 
     rows.remove();
   });
 
   it("returns null when a wrapped row's preceding segment is missing", () => {
-    const { rows, secondTarget } = createRowsDom();
+    const { rows, secondRow } = createRowsDom();
     document.body.appendChild(rows);
+    rows.getBoundingClientRect = () =>
+      ({
+        x: 20,
+        y: 100,
+        top: 100,
+        left: 20,
+        width: 320,
+        height: 60,
+        right: 340,
+        bottom: 160,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    secondRow.getBoundingClientRect = () =>
+      ({
+        x: 20,
+        y: 120,
+        top: 120,
+        left: 20,
+        width: 320,
+        height: 20,
+        right: 340,
+        bottom: 140,
+        toJSON: () => ({}),
+      }) as DOMRect;
 
     const terminal = createTerminal(50, [[51, createBufferLine("suffix   ", true)]]);
 
-    expect(getLogicalLineTextFromTouchTarget({ target: secondTarget, terminal })).toBeNull();
-
-    rows.remove();
-  });
-
-  it("returns null when the touch target does not resolve to a direct xterm row", () => {
-    const outside = document.createElement("div");
-    outside.innerHTML = "<span>outside</span>";
-    document.body.appendChild(outside);
-
-    const terminal = createTerminal(0, [[0, createBufferLine("ignored")]]);
-
     expect(
-      getLogicalLineTextFromTouchTarget({
-        target: outside.querySelector("span"),
+      getLogicalLineTextFromTouchPoint({
+        clientX: 40,
+        clientY: 130,
+        rowsElement: rows,
         terminal,
       })
     ).toBeNull();
 
-    outside.remove();
+    rows.remove();
+  });
+
+  it("returns null when the touch point is outside the xterm rows bounds", () => {
+    const { rows, secondRow } = createRowsDom();
+    document.body.appendChild(rows);
+    rows.getBoundingClientRect = () =>
+      ({
+        x: 20,
+        y: 100,
+        top: 100,
+        left: 20,
+        width: 320,
+        height: 60,
+        right: 340,
+        bottom: 160,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    secondRow.getBoundingClientRect = () =>
+      ({
+        x: 20,
+        y: 120,
+        top: 120,
+        left: 20,
+        width: 320,
+        height: 20,
+        right: 340,
+        bottom: 140,
+        toJSON: () => ({}),
+      }) as DOMRect;
+
+    const terminal = createTerminal(0, [[0, createBufferLine("ignored")]]);
+
+    expect(
+      getLogicalLineTextFromTouchPoint({
+        clientX: 40,
+        clientY: 180,
+        rowsElement: rows,
+        terminal,
+      })
+    ).toBeNull();
+
+    rows.remove();
+  });
+
+  it("maps by row bounds even when the event target is not a row descendant", () => {
+    const { rows, thirdRow } = createRowsDom();
+    document.body.appendChild(rows);
+    rows.getBoundingClientRect = () =>
+      ({
+        x: 20,
+        y: 100,
+        top: 100,
+        left: 20,
+        width: 320,
+        height: 60,
+        right: 340,
+        bottom: 160,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    thirdRow.getBoundingClientRect = () =>
+      ({
+        x: 20,
+        y: 140,
+        top: 140,
+        left: 20,
+        width: 320,
+        height: 20,
+        right: 340,
+        bottom: 160,
+        toJSON: () => ({}),
+      }) as DOMRect;
+
+    const terminal = createTerminal(60, [[62, createBufferLine("gamma")]]);
+
+    expect(
+      getLogicalLineTextFromTouchPoint({
+        clientX: 40,
+        clientY: 150,
+        rowsElement: rows,
+        terminal,
+      })
+    ).toBe("gamma");
+
+    rows.remove();
   });
 });

@@ -14,57 +14,46 @@ export interface TerminalLikeForLongPressCopy {
   };
 }
 
-export interface GetLogicalLineTextFromTouchTargetArgs {
-  target: EventTarget | null;
+export interface GetLogicalLineTextFromTouchPointArgs {
+  clientX: number;
+  clientY: number;
+  rowsElement: HTMLElement;
   terminal: TerminalLikeForLongPressCopy;
 }
 
-function toElement(target: EventTarget | null): Element | null {
-  if (target instanceof Element) {
-    return target;
+function getVisualRowIndexFromTouchPoint(
+  rowsElement: HTMLElement,
+  clientX: number,
+  clientY: number
+): number | null {
+  const rowsRect = rowsElement.getBoundingClientRect();
+  if (
+    clientX < rowsRect.left ||
+    clientX > rowsRect.right ||
+    clientY < rowsRect.top ||
+    clientY > rowsRect.bottom
+  ) {
+    return null;
   }
 
-  if (target instanceof Node) {
-    return target.parentElement;
-  }
-
-  return null;
-}
-
-function findDirectXtermRow(target: EventTarget | null): HTMLElement | null {
-  let current: Element | null = toElement(target);
-
-  while (current) {
-    const parent = current.parentElement;
-    if (parent?.classList.contains("xterm-rows") && current instanceof HTMLElement) {
-      return current;
+  const rowElements = Array.from(rowsElement.children).filter(
+    (child): child is HTMLElement => child instanceof HTMLElement
+  );
+  for (let index = 0; index < rowElements.length; index += 1) {
+    const rowRect = rowElements[index].getBoundingClientRect();
+    if (clientY >= rowRect.top && clientY <= rowRect.bottom) {
+      return index;
     }
-    current = parent;
   }
 
   return null;
 }
 
-export function getLogicalLineTextFromTouchTarget(
-  args: GetLogicalLineTextFromTouchTargetArgs
+function getLogicalLineTextFromBufferRow(
+  terminal: TerminalLikeForLongPressCopy,
+  bufferRow: number
 ): string | null {
-  const rowElement = findDirectXtermRow(args.target);
-  if (!rowElement) {
-    return null;
-  }
-
-  const rowsElement = rowElement.parentElement;
-  if (!rowsElement || !rowsElement.classList.contains("xterm-rows")) {
-    return null;
-  }
-
-  const visualRowIndex = Array.prototype.indexOf.call(rowsElement.children, rowElement) as number;
-  if (visualRowIndex < 0) {
-    return null;
-  }
-
-  const activeBuffer = args.terminal.buffer.active;
-  const bufferRow = activeBuffer.viewportY + visualRowIndex;
+  const activeBuffer = terminal.buffer.active;
 
   let startRow = bufferRow;
   let currentLine = activeBuffer.getLine(startRow);
@@ -100,4 +89,20 @@ export function getLogicalLineTextFromTouchTarget(
   return segments
     .map((line, index) => line.translateToString(index === segments.length - 1))
     .join("");
+}
+
+export function getLogicalLineTextFromTouchPoint(
+  args: GetLogicalLineTextFromTouchPointArgs
+): string | null {
+  const visualRowIndex = getVisualRowIndexFromTouchPoint(
+    args.rowsElement,
+    args.clientX,
+    args.clientY
+  );
+  if (visualRowIndex === null) {
+    return null;
+  }
+
+  const bufferRow = args.terminal.buffer.active.viewportY + visualRowIndex;
+  return getLogicalLineTextFromBufferRow(args.terminal, bufferRow);
 }

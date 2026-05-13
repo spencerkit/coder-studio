@@ -181,6 +181,57 @@ function dispatchTouchEvent(
   target.dispatchEvent(event);
 }
 
+function createMockDomRect({
+  x,
+  y,
+  width,
+  height,
+}: {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}): DOMRect {
+  return {
+    x,
+    y,
+    width,
+    height,
+    top: y,
+    left: x,
+    right: x + width,
+    bottom: y + height,
+    toJSON: () => ({}),
+  } as DOMRect;
+}
+
+function stubRowsGeometry(
+  host: HTMLDivElement,
+  rowsElement: HTMLDivElement,
+  rowElements: HTMLDivElement[],
+  options: {
+    hostRect?: { x: number; y: number; width: number; height: number };
+    rowsRect: { x: number; y: number; width: number; height: number };
+    rowHeight: number;
+  }
+) {
+  vi.spyOn(host, "getBoundingClientRect").mockReturnValue(
+    createMockDomRect(
+      options.hostRect ?? { x: 0, y: 0, width: options.rowsRect.width, height: 240 }
+    )
+  );
+  rowsElement.getBoundingClientRect = () => createMockDomRect(options.rowsRect);
+  rowElements.forEach((rowElement, index) => {
+    rowElement.getBoundingClientRect = () =>
+      createMockDomRect({
+        x: options.rowsRect.x,
+        y: options.rowsRect.y + index * options.rowHeight,
+        width: options.rowsRect.width,
+        height: options.rowHeight,
+      });
+  });
+}
+
 const mockTerminal = {
   open: vi.fn(),
   onData: vi.fn(() => vi.fn()), // Return dispose function
@@ -7006,9 +7057,12 @@ describe("XtermHost", () => {
 
     rowsElement.append(firstRow, secondRow, thirdRow);
     host!.appendChild(rowsElement);
+    stubRowsGeometry(host!, rowsElement, [firstRow, secondRow, thirdRow], {
+      rowsRect: { x: 0, y: 100, width: 320, height: 60 },
+      rowHeight: 20,
+    });
 
-    const target = thirdRow.querySelector("span span") as HTMLSpanElement;
-    dispatchTouchEvent(host!, "touchstart", [{ identifier: 1, clientX: 40, clientY: 120, target }]);
+    dispatchTouchEvent(host!, "touchstart", [{ identifier: 1, clientX: 40, clientY: 150 }]);
 
     await act(async () => {
       vi.advanceTimersByTime(500);
@@ -7086,9 +7140,12 @@ describe("XtermHost", () => {
     rowsElement.className = "xterm-rows";
     rowsElement.innerHTML = "<div><span>&nbsp;</span></div>";
     host!.appendChild(rowsElement);
+    stubRowsGeometry(host!, rowsElement, [rowsElement.firstElementChild as HTMLDivElement], {
+      rowsRect: { x: 0, y: 100, width: 320, height: 20 },
+      rowHeight: 20,
+    });
 
-    const target = rowsElement.querySelector("span") as HTMLSpanElement;
-    dispatchTouchEvent(host!, "touchstart", [{ identifier: 1, clientX: 40, clientY: 120, target }]);
+    dispatchTouchEvent(host!, "touchstart", [{ identifier: 1, clientX: 40, clientY: 110 }]);
 
     await act(async () => {
       vi.advanceTimersByTime(500);
@@ -7166,9 +7223,12 @@ describe("XtermHost", () => {
     rowsElement.className = "xterm-rows";
     rowsElement.innerHTML = "<div><span>disabled line</span></div>";
     host!.appendChild(rowsElement);
+    stubRowsGeometry(host!, rowsElement, [rowsElement.firstElementChild as HTMLDivElement], {
+      rowsRect: { x: 0, y: 100, width: 320, height: 20 },
+      rowHeight: 20,
+    });
 
-    const target = rowsElement.querySelector("span") as HTMLSpanElement;
-    dispatchTouchEvent(host!, "touchstart", [{ identifier: 1, clientX: 40, clientY: 120, target }]);
+    dispatchTouchEvent(host!, "touchstart", [{ identifier: 1, clientX: 40, clientY: 110 }]);
 
     await act(async () => {
       vi.advanceTimersByTime(500);
@@ -7226,10 +7286,18 @@ describe("XtermHost", () => {
     rowsElement.className = "xterm-rows";
     rowsElement.innerHTML = "<div><span>scroll line</span></div>";
     (host as HTMLDivElement).appendChild(rowsElement);
+    stubRowsGeometry(
+      host as HTMLDivElement,
+      rowsElement,
+      [rowsElement.firstElementChild as HTMLDivElement],
+      {
+        rowsRect: { x: 0, y: 100, width: 320, height: 20 },
+        rowHeight: 20,
+      }
+    );
 
-    const target = rowsElement.querySelector("span") as HTMLSpanElement;
-    dispatchTouchEvent(host!, "touchstart", [{ identifier: 1, clientX: 40, clientY: 120, target }]);
-    dispatchTouchEvent(host!, "touchmove", [{ identifier: 1, clientX: 40, clientY: 88, target }]);
+    dispatchTouchEvent(host!, "touchstart", [{ identifier: 1, clientX: 40, clientY: 110 }]);
+    dispatchTouchEvent(host!, "touchmove", [{ identifier: 1, clientX: 40, clientY: 88 }]);
 
     await act(async () => {
       vi.advanceTimersByTime(500);
@@ -7295,10 +7363,18 @@ describe("XtermHost", () => {
     rowsElement.className = "xterm-rows";
     rowsElement.innerHTML = "<div><span>drift line</span></div>";
     (host as HTMLDivElement).appendChild(rowsElement);
+    stubRowsGeometry(
+      host as HTMLDivElement,
+      rowsElement,
+      [rowsElement.firstElementChild as HTMLDivElement],
+      {
+        rowsRect: { x: 0, y: 100, width: 320, height: 20 },
+        rowHeight: 20,
+      }
+    );
 
-    const target = rowsElement.querySelector("span") as HTMLSpanElement;
-    dispatchTouchEvent(host!, "touchstart", [{ identifier: 1, clientX: 40, clientY: 120, target }]);
-    dispatchTouchEvent(host!, "touchmove", [{ identifier: 1, clientX: 56, clientY: 120, target }]);
+    dispatchTouchEvent(host!, "touchstart", [{ identifier: 1, clientX: 40, clientY: 110 }]);
+    dispatchTouchEvent(host!, "touchmove", [{ identifier: 1, clientX: 56, clientY: 110 }]);
 
     await act(async () => {
       vi.advanceTimersByTime(500);
@@ -7392,7 +7468,7 @@ describe("XtermHost", () => {
     vi.useRealTimers();
   });
 
-  it("mobile line copy shows the existing copy-on-select failure toast when clipboard write fails", async () => {
+  it("mobile line copy shows a mobile-specific failure toast when clipboard write fails", async () => {
     vi.useFakeTimers();
     viewportMocks.viewport = "mobile";
 
@@ -7447,9 +7523,12 @@ describe("XtermHost", () => {
     rowsElement.className = "xterm-rows";
     rowsElement.innerHTML = "<div><span>toast line</span></div>";
     host!.appendChild(rowsElement);
+    stubRowsGeometry(host!, rowsElement, [rowsElement.firstElementChild as HTMLDivElement], {
+      rowsRect: { x: 0, y: 100, width: 320, height: 20 },
+      rowHeight: 20,
+    });
 
-    const target = rowsElement.querySelector("span") as HTMLSpanElement;
-    dispatchTouchEvent(host!, "touchstart", [{ identifier: 1, clientX: 40, clientY: 120, target }]);
+    dispatchTouchEvent(host!, "touchstart", [{ identifier: 1, clientX: 40, clientY: 110 }]);
 
     await act(async () => {
       vi.advanceTimersByTime(500);
@@ -7462,10 +7541,177 @@ describe("XtermHost", () => {
         expect.objectContaining({
           kind: "error",
           title: "自动复制失败",
+          body: "请重试长按当前行",
         }),
       ])
     );
     expect(vibrate).not.toHaveBeenCalled();
+
+    window.matchMedia = originalMatchMedia;
+    vi.useRealTimers();
+  });
+
+  it("mobile line copy still succeeds when the touch target is only the host element", async () => {
+    vi.useFakeTimers();
+    viewportMocks.viewport = "mobile";
+
+    const originalMatchMedia = window.matchMedia;
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    const vibrate = vi.fn();
+    const store = createStore();
+
+    mockTerminal.buffer.active.viewportY = 9;
+    setMockBufferLines([[10, "from coords", false]]);
+
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query === "(pointer: coarse)",
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })) as typeof window.matchMedia;
+
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText } satisfies Pick<Clipboard, "writeText">,
+    });
+    Object.defineProperty(navigator, "vibrate", {
+      configurable: true,
+      value: vibrate,
+    });
+
+    store.set(localeAtom, "en");
+    store.set(terminalPreferencesAtom, { copyOnSelect: true });
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn().mockResolvedValue({ ok: true, data: { status: "ok" } }),
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => "connected"),
+      onStatus: vi.fn(() => () => {}),
+      sendTerminalInput: vi.fn().mockResolvedValue(undefined),
+    } as never);
+
+    const { container } = render(
+      <Provider store={store}>
+        <XtermHost
+          terminalId="mobile-line-copy-host-target-terminal"
+          workspaceId="test-workspace"
+        />
+      </Provider>
+    );
+
+    const host = container.querySelector(".xterm-host") as HTMLDivElement | null;
+    expect(host).toBeTruthy();
+
+    const rowsElement = document.createElement("div");
+    rowsElement.className = "xterm-rows";
+    const firstRow = document.createElement("div");
+    firstRow.innerHTML = "<span>ignored</span>";
+    const secondRow = document.createElement("div");
+    secondRow.innerHTML = "<span>from coords</span>";
+    rowsElement.append(firstRow, secondRow);
+    host!.appendChild(rowsElement);
+    stubRowsGeometry(host!, rowsElement, [firstRow, secondRow], {
+      rowsRect: { x: 0, y: 100, width: 320, height: 40 },
+      rowHeight: 20,
+    });
+
+    dispatchTouchEvent(host!, "touchstart", [
+      { identifier: 1, clientX: 40, clientY: 130, target: host },
+    ]);
+
+    await act(async () => {
+      vi.advanceTimersByTime(500);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(writeText).toHaveBeenCalledWith("from coords");
+    expect(vibrate).toHaveBeenCalledWith(10);
+
+    window.matchMedia = originalMatchMedia;
+    vi.useRealTimers();
+  });
+
+  it("mobile line copy still succeeds after the row DOM is replaced before long press matures", async () => {
+    vi.useFakeTimers();
+    viewportMocks.viewport = "mobile";
+
+    const originalMatchMedia = window.matchMedia;
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    const store = createStore();
+
+    mockTerminal.buffer.active.viewportY = 4;
+    setMockBufferLines([[5, "stable row text", false]]);
+
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query === "(pointer: coarse)",
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })) as typeof window.matchMedia;
+
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText } satisfies Pick<Clipboard, "writeText">,
+    });
+
+    store.set(localeAtom, "en");
+    store.set(terminalPreferencesAtom, { copyOnSelect: true });
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn().mockResolvedValue({ ok: true, data: { status: "ok" } }),
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => "connected"),
+      onStatus: vi.fn(() => () => {}),
+      sendTerminalInput: vi.fn().mockResolvedValue(undefined),
+    } as never);
+
+    const { container } = render(
+      <Provider store={store}>
+        <XtermHost terminalId="mobile-line-copy-redraw-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    const host = container.querySelector(".xterm-host") as HTMLDivElement | null;
+    expect(host).toBeTruthy();
+
+    const rowsElement = document.createElement("div");
+    rowsElement.className = "xterm-rows";
+    const firstRow = document.createElement("div");
+    firstRow.innerHTML = "<span>ignored</span>";
+    const secondRow = document.createElement("div");
+    secondRow.innerHTML = "<span><span>stable row text</span></span>";
+    rowsElement.append(firstRow, secondRow);
+    host!.appendChild(rowsElement);
+    stubRowsGeometry(host!, rowsElement, [firstRow, secondRow], {
+      rowsRect: { x: 0, y: 100, width: 320, height: 40 },
+      rowHeight: 20,
+    });
+
+    dispatchTouchEvent(host!, "touchstart", [
+      {
+        identifier: 1,
+        clientX: 40,
+        clientY: 130,
+        target: secondRow.querySelector("span span") as HTMLSpanElement,
+      },
+    ]);
+
+    secondRow.replaceChildren(document.createElement("span"));
+
+    await act(async () => {
+      vi.advanceTimersByTime(500);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(writeText).toHaveBeenCalledWith("stable row text");
 
     window.matchMedia = originalMatchMedia;
     vi.useRealTimers();
