@@ -163,27 +163,29 @@ async function seedLongTerminalLine(page: Page): Promise<void> {
   );
 }
 
-async function longPressTerminalRows(page: Page): Promise<void> {
+async function longPressTerminalRows(page: Page, rowIndex = 1): Promise<void> {
   const rows = page.locator(".mobile-sheet--terminal .xterm-rows").first();
-  const host = page.locator(".mobile-sheet--terminal .xterm-host").first();
   await expect(rows).toBeVisible({ timeout: 10000 });
-  await expect(host).toBeVisible({ timeout: 10000 });
-  const box = await rows.boundingBox();
+
+  const targetRow = rows.locator(":scope > div").nth(rowIndex);
+  await expect(targetRow).toBeVisible({ timeout: 10000 });
+
+  const box = await targetRow.boundingBox();
   expect(box).toBeTruthy();
   if (!box) {
-    throw new Error("xterm rows bounding box missing");
+    throw new Error("xterm row bounding box missing");
   }
 
   const x = box.x + Math.min(48, Math.max(16, box.width / 4));
-  const y = box.y + Math.min(32, Math.max(12, box.height / 3));
+  const y = box.y + Math.min(16, Math.max(8, box.height / 2));
 
-  await host.evaluate(
+  await targetRow.evaluate(
     (node, { clientX, clientY }) => {
       if (!(node instanceof HTMLElement)) {
-        throw new Error("xterm host missing");
+        throw new Error("xterm row missing");
       }
 
-      const touches = [{ identifier: 1, clientX, clientY }];
+      const touches = [{ identifier: 1, clientX, clientY, target: node }];
       const buildEvent = (
         type: string,
         activeTouches: typeof touches,
@@ -203,6 +205,13 @@ async function longPressTerminalRows(page: Page): Promise<void> {
     },
     { clientX: x, clientY: y }
   );
+}
+
+async function findPrintedLineRowIndex(page: Page): Promise<number> {
+  const rowTexts = await page
+    .locator(".mobile-sheet--terminal .xterm-rows > div")
+    .allTextContents();
+  return rowTexts.findIndex((text) => text.startsWith("MOBILE_COPY_MODE_LONG_LINE"));
 }
 
 async function setMobileCopyOnSelect(page: Page, enabled: boolean): Promise<void> {
@@ -228,10 +237,37 @@ test.describe("mobile copy on select", () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
       window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+
+      let copiedText = "";
+      Object.defineProperty(window, "__mobileCopiedText", {
+        configurable: true,
+        get() {
+          return copiedText;
+        },
+      });
+
+      if (navigator.clipboard) {
+        Object.defineProperty(navigator.clipboard, "writeText", {
+          configurable: true,
+          value: async (text: string) => {
+            copiedText = text;
+          },
+        });
+        return;
+      }
+
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: {
+          writeText: async (text: string) => {
+            copiedText = text;
+          },
+        },
+      });
     });
   });
 
-  test("mobile copy mode respects the setting and does not expand page or sheet layout", async ({
+  test("mobile long press copies the wrapped logical line without opening a copy overlay", async ({
     page,
   }) => {
     await setMobileCopyOnSelect(page, true);
@@ -240,119 +276,59 @@ test.describe("mobile copy on select", () => {
     await ensureTerminalExists(page);
     await seedLongTerminalLine(page);
 
-    const beforeMetrics = await page.evaluate(() => {
-      const sheet = document.querySelector(".mobile-sheet--terminal");
-      const terminalSheet = document.querySelector(".mobile-terminal-sheet");
-      const body = document.body;
-      const doc = document.documentElement;
-      const viewportWidth = window.innerWidth;
-      const viewportHeight = window.innerHeight;
+    await expect
+      .poll(async () => {
+        return page.locator(".mobile-sheet--terminal .xterm-rows > div").count();
+      })
+      .toBeGreaterThan(1);
 
-      return {
-        viewportWidth,
-        viewportHeight,
-        docScrollWidth: doc.scrollWidth,
-        docScrollHeight: doc.scrollHeight,
-        bodyScrollWidth: body.scrollWidth,
-        bodyScrollHeight: body.scrollHeight,
-        sheetRect: sheet?.getBoundingClientRect().toJSON() ?? null,
-        terminalSheetRect: terminalSheet?.getBoundingClientRect().toJSON() ?? null,
-      };
-    });
+    await expect
+      .poll(async () => {
+        return findPrintedLineRowIndex(page);
+      })
+      .not.toBe(-1);
+    const printedLineRowIndex = await findPrintedLineRowIndex(page);
+    await longPressTerminalRows(page, printedLineRowIndex);
 
-    await longPressTerminalRows(page);
-
-    const copyMode = page.locator(".mobile-terminal-copy-mode");
-    await expect(copyMode).toBeVisible({ timeout: 5000 });
-    await expect(
-      copyMode.getByText(translateForE2E("terminal.copy_mode_title", "en"))
-    ).toBeVisible();
-
-    const afterMetrics = await page.evaluate(() => {
-      const body = document.body;
-      const doc = document.documentElement;
-      const overlay = document.querySelector(".mobile-terminal-copy-mode");
-      const toolbar = document.querySelector(".mobile-terminal-copy-mode__toolbar");
-      const content = document.querySelector(".mobile-terminal-copy-mode__content");
-      const text = document.querySelector(".mobile-terminal-copy-mode__text");
-      const sheet = document.querySelector(".mobile-sheet--terminal");
-      const terminalSheet = document.querySelector(".mobile-terminal-sheet");
-      const xtermViewport = document.querySelector(".mobile-sheet--terminal .xterm-viewport");
-      const xtermRows = document.querySelector(".mobile-sheet--terminal .xterm-rows");
-      const viewportWidth = window.innerWidth;
-      const viewportHeight = window.innerHeight;
-
-      const rect = (node: Element | null) => node?.getBoundingClientRect().toJSON() ?? null;
-
-      return {
-        viewportWidth,
-        viewportHeight,
-        docScrollWidth: doc.scrollWidth,
-        docScrollHeight: doc.scrollHeight,
-        bodyScrollWidth: body.scrollWidth,
-        bodyScrollHeight: body.scrollHeight,
-        overlayRect: rect(overlay),
-        toolbarRect: rect(toolbar),
-        contentRect: rect(content),
-        textRect: rect(text),
-        sheetRect: rect(sheet),
-        terminalSheetRect: rect(terminalSheet),
-        xtermViewportRect: rect(xtermViewport),
-        xtermRowsRect: rect(xtermRows),
-        contentClientHeight: content instanceof HTMLElement ? content.clientHeight : null,
-        contentScrollHeight: content instanceof HTMLElement ? content.scrollHeight : null,
-        textClientHeight: text instanceof HTMLElement ? text.clientHeight : null,
-        textScrollHeight: text instanceof HTMLElement ? text.scrollHeight : null,
-      };
-    });
-
-    expect(afterMetrics.docScrollWidth).toBeLessThanOrEqual(afterMetrics.viewportWidth);
-    expect(afterMetrics.bodyScrollWidth).toBeLessThanOrEqual(afterMetrics.viewportWidth);
-    expect(afterMetrics.docScrollHeight).toBeLessThanOrEqual(afterMetrics.viewportHeight);
-    expect(afterMetrics.bodyScrollHeight).toBeLessThanOrEqual(afterMetrics.viewportHeight);
-
-    expect(afterMetrics.overlayRect?.width ?? 0).toBeLessThanOrEqual(afterMetrics.viewportWidth);
-    expect(afterMetrics.overlayRect?.height ?? 0).toBeLessThanOrEqual(afterMetrics.viewportHeight);
-    expect(afterMetrics.contentRect?.width ?? 0).toBeLessThanOrEqual(
-      (afterMetrics.overlayRect?.width ?? afterMetrics.viewportWidth) + 1
+    await expect(page.getByText(translateForE2E("terminal.copied_current_line", "en"))).toBeVisible(
+      { timeout: 5000 }
     );
-    expect(afterMetrics.sheetRect?.width ?? 0).toBeLessThanOrEqual(afterMetrics.viewportWidth);
-    expect(afterMetrics.sheetRect?.height ?? 0).toBeLessThanOrEqual(afterMetrics.viewportHeight);
+    await expect(page.locator(".mobile-terminal-copy-mode")).toHaveCount(0);
 
-    expect(
-      Math.abs((afterMetrics.sheetRect?.width ?? 0) - (beforeMetrics.sheetRect?.width ?? 0))
-    ).toBeLessThanOrEqual(1);
-    expect(
-      Math.abs((afterMetrics.sheetRect?.height ?? 0) - (beforeMetrics.sheetRect?.height ?? 0))
-    ).toBeLessThanOrEqual(1);
-    expect(
-      Math.abs(
-        (afterMetrics.terminalSheetRect?.width ?? 0) - (beforeMetrics.terminalSheetRect?.width ?? 0)
-      )
-    ).toBeLessThanOrEqual(1);
-    expect(
-      Math.abs(
-        (afterMetrics.terminalSheetRect?.height ?? 0) -
-          (beforeMetrics.terminalSheetRect?.height ?? 0)
-      )
-    ).toBeLessThanOrEqual(1);
-    expect(
-      afterMetrics.contentScrollHeight,
-      `copy mode content should not overflow by default:\n${JSON.stringify(afterMetrics, null, 2)}`
-    ).toBeLessThanOrEqual((afterMetrics.contentClientHeight ?? 0) + 1);
+    await expect
+      .poll(async () => {
+        return page.evaluate(() => {
+          return (window as Window & { __mobileCopiedText?: string }).__mobileCopiedText ?? "";
+        });
+      })
+      .toBe(LONG_LINE_TEXT);
   });
 
-  test("mobile long press does not enter copy mode when copy on select is disabled", async ({
-    page,
-  }) => {
+  test("mobile long press does not copy when copy on select is disabled", async ({ page }) => {
     await setMobileCopyOnSelect(page, false);
     await openMobileWorkspace(page);
     await openMobileTerminalSheet(page);
     await ensureTerminalExists(page);
     await seedLongTerminalLine(page);
 
-    await longPressTerminalRows(page);
+    await expect
+      .poll(async () => {
+        return findPrintedLineRowIndex(page);
+      })
+      .not.toBe(-1);
+    const printedLineRowIndex = await findPrintedLineRowIndex(page);
+    await longPressTerminalRows(page, printedLineRowIndex);
 
     await expect(page.locator(".mobile-terminal-copy-mode")).toHaveCount(0);
+    await expect(page.getByText(translateForE2E("terminal.copied_current_line", "en"))).toHaveCount(
+      0
+    );
+    await expect
+      .poll(async () => {
+        return page.evaluate(() => {
+          return (window as Window & { __mobileCopiedText?: string }).__mobileCopiedText ?? "";
+        });
+      })
+      .toBe("");
   });
 });
