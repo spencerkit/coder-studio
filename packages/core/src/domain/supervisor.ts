@@ -25,30 +25,45 @@ export type SupervisorStopReason =
   | "supervisor_uncertain"
   | "needs_user_input";
 
-export type SupervisorPlanStepStatus = "pending" | "in_progress" | "completed";
+export type SupervisorPlanStepStatus = "pending" | "in_progress" | "done";
 
 export interface SupervisorPlanStep {
-  step: string;
+  id: string;
+  title: string;
   status: SupervisorPlanStepStatus;
 }
 
 export interface SupervisorTargetMemory {
-  summary: string;
+  targetId: string;
+  planGenerated: boolean;
   plan: SupervisorPlanStep[];
+  activeStepId?: string;
+  progressSummary?: string;
+  lastGuidance?: string;
+  stalledCount: number;
   updatedAt: number;
 }
 
 export interface SupervisorCycleStepUpdate {
-  step: string;
+  id: string;
   status: SupervisorPlanStepStatus;
 }
 
 export interface SupervisorCycleTargetRecord {
   cycleId: string;
   targetId: string;
-  summary?: string;
-  stepUpdates: SupervisorCycleStepUpdate[];
-  createdAt: number;
+  startedAt: number;
+  completedAt: number;
+  result: "continue" | "stop" | "error";
+  stopReason?: "objective_complete" | "supervisor_uncertain" | "needs_user_input";
+  reason?: string;
+  guidance?: string;
+  progressSummary?: string;
+  activeStepId?: string;
+  stepUpdates?: SupervisorCycleStepUpdate[];
+  injected?: boolean;
+  attemptCount?: number;
+  errorReason?: string;
 }
 
 export type SupervisorCycleAttemptStatus = "evaluating" | "completed" | "failed" | "cancelled";
@@ -105,7 +120,7 @@ export interface Supervisor {
   scheduledAt?: number;
   stopReason?: SupervisorStopReason;
   currentTargetMemory?: SupervisorTargetMemory;
-  recentTargetCycles: SupervisorCycleTargetRecord[];
+  recentTargetCycles?: SupervisorCycleTargetRecord[];
   cycles: SupervisorCycle[];
   lastCycleAt?: number;
   lastEvaluatedTurnId?: string;

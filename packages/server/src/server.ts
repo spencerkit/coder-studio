@@ -32,6 +32,7 @@ import { SupervisorCycleAttemptRepo } from "./storage/repositories/supervisor-cy
 import { SupervisorCycleRepo } from "./storage/repositories/supervisor-cycle-repo.js";
 import { SupervisorRepo } from "./storage/repositories/supervisor-repo.js";
 import { SupervisorManager } from "./supervisor/manager.js";
+import * as targetStore from "./supervisor/target-store.js";
 import { TerminalManager } from "./terminal/manager.js";
 import { NodePtyHost } from "./terminal/pty-host.js";
 import type { TerminalDatabase } from "./terminal/types.js";
@@ -184,6 +185,7 @@ export async function createServer(
     supervisorRepo,
     cycleRepo,
     cycleAttemptRepo,
+    targetStore,
     logger: app.log,
   });
   await sessionMgr.hydrate();

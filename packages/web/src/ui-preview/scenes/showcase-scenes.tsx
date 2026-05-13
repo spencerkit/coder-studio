@@ -23,7 +23,7 @@ import { MobileWorkspaceDrawer } from "../../features/workspace/views/mobile/mob
 import { BranchQuickPick } from "../../features/workspace/views/shared/branch-quick-pick";
 import { WorkspaceLaunchModal } from "../../features/workspace/views/shared/workspace-launch-modal";
 import { WorktreeManagerSurface } from "../../features/workspace/views/shared/worktree-manager-surface";
-import type { UiPreviewSceneContext, UiPreviewSceneDefinition } from "../catalog";
+import type { UiPreviewSceneDefinition } from "../catalog";
 import { getUiPreviewSceneMetadata } from "../scene-metadata";
 
 const workspace: Workspace = {
@@ -47,10 +47,34 @@ const supervisor: Supervisor = {
   sessionId: "session-preview-1",
   workspaceId: "ws-preview",
   state: "idle",
+  targetId: "target-preview-1",
   objective: "Review UI regressions before shipping",
   evaluatorProviderId: "claude",
   maxSupervisionCount: 0,
   completedSupervisionCount: 0,
+  currentTargetMemory: {
+    targetId: "target-preview-1",
+    planGenerated: true,
+    plan: [
+      { id: "step-1", title: "Audit compact strip density", status: "done" },
+      { id: "step-2", title: "Move memory into expandable detail", status: "in_progress" },
+      { id: "step-3", title: "Validate preview coverage across themes", status: "pending" },
+    ],
+    activeStepId: "step-2",
+    progressSummary: "Compact strip restored; preview coverage still under review.",
+    stalledCount: 0,
+    updatedAt: 1,
+  },
+  recentTargetCycles: [
+    {
+      cycleId: "target-cycle-preview-1",
+      targetId: "target-preview-1",
+      startedAt: 1,
+      completedAt: 2,
+      result: "continue",
+      reason: "Keep the strip compact and move detailed memory into an explicit disclosure.",
+    },
+  ],
   cycles: [],
   createdAt: 1,
   updatedAt: 1,
@@ -470,6 +494,7 @@ export function createShowcaseScenes(): UiPreviewSceneDefinition[] {
           sessionId="session-preview-1"
           workspaceId={workspace.id}
           onClose={() => {}}
+          defaultSupervisorDetailsOpen
         />
       ),
     }),

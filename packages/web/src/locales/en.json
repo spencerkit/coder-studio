@@ -77,7 +77,9 @@
     "search": "Search",
     "search_files": "Search Files",
     "search_commands": "Search Commands",
-    "back": "Back"
+    "back": "Back",
+    "expand": "Expand",
+    "collapse": "Collapse"
   },
   "label": {
     "workspace": "Workspace",
@@ -670,7 +672,31 @@
     },
     "stop_reason": {
       "objective_complete": "Objective complete. Supervisor stopped automatically.",
-      "max_supervision_count_reached": "Reached the configured max supervision count."
+      "max_supervision_count_reached": "Reached the configured max supervision count.",
+      "supervisor_uncertain": "Supervisor could not determine the next step and stopped automatic supervision.",
+      "needs_user_input": "Supervisor needs more user input before automatic supervision can continue."
+    },
+    "target_memory": {
+      "title": "Target memory",
+      "target": "Target",
+      "plan": "Plan",
+      "stalled": "Stalled",
+      "plan_ready": "Plan ready",
+      "plan_pending": "Plan pending",
+      "progress_title": "Target progress",
+      "progress_badge": "PROGRESS",
+      "plan_title": "Target plan",
+      "reasoning_title": "Target cycle reasoning",
+      "cycle_result": {
+        "continue": "CONTINUE",
+        "stop": "STOP",
+        "error": "ERROR"
+      },
+      "step_status": {
+        "pending": "PENDING",
+        "in_progress": "IN PROGRESS",
+        "done": "DONE"
+      }
     },
     "meta": {
       "title": "Execution policy",

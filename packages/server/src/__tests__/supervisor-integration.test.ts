@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { ServerConfig } from "../config.js";
 import { createServer, type Server } from "../server.js";
 import type { SupervisorEvaluationContext } from "../supervisor/context-builder.js";
-import type { SupervisorResult } from "../supervisor/evaluator.js";
+import type { SupervisorEvaluationResult } from "../supervisor/evaluator.js";
 import type { SupervisorManager } from "../supervisor/manager.js";
 import { type CommandContext, dispatch } from "../ws/dispatch.js";
 
@@ -21,7 +21,7 @@ type MutableSupervisorManager = SupervisorManager & {
       supervisor: Supervisor,
       context: SupervisorEvaluationContext,
       options?: { signal?: AbortSignal }
-    ) => Promise<SupervisorResult>;
+    ) => Promise<SupervisorEvaluationResult>;
   };
   logger: unknown;
 };
@@ -103,12 +103,20 @@ describe("Supervisor integration", () => {
         terminalExcerpt: "assistant: built the persistent supervisor repos",
         evidenceSource: "headless_snapshot",
         latestUserInput: "run the tests",
+        targetMemory: {
+          targetId: "tgt-1",
+          planGenerated: false,
+          plan: [],
+          stalledCount: 0,
+          updatedAt: 1,
+        },
       }),
     };
     supervisorManager.evaluator = {
       evaluate: async () => ({
-        message: "",
-        objectiveComplete: false,
+        status: "continue",
+        reason: "Keep going",
+        guidance: "",
       }),
     };
   });
