@@ -100,7 +100,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "${{ steps.release.outputs.tag }}" \
-            --title "@spencer-kit/coder-studio ${{ steps.release.outputs.version }}" \
-            --generate-notes \
-            --verify-tag
+          release_notes_file="docs/promotion/releases/${{ steps.release.outputs.tag }}.md"
+
+          if [ -f "${release_notes_file}" ]; then
+            gh release create "${{ steps.release.outputs.tag }}" \
+              --title "@spencer-kit/coder-studio ${{ steps.release.outputs.version }}" \
+              --notes-file "${release_notes_file}" \
+              --verify-tag
+          else
+            gh release create "${{ steps.release.outputs.tag }}" \
+              --title "@spencer-kit/coder-studio ${{ steps.release.outputs.version }}" \
+              --generate-notes \
+              --verify-tag
+          fi
