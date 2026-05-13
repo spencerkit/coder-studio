@@ -272,10 +272,13 @@ test.describe("mobile copy on select", () => {
       const body = document.body;
       const doc = document.documentElement;
       const overlay = document.querySelector(".mobile-terminal-copy-mode");
+      const toolbar = document.querySelector(".mobile-terminal-copy-mode__toolbar");
       const content = document.querySelector(".mobile-terminal-copy-mode__content");
       const text = document.querySelector(".mobile-terminal-copy-mode__text");
       const sheet = document.querySelector(".mobile-sheet--terminal");
       const terminalSheet = document.querySelector(".mobile-terminal-sheet");
+      const xtermViewport = document.querySelector(".mobile-sheet--terminal .xterm-viewport");
+      const xtermRows = document.querySelector(".mobile-sheet--terminal .xterm-rows");
       const viewportWidth = window.innerWidth;
       const viewportHeight = window.innerHeight;
 
@@ -289,10 +292,17 @@ test.describe("mobile copy on select", () => {
         bodyScrollWidth: body.scrollWidth,
         bodyScrollHeight: body.scrollHeight,
         overlayRect: rect(overlay),
+        toolbarRect: rect(toolbar),
         contentRect: rect(content),
         textRect: rect(text),
         sheetRect: rect(sheet),
         terminalSheetRect: rect(terminalSheet),
+        xtermViewportRect: rect(xtermViewport),
+        xtermRowsRect: rect(xtermRows),
+        contentClientHeight: content instanceof HTMLElement ? content.clientHeight : null,
+        contentScrollHeight: content instanceof HTMLElement ? content.scrollHeight : null,
+        textClientHeight: text instanceof HTMLElement ? text.clientHeight : null,
+        textScrollHeight: text instanceof HTMLElement ? text.scrollHeight : null,
       };
     });
 
@@ -326,6 +336,10 @@ test.describe("mobile copy on select", () => {
           (beforeMetrics.terminalSheetRect?.height ?? 0)
       )
     ).toBeLessThanOrEqual(1);
+    expect(
+      afterMetrics.contentScrollHeight,
+      `copy mode content should not overflow by default:\n${JSON.stringify(afterMetrics, null, 2)}`
+    ).toBeLessThanOrEqual((afterMetrics.contentClientHeight ?? 0) + 1);
   });
 
   test("mobile long press does not enter copy mode when copy on select is disabled", async ({

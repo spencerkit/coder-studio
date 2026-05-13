@@ -9119,7 +9119,6 @@ textarea.input {
     display: flex;
     flex-direction: column;
     min-height: 0;
-    padding: var(--sp-3);
     box-sizing: border-box;
     overflow: hidden;
     background: color-mix(in srgb, var(--bg-terminal) 94%, var(--bg-page) 6%);
@@ -9132,6 +9131,7 @@ textarea.input {
     display: flex;
     align-items: center;
     gap: var(--sp-2);
+    padding-inline: var(--sp-3);
     padding-bottom: var(--sp-3);
   }
 
@@ -9158,6 +9158,7 @@ textarea.input {
     max-width: 100%;
     max-height: 100%;
     overflow: auto;
+    padding-inline: var(--sp-3);
     user-select: text;
     -webkit-user-select: text;
     -webkit-touch-callout: default;
