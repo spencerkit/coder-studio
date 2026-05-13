@@ -156,10 +156,10 @@ function createMockBufferLine(text: string, isWrapped = false): MockBufferLine {
   };
 }
 
-function setMockBufferLines(lines: Array<[row: number, line: MockBufferLine]>) {
+function setMockBufferLines(entries: Array<[row: number, text: string, isWrapped?: boolean]>) {
   mockBufferLines.clear();
-  for (const [row, line] of lines) {
-    mockBufferLines.set(row, line);
+  for (const [row, text, isWrapped = false] of entries) {
+    mockBufferLines.set(row, createMockBufferLine(text, isWrapped));
   }
 }
 
@@ -6950,9 +6950,9 @@ describe("XtermHost", () => {
     mockTerminal.rows = 3;
     mockTerminal.buffer.active.viewportY = 10;
     setMockBufferLines([
-      [10, createMockBufferLine("prompt> ", false)],
-      [11, createMockBufferLine("echo hel", false)],
-      [12, createMockBufferLine("lo   ", true)],
+      [10, "prompt> ", false],
+      [11, "echo hel", false],
+      [12, "lo   ", true],
     ]);
 
     window.matchMedia = vi.fn().mockImplementation((query: string) => ({
@@ -7041,7 +7041,7 @@ describe("XtermHost", () => {
     const store = createStore();
 
     mockTerminal.buffer.active.viewportY = 3;
-    setMockBufferLines([[3, createMockBufferLine("disabled line", false)]]);
+    setMockBufferLines([[3, "disabled line", false]]);
 
     window.matchMedia = vi.fn().mockImplementation((query: string) => ({
       matches: query === "(pointer: coarse)",
@@ -7111,7 +7111,7 @@ describe("XtermHost", () => {
     mockTerminal.rows = 20;
     mockTerminal.buffer.active.viewportY = 6;
     mockTerminal.buffer.active.baseY = 80;
-    setMockBufferLines([[6, createMockBufferLine("scroll line", false)]]);
+    setMockBufferLines([[6, "scroll line", false]]);
 
     window.matchMedia = vi.fn().mockImplementation((query: string) => ({
       matches: query === "(pointer: coarse)",
@@ -7173,7 +7173,7 @@ describe("XtermHost", () => {
     mockTerminal.rows = 20;
     mockTerminal.buffer.active.viewportY = 6;
     mockTerminal.buffer.active.baseY = 80;
-    setMockBufferLines([[6, createMockBufferLine("drift line", false)]]);
+    setMockBufferLines([[6, "drift line", false]]);
 
     window.matchMedia = vi.fn().mockImplementation((query: string) => ({
       matches: query === "(pointer: coarse)",
@@ -7322,7 +7322,7 @@ describe("XtermHost", () => {
     const store = createStore();
 
     mockTerminal.buffer.active.viewportY = 7;
-    setMockBufferLines([[7, createMockBufferLine("toast line", false)]]);
+    setMockBufferLines([[7, "toast line", false]]);
 
     window.matchMedia = vi.fn().mockImplementation((query: string) => ({
       matches: query === "(pointer: coarse)",
