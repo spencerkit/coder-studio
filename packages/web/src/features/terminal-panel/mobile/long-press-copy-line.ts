@@ -21,6 +21,21 @@ export interface GetLogicalLineTextFromTouchPointArgs {
   terminal: TerminalLikeForLongPressCopy;
 }
 
+function getRenderedTextBounds(rowElement: HTMLElement): { left: number; right: number } | null {
+  const spanRects = Array.from(rowElement.querySelectorAll("span"))
+    .map((span) => span.getBoundingClientRect())
+    .filter((rect) => rect.width > 0 && rect.height > 0);
+
+  if (spanRects.length === 0) {
+    return null;
+  }
+
+  return {
+    left: Math.min(...spanRects.map((rect) => rect.left)),
+    right: Math.max(...spanRects.map((rect) => rect.right)),
+  };
+}
+
 function getVisualRowIndexFromTouchPoint(
   rowsElement: HTMLElement,
   clientX: number,
@@ -40,8 +55,16 @@ function getVisualRowIndexFromTouchPoint(
     (child): child is HTMLElement => child instanceof HTMLElement
   );
   for (let index = 0; index < rowElements.length; index += 1) {
-    const rowRect = rowElements[index].getBoundingClientRect();
-    if (clientY >= rowRect.top && clientY <= rowRect.bottom) {
+    const rowElement = rowElements[index];
+    const rowRect = rowElement.getBoundingClientRect();
+    if (clientY < rowRect.top || clientY > rowRect.bottom) {
+      continue;
+    }
+
+    const renderedTextBounds = getRenderedTextBounds(rowElement);
+    const left = renderedTextBounds?.left ?? rowRect.left;
+    const right = renderedTextBounds?.right ?? rowRect.right;
+    if (clientX >= left && clientX <= right) {
       return index;
     }
   }

@@ -260,6 +260,7 @@
     "create_unavailable_title": "当前没有已选中的工作区",
     "create_unavailable_body": "请先打开或切换到一个工作区，再新建终端。",
     "copied_current_line": "已复制当前行",
+    "mobile_copy_current_line_failed_title": "当前行复制失败",
     "mobile_copy_current_line_failed_body": "请重试长按当前行",
     "hide": "隐藏终端",
     "show": "显示终端",

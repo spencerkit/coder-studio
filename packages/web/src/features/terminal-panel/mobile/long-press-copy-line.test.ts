@@ -376,4 +376,59 @@ describe("getLogicalLineTextFromTouchPoint", () => {
 
     rows.remove();
   });
+
+  it("returns null when the touch point is inside a row band but outside the rendered text width", () => {
+    const { rows, secondRow } = createRowsDom();
+    const secondRowText = secondRow.querySelector("span span") as HTMLSpanElement | null;
+    document.body.appendChild(rows);
+    rows.getBoundingClientRect = () =>
+      ({
+        x: 20,
+        y: 100,
+        top: 100,
+        left: 20,
+        width: 320,
+        height: 60,
+        right: 340,
+        bottom: 160,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    secondRow.getBoundingClientRect = () =>
+      ({
+        x: 20,
+        y: 120,
+        top: 120,
+        left: 20,
+        width: 320,
+        height: 20,
+        right: 340,
+        bottom: 140,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    secondRowText!.getBoundingClientRect = () =>
+      ({
+        x: 20,
+        y: 120,
+        top: 120,
+        left: 20,
+        width: 80,
+        height: 20,
+        right: 100,
+        bottom: 140,
+        toJSON: () => ({}),
+      }) as DOMRect;
+
+    const terminal = createTerminal(70, [[71, createBufferLine("beta")]]);
+
+    expect(
+      getLogicalLineTextFromTouchPoint({
+        clientX: 180,
+        clientY: 130,
+        rowsElement: rows,
+        terminal,
+      })
+    ).toBeNull();
+
+    rows.remove();
+  });
 });

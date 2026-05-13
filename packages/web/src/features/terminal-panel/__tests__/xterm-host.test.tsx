@@ -7540,7 +7540,7 @@ describe("XtermHost", () => {
       expect.arrayContaining([
         expect.objectContaining({
           kind: "error",
-          title: "自动复制失败",
+          title: "当前行复制失败",
           body: "请重试长按当前行",
         }),
       ])

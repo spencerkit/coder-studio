@@ -885,7 +885,10 @@ export function XtermHost({
     lastCopyOnSelectFailureAtRef.current = now;
     pushToast({
       kind: "error",
-      title: t("settings.copy_on_select_failed_title"),
+      title:
+        viewport === "mobile"
+          ? t("terminal.mobile_copy_current_line_failed_title")
+          : t("settings.copy_on_select_failed_title"),
       body:
         viewport === "mobile"
           ? t("terminal.mobile_copy_current_line_failed_body")
