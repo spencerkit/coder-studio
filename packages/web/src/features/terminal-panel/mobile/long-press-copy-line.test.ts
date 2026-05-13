@@ -57,7 +57,6 @@ function createRowsDom() {
 
   return {
     rows,
-    firstTarget: firstRow.querySelector("span") as HTMLSpanElement,
     secondTarget: secondRow.querySelector("span span") as HTMLSpanElement,
     thirdTarget: thirdRow.querySelector("span span") as HTMLSpanElement,
   };
@@ -105,6 +104,28 @@ describe("getLogicalLineTextFromTouchTarget", () => {
     expect(getLogicalLineTextFromTouchTarget({ target: secondTarget, terminal })).toBe(
       "double  space"
     );
+
+    rows.remove();
+  });
+
+  it("returns null when the mapped buffer row is missing", () => {
+    const { rows, secondTarget } = createRowsDom();
+    document.body.appendChild(rows);
+
+    const terminal = createTerminal(40, [[40, createBufferLine("alpha")]]);
+
+    expect(getLogicalLineTextFromTouchTarget({ target: secondTarget, terminal })).toBeNull();
+
+    rows.remove();
+  });
+
+  it("returns null when a wrapped row's preceding segment is missing", () => {
+    const { rows, secondTarget } = createRowsDom();
+    document.body.appendChild(rows);
+
+    const terminal = createTerminal(50, [[51, createBufferLine("suffix   ", true)]]);
+
+    expect(getLogicalLineTextFromTouchTarget({ target: secondTarget, terminal })).toBeNull();
 
     rows.remove();
   });
