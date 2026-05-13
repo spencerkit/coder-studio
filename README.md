@@ -13,15 +13,15 @@ Run Claude Code and Codex in one workspace. Keep your terminal, files, Git view,
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D24.0.0-green.svg)](https://nodejs.org/)
 [![GitHub Stars](https://img.shields.io/github/stars/spencerkit/coder-studio?style=social)](https://github.com/spencerkit/coder-studio/stargazers)
 
-[Watch Demo](docs/assets/demo.mp4) · [Quick Start](#quick-start) · [Star on GitHub](https://github.com/spencerkit/coder-studio)
+[View Workspace](docs/help/assets/screenshot-desktop-workspace-full.png) · [Quick Start](#quick-start) · [Star on GitHub](https://github.com/spencerkit/coder-studio)
 
 [中文说明](README.zh-CN.md) | [Documentation](docs/help/quick-start.md)
 
 </div>
 
-[![Watch Demo Video](docs/assets/demo-preview.gif)](docs/assets/demo.mp4)
+[![Workspace Preview](docs/help/assets/screenshot-desktop-workspace-full.png)](docs/help/assets/screenshot-desktop-workspace-full.png)
 
-<div align="center">See how one coding workspace follows you from desktop to mobile without losing context.</div>
+<div align="center">Preview the full workspace layout built for AI coding, supervision, and device switching.</div>
 
 ## Why It Feels Different
 
@@ -130,7 +130,7 @@ The same workspace URL works across all devices — interface adapts automatical
 
 - **AI Coding Power Users** — Daily Claude Code / Codex users who want better session management
 - **Multi-Device Developers** — Switch between office, home, and mobile devices frequently
-- **Remote-First Teams** — Need to share work progress without screen sharing
+- **Developers Running Long AI Tasks** — Want Supervisor to keep multi-step work moving without constant babysitting
 - **Privacy-Conscious Developers** — Want code to stay on local machine, not cloud IDE
 
 ---

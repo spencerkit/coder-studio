@@ -13,15 +13,15 @@
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D24.0.0-green.svg)](https://nodejs.org/)
 [![GitHub Stars](https://img.shields.io/github/stars/spencerkit/coder-studio?style=social)](https://github.com/spencerkit/coder-studio/stargazers)
 
-[观看 Demo](docs/assets/demo.mp4) · [快速开始](#快速开始) · [GitHub Star](https://github.com/spencerkit/coder-studio)
+[查看工作区](docs/help/assets/screenshot-desktop-workspace-full.png) · [快速开始](#快速开始) · [GitHub Star](https://github.com/spencerkit/coder-studio)
 
 [English](README.md) | [文档](docs/help/quick-start.md)
 
 </div>
 
-[![观看演示视频](docs/assets/demo-preview.gif)](docs/assets/demo.mp4)
+[![工作区预览](docs/help/assets/screenshot-desktop-workspace-full.png)](docs/help/assets/screenshot-desktop-workspace-full.png)
 
-<div align="center">看看同一个编码工作台如何从桌面无缝切到移动端而不丢上下文。</div>
+<div align="center">预览这个为 AI 编程、Supervisor 监督和跨设备切换而设计的完整工作区布局。</div>
 
 ## 为什么它不一样
 
@@ -130,7 +130,7 @@ coder-studio open
 
 - **AI 编程深度用户** — 每天使用 Claude Code / Codex，想要更好的会话管理
 - **多设备开发者** — 频繁在办公室、家和移动设备之间切换
-- **远程优先团队** — 需要无需屏幕共享即可分享工作进度
+- **运行长任务的开发者** — 希望由 Supervisor 持续推进多轮任务，而不是全程人工盯守
 - **注重隐私的开发者** — 希望代码留在本地机器，不依赖云 IDE
 
 ---
