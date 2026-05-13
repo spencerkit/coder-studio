@@ -7,6 +7,10 @@
 [![npm version](https://img.shields.io/npm/v/@spencer-kit/coder-studio.svg)](https://www.npmjs.com/package/@spencer-kit/coder-studio)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D24.0.0-green.svg)](https://nodejs.org/)
+[![GitHub Stars](https://img.shields.io/github/stars/spencerkit/coder-studio?style=social)](https://github.com/spencerkit/coder-studio/stargazers)
+[![GitHub Discussions](https://img.shields.io/github/discussions/spencerkit/coder-studio)](https://github.com/spencerkit/coder-studio/discussions)
+[![Open Issues](https://img.shields.io/github/issues/spencerkit/coder-studio)](https://github.com/spencerkit/coder-studio/issues)
+[![Contributors](https://img.shields.io/github/contributors/spencerkit/coder-studio)](https://github.com/spencerkit/coder-studio/graphs/contributors)
 
 </div>
 
