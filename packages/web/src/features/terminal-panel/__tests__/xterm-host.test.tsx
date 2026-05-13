@@ -140,6 +140,47 @@ function expectTerminalWriteData(data: Uint8Array | string) {
   expect(mockTerminal.write.mock.calls.some(([written]) => written === data)).toBe(true);
 }
 
+interface MockBufferLine {
+  isWrapped?: boolean;
+  translateToString(trimRight?: boolean): string;
+}
+
+const mockBufferLines = new Map<number, MockBufferLine>();
+
+function createMockBufferLine(text: string, isWrapped = false): MockBufferLine {
+  return {
+    isWrapped,
+    translateToString(trimRight = false) {
+      return trimRight ? text.replace(/\s+$/u, "") : text;
+    },
+  };
+}
+
+function setMockBufferLines(lines: Array<[row: number, line: MockBufferLine]>) {
+  mockBufferLines.clear();
+  for (const [row, line] of lines) {
+    mockBufferLines.set(row, line);
+  }
+}
+
+function dispatchTouchEvent(
+  target: EventTarget,
+  type: string,
+  touches: Array<{ identifier: number; clientX?: number; clientY: number; target?: EventTarget }>,
+  changedTouches = touches
+) {
+  const normalizedTouches = touches.map((touch) => ({ ...touch, target: touch.target ?? target }));
+  const normalizedChangedTouches = changedTouches.map((touch) => ({
+    ...touch,
+    target: touch.target ?? target,
+  }));
+  const event = new Event(type, { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "touches", { value: normalizedTouches });
+  Object.defineProperty(event, "targetTouches", { value: normalizedTouches });
+  Object.defineProperty(event, "changedTouches", { value: normalizedChangedTouches });
+  target.dispatchEvent(event);
+}
+
 const mockTerminal = {
   open: vi.fn(),
   onData: vi.fn(() => vi.fn()), // Return dispose function
@@ -158,6 +199,7 @@ const mockTerminal = {
     active: {
       viewportY: 0,
       baseY: 0,
+      getLine: vi.fn((row: number) => mockBufferLines.get(row)),
     },
   },
   options: {},
@@ -206,6 +248,10 @@ describe("XtermHost", () => {
     mockTerminal.rows = undefined;
     mockTerminal.buffer.active.viewportY = 0;
     mockTerminal.buffer.active.baseY = 0;
+    mockBufferLines.clear();
+    mockTerminal.buffer.active.getLine.mockImplementation((row: number) =>
+      mockBufferLines.get(row)
+    );
     mockTerminal.write.mockImplementation((_data: Uint8Array | string, callback?: () => void) => {
       callback?.();
     });
@@ -6892,16 +6938,22 @@ describe("XtermHost", () => {
     global.cancelAnimationFrame = originalCancelAnimationFrame;
   });
 
-  it("enters mobile copy mode after a stable long press and exits via Done", async () => {
+  it("mobile line copy copies a wrapped logical line after a stable long press when copy-on-select is enabled", async () => {
     vi.useFakeTimers();
     viewportMocks.viewport = "mobile";
 
     const originalMatchMedia = window.matchMedia;
+    const writeText = vi.fn().mockResolvedValue(undefined);
     const vibrate = vi.fn();
     const store = createStore();
 
-    mockTerminal.cols = 4;
-    mockTerminal.rows = 2;
+    mockTerminal.rows = 3;
+    mockTerminal.buffer.active.viewportY = 10;
+    setMockBufferLines([
+      [10, createMockBufferLine("prompt> ", false)],
+      [11, createMockBufferLine("echo hel", false)],
+      [12, createMockBufferLine("lo   ", true)],
+    ]);
 
     window.matchMedia = vi.fn().mockImplementation((query: string) => ({
       matches: query === "(pointer: coarse)",
@@ -6914,6 +6966,10 @@ describe("XtermHost", () => {
       dispatchEvent: vi.fn(),
     })) as typeof window.matchMedia;
 
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText } satisfies Pick<Clipboard, "writeText">,
+    });
     Object.defineProperty(navigator, "vibrate", {
       configurable: true,
       value: vibrate,
@@ -6931,100 +6987,61 @@ describe("XtermHost", () => {
 
     const { container } = render(
       <Provider store={store}>
-        <XtermHost terminalId="mobile-copy-mode-terminal" workspaceId="test-workspace" />
+        <XtermHost terminalId="mobile-line-copy-terminal" workspaceId="test-workspace" />
       </Provider>
     );
 
     const host = container.querySelector(".xterm-host") as HTMLDivElement | null;
     expect(host).toBeTruthy();
 
-    vi.spyOn(host!, "getBoundingClientRect").mockReturnValue({
-      width: 320,
-      height: 160,
-      top: 0,
-      right: 320,
-      bottom: 160,
-      left: 0,
-      x: 0,
-      y: 0,
-      toJSON: () => ({}),
-    } as DOMRect);
-
     const rowsElement = document.createElement("div");
     rowsElement.className = "xterm-rows";
-    vi.spyOn(rowsElement, "getBoundingClientRect").mockReturnValue({
-      width: 200,
-      height: 40,
-      top: 12,
-      right: 212,
-      bottom: 52,
-      left: 8,
-      x: 8,
-      y: 12,
-      toJSON: () => ({}),
-    } as DOMRect);
 
     const firstRow = document.createElement("div");
-    const firstSpan = document.createElement("span");
-    firstSpan.textContent = "ab";
-    firstRow.appendChild(firstSpan);
-
+    firstRow.innerHTML = "<span>prompt&gt;</span>";
     const secondRow = document.createElement("div");
-    const secondSpan = document.createElement("span");
-    secondSpan.textContent = "cd";
-    secondRow.appendChild(secondSpan);
+    secondRow.innerHTML = "<span><span>echo hel</span></span>";
+    const thirdRow = document.createElement("div");
+    thirdRow.innerHTML = "<span><span>lo</span></span>";
 
-    rowsElement.append(firstRow, secondRow);
+    rowsElement.append(firstRow, secondRow, thirdRow);
     host!.appendChild(rowsElement);
 
-    const dispatchTouchEvent = (
-      type: string,
-      touches: Array<{ identifier: number; clientY: number }>,
-      changedTouches: Array<{ identifier: number; clientY: number }> = touches
-    ) => {
-      const event = new Event(type, { bubbles: true, cancelable: true });
-      Object.defineProperty(event, "touches", { value: touches });
-      Object.defineProperty(event, "changedTouches", { value: changedTouches });
-      host?.dispatchEvent(event);
-    };
-
-    dispatchTouchEvent("touchstart", [{ identifier: 1, clientY: 120 }]);
+    const target = thirdRow.querySelector("span span") as HTMLSpanElement;
+    dispatchTouchEvent(host!, "touchstart", [{ identifier: 1, clientX: 40, clientY: 120, target }]);
 
     await act(async () => {
       vi.advanceTimersByTime(500);
+      await Promise.resolve();
+      await Promise.resolve();
     });
 
-    const copyMode = container.querySelector(".mobile-terminal-copy-mode");
-    expect(copyMode).toBeTruthy();
-    expect(within(copyMode as HTMLElement).getByText("Copy Mode")).toBeInTheDocument();
-    expect(within(copyMode as HTMLElement).getByText("Drag to select text")).toBeInTheDocument();
-    expect(
-      within(copyMode as HTMLElement).getByRole("button", { name: "Done" })
-    ).toBeInTheDocument();
-    expect(within(copyMode as HTMLElement).getByText("ab")).toBeInTheDocument();
-    expect(within(copyMode as HTMLElement).getByText("cd")).toBeInTheDocument();
-    expect(vibrate).toHaveBeenCalled();
-
-    await act(async () => {
-      fireEvent.click(within(copyMode as HTMLElement).getByRole("button", { name: "Done" }));
-    });
-
-    expect(screen.queryByText("Copy Mode")).not.toBeInTheDocument();
+    expect(writeText).toHaveBeenCalledWith("echo hello");
+    expect(store.get(toastsAtom)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "success",
+          title: "Copied current line",
+        }),
+      ])
+    );
+    expect(vibrate).toHaveBeenCalledWith(10);
 
     window.matchMedia = originalMatchMedia;
     vi.useRealTimers();
   });
 
-  it("does not enter mobile copy mode when copy-on-select is disabled", async () => {
+  it("mobile line copy does nothing when copy-on-select is disabled", async () => {
     vi.useFakeTimers();
     viewportMocks.viewport = "mobile";
 
     const originalMatchMedia = window.matchMedia;
+    const writeText = vi.fn().mockResolvedValue(undefined);
     const vibrate = vi.fn();
     const store = createStore();
 
-    mockTerminal.cols = 4;
-    mockTerminal.rows = 2;
+    mockTerminal.buffer.active.viewportY = 3;
+    setMockBufferLines([[3, createMockBufferLine("disabled line", false)]]);
 
     window.matchMedia = vi.fn().mockImplementation((query: string) => ({
       matches: query === "(pointer: coarse)",
@@ -7037,6 +7054,10 @@ describe("XtermHost", () => {
       dispatchEvent: vi.fn(),
     })) as typeof window.matchMedia;
 
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText } satisfies Pick<Clipboard, "writeText">,
+    });
     Object.defineProperty(navigator, "vibrate", {
       configurable: true,
       value: vibrate,
@@ -7054,78 +7075,43 @@ describe("XtermHost", () => {
 
     const { container } = render(
       <Provider store={store}>
-        <XtermHost terminalId="mobile-copy-mode-disabled-terminal" workspaceId="test-workspace" />
+        <XtermHost terminalId="mobile-line-copy-disabled-terminal" workspaceId="test-workspace" />
       </Provider>
     );
 
     const host = container.querySelector(".xterm-host") as HTMLDivElement | null;
     expect(host).toBeTruthy();
 
-    vi.spyOn(host!, "getBoundingClientRect").mockReturnValue({
-      width: 320,
-      height: 160,
-      top: 0,
-      right: 320,
-      bottom: 160,
-      left: 0,
-      x: 0,
-      y: 0,
-      toJSON: () => ({}),
-    } as DOMRect);
-
     const rowsElement = document.createElement("div");
     rowsElement.className = "xterm-rows";
-    vi.spyOn(rowsElement, "getBoundingClientRect").mockReturnValue({
-      width: 200,
-      height: 40,
-      top: 12,
-      right: 212,
-      bottom: 52,
-      left: 8,
-      x: 8,
-      y: 12,
-      toJSON: () => ({}),
-    } as DOMRect);
-
-    const row = document.createElement("div");
-    const span = document.createElement("span");
-    span.textContent = "ab";
-    row.appendChild(span);
-    rowsElement.appendChild(row);
+    rowsElement.innerHTML = "<div><span>disabled line</span></div>";
     host!.appendChild(rowsElement);
 
-    const dispatchTouchEvent = (
-      type: string,
-      touches: Array<{ identifier: number; clientY: number }>,
-      changedTouches: Array<{ identifier: number; clientY: number }> = touches
-    ) => {
-      const event = new Event(type, { bubbles: true, cancelable: true });
-      Object.defineProperty(event, "touches", { value: touches });
-      Object.defineProperty(event, "changedTouches", { value: changedTouches });
-      host?.dispatchEvent(event);
-    };
-
-    dispatchTouchEvent("touchstart", [{ identifier: 1, clientY: 120 }]);
+    const target = rowsElement.querySelector("span") as HTMLSpanElement;
+    dispatchTouchEvent(host!, "touchstart", [{ identifier: 1, clientX: 40, clientY: 120, target }]);
 
     await act(async () => {
       vi.advanceTimersByTime(500);
+      await Promise.resolve();
     });
 
-    expect(container.querySelector(".mobile-terminal-copy-mode")).toBeNull();
+    expect(writeText).not.toHaveBeenCalled();
     expect(vibrate).not.toHaveBeenCalled();
 
     window.matchMedia = originalMatchMedia;
     vi.useRealTimers();
   });
 
-  it("does not enter mobile copy mode when the gesture becomes a scroll", async () => {
+  it("mobile line copy does not fire when the gesture becomes a scroll before long press matures", async () => {
     vi.useFakeTimers();
     viewportMocks.viewport = "mobile";
 
     const originalMatchMedia = window.matchMedia;
+    const writeText = vi.fn().mockResolvedValue(undefined);
     mockTerminal.rows = 20;
     mockTerminal.buffer.active.viewportY = 6;
     mockTerminal.buffer.active.baseY = 80;
+    setMockBufferLines([[6, createMockBufferLine("scroll line", false)]]);
 
     window.matchMedia = vi.fn().mockImplementation((query: string) => ({
       matches: query === "(pointer: coarse)",
@@ -7137,6 +7123,11 @@ describe("XtermHost", () => {
       removeEventListener: vi.fn(),
       dispatchEvent: vi.fn(),
     })) as typeof window.matchMedia;
+
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText } satisfies Pick<Clipboard, "writeText">,
+    });
 
     const store = createStore();
     store.set(localeAtom, "en");
@@ -7144,48 +7135,45 @@ describe("XtermHost", () => {
 
     const { container } = render(
       <Provider store={store}>
-        <XtermHost terminalId="mobile-copy-mode-scroll-terminal" workspaceId="test-workspace" />
+        <XtermHost terminalId="mobile-line-copy-scroll-terminal" workspaceId="test-workspace" />
       </Provider>
     );
 
     const host = container.querySelector(".xterm-host");
     expect(host).toBeTruthy();
 
-    const dispatchTouchEvent = (
-      type: string,
-      touches: Array<{ identifier: number; clientY: number }>,
-      changedTouches: Array<{ identifier: number; clientY: number }> = touches
-    ) => {
-      const event = new Event(type, { bubbles: true, cancelable: true });
-      Object.defineProperty(event, "touches", { value: touches });
-      Object.defineProperty(event, "changedTouches", { value: changedTouches });
-      host?.dispatchEvent(event);
-    };
+    const rowsElement = document.createElement("div");
+    rowsElement.className = "xterm-rows";
+    rowsElement.innerHTML = "<div><span>scroll line</span></div>";
+    (host as HTMLDivElement).appendChild(rowsElement);
 
-    dispatchTouchEvent("touchstart", [{ identifier: 1, clientY: 120 }]);
-    dispatchTouchEvent("touchmove", [{ identifier: 1, clientY: 88 }]);
+    const target = rowsElement.querySelector("span") as HTMLSpanElement;
+    dispatchTouchEvent(host!, "touchstart", [{ identifier: 1, clientX: 40, clientY: 120, target }]);
+    dispatchTouchEvent(host!, "touchmove", [{ identifier: 1, clientX: 40, clientY: 88, target }]);
 
     await act(async () => {
       vi.advanceTimersByTime(500);
+      await Promise.resolve();
     });
 
-    expect(screen.queryByText("Copy Mode")).not.toBeInTheDocument();
+    expect(writeText).not.toHaveBeenCalled();
     expect(mockTerminal.scrollLines).toHaveBeenCalled();
 
     window.matchMedia = originalMatchMedia;
     vi.useRealTimers();
   });
 
-  it("does not enter mobile copy mode when horizontal drift exceeds the tolerance", async () => {
+  it("mobile line copy cancels on horizontal drift beyond tolerance without vibration or scrolling", async () => {
     vi.useFakeTimers();
     viewportMocks.viewport = "mobile";
 
     const originalMatchMedia = window.matchMedia;
+    const writeText = vi.fn().mockResolvedValue(undefined);
     const vibrate = vi.fn();
     mockTerminal.rows = 20;
-    mockTerminal.cols = 4;
     mockTerminal.buffer.active.viewportY = 6;
     mockTerminal.buffer.active.baseY = 80;
+    setMockBufferLines([[6, createMockBufferLine("drift line", false)]]);
 
     window.matchMedia = vi.fn().mockImplementation((query: string) => ({
       matches: query === "(pointer: coarse)",
@@ -7198,6 +7186,10 @@ describe("XtermHost", () => {
       dispatchEvent: vi.fn(),
     })) as typeof window.matchMedia;
 
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText } satisfies Pick<Clipboard, "writeText">,
+    });
     Object.defineProperty(navigator, "vibrate", {
       configurable: true,
       value: vibrate,
@@ -7210,7 +7202,7 @@ describe("XtermHost", () => {
     const { container } = render(
       <Provider store={store}>
         <XtermHost
-          terminalId="mobile-copy-mode-horizontal-drift-terminal"
+          terminalId="mobile-line-copy-horizontal-drift-terminal"
           workspaceId="test-workspace"
         />
       </Provider>
@@ -7219,168 +7211,23 @@ describe("XtermHost", () => {
     const host = container.querySelector(".xterm-host");
     expect(host).toBeTruthy();
 
-    vi.spyOn(host as HTMLDivElement, "getBoundingClientRect").mockReturnValue({
-      width: 320,
-      height: 160,
-      top: 0,
-      right: 320,
-      bottom: 160,
-      left: 0,
-      x: 0,
-      y: 0,
-      toJSON: () => ({}),
-    } as DOMRect);
-
     const rowsElement = document.createElement("div");
     rowsElement.className = "xterm-rows";
-    vi.spyOn(rowsElement, "getBoundingClientRect").mockReturnValue({
-      width: 200,
-      height: 40,
-      top: 12,
-      right: 212,
-      bottom: 52,
-      left: 8,
-      x: 8,
-      y: 12,
-      toJSON: () => ({}),
-    } as DOMRect);
-
-    const row = document.createElement("div");
-    const span = document.createElement("span");
-    span.textContent = "ab";
-    row.appendChild(span);
-    rowsElement.appendChild(row);
+    rowsElement.innerHTML = "<div><span>drift line</span></div>";
     (host as HTMLDivElement).appendChild(rowsElement);
 
-    const dispatchTouchEvent = (
-      type: string,
-      touches: Array<{ identifier: number; clientX: number; clientY: number }>,
-      changedTouches: Array<{ identifier: number; clientX: number; clientY: number }> = touches
-    ) => {
-      const event = new Event(type, { bubbles: true, cancelable: true });
-      Object.defineProperty(event, "touches", { value: touches });
-      Object.defineProperty(event, "changedTouches", { value: changedTouches });
-      host?.dispatchEvent(event);
-    };
-
-    dispatchTouchEvent("touchstart", [{ identifier: 1, clientX: 40, clientY: 120 }]);
-    dispatchTouchEvent("touchmove", [{ identifier: 1, clientX: 56, clientY: 120 }]);
+    const target = rowsElement.querySelector("span") as HTMLSpanElement;
+    dispatchTouchEvent(host!, "touchstart", [{ identifier: 1, clientX: 40, clientY: 120, target }]);
+    dispatchTouchEvent(host!, "touchmove", [{ identifier: 1, clientX: 56, clientY: 120, target }]);
 
     await act(async () => {
       vi.advanceTimersByTime(500);
+      await Promise.resolve();
     });
 
-    expect(screen.queryByText("Copy Mode")).not.toBeInTheDocument();
+    expect(writeText).not.toHaveBeenCalled();
     expect(mockTerminal.scrollLines).not.toHaveBeenCalled();
     expect(vibrate).not.toHaveBeenCalled();
-
-    window.matchMedia = originalMatchMedia;
-    vi.useRealTimers();
-  });
-
-  it("does not scroll the live terminal while mobile copy mode is active", async () => {
-    vi.useFakeTimers();
-    viewportMocks.viewport = "mobile";
-
-    const originalMatchMedia = window.matchMedia;
-    const store = createStore();
-
-    mockTerminal.cols = 4;
-    mockTerminal.rows = 2;
-    mockTerminal.buffer.active.viewportY = 6;
-    mockTerminal.buffer.active.baseY = 80;
-
-    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
-      matches: query === "(pointer: coarse)",
-      media: query,
-      onchange: null,
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      dispatchEvent: vi.fn(),
-    })) as typeof window.matchMedia;
-
-    store.set(localeAtom, "en");
-    store.set(terminalPreferencesAtom, { copyOnSelect: true });
-    store.set(wsClientAtom, {
-      sendCommand: vi.fn().mockResolvedValue({ ok: true, data: { status: "ok" } }),
-      subscribe: vi.fn(() => () => {}),
-      getStatus: vi.fn(() => "connected"),
-      onStatus: vi.fn(() => () => {}),
-      sendTerminalInput: vi.fn().mockResolvedValue(undefined),
-    } as never);
-
-    const { container } = render(
-      <Provider store={store}>
-        <XtermHost
-          terminalId="mobile-copy-mode-overlay-drag-terminal"
-          workspaceId="test-workspace"
-        />
-      </Provider>
-    );
-
-    const host = container.querySelector(".xterm-host") as HTMLDivElement | null;
-    expect(host).toBeTruthy();
-
-    vi.spyOn(host!, "getBoundingClientRect").mockReturnValue({
-      width: 320,
-      height: 160,
-      top: 0,
-      right: 320,
-      bottom: 160,
-      left: 0,
-      x: 0,
-      y: 0,
-      toJSON: () => ({}),
-    } as DOMRect);
-
-    const rowsElement = document.createElement("div");
-    rowsElement.className = "xterm-rows";
-    vi.spyOn(rowsElement, "getBoundingClientRect").mockReturnValue({
-      width: 200,
-      height: 40,
-      top: 12,
-      right: 212,
-      bottom: 52,
-      left: 8,
-      x: 8,
-      y: 12,
-      toJSON: () => ({}),
-    } as DOMRect);
-
-    const row = document.createElement("div");
-    const span = document.createElement("span");
-    span.textContent = "ab";
-    row.appendChild(span);
-    rowsElement.appendChild(row);
-    host!.appendChild(rowsElement);
-
-    const dispatchTouchEvent = (
-      type: string,
-      touches: Array<{ identifier: number; clientY: number }>,
-      changedTouches: Array<{ identifier: number; clientY: number }> = touches
-    ) => {
-      const event = new Event(type, { bubbles: true, cancelable: true });
-      Object.defineProperty(event, "touches", { value: touches });
-      Object.defineProperty(event, "changedTouches", { value: changedTouches });
-      host?.dispatchEvent(event);
-    };
-
-    dispatchTouchEvent("touchstart", [{ identifier: 1, clientY: 120 }]);
-
-    await act(async () => {
-      vi.advanceTimersByTime(500);
-    });
-
-    expect(container.querySelector(".mobile-terminal-copy-mode")).toBeTruthy();
-    mockTerminal.scrollLines.mockClear();
-
-    dispatchTouchEvent("touchstart", [{ identifier: 2, clientY: 120 }]);
-    dispatchTouchEvent("touchmove", [{ identifier: 2, clientY: 84 }]);
-    dispatchTouchEvent("touchend", [], [{ identifier: 2, clientY: 84 }]);
-
-    expect(mockTerminal.scrollLines).not.toHaveBeenCalled();
 
     window.matchMedia = originalMatchMedia;
     vi.useRealTimers();
@@ -7465,15 +7312,17 @@ describe("XtermHost", () => {
     vi.useRealTimers();
   });
 
-  it("exits mobile copy mode when the overlay background is tapped without an active selection", async () => {
+  it("mobile line copy shows the existing copy-on-select failure toast when clipboard write fails", async () => {
     vi.useFakeTimers();
     viewportMocks.viewport = "mobile";
 
     const originalMatchMedia = window.matchMedia;
+    const writeText = vi.fn().mockRejectedValue(new Error("clipboard failed"));
+    const vibrate = vi.fn();
     const store = createStore();
 
-    mockTerminal.cols = 4;
-    mockTerminal.rows = 2;
+    mockTerminal.buffer.active.viewportY = 7;
+    setMockBufferLines([[7, createMockBufferLine("toast line", false)]]);
 
     window.matchMedia = vi.fn().mockImplementation((query: string) => ({
       matches: query === "(pointer: coarse)",
@@ -7486,408 +7335,14 @@ describe("XtermHost", () => {
       dispatchEvent: vi.fn(),
     })) as typeof window.matchMedia;
 
-    store.set(localeAtom, "en");
-    store.set(terminalPreferencesAtom, { copyOnSelect: true });
-    store.set(wsClientAtom, {
-      sendCommand: vi.fn().mockResolvedValue({ ok: true, data: { status: "ok" } }),
-      subscribe: vi.fn(() => () => {}),
-      getStatus: vi.fn(() => "connected"),
-      onStatus: vi.fn(() => () => {}),
-      sendTerminalInput: vi.fn().mockResolvedValue(undefined),
-    } as never);
-
-    const { container } = render(
-      <Provider store={store}>
-        <XtermHost
-          terminalId="mobile-copy-mode-overlay-exit-terminal"
-          workspaceId="test-workspace"
-        />
-      </Provider>
-    );
-
-    const host = container.querySelector(".xterm-host") as HTMLDivElement | null;
-    expect(host).toBeTruthy();
-
-    vi.spyOn(host!, "getBoundingClientRect").mockReturnValue({
-      width: 320,
-      height: 160,
-      top: 0,
-      right: 320,
-      bottom: 160,
-      left: 0,
-      x: 0,
-      y: 0,
-      toJSON: () => ({}),
-    } as DOMRect);
-
-    const rowsElement = document.createElement("div");
-    rowsElement.className = "xterm-rows";
-    vi.spyOn(rowsElement, "getBoundingClientRect").mockReturnValue({
-      width: 200,
-      height: 40,
-      top: 12,
-      right: 212,
-      bottom: 52,
-      left: 8,
-      x: 8,
-      y: 12,
-      toJSON: () => ({}),
-    } as DOMRect);
-    rowsElement.innerHTML = "<div><span>ab</span></div>";
-    host!.appendChild(rowsElement);
-
-    const dispatchTouchEvent = (
-      type: string,
-      touches: Array<{ identifier: number; clientY: number }>,
-      changedTouches: Array<{ identifier: number; clientY: number }> = touches
-    ) => {
-      const event = new Event(type, { bubbles: true, cancelable: true });
-      Object.defineProperty(event, "touches", { value: touches });
-      Object.defineProperty(event, "changedTouches", { value: changedTouches });
-      host?.dispatchEvent(event);
-    };
-
-    dispatchTouchEvent("touchstart", [{ identifier: 1, clientY: 120 }]);
-
-    await act(async () => {
-      vi.advanceTimersByTime(500);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText } satisfies Pick<Clipboard, "writeText">,
     });
-
-    const overlayContent = container.querySelector(
-      ".mobile-terminal-copy-mode__content"
-    ) as HTMLDivElement | null;
-    expect(overlayContent).toBeTruthy();
-
-    await act(async () => {
-      fireEvent.click(overlayContent!);
+    Object.defineProperty(navigator, "vibrate", {
+      configurable: true,
+      value: vibrate,
     });
-
-    expect(screen.queryByText("Copy Mode")).not.toBeInTheDocument();
-
-    window.matchMedia = originalMatchMedia;
-    vi.useRealTimers();
-  });
-
-  it("keeps mobile copy mode open when the copied text itself is tapped", async () => {
-    vi.useFakeTimers();
-    viewportMocks.viewport = "mobile";
-
-    const originalMatchMedia = window.matchMedia;
-    const store = createStore();
-
-    mockTerminal.cols = 4;
-    mockTerminal.rows = 2;
-
-    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
-      matches: query === "(pointer: coarse)",
-      media: query,
-      onchange: null,
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      dispatchEvent: vi.fn(),
-    })) as typeof window.matchMedia;
-
-    store.set(localeAtom, "en");
-    store.set(terminalPreferencesAtom, { copyOnSelect: true });
-    store.set(wsClientAtom, {
-      sendCommand: vi.fn().mockResolvedValue({ ok: true, data: { status: "ok" } }),
-      subscribe: vi.fn(() => () => {}),
-      getStatus: vi.fn(() => "connected"),
-      onStatus: vi.fn(() => () => {}),
-      sendTerminalInput: vi.fn().mockResolvedValue(undefined),
-    } as never);
-
-    const { container } = render(
-      <Provider store={store}>
-        <XtermHost terminalId="mobile-copy-mode-text-tap-terminal" workspaceId="test-workspace" />
-      </Provider>
-    );
-
-    const host = container.querySelector(".xterm-host") as HTMLDivElement | null;
-    expect(host).toBeTruthy();
-
-    vi.spyOn(host!, "getBoundingClientRect").mockReturnValue({
-      width: 320,
-      height: 160,
-      top: 0,
-      right: 320,
-      bottom: 160,
-      left: 0,
-      x: 0,
-      y: 0,
-      toJSON: () => ({}),
-    } as DOMRect);
-
-    const rowsElement = document.createElement("div");
-    rowsElement.className = "xterm-rows";
-    vi.spyOn(rowsElement, "getBoundingClientRect").mockReturnValue({
-      width: 200,
-      height: 40,
-      top: 12,
-      right: 212,
-      bottom: 52,
-      left: 8,
-      x: 8,
-      y: 12,
-      toJSON: () => ({}),
-    } as DOMRect);
-    rowsElement.innerHTML = "<div><span>ab</span></div>";
-    host!.appendChild(rowsElement);
-
-    const dispatchTouchEvent = (
-      type: string,
-      touches: Array<{ identifier: number; clientY: number }>,
-      changedTouches: Array<{ identifier: number; clientY: number }> = touches
-    ) => {
-      const event = new Event(type, { bubbles: true, cancelable: true });
-      Object.defineProperty(event, "touches", { value: touches });
-      Object.defineProperty(event, "changedTouches", { value: changedTouches });
-      host?.dispatchEvent(event);
-    };
-
-    dispatchTouchEvent("touchstart", [{ identifier: 1, clientY: 120 }]);
-
-    await act(async () => {
-      vi.advanceTimersByTime(500);
-    });
-
-    await act(async () => {
-      fireEvent.click(
-        within(container.querySelector(".mobile-terminal-copy-mode") as HTMLElement).getByText("ab")
-      );
-    });
-
-    expect(screen.getByText("Copy Mode")).toBeInTheDocument();
-
-    window.matchMedia = originalMatchMedia;
-    vi.useRealTimers();
-  });
-
-  it("keeps mobile copy mode open when background tap happens with an active selection", async () => {
-    vi.useFakeTimers();
-    viewportMocks.viewport = "mobile";
-
-    const originalMatchMedia = window.matchMedia;
-    const store = createStore();
-
-    mockTerminal.cols = 4;
-    mockTerminal.rows = 2;
-
-    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
-      matches: query === "(pointer: coarse)",
-      media: query,
-      onchange: null,
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      dispatchEvent: vi.fn(),
-    })) as typeof window.matchMedia;
-
-    store.set(localeAtom, "en");
-    store.set(terminalPreferencesAtom, { copyOnSelect: true });
-    store.set(wsClientAtom, {
-      sendCommand: vi.fn().mockResolvedValue({ ok: true, data: { status: "ok" } }),
-      subscribe: vi.fn(() => () => {}),
-      getStatus: vi.fn(() => "connected"),
-      onStatus: vi.fn(() => () => {}),
-      sendTerminalInput: vi.fn().mockResolvedValue(undefined),
-    } as never);
-
-    const { container } = render(
-      <Provider store={store}>
-        <XtermHost
-          terminalId="mobile-copy-mode-selection-guard-terminal"
-          workspaceId="test-workspace"
-        />
-      </Provider>
-    );
-
-    const host = container.querySelector(".xterm-host") as HTMLDivElement | null;
-    expect(host).toBeTruthy();
-
-    vi.spyOn(host!, "getBoundingClientRect").mockReturnValue({
-      width: 320,
-      height: 160,
-      top: 0,
-      right: 320,
-      bottom: 160,
-      left: 0,
-      x: 0,
-      y: 0,
-      toJSON: () => ({}),
-    } as DOMRect);
-
-    const rowsElement = document.createElement("div");
-    rowsElement.className = "xterm-rows";
-    vi.spyOn(rowsElement, "getBoundingClientRect").mockReturnValue({
-      width: 200,
-      height: 40,
-      top: 12,
-      right: 212,
-      bottom: 52,
-      left: 8,
-      x: 8,
-      y: 12,
-      toJSON: () => ({}),
-    } as DOMRect);
-    rowsElement.innerHTML = "<div><span>ab</span></div>";
-    host!.appendChild(rowsElement);
-
-    vi.spyOn(window, "getSelection").mockReturnValue({
-      toString: () => "ab",
-    } as Selection);
-
-    const dispatchTouchEvent = (
-      type: string,
-      touches: Array<{ identifier: number; clientY: number }>,
-      changedTouches: Array<{ identifier: number; clientY: number }> = touches
-    ) => {
-      const event = new Event(type, { bubbles: true, cancelable: true });
-      Object.defineProperty(event, "touches", { value: touches });
-      Object.defineProperty(event, "changedTouches", { value: changedTouches });
-      host?.dispatchEvent(event);
-    };
-
-    dispatchTouchEvent("touchstart", [{ identifier: 1, clientY: 120 }]);
-
-    await act(async () => {
-      vi.advanceTimersByTime(500);
-    });
-
-    const overlayContent = container.querySelector(
-      ".mobile-terminal-copy-mode__content"
-    ) as HTMLDivElement | null;
-    expect(overlayContent).toBeTruthy();
-
-    await act(async () => {
-      fireEvent.click(overlayContent!);
-    });
-
-    expect(screen.getByText("Copy Mode")).toBeInTheDocument();
-
-    window.matchMedia = originalMatchMedia;
-    vi.useRealTimers();
-  });
-
-  it("clears mobile copy mode when the host switches to a different terminal", async () => {
-    vi.useFakeTimers();
-    viewportMocks.viewport = "mobile";
-
-    const originalMatchMedia = window.matchMedia;
-    const store = createStore();
-
-    mockTerminal.cols = 4;
-    mockTerminal.rows = 2;
-
-    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
-      matches: query === "(pointer: coarse)",
-      media: query,
-      onchange: null,
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      dispatchEvent: vi.fn(),
-    })) as typeof window.matchMedia;
-
-    store.set(localeAtom, "en");
-    store.set(terminalPreferencesAtom, { copyOnSelect: true });
-    store.set(wsClientAtom, {
-      sendCommand: vi.fn().mockResolvedValue({ ok: true, data: { status: "ok" } }),
-      subscribe: vi.fn(() => () => {}),
-      getStatus: vi.fn(() => "connected"),
-      onStatus: vi.fn(() => () => {}),
-      sendTerminalInput: vi.fn().mockResolvedValue(undefined),
-    } as never);
-
-    const { container, rerender } = render(
-      <Provider store={store}>
-        <XtermHost terminalId="mobile-copy-mode-terminal-a" workspaceId="test-workspace" />
-      </Provider>
-    );
-
-    const host = container.querySelector(".xterm-host") as HTMLDivElement | null;
-    expect(host).toBeTruthy();
-
-    vi.spyOn(host!, "getBoundingClientRect").mockReturnValue({
-      width: 320,
-      height: 160,
-      top: 0,
-      right: 320,
-      bottom: 160,
-      left: 0,
-      x: 0,
-      y: 0,
-      toJSON: () => ({}),
-    } as DOMRect);
-
-    const rowsElement = document.createElement("div");
-    rowsElement.className = "xterm-rows";
-    vi.spyOn(rowsElement, "getBoundingClientRect").mockReturnValue({
-      width: 200,
-      height: 40,
-      top: 12,
-      right: 212,
-      bottom: 52,
-      left: 8,
-      x: 8,
-      y: 12,
-      toJSON: () => ({}),
-    } as DOMRect);
-    rowsElement.innerHTML = "<div><span>ab</span></div>";
-    host!.appendChild(rowsElement);
-
-    const dispatchTouchEvent = (
-      type: string,
-      touches: Array<{ identifier: number; clientY: number }>,
-      changedTouches: Array<{ identifier: number; clientY: number }> = touches
-    ) => {
-      const event = new Event(type, { bubbles: true, cancelable: true });
-      Object.defineProperty(event, "touches", { value: touches });
-      Object.defineProperty(event, "changedTouches", { value: changedTouches });
-      host?.dispatchEvent(event);
-    };
-
-    dispatchTouchEvent("touchstart", [{ identifier: 1, clientY: 120 }]);
-
-    await act(async () => {
-      vi.advanceTimersByTime(500);
-    });
-
-    expect(screen.getByText("Copy Mode")).toBeInTheDocument();
-
-    rerender(
-      <Provider store={store}>
-        <XtermHost terminalId="mobile-copy-mode-terminal-b" workspaceId="test-workspace" />
-      </Provider>
-    );
-
-    expect(screen.queryByText("Copy Mode")).not.toBeInTheDocument();
-
-    window.matchMedia = originalMatchMedia;
-    vi.useRealTimers();
-  });
-
-  it("shows a toast and stays in the live terminal when snapshot generation fails", async () => {
-    vi.useFakeTimers();
-    viewportMocks.viewport = "mobile";
-
-    const originalMatchMedia = window.matchMedia;
-    const store = createStore();
-
-    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
-      matches: query === "(pointer: coarse)",
-      media: query,
-      onchange: null,
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      dispatchEvent: vi.fn(),
-    })) as typeof window.matchMedia;
 
     store.set(localeAtom, "zh");
     store.set(terminalPreferencesAtom, { copyOnSelect: true });
@@ -7901,200 +7356,36 @@ describe("XtermHost", () => {
 
     const { container } = render(
       <Provider store={store}>
-        <XtermHost terminalId="mobile-copy-mode-failure-terminal" workspaceId="test-workspace" />
+        <XtermHost terminalId="mobile-line-copy-failure-terminal" workspaceId="test-workspace" />
       </Provider>
     );
 
     const host = container.querySelector(".xterm-host") as HTMLDivElement | null;
     expect(host).toBeTruthy();
 
-    const dispatchTouchEvent = (
-      type: string,
-      touches: Array<{ identifier: number; clientY: number }>,
-      changedTouches: Array<{ identifier: number; clientY: number }> = touches
-    ) => {
-      const event = new Event(type, { bubbles: true, cancelable: true });
-      Object.defineProperty(event, "touches", { value: touches });
-      Object.defineProperty(event, "changedTouches", { value: changedTouches });
-      host?.dispatchEvent(event);
-    };
+    const rowsElement = document.createElement("div");
+    rowsElement.className = "xterm-rows";
+    rowsElement.innerHTML = "<div><span>toast line</span></div>";
+    host!.appendChild(rowsElement);
 
-    dispatchTouchEvent("touchstart", [{ identifier: 1, clientY: 120 }]);
+    const target = rowsElement.querySelector("span") as HTMLSpanElement;
+    dispatchTouchEvent(host!, "touchstart", [{ identifier: 1, clientX: 40, clientY: 120, target }]);
 
     await act(async () => {
       vi.advanceTimersByTime(500);
+      await Promise.resolve();
+      await Promise.resolve();
     });
 
-    expect(screen.queryByText("复制模式")).not.toBeInTheDocument();
     expect(store.get(toastsAtom)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           kind: "error",
-          title: "无法进入复制模式",
+          title: "自动复制失败",
         }),
       ])
     );
-
-    window.matchMedia = originalMatchMedia;
-    vi.useRealTimers();
-  });
-
-  it("does not render mobile copy mode on desktop long-press-like touch sequences", async () => {
-    vi.useFakeTimers();
-    viewportMocks.viewport = "desktop";
-
-    const originalMatchMedia = window.matchMedia;
-    const vibrate = vi.fn();
-
-    mockTerminal.cols = 4;
-    mockTerminal.rows = 2;
-
-    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
-      matches: query === "(pointer: coarse)",
-      media: query,
-      onchange: null,
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      dispatchEvent: vi.fn(),
-    })) as typeof window.matchMedia;
-
-    Object.defineProperty(navigator, "vibrate", {
-      configurable: true,
-      value: vibrate,
-    });
-
-    const { container } = render(
-      <JotaiProvider>
-        <XtermHost terminalId="desktop-no-copy-mode-terminal" workspaceId="test-workspace" />
-      </JotaiProvider>
-    );
-
-    const host = container.querySelector(".xterm-host") as HTMLDivElement | null;
-    expect(host).toBeTruthy();
-
-    const rowsElement = document.createElement("div");
-    rowsElement.className = "xterm-rows";
-    rowsElement.innerHTML = "<div><span>ab</span></div>";
-    host!.appendChild(rowsElement);
-
-    const dispatchTouchEvent = (
-      type: string,
-      touches: Array<{ identifier: number; clientY: number }>,
-      changedTouches: Array<{ identifier: number; clientY: number }> = touches
-    ) => {
-      const event = new Event(type, { bubbles: true, cancelable: true });
-      Object.defineProperty(event, "touches", { value: touches });
-      Object.defineProperty(event, "changedTouches", { value: changedTouches });
-      host?.dispatchEvent(event);
-    };
-
-    dispatchTouchEvent("touchstart", [{ identifier: 1, clientY: 120 }]);
-
-    await act(async () => {
-      vi.advanceTimersByTime(500);
-    });
-
-    expect(screen.queryByText("Copy Mode")).not.toBeInTheDocument();
     expect(vibrate).not.toHaveBeenCalled();
-
-    window.matchMedia = originalMatchMedia;
-    vi.useRealTimers();
-  });
-
-  it("builds copy mode content from the currently visible rows only", async () => {
-    vi.useFakeTimers();
-    viewportMocks.viewport = "mobile";
-
-    const originalMatchMedia = window.matchMedia;
-    const store = createStore();
-
-    mockTerminal.cols = 12;
-    mockTerminal.rows = 2;
-
-    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
-      matches: query === "(pointer: coarse)",
-      media: query,
-      onchange: null,
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      dispatchEvent: vi.fn(),
-    })) as typeof window.matchMedia;
-
-    store.set(localeAtom, "en");
-    store.set(terminalPreferencesAtom, { copyOnSelect: true });
-    store.set(wsClientAtom, {
-      sendCommand: vi.fn().mockResolvedValue({ ok: true, data: { status: "ok" } }),
-      subscribe: vi.fn(() => () => {}),
-      getStatus: vi.fn(() => "connected"),
-      onStatus: vi.fn(() => () => {}),
-      sendTerminalInput: vi.fn().mockResolvedValue(undefined),
-    } as never);
-
-    const { container } = render(
-      <Provider store={store}>
-        <XtermHost terminalId="mobile-visible-rows-only-terminal" workspaceId="test-workspace" />
-      </Provider>
-    );
-
-    const host = container.querySelector(".xterm-host") as HTMLDivElement | null;
-    expect(host).toBeTruthy();
-
-    vi.spyOn(host!, "getBoundingClientRect").mockReturnValue({
-      width: 320,
-      height: 160,
-      top: 0,
-      right: 320,
-      bottom: 160,
-      left: 0,
-      x: 0,
-      y: 0,
-      toJSON: () => ({}),
-    } as DOMRect);
-
-    const rowsElement = document.createElement("div");
-    rowsElement.className = "xterm-rows";
-    vi.spyOn(rowsElement, "getBoundingClientRect").mockReturnValue({
-      width: 200,
-      height: 40,
-      top: 12,
-      right: 212,
-      bottom: 52,
-      left: 8,
-      x: 8,
-      y: 12,
-      toJSON: () => ({}),
-    } as DOMRect);
-    rowsElement.innerHTML = "<div><span>visible line</span></div>";
-
-    const unrelated = document.createElement("div");
-    unrelated.textContent = "hidden line";
-
-    host!.append(rowsElement, unrelated);
-
-    const dispatchTouchEvent = (
-      type: string,
-      touches: Array<{ identifier: number; clientY: number }>,
-      changedTouches: Array<{ identifier: number; clientY: number }> = touches
-    ) => {
-      const event = new Event(type, { bubbles: true, cancelable: true });
-      Object.defineProperty(event, "touches", { value: touches });
-      Object.defineProperty(event, "changedTouches", { value: changedTouches });
-      host?.dispatchEvent(event);
-    };
-
-    dispatchTouchEvent("touchstart", [{ identifier: 1, clientY: 120 }]);
-
-    await act(async () => {
-      vi.advanceTimersByTime(500);
-    });
-
-    const overlayText = container.querySelector(".mobile-terminal-copy-mode__text");
-    expect(overlayText?.textContent).toContain("visible\u00a0line");
-    expect(overlayText?.textContent).not.toContain("hidden line");
 
     window.matchMedia = originalMatchMedia;
     vi.useRealTimers();
