@@ -1,5 +1,12 @@
+interface BufferCellLike {
+  getChars(): string;
+  getWidth(): number;
+}
+
 interface BufferLineLike {
   isWrapped?: boolean;
+  length?: number;
+  getCell?(column: number): BufferCellLike | undefined;
   translateToString(trimRight?: boolean): string;
 }
 
@@ -23,7 +30,25 @@ export interface GetLogicalLineTextFromTouchPointArgs {
   terminal: TerminalLikeForLongPressCopy;
 }
 
-function getVisualRowContentLength(line: BufferLineLike): number {
+function getVisualRowContentLength(line: BufferLineLike, maxColumns: number): number {
+  if (typeof line.getCell === "function") {
+    const scanLimit =
+      typeof line.length === "number" && Number.isFinite(line.length)
+        ? Math.min(Math.max(line.length, 0), maxColumns)
+        : maxColumns;
+
+    for (let column = scanLimit - 1; column >= 0; column -= 1) {
+      const cell = line.getCell(column);
+      if (!cell || cell.getChars() === "") {
+        continue;
+      }
+
+      return column + Math.max(cell.getWidth(), 1);
+    }
+
+    return 0;
+  }
+
   return line.translateToString(true).length;
 }
 
@@ -78,13 +103,13 @@ function getBufferRowFromTouchPoint(
     return null;
   }
 
-  const contentLength = getVisualRowContentLength(line);
-  if (contentLength === 0) {
-    return bufferRow;
-  }
-
   if (clientX < horizontalRect.left || clientX > horizontalRect.right) {
     return null;
+  }
+
+  const contentLength = getVisualRowContentLength(line, terminal.cols);
+  if (contentLength === 0) {
+    return bufferRow;
   }
 
   const cellWidth = horizontalRect.width / terminal.cols;

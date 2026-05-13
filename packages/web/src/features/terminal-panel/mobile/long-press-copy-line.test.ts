@@ -4,19 +4,60 @@ import { getLogicalLineTextFromTouchPoint } from "./long-press-copy-line";
 
 interface MockBufferLine {
   isWrapped?: boolean;
+  length: number;
+  getCell(column: number): { getChars(): string; getWidth(): number } | undefined;
   getNoBgTrimmedLength(): number;
+  getCellWidthTrimmedLength(): number;
   translateToString(trimRight?: boolean): string;
 }
 
 function createBufferLine(
   text: string,
   isWrapped = false,
-  noBgTrimmedLength = text.replace(/\s+$/u, "").length
+  noBgTrimmedLength = text.replace(/\s+$/u, "").length,
+  cellWidthTrimmedLength = text.replace(/\s+$/u, "").length
 ): MockBufferLine {
+  const trimmedText = text.replace(/\s+$/u, "");
+  const columnCells = Array.from({ length: cellWidthTrimmedLength }, () => ({
+    chars: "",
+    width: 1,
+  }));
+  if (trimmedText.length > 0 && cellWidthTrimmedLength > 0) {
+    columnCells[0] = {
+      chars: trimmedText,
+      width: cellWidthTrimmedLength,
+    };
+    for (let column = 1; column < cellWidthTrimmedLength; column += 1) {
+      columnCells[column] = {
+        chars: "",
+        width: 0,
+      };
+    }
+  }
+
   return {
     isWrapped,
+    length: columnCells.length,
+    getCell(column: number) {
+      const cell = columnCells[column];
+      if (!cell) {
+        return undefined;
+      }
+
+      return {
+        getChars() {
+          return cell.chars;
+        },
+        getWidth() {
+          return cell.width;
+        },
+      };
+    },
     getNoBgTrimmedLength() {
       return noBgTrimmedLength;
+    },
+    getCellWidthTrimmedLength() {
+      return cellWidthTrimmedLength;
     },
     translateToString(trimRight = false) {
       return trimRight ? text.replace(/\s+$/u, "") : text;
@@ -514,6 +555,120 @@ describe("getLogicalLineTextFromTouchPoint", () => {
       }) as DOMRect;
 
     const terminal = createTerminal(16, 100, [[101, createBufferLine("1234567890abcdef")]]);
+
+    expect(
+      getLogicalLineTextFromTouchPoint({
+        clientX: 310,
+        clientY: 130,
+        rowsElement: rows,
+        screenElement,
+        terminal,
+      })
+    ).toBeNull();
+
+    rows.remove();
+    screenElement.remove();
+  });
+
+  it("accepts touches on the trailing half of a wide character cell", () => {
+    const { rows, secondRow } = createRowsDom();
+    const screenElement = document.createElement("div");
+    document.body.append(rows, screenElement);
+    rows.getBoundingClientRect = () =>
+      ({
+        x: 20,
+        y: 100,
+        top: 100,
+        left: 20,
+        width: 320,
+        height: 60,
+        right: 340,
+        bottom: 160,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    screenElement.getBoundingClientRect = () =>
+      ({
+        x: 20,
+        y: 100,
+        top: 100,
+        left: 20,
+        width: 320,
+        height: 60,
+        right: 340,
+        bottom: 160,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    secondRow.getBoundingClientRect = () =>
+      ({
+        x: 20,
+        y: 120,
+        top: 120,
+        left: 20,
+        width: 320,
+        height: 20,
+        right: 340,
+        bottom: 140,
+        toJSON: () => ({}),
+      }) as DOMRect;
+
+    const terminal = createTerminal(16, 110, [[111, createBufferLine("中", false, 1, 2)]]);
+
+    expect(
+      getLogicalLineTextFromTouchPoint({
+        clientX: 55,
+        clientY: 130,
+        rowsElement: rows,
+        screenElement,
+        terminal,
+      })
+    ).toBe("中");
+
+    rows.remove();
+    screenElement.remove();
+  });
+
+  it("returns null for an empty row when the touch point lands in the screen gutter", () => {
+    const { rows, secondRow } = createRowsDom();
+    const screenElement = document.createElement("div");
+    document.body.append(rows, screenElement);
+    rows.getBoundingClientRect = () =>
+      ({
+        x: 20,
+        y: 100,
+        top: 100,
+        left: 20,
+        width: 320,
+        height: 60,
+        right: 340,
+        bottom: 160,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    screenElement.getBoundingClientRect = () =>
+      ({
+        x: 20,
+        y: 100,
+        top: 100,
+        left: 20,
+        width: 280,
+        height: 60,
+        right: 300,
+        bottom: 160,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    secondRow.getBoundingClientRect = () =>
+      ({
+        x: 20,
+        y: 120,
+        top: 120,
+        left: 20,
+        width: 320,
+        height: 20,
+        right: 340,
+        bottom: 140,
+        toJSON: () => ({}),
+      }) as DOMRect;
+
+    const terminal = createTerminal(16, 120, [[121, createBufferLine("")]]);
 
     expect(
       getLogicalLineTextFromTouchPoint({

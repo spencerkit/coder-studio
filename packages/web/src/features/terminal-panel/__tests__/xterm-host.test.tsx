@@ -428,6 +428,60 @@ describe("XtermHost", () => {
     });
   });
 
+  it("falls back to document.execCommand when desktop clipboard writeText is rejected", async () => {
+    const store = createStore();
+    const writeText = vi.fn().mockRejectedValue(new Error("clipboard rejected"));
+    const execCommand = vi.fn().mockReturnValue(true);
+
+    store.set(localeAtom, "en");
+    store.set(terminalPreferencesAtom, { copyOnSelect: true });
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn().mockResolvedValue({ status: "ok" }),
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => "connected"),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText } satisfies Pick<Clipboard, "writeText">,
+    });
+    Object.defineProperty(document, "execCommand", {
+      configurable: true,
+      value: execCommand,
+    });
+
+    const { container } = render(
+      <Provider store={store}>
+        <XtermHost terminalId="copy-fallback-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    mockTerminal.hasSelection.mockReturnValue(true);
+    mockTerminal.getSelection.mockReturnValue("selected text");
+
+    const selectionHandler = mockTerminal.onSelectionChange.mock.calls[0]?.[0] as
+      | (() => void)
+      | undefined;
+
+    await act(async () => {
+      selectionHandler?.();
+    });
+
+    fireEvent.pointerDown(container.querySelector(".xterm-host")!, {
+      pointerType: "mouse",
+      pointerId: 1,
+    });
+    fireEvent.pointerUp(container.querySelector(".xterm-host")!, {
+      pointerType: "mouse",
+      pointerId: 1,
+    });
+
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith("selected text");
+      expect(execCommand).toHaveBeenCalledWith("copy");
+    });
+  });
+
   it("copies the terminal selection when desktop mouse pointerup ends outside the host", async () => {
     const store = createStore();
     const writeText = vi.fn().mockResolvedValue(undefined);
@@ -664,6 +718,7 @@ describe("XtermHost", () => {
   it("pushes only one error toast within the throttle window when clipboard writes fail", async () => {
     const store = createStore();
     const writeText = vi.fn().mockRejectedValue(new Error("clipboard failed"));
+    const execCommand = vi.fn().mockReturnValue(false);
 
     store.set(localeAtom, "zh");
     store.set(terminalPreferencesAtom, { copyOnSelect: true });
@@ -676,6 +731,10 @@ describe("XtermHost", () => {
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
       value: { writeText } satisfies Pick<Clipboard, "writeText">,
+    });
+    Object.defineProperty(document, "execCommand", {
+      configurable: true,
+      value: execCommand,
     });
 
     const { container } = render(
@@ -7077,6 +7136,13 @@ describe("XtermHost", () => {
     await act(async () => {
       vi.advanceTimersByTime(500);
       await Promise.resolve();
+    });
+
+    expect(writeText).not.toHaveBeenCalled();
+
+    dispatchTouchEvent(host!, "touchend", [], [{ identifier: 1, clientX: 6, clientY: 150 }]);
+
+    await act(async () => {
       await Promise.resolve();
     });
 
@@ -7161,6 +7227,13 @@ describe("XtermHost", () => {
     await act(async () => {
       vi.advanceTimersByTime(500);
       await Promise.resolve();
+    });
+
+    expect(writeText).not.toHaveBeenCalled();
+
+    dispatchTouchEvent(host!, "touchend", [], [{ identifier: 1, clientX: 20, clientY: 110 }]);
+
+    await act(async () => {
       await Promise.resolve();
     });
 
@@ -7488,6 +7561,7 @@ describe("XtermHost", () => {
 
     const originalMatchMedia = window.matchMedia;
     const writeText = vi.fn().mockRejectedValue(new Error("clipboard failed"));
+    const execCommand = vi.fn().mockReturnValue(false);
     const vibrate = vi.fn();
     const store = createStore();
 
@@ -7513,6 +7587,10 @@ describe("XtermHost", () => {
     Object.defineProperty(navigator, "vibrate", {
       configurable: true,
       value: vibrate,
+    });
+    Object.defineProperty(document, "execCommand", {
+      configurable: true,
+      value: execCommand,
     });
 
     store.set(localeAtom, "zh");
@@ -7548,6 +7626,13 @@ describe("XtermHost", () => {
     await act(async () => {
       vi.advanceTimersByTime(500);
       await Promise.resolve();
+    });
+
+    expect(writeText).not.toHaveBeenCalled();
+
+    dispatchTouchEvent(host!, "touchend", [], [{ identifier: 1, clientX: 20, clientY: 110 }]);
+
+    await act(async () => {
       await Promise.resolve();
     });
 
@@ -7561,6 +7646,103 @@ describe("XtermHost", () => {
       ])
     );
     expect(vibrate).not.toHaveBeenCalled();
+
+    window.matchMedia = originalMatchMedia;
+    vi.useRealTimers();
+  });
+
+  it("mobile line copy falls back to document.execCommand when clipboard writeText is rejected", async () => {
+    vi.useFakeTimers();
+    viewportMocks.viewport = "mobile";
+
+    const originalMatchMedia = window.matchMedia;
+    const writeText = vi.fn().mockRejectedValue(new Error("clipboard rejected"));
+    const execCommand = vi.fn().mockReturnValue(true);
+    const vibrate = vi.fn();
+    const store = createStore();
+
+    mockTerminal.cols = 80;
+    mockTerminal.buffer.active.viewportY = 8;
+    setMockBufferLines([[8, "fallback line", false]]);
+
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query === "(pointer: coarse)",
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })) as typeof window.matchMedia;
+
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText } satisfies Pick<Clipboard, "writeText">,
+    });
+    Object.defineProperty(navigator, "vibrate", {
+      configurable: true,
+      value: vibrate,
+    });
+    Object.defineProperty(document, "execCommand", {
+      configurable: true,
+      value: execCommand,
+    });
+
+    store.set(localeAtom, "en");
+    store.set(terminalPreferencesAtom, { copyOnSelect: true });
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn().mockResolvedValue({ ok: true, data: { status: "ok" } }),
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => "connected"),
+      onStatus: vi.fn(() => () => {}),
+      sendTerminalInput: vi.fn().mockResolvedValue(undefined),
+    } as never);
+
+    const { container } = render(
+      <Provider store={store}>
+        <XtermHost terminalId="mobile-line-copy-fallback-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    const host = container.querySelector(".xterm-host") as HTMLDivElement | null;
+    expect(host).toBeTruthy();
+
+    const rowsElement = document.createElement("div");
+    rowsElement.className = "xterm-rows";
+    rowsElement.innerHTML = "<div><span>fallback line</span></div>";
+    host!.appendChild(rowsElement);
+    stubRowsGeometry(host!, rowsElement, [rowsElement.firstElementChild as HTMLDivElement], {
+      rowsRect: { x: 0, y: 100, width: 320, height: 20 },
+      rowHeight: 20,
+    });
+
+    dispatchTouchEvent(host!, "touchstart", [{ identifier: 1, clientX: 20, clientY: 110 }]);
+
+    await act(async () => {
+      vi.advanceTimersByTime(500);
+      await Promise.resolve();
+    });
+
+    expect(writeText).not.toHaveBeenCalled();
+
+    dispatchTouchEvent(host!, "touchend", [], [{ identifier: 1, clientX: 20, clientY: 110 }]);
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(writeText).toHaveBeenCalledWith("fallback line");
+    expect(execCommand).toHaveBeenCalledWith("copy");
+    expect(store.get(toastsAtom)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "success",
+          title: "Copied current line",
+        }),
+      ])
+    );
+    expect(vibrate).toHaveBeenCalledWith(10);
 
     window.matchMedia = originalMatchMedia;
     vi.useRealTimers();
@@ -7641,6 +7823,13 @@ describe("XtermHost", () => {
     await act(async () => {
       vi.advanceTimersByTime(500);
       await Promise.resolve();
+    });
+
+    expect(writeText).not.toHaveBeenCalled();
+
+    dispatchTouchEvent(host!, "touchend", [], [{ identifier: 1, clientX: 40, clientY: 130 }]);
+
+    await act(async () => {
       await Promise.resolve();
     });
 
@@ -7816,6 +8005,91 @@ describe("XtermHost", () => {
     vi.useRealTimers();
   });
 
+  it("mobile line copy does not copy an empty row when a long press lands in the right gutter outside the xterm screen grid", async () => {
+    vi.useFakeTimers();
+    viewportMocks.viewport = "mobile";
+
+    const originalMatchMedia = window.matchMedia;
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    const vibrate = vi.fn();
+    const store = createStore();
+
+    mockTerminal.cols = 80;
+    mockTerminal.buffer.active.viewportY = 16;
+    setMockBufferLines([[16, "", false]]);
+
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query === "(pointer: coarse)",
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })) as typeof window.matchMedia;
+
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText } satisfies Pick<Clipboard, "writeText">,
+    });
+    Object.defineProperty(navigator, "vibrate", {
+      configurable: true,
+      value: vibrate,
+    });
+
+    store.set(localeAtom, "en");
+    store.set(terminalPreferencesAtom, { copyOnSelect: true });
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn().mockResolvedValue({ ok: true, data: { status: "ok" } }),
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => "connected"),
+      onStatus: vi.fn(() => () => {}),
+      sendTerminalInput: vi.fn().mockResolvedValue(undefined),
+    } as never);
+
+    const { container } = render(
+      <Provider store={store}>
+        <XtermHost
+          terminalId="mobile-line-copy-empty-right-gutter-terminal"
+          workspaceId="test-workspace"
+        />
+      </Provider>
+    );
+
+    const host = container.querySelector(".xterm-host") as HTMLDivElement | null;
+    expect(host).toBeTruthy();
+
+    const screenElement = document.createElement("div");
+    screenElement.className = "xterm-screen";
+    host!.appendChild(screenElement);
+
+    const rowsElement = document.createElement("div");
+    rowsElement.className = "xterm-rows";
+    rowsElement.innerHTML = "<div><span>&nbsp;</span></div>";
+    host!.appendChild(rowsElement);
+    stubRowsGeometry(host!, rowsElement, [rowsElement.firstElementChild as HTMLDivElement], {
+      rowsRect: { x: 0, y: 100, width: 320, height: 20 },
+      screenRect: { x: 0, y: 100, width: 280, height: 20 },
+      rowHeight: 20,
+    });
+
+    dispatchTouchEvent(host!, "touchstart", [{ identifier: 1, clientX: 300, clientY: 110 }]);
+
+    await act(async () => {
+      vi.advanceTimersByTime(500);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(writeText).not.toHaveBeenCalled();
+    expect(vibrate).not.toHaveBeenCalled();
+    expect(store.get(toastsAtom)).toEqual([]);
+
+    window.matchMedia = originalMatchMedia;
+    vi.useRealTimers();
+  });
+
   it("mobile line copy still succeeds after the row DOM is replaced before long press matures", async () => {
     vi.useFakeTimers();
     viewportMocks.viewport = "mobile";
@@ -7890,6 +8164,13 @@ describe("XtermHost", () => {
     await act(async () => {
       vi.advanceTimersByTime(500);
       await Promise.resolve();
+    });
+
+    expect(writeText).not.toHaveBeenCalled();
+
+    dispatchTouchEvent(host!, "touchend", [], [{ identifier: 1, clientX: 40, clientY: 130 }]);
+
+    await act(async () => {
       await Promise.resolve();
     });
 
