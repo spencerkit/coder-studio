@@ -289,40 +289,8 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(xtermViewport).not.toContain("touch-action: none");
   });
 
-  it("mobile terminal copy mode overlay styles", () => {
-    const overlay = getLastRuleBlock(".mobile-terminal-copy-mode");
-    const toolbar = getLastRuleBlock(".mobile-terminal-copy-mode__toolbar");
-    const done = getLastRuleBlock(".mobile-terminal-copy-mode__done");
-    const content = getLastRuleBlock(".mobile-terminal-copy-mode__content");
-    const text = getLastRuleBlock(".mobile-terminal-copy-mode__text");
-
-    expect(overlay).toContain("position: absolute");
-    expect(overlay).toContain("inset: 0");
-    expect(overlay).toContain("z-index: 6");
-    expect(overlay).toContain("box-sizing: border-box");
-    expect(overlay).toContain("overflow: hidden");
-    expect(overlay).toContain("user-select: text");
-    expect(overlay).toContain("-webkit-user-select: text");
-    expect(toolbar).toContain("display: flex");
-    expect(toolbar).toContain("align-items: center");
-    expect(done).toContain("margin-left: auto");
-    expect(content).toContain("overflow: auto");
-    expect(content).toContain("min-width: 0");
-    expect(content).toContain("max-width: 100%");
-    expect(content).toContain("max-height: 100%");
-    expect(content).toContain("-webkit-overflow-scrolling: touch");
-    expect(content).toContain("user-select: text");
-    expect(content).toContain("-webkit-user-select: text");
-    expect(content).toContain("-webkit-touch-callout: default");
-    expect(text).toContain("display: block");
-    expect(text).toContain("width: max-content");
-    expect(text).toContain("max-width: 100%");
-    expect(text).toContain("min-width: 100%");
-    expect(text).toContain("white-space: pre");
-    expect(text).toContain("user-select: text");
-    expect(text).toContain("-webkit-user-select: text");
-    expect(text).not.toContain("white-space: pre-wrap");
-    expect(text).not.toContain("word-break: break-word");
+  it("does not ship removed mobile terminal copy mode overlay CSS", () => {
+    expect(stylesheet).not.toContain(".mobile-terminal-copy-mode");
   });
 
   it("keeps code editor header actions docked to the right edge", () => {

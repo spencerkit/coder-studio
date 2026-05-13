@@ -260,8 +260,6 @@
     "create_unavailable_title": "No workspace selected",
     "create_unavailable_body": "Open or switch to a workspace before creating a terminal.",
     "copied_current_line": "Copied current line",
-    "copy_mode_failed_title": "Couldn't enter copy mode",
-    "copy_mode_failed_body": "Try again, or scroll the terminal and long press again",
     "hide": "Hide Terminal",
     "show": "Show Terminal",
     "selector": {
