@@ -12,6 +12,10 @@ describe("supervisor commands", () => {
       state: "idle",
       objective: input.objective,
       evaluatorProviderId: input.evaluatorProviderId,
+      evaluatorModel: input.evaluatorModel,
+      maxSupervisionCount: input.maxSupervisionCount ?? 0,
+      completedSupervisionCount: 0,
+      scheduledAt: input.scheduledAt,
       cycles: [],
       createdAt: 1,
       updatedAt: 1,
@@ -24,6 +28,10 @@ describe("supervisor commands", () => {
       state: "idle",
       objective: patch.objective ?? "existing objective",
       evaluatorProviderId: patch.evaluatorProviderId ?? "claude",
+      evaluatorModel: patch.evaluatorModel ?? undefined,
+      maxSupervisionCount: patch.maxSupervisionCount ?? 0,
+      completedSupervisionCount: 0,
+      scheduledAt: patch.scheduledAt ?? undefined,
       cycles: [],
       createdAt: 1,
       updatedAt: 2,
@@ -73,6 +81,35 @@ describe("supervisor commands", () => {
     );
   });
 
+  it("passes evaluatorModel, maxSupervisionCount, and scheduledAt through supervisor.create", async () => {
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "cmd-1b",
+        op: "supervisor.create",
+        args: {
+          sessionId: "sess-1",
+          workspaceId: "ws-1",
+          objective: "Ship execution policy",
+          evaluatorProviderId: "codex",
+          evaluatorModel: "o3",
+          maxSupervisionCount: 5,
+          scheduledAt: 1_746_950_400_000,
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(supervisorMgr.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        evaluatorModel: "o3",
+        maxSupervisionCount: 5,
+        scheduledAt: 1_746_950_400_000,
+      })
+    );
+  });
+
   it("rejects legacy intervalMs on supervisor.create", async () => {
     const result = await dispatch(
       {
@@ -111,7 +148,36 @@ describe("supervisor commands", () => {
     expect(result.ok).toBe(true);
     expect(supervisorMgr.update).toHaveBeenCalledWith("sup-1", {
       evaluatorProviderId: "codex",
+      evaluatorModel: undefined,
+      maxSupervisionCount: undefined,
       objective: undefined,
+      scheduledAt: undefined,
+    });
+  });
+
+  it("passes evaluatorModel, maxSupervisionCount, and scheduledAt through supervisor.update", async () => {
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "cmd-3b",
+        op: "supervisor.update",
+        args: {
+          id: "sup-1",
+          evaluatorModel: "o3",
+          maxSupervisionCount: 5,
+          scheduledAt: 1_746_950_400_000,
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(supervisorMgr.update).toHaveBeenCalledWith("sup-1", {
+      evaluatorProviderId: undefined,
+      evaluatorModel: "o3",
+      maxSupervisionCount: 5,
+      objective: undefined,
+      scheduledAt: 1_746_950_400_000,
     });
   });
 

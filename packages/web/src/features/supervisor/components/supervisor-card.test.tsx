@@ -4,6 +4,7 @@ import { createStore, Provider } from "jotai";
 import { describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../../atoms/app-ui";
 import { wsClientAtom } from "../../../atoms/connection";
+import { formatDate } from "../../../lib/i18n";
 import { supervisorCyclesAtom, supervisorsAtom } from "../atoms";
 import { SupervisorCard } from "../views/shared/supervisor-card";
 
@@ -15,6 +16,8 @@ describe("SupervisorCard", () => {
     state: "idle",
     objective: "Finish the server refactor",
     evaluatorProviderId: "codex",
+    maxSupervisionCount: 0,
+    completedSupervisionCount: 0,
     cycles: [],
     createdAt: 1,
     updatedAt: 1,
@@ -101,7 +104,7 @@ describe("SupervisorCard", () => {
       </Provider>
     );
 
-    expect(screen.getByRole("button", { name: "Edit Objective" })).toHaveClass(
+    expect(screen.getByRole("button", { name: "Edit Supervisor" })).toHaveClass(
       "btn",
       "btn-ghost",
       "btn-sm",
@@ -119,7 +122,7 @@ describe("SupervisorCard", () => {
       "btn-sm",
       "supervisor-icon-btn"
     );
-    expect(screen.getByRole("button", { name: "Disable Supervisor" })).toHaveClass(
+    expect(screen.getByRole("button", { name: "Disable" })).toHaveClass(
       "btn",
       "btn-ghost",
       "btn-sm",
@@ -181,5 +184,126 @@ describe("SupervisorCard", () => {
     expect(screen.getByText("No guidance injected this cycle")).toBeInTheDocument();
     expect(screen.queryByText("65%")).not.toBeInTheDocument();
     expect(document.querySelector(".supervisor-progress-track")).not.toBeInTheDocument();
+  });
+
+  it("keeps pause available while the supervisor is evaluating", () => {
+    const store = createStore();
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+    store.set(
+      supervisorsAtom,
+      new Map([["sess-1", { ...createSupervisor(), state: "evaluating" }]])
+    );
+    store.set(supervisorCyclesAtom, new Map());
+
+    render(
+      <Provider store={store}>
+        <SupervisorCard sessionId="sess-1" workspaceId="ws-1" />
+      </Provider>
+    );
+
+    expect(screen.getByRole("button", { name: "Pause" })).not.toBeDisabled();
+  });
+
+  it("renders configured execution policy metadata", () => {
+    const store = createStore();
+    const scheduledAt = Date.UTC(2026, 4, 11, 3, 0);
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+    store.set(
+      supervisorsAtom,
+      new Map([
+        [
+          "sess-1",
+          {
+            ...createSupervisor(),
+            evaluatorModel: "o3",
+            maxSupervisionCount: 5,
+            scheduledAt,
+          },
+        ],
+      ])
+    );
+    store.set(supervisorCyclesAtom, new Map());
+
+    render(
+      <Provider store={store}>
+        <SupervisorCard sessionId="sess-1" workspaceId="ws-1" />
+      </Provider>
+    );
+
+    expect(screen.getByText("Evaluator Model")).toBeInTheDocument();
+    expect(screen.getByText("o3")).toBeInTheDocument();
+    expect(screen.getByText("Max Supervision Count")).toBeInTheDocument();
+    expect(screen.getByText("5")).toBeInTheDocument();
+    expect(screen.getByText("Scheduled Run Time")).toBeInTheDocument();
+    expect(screen.getByText(formatDate(scheduledAt, "en"))).toBeInTheDocument();
+  });
+
+  it("shows a no-cap max supervision count when the limit is disabled", () => {
+    const store = createStore();
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+    store.set(supervisorsAtom, new Map([["sess-1", createSupervisor()]]));
+    store.set(supervisorCyclesAtom, new Map());
+
+    render(
+      <Provider store={store}>
+        <SupervisorCard sessionId="sess-1" workspaceId="ws-1" />
+      </Provider>
+    );
+
+    expect(screen.getByText("Max Supervision Count")).toBeInTheDocument();
+    expect(screen.getByText("No cap")).toBeInTheDocument();
+  });
+
+  it("renders stopped reason and scheduled cancelled cycle details", () => {
+    const store = createStore();
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+    store.set(
+      supervisorsAtom,
+      new Map([
+        [
+          "sess-1",
+          {
+            ...createSupervisor(),
+            state: "stopped",
+            stopReason: "objective_complete",
+          },
+        ],
+      ])
+    );
+    store.set(
+      supervisorCyclesAtom,
+      new Map([
+        [
+          "sup-1",
+          [
+            createCycle({
+              status: "cancelled",
+              trigger: "scheduled",
+              completedAt: 3,
+            }),
+          ],
+        ],
+      ])
+    );
+
+    render(
+      <Provider store={store}>
+        <SupervisorCard sessionId="sess-1" workspaceId="ws-1" />
+      </Provider>
+    );
+
+    expect(screen.getByText("SCHEDULED")).toBeInTheDocument();
+    expect(screen.getByText("Cancelled")).toBeInTheDocument();
+    expect(
+      screen.getByText("Objective complete. Supervisor stopped automatically.")
+    ).toBeInTheDocument();
   });
 });

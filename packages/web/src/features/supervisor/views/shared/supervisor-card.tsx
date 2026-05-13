@@ -12,6 +12,7 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
   const t = useTranslation();
   const {
     actionError,
+    executionPolicyItems,
     handlePause,
     handleResume,
     handleTrigger,
@@ -19,6 +20,7 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
     latestCycle,
     latestCycleText,
     openDialog,
+    stopReasonLabel,
     stateClass,
     stateLabel,
     supervisor,
@@ -79,7 +81,6 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
               <IconButton
                 aria-label={t("supervisor.action.pause")}
                 className="supervisor-icon-btn"
-                disabled={isBusy}
                 icon={<Pause size={12} />}
                 onClick={() => {
                   void handlePause();
@@ -121,17 +122,36 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
         <span className="supervisor-provider-pill">{supervisor.evaluatorProviderId}</span>
       </div>
 
+      {executionPolicyItems.length > 0 ? (
+        <dl className="supervisor-meta-grid" aria-label={t("supervisor.meta.title")}>
+          {executionPolicyItems.map((item) => (
+            <div key={item.key} className="supervisor-meta-item">
+              <dt className="supervisor-meta-label">{item.label}</dt>
+              <dd className="supervisor-meta-value">{item.value}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
+
       {latestCycle ? (
         <ol className="supervisor-history-list" aria-label={t("supervisor.latest_evaluation")}>
           <li className="supervisor-history-item" data-trigger={latestCycle.trigger}>
             <span className="supervisor-history-trigger">
               {latestCycle.trigger === "manual"
                 ? t("supervisor.trigger.manual")
-                : t("supervisor.trigger.auto")}
+                : latestCycle.trigger === "scheduled"
+                  ? t("supervisor.trigger.scheduled")
+                  : t("supervisor.trigger.auto")}
             </span>
             <span className="supervisor-history-result">{latestCycleText}</span>
           </li>
         </ol>
+      ) : null}
+
+      {supervisor.state === "stopped" && stopReasonLabel ? (
+        <div className="supervisor-error" role="status">
+          {stopReasonLabel}
+        </div>
       ) : null}
 
       {actionError ? (

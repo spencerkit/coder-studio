@@ -45,6 +45,10 @@ test.describe("@phase2 settings acceptance", () => {
     await expect(
       page.locator(".settings-group-title").filter({ hasText: settingsGroupPattern("theme") })
     ).toBeVisible();
+    await expect(page.getByRole("button", { name: /^(?:Mint|薄荷)$/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^(?:Graphite)$/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^(?:Nord)$/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^(?:High Contrast|高对比)$/ })).toBeVisible();
     await expect(page.getByRole("button", { name: /^(?:深色|Dark)$/ })).toBeVisible();
     await expect(page.getByRole("button", { name: /^(?:浅色|Light)$/ })).toBeVisible();
   });

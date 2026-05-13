@@ -31,6 +31,7 @@ const NOOP_LOGGER: FastifyBaseLogger = {
  */
 export interface SupervisorResult {
   message: string;
+  objectiveComplete: boolean;
 }
 
 interface EvaluateOptions {
@@ -80,7 +81,12 @@ export class SupervisorEvaluator {
       prompt,
       sessionId: supervisor.sessionId,
       workspacePath: context.workspacePath,
-      model: typeof config.model === "string" ? config.model : undefined,
+      model:
+        typeof supervisor.evaluatorModel === "string" && supervisor.evaluatorModel.trim()
+          ? supervisor.evaluatorModel.trim()
+          : typeof config.model === "string"
+            ? config.model
+            : undefined,
     });
 
     if (!command) {
@@ -113,7 +119,11 @@ export class SupervisorEvaluator {
       throw error;
     }
 
-    return { message: message.slice(0, this.config.guidanceMaxChars) };
+    const normalizedMessage = message.slice(0, this.config.guidanceMaxChars);
+    return {
+      message: normalizedMessage,
+      objectiveComplete: normalizedMessage.trim() === "[objective complete]",
+    };
   }
 }
 
@@ -442,6 +452,14 @@ function extractSupervisorMessage(output: string, providerId: string): string {
   const lines = trimmed.split(/\r?\n/).filter(Boolean);
 
   if (providerId === "codex") {
+    if (trimmed === "[objective complete]") {
+      return trimmed;
+    }
+
+    if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) {
+      return stripCodeFence(trimmed);
+    }
+
     const scan = scanCodexStream(lines);
 
     if (scan.turnFailure) {
@@ -473,7 +491,6 @@ function extractSupervisorMessage(output: string, providerId: string): string {
       }
       const text = line.trim();
       if (text && !scan.isCodexStream) {
-        // Not a codex stream — use raw text
         return stripCodeFence(text);
       }
     }

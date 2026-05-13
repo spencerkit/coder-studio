@@ -147,6 +147,32 @@ describe("LoginPage", () => {
     });
   });
 
+  it("runs the authenticated callback after a successful login", async () => {
+    const onAuthenticated = vi.fn().mockResolvedValue(true);
+    globalThis.fetch = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ ok: true }),
+    }) as unknown as typeof fetch;
+
+    const store = createStore();
+    store.set(authEnabledAtom, true);
+
+    render(
+      <Provider store={store}>
+        <LoginPage onAuthenticated={onAuthenticated} />
+      </Provider>
+    );
+
+    const input = await screen.findByLabelText("密码");
+    fireEvent.change(input, { target: { value: "sekrit" } });
+    fireEvent.click(screen.getByRole("button", { name: "确认" }));
+
+    await waitFor(() => {
+      expect(onAuthenticated).toHaveBeenCalledTimes(1);
+      expect(store.get(authenticatedAtom)).toBe(true);
+    });
+  });
+
   it("shows the login error returned by the server", async () => {
     globalThis.fetch = vi.fn().mockResolvedValueOnce({
       ok: false,

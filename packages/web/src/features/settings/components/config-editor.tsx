@@ -246,7 +246,9 @@ export function ConfigEditor({
         {saveStatus === "saving" ? (
           <Spinner label={config.text} size="sm" />
         ) : (
-          <config.icon size={14} />
+          <span className="config-status__icon" aria-hidden="true">
+            <config.icon size={14} />
+          </span>
         )}
         <span>{config.text}</span>
       </div>

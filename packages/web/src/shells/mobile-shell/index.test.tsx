@@ -5,6 +5,7 @@ import { createStore, Provider } from "jotai";
 import type { ReactNode } from "react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { activationStatusAtom } from "../../atoms/activation";
 import {
   authenticatedAtom,
   localeAtom,
@@ -409,17 +410,25 @@ function renderMobileShell({
           objective: "Ship mobile phase 3",
           evaluatorProviderId: "claude",
           state: "idle",
+          maxSupervisionCount: 0,
+          completedSupervisionCount: 0,
           cycles: [
             {
               id: "cycle-1",
               supervisorId: "sup-1",
+              sessionId: "sess_2",
               trigger: "manual",
               status: "completed",
+              evidenceSource: "transcript",
+              objective: "Ship mobile phase 3",
+              evaluatorProviderId: "claude",
               result: "cycle 1/1",
               createdAt: Date.now() - 5_000,
               completedAt: Date.now() - 1_000,
             },
           ],
+          createdAt: Date.now() - 5_000,
+          updatedAt: Date.now() - 1_000,
         },
       };
     }
@@ -446,6 +455,7 @@ function renderMobileShell({
   window.localStorage.setItem("ui.locale", JSON.stringify(locale));
   const store = createStore();
   store.set(localeAtom, locale);
+  store.set(activationStatusAtom, "active");
   store.set(connectionStatusAtom, connectionStatus);
   store.set(reconnectAttemptCountAtom, reconnectAttempts);
   store.set(authEnabledAtom, false);
@@ -502,17 +512,25 @@ function renderMobileShell({
                 objective: "Ship mobile phase 3",
                 evaluatorProviderId: "claude",
                 state: "idle",
+                maxSupervisionCount: 0,
+                completedSupervisionCount: 0,
                 cycles: [
                   {
                     id: "cycle-1",
                     supervisorId: "sup-1",
+                    sessionId: "sess_2",
                     trigger: "manual",
                     status: "completed",
+                    evidenceSource: "transcript",
+                    objective: "Ship mobile phase 3",
+                    evaluatorProviderId: "claude",
                     result: "cycle 1/1",
                     createdAt: Date.now() - 5_000,
                     completedAt: Date.now() - 1_000,
                   },
                 ],
+                createdAt: Date.now() - 5_000,
+                updatedAt: Date.now() - 1_000,
               },
             ],
           ])
@@ -528,8 +546,12 @@ function renderMobileShell({
                 {
                   id: "cycle-1",
                   supervisorId: "sup-1",
+                  sessionId: "sess_2",
                   trigger: "manual",
                   status: "completed",
+                  evidenceSource: "transcript",
+                  objective: "Ship mobile phase 3",
+                  evaluatorProviderId: "claude",
                   result: "cycle 1/1",
                   createdAt: Date.now() - 5_000,
                   completedAt: Date.now() - 1_000,
@@ -1047,6 +1069,7 @@ describe("MobileShell Phase 2 workspace", () => {
 
   it("shows a loading workspace gate instead of the mobile scaffold while workspaces are still loading", () => {
     const store = createStore();
+    store.set(activationStatusAtom, "active");
     store.set(connectionStatusAtom, "connected");
     store.set(authEnabledAtom, false);
     store.set(authenticatedAtom, true);
@@ -1067,6 +1090,7 @@ describe("MobileShell Phase 2 workspace", () => {
 
   it("shows a workspace load error gate instead of the mobile scaffold when bootstrap fails", () => {
     const store = createStore();
+    store.set(activationStatusAtom, "active");
     store.set(connectionStatusAtom, "connected");
     store.set(authEnabledAtom, false);
     store.set(authenticatedAtom, true);
@@ -1088,6 +1112,7 @@ describe("MobileShell Phase 2 workspace", () => {
 
   it("does not render the mobile scaffold before redirecting home when /workspace resolves to an empty workspace list", async () => {
     const store = createStore();
+    store.set(activationStatusAtom, "active");
     store.set(connectionStatusAtom, "connected");
     store.set(authEnabledAtom, false);
     store.set(authenticatedAtom, true);
@@ -1111,6 +1136,7 @@ describe("MobileShell Phase 2 workspace", () => {
 
   it("redirects /workspace home on mobile when the workspace list is ready but empty while reconnecting", async () => {
     const store = createStore();
+    store.set(activationStatusAtom, "active");
     store.set(connectionStatusAtom, "reconnecting");
     store.set(authEnabledAtom, false);
     store.set(authenticatedAtom, true);
@@ -1552,6 +1578,76 @@ describe("MobileShell Phase 2 workspace", () => {
     expect(screen.getByTestId("mobile-session-card")).toHaveTextContent("sess_2");
   });
 
+  it("lists and can close a workspace session even when it is missing from the current pane layout", async () => {
+    const user = userEvent.setup();
+    const existingSession = createSession({
+      id: "sess_1",
+      terminalId: "term-1",
+      providerId: "claude",
+      state: "idle",
+      lastActiveAt: Date.now() - 5_000,
+      title: "Claude",
+    });
+    const hiddenSession = createSession({
+      id: "sess_hidden",
+      terminalId: "term-hidden",
+      providerId: "codex",
+      state: "running",
+      lastActiveAt: Date.now() - 500,
+      title: "Remote Codex",
+    });
+    const sendCommand = vi.fn(async (op: string) => {
+      if (op === "session.list") {
+        return [existingSession];
+      }
+
+      return undefined;
+    });
+
+    const { store } = renderMobileShell({
+      sendCommand,
+      sessions: [existingSession],
+      paneLayout: {
+        id: "root",
+        type: "leaf",
+        sessionId: "sess_1",
+      },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("mobile-session-card")).toHaveTextContent("sess_1");
+    });
+
+    await act(async () => {
+      store.set(sessionsAtom, {
+        sess_1: existingSession,
+        sess_hidden: hiddenSession,
+      });
+    });
+
+    await user.click(await screen.findByRole("button", { name: "Open Agent sheet" }));
+
+    const hiddenRow = screen
+      .getByRole("button", {
+        name: "Remote Codex",
+        description: "Switch to agent Remote Codex CODEX",
+      })
+      .closest(".mobile-select-sheet__item-row");
+    expect(hiddenRow).not.toBeNull();
+
+    await user.click(
+      within(hiddenRow as HTMLElement).getByRole("button", { name: "Close Current Session" })
+    );
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "session.stop",
+        { sessionId: "sess_hidden" },
+        undefined
+      );
+    });
+  });
+
   it("switches to the target session when a pending focus marker points at a non-active mobile session", async () => {
     const { store } = renderMobileShell({ initialEntry: "/workspace" });
 
@@ -1626,6 +1722,86 @@ describe("MobileShell Phase 2 workspace", () => {
 
     await waitFor(() => {
       expect(screen.getByTestId("mobile-session-card")).toHaveTextContent("sess_reload_1");
+    });
+  });
+
+  it("restores a newly created mobile session after reload even when workspace uiState paneLayout is stale", async () => {
+    const sessions = [
+      createSession({
+        id: "sess_existing",
+        terminalId: "term-existing",
+        providerId: "claude",
+        state: "idle",
+        lastActiveAt: Date.now() - 5_000,
+        title: "Existing Claude",
+      }),
+      createSession({
+        id: "sess_new_mobile",
+        terminalId: "term-new-mobile",
+        providerId: "codex",
+        state: "idle",
+        lastActiveAt: Date.now() - 500,
+        title: "New Mobile Codex",
+      }),
+    ];
+    const sendCommand = vi.fn(async (op: string, payload?: Record<string, unknown>) => {
+      if (op === "session.list") {
+        return sessions;
+      }
+
+      if (op === "workspace.uiState.set") {
+        return {
+          id: "ws-1",
+          name: "Alpha",
+          path: "/tmp/alpha",
+          targetRuntime: "native",
+          openedAt: 1,
+          lastActiveAt: 1,
+          uiState: payload?.uiState,
+        };
+      }
+
+      return undefined;
+    });
+
+    renderMobileShell({
+      initialEntry: "/workspace",
+      sessions: [],
+      paneLayout: {
+        id: "root",
+        type: "leaf",
+        sessionId: "sess_existing",
+      },
+      sendCommand,
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith("session.list", { workspaceId: "ws-1" }, undefined);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("mobile-session-card")).toHaveTextContent("sess_new_mobile");
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "workspace.uiState.set",
+        expect.objectContaining({
+          workspaceId: "ws-1",
+          uiState: expect.objectContaining({
+            activeSessionId: "sess_new_mobile",
+            paneLayout: expect.objectContaining({
+              type: "split",
+              direction: "horizontal",
+              children: [
+                expect.objectContaining({ sessionId: "sess_existing" }),
+                expect.objectContaining({ sessionId: "sess_new_mobile" }),
+              ],
+            }),
+          }),
+        }),
+        undefined
+      );
     });
   });
 
@@ -1995,9 +2171,11 @@ describe("MobileShell Phase 2 workspace", () => {
 
     await user.click(badge);
 
-    expect(screen.getByRole("region", { name: "Supervisor sheet" })).toBeInTheDocument();
-    expect(screen.getByText("Supervisor is not enabled")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Enable Objective" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Enable Supervisor", level: 2 })
+    ).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Objective" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Enable" })).toBeInTheDocument();
   });
 
   it("renders a reconnecting banner inside the mobile workspace scaffold", async () => {

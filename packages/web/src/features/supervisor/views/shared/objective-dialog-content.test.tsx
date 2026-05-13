@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ObjectiveDialogContent } from "./objective-dialog-content";
 
 vi.mock("../../../../lib/i18n", () => ({
+  formatDate: (ts: number) => new Date(ts).toLocaleDateString(),
   useTranslation: () => (key: string) => key,
 }));
 
@@ -32,9 +33,15 @@ describe("ObjectiveDialogContent", () => {
         mode="edit"
         draftObjective="Investigate regressions"
         draftEvaluatorProviderId="claude"
+        draftEvaluatorModel=""
+        draftMaxSupervisionCount="0"
+        draftScheduledAt=""
         disableObjective=""
         onDraftObjectiveChange={vi.fn()}
         onDraftEvaluatorProviderChange={vi.fn()}
+        onDraftEvaluatorModelChange={vi.fn()}
+        onDraftMaxSupervisionCountChange={vi.fn()}
+        onDraftScheduledAtChange={vi.fn()}
       />
     );
 
@@ -67,9 +74,15 @@ describe("ObjectiveDialogContent", () => {
         mode="enable"
         draftObjective=""
         draftEvaluatorProviderId="heuristic"
+        draftEvaluatorModel=""
+        draftMaxSupervisionCount="0"
+        draftScheduledAt=""
         disableObjective=""
         onDraftObjectiveChange={onDraftObjectiveChange}
         onDraftEvaluatorProviderChange={vi.fn()}
+        onDraftEvaluatorModelChange={vi.fn()}
+        onDraftMaxSupervisionCountChange={vi.fn()}
+        onDraftScheduledAtChange={vi.fn()}
       />
     );
 
@@ -89,9 +102,15 @@ describe("ObjectiveDialogContent", () => {
         mode="enable"
         draftObjective=""
         draftEvaluatorProviderId="claude"
+        draftEvaluatorModel=""
+        draftMaxSupervisionCount="0"
+        draftScheduledAt=""
         disableObjective=""
         onDraftObjectiveChange={vi.fn()}
         onDraftEvaluatorProviderChange={onDraftEvaluatorProviderChange}
+        onDraftEvaluatorModelChange={vi.fn()}
+        onDraftMaxSupervisionCountChange={vi.fn()}
+        onDraftScheduledAtChange={vi.fn()}
       />
     );
 
@@ -120,9 +139,15 @@ describe("ObjectiveDialogContent", () => {
         mode="enable"
         draftObjective=""
         draftEvaluatorProviderId="codex"
+        draftEvaluatorModel=""
+        draftMaxSupervisionCount="0"
+        draftScheduledAt=""
         disableObjective=""
         onDraftObjectiveChange={vi.fn()}
         onDraftEvaluatorProviderChange={onDraftEvaluatorProviderChange}
+        onDraftEvaluatorModelChange={vi.fn()}
+        onDraftMaxSupervisionCountChange={vi.fn()}
+        onDraftScheduledAtChange={vi.fn()}
       />
     );
 
@@ -144,5 +169,38 @@ describe("ObjectiveDialogContent", () => {
 
     await user.click(screen.getByRole("button", { name: "Codex" }));
     expect(onDraftEvaluatorProviderChange).toHaveBeenCalledWith("codex");
+  });
+
+  it("renders and edits evaluator model, max supervision count, and schedule fields", () => {
+    const onDraftEvaluatorModelChange = vi.fn();
+    const onDraftMaxSupervisionCountChange = vi.fn();
+    const onDraftScheduledAtChange = vi.fn();
+
+    render(
+      <ObjectiveDialogContent
+        mode="enable"
+        draftObjective=""
+        draftEvaluatorProviderId="codex"
+        draftEvaluatorModel="o3"
+        draftMaxSupervisionCount="5"
+        draftScheduledAt="2026-05-11T03:00"
+        disableObjective=""
+        onDraftObjectiveChange={vi.fn()}
+        onDraftEvaluatorProviderChange={vi.fn()}
+        onDraftEvaluatorModelChange={onDraftEvaluatorModelChange}
+        onDraftMaxSupervisionCountChange={onDraftMaxSupervisionCountChange}
+        onDraftScheduledAtChange={onDraftScheduledAtChange}
+      />
+    );
+
+    fireEvent.change(screen.getByLabelText("supervisor.field.evaluator_model"), {
+      target: { value: "gpt-5" },
+    });
+    fireEvent.change(screen.getByLabelText("supervisor.field.max_supervision_count"), {
+      target: { value: "8" },
+    });
+
+    expect(onDraftEvaluatorModelChange).toHaveBeenCalledWith("gpt-5");
+    expect(onDraftMaxSupervisionCountChange).toHaveBeenCalledWith("8");
   });
 });

@@ -43,8 +43,9 @@ import {
   terminalPanelVisibleAtom,
   worktreeListAtomFamily,
 } from "../features/workspace/atoms";
+import { resolveStoredThemeId } from "../theme";
 
-export type UiPreviewTheme = "dark" | "light";
+export type UiPreviewTheme = string;
 export type UiPreviewLocale = "zh" | "en";
 export type UiPreviewDevice = "desktop" | "mobile";
 
@@ -132,6 +133,9 @@ export interface UiPreviewSeed {
     mode: "enable" | "edit" | "disable";
     draftObjective: string;
     draftEvaluatorProviderId: "claude" | "codex";
+    draftEvaluatorModel?: string;
+    draftMaxSupervisionCount?: string;
+    draftScheduledAt?: string;
   };
   commands?: UiPreviewCommands;
 }
@@ -331,7 +335,7 @@ export function buildUiPreviewStore(seed: UiPreviewSeed): Store {
   const dispatch = createPreviewDispatcher(seed);
   const workspaces = seed.workspaces ?? [];
 
-  store.set(themeAtom, seed.theme);
+  store.set(themeAtom, resolveStoredThemeId(seed.theme));
   store.set(localeAtom, seed.locale);
   store.set(authEnabledAtom, seed.authEnabled === undefined ? false : seed.authEnabled);
   store.set(authenticatedAtom, seed.authenticated ?? true);
@@ -360,13 +364,23 @@ export function buildUiPreviewStore(seed: UiPreviewSeed): Store {
   store.set(toastsAtom, seed.toasts ?? []);
   store.set(
     supervisorDialogAtom,
-    seed.supervisorDialog ?? {
-      open: false,
-      sessionId: null,
-      mode: "enable",
-      draftObjective: "",
-      draftEvaluatorProviderId: "claude",
-    }
+    seed.supervisorDialog
+      ? {
+          draftEvaluatorModel: "",
+          draftMaxSupervisionCount: "0",
+          draftScheduledAt: "",
+          ...seed.supervisorDialog,
+        }
+      : {
+          open: false,
+          sessionId: null,
+          mode: "enable",
+          draftObjective: "",
+          draftEvaluatorProviderId: "claude",
+          draftEvaluatorModel: "",
+          draftMaxSupervisionCount: "0",
+          draftScheduledAt: "",
+        }
   );
   store.set(supervisorsAtom, new Map(Object.entries(seed.supervisorBySessionId ?? {})));
   store.set(supervisorCyclesAtom, new Map());

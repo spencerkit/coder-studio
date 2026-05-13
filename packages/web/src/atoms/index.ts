@@ -2,6 +2,7 @@
  * Atom Barrel Export
  */
 
+export * from "./activation";
 export * from "./app-ui";
 export * from "./connection";
 export * from "./fencing";

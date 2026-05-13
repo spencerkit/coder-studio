@@ -2,6 +2,7 @@
  * Application Entry Point
  */
 
+import "@vitejs/plugin-react/preamble";
 import { Provider } from "jotai";
 import React from "react";
 import ReactDOM from "react-dom/client";

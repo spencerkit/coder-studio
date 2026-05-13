@@ -10,6 +10,7 @@ type MockSupervisorManagerDeps = {
   sessionMgr: { get: ReturnType<typeof vi.fn> };
   providerRegistry: ProviderDefinition[];
   providerConfigRepo: { get: ReturnType<typeof vi.fn> };
+  settingsRepo: { get: ReturnType<typeof vi.fn> };
   supervisorRepo: {
     create: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
@@ -23,6 +24,12 @@ type MockSupervisorManagerDeps = {
     update: ReturnType<typeof vi.fn>;
     listRecentForSupervisor: ReturnType<typeof vi.fn>;
     pruneOldest: ReturnType<typeof vi.fn>;
+  };
+  cycleAttemptRepo: {
+    create: ReturnType<typeof vi.fn>;
+    update: ReturnType<typeof vi.fn>;
+    listForCycle: ReturnType<typeof vi.fn>;
+    deleteForCycle: ReturnType<typeof vi.fn>;
   };
 };
 
@@ -67,6 +74,9 @@ describe("SupervisorManager", () => {
           envVars: {},
         })),
       },
+      settingsRepo: {
+        get: vi.fn(() => undefined),
+      },
       supervisorRepo: {
         create: vi.fn((value) => ({ ...value, cycles: [] })),
         update: vi.fn((id, patch) => ({
@@ -102,6 +112,18 @@ describe("SupervisorManager", () => {
         })),
         listRecentForSupervisor: vi.fn(() => []),
         pruneOldest: vi.fn(),
+      },
+      cycleAttemptRepo: {
+        create: vi.fn((attempt) => attempt),
+        update: vi.fn((id, patch) => ({
+          id,
+          cycleId: "cycle-1",
+          attemptIndex: 0,
+          status: patch.status ?? "completed",
+          startedAt: 1,
+        })),
+        listForCycle: vi.fn(() => []),
+        deleteForCycle: vi.fn(),
       },
     };
   });

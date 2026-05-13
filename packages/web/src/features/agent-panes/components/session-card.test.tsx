@@ -292,6 +292,8 @@ describe("SessionCard", () => {
             state: "idle",
             objective: "Keep the agent on track",
             evaluatorProviderId: "claude",
+            maxSupervisionCount: 0,
+            completedSupervisionCount: 0,
             cycles: [],
             createdAt: Date.now(),
             updatedAt: Date.now(),

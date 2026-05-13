@@ -22,7 +22,6 @@ const sizeMap: Record<
     readonly trackHeight: string;
     readonly thumbSize: string;
     readonly offset: string;
-    readonly translateX: string;
   }
 > = {
   sm: {
@@ -30,14 +29,12 @@ const sizeMap: Record<
     trackHeight: "18px",
     thumbSize: "14px",
     offset: "2px",
-    translateX: "14px",
   },
   md: {
     trackWidth: "36px",
     trackHeight: "20px",
     thumbSize: "16px",
     offset: "2px",
-    translateX: "16px",
   },
 };
 
@@ -73,7 +70,6 @@ export function Switch({
           "--switch-track-height": dimensions.trackHeight,
           "--switch-thumb-size": dimensions.thumbSize,
           "--switch-thumb-offset": dimensions.offset,
-          "--switch-thumb-translate-x": dimensions.translateX,
           ...style,
         } as CSSProperties
       }

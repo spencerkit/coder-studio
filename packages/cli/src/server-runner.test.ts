@@ -2,8 +2,19 @@ import { fileURLToPath } from "url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { getCliVersion } from "./package-manifest.js";
 
-const { createServer, readCliConfig, hasWebAssets, getStaticAssetsDir } = vi.hoisted(() => ({
+const {
+  createServer,
+  parseServerConfig,
+  openDatabase,
+  closeDatabase,
+  readCliConfig,
+  hasWebAssets,
+  getStaticAssetsDir,
+} = vi.hoisted(() => ({
   createServer: vi.fn(),
+  parseServerConfig: vi.fn(),
+  openDatabase: vi.fn(),
+  closeDatabase: vi.fn(),
   readCliConfig: vi.fn(),
   hasWebAssets: vi.fn(),
   getStaticAssetsDir: vi.fn(),
@@ -11,6 +22,9 @@ const { createServer, readCliConfig, hasWebAssets, getStaticAssetsDir } = vi.hoi
 
 vi.mock("@coder-studio/server", () => ({
   createServer,
+  parseServerConfig,
+  openDatabase,
+  closeDatabase,
 }));
 
 vi.mock("./config-store.js", () => ({
@@ -22,7 +36,12 @@ vi.mock("./embed.js", () => ({
   getStaticAssetsDir,
 }));
 
-import { buildServerConfig, runServerEntrypoint, startServer } from "./server-runner";
+import {
+  buildServerConfig,
+  runServerEntrypoint,
+  startServer,
+  verifyLocalDatabaseCompatibility,
+} from "./server-runner";
 
 describe("server-runner", () => {
   afterEach(() => {
@@ -95,6 +114,30 @@ describe("server-runner", () => {
 
     expect(stop).toHaveBeenCalledTimes(1);
     expect(processExitSpy).toHaveBeenCalledWith(0);
+  });
+
+  it("verifies local database compatibility using the resolved server config", () => {
+    readCliConfig.mockReturnValue({
+      dataDir: "/tmp/cs-data/coder-studio.db",
+    });
+    hasWebAssets.mockReturnValue(true);
+    getStaticAssetsDir.mockReturnValue("/tmp/web");
+    parseServerConfig.mockReturnValue({
+      dataDir: "/tmp/cs-data/coder-studio.db",
+    });
+
+    const db = { close: vi.fn() };
+    openDatabase.mockReturnValue(db);
+
+    verifyLocalDatabaseCompatibility();
+
+    expect(parseServerConfig).toHaveBeenCalledWith({
+      appVersion: getCliVersion(import.meta.url),
+      dataDir: "/tmp/cs-data/coder-studio.db",
+      webRoot: "/tmp/web",
+    });
+    expect(openDatabase).toHaveBeenCalledWith("/tmp/cs-data/coder-studio.db");
+    expect(closeDatabase).toHaveBeenCalledWith(db);
   });
 
   it("starts the server when executed as the entrypoint", async () => {

@@ -242,6 +242,144 @@ describe("MobileTerminalInputBar", () => {
     );
   });
 
+  it("prevents touch pointer presses from moving focus onto a soft key", () => {
+    render(
+      <MobileTerminalInputBar
+        ctrlMode="off"
+        shiftArmed={false}
+        labels={labels}
+        onKeyPress={vi.fn()}
+        onCtrlTap={vi.fn()}
+        onCtrlLongPress={vi.fn()}
+        onShiftTap={vi.fn()}
+      />
+    );
+
+    const escapeButton = screen.getByRole("button", { name: labels.escape });
+    const pointerDownEvent = new Event("pointerdown", {
+      bubbles: true,
+      cancelable: true,
+    }) as Event & { pointerType?: string };
+    pointerDownEvent.pointerType = "touch";
+
+    fireEvent(escapeButton, pointerDownEvent);
+
+    expect(pointerDownEvent.defaultPrevented).toBe(true);
+  });
+
+  it("dispatches touch and pen soft-key taps without relying on click synthesis", () => {
+    const onKeyPress = vi.fn();
+    const onShiftTap = vi.fn();
+
+    render(
+      <MobileTerminalInputBar
+        ctrlMode="off"
+        shiftArmed={false}
+        labels={labels}
+        onKeyPress={onKeyPress}
+        onCtrlTap={vi.fn()}
+        onCtrlLongPress={vi.fn()}
+        onShiftTap={onShiftTap}
+      />
+    );
+
+    const escapeButton = screen.getByRole("button", { name: labels.escape });
+    fireEvent.pointerDown(escapeButton, { pointerType: "touch" });
+    fireEvent.pointerUp(escapeButton, { pointerType: "touch" });
+
+    expect(onKeyPress).toHaveBeenCalledTimes(1);
+    expect(onKeyPress).toHaveBeenLastCalledWith("escape");
+
+    const shiftButton = screen.getByRole("button", { name: labels.shift });
+    fireEvent.pointerDown(shiftButton, { pointerType: "pen" });
+    fireEvent.pointerUp(shiftButton, { pointerType: "pen" });
+
+    expect(onShiftTap).toHaveBeenCalledTimes(1);
+  });
+
+  it("dispatches touch ctrl taps on pointer release and keeps long press distinct", () => {
+    const onCtrlTap = vi.fn();
+    const onCtrlLongPress = vi.fn();
+
+    render(
+      <MobileTerminalInputBar
+        ctrlMode="off"
+        shiftArmed={false}
+        labels={labels}
+        onKeyPress={vi.fn()}
+        onCtrlTap={onCtrlTap}
+        onCtrlLongPress={onCtrlLongPress}
+        onShiftTap={vi.fn()}
+      />
+    );
+
+    const ctrlButton = screen.getByRole("button", { name: labels.ctrl });
+    fireEvent.pointerDown(ctrlButton, { pointerType: "touch" });
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+    fireEvent.pointerUp(ctrlButton, { pointerType: "touch" });
+
+    expect(onCtrlTap).toHaveBeenCalledTimes(1);
+    expect(onCtrlLongPress).not.toHaveBeenCalled();
+
+    fireEvent.pointerDown(ctrlButton, { pointerType: "touch" });
+    act(() => {
+      vi.advanceTimersByTime(450);
+    });
+    fireEvent.pointerUp(ctrlButton, { pointerType: "touch" });
+
+    expect(onCtrlTap).toHaveBeenCalledTimes(1);
+    expect(onCtrlLongPress).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not double-dispatch when a touch sequence is followed by a click event", () => {
+    const onKeyPress = vi.fn();
+
+    render(
+      <MobileTerminalInputBar
+        ctrlMode="off"
+        shiftArmed={false}
+        labels={labels}
+        onKeyPress={onKeyPress}
+        onCtrlTap={vi.fn()}
+        onCtrlLongPress={vi.fn()}
+        onShiftTap={vi.fn()}
+      />
+    );
+
+    const escapeButton = screen.getByRole("button", { name: labels.escape });
+    fireEvent.pointerDown(escapeButton, { pointerType: "touch" });
+    fireEvent.pointerUp(escapeButton, { pointerType: "touch" });
+    fireEvent.click(escapeButton);
+
+    expect(onKeyPress).toHaveBeenCalledTimes(1);
+    expect(onKeyPress).toHaveBeenCalledWith("escape");
+  });
+
+  it("does not dispatch a touch soft key when the gesture started on a different button", () => {
+    const onKeyPress = vi.fn();
+
+    render(
+      <MobileTerminalInputBar
+        ctrlMode="off"
+        shiftArmed={false}
+        labels={labels}
+        onKeyPress={onKeyPress}
+        onCtrlTap={vi.fn()}
+        onCtrlLongPress={vi.fn()}
+        onShiftTap={vi.fn()}
+      />
+    );
+
+    const tabButton = screen.getByRole("button", { name: labels.tab });
+    const escapeButton = screen.getByRole("button", { name: labels.escape });
+    fireEvent.pointerDown(tabButton, { pointerType: "touch", pointerId: 7 });
+    fireEvent.pointerUp(escapeButton, { pointerType: "touch", pointerId: 7 });
+
+    expect(onKeyPress).not.toHaveBeenCalled();
+  });
+
   it("ignores command-key callbacks when disabled", () => {
     const onCtrlTap = vi.fn();
     const onCtrlLongPress = vi.fn();

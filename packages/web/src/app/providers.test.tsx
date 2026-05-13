@@ -22,6 +22,8 @@ describe("routeEventToAtom", () => {
     state: "idle",
     objective: "Track progress",
     evaluatorProviderId: "claude",
+    maxSupervisionCount: 0,
+    completedSupervisionCount: 0,
     cycles: [],
     createdAt: 1,
     updatedAt: 1,

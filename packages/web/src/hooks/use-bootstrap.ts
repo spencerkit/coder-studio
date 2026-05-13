@@ -3,6 +3,7 @@ import { useAtomValue, useSetAtom } from "jotai";
 import { useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { authEnabledAtom, connectionStatusAtom, dispatchCommandAtom } from "../atoms";
+import { activationStatusAtom } from "../atoms/activation";
 import { authenticatedAtom } from "../atoms/app-ui";
 import {
   orderedWorkspacesAtom,
@@ -16,6 +17,7 @@ export function useBootstrap() {
   const bootstrapRequestIdRef = useRef(0);
   const navigate = useNavigate();
   const location = useLocation();
+  const activationStatus = useAtomValue(activationStatusAtom);
   const connectionStatus = useAtomValue(connectionStatusAtom);
   const dispatch = useAtomValue(dispatchCommandAtom);
   const workspaces = useAtomValue(orderedWorkspacesAtom);
@@ -49,8 +51,21 @@ export function useBootstrap() {
       return;
     }
 
+    if (location.pathname === "/session-gate") {
+      return;
+    }
+
+    if (activationStatus === "gated") {
+      navigate("/session-gate", { replace: true });
+      return;
+    }
+
     // Only bootstrap workspaces on "/" and "/workspace" paths
     if (location.pathname !== "/" && location.pathname !== "/workspace") {
+      return;
+    }
+
+    if (activationStatus !== "active") {
       return;
     }
 
@@ -115,6 +130,7 @@ export function useBootstrap() {
       navigate("/", { replace: true });
     }
   }, [
+    activationStatus,
     authEnabled,
     authenticated,
     connectionStatus,

@@ -43,6 +43,11 @@ describe("settings commands", () => {
             },
             supervisor: {
               evaluationTimeoutSec: 600,
+              retryEnabled: true,
+              retryMaxCount: 3,
+              retryDelaySec: 10,
+              retryOnTimeout: true,
+              retryOnEvaluatorError: false,
             },
           },
         },
@@ -65,6 +70,23 @@ describe("settings commands", () => {
         .prepare("SELECT value FROM user_settings WHERE key = ?")
         .get("supervisor.evaluationTimeoutSec")
     ).toEqual({ value: "600" });
+    expect(
+      db.prepare("SELECT value FROM user_settings WHERE key = ?").get("supervisor.retryEnabled")
+    ).toEqual({ value: "true" });
+    expect(
+      db.prepare("SELECT value FROM user_settings WHERE key = ?").get("supervisor.retryMaxCount")
+    ).toEqual({ value: "3" });
+    expect(
+      db.prepare("SELECT value FROM user_settings WHERE key = ?").get("supervisor.retryDelaySec")
+    ).toEqual({ value: "10" });
+    expect(
+      db.prepare("SELECT value FROM user_settings WHERE key = ?").get("supervisor.retryOnTimeout")
+    ).toEqual({ value: "true" });
+    expect(
+      db
+        .prepare("SELECT value FROM user_settings WHERE key = ?")
+        .get("supervisor.retryOnEvaluatorError")
+    ).toEqual({ value: "false" });
   });
 
   it("settings.update persists appearance.terminalCopyOnSelect into user_settings", async () => {
@@ -90,6 +112,54 @@ describe("settings commands", () => {
         .prepare("SELECT value FROM user_settings WHERE key = ?")
         .get("appearance.terminalCopyOnSelect")
     ).toEqual({ value: "true" });
+  });
+
+  it("settings.update persists appearance.themeId into user_settings", async () => {
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "settings-update-theme-id",
+        op: "settings.update",
+        args: {
+          settings: {
+            appearance: {
+              themeId: "graphite-light",
+            },
+          },
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(
+      db.prepare("SELECT value FROM user_settings WHERE key = ?").get("appearance.themeId")
+    ).toEqual({ value: '"graphite-light"' });
+  });
+
+  it("settings.update persists legacy appearance.theme light during themeId migration", async () => {
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "settings-update-legacy-theme-light",
+        op: "settings.update",
+        args: {
+          settings: {
+            appearance: {
+              theme: "light",
+            },
+          },
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(
+      db.prepare("SELECT value FROM user_settings WHERE key = ?").get("appearance.theme")
+    ).toEqual({
+      value: '"light"',
+    });
   });
 
   it("settings.update rejects fractional supervisor timeout values", async () => {
@@ -141,6 +211,30 @@ describe("settings commands", () => {
       db
         .prepare("SELECT value FROM user_settings WHERE key = ?")
         .get("supervisor.evaluationTimeoutSec")
+    ).toBeUndefined();
+  });
+
+  it("settings.update rejects retryDelaySec values below the supported minimum", async () => {
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "settings-update-supervisor-retry-delay-too-small",
+        op: "settings.update",
+        args: {
+          settings: {
+            supervisor: {
+              retryDelaySec: 0,
+            },
+          },
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("validation_error");
+    expect(
+      db.prepare("SELECT value FROM user_settings WHERE key = ?").get("supervisor.retryDelaySec")
     ).toBeUndefined();
   });
 
@@ -276,6 +370,26 @@ describe("settings commands", () => {
       "supervisor.evaluationTimeoutSec",
       "900"
     );
+    db.prepare("INSERT INTO user_settings (key, value) VALUES (?, ?)").run(
+      "supervisor.retryEnabled",
+      "true"
+    );
+    db.prepare("INSERT INTO user_settings (key, value) VALUES (?, ?)").run(
+      "supervisor.retryMaxCount",
+      "4"
+    );
+    db.prepare("INSERT INTO user_settings (key, value) VALUES (?, ?)").run(
+      "supervisor.retryDelaySec",
+      "15"
+    );
+    db.prepare("INSERT INTO user_settings (key, value) VALUES (?, ?)").run(
+      "supervisor.retryOnTimeout",
+      "false"
+    );
+    db.prepare("INSERT INTO user_settings (key, value) VALUES (?, ?)").run(
+      "supervisor.retryOnEvaluatorError",
+      "true"
+    );
 
     const result = await dispatch(
       {
@@ -292,6 +406,11 @@ describe("settings commands", () => {
       defaultProviderId: "codex",
       "notifications.enabled": true,
       "supervisor.evaluationTimeoutSec": 900,
+      "supervisor.retryEnabled": true,
+      "supervisor.retryMaxCount": 4,
+      "supervisor.retryDelaySec": 15,
+      "supervisor.retryOnTimeout": false,
+      "supervisor.retryOnEvaluatorError": true,
     });
   });
 
@@ -313,6 +432,28 @@ describe("settings commands", () => {
 
     expect(result.ok).toBe(true);
     expect(result.data?.["appearance.terminalCopyOnSelect"]).toBe(true);
+  });
+
+  it("settings.get returns appearance.themeId from user_settings", async () => {
+    db.prepare("INSERT INTO user_settings (key, value) VALUES (?, ?)").run(
+      "appearance.themeId",
+      '"nord-dark"'
+    );
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "settings-get-theme-id",
+        op: "settings.get",
+        args: {},
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.data).toMatchObject({
+      "appearance.themeId": "nord-dark",
+    });
   });
 
   it("settings.get normalizes invalid persisted supervisor timeout values", async () => {

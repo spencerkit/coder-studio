@@ -20,6 +20,14 @@ const noticeStylesheet = readFileSync(
   `${process.cwd()}/src/components/ui/notice/index.module.css`,
   "utf8"
 );
+const toastStyles = readFileSync(
+  `${process.cwd()}/src/components/ui/toast/index.module.css`,
+  "utf8"
+);
+const confirmDialogStyles = readFileSync(
+  `${process.cwd()}/src/components/ui/confirm-dialog/index.module.css`,
+  "utf8"
+);
 
 function getLastGroupedRuleBlockFrom(source: string, pattern: RegExp) {
   const matches = Array.from(source.matchAll(pattern));
@@ -63,6 +71,85 @@ function getLastRuleBlock(selector: string) {
 }
 
 describe("components.css theme-sensitive surfaces", () => {
+  it("routes file tree and git status icons through icon theme tokens", () => {
+    expect(getLastRuleBlock(".tree-icon.folder")).toContain("var(--icon-file-folder)");
+    expect(getLastRuleBlock(".tree-icon.code")).toContain("var(--icon-file-code)");
+    expect(getLastRuleBlock(".tree-icon.data")).toContain("var(--icon-file-data)");
+    expect(getLastRuleBlock(".tree-icon.doc")).toContain("var(--icon-file-doc)");
+    expect(getLastRuleBlock(".tree-icon.media")).toContain("var(--icon-file-media)");
+    expect(getLastRuleBlock(".tree-icon.file")).toContain("var(--icon-file-default)");
+    expect(getLastRuleBlock(".file-tree-shell .tree-icon.file")).toContain(
+      "var(--icon-file-default)"
+    );
+    expect(getLastRuleBlock(".git-row-icon-staged")).toContain("var(--icon-git-staged)");
+    expect(getLastRuleBlock(".git-row-icon-modified")).toContain("var(--icon-git-modified)");
+    expect(getLastRuleBlock(".git-row-icon-deleted")).toContain("var(--icon-git-deleted)");
+    expect(getLastRuleBlock(".git-row-icon-untracked")).toContain("var(--icon-git-untracked)");
+  });
+
+  it("routes semantic icon classes through icon tokens", () => {
+    expect(getLastRuleBlock(".settings-mobile-item__icon")).toContain("var(--icon-secondary)");
+    expect(getLastRuleBlock(".settings-nav-icon")).toContain("var(--icon-secondary)");
+    expect(getLastRuleBlock(".terminal-panel-empty-icon")).toContain("var(--icon-muted)");
+    expect(getLastRuleBlock(".bottom-terminal-empty-icon")).toContain("var(--icon-muted)");
+    expect(getLastRuleBlock(".config-empty-icon")).toContain("var(--icon-muted)");
+  });
+
+  it("keeps icon surfaces on dedicated icon surface tokens", () => {
+    expect(getLastRuleBlock(".welcome-feature-icon")).toContain(
+      "background: var(--icon-surface-accent)"
+    );
+    expect(getLastRuleBlock(".welcome-feature-icon")).toContain("color: var(--icon-accent)");
+    expect(getLastRuleBlock(".config-empty-icon")).toContain(
+      "background: var(--icon-surface-subtle)"
+    );
+    expect(getLastRuleBlock(".supervisor-danger-callout")).toContain("var(--icon-surface-error)");
+    expect(getLastRuleBlock(".supervisor-danger-callout-icon")).toContain("var(--icon-error)");
+  });
+
+  it("keeps mobile icon intent scoped correctly", () => {
+    expect(getLastRuleBlock(".mobile-supervisor-badge__icon")).toContain(
+      "color: var(--icon-accent)"
+    );
+    expect(getLastRuleBlock(".mobile-dock__icon")).toContain("color: currentColor");
+  });
+
+  it("keeps toast icons on icon semantic tokens instead of raw status colors", () => {
+    expect(getLastRuleBlock(".toast--success .toast__icon")).toContain("var(--icon-success)");
+    expect(getLastRuleBlock(".toast--error .toast__icon")).toContain("var(--icon-error)");
+    expect(getLastRuleBlock(".toast--warning .toast__icon")).toContain("var(--icon-warning)");
+    expect(getLastRuleBlock(".toast--info .toast__icon")).toContain("var(--icon-info)");
+    expect(getLastRuleBlockFrom(toastStyles, ".success .icon")).toContain(
+      "background: var(--icon-surface-success)"
+    );
+    expect(getLastRuleBlockFrom(toastStyles, ".error .icon")).toContain(
+      "background: var(--icon-surface-error)"
+    );
+    expect(getLastRuleBlockFrom(toastStyles, ".warning .icon")).toContain(
+      "background: var(--icon-surface-warning)"
+    );
+    expect(getLastRuleBlockFrom(toastStyles, ".info .icon")).toContain(
+      "background: var(--icon-surface-info)"
+    );
+    expect(getLastRuleBlockFrom(toastStyles, ".success .icon")).toContain("var(--icon-success)");
+  });
+
+  it("keeps confirm dialog danger icons on icon tokens", () => {
+    expect(getLastRuleBlockFrom(confirmDialogStyles, ".titleDanger")).toContain(
+      "var(--icon-warning)"
+    );
+    expect(getLastRuleBlockFrom(confirmDialogStyles, ".iconDanger")).toContain(
+      "color: var(--icon-warning)"
+    );
+  });
+
+  it("keeps config status colors on icon tokens", () => {
+    expect(getLastRuleBlock(".config-status--success")).toContain("var(--icon-success)");
+    expect(getLastRuleBlock(".config-status--warning")).toContain("var(--icon-warning)");
+    expect(getLastRuleBlock(".config-status--info")).toContain("var(--icon-info)");
+    expect(getLastRuleBlock(".config-status--error")).toContain("var(--icon-error)");
+  });
+
   it("exposes global mobile safe-area tokens so standalone mobile views keep their padding", () => {
     expect(tokensStylesheet).toContain("--mobile-safe-top: env(safe-area-inset-top, 0px);");
     expect(tokensStylesheet).toContain("--mobile-safe-right: env(safe-area-inset-right, 0px);");
@@ -84,12 +171,34 @@ describe("components.css theme-sensitive surfaces", () => {
     const activeTab = getLastRuleBlock(".topbar-tab.active");
     const emptyCard = getLastRuleBlock(".workspace-empty-inner");
     const resolvingCard = getLastRuleBlock(".workspace-resolving-card");
+    const sessionTerminal = getLastRuleBlock(".session-terminal");
+    const bottomTerminalShell = getLastRuleBlock(
+      ".workspace-main-area > .bottom-terminal > .bottom-terminal"
+    );
 
     expect(topbar).toContain("var(--bg-surface)");
     expect(activeTab).toContain("var(--bg-active)");
     expect(activeTab).not.toContain("rgba(45, 63, 79, 0.92)");
     expect(emptyCard).toContain("var(--bg-surface)");
     expect(resolvingCard).toContain("var(--bg-surface)");
+    expect(sessionTerminal).toContain("var(--bg-terminal)");
+    expect(sessionTerminal).not.toContain("rgba(11, 18, 24, 0.98)");
+    expect(bottomTerminalShell).toContain("var(--bg-terminal)");
+    expect(bottomTerminalShell).not.toContain("rgba(17, 24, 31, 0.96)");
+  });
+
+  it("keeps auth shells theme-aware instead of forcing dark gradients", () => {
+    const authScreen = getLastRuleBlock(".auth-screen");
+    const authCard = getLastRuleBlock(".auth-card-shell");
+
+    expect(authScreen).toContain("var(--bg-page)");
+    expect(authScreen).toContain("var(--accent-green)");
+    expect(authScreen).toContain("var(--accent-blue)");
+    expect(authScreen).not.toContain("rgba(17, 24, 31, 0.96)");
+    expect(authCard).toContain("var(--bg-surface)");
+    expect(authCard).toContain("var(--accent-blue)");
+    expect(authCard).toContain("var(--shadow-xl)");
+    expect(authCard).not.toContain("rgba(13, 20, 26, 0.94)");
   });
 
   it("keeps quick actions sized to its label instead of icon-button width", () => {
@@ -178,6 +287,10 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(xtermViewport).toContain("touch-action: pan-y");
     expect(xtermViewport).toContain("-webkit-overflow-scrolling: touch");
     expect(xtermViewport).not.toContain("touch-action: none");
+  });
+
+  it("does not ship removed mobile terminal copy mode overlay CSS", () => {
+    expect(stylesheet).not.toContain(".mobile-terminal-copy-mode");
   });
 
   it("keeps code editor header actions docked to the right edge", () => {
@@ -298,6 +411,9 @@ describe("components.css theme-sensitive surfaces", () => {
   it("keeps mobile select row-side actions lightweight and token-driven", () => {
     const row = getLastRuleBlock(".mobile-select-sheet__item-row");
     const rowSelected = getLastRuleBlock('.mobile-select-sheet__item-row[data-selected="true"]');
+    const plainSelected = getLastRuleBlock(
+      '.mobile-select-sheet__list > [data-selected="true"] > .mobile-select-sheet__item'
+    );
     const commandSelected = getLastRuleBlock(
       '.mobile-select-sheet--command .mobile-select-sheet__list > [data-selected="true"] > .mobile-select-sheet__item'
     );
@@ -307,6 +423,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(row).toContain("display: flex");
     expect(row).toContain("padding: var(--sp-1) var(--sp-2)");
     expect(rowSelected).toContain("var(--accent-blue)");
+    expect(plainSelected).toContain("var(--accent-blue)");
     expect(commandSelected).toContain("var(--accent-blue) 12%");
     expect(commandSelected).toContain("inset 2px 0 0");
     expect(sideAction).toContain("width: 40px");
@@ -399,7 +516,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(mobileItem).toContain("border-bottom: 1px solid var(--border)");
     expect(mobileItem).toContain("border-radius: 0");
     expect(mobileItem).toContain("background: transparent");
-    expect(mobileItemIcon).toContain("color: var(--text-tertiary)");
+    expect(mobileItemIcon).toContain("color: var(--icon-secondary)");
     expect(mobileItemArrow).toContain("color: var(--text-tertiary)");
   });
 
@@ -468,6 +585,39 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(launchActionButton).toContain("border-radius: 12px");
     expect(launchActionButton).toContain("font-size: var(--text-sm)");
     expect(launchActionButton).toContain("box-shadow: none");
+  });
+
+  it("keeps mobile supervisor sheets aligned with the shared fullscreen page spacing and action sizing", () => {
+    const supervisorRoot = getLastRuleBlock(".mobile-supervisor-sheet__root").replace(/\s+/g, " ");
+    const supervisorDetail = getLastRuleBlock(".mobile-supervisor-sheet__detail").replace(
+      /\s+/g,
+      " "
+    );
+    const supervisorFullscreenFooter = getLastRuleBlock(
+      ".mobile-supervisor-sheet.mobile-sheet--fullscreen .mobile-sheet__footer"
+    ).replace(/\s+/g, " ");
+    const supervisorActionButton = getLastRuleBlock(
+      ".mobile-supervisor-sheet__actions > .btn"
+    ).replace(/\s+/g, " ");
+    const supervisorFooterButton = getLastRuleBlock(
+      ".mobile-supervisor-sheet__footer > .btn"
+    ).replace(/\s+/g, " ");
+
+    expect(supervisorRoot).toContain("padding: var(--sp-4)");
+    expect(supervisorRoot).toContain("padding-bottom: var(--sp-5)");
+    expect(supervisorDetail).toContain("padding: var(--sp-4)");
+    expect(supervisorDetail).toContain("padding-bottom: var(--sp-5)");
+    expect(supervisorFullscreenFooter).toContain(
+      "padding: var(--sp-2) var(--sp-4) calc(var(--mobile-safe-bottom) + var(--sp-4))"
+    );
+    expect(supervisorActionButton).toContain("min-height: 44px");
+    expect(supervisorFooterButton).toContain("min-height: 44px");
+    expect(supervisorFooterButton).toContain("box-shadow: none");
+    expect(getLastRuleBlock(".mobile-supervisor-sheet__footer")).toContain("padding: var(--sp-2)");
+    expect(getLastRuleBlock(".mobile-supervisor-sheet__footer")).toContain("border-radius: 16px");
+    expect(getLastRuleBlock(".mobile-supervisor-sheet__footer")).toContain(
+      "background: color-mix("
+    );
   });
 
   it("keeps the mobile workspace home screen aligned to settings chrome and editor-pane empty states", () => {

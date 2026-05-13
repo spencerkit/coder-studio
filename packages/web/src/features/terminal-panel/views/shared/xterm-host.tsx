@@ -17,6 +17,7 @@ import { themeAtom } from "../../../../atoms/app-ui";
 import { dispatchCommandAtom, wsClientAtom } from "../../../../atoms/connection";
 import { useViewport } from "../../../../hooks/use-viewport";
 import { useTranslation } from "../../../../lib/i18n";
+import { getThemeById } from "../../../../theme";
 import type { ConnectionStatus, TerminalBinaryPayload } from "../../../../ws/client";
 import { pushToastAtom } from "../../../notifications/atoms";
 import type { OutputBuffer } from "../../atoms";
@@ -26,6 +27,7 @@ import {
   type HydrationRequestHandle,
   type HydrationTier,
 } from "../../hydration-coordinator";
+import { getLogicalLineTextFromTouchPoint } from "../../mobile/long-press-copy-line";
 import { MobileTerminalInputBar } from "../../mobile/mobile-terminal-input-bar";
 import {
   applyCtrlModeToInput,
@@ -50,6 +52,8 @@ const MOBILE_TOUCH_MOMENTUM_MIN_VELOCITY_PX_PER_MS = 0.12;
 const MOBILE_TOUCH_MOMENTUM_STOP_VELOCITY_PX_PER_MS = 0.02;
 const MOBILE_TOUCH_MOMENTUM_FRICTION_PER_FRAME = 0.92;
 const MOBILE_TOUCH_MOMENTUM_FRAME_MS = 16;
+const MOBILE_COPY_MODE_LONG_PRESS_MS = 500;
+const MOBILE_COPY_MODE_MOVE_TOLERANCE_PX = 10;
 const TERMINAL_FOCUS_REPORTING_BYTES = new Set(["\x1b[I", "\x1b[O"]);
 const TERMINAL_COPY_ON_SELECT_ERROR_THROTTLE_MS = 3_000;
 
@@ -58,7 +62,7 @@ interface TerminalInputDraftState {
   submittedText?: string;
 }
 
-type TouchPointLike = Pick<Touch, "identifier" | "clientY">;
+type TouchPointLike = Pick<Touch, "identifier" | "clientX" | "clientY" | "target">;
 
 interface TouchScrollSample {
   clientY: number;
@@ -66,6 +70,49 @@ interface TouchScrollSample {
 }
 
 type TouchScrollDeltaResult = "idle" | "buffered" | "scrolled" | "blocked";
+
+async function copyTextWithFallback(text: string): Promise<void> {
+  let clipboardError: unknown;
+
+  try {
+    await navigator.clipboard.writeText(text);
+    return;
+  } catch (error) {
+    clipboardError = error;
+  }
+
+  if (typeof document === "undefined" || typeof document.execCommand !== "function") {
+    throw clipboardError ?? new Error("Clipboard copy unavailable");
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "true");
+  textarea.setAttribute("aria-hidden", "true");
+  textarea.style.position = "fixed";
+  textarea.style.top = "0";
+  textarea.style.left = "0";
+  textarea.style.width = "1px";
+  textarea.style.height = "1px";
+  textarea.style.padding = "0";
+  textarea.style.border = "0";
+  textarea.style.opacity = "0";
+  textarea.style.pointerEvents = "none";
+
+  document.body.appendChild(textarea);
+
+  try {
+    textarea.focus();
+    textarea.select();
+    textarea.setSelectionRange(0, textarea.value.length);
+
+    if (!document.execCommand("copy")) {
+      throw clipboardError ?? new Error("Clipboard copy unavailable");
+    }
+  } finally {
+    textarea.remove();
+  }
+}
 
 function isReplayGeneratedTerminalResponse(data: string): boolean {
   return /^\x1b\[\d+;\d+R$/.test(data) || /^\x1b\[(?:\?|>)(?:\d+;)*\d*c$/.test(data);
@@ -213,66 +260,6 @@ function getTouchScrollPxPerLine(terminal: Terminal, container: HTMLElement): nu
   }
 
   return MOBILE_TOUCH_SCROLL_FALLBACK_PX_PER_LINE;
-}
-
-/**
- * Aurora Mint terminal themes for xterm.js.
- * These mirror the light/dark tokens so terminals stay legible when the user
- * switches themes without needing a full remount.
- */
-const AURORA_MINT_THEMES = {
-  dark: {
-    background: "#0b1218",
-    foreground: "#e5edf3",
-    cursor: "#78d7b2",
-    cursorAccent: "#0b1218",
-    selectionBackground: "#1e3040",
-    selectionForeground: "#e5edf3",
-    black: "#0a1014",
-    red: "#ff9eb0",
-    green: "#78d7b2",
-    yellow: "#f1b86a",
-    blue: "#6cb6ff",
-    magenta: "#c792ea",
-    cyan: "#78d7b2",
-    white: "#9fb0bc",
-    brightBlack: "#4a5b6a",
-    brightRed: "#ff9eb0",
-    brightGreen: "#78d7b2",
-    brightYellow: "#f1b86a",
-    brightBlue: "#6cb6ff",
-    brightMagenta: "#c792ea",
-    brightCyan: "#78d7b2",
-    brightWhite: "#e5edf3",
-  },
-  light: {
-    background: "#fafbfc",
-    foreground: "#1f2328",
-    cursor: "#0969da",
-    cursorAccent: "#fafbfc",
-    selectionBackground: "#dde4ea",
-    selectionForeground: "#1f2328",
-    black: "#24292f",
-    red: "#cf222e",
-    green: "#1a7f37",
-    yellow: "#9a6700",
-    blue: "#0969da",
-    magenta: "#8250df",
-    cyan: "#1b7c83",
-    white: "#57606a",
-    brightBlack: "#8b949e",
-    brightRed: "#cf222e",
-    brightGreen: "#1a7f37",
-    brightYellow: "#9a6700",
-    brightBlue: "#0969da",
-    brightMagenta: "#8250df",
-    brightCyan: "#1b7c83",
-    brightWhite: "#1f2328",
-  },
-};
-
-function getTerminalTheme(theme: "dark" | "light") {
-  return AURORA_MINT_THEMES[theme];
 }
 
 function shouldBypassPtyForKeyboardPaste(event: KeyboardEvent): boolean {
@@ -475,6 +462,8 @@ export function XtermHost({
   const selectedTextRef = useRef("");
   const lastCopyOnSelectFailureAtRef = useRef(0);
   const copyOnSelectPointerIdRef = useRef<number | null>(null);
+  const copyMobileLongPressRef = useRef<(lineText: string | null) => void>(() => {});
+  const resetTouchStateRef = useRef<() => void>(() => {});
   const touchScrollStateRef = useRef<{
     activeTouchId: number | null;
     lastClientY: number;
@@ -483,6 +472,7 @@ export function XtermHost({
     velocityPxPerMs: number;
     lastMomentumFrameAt: number;
     momentumFrameId: number | null;
+    gestureDidScroll: boolean;
     samples: TouchScrollSample[];
   }>({
     activeTouchId: null,
@@ -492,6 +482,7 @@ export function XtermHost({
     velocityPxPerMs: 0,
     lastMomentumFrameAt: 0,
     momentumFrameId: null,
+    gestureDidScroll: false,
     samples: [],
   });
 
@@ -585,7 +576,7 @@ export function XtermHost({
 
   useEffect(() => {
     if (terminalRef.current) {
-      terminalRef.current.options.theme = getTerminalTheme(uiTheme);
+      terminalRef.current.options.theme = getThemeById(uiTheme).terminalTheme;
     }
   }, [uiTheme]);
 
@@ -600,6 +591,25 @@ export function XtermHost({
     }
 
     const state = touchScrollStateRef.current;
+    let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+    let longPressTouchId: number | null = null;
+    let longPressStartClientX = 0;
+    let longPressStartClientY = 0;
+    let longPressLineText: string | null = null;
+    let longPressReady = false;
+
+    const clearLongPressTimer = () => {
+      if (longPressTimer !== null) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+      }
+
+      longPressTouchId = null;
+      longPressStartClientX = 0;
+      longPressStartClientY = 0;
+      longPressLineText = null;
+      longPressReady = false;
+    };
 
     const stopMomentumScroll = () => {
       if (state.momentumFrameId !== null) {
@@ -710,13 +720,17 @@ export function XtermHost({
     };
 
     const resetTouchState = () => {
+      clearLongPressTimer();
       stopMomentumScroll();
       state.activeTouchId = null;
       state.lastClientY = 0;
       state.carryPx = 0;
       state.pxPerLine = null;
+      state.gestureDidScroll = false;
       state.samples = [];
     };
+
+    resetTouchStateRef.current = resetTouchState;
 
     const handleTouchStart = (event: TouchEvent) => {
       if (event.touches.length !== 1) {
@@ -737,8 +751,32 @@ export function XtermHost({
       state.pxPerLine = terminalRef.current
         ? getTouchScrollPxPerLine(terminalRef.current, container)
         : MOBILE_TOUCH_SCROLL_FALLBACK_PX_PER_LINE;
+      state.gestureDidScroll = false;
       state.samples = [];
       recordTouchSample(touch.clientY, performance.now());
+      if (viewport === "mobile" && terminalPreferences.copyOnSelect) {
+        longPressTouchId = touch.identifier;
+        longPressStartClientX = touch.clientX;
+        longPressStartClientY = touch.clientY;
+        const terminal = terminalRef.current;
+        const rowsElement = container.querySelector(".xterm-rows");
+        const screenElement = container.querySelector(".xterm-screen");
+        longPressReady = false;
+        longPressLineText =
+          terminal && rowsElement instanceof HTMLElement
+            ? getLogicalLineTextFromTouchPoint({
+                clientX: touch.clientX,
+                clientY: touch.clientY,
+                rowsElement,
+                screenElement: screenElement instanceof HTMLElement ? screenElement : undefined,
+                terminal,
+              })
+            : null;
+        longPressTimer = setTimeout(() => {
+          longPressTimer = null;
+          longPressReady = true;
+        }, MOBILE_COPY_MODE_LONG_PRESS_MS);
+      }
     };
 
     const handleTouchMove = (event: TouchEvent) => {
@@ -748,15 +786,28 @@ export function XtermHost({
         return;
       }
 
+      if (longPressTouchId === touch.identifier) {
+        if (
+          Math.abs(touch.clientX - longPressStartClientX) > MOBILE_COPY_MODE_MOVE_TOLERANCE_PX ||
+          Math.abs(touch.clientY - longPressStartClientY) > MOBILE_COPY_MODE_MOVE_TOLERANCE_PX
+        ) {
+          clearLongPressTimer();
+        } else {
+          return;
+        }
+      }
+
       const base = terminal.buffer.active.baseY;
       if (base <= 0) {
         state.lastClientY = touch.clientY;
         state.carryPx = 0;
+        state.gestureDidScroll = false;
         state.samples = [];
         state.velocityPxPerMs = 0;
         return;
       }
 
+      state.gestureDidScroll = true;
       const deltaY = state.lastClientY - touch.clientY;
       state.lastClientY = touch.clientY;
       recordTouchSample(touch.clientY, performance.now());
@@ -769,18 +820,42 @@ export function XtermHost({
     };
 
     const handleTouchEnd = (event: TouchEvent) => {
+      const longPressTouch = findTouchByIdentifier(event.changedTouches, longPressTouchId);
+      if (longPressTouch) {
+        if (longPressReady) {
+          const lineText = longPressLineText;
+          clearLongPressTimer();
+          state.activeTouchId = null;
+          state.lastClientY = 0;
+          state.carryPx = 0;
+          state.pxPerLine = null;
+          state.velocityPxPerMs = 0;
+          state.gestureDidScroll = false;
+          state.samples = [];
+          copyMobileLongPressRef.current(lineText);
+          return;
+        }
+
+        clearLongPressTimer();
+      }
+
       if (findTouchByIdentifier(event.changedTouches, state.activeTouchId)) {
+        const canStartMomentum = state.gestureDidScroll;
         const touch = findTouchByIdentifier(event.changedTouches, state.activeTouchId);
-        if (touch) {
+        if (touch && canStartMomentum) {
           recordTouchSample(touch.clientY, performance.now());
           updateVelocityFromSamples();
         }
 
         state.activeTouchId = null;
         state.lastClientY = 0;
+        state.gestureDidScroll = false;
         state.samples = [];
 
-        if (Math.abs(state.velocityPxPerMs) >= MOBILE_TOUCH_MOMENTUM_MIN_VELOCITY_PX_PER_MS) {
+        if (
+          canStartMomentum &&
+          Math.abs(state.velocityPxPerMs) >= MOBILE_TOUCH_MOMENTUM_MIN_VELOCITY_PX_PER_MS
+        ) {
           state.lastMomentumFrameAt = 0;
           state.momentumFrameId = requestAnimationFrame(stepMomentumScroll);
           return;
@@ -806,9 +881,10 @@ export function XtermHost({
       container.removeEventListener("touchmove", handleTouchMove);
       container.removeEventListener("touchend", handleTouchEnd);
       container.removeEventListener("touchcancel", handleTouchCancel);
+      resetTouchStateRef.current = () => {};
       resetTouchState();
     };
-  }, []);
+  }, [terminalPreferences.copyOnSelect, viewport]);
 
   const scheduleFit = useCallback(() => {
     if (fitFrameRef.current !== null) {
@@ -855,10 +931,6 @@ export function XtermHost({
     setShiftArmed(nextShiftArmed);
   }, []);
 
-  const focusTerminal = useCallback(() => {
-    terminalRef.current?.focus();
-  }, []);
-
   const pushCopyOnSelectFailureToast = useCallback(() => {
     const now = Date.now();
     if (now - lastCopyOnSelectFailureAtRef.current < TERMINAL_COPY_ON_SELECT_ERROR_THROTTLE_MS) {
@@ -868,10 +940,53 @@ export function XtermHost({
     lastCopyOnSelectFailureAtRef.current = now;
     pushToast({
       kind: "error",
-      title: t("settings.copy_on_select_failed_title"),
-      body: t("settings.copy_on_select_failed_body"),
+      title:
+        viewport === "mobile"
+          ? t("terminal.mobile_copy_current_line_failed_title")
+          : t("settings.copy_on_select_failed_title"),
+      body:
+        viewport === "mobile"
+          ? t("terminal.mobile_copy_current_line_failed_body")
+          : t("settings.copy_on_select_failed_body"),
     });
-  }, [pushToast, t]);
+  }, [pushToast, t, viewport]);
+
+  const copyMobileLongPress = useCallback(
+    async (lineText: string | null) => {
+      if (viewport !== "mobile" || !terminalPreferences.copyOnSelect) {
+        return;
+      }
+
+      resetTouchStateRef.current();
+      if (lineText === null) {
+        return;
+      }
+
+      try {
+        await copyTextWithFallback(lineText);
+        pushToast({
+          kind: "success",
+          title: t("terminal.copied_current_line"),
+        });
+        if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+          navigator.vibrate(10);
+        }
+      } catch {
+        pushCopyOnSelectFailureToast();
+      }
+    },
+    [pushCopyOnSelectFailureToast, pushToast, t, terminalPreferences.copyOnSelect, viewport]
+  );
+
+  useEffect(() => {
+    copyMobileLongPressRef.current = (lineText) => {
+      void copyMobileLongPress(lineText);
+    };
+  }, [copyMobileLongPress]);
+
+  useLayoutEffect(() => {
+    resetTouchStateRef.current();
+  }, [terminalId, workspaceId]);
 
   const copySelectionOnSelect = useCallback(async () => {
     if (viewport === "mobile" || !terminalPreferences.copyOnSelect) {
@@ -889,7 +1004,7 @@ export function XtermHost({
     }
 
     try {
-      await navigator.clipboard.writeText(selection);
+      await copyTextWithFallback(selection);
     } catch {
       pushCopyOnSelectFailureToast();
     }
@@ -1096,7 +1211,7 @@ export function XtermHost({
     // characters used by TUIs (claude, codex) render as a continuous frame
     // with no gaps between rows.
     const terminal = new Terminal({
-      theme: getTerminalTheme(initialThemeRef.current),
+      theme: getThemeById(initialThemeRef.current).terminalTheme,
       fontFamily: "JetBrains Mono, Fira Code, SF Mono, monospace",
       fontSize: 11,
       scrollback: 5000,
@@ -1987,10 +2102,15 @@ export function XtermHost({
    * Focus terminal when it becomes active
    */
   useEffect(() => {
-    if (meta?.alive && terminalRef.current) {
+    if (
+      viewport !== "mobile" &&
+      hydrationState.kind === "granted" &&
+      meta?.alive &&
+      terminalRef.current
+    ) {
       terminalRef.current.focus();
     }
-  }, [meta?.alive]);
+  }, [hydrationState.kind, meta?.alive, viewport]);
 
   const showMobileInputBar = viewport === "mobile" && isInteractive;
   const mobileInputDisabled = !isInteractive || uploadBusy || connectionStatus !== "connected";
@@ -2012,30 +2132,26 @@ export function XtermHost({
 
   const handleSoftKeyPress = useCallback(
     async (key: SoftTerminalKeyId) => {
-      focusTerminal();
       const nextShiftArmed = shiftArmedRef.current;
       if (nextShiftArmed) {
         updateShiftArmed(false);
       }
       await handleInput(getSoftTerminalInputBytes(key, { shift: nextShiftArmed }));
     },
-    [focusTerminal, handleInput, updateShiftArmed]
+    [handleInput, updateShiftArmed]
   );
 
   const handleCtrlTap = useCallback(() => {
-    focusTerminal();
     updateCtrlMode(toggleCtrlMode(ctrlModeRef.current));
-  }, [focusTerminal, updateCtrlMode]);
+  }, [updateCtrlMode]);
 
   const handleCtrlLongPress = useCallback(() => {
-    focusTerminal();
     updateCtrlMode(lockCtrlMode());
-  }, [focusTerminal, updateCtrlMode]);
+  }, [updateCtrlMode]);
 
   const handleShiftTap = useCallback(() => {
-    focusTerminal();
     updateShiftArmed(!shiftArmedRef.current);
-  }, [focusTerminal, updateShiftArmed]);
+  }, [updateShiftArmed]);
 
   const showReplayOverlay =
     replayUiState.kind !== "ready" && (viewport === "mobile" || hydrationState.kind === "granted");

@@ -7,9 +7,10 @@
 }
 
 .titleDanger {
-  color: var(--color-warning);
+  color: var(--icon-warning);
 }
 
 .iconDanger {
   flex: none;
+  color: var(--icon-warning);
 }

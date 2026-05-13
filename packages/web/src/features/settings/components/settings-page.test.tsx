@@ -340,6 +340,120 @@ describe("SettingsPage", () => {
     });
   });
 
+  it("loads and saves supervisor retry settings from general settings", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "supervisor.retryEnabled": true,
+          "supervisor.retryMaxCount": 3,
+          "supervisor.retryDelaySec": 10,
+          "supervisor.retryOnTimeout": true,
+          "supervisor.retryOnEvaluatorError": false,
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+
+    const retryEnabled = await screen.findByRole("switch", { name: "启用 Supervisor 重试" });
+    const retryMaxCount = screen.getByLabelText("最大重试次数");
+    const retryDelaySec = screen.getByLabelText("重试间隔（秒）");
+    const retryOnTimeout = screen.getByRole("switch", { name: "超时后重试" });
+    const retryOnEvaluatorError = screen.getByRole("switch", { name: "评估器异常后重试" });
+
+    expect(retryEnabled).toHaveAttribute("aria-checked", "true");
+    expect(retryOnTimeout).toHaveAttribute("aria-checked", "true");
+    expect(retryOnEvaluatorError).toHaveAttribute("aria-checked", "false");
+    await waitFor(() => {
+      expect(retryMaxCount).toHaveValue(3);
+      expect(retryDelaySec).toHaveValue(10);
+    });
+
+    fireEvent.click(retryEnabled);
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            supervisor: {
+              retryEnabled: false,
+            },
+          },
+        },
+        undefined
+      );
+    });
+
+    fireEvent.change(retryMaxCount, { target: { value: "5" } });
+    fireEvent.blur(retryMaxCount);
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            supervisor: {
+              retryMaxCount: 5,
+            },
+          },
+        },
+        undefined
+      );
+    });
+
+    fireEvent.change(retryDelaySec, { target: { value: "30" } });
+    fireEvent.blur(retryDelaySec);
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            supervisor: {
+              retryDelaySec: 30,
+            },
+          },
+        },
+        undefined
+      );
+    });
+
+    fireEvent.click(retryOnTimeout);
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            supervisor: {
+              retryOnTimeout: false,
+            },
+          },
+        },
+        undefined
+      );
+    });
+
+    fireEvent.click(retryOnEvaluatorError);
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            supervisor: {
+              retryOnEvaluatorError: true,
+            },
+          },
+        },
+        undefined
+      );
+    });
+  });
+
   it("renders the supervisor timeout control as an inline settings row", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "settings.get") {
@@ -894,7 +1008,7 @@ describe("SettingsPage", () => {
     });
   });
 
-  it("renders appearance option groups through shared pills with group semantics", async () => {
+  it("renders appearance theme and language controls with shared semantics", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "settings.get") {
         return {
@@ -908,15 +1022,10 @@ describe("SettingsPage", () => {
     renderSettingsPage(store);
     fireEvent.click(screen.getByRole("button", { name: "外观" }));
 
-    const darkThemePill = await screen.findByRole("button", { name: "深色" });
-    const lightThemePill = screen.getByRole("button", { name: "浅色" });
+    const themePicker = await screen.findByRole("button", { name: "主题 Mint 深色" });
     const chineseLanguagePill = screen.getByRole("button", { name: "中文" });
 
-    expect(
-      screen.getByRole("group", {
-        name: "主题",
-      })
-    ).toHaveAccessibleDescription("选择应用主题");
+    expect(themePicker).toHaveAccessibleDescription("选择应用主题");
     expect(
       screen.getByRole("group", {
         name: "语言",
@@ -924,10 +1033,7 @@ describe("SettingsPage", () => {
     ).toHaveAccessibleDescription("选择界面语言");
     expect(screen.queryByRole("group", { name: "终端渲染器" })).not.toBeInTheDocument();
     expect(screen.queryByRole("switch", { name: "选中自动复制" })).not.toBeInTheDocument();
-    expect(darkThemePill).toHaveClass("settings-pill", "settings-pill-active");
-    expect(darkThemePill).toHaveAttribute("aria-pressed", "true");
-    expect(lightThemePill).toHaveClass("settings-pill");
-    expect(lightThemePill).toHaveAttribute("aria-pressed", "false");
+    expect(themePicker).toHaveAttribute("aria-haspopup", "listbox");
     expect(chineseLanguagePill).toHaveAttribute("aria-pressed", "true");
   });
 
@@ -972,7 +1078,7 @@ describe("SettingsPage", () => {
     expect(await screen.findByRole("switch", { name: "选中自动复制" })).toBeInTheDocument();
   });
 
-  it("does not show copy-on-select on mobile general settings", async () => {
+  it("shows copy-on-select on mobile general settings with mobile-specific hint", async () => {
     viewportMocks.viewport = "mobile";
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "settings.get") {
@@ -987,13 +1093,12 @@ describe("SettingsPage", () => {
     renderSettingsPage(store);
     fireEvent.click(screen.getByRole("button", { name: "通用" }));
 
-    await screen.findByText("通知");
-
-    expect(screen.queryByRole("switch", { name: "选中自动复制" })).not.toBeInTheDocument();
-    expect(screen.queryByText("选中自动复制")).not.toBeInTheDocument();
+    expect(await screen.findByRole("switch", { name: "选中自动复制" })).toBeInTheDocument();
+    expect(screen.getByText("选中文本后自动复制到系统剪贴板")).toBeInTheDocument();
   });
 
-  it("updates theme selection through the shared appearance pills", async () => {
+  it("updates theme through a single shared appearance picker", async () => {
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "settings.get") {
         return {};
@@ -1003,8 +1108,23 @@ describe("SettingsPage", () => {
     const store = createConnectedStore(sendCommand);
 
     renderSettingsPage(store);
-    fireEvent.click(screen.getByRole("button", { name: "外观" }));
-    fireEvent.click(await screen.findByRole("button", { name: "浅色" }));
+    fireEvent.click(screen.getByRole("button", { name: "Appearance" }));
+
+    const picker = await screen.findByRole("button", { name: "Theme Mint Dark" });
+    expect(picker).toHaveAttribute("aria-haspopup", "listbox");
+
+    fireEvent.click(picker);
+
+    const listbox = await screen.findByRole("listbox", { name: "Theme" });
+    expect(within(listbox).getByRole("option", { name: "Mint Dark" })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+    expect(within(listbox).getByRole("option", { name: "Graphite Dark" })).toBeInTheDocument();
+    expect(within(listbox).getByRole("option", { name: "Graphite Light" })).toBeInTheDocument();
+    expect(within(listbox).getByRole("option", { name: "Nord Light" })).toBeInTheDocument();
+
+    fireEvent.click(within(listbox).getByRole("option", { name: "Graphite Dark" }));
 
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith(
@@ -1012,7 +1132,7 @@ describe("SettingsPage", () => {
         {
           settings: {
             appearance: {
-              theme: "light",
+              themeId: "graphite-dark",
             },
           },
         },
@@ -1020,9 +1140,140 @@ describe("SettingsPage", () => {
       );
     });
 
-    expect(document.documentElement).toHaveAttribute("data-theme", "light");
-    expect(screen.getByRole("button", { name: "浅色" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: "深色" })).toHaveAttribute("aria-pressed", "false");
+    expect(document.documentElement).toHaveAttribute("data-theme", "graphite-dark");
+
+    const updatedPicker = screen.getByRole("button", { name: "Theme Graphite Dark" });
+    fireEvent.click(updatedPicker);
+
+    const updatedListbox = await screen.findByRole("listbox", { name: "Theme" });
+    fireEvent.click(within(updatedListbox).getByRole("option", { name: "Graphite Light" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            appearance: {
+              themeId: "graphite-light",
+            },
+          },
+        },
+        undefined
+      );
+    });
+
+    expect(document.documentElement).toHaveAttribute("data-theme", "graphite-light");
+    expect(screen.getByRole("button", { name: "Theme Graphite Light" })).toBeInTheDocument();
+  });
+
+  it("hydrates the single theme picker from settings.get themeId", async () => {
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "appearance.themeId": "nord-light",
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "Appearance" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Theme Nord Light" })).toBeInTheDocument();
+    });
+  });
+
+  it("falls back to legacy appearance.theme when themeId is absent in settings load", async () => {
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "appearance.theme": "light",
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "Appearance" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Theme Mint Light" })).toBeInTheDocument();
+      expect(document.documentElement).toHaveAttribute("data-theme", "mint-light");
+    });
+  });
+
+  it("does not reset the current theme when settings load omits theme values", async () => {
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    window.localStorage.setItem("ui.themeId", JSON.stringify("graphite-light"));
+    document.documentElement.setAttribute("data-theme", "graphite-light");
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {};
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "Appearance" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Theme Graphite Light" })).toBeInTheDocument();
+      expect(document.documentElement).toHaveAttribute("data-theme", "graphite-light");
+    });
+  });
+
+  it("preserves a newer local theme selection when a stale settings load resolves afterward", async () => {
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    let resolveSettingsGet: ((value: Record<string, unknown>) => void) | undefined;
+    const settingsGetPromise = new Promise<Record<string, unknown>>((resolve) => {
+      resolveSettingsGet = resolve;
+    });
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return await settingsGetPromise;
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "Appearance" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Theme Mint Dark" }));
+    fireEvent.click(
+      within(await screen.findByRole("listbox", { name: "Theme" })).getByRole("option", {
+        name: "Graphite Dark",
+      })
+    );
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            appearance: {
+              themeId: "graphite-dark",
+            },
+          },
+        },
+        undefined
+      );
+    });
+
+    await act(async () => {
+      resolveSettingsGet?.({
+        "appearance.themeId": "nord-light",
+      });
+      await settingsGetPromise;
+    });
+
+    expect(screen.getByRole("button", { name: "Theme Graphite Dark" })).toBeInTheDocument();
+    expect(document.documentElement).toHaveAttribute("data-theme", "graphite-dark");
   });
 
   it("updates terminal renderer selection through the shared general pills", async () => {

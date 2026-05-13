@@ -5,7 +5,14 @@
 import {
   DEFAULT_SUPERVISOR_EVALUATION_TIMEOUT_SEC,
   MAX_SUPERVISOR_EVALUATION_TIMEOUT_SEC,
+  MAX_SUPERVISOR_RETRY_DELAY_SEC,
+  MAX_SUPERVISOR_RETRY_MAX_COUNT,
   resolveSupervisorEvaluationTimeoutSec,
+  resolveSupervisorRetryDelaySec,
+  resolveSupervisorRetryEnabled,
+  resolveSupervisorRetryMaxCount,
+  resolveSupervisorRetryOnEvaluatorError,
+  resolveSupervisorRetryOnTimeout,
 } from "@coder-studio/core";
 import { z } from "zod";
 import { type ConfigType, readConfigFile, writeConfigFile } from "../config/config-io.js";
@@ -17,7 +24,14 @@ import {
   sanitizeProviderLaunchConfig,
 } from "../provider-config.js";
 import { ProviderConfigRepo } from "../storage/repositories/provider-config-repo.js";
-import { SUPERVISOR_EVALUATION_TIMEOUT_SETTING_KEY } from "../supervisor/settings.js";
+import {
+  SUPERVISOR_EVALUATION_TIMEOUT_SETTING_KEY,
+  SUPERVISOR_RETRY_DELAY_SEC_SETTING_KEY,
+  SUPERVISOR_RETRY_ENABLED_SETTING_KEY,
+  SUPERVISOR_RETRY_MAX_COUNT_SETTING_KEY,
+  SUPERVISOR_RETRY_ON_EVALUATOR_ERROR_SETTING_KEY,
+  SUPERVISOR_RETRY_ON_TIMEOUT_SETTING_KEY,
+} from "../supervisor/settings.js";
 import { registerCommand } from "../ws/dispatch.js";
 
 // Settings schema
@@ -42,11 +56,17 @@ const SettingsSchema = z.object({
         .max(MAX_SUPERVISOR_EVALUATION_TIMEOUT_SEC)
         .default(DEFAULT_SUPERVISOR_EVALUATION_TIMEOUT_SEC)
         .optional(),
+      retryEnabled: z.boolean().optional(),
+      retryMaxCount: z.number().int().min(0).max(MAX_SUPERVISOR_RETRY_MAX_COUNT).optional(),
+      retryDelaySec: z.number().int().min(1).max(MAX_SUPERVISOR_RETRY_DELAY_SEC).optional(),
+      retryOnTimeout: z.boolean().optional(),
+      retryOnEvaluatorError: z.boolean().optional(),
     })
     .optional(),
   appearance: z
     .object({
-      theme: z.enum(["dark"]).optional(),
+      theme: z.enum(["dark", "light"]).optional(),
+      themeId: z.string().optional(),
       terminalRenderer: z.enum(["standard", "compatibility"]).optional(),
       terminalCopyOnSelect: z.boolean().optional(),
       locale: z.enum(["zh", "en"]).optional(),
@@ -92,6 +112,34 @@ registerCommand("settings.get", z.object({}), async (_args, ctx) => {
     settings[SUPERVISOR_EVALUATION_TIMEOUT_SETTING_KEY] = resolveSupervisorEvaluationTimeoutSec(
       settings[SUPERVISOR_EVALUATION_TIMEOUT_SETTING_KEY]
     );
+  }
+  if (Object.prototype.hasOwnProperty.call(settings, SUPERVISOR_RETRY_ENABLED_SETTING_KEY)) {
+    settings[SUPERVISOR_RETRY_ENABLED_SETTING_KEY] = resolveSupervisorRetryEnabled(
+      settings[SUPERVISOR_RETRY_ENABLED_SETTING_KEY]
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(settings, SUPERVISOR_RETRY_MAX_COUNT_SETTING_KEY)) {
+    settings[SUPERVISOR_RETRY_MAX_COUNT_SETTING_KEY] = resolveSupervisorRetryMaxCount(
+      settings[SUPERVISOR_RETRY_MAX_COUNT_SETTING_KEY]
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(settings, SUPERVISOR_RETRY_DELAY_SEC_SETTING_KEY)) {
+    settings[SUPERVISOR_RETRY_DELAY_SEC_SETTING_KEY] = resolveSupervisorRetryDelaySec(
+      settings[SUPERVISOR_RETRY_DELAY_SEC_SETTING_KEY]
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(settings, SUPERVISOR_RETRY_ON_TIMEOUT_SETTING_KEY)) {
+    settings[SUPERVISOR_RETRY_ON_TIMEOUT_SETTING_KEY] = resolveSupervisorRetryOnTimeout(
+      settings[SUPERVISOR_RETRY_ON_TIMEOUT_SETTING_KEY]
+    );
+  }
+  if (
+    Object.prototype.hasOwnProperty.call(settings, SUPERVISOR_RETRY_ON_EVALUATOR_ERROR_SETTING_KEY)
+  ) {
+    settings[SUPERVISOR_RETRY_ON_EVALUATOR_ERROR_SETTING_KEY] =
+      resolveSupervisorRetryOnEvaluatorError(
+        settings[SUPERVISOR_RETRY_ON_EVALUATOR_ERROR_SETTING_KEY]
+      );
   }
 
   return settings;

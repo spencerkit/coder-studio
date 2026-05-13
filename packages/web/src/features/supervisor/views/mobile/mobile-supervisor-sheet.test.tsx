@@ -24,6 +24,43 @@ function setMatchMediaMock(predicate: (query: string) => boolean) {
 describe("MobileSupervisorSheet", () => {
   let originalMatchMedia: typeof window.matchMedia;
 
+  const createDialogState = (
+    overrides: Partial<{
+      open: boolean;
+      sessionId: string | null;
+      mode: "enable" | "edit" | "disable";
+      draftObjective: string;
+      draftEvaluatorProviderId: "claude" | "codex";
+      draftEvaluatorModel: string;
+      draftMaxSupervisionCount: string;
+      draftScheduledAt: string;
+    }> = {}
+  ) => ({
+    open: false,
+    sessionId: null,
+    mode: "enable" as const,
+    draftObjective: "",
+    draftEvaluatorProviderId: "claude" as const,
+    draftEvaluatorModel: "",
+    draftMaxSupervisionCount: "0",
+    draftScheduledAt: "",
+    ...overrides,
+  });
+
+  const createSupervisor = () => ({
+    id: "sup-1",
+    sessionId: "sess-1",
+    workspaceId: "ws-1",
+    state: "idle" as const,
+    objective: "Reduce mobile regression bugs",
+    evaluatorProviderId: "claude",
+    maxSupervisionCount: 0,
+    completedSupervisionCount: 0,
+    cycles: [],
+    createdAt: 1,
+    updatedAt: 1,
+  });
+
   beforeEach(() => {
     originalMatchMedia = window.matchMedia;
     setMatchMediaMock(
@@ -41,25 +78,7 @@ describe("MobileSupervisorSheet", () => {
     window.localStorage.setItem("ui.locale", JSON.stringify("en"));
     store.set(localeAtom, "en");
     store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
-    store.set(
-      supervisorsAtom,
-      new Map([
-        [
-          "sess-1",
-          {
-            id: "sup-1",
-            sessionId: "sess-1",
-            workspaceId: "ws-1",
-            state: "idle",
-            objective: "Reduce mobile regression bugs",
-            evaluatorProviderId: "claude",
-            cycles: [],
-            createdAt: 1,
-            updatedAt: 1,
-          },
-        ],
-      ])
-    );
+    store.set(supervisorsAtom, new Map([["sess-1", createSupervisor()]]));
 
     render(
       <Provider store={store}>
@@ -72,15 +91,18 @@ describe("MobileSupervisorSheet", () => {
 
     expect(screen.getByText("Reduce mobile regression bugs")).toBeInTheDocument();
     expect(
-      within(rootActions as HTMLElement).getByRole("button", { name: "Edit Objective" })
+      within(rootActions as HTMLElement).getByRole("button", { name: "Edit Supervisor" })
     ).toBeInTheDocument();
     expect(
-      within(rootActions as HTMLElement).getByRole("button", { name: "Disable Supervisor" })
+      within(rootActions as HTMLElement).getByRole("button", { name: "Disable" })
     ).toBeInTheDocument();
     expect(screen.queryByText("Supervisor is not enabled")).not.toBeInTheDocument();
+    expect(
+      document.querySelector(".mobile-supervisor-sheet.mobile-sheet--fullscreen")
+    ).not.toBeNull();
   });
 
-  it("opens the enable flow inside the same sheet without rendering a second overlay", async () => {
+  it("renders the enable form directly when supervisor is not enabled", async () => {
     const sendCommand = vi.fn().mockResolvedValue({ id: "sup-1" });
     const store = createStore();
     window.localStorage.setItem("ui.locale", JSON.stringify("en"));
@@ -94,19 +116,16 @@ describe("MobileSupervisorSheet", () => {
       </Provider>
     );
 
-    const emptyState = screen
-      .getByText("Supervisor is not enabled")
-      .closest(".mobile-supervisor-sheet__empty");
-
-    expect(emptyState).not.toBeNull();
-    expect(emptyState).toHaveTextContent("Supervisor");
-    expect(emptyState).toHaveTextContent("Supervisor is not enabled");
-
-    fireEvent.click(screen.getByRole("button", { name: "Enable Objective" }));
-
     expect(screen.getByLabelText("Objective")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Enable Supervisor", level: 2 })
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Enable Objective" })).not.toBeInTheDocument();
     expect(document.querySelectorAll(".mobile-sheet-layer")).toHaveLength(1);
     expect(document.querySelector(".modal-overlay")).toBeNull();
+    expect(
+      document.querySelector(".mobile-supervisor-sheet.mobile-sheet--fullscreen")
+    ).not.toBeNull();
 
     fireEvent.change(screen.getByLabelText("Objective"), {
       target: { value: "Reduce mobile regression bugs" },
@@ -121,25 +140,22 @@ describe("MobileSupervisorSheet", () => {
           workspaceId: "ws-1",
           objective: "Reduce mobile regression bugs",
           evaluatorProviderId: "claude",
+          evaluatorModel: undefined,
+          maxSupervisionCount: 0,
+          scheduledAt: undefined,
         },
         undefined
       );
     });
   });
 
-  it("returns from detail view to the supervisor root when tapping back", () => {
+  it("returns from edit detail view to the supervisor root when tapping back", () => {
     const store = createStore();
     window.localStorage.setItem("ui.locale", JSON.stringify("en"));
     store.set(localeAtom, "en");
     store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
-    store.set(supervisorsAtom, new Map());
-    store.set(supervisorDialogAtom, {
-      open: false,
-      sessionId: null,
-      mode: "enable",
-      draftObjective: "",
-      draftEvaluatorProviderId: "claude",
-    });
+    store.set(supervisorsAtom, new Map([["sess-1", createSupervisor()]]));
+    store.set(supervisorDialogAtom, createDialogState());
 
     render(
       <Provider store={store}>
@@ -147,15 +163,19 @@ describe("MobileSupervisorSheet", () => {
       </Provider>
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Enable Objective" }));
+    const rootActions = document.querySelector(".mobile-supervisor-sheet__actions");
+    expect(rootActions).not.toBeNull();
+
+    fireEvent.click(
+      within(rootActions as HTMLElement).getByRole("button", { name: "Edit Supervisor" })
+    );
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
 
-    expect(screen.getByText("Supervisor is not enabled")).toBeInTheDocument();
+    expect(screen.getByText("Reduce mobile regression bugs")).toBeInTheDocument();
     expect(screen.queryByLabelText("Objective")).not.toBeInTheDocument();
   });
 
   it("renders mobile text actions with shared button compatibility classes", async () => {
-    const user = userEvent.setup();
     const store = createStore();
 
     window.localStorage.setItem("ui.locale", JSON.stringify("en"));
@@ -168,13 +188,6 @@ describe("MobileSupervisorSheet", () => {
         <MobileSupervisorSheet sessionId="sess-1" workspaceId="ws-1" onClose={vi.fn()} />
       </Provider>
     );
-
-    expect(screen.getByRole("button", { name: "Enable Objective" })).toHaveClass(
-      "btn",
-      "btn-primary"
-    );
-
-    await user.click(screen.getByRole("button", { name: "Enable Objective" }));
 
     expect(screen.getByRole("button", { name: "Cancel" })).toHaveClass("btn", "btn-secondary");
     expect(screen.getByRole("button", { name: "Enable" })).toHaveClass("btn", "btn-primary");
@@ -195,7 +208,6 @@ describe("MobileSupervisorSheet", () => {
       </Provider>
     );
 
-    await user.click(screen.getByRole("button", { name: "Enable Objective" }));
     await user.click(screen.getByRole("button", { name: "Evaluator Claude" }));
 
     expect(document.querySelector(".mobile-inline-sheet .page-header__title")).toHaveTextContent(
@@ -210,7 +222,6 @@ describe("MobileSupervisorSheet", () => {
   });
 
   it("keeps the migrated evaluator trigger compatibility classes in the mobile detail sheet", async () => {
-    const user = userEvent.setup();
     const store = createStore();
 
     window.localStorage.setItem("ui.locale", JSON.stringify("en"));
@@ -223,8 +234,6 @@ describe("MobileSupervisorSheet", () => {
         <MobileSupervisorSheet sessionId="sess-1" workspaceId="ws-1" onClose={vi.fn()} />
       </Provider>
     );
-
-    await user.click(screen.getByRole("button", { name: "Enable Objective" }));
 
     const trigger = screen.getByRole("button", { name: "Evaluator Claude" });
     expect(trigger).toHaveClass("input", "mobile-select-trigger");

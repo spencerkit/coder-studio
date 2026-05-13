@@ -8,6 +8,7 @@ import {
   supervisorHydratedAtomFamily,
   supervisorsAtom,
 } from "../atoms";
+import { formatScheduledAtInput } from "./use-objective-dialog-state";
 
 const EMPTY_SESSION_ID = "__supervisor-empty__";
 
@@ -81,6 +82,9 @@ export function useSupervisor(session: Session | null | undefined) {
         draftObjective: supervisor?.objective ?? "",
         draftEvaluatorProviderId:
           (supervisor?.evaluatorProviderId as "claude" | "codex") ?? "claude",
+        draftEvaluatorModel: supervisor?.evaluatorModel ?? "",
+        draftMaxSupervisionCount: String(supervisor?.maxSupervisionCount ?? 0),
+        draftScheduledAt: formatScheduledAtInput(supervisor?.scheduledAt),
       });
     },
     [sessionId, setDialog]

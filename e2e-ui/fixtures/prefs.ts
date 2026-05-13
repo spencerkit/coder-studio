@@ -3,7 +3,7 @@ import type { Page } from "@playwright/test";
 export interface OpenPreviewSceneArgs {
   sceneId: string;
   device: "desktop" | "mobile";
-  theme: "dark" | "light";
+  theme: string;
   locale: "zh" | "en";
 }
 
@@ -16,7 +16,7 @@ async function seedPreviewPreferences(
   });
 
   await page.evaluate(({ theme, locale }) => {
-    window.localStorage.setItem("ui.theme", JSON.stringify(theme));
+    window.localStorage.setItem("ui.themeId", JSON.stringify(theme));
     window.localStorage.setItem("ui.locale", JSON.stringify(locale));
   }, args);
 }

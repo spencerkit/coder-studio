@@ -16,7 +16,7 @@ export interface UiManifestEntry {
   category: string;
   source: string;
   device: "desktop" | "mobile";
-  theme: "dark" | "light";
+  theme: string;
   locale: "zh" | "en";
   path: string;
   description: string;

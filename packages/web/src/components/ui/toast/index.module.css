@@ -64,24 +64,35 @@
 }
 
 .success .icon {
-  color: var(--color-success);
+  color: var(--icon-success);
+  background: var(--icon-surface-success);
 }
 
 .error .icon {
-  color: var(--color-error);
+  color: var(--icon-error);
+  background: var(--icon-surface-error);
 }
 
 .warning .icon {
-  color: var(--color-warning);
+  color: var(--icon-warning);
+  background: var(--icon-surface-warning);
 }
 
 .info .icon {
-  color: var(--color-info);
+  color: var(--icon-info);
+  background: var(--icon-surface-info);
 }
 
 .icon {
   margin-top: 1px;
+  display: inline-flex;
+  width: 20px;
+  height: 20px;
   flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  background: var(--icon-surface-subtle);
 }
 
 .content {

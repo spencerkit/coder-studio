@@ -1,9 +1,11 @@
-import type { Supervisor, SupervisorCycle, SupervisorState } from "@coder-studio/core";
+import type { SupervisorCycle, SupervisorState } from "@coder-studio/core";
 import { useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useState } from "react";
+import { localeAtom } from "../../../atoms/app-ui";
 import { dispatchCommandAtom } from "../../../atoms/connection";
-import { useTranslation } from "../../../lib/i18n";
+import { formatDate, type LocaleCode, useTranslation } from "../../../lib/i18n";
 import { supervisorCyclesAtom, supervisorDialogAtom, supervisorsAtom } from "../atoms";
+import { formatScheduledAtInput } from "./use-objective-dialog-state";
 
 const STATE_CLASSES: Record<SupervisorState, string> = {
   inactive: "supervisor-state-inactive",
@@ -12,6 +14,7 @@ const STATE_CLASSES: Record<SupervisorState, string> = {
   injecting: "supervisor-state-injecting",
   paused: "supervisor-state-paused",
   error: "supervisor-state-error",
+  stopped: "supervisor-state-idle",
 };
 
 interface UseSupervisorActionsArgs {
@@ -23,6 +26,7 @@ export function useSupervisorActions({ sessionId }: UseSupervisorActionsArgs) {
   const cyclesBySupervisor = useAtomValue(supervisorCyclesAtom);
   const dispatch = useAtomValue(dispatchCommandAtom);
   const setDialog = useSetAtom(supervisorDialogAtom);
+  const locale = useAtomValue(localeAtom) as LocaleCode;
   const t = useTranslation();
   const supervisor = supervisors.get(sessionId);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -45,6 +49,9 @@ export function useSupervisorActions({ sessionId }: UseSupervisorActionsArgs) {
         draftObjective: supervisor?.objective ?? "",
         draftEvaluatorProviderId:
           (supervisor?.evaluatorProviderId as "claude" | "codex") ?? "claude",
+        draftEvaluatorModel: supervisor?.evaluatorModel ?? "",
+        draftMaxSupervisionCount: String(supervisor?.maxSupervisionCount ?? 0),
+        draftScheduledAt: formatScheduledAtInput(supervisor?.scheduledAt),
       });
     },
     [sessionId, setDialog, supervisor]
@@ -102,12 +109,46 @@ export function useSupervisorActions({ sessionId }: UseSupervisorActionsArgs) {
         ? t("supervisor.cycle.no_guidance")
         : latestCycle.status === "evaluating"
           ? t("supervisor.cycle.evaluating")
-          : t("supervisor.cycle.waiting")))
+          : latestCycle.status === "cancelled"
+            ? t("supervisor.cycle.cancelled")
+            : t("supervisor.cycle.waiting")))
     : null;
+
+  const stopReasonLabel = supervisor?.stopReason
+    ? t(`supervisor.stop_reason.${supervisor.stopReason}`)
+    : null;
+
+  const executionPolicyItems = supervisor
+    ? [
+        supervisor.evaluatorModel
+          ? {
+              key: "model",
+              label: t("supervisor.field.evaluator_model"),
+              value: supervisor.evaluatorModel,
+            }
+          : null,
+        {
+          key: "max-count",
+          label: t("supervisor.field.max_supervision_count"),
+          value:
+            supervisor.maxSupervisionCount > 0
+              ? String(supervisor.maxSupervisionCount)
+              : t("supervisor.meta.no_cap"),
+        },
+        supervisor.scheduledAt
+          ? {
+              key: "scheduled-at",
+              label: t("supervisor.field.scheduled_at"),
+              value: formatDate(supervisor.scheduledAt, locale),
+            }
+          : null,
+      ].filter((item): item is { key: string; label: string; value: string } => item !== null)
+    : [];
 
   return {
     actionError,
     cycles,
+    executionPolicyItems,
     handlePause,
     handleResume,
     handleTrigger,
@@ -115,6 +156,7 @@ export function useSupervisorActions({ sessionId }: UseSupervisorActionsArgs) {
     latestCycle,
     latestCycleText,
     openDialog,
+    stopReasonLabel,
     stateClass: supervisor ? STATE_CLASSES[supervisor.state] : STATE_CLASSES.inactive,
     stateLabel: t(
       `supervisor.state.${supervisor ? supervisor.state : ("inactive" as SupervisorState)}`

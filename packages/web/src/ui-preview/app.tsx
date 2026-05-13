@@ -1,5 +1,6 @@
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { EmptyState } from "../components/ui";
+import { getThemeById, resolveStoredThemeId } from "../theme";
 import { getUiPreviewScene, type UiPreviewSceneDefinition } from "./catalog";
 import type { UiPreviewDevice, UiPreviewLocale, UiPreviewTheme } from "./preview-store";
 
@@ -19,7 +20,7 @@ export interface UiPreviewRequest {
 export function resolvePreviewRequest(search: string): UiPreviewRequest {
   const params = new URLSearchParams(search);
   const sceneId = params.get("scene") ?? "welcome";
-  const theme = params.get("theme") === "light" ? "light" : "dark";
+  const theme = resolveStoredThemeId(params.get("theme"));
   const locale = params.get("locale") === "en" ? "en" : "zh";
   const device = params.get("device") === "mobile" ? "mobile" : "desktop";
   const scene = getUiPreviewScene(sceneId);
@@ -45,7 +46,10 @@ function UnknownScene({ sceneId }: { sceneId: string }) {
 }
 
 export function UiPreviewApp({ request }: { request: UiPreviewRequest }) {
-  document.documentElement.setAttribute("data-theme", request.theme);
+  document.documentElement.setAttribute(
+    "data-theme",
+    getThemeById(request.theme).documentThemeAttr
+  );
   document.documentElement.setAttribute("lang", request.locale === "zh" ? "zh" : "en");
   document.body.dataset.uiPreviewDevice = request.device;
 

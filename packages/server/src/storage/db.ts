@@ -1,7 +1,12 @@
 import { DatabaseSync } from "node:sqlite";
-import { readFileSync } from "fs";
-import { join } from "path";
 import { type Database, withTransaction } from "./database.js";
+import {
+  CURRENT_SCHEMA_SQL,
+  CURRENT_SCHEMA_VERSION,
+  detectSchema,
+  IncompatibleSchemaError,
+  stampCurrentSchemaVersion,
+} from "./schema-version.js";
 
 interface IntegrityCheckRow {
   integrity_check: string;
@@ -15,62 +20,8 @@ interface ColumnInfoRow {
   name: string;
 }
 
-interface SchemaEntryRow {
-  type: string;
-  name: string;
-  tbl_name: string;
-  sql: string | null;
-}
-
-interface SchemaEntry {
-  type: string;
-  name: string;
-  tableName: string;
-  sql: string;
-}
-
-const SCHEMA_PATH = join(import.meta.dirname, "migrations", "001_init.sql");
-const SCHEMA_SQL = readFileSync(SCHEMA_PATH, "utf-8");
-
 const LEGACY_TABLES = ["hook_registrations", "_migrations"] as const;
 const LEGACY_SESSION_COLUMNS = ["resume_id", "transcript_path"] as const;
-
-function normalizeSql(sql: string | null): string {
-  return (sql ?? "").replace(/\s+/g, " ").trim();
-}
-
-function listSchemaEntries(db: Database): SchemaEntry[] {
-  const rows = db
-    .prepare(
-      `
-        SELECT type, name, tbl_name, sql
-        FROM sqlite_master
-        WHERE type IN ('table', 'index', 'view', 'trigger')
-          AND name NOT LIKE 'sqlite_%'
-        ORDER BY type, name
-      `
-    )
-    .all() as unknown as SchemaEntryRow[];
-
-  return rows.map((row) => ({
-    type: row.type,
-    name: row.name,
-    tableName: row.tbl_name,
-    sql: normalizeSql(row.sql),
-  }));
-}
-
-function buildExpectedSchemaEntries(): SchemaEntry[] {
-  const db = new DatabaseSync(":memory:");
-  try {
-    db.exec(SCHEMA_SQL);
-    return listSchemaEntries(db);
-  } finally {
-    db.close();
-  }
-}
-
-const EXPECTED_SCHEMA_ENTRIES = buildExpectedSchemaEntries();
 
 function hasTable(db: Database, tableName: string): boolean {
   const row = db
@@ -107,86 +58,82 @@ function detectLegacySchema(db: Database): string[] {
   return reasons;
 }
 
-function schemaEntrySignature(entry: SchemaEntry): string {
-  return `${entry.type}:${entry.name}:${entry.tableName}:${entry.sql}`;
-}
-
-function isSchemaEmpty(db: Database): boolean {
-  return listSchemaEntries(db).length === 0;
-}
-
-function assertNoLegacySchema(db: Database, dbPath: string): void {
+function throwIfLegacySchema(db: Database, dbPath: string): void {
   const reasons = detectLegacySchema(db);
   if (reasons.length === 0) {
     return;
   }
 
-  throw new Error(
-    `Legacy database schema detected at ${dbPath}: ${reasons.join(", ")}. ` +
-      "This build no longer supports automatic database upgrades. Delete the local database file and restart."
-  );
-}
-
-function describeSchemaMismatch(expected: SchemaEntry[], actual: SchemaEntry[]): string {
-  const expectedByName = new Map(expected.map((entry) => [`${entry.type}:${entry.name}`, entry]));
-  const actualByName = new Map(actual.map((entry) => [`${entry.type}:${entry.name}`, entry]));
-  const keys = new Set([...expectedByName.keys(), ...actualByName.keys()]);
-
-  for (const key of keys) {
-    const expectedEntry = expectedByName.get(key);
-    const actualEntry = actualByName.get(key);
-
-    if (!expectedEntry) {
-      return `unexpected ${actualEntry?.type ?? "schema object"} ${actualEntry?.name ?? key}`;
-    }
-
-    if (!actualEntry) {
-      return `missing ${expectedEntry.type} ${expectedEntry.name}`;
-    }
-
-    if (schemaEntrySignature(expectedEntry) !== schemaEntrySignature(actualEntry)) {
-      return `definition mismatch for ${expectedEntry.type} ${expectedEntry.name}`;
-    }
-  }
-
-  return "unknown schema drift";
-}
-
-function assertSchemaMatchesBaseline(db: Database, dbPath: string): void {
-  const actualEntries = listSchemaEntries(db);
-  const expectedSignatures = EXPECTED_SCHEMA_ENTRIES.map(schemaEntrySignature);
-  const actualSignatures = actualEntries.map(schemaEntrySignature);
-
-  if (
-    actualSignatures.length === expectedSignatures.length &&
-    actualSignatures.every((signature, index) => signature === expectedSignatures[index])
-  ) {
-    return;
-  }
-
-  const mismatch = describeSchemaMismatch(EXPECTED_SCHEMA_ENTRIES, actualEntries);
-  throw new Error(
-    `Database schema mismatch detected at ${dbPath}: ${mismatch}. ` +
-      "This build requires the current baseline schema. Delete the local database file and restart."
-  );
+  throw new IncompatibleSchemaError(dbPath, `legacy schema detected (${reasons.join(", ")})`);
 }
 
 function initializeSchema(db: Database): void {
   withTransaction(db, () => {
-    db.exec(SCHEMA_SQL);
+    db.exec(CURRENT_SCHEMA_SQL);
   });
 }
 
-function initializeOrValidateSchema(db: Database, dbPath: string): void {
-  assertNoLegacySchema(db, dbPath);
+function upgradeSchemaV1ToV2(db: Database): void {
+  withTransaction(db, () => {
+    db.exec("ALTER TABLE supervisors ADD COLUMN evaluator_model TEXT");
+    db.exec("ALTER TABLE supervisors ADD COLUMN max_supervision_count INTEGER NOT NULL DEFAULT 0");
+    db.exec(
+      "ALTER TABLE supervisors ADD COLUMN completed_supervision_count INTEGER NOT NULL DEFAULT 0"
+    );
+    db.exec("ALTER TABLE supervisors ADD COLUMN scheduled_at INTEGER");
+    db.exec("ALTER TABLE supervisors ADD COLUMN stop_reason TEXT");
+    db.exec(`
+      CREATE TABLE supervisor_cycle_attempts (
+        id TEXT PRIMARY KEY,
+        cycle_id TEXT NOT NULL REFERENCES supervisor_cycles(id) ON DELETE CASCADE,
+        attempt_index INTEGER NOT NULL,
+        status TEXT NOT NULL,
+        started_at INTEGER NOT NULL,
+        completed_at INTEGER,
+        error_reason TEXT,
+        provider_model TEXT
+      )
+    `);
+    db.exec(
+      "CREATE INDEX idx_supervisor_cycle_attempts_cycle ON supervisor_cycle_attempts(cycle_id, attempt_index)"
+    );
+    stampCurrentSchemaVersion(db);
+  });
+}
 
-  if (isSchemaEmpty(db)) {
-    initializeSchema(db);
-    assertSchemaMatchesBaseline(db, dbPath);
-    return;
+function assertCurrentSchema(db: Database, dbPath: string): void {
+  const detection = detectSchema(db);
+  if (detection.state !== "current") {
+    throw new IncompatibleSchemaError(dbPath, detection.mismatch ?? "unknown schema drift");
   }
+}
 
-  assertSchemaMatchesBaseline(db, dbPath);
+function initializeOrUpgradeSchema(db: Database, dbPath: string): void {
+  throwIfLegacySchema(db, dbPath);
+
+  const detection = detectSchema(db);
+
+  switch (detection.state) {
+    case "empty":
+      initializeSchema(db);
+      assertCurrentSchema(db, dbPath);
+      return;
+
+    case "current":
+      if (detection.userVersion !== CURRENT_SCHEMA_VERSION) {
+        stampCurrentSchemaVersion(db);
+      }
+      assertCurrentSchema(db, dbPath);
+      return;
+
+    case "v1":
+      upgradeSchemaV1ToV2(db);
+      assertCurrentSchema(db, dbPath);
+      return;
+
+    case "incompatible":
+      throw new IncompatibleSchemaError(dbPath, detection.mismatch ?? "unknown schema drift");
+  }
 }
 
 /**
@@ -210,7 +157,7 @@ export function openDatabase(dbPath: string): Database {
       throw new Error(`Database integrity check failed: ${JSON.stringify(integrityResult)}`);
     }
 
-    initializeOrValidateSchema(db, dbPath);
+    initializeOrUpgradeSchema(db, dbPath);
 
     return db;
   } catch (error) {
@@ -231,7 +178,7 @@ export function openDatabase(dbPath: string): Database {
  * databases explicitly before wiring command handlers.
  */
 export function runMigrations(db: Database): void {
-  initializeOrValidateSchema(db, ":memory:");
+  initializeOrUpgradeSchema(db, ":memory:");
 }
 
 /**

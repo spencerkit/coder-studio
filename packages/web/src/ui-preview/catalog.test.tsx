@@ -31,7 +31,7 @@ function renderScene(sceneId: string, device: "desktop" | "mobile" = "desktop") 
   }
 
   installMatchMedia(device);
-  const context = { theme: "dark" as const, locale: "en" as const, device };
+  const context = { theme: "mint-dark" as const, locale: "en" as const, device };
   const store = buildUiPreviewStore(scene.seed(context));
   const router = scene.router(context);
 
@@ -74,6 +74,7 @@ describe("UI preview catalog", () => {
         "workspace-desktop",
         "workspace-mobile",
         "auth-preview",
+        "session-gate",
         "not-found",
       ])
     );
@@ -82,7 +83,7 @@ describe("UI preview catalog", () => {
   it("marks settings section scenes for capture-time navigation", () => {
     const scene = getUiPreviewScene("settings-appearance");
     expect(
-      scene?.router({ theme: "dark", locale: "en", device: "desktop" }).initialEntries
+      scene?.router({ theme: "mint-dark", locale: "en", device: "desktop" }).initialEntries
     ).toEqual(["/settings"]);
     expect(scene?.capture?.settingsSection).toBe("appearance");
   });
@@ -168,10 +169,33 @@ describe("UI preview catalog", () => {
     expect(document.querySelector(".workspace-resolving-card")).toBeTruthy();
   });
 
+  it("renders the session gate scene through the shared auth shell", async () => {
+    renderScene("session-gate");
+
+    expect(await screen.findByRole("button", { name: /re-enter|重新进入/i })).toBeInTheDocument();
+    expect(document.querySelector(".auth-card-shell")).toBeTruthy();
+  });
+
   it("renders the file-tree delete confirm scene with the shared danger dialog", async () => {
     renderScene("file-tree-delete-confirm");
 
     expect(await screen.findByText(/delete preview-file.ts/i)).toBeInTheDocument();
     expect(document.querySelector(".modal-card")).toBeTruthy();
+  });
+
+  it("renders the workspace icon review scene with file tree and git status content", async () => {
+    renderScene("workspace-icon-review");
+
+    expect(await screen.findByText("packages")).toBeInTheDocument();
+    expect(document.querySelector(".file-tree-shell")).toBeTruthy();
+    expect(document.querySelector(".git-panel, .git-row")).toBeTruthy();
+    expect(document.querySelector(".bottom-terminal-empty")).toBeTruthy();
+  });
+
+  it("renders the toast icon review scene with four status tones", async () => {
+    renderScene("toast-icon-review");
+
+    expect(await screen.findByText("Workspace opened")).toBeInTheDocument();
+    expect(document.querySelectorAll(".toast").length).toBeGreaterThanOrEqual(4);
   });
 });

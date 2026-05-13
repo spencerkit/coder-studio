@@ -15,6 +15,7 @@ import type { Database } from "../storage/database.js";
 import type { SupervisorManager } from "../supervisor/manager.js";
 import type { TerminalManager } from "../terminal/manager.js";
 import type { WorkspaceManager } from "../workspace/manager.js";
+import type { ActivationManager } from "./activation.js";
 import type { FencingManager } from "./fencing.js";
 import type { Broadcaster } from "./hub.js";
 
@@ -34,6 +35,7 @@ export interface CommandContext {
   autoFetch: AutoFetchRuntime;
   providerRuntimeDeps?: RuntimeStatusDeps;
   providerInstallMgr?: ProviderInstallManager;
+  activationMgr: ActivationManager;
 }
 
 /**
@@ -56,6 +58,11 @@ const handlers = new Map<string, CommandHandler>();
  * Registry of all command schemas
  */
 const schemas = new Map<string, CommandSchema>();
+const ACTIVATION_ALLOWLIST = new Set([
+  "activation.claim",
+  "activation.release",
+  "connection.probe",
+]);
 
 /**
  * Register a command handler
@@ -77,6 +84,24 @@ export async function dispatch(
   ctx: CommandContext,
   clientId?: string
 ): Promise<Result> {
+  const isWsDispatch =
+    clientId !== undefined && typeof ctx.broadcaster.getRequestMetadata === "function";
+
+  if (isWsDispatch && !ACTIVATION_ALLOWLIST.has(msg.op)) {
+    const active = ctx.activationMgr.getLease();
+    if (!active || active.wsClientId !== clientId) {
+      return {
+        kind: "result",
+        id: msg.id,
+        ok: false,
+        error: {
+          code: "activation_required",
+          message: "This tab is no longer the active session",
+        },
+      };
+    }
+  }
+
   const handler = handlers.get(msg.op);
 
   if (!handler) {
@@ -92,7 +117,6 @@ export async function dispatch(
   }
 
   try {
-    // Validate args with schema
     const schema = schemas.get(msg.op);
     let args = msg.args;
 
@@ -109,7 +133,6 @@ export async function dispatch(
       data,
     };
   } catch (error: unknown) {
-    // Normalize error
     const normalizedError = normalizeError(error);
 
     return {
@@ -133,7 +156,6 @@ function normalizeError(error: unknown): Result["error"] {
     errors?: unknown;
   };
 
-  // Zod validation error
   if (candidate.name === "ZodError") {
     return {
       code: "validation_error",
@@ -142,7 +164,6 @@ function normalizeError(error: unknown): Result["error"] {
     };
   }
 
-  // Custom error with code
   if (candidate.code) {
     return {
       code: candidate.code,
@@ -151,7 +172,6 @@ function normalizeError(error: unknown): Result["error"] {
     };
   }
 
-  // Generic error
   return {
     code: "internal_error",
     message: candidate.message || "An internal error occurred",

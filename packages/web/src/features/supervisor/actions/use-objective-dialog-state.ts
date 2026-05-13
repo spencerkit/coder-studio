@@ -18,7 +18,51 @@ const CLOSED_DIALOG_STATE = {
   mode: "enable" as const,
   draftObjective: "",
   draftEvaluatorProviderId: "claude" as const,
+  draftEvaluatorModel: "",
+  draftMaxSupervisionCount: "0",
+  draftScheduledAt: "",
 };
+
+export function formatScheduledAtInput(value?: number): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "";
+  }
+
+  const date = new Date(value);
+  const offsetMinutes = date.getTimezoneOffset();
+  const localDate = new Date(date.getTime() - offsetMinutes * 60_000);
+  return localDate.toISOString().slice(0, 16);
+}
+
+function parseDraftMaxSupervisionCount(value: string): number {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isSafeInteger(parsed) || parsed < 0) {
+    return 0;
+  }
+  return parsed;
+}
+
+function isValidDraftMaxSupervisionCount(value: string | undefined): boolean {
+  const trimmed = (value ?? "").trim();
+  if (!trimmed) {
+    return false;
+  }
+  const parsed = Number(trimmed);
+  return Number.isSafeInteger(parsed) && parsed >= 0;
+}
+
+function parseDraftScheduledAt(value: string): number | undefined {
+  if (!value.trim()) {
+    return undefined;
+  }
+
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed)) {
+    return undefined;
+  }
+
+  return parsed;
+}
 
 interface UseObjectiveDialogStateOptions {
   workspaceId: string;
@@ -45,6 +89,9 @@ export function useObjectiveDialogState({
   };
   const isDisable = mode === "disable";
   const disableObjective = supervisor?.objective ?? dialog.draftObjective;
+  const isMaxSupervisionCountValid = isValidDraftMaxSupervisionCount(
+    dialog.draftMaxSupervisionCount
+  );
 
   const close = useCallback(() => {
     setDialog(CLOSED_DIALOG_STATE);
@@ -55,6 +102,9 @@ export function useObjectiveDialogState({
       patch: Partial<{
         draftObjective: string;
         draftEvaluatorProviderId: ObjectiveDialogEvaluatorProviderId;
+        draftEvaluatorModel: string;
+        draftMaxSupervisionCount: string;
+        draftScheduledAt: string;
       }>
     ) => {
       setDialog((current) => ({ ...current, ...patch }));
@@ -85,12 +135,23 @@ export function useObjectiveDialogState({
       return false;
     }
 
+    if (!isMaxSupervisionCountValid) {
+      return false;
+    }
+
+    const evaluatorModel = dialog.draftEvaluatorModel.trim();
+    const maxSupervisionCount = parseDraftMaxSupervisionCount(dialog.draftMaxSupervisionCount);
+    const scheduledAt = parseDraftScheduledAt(dialog.draftScheduledAt);
+
     if (dialog.mode === "enable") {
       const result = await dispatch("supervisor.create", {
         sessionId: dialog.sessionId,
         workspaceId,
         objective,
         evaluatorProviderId: dialog.draftEvaluatorProviderId,
+        evaluatorModel: evaluatorModel || undefined,
+        maxSupervisionCount,
+        scheduledAt,
       });
 
       if (result.ok) {
@@ -108,6 +169,9 @@ export function useObjectiveDialogState({
       id: supervisor.id,
       objective,
       evaluatorProviderId: dialog.draftEvaluatorProviderId,
+      evaluatorModel: evaluatorModel || null,
+      maxSupervisionCount,
+      scheduledAt: scheduledAt ?? null,
     });
 
     if (result.ok) {
@@ -116,7 +180,7 @@ export function useObjectiveDialogState({
     }
 
     return false;
-  }, [close, dialog, dispatch, supervisor, workspaceId]);
+  }, [close, dialog, dispatch, isMaxSupervisionCountValid, supervisor, workspaceId]);
 
   return {
     dialog,
@@ -126,8 +190,10 @@ export function useObjectiveDialogState({
     copy,
     isDisable,
     disableObjective,
+    isMaxSupervisionCountValid,
     close,
     updateDraft,
     confirm,
+    formatScheduledAtInput,
   };
 }

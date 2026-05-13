@@ -1,9 +1,10 @@
 import react from "@vitejs/plugin-react";
 import path from "path";
-import { defineConfig } from "vitest/config";
+import { defineConfig } from "vite";
 
 const backendHttpTarget = process.env.VITE_BACKEND_HTTP_URL || "http://127.0.0.1:4173";
 const backendWsTarget = process.env.VITE_BACKEND_WS_URL || "ws://127.0.0.1:4173";
+const disableHmr = process.env.CODER_STUDIO_DISABLE_HMR === "true";
 
 export default defineConfig({
   plugins: [react()],
@@ -15,6 +16,7 @@ export default defineConfig({
   server: {
     port: 5173,
     host: true,
+    hmr: disableHmr ? false : undefined,
     proxy: {
       "/ws": {
         target: backendWsTarget,

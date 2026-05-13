@@ -157,6 +157,44 @@ describe("SupervisorEvaluator", () => {
     expect(result.message).toBe("next step: run tests");
   });
 
+  it("prefers supervisor.evaluatorModel over provider config model", async () => {
+    const provider = createProvider("codex", "next step: run tests", {
+      defaultConfig: { model: "gpt-4.1", additionalArgs: [], envVars: {} },
+    });
+    const evaluator = new SupervisorEvaluator({
+      providerRegistry: [provider],
+      providerConfigRepo: createProviderConfigRepo({
+        model: "gpt-4.1",
+        additionalArgs: [],
+        envVars: {},
+      }),
+      timeoutMs: 5000,
+    });
+
+    const result = await evaluator.evaluate(
+      {
+        ...makeSupervisor("codex"),
+        evaluatorModel: "o3",
+      },
+      makeContext()
+    );
+
+    expect(result.message).toBe("next step: run tests");
+    expect(provider.buildSupervisorEvalCommand).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ model: "o3" })
+    );
+  });
+
+  it("returns an objective-complete result when the evaluator emits the sentinel", async () => {
+    const evaluator = makeEvaluator("[objective complete]");
+
+    await expect(evaluator.evaluate(makeSupervisor("codex"), makeContext())).resolves.toEqual({
+      message: "[objective complete]",
+      objectiveComplete: true,
+    });
+  });
+
   it("falls back to provider.defaultConfig when evaluator config is missing", async () => {
     const evaluator = new SupervisorEvaluator({
       providerRegistry: [

@@ -33,7 +33,12 @@ import {
   workspacesLoadStateAtom,
   wsClientAtom,
 } from "../atoms";
-import { authenticatedAtom } from "../atoms/app-ui";
+import {
+  activationGenerationAtom,
+  activationReasonAtom,
+  activationStatusAtom,
+} from "../atoms/activation";
+import { authenticatedAtom, themeAtom } from "../atoms/app-ui";
 import type { DispatchCommand } from "../atoms/connection";
 import { activeWorkspaceIdAtom } from "../atoms/workspaces";
 import { useSessionNotifications } from "../features/notifications";
@@ -45,11 +50,15 @@ import {
 } from "../features/terminal-panel/preferences";
 import {
   editorRefreshTokenAtomFamily,
+  fileTreeAtomFamily,
   fileTreeStaleAtomFamily,
   gitBranchListAtomFamily,
   gitStateAtomFamily,
+  loadedDirsAtomFamily,
   worktreeListAtomFamily,
 } from "../features/workspace/atoms";
+import { useActivation } from "../hooks/use-activation";
+import { getThemeById, resolveStoredThemeId } from "../theme";
 import type { ConnectionStatus, EventListener } from "../ws";
 import { resolveWsUrl, WsClient } from "../ws";
 
@@ -73,6 +82,10 @@ interface WorkspaceActivityState {
   workspaceId: string | null;
 }
 
+interface AppearanceSelectionVersion {
+  theme: number;
+}
+
 const DEFAULT_REFRESH_HINT: WorkspaceRefreshHint = {
   refreshGit: false,
   refreshBranches: false,
@@ -80,9 +93,40 @@ const DEFAULT_REFRESH_HINT: WorkspaceRefreshHint = {
   markTreeStale: false,
   refreshEditorBuffers: false,
 };
+const FOREGROUND_RECOVERY_COOLDOWN_MS = 250;
+const THEME_ID_STORAGE_KEY = "ui.themeId";
+const LEGACY_THEME_STORAGE_KEY = "ui.theme";
 
 function shouldMarkTreeStaleForFsReason(reason?: string): boolean {
   return reason === "fs_change";
+}
+
+function readStoredThemePreference(): unknown {
+  const storedThemeId = localStorage.getItem(THEME_ID_STORAGE_KEY);
+  if (storedThemeId !== null) {
+    try {
+      return JSON.parse(storedThemeId);
+    } catch {
+      return undefined;
+    }
+  }
+
+  const legacyTheme = localStorage.getItem(LEGACY_THEME_STORAGE_KEY);
+  if (legacyTheme !== null) {
+    try {
+      return JSON.parse(legacyTheme);
+    } catch {
+      return undefined;
+    }
+  }
+
+  return undefined;
+}
+
+function applyResolvedTheme(themeId: unknown): string {
+  const resolvedTheme = getThemeById(resolveStoredThemeId(themeId));
+  document.documentElement.setAttribute("data-theme", resolvedTheme.documentThemeAttr);
+  return resolvedTheme.id;
 }
 
 export function resetAppProvidersSingletonsForTests() {
@@ -104,6 +148,43 @@ function mergeRefreshHints(
     markTreeStale: current.markTreeStale || Boolean(next.markTreeStale),
     refreshEditorBuffers: current.refreshEditorBuffers || Boolean(next.refreshEditorBuffers),
   };
+}
+
+function resetServerProjectedState(store: Store): void {
+  const workspaceIds = store.get(workspaceOrderAtom);
+  const terminalIds = Object.values(store.get(sessionsAtom))
+    .map((session) => session.terminalId)
+    .filter((terminalId): terminalId is string => Boolean(terminalId));
+
+  store.set(workspacesAtom, {});
+  store.set(workspaceOrderAtom, []);
+  store.set(workspacesLoadStateAtom, "idle");
+  store.set(workspacesLoadErrorAtom, null);
+  store.set(sessionsAtom, {});
+  store.set(activeWorkspaceIdAtom, null);
+  store.set(supervisorsAtom, new Map());
+  store.set(supervisorCyclesAtom, new Map());
+
+  for (const workspaceId of workspaceIds) {
+    store.set(fileTreeAtomFamily(workspaceId), null);
+    store.set(loadedDirsAtomFamily(workspaceId), new Set());
+    store.set(gitStateAtomFamily(workspaceId), null);
+    store.set(gitBranchListAtomFamily(workspaceId), {
+      current: "",
+      branches: [],
+      loading: false,
+    });
+    store.set(worktreeListAtomFamily(workspaceId), {
+      items: [],
+      loading: false,
+    });
+    store.set(fileTreeStaleAtomFamily(workspaceId), false);
+    store.set(editorRefreshTokenAtomFamily(workspaceId), 0);
+  }
+
+  for (const terminalId of terminalIds) {
+    store.set(terminalMetaAtomFamily(terminalId), null);
+  }
 }
 
 function parseWorkspaceRefreshHint(
@@ -159,6 +240,7 @@ interface AppProvidersProps {
 
 export function AppProviders({ children }: AppProvidersProps) {
   const [, setWsClient] = useAtom(wsClientAtom);
+  const [theme, setTheme] = useAtom(themeAtom);
   const authEnabled = useAtomValue(authEnabledAtom);
   const authenticated = useAtomValue(authenticatedAtom);
   const connectionStatus = useAtomValue(connectionStatusAtom);
@@ -182,6 +264,7 @@ export function AppProviders({ children }: AppProvidersProps) {
   // Get Jotai store for writing to atomFamily atoms
   const store = useStore();
   const dispatch = useAtomValue(dispatchCommandAtom);
+  const { claim } = useActivation();
 
   useSessionNotifications();
 
@@ -192,10 +275,15 @@ export function AppProviders({ children }: AppProvidersProps) {
   const refreshHintsRef = useRef<Map<string, WorkspaceRefreshHint>>(new Map());
   const activeWorkspaceIdRef = useRef<string | null>(activeWorkspaceId);
   const connectionStatusRef = useRef<ConnectionStatus>(connectionStatus);
+  const lastForegroundRecoveryAtRef = useRef<number | null>(null);
   const workspaceActivityRef = useRef<WorkspaceActivityState>({
     mode: "inactive",
     workspaceId: null,
   });
+  const appearanceSelectionVersionRef = useRef<AppearanceSelectionVersion>({
+    theme: 0,
+  });
+  const preferPersistedThemeOnFirstHydrationRef = useRef(false);
 
   // Keep dispatchRef in sync
   useEffect(() => {
@@ -244,20 +332,87 @@ export function AppProviders({ children }: AppProvidersProps) {
     connectionStatusRef.current = connectionStatus;
   }, [connectionStatus]);
 
+  useEffect(() => {
+    if (connectionStatus !== "connected") {
+      return;
+    }
+
+    if (store.get(activationStatusAtom) === "gated") {
+      return;
+    }
+
+    void claim();
+  }, [claim, connectionStatus, store]);
+
   // Initialize theme from localStorage
   useEffect(() => {
-    const savedTheme = localStorage.getItem("ui.theme");
-    if (savedTheme) {
-      try {
-        const theme = JSON.parse(savedTheme);
-        if (theme === "light" || theme === "dark") {
-          document.documentElement.setAttribute("data-theme", theme);
-        }
-      } catch {
-        // Ignore parse errors
-      }
+    preferPersistedThemeOnFirstHydrationRef.current =
+      localStorage.getItem(THEME_ID_STORAGE_KEY) !== null;
+    const resolvedThemeId = applyResolvedTheme(readStoredThemePreference());
+    setTheme(resolvedThemeId);
+    localStorage.setItem(THEME_ID_STORAGE_KEY, JSON.stringify(resolvedThemeId));
+  }, [setTheme]);
+
+  useEffect(() => {
+    const resolvedTheme = getThemeById(theme);
+    document.documentElement.setAttribute("data-theme", resolvedTheme.documentThemeAttr);
+    localStorage.setItem(THEME_ID_STORAGE_KEY, JSON.stringify(resolvedTheme.id));
+  }, [theme]);
+
+  useEffect(() => {
+    if (connectionStatus !== "connected") {
+      return;
     }
-  }, []);
+
+    let cancelled = false;
+
+    const hydrateTheme = async () => {
+      const appearanceSelectionVersionAtRequestStart = {
+        ...appearanceSelectionVersionRef.current,
+      };
+      const result = await dispatch<Record<string, unknown>>("settings.get", {});
+      if (cancelled || !result.ok || !result.data) {
+        return;
+      }
+
+      if (
+        appearanceSelectionVersionRef.current.theme !==
+        appearanceSelectionVersionAtRequestStart.theme
+      ) {
+        return;
+      }
+
+      if (preferPersistedThemeOnFirstHydrationRef.current) {
+        preferPersistedThemeOnFirstHydrationRef.current = false;
+        return;
+      }
+
+      const settings = result.data;
+      const resolvedThemeId = resolveStoredThemeId(
+        settings["appearance.themeId"] ??
+          settings["appearance.theme"] ??
+          readStoredThemePreference()
+      );
+
+      setTheme(resolvedThemeId);
+    };
+
+    void hydrateTheme();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [connectionStatus, dispatch, setTheme]);
+
+  useEffect(() => {
+    const unsubscribeTheme = store.sub(themeAtom, () => {
+      appearanceSelectionVersionRef.current.theme += 1;
+    });
+
+    return () => {
+      unsubscribeTheme();
+    };
+  }, [store]);
 
   useEffect(() => {
     const loadAuthStatus = async () => {
@@ -388,6 +543,56 @@ export function AppProviders({ children }: AppProvidersProps) {
       sendWorkspaceActivate(workspaceId);
     };
 
+    const triggerForegroundRecovery = () => {
+      if (store.get(activationStatusAtom) === "gated") {
+        return;
+      }
+
+      syncWorkspaceActivity();
+      if (document.visibilityState !== "visible") {
+        lastForegroundRecoveryAtRef.current = null;
+        return;
+      }
+
+      const now = Date.now();
+      const lastForegroundRecoveryAt = lastForegroundRecoveryAtRef.current;
+      if (
+        lastForegroundRecoveryAt !== null &&
+        now - lastForegroundRecoveryAt < FOREGROUND_RECOVERY_COOLDOWN_MS
+      ) {
+        return;
+      }
+
+      lastForegroundRecoveryAtRef.current = now;
+      wsClientRef.current?.recoverConnection("visibility_resume");
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        lastForegroundRecoveryAtRef.current = null;
+        syncWorkspaceActivity();
+        return;
+      }
+
+      triggerForegroundRecovery();
+    };
+
+    const handleWindowFocus = () => {
+      triggerForegroundRecovery();
+    };
+
+    const handlePageShow = () => {
+      triggerForegroundRecovery();
+    };
+
+    const handleOnline = () => {
+      if (store.get(activationStatusAtom) === "gated") {
+        return;
+      }
+
+      wsClientRef.current?.recoverConnection("network_online");
+    };
+
     const refreshBranchState = (workspaceId: string) => {
       dispatchRef
         .current<{ current: string; branches: GitBranch[] }>("git.branches", { workspaceId })
@@ -485,6 +690,30 @@ export function AppProviders({ children }: AppProvidersProps) {
 
     // Event handler: route WS events to atoms
     const handleEvent: EventListener = (topic: string, payload: unknown, _seq: number) => {
+      if (topic === "activation.revoked") {
+        const data = (payload ?? {}) as {
+          reason?: string;
+          generation?: number;
+        };
+
+        store.set(activationStatusAtom, "gated");
+        store.set(
+          activationReasonAtom,
+          typeof data.reason === "string" && data.reason.length > 0 ? data.reason : "displaced"
+        );
+        store.set(
+          activationGenerationAtom,
+          typeof data.generation === "number" ? data.generation : null
+        );
+        resetServerProjectedState(store);
+        workspaceActivityRef.current = {
+          mode: "inactive",
+          workspaceId: null,
+        };
+        wsClientRef.current?.disconnect("single_active_displaced");
+        return;
+      }
+
       const refreshInfo = parseWorkspaceRefreshHint(topic, payload);
       if (refreshInfo) {
         queueWorkspaceRefresh(refreshInfo.workspaceId, refreshInfo.hint);
@@ -500,6 +729,7 @@ export function AppProviders({ children }: AppProvidersProps) {
     // Subscribe to all topics we care about
     const topics = [
       "connection.*", // Connection-level events
+      "activation.*",
       "workspace.*", // All workspace events (glob pattern)
     ];
 
@@ -524,24 +754,17 @@ export function AppProviders({ children }: AppProvidersProps) {
         globalWsClient.recoverConnection("manual_retry");
       }
 
-      const handleVisibilityChange = () => {
-        syncWorkspaceActivity();
-        if (document.visibilityState === "visible") {
-          wsClientRef.current?.recoverConnection("visibility_resume");
-        }
-      };
-
-      const handleOnline = () => {
-        wsClientRef.current?.recoverConnection("network_online");
-      };
-
       syncWorkspaceActivity();
 
       document.addEventListener("visibilitychange", handleVisibilityChange);
+      window.addEventListener("focus", handleWindowFocus);
+      window.addEventListener("pageshow", handlePageShow);
       window.addEventListener("online", handleOnline);
 
       return () => {
         document.removeEventListener("visibilitychange", handleVisibilityChange);
+        window.removeEventListener("focus", handleWindowFocus);
+        window.removeEventListener("pageshow", handlePageShow);
         window.removeEventListener("online", handleOnline);
         unsubscribeStatus();
         unsubscribeEvents();
@@ -580,25 +803,18 @@ export function AppProviders({ children }: AppProvidersProps) {
       setConnectionError(err.message || "Connection failed");
     });
 
-    const handleVisibilityChange = () => {
-      syncWorkspaceActivity();
-      if (document.visibilityState === "visible") {
-        wsClientRef.current?.recoverConnection("visibility_resume");
-      }
-    };
-
-    const handleOnline = () => {
-      wsClientRef.current?.recoverConnection("network_online");
-    };
-
     syncWorkspaceActivity();
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("focus", handleWindowFocus);
+    window.addEventListener("pageshow", handlePageShow);
     window.addEventListener("online", handleOnline);
 
     // Cleanup on unmount
     return () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("focus", handleWindowFocus);
+      window.removeEventListener("pageshow", handlePageShow);
       window.removeEventListener("online", handleOnline);
       unsubscribeStatus();
       unsubscribeEvents();

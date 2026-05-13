@@ -11,5 +11,9 @@
   margin-top: 0;
   overflow: auto;
   outline: none;
-  z-index: var(--z-dropdown);
+  z-index: var(--z-modal);
+  padding: var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
 }

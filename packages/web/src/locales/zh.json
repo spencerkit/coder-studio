@@ -1,4 +1,36 @@
 {
+  "datetime": {
+    "today": "今天",
+    "tomorrow": "明天",
+    "next_week": "下周",
+    "prev_month": "上一月",
+    "next_month": "下一月",
+    "clear": "清空",
+    "confirm": "确认",
+    "select_date": "选择日期",
+    "select_time": "选择时间",
+    "hour": "小时",
+    "minute": "分钟",
+    "january": "一月",
+    "february": "二月",
+    "march": "三月",
+    "april": "四月",
+    "may": "五月",
+    "june": "六月",
+    "july": "七月",
+    "august": "八月",
+    "september": "九月",
+    "october": "十月",
+    "november": "十一月",
+    "december": "十二月",
+    "sun": "日",
+    "mon": "一",
+    "tue": "二",
+    "wed": "三",
+    "thu": "四",
+    "fri": "五",
+    "sat": "六"
+  },
   "app": {
     "name": "Coder Studio",
     "description": "Agent-First Development Environment"
@@ -227,6 +259,9 @@
     "create_failed_body": "Shell 进程启动失败，请检查服务端运行环境和 Shell 配置。",
     "create_unavailable_title": "当前没有已选中的工作区",
     "create_unavailable_body": "请先打开或切换到一个工作区，再新建终端。",
+    "copied_current_line": "已复制当前行",
+    "mobile_copy_current_line_failed_title": "当前行复制失败",
+    "mobile_copy_current_line_failed_body": "请重试长按当前行",
     "hide": "隐藏终端",
     "show": "显示终端",
     "selector": {
@@ -470,14 +505,24 @@
     "permission_limited_hint": "当前移动端浏览器内即使允许通知权限，也可能无法稳定展示系统通知。",
     "supervisor": {
       "title": "Supervisor",
-      "hint": "限制 Supervisor 评估器的最长运行时间，超过后服务端会主动中止本轮评估。",
+      "hint": "配置 Supervisor 评估超时和全局重试策略。重试规则对所有 Supervisor 生效。",
       "evaluation_timeout": "Supervisor 超时（秒）",
-      "validation_error": "请输入 1 到 {max} 秒之间的整数。"
+      "validation_error": "请输入 1 到 {max} 秒之间的整数。",
+      "retry_enabled": "启用 Supervisor 重试",
+      "retry_enabled_hint": "当评估超时或评估器异常时，按全局规则自动重试。",
+      "retry_max_count": "最大重试次数",
+      "retry_max_count_validation_error": "请输入 0 到 {max} 之间的整数。",
+      "retry_delay_sec": "重试间隔（秒）",
+      "retry_delay_validation_error": "请输入 1 到 {max} 秒之间的整数。",
+      "retry_on_timeout": "超时后重试",
+      "retry_on_timeout_hint": "评估超时后按重试次数和间隔自动继续。",
+      "retry_on_evaluator_error": "评估器异常后重试",
+      "retry_on_evaluator_error_hint": "评估器进程或运行时报错时按规则自动重试。"
     },
     "terminal_renderer": "终端渲染器",
     "terminal_renderer_hint": "选择终端渲染模式",
     "copy_on_select": "选中自动复制",
-    "copy_on_select_hint": "在桌面端终端中，选中文本后自动复制到系统剪贴板",
+    "copy_on_select_hint": "选中文本后自动复制到系统剪贴板",
     "copy_on_select_failed_title": "自动复制失败",
     "copy_on_select_failed_body": "请使用 Ctrl/Cmd+C 手动复制",
     "terminal_standard": "标准",
@@ -513,7 +558,23 @@
       "dark": "深色",
       "light": "浅色",
       "system": "跟随系统",
-      "hint": "选择应用主题"
+      "hint": "选择应用主题",
+      "family": "主题系列",
+      "variant": "明暗模式",
+      "family_mint": "Mint",
+      "family_graphite": "Graphite",
+      "family_nord": "Nord",
+      "family_hc": "高对比",
+      "mint_dark": "Mint 深色",
+      "mint_light": "Mint 浅色",
+      "graphite_dark": "Graphite 深色",
+      "graphite_light": "Graphite 浅色",
+      "nord_dark": "Nord 深色",
+      "nord_light": "Nord 浅色",
+      "hc_dark": "高对比深色",
+      "hc_light": "高对比浅色",
+      "variant_dark": "深色",
+      "variant_light": "浅色"
     },
     "language": {
       "title": "语言",
@@ -564,7 +625,12 @@
     "status_title": "访问验证",
     "status_loading": "正在检查当前部署的访问状态。",
     "status_unavailable": "暂时无法连接鉴权服务，请稍后重试。",
-    "status_not_configured": "当前部署未配置鉴权。"
+    "status_not_configured": "当前部署未配置鉴权。",
+    "session_gate_title": "SESSION GATE",
+    "session_gate_description": "当前标签页已被其他标签页接管，需要重新进入才能继续操作。",
+    "session_gate_detail": "已断开当前标签页连接，恢复后会重新同步最新数据。",
+    "session_gate_reenter": "重新进入",
+    "session_gate_reentering": "进入中"
   },
   "connection": {
     "title": "连接",
@@ -586,16 +652,27 @@
       "evaluating": "评估中",
       "injecting": "注入中",
       "paused": "已暂停",
-      "error": "错误"
+      "error": "错误",
+      "stopped": "已停止"
     },
     "trigger": {
       "manual": "手动",
-      "auto": "自动"
+      "auto": "自动",
+      "scheduled": "定时"
     },
     "cycle": {
       "no_guidance": "本轮无需注入 guidance",
       "evaluating": "评估中…",
-      "waiting": "等待评估结果"
+      "waiting": "等待评估结果",
+      "cancelled": "已取消"
+    },
+    "stop_reason": {
+      "objective_complete": "目标已达成，Supervisor 已自动停止。",
+      "max_supervision_count_reached": "已达到配置的最大监督次数。"
+    },
+    "meta": {
+      "title": "执行策略",
+      "no_cap": "不设上限"
     },
     "field": {
       "objective": "目标描述",
@@ -603,13 +680,21 @@
       "objective_placeholder": "描述希望 Supervisor 盯住的目标，例如:\n- 完成用户认证功能的实现\n- 修复所有失败的单元测试\n- 把 P95 响应时间压到 100ms 以内",
       "objective_helper": "越具体、越可衡量，评估效果越好。建议包含完成条件。",
       "evaluator": "评估方",
-      "evaluator_helper": "用于评估进度并生成下一步指引的 provider，与执行方可不相同。"
+      "evaluator_helper": "用于评估进度并生成下一步指引的 provider，与执行方可不相同。",
+      "evaluator_model": "评估模型",
+      "evaluator_model_placeholder": "可选模型覆盖，例如 o3 或 gpt-5",
+      "evaluator_model_helper": "留空则沿用该 provider 当前默认的 supervisor 评估模型逻辑。",
+      "max_supervision_count": "最大监督次数",
+      "max_supervision_count_helper": "填 0 表示不设上限。若目标已达成，评估仍可提前停止。",
+      "scheduled_at_placeholder": "选择执行时间",
+      "scheduled_at": "定时执行时间",
+      "scheduled_at_helper": "指定首次执行时间。到达后开始执行评估，之后每轮对话结束自动触发。留空则每轮对话结束自动触发评估。"
     },
     "action": {
       "enable": "启用 Supervisor",
       "enable_objective": "启用目标",
-      "edit_objective": "编辑目标",
-      "disable": "禁用 Supervisor",
+      "edit_objective": "编辑 Supervisor",
+      "disable": "禁用",
       "pause": "暂停",
       "resume": "恢复",
       "trigger": "触发评估",

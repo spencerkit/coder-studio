@@ -5,13 +5,54 @@
  */
 
 import { atom } from "jotai";
-import { atomWithStorage } from "jotai/utils";
+import { atomWithStorage, createJSONStorage } from "jotai/utils";
+import { resolveStoredThemeId } from "../theme";
+
+const THEME_ID_STORAGE_KEY = "ui.themeId";
+const LEGACY_THEME_STORAGE_KEY = "ui.theme";
+
+const baseThemeStorage = createJSONStorage<string>(() => window.localStorage);
+
+function readThemePreferenceFromStorage(initialValue: string): string {
+  if (typeof window === "undefined") {
+    return initialValue;
+  }
+
+  const storedThemeId = window.localStorage.getItem(THEME_ID_STORAGE_KEY);
+  if (storedThemeId !== null) {
+    try {
+      return resolveStoredThemeId(JSON.parse(storedThemeId));
+    } catch {
+      return initialValue;
+    }
+  }
+
+  const legacyTheme = window.localStorage.getItem(LEGACY_THEME_STORAGE_KEY);
+  if (legacyTheme !== null) {
+    try {
+      return resolveStoredThemeId(JSON.parse(legacyTheme));
+    } catch {
+      return initialValue;
+    }
+  }
+
+  return initialValue;
+}
+
+const themeStorage = {
+  ...baseThemeStorage,
+  getItem: (_key: string, initialValue: string) => readThemePreferenceFromStorage(initialValue),
+  setItem: (key: string, value: string) =>
+    baseThemeStorage.setItem(key, resolveStoredThemeId(value) as string),
+};
 
 /**
  * Theme preference
- * Persisted: ui.theme
+ * Persisted: ui.themeId
  */
-export const themeAtom = atomWithStorage<"dark" | "light">("ui.theme", "dark");
+export const themeAtom = atomWithStorage<string>(THEME_ID_STORAGE_KEY, "mint-dark", themeStorage, {
+  getOnInit: true,
+});
 
 /**
  * Locale preference

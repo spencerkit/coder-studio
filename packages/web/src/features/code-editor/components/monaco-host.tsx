@@ -15,10 +15,13 @@ import tsWorker from "monaco-editor/esm/vs/language/typescript/ts.worker?worker"
 import type { FC } from "react";
 import { useEffect, useRef } from "react";
 import { themeAtom } from "../../../atoms/app-ui";
+import { getThemeById } from "../../../theme";
 
 const monacoGlobal = globalThis as typeof globalThis & {
   MonacoEnvironment?: monaco.Environment;
 };
+
+const registeredMonacoThemeIds = new Set<string>();
 
 monacoGlobal.MonacoEnvironment ??= {
   getWorker(_workerId: string, label: string) {
@@ -73,7 +76,15 @@ export const MonacoHost: FC<MonacoHostProps> = ({
   }, [onSave]);
 
   const language = detectLanguage(filePath);
-  const editorTheme = uiTheme === "light" ? "vs" : "vs-dark";
+  const resolvedTheme = getThemeById(uiTheme);
+  const editorTheme = `coder-studio-${resolvedTheme.id}`;
+
+  useEffect(() => {
+    if (!registeredMonacoThemeIds.has(editorTheme)) {
+      monaco.editor.defineTheme(editorTheme, resolvedTheme.monaco);
+      registeredMonacoThemeIds.add(editorTheme);
+    }
+  }, [editorTheme, resolvedTheme]);
 
   useEffect(() => {
     if (!containerRef.current || editorRef.current) return;

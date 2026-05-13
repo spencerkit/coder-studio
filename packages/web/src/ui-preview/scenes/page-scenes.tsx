@@ -1,5 +1,6 @@
 import type { FileNode, GitStatus, Session, Workspace } from "@coder-studio/core";
 import { LoginPage } from "../../features/auth";
+import { SessionGatePage } from "../../features/auth/session-gate";
 import { NotFoundPage } from "../../features/not-found";
 import { SettingsPage } from "../../features/settings";
 import { WelcomePage } from "../../features/welcome";
@@ -55,7 +56,7 @@ function buildSettingsSeed(context: UiPreviewSceneContext) {
         "notifications.soundEnabled": true,
         "supervisor.evaluationTimeoutSec": 600,
         "appearance.locale": context.locale,
-        "appearance.theme": context.theme,
+        "appearance.themeId": context.theme,
         "appearance.terminalRenderer": "standard",
         "providers.claude.additionalArgs": ["--verbose"],
         "providers.codex.additionalArgs": ["--sandbox", "workspace-write"],
@@ -210,6 +211,15 @@ export function createPageScenes(): UiPreviewSceneDefinition[] {
         authenticated: false,
       }),
       render: () => <LoginPage />,
+    }),
+    scene("session-gate", {
+      router: () => ({ initialEntries: ["/session-gate"], path: "/session-gate" }),
+      seed: (context) => ({
+        ...context,
+        authEnabled: false,
+        authenticated: false,
+      }),
+      render: () => <SessionGatePage />,
     }),
     scene("not-found", {
       router: () => ({ initialEntries: ["/preview-missing"], path: "*" }),

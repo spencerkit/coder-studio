@@ -2,8 +2,14 @@ import type { Workspace } from "@coder-studio/core";
 import { act, render } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { authenticatedAtom } from "../atoms/app-ui";
+import {
+  activationGenerationAtom,
+  activationReasonAtom,
+  activationStatusAtom,
+} from "../atoms/activation";
+import { authenticatedAtom, themeAtom } from "../atoms/app-ui";
 import { authEnabledAtom, connectionStatusAtom } from "../atoms/connection";
+import { sessionsAtom } from "../atoms/sessions";
 import {
   activeWorkspaceIdAtom,
   workspaceOrderAtom,
@@ -12,9 +18,11 @@ import {
 } from "../atoms/workspaces";
 import { terminalPreferencesAtom } from "../features/terminal-panel/preferences";
 import {
+  fileTreeAtomFamily,
   fileTreeStaleAtomFamily,
   gitBranchListAtomFamily,
   gitStateAtomFamily,
+  loadedDirsAtomFamily,
   worktreeListAtomFamily,
 } from "../features/workspace/atoms";
 import { AppProviders, resetAppProvidersSingletonsForTests } from "./providers";
@@ -54,6 +62,30 @@ function renderProviders(store = createStore()) {
   );
 
   return { store, ...rendered };
+}
+
+function createWsSendCommandMock(
+  handler?: (op: string, args: unknown) => Promise<unknown> | unknown
+) {
+  return vi.fn().mockImplementation(async (op: string, args: unknown) => {
+    if (op === "activation.claim") {
+      return {
+        active: true,
+        generation: 1,
+        recoveryMode: "fresh",
+      };
+    }
+
+    if (op === "activation.release") {
+      return { ok: true };
+    }
+
+    if (handler) {
+      return await handler(op, args);
+    }
+
+    return undefined;
+  });
 }
 
 function setVisibilityState(value: "visible" | "hidden") {
@@ -98,10 +130,16 @@ function seedWorkspaces(
 describe("AppProviders lifecycle recovery", () => {
   const originalFetch = globalThis.fetch;
   const originalVisibilityState = Object.getOwnPropertyDescriptor(document, "visibilityState");
+  const originalDocumentTheme = document.documentElement.getAttribute("data-theme");
+  const originalLegacyTheme = localStorage.getItem("ui.theme");
+  const originalThemeId = localStorage.getItem("ui.themeId");
   const originalTerminalPreferences = localStorage.getItem("ui.terminalPreferences");
 
   beforeEach(() => {
     resetAppProvidersSingletonsForTests();
+    document.documentElement.removeAttribute("data-theme");
+    localStorage.removeItem("ui.theme");
+    localStorage.removeItem("ui.themeId");
     localStorage.removeItem("ui.terminalPreferences");
     globalThis.fetch = vi.fn().mockResolvedValue({
       json: async () => ({ authEnabled: false }),
@@ -128,18 +166,34 @@ describe("AppProviders lifecycle recovery", () => {
       }),
       getStatus: vi.fn(() => "disconnected"),
       recoverConnection: vi.fn(),
-      sendCommand: vi.fn().mockResolvedValue(undefined),
+      sendCommand: createWsSendCommandMock(),
     };
   });
 
   afterEach(() => {
     resetAppProvidersSingletonsForTests();
     globalThis.fetch = originalFetch;
+    vi.useRealTimers();
     vi.restoreAllMocks();
     if (originalTerminalPreferences === null) {
       localStorage.removeItem("ui.terminalPreferences");
     } else {
       localStorage.setItem("ui.terminalPreferences", originalTerminalPreferences);
+    }
+    if (originalLegacyTheme === null) {
+      localStorage.removeItem("ui.theme");
+    } else {
+      localStorage.setItem("ui.theme", originalLegacyTheme);
+    }
+    if (originalThemeId === null) {
+      localStorage.removeItem("ui.themeId");
+    } else {
+      localStorage.setItem("ui.themeId", originalThemeId);
+    }
+    if (originalDocumentTheme === null) {
+      document.documentElement.removeAttribute("data-theme");
+    } else {
+      document.documentElement.setAttribute("data-theme", originalDocumentTheme);
     }
     if (originalVisibilityState) {
       Object.defineProperty(document, "visibilityState", originalVisibilityState);
@@ -321,6 +375,75 @@ describe("AppProviders lifecycle recovery", () => {
       });
   });
 
+  it("recovers the websocket when the window regains focus while already visible", () => {
+    setVisibilityState("visible");
+    renderProviders();
+
+    return vi
+      .waitFor(() => {
+        expect(wsState.client?.connect).toHaveBeenCalled();
+      })
+      .then(() => {
+        act(() => {
+          window.dispatchEvent(new Event("focus"));
+        });
+
+        expect(wsState.client?.recoverConnection).toHaveBeenCalledWith("visibility_resume");
+      });
+  });
+
+  it("recovers the websocket when the page is shown again while visible", () => {
+    setVisibilityState("visible");
+    renderProviders();
+
+    return vi
+      .waitFor(() => {
+        expect(wsState.client?.connect).toHaveBeenCalled();
+      })
+      .then(() => {
+        act(() => {
+          window.dispatchEvent(new Event("pageshow"));
+        });
+
+        expect(wsState.client?.recoverConnection).toHaveBeenCalledWith("visibility_resume");
+      });
+  });
+
+  it("coalesces back-to-back foreground recovery signals", async () => {
+    setVisibilityState("visible");
+    renderProviders();
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
+
+    wsState.client?.recoverConnection.mockClear();
+    vi.useFakeTimers();
+
+    act(() => {
+      window.dispatchEvent(new Event("focus"));
+    });
+
+    expect(wsState.client?.recoverConnection).toHaveBeenCalledTimes(1);
+    expect(wsState.client?.recoverConnection).toHaveBeenLastCalledWith("visibility_resume");
+
+    act(() => {
+      vi.advanceTimersByTime(100);
+      window.dispatchEvent(new Event("pageshow"));
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+
+    expect(wsState.client?.recoverConnection).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      vi.advanceTimersByTime(250);
+      window.dispatchEvent(new Event("focus"));
+    });
+
+    expect(wsState.client?.recoverConnection).toHaveBeenCalledTimes(2);
+    expect(wsState.client?.recoverConnection).toHaveBeenLastCalledWith("visibility_resume");
+  });
+
   it("hydrates authEnabled and authenticated from /auth/status instead of trusting stale local state", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       json: async () => ({ authEnabled: true, authenticated: false }),
@@ -382,6 +505,179 @@ describe("AppProviders lifecycle recovery", () => {
     });
   });
 
+  it("claims activation when the websocket becomes connected", async () => {
+    const store = createStore();
+    setVisibilityState("visible");
+
+    renderProviders(store);
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
+
+    act(() => {
+      wsState.client?.statusHandler?.("connected");
+    });
+
+    await vi.waitFor(() => {
+      const claimCalls =
+        wsState.client?.sendCommand?.mock.calls.filter(([op]) => op === "activation.claim") ?? [];
+      expect(claimCalls.length).toBeGreaterThan(0);
+      expect(claimCalls[0]?.[1]).toEqual(
+        expect.objectContaining({
+          clientInstanceId: expect.any(String),
+        })
+      );
+      expect(store.get(activationStatusAtom)).toBe("active");
+      expect(store.get(activationGenerationAtom)).toBe(1);
+      expect(store.get(activationReasonAtom)).toBeNull();
+    });
+  });
+
+  it("does not send activation.heartbeat after the session becomes active", async () => {
+    const store = createStore();
+    setVisibilityState("visible");
+    vi.useFakeTimers();
+
+    renderProviders(store);
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
+
+    act(() => {
+      wsState.client?.statusHandler?.("connected");
+    });
+
+    await vi.waitFor(() => {
+      expect(store.get(activationStatusAtom)).toBe("active");
+    });
+
+    act(() => {
+      vi.advanceTimersByTime(60_000);
+    });
+
+    expect(
+      wsState.client?.sendCommand?.mock.calls.filter(([op]) => op === "activation.heartbeat") ?? []
+    ).toHaveLength(0);
+  });
+
+  it("disconnects and gates when activation.revoked is received", async () => {
+    const store = createStore();
+    seedWorkspaces(store, ["ws-1"], "ws-1");
+    act(() => {
+      store.set(activationStatusAtom, "active");
+      store.set(activationGenerationAtom, 1);
+      store.set(activationReasonAtom, null);
+      store.set(gitStateAtomFamily("ws-1"), {
+        branch: "feature/test",
+        ahead: 1,
+        behind: 0,
+        modified: [],
+        staged: [],
+        untracked: [],
+        deleted: [],
+      });
+      store.set(gitBranchListAtomFamily("ws-1"), {
+        current: "feature/test",
+        branches: [],
+        loading: false,
+      });
+      store.set(fileTreeAtomFamily("ws-1"), new Map([[".", []]]));
+      store.set(loadedDirsAtomFamily("ws-1"), new Set(["src"]));
+      store.set(worktreeListAtomFamily("ws-1"), {
+        items: [],
+        loading: false,
+        lastLoadedAt: Date.now(),
+      });
+      store.set(fileTreeStaleAtomFamily("ws-1"), true);
+      store.set(sessionsAtom, {
+        "session-1": {
+          id: "session-1",
+          workspaceId: "ws-1",
+          terminalId: "terminal-1",
+          providerId: "codex",
+          state: "running",
+          capability: "full",
+          startedAt: Date.now(),
+          lastActiveAt: Date.now(),
+        },
+      });
+    });
+
+    renderProviders(store);
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
+
+    act(() => {
+      wsState.client?.eventHandler?.(
+        "activation.revoked",
+        { reason: "displaced", generation: 2 },
+        1
+      );
+    });
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.disconnect).toHaveBeenCalledWith("single_active_displaced");
+      expect(store.get(activationStatusAtom)).toBe("gated");
+      expect(store.get(activationReasonAtom)).toBe("displaced");
+      expect(store.get(activationGenerationAtom)).toBe(2);
+      expect(store.get(workspacesLoadStateAtom)).toBe("idle");
+      expect(store.get(workspaceOrderAtom)).toEqual([]);
+      expect(store.get(workspacesAtom)).toEqual({});
+      expect(store.get(activeWorkspaceIdAtom)).toBeNull();
+      expect(store.get(fileTreeAtomFamily("ws-1"))).toBeNull();
+      expect(Array.from(store.get(loadedDirsAtomFamily("ws-1")))).toEqual([]);
+      expect(store.get(gitStateAtomFamily("ws-1"))).toBeNull();
+      expect(store.get(gitBranchListAtomFamily("ws-1")).current).toBe("");
+      expect(store.get(worktreeListAtomFamily("ws-1")).items).toEqual([]);
+      expect(store.get(fileTreeStaleAtomFamily("ws-1"))).toBe(false);
+      expect(store.get(sessionsAtom)).toEqual({});
+    });
+  });
+
+  it("does not auto-claim again while activation remains gated", async () => {
+    const store = createStore();
+
+    renderProviders(store);
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
+
+    act(() => {
+      store.set(activationStatusAtom, "gated");
+      wsState.client?.statusHandler?.("connected");
+    });
+
+    const claimCalls =
+      wsState.client?.sendCommand?.mock.calls.filter(([op]) => op === "activation.claim") ?? [];
+
+    expect(claimCalls).toHaveLength(0);
+  });
+
+  it("does not auto-recover the websocket from foreground signals while gated", async () => {
+    const store = createStore();
+    setVisibilityState("visible");
+
+    renderProviders(store);
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
+
+    act(() => {
+      store.set(activationStatusAtom, "gated");
+      window.dispatchEvent(new Event("focus"));
+      window.dispatchEvent(new Event("online"));
+      window.dispatchEvent(new Event("pageshow"));
+    });
+
+    expect(wsState.client?.recoverConnection).not.toHaveBeenCalled();
+  });
+
   it("hydrates terminal copy-on-select preferences from settings.get once connected", async () => {
     const store = createStore();
     setVisibilityState("visible");
@@ -412,6 +708,213 @@ describe("AppProviders lifecycle recovery", () => {
     });
 
     expect(sendCommand).toHaveBeenCalledWith("settings.get", {}, undefined);
+  });
+
+  it("bootstraps the document theme from legacy ui.theme localStorage", async () => {
+    localStorage.setItem("ui.theme", JSON.stringify("light"));
+
+    renderProviders();
+
+    await vi.waitFor(() => {
+      expect(document.documentElement.getAttribute("data-theme")).toBe("mint-light");
+      expect(localStorage.getItem("ui.themeId")).toBe(JSON.stringify("mint-light"));
+    });
+  });
+
+  it("hydrates appearance.themeId from settings.get and updates the document theme and atom", async () => {
+    const store = createStore();
+    setVisibilityState("visible");
+
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "appearance.themeId": "graphite-dark",
+        };
+      }
+
+      return undefined;
+    });
+    wsState.client!.sendCommand = sendCommand;
+
+    renderProviders(store);
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
+
+    act(() => {
+      wsState.client?.statusHandler?.("connected");
+    });
+
+    await vi.waitFor(() => {
+      expect(document.documentElement.getAttribute("data-theme")).toBe("graphite-dark");
+      expect(store.get(themeAtom)).toBe("graphite-dark");
+      expect(localStorage.getItem("ui.themeId")).toBe(JSON.stringify("graphite-dark"));
+    });
+  });
+
+  it("prefers server-provided appearance.themeId over legacy ui.theme localStorage", async () => {
+    const store = createStore();
+    setVisibilityState("visible");
+    localStorage.setItem("ui.theme", JSON.stringify("light"));
+
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "appearance.themeId": "graphite-dark",
+        };
+      }
+
+      return undefined;
+    });
+    wsState.client!.sendCommand = sendCommand;
+
+    renderProviders(store);
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
+
+    await vi.waitFor(() => {
+      expect(document.documentElement.getAttribute("data-theme")).toBe("mint-light");
+    });
+
+    act(() => {
+      wsState.client?.statusHandler?.("connected");
+    });
+
+    await vi.waitFor(() => {
+      expect(document.documentElement.getAttribute("data-theme")).toBe("graphite-dark");
+      expect(store.get(themeAtom)).toBe("graphite-dark");
+    });
+  });
+
+  it("falls back to legacy server appearance.theme when themeId is absent", async () => {
+    const store = createStore();
+    setVisibilityState("visible");
+
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "appearance.theme": "light",
+        };
+      }
+
+      return undefined;
+    });
+    wsState.client!.sendCommand = sendCommand;
+
+    renderProviders(store);
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
+
+    act(() => {
+      wsState.client?.statusHandler?.("connected");
+    });
+
+    await vi.waitFor(() => {
+      expect(document.documentElement.getAttribute("data-theme")).toBe("mint-light");
+      expect(store.get(themeAtom)).toBe("mint-light");
+      expect(localStorage.getItem("ui.themeId")).toBe(JSON.stringify("mint-light"));
+    });
+  });
+
+  it("preserves a newer local theme selection when startup hydration resolves afterward", async () => {
+    const store = createStore();
+    setVisibilityState("visible");
+
+    let resolveSettingsGet: ((value: Record<string, unknown>) => void) | undefined;
+    const settingsGetPromise = new Promise<Record<string, unknown>>((resolve) => {
+      resolveSettingsGet = resolve;
+    });
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return await settingsGetPromise;
+      }
+
+      return undefined;
+    });
+    wsState.client!.sendCommand = sendCommand;
+
+    renderProviders(store);
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
+
+    act(() => {
+      wsState.client?.statusHandler?.("connected");
+    });
+
+    await vi.waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith("settings.get", {}, undefined);
+    });
+
+    act(() => {
+      store.set(themeAtom, "graphite-dark");
+    });
+
+    await act(async () => {
+      resolveSettingsGet?.({
+        "appearance.themeId": "nord-light",
+      });
+      await settingsGetPromise;
+    });
+
+    expect(document.documentElement.getAttribute("data-theme")).toBe("graphite-dark");
+    expect(store.get(themeAtom)).toBe("graphite-dark");
+    expect(localStorage.getItem("ui.themeId")).toBe(JSON.stringify("graphite-dark"));
+  });
+
+  it("preserves a persisted local theme selection when startup hydration returns a stale server theme", async () => {
+    const store = createStore();
+    setVisibilityState("visible");
+    localStorage.setItem("ui.themeId", JSON.stringify("graphite-dark"));
+
+    let resolveSettingsGet: ((value: Record<string, unknown>) => void) | undefined;
+    const settingsGetPromise = new Promise<Record<string, unknown>>((resolve) => {
+      resolveSettingsGet = resolve;
+    });
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return await settingsGetPromise;
+      }
+
+      return undefined;
+    });
+    wsState.client!.sendCommand = sendCommand;
+
+    renderProviders(store);
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
+
+    await vi.waitFor(() => {
+      expect(document.documentElement.getAttribute("data-theme")).toBe("graphite-dark");
+      expect(store.get(themeAtom)).toBe("graphite-dark");
+    });
+
+    act(() => {
+      wsState.client?.statusHandler?.("connected");
+    });
+
+    await vi.waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith("settings.get", {}, undefined);
+    });
+
+    await act(async () => {
+      resolveSettingsGet?.({
+        "appearance.themeId": "nord-light",
+      });
+      await settingsGetPromise;
+    });
+
+    expect(document.documentElement.getAttribute("data-theme")).toBe("graphite-dark");
+    expect(store.get(themeAtom)).toBe("graphite-dark");
+    expect(localStorage.getItem("ui.themeId")).toBe(JSON.stringify("graphite-dark"));
   });
 
   it("preserves a newer local terminal copy-on-select update when startup hydration resolves later", async () => {

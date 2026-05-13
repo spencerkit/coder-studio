@@ -154,7 +154,7 @@ export interface Settings {
     evaluationTimeoutSec: number;
   };
   appearance: {
-    theme: "dark";
+    themeId: string;
     terminalRenderer: "standard" | "compatibility";
     locale: "zh" | "en";
   };

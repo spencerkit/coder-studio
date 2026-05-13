@@ -22,12 +22,18 @@ export const supervisorDialogAtom = atom<{
   mode: "enable" | "edit" | "disable";
   draftObjective: string;
   draftEvaluatorProviderId: "claude" | "codex";
+  draftEvaluatorModel: string;
+  draftMaxSupervisionCount: string;
+  draftScheduledAt: string;
 }>({
   open: false,
   sessionId: null,
   mode: "enable",
   draftObjective: "",
   draftEvaluatorProviderId: "claude",
+  draftEvaluatorModel: "",
+  draftMaxSupervisionCount: "0",
+  draftScheduledAt: "",
 });
 
 // Derived atom for getting supervisor by session

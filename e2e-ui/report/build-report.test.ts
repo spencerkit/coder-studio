@@ -11,10 +11,10 @@ describe("build-report", () => {
         source: "real-route",
         description: "Welcome page",
       },
-      screenshotPath: "screenshots/page/welcome/desktop__dark__zh.png",
+      screenshotPath: "screenshots/page/welcome/desktop__mint-light__zh.png",
       variant: {
         device: "desktop",
-        theme: "dark",
+        theme: "mint-light",
         locale: "zh",
       },
     });
@@ -22,10 +22,33 @@ describe("build-report", () => {
     expect(entry).toMatchObject({
       id: "welcome",
       category: "page",
-      path: "screenshots/page/welcome/desktop__dark__zh.png",
+      path: "screenshots/page/welcome/desktop__mint-light__zh.png",
       device: "desktop",
-      theme: "dark",
+      theme: "mint-light",
       locale: "zh",
+    });
+  });
+
+  it("keeps icon review scene manifest entries grouped by exact scene id and theme", () => {
+    const entry = buildManifestEntry({
+      scene: {
+        id: "toast-icon-review",
+        title: "Toast Icon Review",
+        category: "toast",
+        source: "showcase",
+        description: "Theme review for toast icons",
+      },
+      screenshotPath: "screenshots/toast/toast-icon-review/mobile__graphite-light__en.png",
+      variant: {
+        device: "mobile",
+        theme: "graphite-light",
+        locale: "en",
+      },
+    });
+
+    expect(entry).toMatchObject({
+      id: "toast-icon-review",
+      theme: "graphite-light",
     });
   });
 
@@ -37,15 +60,15 @@ describe("build-report", () => {
         category: "page",
         source: "real-route",
         device: "desktop",
-        theme: "dark",
+        theme: "mint-light",
         locale: "zh",
-        path: "screenshots/page/welcome/desktop__dark__zh.png",
+        path: "screenshots/page/welcome/desktop__mint-light__zh.png",
         description: "Welcome page",
       },
     ]);
 
     expect(html).toContain("UI Preview Report");
-    expect(html).toContain("screenshots/page/welcome/desktop__dark__zh.png");
+    expect(html).toContain("screenshots/page/welcome/desktop__mint-light__zh.png");
     expect(html).toContain('data-category="page"');
   });
 });

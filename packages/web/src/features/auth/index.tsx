@@ -14,7 +14,11 @@ const authEmptyStateStyle = {
   textAlign: "left" as const,
 };
 
-export function LoginPage() {
+export function LoginPage({
+  onAuthenticated,
+}: {
+  onAuthenticated?: () => Promise<boolean> | boolean;
+}) {
   const t = useTranslation();
   const [, setAuthenticated] = useAtom(authenticatedAtom);
   const locale = useAtomValue(localeAtom);
@@ -124,6 +128,12 @@ export function LoginPage() {
       const data = await response.json();
       if (data.authEnabled === false || data.ok) {
         setAuthenticated(true);
+        if (onAuthenticated) {
+          const shouldContinue = await onAuthenticated();
+          if (!shouldContinue) {
+            setAuthenticated(false);
+          }
+        }
       }
     } catch {
       setError(t("error.network"));

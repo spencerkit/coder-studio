@@ -1,6 +1,7 @@
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
   useEffect,
   useRef,
 } from "react";
@@ -45,6 +46,25 @@ interface MobileTerminalInputBarProps {
   onShiftTap: () => void;
 }
 
+type TouchLikeGestureTarget = "ctrl" | "shift" | SoftTerminalKeyId;
+
+type TouchLikeGestureStatus = "matched" | "mismatched" | "none";
+
+interface TouchLikeGestureState {
+  pointerId: number;
+  target: TouchLikeGestureTarget;
+}
+
+function preserveExistingInputFocus(event: ReactPointerEvent<HTMLButtonElement>) {
+  if (event.pointerType === "touch" || event.pointerType === "pen") {
+    event.preventDefault();
+  }
+}
+
+function isTouchLikePointer(event: ReactPointerEvent<HTMLButtonElement>) {
+  return event.pointerType === "touch" || event.pointerType === "pen";
+}
+
 function getKeyAriaLabel(key: SoftTerminalKeyId, labels: MobileTerminalInputBarLabels): string {
   switch (key) {
     case "escape":
@@ -75,8 +95,11 @@ export function MobileTerminalInputBar({
   onShiftTap,
 }: MobileTerminalInputBarProps) {
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const suppressedClickResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressTriggeredRef = useRef(false);
   const longPressSourceRef = useRef<"keyboard" | "pointer" | null>(null);
+  const suppressNextPointerClickRef = useRef(false);
+  const touchLikeGestureRef = useRef<TouchLikeGestureState | null>(null);
   const commandKeysDisabled = disabled;
 
   const clearLongPress = () => {
@@ -86,17 +109,83 @@ export function MobileTerminalInputBar({
     }
   };
 
+  const clearSuppressedClickReset = () => {
+    if (suppressedClickResetTimerRef.current !== null) {
+      clearTimeout(suppressedClickResetTimerRef.current);
+      suppressedClickResetTimerRef.current = null;
+    }
+  };
+
+  const scheduleSuppressedPointerClick = () => {
+    suppressNextPointerClickRef.current = true;
+    clearSuppressedClickReset();
+    suppressedClickResetTimerRef.current = setTimeout(() => {
+      suppressNextPointerClickRef.current = false;
+      suppressedClickResetTimerRef.current = null;
+    }, 0);
+  };
+
+  const consumeSuppressedPointerClick = () => {
+    if (!suppressNextPointerClickRef.current) {
+      return false;
+    }
+
+    suppressNextPointerClickRef.current = false;
+    clearSuppressedClickReset();
+    return true;
+  };
+
+  const clearTouchLikeGesture = () => {
+    touchLikeGestureRef.current = null;
+  };
+
+  const startTouchLikeGesture = (
+    event: ReactPointerEvent<HTMLButtonElement>,
+    target: TouchLikeGestureTarget
+  ) => {
+    if (!isTouchLikePointer(event)) {
+      return;
+    }
+
+    touchLikeGestureRef.current = {
+      pointerId: event.pointerId,
+      target,
+    };
+  };
+
+  const finishTouchLikeGesture = (
+    event: ReactPointerEvent<HTMLButtonElement>,
+    target: TouchLikeGestureTarget
+  ): TouchLikeGestureStatus => {
+    if (!isTouchLikePointer(event)) {
+      return "none";
+    }
+
+    const activeGesture = touchLikeGestureRef.current;
+    if (!activeGesture || activeGesture.pointerId !== event.pointerId) {
+      return "none";
+    }
+
+    touchLikeGestureRef.current = null;
+    return activeGesture.target === target ? "matched" : "mismatched";
+  };
+
   useEffect(() => {
     if (commandKeysDisabled) {
       clearLongPress();
+      clearSuppressedClickReset();
+      clearTouchLikeGesture();
       longPressTriggeredRef.current = false;
       longPressSourceRef.current = null;
+      suppressNextPointerClickRef.current = false;
     }
   }, [commandKeysDisabled]);
 
   useEffect(() => {
     return () => {
       clearLongPress();
+      clearSuppressedClickReset();
+      clearTouchLikeGesture();
     };
   }, []);
 
@@ -119,6 +208,7 @@ export function MobileTerminalInputBar({
     clearLongPress();
     longPressTriggeredRef.current = false;
     longPressSourceRef.current = null;
+    suppressNextPointerClickRef.current = false;
   };
 
   const finishCtrlGesture = () => {
@@ -131,6 +221,10 @@ export function MobileTerminalInputBar({
 
   const handleCtrlClick = (event: ReactMouseEvent<HTMLButtonElement>) => {
     if (commandKeysDisabled) {
+      return;
+    }
+
+    if (consumeSuppressedPointerClick()) {
       return;
     }
 
@@ -147,6 +241,66 @@ export function MobileTerminalInputBar({
     }
 
     onCtrlTap();
+  };
+
+  const handleCtrlPointerUp = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const touchGestureStatus = finishTouchLikeGesture(event, "ctrl");
+    finishCtrlGesture();
+    if (commandKeysDisabled || !isTouchLikePointer(event) || touchGestureStatus === "none") {
+      return;
+    }
+
+    scheduleSuppressedPointerClick();
+
+    if (touchGestureStatus !== "matched") {
+      return;
+    }
+
+    if (longPressTriggeredRef.current) {
+      longPressTriggeredRef.current = false;
+      longPressSourceRef.current = null;
+      return;
+    }
+
+    onCtrlTap();
+  };
+
+  const handleTouchLikePointerUp = (
+    event: ReactPointerEvent<HTMLButtonElement>,
+    target: TouchLikeGestureTarget,
+    callback: () => void
+  ) => {
+    if (commandKeysDisabled || !isTouchLikePointer(event)) {
+      return;
+    }
+
+    const touchGestureStatus = finishTouchLikeGesture(event, target);
+    if (touchGestureStatus === "none") {
+      return;
+    }
+
+    scheduleSuppressedPointerClick();
+    if (touchGestureStatus !== "matched") {
+      return;
+    }
+
+    callback();
+  };
+
+  const handleShiftClick = () => {
+    if (commandKeysDisabled || consumeSuppressedPointerClick()) {
+      return;
+    }
+
+    onShiftTap();
+  };
+
+  const handleSoftKeyClick = (key: SoftTerminalKeyId) => {
+    if (commandKeysDisabled || consumeSuppressedPointerClick()) {
+      return;
+    }
+
+    onKeyPress(key);
   };
 
   const handleCtrlKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
@@ -186,10 +340,20 @@ export function MobileTerminalInputBar({
           aria-label={ctrlLabel}
           aria-keyshortcuts="Alt+Enter Alt+Space"
           disabled={commandKeysDisabled}
-          onPointerDown={startCtrlGesture}
-          onPointerUp={finishCtrlGesture}
-          onPointerCancel={cancelCtrlGesture}
-          onPointerLeave={cancelCtrlGesture}
+          onPointerDown={(event) => {
+            preserveExistingInputFocus(event);
+            startTouchLikeGesture(event, "ctrl");
+            startCtrlGesture();
+          }}
+          onPointerUp={handleCtrlPointerUp}
+          onPointerCancel={() => {
+            clearTouchLikeGesture();
+            cancelCtrlGesture();
+          }}
+          onPointerLeave={() => {
+            clearTouchLikeGesture();
+            cancelCtrlGesture();
+          }}
           onClick={handleCtrlClick}
           onKeyDown={handleCtrlKeyDown}
         >
@@ -203,7 +367,15 @@ export function MobileTerminalInputBar({
           aria-pressed={shiftArmed}
           aria-label={shiftLabel}
           disabled={commandKeysDisabled}
-          onClick={onShiftTap}
+          onPointerDown={(event) => {
+            preserveExistingInputFocus(event);
+            startTouchLikeGesture(event, "shift");
+          }}
+          onPointerUp={(event) => {
+            handleTouchLikePointerUp(event, "shift", onShiftTap);
+          }}
+          onPointerCancel={clearTouchLikeGesture}
+          onClick={handleShiftClick}
         >
           Shift
         </button>
@@ -215,7 +387,15 @@ export function MobileTerminalInputBar({
             className="mobile-terminal-input-bar__key"
             aria-label={getKeyAriaLabel(key.id, labels)}
             disabled={commandKeysDisabled}
-            onClick={() => onKeyPress(key.id)}
+            onPointerDown={(event) => {
+              preserveExistingInputFocus(event);
+              startTouchLikeGesture(event, key.id);
+            }}
+            onPointerUp={(event) => {
+              handleTouchLikePointerUp(event, key.id, () => onKeyPress(key.id));
+            }}
+            onPointerCancel={clearTouchLikeGesture}
+            onClick={() => handleSoftKeyClick(key.id)}
           >
             {key.text}
           </button>

@@ -2,10 +2,12 @@ import { act, render, waitFor } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { themeAtom } from "../../../atoms/app-ui";
+import { getThemeById } from "../../../theme";
 import { MonacoHost } from "./monaco-host";
 
 const {
   mockCreateEditor,
+  mockDefineTheme,
   mockSetModelLanguage,
   mockSetTheme,
   mockEditorInstance,
@@ -25,6 +27,7 @@ const {
 
   return {
     mockCreateEditor: vi.fn(() => mockEditorInstance),
+    mockDefineTheme: vi.fn(),
     mockSetModelLanguage: vi.fn(),
     mockSetTheme: vi.fn(),
     mockEditorInstance,
@@ -42,6 +45,7 @@ vi.mock("monaco-editor", () => ({
   },
   editor: {
     create: mockCreateEditor,
+    defineTheme: mockDefineTheme,
     setModelLanguage: mockSetModelLanguage,
     setTheme: mockSetTheme,
   },
@@ -58,6 +62,7 @@ vi.mock("monaco-editor/esm/vs/language/typescript/ts.worker?worker", () => ({
 describe("MonacoHost", () => {
   beforeEach(() => {
     mockCreateEditor.mockClear();
+    mockDefineTheme.mockClear();
     mockSetModelLanguage.mockClear();
     mockSetTheme.mockClear();
     mockAddCommand.mockClear();
@@ -67,9 +72,10 @@ describe("MonacoHost", () => {
     mockEditorInstance.setValue.mockClear();
   });
 
-  it("uses a light editor theme when ui theme is light", async () => {
+  it("creates the editor with a named Monaco theme when ui theme is mint-light", async () => {
     const store = createStore();
-    store.set(themeAtom, "light");
+    store.set(themeAtom, "mint-light");
+    const theme = getThemeById("mint-light");
 
     render(
       <Provider store={store}>
@@ -78,11 +84,12 @@ describe("MonacoHost", () => {
     );
 
     await waitFor(() => {
+      expect(mockDefineTheme).toHaveBeenCalledWith("coder-studio-mint-light", theme.monaco);
       expect(mockCreateEditor).toHaveBeenCalledWith(
         expect.any(HTMLDivElement),
         expect.objectContaining({
           language: "typescript",
-          theme: "vs",
+          theme: "coder-studio-mint-light",
           value: "export const a = 1;",
         })
       );
@@ -99,11 +106,15 @@ describe("MonacoHost", () => {
     );
 
     await act(async () => {
-      store.set(themeAtom, "light");
+      store.set(themeAtom, "graphite-light");
     });
 
     await waitFor(() => {
-      expect(mockSetTheme).toHaveBeenCalledWith("vs");
+      expect(mockDefineTheme).toHaveBeenCalledWith(
+        "coder-studio-graphite-light",
+        getThemeById("graphite-light").monaco
+      );
+      expect(mockSetTheme).toHaveBeenCalledWith("coder-studio-graphite-light");
     });
   });
 
