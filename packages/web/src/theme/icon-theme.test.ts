@@ -79,6 +79,48 @@ describe("theme icon resolver", () => {
     }
   });
 
+  it("keeps mobile dock icons aligned within each built-in theme", () => {
+    for (const themeId of [
+      "mint-dark",
+      "mint-light",
+      "graphite-dark",
+      "graphite-light",
+      "nord-dark",
+      "nord-light",
+      "hc-dark",
+      "hc-light",
+    ] as const) {
+      const agentTone = getIconPresentation(themeId, "mobile.dock.agent").tone;
+      const filesTone = getIconPresentation(themeId, "mobile.dock.files").tone;
+      const terminalTone = getIconPresentation(themeId, "mobile.dock.terminal").tone;
+
+      expect(agentTone).toBe(filesTone);
+      expect(filesTone).toBe(terminalTone);
+    }
+  });
+
+  it("keeps settings navigation icons aligned within each built-in theme", () => {
+    for (const themeId of [
+      "mint-dark",
+      "mint-light",
+      "graphite-dark",
+      "graphite-light",
+      "nord-dark",
+      "nord-light",
+      "hc-dark",
+      "hc-light",
+    ] as const) {
+      const tones = new Set([
+        getIconPresentation(themeId, "nav.settings.general").tone,
+        getIconPresentation(themeId, "nav.settings.providers").tone,
+        getIconPresentation(themeId, "nav.settings.appearance").tone,
+        getIconPresentation(themeId, "nav.settings.shortcuts").tone,
+      ]);
+
+      expect(tones.size).toBe(1);
+    }
+  });
+
   it("applies richer common icon tones for mint themes", () => {
     for (const themeId of ["mint-dark", "mint-light"] as const) {
       expect(getIconPresentation(themeId, "nav.agent")).toEqual(
@@ -88,7 +130,7 @@ describe("theme icon resolver", () => {
         expect.objectContaining({ tone: "accent" })
       );
       expect(getIconPresentation(themeId, "mobile.dock.agent")).toEqual(
-        expect.objectContaining({ tone: "accent" })
+        expect.objectContaining({ tone: "info" })
       );
       expect(getIconPresentation(themeId, "mobile.dock.files")).toEqual(
         expect.objectContaining({ tone: "info" })
@@ -138,7 +180,7 @@ describe("theme icon resolver", () => {
         expect.objectContaining({ tone: "accent" })
       );
       expect(getIconPresentation(themeId, "mobile.dock.agent")).toEqual(
-        expect.objectContaining({ tone: "accent" })
+        expect.objectContaining({ tone: "secondary" })
       );
       expect(getIconPresentation(themeId, "mobile.dock.files")).toEqual(
         expect.objectContaining({ tone: "secondary" })
@@ -188,7 +230,7 @@ describe("theme icon resolver", () => {
         expect.objectContaining({ tone: "accent" })
       );
       expect(getIconPresentation(themeId, "mobile.dock.agent")).toEqual(
-        expect.objectContaining({ tone: "accent" })
+        expect.objectContaining({ tone: "info" })
       );
       expect(getIconPresentation(themeId, "mobile.dock.files")).toEqual(
         expect.objectContaining({ tone: "info" })
@@ -227,7 +269,7 @@ describe("theme icon resolver", () => {
         expect.objectContaining({ tone: "secondary" })
       );
       expect(getIconPresentation(themeId, "nav.settings.providers")).toEqual(
-        expect.objectContaining({ tone: "info" })
+        expect.objectContaining({ tone: "secondary" })
       );
     }
   });

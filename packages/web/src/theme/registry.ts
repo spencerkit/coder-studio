@@ -133,7 +133,7 @@ const THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
       },
       "mobile.dock.agent": {
         ...BASE_ICON_THEME.icons["mobile.dock.agent"],
-        tone: "accent",
+        tone: "info",
       },
       "mobile.dock.files": {
         ...BASE_ICON_THEME.icons["mobile.dock.files"],
@@ -213,7 +213,7 @@ const THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
       },
       "mobile.dock.agent": {
         ...BASE_ICON_THEME.icons["mobile.dock.agent"],
-        tone: "accent",
+        tone: "info",
       },
       "mobile.dock.files": {
         ...BASE_ICON_THEME.icons["mobile.dock.files"],
@@ -308,7 +308,7 @@ const THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
       },
       "mobile.dock.agent": {
         ...BASE_ICON_THEME.icons["mobile.dock.agent"],
-        tone: "accent",
+        tone: "secondary",
       },
       "mobile.dock.files": {
         ...BASE_ICON_THEME.icons["mobile.dock.files"],
@@ -395,7 +395,7 @@ const THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
       },
       "mobile.dock.agent": {
         ...BASE_ICON_THEME.icons["mobile.dock.agent"],
-        tone: "accent",
+        tone: "secondary",
       },
       "mobile.dock.files": {
         ...BASE_ICON_THEME.icons["mobile.dock.files"],
@@ -482,7 +482,7 @@ const THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
       },
       "mobile.dock.agent": {
         ...BASE_ICON_THEME.icons["mobile.dock.agent"],
-        tone: "accent",
+        tone: "info",
       },
       "mobile.dock.files": {
         ...BASE_ICON_THEME.icons["mobile.dock.files"],
@@ -519,10 +519,6 @@ const THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
       "git.commit": {
         ...BASE_ICON_THEME.icons["git.commit"],
         tone: "accent",
-      },
-      "nav.settings.providers": {
-        ...BASE_ICON_THEME.icons["nav.settings.providers"],
-        tone: "info",
       },
       "state.warning": {
         ...BASE_ICON_THEME.icons["state.warning"],
@@ -589,7 +585,7 @@ const THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
       },
       "mobile.dock.agent": {
         ...BASE_ICON_THEME.icons["mobile.dock.agent"],
-        tone: "accent",
+        tone: "info",
       },
       "mobile.dock.files": {
         ...BASE_ICON_THEME.icons["mobile.dock.files"],
@@ -626,10 +622,6 @@ const THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
       "git.commit": {
         ...BASE_ICON_THEME.icons["git.commit"],
         tone: "accent",
-      },
-      "nav.settings.providers": {
-        ...BASE_ICON_THEME.icons["nav.settings.providers"],
-        tone: "info",
       },
       "state.warning": {
         ...BASE_ICON_THEME.icons["state.warning"],
