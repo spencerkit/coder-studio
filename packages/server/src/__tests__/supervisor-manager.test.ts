@@ -622,6 +622,189 @@ describe("SupervisorManager cycle triggers", () => {
     );
   });
 
+  it("keeps a superseded target meta state when an old in-flight cycle later stops", async () => {
+    const supervisor = await manager.create({
+      sessionId: "sess-objective-stop-race",
+      workspaceId: "ws-1",
+      objective: "Initial objective",
+      evaluatorProviderId: "codex",
+    });
+
+    const targetMetaById = new Map<string, Record<string, unknown>>([
+      [
+        supervisor.targetId,
+        {
+          targetId: supervisor.targetId,
+          sessionId: supervisor.sessionId,
+          workspaceId: supervisor.workspaceId,
+          objective: supervisor.objective,
+          status: "active",
+          createdAt: 1,
+          updatedAt: 1,
+          supersededBy: null,
+          completedAt: null,
+        },
+      ],
+    ]);
+
+    deps.targetStore.readTargetMeta.mockImplementation(
+      async (_workspacePath: string, targetId: string) => {
+        const meta = targetMetaById.get(targetId);
+        if (!meta) {
+          throw new Error(`Missing target meta for ${targetId}`);
+        }
+        return { ...meta };
+      }
+    );
+    deps.targetStore.createTargetFiles.mockImplementation(
+      async (
+        _workspacePath: string,
+        input: {
+          targetId: string;
+          sessionId: string;
+          workspaceId: string;
+          objective: string;
+          createdAt: number;
+        }
+      ) => {
+        targetMetaById.set(input.targetId, {
+          targetId: input.targetId,
+          sessionId: input.sessionId,
+          workspaceId: input.workspaceId,
+          objective: input.objective,
+          status: "active",
+          createdAt: input.createdAt,
+          updatedAt: input.createdAt,
+          supersededBy: null,
+          completedAt: null,
+        });
+      }
+    );
+    deps.targetStore.markTargetSuperseded.mockImplementation(
+      async (_workspacePath: string, targetId: string, nextTargetId: string, updatedAt: number) => {
+        const current = targetMetaById.get(targetId);
+        if (!current) {
+          throw new Error(`Missing target meta for ${targetId}`);
+        }
+        targetMetaById.set(targetId, {
+          ...current,
+          status: "superseded",
+          supersededBy: nextTargetId,
+          updatedAt,
+        });
+      }
+    );
+    deps.targetStore.saveTargetMeta.mockImplementation(
+      async (_workspacePath: string, targetId: string, meta: Record<string, unknown>) => {
+        targetMetaById.set(targetId, { ...meta, targetId });
+      }
+    );
+
+    let resolveEvaluation: ((result: SupervisorEvaluationResult) => void) | null = null;
+    vi.spyOn(getManagerInternals().evaluator, "evaluate").mockImplementationOnce(
+      async () =>
+        await new Promise<SupervisorEvaluationResult>((resolve) => {
+          resolveEvaluation = resolve;
+        })
+    );
+
+    const cycle = await manager.triggerEvaluation(supervisor.id);
+
+    await waitFor(() => {
+      expect(resolveEvaluation).not.toBeNull();
+      expect(manager.get(supervisor.id)?.state).toBe("evaluating");
+    });
+
+    const rotated = await manager.update(supervisor.id, {
+      objective: "New objective",
+    });
+
+    resolveEvaluation?.({
+      status: "stop",
+      stopReason: "objective_complete",
+      reason: "old objective is done",
+    });
+
+    await waitFor(() => {
+      const finished = manager.get(supervisor.id)?.cycles.find((entry) => entry.id === cycle.id);
+      expect(finished?.status).toBe("completed");
+    });
+
+    expect(targetMetaById.get(supervisor.targetId)).toMatchObject({
+      status: "superseded",
+      supersededBy: rotated.targetId,
+    });
+    expect(targetMetaById.get(rotated.targetId)).toMatchObject({
+      status: "active",
+    });
+  });
+
+  it("rolls back a supersede mark when creating the next target files fails", async () => {
+    const supervisor = await manager.create({
+      sessionId: "sess-objective-create-fails",
+      workspaceId: "ws-1",
+      objective: "Initial objective",
+      evaluatorProviderId: "codex",
+    });
+
+    let latestMeta: Record<string, unknown> = {
+      targetId: supervisor.targetId,
+      sessionId: supervisor.sessionId,
+      workspaceId: supervisor.workspaceId,
+      objective: supervisor.objective,
+      status: "active",
+      createdAt: 1,
+      updatedAt: 1,
+      supersededBy: null,
+      completedAt: null,
+    };
+
+    deps.targetStore.readTargetMeta.mockImplementation(async () => ({ ...latestMeta }));
+    deps.targetStore.markTargetSuperseded.mockImplementation(
+      async (_workspacePath: string, targetId: string, nextTargetId: string, updatedAt: number) => {
+        latestMeta = {
+          ...latestMeta,
+          targetId,
+          status: "superseded",
+          supersededBy: nextTargetId,
+          updatedAt,
+        };
+      }
+    );
+    deps.targetStore.saveTargetMeta.mockImplementation(
+      async (_workspacePath: string, targetId: string, meta: Record<string, unknown>) => {
+        latestMeta = { ...meta, targetId };
+      }
+    );
+
+    const createTargetFilesError = new Error("disk full");
+    deps.targetStore.createTargetFiles.mockImplementation(async () => {
+      throw createTargetFilesError;
+    });
+
+    await expect(
+      manager.update(supervisor.id, {
+        objective: "New objective",
+      })
+    ).rejects.toThrow("disk full");
+
+    expect(manager.get(supervisor.id)?.targetId).toBe(supervisor.targetId);
+    expect(latestMeta).toMatchObject({
+      targetId: supervisor.targetId,
+      status: "active",
+      supersededBy: null,
+    });
+    expect(deps.targetStore.saveTargetMeta).toHaveBeenCalledWith(
+      expect.any(String),
+      supervisor.targetId,
+      expect.objectContaining({
+        targetId: supervisor.targetId,
+        status: "active",
+        supersededBy: null,
+      })
+    );
+  });
+
   it("retries evaluator timeout up to the global retry budget", async () => {
     vi.useFakeTimers();
     deps.settingsRepo.get = vi.fn((key: string) => {
@@ -1047,6 +1230,42 @@ describe("SupervisorManager cycle triggers", () => {
       )
     ).toBe(false);
     expect(deps.logger.error).not.toHaveBeenCalled();
+  });
+
+  it("marks deleted active targets as cancelled with a completion timestamp", async () => {
+    const supervisor = await manager.create({
+      sessionId: "sess-delete-completed-at",
+      workspaceId: "ws-1",
+      objective: "Ship the fix",
+      evaluatorProviderId: "codex",
+    });
+
+    const activeMeta = {
+      targetId: supervisor.targetId,
+      sessionId: supervisor.sessionId,
+      workspaceId: supervisor.workspaceId,
+      objective: supervisor.objective,
+      status: "active",
+      createdAt: 1,
+      updatedAt: 1,
+      supersededBy: null,
+      completedAt: null,
+    };
+    deps.targetStore.readTargetMeta.mockResolvedValue(activeMeta);
+
+    await manager.delete(supervisor.id);
+
+    await waitFor(() => {
+      expect(deps.targetStore.saveTargetMeta).toHaveBeenCalledWith(
+        expect.any(String),
+        supervisor.targetId,
+        expect.objectContaining({
+          targetId: supervisor.targetId,
+          status: "cancelled",
+          completedAt: expect.any(Number),
+        })
+      );
+    });
   });
 
   it("pauses an in-flight evaluation by cancelling the cycle", async () => {

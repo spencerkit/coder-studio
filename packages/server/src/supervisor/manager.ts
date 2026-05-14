@@ -439,19 +439,32 @@ export class SupervisorManager {
 
     if (objectiveChanged) {
       const nextTargetId = generateTargetId();
+      const previousTargetMeta = await this.deps.targetStore.readTargetMeta(
+        workspace.path,
+        current.targetId
+      );
       await this.deps.targetStore.markTargetSuperseded(
         workspace.path,
         current.targetId,
         nextTargetId,
         nextPatch.updatedAt ?? Date.now()
       );
-      await this.deps.targetStore.createTargetFiles(workspace.path, {
-        targetId: nextTargetId,
-        sessionId: current.sessionId,
-        workspaceId: current.workspaceId,
-        objective: nextObjective,
-        createdAt: nextPatch.updatedAt ?? Date.now(),
-      });
+      try {
+        await this.deps.targetStore.createTargetFiles(workspace.path, {
+          targetId: nextTargetId,
+          sessionId: current.sessionId,
+          workspaceId: current.workspaceId,
+          objective: nextObjective,
+          createdAt: nextPatch.updatedAt ?? Date.now(),
+        });
+      } catch (error) {
+        await this.deps.targetStore.saveTargetMeta(
+          workspace.path,
+          current.targetId,
+          previousTargetMeta
+        );
+        throw error;
+      }
       nextPatch.targetId = nextTargetId;
     }
 
@@ -1339,9 +1352,17 @@ export class SupervisorManager {
     patch: Partial<Pick<SupervisorTargetMeta, "status" | "supersededBy" | "completedAt">>
   ): Promise<void> {
     const current = await this.deps.targetStore.readTargetMeta(workspacePath, targetId);
+    const nextPatch =
+      current.status === "superseded" && patch.status && patch.status !== "superseded"
+        ? {
+            ...patch,
+            status: current.status,
+            supersededBy: current.supersededBy,
+          }
+        : patch;
     await this.deps.targetStore.saveTargetMeta(workspacePath, targetId, {
       ...current,
-      ...patch,
+      ...nextPatch,
       updatedAt: Date.now(),
     });
   }
@@ -1375,7 +1396,7 @@ export class SupervisorManager {
     }
     await this.updateTargetMetaStatus(workspacePath, supervisor.targetId, {
       status: "cancelled",
-      completedAt: meta.completedAt,
+      completedAt: meta.completedAt ?? Date.now(),
     });
   }
 
