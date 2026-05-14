@@ -4,18 +4,15 @@
  * Main navigation bar with workspace tabs, quick actions, and settings.
  */
 
-import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { useAtom, useAtomValue } from "jotai";
 import type { FC } from "react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { commandPaletteOpenAtom } from "../../atoms/app-ui";
-import {
-  activeWorkspaceIdAtom,
-  orderedWorkspacesAtom,
-  resolvedActiveWorkspaceIdAtom,
-} from "../../atoms/workspaces";
+import { orderedWorkspacesAtom, resolvedActiveWorkspaceIdAtom } from "../../atoms/workspaces";
 import { EmptyState, IconButton, TabList, Tabs, ThemedIcon, Tooltip } from "../../components/ui";
 import { useTranslation } from "../../lib/i18n";
+import { useSelectWorkspaceTarget } from "../workspace/actions/use-select-workspace-target";
 import type { WorkspaceFullscreenController } from "../workspace/actions/use-workspace-fullscreen";
 import { sidebarCollapsedAtom, terminalPanelVisibleAtom } from "../workspace/atoms";
 import { WorkspaceFullscreenButton } from "../workspace/components/workspace-fullscreen-button";
@@ -54,7 +51,7 @@ export const TopBar: FC<TopBarProps> = ({ fullscreenController }) => {
   const workspaceList = useAtomValue(orderedWorkspacesAtom);
   const activeWorkspaceId = useAtomValue(resolvedActiveWorkspaceIdAtom);
   const selectedWorkspaceId = activeWorkspaceId ?? workspaceList[0]?.id ?? "";
-  const setActiveWorkspace = useSetAtom(activeWorkspaceIdAtom);
+  const selectWorkspaceTarget = useSelectWorkspaceTarget();
   const [commandPaletteOpen, setCommandPaletteOpen] = useAtom(commandPaletteOpenAtom);
   const [terminalPanelVisible, setTerminalPanelVisible] = useAtom(terminalPanelVisibleAtom);
   const [sidebarCollapsed, setSidebarCollapsed] = useAtom(sidebarCollapsedAtom);
@@ -77,7 +74,9 @@ export const TopBar: FC<TopBarProps> = ({ fullscreenController }) => {
           <Tabs
             aria-label={t("workspace.tabs")}
             className="topbar-tabs-nav"
-            onValueChange={setActiveWorkspace}
+            onValueChange={(workspaceId) => {
+              void selectWorkspaceTarget(workspaceId);
+            }}
             value={selectedWorkspaceId}
           >
             <TabList className="topbar-tablist">

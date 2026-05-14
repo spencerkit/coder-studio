@@ -18,6 +18,7 @@ import { EmptyState, Sheet, ThemedIcon } from "../../../components/ui";
 import { useViewport } from "../../../hooks/use-viewport";
 import { useTranslation } from "../../../lib/i18n";
 import { formatWorkspaceLabel } from "../../notifications/format";
+import { useSelectWorkspaceTarget } from "../../workspace/actions/use-select-workspace-target";
 import {
   bottomPanelHeightAtom,
   focusModeAtom,
@@ -70,6 +71,7 @@ export function CommandPalette() {
   const [bottomPanelHeight, setBottomPanelHeight] = useAtom(bottomPanelHeightAtom);
   const activeWorkspaceId = useAtomValue(resolvedActiveWorkspaceIdAtom);
   const setActiveWorkspaceId = useSetAtom(activeWorkspaceIdAtom);
+  const selectWorkspaceTarget = useSelectWorkspaceTarget();
   const workspaces = useAtomValue(orderedWorkspacesAtom);
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -90,6 +92,7 @@ export function CommandPalette() {
     setBottomPanelHeight,
     activeWorkspaceId,
     setActiveWorkspaceId,
+    selectWorkspaceTarget,
     workspaces,
     locationPathname: location.pathname,
     navigate,
@@ -286,6 +289,7 @@ function buildCommands(context: {
   setBottomPanelHeight: (v: number) => void;
   activeWorkspaceId: string | null;
   setActiveWorkspaceId: (v: string | null) => void;
+  selectWorkspaceTarget: (workspaceId: string) => Promise<unknown>;
   workspaces: Workspace[];
   locationPathname: string;
   navigate: (path: string) => void;
@@ -304,6 +308,7 @@ function buildCommands(context: {
     setBottomPanelHeight,
     activeWorkspaceId,
     setActiveWorkspaceId,
+    selectWorkspaceTarget,
     workspaces,
     locationPathname,
     navigate,
@@ -405,7 +410,7 @@ function buildCommands(context: {
       label: `${t("workspace.title")}: ${workspaceLabel}`,
       description: ws.path || ws.id,
       action: () => {
-        setActiveWorkspaceId(ws.id);
+        void selectWorkspaceTarget(ws.id);
         if (locationPathname !== "/workspace") {
           navigate("/workspace");
         }

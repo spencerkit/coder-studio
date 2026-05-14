@@ -469,6 +469,94 @@ describe("GitPanel", () => {
     expect(screen.queryByLabelText("Open worktree list")).not.toBeInTheDocument();
   });
 
+  it("persists the global last-viewed target when opening another worktree as a workspace", async () => {
+    const sendCommand = vi
+      .fn()
+      .mockImplementation(async (op: string, args?: Record<string, string>) => {
+        if (op === "git.status") {
+          return status;
+        }
+
+        if (op === "git.branches") {
+          return { current: "feature/ai-agent", branches: [] };
+        }
+
+        if (op === "worktree.list") {
+          return {
+            worktrees: [
+              {
+                name: "main",
+                path: "/tmp/ws-test",
+                branch: "main",
+                commit: "abc1234",
+                status: "clean",
+              },
+              {
+                name: "feature/ai-agent",
+                path: "/tmp/ws-test-feature",
+                branch: "feature/ai-agent",
+                commit: "def5678",
+                status: "dirty",
+              },
+            ],
+          };
+        }
+
+        if (op === "git.log") {
+          return { entries: [] };
+        }
+
+        if (op === "workspace.open") {
+          return {
+            id: "ws-opened",
+            path: args?.path ?? "/tmp/ws-test-feature",
+            targetRuntime: "native",
+            openedAt: 1,
+            lastActiveAt: 1,
+            uiState: {
+              leftPanelWidth: 280,
+              bottomPanelHeight: 200,
+              focusMode: false,
+            },
+          };
+        }
+
+        if (op === "workspace.lastViewedTarget.set") {
+          return {
+            workspaceId: "ws-opened",
+            updatedAt: 10,
+          };
+        }
+
+        return {};
+      });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedWorkspaceStore(store);
+
+    render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    const worktreeToggle = await screen.findByRole("button", { name: "Worktrees0" });
+    fireEvent.click(worktreeToggle);
+
+    await screen.findByText("feature/ai-agent");
+    fireEvent.click(screen.getByRole("button", { name: /feature\/ai-agent/i }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "workspace.lastViewedTarget.set",
+        { workspaceId: "ws-opened", sessionId: undefined },
+        undefined
+      );
+    });
+  });
+
   it("renders git groups from the first git.status response", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "git.status") {

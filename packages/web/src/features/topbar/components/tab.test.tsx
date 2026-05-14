@@ -10,6 +10,7 @@ import {
   workspacesAtom,
 } from "../../../atoms/workspaces";
 import { TabList, Tabs } from "../../../components/ui";
+import { CommandResultError } from "../../../ws/client";
 import { WorkspaceTab } from "./tab";
 
 const routerMocks = vi.hoisted(() => ({
@@ -152,6 +153,60 @@ describe("WorkspaceTab", () => {
       expect.anything(),
       undefined
     );
+  });
+
+  it("retries persistence for the same workspace after a failed write", async () => {
+    const workspace = createWorkspace("ws-2", "/tmp/two");
+    const sendCommand = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new CommandResultError({
+          code: "write_failed",
+          message: "failed",
+        })
+      )
+      .mockResolvedValueOnce({
+        workspaceId: "ws-2",
+        updatedAt: 11,
+      });
+    const store = createStore();
+
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    const { rerender } = renderWorkspaceTab(store, workspace, { value: "ws-1" });
+
+    fireEvent.click(screen.getByRole("tab", { name: /two/i }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenNthCalledWith(
+        1,
+        "workspace.lastViewedTarget.set",
+        { workspaceId: "ws-2", sessionId: undefined },
+        undefined
+      );
+    });
+
+    rerender(
+      <Provider store={store}>
+        <Tabs aria-label="Workspaces" onValueChange={vi.fn()} value="ws-1">
+          <TabList className="topbar-tablist">
+            <WorkspaceTab workspace={workspace} isActive={false} />
+          </TabList>
+        </Tabs>
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: /two/i }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenNthCalledWith(
+        2,
+        "workspace.lastViewedTarget.set",
+        { workspaceId: "ws-2", sessionId: undefined },
+        undefined
+      );
+    });
   });
 
   it("closes the active workspace without route navigation and falls back to the next ordered workspace", async () => {

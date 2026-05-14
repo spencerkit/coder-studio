@@ -1,8 +1,9 @@
 import type { Workspace } from "@coder-studio/core";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { commandPaletteOpenAtom, localeAtom } from "../../../atoms/app-ui";
+import { wsClientAtom } from "../../../atoms/connection";
 import {
   activeWorkspaceIdAtom,
   workspaceOrderAtom,
@@ -87,6 +88,39 @@ describe("CommandPalette", () => {
 
     expect(store.get(activeWorkspaceIdAtom)).toBe("ws-2");
     expect(routerMocks.navigate).toHaveBeenCalledWith("/workspace");
+  });
+
+  it("persists the global last-viewed target when switching workspaces", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({
+      workspaceId: "ws-2",
+      updatedAt: 10,
+    });
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(commandPaletteOpenAtom, true);
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(workspacesAtom, {
+      "ws-1": createWorkspace("ws-1", "/tmp/one"),
+      "ws-2": createWorkspace("ws-2", "/tmp/two"),
+    });
+    store.set(workspaceOrderAtom, ["ws-2", "ws-1"]);
+    store.set(workspacesLoadStateAtom, "ready");
+
+    render(
+      <Provider store={store}>
+        <CommandPalette />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByText("Workspace: two"));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "workspace.lastViewedTarget.set",
+        { workspaceId: "ws-2", sessionId: undefined },
+        undefined
+      );
+    });
   });
 
   it("renders inside shared Sheet on mobile and still filters commands", () => {

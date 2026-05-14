@@ -32,6 +32,7 @@ export function usePersistWorkspaceLastViewedTarget() {
         sessionId,
         updatedAt: Date.now(),
       };
+      const previousTarget = lastViewedTarget;
       setLastViewedTarget(optimisticTarget);
 
       const result = await dispatch<WorkspaceLastViewedTarget>("workspace.lastViewedTarget.set", {
@@ -40,6 +41,7 @@ export function usePersistWorkspaceLastViewedTarget() {
       });
 
       if (!result.ok || !result.data) {
+        setLastViewedTarget(previousTarget);
         return optimisticTarget;
       }
 
