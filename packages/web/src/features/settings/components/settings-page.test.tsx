@@ -687,10 +687,10 @@ describe("SettingsPage", () => {
 
     renderSettingsPage(store);
 
-    fireEvent.click(screen.getByRole("button", { name: "Providers" }));
+    fireEvent.click(screen.getByRole("button", { name: "Agents" }));
 
     await waitFor(() => {
-      expect(screen.getByRole("tablist", { name: "Providers" })).toBeInTheDocument();
+      expect(screen.getByRole("tablist", { name: "Agents" })).toBeInTheDocument();
       expect(screen.getByRole("tab", { name: "Claude" })).toHaveAttribute("aria-selected", "true");
       expect(screen.getByRole("tab", { name: "Claude" })).toHaveClass("settings-provider-tab");
       expect(screen.getByLabelText("启动命令参数")).toBeInTheDocument();
@@ -793,7 +793,7 @@ describe("SettingsPage", () => {
 
     renderSettingsPage(store);
 
-    fireEvent.click(screen.getByRole("button", { name: "Providers" }));
+    fireEvent.click(screen.getByRole("button", { name: "Agents" }));
 
     expect(sendCommand).not.toHaveBeenCalledWith("settings.get", {}, undefined);
     expect(screen.queryByText("设置加载失败")).not.toBeInTheDocument();
@@ -866,7 +866,7 @@ describe("SettingsPage", () => {
     const mobileHeader = () =>
       document.querySelector(".settings-header .mobile-page-header") as HTMLElement | null;
 
-    expect(screen.getByRole("button", { name: "Providers" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Agents" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "快捷键" })).toBeInTheDocument();
     expect(screen.queryByText("通知")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("启动命令参数")).not.toBeInTheDocument();
@@ -886,7 +886,7 @@ describe("SettingsPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "返回" }));
 
-    expect(screen.getByRole("button", { name: "Providers" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Agents" })).toBeInTheDocument();
     expect(screen.queryByLabelText("启动命令参数")).not.toBeInTheDocument();
     expect(within(pageHeaderLeading() as HTMLElement).getByText("设置")).toBeInTheDocument();
 
@@ -901,7 +901,7 @@ describe("SettingsPage", () => {
     expect(screen.getByRole("button", { name: "快捷键" })).toBeInTheDocument();
     expect(within(pageHeaderLeading() as HTMLElement).getByText("设置")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Providers" }));
+    fireEvent.click(screen.getByRole("button", { name: "Agents" }));
 
     await waitFor(() => {
       expect(screen.getByLabelText("启动命令参数")).toBeInTheDocument();
@@ -911,7 +911,7 @@ describe("SettingsPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "返回" }));
 
-    expect(screen.getByRole("button", { name: "Providers" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Agents" })).toBeInTheDocument();
     expect(screen.queryByLabelText("启动命令参数")).not.toBeInTheDocument();
   });
 
@@ -941,7 +941,7 @@ describe("SettingsPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "返回" }));
 
-    expect(screen.getByRole("button", { name: "Providers" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Agents" })).toBeInTheDocument();
     expect(document.querySelector(".settings-body--mobile")).toBeNull();
     expect(document.querySelector(".settings-body--mobile-detail")).toBeNull();
     expect(document.querySelector(".settings-content--mobile-detail")).toBeNull();
@@ -973,7 +973,7 @@ describe("SettingsPage", () => {
     const store = createConnectedStore(sendCommand);
 
     renderSettingsPage(store);
-    fireEvent.click(screen.getByRole("button", { name: "Providers" }));
+    fireEvent.click(screen.getByRole("button", { name: "Agents" }));
 
     await waitFor(() => {
       expect(screen.getByLabelText("启动命令参数")).toBeInTheDocument();

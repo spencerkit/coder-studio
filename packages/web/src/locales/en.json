@@ -486,7 +486,7 @@
     "title": "Settings",
     "general": "General",
     "appearance": "Appearance",
-    "providers": "Providers",
+    "providers": "Agents",
     "autosave_hint": "Settings saved automatically",
     "load_failed": "Failed to load settings",
     "load_failed_unknown": "Server did not return settings data",
@@ -533,7 +533,7 @@
     "terminal_standard": "Standard",
     "terminal_compatibility": "Compatibility Mode",
     "provider": {
-      "title": "Provider Settings",
+      "title": "Agent Settings",
       "status": "Status",
       "capability": "Capability Level",
       "capability_full": "Full Support",
@@ -543,7 +543,7 @@
       "hooks_unregistered": "Hooks Not Registered",
       "hooks_error": "Hooks Registration Failed",
       "hooks": "Hooks Integration",
-      "hooks_hint": "Inject Provider-specific hooks into current workspace",
+      "hooks_hint": "Inject agent-specific hooks into current workspace",
       "hooks_inject": "Inject Hooks",
       "configure": "Configure",
       "reset": "Reset",
@@ -553,10 +553,10 @@
       "open_config_file_editor": "Open Config File Editor",
       "back_to_base": "Back to Base Settings",
       "startup_args": "Startup Command Args",
-      "startup_args_hint": "Enter one startup argument per line. Each saved line is appended to the provider launch command.",
+      "startup_args_hint": "Enter one startup argument per line. Each saved line is appended to the agent launch command.",
       "startup_args_placeholder": "--verbose\n--debug",
       "command_preview_title": "Command Preview",
-      "command_preview_hint": "Preview the effective provider launch command"
+      "command_preview_hint": "Preview the effective agent launch command"
     },
     "theme": {
       "title": "Theme",

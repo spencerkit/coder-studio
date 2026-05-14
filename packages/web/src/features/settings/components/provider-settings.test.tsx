@@ -122,9 +122,13 @@ describe("ProviderSettings desktop", () => {
   it("defaults to base settings and switches to config files explicitly", async () => {
     renderHarness();
 
-    expect(screen.getByRole("tablist", { name: "Providers" })).toBeInTheDocument();
+    expect(screen.getByRole("tablist", { name: "Agents" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Claude" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tab", { name: "Claude" })).toHaveClass("settings-provider-tab");
+    expect(
+      screen.getByText("每行填写一个启动参数，保存后会追加到 Agent 启动命令后面。")
+    ).toBeInTheDocument();
+    expect(screen.getByText("预览当前 Agent 最终生效的启动命令")).toBeInTheDocument();
 
     const input = await screen.findByLabelText("启动命令参数");
     expect(input).toHaveValue("--verbose");
