@@ -6,6 +6,7 @@ import {
   closeDraftPaneById,
   closePaneBySessionId,
   createFallbackPaneLayout,
+  removePaneBySessionId,
   splitPaneByPaneId,
   splitPaneBySessionId,
 } from "./pane-layout-tree";
@@ -56,6 +57,25 @@ describe("pane-layout-tree", () => {
         { id: "left", type: "leaf" },
         { id: "right", type: "leaf", sessionId: "sess_2" },
       ],
+    });
+  });
+
+  it("removes a session pane and collapses the split when explicitly requested", () => {
+    const layout: PaneNode = {
+      id: "root",
+      type: "split",
+      direction: "vertical",
+      ratio: 0.5,
+      children: [
+        { id: "left", type: "leaf", sessionId: "sess_1" },
+        { id: "right", type: "leaf", sessionId: "sess_2" },
+      ],
+    };
+
+    expect(removePaneBySessionId(layout, "sess_2")).toEqual({
+      id: "left",
+      type: "leaf",
+      sessionId: "sess_1",
     });
   });
 

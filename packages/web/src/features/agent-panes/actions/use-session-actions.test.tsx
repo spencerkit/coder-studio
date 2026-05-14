@@ -121,7 +121,7 @@ describe("useSessionActions", () => {
       });
 
       await vi.advanceTimersByTimeAsync(100);
-      await expect(closePromise).resolves.toBeUndefined();
+      await expect(closePromise).resolves.toBe(true);
     } finally {
       if (windowDescriptor) {
         Object.defineProperty(globalThis, "window", windowDescriptor);

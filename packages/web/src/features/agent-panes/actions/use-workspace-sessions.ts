@@ -94,7 +94,9 @@ export function useWorkspaceSessions(
 
         const currentLayout = store.get(paneLayoutAtomFamily(workspaceId));
         const workspacePaneLayout = normalizePaneLayout(workspace?.uiState.paneLayout);
-        const legacyPaneLayout = workspacePaneLayout ? null : readLegacyPaneLayout(workspace.id);
+        const legacyPaneLayout = workspacePaneLayout
+          ? null
+          : normalizePaneLayout(readLegacyPaneLayout(workspace.id));
         const baseLayout =
           workspacePaneLayout ?? legacyPaneLayout ?? currentLayout ?? defaultPaneLayout;
         const displayableSessionIds = new Set(
@@ -172,13 +174,19 @@ export function useWorkspaceSessions(
   };
 }
 
-function normalizePaneLayout(layout: Workspace["uiState"]["paneLayout"]): PaneNode | null {
+function normalizePaneLayout(
+  layout: Workspace["uiState"]["paneLayout"] | PaneNode | null | undefined
+): PaneNode | null {
   if (!layout) {
     return null;
   }
 
   return {
-    ...layout,
+    id: layout.id,
+    type: layout.type,
+    sessionId: layout.sessionId,
+    direction: layout.direction,
+    ratio: "ratio" in layout ? layout.ratio : undefined,
     children: layout.children?.map((child) => normalizePaneLayout(child) ?? defaultPaneLayout),
   };
 }

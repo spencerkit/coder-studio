@@ -32,40 +32,43 @@ export function useSessionActions() {
     async (sessionId: string) => {
       const session = store.get(sessionByIdAtomFamily(sessionId));
       if (!session) {
-        return;
+        return false;
       }
 
       if (session.state === "ended") {
         const removeResult = await dispatch<void>("session.remove", { sessionId });
         if (!removeResult.ok) {
           console.error("Failed to remove ended session:", removeResult.error?.message);
+          return false;
         }
-        return;
+        return true;
       }
 
       const stopResult = await dispatch<void>("session.stop", { sessionId });
       if (!stopResult.ok && stopResult.error?.code !== "invalid_state") {
         console.error("Failed to stop session before removal:", stopResult.error?.message);
-        return;
+        return false;
       }
 
       const deadline = Date.now() + SESSION_REMOVAL_TIMEOUT_MS;
       while (Date.now() < deadline) {
         const current = store.get(sessionByIdAtomFamily(sessionId));
         if (!current) {
-          return;
+          return true;
         }
         if (current.state === "ended") {
           const removeResult = await dispatch<void>("session.remove", { sessionId });
           if (!removeResult.ok) {
             console.error("Failed to remove ended session:", removeResult.error?.message);
+            return false;
           }
-          return;
+          return true;
         }
         await delay(SESSION_REMOVAL_POLL_INTERVAL_MS);
       }
 
       console.error("Timed out waiting for session to end before removal:", sessionId);
+      return false;
     },
     [dispatch, store]
   );

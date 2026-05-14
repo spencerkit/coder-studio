@@ -186,7 +186,7 @@ export function closeDraftPaneById(node: PaneNode, paneId: string): PaneNode {
 
 /**
  * Close a session pane by turning it into a draft leaf while preserving the
- * existing split structure. This matches the session-card close behavior:
+ * existing split structure. This matches the desktop session-card close behavior:
  * the session ends, but the workspace layout remains stable so the user can
  * immediately launch a replacement session in the same pane.
  */
@@ -213,6 +213,49 @@ function replaceSessionWithDraft(node: PaneNode, sessionId: string): PaneNode {
 
   if (!changed) {
     return node;
+  }
+
+  return {
+    ...node,
+    children: nextChildren,
+  };
+}
+
+export function removePaneBySessionId(node: PaneNode, sessionId: string): PaneNode {
+  return removeSessionPane(node, sessionId) ?? { id: node.id, type: "leaf" };
+}
+
+function removeSessionPane(node: PaneNode, sessionId: string): PaneNode | null {
+  if (node.type === "leaf") {
+    if (node.sessionId === sessionId) {
+      return null;
+    }
+    return node;
+  }
+
+  const children = node.children ?? [];
+  let changed = false;
+  const nextChildren: PaneNode[] = [];
+  for (const child of children) {
+    const nextChild = removeSessionPane(child, sessionId);
+    if (nextChild !== child) {
+      changed = true;
+    }
+    if (nextChild !== null) {
+      nextChildren.push(nextChild);
+    }
+  }
+
+  if (!changed) {
+    return node;
+  }
+
+  if (nextChildren.length === 1) {
+    return nextChildren[0]!;
+  }
+
+  if (nextChildren.length === 0) {
+    return null;
   }
 
   return {
@@ -317,14 +360,13 @@ export function createFallbackPaneLayout(sessionIds: string[]): PaneNode {
  */
 export function sanitizePaneLayout(node: PaneNode, liveSessionIds: Set<string>): PaneNode {
   if (node.type === "leaf") {
-    // If this leaf references a session that is ended or removed, turn it into a draft
+    // If this leaf references a session that is ended or removed, turn it into a draft.
     if (node.sessionId && !liveSessionIds.has(node.sessionId)) {
       return { id: node.id, type: "leaf" };
     }
     return node;
   }
 
-  // For splits, recursively sanitize all children and keep the structure intact
   const children = node.children ?? [];
   let changed = false;
   const nextChildren = children.map((child) => {
@@ -335,14 +377,8 @@ export function sanitizePaneLayout(node: PaneNode, liveSessionIds: Set<string>):
     return nextChild;
   });
 
-  // If no children changed, return the same node to preserve reference equality
   if (!changed) {
     return node;
-  }
-
-  // If all children collapsed to a single leaf, simplify
-  if (nextChildren.length === 1) {
-    return nextChildren[0]!;
   }
 
   return {
