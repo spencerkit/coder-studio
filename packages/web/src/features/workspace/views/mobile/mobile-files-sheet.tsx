@@ -1,5 +1,5 @@
-import { ChevronsUp, FilePlus, FolderPlus } from "lucide-react";
-import { IconButton, Tab, TabList, Tabs, Tooltip } from "../../../../components/ui";
+import { ChevronsUp } from "lucide-react";
+import { IconButton, Tab, TabList, Tabs, ThemedIcon, Tooltip } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import {
   CodeEditorHost,
@@ -103,7 +103,7 @@ export function MobileFilesSheet({
               <IconButton
                 className="mobile-files-sheet__tab-action"
                 aria-label={t("file.new_file")}
-                icon={<FilePlus size={14} />}
+                icon={<ThemedIcon semantic="file.action.new" size={14} />}
                 onClick={onCreateFile}
                 size="sm"
               />
@@ -112,7 +112,7 @@ export function MobileFilesSheet({
               <IconButton
                 className="mobile-files-sheet__tab-action"
                 aria-label={t("file.new_folder")}
-                icon={<FolderPlus size={14} />}
+                icon={<ThemedIcon semantic="file.action.newFolder" size={14} />}
                 onClick={onCreateFolder}
                 size="sm"
               />

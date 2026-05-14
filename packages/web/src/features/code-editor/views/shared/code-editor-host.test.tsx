@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { CodeEditorHeaderActions, type CodeEditorState } from "./code-editor-host";
+import { CodeEditorHeaderActions, type CodeEditorState, CodeEditorView } from "./code-editor-host";
 
 vi.mock("../../../../lib/i18n", () => ({
   useTranslation: () => (key: string) => {
@@ -23,6 +23,14 @@ vi.mock("../../../../lib/i18n", () => ({
         return key;
     }
   },
+}));
+
+vi.mock("../../components/monaco-host", () => ({
+  MonacoHost: () => <div data-testid="monaco-host-mock" />,
+}));
+
+vi.mock("../../components/image-preview", () => ({
+  ImagePreview: () => <div data-testid="image-preview-mock" />,
 }));
 
 function createState(overrides: Partial<CodeEditorState> = {}): CodeEditorState {
@@ -78,5 +86,49 @@ describe("CodeEditorHeaderActions", () => {
 
     fireEvent.click(closeButton);
     expect(state.handleClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders semantic icons for save and external file alerts", () => {
+    const state = createState({
+      workspace: {
+        id: "ws-1",
+        name: "Workspace",
+        path: "/tmp/ws-1",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+      currentFile: {
+        kind: "text",
+        path: "src/app.tsx",
+        content: "export const app = true;",
+        baseHash: "hash-1",
+        isDirty: false,
+      } as CodeEditorState["currentFile"],
+      activeExternalStatus: "modified",
+      saveError: "Failed to save file",
+    });
+
+    const { container, rerender } = render(<CodeEditorView state={state} />);
+    const alerts = screen.getAllByRole("alert");
+
+    expect(alerts[0]?.querySelector('[data-icon-semantic="state.error"]')).toBeTruthy();
+    expect(alerts[1]?.querySelector('[data-icon-semantic="state.fileModified"]')).toBeTruthy();
+
+    rerender(
+      <CodeEditorView
+        state={{
+          ...state,
+          activeExternalStatus: "deleted",
+        }}
+      />
+    );
+
+    expect(container.querySelector('[data-icon-semantic="state.fileDeleted"]')).toBeTruthy();
   });
 });

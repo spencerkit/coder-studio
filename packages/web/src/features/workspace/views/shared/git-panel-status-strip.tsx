@@ -1,7 +1,6 @@
 import type { GitStatus } from "@coder-studio/core";
-import { GitBranch } from "lucide-react";
 import type { KeyboardEventHandler, MouseEventHandler } from "react";
-import { Tooltip } from "../../../../components/ui";
+import { ThemedIcon, Tooltip } from "../../../../components/ui";
 import { useViewport } from "../../../../hooks/use-viewport";
 import { useTranslation } from "../../../../lib/i18n";
 import { DesktopBranchQuickPickPopover } from "./branch-quick-pick";
@@ -50,7 +49,7 @@ function BranchTrigger({
         aria-label={ariaLabel}
         disabled={disabled}
       >
-        <GitBranch size={11} />
+        <ThemedIcon semantic="git.branch" size={11} />
         <span className="git-panel-status-strip__branch-text">{branchName}</span>
       </button>
     </Tooltip>

@@ -203,4 +203,27 @@ describe("ObjectiveDialogContent", () => {
     expect(onDraftEvaluatorModelChange).toHaveBeenCalledWith("gpt-5");
     expect(onDraftMaxSupervisionCountChange).toHaveBeenCalledWith("8");
   });
+
+  it("renders the semantic warning icon for disable mode", () => {
+    render(
+      <ObjectiveDialogContent
+        mode="disable"
+        draftObjective=""
+        draftEvaluatorProviderId="codex"
+        draftEvaluatorModel=""
+        draftMaxSupervisionCount="0"
+        draftScheduledAt=""
+        disableObjective="Current objective"
+        onDraftObjectiveChange={vi.fn()}
+        onDraftEvaluatorProviderChange={vi.fn()}
+        onDraftEvaluatorModelChange={vi.fn()}
+        onDraftMaxSupervisionCountChange={vi.fn()}
+        onDraftScheduledAtChange={vi.fn()}
+      />
+    );
+
+    expect(
+      screen.getByRole("alert").querySelector('[data-icon-semantic="state.warning"]')
+    ).toBeTruthy();
+  });
 });

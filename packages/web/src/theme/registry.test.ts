@@ -43,6 +43,9 @@ describe("theme registry", () => {
           documentThemeAttr: expect.any(String),
           terminalTheme: expect.any(Object),
           monaco: expect.any(Object),
+          iconTheme: expect.objectContaining({
+            icons: expect.any(Object),
+          }),
         })
       );
     }

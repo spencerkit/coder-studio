@@ -32,7 +32,7 @@ import {
   serverInfoAtom,
 } from "../../../atoms/connection";
 import { resolvedActiveWorkspaceIdAtom } from "../../../atoms/workspaces";
-import { Input, Notice, Pill, Select, Switch } from "../../../components/ui";
+import { Input, Notice, Pill, Select, Switch, ThemedIcon } from "../../../components/ui";
 import { useViewport } from "../../../hooks/use-viewport";
 import { useTranslation } from "../../../lib/i18n";
 import { getThemeById, resolveStoredThemeId, THEMES } from "../../../theme";
@@ -437,7 +437,7 @@ export function SettingsPage() {
   const renderMobileRoot = () => (
     <main className="settings-content settings-content--mobile-root">
       <div className="settings-mobile-list">
-        {availableSections.map(({ id, labelKey, Icon }) => (
+        {availableSections.map(({ id, labelKey, iconSemantic }) => (
           <button
             key={id}
             type="button"
@@ -445,7 +445,7 @@ export function SettingsPage() {
             onClick={() => setNavigationState({ kind: "detail", section: id })}
           >
             <span className="settings-mobile-item__icon">
-              <Icon size={18} />
+              <ThemedIcon semantic={iconSemantic} size={18} />
             </span>
             <span className="settings-mobile-item__label">{t(labelKey)}</span>
             <ChevronRight size={16} className="settings-mobile-item__arrow" />
@@ -481,10 +481,10 @@ export function SettingsPage() {
           {isMobile ? null : (
             <aside className="settings-sidebar">
               <nav className="settings-nav">
-                {availableSections.map(({ id, labelKey, Icon }) => (
+                {availableSections.map(({ id, labelKey, iconSemantic }) => (
                   <SettingsNavItem
                     key={id}
-                    icon={<Icon size={16} />}
+                    icon={<ThemedIcon semantic={iconSemantic} size={16} />}
                     label={t(labelKey)}
                     active={detailSection === id}
                     onClick={() => setNavigationState({ kind: "detail", section: id })}

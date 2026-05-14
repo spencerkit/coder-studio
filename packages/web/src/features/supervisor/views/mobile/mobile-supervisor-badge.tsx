@@ -1,7 +1,7 @@
 import type { SupervisorState } from "@coder-studio/core";
 import { useAtomValue } from "jotai";
-import { Eye } from "lucide-react";
 import { useMemo } from "react";
+import { ThemedIcon } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { supervisorsAtom } from "../../atoms";
 
@@ -45,7 +45,7 @@ export function MobileSupervisorBadge({ sessionId, onOpen }: MobileSupervisorBad
       onClick={onOpen}
     >
       <span className="mobile-supervisor-badge__icon" aria-hidden="true">
-        <Eye size={13} />
+        <ThemedIcon semantic="supervisor.entry" size={13} />
       </span>
       <span className="mobile-supervisor-badge__label">{copy.label}</span>
     </button>

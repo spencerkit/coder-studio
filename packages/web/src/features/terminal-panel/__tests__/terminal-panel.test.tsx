@@ -181,6 +181,8 @@ describe("TerminalPanel", () => {
       </Provider>
     );
 
+    expect(document.querySelector('[data-icon-semantic="terminal.action.new"]')).toBeTruthy();
+
     await act(async () => {
       screen.getAllByRole("button", { name: "New Terminal" })[0]?.click();
     });
@@ -518,6 +520,9 @@ describe("TerminalPanel", () => {
     expect(emptyPanel).not.toBeNull();
     expect(document.querySelector(".bottom-terminal-empty")).toBeTruthy();
     expect(
+      (emptyPanel as HTMLElement).querySelector('[data-icon-semantic="state.emptyTerminal"]')
+    ).toBeTruthy();
+    expect(
       within(emptyPanel as HTMLElement).getByText(
         "Launch a shell to inspect files, run commands, and verify changes without leaving the workspace."
       )
@@ -526,6 +531,9 @@ describe("TerminalPanel", () => {
     expect(
       within(emptyPanel as HTMLElement).getByRole("button", { name: "New Terminal" })
     ).toHaveClass("btn", "btn-primary", "btn-sm");
+    expect(
+      (emptyPanel as HTMLElement).querySelector('[data-icon-semantic="terminal.action.new"]')
+    ).toBeTruthy();
   });
 
   it("caches terminal output to atom for shell terminals before xterm-host subscribes", async () => {

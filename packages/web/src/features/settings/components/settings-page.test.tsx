@@ -209,6 +209,57 @@ describe("SettingsPage", () => {
     expect(screen.getByText("v0.3.0")).toBeInTheDocument();
   });
 
+  it("renders desktop and mobile settings entry icons through themed semantics", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({});
+    const desktopStore = createConnectedStore(sendCommand);
+
+    const desktopView = renderSettingsPage(desktopStore);
+
+    await waitFor(() => {
+      expect(
+        desktopView.container.querySelector('[data-icon-semantic="nav.settings.general"]')
+      ).toBeTruthy();
+    });
+
+    expect(
+      desktopView.container.querySelector('[data-icon-semantic="nav.settings.general"]')
+    ).toBeTruthy();
+    expect(
+      desktopView.container.querySelector('[data-icon-semantic="nav.settings.providers"]')
+    ).toBeTruthy();
+    expect(
+      desktopView.container.querySelector('[data-icon-semantic="nav.settings.appearance"]')
+    ).toBeTruthy();
+    expect(
+      desktopView.container.querySelector('[data-icon-semantic="nav.settings.shortcuts"]')
+    ).toBeTruthy();
+
+    desktopView.unmount();
+
+    viewportMocks.viewport = "mobile";
+    const mobileStore = createConnectedStore(vi.fn().mockResolvedValue({}));
+    const mobileView = renderSettingsPage(mobileStore);
+
+    await waitFor(() => {
+      expect(
+        mobileView.container.querySelector('[data-icon-semantic="nav.settings.general"]')
+      ).toBeTruthy();
+    });
+
+    expect(
+      mobileView.container.querySelector('[data-icon-semantic="nav.settings.general"]')
+    ).toBeTruthy();
+    expect(
+      mobileView.container.querySelector('[data-icon-semantic="nav.settings.providers"]')
+    ).toBeTruthy();
+    expect(
+      mobileView.container.querySelector('[data-icon-semantic="nav.settings.appearance"]')
+    ).toBeTruthy();
+    expect(
+      mobileView.container.querySelector('[data-icon-semantic="nav.settings.shortcuts"]')
+    ).toBeTruthy();
+  });
+
   it("does not render default Agent Provider selection in general settings", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "settings.get") {

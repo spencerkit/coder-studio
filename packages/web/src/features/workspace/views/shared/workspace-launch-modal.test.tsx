@@ -110,8 +110,10 @@ describe("WorkspaceLaunchModal", () => {
     );
 
     const closeButton = screen.getByRole("button", { name: "Close" });
+    const homeButton = screen.getByRole("button", { name: "Home Directory" });
 
     expect(closeButton).toHaveClass("btn", "btn-ghost", "btn-sm", "launch-close-btn");
+    expect(homeButton.querySelector('[data-icon-semantic="workspace.launch.home"]')).toBeTruthy();
 
     fireEvent.click(closeButton);
     expect(onClose).toHaveBeenCalledTimes(1);
@@ -399,6 +401,7 @@ describe("WorkspaceLaunchModal", () => {
     expect(screen.getByRole("button", { name: "Home Directory" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Start Workspace" })).toBeInTheDocument();
     expect(screen.getByText("3 items")).toBeInTheDocument();
+    expect(document.querySelector('[data-icon-semantic="file.folder.closed"]')).toBeTruthy();
   });
 
   it("shows the shared animated spinner while browsing directories", () => {

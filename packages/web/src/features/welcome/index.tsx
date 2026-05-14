@@ -5,17 +5,17 @@
  * Displays product info, "Open Workspace" button, and feature highlights.
  */
 
-import { GitBranch, Plus, Settings, Terminal, Zap } from "lucide-react";
 import type { FC } from "react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { EmptyState } from "../../components/ui";
+import { EmptyState, ThemedIcon } from "../../components/ui";
 import { useViewport } from "../../hooks/use-viewport";
 import { useTranslation } from "../../lib/i18n";
+import type { IconSemantic } from "../../theme";
 import { WorkspaceLaunchModal } from "../workspace/views/shared/workspace-launch-modal";
 
 interface FeatureItem {
-  icon: React.ReactNode;
+  iconSemantic: IconSemantic;
   title: string;
   description: string;
 }
@@ -42,17 +42,17 @@ export const WelcomePage: FC = () => {
   const isMobile = useViewport() === "mobile";
   const features: FeatureItem[] = [
     {
-      icon: <Zap size={18} />,
+      iconSemantic: "state.welcome.lightning",
       title: t("welcome.features.agent_first.title"),
       description: t("welcome.features.agent_first.description"),
     },
     {
-      icon: <GitBranch size={18} />,
+      iconSemantic: "state.welcome.git",
       title: t("welcome.features.git_tools.title"),
       description: t("welcome.features.git_tools.description"),
     },
     {
-      icon: <Terminal size={18} />,
+      iconSemantic: "state.welcome.terminal",
       title: t("welcome.features.terminals.title"),
       description: t("welcome.features.terminals.description"),
     },
@@ -81,14 +81,14 @@ export const WelcomePage: FC = () => {
             description={<p className="welcome-body">{t("welcome.description")}</p>}
             action={
               <button className="welcome-btn" onClick={handleOpenWorkspace}>
-                <Plus size={18} />
+                <ThemedIcon semantic="nav.newWorkspace" size={18} />
                 <span>{t("action.open_workspace")}</span>
               </button>
             }
           />
 
           <button className="welcome-link" onClick={handleOpenSettings}>
-            <Settings size={14} />
+            <ThemedIcon semantic="nav.settings" size={14} />
             <span>{t("action.settings")}</span>
           </button>
 
@@ -97,7 +97,7 @@ export const WelcomePage: FC = () => {
           <div className="welcome-features">
             {features.map((f, i) => (
               <div className="welcome-feature" key={i}>
-                <div className="welcome-feature-icon">{f.icon}</div>
+                <ThemedIcon className="welcome-feature-icon" semantic={f.iconSemantic} size={18} />
                 <div className="welcome-feature-text">
                   <div className="welcome-feature-title">{f.title}</div>
                   <div className="welcome-feature-desc">{f.description}</div>

@@ -1,6 +1,6 @@
 import type { Workspace } from "@coder-studio/core";
-import { Menu, Settings2 } from "lucide-react";
-import { IconButton } from "../../../../components/ui";
+import { Menu } from "lucide-react";
+import { IconButton, ThemedIcon } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { formatWorkspaceLabel } from "../../../notifications/format";
 import type { WorkspaceFullscreenController } from "../../actions/use-workspace-fullscreen";
@@ -46,7 +46,7 @@ export function MobileTopBar({
         <IconButton
           aria-label={t("mobile.topbar.open_settings")}
           className="mobile-topbar__icon-button"
-          icon={<Settings2 size={18} />}
+          icon={<ThemedIcon semantic="nav.settings" size={18} />}
           onClick={onOpenSettings}
         />
         <WorkspaceFullscreenButton

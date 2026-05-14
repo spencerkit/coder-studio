@@ -71,9 +71,12 @@ describe("ConfirmDialog", () => {
     );
 
     expect(screen.getByRole("button", { name: "Delete" })).toHaveClass("btn", "btn-danger");
-    expect(screen.getByText("Delete file").closest(".modal-title")).toContainElement(
-      document.querySelector("svg")
-    );
+    expect(
+      screen
+        .getByText("Delete file")
+        .closest(".modal-title")
+        ?.querySelector('[data-icon-semantic="state.warning"]')
+    ).toBeTruthy();
   });
 
   it("accepts rich ReactNode descriptions", () => {

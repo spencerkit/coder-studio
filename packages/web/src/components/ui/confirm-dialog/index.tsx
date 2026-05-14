@@ -1,9 +1,10 @@
 import clsx from "clsx";
-import { AlertTriangle, X } from "lucide-react";
+import { X } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button, type ButtonProps } from "../button";
 import { IconButton } from "../icon-button";
 import { Modal, ModalBody, ModalFooter, ModalHeader, type ModalProps, ModalTitle } from "../modal";
+import { ThemedIcon } from "../themed-icon";
 import styles from "./index.module.css";
 
 export type ConfirmDialogTone = "default" | "danger";
@@ -65,7 +66,12 @@ export function ConfirmDialog({
       <ModalHeader>
         <ModalTitle className={clsx(tone === "danger" ? styles.titleDanger : undefined)}>
           {tone === "danger" ? (
-            <AlertTriangle aria-hidden="true" className={styles.iconDanger} size={16} />
+            <ThemedIcon
+              aria-hidden="true"
+              className={styles.iconDanger}
+              semantic="state.warning"
+              size={16}
+            />
           ) : null}
           <span>{title}</span>
         </ModalTitle>

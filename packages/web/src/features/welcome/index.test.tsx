@@ -96,9 +96,28 @@ describe("WelcomePage", () => {
 
     expect(screen.getByText("DEPLOY ONCE, CODE EVERYWHERE")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Welcome to Coder Studio" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Open Workspace" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
+    const openWorkspaceButton = screen.getByRole("button", { name: "Open Workspace" });
+    const settingsButton = screen.getByRole("button", { name: "Settings" });
     expect(document.querySelector(".welcome-divider")).toBeTruthy();
-    expect(document.querySelectorAll(".welcome-feature")).toHaveLength(3);
+    const featureCards = Array.from(document.querySelectorAll(".welcome-feature"));
+
+    expect(featureCards).toHaveLength(3);
+    expect(
+      openWorkspaceButton.querySelector('[data-icon-semantic="nav.newWorkspace"]')
+    ).toBeTruthy();
+    expect(settingsButton.querySelector('[data-icon-semantic="nav.settings"]')).toBeTruthy();
+    expect(
+      featureCards.some((card) =>
+        card.querySelector('[data-icon-semantic="state.welcome.lightning"]')
+      )
+    ).toBe(true);
+    expect(
+      featureCards.some((card) => card.querySelector('[data-icon-semantic="state.welcome.git"]'))
+    ).toBe(true);
+    expect(
+      featureCards.some((card) =>
+        card.querySelector('[data-icon-semantic="state.welcome.terminal"]')
+      )
+    ).toBe(true);
   });
 });
