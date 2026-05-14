@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { pendingFocusSessionAtom } from "../../atoms/app-ui";
+import { lastViewedTargetAtom, pendingFocusSessionAtom } from "../../atoms/app-ui";
 import { activeWorkspaceIdAtom } from "../../atoms/workspaces";
 import { type Toast, toastsAtom } from "./atoms";
 import { ToastContainer } from "./toast-container";
@@ -64,6 +64,10 @@ describe("ToastContainer", () => {
     expect(navigate).toHaveBeenCalledWith("/workspace");
     expect(store.get(activeWorkspaceIdAtom)).toBe("ws-9");
     expect(store.get(pendingFocusSessionAtom)).toBe("sess-77");
+    expect(store.get(lastViewedTargetAtom)).toMatchObject({
+      workspaceId: "ws-9",
+      sessionId: "sess-77",
+    });
     expect(window.localStorage.length).toBe(0);
   });
 

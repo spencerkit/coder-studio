@@ -6,6 +6,7 @@ import { activeWorkspaceIdAtom } from "../../../../atoms/workspaces";
 import { IconButton } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { formatWorkspaceLabel } from "../../../notifications/format";
+import { usePersistWorkspaceLastViewedTarget } from "../../actions/use-persist-workspace-last-viewed-target";
 import { useWorkspaceCloseAction } from "../../actions/use-workspace-close-action";
 
 interface MobileWorkspaceDrawerProps {
@@ -27,6 +28,7 @@ export function MobileWorkspaceDrawer({
   const setActiveWorkspaceId = useSetAtom(activeWorkspaceIdAtom);
   const t = useTranslation();
   const closeWorkspace = useWorkspaceCloseAction();
+  const persistLastViewedTarget = usePersistWorkspaceLastViewedTarget();
 
   if (!isOpen) {
     return null;
@@ -80,6 +82,7 @@ export function MobileWorkspaceDrawer({
                     name: displayName,
                   })}
                   onClick={() => {
+                    void persistLastViewedTarget({ workspaceId: workspace.id });
                     setActiveWorkspaceId(workspace.id);
                     navigate("/workspace");
                     onClose();

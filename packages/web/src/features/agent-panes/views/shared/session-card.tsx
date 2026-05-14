@@ -18,6 +18,7 @@ import { useSupervisor } from "../../../supervisor/actions/use-supervisor";
 import { ObjectiveDialog } from "../../../supervisor/views/shared/objective-dialog";
 import { SupervisorCard } from "../../../supervisor/views/shared/supervisor-card";
 import { XtermHost } from "../../../terminal-panel/views/shared/xterm-host";
+import { usePersistWorkspaceLastViewedTarget } from "../../../workspace/actions/use-persist-workspace-last-viewed-target";
 import { useWorkspaceUiStatePersistence } from "../../../workspace/actions/use-workspace-ui-state-persistence";
 
 type SessionCardAction = () => void | Promise<void>;
@@ -66,6 +67,7 @@ export const SessionCard: FC<SessionCardProps> = ({
   const { persistUiState } = useWorkspaceUiStatePersistence(
     session?.workspaceId ?? "__workspace_empty__"
   );
+  const persistLastViewedTarget = usePersistWorkspaceLastViewedTarget();
 
   useEffect(() => {
     if (pendingFocus !== sessionId) {
@@ -101,6 +103,10 @@ export const SessionCard: FC<SessionCardProps> = ({
       return;
     }
 
+    void persistLastViewedTarget({
+      workspaceId: session.workspaceId,
+      sessionId: session.id,
+    });
     void persistUiState({ activeSessionId: session.id });
   };
 

@@ -276,8 +276,8 @@ test.describe("session hydrate refresh acceptance", () => {
 
       const visibleCard = page.locator(".mobile-shell .session-card.agent-pane").first();
       await expect(visibleCard).toBeVisible();
-      await expect(visibleCard).toHaveAttribute("data-session-id", UNAVAILABLE_SESSION_ID);
-      await expect(visibleCard.locator(".session-title")).toHaveText("Unavailable");
+      await expect(visibleCard).toHaveAttribute("data-session-id", INTERRUPTED_SESSION_ID);
+      await expect(visibleCard.locator(".session-title")).toHaveText("Resume me");
       await expect(visibleCard.locator(".session-state-badge")).toHaveText(ENDED_STATE_LABEL);
       await expect(visibleCard.getByRole("button", { name: "Expand terminal keys" })).toHaveCount(
         0
@@ -290,8 +290,8 @@ test.describe("session hydrate refresh acceptance", () => {
       });
       await expect(page.getByTestId("mobile-shell")).toBeVisible({ timeout: 20000 });
       await expect(visibleCard).toBeVisible();
-      await expect(visibleCard).toHaveAttribute("data-session-id", UNAVAILABLE_SESSION_ID);
-      await expect(visibleCard.locator(".session-title")).toHaveText("Unavailable");
+      await expect(visibleCard).toHaveAttribute("data-session-id", INTERRUPTED_SESSION_ID);
+      await expect(visibleCard.locator(".session-title")).toHaveText("Resume me");
       await expect(visibleCard.locator(".session-state-badge")).toHaveText(ENDED_STATE_LABEL);
       await expect(visibleCard.getByRole("button", { name: "Expand terminal keys" })).toHaveCount(
         0
@@ -301,10 +301,35 @@ test.describe("session hydrate refresh acceptance", () => {
       const agentSheet = page.getByRole("region", { name: "Agent Sessions sheet" });
       await expect(agentSheet).toBeVisible();
       await expect(agentSheet.getByRole("button", { name: "Resume me" })).toBeVisible();
-      await expect(agentSheet.getByRole("button", { name: "Unavailable" })).toHaveAttribute(
+      await expect(agentSheet.getByRole("button", { name: "Resume me" })).toHaveAttribute(
         "aria-pressed",
         "true"
       );
+
+      const secondContext = await browser.newContext({
+        viewport: { width: 430, height: 932 },
+      });
+
+      try {
+        const secondPage = await secondContext.newPage();
+        await secondPage.addInitScript(() => {
+          window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+        });
+
+        await secondPage.goto(`${BASE_URL}/workspace`);
+        await expect(secondPage.getByTestId("workspace-resolving-shell")).toHaveCount(0, {
+          timeout: 20000,
+        });
+        await expect(secondPage.getByTestId("mobile-shell")).toBeVisible({ timeout: 20000 });
+
+        const secondVisibleCard = secondPage
+          .locator(".mobile-shell .session-card.agent-pane")
+          .first();
+        await expect(secondVisibleCard).toHaveAttribute("data-session-id", INTERRUPTED_SESSION_ID);
+        await expect(secondVisibleCard.locator(".session-title")).toHaveText("Resume me");
+      } finally {
+        await secondContext.close();
+      }
     } finally {
       await context.close();
     }

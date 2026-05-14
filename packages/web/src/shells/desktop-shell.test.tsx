@@ -371,6 +371,68 @@ describe("DesktopShell auth gating", () => {
     });
   });
 
+  it("hydrates the saved last-viewed workspace before redirecting into /workspace", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "workspace.list") {
+        return [
+          {
+            id: "ws-1",
+            path: "/tmp/ws-1",
+            targetRuntime: "native",
+            openedAt: 1,
+            lastActiveAt: 1,
+            uiState: {
+              leftPanelWidth: 280,
+              bottomPanelHeight: 200,
+              focusMode: false,
+            },
+          },
+          {
+            id: "ws-2",
+            path: "/tmp/ws-2",
+            targetRuntime: "native",
+            openedAt: 2,
+            lastActiveAt: 2,
+            uiState: {
+              leftPanelWidth: 280,
+              bottomPanelHeight: 200,
+              focusMode: false,
+            },
+          },
+        ];
+      }
+
+      if (op === "workspace.lastViewedTarget.get") {
+        return {
+          workspaceId: "ws-2",
+          updatedAt: 10,
+        };
+      }
+
+      return [];
+    });
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(authEnabledAtom, false);
+    store.set(authenticatedAtom, true);
+    store.set(workspacesAtom, {});
+    store.set(workspaceOrderAtom, []);
+    store.set(workspacesLoadStateAtom, "idle");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    renderShell(store);
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith("workspace.list", {}, undefined);
+      expect(sendCommand).toHaveBeenCalledWith("workspace.lastViewedTarget.get", {}, undefined);
+    });
+
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/workspace");
+      expect(store.get(activeWorkspaceIdAtom)).toBe("ws-2");
+    });
+  });
+
   it("redirects / to /workspace on desktop when the workspace list is already ready while reconnecting", async () => {
     const store = createStore();
     store.set(connectionStatusAtom, "reconnecting");

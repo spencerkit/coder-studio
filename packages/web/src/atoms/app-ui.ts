@@ -4,6 +4,7 @@
  * Shared app-level UI state that is not owned by a single feature.
  */
 
+import type { WorkspaceLastViewedTarget } from "@coder-studio/core";
 import { atom } from "jotai";
 import { atomWithStorage, createJSONStorage } from "jotai/utils";
 import { resolveStoredThemeId } from "../theme";
@@ -78,6 +79,15 @@ export const commandPaletteOpenAtom = atom<boolean>(false);
  * session into view.
  */
 export const pendingFocusSessionAtom = atom<string | null>(null);
+
+/**
+ * Server-hydrated global last-viewed workspace/session target.
+ *
+ * This mirrors the server-backed cross-device target and is not persisted
+ * locally. Desktop restores only `workspaceId`; mobile can additionally use
+ * `sessionId` during session selection.
+ */
+export const lastViewedTargetAtom = atom<WorkspaceLastViewedTarget | null>(null);
 
 /**
  * Currently visible session in the mobile workspace shell.

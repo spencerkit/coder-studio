@@ -47,6 +47,7 @@ import {
 } from "../../atoms/workspaces";
 import { useViewport } from "../../hooks/use-viewport";
 import { useTranslation } from "../../lib/i18n";
+import { usePersistWorkspaceLastViewedTarget } from "../workspace/actions/use-persist-workspace-last-viewed-target";
 import { notificationPreferencesAtom, pushToastAtom } from "./atoms";
 import { focusSession } from "./focus-session";
 import { formatDuration, formatProviderLabel, formatWorkspaceLabel } from "./format";
@@ -182,6 +183,7 @@ interface BrowserNotificationOptions {
   workspaceId: string;
   sessionId: string;
   setActiveWorkspaceId: (workspaceId: string | null) => void;
+  persistLastViewedTarget: (target: { workspaceId: string; sessionId: string }) => void;
   /** Set the pending-focus marker so the target SessionCard reacts on
    *  mount (or the next render if it's already mounted). */
   setPendingFocus: (sessionId: string | null) => void;
@@ -209,6 +211,7 @@ function showBrowserNotification(opts: BrowserNotificationOptions): void {
         workspaceId: opts.workspaceId,
         sessionId: opts.sessionId,
         setActiveWorkspaceId: opts.setActiveWorkspaceId,
+        persistLastViewedTarget: opts.persistLastViewedTarget,
         setPendingFocus: opts.setPendingFocus,
         // No router available here — focusSession falls back to
         // history.pushState + popstate, which the SPA router handles.
@@ -239,6 +242,7 @@ export function useSessionNotifications(): void {
   const setPendingFocus = useSetAtom(pendingFocusSessionAtom);
   const t = useTranslation();
   const viewport = useViewport();
+  const persistLastViewedTarget = usePersistWorkspaceLastViewedTarget();
   // Read-on-demand handle for atoms we don't want to trigger re-renders for —
   // notably the workspaces map, which we snapshot only when a notification fires.
   const store = useStore();
@@ -384,6 +388,9 @@ export function useSessionNotifications(): void {
           workspaceId: session.workspaceId,
           sessionId: session.id,
           setActiveWorkspaceId,
+          persistLastViewedTarget: (target) => {
+            void persistLastViewedTarget(target);
+          },
           setPendingFocus,
         });
       } else {
@@ -414,6 +421,7 @@ export function useSessionNotifications(): void {
     pushToast,
     setActiveWorkspaceId,
     setPendingFocus,
+    persistLastViewedTarget,
     store,
     t,
   ]);

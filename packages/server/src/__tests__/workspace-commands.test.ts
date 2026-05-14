@@ -10,6 +10,7 @@ import { dispatch } from "../ws/dispatch.js";
 
 // Import command handlers to register them
 import "../commands/workspace.js";
+import "../commands/workspace-activity.js";
 
 describe("Workspace Commands", () => {
   let db: ReturnType<typeof openDatabase>;
@@ -46,7 +47,9 @@ describe("Workspace Commands", () => {
     ctx = {
       db,
       workspaceMgr,
-      sessionMgr: {},
+      sessionMgr: {
+        get: vi.fn(() => undefined),
+      },
       terminalMgr: {},
       eventBus,
       broadcaster: { broadcast: () => {} },
@@ -200,6 +203,117 @@ describe("Workspace Commands", () => {
           { id: "right", type: "leaf", sessionId: "sess-right" },
         ],
       });
+    });
+  });
+
+  describe("workspace.lastViewedTarget", () => {
+    it("persists and returns the global workspace last-viewed target", async () => {
+      const dir = join(tmpdir(), `workspace-target-test-${Date.now()}`);
+      await mkdir(dir);
+
+      const openResult = await dispatch(
+        {
+          kind: "command",
+          id: "open-workspace-target",
+          op: "workspace.open",
+          args: { path: dir },
+        },
+        ctx
+      );
+
+      expect(openResult.ok).toBe(true);
+      const workspaceId = (openResult.data as { id: string }).id;
+
+      const writeResult = await dispatch(
+        {
+          kind: "command",
+          id: "set-last-viewed-target",
+          op: "workspace.lastViewedTarget.set",
+          args: {
+            workspaceId,
+            sessionId: "sess-123",
+          },
+        },
+        ctx
+      );
+
+      expect(writeResult.ok).toBe(true);
+      expect(writeResult.data).toMatchObject({
+        workspaceId,
+        sessionId: undefined,
+      });
+      expect((writeResult.data as { updatedAt: number }).updatedAt).toEqual(expect.any(Number));
+
+      const readResult = await dispatch(
+        {
+          kind: "command",
+          id: "get-last-viewed-target",
+          op: "workspace.lastViewedTarget.get",
+          args: {},
+        },
+        ctx
+      );
+
+      expect(readResult.ok).toBe(true);
+      expect(readResult.data).toMatchObject({
+        workspaceId,
+        sessionId: undefined,
+      });
+      expect((readResult.data as { updatedAt: number }).updatedAt).toEqual(expect.any(Number));
+    });
+
+    it("drops an out-of-workspace session id while preserving the workspace target", async () => {
+      const dir = join(tmpdir(), `workspace-target-mismatch-${Date.now()}`);
+      await mkdir(dir);
+
+      const openResult = await dispatch(
+        {
+          kind: "command",
+          id: "open-workspace-target-mismatch",
+          op: "workspace.open",
+          args: { path: dir },
+        },
+        ctx
+      );
+
+      expect(openResult.ok).toBe(true);
+      const workspaceId = (openResult.data as { id: string }).id;
+
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "set-last-viewed-target-mismatch",
+          op: "workspace.lastViewedTarget.set",
+          args: {
+            workspaceId,
+            sessionId: "sess-missing",
+          },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.data).toMatchObject({
+        workspaceId,
+        sessionId: undefined,
+      });
+    });
+
+    it("returns workspace_not_found when writing a target for a missing workspace", async () => {
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "set-last-viewed-target-missing-workspace",
+          op: "workspace.lastViewedTarget.set",
+          args: {
+            workspaceId: "ws-missing",
+          },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.error?.code).toBe("workspace_not_found");
     });
   });
 });

@@ -13,6 +13,7 @@ import { activeWorkspaceIdAtom } from "../../../atoms/workspaces";
 import { Badge, IconButton, Tab, Tooltip } from "../../../components/ui";
 import { useTranslation } from "../../../lib/i18n";
 import { formatWorkspaceLabel } from "../../notifications/format";
+import { usePersistWorkspaceLastViewedTarget } from "../../workspace/actions/use-persist-workspace-last-viewed-target";
 import { useWorkspaceCloseAction } from "../../workspace/actions/use-workspace-close-action";
 
 interface WorkspaceTabProps {
@@ -33,10 +34,12 @@ export const WorkspaceTab: FC<WorkspaceTabProps> = ({ workspace, isActive }) => 
   const t = useTranslation();
   const setActiveWorkspace = useSetAtom(activeWorkspaceIdAtom);
   const closeWorkspace = useWorkspaceCloseAction();
+  const persistLastViewedTarget = usePersistWorkspaceLastViewedTarget();
   const displayName = formatWorkspaceLabel(workspace) || workspace.id;
 
   const handleClick = () => {
     setActiveWorkspace(workspace.id);
+    void persistLastViewedTarget({ workspaceId: workspace.id });
   };
 
   const handleClose = async (e: React.MouseEvent) => {

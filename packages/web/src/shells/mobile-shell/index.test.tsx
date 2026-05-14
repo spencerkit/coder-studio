@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { activationStatusAtom } from "../../atoms/activation";
 import {
   authenticatedAtom,
+  lastViewedTargetAtom,
   localeAtom,
   pendingFocusSessionAtom,
   visibleMobileSessionIdAtom,
@@ -730,11 +731,28 @@ describe("MobileShell Phase 2 workspace", () => {
 
   it("opens the workspace drawer and switches active workspace", async () => {
     const user = userEvent.setup();
-    const { store } = renderMobileShell({ initialEntry: "/workspace" });
+    const sendCommand = vi.fn(async (op: string) => {
+      if (op === "workspace.lastViewedTarget.set") {
+        return {
+          workspaceId: "ws-2",
+          updatedAt: 10,
+        };
+      }
+
+      return undefined;
+    });
+    const { store } = renderMobileShell({ initialEntry: "/workspace", sendCommand });
 
     await user.click(screen.getByRole("button", { name: "Switch workspace" }));
     await user.click(screen.getByRole("button", { name: "Switch to workspace Beta" }));
 
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "workspace.lastViewedTarget.set",
+        { workspaceId: "ws-2", sessionId: undefined },
+        undefined
+      );
+    });
     expect(store.get(activeWorkspaceIdAtom)).toBe("ws-2");
   });
 
@@ -1662,6 +1680,61 @@ describe("MobileShell Phase 2 workspace", () => {
     });
   });
 
+  it("persists the global target when a mobile session is selected from the agent sheet", async () => {
+    const user = userEvent.setup();
+    const sendCommand = vi.fn(async (op: string) => {
+      if (op === "workspace.lastViewedTarget.set") {
+        return {
+          workspaceId: "ws-1",
+          sessionId: "sess_1",
+          updatedAt: 10,
+        };
+      }
+
+      if (op === "session.list") {
+        return [
+          createSession({
+            id: "sess_1",
+            terminalId: "term-1",
+            providerId: "claude",
+            state: "idle",
+            title: "Claude",
+          }),
+          createSession({
+            id: "sess_2",
+            terminalId: "term-2",
+            providerId: "codex",
+            state: "running",
+            title: "Codex",
+          }),
+        ];
+      }
+
+      return undefined;
+    });
+
+    renderMobileShell({ sendCommand });
+
+    await user.click(await screen.findByRole("button", { name: "Open Agent sheet" }));
+    await user.click(
+      screen.getByRole("button", {
+        name: "Claude",
+        description: "Switch to agent Claude CLAUDE",
+      })
+    );
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "workspace.lastViewedTarget.set",
+        {
+          workspaceId: "ws-1",
+          sessionId: "sess_1",
+        },
+        undefined
+      );
+    });
+  });
+
   it("tracks the currently visible mobile session in app UI state and clears it on unmount", async () => {
     const { store, unmount } = renderMobileShell({ initialEntry: "/workspace" });
 
@@ -1722,6 +1795,56 @@ describe("MobileShell Phase 2 workspace", () => {
 
     await waitFor(() => {
       expect(screen.getByTestId("mobile-session-card")).toHaveTextContent("sess_reload_1");
+    });
+  });
+
+  it("prefers the saved global session target when the mobile workspace restores", async () => {
+    const sessions = [
+      createSession({
+        id: "sess_1",
+        terminalId: "term-1",
+        providerId: "claude",
+        state: "idle",
+        lastActiveAt: Date.now() - 5_000,
+        title: "Claude",
+      }),
+      createSession({
+        id: "sess_2",
+        terminalId: "term-2",
+        providerId: "codex",
+        state: "running",
+        lastActiveAt: Date.now() - 500,
+        title: "Codex",
+      }),
+    ];
+
+    const { store } = renderMobileShell({
+      initialEntry: "/workspace",
+      sessions,
+      paneLayout: {
+        id: "root",
+        type: "leaf",
+        sessionId: "sess_1",
+      },
+      sendCommand: vi.fn(async (op: string) => {
+        if (op === "session.list") {
+          return sessions;
+        }
+
+        return undefined;
+      }),
+    });
+
+    await act(async () => {
+      store.set(lastViewedTargetAtom, {
+        workspaceId: "ws-1",
+        sessionId: "sess_1",
+        updatedAt: 10,
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("mobile-session-card")).toHaveTextContent("sess_1");
     });
   });
 

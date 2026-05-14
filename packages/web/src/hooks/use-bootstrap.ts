@@ -1,11 +1,12 @@
-import type { Workspace } from "@coder-studio/core";
+import type { Workspace, WorkspaceLastViewedTarget } from "@coder-studio/core";
 import { useAtomValue, useSetAtom } from "jotai";
 import { useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { authEnabledAtom, connectionStatusAtom, dispatchCommandAtom } from "../atoms";
 import { activationStatusAtom } from "../atoms/activation";
-import { authenticatedAtom } from "../atoms/app-ui";
+import { authenticatedAtom, lastViewedTargetAtom } from "../atoms/app-ui";
 import {
+  activeWorkspaceIdAtom,
   orderedWorkspacesAtom,
   workspaceOrderAtom,
   workspacesAtom,
@@ -24,6 +25,8 @@ export function useBootstrap() {
   const authenticated = useAtomValue(authenticatedAtom);
   const authEnabled = useAtomValue(authEnabledAtom);
   const workspacesLoadState = useAtomValue(workspacesLoadStateAtom);
+  const setActiveWorkspaceId = useSetAtom(activeWorkspaceIdAtom);
+  const setLastViewedTarget = useSetAtom(lastViewedTargetAtom);
   const setWorkspaces = useSetAtom(workspacesAtom);
   const setWorkspaceOrder = useSetAtom(workspaceOrderAtom);
   const setWorkspacesLoadState = useSetAtom(workspacesLoadStateAtom);
@@ -81,19 +84,24 @@ export function useBootstrap() {
       setWorkspacesLoadState("loading");
       setWorkspacesLoadError(null);
 
-      dispatch<Workspace[]>("workspace.list", {})
+      Promise.all([
+        dispatch<Workspace[]>("workspace.list", {}),
+        dispatch<WorkspaceLastViewedTarget | null>("workspace.lastViewedTarget.get", {}),
+      ])
         .then((result) => {
           if (bootstrapRequestIdRef.current !== requestId) {
             return;
           }
 
-          if (!result.ok) {
+          const [listResult, targetResult] = result;
+
+          if (!listResult.ok) {
             setWorkspacesLoadState("error");
-            setWorkspacesLoadError(result.error?.message ?? "Failed to fetch workspace list");
+            setWorkspacesLoadError(listResult.error?.message ?? "Failed to fetch workspace list");
             return;
           }
 
-          const nextWorkspaces = Array.isArray(result.data) ? result.data : [];
+          const nextWorkspaces = Array.isArray(listResult.data) ? listResult.data : [];
           const wsMap: Record<string, Workspace> = {};
           for (const workspace of nextWorkspaces) {
             wsMap[workspace.id] = workspace;
@@ -101,6 +109,14 @@ export function useBootstrap() {
 
           setWorkspaces(wsMap);
           setWorkspaceOrder(nextWorkspaces.map((workspace) => workspace.id));
+          const savedTarget =
+            targetResult.ok && targetResult.data && wsMap[targetResult.data.workspaceId]
+              ? targetResult.data
+              : null;
+          setLastViewedTarget(savedTarget);
+          if (savedTarget?.workspaceId) {
+            setActiveWorkspaceId(savedTarget.workspaceId);
+          }
           setWorkspacesLoadState("ready");
           setWorkspacesLoadError(null);
         })
@@ -139,6 +155,8 @@ export function useBootstrap() {
     navigate,
     setWorkspaceOrder,
     setWorkspaces,
+    setActiveWorkspaceId,
+    setLastViewedTarget,
     setWorkspacesLoadError,
     setWorkspacesLoadState,
     workspaces.length,

@@ -15,6 +15,7 @@ describe("focusSession", () => {
   it("sets the active workspace in memory, sets the pending-focus marker, and navigates via the supplied router", () => {
     const setPendingFocus = vi.fn();
     const setActiveWorkspaceId = vi.fn();
+    const persistLastViewedTarget = vi.fn();
     const navigate = vi.fn();
 
     focusSession({
@@ -22,9 +23,14 @@ describe("focusSession", () => {
       sessionId: "sess-42",
       setPendingFocus,
       setActiveWorkspaceId,
+      persistLastViewedTarget,
       navigate,
     });
 
+    expect(persistLastViewedTarget).toHaveBeenCalledWith({
+      workspaceId: "ws-7",
+      sessionId: "sess-42",
+    });
     expect(setActiveWorkspaceId).toHaveBeenCalledWith("ws-7");
     expect(setPendingFocus).toHaveBeenCalledWith("sess-42");
     expect(navigate).toHaveBeenCalledWith("/workspace");
@@ -34,6 +40,7 @@ describe("focusSession", () => {
   it("falls back to history.pushState + popstate when no router is supplied (system-notification path)", () => {
     const setPendingFocus = vi.fn();
     const setActiveWorkspaceId = vi.fn();
+    const persistLastViewedTarget = vi.fn();
     const popstateSpy = vi.fn();
     window.addEventListener("popstate", popstateSpy);
 
@@ -42,8 +49,13 @@ describe("focusSession", () => {
       sessionId: "sess-9",
       setPendingFocus,
       setActiveWorkspaceId,
+      persistLastViewedTarget,
     });
 
+    expect(persistLastViewedTarget).toHaveBeenCalledWith({
+      workspaceId: "ws-3",
+      sessionId: "sess-9",
+    });
     expect(setActiveWorkspaceId).toHaveBeenCalledWith("ws-3");
     expect(window.location.pathname).toBe("/workspace");
     expect(popstateSpy).toHaveBeenCalledTimes(1);
@@ -54,6 +66,7 @@ describe("focusSession", () => {
     window.history.pushState({}, "", "/workspace");
     const setPendingFocus = vi.fn();
     const setActiveWorkspaceId = vi.fn();
+    const persistLastViewedTarget = vi.fn();
     const navigate = vi.fn();
     const popstateSpy = vi.fn();
     window.addEventListener("popstate", popstateSpy);
@@ -63,9 +76,14 @@ describe("focusSession", () => {
       sessionId: "sess-11",
       setPendingFocus,
       setActiveWorkspaceId,
+      persistLastViewedTarget,
       navigate,
     });
 
+    expect(persistLastViewedTarget).toHaveBeenCalledWith({
+      workspaceId: "ws-1",
+      sessionId: "sess-11",
+    });
     expect(navigate).not.toHaveBeenCalled();
     expect(popstateSpy).not.toHaveBeenCalled();
     expect(setActiveWorkspaceId).toHaveBeenCalledWith("ws-1");

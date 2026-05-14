@@ -38,6 +38,12 @@ export interface UiState {
   paneLayout?: WorkspacePaneNode;
 }
 
+export interface WorkspaceLastViewedTarget {
+  workspaceId: string;
+  sessionId?: string;
+  updatedAt: number;
+}
+
 export interface Terminal {
   id: string;
   workspaceId: string;

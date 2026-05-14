@@ -7,6 +7,7 @@ import { sessionsAtom } from "../../../../atoms/sessions";
 import { useTranslation } from "../../../../lib/i18n";
 import { useProviderLauncher } from "../../../agent-panes/actions/use-provider-launcher";
 import { MobileSelectSheet } from "../../../mobile-select";
+import { usePersistWorkspaceLastViewedTarget } from "../../actions/use-persist-workspace-last-viewed-target";
 
 interface MobileAgentSheetProps {
   activeSessionId: string | null;
@@ -51,6 +52,7 @@ export function MobileAgentSheet({
   const dispatch = useAtomValue(dispatchCommandAtom);
   const setSessions = useSetAtom(sessionsAtom);
   const t = useTranslation();
+  const persistLastViewedTarget = usePersistWorkspaceLastViewedTarget();
   const [mode, setMode] = useState<AgentSheetMode>(
     defaultMode === "create" ? "providers" : "sessions"
   );
@@ -165,6 +167,12 @@ export function MobileAgentSheet({
       onClose={closeSheet}
       onSelect={(id) => {
         if (mode === "sessions") {
+          if (activeWorkspaceId) {
+            void persistLastViewedTarget({
+              workspaceId: activeWorkspaceId,
+              sessionId: id,
+            });
+          }
           onSelectSession(id);
           closeSheet();
           return;

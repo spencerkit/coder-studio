@@ -106,6 +106,30 @@ describe("WorkspaceTab", () => {
     expect(routerMocks.navigate).not.toHaveBeenCalled();
   });
 
+  it("persists the global last-viewed workspace target when a tab is clicked", async () => {
+    const workspace = createWorkspace("ws-2", "/tmp/two");
+    const sendCommand = vi.fn().mockResolvedValue({
+      workspaceId: "ws-2",
+      updatedAt: 10,
+    });
+    const store = createStore();
+
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    renderWorkspaceTab(store, workspace, { value: "ws-1" });
+
+    fireEvent.click(screen.getByRole("tab", { name: /two/i }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "workspace.lastViewedTarget.set",
+        { workspaceId: "ws-2", sessionId: undefined },
+        undefined
+      );
+    });
+  });
+
   it("closes the active workspace without route navigation and falls back to the next ordered workspace", async () => {
     const firstWorkspace = createWorkspace("ws-1", "/tmp/one");
     const secondWorkspace = createWorkspace("ws-2", "/tmp/two");

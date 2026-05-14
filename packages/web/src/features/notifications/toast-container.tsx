@@ -14,6 +14,7 @@ import { pendingFocusSessionAtom } from "../../atoms/app-ui";
 import { activeWorkspaceIdAtom } from "../../atoms/workspaces";
 import { ToastViewport, Toast as UiToast } from "../../components/ui";
 import { useViewport } from "../../hooks/use-viewport";
+import { usePersistWorkspaceLastViewedTarget } from "../workspace/actions/use-persist-workspace-last-viewed-target";
 import { dismissToastAtom, type Toast, toastsAtom } from "./atoms";
 import { focusSession } from "./focus-session";
 
@@ -29,6 +30,7 @@ function ToastItem({ toast }: { toast: Toast }) {
   const setActiveWorkspaceId = useSetAtom(activeWorkspaceIdAtom);
   const setPendingFocus = useSetAtom(pendingFocusSessionAtom);
   const navigate = useNavigate();
+  const persistLastViewedTarget = usePersistWorkspaceLastViewedTarget();
   const Icon = KIND_CONFIG[toast.kind];
   const duration = toast.duration ?? 5000;
 
@@ -50,6 +52,9 @@ function ToastItem({ toast }: { toast: Toast }) {
         sessionId: toast.sessionId,
         setPendingFocus,
         setActiveWorkspaceId,
+        persistLastViewedTarget: (target) => {
+          void persistLastViewedTarget(target);
+        },
         navigate,
       });
     } else if (toast.workspaceId) {

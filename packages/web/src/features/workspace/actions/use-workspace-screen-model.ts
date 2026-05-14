@@ -1,6 +1,7 @@
-import type { GitStatus } from "@coder-studio/core";
+import type { GitStatus, Session } from "@coder-studio/core";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { lastViewedTargetAtom } from "../../../atoms/app-ui";
 import { dispatchCommandAtom } from "../../../atoms/connection";
 import {
   activeWorkspaceAtom,
@@ -38,6 +39,32 @@ export interface WorkspaceCreateRequest {
   baseDir: string | null;
 }
 
+function resolvePreferredMobileSessionId(
+  orderedSessions: Session[],
+  globalTargetSessionId: string | null,
+  workspaceUiStateSessionId: string | null
+) {
+  if (
+    globalTargetSessionId &&
+    orderedSessions.some((session) => session.id === globalTargetSessionId)
+  ) {
+    return globalTargetSessionId;
+  }
+
+  if (
+    workspaceUiStateSessionId &&
+    orderedSessions.some((session) => session.id === workspaceUiStateSessionId)
+  ) {
+    return workspaceUiStateSessionId;
+  }
+
+  const mostRecentSession = [...orderedSessions].sort(
+    (left, right) => right.lastActiveAt - left.lastActiveAt
+  )[0];
+
+  return mostRecentSession?.id ?? orderedSessions[0]?.id ?? null;
+}
+
 export function useWorkspaceScreenModel() {
   const workspace = useAtomValue(activeWorkspaceAtom);
   const workspaceId = workspace?.id ?? "__workspace_placeholder__";
@@ -58,6 +85,7 @@ export function useWorkspaceScreenModel() {
   const paneActions = usePaneActions(workspaceId);
   const sessionActions = useSessionActions();
   const { persistUiState } = useWorkspaceUiStatePersistence(workspaceId);
+  const lastViewedTarget = useAtomValue(lastViewedTargetAtom);
 
   const [sidebarTab, setSidebarTab] = useState<WorkspaceSidebarTab>("files");
   const [createRequest, setCreateRequest] = useState<WorkspaceCreateRequest | null>(null);
@@ -160,25 +188,18 @@ export function useWorkspaceScreenModel() {
   }, [orderedSessions, sessions]);
 
   const preferredSessionId = workspace?.uiState?.activeSessionId ?? null;
+  const preferredGlobalSessionId =
+    lastViewedTarget?.workspaceId === workspace?.id ? (lastViewedTarget.sessionId ?? null) : null;
 
   useEffect(() => {
     if (orderedSessions.some((session) => session.id === mobileActiveSessionId)) {
       return;
     }
 
-    if (
-      preferredSessionId &&
-      orderedSessions.some((session) => session.id === preferredSessionId)
-    ) {
-      setMobileActiveSessionId(preferredSessionId);
-      return;
-    }
-
-    const mostRecentSession = [...orderedSessions].sort(
-      (left, right) => right.lastActiveAt - left.lastActiveAt
-    )[0];
-    setMobileActiveSessionId(mostRecentSession?.id ?? orderedSessions[0]?.id ?? null);
-  }, [mobileActiveSessionId, orderedSessions, preferredSessionId]);
+    setMobileActiveSessionId(
+      resolvePreferredMobileSessionId(orderedSessions, preferredGlobalSessionId, preferredSessionId)
+    );
+  }, [mobileActiveSessionId, orderedSessions, preferredGlobalSessionId, preferredSessionId]);
 
   useEffect(() => {
     if (!workspace) {
