@@ -1,8 +1,10 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MobileTerminalInputBar } from "./mobile-terminal-input-bar";
 
 const labels = {
+  paste: "Paste",
+  upload: "Upload",
   shortcuts: "Terminal shortcut keys",
   ctrl: "Ctrl",
   ctrlArmed: "Ctrl armed",
@@ -37,6 +39,8 @@ describe("MobileTerminalInputBar", () => {
         onCtrlTap={vi.fn()}
         onCtrlLongPress={vi.fn()}
         onShiftTap={vi.fn()}
+        onPaste={vi.fn()}
+        onUpload={vi.fn()}
       />
     );
 
@@ -67,6 +71,8 @@ describe("MobileTerminalInputBar", () => {
         onCtrlTap={vi.fn()}
         onCtrlLongPress={vi.fn()}
         onShiftTap={vi.fn()}
+        onPaste={vi.fn()}
+        onUpload={vi.fn()}
       />
     );
 
@@ -84,6 +90,8 @@ describe("MobileTerminalInputBar", () => {
     const onKeyPress = vi.fn();
     const onCtrlTap = vi.fn();
     const onShiftTap = vi.fn();
+    const onPaste = vi.fn();
+    const onUpload = vi.fn();
 
     render(
       <MobileTerminalInputBar
@@ -94,6 +102,8 @@ describe("MobileTerminalInputBar", () => {
         onCtrlTap={onCtrlTap}
         onCtrlLongPress={vi.fn()}
         onShiftTap={onShiftTap}
+        onPaste={onPaste}
+        onUpload={onUpload}
       />
     );
 
@@ -109,6 +119,41 @@ describe("MobileTerminalInputBar", () => {
     expect(onCtrlTap).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: labels.shift }));
     expect(onShiftTap).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: labels.paste }));
+    fireEvent.click(screen.getByRole("button", { name: labels.upload }));
+
+    expect(onPaste).toHaveBeenCalledTimes(1);
+    expect(onUpload).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps mobile actions disabled with the rest of the bar", () => {
+    const onPaste = vi.fn();
+    const onUpload = vi.fn();
+
+    render(
+      <MobileTerminalInputBar
+        ctrlMode="off"
+        shiftArmed={false}
+        disabled
+        labels={labels}
+        onKeyPress={vi.fn()}
+        onCtrlTap={vi.fn()}
+        onCtrlLongPress={vi.fn()}
+        onShiftTap={vi.fn()}
+        onPaste={onPaste}
+        onUpload={onUpload}
+      />
+    );
+
+    expect(screen.getByRole("button", { name: labels.paste })).toBeDisabled();
+    expect(screen.getByRole("button", { name: labels.upload })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: labels.paste }));
+    fireEvent.click(screen.getByRole("button", { name: labels.upload }));
+
+    expect(onPaste).not.toHaveBeenCalled();
+    expect(onUpload).not.toHaveBeenCalled();
   });
 
   it("locks ctrl on long press and switches ctrl labels by mode", () => {
@@ -124,6 +169,8 @@ describe("MobileTerminalInputBar", () => {
         onCtrlTap={onCtrlTap}
         onCtrlLongPress={onCtrlLongPress}
         onShiftTap={vi.fn()}
+        onPaste={vi.fn()}
+        onUpload={vi.fn()}
       />
     );
 
@@ -146,6 +193,8 @@ describe("MobileTerminalInputBar", () => {
         onCtrlTap={onCtrlTap}
         onCtrlLongPress={onCtrlLongPress}
         onShiftTap={vi.fn()}
+        onPaste={vi.fn()}
+        onUpload={vi.fn()}
       />
     );
 
@@ -167,6 +216,8 @@ describe("MobileTerminalInputBar", () => {
         onCtrlTap={vi.fn()}
         onCtrlLongPress={onCtrlLongPress}
         onShiftTap={vi.fn()}
+        onPaste={vi.fn()}
+        onUpload={vi.fn()}
       />
     );
 
@@ -182,6 +233,8 @@ describe("MobileTerminalInputBar", () => {
         onCtrlTap={vi.fn()}
         onCtrlLongPress={onCtrlLongPress}
         onShiftTap={vi.fn()}
+        onPaste={vi.fn()}
+        onUpload={vi.fn()}
       />
     );
 
@@ -205,6 +258,8 @@ describe("MobileTerminalInputBar", () => {
         onCtrlTap={onCtrlTap}
         onCtrlLongPress={onCtrlLongPress}
         onShiftTap={vi.fn()}
+        onPaste={vi.fn()}
+        onUpload={vi.fn()}
       />
     );
 
@@ -234,6 +289,8 @@ describe("MobileTerminalInputBar", () => {
         onCtrlTap={vi.fn()}
         onCtrlLongPress={vi.fn()}
         onShiftTap={vi.fn()}
+        onPaste={vi.fn()}
+        onUpload={vi.fn()}
       />
     );
 
@@ -252,6 +309,8 @@ describe("MobileTerminalInputBar", () => {
         onCtrlTap={vi.fn()}
         onCtrlLongPress={vi.fn()}
         onShiftTap={vi.fn()}
+        onPaste={vi.fn()}
+        onUpload={vi.fn()}
       />
     );
 
@@ -280,6 +339,8 @@ describe("MobileTerminalInputBar", () => {
         onCtrlTap={vi.fn()}
         onCtrlLongPress={vi.fn()}
         onShiftTap={onShiftTap}
+        onPaste={vi.fn()}
+        onUpload={vi.fn()}
       />
     );
 
@@ -310,6 +371,8 @@ describe("MobileTerminalInputBar", () => {
         onCtrlTap={onCtrlTap}
         onCtrlLongPress={onCtrlLongPress}
         onShiftTap={vi.fn()}
+        onPaste={vi.fn()}
+        onUpload={vi.fn()}
       />
     );
 
@@ -345,6 +408,8 @@ describe("MobileTerminalInputBar", () => {
         onCtrlTap={vi.fn()}
         onCtrlLongPress={vi.fn()}
         onShiftTap={vi.fn()}
+        onPaste={vi.fn()}
+        onUpload={vi.fn()}
       />
     );
 
@@ -369,6 +434,8 @@ describe("MobileTerminalInputBar", () => {
         onCtrlTap={vi.fn()}
         onCtrlLongPress={vi.fn()}
         onShiftTap={vi.fn()}
+        onPaste={vi.fn()}
+        onUpload={vi.fn()}
       />
     );
 
@@ -396,6 +463,8 @@ describe("MobileTerminalInputBar", () => {
         onCtrlTap={onCtrlTap}
         onCtrlLongPress={onCtrlLongPress}
         onShiftTap={onShiftTap}
+        onPaste={vi.fn()}
+        onUpload={vi.fn()}
       />
     );
 
@@ -430,6 +499,8 @@ describe("MobileTerminalInputBar", () => {
         onCtrlTap={vi.fn()}
         onCtrlLongPress={vi.fn()}
         onShiftTap={vi.fn()}
+        onPaste={vi.fn()}
+        onUpload={vi.fn()}
       />
     );
 
@@ -448,10 +519,12 @@ describe("MobileTerminalInputBar", () => {
         onCtrlTap={vi.fn()}
         onCtrlLongPress={vi.fn()}
         onShiftTap={vi.fn()}
+        onPaste={vi.fn()}
+        onUpload={vi.fn()}
       />
     );
 
-    const buttons = screen
+    const buttons = within(screen.getByRole("group", { name: labels.shortcuts }))
       .getAllByRole("button")
       .map((button) => button.getAttribute("aria-label"));
 

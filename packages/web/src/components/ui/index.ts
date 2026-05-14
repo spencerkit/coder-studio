@@ -54,6 +54,8 @@ export type { TagColor, TagProps, TagSize } from "./tag";
 export { Tag } from "./tag";
 export type { TextareaProps, TextareaSize } from "./textarea";
 export { Textarea } from "./textarea";
+export type { ThemedIconProps } from "./themed-icon";
+export { ThemedIcon } from "./themed-icon";
 export type { ToastProps, ToastTone, ToastViewportProps } from "./toast";
 export { Toast, ToastViewport } from "./toast";
 export type { TooltipProps } from "./tooltip";

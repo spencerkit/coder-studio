@@ -20,6 +20,8 @@ const SOFT_KEY_LAYOUT: Array<{ id: SoftTerminalKeyId; text: string }> = [
 ];
 
 export interface MobileTerminalInputBarLabels {
+  paste: string;
+  upload: string;
   shortcuts: string;
   ctrl: string;
   ctrlArmed: string;
@@ -44,6 +46,8 @@ interface MobileTerminalInputBarProps {
   onCtrlTap: () => void;
   onCtrlLongPress: () => void;
   onShiftTap: () => void;
+  onPaste: () => void;
+  onUpload: () => void;
 }
 
 type TouchLikeGestureTarget = "ctrl" | "shift" | SoftTerminalKeyId;
@@ -93,6 +97,8 @@ export function MobileTerminalInputBar({
   onCtrlTap,
   onCtrlLongPress,
   onShiftTap,
+  onPaste,
+  onUpload,
 }: MobileTerminalInputBarProps) {
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const suppressedClickResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -331,6 +337,34 @@ export function MobileTerminalInputBar({
       data-expanded="true"
       data-disabled={disabled ? "true" : "false"}
     >
+      <div className="mobile-terminal-input-bar__actions">
+        <button
+          type="button"
+          className="mobile-terminal-input-bar__action"
+          aria-label={labels.paste}
+          disabled={commandKeysDisabled}
+          onClick={() => {
+            if (!commandKeysDisabled) {
+              onPaste();
+            }
+          }}
+        >
+          {labels.paste}
+        </button>
+        <button
+          type="button"
+          className="mobile-terminal-input-bar__action"
+          aria-label={labels.upload}
+          disabled={commandKeysDisabled}
+          onClick={() => {
+            if (!commandKeysDisabled) {
+              onUpload();
+            }
+          }}
+        >
+          {labels.upload}
+        </button>
+      </div>
       <div className="mobile-terminal-input-bar__keys" role="group" aria-label={labels.shortcuts}>
         <button
           type="button"

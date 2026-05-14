@@ -38,6 +38,7 @@ export interface FocusSessionOptions {
    * resolve the target workspace without route ids.
    */
   setActiveWorkspaceId: (workspaceId: string | null) => void;
+  persistLastViewedTarget?: (target: { workspaceId: string; sessionId: string }) => void;
   /**
    * Optional react-router navigate function. When omitted (system
    * notifications), we fall back to `history.pushState` + a synthetic
@@ -47,12 +48,20 @@ export interface FocusSessionOptions {
 }
 
 export function focusSession(opts: FocusSessionOptions): void {
-  const { workspaceId, sessionId, setPendingFocus, setActiveWorkspaceId, navigate } = opts;
+  const {
+    workspaceId,
+    sessionId,
+    setPendingFocus,
+    setActiveWorkspaceId,
+    persistLastViewedTarget,
+    navigate,
+  } = opts;
 
   if (typeof window === "undefined") return;
 
   // 1. Update the in-memory active workspace before navigation so the
   //    workspace shell can immediately resolve the correct target.
+  persistLastViewedTarget?.({ workspaceId, sessionId });
   setActiveWorkspaceId(workspaceId);
 
   // 2. Hand the pending sessionId to the atom. We do this BEFORE navigation

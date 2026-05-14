@@ -2,7 +2,11 @@ import type { SessionState, Workspace } from "@coder-studio/core";
 import { act, render, waitFor } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { pendingFocusSessionAtom, visibleMobileSessionIdAtom } from "../../atoms/app-ui";
+import {
+  lastViewedTargetAtom,
+  pendingFocusSessionAtom,
+  visibleMobileSessionIdAtom,
+} from "../../atoms/app-ui";
 import { connectionStatusAtom, wsClientAtom } from "../../atoms/connection";
 import { sessionsAtom } from "../../atoms/sessions";
 import {
@@ -369,6 +373,10 @@ describe("useSessionNotifications", () => {
 
     expect(store.get(activeWorkspaceIdAtom)).toBe("ws-target");
     expect(store.get(pendingFocusSessionAtom)).toBe("sess-target");
+    expect(store.get(lastViewedTargetAtom)).toMatchObject({
+      workspaceId: "ws-target",
+      sessionId: "sess-target",
+    });
     expect(window.location.pathname).toBe("/workspace");
   });
 

@@ -1,19 +1,18 @@
-import type { LucideIcon } from "lucide-react";
-import { Globe, Keyboard, Palette, Settings } from "lucide-react";
+import type { IconSemantic } from "../../../theme";
 
 export type SettingsSection = "general" | "appearance" | "providers" | "shortcuts";
 
 export interface SettingsSectionMeta {
   id: SettingsSection;
   labelKey: string;
-  Icon: LucideIcon;
+  iconSemantic: IconSemantic;
 }
 
 export const SETTINGS_SECTIONS = [
-  { id: "general", labelKey: "settings.general", Icon: Settings },
-  { id: "providers", labelKey: "settings.providers", Icon: Globe },
-  { id: "appearance", labelKey: "settings.appearance", Icon: Palette },
-  { id: "shortcuts", labelKey: "settings.shortcuts.title", Icon: Keyboard },
+  { id: "general", labelKey: "settings.general", iconSemantic: "nav.settings.general" },
+  { id: "providers", labelKey: "settings.providers", iconSemantic: "nav.settings.providers" },
+  { id: "appearance", labelKey: "settings.appearance", iconSemantic: "nav.settings.appearance" },
+  { id: "shortcuts", labelKey: "settings.shortcuts.title", iconSemantic: "nav.settings.shortcuts" },
 ] as const satisfies readonly SettingsSectionMeta[];
 
 export const MOBILE_SETTINGS_SECTIONS = SETTINGS_SECTIONS;

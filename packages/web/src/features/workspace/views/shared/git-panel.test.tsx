@@ -125,6 +125,10 @@ describe("GitPanel", () => {
     );
 
     await screen.findByText("Worktrees");
+    expect(container.querySelector('[data-icon-semantic="git.status.staged"]')).toBeTruthy();
+    expect(container.querySelector('[data-icon-semantic="git.status.modified"]')).toBeTruthy();
+    expect(container.querySelector('[data-icon-semantic="git.status.deleted"]')).toBeTruthy();
+    expect(container.querySelector('[data-icon-semantic="git.status.untracked"]')).toBeTruthy();
 
     expect(container.querySelector(".git-panel-branch-row")).toBeNull();
     expect(screen.queryByRole("button", { name: "Current Branch: feature/ai-agent" })).toBeNull();
@@ -246,6 +250,7 @@ describe("GitPanel", () => {
     expect(primaryButton).not.toBeNull();
     expect(actionRow).toContainElement(primaryButton);
     expect(actionRow?.querySelectorAll("button")).toHaveLength(1);
+    expect(primaryButton?.querySelector('[data-icon-semantic="git.commit"]')).toBeTruthy();
   });
 
   it("renders compact mobile commit actions with only the shared primary button", async () => {
@@ -286,6 +291,7 @@ describe("GitPanel", () => {
     expect(container.querySelector(".git-commit-actions .git-commit-primary")).not.toBeNull();
     expect(container.querySelector(".git-commit-primary-mobile")).toBeNull();
     expect(container.querySelectorAll(".git-commit-actions button")).toHaveLength(1);
+    expect(container.querySelector('[data-icon-semantic="git.commit"]')).toBeTruthy();
   });
 
   it("renders the commit box above collapsed worktree and history sections", async () => {
@@ -418,9 +424,13 @@ describe("GitPanel", () => {
     );
 
     const worktreeToggle = (await screen.findByText("Worktrees")).closest("button");
+    const newWorktreeButton = screen.getByRole("button", { name: "New" });
 
     expect(worktreeToggle).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByText("pr/123-fix-auth")).toBeNull();
+    expect(
+      newWorktreeButton.querySelector('[data-icon-semantic="worktree.action.new"]')
+    ).toBeTruthy();
   });
 
   it("does not render the legacy header worktree button", async () => {
@@ -457,6 +467,94 @@ describe("GitPanel", () => {
 
     expect(await screen.findByText("Worktrees")).toBeInTheDocument();
     expect(screen.queryByLabelText("Open worktree list")).not.toBeInTheDocument();
+  });
+
+  it("persists the global last-viewed target when opening another worktree as a workspace", async () => {
+    const sendCommand = vi
+      .fn()
+      .mockImplementation(async (op: string, args?: Record<string, string>) => {
+        if (op === "git.status") {
+          return status;
+        }
+
+        if (op === "git.branches") {
+          return { current: "feature/ai-agent", branches: [] };
+        }
+
+        if (op === "worktree.list") {
+          return {
+            worktrees: [
+              {
+                name: "main",
+                path: "/tmp/ws-test",
+                branch: "main",
+                commit: "abc1234",
+                status: "clean",
+              },
+              {
+                name: "feature/ai-agent",
+                path: "/tmp/ws-test-feature",
+                branch: "feature/ai-agent",
+                commit: "def5678",
+                status: "dirty",
+              },
+            ],
+          };
+        }
+
+        if (op === "git.log") {
+          return { entries: [] };
+        }
+
+        if (op === "workspace.open") {
+          return {
+            id: "ws-opened",
+            path: args?.path ?? "/tmp/ws-test-feature",
+            targetRuntime: "native",
+            openedAt: 1,
+            lastActiveAt: 1,
+            uiState: {
+              leftPanelWidth: 280,
+              bottomPanelHeight: 200,
+              focusMode: false,
+            },
+          };
+        }
+
+        if (op === "workspace.lastViewedTarget.set") {
+          return {
+            workspaceId: "ws-opened",
+            updatedAt: 10,
+          };
+        }
+
+        return {};
+      });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedWorkspaceStore(store);
+
+    render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    const worktreeToggle = await screen.findByRole("button", { name: "Worktrees0" });
+    fireEvent.click(worktreeToggle);
+
+    await screen.findByText("feature/ai-agent");
+    fireEvent.click(screen.getByRole("button", { name: /feature\/ai-agent/i }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "workspace.lastViewedTarget.set",
+        { workspaceId: "ws-opened", sessionId: undefined },
+        undefined
+      );
+    });
   });
 
   it("renders git groups from the first git.status response", async () => {
@@ -1931,10 +2029,13 @@ describe("GitPanel", () => {
 
     const untrackedRow = screen.getByText("supervisor.test.ts").closest(".git-row");
     expect(untrackedRow).not.toBeNull();
-    expect(within(untrackedRow as HTMLElement).getByText("?")).toHaveClass(
-      "git-row-status-badge",
-      "git-row-status-badge-untracked"
-    );
+    expect(
+      (untrackedRow as HTMLElement).querySelector('[data-icon-semantic="git.status.untracked"]')
+    ).toBeTruthy();
+    expect((untrackedRow as HTMLElement).querySelector(".git-row-icon")).toBeTruthy();
+    expect(
+      (untrackedRow as HTMLElement).querySelector('[data-icon-semantic="git.status.untracked"]')
+    ).toBeTruthy();
     expect(within(untrackedRow as HTMLElement).queryByText("tests/")).toHaveClass("git-row-dir");
   });
 

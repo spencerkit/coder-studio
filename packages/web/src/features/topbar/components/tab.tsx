@@ -6,13 +6,12 @@
  */
 
 import type { Workspace } from "@coder-studio/core";
-import { useSetAtom } from "jotai";
 import { X } from "lucide-react";
 import type { FC } from "react";
-import { activeWorkspaceIdAtom } from "../../../atoms/workspaces";
 import { Badge, IconButton, Tab, Tooltip } from "../../../components/ui";
 import { useTranslation } from "../../../lib/i18n";
 import { formatWorkspaceLabel } from "../../notifications/format";
+import { useSelectWorkspaceTarget } from "../../workspace/actions/use-select-workspace-target";
 import { useWorkspaceCloseAction } from "../../workspace/actions/use-workspace-close-action";
 
 interface WorkspaceTabProps {
@@ -31,12 +30,18 @@ interface WorkspaceTabProps {
  */
 export const WorkspaceTab: FC<WorkspaceTabProps> = ({ workspace, isActive }) => {
   const t = useTranslation();
-  const setActiveWorkspace = useSetAtom(activeWorkspaceIdAtom);
   const closeWorkspace = useWorkspaceCloseAction();
+  const selectWorkspaceTarget = useSelectWorkspaceTarget();
   const displayName = formatWorkspaceLabel(workspace) || workspace.id;
 
-  const handleClick = () => {
-    setActiveWorkspace(workspace.id);
+  const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+
+    if (isActive) {
+      return;
+    }
+
+    void selectWorkspaceTarget(workspace.id);
   };
 
   const handleClose = async (e: React.MouseEvent) => {

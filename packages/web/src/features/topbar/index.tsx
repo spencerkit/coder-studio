@@ -4,19 +4,15 @@
  * Main navigation bar with workspace tabs, quick actions, and settings.
  */
 
-import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { PanelBottom, PanelLeft, Plus, Search, Settings } from "lucide-react";
+import { useAtom, useAtomValue } from "jotai";
 import type { FC } from "react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { commandPaletteOpenAtom } from "../../atoms/app-ui";
-import {
-  activeWorkspaceIdAtom,
-  orderedWorkspacesAtom,
-  resolvedActiveWorkspaceIdAtom,
-} from "../../atoms/workspaces";
-import { EmptyState, IconButton, TabList, Tabs, Tooltip } from "../../components/ui";
+import { orderedWorkspacesAtom, resolvedActiveWorkspaceIdAtom } from "../../atoms/workspaces";
+import { EmptyState, IconButton, TabList, Tabs, ThemedIcon, Tooltip } from "../../components/ui";
 import { useTranslation } from "../../lib/i18n";
+import { useSelectWorkspaceTarget } from "../workspace/actions/use-select-workspace-target";
 import type { WorkspaceFullscreenController } from "../workspace/actions/use-workspace-fullscreen";
 import { sidebarCollapsedAtom, terminalPanelVisibleAtom } from "../workspace/atoms";
 import { WorkspaceFullscreenButton } from "../workspace/components/workspace-fullscreen-button";
@@ -55,7 +51,7 @@ export const TopBar: FC<TopBarProps> = ({ fullscreenController }) => {
   const workspaceList = useAtomValue(orderedWorkspacesAtom);
   const activeWorkspaceId = useAtomValue(resolvedActiveWorkspaceIdAtom);
   const selectedWorkspaceId = activeWorkspaceId ?? workspaceList[0]?.id ?? "";
-  const setActiveWorkspace = useSetAtom(activeWorkspaceIdAtom);
+  const selectWorkspaceTarget = useSelectWorkspaceTarget();
   const [commandPaletteOpen, setCommandPaletteOpen] = useAtom(commandPaletteOpenAtom);
   const [terminalPanelVisible, setTerminalPanelVisible] = useAtom(terminalPanelVisibleAtom);
   const [sidebarCollapsed, setSidebarCollapsed] = useAtom(sidebarCollapsedAtom);
@@ -78,7 +74,9 @@ export const TopBar: FC<TopBarProps> = ({ fullscreenController }) => {
           <Tabs
             aria-label={t("workspace.tabs")}
             className="topbar-tabs-nav"
-            onValueChange={setActiveWorkspace}
+            onValueChange={(workspaceId) => {
+              void selectWorkspaceTarget(workspaceId);
+            }}
             value={selectedWorkspaceId}
           >
             <TabList className="topbar-tablist">
@@ -92,7 +90,7 @@ export const TopBar: FC<TopBarProps> = ({ fullscreenController }) => {
           <IconButton
             aria-label={t("tooltip.new_workspace")}
             className="topbar-add"
-            icon={<Plus size={14} />}
+            icon={<ThemedIcon semantic="nav.newWorkspace" size={14} />}
             onClick={() => setWorkspaceLaunchOpen(true)}
           />
         </Tooltip>
@@ -106,7 +104,7 @@ export const TopBar: FC<TopBarProps> = ({ fullscreenController }) => {
             onClick={() => setCommandPaletteOpen(!commandPaletteOpen)}
             aria-label={t("tooltip.quick_actions")}
           >
-            <Search size={14} />
+            <ThemedIcon semantic="nav.search" size={14} />
             <span className="topbar-btn-label">{t("tooltip.quick_actions")}</span>
           </button>
         </Tooltip>
@@ -118,7 +116,7 @@ export const TopBar: FC<TopBarProps> = ({ fullscreenController }) => {
               terminalPanelVisible ? t("tooltip.hide_terminal") : t("tooltip.show_terminal")
             }
             className={`topbar-btn ${terminalPanelVisible ? "topbar-btn--active" : "topbar-btn--muted"}`}
-            icon={<PanelBottom size={14} />}
+            icon={<ThemedIcon semantic="nav.panelTerminal" size={14} />}
             onClick={() => setTerminalPanelVisible(!terminalPanelVisible)}
           />
         </Tooltip>
@@ -126,7 +124,7 @@ export const TopBar: FC<TopBarProps> = ({ fullscreenController }) => {
           <IconButton
             aria-label={sidebarCollapsed ? t("tooltip.show_files") : t("tooltip.hide_files")}
             className={`topbar-btn ${sidebarCollapsed ? "topbar-btn--muted" : "topbar-btn--active"}`}
-            icon={<PanelLeft size={14} />}
+            icon={<ThemedIcon semantic="nav.panelFiles" size={14} />}
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
           />
         </Tooltip>
@@ -135,7 +133,7 @@ export const TopBar: FC<TopBarProps> = ({ fullscreenController }) => {
             aria-label={t("settings.title")}
             className="topbar-btn"
             data-testid="settings-open"
-            icon={<Settings size={14} />}
+            icon={<ThemedIcon semantic="nav.settings" size={14} />}
             onClick={() => navigate("/settings")}
           />
         </Tooltip>

@@ -1,12 +1,14 @@
 import type { Session } from "@coder-studio/core";
 import { useAtomValue, useSetAtom } from "jotai";
-import { Bot, Plus, Sparkles, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useState } from "react";
 import { dispatchCommandAtom } from "../../../../atoms/connection";
 import { sessionsAtom } from "../../../../atoms/sessions";
+import { ThemedIcon } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { useProviderLauncher } from "../../../agent-panes/actions/use-provider-launcher";
 import { MobileSelectSheet } from "../../../mobile-select";
+import { usePersistWorkspaceLastViewedTarget } from "../../actions/use-persist-workspace-last-viewed-target";
 
 interface MobileAgentSheetProps {
   activeSessionId: string | null;
@@ -51,6 +53,7 @@ export function MobileAgentSheet({
   const dispatch = useAtomValue(dispatchCommandAtom);
   const setSessions = useSetAtom(sessionsAtom);
   const t = useTranslation();
+  const persistLastViewedTarget = usePersistWorkspaceLastViewedTarget();
   const [mode, setMode] = useState<AgentSheetMode>(
     defaultMode === "create" ? "providers" : "sessions"
   );
@@ -62,12 +65,12 @@ export function MobileAgentSheet({
     {
       id: "claude" as const,
       title: "Claude",
-      icon: <Sparkles size={16} />,
+      icon: <ThemedIcon semantic="agent.provider.claude" size={16} />,
     },
     {
       id: "codex" as const,
       title: "Codex",
-      icon: <Bot size={16} />,
+      icon: <ThemedIcon semantic="agent.provider.codex" size={16} />,
     },
   ];
 
@@ -97,7 +100,7 @@ export function MobileAgentSheet({
         {
           id: "create",
           label: t("action.create_session"),
-          icon: <Plus size={16} />,
+          icon: <ThemedIcon semantic="agent.action.newSession" size={16} />,
           onAction: () => setMode("providers"),
           disabled: !canLaunchSession,
         },
@@ -165,6 +168,12 @@ export function MobileAgentSheet({
       onClose={closeSheet}
       onSelect={(id) => {
         if (mode === "sessions") {
+          if (activeWorkspaceId) {
+            void persistLastViewedTarget({
+              workspaceId: activeWorkspaceId,
+              sessionId: id,
+            });
+          }
           onSelectSession(id);
           closeSheet();
           return;

@@ -7,29 +7,22 @@
  */
 
 import { useAtomValue, useSetAtom } from "jotai";
-import { AlertCircle, AlertTriangle, CheckCircle, Info } from "lucide-react";
 import { useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { pendingFocusSessionAtom } from "../../atoms/app-ui";
 import { activeWorkspaceIdAtom } from "../../atoms/workspaces";
 import { ToastViewport, Toast as UiToast } from "../../components/ui";
 import { useViewport } from "../../hooks/use-viewport";
+import { usePersistWorkspaceLastViewedTarget } from "../workspace/actions/use-persist-workspace-last-viewed-target";
 import { dismissToastAtom, type Toast, toastsAtom } from "./atoms";
 import { focusSession } from "./focus-session";
-
-const KIND_CONFIG = {
-  success: CheckCircle,
-  error: AlertCircle,
-  warning: AlertTriangle,
-  info: Info,
-};
 
 function ToastItem({ toast }: { toast: Toast }) {
   const dismiss = useSetAtom(dismissToastAtom);
   const setActiveWorkspaceId = useSetAtom(activeWorkspaceIdAtom);
   const setPendingFocus = useSetAtom(pendingFocusSessionAtom);
   const navigate = useNavigate();
-  const Icon = KIND_CONFIG[toast.kind];
+  const persistLastViewedTarget = usePersistWorkspaceLastViewedTarget();
   const duration = toast.duration ?? 5000;
 
   // Auto-dismiss
@@ -50,6 +43,9 @@ function ToastItem({ toast }: { toast: Toast }) {
         sessionId: toast.sessionId,
         setPendingFocus,
         setActiveWorkspaceId,
+        persistLastViewedTarget: (target) => {
+          void persistLastViewedTarget(target);
+        },
         navigate,
       });
     } else if (toast.workspaceId) {
@@ -71,7 +67,6 @@ function ToastItem({ toast }: { toast: Toast }) {
   return (
     <UiToast
       description={toast.body}
-      icon={<Icon size={16} />}
       onClick={toast.workspaceId ? handleClick : undefined}
       onDismiss={() => dismiss(toast.id)}
       title={toast.title}

@@ -38,6 +38,9 @@ describe("base.css theme-sensitive shells", () => {
     const tone = getRuleBlock(".icon-tone-secondary");
     const surface = getRuleBlock(".icon-surface-warning");
     const chip = getRuleBlock(".icon-chip");
+    const themedIcon = getRuleBlock(".themed-icon");
+    const themedTone = getRuleBlock(".themed-icon--tone-warning");
+    const themedSurface = getRuleBlock(".themed-icon--surface-info");
 
     expect(tone).toContain("color: var(--icon-secondary)");
     expect(surface).toContain("background: var(--icon-surface-warning)");
@@ -45,5 +48,9 @@ describe("base.css theme-sensitive shells", () => {
     expect(chip).toContain("align-items: center");
     expect(chip).toContain("justify-content: center");
     expect(chip).toContain("border-radius: var(--radius-md)");
+    expect(themedIcon).toContain("display: inline-flex");
+    expect(themedIcon).toContain("line-height: 0");
+    expect(themedTone).toContain("color: var(--icon-warning)");
+    expect(themedSurface).toContain("background: var(--icon-surface-info)");
   });
 });

@@ -10,19 +10,10 @@
  */
 
 import { useAtomValue, useSetAtom } from "jotai";
-import {
-  CheckCircle,
-  ChevronDown,
-  ChevronUp,
-  Circle,
-  FileJson2,
-  FileWarning,
-  Sparkles,
-  XCircle,
-} from "lucide-react";
+import { ChevronDown, ChevronUp, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { dispatchCommandAtom } from "../../../atoms/connection";
-import { Button, EmptyState, Spinner, Tooltip } from "../../../components/ui";
+import { Button, EmptyState, Spinner, ThemedIcon, Tooltip } from "../../../components/ui";
 import { useTranslation } from "../../../lib/i18n";
 import { MonacoHost } from "../../code-editor/components/monaco-host";
 import { pushToastAtom } from "../../notifications/atoms";
@@ -226,17 +217,22 @@ export function ConfigEditor({
     if (!fileExists && !isSaving && !error && !isDirty) {
       return (
         <div className="config-status config-status--warning">
-          <Circle size={14} />
+          <ThemedIcon
+            aria-hidden="true"
+            className="config-status__icon"
+            semantic="state.warning"
+            size={14}
+          />
           <span>{t("settings.config_files.file_not_found_hint")}</span>
         </div>
       );
     }
 
     const statusConfig = {
-      saved: { icon: CheckCircle, color: "success", text: t("settings.config_files.status_saved") },
-      dirty: { icon: Circle, color: "warning", text: t("settings.config_files.unsaved_changes") },
+      saved: { color: "success", text: t("settings.config_files.status_saved") },
+      dirty: { color: "warning", text: t("settings.config_files.unsaved_changes") },
       saving: { color: "info", text: t("settings.config_files.saving") },
-      error: { icon: XCircle, color: "error", text: t("settings.config_files.save_failed") },
+      error: { color: "error", text: t("settings.config_files.save_failed") },
     };
 
     const config = statusConfig[saveStatus];
@@ -246,9 +242,20 @@ export function ConfigEditor({
         {saveStatus === "saving" ? (
           <Spinner label={config.text} size="sm" />
         ) : (
-          <span className="config-status__icon" aria-hidden="true">
-            <config.icon size={14} />
-          </span>
+          <ThemedIcon
+            aria-hidden="true"
+            className="config-status__icon"
+            semantic={
+              saveStatus === "saved"
+                ? "state.success"
+                : saveStatus === "dirty"
+                  ? "state.warning"
+                  : saveStatus === "error"
+                    ? "state.error"
+                    : "state.info"
+            }
+            size={14}
+          />
         )}
         <span>{config.text}</span>
       </div>
@@ -283,7 +290,7 @@ export function ConfigEditor({
       {/* Header */}
       <div className="config-card-header" onClick={handleToggle}>
         <div className="config-card-title">
-          <FileJson2 size={16} />
+          <ThemedIcon semantic="state.configFile" size={16} />
           <Tooltip content={configPath}>
             <span className="config-card-path">{configPath}</span>
           </Tooltip>
@@ -304,7 +311,9 @@ export function ConfigEditor({
                   {t("settings.config_files.file_not_found_hint")}
                 </div>
               }
-              icon={<FileWarning className="config-empty-icon" size={16} />}
+              icon={
+                <ThemedIcon className="config-empty-icon" semantic="state.emptyConfig" size={16} />
+              }
               title={
                 <div className="config-empty-title">
                   {t("settings.config_files.file_not_found")}

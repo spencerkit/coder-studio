@@ -209,6 +209,57 @@ describe("SettingsPage", () => {
     expect(screen.getByText("v0.3.0")).toBeInTheDocument();
   });
 
+  it("renders desktop and mobile settings entry icons through themed semantics", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({});
+    const desktopStore = createConnectedStore(sendCommand);
+
+    const desktopView = renderSettingsPage(desktopStore);
+
+    await waitFor(() => {
+      expect(
+        desktopView.container.querySelector('[data-icon-semantic="nav.settings.general"]')
+      ).toBeTruthy();
+    });
+
+    expect(
+      desktopView.container.querySelector('[data-icon-semantic="nav.settings.general"]')
+    ).toBeTruthy();
+    expect(
+      desktopView.container.querySelector('[data-icon-semantic="nav.settings.providers"]')
+    ).toBeTruthy();
+    expect(
+      desktopView.container.querySelector('[data-icon-semantic="nav.settings.appearance"]')
+    ).toBeTruthy();
+    expect(
+      desktopView.container.querySelector('[data-icon-semantic="nav.settings.shortcuts"]')
+    ).toBeTruthy();
+
+    desktopView.unmount();
+
+    viewportMocks.viewport = "mobile";
+    const mobileStore = createConnectedStore(vi.fn().mockResolvedValue({}));
+    const mobileView = renderSettingsPage(mobileStore);
+
+    await waitFor(() => {
+      expect(
+        mobileView.container.querySelector('[data-icon-semantic="nav.settings.general"]')
+      ).toBeTruthy();
+    });
+
+    expect(
+      mobileView.container.querySelector('[data-icon-semantic="nav.settings.general"]')
+    ).toBeTruthy();
+    expect(
+      mobileView.container.querySelector('[data-icon-semantic="nav.settings.providers"]')
+    ).toBeTruthy();
+    expect(
+      mobileView.container.querySelector('[data-icon-semantic="nav.settings.appearance"]')
+    ).toBeTruthy();
+    expect(
+      mobileView.container.querySelector('[data-icon-semantic="nav.settings.shortcuts"]')
+    ).toBeTruthy();
+  });
+
   it("does not render default Agent Provider selection in general settings", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "settings.get") {
@@ -687,10 +738,10 @@ describe("SettingsPage", () => {
 
     renderSettingsPage(store);
 
-    fireEvent.click(screen.getByRole("button", { name: "Providers" }));
+    fireEvent.click(screen.getByRole("button", { name: "Agents" }));
 
     await waitFor(() => {
-      expect(screen.getByRole("tablist", { name: "Providers" })).toBeInTheDocument();
+      expect(screen.getByRole("tablist", { name: "Agents" })).toBeInTheDocument();
       expect(screen.getByRole("tab", { name: "Claude" })).toHaveAttribute("aria-selected", "true");
       expect(screen.getByRole("tab", { name: "Claude" })).toHaveClass("settings-provider-tab");
       expect(screen.getByLabelText("启动命令参数")).toBeInTheDocument();
@@ -793,7 +844,7 @@ describe("SettingsPage", () => {
 
     renderSettingsPage(store);
 
-    fireEvent.click(screen.getByRole("button", { name: "Providers" }));
+    fireEvent.click(screen.getByRole("button", { name: "Agents" }));
 
     expect(sendCommand).not.toHaveBeenCalledWith("settings.get", {}, undefined);
     expect(screen.queryByText("设置加载失败")).not.toBeInTheDocument();
@@ -866,7 +917,7 @@ describe("SettingsPage", () => {
     const mobileHeader = () =>
       document.querySelector(".settings-header .mobile-page-header") as HTMLElement | null;
 
-    expect(screen.getByRole("button", { name: "Providers" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Agents" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "快捷键" })).toBeInTheDocument();
     expect(screen.queryByText("通知")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("启动命令参数")).not.toBeInTheDocument();
@@ -886,7 +937,7 @@ describe("SettingsPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "返回" }));
 
-    expect(screen.getByRole("button", { name: "Providers" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Agents" })).toBeInTheDocument();
     expect(screen.queryByLabelText("启动命令参数")).not.toBeInTheDocument();
     expect(within(pageHeaderLeading() as HTMLElement).getByText("设置")).toBeInTheDocument();
 
@@ -901,7 +952,7 @@ describe("SettingsPage", () => {
     expect(screen.getByRole("button", { name: "快捷键" })).toBeInTheDocument();
     expect(within(pageHeaderLeading() as HTMLElement).getByText("设置")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Providers" }));
+    fireEvent.click(screen.getByRole("button", { name: "Agents" }));
 
     await waitFor(() => {
       expect(screen.getByLabelText("启动命令参数")).toBeInTheDocument();
@@ -911,7 +962,7 @@ describe("SettingsPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "返回" }));
 
-    expect(screen.getByRole("button", { name: "Providers" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Agents" })).toBeInTheDocument();
     expect(screen.queryByLabelText("启动命令参数")).not.toBeInTheDocument();
   });
 
@@ -941,7 +992,7 @@ describe("SettingsPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "返回" }));
 
-    expect(screen.getByRole("button", { name: "Providers" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Agents" })).toBeInTheDocument();
     expect(document.querySelector(".settings-body--mobile")).toBeNull();
     expect(document.querySelector(".settings-body--mobile-detail")).toBeNull();
     expect(document.querySelector(".settings-content--mobile-detail")).toBeNull();
@@ -973,7 +1024,7 @@ describe("SettingsPage", () => {
     const store = createConnectedStore(sendCommand);
 
     renderSettingsPage(store);
-    fireEvent.click(screen.getByRole("button", { name: "Providers" }));
+    fireEvent.click(screen.getByRole("button", { name: "Agents" }));
 
     await waitFor(() => {
       expect(screen.getByLabelText("启动命令参数")).toBeInTheDocument();

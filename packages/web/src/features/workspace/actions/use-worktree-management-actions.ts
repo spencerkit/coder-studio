@@ -13,6 +13,7 @@ import {
 import { useTranslation } from "../../../lib/i18n";
 import { pushToastAtom } from "../../notifications/atoms";
 import { worktreeListAtomFamily } from "../atoms";
+import { usePersistWorkspaceLastViewedTarget } from "./use-persist-workspace-last-viewed-target";
 
 function slugifyBranchName(branch: string) {
   return branch
@@ -77,6 +78,7 @@ export function useWorktreeManagementActions(workspaceId: string) {
   const setWorkspacesLoadState = useSetAtom(workspacesLoadStateAtom);
   const setWorkspacesLoadError = useSetAtom(workspacesLoadErrorAtom);
   const pushToast = useSetAtom(pushToastAtom);
+  const persistLastViewedTarget = usePersistWorkspaceLastViewedTarget();
 
   const loadWorktrees = useCallback(async () => {
     if (!workspaceId) {
@@ -219,11 +221,13 @@ export function useWorktreeManagementActions(workspaceId: string) {
       });
       setWorkspacesLoadState("ready");
       setWorkspacesLoadError(null);
+      void persistLastViewedTarget({ workspaceId: result.data.id });
 
       return { ok: true as const, workspace: result.data };
     },
     [
       dispatch,
+      persistLastViewedTarget,
       pushToast,
       setActiveWorkspaceId,
       setWorkspaceOrder,

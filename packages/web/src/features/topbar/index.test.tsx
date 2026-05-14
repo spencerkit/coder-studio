@@ -1,9 +1,11 @@
 import type { Workspace } from "@coder-studio/core";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../atoms/app-ui";
+import { wsClientAtom } from "../../atoms/connection";
 import {
+  activeWorkspaceIdAtom,
   workspaceOrderAtom,
   workspacesAtom,
   workspacesLoadStateAtom,
@@ -37,14 +39,6 @@ vi.mock("./components/connection-status", () => ({
 
 vi.mock("../workspace/views/shared/workspace-launch-modal", () => ({
   WorkspaceLaunchModal: () => null,
-}));
-
-vi.mock("./components/tab", () => ({
-  WorkspaceTab: ({ workspace, isActive }: { workspace: Workspace; isActive: boolean }) => (
-    <div data-testid="workspace-tab" data-active={String(isActive)}>
-      {workspace.id}
-    </div>
-  ),
 }));
 
 function createWorkspace(id: string, path: string): Workspace {
@@ -84,14 +78,84 @@ describe("TopBar", () => {
       </Provider>
     );
 
-    const tabs = screen.getAllByTestId("workspace-tab");
+    const tabs = screen.getAllByRole("tab");
 
-    expect(tabs.map((tab) => tab.textContent)).toEqual(["ws-b", "ws-a"]);
-    expect(tabs[0]?.getAttribute("data-active")).toBe("true");
-    expect(tabs[1]?.getAttribute("data-active")).toBe("false");
+    expect(tabs.map((tab) => tab.textContent)).toEqual(["b", "a"]);
+    expect(tabs[0]).toHaveAttribute("aria-selected", "true");
+    expect(tabs[1]).toHaveAttribute("aria-selected", "false");
     expect(screen.getByRole("tablist", { name: "Workspace tabs" })).toBeInTheDocument();
   });
 
+  it("persists the global last-viewed target when keyboard navigation changes workspace tabs", async () => {
+    const store = createStore();
+    const sendCommand = vi.fn().mockResolvedValue({
+      workspaceId: "ws-b",
+      updatedAt: 10,
+    });
+
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(workspacesAtom, {
+      "ws-a": createWorkspace("ws-a", "/tmp/a"),
+      "ws-b": createWorkspace("ws-b", "/tmp/b"),
+    });
+    store.set(workspaceOrderAtom, ["ws-a", "ws-b"]);
+    store.set(workspacesLoadStateAtom, "ready");
+    store.set(activeWorkspaceIdAtom, "ws-a");
+
+    render(
+      <Provider store={store}>
+        <TopBar />
+      </Provider>
+    );
+
+    const activeTab = screen.getByRole("tab", { name: "a" });
+    activeTab.focus();
+    fireEvent.keyDown(activeTab, { key: "ArrowRight" });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "workspace.lastViewedTarget.set",
+        { workspaceId: "ws-b", sessionId: undefined },
+        undefined
+      );
+    });
+  });
+
+  it("persists the global last-viewed target once when clicking a workspace tab", async () => {
+    const store = createStore();
+    const sendCommand = vi.fn().mockResolvedValue({
+      workspaceId: "ws-b",
+      updatedAt: 10,
+    });
+
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(workspacesAtom, {
+      "ws-a": createWorkspace("ws-a", "/tmp/a"),
+      "ws-b": createWorkspace("ws-b", "/tmp/b"),
+    });
+    store.set(workspaceOrderAtom, ["ws-a", "ws-b"]);
+    store.set(workspacesLoadStateAtom, "ready");
+    store.set(activeWorkspaceIdAtom, "ws-a");
+
+    render(
+      <Provider store={store}>
+        <TopBar />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: "b" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledTimes(1);
+      expect(sendCommand).toHaveBeenCalledWith(
+        "workspace.lastViewedTarget.set",
+        { workspaceId: "ws-b", sessionId: undefined },
+        undefined
+      );
+    });
+  });
   it("uses translated labels when locale is set to en", () => {
     const store = createStore();
     store.set(localeAtom, "en");
@@ -104,11 +168,21 @@ describe("TopBar", () => {
     );
 
     const emptyState = screen.getByText("No workspace open").closest(".topbar-empty-state");
+    const addWorkspaceButton = screen.getByRole("button", { name: "New workspace" });
+    const quickActionsButton = screen.getByRole("button", { name: "Quick Actions" });
+    const terminalButton = screen.getByRole("button", { name: "Hide Terminal" });
+    const filesButton = screen.getByRole("button", { name: "Hide Files" });
+    const settingsButton = screen.getByRole("button", { name: "Settings" });
 
     expect(emptyState).not.toBeNull();
     expect(emptyState).toHaveTextContent("No workspace open");
-    expect(screen.getByRole("button", { name: "Quick Actions" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
+    expect(
+      addWorkspaceButton.querySelector('[data-icon-semantic="nav.newWorkspace"]')
+    ).toBeTruthy();
+    expect(quickActionsButton.querySelector('[data-icon-semantic="nav.search"]')).toBeTruthy();
+    expect(terminalButton.querySelector('[data-icon-semantic="nav.panelTerminal"]')).toBeTruthy();
+    expect(filesButton.querySelector('[data-icon-semantic="nav.panelFiles"]')).toBeTruthy();
+    expect(settingsButton.querySelector('[data-icon-semantic="nav.settings"]')).toBeTruthy();
   });
 
   it("shows shared tooltip content for bounded topbar actions on desktop without changing button names", () => {

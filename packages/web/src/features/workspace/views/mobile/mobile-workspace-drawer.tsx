@@ -1,11 +1,12 @@
 import type { Workspace } from "@coder-studio/core";
 import { useSetAtom } from "jotai";
-import { Check, Plus, X } from "lucide-react";
+import { Check, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { activeWorkspaceIdAtom } from "../../../../atoms/workspaces";
-import { IconButton } from "../../../../components/ui";
+import { IconButton, ThemedIcon } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { formatWorkspaceLabel } from "../../../notifications/format";
+import { usePersistWorkspaceLastViewedTarget } from "../../actions/use-persist-workspace-last-viewed-target";
 import { useWorkspaceCloseAction } from "../../actions/use-workspace-close-action";
 
 interface MobileWorkspaceDrawerProps {
@@ -27,6 +28,7 @@ export function MobileWorkspaceDrawer({
   const setActiveWorkspaceId = useSetAtom(activeWorkspaceIdAtom);
   const t = useTranslation();
   const closeWorkspace = useWorkspaceCloseAction();
+  const persistLastViewedTarget = usePersistWorkspaceLastViewedTarget();
 
   if (!isOpen) {
     return null;
@@ -80,6 +82,13 @@ export function MobileWorkspaceDrawer({
                     name: displayName,
                   })}
                   onClick={() => {
+                    if (isActive) {
+                      navigate("/workspace");
+                      onClose();
+                      return;
+                    }
+
+                    void persistLastViewedTarget({ workspaceId: workspace.id });
                     setActiveWorkspaceId(workspace.id);
                     navigate("/workspace");
                     onClose();
@@ -125,7 +134,7 @@ export function MobileWorkspaceDrawer({
               onClose();
             }}
           >
-            <Plus size={14} />
+            <ThemedIcon semantic="nav.newWorkspace" size={14} />
             <span>{t("tooltip.new_workspace")}</span>
           </button>
         </div>
