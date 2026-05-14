@@ -8,6 +8,7 @@ import {
   CURRENT_SCHEMA_VERSION,
   IncompatibleSchemaError,
   V1_SCHEMA_SQL,
+  V2_SCHEMA_SQL,
 } from "../storage/schema-version.js";
 
 describe("Database", () => {
@@ -98,7 +99,7 @@ describe("Database", () => {
       expect(tables.map((table) => table.name)).not.toContain("_migrations");
     });
 
-    it("should upgrade a known v1 supervisor schema to v2 when user_version is unset", () => {
+    it("should upgrade a known v1 supervisor schema to v3 when user_version is unset", () => {
       const dbPath = join(tempDir, "v1.db");
       const rawDb = new DatabaseSync(dbPath);
       rawDb.exec("PRAGMA user_version = 0");
@@ -108,13 +109,14 @@ describe("Database", () => {
       db = openDatabase(dbPath);
 
       const userVersion = db.prepare("PRAGMA user_version").get() as { user_version: number };
-      expect(userVersion.user_version).toBe(2);
+      expect(userVersion.user_version).toBe(CURRENT_SCHEMA_VERSION);
 
       const supervisorColumns = db.prepare("PRAGMA table_info(supervisors)").all() as Array<{
         name: string;
       }>;
       expect(supervisorColumns.map((column) => column.name)).toEqual(
         expect.arrayContaining([
+          "target_id",
           "evaluator_model",
           "max_supervision_count",
           "completed_supervision_count",
@@ -136,6 +138,79 @@ describe("Database", () => {
         )
         .get() as { name: string } | undefined;
       expect(upgradedIndex?.name).toBe("idx_supervisor_cycle_attempts_cycle");
+    });
+
+    it("should upgrade a known v2 supervisor schema to v3 and backfill target ids", () => {
+      const dbPath = join(tempDir, "v2.db");
+      const rawDb = new DatabaseSync(dbPath);
+      rawDb.exec("PRAGMA user_version = 2");
+      rawDb.exec(V2_SCHEMA_SQL);
+      rawDb.exec(`
+        INSERT INTO workspaces (id, path, target_runtime, opened_at, last_active_at, ui_state)
+        VALUES ('ws-1', '/workspace', 'native', 1, 1, '{}');
+      `);
+      rawDb.exec(`
+        INSERT INTO terminals (id, workspace_id, kind, cwd, argv, cols, rows, created_at)
+        VALUES ('term-1', 'ws-1', 'agent', '/workspace', '[]', 120, 30, 1);
+      `);
+      rawDb.exec(`
+        INSERT INTO sessions (
+          id, workspace_id, terminal_id, provider_id, capability, state, started_at, last_active_at
+        ) VALUES ('sess-1', 'ws-1', 'term-1', 'codex', 'full', 'idle', 1, 1);
+      `);
+      rawDb.exec(`
+        INSERT INTO supervisors (
+          id,
+          session_id,
+          workspace_id,
+          state,
+          objective,
+          evaluator_provider_id,
+          evaluator_model,
+          max_supervision_count,
+          completed_supervision_count,
+          scheduled_at,
+          stop_reason,
+          last_cycle_at,
+          last_evaluated_turn_id,
+          error_reason,
+          created_at,
+          updated_at
+        ) VALUES (
+          'sup-legacy',
+          'sess-1',
+          'ws-1',
+          'idle',
+          'Legacy supervisor',
+          'codex',
+          NULL,
+          0,
+          0,
+          NULL,
+          NULL,
+          NULL,
+          NULL,
+          NULL,
+          1,
+          1
+        );
+      `);
+      rawDb.close();
+
+      db = openDatabase(dbPath);
+
+      const userVersion = db.prepare("PRAGMA user_version").get() as { user_version: number };
+      expect(userVersion.user_version).toBe(CURRENT_SCHEMA_VERSION);
+
+      const supervisorColumns = db.prepare("PRAGMA table_info(supervisors)").all() as Array<{
+        name: string;
+      }>;
+      expect(supervisorColumns.map((column) => column.name)).toContain("target_id");
+
+      const upgradedRow = db
+        .prepare("SELECT target_id FROM supervisors WHERE id = ?")
+        .get("sup-legacy") as { target_id: string };
+      expect(upgradedRow.target_id).toBe("legacy_sup-legacy");
     });
 
     it("should restamp user_version for an already-current schema when it is unset", () => {

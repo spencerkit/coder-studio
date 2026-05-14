@@ -77,7 +77,9 @@
     "search": "Search",
     "search_files": "Search Files",
     "search_commands": "Search Commands",
-    "back": "Back"
+    "back": "Back",
+    "expand": "Expand",
+    "collapse": "Collapse"
   },
   "label": {
     "workspace": "Workspace",
@@ -227,7 +229,7 @@
     "stop": "Stop",
     "resume": "Resume",
     "no_session": "No active session",
-    "provider_select": "Select Provider",
+    "provider_select": "Select Agent",
     "state": {
       "starting": "Starting...",
       "running": "Running",
@@ -259,11 +261,12 @@
     "create_failed_body": "The shell process could not be started. Check the server runtime and shell configuration.",
     "create_unavailable_title": "No workspace selected",
     "create_unavailable_body": "Open or switch to a workspace before creating a terminal.",
-    "copy_mode_title": "Copy Mode",
-    "copy_mode_hint": "Drag to select text",
-    "copy_mode_done": "Done",
-    "copy_mode_failed_title": "Couldn't enter copy mode",
-    "copy_mode_failed_body": "Try again, or scroll the terminal and long press again",
+    "copied_current_line": "Copied current line",
+    "mobile_copy_current_line_failed_title": "Current line copy failed",
+    "mobile_copy_current_line_failed_body": "Try long-pressing the current line again",
+    "paste_dialog_title": "Paste Text",
+    "paste_dialog_placeholder": "Paste your text here...",
+    "paste_dialog_submit": "Send",
     "hide": "Hide Terminal",
     "show": "Show Terminal",
     "selector": {
@@ -273,6 +276,8 @@
       "indexed": "Terminal {index}"
     },
     "mobile_input": {
+      "paste": "Paste",
+      "upload": "Upload",
       "shortcuts": "Terminal shortcut keys",
       "ctrl": "Ctrl",
       "ctrl_armed": "Ctrl armed",
@@ -483,7 +488,7 @@
     "title": "Settings",
     "general": "General",
     "appearance": "Appearance",
-    "providers": "Providers",
+    "providers": "Agents",
     "autosave_hint": "Settings saved automatically",
     "load_failed": "Failed to load settings",
     "load_failed_unknown": "Server did not return settings data",
@@ -530,7 +535,7 @@
     "terminal_standard": "Standard",
     "terminal_compatibility": "Compatibility Mode",
     "provider": {
-      "title": "Provider Settings",
+      "title": "Agent Settings",
       "status": "Status",
       "capability": "Capability Level",
       "capability_full": "Full Support",
@@ -540,7 +545,7 @@
       "hooks_unregistered": "Hooks Not Registered",
       "hooks_error": "Hooks Registration Failed",
       "hooks": "Hooks Integration",
-      "hooks_hint": "Inject Provider-specific hooks into current workspace",
+      "hooks_hint": "Inject agent-specific hooks into current workspace",
       "hooks_inject": "Inject Hooks",
       "configure": "Configure",
       "reset": "Reset",
@@ -550,10 +555,10 @@
       "open_config_file_editor": "Open Config File Editor",
       "back_to_base": "Back to Base Settings",
       "startup_args": "Startup Command Args",
-      "startup_args_hint": "Enter one startup argument per line. Each saved line is appended to the provider launch command.",
+      "startup_args_hint": "Enter one startup argument per line. Each saved line is appended to the agent launch command.",
       "startup_args_placeholder": "--verbose\n--debug",
       "command_preview_title": "Command Preview",
-      "command_preview_hint": "Preview the effective provider launch command"
+      "command_preview_hint": "Preview the effective agent launch command"
     },
     "theme": {
       "title": "Theme",
@@ -670,7 +675,31 @@
     },
     "stop_reason": {
       "objective_complete": "Objective complete. Supervisor stopped automatically.",
-      "max_supervision_count_reached": "Reached the configured max supervision count."
+      "max_supervision_count_reached": "Reached the configured max supervision count.",
+      "supervisor_uncertain": "Supervisor could not determine the next step and stopped automatic supervision.",
+      "needs_user_input": "Supervisor needs more user input before automatic supervision can continue."
+    },
+    "target_memory": {
+      "title": "Target memory",
+      "target": "Target",
+      "plan": "Plan",
+      "stalled": "Stalled",
+      "plan_ready": "Plan ready",
+      "plan_pending": "Plan pending",
+      "progress_title": "Target progress",
+      "progress_badge": "PROGRESS",
+      "plan_title": "Target plan",
+      "reasoning_title": "Target cycle reasoning",
+      "cycle_result": {
+        "continue": "CONTINUE",
+        "stop": "STOP",
+        "error": "ERROR"
+      },
+      "step_status": {
+        "pending": "PENDING",
+        "in_progress": "IN PROGRESS",
+        "done": "DONE"
+      }
     },
     "meta": {
       "title": "Execution policy",

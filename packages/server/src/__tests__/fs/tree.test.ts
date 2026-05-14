@@ -91,25 +91,30 @@ describe("readTree", () => {
     expect(result.children[3].name).toBe("b-file.txt");
   });
 
-  it("should skip hidden files", async () => {
+  it("should show hidden files except .git", async () => {
     await writeFile(join(testDir, ".hidden"), "hidden");
+    await writeFile(join(testDir, ".gitignore"), "*.log\n");
+    await mkdirAsync(join(testDir, ".git"));
     await writeFile(join(testDir, "visible.txt"), "visible");
 
     const result = await readTree(testDir);
 
-    expect(result.children).toHaveLength(1);
-    expect(result.children[0].name).toBe("visible.txt");
+    expect(result.children.some((n) => n.name === ".hidden")).toBe(true);
+    expect(result.children.some((n) => n.name === ".gitignore")).toBe(true);
+    expect(result.children.some((n) => n.name === ".git")).toBe(false);
+    expect(result.children.some((n) => n.name === "visible.txt")).toBe(true);
   });
 
-  it("should skip node_modules and .git", async () => {
+  it("should show node_modules but skip .git", async () => {
     await mkdirAsync(join(testDir, "node_modules"));
     await mkdirAsync(join(testDir, ".git"));
     await writeFile(join(testDir, "file.txt"), "content");
 
     const result = await readTree(testDir);
 
-    expect(result.children).toHaveLength(1);
-    expect(result.children[0].name).toBe("file.txt");
+    expect(result.children.some((n) => n.name === "node_modules")).toBe(true);
+    expect(result.children.some((n) => n.name === ".git")).toBe(false);
+    expect(result.children.some((n) => n.name === "file.txt")).toBe(true);
   });
 
   it("should use relative paths", async () => {
@@ -122,7 +127,7 @@ describe("readTree", () => {
     // Subdir children are undefined (lazy loading)
   });
 
-  it("should respect .gitignore rules", async () => {
+  it("should not hide .gitignore-matched files from the tree", async () => {
     await writeFile(join(testDir, ".gitignore"), "*.log\ndist/");
     await writeFile(join(testDir, "app.log"), "log content");
     await writeFile(join(testDir, "app.txt"), "text content");
@@ -131,23 +136,9 @@ describe("readTree", () => {
 
     const result = await readTree(testDir);
 
-    expect(result.children.some((n) => n.name === "app.log")).toBe(false);
-    expect(result.children.some((n) => n.name === "dist")).toBe(false);
+    expect(result.children.some((n) => n.name === "app.log")).toBe(true);
+    expect(result.children.some((n) => n.name === "dist")).toBe(true);
     expect(result.children.some((n) => n.name === "app.txt")).toBe(true);
     expect(result.children.some((n) => n.name === "src")).toBe(true);
-  });
-
-  it("should show dotfiles when .gitignore does not ignore them", async () => {
-    await writeFile(join(testDir, ".gitignore"), "*.log");
-    await writeFile(join(testDir, ".env"), "secret");
-    await writeFile(join(testDir, ".hidden-config"), "hidden");
-    await writeFile(join(testDir, "visible.txt"), "visible");
-
-    const result = await readTree(testDir);
-
-    expect(result.children.some((n) => n.name === ".env")).toBe(true);
-    expect(result.children.some((n) => n.name === ".gitignore")).toBe(true);
-    expect(result.children.some((n) => n.name === ".hidden-config")).toBe(true);
-    expect(result.children.some((n) => n.name === "visible.txt")).toBe(true);
   });
 });

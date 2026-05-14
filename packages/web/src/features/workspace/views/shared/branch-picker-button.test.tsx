@@ -94,4 +94,20 @@ describe("BranchPickerButton", () => {
     fireEvent.mouseEnter(trigger);
     expect(screen.getByRole("tooltip")).toHaveTextContent("Switch Branch");
   });
+
+  it("renders the branch semantic icon in the trigger", () => {
+    const store = createStore();
+    store.set(gitBranchListAtomFamily("test-workspace"), {
+      current: "main",
+      branches: [],
+      loading: false,
+    });
+
+    const { container } = renderWithEnglish(
+      <BranchPickerButton workspaceId="test-workspace" />,
+      store
+    );
+
+    expect(container.querySelector('[data-icon-semantic="git.branch"]')).toBeTruthy();
+  });
 });

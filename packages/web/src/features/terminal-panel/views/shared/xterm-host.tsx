@@ -13,7 +13,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import {
-  type MouseEvent as ReactMouseEvent,
+  type ChangeEvent as ReactChangeEvent,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -34,10 +34,7 @@ import {
   type HydrationRequestHandle,
   type HydrationTier,
 } from "../../hydration-coordinator";
-import {
-  buildTerminalCopyModeSnapshot,
-  type TerminalCopyModeSnapshot,
-} from "../../mobile/copy-mode-snapshot";
+import { getLogicalLineTextFromTouchPoint } from "../../mobile/long-press-copy-line";
 import { MobileTerminalInputBar } from "../../mobile/mobile-terminal-input-bar";
 import {
   applyCtrlModeToInput,
@@ -72,7 +69,7 @@ interface TerminalInputDraftState {
   submittedText?: string;
 }
 
-type TouchPointLike = Pick<Touch, "identifier" | "clientX" | "clientY">;
+type TouchPointLike = Pick<Touch, "identifier" | "clientX" | "clientY" | "target">;
 
 interface TouchScrollSample {
   clientY: number;
@@ -80,6 +77,49 @@ interface TouchScrollSample {
 }
 
 type TouchScrollDeltaResult = "idle" | "buffered" | "scrolled" | "blocked";
+
+async function copyTextWithFallback(text: string): Promise<void> {
+  let clipboardError: unknown;
+
+  try {
+    await navigator.clipboard.writeText(text);
+    return;
+  } catch (error) {
+    clipboardError = error;
+  }
+
+  if (typeof document === "undefined" || typeof document.execCommand !== "function") {
+    throw clipboardError ?? new Error("Clipboard copy unavailable");
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "true");
+  textarea.setAttribute("aria-hidden", "true");
+  textarea.style.position = "fixed";
+  textarea.style.top = "0";
+  textarea.style.left = "0";
+  textarea.style.width = "1px";
+  textarea.style.height = "1px";
+  textarea.style.padding = "0";
+  textarea.style.border = "0";
+  textarea.style.opacity = "0";
+  textarea.style.pointerEvents = "none";
+
+  document.body.appendChild(textarea);
+
+  try {
+    textarea.focus();
+    textarea.select();
+    textarea.setSelectionRange(0, textarea.value.length);
+
+    if (!document.execCommand("copy")) {
+      throw clipboardError ?? new Error("Clipboard copy unavailable");
+    }
+  } finally {
+    textarea.remove();
+  }
+}
 
 function isReplayGeneratedTerminalResponse(data: string): boolean {
   return /^\x1b\[\d+;\d+R$/.test(data) || /^\x1b\[(?:\?|>)(?:\d+;)*\d*c$/.test(data);
@@ -227,29 +267,6 @@ function getTouchScrollPxPerLine(terminal: Terminal, container: HTMLElement): nu
   }
 
   return MOBILE_TOUCH_SCROLL_FALLBACK_PX_PER_LINE;
-}
-
-function getMeasuredTerminalLineHeightPx(
-  terminal: Terminal,
-  container: HTMLElement,
-  rowsElement: HTMLElement | null
-): number {
-  if (rowsElement) {
-    const row = Array.from(rowsElement.children).find((child): child is HTMLElement => {
-      return child instanceof HTMLElement && child.getBoundingClientRect().height > 0;
-    });
-
-    if (row) {
-      return row.getBoundingClientRect().height;
-    }
-
-    const rowsHeight = rowsElement.getBoundingClientRect().height;
-    if (rowsHeight > 0 && terminal.rows > 0) {
-      return rowsHeight / terminal.rows;
-    }
-  }
-
-  return getTouchScrollPxPerLine(terminal, container);
 }
 
 function shouldBypassPtyForKeyboardPaste(event: KeyboardEvent): boolean {
@@ -452,9 +469,8 @@ export function XtermHost({
   const selectedTextRef = useRef("");
   const lastCopyOnSelectFailureAtRef = useRef(0);
   const copyOnSelectPointerIdRef = useRef<number | null>(null);
-  const enterMobileCopyModeRef = useRef<() => void>(() => {});
+  const copyMobileLongPressRef = useRef<(lineText: string | null) => void>(() => {});
   const resetTouchStateRef = useRef<() => void>(() => {});
-  const mobileCopyModeActiveRef = useRef(false);
   const touchScrollStateRef = useRef<{
     activeTouchId: number | null;
     lastClientY: number;
@@ -481,8 +497,6 @@ export function XtermHost({
   const [hydrationState, setHydrationState] = useState<
     { kind: "idle" } | { kind: "queued"; queuePosition: number } | { kind: "granted" }
   >(viewport === "mobile" ? { kind: "granted" } : { kind: "idle" });
-  const [mobileCopyModeSnapshot, setMobileCopyModeSnapshot] =
-    useState<TerminalCopyModeSnapshot | null>(null);
   const [ctrlMode, setCtrlMode] = useState<CtrlMode>("off");
   const [shiftArmed, setShiftArmed] = useState(false);
   const ctrlModeRef = useRef<CtrlMode>("off");
@@ -574,10 +588,6 @@ export function XtermHost({
   }, [uiTheme]);
 
   useEffect(() => {
-    mobileCopyModeActiveRef.current = mobileCopyModeSnapshot !== null;
-  }, [mobileCopyModeSnapshot]);
-
-  useEffect(() => {
     const container = containerRef.current;
     if (!container || typeof window === "undefined" || typeof window.matchMedia !== "function") {
       return;
@@ -592,6 +602,8 @@ export function XtermHost({
     let longPressTouchId: number | null = null;
     let longPressStartClientX = 0;
     let longPressStartClientY = 0;
+    let longPressLineText: string | null = null;
+    let longPressReady = false;
 
     const clearLongPressTimer = () => {
       if (longPressTimer !== null) {
@@ -602,6 +614,8 @@ export function XtermHost({
       longPressTouchId = null;
       longPressStartClientX = 0;
       longPressStartClientY = 0;
+      longPressLineText = null;
+      longPressReady = false;
     };
 
     const stopMomentumScroll = () => {
@@ -726,11 +740,6 @@ export function XtermHost({
     resetTouchStateRef.current = resetTouchState;
 
     const handleTouchStart = (event: TouchEvent) => {
-      if (mobileCopyModeActiveRef.current) {
-        resetTouchState();
-        return;
-      }
-
       if (event.touches.length !== 1) {
         resetTouchState();
         return;
@@ -752,33 +761,32 @@ export function XtermHost({
       state.gestureDidScroll = false;
       state.samples = [];
       recordTouchSample(touch.clientY, performance.now());
-      if (viewport === "mobile") {
+      if (viewport === "mobile" && terminalPreferences.copyOnSelect) {
         longPressTouchId = touch.identifier;
         longPressStartClientX = touch.clientX;
         longPressStartClientY = touch.clientY;
+        const terminal = terminalRef.current;
+        const rowsElement = container.querySelector(".xterm-rows");
+        const screenElement = container.querySelector(".xterm-screen");
+        longPressReady = false;
+        longPressLineText =
+          terminal && rowsElement instanceof HTMLElement
+            ? getLogicalLineTextFromTouchPoint({
+                clientX: touch.clientX,
+                clientY: touch.clientY,
+                rowsElement,
+                screenElement: screenElement instanceof HTMLElement ? screenElement : undefined,
+                terminal,
+              })
+            : null;
         longPressTimer = setTimeout(() => {
           longPressTimer = null;
-          longPressTouchId = null;
-          longPressStartClientX = 0;
-          longPressStartClientY = 0;
-          state.activeTouchId = null;
-          state.lastClientY = 0;
-          state.carryPx = 0;
-          state.pxPerLine = null;
-          state.velocityPxPerMs = 0;
-          state.samples = [];
-          clearLongPressTimer();
-          enterMobileCopyModeRef.current();
+          longPressReady = true;
         }, MOBILE_COPY_MODE_LONG_PRESS_MS);
       }
     };
 
     const handleTouchMove = (event: TouchEvent) => {
-      if (mobileCopyModeActiveRef.current) {
-        resetTouchState();
-        return;
-      }
-
       const touch = findTouchByIdentifier(event.changedTouches, state.activeTouchId);
       const terminal = terminalRef.current;
       if (!touch || !terminal) {
@@ -819,12 +827,22 @@ export function XtermHost({
     };
 
     const handleTouchEnd = (event: TouchEvent) => {
-      if (mobileCopyModeActiveRef.current) {
-        resetTouchState();
-        return;
-      }
+      const longPressTouch = findTouchByIdentifier(event.changedTouches, longPressTouchId);
+      if (longPressTouch) {
+        if (longPressReady) {
+          const lineText = longPressLineText;
+          clearLongPressTimer();
+          state.activeTouchId = null;
+          state.lastClientY = 0;
+          state.carryPx = 0;
+          state.pxPerLine = null;
+          state.velocityPxPerMs = 0;
+          state.gestureDidScroll = false;
+          state.samples = [];
+          copyMobileLongPressRef.current(lineText);
+          return;
+        }
 
-      if (findTouchByIdentifier(event.changedTouches, longPressTouchId)) {
         clearLongPressTimer();
       }
 
@@ -873,7 +891,7 @@ export function XtermHost({
       resetTouchStateRef.current = () => {};
       resetTouchState();
     };
-  }, [viewport]);
+  }, [terminalPreferences.copyOnSelect, viewport]);
 
   const scheduleFit = useCallback(() => {
     if (fitFrameRef.current !== null) {
@@ -929,95 +947,52 @@ export function XtermHost({
     lastCopyOnSelectFailureAtRef.current = now;
     pushToast({
       kind: "error",
-      title: t("settings.copy_on_select_failed_title"),
-      body: t("settings.copy_on_select_failed_body"),
+      title:
+        viewport === "mobile"
+          ? t("terminal.mobile_copy_current_line_failed_title")
+          : t("settings.copy_on_select_failed_title"),
+      body:
+        viewport === "mobile"
+          ? t("terminal.mobile_copy_current_line_failed_body")
+          : t("settings.copy_on_select_failed_body"),
     });
-  }, [pushToast, t]);
+  }, [pushToast, t, viewport]);
 
-  const pushCopyModeFailureToast = useCallback(() => {
-    pushToast({
-      kind: "error",
-      title: t("terminal.copy_mode_failed_title"),
-      body: t("terminal.copy_mode_failed_body"),
-    });
-  }, [pushToast, t]);
-
-  const exitMobileCopyMode = useCallback(() => {
-    setMobileCopyModeSnapshot(null);
-  }, []);
-
-  const handleMobileCopyModeBackgroundClick = useCallback(
-    (event: ReactMouseEvent<HTMLDivElement>) => {
-      if (event.target !== event.currentTarget) {
+  const copyMobileLongPress = useCallback(
+    async (lineText: string | null) => {
+      if (viewport !== "mobile" || !terminalPreferences.copyOnSelect) {
         return;
       }
 
-      const selection = typeof window !== "undefined" ? window.getSelection() : null;
-      if (selection && selection.toString().length > 0) {
+      resetTouchStateRef.current();
+      if (lineText === null) {
         return;
       }
 
-      exitMobileCopyMode();
+      try {
+        await copyTextWithFallback(lineText);
+        pushToast({
+          kind: "success",
+          title: t("terminal.copied_current_line"),
+        });
+        if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+          navigator.vibrate(10);
+        }
+      } catch {
+        pushCopyOnSelectFailureToast();
+      }
     },
-    [exitMobileCopyMode]
+    [pushCopyOnSelectFailureToast, pushToast, t, terminalPreferences.copyOnSelect, viewport]
   );
 
-  const enterMobileCopyMode = useCallback(() => {
-    if (!terminalPreferences.copyOnSelect) {
-      resetTouchStateRef.current();
-      return;
-    }
-
-    const container = containerRef.current;
-    const terminal = terminalRef.current;
-
-    resetTouchStateRef.current();
-
-    if (!container || !terminal) {
-      pushCopyModeFailureToast();
-      return;
-    }
-
-    const rowsElement = container.querySelector(".xterm-rows");
-    const snapshot = buildTerminalCopyModeSnapshot({
-      rowsElement: rowsElement instanceof HTMLElement ? rowsElement : null,
-      cols: terminal.cols,
-      fontFamily:
-        typeof terminal.options.fontFamily === "string"
-          ? terminal.options.fontFamily
-          : "JetBrains Mono, Fira Code, SF Mono, monospace",
-      fontSize: typeof terminal.options.fontSize === "number" ? terminal.options.fontSize : 11,
-      lineHeightPx: getMeasuredTerminalLineHeightPx(
-        terminal,
-        container,
-        rowsElement instanceof HTMLElement ? rowsElement : null
-      ),
-    });
-
-    if (!snapshot) {
-      pushCopyModeFailureToast();
-      return;
-    }
-
-    setMobileCopyModeSnapshot(snapshot);
-    if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
-      navigator.vibrate(10);
-    }
-  }, [pushCopyModeFailureToast, terminalPreferences.copyOnSelect]);
-
   useEffect(() => {
-    enterMobileCopyModeRef.current = enterMobileCopyMode;
-  }, [enterMobileCopyMode]);
-
-  useEffect(() => {
-    if (viewport !== "mobile") {
-      setMobileCopyModeSnapshot(null);
-    }
-  }, [viewport]);
+    copyMobileLongPressRef.current = (lineText) => {
+      void copyMobileLongPress(lineText);
+    };
+  }, [copyMobileLongPress]);
 
   useLayoutEffect(() => {
     resetTouchStateRef.current();
-    setMobileCopyModeSnapshot(null);
   }, [terminalId, workspaceId]);
 
   const copySelectionOnSelect = useCallback(async () => {
@@ -1036,7 +1011,7 @@ export function XtermHost({
     }
 
     try {
-      await navigator.clipboard.writeText(selection);
+      await copyTextWithFallback(selection);
     } catch {
       pushCopyOnSelectFailureToast();
     }
@@ -1151,7 +1126,11 @@ export function XtermHost({
     [handleInput]
   );
 
-  const { busy: uploadBusy } = usePasteDropUpload({
+  const {
+    busy: uploadBusy,
+    handleClipboardPaste,
+    handleFiles,
+  } = usePasteDropUpload({
     containerRef,
     workspaceId,
     sendTextToTerminal,
@@ -2147,6 +2126,8 @@ export function XtermHost({
   const showMobileInputBar = viewport === "mobile" && isInteractive;
   const mobileInputDisabled = !isInteractive || uploadBusy || connectionStatus !== "connected";
   const mobileInputLabels = {
+    paste: t("terminal.mobile_input.paste"),
+    upload: t("terminal.mobile_input.upload"),
     shortcuts: t("terminal.mobile_input.shortcuts"),
     ctrl: t("terminal.mobile_input.ctrl"),
     ctrlArmed: t("terminal.mobile_input.ctrl_armed"),
@@ -2184,6 +2165,66 @@ export function XtermHost({
   const handleShiftTap = useCallback(() => {
     updateShiftArmed(!shiftArmedRef.current);
   }, [updateShiftArmed]);
+
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const [showPasteDialog, setShowPasteDialog] = useState(false);
+  const pasteTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const handleMobilePaste = useCallback(async () => {
+    // Try modern Clipboard API first
+    if (navigator.clipboard) {
+      try {
+        await handleClipboardPaste();
+        return;
+      } catch (error) {
+        console.debug("Clipboard API failed, showing paste dialog:", error);
+      }
+    }
+
+    // Fallback: show paste dialog
+    setShowPasteDialog(true);
+  }, [handleClipboardPaste]);
+
+  const handlePasteDialogSubmit = useCallback(async () => {
+    const textarea = pasteTextareaRef.current;
+    if (!textarea) {
+      return;
+    }
+
+    const text = textarea.value;
+    if (text) {
+      await sendTextToTerminal(text);
+      textarea.value = "";
+    }
+
+    setShowPasteDialog(false);
+  }, [sendTextToTerminal]);
+
+  const handlePasteDialogCancel = useCallback(() => {
+    const textarea = pasteTextareaRef.current;
+    if (textarea) {
+      textarea.value = "";
+    }
+    setShowPasteDialog(false);
+  }, []);
+
+  const handleMobileUpload = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  const handleFileInputChange = useCallback(
+    async (event: ReactChangeEvent<HTMLInputElement>) => {
+      const files = Array.from(event.currentTarget.files ?? []);
+      event.currentTarget.value = "";
+      if (files.length === 0) {
+        return;
+      }
+
+      await handleFiles(files);
+    },
+    [handleFiles]
+  );
 
   const showReplayOverlay =
     replayUiState.kind !== "ready" && (viewport === "mobile" || hydrationState.kind === "granted");
@@ -2227,8 +2268,20 @@ export function XtermHost({
           onCtrlTap={handleCtrlTap}
           onCtrlLongPress={handleCtrlLongPress}
           onShiftTap={handleShiftTap}
+          onPaste={handleMobilePaste}
+          onUpload={handleMobileUpload}
         />
       ) : null}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*,video/*,audio/*,text/plain,.txt,.md,.json,.csv"
+        multiple
+        hidden
+        onChange={(event) => {
+          void handleFileInputChange(event);
+        }}
+      />
       <div
         ref={containerRef}
         className="xterm-host"
@@ -2268,6 +2321,44 @@ export function XtermHost({
           Uploading…
         </div>
       ) : null}
+      {showPasteDialog ? (
+        <div
+          className="paste-dialog-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="paste-dialog-title"
+        >
+          <div className="paste-dialog">
+            <h3 id="paste-dialog-title" className="paste-dialog__title">
+              {t("terminal.paste_dialog_title")}
+            </h3>
+            <textarea
+              ref={pasteTextareaRef}
+              className="paste-dialog__textarea"
+              placeholder={t("terminal.paste_dialog_placeholder")}
+              autoFocus
+            />
+            <div className="paste-dialog__actions">
+              <button
+                type="button"
+                className="paste-dialog__button paste-dialog__button--secondary"
+                onClick={handlePasteDialogCancel}
+              >
+                {t("common.cancel")}
+              </button>
+              <button
+                type="button"
+                className="paste-dialog__button paste-dialog__button--primary"
+                onClick={() => {
+                  void handlePasteDialogSubmit();
+                }}
+              >
+                {t("terminal.paste_dialog_submit")}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {viewport !== "mobile" && hydrationState.kind === "queued" ? (
         <XtermPlaceholder state="queued" queuePosition={hydrationState.queuePosition} />
       ) : null}
@@ -2279,35 +2370,6 @@ export function XtermHost({
             ) : null}
             <div className="xterm-replay-overlay__title">{replayTitle}</div>
             {replayBody ? <div className="xterm-replay-overlay__body">{replayBody}</div> : null}
-          </div>
-        </div>
-      ) : null}
-      {viewport === "mobile" && mobileCopyModeSnapshot ? (
-        <div className="mobile-terminal-copy-mode">
-          <div className="mobile-terminal-copy-mode__toolbar">
-            <div className="mobile-terminal-copy-mode__title">{t("terminal.copy_mode_title")}</div>
-            <div className="mobile-terminal-copy-mode__hint">{t("terminal.copy_mode_hint")}</div>
-            <button
-              type="button"
-              className="mobile-terminal-copy-mode__done"
-              onClick={exitMobileCopyMode}
-            >
-              {t("terminal.copy_mode_done")}
-            </button>
-          </div>
-          <div
-            className="mobile-terminal-copy-mode__content"
-            onClick={handleMobileCopyModeBackgroundClick}
-          >
-            <div
-              className="mobile-terminal-copy-mode__text"
-              style={{
-                fontFamily: mobileCopyModeSnapshot.fontFamily,
-                fontSize: `${mobileCopyModeSnapshot.fontSize}px`,
-                lineHeight: `${mobileCopyModeSnapshot.lineHeightPx}px`,
-              }}
-              dangerouslySetInnerHTML={{ __html: mobileCopyModeSnapshot.html }}
-            />
           </div>
         </div>
       ) : null}

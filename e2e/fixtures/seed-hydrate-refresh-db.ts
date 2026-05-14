@@ -134,6 +134,15 @@ try {
     "Unavailable"
   );
 
+  db.prepare("INSERT INTO user_settings (key, value) VALUES (?, ?)").run(
+    "workspace.lastViewedTarget",
+    JSON.stringify({
+      workspaceId: WORKSPACE_ID,
+      sessionId: INTERRUPTED_SESSION_ID,
+      updatedAt: now,
+    })
+  );
+
   console.log(
     JSON.stringify({
       dbPath,

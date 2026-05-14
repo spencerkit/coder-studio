@@ -110,8 +110,10 @@ describe("WorkspaceLaunchModal", () => {
     );
 
     const closeButton = screen.getByRole("button", { name: "Close" });
+    const homeButton = screen.getByRole("button", { name: "Home Directory" });
 
     expect(closeButton).toHaveClass("btn", "btn-ghost", "btn-sm", "launch-close-btn");
+    expect(homeButton.querySelector('[data-icon-semantic="workspace.launch.home"]')).toBeTruthy();
 
     fireEvent.click(closeButton);
     expect(onClose).toHaveBeenCalledTimes(1);
@@ -255,6 +257,58 @@ describe("WorkspaceLaunchModal", () => {
     });
   });
 
+  it("persists a workspace-only target after opening a workspace", async () => {
+    const onClose = vi.fn();
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args: { path?: string }) => {
+      if (op === "workspace.browse") {
+        return {
+          currentPath: "/home/spencer",
+          parentPath: "/home",
+          directories: [{ name: "workspace", path: "/home/spencer/workspace" }],
+        };
+      }
+
+      if (op === "workspace.open") {
+        return {
+          id: "ws-1",
+        };
+      }
+
+      if (op === "workspace.lastViewedTarget.set") {
+        return {
+          workspaceId: "ws-1",
+          updatedAt: 10,
+        };
+      }
+
+      return {};
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <WorkspaceLaunchModal onClose={onClose} />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    const folderName = await screen.findByText("workspace");
+    fireEvent.click(folderName);
+    fireEvent.click(screen.getByRole("button", { name: "Start Workspace" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "workspace.lastViewedTarget.set",
+        { workspaceId: "ws-1", sessionId: undefined },
+        undefined
+      );
+    });
+  });
+
   it("renders inside shared Sheet on mobile while preserving browse and open behavior", async () => {
     viewportMocks.viewport = "mobile";
     const onClose = vi.fn();
@@ -347,6 +401,7 @@ describe("WorkspaceLaunchModal", () => {
     expect(screen.getByRole("button", { name: "Home Directory" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Start Workspace" })).toBeInTheDocument();
     expect(screen.getByText("3 items")).toBeInTheDocument();
+    expect(document.querySelector('[data-icon-semantic="file.folder.closed"]')).toBeTruthy();
   });
 
   it("shows the shared animated spinner while browsing directories", () => {

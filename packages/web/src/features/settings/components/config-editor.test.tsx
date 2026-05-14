@@ -152,7 +152,9 @@ describe("ConfigEditor", () => {
     expect(footer).not.toBeNull();
     expect(footerStatus).not.toBeNull();
     expect(footerStatus).toHaveTextContent("已保存");
+    expect(footerStatus?.querySelector('[data-icon-semantic="state.success"]')).toBeTruthy();
     expect(headerStatus).toBeNull();
+    expect(container.querySelector('[data-icon-semantic="state.configFile"]')).toBeTruthy();
   });
 
   it("renders text-bearing actions with shared button compatibility classes", async () => {
@@ -259,6 +261,9 @@ describe("ConfigEditor", () => {
     expect(
       within(emptyStateRoot as HTMLElement).getByText("编辑并保存以创建配置文件。")
     ).toBeInTheDocument();
+    expect(
+      (emptyStateRoot as HTMLElement).querySelector('[data-icon-semantic="state.emptyConfig"]')
+    ).toBeTruthy();
     expect(container.querySelector(".config-empty-state")).toBeTruthy();
     expect(screen.getByRole("textbox", { name: "Config editor content" })).toBeInTheDocument();
 

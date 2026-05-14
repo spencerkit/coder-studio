@@ -2,7 +2,7 @@ import type { Workspace } from "@coder-studio/core";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { localeAtom } from "../../../atoms/app-ui";
+import { lastViewedTargetAtom, localeAtom } from "../../../atoms/app-ui";
 import { wsClientAtom } from "../../../atoms/connection";
 import {
   activeWorkspaceIdAtom,
@@ -10,6 +10,7 @@ import {
   workspacesAtom,
 } from "../../../atoms/workspaces";
 import { TabList, Tabs } from "../../../components/ui";
+import { CommandResultError } from "../../../ws/client";
 import { WorkspaceTab } from "./tab";
 
 const routerMocks = vi.hoisted(() => ({
@@ -104,6 +105,108 @@ describe("WorkspaceTab", () => {
 
     expect(store.get(activeWorkspaceIdAtom)).toBe("ws-2");
     expect(routerMocks.navigate).not.toHaveBeenCalled();
+  });
+
+  it("persists the global last-viewed workspace target when a tab is clicked", async () => {
+    const workspace = createWorkspace("ws-2", "/tmp/two");
+    const sendCommand = vi.fn().mockResolvedValue({
+      workspaceId: "ws-2",
+      updatedAt: 10,
+    });
+    const store = createStore();
+
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    renderWorkspaceTab(store, workspace, { value: "ws-1" });
+
+    fireEvent.click(screen.getByRole("tab", { name: /two/i }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "workspace.lastViewedTarget.set",
+        { workspaceId: "ws-2", sessionId: undefined },
+        undefined
+      );
+    });
+  });
+
+  it("does not persist again when the active workspace tab is clicked", () => {
+    const workspace = createWorkspace("ws-2", "/tmp/two");
+    const sendCommand = vi.fn();
+    const store = createStore();
+
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(activeWorkspaceIdAtom, "ws-2");
+    store.set(lastViewedTargetAtom, {
+      workspaceId: "ws-2",
+      updatedAt: 10,
+    });
+
+    renderWorkspaceTab(store, workspace, { isActive: true, value: "ws-2" });
+
+    fireEvent.click(screen.getByRole("tab", { name: /two/i }));
+
+    expect(sendCommand).not.toHaveBeenCalledWith(
+      "workspace.lastViewedTarget.set",
+      expect.anything(),
+      undefined
+    );
+  });
+
+  it("retries persistence for the same workspace after a failed write", async () => {
+    const workspace = createWorkspace("ws-2", "/tmp/two");
+    const sendCommand = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new CommandResultError({
+          code: "write_failed",
+          message: "failed",
+        })
+      )
+      .mockResolvedValueOnce({
+        workspaceId: "ws-2",
+        updatedAt: 11,
+      });
+    const store = createStore();
+
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    const { rerender } = renderWorkspaceTab(store, workspace, { value: "ws-1" });
+
+    fireEvent.click(screen.getByRole("tab", { name: /two/i }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenNthCalledWith(
+        1,
+        "workspace.lastViewedTarget.set",
+        { workspaceId: "ws-2", sessionId: undefined },
+        undefined
+      );
+    });
+
+    rerender(
+      <Provider store={store}>
+        <Tabs aria-label="Workspaces" onValueChange={vi.fn()} value="ws-1">
+          <TabList className="topbar-tablist">
+            <WorkspaceTab workspace={workspace} isActive={false} />
+          </TabList>
+        </Tabs>
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: /two/i }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenNthCalledWith(
+        2,
+        "workspace.lastViewedTarget.set",
+        { workspaceId: "ws-2", sessionId: undefined },
+        undefined
+      );
+    });
   });
 
   it("closes the active workspace without route navigation and falls back to the next ordered workspace", async () => {

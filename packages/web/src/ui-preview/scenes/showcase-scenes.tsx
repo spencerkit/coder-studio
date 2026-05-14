@@ -1,17 +1,5 @@
 import type { FileNode, GitStatus, Supervisor, Workspace, WorktreeInfo } from "@coder-studio/core";
-import {
-  CircleAlert,
-  CircleCheckBig,
-  CircleDot,
-  File,
-  FileCode2,
-  FileJson2,
-  FileText,
-  Folder,
-  Image as ImageIcon,
-  Terminal,
-} from "lucide-react";
-import { ConfirmDialog, EmptyState, Notice, Sheet } from "../../components/ui";
+import { ConfirmDialog, EmptyState, Notice, Sheet, ThemedIcon } from "../../components/ui";
 import { CommandPalette } from "../../features/command-palette";
 import { ToastContainer } from "../../features/notifications";
 import { MobileSupervisorBadge } from "../../features/supervisor/views/mobile/mobile-supervisor-badge";
@@ -23,7 +11,7 @@ import { MobileWorkspaceDrawer } from "../../features/workspace/views/mobile/mob
 import { BranchQuickPick } from "../../features/workspace/views/shared/branch-quick-pick";
 import { WorkspaceLaunchModal } from "../../features/workspace/views/shared/workspace-launch-modal";
 import { WorktreeManagerSurface } from "../../features/workspace/views/shared/worktree-manager-surface";
-import type { UiPreviewSceneContext, UiPreviewSceneDefinition } from "../catalog";
+import type { UiPreviewSceneDefinition } from "../catalog";
 import { getUiPreviewSceneMetadata } from "../scene-metadata";
 
 const workspace: Workspace = {
@@ -47,10 +35,34 @@ const supervisor: Supervisor = {
   sessionId: "session-preview-1",
   workspaceId: "ws-preview",
   state: "idle",
+  targetId: "target-preview-1",
   objective: "Review UI regressions before shipping",
   evaluatorProviderId: "claude",
   maxSupervisionCount: 0,
   completedSupervisionCount: 0,
+  currentTargetMemory: {
+    targetId: "target-preview-1",
+    planGenerated: true,
+    plan: [
+      { id: "step-1", title: "Audit compact strip density", status: "done" },
+      { id: "step-2", title: "Move memory into expandable detail", status: "in_progress" },
+      { id: "step-3", title: "Validate preview coverage across themes", status: "pending" },
+    ],
+    activeStepId: "step-2",
+    progressSummary: "Compact strip restored; preview coverage still under review.",
+    stalledCount: 0,
+    updatedAt: 1,
+  },
+  recentTargetCycles: [
+    {
+      cycleId: "target-cycle-preview-1",
+      targetId: "target-preview-1",
+      startedAt: 1,
+      completedAt: 2,
+      result: "continue",
+      reason: "Keep the strip compact and move detailed memory into an explicit disclosure.",
+    },
+  ],
   cycles: [],
   createdAt: 1,
   updatedAt: 1,
@@ -198,25 +210,25 @@ export function createShowcaseScenes(): UiPreviewSceneDefinition[] {
               <div className="file-tree-shell file-tree-shell--mobile">
                 <div className="tree-item">
                   <span className="tree-icon folder" aria-hidden="true">
-                    <Folder size={14} />
+                    <ThemedIcon semantic="file.folder.closed" size={14} />
                   </span>
                   <span>packages</span>
                 </div>
                 <div className="tree-item">
                   <span className="tree-icon code" aria-hidden="true">
-                    <FileCode2 size={14} />
+                    <ThemedIcon semantic="file.type.code" size={14} />
                   </span>
                   <span>app.tsx</span>
                 </div>
                 <div className="tree-item">
                   <span className="tree-icon data" aria-hidden="true">
-                    <FileJson2 size={14} />
+                    <ThemedIcon semantic="file.type.data" size={14} />
                   </span>
                   <span>theme.json</span>
                 </div>
                 <div className="tree-item">
                   <span className="tree-icon doc" aria-hidden="true">
-                    <FileText size={14} />
+                    <ThemedIcon semantic="file.type.doc" size={14} />
                   </span>
                   <span>README.md</span>
                 </div>
@@ -228,7 +240,13 @@ export function createShowcaseScenes(): UiPreviewSceneDefinition[] {
                     Review the terminal empty-state icon and surface treatment.
                   </p>
                 }
-                icon={<Terminal size={32} className="bottom-terminal-empty-icon" />}
+                icon={
+                  <ThemedIcon
+                    className="bottom-terminal-empty-icon"
+                    semantic="state.emptyTerminal"
+                    size={32}
+                  />
+                }
                 title={<p className="bottom-terminal-empty-text">No terminal session</p>}
               />
               <MobileDock activeItem="files" onSelectItem={() => {}} />
@@ -239,37 +257,37 @@ export function createShowcaseScenes(): UiPreviewSceneDefinition[] {
             <div className="file-tree-shell">
               <div className="tree-item">
                 <span className="tree-icon folder" aria-hidden="true">
-                  <Folder size={14} />
+                  <ThemedIcon semantic="file.folder.closed" size={14} />
                 </span>
                 <span>packages</span>
               </div>
               <div className="tree-item">
                 <span className="tree-icon code" aria-hidden="true">
-                  <FileCode2 size={14} />
+                  <ThemedIcon semantic="file.type.code" size={14} />
                 </span>
                 <span>app.tsx</span>
               </div>
               <div className="tree-item">
                 <span className="tree-icon data" aria-hidden="true">
-                  <FileJson2 size={14} />
+                  <ThemedIcon semantic="file.type.data" size={14} />
                 </span>
                 <span>theme.json</span>
               </div>
               <div className="tree-item">
                 <span className="tree-icon doc" aria-hidden="true">
-                  <FileText size={14} />
+                  <ThemedIcon semantic="file.type.doc" size={14} />
                 </span>
                 <span>README.md</span>
               </div>
               <div className="tree-item">
                 <span className="tree-icon media" aria-hidden="true">
-                  <ImageIcon size={14} />
+                  <ThemedIcon semantic="file.type.media" size={14} />
                 </span>
                 <span>logo.png</span>
               </div>
               <div className="tree-item">
                 <span className="tree-icon file" aria-hidden="true">
-                  <File size={14} />
+                  <ThemedIcon semantic="file.type.default" size={14} />
                 </span>
                 <span>LICENSE</span>
               </div>
@@ -277,25 +295,25 @@ export function createShowcaseScenes(): UiPreviewSceneDefinition[] {
             <div className="git-panel">
               <div className="git-row">
                 <span className="git-row-icon git-row-icon-staged" aria-hidden="true">
-                  <CircleCheckBig size={12} />
+                  <ThemedIcon semantic="git.status.staged" size={12} />
                 </span>
                 <span>staged.ts</span>
               </div>
               <div className="git-row">
                 <span className="git-row-icon git-row-icon-modified" aria-hidden="true">
-                  <CircleAlert size={12} />
+                  <ThemedIcon semantic="git.status.modified" size={12} />
                 </span>
                 <span>modified.ts</span>
               </div>
               <div className="git-row">
                 <span className="git-row-icon git-row-icon-deleted" aria-hidden="true">
-                  <CircleAlert size={12} />
+                  <ThemedIcon semantic="git.status.deleted" size={12} />
                 </span>
                 <span>deleted.ts</span>
               </div>
               <div className="git-row">
                 <span className="git-row-icon git-row-icon-untracked" aria-hidden="true">
-                  <CircleDot size={12} />
+                  <ThemedIcon semantic="git.status.untracked" size={12} />
                 </span>
                 <span>untracked.ts</span>
               </div>
@@ -307,7 +325,13 @@ export function createShowcaseScenes(): UiPreviewSceneDefinition[] {
                   Review the terminal empty-state icon and surface treatment.
                 </p>
               }
-              icon={<Terminal size={32} className="bottom-terminal-empty-icon" />}
+              icon={
+                <ThemedIcon
+                  className="bottom-terminal-empty-icon"
+                  semantic="state.emptyTerminal"
+                  size={32}
+                />
+              }
               title={<p className="bottom-terminal-empty-text">No terminal session</p>}
             />
           </div>
@@ -470,6 +494,7 @@ export function createShowcaseScenes(): UiPreviewSceneDefinition[] {
           sessionId="session-preview-1"
           workspaceId={workspace.id}
           onClose={() => {}}
+          defaultSupervisorDetailsOpen
         />
       ),
     }),

@@ -1,6 +1,6 @@
-import { AlertCircle, FileText, Image as ImageIcon, Save, X } from "lucide-react";
+import { FileText, Image as ImageIcon, Save, X } from "lucide-react";
 import type { FC } from "react";
-import { EmptyState, IconButton, Tooltip } from "../../../../components/ui";
+import { EmptyState, IconButton, ThemedIcon, Tooltip } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { useCodeEditorActions } from "../../actions/use-code-editor-actions";
 import { ImagePreview } from "../../components/image-preview";
@@ -168,14 +168,19 @@ export const CodeEditorView: FC<CodeEditorViewProps> = ({ state, chrome = "full"
 
         {saveError && (
           <div className="code-editor-error" role="alert">
-            <AlertCircle size={14} />
+            <ThemedIcon semantic="state.error" size={14} />
             <span>{saveError}</span>
           </div>
         )}
 
         {activeExternalStatus && (
           <div className="code-editor-error" role="alert">
-            <AlertCircle size={14} />
+            <ThemedIcon
+              semantic={
+                activeExternalStatus === "deleted" ? "state.fileDeleted" : "state.fileModified"
+              }
+              size={14}
+            />
             <span>
               {activeExternalStatus === "deleted"
                 ? t("code_editor.deleted_on_disk")

@@ -1,5 +1,5 @@
-import { ArrowUp, Folder, Home, X } from "lucide-react";
-import { EmptyState, IconButton, Sheet, Spinner } from "../../../../components/ui";
+import { ArrowUp, X } from "lucide-react";
+import { EmptyState, IconButton, Sheet, Spinner, ThemedIcon } from "../../../../components/ui";
 import { useViewport } from "../../../../hooks/use-viewport";
 import { useTranslation } from "../../../../lib/i18n";
 import { useWorkspaceLaunchActions } from "../../actions/use-workspace-launch-actions";
@@ -62,7 +62,7 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
       <div className="folder-picker">
         <div className="fp-toolbar">
           <button className="fp-btn" onClick={() => handleNavigate("~")}>
-            <Home size={12} />
+            <ThemedIcon semantic="workspace.launch.home" size={12} />
             {t("workspace.launch.home_directory")}
           </button>
           {parentPath && (
@@ -113,7 +113,7 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
                 onDoubleClick={() => handleNavigate(dir.path)}
               >
                 <span className="fp-dir-icon">
-                  <Folder size={14} />
+                  <ThemedIcon semantic="file.folder.closed" size={14} />
                 </span>
                 <span className={`fp-dir-name ${selectedPath === dir.path ? "selected" : ""}`}>
                   {dir.name}

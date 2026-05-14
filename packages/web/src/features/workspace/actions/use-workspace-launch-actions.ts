@@ -11,6 +11,7 @@ import {
   workspacesLoadStateAtom,
 } from "../../../atoms/workspaces";
 import { useTranslation } from "../../../lib/i18n";
+import { usePersistWorkspaceLastViewedTarget } from "./use-persist-workspace-last-viewed-target";
 
 export interface DirectoryInfo {
   name: string;
@@ -37,6 +38,7 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
   const setWorkspaceOrder = useSetAtom(workspaceOrderAtom);
   const setWorkspacesLoadState = useSetAtom(workspacesLoadStateAtom);
   const setWorkspacesLoadError = useSetAtom(workspacesLoadErrorAtom);
+  const persistLastViewedTarget = usePersistWorkspaceLastViewedTarget();
 
   const [currentPath, setCurrentPath] = useState("");
   const [directories, setDirectories] = useState<DirectoryInfo[]>([]);
@@ -117,6 +119,7 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
       });
 
       if (result.ok && result.data?.id) {
+        void persistLastViewedTarget({ workspaceId: result.data.id });
         setActiveWorkspaceId(result.data.id);
         setWorkspaces((prev) => ({
           ...prev,
@@ -151,6 +154,7 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
     onClose,
     selectedPath,
     setActiveWorkspaceId,
+    persistLastViewedTarget,
     setWorkspaceOrder,
     setWorkspaces,
     setWorkspacesLoadError,

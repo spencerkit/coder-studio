@@ -1,7 +1,15 @@
 import { useSetAtom } from "jotai";
-import { ChevronsUp, FilePlus, FolderPlus } from "lucide-react";
+import { ChevronsUp } from "lucide-react";
 import { type FC, useEffect, useRef, useState } from "react";
-import { EmptyState, IconButton, Tab, TabList, Tabs, Tooltip } from "../../../../components/ui";
+import {
+  EmptyState,
+  IconButton,
+  Tab,
+  TabList,
+  Tabs,
+  ThemedIcon,
+  Tooltip,
+} from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { AgentPanes } from "../../../agent-panes";
 import { CodeEditorHost } from "../../../code-editor/views/shared/code-editor-host";
@@ -130,7 +138,7 @@ export const WorkspaceDesktopView: FC = () => {
                           <IconButton
                             className="panel-toolbar-btn"
                             aria-label={t("file.new_file")}
-                            icon={<FilePlus size={14} />}
+                            icon={<ThemedIcon semantic="file.action.new" size={14} />}
                             onClick={handleOpenFileCreate}
                             size="sm"
                           />
@@ -139,7 +147,7 @@ export const WorkspaceDesktopView: FC = () => {
                           <IconButton
                             className="panel-toolbar-btn"
                             aria-label={t("file.new_folder")}
-                            icon={<FolderPlus size={14} />}
+                            icon={<ThemedIcon semantic="file.action.newFolder" size={14} />}
                             onClick={handleOpenFolderCreate}
                             size="sm"
                           />

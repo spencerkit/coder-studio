@@ -1214,6 +1214,42 @@ describe("web WsClient", () => {
     }
   });
 
+  it("keeps retrying reconnect attempts after extended outages", async () => {
+    vi.useFakeTimers();
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      const client = new WsClient("ws://127.0.0.1:4173/ws", {
+        baseDelayMs: 1,
+        maxDelayMs: 1,
+      });
+      const connectPromise = client.connect();
+      const firstSocket = MockWebSocket.instances[0]!;
+      firstSocket.triggerOpen();
+      await connectPromise;
+
+      firstSocket.triggerClose(1006, "network_lost");
+
+      expect(client.getStatus()).toBe("reconnecting");
+
+      for (let attempt = 0; attempt < 35; attempt += 1) {
+        await vi.advanceTimersByTimeAsync(1);
+
+        const retrySocket = MockWebSocket.instances[attempt + 1];
+        expect(retrySocket).toBeTruthy();
+        retrySocket?.triggerClose(1006, "network_lost");
+
+        expect(client.getStatus()).toBe("reconnecting");
+      }
+
+      expect(MockWebSocket.instances).toHaveLength(36);
+      expect(client.getStatus()).toBe("reconnecting");
+    } finally {
+      consoleError.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
   it("marks the client rejected without reconnecting after single-active displacement", async () => {
     vi.useFakeTimers();
 

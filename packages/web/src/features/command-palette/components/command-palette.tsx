@@ -6,7 +6,6 @@
 
 import type { Workspace } from "@coder-studio/core";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { Search } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { commandPaletteOpenAtom } from "../../../atoms/app-ui";
@@ -15,10 +14,11 @@ import {
   orderedWorkspacesAtom,
   resolvedActiveWorkspaceIdAtom,
 } from "../../../atoms/workspaces";
-import { EmptyState, Sheet } from "../../../components/ui";
+import { EmptyState, Sheet, ThemedIcon } from "../../../components/ui";
 import { useViewport } from "../../../hooks/use-viewport";
 import { useTranslation } from "../../../lib/i18n";
 import { formatWorkspaceLabel } from "../../notifications/format";
+import { useSelectWorkspaceTarget } from "../../workspace/actions/use-select-workspace-target";
 import {
   bottomPanelHeightAtom,
   focusModeAtom,
@@ -71,6 +71,7 @@ export function CommandPalette() {
   const [bottomPanelHeight, setBottomPanelHeight] = useAtom(bottomPanelHeightAtom);
   const activeWorkspaceId = useAtomValue(resolvedActiveWorkspaceIdAtom);
   const setActiveWorkspaceId = useSetAtom(activeWorkspaceIdAtom);
+  const selectWorkspaceTarget = useSelectWorkspaceTarget();
   const workspaces = useAtomValue(orderedWorkspacesAtom);
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -91,6 +92,7 @@ export function CommandPalette() {
     setBottomPanelHeight,
     activeWorkspaceId,
     setActiveWorkspaceId,
+    selectWorkspaceTarget,
     workspaces,
     locationPathname: location.pathname,
     navigate,
@@ -171,7 +173,7 @@ export function CommandPalette() {
 
   const paletteSearchField = (
     <div className="command-palette-search">
-      <Search size={16} className="command-palette-search-icon" />
+      <ThemedIcon className="command-palette-search-icon" semantic="nav.search" size={16} />
       <input
         ref={inputRef}
         type="text"
@@ -287,6 +289,7 @@ function buildCommands(context: {
   setBottomPanelHeight: (v: number) => void;
   activeWorkspaceId: string | null;
   setActiveWorkspaceId: (v: string | null) => void;
+  selectWorkspaceTarget: (workspaceId: string) => Promise<unknown>;
   workspaces: Workspace[];
   locationPathname: string;
   navigate: (path: string) => void;
@@ -305,6 +308,7 @@ function buildCommands(context: {
     setBottomPanelHeight,
     activeWorkspaceId,
     setActiveWorkspaceId,
+    selectWorkspaceTarget,
     workspaces,
     locationPathname,
     navigate,
@@ -406,7 +410,7 @@ function buildCommands(context: {
       label: `${t("workspace.title")}: ${workspaceLabel}`,
       description: ws.path || ws.id,
       action: () => {
-        setActiveWorkspaceId(ws.id);
+        void selectWorkspaceTarget(ws.id);
         if (locationPathname !== "/workspace") {
           navigate("/workspace");
         }

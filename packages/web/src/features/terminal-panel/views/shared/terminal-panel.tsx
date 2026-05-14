@@ -1,5 +1,5 @@
 import { useStore } from "jotai";
-import { ChevronDown, Plus, Terminal, X } from "lucide-react";
+import { ChevronDown, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
   Button,
@@ -9,6 +9,7 @@ import {
   Select,
   TabList,
   Tabs,
+  ThemedIcon,
   Tooltip,
 } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
@@ -222,7 +223,7 @@ export function TerminalPanel({ chrome = "default" }: TerminalPanelProps) {
               <IconButton
                 className="panel-toolbar-btn"
                 aria-label={t("terminal.new_terminal")}
-                icon={<Plus size={14} />}
+                icon={<ThemedIcon semantic="terminal.action.new" size={14} />}
                 onClick={handleCreateTerminal}
                 size="sm"
               />
@@ -239,14 +240,20 @@ export function TerminalPanel({ chrome = "default" }: TerminalPanelProps) {
                 variant="primary"
                 size="sm"
                 onClick={handleCreateTerminal}
-                leadingIcon={<Plus size={14} />}
+                leadingIcon={<ThemedIcon semantic="terminal.action.new" size={14} />}
               >
                 {t("terminal.new_terminal")}
               </Button>
             }
             className="bottom-terminal-empty"
             description={<p className="bottom-terminal-empty-hint">{t("terminal.empty_hint")}</p>}
-            icon={<Terminal size={32} className="bottom-terminal-empty-icon" />}
+            icon={
+              <ThemedIcon
+                className="bottom-terminal-empty-icon"
+                semantic="state.emptyTerminal"
+                size={32}
+              />
+            }
             title={<p className="bottom-terminal-empty-text">{t("terminal.no_terminal")}</p>}
           />
         ) : (

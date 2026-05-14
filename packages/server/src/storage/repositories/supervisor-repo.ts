@@ -5,6 +5,7 @@ interface SupervisorRow {
   id: string;
   session_id: string;
   workspace_id: string;
+  target_id: string;
   state: SupervisorState;
   objective: string;
   evaluator_provider_id: string;
@@ -24,6 +25,7 @@ export interface NewSupervisor {
   id: string;
   sessionId: string;
   workspaceId: string;
+  targetId: string;
   state: SupervisorState;
   objective: string;
   evaluatorProviderId: string;
@@ -40,6 +42,7 @@ export interface NewSupervisor {
 }
 
 export interface SupervisorUpdatePatch {
+  targetId?: string;
   state?: SupervisorState;
   objective?: string;
   evaluatorProviderId?: string;
@@ -60,13 +63,14 @@ export class SupervisorRepo {
   create(input: NewSupervisor): Supervisor {
     this.db
       .prepare(
-        `INSERT INTO supervisors (id, session_id, workspace_id, state, objective, evaluator_provider_id, evaluator_model, max_supervision_count, completed_supervision_count, scheduled_at, stop_reason, last_cycle_at, last_evaluated_turn_id, error_reason, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO supervisors (id, session_id, workspace_id, target_id, state, objective, evaluator_provider_id, evaluator_model, max_supervision_count, completed_supervision_count, scheduled_at, stop_reason, last_cycle_at, last_evaluated_turn_id, error_reason, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         input.id,
         input.sessionId,
         input.workspaceId,
+        input.targetId,
         input.state,
         input.objective,
         input.evaluatorProviderId,
@@ -113,6 +117,10 @@ export class SupervisorRepo {
       updatedAt: patch.updatedAt ?? Date.now(),
     };
 
+    if (patch.targetId !== undefined) {
+      assignments.push("target_id = @targetId");
+      params.targetId = patch.targetId;
+    }
     if (patch.state !== undefined) {
       assignments.push("state = @state");
       params.state = patch.state;
@@ -178,6 +186,7 @@ export class SupervisorRepo {
       id: row.id,
       sessionId: row.session_id,
       workspaceId: row.workspace_id,
+      targetId: row.target_id,
       state: row.state,
       objective: row.objective,
       evaluatorProviderId: row.evaluator_provider_id,
@@ -186,6 +195,8 @@ export class SupervisorRepo {
       completedSupervisionCount: row.completed_supervision_count,
       scheduledAt: row.scheduled_at ?? undefined,
       stopReason: row.stop_reason ?? undefined,
+      currentTargetMemory: undefined,
+      recentTargetCycles: [],
       cycles: [],
       lastCycleAt: row.last_cycle_at ?? undefined,
       lastEvaluatedTurnId: row.last_evaluated_turn_id ?? undefined,

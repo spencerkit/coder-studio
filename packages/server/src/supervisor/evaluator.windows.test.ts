@@ -27,9 +27,13 @@ function makeSupervisor(): Supervisor {
     id: "sup-1",
     sessionId: "sess-1",
     workspaceId: "ws-1",
+    targetId: "tgt-1",
     state: "idle",
     objective: "obj",
     evaluatorProviderId: "codex",
+    maxSupervisionCount: 0,
+    completedSupervisionCount: 0,
+    recentTargetCycles: [],
     cycles: [],
     createdAt: 1,
     updatedAt: 1,
@@ -48,6 +52,13 @@ function makeContext(): SupervisorEvaluationContext {
     evidenceSource: "headless_snapshot",
     terminalExcerpt: "build passes",
     latestUserInput: "run the tests",
+    targetMemory: {
+      targetId: "tgt-1",
+      planGenerated: true,
+      plan: [],
+      stalledCount: 0,
+      updatedAt: 1,
+    },
   };
 }
 
@@ -85,7 +96,15 @@ describe("SupervisorEvaluator windows child-process options", () => {
           Buffer.from(
             `${JSON.stringify({
               type: "item.completed",
-              item: { id: "i1", type: "agent_message", text: "Run pnpm vitest to verify" },
+              item: {
+                id: "i1",
+                type: "agent_message",
+                text: JSON.stringify({
+                  status: "continue",
+                  reason: "Need more work",
+                  guidance: "Run pnpm vitest to verify",
+                }),
+              },
             })}\n${JSON.stringify({ type: "turn.completed", usage: { output_tokens: 20 } })}\n`
           )
         );
@@ -112,8 +131,13 @@ describe("SupervisorEvaluator windows child-process options", () => {
     });
 
     await expect(evaluator.evaluate(makeSupervisor(), makeContext())).resolves.toEqual({
-      message: "Run pnpm vitest to verify",
-      objectiveComplete: false,
+      status: "continue",
+      reason: "Need more work",
+      guidance: "Run pnpm vitest to verify",
+      plan: undefined,
+      activeStepId: undefined,
+      progressSummary: undefined,
+      stepUpdates: undefined,
     });
 
     expect(spawnMock).toHaveBeenCalledWith(

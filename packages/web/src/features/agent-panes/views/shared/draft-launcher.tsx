@@ -1,10 +1,10 @@
 import type { Session } from "@coder-studio/core";
 import { useAtomValue, useSetAtom } from "jotai";
-import { ArrowRight, Bot, FlipHorizontal, FlipVertical, Sparkles, X } from "lucide-react";
+import { ArrowRight, FlipHorizontal, FlipVertical, X } from "lucide-react";
 import type { FC } from "react";
 import { dispatchCommandAtom } from "../../../../atoms/connection";
 import { sessionsAtom } from "../../../../atoms/sessions";
-import { Button, IconButton, StatusDot, Tag, Tooltip } from "../../../../components/ui";
+import { Button, IconButton, StatusDot, Tag, ThemedIcon, Tooltip } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { type ProviderId, useProviderLauncher } from "../../actions/use-provider-launcher";
 
@@ -174,7 +174,7 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
                   id: "claude",
                   title: "Claude",
                   meta: "analysis",
-                  icon: <Sparkles size={18} />,
+                  icon: <ThemedIcon semantic="agent.provider.claude" size={18} />,
                   description: "更适合长上下文梳理、方案分析和代码审查。",
                   className: "agent-provider-card-claude",
                 },
@@ -182,7 +182,7 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
                   id: "codex",
                   title: "Codex",
                   meta: "workspace",
-                  icon: <Bot size={18} />,
+                  icon: <ThemedIcon semantic="agent.provider.codex" size={18} />,
                   description: "更适合终端操作、直接改文件和逐步修复问题。",
                   className: "agent-provider-card-codex",
                 },

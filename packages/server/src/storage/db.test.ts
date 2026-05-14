@@ -53,6 +53,11 @@ describe("database schema baseline", () => {
     expect(sessionColumns.find((column) => column.name === "transcript_path")).toBeUndefined();
     expect(sessionColumns.find((column) => column.name === "title")).toBeDefined();
 
+    const supervisorColumns = db.prepare("PRAGMA table_info(supervisors)").all() as Array<{
+      name: string;
+    }>;
+    expect(supervisorColumns.find((column) => column.name === "target_id")).toBeDefined();
+
     const indexNames = (
       db.prepare("SELECT name FROM sqlite_master WHERE type='index' ORDER BY name").all() as Array<{
         name: string;

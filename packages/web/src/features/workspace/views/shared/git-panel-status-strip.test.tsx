@@ -167,4 +167,33 @@ describe("GitPanelStatusStrip", () => {
       "git-panel-status-strip--start"
     );
   });
+
+  it("renders the branch semantic icon in the status strip trigger", () => {
+    const store = createStore();
+    store.set(localeAtom, "en");
+
+    const { container } = render(
+      <Provider store={store}>
+        <GitPanelStatusStrip
+          workspaceId="ws-1"
+          gitState={{
+            branch: "develop",
+            ahead: 0,
+            behind: 0,
+            staged: [],
+            modified: [],
+            deleted: [],
+            untracked: [],
+          }}
+          onOpenBranchSwitcher={vi.fn()}
+        />
+      </Provider>
+    );
+
+    expect(
+      container.querySelector(
+        '.git-panel-status-strip__branch [data-icon-semantic="git.footer.branch"]'
+      )
+    ).toBeTruthy();
+  });
 });

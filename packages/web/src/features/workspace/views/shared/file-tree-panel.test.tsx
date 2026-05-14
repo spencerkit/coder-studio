@@ -390,15 +390,39 @@ describe("FileTreePanel", () => {
     );
 
     const folderLabel = screen.getByText("src");
-    expect(folderLabel.previousElementSibling).toHaveClass("tree-icon", "folder");
+    expect(folderLabel.previousElementSibling).toHaveClass("tree-icon");
+    expect(
+      folderLabel.previousElementSibling?.querySelector('[data-icon-semantic="file.folder.open"]')
+    ).toBeTruthy();
 
     await screen.findByText("app.tsx");
 
-    expect(screen.getByText("app.tsx").previousElementSibling).toHaveClass("tree-icon", "code");
-    expect(screen.getByText("config.json").previousElementSibling).toHaveClass("tree-icon", "data");
-    expect(screen.getByText("README.md").previousElementSibling).toHaveClass("tree-icon", "doc");
-    expect(screen.getByText("logo.svg").previousElementSibling).toHaveClass("tree-icon", "media");
-    expect(screen.getByText("notes.bin").previousElementSibling).toHaveClass("tree-icon", "file");
+    expect(screen.getByText("app.tsx").previousElementSibling).toHaveClass("tree-icon");
+    expect(
+      screen
+        .getByText("app.tsx")
+        .previousElementSibling?.querySelector('[data-icon-semantic="file.type.code"]')
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByText("config.json")
+        .previousElementSibling?.querySelector('[data-icon-semantic="file.type.data"]')
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByText("README.md")
+        .previousElementSibling?.querySelector('[data-icon-semantic="file.type.doc"]')
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByText("logo.svg")
+        .previousElementSibling?.querySelector('[data-icon-semantic="file.type.media"]')
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByText("notes.bin")
+        .previousElementSibling?.querySelector('[data-icon-semantic="file.type.default"]')
+    ).toBeTruthy();
 
     fireEvent.change(screen.getByPlaceholderText("action.search_files"), {
       target: { value: "logo" },
@@ -406,9 +430,13 @@ describe("FileTreePanel", () => {
 
     const searchLabel = await screen.findByText("logo.svg");
     expect(searchLabel.closest(".tree-search-labels")?.previousElementSibling).toHaveClass(
-      "tree-icon",
-      "media"
+      "tree-icon"
     );
+    expect(
+      searchLabel
+        .closest(".tree-search-labels")
+        ?.previousElementSibling?.querySelector('[data-icon-semantic="file.type.media"]')
+    ).toBeTruthy();
   });
 
   it("opens the new file dialog from the toolbar and dispatches file.create", async () => {

@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { activationStatusAtom } from "../../atoms/activation";
 import {
   authenticatedAtom,
+  lastViewedTargetAtom,
   localeAtom,
   pendingFocusSessionAtom,
   visibleMobileSessionIdAtom,
@@ -35,6 +36,7 @@ import {
   gitStateAtomFamily,
 } from "../../features/workspace/atoms";
 import { seedReadyWorkspaceState } from "../../test-utils/workspace-state";
+import { CommandResultError } from "../../ws/client";
 import { MobileShell } from "./index";
 
 const { mockMobileEditorHandleSave, mockMobileEditorToggleSvgTextMode } = vi.hoisted(() => ({
@@ -437,6 +439,7 @@ function renderMobileShell({
     return undefined;
   }),
   sendTerminalInput = vi.fn().mockResolvedValue(undefined),
+  lastViewedTarget = null as { workspaceId: string; sessionId?: string; updatedAt: number } | null,
 }: {
   initialEntry?: string;
   withWorkspaces?: boolean;
@@ -452,6 +455,7 @@ function renderMobileShell({
   };
   sendCommand?: ReturnType<typeof vi.fn>;
   sendTerminalInput?: ReturnType<typeof vi.fn>;
+  lastViewedTarget?: { workspaceId: string; sessionId?: string; updatedAt: number } | null;
 } = {}) {
   window.localStorage.setItem("ui.locale", JSON.stringify(locale));
   const store = createStore();
@@ -466,6 +470,7 @@ function renderMobileShell({
     sendTerminalInput,
     subscribe: vi.fn(() => () => {}),
   } as never);
+  store.set(lastViewedTargetAtom, lastViewedTarget);
   if (withWorkspaces) {
     seedReadyWorkspaceState(store, {
       "ws-1": {
@@ -605,9 +610,17 @@ describe("MobileShell Phase 2 workspace", () => {
 
     expect(screen.getByRole("button", { name: "Switch workspace" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Switch active agent" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Open Agent sheet" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Open Files sheet" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Open Terminal sheet" })).toBeInTheDocument();
+    const agentButton = screen.getByRole("button", { name: "Open Agent sheet" });
+    const filesButton = screen.getByRole("button", { name: "Open Files sheet" });
+    const terminalButton = screen.getByRole("button", { name: "Open Terminal sheet" });
+    expect(agentButton).toBeInTheDocument();
+    expect(filesButton).toBeInTheDocument();
+    expect(terminalButton).toBeInTheDocument();
+    expect(agentButton.querySelector('[data-icon-semantic="mobile.dock.agent"]')).toBeTruthy();
+    expect(filesButton.querySelector('[data-icon-semantic="mobile.dock.files"]')).toBeTruthy();
+    expect(
+      terminalButton.querySelector('[data-icon-semantic="mobile.dock.terminal"]')
+    ).toBeTruthy();
     expect(screen.queryByRole("tablist", { name: "Mobile agents" })).not.toBeInTheDocument();
     expect(screen.queryByText("已连接")).not.toBeInTheDocument();
     expect(screen.getByTestId("mobile-session-card")).toHaveTextContent("sess_2");
@@ -731,11 +744,28 @@ describe("MobileShell Phase 2 workspace", () => {
 
   it("opens the workspace drawer and switches active workspace", async () => {
     const user = userEvent.setup();
-    const { store } = renderMobileShell({ initialEntry: "/workspace" });
+    const sendCommand = vi.fn(async (op: string) => {
+      if (op === "workspace.lastViewedTarget.set") {
+        return {
+          workspaceId: "ws-2",
+          updatedAt: 10,
+        };
+      }
+
+      return undefined;
+    });
+    const { store } = renderMobileShell({ initialEntry: "/workspace", sendCommand });
 
     await user.click(screen.getByRole("button", { name: "Switch workspace" }));
     await user.click(screen.getByRole("button", { name: "Switch to workspace Beta" }));
 
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "workspace.lastViewedTarget.set",
+        { workspaceId: "ws-2", sessionId: undefined },
+        undefined
+      );
+    });
     expect(store.get(activeWorkspaceIdAtom)).toBe("ws-2");
   });
 
@@ -778,7 +808,7 @@ describe("MobileShell Phase 2 workspace", () => {
 
       return undefined;
     });
-    const { store } = renderMobileShell({
+    renderMobileShell({
       initialEntry: "/workspace",
       sessions: [],
       paneLayout: {
@@ -1168,7 +1198,7 @@ describe("MobileShell Phase 2 workspace", () => {
       withWorkspaces: false,
     });
 
-    expect(screen.getByText("正在重新连接...")).toBeInTheDocument();
+    expect(screen.getByText("连接已断开，正在重新连接...")).toBeInTheDocument();
   });
 
   it("shows a not found page for unknown frontend routes", () => {
@@ -1304,7 +1334,7 @@ describe("MobileShell Phase 2 workspace", () => {
     await user.click(await screen.findByRole("button", { name: "Open Agent sheet" }));
     await user.click(screen.getByRole("button", { name: "Create Session" }));
 
-    expect(screen.getByRole("region", { name: "Select Provider sheet" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Select Agent sheet" })).toBeInTheDocument();
 
     await user.click(
       screen.getByRole("button", {
@@ -1324,7 +1354,7 @@ describe("MobileShell Phase 2 workspace", () => {
       );
     });
 
-    expect(screen.getByRole("region", { name: "Select Provider sheet" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Select Agent sheet" })).toBeInTheDocument();
     expect(document.querySelectorAll(".mobile-sheet-layer")).toHaveLength(1);
   });
 
@@ -1339,7 +1369,7 @@ describe("MobileShell Phase 2 workspace", () => {
 
     await user.click(screen.getByRole("button", { name: "Create Session" }));
 
-    expect(screen.getByRole("region", { name: "Select Provider sheet" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Select Agent sheet" })).toBeInTheDocument();
     expect(document.querySelectorAll(".mobile-sheet-layer")).toHaveLength(1);
 
     await user.click(screen.getByRole("button", { name: "Back" }));
@@ -1533,6 +1563,489 @@ describe("MobileShell Phase 2 workspace", () => {
     expect(sendCommand).toHaveBeenCalledWith("session.stop", { sessionId: "sess_2" }, undefined);
   });
 
+  it("removes a mobile-created pane after closing that session so desktop panes do not accumulate", async () => {
+    const user = userEvent.setup();
+    let closeStore: ReturnType<typeof createStore> | null = null;
+    const sendCommand = vi.fn(async (op: string, payload?: Record<string, unknown>) => {
+      if (op === "session.list") {
+        return [
+          createSession({
+            id: "sess_1",
+            terminalId: "term-1",
+            providerId: "claude",
+            state: "idle",
+            title: "Claude",
+          }),
+        ];
+      }
+
+      if (op === "provider.runtimeStatus") {
+        return {
+          providers: {
+            claude: {
+              providerId: "claude",
+              available: true,
+              missingCommands: [],
+              missingPrerequisites: [],
+              autoInstallSupported: false,
+              installReadiness: "ready",
+              manualGuideKeys: [],
+              docUrls: { provider: "", prerequisites: {} },
+            },
+            codex: {
+              providerId: "codex",
+              available: true,
+              missingCommands: [],
+              missingPrerequisites: [],
+              autoInstallSupported: false,
+              installReadiness: "ready",
+              manualGuideKeys: [],
+              docUrls: { provider: "", prerequisites: {} },
+            },
+          },
+        };
+      }
+
+      if (op === "session.stop") {
+        queueMicrotask(() => {
+          if (!closeStore) {
+            return;
+          }
+
+          closeStore.set(sessionsAtom, {
+            sess_1: createSession({
+              id: "sess_1",
+              terminalId: "term-1",
+              providerId: "claude",
+              state: "idle",
+              title: "Claude",
+            }),
+            sess_3: createSession({
+              id: "sess_3",
+              terminalId: "term-3",
+              providerId: String(payload?.providerId ?? "codex"),
+              state: "ended",
+              title: "Codex 2",
+              endedAt: Date.now(),
+            }),
+          });
+        });
+        return undefined;
+      }
+
+      if (op === "session.remove") {
+        queueMicrotask(() => {
+          if (!closeStore) {
+            return;
+          }
+
+          closeStore.set(sessionsAtom, {
+            sess_1: createSession({
+              id: "sess_1",
+              terminalId: "term-1",
+              providerId: "claude",
+              state: "idle",
+              title: "Claude",
+            }),
+          });
+        });
+        return undefined;
+      }
+
+      if (op === "session.create") {
+        return createSession({
+          id: "sess_3",
+          terminalId: "term-3",
+          providerId: String(payload?.providerId ?? "codex"),
+          state: "idle",
+          title: "Codex 2",
+        });
+      }
+
+      if (op === "workspace.uiState.set") {
+        return {
+          id: "ws-1",
+          name: "Alpha",
+          path: "/tmp/alpha",
+          targetRuntime: "native",
+          openedAt: 1,
+          lastActiveAt: 1,
+          uiState: payload?.uiState,
+        };
+      }
+
+      return undefined;
+    });
+
+    const { store } = renderMobileShell({
+      sendCommand,
+      sessions: [],
+      paneLayout: {
+        id: "root",
+        type: "leaf",
+        sessionId: "sess_1",
+      },
+    });
+    closeStore = store;
+
+    await user.click(await screen.findByRole("button", { name: "Open Agent sheet" }));
+    await user.click(screen.getByRole("button", { name: "Create Session" }));
+    await user.click(
+      screen.getByRole("button", {
+        name: "Codex",
+        description: "Start Codex session Start new session",
+      })
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("mobile-session-card")).toHaveTextContent("sess_3");
+    });
+
+    const createdLayout = store.get(paneLayoutAtomFamily("ws-1"));
+    expect(createdLayout).toEqual(
+      expect.objectContaining({
+        type: "split",
+        children: [
+          expect.objectContaining({ sessionId: "sess_1" }),
+          expect.objectContaining({ sessionId: "sess_3" }),
+        ],
+      })
+    );
+    expect(createdLayout.children?.[1]).not.toHaveProperty("closeBehavior");
+
+    await user.click(await screen.findByRole("button", { name: "Open Agent sheet" }));
+    const createdRow = screen
+      .getByRole("button", {
+        name: "Codex 2",
+        description: "Switch to agent Codex 2 CODEX",
+      })
+      .closest(".mobile-select-sheet__item-row");
+    expect(createdRow).not.toBeNull();
+
+    await user.click(
+      within(createdRow as HTMLElement).getByRole("button", { name: "Close Current Session" })
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("mobile-session-card")).toHaveTextContent("sess_1");
+    });
+    await waitFor(() => {
+      expect(store.get(paneLayoutAtomFamily("ws-1"))).toEqual({
+        id: "root",
+        type: "leaf",
+        sessionId: "sess_1",
+      });
+    });
+    expect(sendCommand).toHaveBeenCalledWith("session.stop", { sessionId: "sess_3" }, undefined);
+    expect(sendCommand).toHaveBeenCalledWith("session.remove", { sessionId: "sess_3" }, undefined);
+  });
+
+  it("keeps the pane when mobile session close fails", async () => {
+    const user = userEvent.setup();
+    const sendCommand = vi.fn(async (op: string, payload?: Record<string, unknown>) => {
+      if (op === "session.list") {
+        return [
+          createSession({
+            id: "sess_1",
+            terminalId: "term-1",
+            providerId: "claude",
+            state: "idle",
+            title: "Claude",
+          }),
+        ];
+      }
+
+      if (op === "provider.runtimeStatus") {
+        return {
+          providers: {
+            claude: {
+              providerId: "claude",
+              available: true,
+              missingCommands: [],
+              missingPrerequisites: [],
+              autoInstallSupported: false,
+              installReadiness: "ready",
+              manualGuideKeys: [],
+              docUrls: { provider: "", prerequisites: {} },
+            },
+            codex: {
+              providerId: "codex",
+              available: true,
+              missingCommands: [],
+              missingPrerequisites: [],
+              autoInstallSupported: false,
+              installReadiness: "ready",
+              manualGuideKeys: [],
+              docUrls: { provider: "", prerequisites: {} },
+            },
+          },
+        };
+      }
+
+      if (op === "session.create") {
+        return createSession({
+          id: "sess_3",
+          terminalId: "term-3",
+          providerId: String(payload?.providerId ?? "codex"),
+          state: "idle",
+          title: "Codex 2",
+        });
+      }
+
+      if (op === "session.stop") {
+        throw new CommandResultError({
+          code: "permission_denied",
+          message: "stop failed",
+        });
+      }
+
+      if (op === "workspace.uiState.set") {
+        return {
+          id: "ws-1",
+          name: "Alpha",
+          path: "/tmp/alpha",
+          targetRuntime: "native",
+          openedAt: 1,
+          lastActiveAt: 1,
+          uiState: payload?.uiState,
+        };
+      }
+
+      return undefined;
+    });
+
+    const { store } = renderMobileShell({
+      sendCommand,
+      sessions: [],
+      paneLayout: {
+        id: "root",
+        type: "leaf",
+        sessionId: "sess_1",
+      },
+    });
+
+    await user.click(await screen.findByRole("button", { name: "Open Agent sheet" }));
+    await user.click(screen.getByRole("button", { name: "Create Session" }));
+    await user.click(
+      screen.getByRole("button", {
+        name: "Codex",
+        description: "Start Codex session Start new session",
+      })
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("mobile-session-card")).toHaveTextContent("sess_3");
+    });
+
+    await user.click(await screen.findByRole("button", { name: "Open Agent sheet" }));
+    const createdRow = screen
+      .getByRole("button", {
+        name: "Codex 2",
+        description: "Switch to agent Codex 2 CODEX",
+      })
+      .closest(".mobile-select-sheet__item-row");
+    expect(createdRow).not.toBeNull();
+
+    await user.click(
+      within(createdRow as HTMLElement).getByRole("button", { name: "Close Current Session" })
+    );
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith("session.stop", { sessionId: "sess_3" }, undefined);
+    });
+
+    expect(store.get(paneLayoutAtomFamily("ws-1"))).toEqual(
+      expect.objectContaining({
+        type: "split",
+        children: [
+          expect.objectContaining({ sessionId: "sess_1" }),
+          expect.objectContaining({ sessionId: "sess_3" }),
+        ],
+      })
+    );
+    expect(screen.getByTestId("mobile-session-card")).toHaveTextContent("sess_3");
+  });
+
+  it("does not override a user's later fallback-session selection when mobile close fails", async () => {
+    const user = userEvent.setup();
+    let rejectStop: ((error: unknown) => void) | null = null;
+    const sendCommand = vi.fn(async (op: string, payload?: Record<string, unknown>) => {
+      if (op === "session.list") {
+        return [
+          createSession({
+            id: "sess_1",
+            terminalId: "term-1",
+            providerId: "claude",
+            state: "idle",
+            title: "Claude",
+          }),
+          createSession({
+            id: "sess_2",
+            terminalId: "term-2",
+            providerId: "codex",
+            state: "idle",
+            title: "Codex",
+          }),
+          createSession({
+            id: "sess_3",
+            terminalId: "term-3",
+            providerId: "gemini",
+            state: "idle",
+            title: "Gemini",
+          }),
+        ];
+      }
+
+      if (op === "provider.runtimeStatus") {
+        return {
+          providers: {
+            claude: {
+              providerId: "claude",
+              available: true,
+              missingCommands: [],
+              missingPrerequisites: [],
+              autoInstallSupported: false,
+              installReadiness: "ready",
+              manualGuideKeys: [],
+              docUrls: { provider: "", prerequisites: {} },
+            },
+            codex: {
+              providerId: "codex",
+              available: true,
+              missingCommands: [],
+              missingPrerequisites: [],
+              autoInstallSupported: false,
+              installReadiness: "ready",
+              manualGuideKeys: [],
+              docUrls: { provider: "", prerequisites: {} },
+            },
+            gemini: {
+              providerId: "gemini",
+              available: true,
+              missingCommands: [],
+              missingPrerequisites: [],
+              autoInstallSupported: false,
+              installReadiness: "ready",
+              manualGuideKeys: [],
+              docUrls: { provider: "", prerequisites: {} },
+            },
+          },
+        };
+      }
+
+      if (op === "session.stop") {
+        return await new Promise<undefined>((_, reject) => {
+          rejectStop = reject;
+        });
+      }
+
+      if (op === "workspace.uiState.set") {
+        return {
+          id: "ws-1",
+          name: "Alpha",
+          path: "/tmp/alpha",
+          targetRuntime: "native",
+          openedAt: 1,
+          lastActiveAt: 1,
+          uiState: payload?.uiState,
+        };
+      }
+
+      return undefined;
+    });
+
+    renderMobileShell({
+      sendCommand,
+      seedSupervisor: false,
+      lastViewedTarget: { workspaceId: "ws-1", sessionId: "sess_3", updatedAt: Date.now() },
+      sessions: [
+        createSession({
+          id: "sess_1",
+          terminalId: "term-1",
+          providerId: "claude",
+          state: "idle",
+          lastActiveAt: Date.now() - 5_000,
+          title: "Claude",
+        }),
+        createSession({
+          id: "sess_2",
+          terminalId: "term-2",
+          providerId: "codex",
+          state: "idle",
+          lastActiveAt: Date.now() - 2_000,
+          title: "Codex",
+        }),
+        createSession({
+          id: "sess_3",
+          terminalId: "term-3",
+          providerId: "gemini",
+          state: "idle",
+          lastActiveAt: Date.now() - 500,
+          title: "Gemini",
+        }),
+      ],
+      paneLayout: {
+        id: "root",
+        type: "split",
+        direction: "horizontal",
+        children: [
+          { id: "left", type: "leaf", sessionId: "sess_2" },
+          { id: "middle", type: "leaf", sessionId: "sess_3" },
+          { id: "right", type: "leaf", sessionId: "sess_1" },
+        ],
+      },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("mobile-session-card")).toHaveTextContent("sess_3");
+    });
+
+    await user.click(await screen.findByRole("button", { name: "Open Agent sheet" }));
+    const geminiRow = screen
+      .getByRole("button", {
+        name: "Gemini",
+        description: "Switch to agent Gemini GEMINI",
+      })
+      .closest(".mobile-select-sheet__item-row");
+    expect(geminiRow).not.toBeNull();
+
+    await user.click(
+      within(geminiRow as HTMLElement).getByRole("button", { name: "Close Current Session" })
+    );
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith("session.stop", { sessionId: "sess_3" }, undefined);
+    });
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "Codex",
+        description: "Switch to agent Codex CODEX",
+      })
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("mobile-session-card")).toHaveTextContent("sess_2");
+    });
+
+    await act(async () => {
+      rejectStop?.(
+        new CommandResultError({
+          code: "permission_denied",
+          message: "stop failed",
+        })
+      );
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("button", { name: "Close Current Session" })
+      ).not.toBeInTheDocument();
+    });
+    expect(screen.getByTestId("mobile-session-card")).toHaveTextContent("sess_2");
+  });
+
   it("closes a non-active agent from its row action without switching first", async () => {
     const user = userEvent.setup();
     const sendCommand = vi.fn(async (op: string) => {
@@ -1663,6 +2176,61 @@ describe("MobileShell Phase 2 workspace", () => {
     });
   });
 
+  it("persists the global target when a mobile session is selected from the agent sheet", async () => {
+    const user = userEvent.setup();
+    const sendCommand = vi.fn(async (op: string) => {
+      if (op === "workspace.lastViewedTarget.set") {
+        return {
+          workspaceId: "ws-1",
+          sessionId: "sess_1",
+          updatedAt: 10,
+        };
+      }
+
+      if (op === "session.list") {
+        return [
+          createSession({
+            id: "sess_1",
+            terminalId: "term-1",
+            providerId: "claude",
+            state: "idle",
+            title: "Claude",
+          }),
+          createSession({
+            id: "sess_2",
+            terminalId: "term-2",
+            providerId: "codex",
+            state: "running",
+            title: "Codex",
+          }),
+        ];
+      }
+
+      return undefined;
+    });
+
+    renderMobileShell({ sendCommand });
+
+    await user.click(await screen.findByRole("button", { name: "Open Agent sheet" }));
+    await user.click(
+      screen.getByRole("button", {
+        name: "Claude",
+        description: "Switch to agent Claude CLAUDE",
+      })
+    );
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "workspace.lastViewedTarget.set",
+        {
+          workspaceId: "ws-1",
+          sessionId: "sess_1",
+        },
+        undefined
+      );
+    });
+  });
+
   it("tracks the currently visible mobile session in app UI state and clears it on unmount", async () => {
     const { store, unmount } = renderMobileShell({ initialEntry: "/workspace" });
 
@@ -1726,6 +2294,135 @@ describe("MobileShell Phase 2 workspace", () => {
     });
   });
 
+  it("prefers the saved global session target when the mobile workspace restores", async () => {
+    const sessions = [
+      createSession({
+        id: "sess_1",
+        terminalId: "term-1",
+        providerId: "claude",
+        state: "idle",
+        lastActiveAt: Date.now() - 5_000,
+        title: "Claude",
+      }),
+      createSession({
+        id: "sess_2",
+        terminalId: "term-2",
+        providerId: "codex",
+        state: "running",
+        lastActiveAt: Date.now() - 500,
+        title: "Codex",
+      }),
+    ];
+
+    renderMobileShell({
+      initialEntry: "/workspace",
+      sessions,
+      paneLayout: {
+        id: "root",
+        type: "leaf",
+        sessionId: "sess_1",
+      },
+      lastViewedTarget: {
+        workspaceId: "ws-1",
+        sessionId: "sess_1",
+        updatedAt: 10,
+      },
+      sendCommand: vi.fn(async (op: string) => {
+        if (op === "session.list") {
+          return sessions;
+        }
+
+        return undefined;
+      }),
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("mobile-session-card")).toHaveTextContent("sess_1");
+    });
+  });
+
+  it("does not persist the global last-viewed target during automatic mobile restore", async () => {
+    const sendCommand = vi.fn(async (op: string, payload?: Record<string, unknown>) => {
+      if (op === "session.list") {
+        return [
+          createSession({
+            id: "sess_1",
+            terminalId: "term-1",
+            providerId: "claude",
+            state: "idle",
+            lastActiveAt: Date.now() - 5_000,
+            title: "Claude",
+          }),
+          createSession({
+            id: "sess_2",
+            terminalId: "term-2",
+            providerId: "codex",
+            state: "running",
+            lastActiveAt: Date.now() - 500,
+            title: "Codex",
+          }),
+        ];
+      }
+
+      if (op === "workspace.uiState.set") {
+        return {
+          id: "ws-1",
+          name: "Alpha",
+          path: "/tmp/alpha",
+          targetRuntime: "native",
+          openedAt: 1,
+          lastActiveAt: 1,
+          uiState: payload?.uiState,
+        };
+      }
+
+      return undefined;
+    });
+
+    renderMobileShell({
+      initialEntry: "/workspace",
+      sendCommand,
+      sessions: [
+        createSession({
+          id: "sess_1",
+          terminalId: "term-1",
+          providerId: "claude",
+          state: "idle",
+          lastActiveAt: Date.now() - 5_000,
+          title: "Claude",
+        }),
+        createSession({
+          id: "sess_2",
+          terminalId: "term-2",
+          providerId: "codex",
+          state: "running",
+          lastActiveAt: Date.now() - 500,
+          title: "Codex",
+        }),
+      ],
+      paneLayout: {
+        id: "root",
+        type: "leaf",
+        sessionId: "sess_1",
+      },
+      lastViewedTarget: {
+        workspaceId: "ws-1",
+        sessionId: "sess_1",
+        updatedAt: 10,
+      },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("mobile-session-card")).toHaveTextContent("sess_1");
+    });
+
+    expect(sendCommand).not.toHaveBeenCalledWith(
+      "workspace.lastViewedTarget.set",
+      expect.anything(),
+      undefined
+    );
+  });
+
   it("restores a newly created mobile session after reload even when workspace uiState paneLayout is stale", async () => {
     const sessions = [
       createSession({
@@ -1743,6 +2440,187 @@ describe("MobileShell Phase 2 workspace", () => {
         state: "idle",
         lastActiveAt: Date.now() - 500,
         title: "New Mobile Codex",
+      }),
+    ];
+    let closeStore: ReturnType<typeof createStore> | null = null;
+    const sendCommand = vi.fn(async (op: string, payload?: Record<string, unknown>) => {
+      if (op === "session.list") {
+        return sessions;
+      }
+
+      if (op === "session.stop") {
+        queueMicrotask(() => {
+          if (!closeStore) {
+            return;
+          }
+
+          closeStore.set(sessionsAtom, {
+            sess_existing: createSession({
+              id: "sess_existing",
+              terminalId: "term-existing",
+              providerId: "claude",
+              state: "idle",
+              lastActiveAt: Date.now() - 5_000,
+              title: "Existing Claude",
+            }),
+            sess_new_mobile: createSession({
+              id: "sess_new_mobile",
+              terminalId: "term-new-mobile",
+              providerId: "codex",
+              state: "ended",
+              lastActiveAt: Date.now() - 500,
+              title: "New Mobile Codex",
+              endedAt: Date.now(),
+            }),
+          });
+        });
+        return undefined;
+      }
+
+      if (op === "session.remove") {
+        queueMicrotask(() => {
+          if (!closeStore) {
+            return;
+          }
+
+          closeStore.set(sessionsAtom, {
+            sess_existing: createSession({
+              id: "sess_existing",
+              terminalId: "term-existing",
+              providerId: "claude",
+              state: "idle",
+              lastActiveAt: Date.now() - 5_000,
+              title: "Existing Claude",
+            }),
+          });
+        });
+        return undefined;
+      }
+
+      if (op === "workspace.uiState.set") {
+        return {
+          id: "ws-1",
+          name: "Alpha",
+          path: "/tmp/alpha",
+          targetRuntime: "native",
+          openedAt: 1,
+          lastActiveAt: 1,
+          uiState: payload?.uiState,
+        };
+      }
+
+      return undefined;
+    });
+
+    const { store } = renderMobileShell({
+      initialEntry: "/workspace",
+      sessions: [],
+      paneLayout: {
+        id: "root",
+        type: "leaf",
+        sessionId: "sess_existing",
+      },
+      sendCommand,
+    });
+    closeStore = store;
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith("session.list", { workspaceId: "ws-1" }, undefined);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("mobile-session-card")).toHaveTextContent("sess_new_mobile");
+    });
+
+    await waitFor(() => {
+      expect(store.get(paneLayoutAtomFamily("ws-1"))).toEqual(
+        expect.objectContaining({
+          type: "split",
+          children: [
+            expect.objectContaining({ sessionId: "sess_existing" }),
+            expect.objectContaining({ sessionId: "sess_new_mobile" }),
+          ],
+        })
+      );
+    });
+    expect(store.get(paneLayoutAtomFamily("ws-1")).children?.[1]).not.toHaveProperty(
+      "closeBehavior"
+    );
+
+    await userEvent.click(await screen.findByRole("button", { name: "Open Agent sheet" }));
+    const restoredRow = screen
+      .getByRole("button", {
+        name: "New Mobile Codex",
+        description: "Switch to agent New Mobile Codex CODEX",
+      })
+      .closest(".mobile-select-sheet__item-row");
+    expect(restoredRow).not.toBeNull();
+
+    await userEvent.click(
+      within(restoredRow as HTMLElement).getByRole("button", { name: "Close Current Session" })
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("mobile-session-card")).toHaveTextContent("sess_existing");
+    });
+    await waitFor(() => {
+      expect(store.get(paneLayoutAtomFamily("ws-1"))).toEqual({
+        id: "root",
+        type: "leaf",
+        sessionId: "sess_existing",
+      });
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "workspace.uiState.set",
+        expect.objectContaining({
+          workspaceId: "ws-1",
+          uiState: expect.objectContaining({
+            activeSessionId: "sess_new_mobile",
+            paneLayout: expect.objectContaining({
+              type: "split",
+              direction: "horizontal",
+              children: [
+                expect.objectContaining({ sessionId: "sess_existing" }),
+                expect.objectContaining({ sessionId: "sess_new_mobile" }),
+              ],
+            }),
+          }),
+        }),
+        undefined
+      );
+    });
+    const persistedLayoutCall = sendCommand.mock.calls.find(
+      ([op, payload]) =>
+        op === "workspace.uiState.set" &&
+        (payload as { uiState?: { activeSessionId?: string } } | undefined)?.uiState
+          ?.activeSessionId === "sess_new_mobile"
+    );
+    expect(persistedLayoutCall).toBeTruthy();
+    expect(
+      (persistedLayoutCall?.[1] as { uiState?: { paneLayout?: { children?: Array<unknown> } } })
+        .uiState?.paneLayout?.children?.[1]
+    ).not.toHaveProperty("closeBehavior");
+  });
+
+  it("restores the saved global mobile session even when it is missing from the stale pane layout", async () => {
+    const sessions = [
+      createSession({
+        id: "sess_existing",
+        terminalId: "term-existing",
+        providerId: "claude",
+        state: "idle",
+        lastActiveAt: Date.now() - 5_000,
+        title: "Existing Claude",
+      }),
+      createSession({
+        id: "sess_saved",
+        terminalId: "term-saved",
+        providerId: "codex",
+        state: "running",
+        lastActiveAt: Date.now() - 500,
+        title: "Saved Codex",
       }),
     ];
     const sendCommand = vi.fn(async (op: string, payload?: Record<string, unknown>) => {
@@ -1774,35 +2652,15 @@ describe("MobileShell Phase 2 workspace", () => {
         sessionId: "sess_existing",
       },
       sendCommand,
+      lastViewedTarget: {
+        workspaceId: "ws-1",
+        sessionId: "sess_saved",
+        updatedAt: 10,
+      },
     });
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith("session.list", { workspaceId: "ws-1" }, undefined);
-    });
-
-    await waitFor(() => {
-      expect(screen.getByTestId("mobile-session-card")).toHaveTextContent("sess_new_mobile");
-    });
-
-    await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith(
-        "workspace.uiState.set",
-        expect.objectContaining({
-          workspaceId: "ws-1",
-          uiState: expect.objectContaining({
-            activeSessionId: "sess_new_mobile",
-            paneLayout: expect.objectContaining({
-              type: "split",
-              direction: "horizontal",
-              children: [
-                expect.objectContaining({ sessionId: "sess_existing" }),
-                expect.objectContaining({ sessionId: "sess_new_mobile" }),
-              ],
-            }),
-          }),
-        }),
-        undefined
-      );
+      expect(screen.getByTestId("mobile-session-card")).toHaveTextContent("sess_saved");
     });
   });
 
@@ -1936,7 +2794,7 @@ describe("MobileShell Phase 2 workspace", () => {
 
     await user.click(screen.getByRole("button", { name: "Create Session" }));
 
-    expect(screen.getByRole("region", { name: "Select Provider sheet" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Select Agent sheet" })).toBeInTheDocument();
     expect(
       screen.getByRole("button", {
         name: "Claude",
@@ -2156,6 +3014,7 @@ describe("MobileShell Phase 2 workspace", () => {
 
     const badge = await screen.findByRole("button", { name: "打开 Supervisor 面板" });
     expect(screen.getByTestId("mobile-session-card-header-accessory")).toContainElement(badge);
+    expect(badge.querySelector('[data-icon-semantic="supervisor.entry"]')).toBeTruthy();
 
     await user.click(badge);
 
@@ -2185,6 +3044,6 @@ describe("MobileShell Phase 2 workspace", () => {
       reconnectAttempts: 2,
     });
 
-    expect(await screen.findByText("正在重新连接...")).toBeInTheDocument();
+    expect(await screen.findByText("连接已断开，正在重新连接...")).toBeInTheDocument();
   });
 });

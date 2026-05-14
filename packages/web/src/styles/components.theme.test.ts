@@ -2,6 +2,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
+const baseStylesheet = readFileSync(`${process.cwd()}/src/styles/base.css`, "utf8");
 const stylesheet = readFileSync(`${process.cwd()}/src/styles/components.css`, "utf8");
 const tokensStylesheet = readFileSync(`${process.cwd()}/src/styles/tokens.css`, "utf8");
 const segmentedControlStylesheet = readFileSync(
@@ -72,53 +73,114 @@ function getLastRuleBlock(selector: string) {
 
 describe("components.css theme-sensitive surfaces", () => {
   it("routes file tree and git status icons through icon theme tokens", () => {
-    expect(getLastRuleBlock(".tree-icon.folder")).toContain("var(--icon-file-folder)");
-    expect(getLastRuleBlock(".tree-icon.code")).toContain("var(--icon-file-code)");
-    expect(getLastRuleBlock(".tree-icon.data")).toContain("var(--icon-file-data)");
-    expect(getLastRuleBlock(".tree-icon.doc")).toContain("var(--icon-file-doc)");
-    expect(getLastRuleBlock(".tree-icon.media")).toContain("var(--icon-file-media)");
-    expect(getLastRuleBlock(".tree-icon.file")).toContain("var(--icon-file-default)");
-    expect(getLastRuleBlock(".file-tree-shell .tree-icon.file")).toContain(
+    expect(getLastRuleBlock(".tree-icon")).toContain("width: 14px");
+    expect(getLastRuleBlock(".tree-icon")).toContain("height: 14px");
+    expect(getLastRuleBlockFrom(baseStylesheet, ".themed-icon--tone-file-folder")).toContain(
+      "var(--icon-file-folder)"
+    );
+    expect(getLastRuleBlockFrom(baseStylesheet, ".themed-icon--tone-file-code")).toContain(
+      "var(--icon-file-code)"
+    );
+    expect(getLastRuleBlockFrom(baseStylesheet, ".themed-icon--tone-file-data")).toContain(
+      "var(--icon-file-data)"
+    );
+    expect(getLastRuleBlockFrom(baseStylesheet, ".themed-icon--tone-file-doc")).toContain(
+      "var(--icon-file-doc)"
+    );
+    expect(getLastRuleBlockFrom(baseStylesheet, ".themed-icon--tone-file-media")).toContain(
+      "var(--icon-file-media)"
+    );
+    expect(getLastRuleBlockFrom(baseStylesheet, ".themed-icon--tone-file-default")).toContain(
       "var(--icon-file-default)"
     );
-    expect(getLastRuleBlock(".git-row-icon-staged")).toContain("var(--icon-git-staged)");
-    expect(getLastRuleBlock(".git-row-icon-modified")).toContain("var(--icon-git-modified)");
-    expect(getLastRuleBlock(".git-row-icon-deleted")).toContain("var(--icon-git-deleted)");
-    expect(getLastRuleBlock(".git-row-icon-untracked")).toContain("var(--icon-git-untracked)");
+    expect(getLastRuleBlock(".git-row-icon")).toContain("display: inline-flex");
+    expect(getLastRuleBlock(".git-row-icon")).toContain("align-items: center");
+    expect(getLastRuleBlockFrom(baseStylesheet, ".themed-icon--tone-git-staged")).toContain(
+      "var(--icon-git-staged)"
+    );
+    expect(getLastRuleBlockFrom(baseStylesheet, ".themed-icon--tone-git-modified")).toContain(
+      "var(--icon-git-modified)"
+    );
+    expect(getLastRuleBlockFrom(baseStylesheet, ".themed-icon--tone-git-deleted")).toContain(
+      "var(--icon-git-deleted)"
+    );
+    expect(getLastRuleBlockFrom(baseStylesheet, ".themed-icon--tone-git-untracked")).toContain(
+      "var(--icon-git-untracked)"
+    );
   });
 
   it("routes semantic icon classes through icon tokens", () => {
     expect(getLastRuleBlock(".settings-mobile-item__icon")).toContain("var(--icon-secondary)");
     expect(getLastRuleBlock(".settings-nav-icon")).toContain("var(--icon-secondary)");
     expect(getLastRuleBlock(".terminal-panel-empty-icon")).toContain("var(--icon-muted)");
-    expect(getLastRuleBlock(".bottom-terminal-empty-icon")).toContain("var(--icon-muted)");
-    expect(getLastRuleBlock(".config-empty-icon")).toContain("var(--icon-muted)");
+    expect(getLastRuleBlock(".bottom-terminal-empty-icon")).toContain("width: 32px");
+    expect(getLastRuleBlock(".bottom-terminal-empty-icon")).toContain("opacity: 0.45");
+    expect(getLastRuleBlock(".config-empty-icon")).toContain("width: 24px");
+    expect(getLastRuleBlockFrom(baseStylesheet, ".themed-icon--tone-muted")).toContain(
+      "var(--icon-muted)"
+    );
+    expect(getLastRuleBlockFrom(baseStylesheet, ".themed-icon--tone-warning")).toContain(
+      "var(--icon-warning)"
+    );
+    expect(getLastRuleBlockFrom(baseStylesheet, ".themed-icon--tone-success")).toContain(
+      "var(--icon-success)"
+    );
   });
 
   it("keeps icon surfaces on dedicated icon surface tokens", () => {
-    expect(getLastRuleBlock(".welcome-feature-icon")).toContain(
-      "background: var(--icon-surface-accent)"
-    );
-    expect(getLastRuleBlock(".welcome-feature-icon")).toContain("color: var(--icon-accent)");
-    expect(getLastRuleBlock(".config-empty-icon")).toContain(
-      "background: var(--icon-surface-subtle)"
-    );
+    const accentSurfaceBlocks = getRuleBlocksFrom(baseStylesheet, ".themed-icon--surface-accent");
+    const subtleSurfaceBlocks = getRuleBlocksFrom(baseStylesheet, ".themed-icon--surface-subtle");
+    const warningSurfaceBlocks = getRuleBlocksFrom(baseStylesheet, ".themed-icon--surface-warning");
+    const successSurfaceBlocks = getRuleBlocksFrom(baseStylesheet, ".themed-icon--surface-success");
+
+    expect(getLastRuleBlock(".welcome-feature-icon")).toContain("width: 32px");
+    expect(getLastRuleBlock(".welcome-feature-icon")).toContain("height: 32px");
+    expect(getLastRuleBlock(".config-empty-icon")).toContain("margin-bottom: var(--sp-2)");
+    expect(getLastRuleBlock(".tree-icon")).toContain("color: var(--text-tertiary)");
     expect(getLastRuleBlock(".supervisor-danger-callout")).toContain("var(--icon-surface-error)");
-    expect(getLastRuleBlock(".supervisor-danger-callout-icon")).toContain("var(--icon-error)");
+    expect(
+      accentSurfaceBlocks.some((block) => block.includes("background: var(--icon-surface-accent)"))
+    ).toBe(true);
+    expect(getLastRuleBlockFrom(baseStylesheet, ".themed-icon--tone-accent")).toContain(
+      "var(--icon-accent)"
+    );
+    expect(
+      subtleSurfaceBlocks.some((block) => block.includes("background: var(--icon-surface-subtle)"))
+    ).toBe(true);
+    expect(
+      warningSurfaceBlocks.some((block) =>
+        block.includes("background: var(--icon-surface-warning)")
+      )
+    ).toBe(true);
+    expect(
+      successSurfaceBlocks.some((block) =>
+        block.includes("background: var(--icon-surface-success)")
+      )
+    ).toBe(true);
+    expect(getLastRuleBlockFrom(baseStylesheet, ".themed-icon--tone-error")).toContain(
+      "var(--icon-error)"
+    );
   });
 
   it("keeps mobile icon intent scoped correctly", () => {
-    expect(getLastRuleBlock(".mobile-supervisor-badge__icon")).toContain(
-      "color: var(--icon-accent)"
-    );
     expect(getLastRuleBlock(".mobile-dock__icon")).toContain("color: currentColor");
   });
 
   it("keeps toast icons on icon semantic tokens instead of raw status colors", () => {
-    expect(getLastRuleBlock(".toast--success .toast__icon")).toContain("var(--icon-success)");
-    expect(getLastRuleBlock(".toast--error .toast__icon")).toContain("var(--icon-error)");
-    expect(getLastRuleBlock(".toast--warning .toast__icon")).toContain("var(--icon-warning)");
-    expect(getLastRuleBlock(".toast--info .toast__icon")).toContain("var(--icon-info)");
+    expect(getLastRuleBlock(".toast__icon")).toContain("display: inline-flex");
+    expect(getLastRuleBlock(".toast__icon-symbol")).toContain("width: 20px");
+    expect(getLastRuleBlockFrom(baseStylesheet, ".themed-icon--tone-success")).toContain(
+      "var(--icon-success)"
+    );
+    expect(getLastRuleBlockFrom(baseStylesheet, ".themed-icon--tone-error")).toContain(
+      "var(--icon-error)"
+    );
+    expect(getLastRuleBlockFrom(baseStylesheet, ".themed-icon--tone-warning")).toContain(
+      "var(--icon-warning)"
+    );
+    expect(getLastRuleBlockFrom(baseStylesheet, ".themed-icon--tone-info")).toContain(
+      "var(--icon-info)"
+    );
     expect(getLastRuleBlockFrom(toastStyles, ".success .icon")).toContain(
       "background: var(--icon-surface-success)"
     );
@@ -289,34 +351,8 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(xtermViewport).not.toContain("touch-action: none");
   });
 
-  it("mobile terminal copy mode overlay styles", () => {
-    const overlay = getLastRuleBlock(".mobile-terminal-copy-mode");
-    const toolbar = getLastRuleBlock(".mobile-terminal-copy-mode__toolbar");
-    const done = getLastRuleBlock(".mobile-terminal-copy-mode__done");
-    const content = getLastRuleBlock(".mobile-terminal-copy-mode__content");
-    const text = getLastRuleBlock(".mobile-terminal-copy-mode__text");
-
-    expect(overlay).toContain("position: absolute");
-    expect(overlay).toContain("inset: 0");
-    expect(overlay).toContain("z-index: 6");
-    expect(overlay).toContain("overflow: hidden");
-    expect(overlay).toContain("user-select: text");
-    expect(overlay).toContain("-webkit-user-select: text");
-    expect(toolbar).toContain("display: flex");
-    expect(toolbar).toContain("align-items: center");
-    expect(done).toContain("margin-left: auto");
-    expect(content).toContain("overflow: auto");
-    expect(content).toContain("max-width: 100%");
-    expect(content).toContain("-webkit-overflow-scrolling: touch");
-    expect(content).toContain("user-select: text");
-    expect(content).toContain("-webkit-user-select: text");
-    expect(content).toContain("-webkit-touch-callout: default");
-    expect(text).toContain("min-width: 100%");
-    expect(text).toContain("white-space: pre");
-    expect(text).toContain("user-select: text");
-    expect(text).toContain("-webkit-user-select: text");
-    expect(text).not.toContain("white-space: pre-wrap");
-    expect(text).not.toContain("word-break: break-word");
+  it("does not ship removed mobile terminal copy mode overlay CSS", () => {
+    expect(stylesheet).not.toContain(".mobile-terminal-copy-mode");
   });
 
   it("keeps code editor header actions docked to the right edge", () => {
@@ -1053,7 +1089,8 @@ describe("components.css theme-sensitive surfaces", () => {
 
   it("keeps supervisor entry icons and labels vertically centered", () => {
     const desktopButton = getLastRuleBlock(".supervisor-enable-btn");
-    const desktopButtonIcon = getLastRuleBlock(".supervisor-enable-btn > svg");
+    const desktopButtonIcon = getLastRuleBlock(".supervisor-enable-btn > .themed-icon");
+    const desktopButtonIconSvg = getLastRuleBlock(".supervisor-enable-btn > .themed-icon svg");
     const desktopButtonLabel = getLastRuleBlock(".supervisor-enable-btn > span");
     const mobileBadge = getLastGroupedRuleBlock(
       /\.mobile-supervisor-badge\s*\{([^}]*justify-content:[^}]*)\}/g
@@ -1064,7 +1101,8 @@ describe("components.css theme-sensitive surfaces", () => {
 
     expect(desktopButton).toContain("justify-content: center");
     expect(desktopButton).toContain("line-height: 1");
-    expect(desktopButtonIcon).toContain("display: block");
+    expect(desktopButtonIcon).toContain("display: inline-flex");
+    expect(desktopButtonIconSvg).toContain("display: block");
     expect(desktopButtonLabel).toContain("display: inline-flex");
     expect(desktopButtonLabel).toContain("align-items: center");
     expect(mobileBadge).toContain("justify-content: center");

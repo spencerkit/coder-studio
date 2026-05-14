@@ -68,6 +68,13 @@ function createWsSendCommandMock(
   handler?: (op: string, args: unknown) => Promise<unknown> | unknown
 ) {
   return vi.fn().mockImplementation(async (op: string, args: unknown) => {
+    if (handler) {
+      const handled = await handler(op, args);
+      if (handled !== undefined) {
+        return handled;
+      }
+    }
+
     if (op === "activation.claim") {
       return {
         active: true,
@@ -78,10 +85,6 @@ function createWsSendCommandMock(
 
     if (op === "activation.release") {
       return { ok: true };
-    }
-
-    if (handler) {
-      return await handler(op, args);
     }
 
     return undefined;
@@ -560,6 +563,96 @@ describe("AppProviders lifecycle recovery", () => {
     expect(
       wsState.client?.sendCommand?.mock.calls.filter(([op]) => op === "activation.heartbeat") ?? []
     ).toHaveLength(0);
+  });
+
+  it("does not gate activation when websocket reconnect fails", async () => {
+    const store = createStore();
+    wsState.client!.connect = vi.fn().mockRejectedValue(new Error("connect failed"));
+
+    renderProviders(store);
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
+
+    await vi.waitFor(() => {
+      expect(store.get(activationStatusAtom)).not.toBe("gated");
+      expect(store.get(activationReasonAtom)).toBeNull();
+    });
+  });
+
+  it("does not gate activation when activation.claim fails", async () => {
+    const store = createStore();
+    wsState.client!.sendCommand = createWsSendCommandMock(async (op: string) => {
+      if (op === "activation.claim") {
+        throw new Error("claim failed");
+      }
+
+      return undefined;
+    });
+
+    renderProviders(store);
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
+
+    act(() => {
+      wsState.client?.statusHandler?.("connected");
+    });
+
+    await vi.waitFor(() => {
+      expect(store.get(activationStatusAtom)).not.toBe("gated");
+      expect(store.get(activationReasonAtom)).toBeNull();
+    });
+  });
+
+  it("retries activation.claim after a transient failure while connected", async () => {
+    const store = createStore();
+    let claimAttempts = 0;
+    vi.useFakeTimers();
+    wsState.client!.sendCommand = createWsSendCommandMock(async (op: string) => {
+      if (op === "activation.claim") {
+        claimAttempts += 1;
+        if (claimAttempts === 1) {
+          throw new Error("claim failed");
+        }
+
+        return {
+          active: true,
+          generation: 2,
+          recoveryMode: "grace_recover",
+        };
+      }
+
+      return undefined;
+    });
+
+    renderProviders(store);
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
+
+    act(() => {
+      wsState.client?.statusHandler?.("connected");
+    });
+
+    await vi.waitFor(() => {
+      expect(claimAttempts).toBe(1);
+      expect(store.get(activationStatusAtom)).toBe("idle");
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+    });
+
+    await vi.waitFor(() => {
+      expect(claimAttempts).toBe(2);
+      expect(store.get(activationStatusAtom)).toBe("active");
+      expect(store.get(activationGenerationAtom)).toBe(2);
+      expect(store.get(activationReasonAtom)).toBeNull();
+    });
   });
 
   it("disconnects and gates when activation.revoked is received", async () => {

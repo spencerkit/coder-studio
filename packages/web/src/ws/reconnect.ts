@@ -19,7 +19,7 @@ export interface ReconnectConfig {
 }
 
 const DEFAULT_CONFIG: ReconnectConfig = {
-  maxAttempts: 30,
+  maxAttempts: Number.POSITIVE_INFINITY,
   baseDelayMs: 1000,
   maxDelayMs: 30000,
   jitterMs: 100,

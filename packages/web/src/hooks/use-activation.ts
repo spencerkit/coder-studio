@@ -14,6 +14,8 @@ interface ActivationClaimPayload {
   recoveryMode: "fresh" | "grace_recover" | "takeover";
 }
 
+const CLAIM_RETRY_DELAY_MS = 1_000;
+
 export function useActivation() {
   const wsClient = useAtomValue(wsClientAtom);
   const connectionStatus = useAtomValue(connectionStatusAtom);
@@ -22,6 +24,7 @@ export function useActivation() {
   const [generation, setGeneration] = useAtom(activationGenerationAtom);
   const setReason = useSetAtom(activationReasonAtom);
   const claimInFlightRef = useRef<Promise<boolean> | null>(null);
+  const claimRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const claim = useCallback(async (): Promise<boolean> => {
     if (!wsClient) {
@@ -32,8 +35,8 @@ export function useActivation() {
       try {
         await wsClient.connect();
       } catch {
-        setStatus("gated");
-        setReason("reconnect_failed");
+        setReason(null);
+        setStatus((current) => (current === "gated" ? current : "idle"));
         return false;
       }
     }
@@ -54,9 +57,9 @@ export function useActivation() {
         setStatus("active");
         return true;
       })
-      .catch((error) => {
-        setStatus("gated");
-        setReason(error instanceof Error ? error.message : "claim_failed");
+      .catch(() => {
+        setReason(null);
+        setStatus((current) => (current === "gated" ? current : "idle"));
         return false;
       })
       .finally(() => {
@@ -68,7 +71,37 @@ export function useActivation() {
   }, [clientInstanceId, connectionStatus, setGeneration, setReason, setStatus, wsClient]);
 
   useEffect(() => {
+    if (claimRetryTimerRef.current !== null) {
+      clearTimeout(claimRetryTimerRef.current);
+      claimRetryTimerRef.current = null;
+    }
+
+    if (!wsClient || connectionStatus !== "connected" || status !== "idle") {
+      return;
+    }
+
+    claimRetryTimerRef.current = setTimeout(() => {
+      claimRetryTimerRef.current = null;
+      if (!claimInFlightRef.current) {
+        void claim();
+      }
+    }, CLAIM_RETRY_DELAY_MS);
+
     return () => {
+      if (claimRetryTimerRef.current !== null) {
+        clearTimeout(claimRetryTimerRef.current);
+        claimRetryTimerRef.current = null;
+      }
+    };
+  }, [claim, connectionStatus, status, wsClient]);
+
+  useEffect(() => {
+    return () => {
+      if (claimRetryTimerRef.current !== null) {
+        clearTimeout(claimRetryTimerRef.current);
+        claimRetryTimerRef.current = null;
+      }
+
       if (!wsClient || generation === null) {
         return;
       }

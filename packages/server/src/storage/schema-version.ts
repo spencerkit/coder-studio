@@ -21,7 +21,7 @@ interface UserVersionRow {
   user_version: number;
 }
 
-export type SchemaState = "empty" | "current" | "v1" | "incompatible";
+export type SchemaState = "empty" | "current" | "v1" | "v2" | "incompatible";
 
 export interface SchemaDetection {
   state: SchemaState;
@@ -29,7 +29,7 @@ export interface SchemaDetection {
   mismatch: string | null;
 }
 
-export const CURRENT_SCHEMA_VERSION = 2;
+export const CURRENT_SCHEMA_VERSION = 3;
 
 const CURRENT_SCHEMA_PATH = join(import.meta.dirname, "migrations", "001_init.sql");
 
@@ -163,6 +163,152 @@ CREATE TABLE auth_login_failures (
 CREATE INDEX idx_auth_login_failures_ip_failed_at ON auth_login_failures(ip, failed_at);
 `;
 
+export const V2_SCHEMA_SQL = `
+CREATE TABLE workspaces (
+  id TEXT PRIMARY KEY,
+  path TEXT NOT NULL UNIQUE,
+  target_runtime TEXT NOT NULL,
+  wsl_distro TEXT,
+  opened_at INTEGER NOT NULL,
+  last_active_at INTEGER NOT NULL,
+  ui_state TEXT
+);
+
+CREATE TABLE terminals (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL,
+  cwd TEXT NOT NULL,
+  argv TEXT NOT NULL,
+  env TEXT,
+  title TEXT,
+  cols INTEGER NOT NULL,
+  rows INTEGER NOT NULL,
+  created_at INTEGER NOT NULL,
+  ended_at INTEGER,
+  exit_code INTEGER
+);
+
+CREATE INDEX idx_terminals_workspace ON terminals(workspace_id);
+CREATE INDEX idx_terminals_kind ON terminals(workspace_id, kind);
+
+CREATE TABLE sessions (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  terminal_id TEXT NOT NULL REFERENCES terminals(id) ON DELETE CASCADE,
+  provider_id TEXT NOT NULL,
+  capability TEXT NOT NULL,
+  state TEXT NOT NULL,
+  started_at INTEGER NOT NULL,
+  ended_at INTEGER,
+  last_active_at INTEGER NOT NULL,
+  completion_percent INTEGER,
+  error_reason TEXT,
+  archived BOOLEAN DEFAULT 0,
+  title TEXT
+);
+
+CREATE INDEX idx_sessions_workspace ON sessions(workspace_id);
+CREATE UNIQUE INDEX idx_sessions_terminal ON sessions(terminal_id);
+CREATE UNIQUE INDEX idx_sessions_id_workspace ON sessions(id, workspace_id);
+
+CREATE TABLE provider_configs (
+  provider_id TEXT PRIMARY KEY,
+  config TEXT NOT NULL
+);
+
+CREATE TABLE user_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+
+CREATE TABLE auth_sessions (
+  token TEXT PRIMARY KEY,
+  created_at INTEGER NOT NULL,
+  last_seen_at INTEGER NOT NULL
+);
+
+CREATE INDEX idx_auth_sessions_last_seen_at ON auth_sessions(last_seen_at);
+
+CREATE TABLE supervisors (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL UNIQUE,
+  workspace_id TEXT NOT NULL,
+  state TEXT NOT NULL,
+  objective TEXT NOT NULL,
+  evaluator_provider_id TEXT NOT NULL,
+  last_cycle_at INTEGER,
+  last_evaluated_turn_id TEXT,
+  error_reason TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  evaluator_model TEXT,
+  max_supervision_count INTEGER NOT NULL DEFAULT 0,
+  completed_supervision_count INTEGER NOT NULL DEFAULT 0,
+  scheduled_at INTEGER,
+  stop_reason TEXT,
+  FOREIGN KEY (session_id, workspace_id) REFERENCES sessions(id, workspace_id) ON DELETE CASCADE,
+  FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_supervisors_workspace ON supervisors(workspace_id);
+CREATE INDEX idx_supervisors_session ON supervisors(session_id);
+CREATE UNIQUE INDEX idx_supervisors_id_session ON supervisors(id, session_id);
+
+CREATE TABLE supervisor_cycles (
+  id TEXT PRIMARY KEY,
+  supervisor_id TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  status TEXT NOT NULL,
+  trigger TEXT NOT NULL,
+  evidence_source TEXT NOT NULL,
+  objective TEXT NOT NULL,
+  evaluator_provider_id TEXT NOT NULL,
+  turn_id TEXT,
+  progress INTEGER,
+  result TEXT,
+  injected_guidance TEXT,
+  error_reason TEXT,
+  created_at INTEGER NOT NULL,
+  completed_at INTEGER,
+  FOREIGN KEY (supervisor_id, session_id) REFERENCES supervisors(id, session_id) ON DELETE CASCADE,
+  FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_supervisor_cycles_supervisor ON supervisor_cycles(supervisor_id, created_at DESC);
+CREATE INDEX idx_supervisor_cycles_session ON supervisor_cycles(session_id, created_at DESC);
+
+CREATE TABLE supervisor_cycle_attempts (
+  id TEXT PRIMARY KEY,
+  cycle_id TEXT NOT NULL REFERENCES supervisor_cycles(id) ON DELETE CASCADE,
+  attempt_index INTEGER NOT NULL,
+  status TEXT NOT NULL,
+  started_at INTEGER NOT NULL,
+  completed_at INTEGER,
+  error_reason TEXT,
+  provider_model TEXT
+);
+
+CREATE INDEX idx_supervisor_cycle_attempts_cycle ON supervisor_cycle_attempts(cycle_id, attempt_index);
+
+CREATE TABLE auth_login_blocks (
+  ip TEXT PRIMARY KEY,
+  failed_count INTEGER NOT NULL,
+  first_failed_at INTEGER NOT NULL,
+  last_failed_at INTEGER NOT NULL,
+  blocked_until INTEGER
+);
+
+CREATE INDEX idx_auth_login_blocks_blocked_until ON auth_login_blocks(blocked_until);
+
+CREATE TABLE auth_login_failures (
+  ip TEXT NOT NULL,
+  failed_at INTEGER NOT NULL
+);
+
+CREATE INDEX idx_auth_login_failures_ip_failed_at ON auth_login_failures(ip, failed_at);
+`;
+
 function normalizeSql(sql: string | null): string {
   return (sql ?? "").replace(/\s+/g, " ").trim();
 }
@@ -204,6 +350,7 @@ function buildSchemaEntries(schemaSql: string): SchemaEntry[] {
 
 const CURRENT_SCHEMA_ENTRIES = buildSchemaEntries(CURRENT_SCHEMA_SQL);
 const V1_SCHEMA_ENTRIES = buildSchemaEntries(V1_SCHEMA_SQL);
+const V2_SCHEMA_ENTRIES = buildSchemaEntries(V2_SCHEMA_SQL);
 
 function hasExactFingerprint(
   actualEntries: SchemaEntry[],
@@ -272,6 +419,14 @@ export function detectSchema(db: Database): SchemaDetection {
     };
   }
 
+  if (hasExactFingerprint(actualEntries, V2_SCHEMA_ENTRIES)) {
+    return {
+      state: "v2",
+      userVersion,
+      mismatch: null,
+    };
+  }
+
   return {
     state: "incompatible",
     userVersion,
@@ -281,6 +436,10 @@ export function detectSchema(db: Database): SchemaDetection {
 
 export function stampCurrentSchemaVersion(db: Database): void {
   db.exec(`PRAGMA user_version = ${CURRENT_SCHEMA_VERSION}`);
+}
+
+export function stampSchemaVersion(db: Database, version: number): void {
+  db.exec(`PRAGMA user_version = ${version}`);
 }
 
 export class IncompatibleSchemaError extends Error {

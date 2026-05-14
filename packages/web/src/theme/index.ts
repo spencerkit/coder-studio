@@ -1,4 +1,17 @@
 export {
+  BASE_ICON_THEME,
+  createIconTheme,
+  getIconPresentation,
+  ICON_SEMANTICS,
+  type IconPresentationDefinition,
+  type IconSemantic,
+  type IconSurface,
+  type IconThemeDefinition,
+  type IconTone,
+  type ResolvedIconPresentation,
+  registerIconThemes,
+} from "./icon-theme";
+export {
   type AppThemeDefinition,
   type MonacoThemeDefinition,
   type TerminalThemeDefinition,

@@ -2,7 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { BrowserRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { activationStatusAtom } from "../atoms/activation";
+import { activationReasonAtom, activationStatusAtom } from "../atoms/activation";
 import { authenticatedAtom, localeAtom } from "../atoms/app-ui";
 import { authEnabledAtom, connectionStatusAtom, wsClientAtom } from "../atoms/connection";
 import {
@@ -313,7 +313,21 @@ describe("DesktopShell auth gating", () => {
 
     renderShell(store);
 
-    expect(screen.getByText("正在重新连接...")).toBeInTheDocument();
+    expect(screen.getByText("连接已断开，正在重新连接...")).toBeInTheDocument();
+  });
+
+  it("shows the displaced-session banner on desktop when activation is gated", () => {
+    const store = createStore();
+    store.set(connectionStatusAtom, "disconnected");
+    store.set(authEnabledAtom, false);
+    store.set(authenticatedAtom, true);
+    store.set(activationStatusAtom, "gated");
+    store.set(activationReasonAtom, "displaced");
+
+    renderShell(store);
+
+    expect(screen.getByText("另一个标签页已激活")).toBeInTheDocument();
+    expect(screen.queryByText("连接已断开，正在重新连接...")).not.toBeInTheDocument();
   });
 
   it("renders SessionGatePage on /session-gate", () => {
@@ -369,6 +383,134 @@ describe("DesktopShell auth gating", () => {
     await waitFor(() => {
       expect(window.location.pathname).toBe("/workspace");
     });
+  });
+
+  it("hydrates the saved last-viewed workspace before redirecting into /workspace", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "workspace.list") {
+        return [
+          {
+            id: "ws-1",
+            path: "/tmp/ws-1",
+            targetRuntime: "native",
+            openedAt: 1,
+            lastActiveAt: 1,
+            uiState: {
+              leftPanelWidth: 280,
+              bottomPanelHeight: 200,
+              focusMode: false,
+            },
+          },
+          {
+            id: "ws-2",
+            path: "/tmp/ws-2",
+            targetRuntime: "native",
+            openedAt: 2,
+            lastActiveAt: 2,
+            uiState: {
+              leftPanelWidth: 280,
+              bottomPanelHeight: 200,
+              focusMode: false,
+            },
+          },
+        ];
+      }
+
+      if (op === "workspace.lastViewedTarget.get") {
+        return {
+          workspaceId: "ws-2",
+          updatedAt: 10,
+        };
+      }
+
+      return [];
+    });
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(authEnabledAtom, false);
+    store.set(authenticatedAtom, true);
+    store.set(workspacesAtom, {});
+    store.set(workspaceOrderAtom, []);
+    store.set(workspacesLoadStateAtom, "idle");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    renderShell(store);
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith("workspace.list", {}, undefined);
+      expect(sendCommand).toHaveBeenCalledWith("workspace.lastViewedTarget.get", {}, undefined);
+    });
+
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/workspace");
+      expect(store.get(activeWorkspaceIdAtom)).toBe("ws-2");
+    });
+  });
+
+  it("does not persist a session-focused uiState during desktop bootstrap when the saved target includes a session", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "workspace.list") {
+        return [
+          {
+            id: "ws-1",
+            path: "/tmp/ws-1",
+            targetRuntime: "native",
+            openedAt: 1,
+            lastActiveAt: 1,
+            uiState: {
+              leftPanelWidth: 280,
+              bottomPanelHeight: 200,
+              focusMode: false,
+            },
+          },
+          {
+            id: "ws-2",
+            path: "/tmp/ws-2",
+            targetRuntime: "native",
+            openedAt: 2,
+            lastActiveAt: 2,
+            uiState: {
+              leftPanelWidth: 280,
+              bottomPanelHeight: 200,
+              focusMode: false,
+            },
+          },
+        ];
+      }
+
+      if (op === "workspace.lastViewedTarget.get") {
+        return {
+          workspaceId: "ws-2",
+          sessionId: "sess-2",
+          updatedAt: 10,
+        };
+      }
+
+      return [];
+    });
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(authEnabledAtom, false);
+    store.set(authenticatedAtom, true);
+    store.set(workspacesAtom, {});
+    store.set(workspaceOrderAtom, []);
+    store.set(workspacesLoadStateAtom, "idle");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    renderShell(store);
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith("workspace.list", {}, undefined);
+      expect(sendCommand).toHaveBeenCalledWith("workspace.lastViewedTarget.get", {}, undefined);
+      expect(window.location.pathname).toBe("/workspace");
+      expect(store.get(activeWorkspaceIdAtom)).toBe("ws-2");
+    });
+
+    expect(sendCommand).not.toHaveBeenCalledWith(
+      "workspace.uiState.set",
+      expect.anything(),
+      undefined
+    );
   });
 
   it("redirects / to /workspace on desktop when the workspace list is already ready while reconnecting", async () => {

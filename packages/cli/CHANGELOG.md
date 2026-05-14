@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.3.7
+
+### Why this patch matters
+
+`v0.3.7` is a UI and workflow polish release focused on consistency. It makes icon styling truly theme-owned across the workspace, fixes places where icons in the same surface could drift into mismatched colors, improves mobile terminal paste and upload flows, and makes workspace target restore more dependable when you return to an existing workspace.
+
+In practice, this release means:
+
+- file tree, mobile workspace dock, settings navigation, and Git footer icons now follow the active theme more consistently
+- Git footer status actions stay visually distinguishable instead of collapsing into one generic symbol set
+- mobile terminal paste is easier to trigger, with clearer fallback handling and mobile upload actions in the same flow
+- reopening a workspace restores the last viewed target more reliably, including safer handling around rapid target switching
+
+### Included in v0.3.7
+
+- add theme-owned semantic icon styling for shared workspace and settings surfaces
+- scope icon palettes by UI context so different areas can stay cohesive without losing meaning
+- align icon groups across supported themes for the file tree, mobile dock, settings navigation, and Git footer
+- improve mobile terminal paste and upload UX for touch-first usage
+- harden last-viewed workspace target persistence and restore behavior
+- fix Git footer icon differentiation for change counts, remote state, local push state, and refresh actions
+
+## 0.3.6
+
+### Patch Changes
+
+- [#33](https://github.com/spencerkit/coder-studio/pull/33) [`851bf21`](https://github.com/spencerkit/coder-studio/commit/851bf213567b638774a4c0bfd0197f07d0f16eeb) Thanks [@pallyoung](https://github.com/pallyoung)! - Fix the shared settings switch thumb alignment so the knob stays vertically centered and reaches the correct checked position.
+
 ## 0.3.5
 
 ### Patch Changes

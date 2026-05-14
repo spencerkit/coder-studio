@@ -1,51 +1,35 @@
-# Coder Studio
-
 <div align="center">
 
-**AI Coding Workspace · Browser-Based · Cross-Device · Self-Hosted**
+<img src="docs/assets/logo.png" alt="Coder Studio Logo" width="128" height="128">
+
+# Coder Studio
+
+**A browser-based AI coding workspace for developers who move between desktop, tablet, and phone.**
+
+Run Claude Code and Codex in one workspace. Keep your terminal, files, Git view, and AI sessions available from any device.
 
 [![npm version](https://img.shields.io/npm/v/@spencer-kit/coder-studio.svg)](https://www.npmjs.com/package/@spencer-kit/coder-studio)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D24.0.0-green.svg)](https://nodejs.org/)
+[![GitHub Stars](https://img.shields.io/github/stars/spencerkit/coder-studio?style=social)](https://github.com/spencerkit/coder-studio/stargazers)
+
+[View Workspace](docs/help/assets/screenshot-desktop-workspace-full.png) · [Quick Start](#quick-start) · [Star on GitHub](https://github.com/spencerkit/coder-studio)
+
+[中文说明](README.zh-CN.md) | [Documentation](docs/help/quick-start.md)
 
 </div>
 
----
+[![Workspace Preview](docs/help/assets/screenshot-desktop-workspace-full.png)](docs/help/assets/screenshot-desktop-workspace-full.png)
 
-> Deploy once, code everywhere.
->
-> Deploy your coding workspace once, then keep working anywhere.
+<div align="center">Preview the full workspace layout built for AI coding, supervision, and device switching.</div>
 
-[中文说明](README.zh-CN.md) | [Documentation](docs/help/quick-start.md) | [GitHub](https://github.com/spencerkit/coder-studio)
+## Why It Feels Different
 
-**Coder Studio** is a browser-based AI coding workspace that runs on your local machine. Access your development environment from any device with a web browser — continue coding on your phone during commute, review changes on a tablet, or switch between computers seamlessly.
+- **One browser workspace for AI coding** — Keep terminal, files, Git, and AI sessions in one place.
+- **Built for device switching** — Start on desktop, continue on tablet, and check progress from your phone.
+- **Objective-driven multi-step orchestration** — Let Supervisor steer long-running AI tasks so you do not have to babysit every turn, reduce repetitive manual prompting, and get more consistent outcomes.
 
-## ✨ Key Features
-
-- 🌐 **Browser-Based Workspace** — No desktop app needed, works in any modern browser
-- 📱 **Cross-Device Continuity** — Start on desktop, continue on mobile, switch devices freely
-- 🤖 **Multi-Agent Support** — Run Claude Code and OpenAI Codex sessions side by side
-- 🔧 **Integrated Environment** — Terminal, file editor, Git viewer, and AI agents in one interface
-- 🔒 **Self-Hosted & Private** — Code stays on your machine, no cloud IDE dependency
-- ⚡ **Real-Time Sync** — Live workspace state across all connected devices
-
-![Workspace Overview](docs/help/assets/screenshot-workspace-overview.png)
-
----
-
-## 🎯 Why Coder Studio
-
-| Feature | Benefit |
-|---------|---------|
-| **Deploy once, continue anywhere** | Start the service once, move between devices without breaking flow |
-| **Unified workspace** | Agent, code, Git, and terminal in one place — no more app switching |
-| **Multi-Agent support** | Run Claude Code and Codex sessions side by side |
-| **Local-first & private** | Runs on your machine, code never leaves your device |
-| **Zero-config browser access** | No desktop client, just open a URL from any device |
-
----
-
-## 🚀 Quick Start
+## Quick Start
 
 ```bash
 # Install globally
@@ -63,23 +47,23 @@ Your browser opens automatically. Select your project folder and start working w
 
 ## 💡 Use Cases
 
-### Remote-Friendly Development
+### Cross-Device Development
 
 - Start an Agent task at the office, check progress on your phone during commute
 - Review code changes on a tablet without opening your laptop
 - Continue work from a home computer with zero setup
 
-### Team Collaboration
+### Long-Running AI Workflows
 
-- Share workspace URL with teammates on the same network
-- Code review without screen sharing — just open the link
-- Real-time visibility into Agent progress for stakeholders
+- Let Supervisor push multi-step tasks toward an objective without constant babysitting
+- Check evaluation cycles and follow-up actions from your phone instead of watching terminal output
+- Reduce repetitive prompting and manual coordination during long agent runs
 
 ### AI-Assisted Coding
 
-- Run multiple Claude Code or Codex sessions in parallel
-- Monitor Agent progress from mobile while away from desk
-- Keep terminal, editor, and Git view in one unified interface
+- Run Claude Code and Codex sessions side by side
+- Keep terminal, editor, Git, and supervisor state in one unified interface
+- Resume active AI work from another device without rebuilding context
 
 ---
 
@@ -107,13 +91,13 @@ The same workspace URL works across all devices — interface adapts automatical
 
 | Feature | Description |
 |---------|-------------|
-| **Multi-Agent Sessions** | Run Claude Code and Codex sessions side by side |
-| **Integrated Editor** | Monaco-powered code editor with syntax highlighting |
-| **Git Integration** | View branches, diffs, and changed files without leaving workspace |
-| **Shell Terminal** | Full PTY terminal for commands and validating Agent output |
-| **Responsive UI** | Desktop, tablet, and phone layouts that adapt automatically |
-| **Session History** | Resume previous sessions with full context preserved |
-| **Dark/Light Theme** | Customizable appearance and keyboard shortcuts |
+| **Cross-Device Workspace** | Reopen the same coding environment from desktop, tablet, or phone without rebuilding context |
+| **Supervisor Loops** | Run objective-driven evaluation and follow-up cycles for long AI tasks with less manual babysitting |
+| **Claude Code + Codex** | Use both agent CLIs inside one workspace instead of splitting your workflow across separate tools |
+| **Unified Terminal, Editor, and Git** | Keep PTY terminals, Monaco editing, diffs, and changed files in one browser UI |
+| **Responsive Workspace UI** | Use layouts tuned for desktop, tablet, and mobile instead of a desktop-only interface squeezed onto small screens |
+| **Session Continuity** | Resume active sessions and keep AI work visible across device switches |
+| **Local-First Runtime** | Keep code and runtime on your machine instead of relying on a cloud IDE |
 
 ---
 
@@ -146,7 +130,7 @@ The same workspace URL works across all devices — interface adapts automatical
 
 - **AI Coding Power Users** — Daily Claude Code / Codex users who want better session management
 - **Multi-Device Developers** — Switch between office, home, and mobile devices frequently
-- **Remote-First Teams** — Need to share work progress without screen sharing
+- **Developers Running Long AI Tasks** — Want Supervisor to keep multi-step work moving without constant babysitting
 - **Privacy-Conscious Developers** — Want code to stay on local machine, not cloud IDE
 
 ---

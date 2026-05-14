@@ -2,6 +2,7 @@ import clsx from "clsx";
 import { X } from "lucide-react";
 import type { HTMLAttributes, ReactNode } from "react";
 import { IconButton } from "../icon-button";
+import { ThemedIcon } from "../themed-icon";
 import styles from "./index.module.css";
 
 export type ToastTone = "success" | "error" | "warning" | "info";
@@ -36,6 +37,13 @@ const legacyToneClassMap: Record<ToastTone, string> = {
   warning: "toast--warning",
   info: "toast--info",
 };
+
+const toastSemanticByTone = {
+  success: "state.success",
+  error: "state.error",
+  warning: "state.warning",
+  info: "state.info",
+} as const;
 
 export function ToastViewport({
   children,
@@ -74,6 +82,9 @@ export function Toast({
 }: ToastProps) {
   const clickable = typeof onClick === "function";
   const { ["aria-live"]: ariaLive, ...restProps } = props;
+  const resolvedIcon = icon ?? (
+    <ThemedIcon className="toast__icon-symbol" semantic={toastSemanticByTone[tone]} size={16} />
+  );
 
   return (
     <div
@@ -90,9 +101,9 @@ export function Toast({
       onClick={onClick}
       role="alert"
     >
-      {icon ? (
+      {resolvedIcon ? (
         <span aria-hidden="true" className={clsx(styles.icon, "toast__icon")}>
-          {icon}
+          {resolvedIcon}
         </span>
       ) : null}
 

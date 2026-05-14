@@ -48,6 +48,8 @@ describe("Toast", () => {
       <Toast closeLabel="Close notification" onDismiss={onDismiss} title="Saved" tone="info" />
     );
 
+    expect(screen.getByTestId("themed-icon")).toHaveAttribute("data-icon-semantic", "state.info");
+
     const closeButton = screen.getByRole("button", { name: "Close notification" });
     expect(closeButton).toHaveClass("btn", "btn-ghost", "btn-sm", "toast__close");
 
@@ -78,6 +80,15 @@ describe("Toast", () => {
     await user.click(screen.getByRole("button", { name: "Open" }));
     expect(onAction).toHaveBeenCalledTimes(1);
     expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses semantic default icons for toast tones when no custom icon is provided", () => {
+    render(<Toast onDismiss={vi.fn()} title="Saved" tone="success" />);
+
+    expect(screen.getByTestId("themed-icon")).toHaveAttribute(
+      "data-icon-semantic",
+      "state.success"
+    );
   });
 
   it("does not make clickable alerts keyboard-focusable or route nested button key activation through the root click handler", async () => {

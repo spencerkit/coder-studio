@@ -145,8 +145,9 @@ test.describe("workspace route history acceptance", () => {
     baseURL: BASE_URL,
   });
 
-  test("switching workspaces keeps the URL stable and does not create history entries", async ({
+  test("switching workspaces keeps the URL stable and restores across refresh and a new browser context", async ({
     page,
+    browser,
   }) => {
     await page.goto("/");
     await expect(page.locator(".topbar-tab")).toHaveCount(2, { timeout: 20000 });
@@ -163,9 +164,31 @@ test.describe("workspace route history acceptance", () => {
 
     await expect(page.locator(".topbar-tab.active")).toContainText("older-workspace");
     await expect(page).toHaveURL(`${BASE_URL}/workspace`);
+    await page.waitForTimeout(300);
 
     const historyLengthAfterSwitch = await page.evaluate(() => window.history.length);
     expect(historyLengthAfterSwitch).toBe(historyLengthBeforeSwitch);
+
+    await page.reload();
+
+    await expect(page.getByTestId("workspace-resolving-shell")).toHaveCount(0, { timeout: 20000 });
+    await expect(page.locator(".topbar-tab")).toHaveCount(2, { timeout: 20000 });
+    await expect(page.locator(".topbar-tab.active")).toContainText("older-workspace");
+    await expect(page).toHaveURL(`${BASE_URL}/workspace`);
+
+    const secondContext = await browser.newContext();
+    try {
+      const secondPage = await secondContext.newPage();
+      await secondPage.goto(`${BASE_URL}/workspace`);
+      await expect(secondPage.getByTestId("workspace-resolving-shell")).toHaveCount(0, {
+        timeout: 20000,
+      });
+      await expect(secondPage.locator(".topbar-tab")).toHaveCount(2, { timeout: 20000 });
+      await expect(secondPage.locator(".topbar-tab.active")).toContainText("older-workspace");
+      await expect(secondPage).toHaveURL(`${BASE_URL}/workspace`);
+    } finally {
+      await secondContext.close();
+    }
 
     await page.goBack();
 

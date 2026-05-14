@@ -1,6 +1,6 @@
-import type { GitStatus } from "@coder-studio/core";
+import type { GitStatus, Session } from "@coder-studio/core";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { dispatchCommandAtom } from "../../../atoms/connection";
 import {
   activeWorkspaceAtom,
@@ -22,7 +22,6 @@ import {
   terminalPanelVisibleAtom,
 } from "../atoms";
 import { useWorkspaceLayoutActions } from "./use-workspace-layout-actions";
-import { useWorkspaceUiStatePersistence } from "./use-workspace-ui-state-persistence";
 
 export type WorkspaceSidebarTab = "files" | "git";
 export type WorkspaceMainAreaMode = "agent" | "editor" | "diff";
@@ -57,7 +56,6 @@ export function useWorkspaceScreenModel() {
   const layout = useWorkspaceLayoutActions();
   const paneActions = usePaneActions(workspaceId);
   const sessionActions = useSessionActions();
-  const { persistUiState } = useWorkspaceUiStatePersistence(workspaceId);
 
   const [sidebarTab, setSidebarTab] = useState<WorkspaceSidebarTab>("files");
   const [createRequest, setCreateRequest] = useState<WorkspaceCreateRequest | null>(null);
@@ -65,6 +63,7 @@ export function useWorkspaceScreenModel() {
   const [mobileSheet, setMobileSheet] = useState<MobileWorkspaceSheetKind>(null);
   const [mobileFilesRoute, setMobileFilesRoute] = useState<MobileFilesRoute>({ kind: "root" });
   const [mobileActiveSessionId, setMobileActiveSessionId] = useState<string | null>(null);
+  const mobileSelectionVersionRef = useRef(0);
 
   useEffect(() => {
     if (!workspace) {
@@ -159,46 +158,8 @@ export function useWorkspaceScreenModel() {
     ];
   }, [orderedSessions, sessions]);
 
-  const preferredSessionId = workspace?.uiState?.activeSessionId ?? null;
-
-  useEffect(() => {
-    if (orderedSessions.some((session) => session.id === mobileActiveSessionId)) {
-      return;
-    }
-
-    if (
-      preferredSessionId &&
-      orderedSessions.some((session) => session.id === preferredSessionId)
-    ) {
-      setMobileActiveSessionId(preferredSessionId);
-      return;
-    }
-
-    const mostRecentSession = [...orderedSessions].sort(
-      (left, right) => right.lastActiveAt - left.lastActiveAt
-    )[0];
-    setMobileActiveSessionId(mostRecentSession?.id ?? orderedSessions[0]?.id ?? null);
-  }, [mobileActiveSessionId, orderedSessions, preferredSessionId]);
-
-  useEffect(() => {
-    if (!workspace) {
-      return;
-    }
-
-    if (mobileActiveSessionId === null && workspace.uiState.activeSessionId) {
-      return;
-    }
-
-    const nextActiveSessionId = mobileActiveSessionId ?? undefined;
-    if (workspace.uiState.activeSessionId === nextActiveSessionId) {
-      return;
-    }
-
-    void persistUiState({ activeSessionId: nextActiveSessionId });
-  }, [mobileActiveSessionId, persistUiState, workspace]);
-
   const activeSession =
-    orderedSessions.find((session) => session.id === mobileActiveSessionId) ?? null;
+    mobileAgentSessions.find((session) => session.id === mobileActiveSessionId) ?? null;
 
   const selectMobileSession = useCallback(
     (sessionId: string | null) => {
@@ -210,6 +171,7 @@ export function useWorkspaceScreenModel() {
         paneActions.appendSession(sessionId, mobileActiveSessionId, "vertical");
       }
 
+      mobileSelectionVersionRef.current += 1;
       setMobileActiveSessionId(sessionId);
     },
     [mobileActiveSessionId, orderedSessions, paneActions, sessions]
@@ -218,6 +180,7 @@ export function useWorkspaceScreenModel() {
   const handleMobileSessionCreated = useCallback(
     (sessionId: string) => {
       paneActions.appendSession(sessionId, mobileActiveSessionId, "vertical");
+      mobileSelectionVersionRef.current += 1;
       setMobileActiveSessionId(sessionId);
     },
     [mobileActiveSessionId, paneActions]
@@ -225,19 +188,46 @@ export function useWorkspaceScreenModel() {
 
   const closeMobileSession = useCallback(
     async (sessionId: string) => {
-      paneActions.closeSessionPane(sessionId);
-      await sessionActions.closeSession(sessionId);
+      const wasActive = mobileActiveSessionId === sessionId;
+      const selectionVersionAtCloseStart = mobileSelectionVersionRef.current;
+      const remainingSessions = mobileAgentSessions.filter((session) => session.id !== sessionId);
+      const nextActiveSessionId = remainingSessions[0]?.id ?? null;
 
-      setMobileActiveSessionId((current) => {
-        if (current !== sessionId) {
-          return current;
+      if (wasActive) {
+        setMobileActiveSessionId(nextActiveSessionId);
+      }
+
+      const closed = await sessionActions.closeSession(sessionId);
+      if (!closed) {
+        if (!wasActive || mobileSelectionVersionRef.current !== selectionVersionAtCloseStart) {
+          return;
         }
 
-        const remainingSessions = orderedSessions.filter((session) => session.id !== sessionId);
-        return remainingSessions[0]?.id ?? null;
-      });
+        setMobileActiveSessionId((current) =>
+          current === nextActiveSessionId ? sessionId : current
+        );
+        return;
+      }
+
+      paneActions.removeSessionPane(sessionId);
     },
-    [orderedSessions, paneActions, sessionActions]
+    [mobileActiveSessionId, mobileAgentSessions, paneActions, sessionActions]
+  );
+
+  const restoreMobileSession = useCallback(
+    (sessionId: string | null) => {
+      if (
+        sessionId &&
+        !orderedSessions.some((session) => session.id === sessionId) &&
+        sessions.some((session) => session.id === sessionId && session.state !== "draft")
+      ) {
+        paneActions.appendSession(sessionId, mobileActiveSessionId, "vertical");
+      }
+
+      mobileSelectionVersionRef.current += 1;
+      setMobileActiveSessionId(sessionId);
+    },
+    [mobileActiveSessionId, orderedSessions, paneActions, sessions]
   );
 
   const openMobileSheet = useCallback((sheet: Exclude<MobileWorkspaceSheetKind, null>) => {
@@ -282,7 +272,9 @@ export function useWorkspaceScreenModel() {
     orderedSessions,
     paneLayout,
     panelRefreshToken,
+    paneLayout,
     closeMobileSession,
+    restoreMobileSession,
     selectMobileSession,
     sessions,
     setSidebarTab,

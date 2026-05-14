@@ -6,7 +6,7 @@
 import type { FileNode } from "@coder-studio/core";
 import { readdir, stat } from "fs/promises";
 import { join, relative } from "path";
-import { createGitignoreFilter } from "./gitignore.js";
+import { createGitignoreFilter, createTreeVisibilityFilter } from "./gitignore.js";
 
 export interface ReadTreeResult {
   path: string;
@@ -24,7 +24,7 @@ export interface ReadTreeResult {
  */
 export async function readTree(rootPath: string, subdir?: string): Promise<ReadTreeResult> {
   const targetPath = subdir ? join(rootPath, subdir) : rootPath;
-  const filter = createGitignoreFilter(rootPath, targetPath);
+  const filter = createTreeVisibilityFilter();
 
   const entries = await readdir(targetPath, { withFileTypes: true });
   const nodes: FileNode[] = [];

@@ -6,6 +6,7 @@ import {
   detectSchema,
   IncompatibleSchemaError,
   stampCurrentSchemaVersion,
+  stampSchemaVersion,
 } from "./schema-version.js";
 
 interface IntegrityCheckRow {
@@ -97,6 +98,14 @@ function upgradeSchemaV1ToV2(db: Database): void {
     db.exec(
       "CREATE INDEX idx_supervisor_cycle_attempts_cycle ON supervisor_cycle_attempts(cycle_id, attempt_index)"
     );
+    stampSchemaVersion(db, 2);
+  });
+}
+
+function upgradeSchemaV2ToV3(db: Database): void {
+  withTransaction(db, () => {
+    db.exec("ALTER TABLE supervisors ADD COLUMN target_id TEXT NOT NULL DEFAULT ''");
+    db.exec("UPDATE supervisors SET target_id = 'legacy_' || id WHERE target_id = ''");
     stampCurrentSchemaVersion(db);
   });
 }
@@ -128,6 +137,12 @@ function initializeOrUpgradeSchema(db: Database, dbPath: string): void {
 
     case "v1":
       upgradeSchemaV1ToV2(db);
+      upgradeSchemaV2ToV3(db);
+      assertCurrentSchema(db, dbPath);
+      return;
+
+    case "v2":
+      upgradeSchemaV2ToV3(db);
       assertCurrentSchema(db, dbPath);
       return;
 

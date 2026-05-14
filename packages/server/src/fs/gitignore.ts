@@ -25,6 +25,10 @@ function isDefaultTreeIgnored(name: string): boolean {
   return name.startsWith(".") || name === "node_modules" || name === ".git";
 }
 
+function isTreeHidden(name: string): boolean {
+  return name === ".git";
+}
+
 function isAlwaysTreeIgnored(name: string): boolean {
   return name === "node_modules" || name === ".git";
 }
@@ -66,6 +70,14 @@ export function createGitignoreFilter(
     const relativePath = relativeToRoot(rootPath, join(dirPath, name));
     return !isIgnoredByGitignore(ig, relativePath);
   };
+}
+
+/**
+ * Creates a filter for directory tree visibility.
+ * Returns false if the entry should be hidden from the tree, true otherwise.
+ */
+export function createTreeVisibilityFilter(): (name: string) => boolean {
+  return (name: string) => !isTreeHidden(name);
 }
 
 /**

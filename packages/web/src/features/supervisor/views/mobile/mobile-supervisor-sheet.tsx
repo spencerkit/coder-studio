@@ -19,12 +19,14 @@ interface MobileSupervisorSheetProps {
   sessionId: string;
   workspaceId: string;
   onClose: () => void;
+  defaultSupervisorDetailsOpen?: boolean;
 }
 
 export function MobileSupervisorSheet({
   sessionId,
   workspaceId,
   onClose,
+  defaultSupervisorDetailsOpen = false,
 }: MobileSupervisorSheetProps) {
   const t = useTranslation();
   const [detailMode, setDetailMode] = useState<ObjectiveDialogMode | null>(null);
@@ -219,7 +221,11 @@ export function MobileSupervisorSheet({
         <div className="mobile-supervisor-sheet__root">
           {supervisor ? (
             <>
-              <SupervisorCard sessionId={sessionId} workspaceId={workspaceId} />
+              <SupervisorCard
+                sessionId={sessionId}
+                workspaceId={workspaceId}
+                defaultDetailsOpen={defaultSupervisorDetailsOpen}
+              />
               <div className="mobile-supervisor-sheet__actions">
                 <Button onClick={() => openDetail("edit")}>
                   {t("supervisor.action.edit_objective")}

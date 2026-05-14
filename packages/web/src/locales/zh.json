@@ -77,7 +77,9 @@
     "search": "搜索",
     "search_files": "搜索文件",
     "search_commands": "搜索命令",
-    "back": "返回"
+    "back": "返回",
+    "expand": "展开",
+    "collapse": "收起"
   },
   "label": {
     "workspace": "工作区",
@@ -227,7 +229,7 @@
     "stop": "停止",
     "resume": "恢复",
     "no_session": "无活跃会话",
-    "provider_select": "选择 Provider",
+    "provider_select": "选择 Agent",
     "state": {
       "starting": "启动中...",
       "running": "运行中",
@@ -259,11 +261,12 @@
     "create_failed_body": "Shell 进程启动失败，请检查服务端运行环境和 Shell 配置。",
     "create_unavailable_title": "当前没有已选中的工作区",
     "create_unavailable_body": "请先打开或切换到一个工作区，再新建终端。",
-    "copy_mode_title": "复制模式",
-    "copy_mode_hint": "拖动选择文本",
-    "copy_mode_done": "完成",
-    "copy_mode_failed_title": "无法进入复制模式",
-    "copy_mode_failed_body": "请重试，或先滚动终端后再长按",
+    "copied_current_line": "已复制当前行",
+    "mobile_copy_current_line_failed_title": "当前行复制失败",
+    "mobile_copy_current_line_failed_body": "请重试长按当前行",
+    "paste_dialog_title": "粘贴文本",
+    "paste_dialog_placeholder": "在此粘贴您的文本...",
+    "paste_dialog_submit": "发送",
     "hide": "隐藏终端",
     "show": "显示终端",
     "selector": {
@@ -273,6 +276,8 @@
       "indexed": "终端 {index}"
     },
     "mobile_input": {
+      "paste": "粘贴",
+      "upload": "上传",
       "shortcuts": "终端快捷按键",
       "ctrl": "Ctrl",
       "ctrl_armed": "Ctrl 已待命",
@@ -483,7 +488,7 @@
     "title": "设置",
     "general": "通用",
     "appearance": "外观",
-    "providers": "Providers",
+    "providers": "Agents",
     "autosave_hint": "设置已自动保存",
     "load_failed": "设置加载失败",
     "load_failed_unknown": "未收到服务端返回的设置数据",
@@ -530,7 +535,7 @@
     "terminal_standard": "标准",
     "terminal_compatibility": "兼容模式",
     "provider": {
-      "title": "Provider 设置",
+      "title": "Agent 设置",
       "status": "状态",
       "capability": "能力等级",
       "capability_full": "完整支持",
@@ -540,7 +545,7 @@
       "hooks_unregistered": "Hooks 未注册",
       "hooks_error": "Hooks 注册失败",
       "hooks": "Hooks 集成",
-      "hooks_hint": "将 Provider 特定的 hooks 注入到当前工作区",
+      "hooks_hint": "将 Agent 特定的 hooks 注入到当前工作区",
       "hooks_inject": "注入 Hooks",
       "configure": "配置",
       "reset": "重置",
@@ -550,10 +555,10 @@
       "open_config_file_editor": "打开配置文件编辑",
       "back_to_base": "返回基础配置",
       "startup_args": "启动命令参数",
-      "startup_args_hint": "每行填写一个启动参数，保存后会追加到 Provider 启动命令后面。",
+      "startup_args_hint": "每行填写一个启动参数，保存后会追加到 Agent 启动命令后面。",
       "startup_args_placeholder": "--verbose\n--debug",
       "command_preview_title": "命令预览",
-      "command_preview_hint": "预览当前 Provider 最终生效的启动命令"
+      "command_preview_hint": "预览当前 Agent 最终生效的启动命令"
     },
     "theme": {
       "title": "主题",
@@ -670,7 +675,31 @@
     },
     "stop_reason": {
       "objective_complete": "目标已达成，Supervisor 已自动停止。",
-      "max_supervision_count_reached": "已达到配置的最大监督次数。"
+      "max_supervision_count_reached": "已达到配置的最大监督次数。",
+      "supervisor_uncertain": "Supervisor 暂时无法判断下一步，已停止自动监督。",
+      "needs_user_input": "Supervisor 需要更多用户输入后才能继续自动监督。"
+    },
+    "target_memory": {
+      "title": "目标记忆",
+      "target": "目标",
+      "plan": "计划",
+      "stalled": "停滞",
+      "plan_ready": "计划已就绪",
+      "plan_pending": "计划待生成",
+      "progress_title": "目标进展",
+      "progress_badge": "进展",
+      "plan_title": "目标计划",
+      "reasoning_title": "目标轮次判断",
+      "cycle_result": {
+        "continue": "继续",
+        "stop": "停止",
+        "error": "错误"
+      },
+      "step_status": {
+        "pending": "待处理",
+        "in_progress": "进行中",
+        "done": "已完成"
+      }
     },
     "meta": {
       "title": "执行策略",
