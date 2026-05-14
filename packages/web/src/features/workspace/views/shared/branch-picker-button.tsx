@@ -1,7 +1,6 @@
 import { useAtomValue, useSetAtom } from "jotai";
-import { GitBranch } from "lucide-react";
 import type { FC } from "react";
-import { Tooltip } from "../../../../components/ui";
+import { ThemedIcon, Tooltip } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { branchQuickPickAtom, gitBranchListAtomFamily } from "../../atoms";
 
@@ -35,7 +34,7 @@ export const BranchPickerButton: FC<BranchPickerButtonProps> = ({ workspaceId })
         onClick={handleClick}
         type="button"
       >
-        <GitBranch size={14} />
+        <ThemedIcon semantic="git.branch" size={14} />
         <span className="branch-name">{branchName}</span>
       </button>
     </Tooltip>

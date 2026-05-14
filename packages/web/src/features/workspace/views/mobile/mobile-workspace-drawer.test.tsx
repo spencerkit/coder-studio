@@ -185,4 +185,36 @@ describe("MobileWorkspaceDrawer", () => {
       "aria-current"
     );
   });
+
+  it("renders the footer launch action with the new workspace semantic icon", () => {
+    const store = createStore();
+
+    render(
+      <Provider store={store}>
+        <MobileWorkspaceDrawer
+          activeWorkspaceId="ws-1"
+          isOpen
+          onClose={vi.fn()}
+          onOpenWorkspaceLauncher={vi.fn()}
+          workspaces={[
+            {
+              id: "ws-1",
+              path: "/tmp/demo",
+              targetRuntime: "native",
+              openedAt: 1,
+              lastActiveAt: 1,
+              uiState: {
+                leftPanelWidth: 320,
+                bottomPanelHeight: 240,
+                focusMode: false,
+              },
+            },
+          ]}
+        />
+      </Provider>
+    );
+
+    const footerButton = screen.getByRole("button", { name: "New Workspace" });
+    expect(footerButton.querySelector('[data-icon-semantic="nav.newWorkspace"]')).toBeTruthy();
+  });
 });

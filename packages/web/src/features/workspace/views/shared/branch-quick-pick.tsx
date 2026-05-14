@@ -1,7 +1,7 @@
 import { useAtomValue, useSetAtom } from "jotai";
-import { Check, Plus } from "lucide-react";
+import { Check } from "lucide-react";
 import { type KeyboardEvent, type ReactElement, useEffect, useRef } from "react";
-import { EmptyState, Popover, Tag } from "../../../../components/ui";
+import { EmptyState, Popover, Tag, ThemedIcon } from "../../../../components/ui";
 import { useViewport } from "../../../../hooks/use-viewport";
 import { useTranslation } from "../../../../lib/i18n";
 import { MobileSelectSheet } from "../../../mobile-select";
@@ -171,7 +171,7 @@ function BranchQuickPickContent() {
               ) : (
                 <>
                   <span className="branch-quick-pick-create-icon">
-                    <Plus size={14} />
+                    <ThemedIcon semantic="git.branch.create" size={14} />
                   </span>
                   <span className="branch-quick-pick-create-label">{item.label}</span>
                 </>

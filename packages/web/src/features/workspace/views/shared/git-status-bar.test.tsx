@@ -36,21 +36,25 @@ function renderStatusBar({
   store.set(wsClientAtom, { sendCommand } as never);
   store.set(gitStateAtomFamily("ws-test"), status);
 
-  render(
+  const { container } = render(
     <Provider store={store}>
       <GitStatusBar workspaceId="ws-test" gitState={status} inline />
     </Provider>
   );
 
-  return { store, sendCommand };
+  return { store, sendCommand, container };
 }
 
 describe("GitStatusBar", () => {
   it("keeps fetch as the trailing action after change and sync counters", () => {
-    renderStatusBar();
+    const { container } = renderStatusBar();
 
     const toolbar = screen.getByRole("button", { name: "Fetch" }).closest(".git-status-bar");
     expect(toolbar).not.toBeNull();
+    expect(container.querySelector('[data-icon-semantic="git.action.diff"]')).toBeTruthy();
+    expect(container.querySelector('[data-icon-semantic="git.action.push"]')).toBeTruthy();
+    expect(container.querySelector('[data-icon-semantic="git.action.pull"]')).toBeTruthy();
+    expect(container.querySelector('[data-icon-semantic="git.action.refresh"]')).toBeTruthy();
 
     expect(screen.getByRole("button", { name: "Fetch" })).toHaveClass(
       "btn",
@@ -105,6 +109,7 @@ describe("GitStatusBar", () => {
 
     expect(screen.getByText("Push Changes")).toBeInTheDocument();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(document.querySelector('[data-icon-semantic="git.action.warning"]')).toBeTruthy();
     expect(
       screen.getByText("Do you want to push 2 local commits to the remote?")
     ).toBeInTheDocument();

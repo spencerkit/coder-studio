@@ -1,6 +1,6 @@
 import type { GitStatus } from "@coder-studio/core";
 import { useAtomValue } from "jotai";
-import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Diff, RefreshCw, X } from "lucide-react";
+import { X } from "lucide-react";
 import { type FC, useLayoutEffect, useState } from "react";
 import { localeAtom } from "../../../../atoms/app-ui";
 import {
@@ -13,6 +13,7 @@ import {
   ModalFooter,
   ModalHeader,
   ModalTitle,
+  ThemedIcon,
   Tooltip,
 } from "../../../../components/ui";
 import { formatDate, type LocaleCode, useTranslation } from "../../../../lib/i18n";
@@ -196,7 +197,7 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({
       <div className={`git-status-bar${inline ? " git-status-bar--inline" : ""}`}>
         <Tooltip content={t("git.statusbar.changes")}>
           <span className="git-status-bar__item">
-            <Diff size={13} aria-hidden="true" />
+            <ThemedIcon semantic="git.action.diff" size={13} />
             <span className="git-status-bar__value">{changeCount}</span>
           </span>
         </Tooltip>
@@ -208,7 +209,7 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({
             disabled={ahead <= 0}
             onClick={() => openConfirm("push", ahead)}
           >
-            <ArrowUpFromLine size={13} aria-hidden="true" />
+            <ThemedIcon semantic="git.action.push" size={13} />
             <span className="git-status-bar__value">{ahead}</span>
           </button>
         </Tooltip>
@@ -220,7 +221,7 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({
             disabled={behind <= 0}
             onClick={() => openConfirm("pull", behind)}
           >
-            <ArrowDownToLine size={13} aria-hidden="true" />
+            <ThemedIcon semantic="git.action.pull" size={13} />
             <span className="git-status-bar__value">{behind}</span>
           </button>
         </Tooltip>
@@ -230,7 +231,11 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({
             className="git-status-bar__item git-status-bar__item--actionable"
             disabled={isFetching}
             icon={
-              <RefreshCw size={13} aria-hidden="true" className={isFetching ? "spin" : undefined} />
+              <ThemedIcon
+                semantic="git.action.refresh"
+                size={13}
+                className={isFetching ? "spin" : undefined}
+              />
             }
             onClick={() => void refreshAfterFetch()}
             size="sm"
@@ -247,7 +252,7 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({
           onOpenChange={handleOpenChange}
           title={
             <>
-              <AlertTriangle size={16} />
+              <ThemedIcon semantic="git.action.warning" size={16} />
               <span>{confirmTitle}</span>
             </>
           }
@@ -277,7 +282,7 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({
         >
           <ModalHeader>
             <ModalTitle>
-              <AlertTriangle size={16} />
+              <ThemedIcon semantic="git.action.warning" size={16} />
               <span>
                 {dialogIntent === "push"
                   ? t("git.push_confirm_title")

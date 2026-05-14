@@ -59,7 +59,6 @@
 
 .command-palette-search-icon {
   flex-shrink: 0;
-  color: var(--text-tertiary);
 }
 
 .command-palette-input {
@@ -2258,14 +2257,8 @@ body.is-resizing-panels * {
 
 .welcome-feature-icon {
   flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   width: 32px;
   height: 32px;
-  border-radius: var(--radius-md);
-  background: var(--icon-surface-accent);
-  color: var(--icon-accent);
 }
 
 .welcome-feature-text {
@@ -3070,9 +3063,14 @@ body.is-resizing-panels * {
     background var(--duration-normal) var(--ease-out);
 }
 
+.supervisor-enable-btn > .themed-icon,
 .supervisor-enable-btn > svg {
-  display: block;
+  display: inline-flex;
   flex-shrink: 0;
+}
+
+.supervisor-enable-btn > .themed-icon svg {
+  display: block;
 }
 
 .supervisor-enable-btn > span {
@@ -3477,7 +3475,6 @@ body.is-resizing-panels * {
 
 .supervisor-danger-callout-icon {
   flex-shrink: 0;
-  color: var(--icon-error);
   margin-top: 1px;
 }
 
@@ -4285,7 +4282,9 @@ body.is-resizing-panels * {
 }
 
 .fp-dir-icon {
-  color: var(--accent-amber);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-size: var(--text-lg);
 }
 
@@ -5400,7 +5399,8 @@ textarea.input {
 }
 
 .bottom-terminal-empty-icon {
-  color: var(--icon-muted);
+  width: 32px;
+  height: 32px;
   opacity: 0.45;
 }
 
@@ -7178,22 +7178,17 @@ textarea.input {
   border-left: 3px solid var(--color-info);
 }
 
-.toast--success .toast__icon {
-  color: var(--icon-success);
-}
-.toast--error .toast__icon {
-  color: var(--icon-error);
-}
-.toast--warning .toast__icon {
-  color: var(--icon-warning);
-}
-.toast--info .toast__icon {
-  color: var(--icon-info);
-}
-
 .toast__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
   margin-top: 1px;
+}
+
+.toast__icon-symbol {
+  width: 20px;
+  height: 20px;
 }
 
 .toast__content {
@@ -7656,17 +7651,10 @@ textarea.input {
 }
 
 .config-empty-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   width: 24px;
   height: 24px;
   margin-bottom: var(--sp-2);
   font-size: var(--text-sm);
-  opacity: 0.8;
-  background: var(--icon-surface-subtle);
-  border-radius: var(--radius-md);
-  color: var(--icon-muted);
 }
 
 .config-empty-title {
@@ -8451,7 +8439,10 @@ textarea.input {
     justify-content: center;
     flex-shrink: 0;
     line-height: 1;
-    color: var(--icon-accent);
+  }
+
+  .mobile-supervisor-badge__icon .themed-icon {
+    display: inline-flex;
   }
 
   .mobile-supervisor-badge__icon svg {
@@ -10578,6 +10569,9 @@ textarea.input {
 }
 
 .git-panel-section-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   flex-shrink: 0;
   padding: 0;
   border: none;
@@ -11133,6 +11127,7 @@ textarea.input {
   gap: 4px;
 }
 
+.mobile-shell__bottom-stack .git-panel-status-strip__branch .themed-icon svg,
 .mobile-shell__bottom-stack .git-panel-status-strip__branch svg {
   width: 10px;
   height: 10px;

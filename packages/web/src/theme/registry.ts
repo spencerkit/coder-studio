@@ -1,3 +1,10 @@
+import {
+  BASE_ICON_THEME,
+  createIconTheme,
+  type IconThemeDefinition,
+  registerIconThemes,
+} from "./icon-theme";
+
 export type ThemeFamily = "mint" | "graphite" | "nord" | "hc";
 export type ThemeKind = "dark" | "light";
 
@@ -48,6 +55,7 @@ export interface AppThemeDefinition {
   documentThemeAttr: string;
   terminalTheme: TerminalThemeDefinition;
   monaco: MonacoThemeDefinition;
+  iconTheme: IconThemeDefinition;
 }
 
 const mintDarkTerminal: TerminalThemeDefinition = {
@@ -110,6 +118,16 @@ const THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
     isHighContrast: false,
     documentThemeAttr: "mint-dark",
     terminalTheme: mintDarkTerminal,
+    iconTheme: createIconTheme({
+      "file.folder.closed": {
+        ...BASE_ICON_THEME.icons["file.folder.closed"],
+        strokeWidth: 1.8,
+      },
+      "file.folder.open": {
+        ...BASE_ICON_THEME.icons["file.folder.open"],
+        strokeWidth: 1.8,
+      },
+    }),
     monaco: {
       base: "vs-dark",
       inherit: true,
@@ -136,6 +154,16 @@ const THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
     isHighContrast: false,
     documentThemeAttr: "mint-light",
     terminalTheme: mintLightTerminal,
+    iconTheme: createIconTheme({
+      "file.folder.closed": {
+        ...BASE_ICON_THEME.icons["file.folder.closed"],
+        strokeWidth: 1.8,
+      },
+      "file.folder.open": {
+        ...BASE_ICON_THEME.icons["file.folder.open"],
+        strokeWidth: 1.8,
+      },
+    }),
     monaco: {
       base: "vs",
       inherit: true,
@@ -185,6 +213,7 @@ const THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
       brightCyan: "#93ddd8",
       brightWhite: "#f0f3f6",
     },
+    iconTheme: BASE_ICON_THEME,
     monaco: {
       base: "vs-dark",
       inherit: true,
@@ -234,6 +263,7 @@ const THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
       brightCyan: "#2e86a5",
       brightWhite: "#111827",
     },
+    iconTheme: BASE_ICON_THEME,
     monaco: {
       base: "vs",
       inherit: true,
@@ -283,6 +313,16 @@ const THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
       brightCyan: "#93ccdc",
       brightWhite: "#eceff4",
     },
+    iconTheme: createIconTheme({
+      "state.warning": {
+        ...BASE_ICON_THEME.icons["state.warning"],
+      },
+      "state.info": {
+        ...BASE_ICON_THEME.icons["state.info"],
+        tone: "accent",
+        surface: "subtle",
+      },
+    }),
     monaco: {
       base: "vs-dark",
       inherit: true,
@@ -332,6 +372,16 @@ const THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
       brightCyan: "#5b90a6",
       brightWhite: "#2e3440",
     },
+    iconTheme: createIconTheme({
+      "state.warning": {
+        ...BASE_ICON_THEME.icons["state.warning"],
+      },
+      "state.info": {
+        ...BASE_ICON_THEME.icons["state.info"],
+        tone: "accent",
+        surface: "subtle",
+      },
+    }),
     monaco: {
       base: "vs",
       inherit: true,
@@ -381,6 +431,22 @@ const THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
       brightCyan: "#99ffff",
       brightWhite: "#ffffff",
     },
+    iconTheme: createIconTheme({
+      "file.folder.closed": {
+        ...BASE_ICON_THEME.icons["file.folder.closed"],
+        tone: "warning",
+        strokeWidth: 2.25,
+      },
+      "file.folder.open": {
+        ...BASE_ICON_THEME.icons["file.folder.open"],
+        tone: "warning",
+        strokeWidth: 2.25,
+      },
+      "state.warning": {
+        ...BASE_ICON_THEME.icons["state.warning"],
+        strokeWidth: 2.25,
+      },
+    }),
     monaco: {
       base: "hc-black",
       inherit: true,
@@ -430,6 +496,22 @@ const THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
       brightCyan: "#0088aa",
       brightWhite: "#000000",
     },
+    iconTheme: createIconTheme({
+      "file.folder.closed": {
+        ...BASE_ICON_THEME.icons["file.folder.closed"],
+        tone: "warning",
+        strokeWidth: 2.25,
+      },
+      "file.folder.open": {
+        ...BASE_ICON_THEME.icons["file.folder.open"],
+        tone: "warning",
+        strokeWidth: 2.25,
+      },
+      "state.warning": {
+        ...BASE_ICON_THEME.icons["state.warning"],
+        strokeWidth: 2.25,
+      },
+    }),
     monaco: {
       base: "hc-light",
       inherit: true,
@@ -448,6 +530,8 @@ const THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
     },
   },
 ];
+
+registerIconThemes(THEMES_REGISTRY);
 
 export const THEMES = THEMES_REGISTRY;
 export const THEME_IDS = THEMES_REGISTRY.map((theme) => theme.id) as readonly string[];

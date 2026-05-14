@@ -275,6 +275,12 @@ describe("BranchQuickPick", () => {
     await waitFor(() => {
       expect(screen.getByText("Create branch: new-feature")).toBeInTheDocument();
     });
+    expect(
+      screen
+        .getByText("Create branch: new-feature")
+        .closest(".branch-quick-pick-item")
+        ?.querySelector('[data-icon-semantic="git.branch.create"]')
+    ).toBeTruthy();
 
     // Should not show create option for existing branch
     fireEvent.change(input, { target: { value: "main" } });

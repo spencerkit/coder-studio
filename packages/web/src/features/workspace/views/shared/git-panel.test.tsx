@@ -125,6 +125,10 @@ describe("GitPanel", () => {
     );
 
     await screen.findByText("Worktrees");
+    expect(container.querySelector('[data-icon-semantic="git.status.staged"]')).toBeTruthy();
+    expect(container.querySelector('[data-icon-semantic="git.status.modified"]')).toBeTruthy();
+    expect(container.querySelector('[data-icon-semantic="git.status.deleted"]')).toBeTruthy();
+    expect(container.querySelector('[data-icon-semantic="git.status.untracked"]')).toBeTruthy();
 
     expect(container.querySelector(".git-panel-branch-row")).toBeNull();
     expect(screen.queryByRole("button", { name: "Current Branch: feature/ai-agent" })).toBeNull();
@@ -246,6 +250,7 @@ describe("GitPanel", () => {
     expect(primaryButton).not.toBeNull();
     expect(actionRow).toContainElement(primaryButton);
     expect(actionRow?.querySelectorAll("button")).toHaveLength(1);
+    expect(primaryButton?.querySelector('[data-icon-semantic="git.commit"]')).toBeTruthy();
   });
 
   it("renders compact mobile commit actions with only the shared primary button", async () => {
@@ -286,6 +291,7 @@ describe("GitPanel", () => {
     expect(container.querySelector(".git-commit-actions .git-commit-primary")).not.toBeNull();
     expect(container.querySelector(".git-commit-primary-mobile")).toBeNull();
     expect(container.querySelectorAll(".git-commit-actions button")).toHaveLength(1);
+    expect(container.querySelector('[data-icon-semantic="git.commit"]')).toBeTruthy();
   });
 
   it("renders the commit box above collapsed worktree and history sections", async () => {
@@ -418,9 +424,13 @@ describe("GitPanel", () => {
     );
 
     const worktreeToggle = (await screen.findByText("Worktrees")).closest("button");
+    const newWorktreeButton = screen.getByRole("button", { name: "New" });
 
     expect(worktreeToggle).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByText("pr/123-fix-auth")).toBeNull();
+    expect(
+      newWorktreeButton.querySelector('[data-icon-semantic="worktree.action.new"]')
+    ).toBeTruthy();
   });
 
   it("does not render the legacy header worktree button", async () => {
@@ -1931,10 +1941,13 @@ describe("GitPanel", () => {
 
     const untrackedRow = screen.getByText("supervisor.test.ts").closest(".git-row");
     expect(untrackedRow).not.toBeNull();
-    expect(within(untrackedRow as HTMLElement).getByText("?")).toHaveClass(
-      "git-row-status-badge",
-      "git-row-status-badge-untracked"
-    );
+    expect(
+      (untrackedRow as HTMLElement).querySelector('[data-icon-semantic="git.status.untracked"]')
+    ).toBeTruthy();
+    expect((untrackedRow as HTMLElement).querySelector(".git-row-icon")).toBeTruthy();
+    expect(
+      (untrackedRow as HTMLElement).querySelector('[data-icon-semantic="git.status.untracked"]')
+    ).toBeTruthy();
     expect(within(untrackedRow as HTMLElement).queryByText("tests/")).toHaveClass("git-row-dir");
   });
 

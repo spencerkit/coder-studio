@@ -175,6 +175,8 @@ describe("WorkspacePage", () => {
 
     await screen.findByTestId("file-tree-panel");
     expect(screen.getByRole("button", { name: /^new file$|^新建文件$/i })).toBeInTheDocument();
+    expect(document.querySelector('[data-icon-semantic="file.action.new"]')).toBeTruthy();
+    expect(document.querySelector('[data-icon-semantic="file.action.newFolder"]')).toBeTruthy();
     expect(screen.queryByRole("button", { name: /refresh|刷新/i })).toBeNull();
 
     fireEvent.click(screen.getByRole("tab", { name: "Git" }));
@@ -245,6 +247,7 @@ describe("WorkspacePage", () => {
       ".workspace-status-bar .git-panel-status-strip__branch"
     );
     expect(branchButton).not.toBeNull();
+    expect(branchButton?.querySelector('[data-icon-semantic="git.branch"]')).toBeTruthy();
     fireEvent.click(branchButton as HTMLElement);
 
     const gitTab = screen.getByRole("tab", { name: "Git" });

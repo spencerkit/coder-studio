@@ -1,4 +1,3 @@
-import { AlertTriangle, Eye, Pencil, PowerOff } from "lucide-react";
 import { useId } from "react";
 import {
   DateTimePicker,
@@ -6,6 +5,7 @@ import {
   Select,
   type SelectOption,
   Textarea,
+  ThemedIcon,
 } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import {
@@ -37,9 +37,9 @@ interface ObjectiveDialogContentProps {
 }
 
 export function ObjectiveDialogModeIcon({ mode }: { mode: ObjectiveDialogMode }) {
-  if (mode === "enable") return <Eye size={14} />;
-  if (mode === "edit") return <Pencil size={14} />;
-  return <PowerOff size={14} />;
+  if (mode === "enable") return <ThemedIcon semantic="supervisor.mode.enable" size={14} />;
+  if (mode === "edit") return <ThemedIcon semantic="supervisor.mode.edit" size={14} />;
+  return <ThemedIcon semantic="supervisor.mode.disable" size={14} />;
 }
 
 export function ObjectiveDialogContent({
@@ -69,7 +69,12 @@ export function ObjectiveDialogContent({
     return (
       <>
         <div className="supervisor-danger-callout" role="alert">
-          <AlertTriangle size={16} className="supervisor-danger-callout-icon" aria-hidden="true" />
+          <ThemedIcon
+            aria-hidden="true"
+            className="supervisor-danger-callout-icon"
+            semantic="state.warning"
+            size={16}
+          />
           <div className="supervisor-danger-callout-copy">
             <strong>{t("supervisor.dialog.disable.warning_title")}</strong>
             <small>{t("supervisor.dialog.disable.warning_body")}</small>

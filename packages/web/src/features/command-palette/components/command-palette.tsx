@@ -6,7 +6,6 @@
 
 import type { Workspace } from "@coder-studio/core";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { Search } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { commandPaletteOpenAtom } from "../../../atoms/app-ui";
@@ -15,7 +14,7 @@ import {
   orderedWorkspacesAtom,
   resolvedActiveWorkspaceIdAtom,
 } from "../../../atoms/workspaces";
-import { EmptyState, Sheet } from "../../../components/ui";
+import { EmptyState, Sheet, ThemedIcon } from "../../../components/ui";
 import { useViewport } from "../../../hooks/use-viewport";
 import { useTranslation } from "../../../lib/i18n";
 import { formatWorkspaceLabel } from "../../notifications/format";
@@ -171,7 +170,7 @@ export function CommandPalette() {
 
   const paletteSearchField = (
     <div className="command-palette-search">
-      <Search size={16} className="command-palette-search-icon" />
+      <ThemedIcon className="command-palette-search-icon" semantic="nav.search" size={16} />
       <input
         ref={inputRef}
         type="text"

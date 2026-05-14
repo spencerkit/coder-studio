@@ -1,6 +1,6 @@
 import type { GitCommitSummary, GitFileChange, WorktreeInfo } from "@coder-studio/core";
 import { useAtomValue } from "jotai";
-import { ArrowUp, ChevronDown, Minus, Plus, RotateCcw } from "lucide-react";
+import { ChevronDown, Minus, Plus, RotateCcw } from "lucide-react";
 import type { FC, MouseEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { localeAtom } from "../../../../atoms/app-ui";
@@ -9,6 +9,7 @@ import {
   EmptyState,
   IconButton,
   Textarea,
+  ThemedIcon,
   Tooltip,
 } from "../../../../components/ui";
 import { formatRelativeTime, useTranslation } from "../../../../lib/i18n";
@@ -168,7 +169,7 @@ export const GitPanel: FC<GitPanelProps> = ({
                   type="button"
                 >
                   <span>{t("git.commit")}</span>
-                  <ArrowUp size={14} />
+                  <ThemedIcon semantic="git.commit" size={14} />
                 </button>
               </Tooltip>
             </div>
@@ -195,7 +196,8 @@ export const GitPanel: FC<GitPanelProps> = ({
                 className="git-panel-section-link"
                 onClick={() => setWorktreeSurfaceView("create")}
               >
-                + {t("worktree.new")}
+                <ThemedIcon semantic="worktree.action.new" size={12} />
+                <span>{t("worktree.new")}</span>
               </button>
             </div>
 
@@ -476,11 +478,10 @@ const GitChangeRow: FC<GitChangeRowProps> = ({
   const pathParts = useMemo(() => change.path.split("/"), [change.path]);
   const fileName = pathParts[pathParts.length - 1] ?? change.path;
   const dirName = pathParts.length > 1 ? `${pathParts.slice(0, -1).join("/")}/` : "";
-  const badge = getChangeBadge(change, type);
-  const tone = getChangeTone(change, type);
   const toggleStageLabel = type === "staged" ? t("git.unstage") : t("git.stage");
   const discardLabel = t("git.discard");
   const toggleStageIcon = type === "staged" ? <Minus size={12} /> : <Plus size={12} />;
+  const semantic = getChangeSemantic(change, type);
 
   const handleToggleStage = async () => {
     if (type === "staged") {
@@ -524,7 +525,9 @@ const GitChangeRow: FC<GitChangeRowProps> = ({
         }
       }}
     >
-      <span className={`git-row-status-badge git-row-status-badge-${tone}`}>{badge}</span>
+      <span className="git-row-icon" aria-hidden="true">
+        <ThemedIcon semantic={semantic} size={13} />
+      </span>
 
       <div className="git-row-content">
         <span className="git-row-name">{fileName}</span>
@@ -666,26 +669,20 @@ function getResolvedChangeStatus(change: GitFileChange, type: GitChangeType) {
   return "modified";
 }
 
-function getChangeBadge(change: GitFileChange, type: GitChangeType) {
+function getChangeSemantic(change: GitFileChange, type: GitChangeType) {
   const status = getResolvedChangeStatus(change, type);
 
   switch (status) {
-    case "added":
-      return "A";
     case "deleted":
-      return "D";
-    case "renamed":
-      return "R";
+      return "git.status.deleted";
     case "untracked":
-      return "?";
+      return "git.status.untracked";
+    case "added":
+    case "renamed":
     case "modified":
     default:
-      return "M";
+      return type === "staged" ? "git.status.staged" : "git.status.modified";
   }
-}
-
-function getChangeTone(change: GitFileChange, type: GitChangeType) {
-  return getResolvedChangeStatus(change, type);
 }
 
 export default GitPanel;

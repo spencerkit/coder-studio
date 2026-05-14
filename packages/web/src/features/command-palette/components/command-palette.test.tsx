@@ -109,6 +109,7 @@ describe("CommandPalette", () => {
 
     expect(document.querySelector(".mobile-sheet")).toBeTruthy();
     expect(document.querySelector(".command-palette-overlay")).toBeNull();
+    expect(document.querySelector('[data-icon-semantic="nav.search"]')).toBeTruthy();
 
     fireEvent.change(screen.getByRole("textbox"), {
       target: { value: "settings" },

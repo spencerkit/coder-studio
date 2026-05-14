@@ -104,11 +104,21 @@ describe("TopBar", () => {
     );
 
     const emptyState = screen.getByText("No workspace open").closest(".topbar-empty-state");
+    const addWorkspaceButton = screen.getByRole("button", { name: "New workspace" });
+    const quickActionsButton = screen.getByRole("button", { name: "Quick Actions" });
+    const terminalButton = screen.getByRole("button", { name: "Hide Terminal" });
+    const filesButton = screen.getByRole("button", { name: "Hide Files" });
+    const settingsButton = screen.getByRole("button", { name: "Settings" });
 
     expect(emptyState).not.toBeNull();
     expect(emptyState).toHaveTextContent("No workspace open");
-    expect(screen.getByRole("button", { name: "Quick Actions" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
+    expect(
+      addWorkspaceButton.querySelector('[data-icon-semantic="nav.newWorkspace"]')
+    ).toBeTruthy();
+    expect(quickActionsButton.querySelector('[data-icon-semantic="nav.search"]')).toBeTruthy();
+    expect(terminalButton.querySelector('[data-icon-semantic="nav.panelTerminal"]')).toBeTruthy();
+    expect(filesButton.querySelector('[data-icon-semantic="nav.panelFiles"]')).toBeTruthy();
+    expect(settingsButton.querySelector('[data-icon-semantic="nav.settings"]')).toBeTruthy();
   });
 
   it("shows shared tooltip content for bounded topbar actions on desktop without changing button names", () => {

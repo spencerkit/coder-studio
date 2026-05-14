@@ -1,21 +1,5 @@
 import type { FileNode } from "@coder-studio/core";
-import type { LucideIcon } from "lucide-react";
-import {
-  ChevronDown,
-  ChevronRight,
-  FileCode2,
-  File as FileIcon,
-  FileImage,
-  FileJson2,
-  FilePlus,
-  FileText,
-  Folder,
-  FolderOpen,
-  FolderPlus,
-  Search,
-  Trash2,
-  X,
-} from "lucide-react";
+import { ChevronDown, ChevronRight, FilePlus, FolderPlus, Trash2, X } from "lucide-react";
 import type { FC } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -29,6 +13,7 @@ import {
   ModalFooter,
   ModalHeader,
   ModalTitle,
+  ThemedIcon,
   Tooltip,
 } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
@@ -38,6 +23,7 @@ import {
   type PendingDeleteState,
   useFileActions,
 } from "../../actions/use-file-actions";
+import { getFileNodeSemantic } from "./file-tree-icon-semantics";
 
 const fileTreeEmptyStateStyle = {
   minHeight: "auto",
@@ -196,7 +182,12 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
     <>
       <div className={`file-tree-shell file-tree-shell--${variant}`}>
         <label className="file-tree-search" htmlFor={`file-tree-search-${workspaceId}`}>
-          <Search size={14} className="file-tree-search-icon" aria-hidden="true" />
+          <ThemedIcon
+            semantic="file.action.search"
+            size={14}
+            className="file-tree-search-icon"
+            aria-hidden="true"
+          />
           <input
             id={`file-tree-search-${workspaceId}`}
             className="file-tree-search-input"
@@ -276,7 +267,6 @@ const FileSearchResultRow: FC<FileSearchResultRowProps> = ({
   onSelectFile,
 }) => {
   const t = useTranslation();
-  const Icon = getNodeIcon(node, false);
   const dirName = node.path.includes("/") ? node.path.slice(0, node.path.lastIndexOf("/")) : "";
 
   return (
@@ -287,8 +277,8 @@ const FileSearchResultRow: FC<FileSearchResultRowProps> = ({
     >
       <span className="tree-chevron" aria-hidden="true" />
 
-      <span className={`tree-icon ${getNodeToneClass(node, false)}`}>
-        <Icon size={14} />
+      <span className="tree-icon" aria-hidden="true">
+        <ThemedIcon semantic={getFileNodeSemantic(node, false)} size={14} />
       </span>
 
       <span className="tree-search-labels">
@@ -375,7 +365,6 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
   };
 
   const paddingLeft = depth * 14 + 16;
-  const Icon = getNodeIcon(node, isExpanded);
 
   return (
     <>
@@ -388,8 +377,8 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
           {isFolder ? isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} /> : null}
         </span>
 
-        <span className={`tree-icon ${getNodeToneClass(node, isExpanded)}`}>
-          <Icon size={14} />
+        <span className="tree-icon" aria-hidden="true">
+          <ThemedIcon semantic={getFileNodeSemantic(node, isExpanded)} size={14} />
         </span>
 
         <span className="tree-label">{node.name}</span>
@@ -401,7 +390,7 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
                 <IconButton
                   aria-label={`${t("file.new_file")} ${node.path}`}
                   className="git-row-action"
-                  icon={<FilePlus size={12} />}
+                  icon={<ThemedIcon semantic="file.action.new" size={12} />}
                   onClick={(event) => {
                     event.stopPropagation();
                     onRequestCreate("file", node.path);
@@ -413,7 +402,7 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
                 <IconButton
                   aria-label={`${t("file.new_folder")} ${node.path}`}
                   className="git-row-action"
-                  icon={<FolderPlus size={12} />}
+                  icon={<ThemedIcon semantic="file.action.newFolder" size={12} />}
                   onClick={(event) => {
                     event.stopPropagation();
                     onRequestCreate("folder", node.path);
@@ -511,9 +500,9 @@ const CreatePathModal: FC<CreatePathModalProps> = ({
       <ModalHeader>
         <ModalTitle>
           {dialog.mode === "file" ? (
-            <FilePlus aria-hidden="true" size={16} />
+            <ThemedIcon aria-hidden="true" semantic="file.action.new" size={16} />
           ) : (
-            <FolderPlus aria-hidden="true" size={16} />
+            <ThemedIcon aria-hidden="true" semantic="file.action.newFolder" size={16} />
           )}
           <span>{dialog.mode === "file" ? t("file.new_file") : t("file.new_folder")}</span>
         </ModalTitle>
@@ -637,84 +626,4 @@ function sortNodes(nodes: FileNode[]) {
 
     return a.name.localeCompare(b.name);
   });
-}
-
-function getNodeIcon(node: FileNode, isExpanded: boolean): LucideIcon {
-  if (node.kind === "dir") {
-    return isExpanded ? FolderOpen : Folder;
-  }
-
-  const ext = node.name.split(".").pop()?.toLowerCase();
-
-  switch (ext) {
-    case "ts":
-    case "tsx":
-    case "js":
-    case "jsx":
-    case "mjs":
-    case "cjs":
-    case "py":
-    case "go":
-    case "rs":
-    case "java":
-      return FileCode2;
-    case "json":
-    case "yaml":
-    case "yml":
-    case "toml":
-    case "lock":
-      return FileJson2;
-    case "md":
-    case "txt":
-      return FileText;
-    case "png":
-    case "jpg":
-    case "jpeg":
-    case "gif":
-    case "svg":
-    case "webp":
-      return FileImage;
-    default:
-      return FileIcon;
-  }
-}
-
-function getNodeToneClass(node: FileNode, isExpanded: boolean) {
-  if (node.kind === "dir") {
-    return "folder";
-  }
-
-  const ext = node.name.split(".").pop()?.toLowerCase();
-
-  switch (ext) {
-    case "ts":
-    case "tsx":
-    case "js":
-    case "jsx":
-    case "mjs":
-    case "cjs":
-    case "py":
-    case "go":
-    case "rs":
-    case "java":
-      return "code";
-    case "json":
-    case "yaml":
-    case "yml":
-    case "toml":
-    case "lock":
-      return "data";
-    case "md":
-    case "txt":
-      return "doc";
-    case "png":
-    case "jpg":
-    case "jpeg":
-    case "gif":
-    case "svg":
-    case "webp":
-      return "media";
-    default:
-      return "file";
-  }
 }

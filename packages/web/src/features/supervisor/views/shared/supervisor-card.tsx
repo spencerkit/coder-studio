@@ -1,5 +1,4 @@
-import { ArrowUpCircle, Eye, Pause, Pencil, Play, PowerOff } from "lucide-react";
-import { IconButton, Tooltip } from "../../../../components/ui";
+import { IconButton, ThemedIcon, Tooltip } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { useSupervisorActions } from "../../actions/use-supervisor-actions";
 
@@ -35,7 +34,7 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
             onClick={() => openDialog("enable")}
             aria-label={t("supervisor.action.enable")}
           >
-            <Eye size={13} />
+            <ThemedIcon semantic="supervisor.entry" size={13} />
             <span>{t("supervisor.title")}</span>
           </button>
         </Tooltip>
@@ -58,7 +57,7 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
             <IconButton
               aria-label={t("supervisor.action.edit_objective")}
               className="supervisor-icon-btn"
-              icon={<Pencil size={12} />}
+              icon={<ThemedIcon semantic="supervisor.mode.edit" size={12} />}
               onClick={() => openDialog("edit")}
               size="sm"
             />
@@ -69,7 +68,7 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
               <IconButton
                 aria-label={t("supervisor.action.resume")}
                 className="supervisor-icon-btn"
-                icon={<Play size={12} />}
+                icon={<ThemedIcon semantic="supervisor.action.resume" size={12} />}
                 onClick={() => {
                   void handleResume();
                 }}
@@ -81,7 +80,7 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
               <IconButton
                 aria-label={t("supervisor.action.pause")}
                 className="supervisor-icon-btn"
-                icon={<Pause size={12} />}
+                icon={<ThemedIcon semantic="supervisor.action.pause" size={12} />}
                 onClick={() => {
                   void handlePause();
                 }}
@@ -95,7 +94,7 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
               aria-label={t("supervisor.action.trigger")}
               className="supervisor-icon-btn"
               disabled={isBusy}
-              icon={<ArrowUpCircle size={12} />}
+              icon={<ThemedIcon semantic="supervisor.action.trigger" size={12} />}
               onClick={() => {
                 void handleTrigger();
               }}
@@ -107,7 +106,7 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
             <IconButton
               aria-label={t("supervisor.action.disable")}
               className="supervisor-icon-btn supervisor-icon-btn-danger"
-              icon={<PowerOff size={12} />}
+              icon={<ThemedIcon semantic="supervisor.mode.disable" size={12} />}
               onClick={() => openDialog("disable")}
               size="sm"
             />

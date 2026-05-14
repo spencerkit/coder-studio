@@ -2155,6 +2155,7 @@ describe("MobileShell Phase 2 workspace", () => {
 
     const badge = await screen.findByRole("button", { name: "打开 Supervisor 面板" });
     expect(screen.getByTestId("mobile-session-card-header-accessory")).toContainElement(badge);
+    expect(badge.querySelector('[data-icon-semantic="supervisor.entry"]')).toBeTruthy();
 
     await user.click(badge);
 

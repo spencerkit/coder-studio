@@ -1,4 +1,4 @@
-import { Bot, FolderOpen, TerminalSquare } from "lucide-react";
+import { ThemedIcon } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 
 interface MobileDockProps {
@@ -18,7 +18,7 @@ export function MobileDock({ activeItem, onSelectItem }: MobileDockProps) {
         aria-label={t("mobile.dock.open_agent")}
       >
         <span className="mobile-dock__icon" aria-hidden="true">
-          <Bot size={18} />
+          <ThemedIcon semantic="nav.agent" size={18} />
         </span>
         <span className="mobile-dock__label">{t("label.agent")}</span>
       </button>
@@ -30,7 +30,7 @@ export function MobileDock({ activeItem, onSelectItem }: MobileDockProps) {
         aria-label={t("mobile.dock.open_files")}
       >
         <span className="mobile-dock__icon" aria-hidden="true">
-          <FolderOpen size={18} />
+          <ThemedIcon semantic="nav.panelFiles" size={18} />
         </span>
         <span className="mobile-dock__label">{t("file.title")}</span>
       </button>
@@ -42,7 +42,7 @@ export function MobileDock({ activeItem, onSelectItem }: MobileDockProps) {
         aria-label={t("mobile.dock.open_terminal")}
       >
         <span className="mobile-dock__icon" aria-hidden="true">
-          <TerminalSquare size={18} />
+          <ThemedIcon semantic="nav.panelTerminal" size={18} />
         </span>
         <span className="mobile-dock__label">{t("label.terminal")}</span>
       </button>

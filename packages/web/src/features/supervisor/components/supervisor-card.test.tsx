@@ -54,6 +54,7 @@ describe("SupervisorCard", () => {
 
     const button = screen.getByRole("button", { name: "Enable Supervisor" });
     expect(button).toHaveTextContent("Supervisor");
+    expect(button.querySelector('[data-icon-semantic="supervisor.entry"]')).toBeTruthy();
   });
 
   it("shows the latest cycle history and trigger action", () => {
@@ -129,6 +130,47 @@ describe("SupervisorCard", () => {
       "supervisor-icon-btn",
       "supervisor-icon-btn-danger"
     );
+    expect(
+      screen
+        .getByRole("button", { name: "Edit Supervisor" })
+        .querySelector('[data-icon-semantic="supervisor.mode.edit"]')
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("button", { name: "Pause" })
+        .querySelector('[data-icon-semantic="supervisor.action.pause"]')
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("button", { name: "Trigger Evaluation" })
+        .querySelector('[data-icon-semantic="supervisor.action.trigger"]')
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("button", { name: "Disable" })
+        .querySelector('[data-icon-semantic="supervisor.mode.disable"]')
+    ).toBeTruthy();
+  });
+
+  it("renders the resume semantic when the supervisor is paused", () => {
+    const store = createStore();
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+    store.set(supervisorsAtom, new Map([["sess-1", { ...createSupervisor(), state: "paused" }]]));
+    store.set(supervisorCyclesAtom, new Map());
+
+    render(
+      <Provider store={store}>
+        <SupervisorCard sessionId="sess-1" workspaceId="ws-1" />
+      </Provider>
+    );
+
+    expect(
+      screen
+        .getByRole("button", { name: "Resume" })
+        .querySelector('[data-icon-semantic="supervisor.action.resume"]')
+    ).toBeTruthy();
   });
 
   it("uses the shared tooltip for the supervisor objective text", () => {

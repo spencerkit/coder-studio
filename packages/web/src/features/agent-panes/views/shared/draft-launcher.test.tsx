@@ -86,4 +86,23 @@ describe("DraftLauncher", () => {
     expect(onSplitPane).toHaveBeenNthCalledWith(2, "pane-1", "vertical");
     expect(onClosePane).toHaveBeenCalledWith("pane-1");
   });
+
+  it("renders provider cards with semantic business icons", () => {
+    const store = createStore();
+
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn(),
+      subscribe: vi.fn(() => () => {}),
+    } as never);
+
+    const { container } = render(
+      <Provider store={store}>
+        <DraftLauncher workspaceId="ws-123" />
+      </Provider>
+    );
+
+    expect(container.querySelector('[data-icon-semantic="agent.provider.claude"]')).toBeTruthy();
+    expect(container.querySelector('[data-icon-semantic="agent.provider.codex"]')).toBeTruthy();
+  });
 });
