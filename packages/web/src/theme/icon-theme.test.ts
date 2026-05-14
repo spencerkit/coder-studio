@@ -40,4 +40,13 @@ describe("theme icon resolver", () => {
     expect(hcFolder.Icon).not.toBeUndefined();
     expect(mintFolder.strokeWidth).not.toBe(hcFolder.strokeWidth);
   });
+
+  it("uses distinct glyphs for footer git action semantics", () => {
+    const diffIcon = getIconPresentation("mint-dark", "git.action.diff").Icon;
+    const pushIcon = getIconPresentation("mint-dark", "git.action.push").Icon;
+    const pullIcon = getIconPresentation("mint-dark", "git.action.pull").Icon;
+    const refreshIcon = getIconPresentation("mint-dark", "git.action.refresh").Icon;
+
+    expect(new Set([diffIcon, pushIcon, pullIcon, refreshIcon]).size).toBe(4);
+  });
 });
