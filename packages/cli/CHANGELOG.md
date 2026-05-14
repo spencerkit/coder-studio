@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.7
+
+### Patch Changes
+
+- [#35](https://github.com/spencerkit/coder-studio/pull/35) [`2182828`](https://github.com/spencerkit/coder-studio/commit/2182828da8c199b7a0dc540f547d98d9b79c8e2c) Thanks [@pallyoung](https://github.com/pallyoung)! - Improve theme-owned workspace icon styling so file tree, mobile workspace dock, settings navigation, and Git footer icons stay consistent across themes, while also hardening workspace target restore behavior and mobile terminal paste and upload flows.
+
 ## 0.3.6
 
 ### Patch Changes
