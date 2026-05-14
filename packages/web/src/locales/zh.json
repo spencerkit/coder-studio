@@ -227,7 +227,7 @@
     "stop": "停止",
     "resume": "恢复",
     "no_session": "无活跃会话",
-    "provider_select": "选择 Provider",
+    "provider_select": "选择 Agent",
     "state": {
       "starting": "启动中...",
       "running": "运行中",

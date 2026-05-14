@@ -1324,7 +1324,7 @@ describe("MobileShell Phase 2 workspace", () => {
     await user.click(await screen.findByRole("button", { name: "Open Agent sheet" }));
     await user.click(screen.getByRole("button", { name: "Create Session" }));
 
-    expect(screen.getByRole("region", { name: "Select Provider sheet" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Select Agent sheet" })).toBeInTheDocument();
 
     await user.click(
       screen.getByRole("button", {
@@ -1344,7 +1344,7 @@ describe("MobileShell Phase 2 workspace", () => {
       );
     });
 
-    expect(screen.getByRole("region", { name: "Select Provider sheet" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Select Agent sheet" })).toBeInTheDocument();
     expect(document.querySelectorAll(".mobile-sheet-layer")).toHaveLength(1);
   });
 
@@ -1359,7 +1359,7 @@ describe("MobileShell Phase 2 workspace", () => {
 
     await user.click(screen.getByRole("button", { name: "Create Session" }));
 
-    expect(screen.getByRole("region", { name: "Select Provider sheet" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Select Agent sheet" })).toBeInTheDocument();
     expect(document.querySelectorAll(".mobile-sheet-layer")).toHaveLength(1);
 
     await user.click(screen.getByRole("button", { name: "Back" }));
@@ -2200,7 +2200,7 @@ describe("MobileShell Phase 2 workspace", () => {
 
     await user.click(screen.getByRole("button", { name: "Create Session" }));
 
-    expect(screen.getByRole("region", { name: "Select Provider sheet" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Select Agent sheet" })).toBeInTheDocument();
     expect(
       screen.getByRole("button", {
         name: "Claude",
