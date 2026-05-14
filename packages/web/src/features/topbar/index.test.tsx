@@ -122,6 +122,40 @@ describe("TopBar", () => {
     });
   });
 
+  it("persists the global last-viewed target once when clicking a workspace tab", async () => {
+    const store = createStore();
+    const sendCommand = vi.fn().mockResolvedValue({
+      workspaceId: "ws-b",
+      updatedAt: 10,
+    });
+
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(workspacesAtom, {
+      "ws-a": createWorkspace("ws-a", "/tmp/a"),
+      "ws-b": createWorkspace("ws-b", "/tmp/b"),
+    });
+    store.set(workspaceOrderAtom, ["ws-a", "ws-b"]);
+    store.set(workspacesLoadStateAtom, "ready");
+    store.set(activeWorkspaceIdAtom, "ws-a");
+
+    render(
+      <Provider store={store}>
+        <TopBar />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: "b" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledTimes(1);
+      expect(sendCommand).toHaveBeenCalledWith(
+        "workspace.lastViewedTarget.set",
+        { workspaceId: "ws-b", sessionId: undefined },
+        undefined
+      );
+    });
+  });
   it("uses translated labels when locale is set to en", () => {
     const store = createStore();
     store.set(localeAtom, "en");

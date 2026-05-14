@@ -34,7 +34,9 @@ export const WorkspaceTab: FC<WorkspaceTabProps> = ({ workspace, isActive }) => 
   const selectWorkspaceTarget = useSelectWorkspaceTarget();
   const displayName = formatWorkspaceLabel(workspace) || workspace.id;
 
-  const handleClick = () => {
+  const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+
     if (isActive) {
       return;
     }

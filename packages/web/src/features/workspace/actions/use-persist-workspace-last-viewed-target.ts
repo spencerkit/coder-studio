@@ -1,5 +1,5 @@
 import type { WorkspaceLastViewedTarget } from "@coder-studio/core";
-import { useAtomValue, useSetAtom } from "jotai";
+import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { useCallback } from "react";
 import { lastViewedTargetAtom } from "../../../atoms/app-ui";
 import { dispatchCommandAtom } from "../../../atoms/connection";
@@ -11,11 +11,13 @@ interface PersistWorkspaceLastViewedTargetInput {
 
 export function usePersistWorkspaceLastViewedTarget() {
   const dispatch = useAtomValue(dispatchCommandAtom);
-  const lastViewedTarget = useAtomValue(lastViewedTargetAtom);
   const setLastViewedTarget = useSetAtom(lastViewedTargetAtom);
+  const store = useStore();
 
   return useCallback(
     async ({ workspaceId, sessionId }: PersistWorkspaceLastViewedTargetInput) => {
+      const lastViewedTarget = store.get(lastViewedTargetAtom);
+
       if (!workspaceId) {
         return null;
       }
@@ -40,6 +42,10 @@ export function usePersistWorkspaceLastViewedTarget() {
         sessionId,
       });
 
+      if (store.get(lastViewedTargetAtom) !== optimisticTarget) {
+        return store.get(lastViewedTargetAtom);
+      }
+
       if (!result.ok || !result.data) {
         setLastViewedTarget(previousTarget);
         return optimisticTarget;
@@ -48,6 +54,6 @@ export function usePersistWorkspaceLastViewedTarget() {
       setLastViewedTarget(result.data);
       return result.data;
     },
-    [dispatch, lastViewedTarget, setLastViewedTarget]
+    [dispatch, setLastViewedTarget, store]
   );
 }
