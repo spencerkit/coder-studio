@@ -119,6 +119,28 @@ describe("File Commands", () => {
     expect(files).toHaveLength(0);
   });
 
+  it("keeps .gitignore filtering for search results", async () => {
+    await writeFile(join(testDir, ".gitignore"), "ignored-note.md\n");
+    await writeFile(join(testDir, "ignored-note.md"), "hidden from search\n");
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "file-search-3",
+        op: "file.search",
+        args: {
+          workspaceId,
+          query: "ignored",
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    const files = (result.data as { files: Array<{ path: string }> }).files;
+    expect(files).toHaveLength(0);
+  });
+
   it("emits fs.dirty after file writes", async () => {
     const result = await dispatch(
       {

@@ -6,7 +6,11 @@ import { mkdir, rm, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createGitignoreFilter, createWatcherIgnoreFilter } from "../../fs/gitignore.js";
+import {
+  createGitignoreFilter,
+  createTreeVisibilityFilter,
+  createWatcherIgnoreFilter,
+} from "../../fs/gitignore.js";
 
 describe("createGitignoreFilter", () => {
   let testDir: string;
@@ -83,6 +87,18 @@ describe("createGitignoreFilter", () => {
     expect(filter(".hidden")).toBe(true);
     expect(filter("node_modules")).toBe(false);
     expect(filter(".git")).toBe(false);
+  });
+});
+
+describe("createTreeVisibilityFilter", () => {
+  it("hides only .git entries from the directory tree", () => {
+    const filter = createTreeVisibilityFilter();
+
+    expect(filter(".git")).toBe(false);
+    expect(filter(".gitignore")).toBe(true);
+    expect(filter(".env")).toBe(true);
+    expect(filter("node_modules")).toBe(true);
+    expect(filter("src")).toBe(true);
   });
 });
 
