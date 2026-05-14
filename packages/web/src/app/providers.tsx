@@ -463,7 +463,7 @@ export function AppProviders({ children }: AppProvidersProps) {
       // Track reconnect attempts
       if (status === "reconnecting") {
         setReconnectCount((count) => count + 1);
-        setLastReconnect(Date.now());
+        setLastReconnect((previous) => previous ?? Date.now());
       }
 
       // Reset writer status on disconnect
@@ -472,6 +472,8 @@ export function AppProviders({ children }: AppProvidersProps) {
       }
 
       if (status === "connected") {
+        setReconnectCount(0);
+        setLastReconnect(null);
         syncWorkspaceActivity(true);
       }
     };
