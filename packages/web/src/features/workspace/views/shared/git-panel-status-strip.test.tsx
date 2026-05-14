@@ -191,7 +191,9 @@ describe("GitPanelStatusStrip", () => {
     );
 
     expect(
-      container.querySelector('.git-panel-status-strip__branch [data-icon-semantic="git.branch"]')
+      container.querySelector(
+        '.git-panel-status-strip__branch [data-icon-semantic="git.footer.branch"]'
+      )
     ).toBeTruthy();
   });
 });

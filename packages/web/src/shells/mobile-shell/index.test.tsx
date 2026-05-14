@@ -608,9 +608,17 @@ describe("MobileShell Phase 2 workspace", () => {
 
     expect(screen.getByRole("button", { name: "Switch workspace" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Switch active agent" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Open Agent sheet" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Open Files sheet" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Open Terminal sheet" })).toBeInTheDocument();
+    const agentButton = screen.getByRole("button", { name: "Open Agent sheet" });
+    const filesButton = screen.getByRole("button", { name: "Open Files sheet" });
+    const terminalButton = screen.getByRole("button", { name: "Open Terminal sheet" });
+    expect(agentButton).toBeInTheDocument();
+    expect(filesButton).toBeInTheDocument();
+    expect(terminalButton).toBeInTheDocument();
+    expect(agentButton.querySelector('[data-icon-semantic="mobile.dock.agent"]')).toBeTruthy();
+    expect(filesButton.querySelector('[data-icon-semantic="mobile.dock.files"]')).toBeTruthy();
+    expect(
+      terminalButton.querySelector('[data-icon-semantic="mobile.dock.terminal"]')
+    ).toBeTruthy();
     expect(screen.queryByRole("tablist", { name: "Mobile agents" })).not.toBeInTheDocument();
     expect(screen.queryByText("已连接")).not.toBeInTheDocument();
     expect(screen.getByTestId("mobile-session-card")).toHaveTextContent("sess_2");

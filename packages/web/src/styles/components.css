@@ -10198,6 +10198,10 @@ textarea.input {
   white-space: nowrap;
 }
 
+.git-status-bar__item--changes {
+  color: var(--icon-warning);
+}
+
 .git-status-bar__value {
   font-variant-numeric: tabular-nums;
 }
@@ -10228,11 +10232,11 @@ textarea.input {
 }
 
 .git-status-bar__item--ahead {
-  color: var(--accent-blue);
+  color: var(--icon-success);
 }
 
 .git-status-bar__item--behind {
-  color: var(--orange, #e5a50a);
+  color: var(--icon-info);
 }
 
 .git-status-bar__confirm {

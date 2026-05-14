@@ -127,16 +127,20 @@ const THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
         ...BASE_ICON_THEME.icons["file.folder.open"],
         strokeWidth: 1.8,
       },
-      "nav.agent": {
-        ...BASE_ICON_THEME.icons["nav.agent"],
-        tone: "accent",
-      },
       "agent.provider.codex": {
         ...BASE_ICON_THEME.icons["agent.provider.codex"],
         tone: "accent",
       },
-      "nav.panelTerminal": {
-        ...BASE_ICON_THEME.icons["nav.panelTerminal"],
+      "mobile.dock.agent": {
+        ...BASE_ICON_THEME.icons["mobile.dock.agent"],
+        tone: "accent",
+      },
+      "mobile.dock.files": {
+        ...BASE_ICON_THEME.icons["mobile.dock.files"],
+        tone: "info",
+      },
+      "mobile.dock.terminal": {
+        ...BASE_ICON_THEME.icons["mobile.dock.terminal"],
         tone: "info",
       },
       "terminal.action.new": {
@@ -149,6 +153,18 @@ const THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
       },
       "git.action.diff": {
         ...BASE_ICON_THEME.icons["git.action.diff"],
+        tone: "info",
+      },
+      "git.action.push": {
+        ...BASE_ICON_THEME.icons["git.action.push"],
+        tone: "info",
+      },
+      "git.action.pull": {
+        ...BASE_ICON_THEME.icons["git.action.pull"],
+        tone: "info",
+      },
+      "git.action.refresh": {
+        ...BASE_ICON_THEME.icons["git.action.refresh"],
         tone: "info",
       },
       "git.commit": {
@@ -195,16 +211,20 @@ const THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
         ...BASE_ICON_THEME.icons["file.folder.open"],
         strokeWidth: 1.8,
       },
-      "nav.agent": {
-        ...BASE_ICON_THEME.icons["nav.agent"],
-        tone: "accent",
-      },
       "agent.provider.codex": {
         ...BASE_ICON_THEME.icons["agent.provider.codex"],
         tone: "accent",
       },
-      "nav.panelTerminal": {
-        ...BASE_ICON_THEME.icons["nav.panelTerminal"],
+      "mobile.dock.agent": {
+        ...BASE_ICON_THEME.icons["mobile.dock.agent"],
+        tone: "accent",
+      },
+      "mobile.dock.files": {
+        ...BASE_ICON_THEME.icons["mobile.dock.files"],
+        tone: "info",
+      },
+      "mobile.dock.terminal": {
+        ...BASE_ICON_THEME.icons["mobile.dock.terminal"],
         tone: "info",
       },
       "terminal.action.new": {
@@ -217,6 +237,18 @@ const THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
       },
       "git.action.diff": {
         ...BASE_ICON_THEME.icons["git.action.diff"],
+        tone: "info",
+      },
+      "git.action.push": {
+        ...BASE_ICON_THEME.icons["git.action.push"],
+        tone: "info",
+      },
+      "git.action.pull": {
+        ...BASE_ICON_THEME.icons["git.action.pull"],
+        tone: "info",
+      },
+      "git.action.refresh": {
+        ...BASE_ICON_THEME.icons["git.action.refresh"],
         tone: "info",
       },
       "git.commit": {
@@ -278,13 +310,21 @@ const THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
       brightWhite: "#f0f3f6",
     },
     iconTheme: createIconTheme({
-      "nav.agent": {
-        ...BASE_ICON_THEME.icons["nav.agent"],
-        tone: "accent",
-      },
       "agent.provider.codex": {
         ...BASE_ICON_THEME.icons["agent.provider.codex"],
         tone: "accent",
+      },
+      "mobile.dock.agent": {
+        ...BASE_ICON_THEME.icons["mobile.dock.agent"],
+        tone: "accent",
+      },
+      "mobile.dock.files": {
+        ...BASE_ICON_THEME.icons["mobile.dock.files"],
+        tone: "secondary",
+      },
+      "mobile.dock.terminal": {
+        ...BASE_ICON_THEME.icons["mobile.dock.terminal"],
+        tone: "secondary",
       },
       "git.branch": {
         ...BASE_ICON_THEME.icons["git.branch"],
@@ -292,6 +332,18 @@ const THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
       },
       "git.action.diff": {
         ...BASE_ICON_THEME.icons["git.action.diff"],
+        tone: "info",
+      },
+      "git.action.push": {
+        ...BASE_ICON_THEME.icons["git.action.push"],
+        tone: "info",
+      },
+      "git.action.pull": {
+        ...BASE_ICON_THEME.icons["git.action.pull"],
+        tone: "info",
+      },
+      "git.action.refresh": {
+        ...BASE_ICON_THEME.icons["git.action.refresh"],
         tone: "info",
       },
       "nav.settings.appearance": {
@@ -349,13 +401,21 @@ const THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
       brightWhite: "#111827",
     },
     iconTheme: createIconTheme({
-      "nav.agent": {
-        ...BASE_ICON_THEME.icons["nav.agent"],
-        tone: "accent",
-      },
       "agent.provider.codex": {
         ...BASE_ICON_THEME.icons["agent.provider.codex"],
         tone: "accent",
+      },
+      "mobile.dock.agent": {
+        ...BASE_ICON_THEME.icons["mobile.dock.agent"],
+        tone: "accent",
+      },
+      "mobile.dock.files": {
+        ...BASE_ICON_THEME.icons["mobile.dock.files"],
+        tone: "secondary",
+      },
+      "mobile.dock.terminal": {
+        ...BASE_ICON_THEME.icons["mobile.dock.terminal"],
+        tone: "secondary",
       },
       "git.branch": {
         ...BASE_ICON_THEME.icons["git.branch"],
@@ -363,6 +423,18 @@ const THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
       },
       "git.action.diff": {
         ...BASE_ICON_THEME.icons["git.action.diff"],
+        tone: "info",
+      },
+      "git.action.push": {
+        ...BASE_ICON_THEME.icons["git.action.push"],
+        tone: "info",
+      },
+      "git.action.pull": {
+        ...BASE_ICON_THEME.icons["git.action.pull"],
+        tone: "info",
+      },
+      "git.action.refresh": {
+        ...BASE_ICON_THEME.icons["git.action.refresh"],
         tone: "info",
       },
       "nav.settings.appearance": {
@@ -420,16 +492,20 @@ const THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
       brightWhite: "#eceff4",
     },
     iconTheme: createIconTheme({
-      "nav.agent": {
-        ...BASE_ICON_THEME.icons["nav.agent"],
-        tone: "accent",
-      },
       "agent.provider.codex": {
         ...BASE_ICON_THEME.icons["agent.provider.codex"],
         tone: "accent",
       },
-      "nav.panelTerminal": {
-        ...BASE_ICON_THEME.icons["nav.panelTerminal"],
+      "mobile.dock.agent": {
+        ...BASE_ICON_THEME.icons["mobile.dock.agent"],
+        tone: "accent",
+      },
+      "mobile.dock.files": {
+        ...BASE_ICON_THEME.icons["mobile.dock.files"],
+        tone: "info",
+      },
+      "mobile.dock.terminal": {
+        ...BASE_ICON_THEME.icons["mobile.dock.terminal"],
         tone: "info",
       },
       "terminal.action.new": {
@@ -442,6 +518,18 @@ const THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
       },
       "git.action.diff": {
         ...BASE_ICON_THEME.icons["git.action.diff"],
+        tone: "accent",
+      },
+      "git.action.push": {
+        ...BASE_ICON_THEME.icons["git.action.push"],
+        tone: "accent",
+      },
+      "git.action.pull": {
+        ...BASE_ICON_THEME.icons["git.action.pull"],
+        tone: "accent",
+      },
+      "git.action.refresh": {
+        ...BASE_ICON_THEME.icons["git.action.refresh"],
         tone: "accent",
       },
       "git.commit": {
@@ -515,16 +603,20 @@ const THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
       brightWhite: "#2e3440",
     },
     iconTheme: createIconTheme({
-      "nav.agent": {
-        ...BASE_ICON_THEME.icons["nav.agent"],
-        tone: "accent",
-      },
       "agent.provider.codex": {
         ...BASE_ICON_THEME.icons["agent.provider.codex"],
         tone: "accent",
       },
-      "nav.panelTerminal": {
-        ...BASE_ICON_THEME.icons["nav.panelTerminal"],
+      "mobile.dock.agent": {
+        ...BASE_ICON_THEME.icons["mobile.dock.agent"],
+        tone: "accent",
+      },
+      "mobile.dock.files": {
+        ...BASE_ICON_THEME.icons["mobile.dock.files"],
+        tone: "info",
+      },
+      "mobile.dock.terminal": {
+        ...BASE_ICON_THEME.icons["mobile.dock.terminal"],
         tone: "info",
       },
       "terminal.action.new": {
@@ -537,6 +629,18 @@ const THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
       },
       "git.action.diff": {
         ...BASE_ICON_THEME.icons["git.action.diff"],
+        tone: "accent",
+      },
+      "git.action.push": {
+        ...BASE_ICON_THEME.icons["git.action.push"],
+        tone: "accent",
+      },
+      "git.action.pull": {
+        ...BASE_ICON_THEME.icons["git.action.pull"],
+        tone: "accent",
+      },
+      "git.action.refresh": {
+        ...BASE_ICON_THEME.icons["git.action.refresh"],
         tone: "accent",
       },
       "git.commit": {

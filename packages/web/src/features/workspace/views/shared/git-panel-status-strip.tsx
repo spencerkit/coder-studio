@@ -49,7 +49,7 @@ function BranchTrigger({
         aria-label={ariaLabel}
         disabled={disabled}
       >
-        <ThemedIcon semantic="git.branch" size={11} />
+        <ThemedIcon semantic="git.footer.branch" size={11} />
         <span className="git-panel-status-strip__branch-text">{branchName}</span>
       </button>
     </Tooltip>

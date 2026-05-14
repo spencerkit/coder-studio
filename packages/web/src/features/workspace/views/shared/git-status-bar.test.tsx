@@ -51,10 +51,10 @@ describe("GitStatusBar", () => {
 
     const toolbar = screen.getByRole("button", { name: "Fetch" }).closest(".git-status-bar");
     expect(toolbar).not.toBeNull();
-    expect(container.querySelector('[data-icon-semantic="git.action.diff"]')).toBeTruthy();
-    expect(container.querySelector('[data-icon-semantic="git.action.push"]')).toBeTruthy();
-    expect(container.querySelector('[data-icon-semantic="git.action.pull"]')).toBeTruthy();
-    expect(container.querySelector('[data-icon-semantic="git.action.refresh"]')).toBeTruthy();
+    expect(container.querySelector('[data-icon-semantic="git.footer.diff"]')).toBeTruthy();
+    expect(container.querySelector('[data-icon-semantic="git.footer.push"]')).toBeTruthy();
+    expect(container.querySelector('[data-icon-semantic="git.footer.pull"]')).toBeTruthy();
+    expect(container.querySelector('[data-icon-semantic="git.footer.refresh"]')).toBeTruthy();
 
     expect(screen.getByRole("button", { name: "Fetch" })).toHaveClass(
       "btn",

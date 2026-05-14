@@ -247,7 +247,7 @@ describe("WorkspacePage", () => {
       ".workspace-status-bar .git-panel-status-strip__branch"
     );
     expect(branchButton).not.toBeNull();
-    expect(branchButton?.querySelector('[data-icon-semantic="git.branch"]')).toBeTruthy();
+    expect(branchButton?.querySelector('[data-icon-semantic="git.footer.branch"]')).toBeTruthy();
     fireEvent.click(branchButton as HTMLElement);
 
     const gitTab = screen.getByRole("tab", { name: "Git" });

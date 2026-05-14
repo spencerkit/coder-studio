@@ -196,8 +196,8 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({
     <>
       <div className={`git-status-bar${inline ? " git-status-bar--inline" : ""}`}>
         <Tooltip content={t("git.statusbar.changes")}>
-          <span className="git-status-bar__item">
-            <ThemedIcon semantic="git.action.diff" size={13} />
+          <span className="git-status-bar__item git-status-bar__item--changes">
+            <ThemedIcon semantic="git.footer.diff" size={13} />
             <span className="git-status-bar__value">{changeCount}</span>
           </span>
         </Tooltip>
@@ -209,7 +209,7 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({
             disabled={ahead <= 0}
             onClick={() => openConfirm("push", ahead)}
           >
-            <ThemedIcon semantic="git.action.push" size={13} />
+            <ThemedIcon semantic="git.footer.push" size={13} />
             <span className="git-status-bar__value">{ahead}</span>
           </button>
         </Tooltip>
@@ -221,7 +221,7 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({
             disabled={behind <= 0}
             onClick={() => openConfirm("pull", behind)}
           >
-            <ThemedIcon semantic="git.action.pull" size={13} />
+            <ThemedIcon semantic="git.footer.pull" size={13} />
             <span className="git-status-bar__value">{behind}</span>
           </button>
         </Tooltip>
@@ -232,7 +232,7 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({
             disabled={isFetching}
             icon={
               <ThemedIcon
-                semantic="git.action.refresh"
+                semantic="git.footer.refresh"
                 size={13}
                 className={isFetching ? "spin" : undefined}
               />
