@@ -62,6 +62,7 @@ e2e-ui/test-results/
 /superpowers/
 /.superpowers/
 /.coder-studio/
+.coder-studio/
 /.codex
 tsconfig.tsbuildinfo
 
