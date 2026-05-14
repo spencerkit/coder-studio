@@ -49,4 +49,97 @@ describe("theme icon resolver", () => {
 
     expect(new Set([diffIcon, pushIcon, pullIcon, refreshIcon]).size).toBe(4);
   });
+
+  it("applies richer common icon tones for mint themes", () => {
+    for (const themeId of ["mint-dark", "mint-light"] as const) {
+      expect(getIconPresentation(themeId, "nav.agent")).toEqual(
+        expect.objectContaining({ tone: "accent" })
+      );
+      expect(getIconPresentation(themeId, "agent.provider.codex")).toEqual(
+        expect.objectContaining({ tone: "accent" })
+      );
+      expect(getIconPresentation(themeId, "nav.panelTerminal")).toEqual(
+        expect.objectContaining({ tone: "info" })
+      );
+      expect(getIconPresentation(themeId, "terminal.action.new")).toEqual(
+        expect.objectContaining({ tone: "info" })
+      );
+      expect(getIconPresentation(themeId, "git.branch")).toEqual(
+        expect.objectContaining({ tone: "info" })
+      );
+      expect(getIconPresentation(themeId, "git.action.diff")).toEqual(
+        expect.objectContaining({ tone: "info" })
+      );
+      expect(getIconPresentation(themeId, "git.commit")).toEqual(
+        expect.objectContaining({ tone: "info" })
+      );
+      expect(getIconPresentation(themeId, "nav.settings.appearance")).toEqual(
+        expect.objectContaining({ tone: "accent" })
+      );
+    }
+  });
+
+  it("keeps graphite themes restrained while highlighting key icons", () => {
+    for (const themeId of ["graphite-dark", "graphite-light"] as const) {
+      expect(getIconPresentation(themeId, "nav.agent")).toEqual(
+        expect.objectContaining({ tone: "accent" })
+      );
+      expect(getIconPresentation(themeId, "agent.provider.codex")).toEqual(
+        expect.objectContaining({ tone: "accent" })
+      );
+      expect(getIconPresentation(themeId, "git.branch")).toEqual(
+        expect.objectContaining({ tone: "info" })
+      );
+      expect(getIconPresentation(themeId, "git.action.diff")).toEqual(
+        expect.objectContaining({ tone: "info" })
+      );
+      expect(getIconPresentation(themeId, "nav.settings.appearance")).toEqual(
+        expect.objectContaining({ tone: "accent" })
+      );
+      expect(getIconPresentation(themeId, "nav.panelTerminal")).toEqual(
+        expect.objectContaining({ tone: "current" })
+      );
+      expect(getIconPresentation(themeId, "terminal.action.new")).toEqual(
+        expect.objectContaining({ tone: "secondary" })
+      );
+      expect(getIconPresentation(themeId, "git.commit")).toEqual(
+        expect.objectContaining({ tone: "secondary" })
+      );
+    }
+  });
+
+  it("gives nord themes a cooler accent hierarchy", () => {
+    for (const themeId of ["nord-dark", "nord-light"] as const) {
+      expect(getIconPresentation(themeId, "nav.agent")).toEqual(
+        expect.objectContaining({ tone: "accent" })
+      );
+      expect(getIconPresentation(themeId, "agent.provider.codex")).toEqual(
+        expect.objectContaining({ tone: "accent" })
+      );
+      expect(getIconPresentation(themeId, "nav.panelTerminal")).toEqual(
+        expect.objectContaining({ tone: "info" })
+      );
+      expect(getIconPresentation(themeId, "terminal.action.new")).toEqual(
+        expect.objectContaining({ tone: "info" })
+      );
+      expect(getIconPresentation(themeId, "git.branch")).toEqual(
+        expect.objectContaining({ tone: "accent" })
+      );
+      expect(getIconPresentation(themeId, "git.action.diff")).toEqual(
+        expect.objectContaining({ tone: "accent" })
+      );
+      expect(getIconPresentation(themeId, "git.commit")).toEqual(
+        expect.objectContaining({ tone: "accent" })
+      );
+      expect(getIconPresentation(themeId, "nav.settings.appearance")).toEqual(
+        expect.objectContaining({ tone: "accent" })
+      );
+      expect(getIconPresentation(themeId, "nav.settings.providers")).toEqual(
+        expect.objectContaining({ tone: "info" })
+      );
+      expect(getIconPresentation(themeId, "git.action.pull")).toEqual(
+        expect.objectContaining({ tone: "secondary" })
+      );
+    }
+  });
 });
