@@ -1,7 +1,11 @@
 import { useAtomValue, useSetAtom } from "jotai";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { pendingFocusSessionAtom, visibleMobileSessionIdAtom } from "../../../../atoms/app-ui";
+import {
+  lastViewedTargetAtom,
+  pendingFocusSessionAtom,
+  visibleMobileSessionIdAtom,
+} from "../../../../atoms/app-ui";
 import { EmptyState, Sheet } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { SessionCard } from "../../../agent-panes/views/shared/session-card";
@@ -13,6 +17,7 @@ import { TerminalPanel } from "../../../terminal-panel";
 import type { CreateRequest } from "../../actions/use-file-actions";
 import { useWorkspaceFullscreen } from "../../actions/use-workspace-fullscreen";
 import { useWorkspaceScreenModel } from "../../actions/use-workspace-screen-model";
+import { useWorkspaceUiStatePersistence } from "../../actions/use-workspace-ui-state-persistence";
 import { WorkspaceLaunchModal } from "../shared/workspace-launch-modal";
 import { WorkspaceStatusBar } from "../shared/workspace-status-bar";
 import { useMobileLayoutMode } from "./hooks/use-mobile-layout-mode";
@@ -24,12 +29,50 @@ import { MobileFilesSheet } from "./mobile-files-sheet";
 import { MobileTopBar } from "./mobile-topbar";
 import { MobileWorkspaceDrawer } from "./mobile-workspace-drawer";
 
+function resolvePreferredMobileSessionId(
+  sessionIdsInLayout: string[],
+  orderedSessions: Array<{ id: string; lastActiveAt: number }>,
+  mobileAgentSessions: Array<{ id: string; lastActiveAt: number }>,
+  globalTargetSessionId: string | null,
+  workspaceUiStateSessionId: string | null
+) {
+  const displayableSessionIds = new Set(mobileAgentSessions.map((session) => session.id));
+  const sessionIdsInLayoutSet = new Set(sessionIdsInLayout);
+
+  if (globalTargetSessionId && displayableSessionIds.has(globalTargetSessionId)) {
+    return {
+      sessionId: globalTargetSessionId,
+      missingFromLayout: !sessionIdsInLayoutSet.has(globalTargetSessionId),
+    };
+  }
+
+  if (workspaceUiStateSessionId && displayableSessionIds.has(workspaceUiStateSessionId)) {
+    return {
+      sessionId: workspaceUiStateSessionId,
+      missingFromLayout: !sessionIdsInLayoutSet.has(workspaceUiStateSessionId),
+    };
+  }
+
+  const mostRecentSession = [...orderedSessions].sort(
+    (left, right) => right.lastActiveAt - left.lastActiveAt
+  )[0];
+  const fallbackSessionId = mostRecentSession?.id ?? orderedSessions[0]?.id ?? null;
+
+  return {
+    sessionId: fallbackSessionId,
+    missingFromLayout: fallbackSessionId ? !sessionIdsInLayoutSet.has(fallbackSessionId) : false,
+  };
+}
+
 export function WorkspaceMobileView() {
   const fullscreenRootRef = useRef<HTMLDivElement>(null);
+  const restoredWorkspaceIdRef = useRef<string | null>(null);
+  const lastPersistedSessionIdRef = useRef<string | null>(null);
   const fullscreenController = useWorkspaceFullscreen(fullscreenRootRef);
   const t = useTranslation();
   const navigate = useNavigate();
   const pendingFocusSessionId = useAtomValue(pendingFocusSessionAtom);
+  const lastViewedTarget = useAtomValue(lastViewedTargetAtom);
   const setVisibleMobileSessionId = useSetAtom(visibleMobileSessionIdAtom);
   const {
     activeSession,
@@ -45,11 +88,15 @@ export function WorkspaceMobileView() {
     mobileSheet,
     openMobileSheet,
     orderedSessions,
+    restoreMobileSession,
     selectMobileSession,
     updateMobileFilesRoute,
     workspace,
     workspaces,
   } = useWorkspaceScreenModel();
+  const { persistUiState } = useWorkspaceUiStatePersistence(
+    activeWorkspaceId ?? "__workspace_empty__"
+  );
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [agentSheetOpen, setAgentSheetOpen] = useState(false);
   const [mobileFilesTab, setMobileFilesTab] = useState<"files" | "git">("files");
@@ -62,6 +109,81 @@ export function WorkspaceMobileView() {
   const layoutMode = useMobileLayoutMode();
   const motionMode = useMobileMotionMode();
   const mobileEditorState = useCodeEditorActions();
+
+  const preferredSessionId = workspace?.uiState?.activeSessionId ?? null;
+  const preferredGlobalSessionId =
+    lastViewedTarget?.workspaceId === workspace?.id ? (lastViewedTarget.sessionId ?? null) : null;
+
+  useEffect(() => {
+    if (!workspace) {
+      return;
+    }
+
+    if (restoredWorkspaceIdRef.current === workspace.id) {
+      return;
+    }
+
+    if (mobileAgentSessions.length === 0 && orderedSessions.length === 0) {
+      return;
+    }
+
+    const sessionIdsInLayout = orderedSessions.map((session) => session.id);
+
+    const preferred = resolvePreferredMobileSessionId(
+      sessionIdsInLayout,
+      orderedSessions,
+      mobileAgentSessions,
+      preferredGlobalSessionId,
+      preferredSessionId
+    );
+
+    if (!preferred.sessionId) {
+      restoredWorkspaceIdRef.current = workspace.id;
+      return;
+    }
+
+    restoredWorkspaceIdRef.current = workspace.id;
+
+    if (preferred.missingFromLayout) {
+      restoreMobileSession(preferred.sessionId);
+      return;
+    }
+
+    if (preferred.sessionId !== mobileActiveSessionId) {
+      restoreMobileSession(preferred.sessionId);
+    }
+  }, [
+    mobileActiveSessionId,
+    mobileAgentSessions,
+    orderedSessions,
+    preferredGlobalSessionId,
+    preferredSessionId,
+    restoreMobileSession,
+    workspace,
+  ]);
+
+  useEffect(() => {
+    if (!workspace) {
+      restoredWorkspaceIdRef.current = null;
+      lastPersistedSessionIdRef.current = null;
+      return;
+    }
+
+    if (!mobileActiveSessionId) {
+      return;
+    }
+
+    if (lastPersistedSessionIdRef.current === mobileActiveSessionId) {
+      return;
+    }
+
+    lastPersistedSessionIdRef.current = mobileActiveSessionId;
+    if (workspace.uiState.activeSessionId === mobileActiveSessionId) {
+      return;
+    }
+
+    void persistUiState({ activeSessionId: mobileActiveSessionId });
+  }, [mobileActiveSessionId, persistUiState, workspace]);
 
   useEffect(() => {
     if (!pendingFocusSessionId) {

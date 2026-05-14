@@ -437,6 +437,7 @@ function renderMobileShell({
     return undefined;
   }),
   sendTerminalInput = vi.fn().mockResolvedValue(undefined),
+  lastViewedTarget = null as { workspaceId: string; sessionId?: string; updatedAt: number } | null,
 }: {
   initialEntry?: string;
   withWorkspaces?: boolean;
@@ -452,6 +453,7 @@ function renderMobileShell({
   };
   sendCommand?: ReturnType<typeof vi.fn>;
   sendTerminalInput?: ReturnType<typeof vi.fn>;
+  lastViewedTarget?: { workspaceId: string; sessionId?: string; updatedAt: number } | null;
 } = {}) {
   window.localStorage.setItem("ui.locale", JSON.stringify(locale));
   const store = createStore();
@@ -466,6 +468,7 @@ function renderMobileShell({
     sendTerminalInput,
     subscribe: vi.fn(() => () => {}),
   } as never);
+  store.set(lastViewedTargetAtom, lastViewedTarget);
   if (withWorkspaces) {
     seedReadyWorkspaceState(store, {
       "ws-1": {
@@ -1818,13 +1821,18 @@ describe("MobileShell Phase 2 workspace", () => {
       }),
     ];
 
-    const { store } = renderMobileShell({
+    renderMobileShell({
       initialEntry: "/workspace",
       sessions,
       paneLayout: {
         id: "root",
         type: "leaf",
         sessionId: "sess_1",
+      },
+      lastViewedTarget: {
+        workspaceId: "ws-1",
+        sessionId: "sess_1",
+        updatedAt: 10,
       },
       sendCommand: vi.fn(async (op: string) => {
         if (op === "session.list") {
@@ -1835,17 +1843,91 @@ describe("MobileShell Phase 2 workspace", () => {
       }),
     });
 
-    await act(async () => {
-      store.set(lastViewedTargetAtom, {
+    await waitFor(() => {
+      expect(screen.getByTestId("mobile-session-card")).toHaveTextContent("sess_1");
+    });
+  });
+
+  it("does not persist the global last-viewed target during automatic mobile restore", async () => {
+    const sendCommand = vi.fn(async (op: string, payload?: Record<string, unknown>) => {
+      if (op === "session.list") {
+        return [
+          createSession({
+            id: "sess_1",
+            terminalId: "term-1",
+            providerId: "claude",
+            state: "idle",
+            lastActiveAt: Date.now() - 5_000,
+            title: "Claude",
+          }),
+          createSession({
+            id: "sess_2",
+            terminalId: "term-2",
+            providerId: "codex",
+            state: "running",
+            lastActiveAt: Date.now() - 500,
+            title: "Codex",
+          }),
+        ];
+      }
+
+      if (op === "workspace.uiState.set") {
+        return {
+          id: "ws-1",
+          name: "Alpha",
+          path: "/tmp/alpha",
+          targetRuntime: "native",
+          openedAt: 1,
+          lastActiveAt: 1,
+          uiState: payload?.uiState,
+        };
+      }
+
+      return undefined;
+    });
+
+    renderMobileShell({
+      initialEntry: "/workspace",
+      sendCommand,
+      sessions: [
+        createSession({
+          id: "sess_1",
+          terminalId: "term-1",
+          providerId: "claude",
+          state: "idle",
+          lastActiveAt: Date.now() - 5_000,
+          title: "Claude",
+        }),
+        createSession({
+          id: "sess_2",
+          terminalId: "term-2",
+          providerId: "codex",
+          state: "running",
+          lastActiveAt: Date.now() - 500,
+          title: "Codex",
+        }),
+      ],
+      paneLayout: {
+        id: "root",
+        type: "leaf",
+        sessionId: "sess_1",
+      },
+      lastViewedTarget: {
         workspaceId: "ws-1",
         sessionId: "sess_1",
         updatedAt: 10,
-      });
+      },
     });
 
     await waitFor(() => {
       expect(screen.getByTestId("mobile-session-card")).toHaveTextContent("sess_1");
     });
+
+    expect(sendCommand).not.toHaveBeenCalledWith(
+      "workspace.lastViewedTarget.set",
+      expect.anything(),
+      undefined
+    );
   });
 
   it("restores a newly created mobile session after reload even when workspace uiState paneLayout is stale", async () => {
@@ -1925,6 +2007,66 @@ describe("MobileShell Phase 2 workspace", () => {
         }),
         undefined
       );
+    });
+  });
+
+  it("restores the saved global mobile session even when it is missing from the stale pane layout", async () => {
+    const sessions = [
+      createSession({
+        id: "sess_existing",
+        terminalId: "term-existing",
+        providerId: "claude",
+        state: "idle",
+        lastActiveAt: Date.now() - 5_000,
+        title: "Existing Claude",
+      }),
+      createSession({
+        id: "sess_saved",
+        terminalId: "term-saved",
+        providerId: "codex",
+        state: "running",
+        lastActiveAt: Date.now() - 500,
+        title: "Saved Codex",
+      }),
+    ];
+    const sendCommand = vi.fn(async (op: string, payload?: Record<string, unknown>) => {
+      if (op === "session.list") {
+        return sessions;
+      }
+
+      if (op === "workspace.uiState.set") {
+        return {
+          id: "ws-1",
+          name: "Alpha",
+          path: "/tmp/alpha",
+          targetRuntime: "native",
+          openedAt: 1,
+          lastActiveAt: 1,
+          uiState: payload?.uiState,
+        };
+      }
+
+      return undefined;
+    });
+
+    renderMobileShell({
+      initialEntry: "/workspace",
+      sessions: [],
+      paneLayout: {
+        id: "root",
+        type: "leaf",
+        sessionId: "sess_existing",
+      },
+      sendCommand,
+      lastViewedTarget: {
+        workspaceId: "ws-1",
+        sessionId: "sess_saved",
+        updatedAt: 10,
+      },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("mobile-session-card")).toHaveTextContent("sess_saved");
     });
   });
 

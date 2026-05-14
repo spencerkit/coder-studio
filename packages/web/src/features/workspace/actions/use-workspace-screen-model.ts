@@ -1,7 +1,6 @@
 import type { GitStatus, Session } from "@coder-studio/core";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { lastViewedTargetAtom } from "../../../atoms/app-ui";
 import { dispatchCommandAtom } from "../../../atoms/connection";
 import {
   activeWorkspaceAtom,
@@ -23,7 +22,6 @@ import {
   terminalPanelVisibleAtom,
 } from "../atoms";
 import { useWorkspaceLayoutActions } from "./use-workspace-layout-actions";
-import { useWorkspaceUiStatePersistence } from "./use-workspace-ui-state-persistence";
 
 export type WorkspaceSidebarTab = "files" | "git";
 export type WorkspaceMainAreaMode = "agent" | "editor" | "diff";
@@ -37,32 +35,6 @@ export interface WorkspaceCreateRequest {
   id: number;
   mode: "file" | "folder";
   baseDir: string | null;
-}
-
-function resolvePreferredMobileSessionId(
-  orderedSessions: Session[],
-  globalTargetSessionId: string | null,
-  workspaceUiStateSessionId: string | null
-) {
-  if (
-    globalTargetSessionId &&
-    orderedSessions.some((session) => session.id === globalTargetSessionId)
-  ) {
-    return globalTargetSessionId;
-  }
-
-  if (
-    workspaceUiStateSessionId &&
-    orderedSessions.some((session) => session.id === workspaceUiStateSessionId)
-  ) {
-    return workspaceUiStateSessionId;
-  }
-
-  const mostRecentSession = [...orderedSessions].sort(
-    (left, right) => right.lastActiveAt - left.lastActiveAt
-  )[0];
-
-  return mostRecentSession?.id ?? orderedSessions[0]?.id ?? null;
 }
 
 export function useWorkspaceScreenModel() {
@@ -84,8 +56,6 @@ export function useWorkspaceScreenModel() {
   const layout = useWorkspaceLayoutActions();
   const paneActions = usePaneActions(workspaceId);
   const sessionActions = useSessionActions();
-  const { persistUiState } = useWorkspaceUiStatePersistence(workspaceId);
-  const lastViewedTarget = useAtomValue(lastViewedTargetAtom);
 
   const [sidebarTab, setSidebarTab] = useState<WorkspaceSidebarTab>("files");
   const [createRequest, setCreateRequest] = useState<WorkspaceCreateRequest | null>(null);
@@ -187,39 +157,8 @@ export function useWorkspaceScreenModel() {
     ];
   }, [orderedSessions, sessions]);
 
-  const preferredSessionId = workspace?.uiState?.activeSessionId ?? null;
-  const preferredGlobalSessionId =
-    lastViewedTarget?.workspaceId === workspace?.id ? (lastViewedTarget.sessionId ?? null) : null;
-
-  useEffect(() => {
-    if (orderedSessions.some((session) => session.id === mobileActiveSessionId)) {
-      return;
-    }
-
-    setMobileActiveSessionId(
-      resolvePreferredMobileSessionId(orderedSessions, preferredGlobalSessionId, preferredSessionId)
-    );
-  }, [mobileActiveSessionId, orderedSessions, preferredGlobalSessionId, preferredSessionId]);
-
-  useEffect(() => {
-    if (!workspace) {
-      return;
-    }
-
-    if (mobileActiveSessionId === null && workspace.uiState.activeSessionId) {
-      return;
-    }
-
-    const nextActiveSessionId = mobileActiveSessionId ?? undefined;
-    if (workspace.uiState.activeSessionId === nextActiveSessionId) {
-      return;
-    }
-
-    void persistUiState({ activeSessionId: nextActiveSessionId });
-  }, [mobileActiveSessionId, persistUiState, workspace]);
-
   const activeSession =
-    orderedSessions.find((session) => session.id === mobileActiveSessionId) ?? null;
+    mobileAgentSessions.find((session) => session.id === mobileActiveSessionId) ?? null;
 
   const selectMobileSession = useCallback(
     (sessionId: string | null) => {
@@ -246,19 +185,31 @@ export function useWorkspaceScreenModel() {
 
   const closeMobileSession = useCallback(
     async (sessionId: string) => {
+      const remainingSessions = mobileAgentSessions.filter((session) => session.id !== sessionId);
+      const nextActiveSessionId = remainingSessions[0]?.id ?? null;
+
       paneActions.closeSessionPane(sessionId);
+      setMobileActiveSessionId((current) =>
+        current === sessionId ? nextActiveSessionId : current
+      );
       await sessionActions.closeSession(sessionId);
-
-      setMobileActiveSessionId((current) => {
-        if (current !== sessionId) {
-          return current;
-        }
-
-        const remainingSessions = orderedSessions.filter((session) => session.id !== sessionId);
-        return remainingSessions[0]?.id ?? null;
-      });
     },
-    [orderedSessions, paneActions, sessionActions]
+    [mobileAgentSessions, paneActions, sessionActions]
+  );
+
+  const restoreMobileSession = useCallback(
+    (sessionId: string | null) => {
+      if (
+        sessionId &&
+        !orderedSessions.some((session) => session.id === sessionId) &&
+        sessions.some((session) => session.id === sessionId && session.state !== "draft")
+      ) {
+        paneActions.appendSession(sessionId, mobileActiveSessionId, "vertical");
+      }
+
+      setMobileActiveSessionId(sessionId);
+    },
+    [mobileActiveSessionId, orderedSessions, paneActions, sessions]
   );
 
   const openMobileSheet = useCallback((sheet: Exclude<MobileWorkspaceSheetKind, null>) => {
@@ -303,7 +254,9 @@ export function useWorkspaceScreenModel() {
     orderedSessions,
     paneLayout,
     panelRefreshToken,
+    paneLayout,
     closeMobileSession,
+    restoreMobileSession,
     selectMobileSession,
     sessions,
     setSidebarTab,

@@ -2,7 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createStore, Provider } from "jotai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { localeAtom } from "../../../../atoms/app-ui";
+import { lastViewedTargetAtom, localeAtom } from "../../../../atoms/app-ui";
 import { wsClientAtom } from "../../../../atoms/connection";
 import { MobileWorkspaceDrawer } from "./mobile-workspace-drawer";
 
@@ -198,6 +198,10 @@ describe("MobileWorkspaceDrawer", () => {
     const store = createStore();
     store.set(localeAtom, "en");
     store.set(wsClientAtom, { sendCommand } as never);
+    store.set(lastViewedTargetAtom, {
+      workspaceId: "ws-1",
+      updatedAt: 10,
+    });
 
     render(
       <Provider store={store}>
@@ -245,5 +249,47 @@ describe("MobileWorkspaceDrawer", () => {
         undefined
       );
     });
+  });
+
+  it("does not persist again when the mobile drawer clicks the active workspace", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    const sendCommand = vi.fn();
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <MobileWorkspaceDrawer
+          activeWorkspaceId="ws-1"
+          isOpen
+          onClose={onClose}
+          onOpenWorkspaceLauncher={vi.fn()}
+          workspaces={[
+            {
+              id: "ws-1",
+              path: "/tmp/demo",
+              targetRuntime: "native",
+              openedAt: 1,
+              lastActiveAt: 1,
+              uiState: {
+                leftPanelWidth: 320,
+                bottomPanelHeight: 240,
+                focusMode: false,
+              },
+            },
+          ]}
+        />
+      </Provider>
+    );
+
+    await user.click(screen.getByRole("button", { name: "Switch to demo" }));
+
+    expect(sendCommand).not.toHaveBeenCalledWith(
+      "workspace.lastViewedTarget.set",
+      expect.anything(),
+      undefined
+    );
   });
 });

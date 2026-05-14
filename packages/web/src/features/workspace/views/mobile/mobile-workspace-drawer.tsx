@@ -82,6 +82,12 @@ export function MobileWorkspaceDrawer({
                     name: displayName,
                   })}
                   onClick={() => {
+                    if (isActive) {
+                      navigate("/workspace");
+                      onClose();
+                      return;
+                    }
+
                     void persistLastViewedTarget({ workspaceId: workspace.id });
                     setActiveWorkspaceId(workspace.id);
                     navigate("/workspace");

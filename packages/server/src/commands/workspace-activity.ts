@@ -3,6 +3,21 @@ import { z } from "zod";
 import { registerCommand } from "../ws/dispatch.js";
 
 const WORKSPACE_LAST_VIEWED_TARGET_KEY = "workspace.lastViewedTarget";
+const workspaceLastViewedTargetSchema = z.object({
+  workspaceId: z.string(),
+  sessionId: z.string().optional(),
+  updatedAt: z.number(),
+});
+
+function parseWorkspaceLastViewedTarget(value: string): WorkspaceLastViewedTarget | null {
+  try {
+    const parsed = JSON.parse(value);
+    const result = workspaceLastViewedTargetSchema.safeParse(parsed);
+    return result.success ? result.data : null;
+  } catch {
+    return null;
+  }
+}
 
 registerCommand(
   "workspace.activate",
@@ -37,12 +52,7 @@ registerCommand("workspace.lastViewedTarget.get", z.object({}), async (_args, ct
     return null;
   }
 
-  const target = JSON.parse(row.value) as WorkspaceLastViewedTarget;
-  return {
-    workspaceId: target.workspaceId,
-    sessionId: target.sessionId,
-    updatedAt: target.updatedAt,
-  } satisfies WorkspaceLastViewedTarget;
+  return parseWorkspaceLastViewedTarget(row.value);
 });
 
 registerCommand(

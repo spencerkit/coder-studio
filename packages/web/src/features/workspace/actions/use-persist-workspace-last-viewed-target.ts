@@ -11,12 +11,20 @@ interface PersistWorkspaceLastViewedTargetInput {
 
 export function usePersistWorkspaceLastViewedTarget() {
   const dispatch = useAtomValue(dispatchCommandAtom);
+  const lastViewedTarget = useAtomValue(lastViewedTargetAtom);
   const setLastViewedTarget = useSetAtom(lastViewedTargetAtom);
 
   return useCallback(
     async ({ workspaceId, sessionId }: PersistWorkspaceLastViewedTargetInput) => {
       if (!workspaceId) {
         return null;
+      }
+
+      if (
+        lastViewedTarget?.workspaceId === workspaceId &&
+        (lastViewedTarget.sessionId ?? undefined) === sessionId
+      ) {
+        return lastViewedTarget;
       }
 
       const optimisticTarget: WorkspaceLastViewedTarget = {
@@ -38,6 +46,6 @@ export function usePersistWorkspaceLastViewedTarget() {
       setLastViewedTarget(result.data);
       return result.data;
     },
-    [dispatch, setLastViewedTarget]
+    [dispatch, lastViewedTarget, setLastViewedTarget]
   );
 }

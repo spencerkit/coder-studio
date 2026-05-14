@@ -38,6 +38,10 @@ export const WorkspaceTab: FC<WorkspaceTabProps> = ({ workspace, isActive }) => 
   const displayName = formatWorkspaceLabel(workspace) || workspace.id;
 
   const handleClick = () => {
+    if (isActive) {
+      return;
+    }
+
     setActiveWorkspace(workspace.id);
     void persistLastViewedTarget({ workspaceId: workspace.id });
   };

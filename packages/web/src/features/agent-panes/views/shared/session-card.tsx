@@ -103,6 +103,10 @@ export const SessionCard: FC<SessionCardProps> = ({
       return;
     }
 
+    if (workspace?.uiState.activeSessionId === session.id) {
+      return;
+    }
+
     void persistLastViewedTarget({
       workspaceId: session.workspaceId,
       sessionId: session.id,

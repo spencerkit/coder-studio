@@ -2,7 +2,7 @@ import type { Workspace } from "@coder-studio/core";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { localeAtom } from "../../../atoms/app-ui";
+import { lastViewedTargetAtom, localeAtom } from "../../../atoms/app-ui";
 import { wsClientAtom } from "../../../atoms/connection";
 import {
   activeWorkspaceIdAtom,
@@ -128,6 +128,30 @@ describe("WorkspaceTab", () => {
         undefined
       );
     });
+  });
+
+  it("does not persist again when the active workspace tab is clicked", () => {
+    const workspace = createWorkspace("ws-2", "/tmp/two");
+    const sendCommand = vi.fn();
+    const store = createStore();
+
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(activeWorkspaceIdAtom, "ws-2");
+    store.set(lastViewedTargetAtom, {
+      workspaceId: "ws-2",
+      updatedAt: 10,
+    });
+
+    renderWorkspaceTab(store, workspace, { isActive: true, value: "ws-2" });
+
+    fireEvent.click(screen.getByRole("tab", { name: /two/i }));
+
+    expect(sendCommand).not.toHaveBeenCalledWith(
+      "workspace.lastViewedTarget.set",
+      expect.anything(),
+      undefined
+    );
   });
 
   it("closes the active workspace without route navigation and falls back to the next ordered workspace", async () => {

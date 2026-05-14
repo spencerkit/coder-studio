@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { createStore, Provider } from "jotai";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { pendingFocusSessionAtom } from "../../../atoms/app-ui";
+import { lastViewedTargetAtom, pendingFocusSessionAtom } from "../../../atoms/app-ui";
 import { wsClientAtom } from "../../../atoms/connection";
 import { sessionsAtom } from "../../../atoms/sessions";
 import {
@@ -136,6 +136,11 @@ describe("SessionCard", () => {
           activeSessionId: "sess_123456",
         },
       },
+    });
+    store.set(lastViewedTargetAtom, {
+      workspaceId: "ws-123",
+      sessionId: "sess_123456",
+      updatedAt: 10,
     });
 
     render(
@@ -643,6 +648,48 @@ describe("SessionCard", () => {
         undefined
       );
     });
+  });
+
+  it("does not persist the global last-viewed target again when the active session card is clicked", () => {
+    const sendCommand = vi.fn().mockResolvedValue(undefined);
+    const { store } = createSessionStore(
+      {
+        terminalId: "term-live",
+        state: "running",
+        endedAt: undefined,
+      },
+      sendCommand
+    );
+
+    store.set(workspacesAtom, {
+      "ws-123": {
+        id: "ws-123",
+        path: "/tmp/ws-123",
+        targetRuntime: "native",
+        openedAt: Date.now() - 10_000,
+        lastActiveAt: Date.now(),
+        uiState: {
+          leftPanelWidth: 320,
+          bottomPanelHeight: 240,
+          focusMode: false,
+          activeSessionId: "sess_123456",
+        },
+      },
+    });
+
+    render(
+      <Provider store={store}>
+        <SessionCard sessionId="sess_123456" />
+      </Provider>
+    );
+
+    fireEvent.click(document.querySelector('[data-session-id="sess_123456"]')!);
+
+    expect(sendCommand).not.toHaveBeenCalledWith(
+      "workspace.lastViewedTarget.set",
+      expect.anything(),
+      undefined
+    );
   });
 
   it("does not persist activeSessionId when header action buttons are clicked", async () => {
