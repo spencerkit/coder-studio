@@ -3,7 +3,7 @@
  */
 
 export { SupervisorContextBuilder, type SupervisorEvaluationContext } from "./context-builder.js";
-export { SupervisorEvaluator, type SupervisorResult } from "./evaluator.js";
+export { type SupervisorEvaluationResult, SupervisorEvaluator } from "./evaluator.js";
 export { SupervisorInjector } from "./injector.js";
 export type {
   CreateSupervisorRequest,

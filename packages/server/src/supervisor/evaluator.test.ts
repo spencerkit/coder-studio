@@ -78,14 +78,48 @@ function makeEvaluator(
   });
 }
 
+function continuePayload(overrides?: Partial<Record<string, unknown>>): string {
+  return JSON.stringify({
+    status: "continue",
+    reason: "Need more work",
+    guidance: "next step: run tests",
+    ...overrides,
+  });
+}
+
+function stopPayload(overrides?: Partial<Record<string, unknown>>): string {
+  return JSON.stringify({
+    status: "stop",
+    stopReason: "objective_complete",
+    reason: "The target is complete",
+    ...overrides,
+  });
+}
+
+function codexJsonlPayload(text: string): string {
+  return [
+    JSON.stringify({ type: "thread.started", thread_id: "t1" }),
+    JSON.stringify({ type: "turn.started" }),
+    JSON.stringify({
+      type: "item.completed",
+      item: { id: "i1", type: "agent_message", text },
+    }),
+    JSON.stringify({ type: "turn.completed", usage: { output_tokens: 20 } }),
+  ].join("\n");
+}
+
 function makeSupervisor(evaluatorProviderId = "codex"): Supervisor {
   return {
     id: "sup-1",
     sessionId: "sess-1",
     workspaceId: "ws-1",
+    targetId: "tgt-1",
     state: "idle",
     objective: "obj",
     evaluatorProviderId,
+    maxSupervisionCount: 0,
+    completedSupervisionCount: 0,
+    recentTargetCycles: [],
     cycles: [],
     createdAt: 1,
     updatedAt: 1,
@@ -104,6 +138,16 @@ function makeContext(): SupervisorEvaluationContext {
     evidenceSource: "headless_snapshot",
     terminalExcerpt: "build passes",
     latestUserInput: "run the tests",
+    targetMemory: {
+      targetId: "tgt-1",
+      planGenerated: true,
+      plan: [{ id: "step-1", title: "Verify the fix", status: "in_progress" }],
+      activeStepId: "step-1",
+      progressSummary: "Verification in progress",
+      lastGuidance: "Run the focused tests",
+      stalledCount: 0,
+      updatedAt: 1,
+    },
   };
 }
 
@@ -123,22 +167,21 @@ describe("SupervisorEvaluator", () => {
 
   it("uses supervisor.evaluatorProviderId instead of the session provider", async () => {
     const evaluator = new SupervisorEvaluator({
-      providerRegistry: [createProvider("codex", "next step: run tests")],
+      providerRegistry: [
+        createProvider("claude", continuePayload({ guidance: "should not be used" })),
+        createProvider(
+          "codex",
+          codexJsonlPayload(continuePayload({ guidance: "next step: run tests" }))
+        ),
+      ],
       providerConfigRepo: createProviderConfigRepo(),
       timeoutMs: 5000,
     });
 
     const result = await evaluator.evaluate(
       {
-        id: "sup-1",
-        sessionId: "sess-1",
-        workspaceId: "ws-1",
-        state: "idle",
+        ...makeSupervisor("codex"),
         objective: "Finish the evaluator runner",
-        evaluatorProviderId: "codex",
-        cycles: [],
-        createdAt: 1,
-        updatedAt: 1,
       },
       {
         objective: "Finish the evaluator runner",
@@ -151,14 +194,21 @@ describe("SupervisorEvaluator", () => {
         evidenceSource: "headless_snapshot",
         terminalExcerpt: "build passes",
         latestUserInput: "run the tests",
+        targetMemory: makeContext().targetMemory,
       }
     );
 
-    expect(result.message).toBe("next step: run tests");
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: "continue",
+        reason: "Need more work",
+        guidance: "next step: run tests",
+      })
+    );
   });
 
   it("prefers supervisor.evaluatorModel over provider config model", async () => {
-    const provider = createProvider("codex", "next step: run tests", {
+    const provider = createProvider("claude", continuePayload(), {
       defaultConfig: { model: "gpt-4.1", additionalArgs: [], envVars: {} },
     });
     const evaluator = new SupervisorEvaluator({
@@ -173,32 +223,80 @@ describe("SupervisorEvaluator", () => {
 
     const result = await evaluator.evaluate(
       {
-        ...makeSupervisor("codex"),
+        ...makeSupervisor("claude"),
         evaluatorModel: "o3",
       },
       makeContext()
     );
 
-    expect(result.message).toBe("next step: run tests");
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: "continue",
+        guidance: "next step: run tests",
+      })
+    );
     expect(provider.buildSupervisorEvalCommand).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({ model: "o3" })
     );
   });
 
-  it("returns an objective-complete result when the evaluator emits the sentinel", async () => {
-    const evaluator = makeEvaluator("[objective complete]");
+  it("builds a bootstrap prompt when planGenerated is false", async () => {
+    const evaluator = makeEvaluator(
+      JSON.stringify({
+        status: "continue",
+        reason: "Need a plan first",
+        guidance: "Break the objective into 3 to 7 steps",
+        plan: [
+          { id: "step-1", title: "Inspect current behavior", status: "in_progress" },
+          { id: "step-2", title: "Implement target store", status: "pending" },
+        ],
+        activeStepId: "step-1",
+        progressSummary: "Initial decomposition complete",
+      }),
+      "claude"
+    );
 
-    await expect(evaluator.evaluate(makeSupervisor("codex"), makeContext())).resolves.toEqual({
-      message: "[objective complete]",
-      objectiveComplete: true,
+    const result = await evaluator.evaluate(makeSupervisor("claude"), {
+      ...makeContext(),
+      targetMemory: {
+        targetId: "tgt-1",
+        planGenerated: false,
+        plan: [],
+        stalledCount: 0,
+        updatedAt: 1,
+      },
+    });
+
+    expect(result.status).toBe("continue");
+    expect(result.plan?.map((step) => step.title)).toEqual([
+      "Inspect current behavior",
+      "Implement target store",
+    ]);
+    expect(result.guidance).toBe("Break the objective into 3 to 7 steps");
+  });
+
+  it("parses a stop result with stopReason", async () => {
+    const evaluator = makeEvaluator(
+      JSON.stringify({
+        status: "stop",
+        stopReason: "objective_complete",
+        reason: "The target is complete",
+      }),
+      "claude"
+    );
+
+    await expect(evaluator.evaluate(makeSupervisor("claude"), makeContext())).resolves.toEqual({
+      status: "stop",
+      stopReason: "objective_complete",
+      reason: "The target is complete",
     });
   });
 
   it("falls back to provider.defaultConfig when evaluator config is missing", async () => {
     const evaluator = new SupervisorEvaluator({
       providerRegistry: [
-        createProvider("claude", "proceed with review", {
+        createProvider("claude", continuePayload({ guidance: "proceed with review" }), {
           defaultConfig: { model: "claude-sonnet-4-6", additionalArgs: [], envVars: {} },
         }),
       ],
@@ -208,15 +306,8 @@ describe("SupervisorEvaluator", () => {
 
     const result = await evaluator.evaluate(
       {
-        id: "sup-1",
-        sessionId: "sess-1",
-        workspaceId: "ws-1",
-        state: "idle",
+        ...makeSupervisor("claude"),
         objective: "Finish the evaluator runner",
-        evaluatorProviderId: "claude",
-        cycles: [],
-        createdAt: 1,
-        updatedAt: 1,
       },
       {
         objective: "Finish the evaluator runner",
@@ -229,10 +320,16 @@ describe("SupervisorEvaluator", () => {
         evidenceSource: "headless_snapshot",
         terminalExcerpt: "build passes",
         latestUserInput: "run the tests",
+        targetMemory: makeContext().targetMemory,
       }
     );
 
-    expect(result.message).toBe("proceed with review");
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: "continue",
+        guidance: "proceed with review",
+      })
+    );
   });
 
   it("uses the shared 600-second default timeout when the setting is missing", () => {
@@ -285,14 +382,14 @@ describe("SupervisorEvaluator", () => {
       get: vi.fn(() => 900),
     };
     const evaluator = new SupervisorEvaluator({
-      providerRegistry: [createProvider("codex", "next step: run tests")],
+      providerRegistry: [createProvider("claude", continuePayload())],
       providerConfigRepo: createProviderConfigRepo(),
       settingsRepo: settingsRepo as never,
     });
 
-    const result = await evaluator.evaluate(makeSupervisor("codex"), makeContext());
+    const result = await evaluator.evaluate(makeSupervisor("claude"), makeContext());
 
-    expect(result.message).toBe("next step: run tests");
+    expect(result.guidance).toBe("next step: run tests");
     expect(settingsRepo.get).toHaveBeenCalledWith("supervisor.evaluationTimeoutSec");
   });
 
@@ -306,14 +403,14 @@ describe("SupervisorEvaluator", () => {
       );
 
       const evaluator = new SupervisorEvaluator({
-        providerRegistry: [createProvider("codex", "next step: run tests")],
+        providerRegistry: [createProvider("claude", continuePayload())],
         providerConfigRepo: createProviderConfigRepo(),
         settingsRepo: new SettingsRepo(db),
       });
 
-      const result = await evaluator.evaluate(makeSupervisor("codex"), makeContext());
+      const result = await evaluator.evaluate(makeSupervisor("claude"), makeContext());
 
-      expect(result.message).toBe("next step: run tests");
+      expect(result.guidance).toBe("next step: run tests");
     } finally {
       closeDatabase(db);
     }
@@ -337,16 +434,18 @@ describe("SupervisorEvaluator", () => {
     ).rejects.toThrow();
 
     const prompt = (logger.warn.mock.calls[0]?.[0] as { prompt?: string } | undefined)?.prompt;
-    expect(prompt).toContain("You are the supervisor for a business agent terminal session.");
-    expect(prompt).toContain("generate the next concrete task");
+    expect(prompt).toContain("You are supervising a target-scoped software task.");
+    expect(prompt).toContain("Return JSON only.");
     expect(prompt).toContain("Current objective:");
     expect(prompt).toContain("Ship the fix");
+    expect(prompt).toContain("Current target memory:");
+    expect(prompt).toContain('"targetId": "tgt-1"');
     expect(prompt).toContain("Latest user input:");
     expect(prompt).toContain("run the tests");
-    expect(prompt).toContain("Latest business agent output:");
+    expect(prompt).toContain("Current terminal snapshot:");
     expect(prompt).toContain("latest output");
-    expect(prompt).toContain("[objective complete]");
-    expect(prompt).toContain("Your response must be one of");
+    expect(prompt).toContain('"continue"');
+    expect(prompt).toContain('"stop"');
   });
 
   it("aborts the evaluator process group when the signal is cancelled", async () => {
@@ -422,7 +521,11 @@ describe("SupervisorEvaluator", () => {
         JSON.stringify({ type: "turn.started" }),
         JSON.stringify({
           type: "item.completed",
-          item: { id: "i1", type: "agent_message", text: "Run pnpm vitest to verify" },
+          item: {
+            id: "i1",
+            type: "agent_message",
+            text: continuePayload({ guidance: "Run pnpm vitest to verify" }),
+          },
         }),
         JSON.stringify({ type: "turn.completed", usage: { output_tokens: 20 } }),
       ].join("\n");
@@ -430,7 +533,7 @@ describe("SupervisorEvaluator", () => {
       const evaluator = makeEvaluator(jsonl, "codex");
       const result = await evaluator.evaluate(makeSupervisor("codex"), makeContext());
 
-      expect(result.message).toBe("Run pnpm vitest to verify");
+      expect(result.guidance).toBe("Run pnpm vitest to verify");
     });
 
     it("falls back to reasoning text when agent_message is missing", async () => {
@@ -439,7 +542,11 @@ describe("SupervisorEvaluator", () => {
         JSON.stringify({ type: "turn.started" }),
         JSON.stringify({
           type: "item.completed",
-          item: { id: "i0", type: "reasoning", text: "Continue with the tests" },
+          item: {
+            id: "i0",
+            type: "reasoning",
+            text: continuePayload({ guidance: "Continue with the tests" }),
+          },
         }),
         JSON.stringify({ type: "turn.completed", usage: { output_tokens: 50 } }),
       ].join("\n");
@@ -447,7 +554,7 @@ describe("SupervisorEvaluator", () => {
       const evaluator = makeEvaluator(jsonl, "codex");
       const result = await evaluator.evaluate(makeSupervisor("codex"), makeContext());
 
-      expect(result.message).toBe("Continue with the tests");
+      expect(result.guidance).toBe("Continue with the tests");
     });
 
     it("accepts assistant_message (older codex builds)", async () => {
@@ -455,7 +562,11 @@ describe("SupervisorEvaluator", () => {
         JSON.stringify({ type: "thread.started", thread_id: "t1" }),
         JSON.stringify({
           type: "item.completed",
-          item: { id: "i0", item_type: "assistant_message", text: "All good" },
+          item: {
+            id: "i0",
+            item_type: "assistant_message",
+            text: continuePayload({ guidance: "All good" }),
+          },
         }),
         JSON.stringify({ type: "turn.completed", usage: { output_tokens: 40 } }),
       ].join("\n");
@@ -463,11 +574,11 @@ describe("SupervisorEvaluator", () => {
       const evaluator = makeEvaluator(jsonl, "codex");
       const result = await evaluator.evaluate(makeSupervisor("codex"), makeContext());
 
-      expect(result.message).toBe("All good");
+      expect(result.guidance).toBe("All good");
     });
 
     it("strips markdown code fence from agent_message text", async () => {
-      const fenced = "```json\nRun the tests\n```";
+      const fenced = `\`\`\`json\n${continuePayload({ guidance: "Run the tests" })}\n\`\`\``;
       const jsonl = [
         JSON.stringify({ type: "thread.started", thread_id: "t1" }),
         JSON.stringify({ type: "turn.started" }),
@@ -481,7 +592,7 @@ describe("SupervisorEvaluator", () => {
       const evaluator = makeEvaluator(jsonl, "codex");
       const result = await evaluator.evaluate(makeSupervisor("codex"), makeContext());
 
-      expect(result.message).toBe("Run the tests");
+      expect(result.guidance).toBe("Run the tests");
     });
 
     it("parses claude --output-format json envelope (result field)", async () => {
@@ -490,14 +601,14 @@ describe("SupervisorEvaluator", () => {
         subtype: "success",
         is_error: false,
         duration_ms: 42,
-        result: "Proceed to the next step",
+        result: continuePayload({ guidance: "Proceed to the next step" }),
         session_id: "uuid",
       });
 
       const evaluator = makeEvaluator(claudeEnvelope, "claude");
       const result = await evaluator.evaluate(makeSupervisor("claude"), makeContext());
 
-      expect(result.message).toBe("Proceed to the next step");
+      expect(result.guidance).toBe("Proceed to the next step");
     });
 
     it("surfaces codex turn.failed error details", async () => {
@@ -535,7 +646,11 @@ describe("SupervisorEvaluator", () => {
         JSON.stringify({ type: "turn.started" }),
         JSON.stringify({
           type: "item.completed",
-          item: { id: "i1", type: "agent_message", text: longMessage },
+          item: {
+            id: "i1",
+            type: "agent_message",
+            text: continuePayload({ guidance: longMessage }),
+          },
         }),
         JSON.stringify({ type: "turn.completed", usage: {} }),
       ].join("\n");
@@ -543,7 +658,7 @@ describe("SupervisorEvaluator", () => {
       const evaluator = makeEvaluator(jsonl, "codex", { guidanceMaxChars: 100 });
       const result = await evaluator.evaluate(makeSupervisor(), makeContext());
 
-      expect(result.message).toHaveLength(100);
+      expect(result.guidance).toHaveLength(100);
     });
   });
 });

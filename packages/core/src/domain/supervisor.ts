@@ -19,7 +19,52 @@ export type CycleStatus =
 
 export type CycleTrigger = "turn_completed" | "manual" | "scheduled";
 
-export type SupervisorStopReason = "objective_complete" | "max_supervision_count_reached";
+export type SupervisorStopReason =
+  | "objective_complete"
+  | "max_supervision_count_reached"
+  | "supervisor_uncertain"
+  | "needs_user_input";
+
+export type SupervisorPlanStepStatus = "pending" | "in_progress" | "done";
+
+export interface SupervisorPlanStep {
+  id: string;
+  title: string;
+  status: SupervisorPlanStepStatus;
+}
+
+export interface SupervisorTargetMemory {
+  targetId: string;
+  planGenerated: boolean;
+  plan: SupervisorPlanStep[];
+  activeStepId?: string;
+  progressSummary?: string;
+  lastGuidance?: string;
+  stalledCount: number;
+  updatedAt: number;
+}
+
+export interface SupervisorCycleStepUpdate {
+  id: string;
+  status: SupervisorPlanStepStatus;
+}
+
+export interface SupervisorCycleTargetRecord {
+  cycleId: string;
+  targetId: string;
+  startedAt: number;
+  completedAt: number;
+  result: "continue" | "stop" | "error";
+  stopReason?: "objective_complete" | "supervisor_uncertain" | "needs_user_input";
+  reason?: string;
+  guidance?: string;
+  progressSummary?: string;
+  activeStepId?: string;
+  stepUpdates?: SupervisorCycleStepUpdate[];
+  injected?: boolean;
+  attemptCount?: number;
+  errorReason?: string;
+}
 
 export type SupervisorCycleAttemptStatus = "evaluating" | "completed" | "failed" | "cancelled";
 
@@ -65,6 +110,7 @@ export interface Supervisor {
   id: string;
   sessionId: string;
   workspaceId: string;
+  targetId: string;
   state: SupervisorState;
   objective: string;
   evaluatorProviderId: string;
@@ -73,6 +119,8 @@ export interface Supervisor {
   completedSupervisionCount: number;
   scheduledAt?: number;
   stopReason?: SupervisorStopReason;
+  currentTargetMemory?: SupervisorTargetMemory;
+  recentTargetCycles?: SupervisorCycleTargetRecord[];
   cycles: SupervisorCycle[];
   lastCycleAt?: number;
   lastEvaluatedTurnId?: string;

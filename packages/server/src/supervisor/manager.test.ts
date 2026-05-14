@@ -31,6 +31,16 @@ type MockSupervisorManagerDeps = {
     listForCycle: ReturnType<typeof vi.fn>;
     deleteForCycle: ReturnType<typeof vi.fn>;
   };
+  targetStore: {
+    createTargetFiles: ReturnType<typeof vi.fn>;
+    readTargetMeta: ReturnType<typeof vi.fn>;
+    loadTargetMemory: ReturnType<typeof vi.fn>;
+    saveTargetMeta: ReturnType<typeof vi.fn>;
+    saveTargetMemory: ReturnType<typeof vi.fn>;
+    appendTargetCycleRecord: ReturnType<typeof vi.fn>;
+    markTargetSuperseded: ReturnType<typeof vi.fn>;
+    readTargetCycleRecords: ReturnType<typeof vi.fn>;
+  };
 };
 
 function createProvider(): ProviderDefinition {
@@ -38,7 +48,17 @@ function createProvider(): ProviderDefinition {
     id: "claude",
     capability: "full",
     buildSupervisorEvalCommand: vi.fn(() => ({
-      argv: ["node", "-e", `process.stdout.write(${JSON.stringify("continue with the work")})`],
+      argv: [
+        "node",
+        "-e",
+        `process.stdout.write(${JSON.stringify(
+          JSON.stringify({
+            status: "continue",
+            reason: "Need more work",
+            guidance: "continue with the work",
+          })
+        )})`,
+      ],
       cwd: process.cwd(),
       env: {},
     })),
@@ -124,6 +144,32 @@ describe("SupervisorManager", () => {
         })),
         listForCycle: vi.fn(() => []),
         deleteForCycle: vi.fn(),
+      },
+      targetStore: {
+        createTargetFiles: vi.fn(async () => {}),
+        readTargetMeta: vi.fn(async () => ({
+          targetId: "tgt-1",
+          sessionId: "sess-1",
+          workspaceId: "ws-1",
+          objective: "Persist supervisors",
+          status: "active",
+          createdAt: 1,
+          updatedAt: 1,
+          supersededBy: null,
+          completedAt: null,
+        })),
+        loadTargetMemory: vi.fn(async () => ({
+          targetId: "tgt-1",
+          planGenerated: false,
+          plan: [],
+          stalledCount: 0,
+          updatedAt: 1,
+        })),
+        saveTargetMeta: vi.fn(async () => {}),
+        saveTargetMemory: vi.fn(async () => {}),
+        appendTargetCycleRecord: vi.fn(async () => {}),
+        markTargetSuperseded: vi.fn(async () => {}),
+        readTargetCycleRecords: vi.fn(async () => []),
       },
     };
   });

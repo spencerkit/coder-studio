@@ -4,6 +4,7 @@ import type {
   Session,
   Supervisor,
   SupervisorCycle,
+  SupervisorTargetMemory,
 } from "@coder-studio/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
@@ -14,7 +15,7 @@ import type {
 } from "../storage/repositories/supervisor-repo.js";
 import type { SupervisorEvaluationContext } from "../supervisor/context-builder.js";
 import { SupervisorContextBuilder } from "../supervisor/context-builder.js";
-import { SupervisorEvaluator, type SupervisorResult } from "../supervisor/evaluator.js";
+import { type SupervisorEvaluationResult, SupervisorEvaluator } from "../supervisor/evaluator.js";
 import { SupervisorInjector } from "../supervisor/injector.js";
 import { SupervisorManager, type SupervisorManagerDeps } from "../supervisor/manager.js";
 
@@ -84,6 +85,7 @@ function createSessionRecord(sessionId: string, overrides?: Partial<Session>): S
 function applySupervisorPatch(current: Supervisor, patch: SupervisorUpdatePatch): Supervisor {
   return {
     ...current,
+    ...(patch.targetId !== undefined ? { targetId: patch.targetId } : {}),
     ...(patch.state !== undefined ? { state: patch.state } : {}),
     ...(patch.objective !== undefined ? { objective: patch.objective } : {}),
     ...(patch.evaluatorProviderId !== undefined
@@ -149,7 +151,17 @@ function createManagerDeps() {
   };
 
   const codexBuildSupervisorEvalCommand = vi.fn(() => ({
-    argv: ["node", "-e", `process.stdout.write(${JSON.stringify("Run the focused parser test.")})`],
+    argv: [
+      "node",
+      "-e",
+      `process.stdout.write(${JSON.stringify(
+        JSON.stringify({
+          status: "continue",
+          reason: "Need more work",
+          guidance: "Run the focused parser test.",
+        })
+      )})`,
+    ],
     cwd: process.cwd(),
     env: {},
   }));
@@ -270,6 +282,32 @@ function createManagerDeps() {
       attemptsByCycle.delete(cycleId);
     }),
   };
+  const targetStore = {
+    createTargetFiles: vi.fn(async () => {}),
+    readTargetMeta: vi.fn(async (_workspacePath: string, targetId: string) => ({
+      targetId,
+      sessionId: "sess-1",
+      workspaceId: "ws-1",
+      objective: "Ship the fix",
+      status: "active",
+      createdAt: 1,
+      updatedAt: 1,
+      supersededBy: null,
+      completedAt: null,
+    })),
+    loadTargetMemory: vi.fn(async (_workspacePath: string, targetId: string) => ({
+      targetId,
+      planGenerated: false,
+      plan: [],
+      stalledCount: 0,
+      updatedAt: 1,
+    })),
+    saveTargetMeta: vi.fn(async () => {}),
+    saveTargetMemory: vi.fn(async () => {}),
+    appendTargetCycleRecord: vi.fn(async () => {}),
+    markTargetSuperseded: vi.fn(async () => {}),
+    readTargetCycleRecords: vi.fn(async () => []),
+  };
 
   return {
     eventBus: { on: vi.fn(() => () => {}), emit: vi.fn() },
@@ -308,6 +346,7 @@ function createManagerDeps() {
     supervisorRepo,
     cycleRepo,
     cycleAttemptRepo,
+    targetStore,
     codexBuildSupervisorEvalCommand,
   };
 }
@@ -386,8 +425,9 @@ describe("SupervisorManager cycle triggers", () => {
     });
 
     vi.spyOn(getManagerInternals().evaluator, "evaluate").mockResolvedValueOnce({
-      message: "[objective complete]",
-      objectiveComplete: true,
+      status: "stop",
+      stopReason: "objective_complete",
+      reason: "[objective complete]",
     });
 
     const finished = await getManagerInternals().runEvaluation(supervisor.id, "turn_completed");
@@ -396,6 +436,373 @@ describe("SupervisorManager cycle triggers", () => {
     expect(finished?.result).toBe("[objective complete]");
     expect(manager.get(supervisor.id)?.state).toBe("stopped");
     expect(manager.get(supervisor.id)?.stopReason).toBe("objective_complete");
+  });
+
+  it("resets runtime stop state and counters when the objective changes", async () => {
+    const supervisor = await manager.create({
+      sessionId: "sess-objective-reset",
+      workspaceId: "ws-1",
+      objective: "Finish the migration",
+      evaluatorProviderId: "codex",
+      maxSupervisionCount: 1,
+    });
+
+    vi.spyOn(getManagerInternals().evaluator, "evaluate").mockResolvedValueOnce({
+      status: "stop",
+      stopReason: "objective_complete",
+      reason: "done",
+    });
+
+    await getManagerInternals().runEvaluation(supervisor.id, "turn_completed");
+
+    const updated = await manager.update(supervisor.id, {
+      objective: "Start the follow-up migration",
+    });
+
+    expect(updated.targetId).not.toBe(supervisor.targetId);
+    expect(updated.state).toBe("idle");
+    expect(updated.stopReason).toBeUndefined();
+    expect(updated.completedSupervisionCount).toBe(0);
+
+    vi.spyOn(getManagerInternals().evaluator, "evaluate").mockResolvedValueOnce({
+      status: "continue",
+      reason: "keep going",
+      guidance: "do the next step",
+    });
+
+    const nextCycle = await getManagerInternals().runEvaluation(updated.id, "turn_completed");
+    expect(nextCycle?.status).toBe("injected");
+  });
+
+  it("keeps in-flight cycle writes attached to the original target after an objective change", async () => {
+    const supervisor = await manager.create({
+      sessionId: "sess-objective-race",
+      workspaceId: "ws-1",
+      objective: "Initial objective",
+      evaluatorProviderId: "codex",
+    });
+
+    let resolveEvaluation: ((result: SupervisorEvaluationResult) => void) | null = null;
+    vi.spyOn(getManagerInternals().evaluator, "evaluate").mockImplementationOnce(
+      async () =>
+        await new Promise<SupervisorEvaluationResult>((resolve) => {
+          resolveEvaluation = resolve;
+        })
+    );
+
+    const cycle = await manager.triggerEvaluation(supervisor.id);
+
+    await waitFor(() => {
+      expect(resolveEvaluation).not.toBeNull();
+      expect(manager.get(supervisor.id)?.state).toBe("evaluating");
+    });
+
+    const rotated = await manager.update(supervisor.id, {
+      objective: "New objective",
+    });
+
+    expect(rotated.targetId).not.toBe(supervisor.targetId);
+
+    resolveEvaluation?.({
+      status: "continue",
+      reason: "Keep going on the old target",
+      guidance: "Run the old-target validation",
+      progressSummary: "Old target progress",
+    });
+
+    await waitFor(() => {
+      const finished = manager.get(supervisor.id)?.cycles.find((entry) => entry.id === cycle.id);
+      expect(finished?.status).toBe("completed");
+    });
+
+    expect(deps.targetStore.saveTargetMemory).toHaveBeenCalledWith(
+      expect.any(String),
+      supervisor.targetId,
+      expect.objectContaining({
+        targetId: supervisor.targetId,
+        progressSummary: "Old target progress",
+      })
+    );
+    expect(deps.targetStore.appendTargetCycleRecord).toHaveBeenCalledWith(
+      expect.any(String),
+      supervisor.targetId,
+      expect.objectContaining({
+        cycleId: cycle.id,
+        targetId: supervisor.targetId,
+      })
+    );
+    expect(deps.targetStore.saveTargetMemory).not.toHaveBeenCalledWith(
+      expect.any(String),
+      rotated.targetId,
+      expect.anything()
+    );
+    expect(manager.get(supervisor.id)?.state).toBe("idle");
+    expect(manager.get(supervisor.id)?.completedSupervisionCount).toBe(0);
+    expect(deps.sessionMgr.sendInput).not.toHaveBeenCalled();
+  });
+
+  it("marks supervisor_uncertain stops as cancelled instead of completed target meta", async () => {
+    const supervisor = await manager.create({
+      sessionId: "sess-uncertain-stop",
+      workspaceId: "ws-1",
+      objective: "Investigate the flaky state",
+      evaluatorProviderId: "codex",
+    });
+
+    vi.spyOn(getManagerInternals().evaluator, "evaluate").mockResolvedValueOnce({
+      status: "stop",
+      stopReason: "supervisor_uncertain",
+      reason: "I cannot determine the next step safely",
+    });
+
+    await getManagerInternals().runEvaluation(supervisor.id, "turn_completed");
+
+    expect(deps.targetStore.saveTargetMeta).toHaveBeenCalledWith(
+      expect.any(String),
+      supervisor.targetId,
+      expect.objectContaining({
+        status: "cancelled",
+      })
+    );
+    expect(deps.targetStore.saveTargetMeta).not.toHaveBeenCalledWith(
+      expect.any(String),
+      supervisor.targetId,
+      expect.objectContaining({
+        status: "completed",
+      })
+    );
+  });
+
+  it("does not move the rotated target into error when the previous target cycle fails", async () => {
+    const supervisor = await manager.create({
+      sessionId: "sess-objective-error-race",
+      workspaceId: "ws-1",
+      objective: "Initial objective",
+      evaluatorProviderId: "codex",
+    });
+
+    let rejectEvaluation: ((error: unknown) => void) | null = null;
+    vi.spyOn(getManagerInternals().evaluator, "evaluate").mockImplementationOnce(
+      async () =>
+        await new Promise<SupervisorEvaluationResult>((_resolve, reject) => {
+          rejectEvaluation = reject;
+        })
+    );
+
+    const cycle = await manager.triggerEvaluation(supervisor.id);
+
+    await waitFor(() => {
+      expect(rejectEvaluation).not.toBeNull();
+      expect(manager.get(supervisor.id)?.state).toBe("evaluating");
+    });
+
+    const rotated = await manager.update(supervisor.id, {
+      objective: "New objective",
+    });
+
+    rejectEvaluation?.(new Error("old target eval failed"));
+
+    await waitFor(() => {
+      const finished = manager.get(supervisor.id)?.cycles.find((entry) => entry.id === cycle.id);
+      expect(finished?.status).toBe("failed");
+    });
+
+    expect(manager.get(supervisor.id)?.targetId).toBe(rotated.targetId);
+    expect(manager.get(supervisor.id)?.state).toBe("idle");
+    expect(manager.get(supervisor.id)?.errorReason).toBeUndefined();
+    expect(deps.targetStore.appendTargetCycleRecord).toHaveBeenCalledWith(
+      expect.any(String),
+      supervisor.targetId,
+      expect.objectContaining({
+        cycleId: cycle.id,
+        targetId: supervisor.targetId,
+        result: "error",
+        errorReason: "old target eval failed",
+      })
+    );
+  });
+
+  it("keeps a superseded target meta state when an old in-flight cycle later stops", async () => {
+    const supervisor = await manager.create({
+      sessionId: "sess-objective-stop-race",
+      workspaceId: "ws-1",
+      objective: "Initial objective",
+      evaluatorProviderId: "codex",
+    });
+
+    const targetMetaById = new Map<string, Record<string, unknown>>([
+      [
+        supervisor.targetId,
+        {
+          targetId: supervisor.targetId,
+          sessionId: supervisor.sessionId,
+          workspaceId: supervisor.workspaceId,
+          objective: supervisor.objective,
+          status: "active",
+          createdAt: 1,
+          updatedAt: 1,
+          supersededBy: null,
+          completedAt: null,
+        },
+      ],
+    ]);
+
+    deps.targetStore.readTargetMeta.mockImplementation(
+      async (_workspacePath: string, targetId: string) => {
+        const meta = targetMetaById.get(targetId);
+        if (!meta) {
+          throw new Error(`Missing target meta for ${targetId}`);
+        }
+        return { ...meta };
+      }
+    );
+    deps.targetStore.createTargetFiles.mockImplementation(
+      async (
+        _workspacePath: string,
+        input: {
+          targetId: string;
+          sessionId: string;
+          workspaceId: string;
+          objective: string;
+          createdAt: number;
+        }
+      ) => {
+        targetMetaById.set(input.targetId, {
+          targetId: input.targetId,
+          sessionId: input.sessionId,
+          workspaceId: input.workspaceId,
+          objective: input.objective,
+          status: "active",
+          createdAt: input.createdAt,
+          updatedAt: input.createdAt,
+          supersededBy: null,
+          completedAt: null,
+        });
+      }
+    );
+    deps.targetStore.markTargetSuperseded.mockImplementation(
+      async (_workspacePath: string, targetId: string, nextTargetId: string, updatedAt: number) => {
+        const current = targetMetaById.get(targetId);
+        if (!current) {
+          throw new Error(`Missing target meta for ${targetId}`);
+        }
+        targetMetaById.set(targetId, {
+          ...current,
+          status: "superseded",
+          supersededBy: nextTargetId,
+          updatedAt,
+        });
+      }
+    );
+    deps.targetStore.saveTargetMeta.mockImplementation(
+      async (_workspacePath: string, targetId: string, meta: Record<string, unknown>) => {
+        targetMetaById.set(targetId, { ...meta, targetId });
+      }
+    );
+
+    let resolveEvaluation: ((result: SupervisorEvaluationResult) => void) | null = null;
+    vi.spyOn(getManagerInternals().evaluator, "evaluate").mockImplementationOnce(
+      async () =>
+        await new Promise<SupervisorEvaluationResult>((resolve) => {
+          resolveEvaluation = resolve;
+        })
+    );
+
+    const cycle = await manager.triggerEvaluation(supervisor.id);
+
+    await waitFor(() => {
+      expect(resolveEvaluation).not.toBeNull();
+      expect(manager.get(supervisor.id)?.state).toBe("evaluating");
+    });
+
+    const rotated = await manager.update(supervisor.id, {
+      objective: "New objective",
+    });
+
+    resolveEvaluation?.({
+      status: "stop",
+      stopReason: "objective_complete",
+      reason: "old objective is done",
+    });
+
+    await waitFor(() => {
+      const finished = manager.get(supervisor.id)?.cycles.find((entry) => entry.id === cycle.id);
+      expect(finished?.status).toBe("completed");
+    });
+
+    expect(targetMetaById.get(supervisor.targetId)).toMatchObject({
+      status: "superseded",
+      supersededBy: rotated.targetId,
+    });
+    expect(targetMetaById.get(rotated.targetId)).toMatchObject({
+      status: "active",
+    });
+  });
+
+  it("rolls back a supersede mark when creating the next target files fails", async () => {
+    const supervisor = await manager.create({
+      sessionId: "sess-objective-create-fails",
+      workspaceId: "ws-1",
+      objective: "Initial objective",
+      evaluatorProviderId: "codex",
+    });
+
+    let latestMeta: Record<string, unknown> = {
+      targetId: supervisor.targetId,
+      sessionId: supervisor.sessionId,
+      workspaceId: supervisor.workspaceId,
+      objective: supervisor.objective,
+      status: "active",
+      createdAt: 1,
+      updatedAt: 1,
+      supersededBy: null,
+      completedAt: null,
+    };
+
+    deps.targetStore.readTargetMeta.mockImplementation(async () => ({ ...latestMeta }));
+    deps.targetStore.markTargetSuperseded.mockImplementation(
+      async (_workspacePath: string, targetId: string, nextTargetId: string, updatedAt: number) => {
+        latestMeta = {
+          ...latestMeta,
+          targetId,
+          status: "superseded",
+          supersededBy: nextTargetId,
+          updatedAt,
+        };
+      }
+    );
+    deps.targetStore.saveTargetMeta.mockImplementation(
+      async (_workspacePath: string, targetId: string, meta: Record<string, unknown>) => {
+        latestMeta = { ...meta, targetId };
+      }
+    );
+
+    const createTargetFilesError = new Error("disk full");
+    deps.targetStore.createTargetFiles.mockImplementation(async () => {
+      throw createTargetFilesError;
+    });
+
+    await expect(
+      manager.update(supervisor.id, {
+        objective: "New objective",
+      })
+    ).rejects.toThrow("disk full");
+
+    expect(manager.get(supervisor.id)?.targetId).toBe(supervisor.targetId);
+    expect(latestMeta).toMatchObject({
+      targetId: supervisor.targetId,
+      status: "active",
+      supersededBy: null,
+    });
+    expect(deps.targetStore.saveTargetMeta).toHaveBeenCalledWith(
+      expect.any(String),
+      supervisor.targetId,
+      expect.objectContaining({
+        targetId: supervisor.targetId,
+        status: "active",
+        supersededBy: null,
+      })
+    );
   });
 
   it("retries evaluator timeout up to the global retry budget", async () => {
@@ -426,7 +833,11 @@ describe("SupervisorManager cycle triggers", () => {
 
     vi.spyOn(getManagerInternals().evaluator, "evaluate")
       .mockRejectedValueOnce({ code: "supervisor_eval_timeout", message: "timed out" })
-      .mockResolvedValueOnce({ message: "Run tests", objectiveComplete: false });
+      .mockResolvedValueOnce({
+        status: "continue",
+        reason: "Run tests",
+        guidance: "Run tests",
+      });
 
     const pending = getManagerInternals().runEvaluation(supervisor.id, "turn_completed");
     for (let index = 0; index < 20; index += 1) {
@@ -480,7 +891,7 @@ describe("SupervisorManager cycle triggers", () => {
         _context: SupervisorEvaluationContext,
         options?: { signal?: AbortSignal }
       ) =>
-        await new Promise<SupervisorResult>((_resolve, reject) => {
+        await new Promise<SupervisorEvaluationResult>((_resolve, reject) => {
           const signal = options?.signal;
           const abort = () =>
             reject({
@@ -516,7 +927,11 @@ describe("SupervisorManager cycle triggers", () => {
     expect(manager.get(supervisor.id)?.completedSupervisionCount).toBe(0);
 
     await manager.resume(supervisor.id);
-    evaluate.mockResolvedValueOnce({ message: "Run tests", objectiveComplete: false });
+    evaluate.mockResolvedValueOnce({
+      status: "continue",
+      reason: "Run tests",
+      guidance: "Run tests",
+    });
 
     const finished = await managerInternals.runEvaluation(supervisor.id, "turn_completed");
 
@@ -569,8 +984,9 @@ describe("SupervisorManager cycle triggers", () => {
       createSessionRecord(sessionId, { state: sessionState })
     );
     vi.spyOn(getManagerInternals().evaluator, "evaluate").mockResolvedValueOnce({
-      message: "Run tests",
-      objectiveComplete: false,
+      status: "continue",
+      reason: "Run tests",
+      guidance: "Run tests",
     });
 
     const supervisor = await manager.create({
@@ -605,7 +1021,9 @@ describe("SupervisorManager cycle triggers", () => {
     const managerInternals = getManagerInternals();
 
     vi.spyOn(managerInternals.evaluator, "evaluate").mockResolvedValueOnce({
-      message: "Run the focused parser test.",
+      status: "continue",
+      reason: "Run the focused parser test.",
+      guidance: "Run the focused parser test.",
     });
     vi.spyOn(managerInternals.injector, "inject").mockResolvedValueOnce({
       injected: false,
@@ -615,7 +1033,7 @@ describe("SupervisorManager cycle triggers", () => {
     const finished = await managerInternals.runEvaluation(supervisor.id);
 
     expect(finished?.status).toBe("completed");
-    expect(finished?.result).toBe("Skipped duplicate: [Supervisor] Run the focused parser test.");
+    expect(finished?.result).toBe("Skipped duplicate: Run the focused parser test.");
     expect(finished?.injectedGuidance).toBeUndefined();
   });
 
@@ -767,7 +1185,7 @@ describe("SupervisorManager cycle triggers", () => {
         _context: SupervisorEvaluationContext,
         options?: { signal?: AbortSignal }
       ) =>
-        await new Promise<SupervisorResult>((_resolve, reject) => {
+        await new Promise<SupervisorEvaluationResult>((_resolve, reject) => {
           const signal = options?.signal;
           const abort = () =>
             reject({
@@ -814,6 +1232,42 @@ describe("SupervisorManager cycle triggers", () => {
     expect(deps.logger.error).not.toHaveBeenCalled();
   });
 
+  it("marks deleted active targets as cancelled with a completion timestamp", async () => {
+    const supervisor = await manager.create({
+      sessionId: "sess-delete-completed-at",
+      workspaceId: "ws-1",
+      objective: "Ship the fix",
+      evaluatorProviderId: "codex",
+    });
+
+    const activeMeta = {
+      targetId: supervisor.targetId,
+      sessionId: supervisor.sessionId,
+      workspaceId: supervisor.workspaceId,
+      objective: supervisor.objective,
+      status: "active",
+      createdAt: 1,
+      updatedAt: 1,
+      supersededBy: null,
+      completedAt: null,
+    };
+    deps.targetStore.readTargetMeta.mockResolvedValue(activeMeta);
+
+    await manager.delete(supervisor.id);
+
+    await waitFor(() => {
+      expect(deps.targetStore.saveTargetMeta).toHaveBeenCalledWith(
+        expect.any(String),
+        supervisor.targetId,
+        expect.objectContaining({
+          targetId: supervisor.targetId,
+          status: "cancelled",
+          completedAt: expect.any(Number),
+        })
+      );
+    });
+  });
+
   it("pauses an in-flight evaluation by cancelling the cycle", async () => {
     const supervisor = await manager.create({
       sessionId: "sess-pause",
@@ -829,7 +1283,7 @@ describe("SupervisorManager cycle triggers", () => {
         _context: SupervisorEvaluationContext,
         options?: { signal?: AbortSignal }
       ) =>
-        await new Promise<SupervisorResult>((_resolve, reject) => {
+        await new Promise<SupervisorEvaluationResult>((_resolve, reject) => {
           const signal = options?.signal;
           const abort = () =>
             reject({
@@ -890,8 +1344,9 @@ describe("SupervisorManager cycle triggers", () => {
     });
 
     vi.spyOn(managerInternals.evaluator, "evaluate").mockResolvedValueOnce({
-      message: "Run tests",
-      objectiveComplete: false,
+      status: "continue",
+      reason: "Run tests",
+      guidance: "Run tests",
     });
 
     const finished = await managerInternals.runEvaluation(supervisor.id, "turn_completed");
