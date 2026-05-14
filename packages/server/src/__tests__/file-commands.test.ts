@@ -141,6 +141,33 @@ describe("File Commands", () => {
     expect(files).toHaveLength(0);
   });
 
+  it("shows dotfiles and node_modules in file.readTree while still hiding .git", async () => {
+    await writeFile(join(testDir, ".gitignore"), "*.log\nnode_modules/\n");
+    await writeFile(join(testDir, ".env"), "secret\n");
+    await writeFile(join(testDir, "ignored.log"), "log\n");
+    await mkdir(join(testDir, "node_modules", "pkg"), { recursive: true });
+    await mkdir(join(testDir, ".git"), { recursive: true });
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "file-tree-1",
+        op: "file.readTree",
+        args: {
+          workspaceId,
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    const children = (result.data as { children: Array<{ name: string }> }).children;
+    expect(children.some((item) => item.name === ".env")).toBe(true);
+    expect(children.some((item) => item.name === "ignored.log")).toBe(true);
+    expect(children.some((item) => item.name === "node_modules")).toBe(true);
+    expect(children.some((item) => item.name === ".git")).toBe(false);
+  });
+
   it("emits fs.dirty after file writes", async () => {
     const result = await dispatch(
       {

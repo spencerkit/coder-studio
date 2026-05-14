@@ -7,7 +7,7 @@
 
 import { Topics } from "@coder-studio/core";
 import chokidar, { type FSWatcher } from "chokidar";
-import { mkdtemp, rm } from "fs/promises";
+import { mkdtemp, rm, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -91,6 +91,22 @@ describe("WorkspaceWatcher", () => {
     expect(ignored?.(join(testDir, ".DS_Store"))).toBe(true);
     expect(ignored?.(join(testDir, "Thumbs.db"))).toBe(true);
     expect(ignored?.(join(testDir, "src/index.ts"))).toBe(false);
+  });
+
+  it("continues to respect .gitignore entries after tree visibility was relaxed", async () => {
+    await writeFile(join(testDir, ".gitignore"), "dist/\n*.log\n");
+
+    new WorkspaceWatcher("test-workspace-id", testDir, broadcaster);
+
+    expect(watchSpy).toHaveBeenCalledTimes(1);
+    const options = watchSpy.mock.calls[0]?.[1];
+    const ignored = options?.ignored;
+
+    expect(typeof ignored).toBe("function");
+    expect(ignored?.(join(testDir, "dist", "bundle.js"))).toBe(true);
+    expect(ignored?.(join(testDir, "debug.log"))).toBe(true);
+    expect(ignored?.(join(testDir, ".git", "index"))).toBe(false);
+    expect(ignored?.(join(testDir, "src", "index.ts"))).toBe(false);
   });
 
   it("broadcasts fs.dirty after git metadata events settle", async () => {
