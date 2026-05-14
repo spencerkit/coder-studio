@@ -124,7 +124,7 @@ describe("theme icon resolver", () => {
         expect.objectContaining({ tone: "info" })
       );
       expect(getIconPresentation(themeId, "nav.settings.appearance")).toEqual(
-        expect.objectContaining({ tone: "accent" })
+        expect.objectContaining({ tone: "secondary" })
       );
     }
   });
@@ -162,7 +162,7 @@ describe("theme icon resolver", () => {
         expect.objectContaining({ tone: "info" })
       );
       expect(getIconPresentation(themeId, "nav.settings.appearance")).toEqual(
-        expect.objectContaining({ tone: "accent" })
+        expect.objectContaining({ tone: "secondary" })
       );
       expect(getIconPresentation(themeId, "nav.panelTerminal")).toEqual(
         expect.objectContaining({ tone: "current" })
@@ -224,7 +224,7 @@ describe("theme icon resolver", () => {
         expect.objectContaining({ tone: "accent" })
       );
       expect(getIconPresentation(themeId, "nav.settings.appearance")).toEqual(
-        expect.objectContaining({ tone: "accent" })
+        expect.objectContaining({ tone: "secondary" })
       );
       expect(getIconPresentation(themeId, "nav.settings.providers")).toEqual(
         expect.objectContaining({ tone: "info" })

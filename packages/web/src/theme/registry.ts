@@ -171,10 +171,6 @@ const THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
         ...BASE_ICON_THEME.icons["git.commit"],
         tone: "info",
       },
-      "nav.settings.appearance": {
-        ...BASE_ICON_THEME.icons["nav.settings.appearance"],
-        tone: "accent",
-      },
     }),
     monaco: {
       base: "vs-dark",
@@ -254,10 +250,6 @@ const THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
       "git.commit": {
         ...BASE_ICON_THEME.icons["git.commit"],
         tone: "info",
-      },
-      "nav.settings.appearance": {
-        ...BASE_ICON_THEME.icons["nav.settings.appearance"],
-        tone: "accent",
       },
     }),
     monaco: {
@@ -346,10 +338,6 @@ const THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
         ...BASE_ICON_THEME.icons["git.action.refresh"],
         tone: "info",
       },
-      "nav.settings.appearance": {
-        ...BASE_ICON_THEME.icons["nav.settings.appearance"],
-        tone: "accent",
-      },
     }),
     monaco: {
       base: "vs-dark",
@@ -436,10 +424,6 @@ const THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
       "git.action.refresh": {
         ...BASE_ICON_THEME.icons["git.action.refresh"],
         tone: "info",
-      },
-      "nav.settings.appearance": {
-        ...BASE_ICON_THEME.icons["nav.settings.appearance"],
-        tone: "accent",
       },
     }),
     monaco: {
@@ -534,10 +518,6 @@ const THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
       },
       "git.commit": {
         ...BASE_ICON_THEME.icons["git.commit"],
-        tone: "accent",
-      },
-      "nav.settings.appearance": {
-        ...BASE_ICON_THEME.icons["nav.settings.appearance"],
         tone: "accent",
       },
       "nav.settings.providers": {
@@ -645,10 +625,6 @@ const THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
       },
       "git.commit": {
         ...BASE_ICON_THEME.icons["git.commit"],
-        tone: "accent",
-      },
-      "nav.settings.appearance": {
-        ...BASE_ICON_THEME.icons["nav.settings.appearance"],
         tone: "accent",
       },
       "nav.settings.providers": {
