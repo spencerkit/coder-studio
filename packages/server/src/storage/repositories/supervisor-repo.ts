@@ -24,7 +24,6 @@ export interface NewSupervisor {
   id: string;
   sessionId: string;
   workspaceId: string;
-  targetId: string;
   state: SupervisorState;
   objective: string;
   evaluatorProviderId: string;
@@ -41,7 +40,6 @@ export interface NewSupervisor {
 }
 
 export interface SupervisorUpdatePatch {
-  targetId?: string;
   state?: SupervisorState;
   objective?: string;
   evaluatorProviderId?: string;

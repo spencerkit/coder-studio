@@ -373,7 +373,6 @@ export class SupervisorManager {
         id: supervisorId,
         sessionId: req.sessionId,
         workspaceId: req.workspaceId,
-        targetId: supervisorId,
         state: "idle",
         objective,
         evaluatorProviderId: req.evaluatorProviderId,

@@ -394,6 +394,21 @@ describe("SupervisorManager cycle triggers", () => {
     expect(deps.supervisorRepo.getBySessionId("sess-create-fails")).toBeUndefined();
   });
 
+  it("does not pass targetId into supervisor repo create", async () => {
+    await manager.create({
+      sessionId: "sess-create-shape",
+      workspaceId: "ws-1",
+      objective: "Ship the fix",
+      evaluatorProviderId: "codex",
+    });
+
+    expect(deps.supervisorRepo.create).toHaveBeenCalledWith(
+      expect.not.objectContaining({
+        targetId: expect.anything(),
+      })
+    );
+  });
+
   it("returns an in-flight cycle immediately on manual triggerEvaluation", async () => {
     const supervisor = await manager.create({
       sessionId: "sess-manual",
