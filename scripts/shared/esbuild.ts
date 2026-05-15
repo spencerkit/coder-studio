@@ -59,6 +59,7 @@ export async function createCliBuildOptions(format: "esm" | "cjs"): Promise<Buil
       resolve(CLI_DIR, "src/bin.ts"),
       resolve(CLI_DIR, "src/index.ts"),
       resolve(CLI_DIR, "src/server-runner.ts"),
+      resolve(CLI_DIR, "src/terminal-broker-runner.ts"),
     ],
     bundle: true,
     platform: "node",

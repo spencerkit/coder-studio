@@ -3,11 +3,17 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  deleteRestartIntent,
   deleteRuntimeConfig,
+  getRestartIntentPath,
   getRuntimeDir,
   getRuntimePath,
+  getTerminalBrokerRuntimePath,
+  getTerminalBrokerSocketPath,
   type RuntimeConfig,
+  readRestartIntent,
   readRuntimeConfig,
+  writeRestartIntent,
   writeRuntimeConfig,
 } from "./runtime.js";
 
@@ -71,6 +77,32 @@ describe("runtime config", () => {
     expect(getRuntimePath()).toBe(join(homedir(), ".coder-studio", "runtime.json"));
     deleteRuntimeConfig();
     expect(readRuntimeConfig()).toBeNull();
+  });
+
+  it("writes, reads, and deletes restart intent", () => {
+    const intent = {
+      requestId: "restart-1",
+      expectedServerInstanceId: "server-123",
+      createdAt: 100,
+      expiresAt: 200,
+      mode: "preserve_terminals" as const,
+    };
+
+    writeRestartIntent(intent);
+    expect(readRestartIntent()).toEqual(intent);
+
+    deleteRestartIntent();
+    expect(readRestartIntent()).toBeNull();
+  });
+
+  it("returns broker runtime and socket paths inside the runtime dir", () => {
+    const runtimeDir = getRuntimeDir();
+    expect(getRestartIntentPath()).toBe(join(runtimeDir, "restart-intent.json"));
+    expect(getTerminalBrokerRuntimePath()).toBe(join(runtimeDir, "terminal-broker.json"));
+
+    if (process.platform !== "win32") {
+      expect(getTerminalBrokerSocketPath()).toBe(join(runtimeDir, "terminal-broker.sock"));
+    }
   });
 
   it("defaults host to localhost when reading a legacy runtime file", () => {

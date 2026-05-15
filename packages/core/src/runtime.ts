@@ -11,6 +11,20 @@ export interface RuntimeConfig {
   startedAt: number;
 }
 
+export interface RestartIntent {
+  requestId: string;
+  expectedServerInstanceId: string;
+  createdAt: number;
+  expiresAt: number;
+  mode: "preserve_terminals";
+}
+
+export interface TerminalBrokerRuntimeConfig {
+  endpoint: string;
+  pid: number;
+  startedAt: number;
+}
+
 export function getRuntimeDir(): string {
   const override = process.env.CODER_STUDIO_RUNTIME_DIR;
   if (override && override.trim()) {
@@ -30,49 +44,98 @@ export function getRuntimePath(): string {
 }
 
 export function readRuntimeConfig(): RuntimeConfig | null {
-  const runtimePath = getRuntimePath();
-  if (!existsSync(runtimePath)) {
+  const config = readJsonFile(getRuntimePath()) as Partial<RuntimeConfig> | null;
+  if (
+    !config ||
+    typeof config.port !== "number" ||
+    typeof config.pid !== "number" ||
+    typeof config.token !== "string" ||
+    typeof config.serverInstanceId !== "string" ||
+    typeof config.startedAt !== "number"
+  ) {
+    return null;
+  }
+
+  return {
+    host: typeof config.host === "string" ? config.host : "localhost",
+    port: config.port,
+    pid: config.pid,
+    token: config.token,
+    serverInstanceId: config.serverInstanceId,
+    startedAt: config.startedAt,
+  };
+}
+
+export function writeRuntimeConfig(config: RuntimeConfig): void {
+  writeJsonFile(getRuntimePath(), config);
+}
+
+export function deleteRuntimeConfig(): void {
+  deleteFileIfExists(getRuntimePath());
+}
+
+export function getRestartIntentPath(): string {
+  return join(getRuntimeDir(), "restart-intent.json");
+}
+
+export function readRestartIntent(): RestartIntent | null {
+  return readJsonFile(getRestartIntentPath()) as RestartIntent | null;
+}
+
+export function writeRestartIntent(intent: RestartIntent): void {
+  writeJsonFile(getRestartIntentPath(), intent);
+}
+
+export function deleteRestartIntent(): void {
+  deleteFileIfExists(getRestartIntentPath());
+}
+
+export function getTerminalBrokerRuntimePath(): string {
+  return join(getRuntimeDir(), "terminal-broker.json");
+}
+
+export function getTerminalBrokerSocketPath(): string {
+  if (process.platform === "win32") {
+    return "\\\\.\\pipe\\coder-studio-terminal-broker";
+  }
+
+  return join(getRuntimeDir(), "terminal-broker.sock");
+}
+
+export function readTerminalBrokerRuntime(): TerminalBrokerRuntimeConfig | null {
+  return readJsonFile(getTerminalBrokerRuntimePath()) as TerminalBrokerRuntimeConfig | null;
+}
+
+export function writeTerminalBrokerRuntime(config: TerminalBrokerRuntimeConfig): void {
+  writeJsonFile(getTerminalBrokerRuntimePath(), config);
+}
+
+export function deleteTerminalBrokerRuntime(): void {
+  deleteFileIfExists(getTerminalBrokerRuntimePath());
+}
+
+function readJsonFile(path: string): unknown | null {
+  if (!existsSync(path)) {
     return null;
   }
 
   try {
-    const config = JSON.parse(readFileSync(runtimePath, "utf-8")) as Partial<RuntimeConfig>;
-    if (
-      typeof config.port !== "number" ||
-      typeof config.pid !== "number" ||
-      typeof config.token !== "string" ||
-      typeof config.serverInstanceId !== "string" ||
-      typeof config.startedAt !== "number"
-    ) {
-      return null;
-    }
-
-    return {
-      host: typeof config.host === "string" ? config.host : "localhost",
-      port: config.port,
-      pid: config.pid,
-      token: config.token,
-      serverInstanceId: config.serverInstanceId,
-      startedAt: config.startedAt,
-    };
+    return JSON.parse(readFileSync(path, "utf-8"));
   } catch {
     return null;
   }
 }
 
-export function writeRuntimeConfig(config: RuntimeConfig): void {
-  const runtimePath = getRuntimePath();
-  const runtimeDir = dirname(runtimePath);
-  if (!existsSync(runtimeDir)) {
-    mkdirSync(runtimeDir, { recursive: true });
+function writeJsonFile(path: string, value: unknown): void {
+  const dir = dirname(path);
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
   }
-
-  writeFileSync(runtimePath, JSON.stringify(config, null, 2), "utf-8");
+  writeFileSync(path, JSON.stringify(value, null, 2), "utf-8");
 }
 
-export function deleteRuntimeConfig(): void {
-  const runtimePath = getRuntimePath();
-  if (existsSync(runtimePath)) {
-    unlinkSync(runtimePath);
+function deleteFileIfExists(path: string): void {
+  if (existsSync(path)) {
+    unlinkSync(path);
   }
 }

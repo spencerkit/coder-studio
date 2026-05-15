@@ -161,6 +161,7 @@ export async function assertCliPublishArtifacts(
   await assertFile(resolve(cliDir, "dist/esm/bin.mjs"));
   await assertFile(resolve(cliDir, "dist/esm/index.mjs"));
   await assertFile(resolve(cliDir, "dist/esm/server-runner.mjs"));
+  await assertFile(resolve(cliDir, "dist/esm/terminal-broker-runner.mjs"));
   await assertFile(resolve(cliDir, "dist/web/index.html"));
   await assertDirectoryHasFile(resolve(cliDir, "dist/esm/migrations"), ".sql");
   assertBundleRuntimeDependenciesDeclared(
@@ -169,6 +170,7 @@ export async function assertCliPublishArtifacts(
       "bin.mjs",
       "index.mjs",
       "server-runner.mjs",
+      "terminal-broker-runner.mjs",
     ]),
     packageJsonPath
   );

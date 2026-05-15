@@ -92,6 +92,7 @@ describe("publish-cli", () => {
     await writeFile(join(cliDir, "dist", "esm", "bin.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "esm", "index.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "esm", "server-runner.mjs"), "export {};\n");
+    await writeFile(join(cliDir, "dist", "esm", "terminal-broker-runner.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "esm", "migrations", "001_init.sql"), "-- init\n");
     await writeFile(join(cliDir, "dist", "web", "index.html"), "<!doctype html>\n");
     await writeFile(
@@ -139,6 +140,7 @@ describe("publish-cli", () => {
     );
     await writeFile(join(cliDir, "dist", "esm", "index.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "esm", "server-runner.mjs"), "export {};\n");
+    await writeFile(join(cliDir, "dist", "esm", "terminal-broker-runner.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "esm", "migrations", "001_init.sql"), "-- init\n");
     await writeFile(join(cliDir, "dist", "web", "index.html"), "<!doctype html>\n");
     await writeFile(
@@ -178,6 +180,7 @@ describe("publish-cli", () => {
     await writeFile(join(cliDir, "dist", "esm", "bin.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "esm", "index.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "esm", "server-runner.mjs"), "export {};\n");
+    await writeFile(join(cliDir, "dist", "esm", "terminal-broker-runner.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "esm", "migrations", "001_init.sql"), "-- init\n");
     await writeFile(join(cliDir, "dist", "web", "index.html"), "<!doctype html>\n");
     await writeFile(
