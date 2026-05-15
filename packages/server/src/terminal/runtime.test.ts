@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import { EventBus } from "../bus/event-bus";
 import { TerminalRuntime } from "./runtime";
 import type { PtyHost, PtyProcess, TerminalDatabase } from "./types";
@@ -95,5 +95,118 @@ describe("TerminalRuntime preserve leases", () => {
 
     expect(claimed.map((terminal) => terminal.id)).toEqual(["term-1"]);
     expect(runtime.get("term-1")?.ownerServerInstanceId).toBe("server-b");
+  });
+
+  it("continues owner disconnect cleanup when one terminal kill rejects", async () => {
+    const rejectingPty: PtyProcess = {
+      onData: vi.fn(),
+      onExit: vi.fn(),
+      write: vi.fn(),
+      resize: vi.fn(),
+      kill: vi.fn().mockRejectedValue(new Error("kill failed")),
+    };
+    const secondPty: PtyProcess = {
+      onData: vi.fn(),
+      onExit: vi.fn(),
+      write: vi.fn(),
+      resize: vi.fn(),
+      kill: vi.fn().mockResolvedValue(undefined),
+    };
+
+    mockPtyHost.spawn = vi.fn().mockReturnValueOnce(rejectingPty).mockReturnValueOnce(secondPty);
+
+    runtime = new TerminalRuntime({
+      ptyHost: mockPtyHost,
+      eventBus: new EventBus(),
+      db: mockDb,
+    });
+
+    runtime.create(
+      "term-1",
+      {
+        workspaceId: "ws-1",
+        kind: "shell",
+        argv: ["bash"],
+        cwd: "/tmp",
+      },
+      "server-a"
+    );
+    runtime.create(
+      "term-2",
+      {
+        workspaceId: "ws-1",
+        kind: "shell",
+        argv: ["bash"],
+        cwd: "/tmp",
+      },
+      "server-a"
+    );
+
+    await expect(runtime.handleOwnerDisconnect("server-a")).resolves.toBeUndefined();
+    expect(rejectingPty.kill).toHaveBeenCalledWith("SIGTERM");
+    expect(secondPty.kill).toHaveBeenCalledWith("SIGTERM");
+  });
+
+  it("waits for PTY exit before resolving an explicit close", async () => {
+    runtime.create(
+      "term-1",
+      {
+        workspaceId: "ws-1",
+        kind: "shell",
+        argv: ["bash"],
+        cwd: "/tmp",
+      },
+      "server-a"
+    );
+
+    const closePromise = runtime.close("term-1");
+    let resolved = false;
+    void closePromise.then(() => {
+      resolved = true;
+    });
+
+    await Promise.resolve();
+
+    expect(mockPty.kill).toHaveBeenCalledWith("SIGTERM");
+    expect(resolved).toBe(false);
+
+    const onExitCallback = (mockPty.onExit as Mock).mock.calls[0][0] as (event: {
+      exitCode: number;
+    }) => void;
+    onExitCallback({ exitCode: 0 });
+
+    await closePromise;
+    expect(resolved).toBe(true);
+  });
+
+  it("keeps replay available for 1 second after exit before cleanup", async () => {
+    vi.useFakeTimers();
+    runtime.create(
+      "term-1",
+      {
+        workspaceId: "ws-1",
+        kind: "shell",
+        argv: ["bash"],
+        cwd: "/tmp",
+      },
+      "server-a"
+    );
+
+    const onDataCallback = (mockPty.onData as Mock).mock.calls[0][0] as (data: string) => void;
+    const onExitCallback = (mockPty.onExit as Mock).mock.calls[0][0] as (event: {
+      exitCode: number;
+    }) => void;
+
+    onDataCallback("hello");
+    onExitCallback({ exitCode: 0 });
+
+    expect(runtime.replay("term-1", 0)).toMatchObject({
+      status: "ok",
+      data: Buffer.from("hello"),
+      seq: 5,
+    });
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(runtime.replay("term-1", 0)).toEqual({ status: "unknown" });
   });
 });

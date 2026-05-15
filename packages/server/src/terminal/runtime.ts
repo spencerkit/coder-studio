@@ -239,7 +239,7 @@ export class TerminalRuntime {
         continue;
       }
 
-      await terminal.pty.kill("SIGTERM");
+      await this.killTerminalBestEffort(terminal, "SIGTERM", "owner-disconnect.kill.error");
     }
   }
 
@@ -493,9 +493,7 @@ export class TerminalRuntime {
     requestId: string,
     ttlMs: number
   ): void {
-    this.clearPreserveTimer(terminal);
-    terminal.preserveTimer = setTimeout(() => {
-      terminal.preserveTimer = null;
+    terminal.armPreserveTimeout(() => {
       if (!terminal.alive) {
         return;
       }
@@ -503,12 +501,26 @@ export class TerminalRuntime {
         return;
       }
 
-      void terminal.pty.kill("SIGTERM");
+      void this.killTerminalBestEffort(terminal, "SIGTERM", "preserve-expiry.kill.error");
     }, ttlMs);
   }
 
   private clearPreserveTimer(terminal: RuntimeActiveTerminal): void {
     terminal.clearPreserveTimeout();
+  }
+
+  private async killTerminalBestEffort(
+    terminal: RuntimeActiveTerminal,
+    signal: NodeJS.Signals,
+    event: string
+  ): Promise<void> {
+    try {
+      await terminal.pty.kill(signal);
+    } catch (error) {
+      traceTerminal(terminal.id, event, {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   private finalizeTerminal(active: RuntimeActiveTerminal): void {
