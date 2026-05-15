@@ -1,6 +1,7 @@
 // Terminal types (spec §4.5)
 
 import type { Terminal } from "@coder-studio/core";
+import type { ActiveTerminal } from "./active-terminal";
 
 /**
  * Specification for creating a new terminal
@@ -33,6 +34,27 @@ export type ReplayResult =
   | { status: "ok"; data: Buffer; seq: number }
   | { status: "too_old" }
   | { status: "unknown" };
+
+export type TerminalLeaseStatus = "attached" | "preserved";
+
+export interface TerminalLease {
+  status: TerminalLeaseStatus;
+  ownerServerInstanceId: string;
+  requestId?: string;
+  expiresAt?: number;
+}
+
+export interface TerminalRecoveryMetadata {
+  lastOutputAt: number;
+  recentOutputBase64: string;
+  alive: boolean;
+}
+
+export interface RuntimeTerminalRecord extends Terminal {
+  ownerServerInstanceId: string;
+  leaseStatus: TerminalLeaseStatus;
+  lastOutputAt: number;
+}
 
 /**
  * Error thrown when terminal is not alive
@@ -101,3 +123,15 @@ export interface TerminalDatabase {
  * Terminal ID type
  */
 export type TerminalId = string;
+
+export interface RuntimeActiveTerminal extends ActiveTerminal {
+  ownerServerInstanceId: string;
+  leaseStatus: TerminalLeaseStatus;
+  leaseRequestId?: string;
+  leaseExpiresAt?: number;
+  preserveTimer: NodeJS.Timeout | null;
+  lastOutputAt: number;
+  toLease(): TerminalLease;
+  toRuntimeRecord(): RuntimeTerminalRecord;
+  getRecoveryMetadata(): TerminalRecoveryMetadata;
+}
