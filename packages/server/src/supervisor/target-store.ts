@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { SupervisorCycleTargetRecord, SupervisorTargetMemory } from "@coder-studio/core";
 
@@ -30,6 +30,27 @@ function cyclesPath(workspacePath: string, targetId: string): string {
   return join(targetDir(workspacePath, targetId), "cycles.jsonl");
 }
 
+function metaFilePath(dirPath: string): string {
+  return join(dirPath, "meta.json");
+}
+
+function memoryFilePath(dirPath: string): string {
+  return join(dirPath, "memory.json");
+}
+
+function cyclesFilePath(dirPath: string): string {
+  return join(dirPath, "cycles.jsonl");
+}
+
+function hasCode(error: unknown, code: string): boolean {
+  return Boolean(
+    error &&
+      typeof error === "object" &&
+      "code" in error &&
+      (error as { code?: unknown }).code === code
+  );
+}
+
 async function writeJsonIfMissing(path: string, value: unknown): Promise<void> {
   try {
     await writeFile(path, JSON.stringify(value, null, 2) + "\n", {
@@ -37,12 +58,7 @@ async function writeJsonIfMissing(path: string, value: unknown): Promise<void> {
       flag: "wx",
     });
   } catch (error) {
-    if (
-      !error ||
-      typeof error !== "object" ||
-      !("code" in error) ||
-      (error as { code?: string }).code !== "EEXIST"
-    ) {
+    if (!hasCode(error, "EEXIST")) {
       throw error;
     }
   }
@@ -78,6 +94,30 @@ function buildTargetMemory(targetId: string, createdAt: number): SupervisorTarge
   };
 }
 
+async function writeResetTargetFiles(
+  dirPath: string,
+  input: {
+    targetId: string;
+    sessionId: string;
+    workspaceId: string;
+    objective: string;
+    createdAt: number;
+  }
+): Promise<void> {
+  await mkdir(dirPath, { recursive: true });
+  await writeFile(
+    metaFilePath(dirPath),
+    JSON.stringify(buildTargetMeta(input), null, 2) + "\n",
+    "utf-8"
+  );
+  await writeFile(
+    memoryFilePath(dirPath),
+    JSON.stringify(buildTargetMemory(input.targetId, input.createdAt), null, 2) + "\n",
+    "utf-8"
+  );
+  await writeFile(cyclesFilePath(dirPath), "", "utf-8");
+}
+
 export async function createTargetFiles(
   workspacePath: string,
   input: {
@@ -108,18 +148,51 @@ export async function resetTargetFiles(
   }
 ): Promise<void> {
   const dir = targetDir(workspacePath, input.targetId);
-  await mkdir(dir, { recursive: true });
-  await writeFile(
-    metaPath(workspacePath, input.targetId),
-    JSON.stringify(buildTargetMeta(input), null, 2) + "\n",
-    "utf-8"
-  );
-  await writeFile(
-    memoryPath(workspacePath, input.targetId),
-    JSON.stringify(buildTargetMemory(input.targetId, input.createdAt), null, 2) + "\n",
-    "utf-8"
-  );
-  await writeFile(cyclesPath(workspacePath, input.targetId), "", "utf-8");
+  const parentDir = dirname(dir);
+  const backupDir = `${dir}.backup-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+  await mkdir(parentDir, { recursive: true });
+  const stagingDir = await mkdtemp(join(parentDir, `${input.targetId}.reset-`));
+
+  let movedExisting = false;
+  let promoted = false;
+
+  try {
+    await writeResetTargetFiles(stagingDir, input);
+
+    try {
+      await rename(dir, backupDir);
+      movedExisting = true;
+    } catch (error) {
+      if (!hasCode(error, "ENOENT")) {
+        throw error;
+      }
+    }
+
+    try {
+      await rename(stagingDir, dir);
+      promoted = true;
+    } catch (error) {
+      if (movedExisting) {
+        await rename(backupDir, dir);
+        movedExisting = false;
+      }
+      throw error;
+    }
+
+    if (movedExisting) {
+      await rm(backupDir, { recursive: true, force: true });
+      movedExisting = false;
+    }
+  } catch (error) {
+    if (!promoted) {
+      await rm(stagingDir, { recursive: true, force: true }).catch(() => {});
+    }
+    if (movedExisting) {
+      await rm(backupDir, { recursive: true, force: true }).catch(() => {});
+    }
+    throw error;
+  }
 }
 
 export async function readTargetMeta(

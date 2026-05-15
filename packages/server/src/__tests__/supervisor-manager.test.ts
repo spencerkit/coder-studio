@@ -578,6 +578,57 @@ describe("SupervisorManager cycle triggers", () => {
     expect(deps.sessionMgr.sendInput).not.toHaveBeenCalled();
   });
 
+  it("marks the aborted attempt as cancelled when the objective changes", async () => {
+    const supervisor = await manager.create({
+      sessionId: "sess-objective-attempt-cancelled",
+      workspaceId: "ws-1",
+      objective: "Initial objective",
+      evaluatorProviderId: "codex",
+    });
+
+    let observedSignal: AbortSignal | undefined;
+    vi.spyOn(getManagerInternals().evaluator, "evaluate").mockImplementationOnce(
+      async (_supervisor, _context, options) =>
+        await new Promise<SupervisorEvaluationResult>((_resolve, reject) => {
+          observedSignal = options?.signal;
+          options?.signal?.addEventListener(
+            "abort",
+            () => {
+              reject({
+                code: "supervisor_eval_aborted",
+                message: "Supervisor evaluator aborted",
+              });
+            },
+            { once: true }
+          );
+        })
+    );
+
+    const cycle = await manager.triggerEvaluation(supervisor.id);
+
+    await waitFor(() => {
+      expect(observedSignal).toBeDefined();
+      expect(manager.get(supervisor.id)?.state).toBe("evaluating");
+    });
+
+    const updatedPromise = manager.update(supervisor.id, {
+      objective: "New objective",
+    });
+
+    await waitFor(() => {
+      expect(observedSignal?.aborted).toBe(true);
+    });
+
+    await updatedPromise;
+
+    expect(deps.cycleAttemptRepo.listForCycle(cycle.id)).toMatchObject([
+      {
+        status: "cancelled",
+        errorReason: undefined,
+      },
+    ]);
+  });
+
   it("marks supervisor_uncertain stops as cancelled instead of completed target meta", async () => {
     const supervisor = await manager.create({
       sessionId: "sess-uncertain-stop",
@@ -709,6 +760,42 @@ describe("SupervisorManager cycle triggers", () => {
         objective: "New objective",
       })
     );
+  });
+
+  it("rolls back persisted supervisor changes when resetting target files fails", async () => {
+    const supervisor = await manager.create({
+      sessionId: "sess-objective-rollback",
+      workspaceId: "ws-1",
+      objective: "Initial objective",
+      evaluatorProviderId: "codex",
+    });
+
+    deps.targetStore.resetTargetFiles.mockImplementation(async () => {
+      throw new Error("disk full");
+    });
+
+    await expect(
+      manager.update(supervisor.id, {
+        objective: "New objective",
+      })
+    ).rejects.toThrow("disk full");
+
+    const updatesForSupervisor = deps.supervisorRepo.update.mock.calls.filter(
+      ([id]: [string, SupervisorUpdatePatch]) => id === supervisor.id
+    );
+
+    expect(updatesForSupervisor).toHaveLength(2);
+    expect(updatesForSupervisor[0]?.[1]).toEqual(
+      expect.objectContaining({
+        objective: "New objective",
+      })
+    );
+    expect(updatesForSupervisor[1]?.[1]).toEqual(
+      expect.objectContaining({
+        objective: "Initial objective",
+      })
+    );
+    expect(deps.supervisorRepo.findById(supervisor.id)?.objective).toBe("Initial objective");
   });
 
   it("retries evaluator timeout up to the global retry budget", async () => {

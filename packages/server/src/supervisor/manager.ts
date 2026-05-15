@@ -448,17 +448,31 @@ export class SupervisorManager {
       updatedAt: Date.now(),
     };
 
+    const rollbackPatch = this.toSupervisorUpdatePatch(current, Date.now());
+    let updated = this.attachCycles(this.deps.supervisorRepo.update(id, nextPatch));
+
     if (objectiveChanged) {
-      await this.deps.targetStore.resetTargetFiles(workspace.path, {
-        targetId: current.targetId,
-        sessionId: current.sessionId,
-        workspaceId: current.workspaceId,
-        objective: nextObjective,
-        createdAt: nextPatch.updatedAt ?? Date.now(),
-      });
+      try {
+        await this.deps.targetStore.resetTargetFiles(workspace.path, {
+          targetId: current.targetId,
+          sessionId: current.sessionId,
+          workspaceId: current.workspaceId,
+          objective: nextObjective,
+          createdAt: nextPatch.updatedAt ?? Date.now(),
+        });
+      } catch (error) {
+        try {
+          this.deps.supervisorRepo.update(id, rollbackPatch);
+        } catch (rollbackError) {
+          this.logger.error(
+            { err: rollbackError, supervisorId: id },
+            "Failed to roll back supervisor after target reset failure"
+          );
+        }
+        throw error;
+      }
     }
 
-    const updated = this.attachCycles(this.deps.supervisorRepo.update(id, nextPatch));
     const enriched = await this.attachTargetState(updated, workspace.path);
 
     this.storeSnapshot(enriched);
@@ -782,8 +796,7 @@ export class SupervisorManager {
       return finalized.cycle;
     } catch (error: unknown) {
       if (isSupervisorEvalAborted(error)) {
-        const cancelled =
-          this.pendingPauses.has(supervisorId) || this.pendingObjectiveUpdates.has(supervisorId);
+        const cancelled = this.isCancellationRequested(supervisorId);
         const abortedCycle = this.deps.cycleRepo.update(activeCycle.id, {
           status: cancelled ? "cancelled" : "failed",
           errorReason: cancelled ? null : messageOf(error, "Supervisor evaluator aborted"),
@@ -1043,12 +1056,11 @@ export class SupervisorManager {
         };
       } catch (error) {
         if (isSupervisorEvalAborted(error)) {
+          const cancelled = this.isCancellationRequested(supervisor.id);
           this.deps.cycleAttemptRepo.update(attempt.id, {
-            status: this.pendingPauses.has(supervisor.id) ? "cancelled" : "failed",
+            status: cancelled ? "cancelled" : "failed",
             completedAt: Date.now(),
-            errorReason: this.pendingPauses.has(supervisor.id)
-              ? null
-              : messageOf(error, "Supervisor evaluator aborted"),
+            errorReason: cancelled ? null : messageOf(error, "Supervisor evaluator aborted"),
           });
           throw error;
         }
@@ -1315,6 +1327,30 @@ export class SupervisorManager {
       ...supervisor,
       currentTargetMemory: current.currentTargetMemory,
       recentTargetCycles: current.recentTargetCycles,
+    };
+  }
+
+  private isCancellationRequested(supervisorId: string): boolean {
+    return this.pendingPauses.has(supervisorId) || this.pendingObjectiveUpdates.has(supervisorId);
+  }
+
+  private toSupervisorUpdatePatch(
+    supervisor: Supervisor,
+    updatedAt: number
+  ): Parameters<SupervisorRepo["update"]>[1] {
+    return {
+      state: supervisor.state,
+      objective: supervisor.objective,
+      evaluatorProviderId: supervisor.evaluatorProviderId,
+      evaluatorModel: supervisor.evaluatorModel ?? null,
+      maxSupervisionCount: supervisor.maxSupervisionCount,
+      completedSupervisionCount: supervisor.completedSupervisionCount,
+      scheduledAt: supervisor.scheduledAt ?? null,
+      stopReason: supervisor.stopReason ?? null,
+      lastCycleAt: supervisor.lastCycleAt ?? null,
+      lastEvaluatedTurnId: supervisor.lastEvaluatedTurnId ?? null,
+      errorReason: supervisor.errorReason ?? null,
+      updatedAt,
     };
   }
 
