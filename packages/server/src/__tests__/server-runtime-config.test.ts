@@ -1,5 +1,5 @@
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { getRuntimePath, readRuntimeConfig } from "@coder-studio/core/runtime";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -9,7 +9,10 @@ import { createServer, type Server, type ServerRuntimeOptions } from "../server.
 describe("server runtime config", () => {
   const originalHome = process.env.HOME;
   const originalUserProfile = process.env.USERPROFILE;
+  const originalRuntimeDir = process.env.CODER_STUDIO_RUNTIME_DIR;
+  const originalRuntimePath = process.env.CODER_STUDIO_RUNTIME_JSON_PATH;
   let testHomeDir: string;
+  let runtimePath: string;
   let server: Server | undefined;
 
   const createRuntimeServer = async (
@@ -20,6 +23,9 @@ describe("server runtime config", () => {
     testHomeDir = mkdtempSync(join(tmpdir(), "cs-server-runtime-home-"));
     process.env.HOME = testHomeDir;
     process.env.USERPROFILE = testHomeDir;
+    runtimePath = join(testHomeDir, ".coder-studio", "runtime.json");
+    delete process.env.CODER_STUDIO_RUNTIME_DIR;
+    process.env.CODER_STUDIO_RUNTIME_JSON_PATH = runtimePath;
   });
 
   afterEach(async () => {
@@ -28,7 +34,6 @@ describe("server runtime config", () => {
       server = undefined;
     }
 
-    const runtimePath = join(homedir(), ".coder-studio", "runtime.json");
     if (existsSync(runtimePath)) {
       rmSync(runtimePath);
     }
@@ -46,6 +51,18 @@ describe("server runtime config", () => {
     } else {
       process.env.USERPROFILE = originalUserProfile;
     }
+
+    if (originalRuntimeDir === undefined) {
+      delete process.env.CODER_STUDIO_RUNTIME_DIR;
+    } else {
+      process.env.CODER_STUDIO_RUNTIME_DIR = originalRuntimeDir;
+    }
+
+    if (originalRuntimePath === undefined) {
+      delete process.env.CODER_STUDIO_RUNTIME_JSON_PATH;
+    } else {
+      process.env.CODER_STUDIO_RUNTIME_JSON_PATH = originalRuntimePath;
+    }
   });
 
   it("writes runtime config on startup and clears it on stop", async () => {
@@ -62,9 +79,7 @@ describe("server runtime config", () => {
         pid: process.pid,
       })
     );
-    expect(getRuntimePath()).toBe(
-      process.env.CODER_STUDIO_RUNTIME_JSON_PATH ?? join(homedir(), ".coder-studio", "runtime.json")
-    );
+    expect(getRuntimePath()).toBe(runtimePath);
 
     await server.stop();
     server = undefined;
