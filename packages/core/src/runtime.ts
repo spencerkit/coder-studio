@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -79,7 +80,8 @@ export function getRestartIntentPath(): string {
 }
 
 export function readRestartIntent(): RestartIntent | null {
-  return readJsonFile(getRestartIntentPath()) as RestartIntent | null;
+  const intent = readJsonFile(getRestartIntentPath());
+  return isRestartIntent(intent) ? intent : null;
 }
 
 export function writeRestartIntent(intent: RestartIntent): void {
@@ -96,14 +98,16 @@ export function getTerminalBrokerRuntimePath(): string {
 
 export function getTerminalBrokerSocketPath(): string {
   if (process.platform === "win32") {
-    return "\\\\.\\pipe\\coder-studio-terminal-broker";
+    const runtimeDirHash = createHash("sha256").update(getRuntimeDir()).digest("hex");
+    return `\\\\.\\pipe\\coder-studio-terminal-broker-${runtimeDirHash}`;
   }
 
   return join(getRuntimeDir(), "terminal-broker.sock");
 }
 
 export function readTerminalBrokerRuntime(): TerminalBrokerRuntimeConfig | null {
-  return readJsonFile(getTerminalBrokerRuntimePath()) as TerminalBrokerRuntimeConfig | null;
+  const config = readJsonFile(getTerminalBrokerRuntimePath());
+  return isTerminalBrokerRuntimeConfig(config) ? config : null;
 }
 
 export function writeTerminalBrokerRuntime(config: TerminalBrokerRuntimeConfig): void {
@@ -138,4 +142,26 @@ function deleteFileIfExists(path: string): void {
   if (existsSync(path)) {
     unlinkSync(path);
   }
+}
+
+function isRestartIntent(value: unknown): value is RestartIntent {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof value.requestId === "string" &&
+    typeof value.expectedServerInstanceId === "string" &&
+    typeof value.createdAt === "number" &&
+    typeof value.expiresAt === "number" &&
+    value.mode === "preserve_terminals"
+  );
+}
+
+function isTerminalBrokerRuntimeConfig(value: unknown): value is TerminalBrokerRuntimeConfig {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof value.endpoint === "string" &&
+    typeof value.pid === "number" &&
+    typeof value.startedAt === "number"
+  );
 }
