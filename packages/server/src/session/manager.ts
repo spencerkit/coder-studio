@@ -195,8 +195,51 @@ export class SessionManager {
       this.sessions.set(session.id, hydrated);
       this.terminalToSession.set(session.terminalId, session.id);
 
+      const provider = this.deps.providerRegistry.find((entry) => entry.id === session.providerId);
+      if (nextState !== "ended" && provider) {
+        this.attachShadowDetector(hydrated, provider);
+      }
+
       if (nextState !== session.state) {
         this.deps.db.update(session.id, { state: nextState });
+      }
+    }
+  }
+
+  async reconcilePreservedSessions(): Promise<void> {
+    for (const session of this.sessions.values()) {
+      if (session.state === "ended") {
+        continue;
+      }
+
+      const metadata = await this.deps.terminalMgr.getRecoveryMetadata?.(session.terminalId);
+      if (!metadata?.alive) {
+        this.finishSession(session, 0);
+        continue;
+      }
+
+      const provider = this.deps.providerRegistry.find((entry) => entry.id === session.providerId);
+      if (!provider?.idleHeuristics) {
+        continue;
+      }
+
+      const detector = this.detectors.get(session.id);
+      if (detector && metadata.recentOutputBase64.length > 0) {
+        detector.feed(Buffer.from(metadata.recentOutputBase64, "base64"));
+      }
+
+      const idleForMs =
+        metadata.lastOutputAt === null
+          ? Number.POSITIVE_INFINITY
+          : Date.now() - metadata.lastOutputAt;
+
+      if (
+        (session.state === "running" || session.state === "starting") &&
+        idleForMs >= provider.idleHeuristics.idleDebounceMs
+      ) {
+        session.awaitingTurnCompletion = false;
+        session.sawOutputSinceTurnStart = true;
+        this.transitionSessionToIdle(session);
       }
     }
   }

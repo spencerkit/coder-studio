@@ -218,6 +218,9 @@ export async function createServer(
     await terminalMgr.claimPreserved?.(configOverrides.restartClaimRequestId);
   }
   await sessionMgr.hydrate();
+  if (configOverrides?.restartClaimRequestId) {
+    await sessionMgr.reconcilePreservedSessions();
+  }
   await supervisorMgr.hydrate();
 
   const providerMockOverrides = createE2EProviderMockOverrides();
