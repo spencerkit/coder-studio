@@ -1,5 +1,5 @@
 import { fileURLToPath } from "url";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getCliVersion } from "./package-manifest.js";
 
 const {
@@ -10,6 +10,7 @@ const {
   readCliConfig,
   hasWebAssets,
   getStaticAssetsDir,
+  ensureTerminalBroker,
 } = vi.hoisted(() => ({
   createServer: vi.fn(),
   parseServerConfig: vi.fn(),
@@ -18,6 +19,7 @@ const {
   readCliConfig: vi.fn(),
   hasWebAssets: vi.fn(),
   getStaticAssetsDir: vi.fn(),
+  ensureTerminalBroker: vi.fn(),
 }));
 
 vi.mock("@coder-studio/server", () => ({
@@ -36,6 +38,10 @@ vi.mock("./embed.js", () => ({
   getStaticAssetsDir,
 }));
 
+vi.mock("./terminal-broker-control.js", () => ({
+  ensureTerminalBroker,
+}));
+
 import {
   buildServerConfig,
   runServerEntrypoint,
@@ -44,6 +50,14 @@ import {
 } from "./server-runner";
 
 describe("server-runner", () => {
+  beforeEach(() => {
+    ensureTerminalBroker.mockResolvedValue({
+      endpoint: "/tmp/broker.sock",
+      pid: 9001,
+      startedAt: 1000,
+    });
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
@@ -102,6 +116,7 @@ describe("server-runner", () => {
       appVersion: getCliVersion(import.meta.url),
       host: "127.0.0.1",
       port: 4173,
+      terminalBrokerEndpoint: "/tmp/broker.sock",
       webRoot: "/tmp/web",
     });
     expect(runningServer).toEqual({ stop: expect.any(Function) });
@@ -138,6 +153,27 @@ describe("server-runner", () => {
     });
     expect(openDatabase).toHaveBeenCalledWith("/tmp/cs-data/coder-studio.db");
     expect(closeDatabase).toHaveBeenCalledWith(db);
+  });
+
+  it("ensures the terminal broker before creating the server", async () => {
+    ensureTerminalBroker.mockResolvedValue({
+      endpoint: "/tmp/broker.sock",
+      pid: 9001,
+      startedAt: 1000,
+    });
+    readCliConfig.mockReturnValue(null);
+    hasWebAssets.mockReturnValue(true);
+    getStaticAssetsDir.mockReturnValue("/tmp/web");
+    createServer.mockResolvedValue({ stop: vi.fn() });
+
+    await startServer();
+
+    expect(ensureTerminalBroker).toHaveBeenCalledTimes(1);
+    expect(createServer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        terminalBrokerEndpoint: "/tmp/broker.sock",
+      })
+    );
   });
 
   it("starts the server when executed as the entrypoint", async () => {

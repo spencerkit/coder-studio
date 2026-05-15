@@ -1,12 +1,13 @@
 import type { Server, ServerConfig } from "@coder-studio/server";
 import { closeDatabase, openDatabase, parseServerConfig } from "@coder-studio/server";
-import { mkdirSync } from "fs";
-import { dirname } from "path";
+import { existsSync, mkdirSync } from "fs";
+import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { readCliConfig } from "./config-store.js";
 import { getStaticAssetsDir, hasWebAssets } from "./embed.js";
 import { assertSupportedNodeVersion } from "./node-version.js";
 import { getCliVersion } from "./package-manifest.js";
+import { ensureTerminalBroker } from "./terminal-broker-control.js";
 
 const MISSING_WEB_ASSETS_WARNING = "Warning: Web assets not found. Frontend will not be available.";
 
@@ -75,10 +76,35 @@ export const runServerEntrypoint = async (moduleUrl: string, argvEntry?: string)
   await startServer();
 };
 
+function resolveTerminalBrokerScriptPath(): string {
+  const currentFile = fileURLToPath(import.meta.url);
+  const currentDir = dirname(currentFile);
+  const candidates = [
+    join(currentDir, "terminal-broker-runner.js"),
+    join(currentDir, "terminal-broker-runner.mjs"),
+    join(currentDir, "../src/terminal-broker-runner.ts"),
+  ];
+
+  const scriptPath = candidates.find((candidate) => existsSync(candidate));
+  if (!scriptPath) {
+    throw new Error("Unable to locate the terminal broker entry script");
+  }
+
+  return scriptPath;
+}
+
 export const startServer = async (): Promise<Server> => {
   assertSupportedNodeVersion();
+  const broker = await ensureTerminalBroker({
+    script: resolveTerminalBrokerScriptPath(),
+    cwd: process.cwd(),
+    waitMs: 5000,
+  });
   const { createServer } = await import("@coder-studio/server");
-  const server = await createServer(buildServerConfig());
+  const server = await createServer({
+    ...buildServerConfig(),
+    terminalBrokerEndpoint: broker.endpoint,
+  });
   const shutdown = createShutdownHandler(server);
 
   process.on("SIGINT", shutdown);

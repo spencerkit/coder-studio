@@ -57,6 +57,7 @@ export interface Server {
 
 export interface ServerRuntimeOptions {
   writeRuntimeConfig?: boolean;
+  terminalBrokerEndpoint?: string;
 }
 
 export async function createServer(
