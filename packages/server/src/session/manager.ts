@@ -17,8 +17,8 @@ import type { EventBus, Unsubscribe } from "../bus/event-bus.js";
 import { mergeProviderLaunchConfig } from "../provider-config.js";
 import type { ProviderConfigRepo } from "../storage/repositories/provider-config-repo.js";
 import { type SessionRow, sessionToRow } from "../storage/repositories/session-repo.js";
-import type { TerminalManager } from "../terminal/manager.js";
 import type { RenderOptions } from "../terminal/snapshot-render.js";
+import type { TerminalManagerLike } from "../terminal/terminal-manager-like.js";
 import type { TerminalSpec } from "../terminal/types.js";
 import type { Broadcaster } from "../ws/hub.js";
 import { PtyStateDetector } from "./pty-state-detector.js";
@@ -38,7 +38,7 @@ export interface SessionLogger {
 }
 
 export interface SessionManagerDeps {
-  terminalMgr: TerminalManager;
+  terminalMgr: TerminalManagerLike;
   eventBus: EventBus;
   db: SessionDatabase;
   broadcaster: Broadcaster;
@@ -110,7 +110,7 @@ export class SessionManager {
     };
 
     // Create terminal (delegates to TerminalManager)
-    const terminal = this.deps.terminalMgr.create(terminalSpec);
+    const terminal = await this.deps.terminalMgr.create(terminalSpec);
 
     // Register session only after terminal creation succeeds so failed creates
     // do not leak half-created sessions into memory or hydration state.

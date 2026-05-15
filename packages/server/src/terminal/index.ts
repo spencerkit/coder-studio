@@ -1,6 +1,7 @@
 // Terminal module exports
 
 export { ActiveTerminal } from "./active-terminal";
+export { BrokerTerminalManager } from "./broker-terminal-manager.js";
 export { TerminalManager } from "./manager";
 export { NodePtyHost } from "./pty-host";
 export { RingBuffer } from "./ring-buffer";

@@ -6,6 +6,7 @@
 import {
   deleteRuntimeConfig,
   getRuntimePath,
+  getTerminalBrokerSocketPath,
   type RuntimeConfig,
   writeRuntimeConfig,
 } from "@coder-studio/core/runtime";
@@ -33,8 +34,11 @@ import { SupervisorCycleRepo } from "./storage/repositories/supervisor-cycle-rep
 import { SupervisorRepo } from "./storage/repositories/supervisor-repo.js";
 import { SupervisorManager } from "./supervisor/manager.js";
 import * as targetStore from "./supervisor/target-store.js";
+import { TerminalBrokerClient } from "./terminal/broker-client.js";
+import { BrokerTerminalManager } from "./terminal/broker-terminal-manager.js";
 import { TerminalManager } from "./terminal/manager.js";
 import { NodePtyHost } from "./terminal/pty-host.js";
+import type { TerminalManagerLike } from "./terminal/terminal-manager-like.js";
 import type { TerminalDatabase } from "./terminal/types.js";
 import { deleteWorkspaceUploads, runStartupGc } from "./uploads/cleanup.js";
 import { STARTUP_GC_DELAY_MS } from "./uploads/constants.js";
@@ -51,19 +55,30 @@ const WS_KEEPALIVE_INTERVAL_MS = 15_000;
 
 export interface Server {
   app: FastifyInstance;
-  stop: () => Promise<void>;
+  stop: (options?: ServerStopOptions) => Promise<void>;
   __test__?: { sessionMgr: SessionManager; commandContext: CommandContext };
 }
 
 export interface ServerRuntimeOptions {
   writeRuntimeConfig?: boolean;
+  serverInstanceId?: string;
+  restartClaimRequestId?: string;
   terminalBrokerEndpoint?: string;
+}
+
+export interface ServerStopOptions {
+  mode?: "terminate" | "restart-preserve";
+  requestId?: string;
+  ttlMs?: number;
 }
 
 export async function createServer(
   configOverrides?: Partial<ServerConfig> & ServerRuntimeOptions
 ): Promise<Server> {
   const config = parseServerConfig(configOverrides);
+  const serverInstanceId = configOverrides?.serverInstanceId ?? `server-${process.pid}`;
+  const terminalBrokerEndpoint =
+    configOverrides?.terminalBrokerEndpoint ?? getTerminalBrokerSocketPath();
 
   ensureDataDir(config);
 
@@ -75,11 +90,19 @@ export async function createServer(
   let workspaceMgr: WorkspaceManager;
   let commandContext: CommandContext;
 
-  const terminalMgr = new TerminalManager({
-    ptyHost: createPtyHost(),
-    eventBus,
-    db: createTerminalDatabase(db),
-  });
+  const terminalMgr: TerminalManagerLike =
+    configOverrides?.terminalBrokerEndpoint !== undefined
+      ? new BrokerTerminalManager({
+          broker: new TerminalBrokerClient({ endpoint: terminalBrokerEndpoint }),
+          eventBus,
+          db: createTerminalDatabase(db),
+          ownerServerInstanceId: serverInstanceId,
+        })
+      : new TerminalManager({
+          ptyHost: createPtyHost(),
+          eventBus,
+          db: createTerminalDatabase(db),
+        });
 
   const settingsRepo = new SettingsRepo(db);
   const autoFetch = new AutoFetchScheduler({
@@ -189,6 +212,11 @@ export async function createServer(
     targetStore,
     logger: app.log,
   });
+  await terminalMgr.connect?.();
+  await terminalMgr.hydrateOwned?.();
+  if (configOverrides?.restartClaimRequestId) {
+    await terminalMgr.claimPreserved?.(configOverrides.restartClaimRequestId);
+  }
   await sessionMgr.hydrate();
   await supervisorMgr.hydrate();
 
@@ -231,8 +259,8 @@ export async function createServer(
       host: config.host,
       port: extractListenPort(app) ?? config.port,
       pid: process.pid,
-      token: `server-${process.pid}`,
-      serverInstanceId: `server-${process.pid}`,
+      token: serverInstanceId,
+      serverInstanceId,
       startedAt: Date.now(),
     };
     process.env.CODER_STUDIO_RUNTIME_JSON_PATH = getRuntimePath();
@@ -252,7 +280,7 @@ export async function createServer(
   wsKeepaliveTimer.unref();
 
   let stopped = false;
-  const stopServer = async () => {
+  const stopServer = async (options?: ServerStopOptions) => {
     if (stopped) return;
     stopped = true;
 
@@ -261,7 +289,11 @@ export async function createServer(
     await app.close();
     autoFetch.stop();
     supervisorMgr.stop();
-    terminalMgr.shutdown();
+    await terminalMgr.shutdown(
+      options?.mode === "restart-preserve" && options.requestId && options.ttlMs
+        ? { mode: "restart-preserve", requestId: options.requestId, ttlMs: options.ttlMs }
+        : { mode: "terminate" }
+    );
     wsHub.destroy();
     eventBus.clear();
     deleteRuntimeConfig();

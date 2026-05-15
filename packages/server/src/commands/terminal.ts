@@ -161,7 +161,7 @@ registerCommand(
     const shell = resolveShellCommand();
 
     // Create shell terminal
-    const terminal = ctx.terminalMgr.create({
+    const terminal = await ctx.terminalMgr.create({
       workspaceId: args.workspaceId,
       kind: "shell",
       argv: shell.argv,
@@ -183,7 +183,7 @@ registerCommand(
     lastSeq: z.number().int().nonnegative().optional(),
   }),
   async (args, ctx, clientId) => {
-    const replay = ctx.terminalMgr.replay(args.terminalId, args.lastSeq ?? 0);
+    const replay = await ctx.terminalMgr.replay(args.terminalId, args.lastSeq ?? 0);
 
     if (replay.status !== "ok") {
       return replay;

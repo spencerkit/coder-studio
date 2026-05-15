@@ -187,6 +187,7 @@ describe("main", () => {
       script: expect.stringMatching(/server-runner\.(ts|js|mjs)$/),
       cwd: process.cwd(),
       waitMs: 5000,
+      restart: false,
     });
     expect(logSpy).toHaveBeenCalledWith("Coder Studio server started in background.");
     expect(logSpy).toHaveBeenCalledWith("Run `coder-studio status` to inspect the server.");
@@ -360,6 +361,7 @@ describe("main", () => {
       script: expect.stringMatching(/server-runner\.(ts|js|mjs)$/),
       cwd: process.cwd(),
       waitMs: 5000,
+      restart: false,
     });
     expect(logSpy).toHaveBeenCalledWith("Coder Studio server started in background.");
   });
@@ -403,7 +405,11 @@ describe("main", () => {
     await main(["serve", "--restart"]);
 
     expect(confirmYesNo).not.toHaveBeenCalled();
-    expect(startManagedServer).toHaveBeenCalledTimes(1);
+    expect(startManagedServer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        restart: true,
+      })
+    );
     expect(logSpy).toHaveBeenCalledWith("Restarting the managed Coder Studio server...");
   });
 
@@ -508,7 +514,11 @@ describe("main", () => {
     await main(["open", "--restart"]);
 
     expect(confirmYesNo).not.toHaveBeenCalled();
-    expect(startManagedServer).toHaveBeenCalledTimes(1);
+    expect(startManagedServer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        restart: true,
+      })
+    );
     expect(logSpy).toHaveBeenCalledWith("Restarting the managed Coder Studio server...");
     expect(openBrowser).toHaveBeenCalledWith("http://127.0.0.1:4190");
   });

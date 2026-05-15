@@ -133,6 +133,10 @@ export class AutoFetchScheduler implements AutoFetchRuntime {
   }
 
   recordSuccess(workspaceId: string): void {
+    if (this.stopped) {
+      return;
+    }
+
     const state = this.getOrCreateState(workspaceId);
     state.lastFetchAt = this.now();
     state.consecutiveFailures = 0;
@@ -142,6 +146,10 @@ export class AutoFetchScheduler implements AutoFetchRuntime {
   }
 
   recordFailure(workspaceId: string): void {
+    if (this.stopped) {
+      return;
+    }
+
     const state = this.getOrCreateState(workspaceId);
     state.consecutiveFailures += 1;
     state.nextFetchAt = undefined;
@@ -216,6 +224,11 @@ export class AutoFetchScheduler implements AutoFetchRuntime {
   }
 
   private ensureNextPeriodicFetch(state: WorkspaceFetchState, resetSchedule: boolean): void {
+    if (this.stopped) {
+      state.nextFetchAt = undefined;
+      return;
+    }
+
     const periodMs = this.getPeriodMs();
     if (periodMs <= 0 || state.viewerCount <= 0 || state.blocked || state.inFlight) {
       return;
@@ -336,6 +349,10 @@ export class AutoFetchScheduler implements AutoFetchRuntime {
           }
 
           state.inFlight = false;
+          if (this.stopped) {
+            state.nextFetchAt = undefined;
+            return;
+          }
           this.ensureNextPeriodicFetch(state, true);
         });
       };

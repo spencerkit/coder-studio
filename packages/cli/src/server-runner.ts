@@ -1,3 +1,4 @@
+import { type RestartIntent, readRestartIntent } from "@coder-studio/core/runtime";
 import type { Server, ServerConfig } from "@coder-studio/server";
 import { closeDatabase, openDatabase, parseServerConfig } from "@coder-studio/server";
 import { existsSync, mkdirSync } from "fs";
@@ -49,7 +50,27 @@ export const verifyLocalDatabaseCompatibility = (): void => {
   closeDatabase(db);
 };
 
-const createShutdownHandler = (server: Server) => async () => {
+function readValidRestartIntent(): RestartIntent | null {
+  const intent = readRestartIntent();
+  if (!intent) {
+    return null;
+  }
+
+  return intent.expiresAt > Date.now() ? intent : null;
+}
+
+const createShutdownHandler = (server: Server, serverInstanceId: string) => async () => {
+  const intent = readValidRestartIntent();
+  if (intent && intent.expectedServerInstanceId === serverInstanceId) {
+    await server.stop({
+      mode: "restart-preserve",
+      requestId: intent.requestId,
+      ttlMs: Math.max(1, intent.expiresAt - Date.now()),
+    });
+    process.exit(0);
+    return;
+  }
+
   await server.stop();
   process.exit(0);
 };
@@ -100,12 +121,16 @@ export const startServer = async (): Promise<Server> => {
     cwd: process.cwd(),
     waitMs: 5000,
   });
+  const serverInstanceId = `server-${process.pid}`;
+  const restartIntent = readValidRestartIntent();
   const { createServer } = await import("@coder-studio/server");
   const server = await createServer({
     ...buildServerConfig(),
+    serverInstanceId,
+    restartClaimRequestId: restartIntent?.requestId,
     terminalBrokerEndpoint: broker.endpoint,
   });
-  const shutdown = createShutdownHandler(server);
+  const shutdown = createShutdownHandler(server, serverInstanceId);
 
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);

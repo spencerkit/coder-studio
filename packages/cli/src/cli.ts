@@ -213,11 +213,12 @@ async function prepareManagedStartup(forceRestart = false): Promise<ManagedStart
   };
 }
 
-async function startManagedServerFlow(): Promise<void> {
+async function startManagedServerFlow(restart = false): Promise<void> {
   await startManagedServer({
     script: resolveManagedScriptPath(),
     cwd: process.cwd(),
     waitMs: MANAGED_SERVER_WAIT_MS,
+    restart,
   });
 }
 
@@ -368,7 +369,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     const startup = await prepareManagedStartup(args.restart);
     if (startup.existingStatus === null) {
       await verifyManagedDatabaseCompatibility();
-      await startManagedServerFlow();
+      await startManagedServerFlow(startup.restartRequested);
     }
 
     await openManagedServerInBrowser(startup.existingStatus);
@@ -404,7 +405,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
   }
 
   await verifyManagedDatabaseCompatibility();
-  await startManagedServerFlow();
+  await startManagedServerFlow(startup.restartRequested);
 
   console.log("Coder Studio server started in background.");
   console.log("Run `coder-studio status` to inspect the server.");

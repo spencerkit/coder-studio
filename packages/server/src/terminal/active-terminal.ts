@@ -1,9 +1,10 @@
 // Active terminal instance (spec §4.5)
 
 import type { Terminal } from "@coder-studio/core";
+import { RING_BUFFER_SIZE } from "./constants";
 import { RingBuffer } from "./ring-buffer";
 import type { HeadlessSnapshotBuffer } from "./terminal-snapshot-buffer";
-import type { PtyProcess, TerminalSpec } from "./types";
+import type { PtyProcess, RuntimeTerminalRecord, TerminalSpec } from "./types";
 
 /**
  * Active terminal object that holds PTY instance and ring buffer
@@ -58,5 +59,38 @@ export class ActiveTerminal {
    */
   toRow(): Terminal {
     return this.toDTO();
+  }
+
+  static fromRuntimeRecord(record: RuntimeTerminalRecord): ActiveTerminal {
+    const detachedPty: PtyProcess = {
+      onData: () => undefined,
+      onExit: () => undefined,
+      write: () => undefined,
+      resize: () => undefined,
+      kill: async () => undefined,
+    };
+
+    const active = new ActiveTerminal(
+      record.id,
+      {
+        workspaceId: record.workspaceId,
+        kind: record.kind,
+        argv: record.argv,
+        cwd: record.cwd,
+        cols: record.cols,
+        rows: record.rows,
+        title: record.title,
+      },
+      detachedPty,
+      new RingBuffer(RING_BUFFER_SIZE),
+      undefined,
+      record.createdAt
+    );
+
+    active.alive = record.alive;
+    active.exitCode = record.exitCode;
+    active.currentCols = record.cols;
+    active.currentRows = record.rows;
+    return active;
   }
 }

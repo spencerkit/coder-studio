@@ -54,6 +54,10 @@ export interface RuntimeTerminalRecord extends Terminal {
   lastOutputAt: number | null;
 }
 
+export type TerminalShutdownMode =
+  | { mode: "terminate" }
+  | { mode: "restart-preserve"; requestId: string; ttlMs: number };
+
 /**
  * Error thrown when terminal is not alive
  */

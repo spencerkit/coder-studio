@@ -1,4 +1,9 @@
-import { deleteRuntimeConfig, readRuntimeConfig } from "@coder-studio/core/runtime";
+import {
+  deleteRestartIntent,
+  deleteRuntimeConfig,
+  readRuntimeConfig,
+  writeRestartIntent,
+} from "@coder-studio/core/runtime";
 import { mkdirSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
@@ -25,6 +30,7 @@ export interface StartManagedServerOptions {
   cwd: string;
   waitMs: number;
   args?: string[];
+  restart?: boolean;
 }
 
 interface Pm2ProcessDescription {
@@ -351,48 +357,79 @@ export const startManagedServer = async ({
   cwd,
   waitMs,
   args,
+  restart = false,
 }: StartManagedServerOptions): Promise<void> =>
   withPm2Connection(async (pm2) => {
-    await deleteManagedServerInSession(pm2, { ignoreMissing: true });
+    const runtime = readRuntimeConfig();
+    const now = Date.now();
+    const intent =
+      restart && runtime
+        ? {
+            requestId: `restart-${now}`,
+            expectedServerInstanceId: runtime.serverInstanceId,
+            createdAt: now,
+            expiresAt: now + 30_000,
+            mode: "preserve_terminals" as const,
+          }
+        : null;
 
-    if (readRuntimeConfig()) {
-      deleteRuntimeConfig();
+    if (intent) {
+      writeRestartIntent(intent);
+    } else {
+      deleteRestartIntent();
     }
 
-    ensureLogDirectory();
-    const { outFile, errFile } = getLogPaths();
-    const logOffsets = captureStartupLogOffsets();
+    try {
+      await deleteManagedServerInSession(pm2, { ignoreMissing: true });
 
-    await new Promise<void>((resolve, reject) => {
-      pm2.start(
-        {
-          name: MANAGED_SERVER_NAME,
-          script,
-          cwd,
-          ...(args !== undefined ? { args } : {}),
-          env: {
-            ...process.env,
-            NODE_ENV: "production",
+      if (readRuntimeConfig()) {
+        deleteRuntimeConfig();
+      }
+
+      ensureLogDirectory();
+      const { outFile, errFile } = getLogPaths();
+      const logOffsets = captureStartupLogOffsets();
+
+      await new Promise<void>((resolve, reject) => {
+        pm2.start(
+          {
+            name: MANAGED_SERVER_NAME,
+            script,
+            cwd,
+            ...(args !== undefined ? { args } : {}),
+            env: {
+              ...process.env,
+              NODE_ENV: "production",
+            },
+            autorestart: true,
+            restart_delay: PM2_RESTART_DELAY_MS,
+            min_uptime: PM2_MIN_UPTIME,
+            max_restarts: PM2_MAX_RESTARTS,
+            out_file: outFile,
+            error_file: errFile,
           },
-          autorestart: true,
-          restart_delay: PM2_RESTART_DELAY_MS,
-          min_uptime: PM2_MIN_UPTIME,
-          max_restarts: PM2_MAX_RESTARTS,
-          out_file: outFile,
-          error_file: errFile,
-        },
-        (error) => {
-          if (error) {
-            reject(error);
-            return;
+          (error) => {
+            if (error) {
+              reject(error);
+              return;
+            }
+
+            resolve();
           }
+        );
+      });
 
-          resolve();
-        }
-      );
-    });
+      await waitForRuntimeReady(pm2, waitMs, logOffsets);
+    } catch (error) {
+      if (intent) {
+        deleteRestartIntent();
+      }
+      throw error;
+    }
 
-    await waitForRuntimeReady(pm2, waitMs, logOffsets);
+    if (intent) {
+      deleteRestartIntent();
+    }
   });
 
 export const getManagedServerStatus = async (): Promise<ManagedServerStatus> =>

@@ -6,7 +6,7 @@ import type {
 } from "@coder-studio/core";
 import type { FastifyBaseLogger } from "fastify";
 import type { SessionManager } from "../session/manager.js";
-import type { TerminalManager } from "../terminal/manager.js";
+import type { TerminalManagerLike } from "../terminal/terminal-manager-like.js";
 import type { WorkspaceManager } from "../workspace/manager.js";
 
 export { stripAnsi } from "../terminal/snapshot-render.js";
@@ -49,7 +49,7 @@ export class SupervisorContextBuilder {
     private readonly deps: {
       workspaceMgr: WorkspaceManager;
       sessionMgr: SessionManager;
-      terminalMgr: TerminalManager;
+      terminalMgr: TerminalManagerLike;
       providerRegistry: ProviderDefinition[];
       logger?: FastifyBaseLogger;
     }
