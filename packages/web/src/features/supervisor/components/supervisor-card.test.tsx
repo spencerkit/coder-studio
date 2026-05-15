@@ -332,6 +332,49 @@ describe("SupervisorCard", () => {
     expect(screen.getByRole("button", { name: "Pause" })).not.toBeDisabled();
   });
 
+  it("keeps manual trigger disabled while an older cycle is still evaluating", () => {
+    const store = createStore();
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+    store.set(
+      supervisorsAtom,
+      new Map([
+        [
+          "sess-1",
+          {
+            ...createSupervisor(),
+            state: "idle",
+            objective: "Finish the follow-up refactor",
+          },
+        ],
+      ])
+    );
+    store.set(
+      supervisorCyclesAtom,
+      new Map([
+        [
+          "sup-1",
+          [
+            createCycle({
+              status: "evaluating",
+              objective: "Finish the original refactor",
+              completedAt: undefined,
+            }),
+          ],
+        ],
+      ])
+    );
+
+    render(
+      <Provider store={store}>
+        <SupervisorCard sessionId="sess-1" workspaceId="ws-1" />
+      </Provider>
+    );
+
+    expect(screen.getByRole("button", { name: "Trigger Evaluation" })).toBeDisabled();
+  });
+
   it("renders configured execution policy metadata", () => {
     const store = createStore();
     const scheduledAt = Date.UTC(2026, 4, 11, 3, 0);

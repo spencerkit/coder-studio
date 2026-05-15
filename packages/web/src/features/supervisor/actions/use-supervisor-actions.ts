@@ -102,6 +102,9 @@ export function useSupervisorActions({ sessionId }: UseSupervisorActionsArgs) {
     : ([] as SupervisorCycle[]);
 
   const latestCycle = cycles[0];
+  const hasInFlightCycle = cycles.some(
+    (cycle) => cycle.status === "evaluating" || cycle.status === "queued"
+  );
   const latestCycleText = latestCycle
     ? (latestCycle.result ??
       latestCycle.errorReason ??
@@ -166,7 +169,8 @@ export function useSupervisorActions({ sessionId }: UseSupervisorActionsArgs) {
     handlePause,
     handleResume,
     handleTrigger,
-    isBusy: supervisor?.state === "evaluating" || supervisor?.state === "injecting",
+    isBusy:
+      supervisor?.state === "evaluating" || supervisor?.state === "injecting" || hasInFlightCycle,
     latestCycle,
     latestCycleText,
     planGeneratedLabel,

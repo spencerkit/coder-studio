@@ -373,6 +373,26 @@ describe("SupervisorManager cycle triggers", () => {
     expect(managerInternals.evaluator.logger).toBe(deps.logger);
   });
 
+  it("deletes the persisted supervisor when create target files fails", async () => {
+    const createTargetFilesError = new Error("disk full");
+    deps.targetStore.createTargetFiles.mockImplementationOnce(async () => {
+      throw createTargetFilesError;
+    });
+
+    await expect(
+      manager.create({
+        sessionId: "sess-create-fails",
+        workspaceId: "ws-1",
+        objective: "Ship the fix",
+        evaluatorProviderId: "codex",
+      })
+    ).rejects.toThrow("disk full");
+
+    expect(deps.supervisorRepo.delete).toHaveBeenCalledWith(expect.any(String));
+    expect(manager.getBySession("sess-create-fails")).toBeUndefined();
+    expect(deps.supervisorRepo.getBySessionId("sess-create-fails")).toBeUndefined();
+  });
+
   it("returns an in-flight cycle immediately on manual triggerEvaluation", async () => {
     const supervisor = await manager.create({
       sessionId: "sess-manual",

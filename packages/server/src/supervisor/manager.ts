@@ -387,15 +387,21 @@ export class SupervisorManager {
         updatedAt: now,
       })
     );
-    await this.deps.targetStore.createTargetFiles(workspace.path, {
-      targetId,
-      sessionId: req.sessionId,
-      workspaceId: req.workspaceId,
-      objective,
-      createdAt: now,
-    });
+    let enriched: Supervisor;
+    try {
+      await this.deps.targetStore.createTargetFiles(workspace.path, {
+        targetId,
+        sessionId: req.sessionId,
+        workspaceId: req.workspaceId,
+        objective,
+        createdAt: now,
+      });
 
-    const enriched = await this.attachTargetState(supervisor, workspace.path);
+      enriched = await this.attachTargetState(supervisor, workspace.path);
+    } catch (error) {
+      this.deps.supervisorRepo.delete(supervisor.id);
+      throw error;
+    }
 
     this.storeSnapshot(enriched);
     this.broadcastState(enriched, "created");
