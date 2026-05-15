@@ -85,7 +85,6 @@ function createSessionRecord(sessionId: string, overrides?: Partial<Session>): S
 function applySupervisorPatch(current: Supervisor, patch: SupervisorUpdatePatch): Supervisor {
   return {
     ...current,
-    ...(patch.targetId !== undefined ? { targetId: patch.targetId } : {}),
     ...(patch.state !== undefined ? { state: patch.state } : {}),
     ...(patch.objective !== undefined ? { objective: patch.objective } : {}),
     ...(patch.evaluatorProviderId !== undefined
@@ -184,6 +183,7 @@ function createManagerDeps() {
     create: vi.fn((value: NewSupervisor) => {
       const supervisor: Supervisor = {
         ...value,
+        targetId: value.id,
         maxSupervisionCount: value.maxSupervisionCount ?? 0,
         completedSupervisionCount: value.completedSupervisionCount ?? 0,
         cycles: [],
@@ -284,6 +284,7 @@ function createManagerDeps() {
   };
   const targetStore = {
     createTargetFiles: vi.fn(async () => {}),
+    resetTargetFiles: vi.fn(async () => {}),
     readTargetMeta: vi.fn(async (_workspacePath: string, targetId: string) => ({
       targetId,
       sessionId: "sess-1",
@@ -479,10 +480,19 @@ describe("SupervisorManager cycle triggers", () => {
       objective: "Start the follow-up migration",
     });
 
-    expect(updated.targetId).not.toBe(supervisor.targetId);
+    expect(updated.targetId).toBe(supervisor.targetId);
     expect(updated.state).toBe("idle");
     expect(updated.stopReason).toBeUndefined();
     expect(updated.completedSupervisionCount).toBe(0);
+    expect(deps.targetStore.resetTargetFiles).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        targetId: supervisor.targetId,
+        sessionId: supervisor.sessionId,
+        workspaceId: supervisor.workspaceId,
+        objective: "Start the follow-up migration",
+      })
+    );
 
     vi.spyOn(getManagerInternals().evaluator, "evaluate").mockResolvedValueOnce({
       status: "continue",
@@ -494,7 +504,7 @@ describe("SupervisorManager cycle triggers", () => {
     expect(nextCycle?.status).toBe("injected");
   });
 
-  it("keeps in-flight cycle writes attached to the original target after an objective change", async () => {
+  it("cancels an in-flight cycle and resets the same target when the objective changes", async () => {
     const supervisor = await manager.create({
       sessionId: "sess-objective-race",
       workspaceId: "ws-1",
@@ -502,62 +512,54 @@ describe("SupervisorManager cycle triggers", () => {
       evaluatorProviderId: "codex",
     });
 
-    let resolveEvaluation: ((result: SupervisorEvaluationResult) => void) | null = null;
+    let observedSignal: AbortSignal | undefined;
     vi.spyOn(getManagerInternals().evaluator, "evaluate").mockImplementationOnce(
-      async () =>
-        await new Promise<SupervisorEvaluationResult>((resolve) => {
-          resolveEvaluation = resolve;
+      async (_supervisor, _context, options) =>
+        await new Promise<SupervisorEvaluationResult>((_resolve, reject) => {
+          observedSignal = options?.signal;
+          options?.signal?.addEventListener(
+            "abort",
+            () => {
+              reject({
+                code: "supervisor_eval_aborted",
+                message: "Supervisor evaluator aborted",
+              });
+            },
+            { once: true }
+          );
         })
     );
 
     const cycle = await manager.triggerEvaluation(supervisor.id);
 
     await waitFor(() => {
-      expect(resolveEvaluation).not.toBeNull();
+      expect(observedSignal).toBeDefined();
       expect(manager.get(supervisor.id)?.state).toBe("evaluating");
     });
 
-    const rotated = await manager.update(supervisor.id, {
+    const updatedPromise = manager.update(supervisor.id, {
       objective: "New objective",
     });
 
-    expect(rotated.targetId).not.toBe(supervisor.targetId);
-
-    resolveEvaluation?.({
-      status: "continue",
-      reason: "Keep going on the old target",
-      guidance: "Run the old-target validation",
-      progressSummary: "Old target progress",
-    });
-
     await waitFor(() => {
-      const finished = manager.get(supervisor.id)?.cycles.find((entry) => entry.id === cycle.id);
-      expect(finished?.status).toBe("completed");
+      expect(observedSignal?.aborted).toBe(true);
     });
 
-    expect(deps.targetStore.saveTargetMemory).toHaveBeenCalledWith(
-      expect.any(String),
-      supervisor.targetId,
-      expect.objectContaining({
-        targetId: supervisor.targetId,
-        progressSummary: "Old target progress",
-      })
-    );
-    expect(deps.targetStore.appendTargetCycleRecord).toHaveBeenCalledWith(
-      expect.any(String),
-      supervisor.targetId,
-      expect.objectContaining({
-        cycleId: cycle.id,
-        targetId: supervisor.targetId,
-      })
-    );
-    expect(deps.targetStore.saveTargetMemory).not.toHaveBeenCalledWith(
-      expect.any(String),
-      rotated.targetId,
-      expect.anything()
-    );
+    const updated = await updatedPromise;
+
+    expect(updated.targetId).toBe(supervisor.targetId);
+    expect(updated.objective).toBe("New objective");
     expect(manager.get(supervisor.id)?.state).toBe("idle");
     expect(manager.get(supervisor.id)?.completedSupervisionCount).toBe(0);
+    expect(deps.targetStore.resetTargetFiles).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        targetId: supervisor.targetId,
+        objective: "New objective",
+      })
+    );
+    const finished = manager.get(supervisor.id)?.cycles.find((entry) => entry.id === cycle.id);
+    expect(finished?.status).toBe("cancelled");
     expect(deps.sessionMgr.sendInput).not.toHaveBeenCalled();
   });
 
@@ -593,7 +595,7 @@ describe("SupervisorManager cycle triggers", () => {
     );
   });
 
-  it("does not move the rotated target into error when the previous target cycle fails", async () => {
+  it("keeps the supervisor idle after an in-flight evaluation fails during objective reset", async () => {
     const supervisor = await manager.create({
       sessionId: "sess-objective-error-race",
       workspaceId: "ws-1",
@@ -616,150 +618,55 @@ describe("SupervisorManager cycle triggers", () => {
       expect(manager.get(supervisor.id)?.state).toBe("evaluating");
     });
 
-    const rotated = await manager.update(supervisor.id, {
+    const updatedPromise = manager.update(supervisor.id, {
       objective: "New objective",
     });
 
-    rejectEvaluation?.(new Error("old target eval failed"));
-
-    await waitFor(() => {
-      const finished = manager.get(supervisor.id)?.cycles.find((entry) => entry.id === cycle.id);
-      expect(finished?.status).toBe("failed");
+    queueMicrotask(() => {
+      rejectEvaluation?.(new Error("old target eval failed"));
     });
 
-    expect(manager.get(supervisor.id)?.targetId).toBe(rotated.targetId);
-    expect(manager.get(supervisor.id)?.state).toBe("idle");
-    expect(manager.get(supervisor.id)?.errorReason).toBeUndefined();
-    expect(deps.targetStore.appendTargetCycleRecord).toHaveBeenCalledWith(
+    const updated = await updatedPromise;
+    const finished = manager.get(supervisor.id)?.cycles.find((entry) => entry.id === cycle.id);
+
+    expect(finished?.status).toBe("failed");
+    expect(updated.targetId).toBe(supervisor.targetId);
+    expect(updated.objective).toBe("New objective");
+    expect(updated.state).toBe("idle");
+    expect(updated.errorReason).toBeUndefined();
+    expect(deps.targetStore.resetTargetFiles).toHaveBeenCalledWith(
       expect.any(String),
-      supervisor.targetId,
       expect.objectContaining({
-        cycleId: cycle.id,
         targetId: supervisor.targetId,
-        result: "error",
-        errorReason: "old target eval failed",
+        objective: "New objective",
       })
     );
   });
 
-  it("keeps a superseded target meta state when an old in-flight cycle later stops", async () => {
+  it("resets target files in place instead of superseding them on objective change", async () => {
     const supervisor = await manager.create({
-      sessionId: "sess-objective-stop-race",
+      sessionId: "sess-objective-meta-reset",
       workspaceId: "ws-1",
       objective: "Initial objective",
       evaluatorProviderId: "codex",
     });
 
-    const targetMetaById = new Map<string, Record<string, unknown>>([
-      [
-        supervisor.targetId,
-        {
-          targetId: supervisor.targetId,
-          sessionId: supervisor.sessionId,
-          workspaceId: supervisor.workspaceId,
-          objective: supervisor.objective,
-          status: "active",
-          createdAt: 1,
-          updatedAt: 1,
-          supersededBy: null,
-          completedAt: null,
-        },
-      ],
-    ]);
-
-    deps.targetStore.readTargetMeta.mockImplementation(
-      async (_workspacePath: string, targetId: string) => {
-        const meta = targetMetaById.get(targetId);
-        if (!meta) {
-          throw new Error(`Missing target meta for ${targetId}`);
-        }
-        return { ...meta };
-      }
-    );
-    deps.targetStore.createTargetFiles.mockImplementation(
-      async (
-        _workspacePath: string,
-        input: {
-          targetId: string;
-          sessionId: string;
-          workspaceId: string;
-          objective: string;
-          createdAt: number;
-        }
-      ) => {
-        targetMetaById.set(input.targetId, {
-          targetId: input.targetId,
-          sessionId: input.sessionId,
-          workspaceId: input.workspaceId,
-          objective: input.objective,
-          status: "active",
-          createdAt: input.createdAt,
-          updatedAt: input.createdAt,
-          supersededBy: null,
-          completedAt: null,
-        });
-      }
-    );
-    deps.targetStore.markTargetSuperseded.mockImplementation(
-      async (_workspacePath: string, targetId: string, nextTargetId: string, updatedAt: number) => {
-        const current = targetMetaById.get(targetId);
-        if (!current) {
-          throw new Error(`Missing target meta for ${targetId}`);
-        }
-        targetMetaById.set(targetId, {
-          ...current,
-          status: "superseded",
-          supersededBy: nextTargetId,
-          updatedAt,
-        });
-      }
-    );
-    deps.targetStore.saveTargetMeta.mockImplementation(
-      async (_workspacePath: string, targetId: string, meta: Record<string, unknown>) => {
-        targetMetaById.set(targetId, { ...meta, targetId });
-      }
-    );
-
-    let resolveEvaluation: ((result: SupervisorEvaluationResult) => void) | null = null;
-    vi.spyOn(getManagerInternals().evaluator, "evaluate").mockImplementationOnce(
-      async () =>
-        await new Promise<SupervisorEvaluationResult>((resolve) => {
-          resolveEvaluation = resolve;
-        })
-    );
-
-    const cycle = await manager.triggerEvaluation(supervisor.id);
-
-    await waitFor(() => {
-      expect(resolveEvaluation).not.toBeNull();
-      expect(manager.get(supervisor.id)?.state).toBe("evaluating");
-    });
-
-    const rotated = await manager.update(supervisor.id, {
+    const updated = await manager.update(supervisor.id, {
       objective: "New objective",
     });
 
-    resolveEvaluation?.({
-      status: "stop",
-      stopReason: "objective_complete",
-      reason: "old objective is done",
-    });
-
-    await waitFor(() => {
-      const finished = manager.get(supervisor.id)?.cycles.find((entry) => entry.id === cycle.id);
-      expect(finished?.status).toBe("completed");
-    });
-
-    expect(targetMetaById.get(supervisor.targetId)).toMatchObject({
-      status: "superseded",
-      supersededBy: rotated.targetId,
-    });
-    expect(targetMetaById.get(rotated.targetId)).toMatchObject({
-      status: "active",
-    });
+    expect(updated.targetId).toBe(supervisor.targetId);
+    expect(deps.targetStore.resetTargetFiles).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        targetId: supervisor.targetId,
+        objective: "New objective",
+      })
+    );
+    expect(deps.targetStore.markTargetSuperseded).not.toHaveBeenCalled();
   });
 
-  it("rolls back a supersede mark when creating the next target files fails", async () => {
+  it("keeps the current target unchanged when resetting target files fails", async () => {
     const supervisor = await manager.create({
       sessionId: "sess-objective-create-fails",
       workspaceId: "ws-1",
@@ -767,39 +674,9 @@ describe("SupervisorManager cycle triggers", () => {
       evaluatorProviderId: "codex",
     });
 
-    let latestMeta: Record<string, unknown> = {
-      targetId: supervisor.targetId,
-      sessionId: supervisor.sessionId,
-      workspaceId: supervisor.workspaceId,
-      objective: supervisor.objective,
-      status: "active",
-      createdAt: 1,
-      updatedAt: 1,
-      supersededBy: null,
-      completedAt: null,
-    };
-
-    deps.targetStore.readTargetMeta.mockImplementation(async () => ({ ...latestMeta }));
-    deps.targetStore.markTargetSuperseded.mockImplementation(
-      async (_workspacePath: string, targetId: string, nextTargetId: string, updatedAt: number) => {
-        latestMeta = {
-          ...latestMeta,
-          targetId,
-          status: "superseded",
-          supersededBy: nextTargetId,
-          updatedAt,
-        };
-      }
-    );
-    deps.targetStore.saveTargetMeta.mockImplementation(
-      async (_workspacePath: string, targetId: string, meta: Record<string, unknown>) => {
-        latestMeta = { ...meta, targetId };
-      }
-    );
-
-    const createTargetFilesError = new Error("disk full");
-    deps.targetStore.createTargetFiles.mockImplementation(async () => {
-      throw createTargetFilesError;
+    const resetTargetFilesError = new Error("disk full");
+    deps.targetStore.resetTargetFiles.mockImplementation(async () => {
+      throw resetTargetFilesError;
     });
 
     await expect(
@@ -809,18 +686,12 @@ describe("SupervisorManager cycle triggers", () => {
     ).rejects.toThrow("disk full");
 
     expect(manager.get(supervisor.id)?.targetId).toBe(supervisor.targetId);
-    expect(latestMeta).toMatchObject({
-      targetId: supervisor.targetId,
-      status: "active",
-      supersededBy: null,
-    });
-    expect(deps.targetStore.saveTargetMeta).toHaveBeenCalledWith(
+    expect(manager.get(supervisor.id)?.objective).toBe("Initial objective");
+    expect(deps.targetStore.resetTargetFiles).toHaveBeenCalledWith(
       expect.any(String),
-      supervisor.targetId,
       expect.objectContaining({
         targetId: supervisor.targetId,
-        status: "active",
-        supersededBy: null,
+        objective: "New objective",
       })
     );
   });

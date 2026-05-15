@@ -1,5 +1,5 @@
 -- Current database schema baseline
-PRAGMA user_version = 3;
+PRAGMA user_version = 2;
 
 CREATE TABLE IF NOT EXISTS workspaces (
   id TEXT PRIMARY KEY,
@@ -78,7 +78,7 @@ CREATE TABLE IF NOT EXISTS supervisors (
   last_evaluated_turn_id TEXT,
   error_reason TEXT,
   created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL, evaluator_model TEXT, max_supervision_count INTEGER NOT NULL DEFAULT 0, completed_supervision_count INTEGER NOT NULL DEFAULT 0, scheduled_at INTEGER, stop_reason TEXT, target_id TEXT NOT NULL DEFAULT '',
+  updated_at INTEGER NOT NULL, evaluator_model TEXT, max_supervision_count INTEGER NOT NULL DEFAULT 0, completed_supervision_count INTEGER NOT NULL DEFAULT 0, scheduled_at INTEGER, stop_reason TEXT,
   FOREIGN KEY (session_id, workspace_id) REFERENCES sessions(id, workspace_id) ON DELETE CASCADE,
   FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
 );

@@ -48,6 +48,36 @@ async function writeJsonIfMissing(path: string, value: unknown): Promise<void> {
   }
 }
 
+function buildTargetMeta(input: {
+  targetId: string;
+  sessionId: string;
+  workspaceId: string;
+  objective: string;
+  createdAt: number;
+}): SupervisorTargetMeta {
+  return {
+    targetId: input.targetId,
+    sessionId: input.sessionId,
+    workspaceId: input.workspaceId,
+    objective: input.objective,
+    status: "active",
+    createdAt: input.createdAt,
+    updatedAt: input.createdAt,
+    supersededBy: null,
+    completedAt: null,
+  };
+}
+
+function buildTargetMemory(targetId: string, createdAt: number): SupervisorTargetMemory {
+  return {
+    targetId,
+    planGenerated: false,
+    plan: [],
+    stalledCount: 0,
+    updatedAt: createdAt,
+  };
+}
+
 export async function createTargetFiles(
   workspacePath: string,
   input: {
@@ -60,29 +90,36 @@ export async function createTargetFiles(
 ): Promise<void> {
   const dir = targetDir(workspacePath, input.targetId);
   await mkdir(dir, { recursive: true });
+  await writeJsonIfMissing(metaPath(workspacePath, input.targetId), buildTargetMeta(input));
+  await writeJsonIfMissing(
+    memoryPath(workspacePath, input.targetId),
+    buildTargetMemory(input.targetId, input.createdAt)
+  );
+}
 
-  const meta: SupervisorTargetMeta = {
-    targetId: input.targetId,
-    sessionId: input.sessionId,
-    workspaceId: input.workspaceId,
-    objective: input.objective,
-    status: "active",
-    createdAt: input.createdAt,
-    updatedAt: input.createdAt,
-    supersededBy: null,
-    completedAt: null,
-  };
-
-  const memory: SupervisorTargetMemory = {
-    targetId: input.targetId,
-    planGenerated: false,
-    plan: [],
-    stalledCount: 0,
-    updatedAt: input.createdAt,
-  };
-
-  await writeJsonIfMissing(metaPath(workspacePath, input.targetId), meta);
-  await writeJsonIfMissing(memoryPath(workspacePath, input.targetId), memory);
+export async function resetTargetFiles(
+  workspacePath: string,
+  input: {
+    targetId: string;
+    sessionId: string;
+    workspaceId: string;
+    objective: string;
+    createdAt: number;
+  }
+): Promise<void> {
+  const dir = targetDir(workspacePath, input.targetId);
+  await mkdir(dir, { recursive: true });
+  await writeFile(
+    metaPath(workspacePath, input.targetId),
+    JSON.stringify(buildTargetMeta(input), null, 2) + "\n",
+    "utf-8"
+  );
+  await writeFile(
+    memoryPath(workspacePath, input.targetId),
+    JSON.stringify(buildTargetMemory(input.targetId, input.createdAt), null, 2) + "\n",
+    "utf-8"
+  );
+  await writeFile(cyclesPath(workspacePath, input.targetId), "", "utf-8");
 }
 
 export async function readTargetMeta(

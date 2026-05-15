@@ -89,7 +89,7 @@ describe("SupervisorRepo", () => {
     });
   });
 
-  it("persists targetId on create and update", () => {
+  it("derives targetId from supervisor id and ignores targetId patches", () => {
     supervisorRepo.create({
       id: "sup-1",
       sessionId: "sess-1",
@@ -103,15 +103,15 @@ describe("SupervisorRepo", () => {
     });
 
     const created = supervisorRepo.findById("sup-1");
-    expect(created?.targetId).toBe("target-alpha");
+    expect(created?.targetId).toBe("sup-1");
 
     const updated = supervisorRepo.update("sup-1", {
       targetId: "target-beta",
       updatedAt: 11,
     });
 
-    expect(updated.targetId).toBe("target-beta");
-    expect(supervisorRepo.findById("sup-1")?.targetId).toBe("target-beta");
+    expect(updated.targetId).toBe("sup-1");
+    expect(supervisorRepo.findById("sup-1")?.targetId).toBe("sup-1");
   });
 
   it("rejects a supervisor whose workspace does not match its session workspace", () => {

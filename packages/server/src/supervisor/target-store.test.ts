@@ -6,9 +6,9 @@ import {
   appendTargetCycleRecord,
   createTargetFiles,
   loadTargetMemory,
-  markTargetSuperseded,
   readTargetCycleRecords,
   readTargetMeta,
+  resetTargetFiles,
   saveTargetMemory,
 } from "./target-store.js";
 
@@ -72,7 +72,7 @@ describe("target store", () => {
     expect(lines[0]?.guidance).toBe("Implement the store");
   });
 
-  it("marks a target as superseded without mutating the old memory contents", async () => {
+  it("resets target files in place when the objective changes", async () => {
     await createTargetFiles(workspacePath, {
       targetId: "tgt-1",
       sessionId: "sess-1",
@@ -92,14 +92,52 @@ describe("target store", () => {
       updatedAt: 2,
     });
 
-    await markTargetSuperseded(workspacePath, "tgt-1", "tgt-2", 3);
+    await appendTargetCycleRecord(workspacePath, "tgt-1", {
+      cycleId: "cycle-1",
+      targetId: "tgt-1",
+      startedAt: 1,
+      completedAt: 2,
+      result: "continue",
+      reason: "Stale progress",
+      guidance: "Do the old thing",
+      injected: true,
+      attemptCount: 1,
+    });
+
+    await resetTargetFiles(workspacePath, {
+      targetId: "tgt-1",
+      sessionId: "sess-1",
+      workspaceId: "ws-1",
+      objective: "New objective",
+      createdAt: 3,
+    });
 
     const meta = await readTargetMeta(workspacePath, "tgt-1");
     const memory = await loadTargetMemory(workspacePath, "tgt-1");
+    const cycles = await readTargetCycleRecords(workspacePath, "tgt-1");
 
-    expect(meta.status).toBe("superseded");
-    expect(meta.supersededBy).toBe("tgt-2");
-    expect(memory.lastGuidance).toBe("Do old thing");
+    expect(meta).toEqual({
+      targetId: "tgt-1",
+      sessionId: "sess-1",
+      workspaceId: "ws-1",
+      objective: "New objective",
+      status: "active",
+      createdAt: 3,
+      updatedAt: 3,
+      supersededBy: null,
+      completedAt: null,
+    });
+    expect(memory).toEqual({
+      targetId: "tgt-1",
+      planGenerated: false,
+      plan: [],
+      activeStepId: undefined,
+      progressSummary: undefined,
+      lastGuidance: undefined,
+      stalledCount: 0,
+      updatedAt: 3,
+    });
+    expect(cycles).toEqual([]);
   });
 
   it("does not overwrite existing memory when createTargetFiles is called for an existing target", async () => {
