@@ -21,7 +21,7 @@ type SnapshotResult =
   | { status: "ok"; data: Buffer; seq: number; cols: number; rows: number }
   | { status: "unsupported" };
 
-const RECOVERY_OUTPUT_BYTES = 64 * 1024;
+const RECOVERY_OUTPUT_BYTES = 4096;
 
 function isTerminalTraceEnabled(): boolean {
   return process.env.CODER_STUDIO_TERMINAL_TRACE === "1";
@@ -86,26 +86,27 @@ function createRuntimeActiveTerminal(
 
   runtimeActive.ownerServerInstanceId = ownerServerInstanceId;
   runtimeActive.leaseStatus = "attached";
-  runtimeActive.leaseRequestId = undefined;
-  runtimeActive.leaseExpiresAt = undefined;
+  runtimeActive.preserveRequestId = undefined;
+  runtimeActive.preserveExpiresAt = undefined;
   runtimeActive.preserveTimer = null;
-  runtimeActive.lastOutputAt = active.createdAt;
-  runtimeActive.toLease = () => ({
-    status: runtimeActive.leaseStatus,
-    ownerServerInstanceId: runtimeActive.ownerServerInstanceId,
-    requestId: runtimeActive.leaseRequestId,
-    expiresAt: runtimeActive.leaseExpiresAt,
-  });
+  runtimeActive.lastOutputAt = null;
+  runtimeActive.clearPreserveTimeout = () => {
+    if (!runtimeActive.preserveTimer) {
+      return;
+    }
+
+    clearTimeout(runtimeActive.preserveTimer);
+    runtimeActive.preserveTimer = null;
+  };
+  runtimeActive.armPreserveTimeout = (onExpire: () => void, ttlMs: number) => {
+    runtimeActive.clearPreserveTimeout();
+    runtimeActive.preserveTimer = setTimeout(onExpire, ttlMs);
+  };
   runtimeActive.toRuntimeRecord = () => ({
     ...active.toDTO(),
     ownerServerInstanceId: runtimeActive.ownerServerInstanceId,
     leaseStatus: runtimeActive.leaseStatus,
     lastOutputAt: runtimeActive.lastOutputAt,
-  });
-  runtimeActive.getRecoveryMetadata = (): TerminalRecoveryMetadata => ({
-    alive: runtimeActive.alive,
-    lastOutputAt: runtimeActive.lastOutputAt,
-    recentOutputBase64: runtimeActive.ringBuffer.tail(RECOVERY_OUTPUT_BYTES).toString("base64"),
   });
 
   return runtimeActive;
@@ -198,8 +199,8 @@ export class TerminalRuntime {
       }
 
       terminal.leaseStatus = "preserved";
-      terminal.leaseRequestId = requestId;
-      terminal.leaseExpiresAt = expiresAt;
+      terminal.preserveRequestId = requestId;
+      terminal.preserveExpiresAt = expiresAt;
       this.armPreserveTimer(terminal, requestId, ttlMs);
       detachedIds.push(terminal.id);
     }
@@ -214,22 +215,22 @@ export class TerminalRuntime {
       if (!terminal.alive) {
         continue;
       }
-      if (terminal.leaseStatus !== "preserved" || terminal.leaseRequestId !== requestId) {
+      if (terminal.leaseStatus !== "preserved" || terminal.preserveRequestId !== requestId) {
         continue;
       }
 
-      this.clearPreserveTimer(terminal);
+      terminal.clearPreserveTimeout();
       terminal.ownerServerInstanceId = nextOwnerServerInstanceId;
       terminal.leaseStatus = "attached";
-      terminal.leaseRequestId = undefined;
-      terminal.leaseExpiresAt = undefined;
+      terminal.preserveRequestId = undefined;
+      terminal.preserveExpiresAt = undefined;
       claimed.push(terminal.toRuntimeRecord());
     }
 
     return claimed;
   }
 
-  handleOwnerDisconnect(ownerServerInstanceId: string): void {
+  async handleOwnerDisconnect(ownerServerInstanceId: string): Promise<void> {
     for (const terminal of this.terminals.values()) {
       if (!terminal.alive || terminal.ownerServerInstanceId !== ownerServerInstanceId) {
         continue;
@@ -238,7 +239,7 @@ export class TerminalRuntime {
         continue;
       }
 
-      void terminal.pty.kill("SIGTERM");
+      await terminal.pty.kill("SIGTERM");
     }
   }
 
@@ -399,16 +400,25 @@ export class TerminalRuntime {
     }
   }
 
-  getRecoveryMetadata(terminalId: TerminalId): TerminalRecoveryMetadata | undefined {
-    return this.terminals.get(terminalId)?.getRecoveryMetadata();
+  getRecoveryMetadata(terminalId: TerminalId): TerminalRecoveryMetadata | null {
+    const terminal = this.terminals.get(terminalId);
+    if (!terminal) {
+      return null;
+    }
+
+    return {
+      alive: terminal.alive,
+      lastOutputAt: terminal.lastOutputAt,
+      recentOutputBase64: terminal.ringBuffer.tail(RECOVERY_OUTPUT_BYTES).toString("base64"),
+    };
   }
 
-  getOwnerServerInstanceId(terminalId: TerminalId): string | undefined {
-    return this.terminals.get(terminalId)?.ownerServerInstanceId;
+  getOwnerServerInstanceId(terminalId: TerminalId): string | null {
+    return this.terminals.get(terminalId)?.ownerServerInstanceId ?? null;
   }
 
-  get(terminalId: TerminalId): RuntimeActiveTerminal | undefined {
-    return this.terminals.get(terminalId);
+  get(terminalId: TerminalId): RuntimeTerminalRecord | undefined {
+    return this.terminals.get(terminalId)?.toRuntimeRecord();
   }
 
   private wireEvents(active: RuntimeActiveTerminal): void {
@@ -448,7 +458,7 @@ export class TerminalRuntime {
     pty.onExit(({ exitCode }: { exitCode: number }) => {
       active.alive = false;
       active.exitCode = exitCode;
-      this.clearPreserveTimer(active);
+      active.clearPreserveTimeout();
 
       const event: DomainEvent = {
         type: "terminal.exited",
@@ -489,7 +499,7 @@ export class TerminalRuntime {
       if (!terminal.alive) {
         return;
       }
-      if (terminal.leaseStatus !== "preserved" || terminal.leaseRequestId !== requestId) {
+      if (terminal.leaseStatus !== "preserved" || terminal.preserveRequestId !== requestId) {
         return;
       }
 
@@ -498,12 +508,7 @@ export class TerminalRuntime {
   }
 
   private clearPreserveTimer(terminal: RuntimeActiveTerminal): void {
-    if (!terminal.preserveTimer) {
-      return;
-    }
-
-    clearTimeout(terminal.preserveTimer);
-    terminal.preserveTimer = null;
+    terminal.clearPreserveTimeout();
   }
 
   private finalizeTerminal(active: RuntimeActiveTerminal): void {

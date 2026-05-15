@@ -11,12 +11,10 @@ export type {
   PtyProcess,
   PtySpawnOptions,
   ReplayResult,
-  RuntimeActiveTerminal,
   RuntimeTerminalRecord,
   TerminalDatabase,
   TerminalId,
   TerminalLease,
-  TerminalLeaseStatus,
   TerminalRecoveryMetadata,
   TerminalSpec,
 } from "./types";

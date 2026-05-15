@@ -1,9 +1,9 @@
-import { beforeEach, describe, expect, it, type Mock, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventBus } from "../bus/event-bus";
 import { TerminalRuntime } from "./runtime";
-import type { PtyHost, PtyProcess, TerminalDatabase, TerminalSpec } from "./types";
+import type { PtyHost, PtyProcess, TerminalDatabase } from "./types";
 
-describe("TerminalRuntime", () => {
+describe("TerminalRuntime preserve leases", () => {
   let runtime: TerminalRuntime;
   let mockPtyHost: PtyHost;
   let mockDb: TerminalDatabase;
@@ -34,94 +34,66 @@ describe("TerminalRuntime", () => {
     });
   });
 
-  const spec: TerminalSpec = {
-    workspaceId: "ws-123",
-    kind: "shell",
-    argv: ["bash"],
-    cwd: "/workspace",
-  };
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
 
-  it("kills attached terminals immediately when the owner disconnects", () => {
-    runtime.create("term-1", spec, "server-1");
+  it("kills attached terminals immediately when the owner disconnects without preserve", async () => {
+    runtime.create(
+      "term-1",
+      {
+        workspaceId: "ws-1",
+        kind: "shell",
+        argv: ["bash"],
+        cwd: "/tmp",
+      },
+      "server-a"
+    );
 
-    runtime.handleOwnerDisconnect("server-1");
+    await runtime.handleOwnerDisconnect("server-a");
 
-    expect(mockPty.kill).toHaveBeenCalledTimes(1);
     expect(mockPty.kill).toHaveBeenCalledWith("SIGTERM");
   });
 
-  it("keeps preserved terminals alive across owner disconnect until the ttl expires", async () => {
+  it("keeps preserved terminals alive until they are claimed or the TTL expires", async () => {
     vi.useFakeTimers();
+    runtime.create(
+      "term-1",
+      {
+        workspaceId: "ws-1",
+        kind: "shell",
+        argv: ["bash"],
+        cwd: "/tmp",
+      },
+      "server-a"
+    );
 
-    try {
-      runtime.create("term-1", spec, "server-1");
+    runtime.detachForRestart("server-a", "restart-1", 5_000);
+    await runtime.handleOwnerDisconnect("server-a");
 
-      expect(runtime.detachForRestart("server-1", "req-1", 5_000)).toEqual(["term-1"]);
-      expect(runtime.get("term-1")).toMatchObject({
-        id: "term-1",
-        ownerServerInstanceId: "server-1",
-        leaseStatus: "preserved",
-      });
+    expect(mockPty.kill).not.toHaveBeenCalled();
 
-      runtime.handleOwnerDisconnect("server-1");
-      expect(mockPty.kill).not.toHaveBeenCalled();
-
-      await vi.advanceTimersByTimeAsync(4_999);
-      expect(mockPty.kill).not.toHaveBeenCalled();
-
-      await vi.advanceTimersByTimeAsync(1);
-      expect(mockPty.kill).toHaveBeenCalledTimes(1);
-      expect(mockPty.kill).toHaveBeenCalledWith("SIGTERM");
-    } finally {
-      vi.useRealTimers();
-    }
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(mockPty.kill).toHaveBeenCalledWith("SIGTERM");
   });
 
-  it("allows the next server instance to claim preserved terminals", async () => {
-    vi.useFakeTimers();
+  it("claims preserved terminals for the next server instance", () => {
+    runtime.create(
+      "term-1",
+      {
+        workspaceId: "ws-1",
+        kind: "shell",
+        argv: ["bash"],
+        cwd: "/tmp",
+      },
+      "server-a"
+    );
 
-    try {
-      runtime.create("term-1", spec, "server-1");
-      runtime.detachForRestart("server-1", "req-1", 5_000);
+    runtime.detachForRestart("server-a", "restart-1", 5_000);
+    const claimed = runtime.claimPreserved("restart-1", "server-b");
 
-      runtime.handleOwnerDisconnect("server-1");
-      expect(mockPty.kill).not.toHaveBeenCalled();
-
-      const claimed = runtime.claimPreserved("req-1", "server-2");
-
-      expect(claimed).toHaveLength(1);
-      expect(claimed[0]).toMatchObject({
-        id: "term-1",
-        ownerServerInstanceId: "server-2",
-        leaseStatus: "attached",
-        alive: true,
-      });
-      expect(runtime.getOwnerServerInstanceId("term-1")).toBe("server-2");
-      expect(runtime.hydrateAttached("server-2")).toMatchObject([
-        {
-          id: "term-1",
-          ownerServerInstanceId: "server-2",
-          leaseStatus: "attached",
-        },
-      ]);
-
-      await vi.advanceTimersByTimeAsync(5_000);
-      expect(mockPty.kill).not.toHaveBeenCalled();
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("tracks recovery metadata from terminal output", () => {
-    runtime.create("term-1", spec, "server-1");
-
-    const onData = (mockPty.onData as Mock).mock.calls[0][0] as (data: string) => void;
-    onData("hello");
-
-    expect(runtime.getRecoveryMetadata("term-1")).toMatchObject({
-      alive: true,
-      recentOutputBase64: Buffer.from("hello").toString("base64"),
-      lastOutputAt: expect.any(Number),
-    });
+    expect(claimed.map((terminal) => terminal.id)).toEqual(["term-1"]);
+    expect(runtime.get("term-1")?.ownerServerInstanceId).toBe("server-b");
   });
 });

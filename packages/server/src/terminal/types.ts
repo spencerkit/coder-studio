@@ -35,25 +35,23 @@ export type ReplayResult =
   | { status: "too_old" }
   | { status: "unknown" };
 
-export type TerminalLeaseStatus = "attached" | "preserved";
-
 export interface TerminalLease {
-  status: TerminalLeaseStatus;
+  status: "attached" | "preserved";
   ownerServerInstanceId: string;
   requestId?: string;
   expiresAt?: number;
 }
 
 export interface TerminalRecoveryMetadata {
-  lastOutputAt: number;
+  lastOutputAt: number | null;
   recentOutputBase64: string;
   alive: boolean;
 }
 
 export interface RuntimeTerminalRecord extends Terminal {
   ownerServerInstanceId: string;
-  leaseStatus: TerminalLeaseStatus;
-  lastOutputAt: number;
+  leaseStatus: TerminalLease["status"];
+  lastOutputAt: number | null;
 }
 
 /**
@@ -126,12 +124,12 @@ export type TerminalId = string;
 
 export interface RuntimeActiveTerminal extends ActiveTerminal {
   ownerServerInstanceId: string;
-  leaseStatus: TerminalLeaseStatus;
-  leaseRequestId?: string;
-  leaseExpiresAt?: number;
+  leaseStatus: TerminalLease["status"];
+  preserveRequestId?: string;
+  preserveExpiresAt?: number;
   preserveTimer: NodeJS.Timeout | null;
-  lastOutputAt: number;
-  toLease(): TerminalLease;
+  lastOutputAt: number | null;
+  clearPreserveTimeout(): void;
+  armPreserveTimeout(onExpire: () => void, ttlMs: number): void;
   toRuntimeRecord(): RuntimeTerminalRecord;
-  getRecoveryMetadata(): TerminalRecoveryMetadata;
 }
