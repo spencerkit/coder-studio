@@ -798,6 +798,56 @@ describe("SupervisorManager cycle triggers", () => {
     expect(deps.supervisorRepo.findById(supervisor.id)?.objective).toBe("Initial objective");
   });
 
+  it("preserves a pause request while an objective change abort is in flight", async () => {
+    const supervisor = await manager.create({
+      sessionId: "sess-objective-pause-race",
+      workspaceId: "ws-1",
+      objective: "Initial objective",
+      evaluatorProviderId: "codex",
+    });
+
+    let observedSignal: AbortSignal | undefined;
+    vi.spyOn(getManagerInternals().evaluator, "evaluate").mockImplementationOnce(
+      async (_supervisor, _context, options) =>
+        await new Promise<SupervisorEvaluationResult>((_resolve, reject) => {
+          observedSignal = options?.signal;
+          options?.signal?.addEventListener(
+            "abort",
+            () => {
+              reject({
+                code: "supervisor_eval_aborted",
+                message: "Supervisor evaluator aborted",
+              });
+            },
+            { once: true }
+          );
+        })
+    );
+
+    await manager.triggerEvaluation(supervisor.id);
+
+    await waitFor(() => {
+      expect(observedSignal).toBeDefined();
+      expect(manager.get(supervisor.id)?.state).toBe("evaluating");
+    });
+
+    const updatedPromise = manager.update(supervisor.id, {
+      objective: "New objective",
+    });
+    const paused = await manager.pause(supervisor.id);
+
+    await waitFor(() => {
+      expect(observedSignal?.aborted).toBe(true);
+    });
+
+    const updated = await updatedPromise;
+
+    expect(paused.state).toBe("paused");
+    expect(updated.state).toBe("paused");
+    expect(updated.objective).toBe("New objective");
+    expect(manager.get(supervisor.id)?.state).toBe("paused");
+  });
+
   it("retries evaluator timeout up to the global retry budget", async () => {
     vi.useFakeTimers();
     deps.settingsRepo.get = vi.fn((key: string) => {

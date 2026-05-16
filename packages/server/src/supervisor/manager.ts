@@ -824,9 +824,12 @@ export class SupervisorManager {
         }
 
         if (this.pendingObjectiveUpdates.has(supervisorId)) {
+          const nextState: SupervisorState = this.pendingPauses.has(supervisorId)
+            ? "paused"
+            : "idle";
           const recoveredSupervisor = this.attachCycles(
             this.deps.supervisorRepo.update(supervisorId, {
-              state: "idle",
+              state: nextState,
               stopReason: null,
               errorReason: null,
               updatedAt: Date.now(),
@@ -838,7 +841,6 @@ export class SupervisorManager {
           this.broadcastState(recoveredSupervisor, "state_changed");
           this.deps.cycleRepo.pruneOldest(supervisorId, this.config.maxCyclesPerSession);
           this.scheduler.refresh();
-          this.pendingPauses.delete(supervisorId);
 
           return abortedCycle;
         }

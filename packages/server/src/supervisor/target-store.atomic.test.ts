@@ -1,11 +1,13 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const renameState = vi.hoisted(() => ({
-  callCount: 0,
-  failOnCall: 0,
+const fsState = vi.hoisted(() => ({
+  renameCallCount: 0,
+  failRenameOnCalls: [] as number[],
+  rmCallCount: 0,
+  failRmOnCalls: [] as number[],
 }));
 
 vi.mock("node:fs/promises", async () => {
@@ -13,11 +15,18 @@ vi.mock("node:fs/promises", async () => {
   return {
     ...actual,
     rename: vi.fn(async (from: string, to: string) => {
-      renameState.callCount += 1;
-      if (renameState.failOnCall !== 0 && renameState.callCount === renameState.failOnCall) {
+      fsState.renameCallCount += 1;
+      if (fsState.failRenameOnCalls.includes(fsState.renameCallCount)) {
         throw new Error("promote failed");
       }
       return actual.rename(from, to);
+    }),
+    rm: vi.fn(async (...args: Parameters<typeof actual.rm>) => {
+      fsState.rmCallCount += 1;
+      if (fsState.failRmOnCalls.includes(fsState.rmCallCount)) {
+        throw new Error("cleanup failed");
+      }
+      return actual.rm(...args);
     }),
   };
 });
@@ -37,8 +46,10 @@ describe("target store atomic reset", () => {
 
   beforeEach(() => {
     workspacePath = mkdtempSync(join(tmpdir(), "supervisor-target-store-atomic-"));
-    renameState.callCount = 0;
-    renameState.failOnCall = 0;
+    fsState.renameCallCount = 0;
+    fsState.failRenameOnCalls = [];
+    fsState.rmCallCount = 0;
+    fsState.failRmOnCalls = [];
   });
 
   afterEach(() => {
@@ -77,7 +88,7 @@ describe("target store atomic reset", () => {
       attemptCount: 1,
     });
 
-    renameState.failOnCall = 2;
+    fsState.failRenameOnCalls = [2];
 
     await expect(
       resetTargetFiles(workspacePath, {
@@ -109,5 +120,81 @@ describe("target store atomic reset", () => {
         guidance: "Do the old thing",
       },
     ]);
+  });
+
+  it("keeps the promoted target live when backup cleanup fails", async () => {
+    await createTargetFiles(workspacePath, {
+      targetId: "tgt-1",
+      sessionId: "sess-1",
+      workspaceId: "ws-1",
+      objective: "Old objective",
+      createdAt: 1,
+    });
+
+    fsState.failRmOnCalls = [1];
+
+    await expect(
+      resetTargetFiles(workspacePath, {
+        targetId: "tgt-1",
+        sessionId: "sess-1",
+        workspaceId: "ws-1",
+        objective: "New objective",
+        createdAt: 3,
+      })
+    ).resolves.toBeUndefined();
+
+    const meta = await readTargetMeta(workspacePath, "tgt-1");
+    const memory = await loadTargetMemory(workspacePath, "tgt-1");
+    const cycles = await readTargetCycleRecords(workspacePath, "tgt-1");
+
+    expect(meta.objective).toBe("New objective");
+    expect(memory).toMatchObject({
+      targetId: "tgt-1",
+      planGenerated: false,
+      stalledCount: 0,
+      updatedAt: 3,
+    });
+    expect(cycles).toEqual([]);
+  });
+
+  it("preserves the backup target when both promotion and restore fail", async () => {
+    await createTargetFiles(workspacePath, {
+      targetId: "tgt-1",
+      sessionId: "sess-1",
+      workspaceId: "ws-1",
+      objective: "Old objective",
+      createdAt: 1,
+    });
+
+    fsState.failRenameOnCalls = [2, 3];
+
+    await expect(
+      resetTargetFiles(workspacePath, {
+        targetId: "tgt-1",
+        sessionId: "sess-1",
+        workspaceId: "ws-1",
+        objective: "New objective",
+        createdAt: 3,
+      })
+    ).rejects.toThrow("promote failed");
+
+    const targetsRoot = join(workspacePath, ".coder-studio", "supervisor", "targets");
+    const entries = readdirSync(targetsRoot);
+    const backupEntry = entries.find((entry) => entry.startsWith("tgt-1.backup-"));
+    const stagingEntry = entries.find((entry) => entry.startsWith("tgt-1.reset-"));
+
+    expect(existsSync(join(targetsRoot, "tgt-1"))).toBe(false);
+    expect(backupEntry).toBeDefined();
+    expect(stagingEntry).toBeDefined();
+
+    const backupMeta = JSON.parse(
+      readFileSync(join(targetsRoot, backupEntry!, "meta.json"), "utf-8")
+    ) as { objective: string };
+    const stagedMeta = JSON.parse(
+      readFileSync(join(targetsRoot, stagingEntry!, "meta.json"), "utf-8")
+    ) as { objective: string };
+
+    expect(backupMeta.objective).toBe("Old objective");
+    expect(stagedMeta.objective).toBe("New objective");
   });
 });

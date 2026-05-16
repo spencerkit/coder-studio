@@ -51,6 +51,19 @@ function hasCode(error: unknown, code: string): boolean {
   );
 }
 
+function errorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (error && typeof error === "object" && "message" in error) {
+    const value = (error as { message?: unknown }).message;
+    if (typeof value === "string") {
+      return value;
+    }
+  }
+  return fallback;
+}
+
 async function writeJsonIfMissing(path: string, value: unknown): Promise<void> {
   try {
     await writeFile(path, JSON.stringify(value, null, 2) + "\n", {
@@ -154,15 +167,16 @@ export async function resetTargetFiles(
   await mkdir(parentDir, { recursive: true });
   const stagingDir = await mkdtemp(join(parentDir, `${input.targetId}.reset-`));
 
-  let movedExisting = false;
+  let backupCreated = false;
   let promoted = false;
+  let restored = false;
 
   try {
     await writeResetTargetFiles(stagingDir, input);
 
     try {
       await rename(dir, backupDir);
-      movedExisting = true;
+      backupCreated = true;
     } catch (error) {
       if (!hasCode(error, "ENOENT")) {
         throw error;
@@ -172,26 +186,35 @@ export async function resetTargetFiles(
     try {
       await rename(stagingDir, dir);
       promoted = true;
-    } catch (error) {
-      if (movedExisting) {
-        await rename(backupDir, dir);
-        movedExisting = false;
+    } catch (promoteError) {
+      if (backupCreated) {
+        try {
+          await rename(backupDir, dir);
+          backupCreated = false;
+          restored = true;
+        } catch (restoreError) {
+          throw new Error(
+            `Failed to promote target reset (${errorMessage(
+              promoteError,
+              "unknown promote error"
+            )}); restore also failed (${errorMessage(restoreError, "unknown restore error")})`
+          );
+        }
       }
-      throw error;
-    }
-
-    if (movedExisting) {
-      await rm(backupDir, { recursive: true, force: true });
-      movedExisting = false;
+      throw promoteError;
     }
   } catch (error) {
-    if (!promoted) {
+    if (restored || !backupCreated) {
       await rm(stagingDir, { recursive: true, force: true }).catch(() => {});
     }
-    if (movedExisting) {
-      await rm(backupDir, { recursive: true, force: true }).catch(() => {});
-    }
     throw error;
+  }
+
+  if (backupCreated) {
+    await rm(backupDir, { recursive: true, force: true }).catch(() => {});
+  }
+  if (!promoted) {
+    await rm(stagingDir, { recursive: true, force: true }).catch(() => {});
   }
 }
 
