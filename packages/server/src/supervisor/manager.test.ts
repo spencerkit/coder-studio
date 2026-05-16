@@ -33,6 +33,7 @@ type MockSupervisorManagerDeps = {
   };
   targetStore: {
     createTargetFiles: ReturnType<typeof vi.fn>;
+    resetTargetFiles: ReturnType<typeof vi.fn>;
     readTargetMeta: ReturnType<typeof vi.fn>;
     loadTargetMemory: ReturnType<typeof vi.fn>;
     saveTargetMeta: ReturnType<typeof vi.fn>;
@@ -98,11 +99,12 @@ describe("SupervisorManager", () => {
         get: vi.fn(() => undefined),
       },
       supervisorRepo: {
-        create: vi.fn((value) => ({ ...value, cycles: [] })),
+        create: vi.fn((value) => ({ ...value, targetId: value.id, cycles: [] })),
         update: vi.fn((id, patch) => ({
           id,
           sessionId: "sess-1",
           workspaceId: "ws-1",
+          targetId: id,
           state: patch.state ?? "idle",
           objective: patch.objective ?? "Persist supervisors",
           evaluatorProviderId: patch.evaluatorProviderId ?? "claude",
@@ -147,6 +149,7 @@ describe("SupervisorManager", () => {
       },
       targetStore: {
         createTargetFiles: vi.fn(async () => {}),
+        resetTargetFiles: vi.fn(async () => {}),
         readTargetMeta: vi.fn(async () => ({
           targetId: "tgt-1",
           sessionId: "sess-1",

@@ -973,7 +973,7 @@ describe("runGitCheckout", () => {
       const result = await runGitCheckout(testDir, "feature/worktree-branch");
 
       expect(result.success).toBe(false);
-      expect(result.message).toContain("already used by worktree");
+      expect(result.message).toMatch(/already (?:used by worktree|checked out at)/);
       expect(result.message).toContain(linkedWorktreeDir);
     } finally {
       await rm(linkedWorktreeDir, { recursive: true, force: true });

@@ -91,6 +91,7 @@ export interface SupervisorManagerDeps {
   >;
   targetStore: {
     createTargetFiles: typeof import("./target-store.js").createTargetFiles;
+    resetTargetFiles: typeof import("./target-store.js").resetTargetFiles;
     readTargetMeta: typeof import("./target-store.js").readTargetMeta;
     loadTargetMemory: typeof import("./target-store.js").loadTargetMemory;
     saveTargetMeta: typeof import("./target-store.js").saveTargetMeta;
@@ -141,10 +142,6 @@ function generateAttemptId(): string {
   return `attempt_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 }
 
-function generateTargetId(): string {
-  return `tgt_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-}
-
 function messageOf(error: unknown, fallback: string): string {
   if (error instanceof Error) {
     return error.message;
@@ -173,6 +170,7 @@ export class SupervisorManager {
   private readonly inFlight = new Set<string>();
   private readonly pendingDeletes = new Set<string>();
   private readonly pendingPauses = new Set<string>();
+  private readonly pendingObjectiveUpdates = new Set<string>();
   private readonly evaluationAbortControllers = new Map<string, AbortController>();
   private readonly inFlightCompletions = new Map<string, DeferredCompletion>();
   private readonly scheduler: SupervisorScheduler;
@@ -369,13 +367,12 @@ export class SupervisorManager {
     const now = Date.now();
     const objective = req.objective.trim();
     const workspace = this.requireWorkspace(req.workspaceId);
-    const targetId = generateTargetId();
+    const supervisorId = generateSupervisorId();
     const supervisor = this.attachCycles(
       this.deps.supervisorRepo.create({
-        id: generateSupervisorId(),
+        id: supervisorId,
         sessionId: req.sessionId,
         workspaceId: req.workspaceId,
-        targetId,
         state: "idle",
         objective,
         evaluatorProviderId: req.evaluatorProviderId,
@@ -387,15 +384,21 @@ export class SupervisorManager {
         updatedAt: now,
       })
     );
-    await this.deps.targetStore.createTargetFiles(workspace.path, {
-      targetId,
-      sessionId: req.sessionId,
-      workspaceId: req.workspaceId,
-      objective,
-      createdAt: now,
-    });
+    let enriched: Supervisor;
+    try {
+      await this.deps.targetStore.createTargetFiles(workspace.path, {
+        targetId: supervisorId,
+        sessionId: req.sessionId,
+        workspaceId: req.workspaceId,
+        objective,
+        createdAt: now,
+      });
 
-    const enriched = await this.attachTargetState(supervisor, workspace.path);
+      enriched = await this.attachTargetState(supervisor, workspace.path);
+    } catch (error) {
+      this.deps.supervisorRepo.delete(supervisor.id);
+      throw error;
+    }
 
     this.storeSnapshot(enriched);
     this.broadcastState(enriched, "created");
@@ -404,16 +407,24 @@ export class SupervisorManager {
   }
 
   async update(id: string, patch: UpdateSupervisorRequest): Promise<Supervisor> {
-    const current = this.requireSupervisor(id);
+    let current = this.requireSupervisor(id);
 
     if (patch.evaluatorProviderId) {
       this.assertEvaluatorProvider(patch.evaluatorProviderId);
     }
 
-    const workspace = this.requireWorkspace(current.workspaceId);
     const nextObjective =
       patch.objective !== undefined ? patch.objective.trim() : current.objective;
     const objectiveChanged = patch.objective !== undefined && nextObjective !== current.objective;
+
+    if (objectiveChanged && this.inFlight.has(id)) {
+      this.pendingObjectiveUpdates.add(id);
+      this.evaluationAbortControllers.get(id)?.abort();
+      await this.inFlightCompletions.get(id)?.promise;
+      current = this.requireSupervisor(id);
+    }
+
+    const workspace = this.requireWorkspace(current.workspaceId);
     const nextPatch: Parameters<SupervisorRepo["update"]>[1] = {
       objective: nextObjective,
       evaluatorProviderId: patch.evaluatorProviderId ?? current.evaluatorProviderId,
@@ -437,39 +448,36 @@ export class SupervisorManager {
       updatedAt: Date.now(),
     };
 
+    const rollbackPatch = this.toSupervisorUpdatePatch(current, Date.now());
+    this.deps.supervisorRepo.update(id, nextPatch);
+
     if (objectiveChanged) {
-      const nextTargetId = generateTargetId();
-      const previousTargetMeta = await this.deps.targetStore.readTargetMeta(
-        workspace.path,
-        current.targetId
-      );
-      await this.deps.targetStore.markTargetSuperseded(
-        workspace.path,
-        current.targetId,
-        nextTargetId,
-        nextPatch.updatedAt ?? Date.now()
-      );
       try {
-        await this.deps.targetStore.createTargetFiles(workspace.path, {
-          targetId: nextTargetId,
+        await this.deps.targetStore.resetTargetFiles(workspace.path, {
+          targetId: current.targetId,
           sessionId: current.sessionId,
           workspaceId: current.workspaceId,
           objective: nextObjective,
           createdAt: nextPatch.updatedAt ?? Date.now(),
         });
       } catch (error) {
-        await this.deps.targetStore.saveTargetMeta(
-          workspace.path,
-          current.targetId,
-          previousTargetMeta
-        );
+        try {
+          this.deps.supervisorRepo.update(id, rollbackPatch);
+        } catch (rollbackError) {
+          this.logger.error(
+            { err: rollbackError, supervisorId: id },
+            "Failed to roll back supervisor after target reset failure"
+          );
+        }
         throw error;
       }
-      nextPatch.targetId = nextTargetId;
     }
 
-    const updated = this.attachCycles(this.deps.supervisorRepo.update(id, nextPatch));
-    const enriched = await this.attachTargetState(updated, workspace.path);
+    const enriched = await this.hydratePersistedSupervisor(id, workspace.path);
+    if (!enriched) {
+      await this.markTargetCancelledIfActive(workspace.path, current).catch(() => {});
+      throw this.supervisorNotFoundError(id);
+    }
 
     this.storeSnapshot(enriched);
     this.broadcastState(enriched, "updated");
@@ -792,7 +800,7 @@ export class SupervisorManager {
       return finalized.cycle;
     } catch (error: unknown) {
       if (isSupervisorEvalAborted(error)) {
-        const cancelled = this.pendingPauses.has(supervisorId);
+        const cancelled = this.isCancellationRequested(supervisorId);
         const abortedCycle = this.deps.cycleRepo.update(activeCycle.id, {
           status: cancelled ? "cancelled" : "failed",
           errorReason: cancelled ? null : messageOf(error, "Supervisor evaluator aborted"),
@@ -816,6 +824,28 @@ export class SupervisorManager {
           this.broadcastCycle(currentSupervisor, abortedCycle, "updated");
           this.pendingDeletes.delete(supervisorId);
           this.deleteNow(currentSupervisor);
+          return abortedCycle;
+        }
+
+        if (this.pendingObjectiveUpdates.has(supervisorId)) {
+          const nextState: SupervisorState = this.pendingPauses.has(supervisorId)
+            ? "paused"
+            : "idle";
+          const recoveredSupervisor = this.attachCycles(
+            this.deps.supervisorRepo.update(supervisorId, {
+              state: nextState,
+              stopReason: null,
+              errorReason: null,
+              updatedAt: Date.now(),
+            })
+          );
+
+          this.storeSnapshot(recoveredSupervisor);
+          this.broadcastCycle(recoveredSupervisor, abortedCycle, "updated");
+          this.broadcastState(recoveredSupervisor, "state_changed");
+          this.deps.cycleRepo.pruneOldest(supervisorId, this.config.maxCyclesPerSession);
+          this.scheduler.refresh();
+
           return abortedCycle;
         }
 
@@ -941,6 +971,7 @@ export class SupervisorManager {
 
       throw error;
     } finally {
+      this.pendingObjectiveUpdates.delete(supervisorId);
       this.pendingPauses.delete(supervisorId);
       this.releaseInFlight(supervisorId);
     }
@@ -1031,12 +1062,11 @@ export class SupervisorManager {
         };
       } catch (error) {
         if (isSupervisorEvalAborted(error)) {
+          const cancelled = this.isCancellationRequested(supervisor.id);
           this.deps.cycleAttemptRepo.update(attempt.id, {
-            status: this.pendingPauses.has(supervisor.id) ? "cancelled" : "failed",
+            status: cancelled ? "cancelled" : "failed",
             completedAt: Date.now(),
-            errorReason: this.pendingPauses.has(supervisor.id)
-              ? null
-              : messageOf(error, "Supervisor evaluator aborted"),
+            errorReason: cancelled ? null : messageOf(error, "Supervisor evaluator aborted"),
           });
           throw error;
         }
@@ -1294,6 +1324,32 @@ export class SupervisorManager {
     return await this.attachTargetState(supervisor, workspace.path);
   }
 
+  private async hydratePersistedSupervisor(
+    supervisorId: string,
+    workspacePath: string
+  ): Promise<Supervisor | null> {
+    const persisted = this.deps.supervisorRepo.findById(supervisorId);
+    if (!persisted) {
+      return null;
+    }
+
+    const hydrated = await this.attachTargetState(this.attachCycles(persisted), workspacePath);
+    const latest = this.deps.supervisorRepo.findById(supervisorId);
+    if (!latest) {
+      return null;
+    }
+
+    if (latest.targetId !== hydrated.targetId) {
+      return await this.attachTargetState(this.attachCycles(latest), workspacePath);
+    }
+
+    return {
+      ...this.attachCycles(latest),
+      currentTargetMemory: hydrated.currentTargetMemory,
+      recentTargetCycles: hydrated.recentTargetCycles,
+    };
+  }
+
   private withCurrentTargetState(supervisor: Supervisor): Supervisor {
     const current = this.supervisors.get(supervisor.id);
     if (!current || current.targetId !== supervisor.targetId) {
@@ -1303,6 +1359,30 @@ export class SupervisorManager {
       ...supervisor,
       currentTargetMemory: current.currentTargetMemory,
       recentTargetCycles: current.recentTargetCycles,
+    };
+  }
+
+  private isCancellationRequested(supervisorId: string): boolean {
+    return this.pendingPauses.has(supervisorId) || this.pendingObjectiveUpdates.has(supervisorId);
+  }
+
+  private toSupervisorUpdatePatch(
+    supervisor: Supervisor,
+    updatedAt: number
+  ): Parameters<SupervisorRepo["update"]>[1] {
+    return {
+      state: supervisor.state,
+      objective: supervisor.objective,
+      evaluatorProviderId: supervisor.evaluatorProviderId,
+      evaluatorModel: supervisor.evaluatorModel ?? null,
+      maxSupervisionCount: supervisor.maxSupervisionCount,
+      completedSupervisionCount: supervisor.completedSupervisionCount,
+      scheduledAt: supervisor.scheduledAt ?? null,
+      stopReason: supervisor.stopReason ?? null,
+      lastCycleAt: supervisor.lastCycleAt ?? null,
+      lastEvaluatedTurnId: supervisor.lastEvaluatedTurnId ?? null,
+      errorReason: supervisor.errorReason ?? null,
+      updatedAt,
     };
   }
 
@@ -1458,6 +1538,7 @@ export class SupervisorManager {
     this.supervisorsBySession.delete(supervisor.sessionId);
     this.pendingDeletes.delete(supervisor.id);
     this.pendingPauses.delete(supervisor.id);
+    this.pendingObjectiveUpdates.delete(supervisor.id);
     this.releaseInFlight(supervisor.id);
     this.scheduler.refresh();
 
@@ -1474,13 +1555,17 @@ export class SupervisorManager {
     this.inFlightCompletions.delete(supervisorId);
   }
 
+  private supervisorNotFoundError(id: string): { code: "supervisor_not_found"; message: string } {
+    return {
+      code: "supervisor_not_found",
+      message: `Supervisor ${id} not found`,
+    };
+  }
+
   private requireSupervisor(id: string): Supervisor {
     const supervisor = this.supervisors.get(id);
     if (!supervisor) {
-      throw {
-        code: "supervisor_not_found",
-        message: `Supervisor ${id} not found`,
-      };
+      throw this.supervisorNotFoundError(id);
     }
     return supervisor;
   }

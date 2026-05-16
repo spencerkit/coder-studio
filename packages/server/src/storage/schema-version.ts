@@ -29,7 +29,7 @@ export interface SchemaDetection {
   mismatch: string | null;
 }
 
-export const CURRENT_SCHEMA_VERSION = 3;
+export const CURRENT_SCHEMA_VERSION = 2;
 
 const CURRENT_SCHEMA_PATH = join(import.meta.dirname, "migrations", "001_init.sql");
 
@@ -421,7 +421,7 @@ export function detectSchema(db: Database): SchemaDetection {
 
   if (hasExactFingerprint(actualEntries, V2_SCHEMA_ENTRIES)) {
     return {
-      state: "v2",
+      state: CURRENT_SCHEMA_VERSION === 2 ? "current" : "v2",
       userVersion,
       mismatch: null,
     };

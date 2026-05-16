@@ -99,7 +99,7 @@ describe("Database", () => {
       expect(tables.map((table) => table.name)).not.toContain("_migrations");
     });
 
-    it("should upgrade a known v1 supervisor schema to v3 when user_version is unset", () => {
+    it("should upgrade a known v1 supervisor schema to v2 when user_version is unset", () => {
       const dbPath = join(tempDir, "v1.db");
       const rawDb = new DatabaseSync(dbPath);
       rawDb.exec("PRAGMA user_version = 0");
@@ -116,7 +116,6 @@ describe("Database", () => {
       }>;
       expect(supervisorColumns.map((column) => column.name)).toEqual(
         expect.arrayContaining([
-          "target_id",
           "evaluator_model",
           "max_supervision_count",
           "completed_supervision_count",
@@ -140,7 +139,7 @@ describe("Database", () => {
       expect(upgradedIndex?.name).toBe("idx_supervisor_cycle_attempts_cycle");
     });
 
-    it("should upgrade a known v2 supervisor schema to v3 and backfill target ids", () => {
+    it("should keep a known v2 supervisor schema current without adding target ids", () => {
       const dbPath = join(tempDir, "v2.db");
       const rawDb = new DatabaseSync(dbPath);
       rawDb.exec("PRAGMA user_version = 2");
@@ -205,12 +204,15 @@ describe("Database", () => {
       const supervisorColumns = db.prepare("PRAGMA table_info(supervisors)").all() as Array<{
         name: string;
       }>;
-      expect(supervisorColumns.map((column) => column.name)).toContain("target_id");
+      expect(supervisorColumns.map((column) => column.name)).not.toContain("target_id");
 
       const upgradedRow = db
-        .prepare("SELECT target_id FROM supervisors WHERE id = ?")
-        .get("sup-legacy") as { target_id: string };
-      expect(upgradedRow.target_id).toBe("legacy_sup-legacy");
+        .prepare("SELECT id, objective FROM supervisors WHERE id = ?")
+        .get("sup-legacy") as { id: string; objective: string };
+      expect(upgradedRow).toEqual({
+        id: "sup-legacy",
+        objective: "Legacy supervisor",
+      });
     });
 
     it("should restamp user_version for an already-current schema when it is unset", () => {

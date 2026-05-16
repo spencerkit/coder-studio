@@ -102,14 +102,6 @@ function upgradeSchemaV1ToV2(db: Database): void {
   });
 }
 
-function upgradeSchemaV2ToV3(db: Database): void {
-  withTransaction(db, () => {
-    db.exec("ALTER TABLE supervisors ADD COLUMN target_id TEXT NOT NULL DEFAULT ''");
-    db.exec("UPDATE supervisors SET target_id = 'legacy_' || id WHERE target_id = ''");
-    stampCurrentSchemaVersion(db);
-  });
-}
-
 function assertCurrentSchema(db: Database, dbPath: string): void {
   const detection = detectSchema(db);
   if (detection.state !== "current") {
@@ -137,12 +129,13 @@ function initializeOrUpgradeSchema(db: Database, dbPath: string): void {
 
     case "v1":
       upgradeSchemaV1ToV2(db);
-      upgradeSchemaV2ToV3(db);
       assertCurrentSchema(db, dbPath);
       return;
 
     case "v2":
-      upgradeSchemaV2ToV3(db);
+      if (detection.userVersion !== CURRENT_SCHEMA_VERSION) {
+        stampCurrentSchemaVersion(db);
+      }
       assertCurrentSchema(db, dbPath);
       return;
 

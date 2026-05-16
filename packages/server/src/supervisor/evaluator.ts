@@ -583,8 +583,8 @@ function parseSupervisorEvaluationResult(
       ? record.guidance.trim().slice(0, guidanceMaxChars)
       : undefined;
 
-  const plan = Array.isArray(record.plan)
-    ? record.plan.flatMap((value) => {
+  const plan: SupervisorPlanStep[] | undefined = Array.isArray(record.plan)
+    ? record.plan.flatMap<SupervisorPlanStep>((value) => {
         if (!value || typeof value !== "object") {
           return [];
         }
@@ -600,8 +600,8 @@ function parseSupervisorEvaluationResult(
       })
     : undefined;
 
-  const stepUpdates = Array.isArray(record.stepUpdates)
-    ? record.stepUpdates.flatMap((value) => {
+  const stepUpdates: SupervisorCycleStepUpdate[] | undefined = Array.isArray(record.stepUpdates)
+    ? record.stepUpdates.flatMap<SupervisorCycleStepUpdate>((value) => {
         if (!value || typeof value !== "object") {
           return [];
         }

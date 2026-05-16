@@ -807,7 +807,7 @@ describe("MobileShell Phase 2 workspace", () => {
 
       return undefined;
     });
-    renderMobileShell({
+    const { store } = renderMobileShell({
       initialEntry: "/workspace",
       sessions: [],
       paneLayout: {
