@@ -7573,6 +7573,7 @@ textarea.input {
 
 .desktop-review-card--topbar {
   width: min(100%, 1080px);
+  min-height: 0;
   padding: 0;
 }
 
@@ -7597,6 +7598,7 @@ textarea.input {
 
 .desktop-review-card--statusbar {
   width: min(100%, 1080px);
+  min-height: 0;
   padding: 0;
 }
 
