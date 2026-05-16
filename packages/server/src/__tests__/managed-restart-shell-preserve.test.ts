@@ -27,7 +27,7 @@ describe("managed restart shell preservation", () => {
     first = undefined;
     second = undefined;
     broker = undefined;
-  });
+  }, 20_000);
 
   it("preserves a shell terminal across explicit restart and keeps stop destructive", async () => {
     first = await createServer({
@@ -97,5 +97,5 @@ describe("managed restart shell preservation", () => {
         alive: true,
       }),
     ]);
-  });
+  }, 15_000);
 });

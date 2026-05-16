@@ -239,6 +239,7 @@ export class TerminalRuntime {
         continue;
       }
 
+      terminal.ownerServerInstanceId = "";
       await this.killTerminalBestEffort(terminal, "SIGTERM", "owner-disconnect.kill.error");
     }
   }

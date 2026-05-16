@@ -1,4 +1,8 @@
-import { deleteRuntimeConfig, readRuntimeConfig } from "@coder-studio/core/runtime";
+import {
+  deleteRestartIntent,
+  deleteRuntimeConfig,
+  readRuntimeConfig,
+} from "@coder-studio/core/runtime";
 import { deleteManagedServer, getLogPaths, getManagedServerStatus } from "./pm2-control.js";
 
 export interface ServerStatus {
@@ -12,7 +16,15 @@ export interface ServerStatus {
   startedAt: number | null;
 }
 
-export async function stopRunningServer(): Promise<boolean> {
+export interface StopRunningServerOptions {
+  preserveRestartIntent?: boolean;
+}
+
+export async function stopRunningServer(options: StopRunningServerOptions = {}): Promise<boolean> {
+  if (!options.preserveRestartIntent) {
+    deleteRestartIntent();
+  }
+
   const stopped = await deleteManagedServer({ ignoreMissing: true });
 
   if (readRuntimeConfig()) {

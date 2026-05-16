@@ -1,5 +1,6 @@
 import { existsSync, rmSync } from "node:fs";
 import { createServer, type Socket } from "node:net";
+import type { DomainEvent } from "@coder-studio/core";
 import {
   deleteTerminalBrokerRuntime,
   writeTerminalBrokerRuntime,
@@ -9,6 +10,9 @@ import type { BrokerEvent, BrokerRequest, BrokerResponse } from "./broker-protoc
 import { NodePtyHost } from "./pty-host.js";
 import { TerminalRuntime } from "./runtime.js";
 import type { PtyHost } from "./types.js";
+
+type TerminalOutputEvent = Extract<DomainEvent, { type: "terminal.output" }>;
+type TerminalExitedEvent = Extract<DomainEvent, { type: "terminal.exited" }>;
 
 function removeSocketFromSubscribers(subscribers: Map<string, Set<Socket>>, socket: Socket): void {
   for (const [ownerServerInstanceId, ownerSubscribers] of subscribers.entries()) {
@@ -49,11 +53,38 @@ export async function startTerminalBrokerServer(opts: {
 
   const server = createServer((socket) => {
     let buffer = "";
+    let subscribedOwnerServerInstanceId: string | null = null;
+    let ownerDisconnectHandled = false;
     socket.setEncoding("utf8");
 
-    const cleanup = () => removeSocketFromSubscribers(subscribers, socket);
-    socket.on("close", cleanup);
-    socket.on("error", cleanup);
+    const cleanup = async (awaitOwnerDisconnect = false) => {
+      removeSocketFromSubscribers(subscribers, socket);
+
+      if (subscribedOwnerServerInstanceId === null || ownerDisconnectHandled) {
+        return;
+      }
+
+      ownerDisconnectHandled = true;
+      const ownerServerInstanceId = subscribedOwnerServerInstanceId;
+      if (awaitOwnerDisconnect) {
+        await runtime.handleOwnerDisconnect(ownerServerInstanceId);
+        return;
+      }
+
+      void runtime.handleOwnerDisconnect(ownerServerInstanceId).catch(() => undefined);
+    };
+    socket.on("end", () => {
+      void cleanup();
+      if (!socket.writableEnded) {
+        socket.end();
+      }
+    });
+    socket.on("close", () => {
+      void cleanup();
+    });
+    socket.on("error", () => {
+      void cleanup();
+    });
 
     socket.on("data", async (chunk) => {
       buffer += chunk;
@@ -68,6 +99,20 @@ export async function startTerminalBrokerServer(opts: {
         let request: BrokerRequest | null = null;
         try {
           request = JSON.parse(line) as BrokerRequest;
+
+          if (request.op === "unsubscribe_output") {
+            if (request.ownerServerInstanceId !== subscribedOwnerServerInstanceId) {
+              throw new Error("Output subscription owner mismatch");
+            }
+
+            await cleanup(true);
+            subscribedOwnerServerInstanceId = null;
+            socket.end(
+              `${JSON.stringify({ id: request.id, ok: true } satisfies BrokerResponse)}\n`
+            );
+            continue;
+          }
+
           const response = await handleBrokerRequest(runtime, request);
           socket.write(`${JSON.stringify(response)}\n`);
 
@@ -76,6 +121,7 @@ export async function startTerminalBrokerServer(opts: {
               subscribers.get(request.ownerServerInstanceId) ?? new Set<Socket>();
             ownerSubscribers.add(socket);
             subscribers.set(request.ownerServerInstanceId, ownerSubscribers);
+            subscribedOwnerServerInstanceId = request.ownerServerInstanceId;
           }
         } catch (error) {
           const response = toBrokerError(request?.id ?? "unknown", error);
@@ -85,7 +131,7 @@ export async function startTerminalBrokerServer(opts: {
     });
   });
 
-  opts.eventBus.on("terminal.output", (event) => {
+  opts.eventBus.on("terminal.output", (event: TerminalOutputEvent) => {
     const ownerServerInstanceId = runtime.getOwnerServerInstanceId(event.terminalId);
     if (!ownerServerInstanceId) {
       return;
@@ -106,7 +152,7 @@ export async function startTerminalBrokerServer(opts: {
     }
   });
 
-  opts.eventBus.on("terminal.exited", (event) => {
+  opts.eventBus.on("terminal.exited", (event: TerminalExitedEvent) => {
     const ownerServerInstanceId = runtime.getOwnerServerInstanceId(event.terminalId);
     if (!ownerServerInstanceId) {
       return;
@@ -188,6 +234,8 @@ async function handleBrokerRequest(
         terminals: runtime.hydrateAttached(request.ownerServerInstanceId),
       };
     case "subscribe_output":
+      return { id: request.id, ok: true };
+    case "unsubscribe_output":
       return { id: request.id, ok: true };
     case "close_all_for_owner":
       await runtime.handleOwnerDisconnect(request.ownerServerInstanceId);

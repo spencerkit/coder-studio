@@ -45,6 +45,7 @@ export type BrokerRequest =
   | { id: string; op: "claim_preserved"; requestId: string; ownerServerInstanceId: string }
   | { id: string; op: "hydrate_attached"; ownerServerInstanceId: string }
   | { id: string; op: "subscribe_output"; ownerServerInstanceId: string }
+  | { id: string; op: "unsubscribe_output"; ownerServerInstanceId: string }
   | { id: string; op: "close_all_for_owner"; ownerServerInstanceId: string }
   | { id: string; op: "write"; terminalId: string; bytesBase64: string }
   | { id: string; op: "resize"; terminalId: string; cols: number; rows: number }

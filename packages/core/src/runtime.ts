@@ -145,23 +145,29 @@ function deleteFileIfExists(path: string): void {
 }
 
 function isRestartIntent(value: unknown): value is RestartIntent {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
   return (
-    typeof value === "object" &&
-    value !== null &&
-    typeof value.requestId === "string" &&
-    typeof value.expectedServerInstanceId === "string" &&
-    typeof value.createdAt === "number" &&
-    typeof value.expiresAt === "number" &&
-    value.mode === "preserve_terminals"
+    typeof candidate.requestId === "string" &&
+    typeof candidate.expectedServerInstanceId === "string" &&
+    typeof candidate.createdAt === "number" &&
+    typeof candidate.expiresAt === "number" &&
+    candidate.mode === "preserve_terminals"
   );
 }
 
 function isTerminalBrokerRuntimeConfig(value: unknown): value is TerminalBrokerRuntimeConfig {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
   return (
-    typeof value === "object" &&
-    value !== null &&
-    typeof value.endpoint === "string" &&
-    typeof value.pid === "number" &&
-    typeof value.startedAt === "number"
+    typeof candidate.endpoint === "string" &&
+    typeof candidate.pid === "number" &&
+    typeof candidate.startedAt === "number"
   );
 }

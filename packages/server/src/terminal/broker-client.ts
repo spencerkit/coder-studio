@@ -148,13 +148,34 @@ export class TerminalBrokerClient {
       const socket = createConnection(this.options.endpoint);
       let buffer = "";
       let settled = false;
+      let unsubscribePending: {
+        id: string;
+        reject: (error: Error) => void;
+        resolve: () => void;
+      } | null = null;
       socket.setEncoding("utf8");
 
-      socket.once("error", (error) => {
+      socket.on("error", (error) => {
         if (!settled) {
           settled = true;
           reject(error);
+          return;
         }
+
+        if (unsubscribePending) {
+          const pending = unsubscribePending;
+          unsubscribePending = null;
+          pending.reject(error);
+        }
+      });
+      socket.on("close", () => {
+        if (!unsubscribePending) {
+          return;
+        }
+
+        const pending = unsubscribePending;
+        unsubscribePending = null;
+        pending.reject(new Error("Subscription socket closed before unsubscribe ack"));
       });
 
       socket.on("data", (chunk) => {
@@ -173,6 +194,27 @@ export class TerminalBrokerClient {
             continue;
           }
 
+          if (unsubscribePending && message.id === unsubscribePending.id) {
+            if (!message.ok) {
+              const pending = unsubscribePending;
+              unsubscribePending = null;
+              pending.reject(new Error(message.message));
+              socket.destroy();
+              return;
+            }
+
+            const pending = unsubscribePending;
+            unsubscribePending = null;
+            if (socket.destroyed) {
+              pending.resolve();
+            } else {
+              socket.once("close", () => {
+                pending.resolve();
+              });
+            }
+            continue;
+          }
+
           if (message.id !== request.id) {
             continue;
           }
@@ -186,8 +228,25 @@ export class TerminalBrokerClient {
             settled = true;
             resolve(
               async () =>
-                await new Promise<void>((endResolve) => {
-                  socket.end(endResolve);
+                await new Promise<void>((unsubscribeResolve, unsubscribeReject) => {
+                  if (socket.destroyed) {
+                    unsubscribeResolve();
+                    return;
+                  }
+
+                  const unsubscribeRequestId = randomUUID();
+                  unsubscribePending = {
+                    id: unsubscribeRequestId,
+                    reject: unsubscribeReject,
+                    resolve: unsubscribeResolve,
+                  };
+                  socket.write(
+                    `${JSON.stringify({
+                      id: unsubscribeRequestId,
+                      op: "unsubscribe_output",
+                      ownerServerInstanceId,
+                    } satisfies BrokerRequest)}\n`
+                  );
                 })
             );
           }

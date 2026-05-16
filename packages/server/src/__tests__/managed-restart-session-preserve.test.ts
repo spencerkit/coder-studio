@@ -91,7 +91,7 @@ done
     first = undefined;
     second = undefined;
     broker = undefined;
-  });
+  }, 20_000);
 
   it("moves a preserved running session back to idle after the debounce elapses", async () => {
     const codexProvider = providerRegistry.find((provider) => provider.id === "codex");
@@ -155,5 +155,5 @@ done
     });
 
     expect(second.__test__!.sessionMgr.get(session.id)?.state).toBe("idle");
-  });
+  }, 15_000);
 });

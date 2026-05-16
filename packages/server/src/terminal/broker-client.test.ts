@@ -58,4 +58,26 @@ describe("TerminalBrokerClient", () => {
 
     expect(claimed.map((terminal) => terminal.id)).toEqual(["term-1"]);
   });
+
+  it("kills attached terminals when the owner output subscription disconnects", async () => {
+    const client = new TerminalBrokerClient({ endpoint: socketPath });
+
+    await client.create(
+      "term-1",
+      {
+        workspaceId: "ws-1",
+        kind: "shell",
+        argv: ["bash"],
+        cwd: "/tmp",
+      },
+      "server-a"
+    );
+
+    const unsubscribe = await client.subscribeOutput("server-a", () => undefined);
+    expect(await client.hydrateAttached("server-a")).toHaveLength(1);
+
+    await unsubscribe();
+
+    expect(await client.hydrateAttached("server-a")).toEqual([]);
+  });
 });

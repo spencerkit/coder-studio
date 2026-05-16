@@ -2,6 +2,8 @@ import type { DomainEvent, Terminal } from "@coder-studio/core";
 import type { EventBus } from "../bus/event-bus.js";
 import { ActiveTerminal } from "./active-terminal.js";
 import { TerminalBrokerClient } from "./broker-client.js";
+import { RING_BUFFER_SIZE } from "./constants.js";
+import { RingBuffer } from "./ring-buffer.js";
 import { type RenderOptions, renderSnapshotToText } from "./snapshot-render.js";
 import type {
   ReplayResult,
@@ -34,7 +36,7 @@ function emitTerminalCreated(eventBus: EventBus, terminal: Terminal): void {
 
 export class BrokerTerminalManager {
   private readonly terminals = new Map<TerminalId, ActiveTerminal>();
-  private readonly recentOutput = new Map<TerminalId, Buffer>();
+  private readonly recentOutput = new Map<TerminalId, RingBuffer>();
   private unsubscribeBrokerOutput: (() => Promise<void>) | null = null;
 
   constructor(
@@ -52,9 +54,13 @@ export class BrokerTerminalManager {
       (event) => {
         if (event.type === "output") {
           const terminal = this.terminals.get(event.terminalId);
+          const chunk = Buffer.from(event.chunkBase64, "base64");
           if (terminal) {
             terminal.alive = true;
-            this.recentOutput.set(event.terminalId, Buffer.from(event.chunkBase64, "base64"));
+            const recentOutput =
+              this.recentOutput.get(event.terminalId) ?? new RingBuffer(RING_BUFFER_SIZE);
+            recentOutput.append(chunk);
+            this.recentOutput.set(event.terminalId, recentOutput);
           }
 
           this.deps.eventBus.emit({
@@ -62,7 +68,7 @@ export class BrokerTerminalManager {
             workspaceId: event.workspaceId,
             terminalId: event.terminalId,
             seq: event.seq,
-            chunk: Buffer.from(event.chunkBase64, "base64"),
+            chunk,
           } satisfies DomainEvent);
           return;
         }
@@ -195,7 +201,7 @@ export class BrokerTerminalManager {
       return Buffer.alloc(0);
     }
 
-    return buffer.subarray(Math.max(0, buffer.length - bytes));
+    return buffer.tail(bytes);
   }
 
   async getRecoveryMetadata(terminalId: TerminalId): Promise<TerminalRecoveryMetadata | null> {

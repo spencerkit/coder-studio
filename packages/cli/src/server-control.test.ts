@@ -1,4 +1,9 @@
-import { readRuntimeConfig, writeRuntimeConfig } from "@coder-studio/core/runtime";
+import {
+  readRestartIntent,
+  readRuntimeConfig,
+  writeRestartIntent,
+  writeRuntimeConfig,
+} from "@coder-studio/core/runtime";
 import { existsSync, mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -100,6 +105,58 @@ describe("server-control", () => {
 
     await expect(stopRunningServer()).resolves.toBe(true);
     expect(readRuntimeConfig()).toBeNull();
+  });
+
+  it("clears any stale restart intent even when the pm2 app is already missing", async () => {
+    writeRestartIntent({
+      requestId: "restart-1",
+      expectedServerInstanceId: "server-1",
+      createdAt: 1000,
+      expiresAt: 2000,
+      mode: "preserve_terminals",
+    });
+
+    await expect(stopRunningServer()).resolves.toBe(false);
+    expect(readRestartIntent()).toBeNull();
+  });
+
+  it("preserves the restart intent when explicitly requested", async () => {
+    writeRestartIntent({
+      requestId: "restart-1",
+      expectedServerInstanceId: "server-1",
+      createdAt: 1000,
+      expiresAt: 2000,
+      mode: "preserve_terminals",
+    });
+
+    await expect(
+      stopRunningServer({
+        preserveRestartIntent: true,
+      })
+    ).resolves.toBe(false);
+    expect(readRestartIntent()).toEqual({
+      requestId: "restart-1",
+      expectedServerInstanceId: "server-1",
+      createdAt: 1000,
+      expiresAt: 2000,
+      mode: "preserve_terminals",
+    });
+  });
+
+  it("clears restart intent before stopping the managed server destructively", async () => {
+    writeRestartIntent({
+      requestId: "restart-1",
+      expectedServerInstanceId: "server-1",
+      createdAt: 1000,
+      expiresAt: 2000,
+      mode: "preserve_terminals",
+    });
+    deleteManagedServer.mockImplementation(async () => {
+      expect(readRestartIntent()).toBeNull();
+      return true;
+    });
+
+    await expect(stopRunningServer()).resolves.toBe(true);
   });
 
   it("maps runtime details into a running status response", async () => {
