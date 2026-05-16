@@ -22,8 +22,7 @@ export type CycleTrigger = "turn_completed" | "manual" | "scheduled";
 export type SupervisorStopReason =
   | "objective_complete"
   | "max_supervision_count_reached"
-  | "supervisor_uncertain"
-  | "needs_user_input";
+  | "supervisor_uncertain";
 
 export type SupervisorPlanStepStatus = "pending" | "in_progress" | "done";
 
@@ -55,7 +54,7 @@ export interface SupervisorCycleTargetRecord {
   startedAt: number;
   completedAt: number;
   result: "continue" | "stop" | "error";
-  stopReason?: "objective_complete" | "supervisor_uncertain" | "needs_user_input";
+  stopReason?: "objective_complete" | "supervisor_uncertain";
   reason?: string;
   guidance?: string;
   progressSummary?: string;

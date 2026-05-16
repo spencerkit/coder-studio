@@ -676,8 +676,7 @@
     "stop_reason": {
       "objective_complete": "目标已达成，Supervisor 已自动停止。",
       "max_supervision_count_reached": "已达到配置的最大监督次数。",
-      "supervisor_uncertain": "Supervisor 暂时无法判断下一步，已停止自动监督。",
-      "needs_user_input": "Supervisor 需要更多用户输入后才能继续自动监督。"
+      "supervisor_uncertain": "Supervisor 暂时无法判断下一步，已停止自动监督。"
     },
     "target_memory": {
       "title": "目标记忆",

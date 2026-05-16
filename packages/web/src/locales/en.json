@@ -676,8 +676,7 @@
     "stop_reason": {
       "objective_complete": "Objective complete. Supervisor stopped automatically.",
       "max_supervision_count_reached": "Reached the configured max supervision count.",
-      "supervisor_uncertain": "Supervisor could not determine the next step and stopped automatic supervision.",
-      "needs_user_input": "Supervisor needs more user input before automatic supervision can continue."
+      "supervisor_uncertain": "Supervisor could not determine the next step and stopped automatic supervision."
     },
     "target_memory": {
       "title": "Target memory",
