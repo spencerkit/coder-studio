@@ -94,8 +94,13 @@ describe("terminal-broker-control", () => {
 
     expect(spawn).toHaveBeenCalledWith(
       process.execPath,
-      ["/cli/dist/esm/terminal-broker-runner.mjs"],
+      [
+        "--input-type=module",
+        "-e",
+        expect.stringContaining('["/cli/dist/esm/terminal-broker-runner.mjs"]'),
+      ],
       expect.objectContaining({
+        cwd: "/repo",
         detached: true,
         stdio: "ignore",
       })

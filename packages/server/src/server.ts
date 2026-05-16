@@ -11,7 +11,6 @@ import {
   writeRuntimeConfig,
 } from "@coder-studio/core/runtime";
 import { providerRegistry } from "@coder-studio/providers";
-import { isDirectExecution } from "@coder-studio/utils";
 import type { FastifyInstance } from "fastify";
 import { buildFastifyApp } from "./app.js";
 import { EventBus } from "./bus/event-bus.js";
@@ -422,20 +421,4 @@ function createSessionDatabase(db: Database) {
       db.prepare("DELETE FROM sessions WHERE id = ?").run(id);
     },
   };
-}
-
-if (isDirectExecution(import.meta.url)) {
-  const server = await createServer();
-
-  process.on("SIGINT", async () => {
-    console.log("\nShutting down...");
-    await server.stop();
-    process.exit(0);
-  });
-
-  process.on("SIGTERM", async () => {
-    console.log("\nShutting down...");
-    await server.stop();
-    process.exit(0);
-  });
 }

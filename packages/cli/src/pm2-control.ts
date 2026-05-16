@@ -72,7 +72,7 @@ type Pm2Module = {
   disconnect: (cb?: (err: Error | null, data?: unknown) => void) => void;
   describe: (name: string, cb: (err: Error | null, result: unknown[]) => void) => void;
   delete: (name: string, cb: (err: Error | null) => void) => void;
-  start: (opts: unknown, cb: (err: Error | null) => void) => void;
+  start: (script: string, opts: unknown, cb: (err: Error | null) => void) => void;
   kill: (cb: (err: Error | null) => void) => void;
 };
 
@@ -389,35 +389,41 @@ export const startManagedServer = async ({
       ensureLogDirectory();
       const { outFile, errFile } = getLogPaths();
       const logOffsets = captureStartupLogOffsets();
+      const previousNodeEnv = process.env.NODE_ENV;
+      process.env.NODE_ENV = "production";
 
-      await new Promise<void>((resolve, reject) => {
-        pm2.start(
-          {
-            name: MANAGED_SERVER_NAME,
+      try {
+        await new Promise<void>((resolve, reject) => {
+          pm2.start(
             script,
-            cwd,
-            ...(args !== undefined ? { args } : {}),
-            env: {
-              ...process.env,
-              NODE_ENV: "production",
+            {
+              name: MANAGED_SERVER_NAME,
+              cwd,
+              ...(args !== undefined ? { args } : {}),
+              autorestart: true,
+              restart_delay: PM2_RESTART_DELAY_MS,
+              min_uptime: PM2_MIN_UPTIME,
+              max_restarts: PM2_MAX_RESTARTS,
+              out_file: outFile,
+              error_file: errFile,
             },
-            autorestart: true,
-            restart_delay: PM2_RESTART_DELAY_MS,
-            min_uptime: PM2_MIN_UPTIME,
-            max_restarts: PM2_MAX_RESTARTS,
-            out_file: outFile,
-            error_file: errFile,
-          },
-          (error) => {
-            if (error) {
-              reject(error);
-              return;
-            }
+            (error) => {
+              if (error) {
+                reject(error);
+                return;
+              }
 
-            resolve();
-          }
-        );
-      });
+              resolve();
+            }
+          );
+        });
+      } finally {
+        if (previousNodeEnv === undefined) {
+          delete process.env.NODE_ENV;
+        } else {
+          process.env.NODE_ENV = previousNodeEnv;
+        }
+      }
 
       await waitForRuntimeReady(pm2, waitMs, logOffsets);
     } catch (error) {

@@ -51,7 +51,11 @@ describe("pm2-control", () => {
       return undefined;
     });
     start.mockImplementation(
-      (_config: unknown, callback: (error: Error | null, apps: unknown[]) => void) => {
+      (
+        _script: string,
+        _config: unknown,
+        callback: (error: Error | null, apps: unknown[]) => void
+      ) => {
         writeRuntimeConfig({
           host: "127.0.0.1",
           port: 4187,
@@ -106,6 +110,8 @@ describe("pm2-control", () => {
   });
 
   it("starts the managed server with the fixed app name", async () => {
+    process.env.NODE_ENV = "development";
+
     await startManagedServer({
       script: "/cli/dist/esm/server-runner.js",
       cwd: "/repo",
@@ -113,19 +119,64 @@ describe("pm2-control", () => {
     });
 
     expect(start).toHaveBeenCalledWith(
+      "/cli/dist/esm/server-runner.js",
       expect.objectContaining({
         name: MANAGED_SERVER_NAME,
-        script: "/cli/dist/esm/server-runner.js",
         cwd: "/repo",
-        env: expect.objectContaining({
-          NODE_ENV: "production",
-        }),
         autorestart: true,
         restart_delay: 2000,
         min_uptime: "5s",
         max_restarts: 10,
         out_file: join(testHomeDir, ".coder-studio", "logs", "server.out.log"),
         error_file: join(testHomeDir, ".coder-studio", "logs", "server.err.log"),
+      }),
+      expect.any(Function)
+    );
+  });
+
+  it("temporarily forces NODE_ENV=production during PM2 startup without passing env opts", async () => {
+    process.env.NODE_ENV = "development";
+
+    start.mockImplementationOnce(
+      (
+        _script: string,
+        config: unknown,
+        callback: (error: Error | null, apps: unknown[]) => void
+      ) => {
+        expect(process.env.NODE_ENV).toBe("production");
+        expect(config).not.toHaveProperty("env");
+        writeRuntimeConfig({
+          host: "127.0.0.1",
+          port: 4187,
+          pid: 424242,
+          token: "test-token",
+          serverInstanceId: "server-1",
+          startedAt: Date.now(),
+        });
+        callback(null, [{ pm_id: 1 }]);
+      }
+    );
+
+    await startManagedServer({
+      script: "/cli/dist/esm/server-runner.js",
+      cwd: "/repo",
+      waitMs: 10,
+    });
+
+    expect(process.env.NODE_ENV).toBe("development");
+  });
+
+  it("starts PM2 in script mode instead of JSON config mode", async () => {
+    await startManagedServer({
+      script: "/cli/dist/esm/server-runner.js",
+      cwd: "/repo",
+      waitMs: 10,
+    });
+
+    expect(start).toHaveBeenCalledWith(
+      "/cli/dist/esm/server-runner.js",
+      expect.not.objectContaining({
+        script: expect.anything(),
       }),
       expect.any(Function)
     );
@@ -140,8 +191,8 @@ describe("pm2-control", () => {
     });
 
     expect(start).toHaveBeenCalledWith(
+      "/cli/dist/esm/server-runner.js",
       expect.objectContaining({
-        script: "/cli/dist/esm/server-runner.js",
         args: ["--flag"],
       }),
       expect.any(Function)
@@ -305,7 +356,11 @@ describe("pm2-control", () => {
 
   it("fails background startup when runtime readiness times out", async () => {
     start.mockImplementationOnce(
-      (_config: unknown, callback: (error: Error | null, apps: unknown[]) => void) => {
+      (
+        _script: string,
+        _config: unknown,
+        callback: (error: Error | null, apps: unknown[]) => void
+      ) => {
         callback(null, [{ pm_id: 1 }]);
       }
     );
@@ -340,7 +395,11 @@ describe("pm2-control", () => {
     writeFileSync(errFile, "Error: stale previous startup failure\n");
 
     start.mockImplementationOnce(
-      (config: unknown, callback: (error: Error | null, apps: unknown[]) => void) => {
+      (
+        _script: string,
+        config: unknown,
+        callback: (error: Error | null, apps: unknown[]) => void
+      ) => {
         const errorFile = (config as { error_file: string }).error_file;
         writeFileSync(
           errorFile,
@@ -374,6 +433,11 @@ describe("pm2-control", () => {
   });
 
   it("maps missing PM2 app to stopped status", async () => {
+    describeProcess.mockImplementationOnce(
+      (_name: string, callback: (error: Error | null, result: unknown[]) => void) =>
+        callback(null, [])
+    );
+
     await expect(getManagedServerStatus()).resolves.toEqual({
       status: "stopped",
       pm2Pid: null,

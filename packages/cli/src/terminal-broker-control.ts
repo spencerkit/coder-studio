@@ -11,6 +11,31 @@ async function sleep(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function spawnDetachedTerminalBroker(script: string, cwd: string, endpoint: string): void {
+  const bootstrapCode = `
+    import { spawn } from "node:child_process";
+
+    const child = spawn(${JSON.stringify(process.execPath)}, [${JSON.stringify(script)}], {
+      cwd: ${JSON.stringify(cwd)},
+      detached: true,
+      stdio: "ignore",
+      env: process.env,
+    });
+
+    child.unref();
+  `;
+
+  spawn(process.execPath, ["--input-type=module", "-e", bootstrapCode], {
+    cwd,
+    detached: true,
+    stdio: "ignore",
+    env: {
+      ...process.env,
+      CODER_STUDIO_TERMINAL_BROKER_ENDPOINT: endpoint,
+    },
+  }).unref();
+}
+
 export async function ensureTerminalBroker(opts: {
   script: string;
   cwd: string;
@@ -27,15 +52,7 @@ export async function ensureTerminalBroker(opts: {
   }
 
   const endpoint = getTerminalBrokerSocketPath();
-  spawn(process.execPath, [opts.script], {
-    cwd: opts.cwd,
-    detached: true,
-    stdio: "ignore",
-    env: {
-      ...process.env,
-      CODER_STUDIO_TERMINAL_BROKER_ENDPOINT: endpoint,
-    },
-  }).unref();
+  spawnDetachedTerminalBroker(opts.script, opts.cwd, endpoint);
 
   const deadline = Date.now() + opts.waitMs;
   while (Date.now() <= deadline) {
