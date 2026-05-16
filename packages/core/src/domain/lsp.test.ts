@@ -1,13 +1,14 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
-import { Topics } from "../protocol/topics";
 import type {
+  DomainEvent,
   LspDiagnostic,
   LspDiagnosticsEvent,
   LspDocumentSymbol,
+  LspHoverResult,
   LspLocation,
-  LspServerKind,
   LspSessionSummary,
-} from "./lsp";
+} from "../index";
+import { Topics } from "../index";
 
 describe("LSP shared surface", () => {
   it("builds the workspace diagnostics topic", () => {
@@ -58,7 +59,7 @@ describe("LSP shared surface", () => {
 
     expectTypeOf<LspDiagnosticsEvent>().toEqualTypeOf<{
       workspaceId: string;
-      serverKind: LspServerKind;
+      serverKind: "typescript" | "python" | "go" | "rust";
       path: string;
       version?: number;
       diagnostics: LspDiagnostic[];
@@ -66,7 +67,7 @@ describe("LSP shared surface", () => {
 
     expectTypeOf<LspSessionSummary>().toEqualTypeOf<{
       workspaceId: string;
-      serverKind: LspServerKind;
+      serverKind: "typescript" | "python" | "go" | "rust";
       status: "unsupported" | "starting" | "ready" | "degraded" | "stopped";
       capabilities: {
         definition: boolean;
@@ -75,6 +76,26 @@ describe("LSP shared surface", () => {
         documentSymbols: boolean;
         diagnostics: boolean;
       };
+    }>();
+
+    expectTypeOf<LspHoverResult>().toEqualTypeOf<{
+      contents: string[];
+      range?: {
+        startLine: number;
+        startColumn: number;
+        endLine: number;
+        endColumn: number;
+      };
+      version?: number;
+    }>();
+
+    expectTypeOf<Extract<DomainEvent, { type: "lsp.diagnostics.updated" }>>().toEqualTypeOf<{
+      type: "lsp.diagnostics.updated";
+      workspaceId: string;
+      serverKind: "typescript" | "python" | "go" | "rust";
+      path: string;
+      version?: number;
+      diagnostics: LspDiagnostic[];
     }>();
   });
 });

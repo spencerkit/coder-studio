@@ -70,9 +70,8 @@ function overrideable(
 ): LspServerSpec {
   const prefix = `CODER_STUDIO_LSP_${serverKind.toUpperCase()}`;
   const command = env[`${prefix}_COMMAND`] ?? defaultCommand;
-  const args = env[`${prefix}_ARGS_JSON`]
-    ? (JSON.parse(env[`${prefix}_ARGS_JSON`]!) as string[])
-    : defaultArgs;
+  const argsJson = env[`${prefix}_ARGS_JSON`];
+  const args = argsJson ? parseOverrideArgs(argsJson, `${prefix}_ARGS_JSON`) : defaultArgs;
 
   return {
     serverKind,
@@ -80,4 +79,12 @@ function overrideable(
     args,
     rootPath,
   };
+}
+
+function parseOverrideArgs(raw: string, envVarName: string): string[] {
+  try {
+    return JSON.parse(raw) as string[];
+  } catch {
+    throw new Error(`Invalid JSON in ${envVarName}`);
+  }
 }

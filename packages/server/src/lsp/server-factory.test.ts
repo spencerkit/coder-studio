@@ -45,6 +45,18 @@ describe("resolveLspServerSpec", () => {
     });
   });
 
+  it("throws a clear error when override args JSON is malformed", () => {
+    expect(() =>
+      resolveLspServerSpec({
+        workspace,
+        path: "src/a.ts",
+        env: {
+          CODER_STUDIO_LSP_TYPESCRIPT_ARGS_JSON: "{",
+        },
+      })
+    ).toThrowError(/CODER_STUDIO_LSP_TYPESCRIPT_ARGS_JSON/);
+  });
+
   it("wraps the command in wsl when the workspace targets WSL", () => {
     const spec = resolveLspServerSpec({
       workspace: {
