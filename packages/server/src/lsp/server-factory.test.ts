@@ -17,6 +17,8 @@ const workspace = {
 
 describe("resolveLspServerSpec", () => {
   it("maps ts/js/jsx/tsx files to the typescript server kind", () => {
+    expect(resolveLspServerSpec({ workspace, path: "src/a.ts" })?.serverKind).toBe("typescript");
+    expect(resolveLspServerSpec({ workspace, path: "src/a.js" })?.serverKind).toBe("typescript");
     expect(resolveLspServerSpec({ workspace, path: "src/a.tsx" })?.serverKind).toBe("typescript");
     expect(resolveLspServerSpec({ workspace, path: "src/a.jsx" })?.serverKind).toBe("typescript");
   });
