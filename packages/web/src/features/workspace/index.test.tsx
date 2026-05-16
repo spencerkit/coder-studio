@@ -118,6 +118,9 @@ describe("WorkspacePage", () => {
 
     await screen.findByText("feature/refactor-ts");
 
+    expect(document.querySelector(".workspace-page.workspace-page--desktop")).toBeTruthy();
+    expect(document.querySelector(".workspace-main-stage")).toBeTruthy();
+    expect(document.querySelector(".workspace-main-area > .workspace-main-stage")).toBeTruthy();
     expect(
       document.querySelector(".workspace-status-bar .git-panel-status-strip__branch-text")
     ).toHaveTextContent("feature/refactor-ts");

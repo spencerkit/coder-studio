@@ -257,7 +257,7 @@ export function CommandPalette() {
   return (
     <div className="command-palette-overlay" onClick={() => setIsOpen(false)}>
       <div
-        className="command-palette"
+        className="command-palette command-palette--desktop"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={handleKeyDown}
       >

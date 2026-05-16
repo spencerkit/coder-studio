@@ -22,7 +22,7 @@ import {
   resolveSupervisorRetryOnTimeout,
 } from "@coder-studio/core";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { Check, ChevronRight } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { localeAtom, themeAtom } from "../../../atoms/app-ui";
@@ -464,12 +464,40 @@ export function SettingsPage() {
   return (
     <div className={`settings-page ${isMobile ? "settings-page--mobile" : ""}`}>
       <header className="settings-header">
-        <MobilePageHeader
-          title={headerTitle}
-          titleAs="div"
-          onBack={handleBack}
-          backLabel={t("action.back")}
-        />
+        {isMobile ? (
+          <MobilePageHeader
+            title={headerTitle}
+            titleAs="div"
+            onBack={handleBack}
+            backLabel={t("action.back")}
+          />
+        ) : (
+          <div className="settings-header__desktop">
+            <button
+              type="button"
+              className="page-header__back settings-header__back"
+              onClick={handleBack}
+            >
+              <ChevronLeft size={16} />
+              <span>{t("action.back")}</span>
+            </button>
+            <div className="settings-header__copy">
+              <div className="page-kicker settings-header__kicker">{t("app.name")}</div>
+              <h1 className="page-title settings-header__title">{t("settings.title")}</h1>
+              <p className="settings-header__summary meta-text">
+                <span>{t(activeSectionMeta.labelKey)}</span>
+                <span className="settings-header__summary-separator" aria-hidden="true">
+                  •
+                </span>
+                <span>{t("settings.autosave_hint")}</span>
+              </p>
+            </div>
+            <div className="settings-header__section-pill">
+              <ThemedIcon semantic={activeSectionMeta.iconSemantic} size={14} />
+              <span>{t(activeSectionMeta.labelKey)}</span>
+            </div>
+          </div>
+        )}
       </header>
 
       {shouldShowMobileRoot ? (
@@ -497,31 +525,35 @@ export function SettingsPage() {
           <main
             className={`settings-content ${isMobile ? "settings-content--mobile" : ""} ${isMobileDetailView ? "settings-content--mobile-detail" : ""} ${contentLayoutMode === "fill-height" ? "settings-content--fill-height" : ""}`}
           >
-            {settingsLoadError && (
-              <Notice
-                role="alert"
-                tone="error"
-                title={t("settings.load_failed")}
-                message={settingsLoadError}
-                action={
-                  <button
-                    type="button"
-                    className="settings-link"
-                    onClick={() => setSettingsRefreshKey((value) => value + 1)}
-                  >
-                    {t("action.refresh")}
-                  </button>
-                }
-              />
-            )}
-            {renderContent()}
+            <div className="settings-content-surface">
+              {settingsLoadError && (
+                <Notice
+                  role="alert"
+                  tone="error"
+                  title={t("settings.load_failed")}
+                  message={settingsLoadError}
+                  action={
+                    <button
+                      type="button"
+                      className="settings-link"
+                      onClick={() => setSettingsRefreshKey((value) => value + 1)}
+                    >
+                      {t("action.refresh")}
+                    </button>
+                  }
+                />
+              )}
+              {renderContent()}
+            </div>
           </main>
         </div>
       )}
 
       <footer className={`settings-footer ${isMobile ? "settings-footer--mobile" : ""}`}>
-        <span className="settings-autosave">{t("settings.autosave_hint")}</span>
-        <span className="settings-version">v{serverInfo?.version ?? "0.0.0"}</span>
+        <div className="settings-footer__meta">
+          <span className="settings-autosave">{t("settings.autosave_hint")}</span>
+          <span className="settings-version">v{serverInfo?.version ?? "0.0.0"}</span>
+        </div>
       </footer>
     </div>
   );

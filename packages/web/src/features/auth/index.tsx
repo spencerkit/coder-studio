@@ -161,40 +161,42 @@ export function LoginPage({
           .filter(Boolean)
           .join(" ")}
       >
-        <EmptyState
-          style={authEmptyStateStyle}
-          title={
-            <div>
-              <div className="welcome-kicker">CODER STUDIO</div>
-              <h1 className="welcome-title">{t("app.name")}</h1>
-            </div>
-          }
-          description={<p className="welcome-body auth-card-desc">{description}</p>}
-        />
-        <div className={statusPanelClassName}>
-          <div className="auth-status-eyebrow">{t("auth.status_title")}</div>
-          <p className="auth-status-detail">{error ?? statusDetail}</p>
-        </div>
-        <form className="auth-form" onSubmit={handleSubmit}>
-          <Input
-            className="auth-input"
-            type="password"
-            size="lg"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            aria-label={t("settings.auth.password")}
-            placeholder={t("settings.auth.password")}
+        <div className="auth-card-shell__content">
+          <EmptyState
+            style={authEmptyStateStyle}
+            title={
+              <div>
+                <div className="welcome-kicker page-kicker">CODER STUDIO</div>
+                <h1 className="welcome-title page-title">{t("app.name")}</h1>
+              </div>
+            }
+            description={<p className="welcome-body auth-card-desc meta-text">{description}</p>}
           />
-          <Button
-            className="auth-submit"
-            variant="primary"
-            size="lg"
-            type="submit"
-            disabled={checkingStatus || submitting || !password.trim()}
-          >
-            {submitLabel}
-          </Button>
-        </form>
+          <div className={statusPanelClassName}>
+            <div className="auth-status-eyebrow">{t("auth.status_title")}</div>
+            <p className="auth-status-detail">{error ?? statusDetail}</p>
+          </div>
+          <form className="auth-form" onSubmit={handleSubmit}>
+            <Input
+              className="auth-input"
+              type="password"
+              size="lg"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              aria-label={t("settings.auth.password")}
+              placeholder={t("settings.auth.password")}
+            />
+            <Button
+              className="auth-submit"
+              variant="primary"
+              size="lg"
+              type="submit"
+              disabled={checkingStatus || submitting || !password.trim()}
+            >
+              {submitLabel}
+            </Button>
+          </form>
+        </div>
       </div>
     </div>
   );

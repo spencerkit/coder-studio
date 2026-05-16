@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { Provider } from "jotai";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { getThemeById } from "../theme";
 import { getUiPreviewScene, UI_PREVIEW_SCENES } from "./catalog";
 import { buildUiPreviewStore } from "./preview-store";
 
@@ -24,16 +25,24 @@ function installMatchMedia(device: "desktop" | "mobile") {
   });
 }
 
-function renderScene(sceneId: string, device: "desktop" | "mobile" = "desktop") {
+function renderScene(
+  sceneId: string,
+  device: "desktop" | "mobile" = "desktop",
+  theme: "mint-dark" | "mint-light" = "mint-dark"
+) {
   const scene = getUiPreviewScene(sceneId);
   if (!scene) {
     throw new Error(`Missing scene ${sceneId}`);
   }
 
   installMatchMedia(device);
-  const context = { theme: "mint-dark" as const, locale: "en" as const, device };
+  const context = { theme, locale: "en" as const, device };
   const store = buildUiPreviewStore(scene.seed(context));
   const router = scene.router(context);
+
+  document.documentElement.setAttribute("data-theme", getThemeById(theme).documentThemeAttr);
+  document.documentElement.setAttribute("lang", "en");
+  document.body.dataset.uiPreviewDevice = device;
 
   return render(
     <Provider store={store}>
@@ -56,6 +65,9 @@ describe("UI preview catalog", () => {
 
   afterEach(() => {
     window.matchMedia = originalMatchMedia;
+    document.documentElement.removeAttribute("data-theme");
+    document.documentElement.removeAttribute("lang");
+    delete document.body.dataset.uiPreviewDevice;
   });
 
   it("registers unique first-batch page scene ids", () => {
@@ -197,5 +209,101 @@ describe("UI preview catalog", () => {
 
     expect(await screen.findByText("Workspace opened")).toBeInTheDocument();
     expect(document.querySelectorAll(".toast").length).toBeGreaterThanOrEqual(4);
+  });
+
+  it("renders the workspace topbar review scene", async () => {
+    renderScene("workspace-topbar-review");
+
+    expect(await screen.findByRole("tablist", { name: "Workspace tabs" })).toBeInTheDocument();
+    expect(document.querySelector(".desktop-review-card--topbar .app-topbar")).toBeTruthy();
+  });
+
+  it("renders the workspace sidebar files review scene", async () => {
+    renderScene("workspace-sidebar-files-review");
+
+    expect(await screen.findByText("packages")).toBeInTheDocument();
+    expect(document.querySelector(".desktop-review-card--sidebar .file-tree-shell")).toBeTruthy();
+  });
+
+  it("renders the workspace sidebar git review scene", async () => {
+    renderScene("workspace-sidebar-git-review");
+
+    expect(await screen.findByText(/changes|更改/i)).toBeInTheDocument();
+    expect(document.querySelector(".desktop-review-card--sidebar .git-panel")).toBeTruthy();
+  });
+
+  it("renders the workspace editor review scene", async () => {
+    renderScene("workspace-editor-review");
+
+    expect(
+      await screen.findByText("packages/web/src/features/settings/components/settings-page.tsx")
+    ).toBeInTheDocument();
+    expect(
+      document.querySelector(".desktop-review-card--editor .workspace-git-editor")
+    ).toBeTruthy();
+    expect(screen.getByText("const headerTitle = isMobile")).toBeInTheDocument();
+  });
+
+  it("renders the workspace diff review scene", async () => {
+    renderScene("workspace-diff-review");
+
+    expect(await screen.findByText("packages/web/src/styles/components.css")).toBeInTheDocument();
+    expect(document.querySelector(".desktop-review-card--diff .workspace-git-editor")).toBeTruthy();
+    expect(screen.getByText(/\+\s+background: var\(--bg-elevated\);/)).toBeInTheDocument();
+  });
+
+  it("renders the workspace terminal empty review scene", async () => {
+    renderScene("workspace-terminal-empty-review");
+
+    expect(await screen.findByText(/no terminal|暂无终端/i)).toBeInTheDocument();
+    expect(
+      document.querySelector(".desktop-review-card--terminal .bottom-terminal-empty")
+    ).toBeTruthy();
+  });
+
+  it("renders the settings density review scene", async () => {
+    renderScene("settings-density-review");
+
+    expect(await screen.findByRole("heading", { name: /settings|设置/i })).toBeInTheDocument();
+    expect(document.querySelector(".settings-header__desktop")).toBeTruthy();
+    expect(document.querySelector(".settings-sidebar")).toBeTruthy();
+  });
+
+  it("renders the settings light theme review scene", async () => {
+    renderScene("settings-light-theme-review", "desktop", "mint-light");
+
+    expect(await screen.findByRole("heading", { name: /settings|设置/i })).toBeInTheDocument();
+    expect(document.querySelector(".settings-page")).toBeTruthy();
+    expect(document.querySelector(".settings-nav-item")).toBeTruthy();
+    expect(document.documentElement).toHaveAttribute("data-theme", "mint-light");
+  });
+
+  it("renders the desktop overlay review scene", async () => {
+    renderScene("desktop-overlay-review");
+
+    expect(await screen.findByText("Open Workspace")).toBeInTheDocument();
+    expect(document.querySelector(".desktop-review-grid")).toBeTruthy();
+    expect(document.querySelector(".desktop-review-card .command-palette")).toBeTruthy();
+    expect(document.querySelector(".desktop-review-card .launch-modal")).toBeTruthy();
+    expect(
+      document.querySelector(".desktop-review-card .desktop-review-embedded-worktree")
+    ).toBeTruthy();
+
+    const embeddedSurface = document.querySelector(
+      ".desktop-review-card--worktree .worktree-manager-surface"
+    );
+
+    expect(embeddedSurface).toBeTruthy();
+    expect(embeddedSurface?.closest(".desktop-review-card--worktree")).toBeTruthy();
+    expect(document.querySelector(".desktop-review-card--worktree .modal-overlay")).toBeNull();
+  });
+
+  it("renders the desktop statusbar review scene", async () => {
+    renderScene("desktop-statusbar-review");
+
+    expect(await screen.findByText("main")).toBeInTheDocument();
+    expect(
+      document.querySelector(".desktop-review-card--statusbar .workspace-status-bar")
+    ).toBeTruthy();
   });
 });

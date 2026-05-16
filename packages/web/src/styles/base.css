@@ -51,7 +51,7 @@ h1 {
   font-size: var(--text-3xl);
 }
 h2 {
-  font-size: var(--2xl);
+  font-size: var(--text-2xl);
 }
 h3 {
   font-size: var(--text-xl);
@@ -69,6 +69,47 @@ h6 {
 p {
   color: var(--text-secondary);
   line-height: var(--leading-normal);
+}
+
+.page-kicker,
+.section-kicker {
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-tertiary);
+}
+
+.page-title {
+  font-size: var(--text-3xl);
+  font-weight: var(--font-semibold);
+  line-height: var(--leading-tight);
+  color: var(--text-primary);
+}
+
+.section-title {
+  font-size: var(--text-base);
+  font-weight: var(--font-semibold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+}
+
+.meta-text {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.hint-text {
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.mono-meta {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
 }
 
 code,
@@ -390,6 +431,11 @@ textarea::placeholder {
 .themed-icon--surface-warning,
 .themed-icon--surface-error,
 .themed-icon--surface-info {
+  border-radius: var(--radius-md);
+}
+
+.themed-icon--surface-info {
+  background: var(--icon-surface-info);
   border-radius: var(--radius-md);
 }
 

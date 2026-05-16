@@ -181,7 +181,10 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
   return (
     <>
       <div className={`file-tree-shell file-tree-shell--${variant}`}>
-        <label className="file-tree-search" htmlFor={`file-tree-search-${workspaceId}`}>
+        <label
+          className={`file-tree-search ${variant === "desktop" ? "file-tree-search--desktop" : ""}`}
+          htmlFor={`file-tree-search-${workspaceId}`}
+        >
           <ThemedIcon
             semantic="file.action.search"
             size={14}

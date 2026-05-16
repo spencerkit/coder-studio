@@ -207,6 +207,18 @@ describe("SettingsPage", () => {
     renderSettingsPage(store);
 
     expect(screen.getByText("v0.3.0")).toBeInTheDocument();
+    expect(document.querySelector(".settings-footer__meta")).toBeTruthy();
+  });
+
+  it("wraps desktop settings content in the shared content surface", async () => {
+    const store = createConnectedStore(vi.fn().mockResolvedValue({}));
+
+    renderSettingsPage(store);
+
+    await waitFor(() => {
+      expect(document.querySelector(".settings-content-surface")).toBeTruthy();
+    });
+    expect(document.querySelector(".settings-content-surface .settings-section")).toBeTruthy();
   });
 
   it("renders desktop and mobile settings entry icons through themed semantics", async () => {
@@ -890,6 +902,28 @@ describe("SettingsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "返回" }));
 
     expect(routerMocks.navigate).toHaveBeenCalledWith("/");
+  });
+
+  it("renders a dedicated desktop header with the active section pill", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({});
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+
+    const desktopHeader = document.querySelector(".settings-header__desktop") as HTMLElement | null;
+    const mobileHeader = document.querySelector(
+      ".settings-header .mobile-page-header"
+    ) as HTMLElement | null;
+    const sectionPill = document.querySelector(
+      ".settings-header__section-pill"
+    ) as HTMLElement | null;
+
+    expect(desktopHeader).not.toBeNull();
+    expect(mobileHeader).toBeNull();
+    expect(screen.getByRole("heading", { name: "设置" })).toBeInTheDocument();
+    expect(within(desktopHeader as HTMLElement).getByText("Coder Studio")).toBeInTheDocument();
+    expect(sectionPill).not.toBeNull();
+    expect(within(sectionPill as HTMLElement).getByText("通用")).toBeInTheDocument();
   });
 
   it("renders a mobile category list and returns from detail content to the settings root", async () => {

@@ -108,6 +108,8 @@ describe("TerminalPanel", () => {
     );
 
     expect(screen.getByText("No terminals")).toBeInTheDocument();
+    expect(document.querySelector(".bottom-terminal-empty")).toBeTruthy();
+    expect(document.querySelector(".bottom-terminal-empty-icon")).toBeTruthy();
     expect(subscribe).toHaveBeenCalledWith([Topics.terminalsAll("ws-test")], expect.any(Function));
 
     await act(async () => {
