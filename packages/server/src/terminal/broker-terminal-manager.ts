@@ -238,19 +238,59 @@ export class BrokerTerminalManager {
   }
 
   async shutdown(mode: TerminalShutdownMode = { mode: "terminate" }): Promise<void> {
+    const startedAt = Date.now();
+    debugRestartTrace("terminal.shutdown.proxy.begin", {
+      ownerServerInstanceId: this.deps.ownerServerInstanceId,
+      mode: mode.mode,
+      requestId: mode.mode === "restart-preserve" ? mode.requestId : null,
+      ttlMs: mode.mode === "restart-preserve" ? mode.ttlMs : null,
+      trackedTerminalIds: Array.from(this.terminals.keys()),
+    });
+
     if (mode.mode === "restart-preserve") {
+      debugRestartTrace("terminal.detach_for_restart.proxy.begin", {
+        ownerServerInstanceId: this.deps.ownerServerInstanceId,
+        requestId: mode.requestId,
+        ttlMs: mode.ttlMs,
+      });
       await this.deps.broker.detachForRestart(
         this.deps.ownerServerInstanceId,
         mode.requestId,
         mode.ttlMs
       );
+      debugRestartTrace("terminal.detach_for_restart.proxy.complete", {
+        ownerServerInstanceId: this.deps.ownerServerInstanceId,
+        requestId: mode.requestId,
+        ttlMs: mode.ttlMs,
+      });
     } else {
+      debugRestartTrace("terminal.close_all_for_owner.proxy.begin", {
+        ownerServerInstanceId: this.deps.ownerServerInstanceId,
+      });
       await this.deps.broker.closeAllForOwner(this.deps.ownerServerInstanceId);
+      debugRestartTrace("terminal.close_all_for_owner.proxy.complete", {
+        ownerServerInstanceId: this.deps.ownerServerInstanceId,
+      });
     }
 
+    if (this.unsubscribeBrokerOutput) {
+      debugRestartTrace("terminal.unsubscribe_output.proxy.begin", {
+        ownerServerInstanceId: this.deps.ownerServerInstanceId,
+      });
+    }
     await this.unsubscribeBrokerOutput?.();
+    if (this.unsubscribeBrokerOutput) {
+      debugRestartTrace("terminal.unsubscribe_output.proxy.complete", {
+        ownerServerInstanceId: this.deps.ownerServerInstanceId,
+      });
+    }
     this.unsubscribeBrokerOutput = null;
     this.terminals.clear();
     this.recentOutput.clear();
+    debugRestartTrace("terminal.shutdown.proxy.complete", {
+      ownerServerInstanceId: this.deps.ownerServerInstanceId,
+      mode: mode.mode,
+      durationMs: Date.now() - startedAt,
+    });
   }
 }

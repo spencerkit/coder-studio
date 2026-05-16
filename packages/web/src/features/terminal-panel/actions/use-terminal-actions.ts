@@ -1,7 +1,8 @@
 import { type Terminal as TerminalDto, Topics } from "@coder-studio/core";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { dispatchCommandAtom, wsClientAtom } from "../../../atoms/connection";
+import { activationStatusAtom } from "../../../atoms/activation";
+import { connectionStatusAtom, dispatchCommandAtom, wsClientAtom } from "../../../atoms/connection";
 import { resolvedActiveWorkspaceIdAtom } from "../../../atoms/workspaces";
 import { useTranslation } from "../../../lib/i18n";
 import type { TerminalBinaryPayload } from "../../../ws/client";
@@ -38,6 +39,8 @@ function toTerminalMeta(terminal: TerminalDto) {
 export function useTerminalActions() {
   const t = useTranslation();
   const activeWorkspaceId = useAtomValue(resolvedActiveWorkspaceIdAtom);
+  const activationStatus = useAtomValue(activationStatusAtom);
+  const connectionStatus = useAtomValue(connectionStatusAtom);
   const dispatch = useAtomValue(dispatchCommandAtom);
   const wsClient = useAtomValue(wsClientAtom);
   const pushToast = useSetAtom(pushToastAtom);
@@ -56,6 +59,18 @@ export function useTerminalActions() {
     if (!activeWorkspaceId) {
       setTerminalIds([]);
       setActiveTerminalId(null);
+      return;
+    }
+
+    if (wsClient && typeof wsClient.getStatus === "function" && connectionStatus !== "connected") {
+      return;
+    }
+
+    if (
+      activationStatus === "claiming" ||
+      activationStatus === "gated" ||
+      activationStatus === "revoked"
+    ) {
       return;
     }
 
@@ -103,7 +118,16 @@ export function useTerminalActions() {
     return () => {
       cancelled = true;
     };
-  }, [activeWorkspaceId, dispatch, pushToast, store, t]);
+  }, [
+    activeWorkspaceId,
+    activationStatus,
+    connectionStatus,
+    dispatch,
+    pushToast,
+    store,
+    t,
+    wsClient,
+  ]);
 
   useEffect(() => {
     if (!wsClient || !activeWorkspaceId) {

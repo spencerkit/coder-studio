@@ -1,16 +1,18 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   deleteTerminalBrokerRuntime,
+  getTerminalBrokerSocketPath,
   readTerminalBrokerRuntime,
   writeTerminalBrokerRuntime,
 } from "@coder-studio/core/runtime";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { spawn, ping } = vi.hoisted(() => ({
+const { spawn, ping, status } = vi.hoisted(() => ({
   spawn: vi.fn(),
   ping: vi.fn(),
+  status: vi.fn(),
 }));
 
 vi.mock("node:child_process", () => ({
@@ -20,6 +22,7 @@ vi.mock("node:child_process", () => ({
 vi.mock("@coder-studio/server", () => ({
   TerminalBrokerClient: class MockTerminalBrokerClient {
     ping = ping;
+    status = status;
   },
 }));
 
@@ -38,6 +41,10 @@ describe("terminal-broker-control", () => {
     process.env.CODER_STUDIO_RUNTIME_DIR = join(testHomeDir, ".coder-studio");
     deleteTerminalBrokerRuntime();
     ping.mockResolvedValue(true);
+    status.mockResolvedValue({
+      pid: 7001,
+      startedAt: 7002,
+    });
   });
 
   afterEach(() => {
@@ -107,6 +114,30 @@ describe("terminal-broker-control", () => {
       })
     );
     expect(runtime.endpoint).toBeTruthy();
+    expect(readTerminalBrokerRuntime()).toEqual(runtime);
+  });
+
+  it("recovers a live broker when the runtime file is missing", async () => {
+    const endpoint = getTerminalBrokerSocketPath();
+    if (process.platform !== "win32") {
+      mkdirSync(testHomeDir, { recursive: true });
+      mkdirSync(join(testHomeDir, ".coder-studio"), { recursive: true });
+      writeFileSync(endpoint, "", "utf8");
+    }
+
+    const runtime = await ensureTerminalBroker({
+      script: "/cli/dist/esm/terminal-broker-runner.mjs",
+      cwd: "/repo",
+      waitMs: 50,
+    });
+
+    expect(status).toHaveBeenCalledTimes(1);
+    expect(spawn).not.toHaveBeenCalled();
+    expect(runtime).toEqual({
+      endpoint,
+      pid: 7001,
+      startedAt: 7002,
+    });
     expect(readTerminalBrokerRuntime()).toEqual(runtime);
   });
 

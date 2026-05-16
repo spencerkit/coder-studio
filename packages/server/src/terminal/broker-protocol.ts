@@ -53,12 +53,17 @@ export type BrokerRequest =
   | { id: string; op: "replay"; terminalId: string; lastSeq: number }
   | { id: string; op: "snapshot"; terminalId: string }
   | { id: string; op: "recovery"; terminalId: string }
+  | { id: string; op: "status" }
   | { id: string; op: "ping" };
 
 export type BrokerResponse =
   | {
       id: string;
       ok: true;
+      broker?: {
+        pid: number;
+        startedAt: number;
+      };
       terminal?: RuntimeTerminalRecord;
       terminals?: RuntimeTerminalRecord[];
       replay?: BrokerReplayResult;

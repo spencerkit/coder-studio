@@ -9,6 +9,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import userEvent from "@testing-library/user-event";
 import { createStore, Provider } from "jotai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { activationStatusAtom } from "../../../atoms/activation";
 import { localeAtom, themeAtom } from "../../../atoms/app-ui";
 import { wsClientAtom } from "../../../atoms/connection";
 import { JotaiProvider } from "../../../test-utils/jotai-provider";
@@ -822,6 +823,101 @@ describe("XtermHost", () => {
 
     await waitFor(() => {
       expect(screen.queryByText("Uploading…")).not.toBeInTheDocument();
+      expect(mockTerminal.options).toEqual(
+        expect.objectContaining({
+          disableStdin: false,
+          cursorBlink: true,
+        })
+      );
+    });
+  });
+
+  it("disables desktop stdin while the websocket is reconnecting and re-enables it once connected", async () => {
+    const store = createStore();
+    const snapshotChunk = new TextEncoder().encode("snapshot\n");
+    type StatusHandler = (
+      status: "connecting" | "connected" | "disconnected" | "reconnecting" | "rejected"
+    ) => void;
+    const statusHandlers = new Set<StatusHandler>();
+    let connectionStatus:
+      | "connecting"
+      | "connected"
+      | "disconnected"
+      | "reconnecting"
+      | "rejected" = "connected";
+    const sendCommand = vi.fn().mockImplementation((op: string) => {
+      if (op === "terminal.snapshot") {
+        return Promise.resolve({
+          status: "ok",
+          transport: "binary",
+          streamId: 777,
+          size: snapshotChunk.byteLength,
+          seq: 12,
+          rows: 36,
+          cols: 132,
+          source: "headless",
+          bytes: snapshotChunk,
+        } satisfies TerminalSnapshotPayload);
+      }
+
+      return Promise.resolve({ status: "ok" });
+    });
+
+    mockTerminal.cols = 132;
+    mockTerminal.rows = 36;
+
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe: vi.fn(() => vi.fn()),
+      getStatus: vi.fn(() => connectionStatus),
+      onStatus: vi.fn((handler: StatusHandler) => {
+        statusHandlers.add(handler);
+        return () => {
+          statusHandlers.delete(handler);
+        };
+      }),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="reconnect-input-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(mockTerminal.options).toEqual(
+        expect.objectContaining({
+          disableStdin: false,
+          cursorBlink: true,
+        })
+      );
+      expect(statusHandlers.size).toBeGreaterThan(0);
+    });
+
+    act(() => {
+      connectionStatus = "reconnecting";
+      for (const handler of statusHandlers) {
+        handler("reconnecting");
+      }
+    });
+
+    await waitFor(() => {
+      expect(mockTerminal.options).toEqual(
+        expect.objectContaining({
+          disableStdin: true,
+          cursorBlink: false,
+        })
+      );
+    });
+
+    act(() => {
+      connectionStatus = "connected";
+      for (const handler of statusHandlers) {
+        handler("connected");
+      }
+    });
+
+    await waitFor(() => {
       expect(mockTerminal.options).toEqual(
         expect.objectContaining({
           disableStdin: false,
@@ -6296,7 +6392,7 @@ describe("XtermHost", () => {
     vi.useRealTimers();
   });
 
-  it("waits for websocket connection before initial resize sync and snapshot recovery", async () => {
+  it("waits for websocket connection and activation claim before initial resize sync and snapshot recovery", async () => {
     const store = createStore();
     const snapshotChunk = new TextEncoder().encode("snapshot after connect\n");
     let connectionStatus: "connecting" | "connected" = "connecting";
@@ -6334,6 +6430,7 @@ describe("XtermHost", () => {
 
     mockTerminal.cols = 132;
     mockTerminal.rows = 36;
+    store.set(activationStatusAtom, "claiming");
 
     global.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
       rafCallbacks.push(callback);
@@ -6377,6 +6474,15 @@ describe("XtermHost", () => {
       await Promise.resolve();
     });
 
+    expect(sendCommand).not.toHaveBeenCalled();
+
+    await act(async () => {
+      store.set(activationStatusAtom, "active");
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
     await waitFor(() => {
       expectResizeCall(sendCommand, "connect-gated-terminal", 132, 36);
       expectSnapshotCall(sendCommand, "connect-gated-terminal");
@@ -6391,6 +6497,119 @@ describe("XtermHost", () => {
 
     global.requestAnimationFrame = originalRequestAnimationFrame;
     global.cancelAnimationFrame = originalCancelAnimationFrame;
+  });
+
+  it("waits for activation claim before replaying terminal history after websocket reconnect", async () => {
+    const store = createStore();
+    const snapshotChunk = new TextEncoder().encode("snapshot before reconnect\n");
+    const replayChunk = new TextEncoder().encode("replay after activation\n");
+    type StatusHandler = (
+      status: "connecting" | "connected" | "disconnected" | "reconnecting" | "rejected"
+    ) => void;
+    const statusHandlers = new Set<StatusHandler>();
+    let connectionStatus:
+      | "connecting"
+      | "connected"
+      | "disconnected"
+      | "reconnecting"
+      | "rejected" = "connected";
+    const sendCommand = vi.fn().mockImplementation((op: string) => {
+      if (connectionStatus !== "connected") {
+        return Promise.reject(new Error("WebSocket not connected"));
+      }
+
+      if (op === "terminal.snapshot") {
+        return Promise.resolve({
+          status: "ok",
+          transport: "binary",
+          streamId: 511,
+          size: snapshotChunk.byteLength,
+          seq: 200,
+          rows: 36,
+          cols: 132,
+          source: "headless",
+          bytes: snapshotChunk,
+        } satisfies TerminalSnapshotPayload);
+      }
+
+      if (op === "terminal.replay") {
+        return Promise.resolve({
+          status: "ok",
+          transport: "binary",
+          streamId: 512,
+          size: replayChunk.byteLength,
+          seq: 212,
+          bytes: replayChunk,
+        } satisfies TerminalReplayPayload);
+      }
+
+      return Promise.resolve({ status: "ok" });
+    });
+
+    mockTerminal.cols = 132;
+    mockTerminal.rows = 36;
+    store.set(activationStatusAtom, "active");
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe: vi.fn(() => vi.fn()),
+      getStatus: vi.fn(() => connectionStatus),
+      onStatus: vi.fn((handler: StatusHandler) => {
+        statusHandlers.add(handler);
+        return () => {
+          statusHandlers.delete(handler);
+        };
+      }),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="reconnect-claim-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expectSnapshotCall(sendCommand, "reconnect-claim-terminal");
+      expectTerminalWriteData(snapshotChunk);
+      expect(statusHandlers.size).toBeGreaterThan(0);
+    });
+    expect(sendCommand.mock.calls.some(([op]) => op === "terminal.replay")).toBe(false);
+
+    sendCommand.mockClear();
+    mockTerminal.write.mockClear();
+
+    act(() => {
+      connectionStatus = "reconnecting";
+      for (const handler of statusHandlers) {
+        handler("reconnecting");
+      }
+    });
+
+    await act(async () => {
+      store.set(activationStatusAtom, "claiming");
+      connectionStatus = "connected";
+      for (const handler of statusHandlers) {
+        handler("connected");
+      }
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(sendCommand).not.toHaveBeenCalled();
+    expect(mockTerminal.write).not.toHaveBeenCalled();
+
+    await act(async () => {
+      store.set(activationStatusAtom, "active");
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expectReplayCall(sendCommand, "reconnect-claim-terminal", 200);
+      expectTerminalWriteData(replayChunk);
+    });
+    expect(sendCommand.mock.calls.some(([op]) => op === "terminal.snapshot")).toBe(false);
   });
 
   it("starts historical recovery after the websocket client becomes available post-mount", async () => {

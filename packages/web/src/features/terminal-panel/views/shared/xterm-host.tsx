@@ -11,7 +11,7 @@
 import { type TerminalInputActivity, Topics } from "@coder-studio/core";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
-import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import {
   type ChangeEvent as ReactChangeEvent,
   useCallback,
@@ -20,6 +20,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { activationStatusAtom } from "../../../../atoms/activation";
 import { themeAtom } from "../../../../atoms/app-ui";
 import { dispatchCommandAtom, wsClientAtom } from "../../../../atoms/connection";
 import { useViewport } from "../../../../hooks/use-viewport";
@@ -422,11 +423,13 @@ export function XtermHost({
 }: XtermHostProps) {
   const t = useTranslation();
   const viewport = useViewport();
+  const activationStatus = useAtomValue(activationStatusAtom);
   const uiTheme = useAtomValue(themeAtom);
   const terminalPreferences = useAtomValue(terminalPreferencesAtom);
   const wsClient = useAtomValue(wsClientAtom);
   const dispatch = useAtomValue(dispatchCommandAtom);
   const pushToast = useSetAtom(pushToastAtom);
+  const store = useStore();
   const [outputAtom, setOutputAtom] = useAtom(terminalOutputAtomFamily(terminalId));
   const meta = useAtomValue(terminalMetaAtomFamily(terminalId));
   const terminalKind = terminalKindProp ?? meta?.kind ?? "shell";
@@ -466,6 +469,7 @@ export function XtermHost({
   const hydrationHandleRef = useRef<HydrationRequestHandle | null>(null);
   const hydrationReleasedRef = useRef(false);
   const reconnectRecoveryTriggerRef = useRef<(() => void) | null>(null);
+  const activationReadyWaitersRef = useRef<Set<() => void>>(new Set());
   const selectedTextRef = useRef("");
   const lastCopyOnSelectFailureAtRef = useRef(0);
   const copyOnSelectPointerIdRef = useRef<number | null>(null);
@@ -508,6 +512,7 @@ export function XtermHost({
 
     return wsClient.getStatus();
   });
+  const activationCommandsBlockedRef = useRef(false);
 
   // Latest copies of callback identities used inside the mount effect, exposed
   // via refs so the effect's cleanup/re-creation is not tied to their churn.
@@ -526,6 +531,29 @@ export function XtermHost({
   useEffect(() => {
     initialThemeRef.current = uiTheme;
   }, [uiTheme]);
+
+  const hasStatusAwareWsClient = Boolean(wsClient && typeof wsClient.getStatus === "function");
+  const activationCommandsBlocked =
+    hasStatusAwareWsClient &&
+    (activationStatus === "claiming" ||
+      activationStatus === "gated" ||
+      activationStatus === "revoked");
+
+  const areActivationCommandsReady = useCallback(() => {
+    if (!hasStatusAwareWsClient) {
+      return true;
+    }
+
+    const currentActivationStatus = store.get(activationStatusAtom);
+
+    // Read the atom store synchronously so reconnect recovery cannot race
+    // ahead of the Providers listener that flips activation into "claiming".
+    return (
+      currentActivationStatus !== "claiming" &&
+      currentActivationStatus !== "gated" &&
+      currentActivationStatus !== "revoked"
+    );
+  }, [hasStatusAwareWsClient, store]);
 
   useLayoutEffect(() => {
     if (viewport === "mobile") {
@@ -1033,6 +1061,10 @@ export function XtermHost({
         return;
       }
 
+      if (!areActivationCommandsReady()) {
+        return;
+      }
+
       if (!wsClient) {
         console.error("Cannot send terminal input: WebSocket not connected");
         return;
@@ -1081,7 +1113,7 @@ export function XtermHost({
         console.error("Failed to send terminal input:", error);
       }
     },
-    [terminalId, updateCtrlMode, wsClient]
+    [areActivationCommandsReady, terminalId, updateCtrlMode, wsClient]
   );
 
   const handleResize = useCallback(
@@ -1126,6 +1158,9 @@ export function XtermHost({
     [handleInput]
   );
 
+  const inputConnectionReady =
+    !hasStatusAwareWsClient || (connectionStatus === "connected" && !activationCommandsBlocked);
+
   const {
     busy: uploadBusy,
     handleClipboardPaste,
@@ -1134,17 +1169,18 @@ export function XtermHost({
     containerRef,
     workspaceId,
     sendTextToTerminal,
-    enabled: isInteractive,
+    enabled: isInteractive && inputConnectionReady,
   });
+  const inputEnabled = isInteractive && inputConnectionReady && !uploadBusy;
 
   useEffect(() => {
     interactiveRef.current = isInteractive;
 
     if (terminalRef.current) {
-      terminalRef.current.options.disableStdin = !isInteractive || uploadBusy;
-      terminalRef.current.options.cursorBlink = isInteractive && !uploadBusy;
+      terminalRef.current.options.disableStdin = !inputEnabled;
+      terminalRef.current.options.cursorBlink = inputEnabled;
     }
-  }, [isInteractive, uploadBusy]);
+  }, [inputEnabled, isInteractive]);
 
   useEffect(() => {
     if (!wsClient) {
@@ -1166,6 +1202,20 @@ export function XtermHost({
       setConnectionStatus(status);
     });
   }, [wsClient]);
+
+  useEffect(() => {
+    activationCommandsBlockedRef.current = activationCommandsBlocked;
+
+    if (activationCommandsBlocked) {
+      return;
+    }
+
+    for (const resolve of activationReadyWaitersRef.current) {
+      resolve();
+    }
+    activationReadyWaitersRef.current.clear();
+    reconnectRecoveryTriggerRef.current?.();
+  }, [activationCommandsBlocked]);
 
   useLayoutEffect(() => {
     updateCtrlMode("off");
@@ -1226,9 +1276,9 @@ export function XtermHost({
       fontFamily: "JetBrains Mono, Fira Code, SF Mono, monospace",
       fontSize: 11,
       scrollback: 5000,
-      cursorBlink: isInteractive && !uploadBusy,
+      cursorBlink: inputEnabled,
       cursorStyle: "block",
-      disableStdin: !isInteractive || uploadBusy,
+      disableStdin: !inputEnabled,
       allowProposedApi: true,
     });
 
@@ -1314,11 +1364,22 @@ export function XtermHost({
       });
     };
 
+    const waitForActivationReady = async () => {
+      if (areActivationCommandsReady()) {
+        return;
+      }
+
+      await new Promise<void>((resolve) => {
+        activationReadyWaitersRef.current.add(resolve);
+      });
+    };
+
     const initialReplayReady = initialFitReady.then(async () => {
       if (!wsClient) {
         return;
       }
       await waitForConnected();
+      await waitForActivationReady();
       if (disposed || !mountedRef.current) {
         return;
       }
@@ -1785,6 +1846,10 @@ export function XtermHost({
         return;
       }
 
+      if (!areActivationCommandsReady()) {
+        return;
+      }
+
       if (coldStartStateRef.current === "in-flight") {
         return;
       }
@@ -1879,6 +1944,7 @@ export function XtermHost({
       disposed = true;
       reconnectRecoveryTriggerRef.current = null;
       pendingRecoveryModeRef.current = null;
+      activationReadyWaitersRef.current.clear();
       if (replayWriteGenerationRef.current === replayWriteGeneration) {
         replayWriteGenerationRef.current += 1;
         replayWriteDepthRef.current = 0;
@@ -1911,6 +1977,7 @@ export function XtermHost({
       }
     };
   }, [
+    areActivationCommandsReady,
     dispatch,
     hydrationState.kind,
     scheduleFit,
@@ -2124,7 +2191,7 @@ export function XtermHost({
   }, [hydrationState.kind, meta?.alive, viewport]);
 
   const showMobileInputBar = viewport === "mobile" && isInteractive;
-  const mobileInputDisabled = !isInteractive || uploadBusy || connectionStatus !== "connected";
+  const mobileInputDisabled = !isInteractive || uploadBusy || !inputConnectionReady;
   const mobileInputLabels = {
     paste: t("terminal.mobile_input.paste"),
     upload: t("terminal.mobile_input.upload"),

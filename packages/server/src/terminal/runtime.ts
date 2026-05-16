@@ -245,6 +245,8 @@ export class TerminalRuntime {
   }
 
   async handleOwnerDisconnect(ownerServerInstanceId: string): Promise<void> {
+    const startedAt = Date.now();
+    const killedTerminalIds: string[] = [];
     for (const terminal of this.terminals.values()) {
       if (!terminal.alive || terminal.ownerServerInstanceId !== ownerServerInstanceId) {
         continue;
@@ -254,8 +256,15 @@ export class TerminalRuntime {
       }
 
       terminal.ownerServerInstanceId = "";
+      killedTerminalIds.push(terminal.id);
       await this.killTerminalBestEffort(terminal, "SIGTERM", "owner-disconnect.kill.error");
     }
+
+    debugRestartTrace("terminal.owner_disconnect", {
+      ownerServerInstanceId,
+      killedTerminalIds,
+      durationMs: Date.now() - startedAt,
+    });
   }
 
   hydrateAttached(ownerServerInstanceId: string): RuntimeTerminalRecord[] {

@@ -1,6 +1,7 @@
 import type { Session, Workspace } from "@coder-studio/core";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { useEffect } from "react";
+import { activationStatusAtom } from "../../../atoms/activation";
 import { connectionStatusAtom, dispatchCommandAtom } from "../../../atoms/connection";
 import { sessionsAtom, sessionsByWorkspaceAtomFamily } from "../../../atoms/sessions";
 import { activeWorkspaceAtom } from "../../../atoms/workspaces";
@@ -32,6 +33,7 @@ export function useWorkspaceSessions(
   const workspaceId = workspace?.id ?? "__workspace_empty__";
   const disabled = options?.disabled ?? false;
   const dispatch = useAtomValue(dispatchCommandAtom);
+  const activationStatus = useAtomValue(activationStatusAtom);
   const connectionStatus = useAtomValue(connectionStatusAtom);
   const sessions = useAtomValue(sessionsByWorkspaceAtomFamily(workspaceId));
   const paneLayout = useAtomValue(paneLayoutAtomFamily(workspaceId));
@@ -49,7 +51,7 @@ export function useWorkspaceSessions(
       return;
     }
 
-    if (connectionStatus !== "connected") {
+    if (connectionStatus !== "connected" || activationStatus !== "active") {
       return;
     }
 
@@ -154,6 +156,7 @@ export function useWorkspaceSessions(
       cancelled = true;
     };
   }, [
+    activationStatus,
     connectionStatus,
     disabled,
     dispatch,

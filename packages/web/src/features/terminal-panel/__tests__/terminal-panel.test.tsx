@@ -4,8 +4,9 @@ import userEvent from "@testing-library/user-event";
 import { createStore, Provider } from "jotai";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { activationStatusAtom } from "../../../atoms/activation";
 import { localeAtom } from "../../../atoms/app-ui";
-import { wsClientAtom } from "../../../atoms/connection";
+import { connectionStatusAtom, wsClientAtom } from "../../../atoms/connection";
 import { seedReadyWorkspaceState } from "../../../test-utils/workspace-state";
 import { toastsAtom } from "../../notifications";
 import { bottomPanelHeightAtom } from "../../workspace/atoms";
@@ -123,6 +124,89 @@ describe("TerminalPanel", () => {
     });
     expect(screen.getByTestId("xterm-host")).toHaveTextContent("term_1");
     expect(consoleSpy).not.toHaveBeenCalled();
+  });
+
+  it("waits for activation claim completion before hydrating the terminal list after reconnect", async () => {
+    const store = createStore();
+    const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
+      handlers.push(handler);
+      return () => {
+        handlers = handlers.filter((candidate) => candidate !== handler);
+      };
+    });
+    const sendCommand = vi.fn().mockImplementation((op: string) => {
+      if (op === "terminal.list") {
+        return Promise.resolve([
+          {
+            id: "term_reconnected",
+            workspaceId: "ws-test",
+            kind: "shell",
+            title: "Recovered Shell",
+            cwd: "/tmp/ws-test",
+            argv: ["/bin/bash"],
+            cols: 120,
+            rows: 30,
+            alive: true,
+            createdAt: 1,
+          },
+        ]);
+      }
+
+      return Promise.resolve([]);
+    });
+
+    seedReadyWorkspaceState(store, {
+      "ws-test": {
+        id: "ws-test",
+        path: "/tmp/ws-test",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+    store.set(bottomPanelHeightAtom, 240);
+    store.set(activationStatusAtom, "claiming");
+    store.set(connectionStatusAtom, "reconnecting");
+    setEnglishLocale(store);
+    store.set(wsClientAtom, {
+      subscribe,
+      sendCommand,
+      getStatus: () => store.get(connectionStatusAtom),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <TerminalPanel />
+      </Provider>
+    );
+
+    expect(sendCommand).not.toHaveBeenCalledWith("terminal.list", expect.anything());
+    expect(screen.getByText("No terminals")).toBeInTheDocument();
+
+    act(() => {
+      store.set(connectionStatusAtom, "connected");
+    });
+
+    expect(sendCommand).not.toHaveBeenCalledWith("terminal.list", expect.anything());
+
+    act(() => {
+      store.set(activationStatusAtom, "active");
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "terminal.list",
+        { workspaceId: "ws-test" },
+        undefined
+      );
+      expect(screen.getAllByText("Recovered Shell").length).toBeGreaterThan(0);
+      expect(screen.getByTestId("xterm-host")).toHaveTextContent("term_reconnected");
+    });
   });
 
   it("renders the new terminal immediately from terminal.create result before the created event arrives", async () => {

@@ -241,6 +241,7 @@ interface AppProvidersProps {
 export function AppProviders({ children }: AppProvidersProps) {
   const [, setWsClient] = useAtom(wsClientAtom);
   const [theme, setTheme] = useAtom(themeAtom);
+  const activationStatus = useAtomValue(activationStatusAtom);
   const authEnabled = useAtomValue(authEnabledAtom);
   const authenticated = useAtomValue(authenticatedAtom);
   const connectionStatus = useAtomValue(connectionStatusAtom);
@@ -291,7 +292,7 @@ export function AppProviders({ children }: AppProvidersProps) {
   }, [dispatch]);
 
   useEffect(() => {
-    if (connectionStatus !== "connected") {
+    if (connectionStatus !== "connected" || activationStatus !== "active") {
       return;
     }
 
@@ -322,7 +323,7 @@ export function AppProviders({ children }: AppProvidersProps) {
       cancelled = true;
       unsubscribeTerminalPreferences();
     };
-  }, [connectionStatus, dispatch, setTerminalPreferences, store]);
+  }, [activationStatus, connectionStatus, dispatch, setTerminalPreferences, store]);
 
   useEffect(() => {
     activeWorkspaceIdRef.current = activeWorkspaceId;
@@ -337,12 +338,12 @@ export function AppProviders({ children }: AppProvidersProps) {
       return;
     }
 
-    if (store.get(activationStatusAtom) === "gated") {
+    if (activationStatus !== "claiming") {
       return;
     }
 
     void claim();
-  }, [claim, connectionStatus, store]);
+  }, [activationStatus, claim, connectionStatus]);
 
   // Initialize theme from localStorage
   useEffect(() => {
@@ -360,7 +361,7 @@ export function AppProviders({ children }: AppProvidersProps) {
   }, [theme]);
 
   useEffect(() => {
-    if (connectionStatus !== "connected") {
+    if (connectionStatus !== "connected" || activationStatus !== "active") {
       return;
     }
 
@@ -402,7 +403,7 @@ export function AppProviders({ children }: AppProvidersProps) {
     return () => {
       cancelled = true;
     };
-  }, [connectionStatus, dispatch, setTheme]);
+  }, [activationStatus, connectionStatus, dispatch, setTheme]);
 
   useEffect(() => {
     const unsubscribeTheme = store.sub(themeAtom, () => {
@@ -459,6 +460,7 @@ export function AppProviders({ children }: AppProvidersProps) {
     // Subscribe to connection status changes
     const handleStatusChange = (status: ConnectionStatus) => {
       setConnectionStatus(status);
+      const activationStatus = store.get(activationStatusAtom);
 
       // Track reconnect attempts
       if (status === "reconnecting") {
@@ -471,7 +473,21 @@ export function AppProviders({ children }: AppProvidersProps) {
         setIsWriter(false);
       }
 
+      if (
+        activationStatus !== "gated" &&
+        (status === "connecting" || status === "disconnected" || status === "reconnecting")
+      ) {
+        store.set(activationStatusAtom, "idle");
+        store.set(activationGenerationAtom, null);
+        store.set(activationReasonAtom, null);
+      }
+
       if (status === "connected") {
+        if (activationStatus !== "gated") {
+          store.set(activationStatusAtom, "claiming");
+          store.set(activationGenerationAtom, null);
+          store.set(activationReasonAtom, null);
+        }
         setReconnectCount(0);
         setLastReconnect(null);
         syncWorkspaceActivity(true);
@@ -510,6 +526,9 @@ export function AppProviders({ children }: AppProvidersProps) {
     const sendWorkspaceActivate = (workspaceId: string) => {
       const currentState = workspaceActivityRef.current;
       if (currentState.mode === "active" && currentState.workspaceId === workspaceId) {
+        return;
+      }
+      if (store.get(activationStatusAtom) !== "active") {
         return;
       }
       const client = wsClientRef.current;
@@ -864,7 +883,7 @@ export function AppProviders({ children }: AppProvidersProps) {
       return;
     }
 
-    if (connectionStatus !== "connected") {
+    if (connectionStatus !== "connected" || activationStatus !== "active") {
       return;
     }
 
@@ -917,7 +936,7 @@ export function AppProviders({ children }: AppProvidersProps) {
     void client
       .sendCommand("workspace.activate", { workspaceId: activeWorkspaceId })
       .catch(() => {});
-  }, [activeWorkspaceId, authEnabled, authenticated, connectionStatus]);
+  }, [activeWorkspaceId, activationStatus, authEnabled, authenticated, connectionStatus]);
 
   return <>{children}</>;
 }

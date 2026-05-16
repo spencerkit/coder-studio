@@ -20,6 +20,7 @@ import { runCommandAsString } from "./provider-runtime/command-runner.js";
 import { createE2EProviderMockOverrides } from "./provider-runtime/e2e-provider-mock.js";
 import { ProviderInstallManager } from "./provider-runtime/install-manager.js";
 import type { RuntimeStatusDeps } from "./provider-runtime/runtime-status.js";
+import { debugRestartTrace, warnRestartTrace } from "./restart-trace.js";
 import { SessionManager } from "./session/manager.js";
 import type { Database } from "./storage/database.js";
 import { openDatabase } from "./storage/db.js";
@@ -282,24 +283,66 @@ export async function createServer(
   wsKeepaliveTimer.unref();
 
   let stopped = false;
+  const runStopStage = async <T>(stage: string, fn: () => Promise<T> | T): Promise<T> => {
+    const startedAt = Date.now();
+    debugRestartTrace("server.stop.stage_begin", {
+      serverInstanceId,
+      stage,
+    });
+    try {
+      const result = await fn();
+      debugRestartTrace("server.stop.stage_complete", {
+        serverInstanceId,
+        stage,
+        durationMs: Date.now() - startedAt,
+      });
+      return result;
+    } catch (error) {
+      warnRestartTrace("server.stop.stage_failed", {
+        serverInstanceId,
+        stage,
+        durationMs: Date.now() - startedAt,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+  };
   const stopServer = async (options?: ServerStopOptions) => {
-    if (stopped) return;
+    if (stopped) {
+      debugRestartTrace("server.stop.skip_already_stopped", {
+        serverInstanceId,
+      });
+      return;
+    }
     stopped = true;
+    const startedAt = Date.now();
+    const terminalShutdownMode =
+      options?.mode === "restart-preserve" && options.requestId && options.ttlMs
+        ? { mode: "restart-preserve" as const, requestId: options.requestId, ttlMs: options.ttlMs }
+        : { mode: "terminate" as const };
+
+    debugRestartTrace("server.stop.begin", {
+      serverInstanceId,
+      mode: terminalShutdownMode.mode,
+      requestId: "requestId" in terminalShutdownMode ? terminalShutdownMode.requestId : null,
+      ttlMs: "ttlMs" in terminalShutdownMode ? terminalShutdownMode.ttlMs : null,
+    });
 
     clearTimeout(gcTimer);
     clearInterval(wsKeepaliveTimer);
-    await app.close();
-    autoFetch.stop();
-    supervisorMgr.stop();
-    await terminalMgr.shutdown(
-      options?.mode === "restart-preserve" && options.requestId && options.ttlMs
-        ? { mode: "restart-preserve", requestId: options.requestId, ttlMs: options.ttlMs }
-        : { mode: "terminate" }
-    );
-    wsHub.destroy();
-    eventBus.clear();
-    deleteRuntimeConfig();
-    db.close();
+    await runStopStage("app.close", () => app.close());
+    await runStopStage("autoFetch.stop", () => autoFetch.stop());
+    await runStopStage("supervisor.stop", () => supervisorMgr.stop());
+    await runStopStage("terminal.shutdown", () => terminalMgr.shutdown(terminalShutdownMode));
+    await runStopStage("wsHub.destroy", () => wsHub.destroy());
+    await runStopStage("eventBus.clear", () => eventBus.clear());
+    await runStopStage("runtime.delete", () => deleteRuntimeConfig());
+    await runStopStage("db.close", () => db.close());
+    debugRestartTrace("server.stop.complete", {
+      serverInstanceId,
+      mode: terminalShutdownMode.mode,
+      durationMs: Date.now() - startedAt,
+    });
   };
 
   const actualPort = extractListenPort(app) ?? config.port;

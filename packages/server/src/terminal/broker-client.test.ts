@@ -1,6 +1,10 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import {
+  getTerminalBrokerRuntimePath,
+  readTerminalBrokerRuntime,
+} from "@coder-studio/core/runtime";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventBus } from "../bus/event-bus.js";
 import { TerminalBrokerClient } from "./broker-client.js";
@@ -15,6 +19,7 @@ describe("TerminalBrokerClient", () => {
   beforeEach(async () => {
     dir = mkdtempSync(join(tmpdir(), "cs-broker-"));
     socketPath = join(dir, "terminal-broker.sock");
+    process.env.CODER_STUDIO_RUNTIME_DIR = dir;
 
     const mockPty: PtyProcess = {
       onData: vi.fn(),
@@ -40,6 +45,7 @@ describe("TerminalBrokerClient", () => {
     rmSync(dir, { recursive: true, force: true });
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
+    delete process.env.CODER_STUDIO_RUNTIME_DIR;
   });
 
   it("creates, detaches, and claims a shell terminal across owners", async () => {
@@ -101,5 +107,42 @@ describe("TerminalBrokerClient", () => {
       message: expect.stringContaining("ENOENT"),
       code: "ENOENT",
     });
+  });
+
+  it("reports broker status for runtime recovery", async () => {
+    const client = new TerminalBrokerClient({ endpoint: socketPath });
+
+    const brokerStatus = await client.status();
+    const runtime = readTerminalBrokerRuntime();
+
+    expect(runtime).not.toBeNull();
+    expect(brokerStatus).toEqual({
+      pid: runtime!.pid,
+      startedAt: runtime!.startedAt,
+    });
+  });
+
+  it("preserves the replacement broker runtime artifacts when the old broker closes", async () => {
+    const firstBroker = broker!;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    const secondBroker = await startTerminalBrokerServer({
+      endpoint: socketPath,
+      eventBus: new EventBus(),
+    });
+    broker = secondBroker;
+
+    const replacementRuntime = readTerminalBrokerRuntime();
+    expect(replacementRuntime).not.toBeNull();
+
+    await firstBroker.close();
+
+    expect(readTerminalBrokerRuntime()).toEqual(replacementRuntime);
+    expect(
+      JSON.parse(readFileSync(getTerminalBrokerRuntimePath(), "utf8")) as {
+        endpoint: string;
+        pid: number;
+        startedAt: number;
+      }
+    ).toEqual(replacementRuntime);
   });
 });

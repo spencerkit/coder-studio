@@ -8,6 +8,7 @@ import { readCliConfig } from "./config-store.js";
 import { getStaticAssetsDir, hasWebAssets } from "./embed.js";
 import { assertSupportedNodeVersion } from "./node-version.js";
 import { getCliVersion } from "./package-manifest.js";
+import { debugRestartTrace, warnRestartTrace } from "./restart-trace.js";
 import { ensureTerminalBroker } from "./terminal-broker-control.js";
 
 const MISSING_WEB_ASSETS_WARNING = "Warning: Web assets not found. Frontend will not be available.";
@@ -59,21 +60,51 @@ function readValidRestartIntent(): RestartIntent | null {
   return intent.expiresAt > Date.now() ? intent : null;
 }
 
-const createShutdownHandler = (server: Server, serverInstanceId: string) => async () => {
-  const intent = readValidRestartIntent();
-  if (intent && intent.expectedServerInstanceId === serverInstanceId) {
-    await server.stop({
-      mode: "restart-preserve",
-      requestId: intent.requestId,
-      ttlMs: Math.max(1, intent.expiresAt - Date.now()),
-    });
-    process.exit(0);
-    return;
-  }
+const createShutdownHandler =
+  (server: Server, serverInstanceId: string, signal: NodeJS.Signals) => async () => {
+    const startedAt = Date.now();
+    const intent = readValidRestartIntent();
+    const shouldPreserve = intent?.expectedServerInstanceId === serverInstanceId;
+    const ttlMs = shouldPreserve && intent ? Math.max(1, intent.expiresAt - Date.now()) : null;
 
-  await server.stop();
-  process.exit(0);
-};
+    debugRestartTrace("server_runner.shutdown_signal", {
+      signal,
+      serverInstanceId,
+      requestId: intent?.requestId ?? null,
+      intentExpectedServerInstanceId: intent?.expectedServerInstanceId ?? null,
+      shouldPreserve,
+      ttlMs,
+    });
+
+    try {
+      if (shouldPreserve && intent && ttlMs !== null) {
+        await server.stop({
+          mode: "restart-preserve",
+          requestId: intent.requestId,
+          ttlMs,
+        });
+      } else {
+        await server.stop();
+      }
+
+      debugRestartTrace("server_runner.shutdown_complete", {
+        signal,
+        serverInstanceId,
+        shouldPreserve,
+        durationMs: Date.now() - startedAt,
+      });
+      process.exit(0);
+    } catch (error) {
+      warnRestartTrace("server_runner.shutdown_failed", {
+        signal,
+        serverInstanceId,
+        shouldPreserve,
+        durationMs: Date.now() - startedAt,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      process.exit(1);
+    }
+  };
 
 const isServerEntrypoint = (moduleUrl: string, argvEntry?: string): boolean => {
   if (argvEntry === undefined) {
@@ -130,10 +161,8 @@ export const startServer = async (): Promise<Server> => {
     restartClaimRequestId: restartIntent?.requestId,
     terminalBrokerEndpoint: broker.endpoint,
   });
-  const shutdown = createShutdownHandler(server, serverInstanceId);
-
-  process.on("SIGINT", shutdown);
-  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", createShutdownHandler(server, serverInstanceId, "SIGINT"));
+  process.on("SIGTERM", createShutdownHandler(server, serverInstanceId, "SIGTERM"));
 
   return server;
 };

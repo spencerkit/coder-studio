@@ -224,6 +224,10 @@ describe("AppProviders lifecycle recovery", () => {
       undefined
     );
 
+    act(() => {
+      store.set(activationStatusAtom, "active");
+    });
+
     seedWorkspaces(store, ["ws-1"], "ws-1");
 
     await vi.waitFor(() => {
@@ -236,6 +240,9 @@ describe("AppProviders lifecycle recovery", () => {
   it("sends workspace.deactivate when the page becomes hidden", async () => {
     const store = createStore();
     setVisibilityState("visible");
+    act(() => {
+      store.set(activationStatusAtom, "active");
+    });
     seedWorkspaces(store, ["ws-1"], "ws-1");
 
     renderProviders(store);
@@ -259,6 +266,9 @@ describe("AppProviders lifecycle recovery", () => {
   it("re-activates the current workspace when the page becomes visible again", async () => {
     const store = createStore();
     setVisibilityState("visible");
+    act(() => {
+      store.set(activationStatusAtom, "active");
+    });
     seedWorkspaces(store, ["ws-1"], "ws-1");
 
     renderProviders(store);
@@ -292,10 +302,13 @@ describe("AppProviders lifecycle recovery", () => {
     });
   });
 
-  it("re-sends workspace.activate after websocket reconnects", async () => {
+  it("waits for activation claim before re-sending workspace.activate after websocket reconnects", async () => {
     const store = createStore();
     setVisibilityState("visible");
     seedWorkspaces(store, ["ws-1"], "ws-1");
+    act(() => {
+      store.set(activationStatusAtom, "active");
+    });
 
     renderProviders(store);
 
@@ -305,23 +318,98 @@ describe("AppProviders lifecycle recovery", () => {
       });
     });
 
+    wsState.client?.sendCommand?.mockClear();
+
     act(() => {
       wsState.client?.statusHandler?.("reconnecting");
       wsState.client?.statusHandler?.("connected");
     });
 
     await vi.waitFor(() => {
-      const activateCalls =
-        wsState.client?.sendCommand?.mock.calls.filter(
-          ([op, args]) => op === "workspace.activate" && args?.workspaceId === "ws-1"
-        ) ?? [];
-      expect(activateCalls.length).toBe(2);
+      expect(store.get(activationStatusAtom)).toBe("claiming");
+    });
+
+    expect(wsState.client?.sendCommand).not.toHaveBeenCalledWith("workspace.activate", {
+      workspaceId: "ws-1",
+    });
+
+    act(() => {
+      store.set(activationStatusAtom, "active");
+    });
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.sendCommand).toHaveBeenCalledWith("workspace.activate", {
+        workspaceId: "ws-1",
+      });
+    });
+  });
+
+  it("marks activation idle on disconnect and claiming on reconnect before the new claim resolves", async () => {
+    const store = createStore();
+    let resolveClaim: (() => void) | undefined;
+    wsState.client!.sendCommand = createWsSendCommandMock((op: string) => {
+      if (op === "activation.claim") {
+        return new Promise((resolve) => {
+          resolveClaim = () =>
+            resolve({
+              active: true,
+              generation: 9,
+              recoveryMode: "grace_recover",
+            });
+        });
+      }
+
+      return undefined;
+    });
+
+    act(() => {
+      store.set(activationStatusAtom, "active");
+      store.set(activationGenerationAtom, 3);
+      store.set(activationReasonAtom, "stale");
+    });
+
+    renderProviders(store);
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
+
+    act(() => {
+      wsState.client?.statusHandler?.("reconnecting");
+    });
+
+    expect(store.get(activationStatusAtom)).toBe("idle");
+    expect(store.get(activationGenerationAtom)).toBeNull();
+    expect(store.get(activationReasonAtom)).toBeNull();
+
+    act(() => {
+      wsState.client?.statusHandler?.("connected");
+    });
+
+    await vi.waitFor(() => {
+      expect(store.get(activationStatusAtom)).toBe("claiming");
+      expect(store.get(activationGenerationAtom)).toBeNull();
+      expect(store.get(activationReasonAtom)).toBeNull();
+    });
+
+    await act(async () => {
+      resolveClaim?.();
+      await Promise.resolve();
+    });
+
+    await vi.waitFor(() => {
+      expect(store.get(activationStatusAtom)).toBe("active");
+      expect(store.get(activationGenerationAtom)).toBe(9);
+      expect(store.get(activationReasonAtom)).toBeNull();
     });
   });
 
   it("sends workspace.deactivate when the active workspace intent is cleared", async () => {
     const store = createStore();
     setVisibilityState("visible");
+    act(() => {
+      store.set(activationStatusAtom, "active");
+    });
     seedWorkspaces(store, ["ws-1", "ws-2"], "ws-1");
 
     renderProviders(store);
@@ -775,7 +863,7 @@ describe("AppProviders lifecycle recovery", () => {
     const store = createStore();
     setVisibilityState("visible");
 
-    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+    const sendCommand = createWsSendCommandMock(async (op: string) => {
       if (op === "settings.get") {
         return {
           "appearance.terminalCopyOnSelect": true,
@@ -818,7 +906,7 @@ describe("AppProviders lifecycle recovery", () => {
     const store = createStore();
     setVisibilityState("visible");
 
-    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+    const sendCommand = createWsSendCommandMock(async (op: string) => {
       if (op === "settings.get") {
         return {
           "appearance.themeId": "graphite-dark",
@@ -851,7 +939,7 @@ describe("AppProviders lifecycle recovery", () => {
     setVisibilityState("visible");
     localStorage.setItem("ui.theme", JSON.stringify("light"));
 
-    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+    const sendCommand = createWsSendCommandMock(async (op: string) => {
       if (op === "settings.get") {
         return {
           "appearance.themeId": "graphite-dark",
@@ -886,7 +974,7 @@ describe("AppProviders lifecycle recovery", () => {
     const store = createStore();
     setVisibilityState("visible");
 
-    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+    const sendCommand = createWsSendCommandMock(async (op: string) => {
       if (op === "settings.get") {
         return {
           "appearance.theme": "light",
@@ -922,7 +1010,7 @@ describe("AppProviders lifecycle recovery", () => {
     const settingsGetPromise = new Promise<Record<string, unknown>>((resolve) => {
       resolveSettingsGet = resolve;
     });
-    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+    const sendCommand = createWsSendCommandMock(async (op: string) => {
       if (op === "settings.get") {
         return await settingsGetPromise;
       }
@@ -970,7 +1058,7 @@ describe("AppProviders lifecycle recovery", () => {
     const settingsGetPromise = new Promise<Record<string, unknown>>((resolve) => {
       resolveSettingsGet = resolve;
     });
-    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+    const sendCommand = createWsSendCommandMock(async (op: string) => {
       if (op === "settings.get") {
         return await settingsGetPromise;
       }
@@ -1018,7 +1106,7 @@ describe("AppProviders lifecycle recovery", () => {
     const settingsGetPromise = new Promise<Record<string, unknown>>((resolve) => {
       resolveSettingsGet = resolve;
     });
-    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+    const sendCommand = createWsSendCommandMock(async (op: string) => {
       if (op === "settings.get") {
         return await settingsGetPromise;
       }
@@ -1065,7 +1153,7 @@ describe("AppProviders lifecycle recovery", () => {
     const settingsGetPromise = new Promise<Record<string, unknown>>((resolve) => {
       resolveSettingsGet = resolve;
     });
-    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+    const sendCommand = createWsSendCommandMock(async (op: string) => {
       if (op === "settings.get") {
         return await settingsGetPromise;
       }

@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { activationStatusAtom } from "../../atoms/activation";
 import { localeAtom } from "../../atoms/app-ui";
 import { connectionStatusAtom, wsClientAtom } from "../../atoms/connection";
 import { sessionsAtom } from "../../atoms/sessions";
@@ -110,6 +111,7 @@ function createAgentPaneStore(
     });
 
   store.set(connectionStatusAtom, connectionStatus);
+  store.set(activationStatusAtom, "active");
   store.set(wsClientAtom, {
     sendCommand,
     subscribe: vi.fn(() => () => {}),
@@ -356,6 +358,34 @@ describe("AgentPanes", () => {
     );
 
     await act(async () => {});
+    expect(
+      sendCommand.mock.calls.filter(
+        ([op, args]) => op === "session.list" && args?.workspaceId === "ws-1"
+      )
+    ).toHaveLength(0);
+
+    act(() => {
+      store.set(connectionStatusAtom, "connected");
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith("session.list", { workspaceId: "ws-1" }, undefined);
+    });
+  });
+
+  it("waits for activation claim completion before requesting session.list after reconnect", async () => {
+    const sendCommand = vi.fn().mockResolvedValue([]);
+    const { store } = createAgentPaneStore(undefined, sendCommand, "connected");
+    store.set(activationStatusAtom, "claiming");
+    store.set(sessionsAtom, {});
+
+    render(
+      <Provider store={store}>
+        <AgentPanes />
+      </Provider>
+    );
+
+    await act(async () => {});
     expect(sendCommand).not.toHaveBeenCalledWith(
       "session.list",
       { workspaceId: "ws-1" },
@@ -363,7 +393,7 @@ describe("AgentPanes", () => {
     );
 
     act(() => {
-      store.set(connectionStatusAtom, "connected");
+      store.set(activationStatusAtom, "active");
     });
 
     await waitFor(() => {
