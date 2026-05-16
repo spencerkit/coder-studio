@@ -1,3 +1,4 @@
+import * as runtimeModule from "@coder-studio/core/runtime";
 import { writeRuntimeConfig } from "@coder-studio/core/runtime";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
@@ -145,6 +146,55 @@ describe("pm2-control", () => {
       }),
       expect.any(Function)
     );
+  });
+
+  it("writes a restart intent before deleting the running server when restart=true", async () => {
+    const writeRestartIntentSpy = vi.spyOn(runtimeModule, "writeRestartIntent");
+
+    writeRuntimeConfig({
+      host: "127.0.0.1",
+      port: 4187,
+      pid: 424242,
+      token: "test-token",
+      serverInstanceId: "server-1",
+      startedAt: Date.now(),
+    });
+
+    await startManagedServer({
+      script: "/cli/dist/esm/server-runner.js",
+      cwd: "/repo",
+      waitMs: 10,
+      restart: true,
+    });
+
+    expect(writeRestartIntentSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        expectedServerInstanceId: "server-1",
+        mode: "preserve_terminals",
+      })
+    );
+  });
+
+  it("deletes the restart intent after a successful managed restart", async () => {
+    const deleteRestartIntentSpy = vi.spyOn(runtimeModule, "deleteRestartIntent");
+
+    writeRuntimeConfig({
+      host: "127.0.0.1",
+      port: 4187,
+      pid: 424242,
+      token: "test-token",
+      serverInstanceId: "server-1",
+      startedAt: Date.now(),
+    });
+
+    await startManagedServer({
+      script: "/cli/dist/esm/server-runner.js",
+      cwd: "/repo",
+      waitMs: 10,
+      restart: true,
+    });
+
+    expect(deleteRestartIntentSpy).toHaveBeenCalled();
   });
 
   it("waits for the previous PM2 app to disappear before starting a replacement", async () => {

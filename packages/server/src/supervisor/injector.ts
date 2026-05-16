@@ -7,7 +7,7 @@ import {
   type SupervisorCycle,
 } from "@coder-studio/core";
 import type { SessionManager } from "../session/manager.js";
-import type { TerminalManager } from "../terminal/manager.js";
+import type { TerminalManagerLike } from "../terminal/terminal-manager-like.js";
 
 export const INJECTABLE_SESSION_STATES: ReadonlySet<SessionState> = new Set<SessionState>([
   "idle",
@@ -39,7 +39,7 @@ export class SupervisorInjector {
   constructor(
     readonly deps: {
       sessionMgr: SessionManager;
-      terminalMgr: TerminalManager;
+      terminalMgr: TerminalManagerLike;
       config?: SupervisorConfig;
     }
   ) {

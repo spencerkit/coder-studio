@@ -168,7 +168,8 @@ function isRunningStatus(status: ServerStatus): boolean {
 
 interface ManagedStartupDecision {
   existingStatus: ServerStatus | null;
-  restartRequested: boolean;
+  shouldReplaceExisting: boolean;
+  preserveForRestart: boolean;
 }
 
 async function shouldRestartRunningServer(status: ServerStatus): Promise<boolean> {
@@ -186,7 +187,8 @@ async function prepareManagedStartup(forceRestart = false): Promise<ManagedStart
   if (!isRunningStatus(status)) {
     return {
       existingStatus: null,
-      restartRequested: false,
+      shouldReplaceExisting: false,
+      preserveForRestart: false,
     };
   }
 
@@ -202,22 +204,25 @@ async function prepareManagedStartup(forceRestart = false): Promise<ManagedStart
     }
     return {
       existingStatus: status,
-      restartRequested: false,
+      shouldReplaceExisting: false,
+      preserveForRestart: false,
     };
   }
 
   console.log("Restarting the managed Coder Studio server...");
   return {
     existingStatus: null,
-    restartRequested: true,
+    shouldReplaceExisting: true,
+    preserveForRestart: forceRestart,
   };
 }
 
-async function startManagedServerFlow(): Promise<void> {
+async function startManagedServerFlow(preserveForRestart = false): Promise<void> {
   await startManagedServer({
     script: resolveManagedScriptPath(),
     cwd: process.cwd(),
     waitMs: MANAGED_SERVER_WAIT_MS,
+    restart: preserveForRestart,
   });
 }
 
@@ -368,7 +373,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     const startup = await prepareManagedStartup(args.restart);
     if (startup.existingStatus === null) {
       await verifyManagedDatabaseCompatibility();
-      await startManagedServerFlow();
+      await startManagedServerFlow(startup.preserveForRestart);
     }
 
     await openManagedServerInBrowser(startup.existingStatus);
@@ -381,8 +386,12 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       return;
     }
 
-    if (startup.restartRequested) {
-      await stopRunningServer();
+    if (startup.shouldReplaceExisting) {
+      if (startup.preserveForRestart) {
+        await stopRunningServer({ preserveRestartIntent: true });
+      } else {
+        await stopRunningServer();
+      }
     }
 
     console.log("Starting Coder Studio Server in foreground...");
@@ -404,7 +413,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
   }
 
   await verifyManagedDatabaseCompatibility();
-  await startManagedServerFlow();
+  await startManagedServerFlow(startup.preserveForRestart);
 
   console.log("Coder Studio server started in background.");
   console.log("Run `coder-studio status` to inspect the server.");

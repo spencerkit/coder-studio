@@ -13,7 +13,7 @@ import type { RuntimeStatusDeps } from "../provider-runtime/runtime-status.js";
 import type { SessionManager } from "../session/manager.js";
 import type { Database } from "../storage/database.js";
 import type { SupervisorManager } from "../supervisor/manager.js";
-import type { TerminalManager } from "../terminal/manager.js";
+import type { TerminalManagerLike } from "../terminal/terminal-manager-like.js";
 import type { WorkspaceManager } from "../workspace/manager.js";
 import type { ActivationManager } from "./activation.js";
 import type { FencingManager } from "./fencing.js";
@@ -25,7 +25,7 @@ import type { Broadcaster } from "./hub.js";
 export interface CommandContext {
   workspaceMgr: WorkspaceManager;
   sessionMgr: SessionManager;
-  terminalMgr: TerminalManager;
+  terminalMgr: TerminalManagerLike;
   eventBus: EventBus;
   broadcaster: Broadcaster;
   db: Database;

@@ -5,5 +5,7 @@ export type { Server } from "./server.js";
 // Server entry point
 export { createServer } from "./server.js";
 export * from "./storage/index.js";
+export { TerminalBrokerClient } from "./terminal/broker-client.js";
+export { startTerminalBrokerServer } from "./terminal/broker-server.js";
 export * from "./terminal/index.js";
 export { type Broadcaster, WsHub } from "./ws/hub.js";

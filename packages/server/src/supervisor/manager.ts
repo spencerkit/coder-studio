@@ -19,7 +19,7 @@ import type { SettingsRepo } from "../storage/repositories/settings-repo.js";
 import type { SupervisorCycleAttemptRepo } from "../storage/repositories/supervisor-cycle-attempt-repo.js";
 import type { SupervisorCycleRepo } from "../storage/repositories/supervisor-cycle-repo.js";
 import type { SupervisorRepo } from "../storage/repositories/supervisor-repo.js";
-import type { TerminalManager } from "../terminal/manager.js";
+import type { TerminalManagerLike } from "../terminal/terminal-manager-like.js";
 import type { WorkspaceManager } from "../workspace/manager.js";
 import type { Broadcaster } from "../ws/hub.js";
 import type { SupervisorEvaluationContext } from "./context-builder.js";
@@ -77,7 +77,7 @@ interface SupervisorRetrySnapshot {
 export interface SupervisorManagerDeps {
   eventBus: EventBus;
   broadcaster: Broadcaster;
-  terminalMgr: TerminalManager;
+  terminalMgr: TerminalManagerLike;
   workspaceMgr: WorkspaceManager;
   sessionMgr: SessionManager;
   providerRegistry: ProviderDefinition[];

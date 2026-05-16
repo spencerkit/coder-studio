@@ -145,7 +145,9 @@ describe("main", () => {
     await main(["serve", "--foreground", "--restart"]);
 
     expect(confirmYesNo).not.toHaveBeenCalled();
-    expect(stopRunningServer).toHaveBeenCalledTimes(1);
+    expect(stopRunningServer).toHaveBeenCalledWith({
+      preserveRestartIntent: true,
+    });
     expect(startServer).toHaveBeenCalledTimes(1);
     expect(logSpy).toHaveBeenCalledWith("Restarting the managed Coder Studio server...");
     expect(logSpy).toHaveBeenCalledWith("Starting Coder Studio Server in foreground...");
@@ -187,6 +189,7 @@ describe("main", () => {
       script: expect.stringMatching(/server-runner\.(ts|js|mjs)$/),
       cwd: process.cwd(),
       waitMs: 5000,
+      restart: false,
     });
     expect(logSpy).toHaveBeenCalledWith("Coder Studio server started in background.");
     expect(logSpy).toHaveBeenCalledWith("Run `coder-studio status` to inspect the server.");
@@ -360,6 +363,7 @@ describe("main", () => {
       script: expect.stringMatching(/server-runner\.(ts|js|mjs)$/),
       cwd: process.cwd(),
       waitMs: 5000,
+      restart: false,
     });
     expect(logSpy).toHaveBeenCalledWith("Coder Studio server started in background.");
   });
@@ -383,7 +387,11 @@ describe("main", () => {
     expect(confirmYesNo).toHaveBeenCalledWith(
       "Coder Studio is already running at http://127.0.0.1:4187. Restart it? [y/N] "
     );
-    expect(startManagedServer).toHaveBeenCalledTimes(1);
+    expect(startManagedServer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        restart: false,
+      })
+    );
     expect(logSpy).toHaveBeenCalledWith("Restarting the managed Coder Studio server...");
   });
 
@@ -403,7 +411,11 @@ describe("main", () => {
     await main(["serve", "--restart"]);
 
     expect(confirmYesNo).not.toHaveBeenCalled();
-    expect(startManagedServer).toHaveBeenCalledTimes(1);
+    expect(startManagedServer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        restart: true,
+      })
+    );
     expect(logSpy).toHaveBeenCalledWith("Restarting the managed Coder Studio server...");
   });
 
@@ -508,8 +520,46 @@ describe("main", () => {
     await main(["open", "--restart"]);
 
     expect(confirmYesNo).not.toHaveBeenCalled();
-    expect(startManagedServer).toHaveBeenCalledTimes(1);
+    expect(startManagedServer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        restart: true,
+      })
+    );
     expect(logSpy).toHaveBeenCalledWith("Restarting the managed Coder Studio server...");
+    expect(openBrowser).toHaveBeenCalledWith("http://127.0.0.1:4190");
+  });
+
+  it("restarts destructively for open when the interactive prompt is confirmed without --restart", async () => {
+    getServerStatus
+      .mockResolvedValueOnce({
+        status: "running",
+        pid: 424242,
+        host: "127.0.0.1",
+        port: 4187,
+        restartCount: 0,
+        outFile: "/tmp/server.out.log",
+        errFile: "/tmp/server.err.log",
+        startedAt: 1000,
+      })
+      .mockResolvedValueOnce({
+        status: "running",
+        pid: 434343,
+        host: "127.0.0.1",
+        port: 4190,
+        restartCount: 0,
+        outFile: "/tmp/server.out.log",
+        errFile: "/tmp/server.err.log",
+        startedAt: 2000,
+      });
+    confirmYesNo.mockResolvedValue(true);
+
+    await main(["open"]);
+
+    expect(startManagedServer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        restart: false,
+      })
+    );
     expect(openBrowser).toHaveBeenCalledWith("http://127.0.0.1:4190");
   });
 

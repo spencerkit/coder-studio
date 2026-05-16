@@ -17,8 +17,8 @@ import type { EventBus, Unsubscribe } from "../bus/event-bus.js";
 import { mergeProviderLaunchConfig } from "../provider-config.js";
 import type { ProviderConfigRepo } from "../storage/repositories/provider-config-repo.js";
 import { type SessionRow, sessionToRow } from "../storage/repositories/session-repo.js";
-import type { TerminalManager } from "../terminal/manager.js";
 import type { RenderOptions } from "../terminal/snapshot-render.js";
+import type { TerminalManagerLike } from "../terminal/terminal-manager-like.js";
 import type { TerminalSpec } from "../terminal/types.js";
 import type { Broadcaster } from "../ws/hub.js";
 import { PtyStateDetector } from "./pty-state-detector.js";
@@ -38,7 +38,7 @@ export interface SessionLogger {
 }
 
 export interface SessionManagerDeps {
-  terminalMgr: TerminalManager;
+  terminalMgr: TerminalManagerLike;
   eventBus: EventBus;
   db: SessionDatabase;
   broadcaster: Broadcaster;
@@ -110,7 +110,7 @@ export class SessionManager {
     };
 
     // Create terminal (delegates to TerminalManager)
-    const terminal = this.deps.terminalMgr.create(terminalSpec);
+    const terminal = await this.deps.terminalMgr.create(terminalSpec);
 
     // Register session only after terminal creation succeeds so failed creates
     // do not leak half-created sessions into memory or hydration state.
@@ -195,8 +195,51 @@ export class SessionManager {
       this.sessions.set(session.id, hydrated);
       this.terminalToSession.set(session.terminalId, session.id);
 
+      const provider = this.deps.providerRegistry.find((entry) => entry.id === session.providerId);
+      if (nextState !== "ended" && provider) {
+        this.attachShadowDetector(hydrated, provider);
+      }
+
       if (nextState !== session.state) {
         this.deps.db.update(session.id, { state: nextState });
+      }
+    }
+  }
+
+  async reconcilePreservedSessions(): Promise<void> {
+    for (const session of this.sessions.values()) {
+      if (session.state === "ended") {
+        continue;
+      }
+
+      const metadata = await this.deps.terminalMgr.getRecoveryMetadata?.(session.terminalId);
+      if (!metadata?.alive) {
+        this.finishSession(session, 0);
+        continue;
+      }
+
+      const provider = this.deps.providerRegistry.find((entry) => entry.id === session.providerId);
+      if (!provider?.idleHeuristics) {
+        continue;
+      }
+
+      const detector = this.detectors.get(session.id);
+      if (detector && metadata.recentOutputBase64.length > 0) {
+        detector.feed(Buffer.from(metadata.recentOutputBase64, "base64"));
+      }
+
+      const idleForMs =
+        metadata.lastOutputAt === null
+          ? Number.POSITIVE_INFINITY
+          : Date.now() - metadata.lastOutputAt;
+
+      if (
+        (session.state === "running" || session.state === "starting") &&
+        idleForMs >= provider.idleHeuristics.idleDebounceMs
+      ) {
+        session.awaitingTurnCompletion = false;
+        session.sawOutputSinceTurnStart = true;
+        this.transitionSessionToIdle(session);
       }
     }
   }

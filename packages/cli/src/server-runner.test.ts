@@ -1,5 +1,6 @@
+import type { RestartIntent } from "@coder-studio/core/runtime";
 import { fileURLToPath } from "url";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getCliVersion } from "./package-manifest.js";
 
 const {
@@ -10,6 +11,8 @@ const {
   readCliConfig,
   hasWebAssets,
   getStaticAssetsDir,
+  ensureTerminalBroker,
+  readRestartIntent,
 } = vi.hoisted(() => ({
   createServer: vi.fn(),
   parseServerConfig: vi.fn(),
@@ -18,6 +21,8 @@ const {
   readCliConfig: vi.fn(),
   hasWebAssets: vi.fn(),
   getStaticAssetsDir: vi.fn(),
+  ensureTerminalBroker: vi.fn(),
+  readRestartIntent: vi.fn(),
 }));
 
 vi.mock("@coder-studio/server", () => ({
@@ -36,6 +41,20 @@ vi.mock("./embed.js", () => ({
   getStaticAssetsDir,
 }));
 
+vi.mock("./terminal-broker-control.js", () => ({
+  ensureTerminalBroker,
+}));
+
+vi.mock("@coder-studio/core/runtime", async () => {
+  const actual = await vi.importActual<typeof import("@coder-studio/core/runtime")>(
+    "@coder-studio/core/runtime"
+  );
+  return {
+    ...actual,
+    readRestartIntent,
+  };
+});
+
 import {
   buildServerConfig,
   runServerEntrypoint,
@@ -44,6 +63,15 @@ import {
 } from "./server-runner";
 
 describe("server-runner", () => {
+  beforeEach(() => {
+    ensureTerminalBroker.mockResolvedValue({
+      endpoint: "/tmp/broker.sock",
+      pid: 9001,
+      startedAt: 1000,
+    });
+    readRestartIntent.mockReturnValue(null);
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
@@ -102,6 +130,9 @@ describe("server-runner", () => {
       appVersion: getCliVersion(import.meta.url),
       host: "127.0.0.1",
       port: 4173,
+      serverInstanceId: `server-${process.pid}`,
+      restartClaimRequestId: undefined,
+      terminalBrokerEndpoint: "/tmp/broker.sock",
       webRoot: "/tmp/web",
     });
     expect(runningServer).toEqual({ stop: expect.any(Function) });
@@ -138,6 +169,133 @@ describe("server-runner", () => {
     });
     expect(openDatabase).toHaveBeenCalledWith("/tmp/cs-data/coder-studio.db");
     expect(closeDatabase).toHaveBeenCalledWith(db);
+  });
+
+  it("ensures the terminal broker before creating the server", async () => {
+    ensureTerminalBroker.mockResolvedValue({
+      endpoint: "/tmp/broker.sock",
+      pid: 9001,
+      startedAt: 1000,
+    });
+    readCliConfig.mockReturnValue(null);
+    hasWebAssets.mockReturnValue(true);
+    getStaticAssetsDir.mockReturnValue("/tmp/web");
+    createServer.mockResolvedValue({ stop: vi.fn() });
+
+    await startServer();
+
+    expect(ensureTerminalBroker).toHaveBeenCalledTimes(1);
+    expect(createServer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        terminalBrokerEndpoint: "/tmp/broker.sock",
+      })
+    );
+  });
+
+  it("claims the restart intent on startup and preserves terminals on SIGTERM only when the intent targets this instance", async () => {
+    readRestartIntent.mockReturnValue({
+      requestId: "restart-1",
+      expectedServerInstanceId: `server-${process.pid}`,
+      createdAt: 100,
+      expiresAt: Date.now() + 5_000,
+      mode: "preserve_terminals",
+    } satisfies RestartIntent);
+
+    const stop = vi.fn().mockResolvedValue(undefined);
+    createServer.mockResolvedValue({ stop });
+    readCliConfig.mockReturnValue(null);
+    hasWebAssets.mockReturnValue(true);
+    getStaticAssetsDir.mockReturnValue("/tmp/web");
+
+    const processOnSpy = vi.spyOn(process, "on");
+    const processExitSpy = vi.spyOn(process, "exit").mockImplementation((() => undefined) as never);
+
+    await startServer();
+
+    expect(createServer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        terminalBrokerEndpoint: "/tmp/broker.sock",
+        serverInstanceId: `server-${process.pid}`,
+        restartClaimRequestId: "restart-1",
+      })
+    );
+
+    const shutdown = processOnSpy.mock.calls[1]?.[1] as () => Promise<void>;
+    await shutdown();
+
+    expect(stop).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: "restart-preserve",
+        requestId: "restart-1",
+      })
+    );
+    expect(processExitSpy).toHaveBeenCalledWith(0);
+  });
+
+  it("ignores an expired restart intent during startup and shutdown", async () => {
+    readRestartIntent.mockReturnValue({
+      requestId: "restart-expired",
+      expectedServerInstanceId: `server-${process.pid}`,
+      createdAt: 100,
+      expiresAt: Date.now() - 1,
+      mode: "preserve_terminals",
+    } satisfies RestartIntent);
+
+    const stop = vi.fn().mockResolvedValue(undefined);
+    createServer.mockResolvedValue({ stop });
+    readCliConfig.mockReturnValue(null);
+    hasWebAssets.mockReturnValue(true);
+    getStaticAssetsDir.mockReturnValue("/tmp/web");
+
+    const processOnSpy = vi.spyOn(process, "on");
+    const processExitSpy = vi.spyOn(process, "exit").mockImplementation((() => undefined) as never);
+
+    await startServer();
+
+    expect(createServer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        restartClaimRequestId: undefined,
+      })
+    );
+
+    const shutdown = processOnSpy.mock.calls[1]?.[1] as () => Promise<void>;
+    await shutdown();
+
+    expect(stop).toHaveBeenCalledWith();
+    expect(processExitSpy).toHaveBeenCalledWith(0);
+  });
+
+  it("does not preserve terminals on shutdown when the restart intent targets a different instance", async () => {
+    readRestartIntent.mockReturnValue({
+      requestId: "restart-other",
+      expectedServerInstanceId: "server-other",
+      createdAt: 100,
+      expiresAt: Date.now() + 5_000,
+      mode: "preserve_terminals",
+    } satisfies RestartIntent);
+
+    const stop = vi.fn().mockResolvedValue(undefined);
+    createServer.mockResolvedValue({ stop });
+    readCliConfig.mockReturnValue(null);
+    hasWebAssets.mockReturnValue(true);
+    getStaticAssetsDir.mockReturnValue("/tmp/web");
+
+    const processOnSpy = vi.spyOn(process, "on");
+    const processExitSpy = vi.spyOn(process, "exit").mockImplementation((() => undefined) as never);
+
+    await startServer();
+
+    expect(createServer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        restartClaimRequestId: "restart-other",
+      })
+    );
+
+    const shutdown = processOnSpy.mock.calls[1]?.[1] as () => Promise<void>;
+    await shutdown();
+
+    expect(stop).toHaveBeenCalledWith();
+    expect(processExitSpy).toHaveBeenCalledWith(0);
   });
 
   it("starts the server when executed as the entrypoint", async () => {
