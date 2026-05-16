@@ -1,6 +1,6 @@
 import type { GitStatus, Session } from "@coder-studio/core";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { dispatchCommandAtom } from "../../../atoms/connection";
 import {
   activeWorkspaceAtom,
@@ -63,6 +63,7 @@ export function useWorkspaceScreenModel() {
   const [mobileSheet, setMobileSheet] = useState<MobileWorkspaceSheetKind>(null);
   const [mobileFilesRoute, setMobileFilesRoute] = useState<MobileFilesRoute>({ kind: "root" });
   const [mobileActiveSessionId, setMobileActiveSessionId] = useState<string | null>(null);
+  const mobileSelectionVersionRef = useRef(0);
 
   useEffect(() => {
     if (!workspace) {
@@ -170,6 +171,7 @@ export function useWorkspaceScreenModel() {
         paneActions.appendSession(sessionId, mobileActiveSessionId, "vertical");
       }
 
+      mobileSelectionVersionRef.current += 1;
       setMobileActiveSessionId(sessionId);
     },
     [mobileActiveSessionId, orderedSessions, paneActions, sessions]
@@ -178,6 +180,7 @@ export function useWorkspaceScreenModel() {
   const handleMobileSessionCreated = useCallback(
     (sessionId: string) => {
       paneActions.appendSession(sessionId, mobileActiveSessionId, "vertical");
+      mobileSelectionVersionRef.current += 1;
       setMobileActiveSessionId(sessionId);
     },
     [mobileActiveSessionId, paneActions]
@@ -185,16 +188,30 @@ export function useWorkspaceScreenModel() {
 
   const closeMobileSession = useCallback(
     async (sessionId: string) => {
+      const wasActive = mobileActiveSessionId === sessionId;
+      const selectionVersionAtCloseStart = mobileSelectionVersionRef.current;
       const remainingSessions = mobileAgentSessions.filter((session) => session.id !== sessionId);
       const nextActiveSessionId = remainingSessions[0]?.id ?? null;
 
-      paneActions.closeSessionPane(sessionId);
-      setMobileActiveSessionId((current) =>
-        current === sessionId ? nextActiveSessionId : current
-      );
-      await sessionActions.closeSession(sessionId);
+      if (wasActive) {
+        setMobileActiveSessionId(nextActiveSessionId);
+      }
+
+      const closed = await sessionActions.closeSession(sessionId);
+      if (!closed) {
+        if (!wasActive || mobileSelectionVersionRef.current !== selectionVersionAtCloseStart) {
+          return;
+        }
+
+        setMobileActiveSessionId((current) =>
+          current === nextActiveSessionId ? sessionId : current
+        );
+        return;
+      }
+
+      paneActions.removeSessionPane(sessionId);
     },
-    [mobileAgentSessions, paneActions, sessionActions]
+    [mobileActiveSessionId, mobileAgentSessions, paneActions, sessionActions]
   );
 
   const restoreMobileSession = useCallback(
@@ -207,6 +224,7 @@ export function useWorkspaceScreenModel() {
         paneActions.appendSession(sessionId, mobileActiveSessionId, "vertical");
       }
 
+      mobileSelectionVersionRef.current += 1;
       setMobileActiveSessionId(sessionId);
     },
     [mobileActiveSessionId, orderedSessions, paneActions, sessions]

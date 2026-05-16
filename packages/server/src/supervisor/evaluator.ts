@@ -4,6 +4,9 @@ import {
   type ProviderDefinition,
   type Supervisor,
   type SupervisorConfig,
+  type SupervisorCycleStepUpdate,
+  type SupervisorPlanStep,
+  type SupervisorStopReason,
 } from "@coder-studio/core";
 import type { FastifyBaseLogger } from "fastify";
 import { mergeProviderLaunchConfig } from "../provider-config.js";
@@ -25,14 +28,21 @@ const NOOP_LOGGER: FastifyBaseLogger = {
   warn: () => {},
 };
 
-/**
- * Result of a supervisor evaluation cycle.
- * The message is the next instruction to send to the business agent.
- */
-export interface SupervisorResult {
-  message: string;
-  objectiveComplete: boolean;
+export interface SupervisorEvaluationResult {
+  status: "continue" | "stop";
+  stopReason?: Extract<
+    SupervisorStopReason,
+    "objective_complete" | "supervisor_uncertain" | "needs_user_input"
+  >;
+  reason: string;
+  guidance?: string;
+  plan?: SupervisorPlanStep[];
+  activeStepId?: string;
+  progressSummary?: string;
+  stepUpdates?: SupervisorCycleStepUpdate[];
 }
+
+export type SupervisorResult = SupervisorEvaluationResult;
 
 interface EvaluateOptions {
   signal?: AbortSignal;
@@ -60,7 +70,7 @@ export class SupervisorEvaluator {
     supervisor: Supervisor,
     context: SupervisorEvaluationContext,
     options: EvaluateOptions = {}
-  ): Promise<SupervisorResult> {
+  ): Promise<SupervisorEvaluationResult> {
     const provider = this.deps.providerRegistry.find(
       (item) => item.id === supervisor.evaluatorProviderId
     );
@@ -102,9 +112,9 @@ export class SupervisorEvaluator {
       options
     );
 
-    let message: string;
+    let payloadText: string;
     try {
-      message = extractSupervisorMessage(stdout, provider.id);
+      payloadText = extractSupervisorPayload(stdout, provider.id);
     } catch (error) {
       const lines = stdout.trim().split(/\r?\n/).filter(Boolean);
       debugCodexUnparseableOutput(
@@ -119,41 +129,39 @@ export class SupervisorEvaluator {
       throw error;
     }
 
-    const normalizedMessage = message.slice(0, this.config.guidanceMaxChars);
-    return {
-      message: normalizedMessage,
-      objectiveComplete: normalizedMessage.trim() === "[objective complete]",
-    };
+    return parseSupervisorEvaluationResult(payloadText, this.config.guidanceMaxChars);
   }
 }
 
 function buildPrompt(context: SupervisorEvaluationContext): string {
-  const agentOutput = context.transcriptExcerpt ?? context.terminalExcerpt ?? "";
-  const userInput = context.latestUserInput?.trim() ?? "";
-
   const lines: string[] = [
-    "You are the supervisor for a business agent terminal session.",
-    "Your job is to analyze the current objective and the business agent's latest output, then generate the next concrete task for the agent to execute.",
-    'If the objective is complete, respond with "[objective complete]".',
-    "If more work is needed, respond with a clear, actionable instruction for the next step.",
+    "You are supervising a target-scoped software task.",
+    "Return JSON only.",
+    "",
+    "Allowed statuses:",
+    '- "continue": more work is needed; include "reason" and "guidance".',
+    '- "stop": supervision should stop; include "stopReason" and "reason".',
+    "",
+    "Allowed stop reasons:",
+    '- "objective_complete"',
+    '- "supervisor_uncertain"',
+    '- "needs_user_input"',
+    "",
+    "If planGenerated is false, bootstrap a plan with 3 to 7 milestone-sized steps.",
+    "If planGenerated is true, update progress incrementally; do not rewrite the full plan unless absolutely necessary.",
     "",
     "Current objective:",
     context.objective,
+    "",
+    "Current target memory:",
+    JSON.stringify(context.targetMemory, null, 2),
+    "",
+    "Latest user input:",
+    context.latestUserInput?.trim() || "(none)",
+    "",
+    "Current terminal snapshot:",
+    context.terminalExcerpt || "(no output yet)",
   ];
-
-  if (userInput) {
-    lines.push("", "Latest user input:", userInput);
-  }
-
-  lines.push(
-    "",
-    "Latest business agent output:",
-    agentOutput || "(no output yet)",
-    "",
-    "Your response must be one of:",
-    '1. A concrete next task (e.g., "Run the tests to verify the fix", "Review the error in logs/main.log")',
-    '2. "[objective complete]" if the objective has been fully achieved'
-  );
 
   return lines.join("\n");
 }
@@ -436,14 +444,11 @@ function debugCodexUnparseableOutput(
 }
 
 /**
- * Extract the supervisor's message from the provider's output.
- * The supervisor outputs natural language text (not JSON) that should be
- * sent directly to the business agent.
- *
+ * Extract the supervisor's payload text from the provider's output.
  * For Codex: scans JSONL stream for agent_message/reasoning items.
  * For Claude: parses the result envelope or plain text.
  */
-function extractSupervisorMessage(output: string, providerId: string): string {
+function extractSupervisorPayload(output: string, providerId: string): string {
   const trimmed = output.trim();
   if (!trimmed) {
     throw new Error("Supervisor returned empty output");
@@ -452,15 +457,15 @@ function extractSupervisorMessage(output: string, providerId: string): string {
   const lines = trimmed.split(/\r?\n/).filter(Boolean);
 
   if (providerId === "codex") {
-    if (trimmed === "[objective complete]") {
-      return trimmed;
-    }
-
     if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) {
       return stripCodeFence(trimmed);
     }
 
     const scan = scanCodexStream(lines);
+
+    if (!scan.isCodexStream && (trimmed.startsWith("{") || trimmed.startsWith("["))) {
+      return stripCodeFence(trimmed);
+    }
 
     if (scan.turnFailure) {
       throw new Error(`Supervisor (codex) failed: ${scan.turnFailure}`);
@@ -525,4 +530,107 @@ function extractSupervisorMessage(output: string, providerId: string): string {
   }
 
   throw new Error("Supervisor did not return a recognizable message");
+}
+
+function parseSupervisorEvaluationResult(
+  payloadText: string,
+  guidanceMaxChars: number
+): SupervisorEvaluationResult {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(stripCodeFence(payloadText));
+  } catch (error) {
+    throw new Error(
+      `Supervisor returned invalid JSON: ${error instanceof Error ? error.message : "parse failed"}`
+    );
+  }
+
+  if (!parsed || typeof parsed !== "object") {
+    throw new Error("Supervisor returned invalid evaluation payload");
+  }
+
+  const record = parsed as Record<string, unknown>;
+  const status = record.status;
+  const reason = record.reason;
+
+  if (
+    (status !== "continue" && status !== "stop") ||
+    typeof reason !== "string" ||
+    !reason.trim()
+  ) {
+    throw new Error("Supervisor returned invalid evaluation payload");
+  }
+
+  if (status === "stop") {
+    const stopReason = record.stopReason;
+    if (
+      stopReason !== "objective_complete" &&
+      stopReason !== "supervisor_uncertain" &&
+      stopReason !== "needs_user_input"
+    ) {
+      throw new Error("Supervisor stop result is missing a valid stopReason");
+    }
+
+    return {
+      status,
+      stopReason,
+      reason: reason.trim(),
+    };
+  }
+
+  const guidance =
+    typeof record.guidance === "string" && record.guidance.trim()
+      ? record.guidance.trim().slice(0, guidanceMaxChars)
+      : undefined;
+
+  const plan: SupervisorPlanStep[] | undefined = Array.isArray(record.plan)
+    ? record.plan.flatMap<SupervisorPlanStep>((value) => {
+        if (!value || typeof value !== "object") {
+          return [];
+        }
+        const step = value as Record<string, unknown>;
+        if (
+          typeof step.id !== "string" ||
+          typeof step.title !== "string" ||
+          (step.status !== "pending" && step.status !== "in_progress" && step.status !== "done")
+        ) {
+          return [];
+        }
+        return [{ id: step.id, title: step.title, status: step.status }];
+      })
+    : undefined;
+
+  const stepUpdates: SupervisorCycleStepUpdate[] | undefined = Array.isArray(record.stepUpdates)
+    ? record.stepUpdates.flatMap<SupervisorCycleStepUpdate>((value) => {
+        if (!value || typeof value !== "object") {
+          return [];
+        }
+        const update = value as Record<string, unknown>;
+        if (
+          typeof update.id !== "string" ||
+          (update.status !== "pending" &&
+            update.status !== "in_progress" &&
+            update.status !== "done")
+        ) {
+          return [];
+        }
+        return [{ id: update.id, status: update.status }];
+      })
+    : undefined;
+
+  return {
+    status,
+    reason: reason.trim(),
+    guidance,
+    plan,
+    activeStepId:
+      typeof record.activeStepId === "string" && record.activeStepId.trim()
+        ? record.activeStepId
+        : undefined,
+    progressSummary:
+      typeof record.progressSummary === "string" && record.progressSummary.trim()
+        ? record.progressSummary.trim()
+        : undefined,
+    stepUpdates,
+  };
 }

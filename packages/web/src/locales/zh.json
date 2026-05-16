@@ -77,7 +77,9 @@
     "search": "搜索",
     "search_files": "搜索文件",
     "search_commands": "搜索命令",
-    "back": "返回"
+    "back": "返回",
+    "expand": "展开",
+    "collapse": "收起"
   },
   "label": {
     "workspace": "工作区",
@@ -673,7 +675,31 @@
     },
     "stop_reason": {
       "objective_complete": "目标已达成，Supervisor 已自动停止。",
-      "max_supervision_count_reached": "已达到配置的最大监督次数。"
+      "max_supervision_count_reached": "已达到配置的最大监督次数。",
+      "supervisor_uncertain": "Supervisor 暂时无法判断下一步，已停止自动监督。",
+      "needs_user_input": "Supervisor 需要更多用户输入后才能继续自动监督。"
+    },
+    "target_memory": {
+      "title": "目标记忆",
+      "target": "目标",
+      "plan": "计划",
+      "stalled": "停滞",
+      "plan_ready": "计划已就绪",
+      "plan_pending": "计划待生成",
+      "progress_title": "目标进展",
+      "progress_badge": "进展",
+      "plan_title": "目标计划",
+      "reasoning_title": "目标轮次判断",
+      "cycle_result": {
+        "continue": "继续",
+        "stop": "停止",
+        "error": "错误"
+      },
+      "step_status": {
+        "pending": "待处理",
+        "in_progress": "进行中",
+        "done": "已完成"
+      }
     },
     "meta": {
       "title": "执行策略",

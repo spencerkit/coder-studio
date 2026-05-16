@@ -87,6 +87,30 @@ describe("SupervisorRepo", () => {
     });
   });
 
+  it("derives targetId from supervisor id", () => {
+    supervisorRepo.create({
+      id: "sup-1",
+      sessionId: "sess-1",
+      workspaceId: "ws-1",
+      state: "idle",
+      objective: "Track target scope",
+      evaluatorProviderId: "codex",
+      createdAt: 10,
+      updatedAt: 10,
+    });
+
+    const created = supervisorRepo.findById("sup-1");
+    expect(created?.targetId).toBe("sup-1");
+
+    const updated = supervisorRepo.update("sup-1", {
+      objective: "Track target scope again",
+      updatedAt: 11,
+    });
+
+    expect(updated.targetId).toBe("sup-1");
+    expect(supervisorRepo.findById("sup-1")?.targetId).toBe("sup-1");
+  });
+
   it("rejects a supervisor whose workspace does not match its session workspace", () => {
     db.prepare(
       "INSERT INTO workspaces (id, path, target_runtime, opened_at, last_active_at, ui_state) VALUES (?, ?, ?, ?, ?, ?)"

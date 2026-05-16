@@ -14,7 +14,7 @@ const STATE_CLASSES: Record<SupervisorState, string> = {
   injecting: "supervisor-state-injecting",
   paused: "supervisor-state-paused",
   error: "supervisor-state-error",
-  stopped: "supervisor-state-idle",
+  stopped: "supervisor-state-stopped",
 };
 
 interface UseSupervisorActionsArgs {
@@ -102,6 +102,9 @@ export function useSupervisorActions({ sessionId }: UseSupervisorActionsArgs) {
     : ([] as SupervisorCycle[]);
 
   const latestCycle = cycles[0];
+  const hasInFlightCycle = cycles.some(
+    (cycle) => cycle.status === "evaluating" || cycle.status === "queued"
+  );
   const latestCycleText = latestCycle
     ? (latestCycle.result ??
       latestCycle.errorReason ??
@@ -113,6 +116,20 @@ export function useSupervisorActions({ sessionId }: UseSupervisorActionsArgs) {
             ? t("supervisor.cycle.cancelled")
             : t("supervisor.cycle.waiting")))
     : null;
+
+  const targetMemory = supervisor?.currentTargetMemory ?? null;
+  const targetPlanItems = targetMemory?.plan ?? [];
+  const recentTargetCycles = supervisor?.recentTargetCycles ?? [];
+  const planGeneratedLabel = targetMemory
+    ? targetMemory.planGenerated
+      ? t("supervisor.target_memory.plan_ready")
+      : t("supervisor.target_memory.plan_pending")
+    : null;
+  const targetProgressLabel = t("supervisor.target_memory.progress_badge");
+  const targetCycleResultLabel =
+    recentTargetCycles[0] != null
+      ? t(`supervisor.target_memory.cycle_result.${recentTargetCycles[0].result}`)
+      : null;
 
   const stopReasonLabel = supervisor?.stopReason
     ? t(`supervisor.stop_reason.${supervisor.stopReason}`)
@@ -152,9 +169,16 @@ export function useSupervisorActions({ sessionId }: UseSupervisorActionsArgs) {
     handlePause,
     handleResume,
     handleTrigger,
-    isBusy: supervisor?.state === "evaluating" || supervisor?.state === "injecting",
+    isBusy:
+      supervisor?.state === "evaluating" || supervisor?.state === "injecting" || hasInFlightCycle,
     latestCycle,
     latestCycleText,
+    planGeneratedLabel,
+    recentTargetCycles,
+    targetCycleResultLabel,
+    targetMemory,
+    targetProgressLabel,
+    targetPlanItems,
     openDialog,
     stopReasonLabel,
     stateClass: supervisor ? STATE_CLASSES[supervisor.state] : STATE_CLASSES.inactive,

@@ -2,7 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { BrowserRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { activationStatusAtom } from "../atoms/activation";
+import { activationReasonAtom, activationStatusAtom } from "../atoms/activation";
 import { authenticatedAtom, localeAtom } from "../atoms/app-ui";
 import { authEnabledAtom, connectionStatusAtom, wsClientAtom } from "../atoms/connection";
 import {
@@ -313,7 +313,21 @@ describe("DesktopShell auth gating", () => {
 
     renderShell(store);
 
-    expect(screen.getByText("正在重新连接...")).toBeInTheDocument();
+    expect(screen.getByText("连接已断开，正在重新连接...")).toBeInTheDocument();
+  });
+
+  it("shows the displaced-session banner on desktop when activation is gated", () => {
+    const store = createStore();
+    store.set(connectionStatusAtom, "disconnected");
+    store.set(authEnabledAtom, false);
+    store.set(authenticatedAtom, true);
+    store.set(activationStatusAtom, "gated");
+    store.set(activationReasonAtom, "displaced");
+
+    renderShell(store);
+
+    expect(screen.getByText("另一个标签页已激活")).toBeInTheDocument();
+    expect(screen.queryByText("连接已断开，正在重新连接...")).not.toBeInTheDocument();
   });
 
   it("renders SessionGatePage on /session-gate", () => {

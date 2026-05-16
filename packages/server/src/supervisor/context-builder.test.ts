@@ -56,13 +56,25 @@ const baseSupervisor: Supervisor = {
   id: "sup-1",
   sessionId: "sess-1",
   workspaceId: "ws-1",
+  targetId: "tgt-1",
   state: "idle",
   objective: "Persist supervisors",
   evaluatorProviderId: "codex",
+  maxSupervisionCount: 0,
+  completedSupervisionCount: 0,
+  recentTargetCycles: [],
   cycles: [],
   createdAt: 1,
   updatedAt: 1,
 };
+
+const baseTargetMemory = {
+  targetId: "tgt-1",
+  planGenerated: false,
+  plan: [],
+  stalledCount: 0,
+  updatedAt: 1,
+} as const;
 
 describe("stripAnsi", () => {
   it("removes bracketed paste markers", () => {
@@ -104,12 +116,15 @@ describe("SupervisorContextBuilder", () => {
       },
     });
 
-    const context = await builder.build(baseSupervisor);
+    const context = await builder.build(baseSupervisor, baseTargetMemory);
 
     expect(context.evidenceSource).toBe("headless_snapshot");
     expect(context.terminalExcerpt).toContain("rendered terminal content here");
     expect(context.transcriptExcerpt).toBeUndefined();
     expect(context.lastTurnId).toBeUndefined();
+    expect(context.targetMemory).toEqual(baseTargetMemory);
+    expect("gitStatusSummary" in context).toBe(false);
+    expect("gitDiffStat" in context).toBe(false);
   });
 
   it("returns an empty headless snapshot when no rendered terminal content is available", async () => {
@@ -125,7 +140,10 @@ describe("SupervisorContextBuilder", () => {
       },
     });
 
-    const context = await builder.build({ ...baseSupervisor, evaluatorProviderId: "claude" });
+    const context = await builder.build(
+      { ...baseSupervisor, evaluatorProviderId: "claude" },
+      baseTargetMemory
+    );
 
     expect(context.evidenceSource).toBe("headless_snapshot");
     expect(context.terminalExcerpt).toBe("");
@@ -143,11 +161,14 @@ describe("SupervisorContextBuilder", () => {
       },
     });
 
-    const context = await builder.build({
-      ...baseSupervisor,
-      objective: "Ship the fix",
-      evaluatorProviderId: "claude",
-    });
+    const context = await builder.build(
+      {
+        ...baseSupervisor,
+        objective: "Ship the fix",
+        evaluatorProviderId: "claude",
+      },
+      baseTargetMemory
+    );
 
     expect(context.latestUserInput).toBe("run the tests");
   });
@@ -165,7 +186,10 @@ describe("SupervisorContextBuilder", () => {
       },
     });
 
-    const context = await builder.build({ ...baseSupervisor, evaluatorProviderId: "claude" });
+    const context = await builder.build(
+      { ...baseSupervisor, evaluatorProviderId: "claude" },
+      baseTargetMemory
+    );
 
     expect(context.latestUserInput).toBeUndefined();
   });
@@ -194,7 +218,7 @@ describe("SupervisorContextBuilder", () => {
       logger,
     });
 
-    await builder.build(baseSupervisor);
+    await builder.build(baseSupervisor, baseTargetMemory);
 
     expect(logger.info).toHaveBeenCalledWith(
       expect.objectContaining({
