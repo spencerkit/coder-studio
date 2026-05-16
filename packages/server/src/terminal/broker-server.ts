@@ -3,6 +3,7 @@ import { createServer, type Socket } from "node:net";
 import type { DomainEvent } from "@coder-studio/core";
 import {
   deleteTerminalBrokerRuntime,
+  readTerminalBrokerRuntime,
   writeTerminalBrokerRuntime,
 } from "@coder-studio/core/runtime";
 import type { EventBus } from "../bus/event-bus.js";
@@ -31,6 +32,25 @@ function toBrokerError(id: string, error: unknown): BrokerResponse {
     code: "broker_request_failed",
     message: error instanceof Error ? error.message : String(error),
   };
+}
+
+function brokerRuntimeMatchesCurrent(
+  brokerRuntime: {
+    endpoint: string;
+    pid: number;
+    startedAt: number;
+  },
+  currentRuntime: {
+    endpoint: string;
+    pid: number;
+    startedAt: number;
+  } | null
+): boolean {
+  return (
+    currentRuntime?.endpoint === brokerRuntime.endpoint &&
+    currentRuntime.pid === brokerRuntime.pid &&
+    currentRuntime.startedAt === brokerRuntime.startedAt
+  );
 }
 
 export async function startTerminalBrokerServer(opts: {
@@ -118,7 +138,7 @@ export async function startTerminalBrokerServer(opts: {
             continue;
           }
 
-          const response = await handleBrokerRequest(runtime, request);
+          const response = await handleBrokerRequest(runtime, request, brokerRuntime);
           socket.write(`${JSON.stringify(response)}\n`);
 
           if (request.op === "subscribe_output") {
@@ -183,16 +203,17 @@ export async function startTerminalBrokerServer(opts: {
       resolve();
     });
   });
+  const brokerRuntime = {
+    endpoint: opts.endpoint,
+    pid: process.pid,
+    startedAt: Date.now(),
+  };
   debugRestartTrace("terminal_broker.listen", {
     endpoint: opts.endpoint,
     pid: process.pid,
   });
 
-  writeTerminalBrokerRuntime({
-    endpoint: opts.endpoint,
-    pid: process.pid,
-    startedAt: Date.now(),
-  });
+  writeTerminalBrokerRuntime(brokerRuntime);
   debugRestartTrace("terminal_broker.runtime_write", {
     endpoint: opts.endpoint,
     pid: process.pid,
@@ -204,7 +225,6 @@ export async function startTerminalBrokerServer(opts: {
         endpoint: opts.endpoint,
         pid: process.pid,
       });
-      deleteTerminalBrokerRuntime();
       await new Promise<void>((resolve, reject) => {
         server.close((error) => {
           if (error) {
@@ -214,6 +234,20 @@ export async function startTerminalBrokerServer(opts: {
           resolve();
         });
       });
+
+      const currentRuntime = readTerminalBrokerRuntime();
+      const ownsRuntimeArtifacts = brokerRuntimeMatchesCurrent(brokerRuntime, currentRuntime);
+      if (!ownsRuntimeArtifacts) {
+        debugRestartTrace("terminal_broker.close_skip_artifact_cleanup", {
+          endpoint: opts.endpoint,
+          pid: process.pid,
+          currentRuntimePid: currentRuntime?.pid ?? null,
+          currentRuntimeStartedAt: currentRuntime?.startedAt ?? null,
+        });
+        return;
+      }
+
+      deleteTerminalBrokerRuntime();
 
       if (process.platform !== "win32" && existsSync(opts.endpoint)) {
         debugRestartTrace("terminal_broker.socket_remove_on_close", {
@@ -228,7 +262,12 @@ export async function startTerminalBrokerServer(opts: {
 
 async function handleBrokerRequest(
   runtime: TerminalRuntime,
-  request: BrokerRequest
+  request: BrokerRequest,
+  brokerRuntime: {
+    endpoint: string;
+    pid: number;
+    startedAt: number;
+  }
 ): Promise<BrokerResponse> {
   switch (request.op) {
     case "create": {
@@ -305,6 +344,15 @@ async function handleBrokerRequest(
         id: request.id,
         ok: true,
         recovery: runtime.getRecoveryMetadata(request.terminalId),
+      };
+    case "status":
+      return {
+        id: request.id,
+        ok: true,
+        broker: {
+          pid: brokerRuntime.pid,
+          startedAt: brokerRuntime.startedAt,
+        },
       };
     case "ping":
       return { id: request.id, ok: true };

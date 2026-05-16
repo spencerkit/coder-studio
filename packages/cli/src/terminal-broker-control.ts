@@ -5,6 +5,7 @@ import {
   getTerminalBrokerSocketPath,
   readTerminalBrokerRuntime,
   type TerminalBrokerRuntimeConfig,
+  writeTerminalBrokerRuntime,
 } from "@coder-studio/core/runtime";
 import { TerminalBrokerClient } from "@coder-studio/server";
 import { debugRestartTrace, warnRestartTrace } from "./restart-trace.js";
@@ -47,11 +48,34 @@ function spawnDetachedTerminalBroker(script: string, cwd: string, endpoint: stri
   }).unref();
 }
 
+function canProbeSocket(endpoint: string): boolean {
+  return process.platform === "win32" || existsSync(endpoint);
+}
+
+async function recoverLiveBrokerRuntime(
+  endpoint: string
+): Promise<TerminalBrokerRuntimeConfig | null> {
+  if (!canProbeSocket(endpoint)) {
+    return null;
+  }
+
+  const status = await new TerminalBrokerClient({ endpoint }).status();
+  const runtime = {
+    endpoint,
+    pid: status.pid,
+    startedAt: status.startedAt,
+  } satisfies TerminalBrokerRuntimeConfig;
+  writeTerminalBrokerRuntime(runtime);
+  debugRestartTrace("terminal_broker.runtime_recovered", runtime);
+  return runtime;
+}
+
 export async function ensureTerminalBroker(opts: {
   script: string;
   cwd: string;
   waitMs: number;
 }): Promise<TerminalBrokerRuntimeConfig> {
+  const endpoint = getTerminalBrokerSocketPath();
   const existing = readTerminalBrokerRuntime();
   if (existing) {
     debugRestartTrace("terminal_broker.runtime_found", {
@@ -77,10 +101,26 @@ export async function ensureTerminalBroker(opts: {
         message: error instanceof Error ? error.message : String(error),
       });
       deleteTerminalBrokerRuntime();
+      try {
+        const recovered = await recoverLiveBrokerRuntime(existing.endpoint);
+        if (recovered) {
+          return recovered;
+        }
+      } catch {
+        // Fall through to spawning a replacement broker.
+      }
+    }
+  } else {
+    try {
+      const recovered = await recoverLiveBrokerRuntime(endpoint);
+      if (recovered) {
+        return recovered;
+      }
+    } catch {
+      // No broker was reachable on the default endpoint.
     }
   }
 
-  const endpoint = getTerminalBrokerSocketPath();
   debugRestartTrace("terminal_broker.spawn", {
     endpoint,
     script: opts.script,

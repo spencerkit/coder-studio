@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -8,9 +8,10 @@ import {
 } from "@coder-studio/core/runtime";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { spawn, ping } = vi.hoisted(() => ({
+const { spawn, ping, status } = vi.hoisted(() => ({
   spawn: vi.fn(),
   ping: vi.fn(),
+  status: vi.fn(),
 }));
 
 vi.mock("node:child_process", () => ({
@@ -20,6 +21,7 @@ vi.mock("node:child_process", () => ({
 vi.mock("@coder-studio/server", () => ({
   TerminalBrokerClient: class MockTerminalBrokerClient {
     ping = ping;
+    status = status;
   },
 }));
 
@@ -38,6 +40,10 @@ describe("terminal-broker-control", () => {
     process.env.CODER_STUDIO_RUNTIME_DIR = join(testHomeDir, ".coder-studio");
     deleteTerminalBrokerRuntime();
     ping.mockResolvedValue(true);
+    status.mockResolvedValue({
+      pid: 9001,
+      startedAt: 1000,
+    });
   });
 
   afterEach(() => {
@@ -159,5 +165,28 @@ describe("terminal-broker-control", () => {
       processAlive: true,
       message: "connect ENOENT broker.sock",
     });
+  });
+
+  it("reuses a live broker when the runtime file is missing", async () => {
+    mkdirSync(join(testHomeDir, ".coder-studio"), { recursive: true });
+    writeFileSync(join(testHomeDir, ".coder-studio", "terminal-broker.sock"), "", "utf8");
+    spawn.mockImplementation(() => ({
+      pid: 5152,
+      unref: vi.fn(),
+    }));
+
+    const runtime = await ensureTerminalBroker({
+      script: "/cli/dist/esm/terminal-broker-runner.mjs",
+      cwd: "/repo",
+      waitMs: 50,
+    });
+
+    expect(spawn).not.toHaveBeenCalled();
+    expect(runtime).toEqual({
+      endpoint: join(testHomeDir, ".coder-studio", "terminal-broker.sock"),
+      pid: 9001,
+      startedAt: 1000,
+    });
+    expect(readTerminalBrokerRuntime()).toEqual(runtime);
   });
 });
