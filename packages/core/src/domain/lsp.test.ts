@@ -5,6 +5,7 @@ import type {
   LspDiagnosticsEvent,
   LspDocumentSymbol,
   LspLocation,
+  LspServerKind,
   LspSessionSummary,
 } from "./lsp";
 
@@ -27,6 +28,8 @@ describe("LSP shared surface", () => {
     expectTypeOf<LspDiagnostic>().toMatchTypeOf<{
       message: string;
       severity: "error" | "warning" | "info" | "hint";
+      code?: string;
+      source?: string;
       range: {
         startLine: number;
         startColumn: number;
@@ -38,21 +41,32 @@ describe("LSP shared surface", () => {
     expectTypeOf<LspDocumentSymbol>().toMatchTypeOf<{
       name: string;
       kind: number;
-      range: unknown;
-      selectionRange: unknown;
-      children?: unknown[];
+      range: {
+        startLine: number;
+        startColumn: number;
+        endLine: number;
+        endColumn: number;
+      };
+      selectionRange: {
+        startLine: number;
+        startColumn: number;
+        endLine: number;
+        endColumn: number;
+      };
+      children?: LspDocumentSymbol[];
     }>();
 
     expectTypeOf<LspDiagnosticsEvent>().toMatchTypeOf<{
       workspaceId: string;
-      serverKind: string;
+      serverKind: LspServerKind;
       path: string;
+      version?: number;
       diagnostics: LspDiagnostic[];
     }>();
 
     expectTypeOf<LspSessionSummary>().toMatchTypeOf<{
       workspaceId: string;
-      serverKind: string;
+      serverKind: LspServerKind;
       status: "unsupported" | "starting" | "ready" | "degraded" | "stopped";
       capabilities: {
         definition: boolean;
