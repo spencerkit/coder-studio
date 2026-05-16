@@ -798,6 +798,77 @@ describe("SupervisorManager cycle triggers", () => {
     expect(deps.supervisorRepo.findById(supervisor.id)?.objective).toBe("Initial objective");
   });
 
+  it("preserves a pause request while a target reset update is still persisting", async () => {
+    const supervisor = await manager.create({
+      sessionId: "sess-objective-reset-pause-race",
+      workspaceId: "ws-1",
+      objective: "Initial objective",
+      evaluatorProviderId: "codex",
+    });
+
+    let releaseReset: (() => void) | null = null;
+    deps.targetStore.resetTargetFiles.mockImplementation(
+      async () =>
+        await new Promise<void>((resolve) => {
+          releaseReset = resolve;
+        })
+    );
+
+    const updatedPromise = manager.update(supervisor.id, {
+      objective: "New objective",
+    });
+
+    await waitFor(() => {
+      expect(deps.targetStore.resetTargetFiles).toHaveBeenCalledTimes(1);
+      expect(releaseReset).not.toBeNull();
+    });
+
+    const paused = await manager.pause(supervisor.id);
+    releaseReset?.();
+
+    const updated = await updatedPromise;
+
+    expect(paused.state).toBe("paused");
+    expect(updated.state).toBe("paused");
+    expect(updated.objective).toBe("New objective");
+    expect(manager.get(supervisor.id)?.state).toBe("paused");
+  });
+
+  it("does not resurrect a supervisor deleted during target reset persistence", async () => {
+    const supervisor = await manager.create({
+      sessionId: "sess-objective-reset-delete-race",
+      workspaceId: "ws-1",
+      objective: "Initial objective",
+      evaluatorProviderId: "codex",
+    });
+
+    let releaseReset: (() => void) | null = null;
+    deps.targetStore.resetTargetFiles.mockImplementation(
+      async () =>
+        await new Promise<void>((resolve) => {
+          releaseReset = resolve;
+        })
+    );
+
+    const updatedPromise = manager.update(supervisor.id, {
+      objective: "New objective",
+    });
+
+    await waitFor(() => {
+      expect(deps.targetStore.resetTargetFiles).toHaveBeenCalledTimes(1);
+      expect(releaseReset).not.toBeNull();
+    });
+
+    await manager.delete(supervisor.id);
+    releaseReset?.();
+
+    await expect(updatedPromise).rejects.toMatchObject({
+      code: "supervisor_not_found",
+    });
+    expect(manager.get(supervisor.id)).toBeUndefined();
+    expect(deps.supervisorRepo.findById(supervisor.id)).toBeUndefined();
+  });
+
   it("preserves a pause request while an objective change abort is in flight", async () => {
     const supervisor = await manager.create({
       sessionId: "sess-objective-pause-race",

@@ -449,7 +449,7 @@ export class SupervisorManager {
     };
 
     const rollbackPatch = this.toSupervisorUpdatePatch(current, Date.now());
-    let updated = this.attachCycles(this.deps.supervisorRepo.update(id, nextPatch));
+    this.deps.supervisorRepo.update(id, nextPatch);
 
     if (objectiveChanged) {
       try {
@@ -473,7 +473,11 @@ export class SupervisorManager {
       }
     }
 
-    const enriched = await this.attachTargetState(updated, workspace.path);
+    const enriched = await this.hydratePersistedSupervisor(id, workspace.path);
+    if (!enriched) {
+      await this.markTargetCancelledIfActive(workspace.path, current).catch(() => {});
+      throw this.supervisorNotFoundError(id);
+    }
 
     this.storeSnapshot(enriched);
     this.broadcastState(enriched, "updated");
@@ -1320,6 +1324,32 @@ export class SupervisorManager {
     return await this.attachTargetState(supervisor, workspace.path);
   }
 
+  private async hydratePersistedSupervisor(
+    supervisorId: string,
+    workspacePath: string
+  ): Promise<Supervisor | null> {
+    const persisted = this.deps.supervisorRepo.findById(supervisorId);
+    if (!persisted) {
+      return null;
+    }
+
+    const hydrated = await this.attachTargetState(this.attachCycles(persisted), workspacePath);
+    const latest = this.deps.supervisorRepo.findById(supervisorId);
+    if (!latest) {
+      return null;
+    }
+
+    if (latest.targetId !== hydrated.targetId) {
+      return await this.attachTargetState(this.attachCycles(latest), workspacePath);
+    }
+
+    return {
+      ...this.attachCycles(latest),
+      currentTargetMemory: hydrated.currentTargetMemory,
+      recentTargetCycles: hydrated.recentTargetCycles,
+    };
+  }
+
   private withCurrentTargetState(supervisor: Supervisor): Supervisor {
     const current = this.supervisors.get(supervisor.id);
     if (!current || current.targetId !== supervisor.targetId) {
@@ -1525,13 +1555,17 @@ export class SupervisorManager {
     this.inFlightCompletions.delete(supervisorId);
   }
 
+  private supervisorNotFoundError(id: string): { code: "supervisor_not_found"; message: string } {
+    return {
+      code: "supervisor_not_found",
+      message: `Supervisor ${id} not found`,
+    };
+  }
+
   private requireSupervisor(id: string): Supervisor {
     const supervisor = this.supervisors.get(id);
     if (!supervisor) {
-      throw {
-        code: "supervisor_not_found",
-        message: `Supervisor ${id} not found`,
-      };
+      throw this.supervisorNotFoundError(id);
     }
     return supervisor;
   }
