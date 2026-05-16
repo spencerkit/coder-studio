@@ -1,5 +1,6 @@
 // DomainEvent type union for EventBus (spec §4.0)
 
+import type { LspDiagnosticsEvent } from "./lsp";
 import type { SessionState, Workspace } from "./types";
 
 export type DomainEvent =
@@ -35,4 +36,5 @@ export type DomainEvent =
       cwd: string;
     }
   | { type: "terminal.output"; workspaceId: string; terminalId: string; chunk: Buffer; seq: number }
-  | { type: "terminal.exited"; workspaceId: string; terminalId: string; exitCode: number };
+  | { type: "terminal.exited"; workspaceId: string; terminalId: string; exitCode: number }
+  | ({ type: "lsp.diagnostics.updated" } & LspDiagnosticsEvent);
