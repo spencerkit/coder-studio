@@ -1,4 +1,5 @@
 import type { FastifyRequest } from "fastify";
+import { debugRestartTrace } from "../restart-trace.js";
 
 export interface ActivationLease {
   clientInstanceId: string;
@@ -46,9 +47,19 @@ export class ActivationManager {
       const isGraceRecovery = activeLease.graceUntil !== null && now <= activeLease.graceUntil;
       const displacedWsClientId =
         isGraceRecovery || activeLease.wsClientId === wsClientId ? null : activeLease.wsClientId;
+      const previousGraceUntil = activeLease.graceUntil;
 
       activeLease.wsClientId = wsClientId;
       activeLease.graceUntil = null;
+
+      debugRestartTrace("activation.claim", {
+        clientInstanceId,
+        wsClientId,
+        generation: activeLease.generation,
+        recoveryMode: "grace_recover",
+        displacedWsClientId,
+        previousGraceUntil,
+      });
 
       return {
         active: true,
@@ -75,6 +86,15 @@ export class ActivationManager {
       userAgent: request.headers["user-agent"] ?? "",
     };
 
+    debugRestartTrace("activation.claim", {
+      clientInstanceId,
+      wsClientId,
+      generation: this.lease.generation,
+      recoveryMode,
+      displacedWsClientId,
+      graceUntil: this.lease.graceUntil,
+    });
+
     return {
       active: true,
       generation: this.lease.generation,
@@ -93,6 +113,11 @@ export class ActivationManager {
       return;
     }
 
+    debugRestartTrace("activation.release", {
+      clientInstanceId,
+      generation,
+      wsClientId: lease.wsClientId,
+    });
     this.lease = null;
   }
 
@@ -103,6 +128,12 @@ export class ActivationManager {
     }
 
     lease.graceUntil = Date.now() + this.options.graceMs;
+    debugRestartTrace("activation.socket_closed", {
+      wsClientId,
+      clientInstanceId: lease.clientInstanceId,
+      generation: lease.generation,
+      graceUntil: lease.graceUntil,
+    });
   }
 
   getLease(): ActivationLease | null {

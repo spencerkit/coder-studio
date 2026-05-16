@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import {
   deleteTerminalBrokerRuntime,
   getTerminalBrokerSocketPath,
@@ -6,9 +7,19 @@ import {
   type TerminalBrokerRuntimeConfig,
 } from "@coder-studio/core/runtime";
 import { TerminalBrokerClient } from "@coder-studio/server";
+import { debugRestartTrace, warnRestartTrace } from "./restart-trace.js";
 
 async function sleep(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function spawnDetachedTerminalBroker(script: string, cwd: string, endpoint: string): void {
@@ -43,15 +54,39 @@ export async function ensureTerminalBroker(opts: {
 }): Promise<TerminalBrokerRuntimeConfig> {
   const existing = readTerminalBrokerRuntime();
   if (existing) {
+    debugRestartTrace("terminal_broker.runtime_found", {
+      endpoint: existing.endpoint,
+      pid: existing.pid,
+      startedAt: existing.startedAt,
+      socketExists: existsSync(existing.endpoint),
+    });
     try {
       await new TerminalBrokerClient({ endpoint: existing.endpoint }).ping();
+      debugRestartTrace("terminal_broker.runtime_alive", {
+        endpoint: existing.endpoint,
+        pid: existing.pid,
+      });
       return existing;
-    } catch {
+    } catch (error) {
+      warnRestartTrace("terminal_broker.runtime_stale", {
+        endpoint: existing.endpoint,
+        pid: existing.pid,
+        startedAt: existing.startedAt,
+        socketExists: existsSync(existing.endpoint),
+        processAlive: isProcessAlive(existing.pid),
+        message: error instanceof Error ? error.message : String(error),
+      });
       deleteTerminalBrokerRuntime();
     }
   }
 
   const endpoint = getTerminalBrokerSocketPath();
+  debugRestartTrace("terminal_broker.spawn", {
+    endpoint,
+    script: opts.script,
+    cwd: opts.cwd,
+    waitMs: opts.waitMs,
+  });
   spawnDetachedTerminalBroker(opts.script, opts.cwd, endpoint);
 
   const deadline = Date.now() + opts.waitMs;
@@ -60,6 +95,11 @@ export async function ensureTerminalBroker(opts: {
     if (runtime) {
       try {
         await new TerminalBrokerClient({ endpoint: runtime.endpoint }).ping();
+        debugRestartTrace("terminal_broker.runtime_ready", {
+          endpoint: runtime.endpoint,
+          pid: runtime.pid,
+          startedAt: runtime.startedAt,
+        });
         return runtime;
       } catch {
         // Broker not ready yet.
@@ -69,5 +109,11 @@ export async function ensureTerminalBroker(opts: {
     await sleep(50);
   }
 
+  warnRestartTrace("terminal_broker.runtime_wait_timeout", {
+    endpoint,
+    script: opts.script,
+    cwd: opts.cwd,
+    waitMs: opts.waitMs,
+  });
   throw new Error(`Timed out waiting for terminal broker after ${opts.waitMs}ms`);
 }

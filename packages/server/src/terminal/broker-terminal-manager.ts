@@ -1,5 +1,6 @@
 import type { DomainEvent, Terminal } from "@coder-studio/core";
 import type { EventBus } from "../bus/event-bus.js";
+import { debugRestartTrace, warnRestartTrace } from "../restart-trace.js";
 import { ActiveTerminal } from "./active-terminal.js";
 import { TerminalBrokerClient } from "./broker-client.js";
 import { RING_BUFFER_SIZE } from "./constants.js";
@@ -119,6 +120,12 @@ export class BrokerTerminalManager {
     for (const terminal of terminals) {
       this.terminals.set(terminal.id, ActiveTerminal.fromRuntimeRecord(terminal));
     }
+
+    debugRestartTrace("terminal.claim_preserved.proxy", {
+      requestId,
+      ownerServerInstanceId: this.deps.ownerServerInstanceId,
+      claimedTerminalIds: terminals.map((terminal) => terminal.id),
+    });
   }
 
   write(terminalId: TerminalId, bytes: Buffer): void {
@@ -127,7 +134,13 @@ export class BrokerTerminalManager {
       throw new Error("Terminal is not alive");
     }
 
-    void this.deps.broker.write(terminalId, bytes.toString("base64"));
+    void this.deps.broker.write(terminalId, bytes.toString("base64")).catch((error) => {
+      warnRestartTrace("terminal.write_failed.proxy", {
+        terminalId,
+        ownerServerInstanceId: this.deps.ownerServerInstanceId,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    });
   }
 
   resize(terminalId: TerminalId, cols: number, rows: number): void {
@@ -138,7 +151,15 @@ export class BrokerTerminalManager {
 
     terminal.currentCols = cols;
     terminal.currentRows = rows;
-    void this.deps.broker.resize(terminalId, cols, rows);
+    void this.deps.broker.resize(terminalId, cols, rows).catch((error) => {
+      warnRestartTrace("terminal.resize_failed.proxy", {
+        terminalId,
+        cols,
+        rows,
+        ownerServerInstanceId: this.deps.ownerServerInstanceId,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    });
   }
 
   async close(terminalId: TerminalId): Promise<void> {
@@ -174,6 +195,10 @@ export class BrokerTerminalManager {
   async snapshot(terminalId: TerminalId): Promise<SnapshotResult> {
     const snapshot = await this.deps.broker.snapshot(terminalId);
     if (snapshot.status !== "ok") {
+      warnRestartTrace("terminal.snapshot_unsupported.proxy", {
+        terminalId,
+        ownerServerInstanceId: this.deps.ownerServerInstanceId,
+      });
       return snapshot;
     }
 

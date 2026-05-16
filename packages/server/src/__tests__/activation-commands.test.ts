@@ -1,5 +1,5 @@
 import type { FastifyRequest } from "fastify";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ActivationManager } from "../ws/activation.js";
 import { type CommandContext, dispatch } from "../ws/dispatch.js";
 import type { Broadcaster } from "../ws/hub.js";
@@ -41,6 +41,11 @@ function createBaseContext(overrides?: {
 }
 
 describe("activation commands", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+  });
+
   it("returns generation data from activation.claim", async () => {
     const request = createMockRequest();
     const broadcaster = {
@@ -101,6 +106,36 @@ describe("activation commands", () => {
     expect(result.error).toEqual({
       code: "activation_required",
       message: "This tab is no longer the active session",
+    });
+  });
+
+  it("logs activation gating diagnostics when restart trace is enabled", async () => {
+    vi.stubEnv("CODER_STUDIO_RESTART_TRACE", "1");
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const broadcaster = {
+      broadcast: vi.fn(),
+      sendToClient: vi.fn(() => true),
+      sendBinaryToClient: vi.fn(() => true),
+      getRequestMetadata: vi.fn(() => createMockRequest()),
+    } satisfies Broadcaster;
+    const ctx = createBaseContext({ broadcaster });
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "00000000-0000-4000-8000-000000000099",
+        op: "workspace.list",
+        args: {},
+      },
+      ctx,
+      "ws-a"
+    );
+
+    expect(result.ok).toBe(false);
+    expect(warnSpy).toHaveBeenCalledWith("[restart-trace] activation.blocked", {
+      op: "workspace.list",
+      clientId: "ws-a",
+      activeLease: null,
     });
   });
 

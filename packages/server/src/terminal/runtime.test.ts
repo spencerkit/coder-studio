@@ -37,6 +37,7 @@ describe("TerminalRuntime preserve leases", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
   });
 
   it("kills attached terminals immediately when the owner disconnects without preserve", async () => {
@@ -95,6 +96,54 @@ describe("TerminalRuntime preserve leases", () => {
 
     expect(claimed.map((terminal) => terminal.id)).toEqual(["term-1"]);
     expect(runtime.get("term-1")?.ownerServerInstanceId).toBe("server-b");
+  });
+
+  it("logs preserve detach and claim diagnostics when restart trace is enabled", () => {
+    vi.stubEnv("CODER_STUDIO_RESTART_TRACE", "1");
+    const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
+
+    runtime.create(
+      "term-1",
+      {
+        workspaceId: "ws-1",
+        kind: "shell",
+        argv: ["bash"],
+        cwd: "/tmp",
+      },
+      "server-a"
+    );
+
+    runtime.detachForRestart("server-a", "restart-1", 5_000);
+    runtime.claimPreserved("restart-1", "server-b");
+
+    expect(debugSpy).toHaveBeenCalledWith("[restart-trace] terminal.detach_for_restart", {
+      ownerServerInstanceId: "server-a",
+      requestId: "restart-1",
+      ttlMs: 5000,
+      detachedTerminalIds: ["term-1"],
+    });
+    expect(debugSpy).toHaveBeenCalledWith("[restart-trace] terminal.claim_preserved", {
+      requestId: "restart-1",
+      nextOwnerServerInstanceId: "server-b",
+      claimedTerminalIds: ["term-1"],
+    });
+  });
+
+  it("logs snapshot unsupported reasons when restart trace is enabled", async () => {
+    vi.stubEnv("CODER_STUDIO_RESTART_TRACE", "1");
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await expect(runtime.snapshot("missing-terminal")).resolves.toEqual({
+      status: "unsupported",
+    });
+
+    expect(warnSpy).toHaveBeenCalledWith("[restart-trace] terminal.snapshot_unsupported", {
+      terminalId: "missing-terminal",
+      reason: "terminal_missing",
+      leaseStatus: null,
+      ownerServerInstanceId: null,
+      preserveRequestId: null,
+    });
   });
 
   it("continues owner disconnect cleanup when one terminal kill rejects", async () => {

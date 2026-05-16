@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventBus } from "../bus/event-bus.js";
 import { BrokerTerminalManager } from "./broker-terminal-manager.js";
 import type { RuntimeTerminalRecord, TerminalDatabase } from "./types.js";
@@ -27,6 +27,11 @@ describe("BrokerTerminalManager", () => {
       insert: vi.fn(),
       markEnded: vi.fn(),
     };
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
   });
 
   it("returns the tail across multiple output chunks", async () => {
@@ -91,5 +96,45 @@ describe("BrokerTerminalManager", () => {
     });
 
     expect(manager.getRingBufferTail("term-1", 4).toString("utf8")).toBe("cdef");
+  });
+
+  it("logs preserve claim and snapshot unsupported diagnostics when restart trace is enabled", async () => {
+    vi.stubEnv("CODER_STUDIO_RESTART_TRACE", "1");
+    const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const broker = {
+      subscribeOutput: vi.fn().mockResolvedValue(async () => undefined),
+      create: vi.fn(),
+      hydrateAttached: vi.fn().mockResolvedValue([]),
+      claimPreserved: vi.fn().mockResolvedValue([runtimeRecord]),
+      write: vi.fn(),
+      resize: vi.fn(),
+      close: vi.fn(),
+      replay: vi.fn(),
+      snapshot: vi.fn().mockResolvedValue({ status: "unsupported" }),
+      recovery: vi.fn(),
+      detachForRestart: vi.fn(),
+      closeAllForOwner: vi.fn(),
+    };
+
+    const manager = new BrokerTerminalManager({
+      broker,
+      eventBus: new EventBus(),
+      db,
+      ownerServerInstanceId: "server-b",
+    });
+
+    await manager.claimPreserved("restart-1");
+    await expect(manager.snapshot("term-1")).resolves.toEqual({ status: "unsupported" });
+
+    expect(debugSpy).toHaveBeenCalledWith("[restart-trace] terminal.claim_preserved.proxy", {
+      requestId: "restart-1",
+      ownerServerInstanceId: "server-b",
+      claimedTerminalIds: ["term-1"],
+    });
+    expect(warnSpy).toHaveBeenCalledWith("[restart-trace] terminal.snapshot_unsupported.proxy", {
+      terminalId: "term-1",
+      ownerServerInstanceId: "server-b",
+    });
   });
 });

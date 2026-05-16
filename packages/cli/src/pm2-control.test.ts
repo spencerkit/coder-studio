@@ -79,6 +79,7 @@ describe("pm2-control", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
 
     if (originalHome === undefined) {
       delete process.env.HOME;
@@ -246,6 +247,38 @@ describe("pm2-control", () => {
     });
 
     expect(deleteRestartIntentSpy).toHaveBeenCalled();
+  });
+
+  it("logs restart lifecycle diagnostics when restart trace is enabled", async () => {
+    vi.stubEnv("CODER_STUDIO_RESTART_TRACE", "1");
+    const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
+
+    writeRuntimeConfig({
+      host: "127.0.0.1",
+      port: 4187,
+      pid: 424242,
+      token: "test-token",
+      serverInstanceId: "server-1",
+      startedAt: Date.now(),
+    });
+
+    await startManagedServer({
+      script: "/cli/dist/esm/server-runner.js",
+      cwd: "/repo",
+      waitMs: 10,
+      restart: true,
+    });
+
+    expect(debugSpy).toHaveBeenCalledWith("[restart-trace] pm2.restart_intent.write", {
+      requestId: expect.stringMatching(/^restart-\d+$/),
+      expectedServerInstanceId: "server-1",
+      mode: "preserve_terminals",
+    });
+    expect(debugSpy).toHaveBeenCalledWith("[restart-trace] pm2.runtime_ready", {
+      runtimePid: 424242,
+      runtimePort: 4187,
+      serverInstanceId: "server-1",
+    });
   });
 
   it("waits for the previous PM2 app to disappear before starting a replacement", async () => {

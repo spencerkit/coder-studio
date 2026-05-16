@@ -43,6 +43,7 @@ describe("terminal-broker-control", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
     deleteTerminalBrokerRuntime();
 
     if (originalHome === undefined) {
@@ -107,5 +108,56 @@ describe("terminal-broker-control", () => {
     );
     expect(runtime.endpoint).toBeTruthy();
     expect(readTerminalBrokerRuntime()).toEqual(runtime);
+  });
+
+  it("logs stale broker runtime details when ping fails and restart trace is enabled", async () => {
+    vi.stubEnv("CODER_STUDIO_RESTART_TRACE", "1");
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    writeTerminalBrokerRuntime({
+      endpoint: join(testHomeDir, ".coder-studio", "terminal-broker.sock"),
+      pid: process.pid,
+      startedAt: 1234,
+    });
+
+    ping
+      .mockRejectedValueOnce(
+        Object.assign(new Error("connect ENOENT broker.sock"), { code: "ENOENT" })
+      )
+      .mockResolvedValueOnce(true);
+
+    spawn.mockImplementation(
+      (
+        _command: string,
+        _args: string[],
+        options: { env?: Record<string, string>; detached?: boolean; stdio?: string }
+      ) => {
+        writeTerminalBrokerRuntime({
+          endpoint: options.env?.CODER_STUDIO_TERMINAL_BROKER_ENDPOINT ?? "/tmp/broker.sock",
+          pid: 5151,
+          startedAt: 5678,
+        });
+
+        return {
+          pid: 5151,
+          unref: vi.fn(),
+        };
+      }
+    );
+
+    await ensureTerminalBroker({
+      script: "/cli/dist/esm/terminal-broker-runner.mjs",
+      cwd: "/repo",
+      waitMs: 200,
+    });
+
+    expect(warnSpy).toHaveBeenCalledWith("[restart-trace] terminal_broker.runtime_stale", {
+      endpoint: join(testHomeDir, ".coder-studio", "terminal-broker.sock"),
+      pid: process.pid,
+      startedAt: 1234,
+      socketExists: false,
+      processAlive: true,
+      message: "connect ENOENT broker.sock",
+    });
   });
 });

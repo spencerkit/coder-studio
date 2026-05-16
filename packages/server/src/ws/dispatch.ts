@@ -10,6 +10,7 @@ import type { EventBus } from "../bus/event-bus.js";
 import type { AutoFetchRuntime } from "../git/auto-fetch.js";
 import type { ProviderInstallManager } from "../provider-runtime/install-manager.js";
 import type { RuntimeStatusDeps } from "../provider-runtime/runtime-status.js";
+import { warnRestartTrace } from "../restart-trace.js";
 import type { SessionManager } from "../session/manager.js";
 import type { Database } from "../storage/database.js";
 import type { SupervisorManager } from "../supervisor/manager.js";
@@ -64,6 +65,24 @@ const ACTIVATION_ALLOWLIST = new Set([
   "connection.probe",
 ]);
 
+function summarizeLease(lease: ReturnType<ActivationManager["getLease"]>): {
+  clientInstanceId: string;
+  wsClientId: string;
+  generation: number;
+  graceUntil: number | null;
+} | null {
+  if (!lease) {
+    return null;
+  }
+
+  return {
+    clientInstanceId: lease.clientInstanceId,
+    wsClientId: lease.wsClientId,
+    generation: lease.generation,
+    graceUntil: lease.graceUntil,
+  };
+}
+
 /**
  * Register a command handler
  */
@@ -90,6 +109,11 @@ export async function dispatch(
   if (isWsDispatch && !ACTIVATION_ALLOWLIST.has(msg.op)) {
     const active = ctx.activationMgr.getLease();
     if (!active || active.wsClientId !== clientId) {
+      warnRestartTrace("activation.blocked", {
+        op: msg.op,
+        clientId,
+        activeLease: summarizeLease(active),
+      });
       return {
         kind: "result",
         id: msg.id,

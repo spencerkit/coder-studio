@@ -1,5 +1,6 @@
 import type { DomainEvent, Terminal } from "@coder-studio/core";
 import type { EventBus } from "../bus/event-bus";
+import { debugRestartTrace, warnRestartTrace } from "../restart-trace.js";
 import { ActiveTerminal } from "./active-terminal";
 import { RING_BUFFER_SIZE } from "./constants";
 import { RingBuffer } from "./ring-buffer";
@@ -205,6 +206,13 @@ export class TerminalRuntime {
       detachedIds.push(terminal.id);
     }
 
+    debugRestartTrace("terminal.detach_for_restart", {
+      ownerServerInstanceId,
+      requestId,
+      ttlMs,
+      detachedTerminalIds: detachedIds,
+    });
+
     return detachedIds;
   }
 
@@ -226,6 +234,12 @@ export class TerminalRuntime {
       terminal.preserveExpiresAt = undefined;
       claimed.push(terminal.toRuntimeRecord());
     }
+
+    debugRestartTrace("terminal.claim_preserved", {
+      requestId,
+      nextOwnerServerInstanceId,
+      claimedTerminalIds: claimed.map((terminal) => terminal.id),
+    });
 
     return claimed;
   }
@@ -381,6 +395,17 @@ export class TerminalRuntime {
   async snapshot(terminalId: TerminalId): Promise<SnapshotResult> {
     const terminal = this.terminals.get(terminalId);
     if (!terminal || !terminal.snapshotBuffer || terminal.snapshotBuffer.disabled) {
+      warnRestartTrace("terminal.snapshot_unsupported", {
+        terminalId,
+        reason: !terminal
+          ? "terminal_missing"
+          : !terminal.snapshotBuffer
+            ? "snapshot_buffer_missing"
+            : "snapshot_buffer_disabled",
+        leaseStatus: terminal?.leaseStatus ?? null,
+        ownerServerInstanceId: terminal?.ownerServerInstanceId ?? null,
+        preserveRequestId: terminal?.preserveRequestId ?? null,
+      });
       return { status: "unsupported" };
     }
 

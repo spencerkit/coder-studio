@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { createConnection } from "node:net";
+import { warnRestartTrace } from "../restart-trace.js";
 import type {
   BrokerEvent,
   BrokerReplayResult,
@@ -11,6 +12,18 @@ import type { RuntimeTerminalRecord, TerminalRecoveryMetadata, TerminalSpec } fr
 
 export class TerminalBrokerClient {
   constructor(private readonly options: { endpoint: string }) {}
+
+  private logRequestFailure(op: BrokerRequest["op"], error: unknown): void {
+    warnRestartTrace("terminal_broker.request_failed", {
+      op,
+      endpoint: this.options.endpoint,
+      message: error instanceof Error ? error.message : String(error),
+      code:
+        typeof error === "object" && error !== null && "code" in error
+          ? String((error as { code: unknown }).code)
+          : null,
+    });
+  }
 
   async create(
     terminalId: string,
@@ -156,6 +169,7 @@ export class TerminalBrokerClient {
       socket.setEncoding("utf8");
 
       socket.on("error", (error) => {
+        this.logRequestFailure(request.op, error);
         if (!settled) {
           settled = true;
           reject(error);
@@ -265,7 +279,10 @@ export class TerminalBrokerClient {
       let buffer = "";
       socket.setEncoding("utf8");
 
-      socket.once("error", reject);
+      socket.once("error", (error) => {
+        this.logRequestFailure(request.op, error);
+        reject(error);
+      });
       socket.on("data", (chunk) => {
         buffer += chunk;
         const lines = buffer.split("\n");

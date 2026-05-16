@@ -10,7 +10,7 @@ import type { PtyHost, PtyProcess } from "./types.js";
 describe("TerminalBrokerClient", () => {
   let dir: string;
   let socketPath: string;
-  let broker: Awaited<ReturnType<typeof startTerminalBrokerServer>>;
+  let broker: Awaited<ReturnType<typeof startTerminalBrokerServer>> | undefined;
 
   beforeEach(async () => {
     dir = mkdtempSync(join(tmpdir(), "cs-broker-"));
@@ -35,8 +35,11 @@ describe("TerminalBrokerClient", () => {
   });
 
   afterEach(async () => {
-    await broker.close();
+    await broker?.close().catch(() => undefined);
+    broker = undefined;
     rmSync(dir, { recursive: true, force: true });
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
   });
 
   it("creates, detaches, and claims a shell terminal across owners", async () => {
@@ -79,5 +82,24 @@ describe("TerminalBrokerClient", () => {
     await unsubscribe();
 
     expect(await client.hydrateAttached("server-a")).toEqual([]);
+  });
+
+  it("logs broker request failures when restart trace is enabled", async () => {
+    vi.stubEnv("CODER_STUDIO_RESTART_TRACE", "1");
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await broker?.close();
+    broker = undefined;
+
+    const client = new TerminalBrokerClient({ endpoint: socketPath });
+    await expect(client.ping()).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+
+    expect(warnSpy).toHaveBeenCalledWith("[restart-trace] terminal_broker.request_failed", {
+      op: "ping",
+      endpoint: socketPath,
+      message: expect.stringContaining("ENOENT"),
+      code: "ENOENT",
+    });
   });
 });

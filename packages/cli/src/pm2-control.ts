@@ -8,6 +8,7 @@ import { mkdirSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
 import { getFileSize, readLogExcerpt } from "./log-excerpt.js";
+import { debugRestartTrace, warnRestartTrace } from "./restart-trace.js";
 
 export const MANAGED_SERVER_NAME = "coder-studio-server";
 const PM2_RESTART_DELAY_MS = 2000;
@@ -222,7 +223,13 @@ const waitForRuntimeReady = async (
   const deadline = Date.now() + waitMs;
 
   while (Date.now() <= deadline) {
-    if (readRuntimeConfig()) {
+    const runtime = readRuntimeConfig();
+    if (runtime) {
+      debugRestartTrace("pm2.runtime_ready", {
+        runtimePid: runtime.pid,
+        runtimePort: runtime.port,
+        serverInstanceId: runtime.serverInstanceId,
+      });
       return;
     }
 
@@ -237,6 +244,10 @@ const waitForRuntimeReady = async (
 
     const status = process.pm2_env?.status;
     if (status === "errored" || status === "stopped") {
+      warnRestartTrace("pm2.runtime_ready_failed", {
+        status,
+        waitMs,
+      });
       throw createStartupError(`the managed process entered the ${status} state`, logOffsets);
     }
 
@@ -281,13 +292,24 @@ const deleteManagedServerInSession = async (
 ): Promise<boolean> => {
   const processes = await describeManagedServer(pm2);
   if (processes.length === 0) {
+    debugRestartTrace("pm2.delete.skip_missing", {
+      ignoreMissing,
+    });
     return false;
   }
 
   try {
+    debugRestartTrace("pm2.delete.begin", {
+      ignoreMissing,
+      existingPids: processes.map((process) => process.pid ?? null),
+    });
     await removeManagedServer(pm2);
   } catch (error) {
     if (ignoreMissing && isMissingManagedServerError(error)) {
+      warnRestartTrace("pm2.delete.missing_during_delete", {
+        ignoreMissing,
+        message: error instanceof Error ? error.message : String(error),
+      });
       await waitForManagedServerDeletion(pm2, PM2_DELETE_WAIT_MS);
       return false;
     }
@@ -296,6 +318,9 @@ const deleteManagedServerInSession = async (
   }
 
   await waitForManagedServerDeletion(pm2, PM2_DELETE_WAIT_MS);
+  debugRestartTrace("pm2.delete.complete", {
+    ignoreMissing,
+  });
   return true;
 };
 
@@ -374,12 +399,24 @@ export const startManagedServer = async ({
         : null;
 
     if (intent) {
+      debugRestartTrace("pm2.restart_intent.write", {
+        requestId: intent.requestId,
+        expectedServerInstanceId: intent.expectedServerInstanceId,
+        mode: intent.mode,
+      });
       writeRestartIntent(intent);
     } else {
       deleteRestartIntent();
     }
 
     try {
+      debugRestartTrace("pm2.start.begin", {
+        script,
+        cwd,
+        restart,
+        existingRuntimePid: runtime?.pid ?? null,
+        existingServerInstanceId: runtime?.serverInstanceId ?? null,
+      });
       await deleteManagedServerInSession(pm2, { ignoreMissing: true });
 
       if (readRuntimeConfig()) {
@@ -417,6 +454,11 @@ export const startManagedServer = async ({
             }
           );
         });
+        debugRestartTrace("pm2.start.spawned", {
+          script,
+          cwd,
+          restart,
+        });
       } finally {
         if (previousNodeEnv === undefined) {
           delete process.env.NODE_ENV;
@@ -430,6 +472,10 @@ export const startManagedServer = async ({
       if (intent) {
         deleteRestartIntent();
       }
+      warnRestartTrace("pm2.start.failed", {
+        restart,
+        message: error instanceof Error ? error.message : String(error),
+      });
       throw error;
     }
 

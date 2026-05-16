@@ -6,6 +6,7 @@ import {
   writeTerminalBrokerRuntime,
 } from "@coder-studio/core/runtime";
 import type { EventBus } from "../bus/event-bus.js";
+import { debugRestartTrace } from "../restart-trace.js";
 import type { BrokerEvent, BrokerRequest, BrokerResponse } from "./broker-protocol.js";
 import { NodePtyHost } from "./pty-host.js";
 import { TerminalRuntime } from "./runtime.js";
@@ -48,6 +49,10 @@ export async function startTerminalBrokerServer(opts: {
   const subscribers = new Map<string, Set<Socket>>();
 
   if (process.platform !== "win32" && existsSync(opts.endpoint)) {
+    debugRestartTrace("terminal_broker.socket_remove_before_listen", {
+      endpoint: opts.endpoint,
+      pid: process.pid,
+    });
     rmSync(opts.endpoint, { force: true });
   }
 
@@ -178,15 +183,27 @@ export async function startTerminalBrokerServer(opts: {
       resolve();
     });
   });
+  debugRestartTrace("terminal_broker.listen", {
+    endpoint: opts.endpoint,
+    pid: process.pid,
+  });
 
   writeTerminalBrokerRuntime({
     endpoint: opts.endpoint,
     pid: process.pid,
     startedAt: Date.now(),
   });
+  debugRestartTrace("terminal_broker.runtime_write", {
+    endpoint: opts.endpoint,
+    pid: process.pid,
+  });
 
   return {
     close: async () => {
+      debugRestartTrace("terminal_broker.close", {
+        endpoint: opts.endpoint,
+        pid: process.pid,
+      });
       deleteTerminalBrokerRuntime();
       await new Promise<void>((resolve, reject) => {
         server.close((error) => {
@@ -199,6 +216,10 @@ export async function startTerminalBrokerServer(opts: {
       });
 
       if (process.platform !== "win32" && existsSync(opts.endpoint)) {
+        debugRestartTrace("terminal_broker.socket_remove_on_close", {
+          endpoint: opts.endpoint,
+          pid: process.pid,
+        });
         rmSync(opts.endpoint, { force: true });
       }
     },
