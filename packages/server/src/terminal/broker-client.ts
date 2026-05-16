@@ -147,17 +147,6 @@ export class TerminalBrokerClient {
     return true;
   }
 
-  async status(): Promise<{ pid: number; startedAt: number }> {
-    const result = await this.request({
-      id: randomUUID(),
-      op: "status",
-    });
-    if (!result.broker) {
-      throw new Error("Broker status payload missing");
-    }
-    return result.broker;
-  }
-
   async subscribeOutput(
     ownerServerInstanceId: string,
     onEvent: (event: BrokerEvent) => void
