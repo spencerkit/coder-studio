@@ -125,6 +125,19 @@ function loadProviderAdditionalArgs(
   );
 }
 
+function getMobileSectionHintKey(section: SettingsSection) {
+  switch (section) {
+    case "general":
+      return "settings.notifications_channel_hint";
+    case "providers":
+      return "settings.provider.command_preview_hint";
+    case "appearance":
+      return "settings.theme.hint";
+    case "shortcuts":
+      return "settings.shortcuts.hint";
+  }
+}
+
 /**
  * Settings Page
  *
@@ -436,18 +449,28 @@ export function SettingsPage() {
 
   const renderMobileRoot = () => (
     <main className="settings-content settings-content--mobile-root">
+      <section className="settings-mobile-root-hero">
+        <div className="settings-mobile-root-hero__eyebrow">{t("settings.title")}</div>
+        <p className="settings-mobile-root-hero__body">{t("settings.autosave_hint")}</p>
+      </section>
       <div className="settings-mobile-list">
         {availableSections.map(({ id, labelKey, iconSemantic }) => (
           <button
             key={id}
             type="button"
             className="settings-mobile-item"
+            aria-label={t(labelKey)}
             onClick={() => setNavigationState({ kind: "detail", section: id })}
           >
-            <span className="settings-mobile-item__icon">
-              <ThemedIcon semantic={iconSemantic} size={18} />
+            <span className="settings-mobile-item__icon-shell" aria-hidden="true">
+              <span className="settings-mobile-item__icon">
+                <ThemedIcon semantic={iconSemantic} size={18} />
+              </span>
             </span>
-            <span className="settings-mobile-item__label">{t(labelKey)}</span>
+            <span className="settings-mobile-item__copy">
+              <span className="settings-mobile-item__label">{t(labelKey)}</span>
+              <span className="settings-mobile-item__hint">{t(getMobileSectionHintKey(id))}</span>
+            </span>
             <ChevronRight size={16} className="settings-mobile-item__arrow" />
           </button>
         ))}

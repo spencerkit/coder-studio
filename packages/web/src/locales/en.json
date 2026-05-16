@@ -598,6 +598,7 @@
     },
     "shortcuts": {
       "title": "Keyboard Shortcuts",
+      "hint": "Review and adjust common keyboard actions",
       "reset_all": "Reset All",
       "capture_hint": "Press new shortcut combination",
       "reset_hint": "Reset to default"

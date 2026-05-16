@@ -598,6 +598,7 @@
     },
     "shortcuts": {
       "title": "快捷键",
+      "hint": "查看并调整常用键盘操作",
       "reset_all": "重置全部",
       "capture_hint": "按下新的快捷键组合",
       "reset_hint": "重置为默认"

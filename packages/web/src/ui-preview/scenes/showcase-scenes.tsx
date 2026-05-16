@@ -5,8 +5,9 @@ import { ToastContainer } from "../../features/notifications";
 import { MobileSupervisorBadge } from "../../features/supervisor/views/mobile/mobile-supervisor-badge";
 import { MobileSupervisorSheet } from "../../features/supervisor/views/mobile/mobile-supervisor-sheet";
 import { ObjectiveDialog } from "../../features/supervisor/views/shared/objective-dialog";
-import { XtermPlaceholder } from "../../features/terminal-panel/views/shared/xterm-placeholder";
+import { TerminalPanel } from "../../features/terminal-panel";
 import { MobileDock } from "../../features/workspace/views/mobile/mobile-dock";
+import { MobileFilesSheet } from "../../features/workspace/views/mobile/mobile-files-sheet";
 import { MobileWorkspaceDrawer } from "../../features/workspace/views/mobile/mobile-workspace-drawer";
 import { BranchQuickPick } from "../../features/workspace/views/shared/branch-quick-pick";
 import { WorkspaceLaunchModal } from "../../features/workspace/views/shared/workspace-launch-modal";
@@ -91,6 +92,17 @@ const worktreeStatus: GitStatus = {
 const worktreeTree: FileNode[] = [
   { name: "packages", path: "packages", kind: "dir" },
   { name: "e2e-ui", path: "e2e-ui", kind: "dir" },
+];
+
+const fileTreeRoot: FileNode[] = [
+  { name: "packages", path: "packages", kind: "dir" },
+  { name: "README.md", path: "README.md", kind: "file" },
+  { name: "pnpm-workspace.yaml", path: "pnpm-workspace.yaml", kind: "file" },
+];
+
+const fileTreePackages: FileNode[] = [
+  { name: "web", path: "packages/web", kind: "dir" },
+  { name: "core", path: "packages/core", kind: "dir" },
 ];
 
 function scene(
@@ -442,40 +454,137 @@ export function createShowcaseScenes(): UiPreviewSceneDefinition[] {
     }),
     scene("mobile-files-sheet", {
       router: () => ({ initialEntries: ["/workspace"], path: "/workspace" }),
-      seed: (context) => ({ ...context }),
+      seed: (context) => ({
+        ...context,
+        workspaces: [workspace],
+        activeWorkspaceId: workspace.id,
+        commands: {
+          fileTreeByWorkspaceId: {
+            [workspace.id]: {
+              ".": fileTreeRoot,
+              packages: fileTreePackages,
+            },
+          },
+          gitStatusByWorkspaceId: {
+            [workspace.id]: {
+              branch: "feature/mobile-polish",
+              ahead: 2,
+              behind: 0,
+              staged: [{ path: "packages/web/src/styles/components.css", status: "modified" }],
+              modified: [
+                {
+                  path: "packages/web/src/features/settings/components/settings-page.tsx",
+                  status: "modified",
+                },
+                {
+                  path: "packages/web/src/features/workspace/views/mobile/mobile-workspace-drawer.tsx",
+                  status: "modified",
+                },
+              ],
+              untracked: [{ path: "e2e-ui/output/mobile-review.png", status: "untracked" }],
+              deleted: [],
+            },
+          },
+          gitBranchesByWorkspaceId: {
+            [workspace.id]: {
+              current: "feature/mobile-polish",
+              branches: [
+                { name: "feature/mobile-polish", isCurrent: true, isRemote: false },
+                { name: "develop", isCurrent: false, isRemote: false },
+              ],
+            },
+          },
+          terminalListByWorkspaceId: {
+            [workspace.id]: [],
+          },
+        },
+      }),
       render: () => (
         <Sheet
           title="Files"
+          kicker="Workspace"
           fullscreen
           bodyClassName="mobile-sheet__body--flush mobile-sheet__body--fullscreen"
           contentClassName="mobile-sheet--files"
           onClose={() => {}}
           body={
-            <div className="mobile-files-sheet">
-              <div className="file-tree-shell file-tree-shell--mobile">
-                <div className="file-tree">
-                  <div className="file-tree-row">packages/web/src/app.tsx</div>
-                  <div className="file-tree-row">packages/web/src/ui-preview/app.tsx</div>
-                </div>
-              </div>
-            </div>
+            <MobileFilesSheet
+              workspaceId={workspace.id}
+              route={{ kind: "root" }}
+              activeTab="files"
+            />
           }
         />
       ),
     }),
     scene("mobile-terminal-sheet", {
       router: () => ({ initialEntries: ["/workspace"], path: "/workspace" }),
-      seed: (context) => ({ ...context }),
+      seed: (context) => ({
+        ...context,
+        workspaces: [workspace],
+        activeWorkspaceId: workspace.id,
+        terminalMetaById: {
+          "term-preview-1": {
+            id: "term-preview-1",
+            workspaceId: workspace.id,
+            kind: "shell",
+            alive: true,
+            title: "Workspace Shell",
+          },
+          "term-preview-2": {
+            id: "term-preview-2",
+            workspaceId: workspace.id,
+            kind: "shell",
+            alive: true,
+            title: "Preview Runner",
+          },
+        },
+        terminalOutputById: {
+          "term-preview-1": [new TextEncoder().encode("$ pnpm --filter @coder-studio/web test\n")],
+          "term-preview-2": [new TextEncoder().encode("$ playwright test --project=mobile\n")],
+        },
+        commands: {
+          terminalListByWorkspaceId: {
+            [workspace.id]: [
+              {
+                id: "term-preview-1",
+                workspaceId: workspace.id,
+                kind: "shell",
+                title: "Workspace Shell",
+                cwd: workspace.path,
+                argv: ["zsh"],
+                cols: 120,
+                rows: 28,
+                alive: true,
+                createdAt: 1,
+              },
+              {
+                id: "term-preview-2",
+                workspaceId: workspace.id,
+                kind: "shell",
+                title: "Preview Runner",
+                cwd: workspace.path,
+                argv: ["zsh"],
+                cols: 120,
+                rows: 28,
+                alive: true,
+                createdAt: 2,
+              },
+            ],
+          },
+        },
+      }),
       render: () => (
         <Sheet
           title="Terminal"
+          kicker="Workspace"
           fullscreen
           bodyClassName="mobile-sheet__body--flush mobile-sheet__body--fullscreen"
           contentClassName="mobile-sheet--terminal"
           onClose={() => {}}
           body={
             <div className="mobile-terminal-sheet mobile-terminal-sheet--fullscreen">
-              <XtermPlaceholder state="granting" />
+              <TerminalPanel chrome="mobile-fullscreen" />
             </div>
           }
         />

@@ -361,6 +361,7 @@ export function WorkspaceMobileView() {
           ) : (
             <section className="mobile-shell__agent-empty" data-testid="mobile-agent-empty">
               <div className="mobile-shell__empty-content">
+                <div className="mobile-shell__empty-panel" aria-hidden="true" />
                 <EmptyState
                   className="mobile-shell__empty-state"
                   style={{ minHeight: "auto" }}
@@ -373,6 +374,13 @@ export function WorkspaceMobileView() {
                   description={
                     <div className="mobile-shell__placeholder-copy">
                       <p>{t("mobile.empty.files_terminal_hint")}</p>
+                      <div className="mobile-shell__placeholder-pills" aria-hidden="true">
+                        <span className="mobile-shell__placeholder-pill">{t("label.agent")}</span>
+                        <span className="mobile-shell__placeholder-pill">{t("file.title")}</span>
+                        <span className="mobile-shell__placeholder-pill">
+                          {t("label.terminal")}
+                        </span>
+                      </div>
                     </div>
                   }
                   action={

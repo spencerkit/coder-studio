@@ -422,7 +422,7 @@ describe("components.css theme-sensitive surfaces", () => {
     );
 
     expect(viewport).toContain(
-      "padding: var(--sp-1) var(--mobile-safe-right) 0 var(--mobile-safe-left)"
+      "padding: var(--sp-2) var(--mobile-safe-right) 0 var(--mobile-safe-left)"
     );
     expect(viewport).not.toContain("var(--sp-3) var(--mobile-safe-left)");
     expect(compactViewport).toContain("padding-bottom: 0");
@@ -484,11 +484,11 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(inlineSheet).toContain("border-radius: 12px");
     expect(inlineSelectSheet).toContain("flex: 1");
     expect(inlineSelectSheet).toContain("flex-direction: column");
-    expect(workspaceButton).toContain("height: 32px");
+    expect(workspaceButton).toContain("height: 36px");
     expect(workspaceButton).not.toContain("box-shadow:");
     expect(sessionButton).toContain("min-height: 40px");
     expect(sessionButton).not.toContain("box-shadow:");
-    expect(iconButton).toContain("height: 32px");
+    expect(iconButton).toContain("height: 36px");
     expect(iconButton).not.toContain("box-shadow:");
   });
 
@@ -527,13 +527,13 @@ describe("components.css theme-sensitive surfaces", () => {
     );
 
     expect(mobileDock).toContain("grid-template-columns: repeat(3, minmax(0, 1fr))");
-    expect(mobileDock).toContain("gap: 0");
+    expect(mobileDock).toContain("gap: var(--sp-2)");
     expect(mobileDockItem).toBeTruthy();
-    expect(mobileDockItem).toContain("border: none");
-    expect(mobileDockItem).toContain("background: transparent");
-    expect(mobileDockItem).toContain("min-height: 34px");
+    expect(mobileDockItem).toContain("border: 1px solid");
+    expect(mobileDockItem).toContain("background: color-mix(");
+    expect(mobileDockItem).toContain("min-height: 42px");
     expect(activeDockItem).toBeTruthy();
-    expect(activeDockItem).toContain("background: transparent");
+    expect(activeDockItem).toContain("background: color-mix(");
   });
 
   it("keeps mobile sheets closer to IDE panes than floating cards", () => {
@@ -604,16 +604,17 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(settingsNavItemActive).toContain("border-color: color-mix");
     expect(settingsNavItemActive).toContain("var(--accent-blue)");
     expect(mobileContent).toContain("padding: 0");
-    expect(mobileRootContent).toContain("padding-left: var(--sp-2)");
-    expect(mobileRootContent).toContain("padding-right: var(--sp-2)");
-    expect(mobileList).toContain("gap: 0");
-    expect(mobileList).toContain("border-top: 1px solid var(--border)");
-    expect(mobileItem).toContain("min-height: 48px");
-    expect(mobileItem).toContain("padding: var(--sp-3) var(--sp-4)");
-    expect(mobileItem).toContain("border: none");
-    expect(mobileItem).toContain("border-bottom: 1px solid var(--border)");
-    expect(mobileItem).toContain("border-radius: 0");
-    expect(mobileItem).toContain("background: transparent");
+    expect(mobileRootContent).toContain("padding-left: var(--sp-3)");
+    expect(mobileRootContent).toContain("padding-right: var(--sp-3)");
+    expect(mobileList).toContain("gap: var(--sp-3)");
+    expect(mobileList).toContain("border-top: none");
+    expect(mobileItem).toContain("min-height: 76px");
+    expect(mobileItem).toContain("padding: var(--sp-4)");
+    expect(mobileItem).toContain("border: 1px solid");
+    expect(mobileItem).toContain("border-bottom: 1px solid");
+    expect(mobileItem).toContain("border-radius: 22px");
+    expect(mobileItem).toContain("background:");
+    expect(mobileItem).toContain("linear-gradient(");
     expect(mobileItemIcon).toContain("color: var(--icon-secondary)");
     expect(mobileItemArrow).toContain("color: var(--text-tertiary)");
   });
@@ -742,19 +743,19 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(topbar).toContain(
       "padding: calc(var(--mobile-safe-top) + var(--sp-1)) calc(var(--mobile-safe-right) + var(--sp-4)) var(--sp-1) calc(var(--mobile-safe-left) + var(--sp-4))"
     );
-    expect(emptyStage).toContain("padding: clamp(56px, 14vh, 116px) var(--sp-4) var(--sp-3)");
-    expect(bottomStack).toContain("background: var(--bg-surface)");
-    expect(bottomStack).toContain("border-top: 1px solid var(--border)");
+    expect(emptyStage).toContain("padding: clamp(44px, 11vh, 92px) var(--sp-4) var(--sp-3)");
+    expect(bottomStack).toContain("background: linear-gradient(");
+    expect(bottomStack).toContain("border-top: 1px solid color-mix(");
     expect(bottomStack).not.toContain("backdrop-filter");
     expect(dockShell).toContain(
-      "padding: 2px calc(var(--mobile-safe-right) + var(--sp-4)) 0 calc(var(--mobile-safe-left) + var(--sp-4))"
+      "padding: 6px calc(var(--mobile-safe-right) + var(--sp-4)) 0 calc(var(--mobile-safe-left) + var(--sp-4))"
     );
-    expect(dock).toContain("gap: 0");
+    expect(dock).toContain("gap: var(--sp-2)");
     expect(dock).toContain("border-bottom: none");
     expect(dockItem).toBeTruthy();
-    expect(dockItem).toContain("min-height: 34px");
-    expect(dockItem).toContain("padding: 3px var(--sp-1) 5px");
-    expect(dockLabel).toContain("font-size: 10px");
+    expect(dockItem).toContain("min-height: 42px");
+    expect(dockItem).toContain("padding: 8px var(--sp-2) 7px");
+    expect(dockLabel).toContain("font-size: 11px");
     expect(statusBar).toContain("padding-bottom: calc(var(--mobile-safe-bottom) + var(--sp-1))");
     expect(statusBar).toContain("border-top: 1px solid");
     expect(statusStrip).toContain("min-height: 28px");
@@ -765,20 +766,25 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(emptyPane).toContain("position: relative");
     expect(emptyPane).toContain("width: min(100%, 344px)");
     expect(emptyPane).toContain("align-self: flex-start");
-    expect(emptyPane).toContain("padding: var(--sp-2) 0 0 var(--sp-4)");
+    expect(emptyPane).toContain(
+      "padding: var(--sp-4) var(--sp-4) var(--sp-4) calc(var(--sp-4) + 2px)"
+    );
     expect(emptyPane).toContain("border-top: none");
-    expect(emptyPane).toContain("background: transparent");
+    expect(emptyPane).toContain("border: 1px solid");
+    expect(emptyPane).toContain("border-radius: 24px");
+    expect(emptyPane).toContain("background:");
+    expect(emptyPane).toContain("linear-gradient(");
     expect(emptyPaneBefore).toContain('content: ""');
     expect(emptyPaneBefore).toContain("position: absolute");
-    expect(emptyPaneBefore).toContain("width: 1px");
+    expect(emptyPaneBefore).toContain("width: 2px");
     expect(emptyPaneBefore).toContain("background: linear-gradient(");
     expect(emptyState).toContain("align-items: flex-start");
     expect(emptyState).toContain("width: 100%");
     expect(emptyState).toContain("text-align: left");
-    expect(emptyCta).toContain("min-height: 36px");
+    expect(emptyCta).toContain("min-height: 40px");
     expect(emptyCta).toContain("width: auto");
-    expect(emptyCta).toContain("min-width: 132px");
-    expect(emptyCta).toContain("border-radius: 8px");
+    expect(emptyCta).toContain("min-width: 150px");
+    expect(emptyCta).toContain("border-radius: 999px");
   });
 
   it("keeps settings content groups and provider controls aligned with editor configuration panels", () => {

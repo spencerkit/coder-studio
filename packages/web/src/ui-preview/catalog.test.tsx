@@ -1,7 +1,8 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Provider } from "jotai";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { terminalOutputAtomFamily } from "../features/terminal-panel/atoms";
 import { getThemeById } from "../theme";
 import { getUiPreviewScene, UI_PREVIEW_SCENES } from "./catalog";
 import { buildUiPreviewStore } from "./preview-store";
@@ -152,6 +153,35 @@ describe("UI preview catalog", () => {
     expect(document.querySelector(".launch-modal, .mobile-sheet--launch")).toBeTruthy();
   });
 
+  it("renders the mobile terminal showcase without the replay loading overlay", async () => {
+    renderScene("mobile-terminal-sheet", "mobile");
+
+    await waitFor(() => {
+      expect(screen.queryByText("Restoring terminal output...")).not.toBeInTheDocument();
+    });
+    expect(document.querySelector(".mobile-sheet--terminal")).toBeTruthy();
+  });
+
+  it("keeps mobile terminal showcase history in replay state instead of preloading live output", () => {
+    const scene = getUiPreviewScene("mobile-terminal-sheet");
+    if (!scene) {
+      throw new Error("Missing mobile-terminal-sheet scene");
+    }
+
+    const store = buildUiPreviewStore(
+      scene.seed({
+        theme: "mint-dark",
+        locale: "en",
+        device: "mobile",
+      })
+    );
+
+    expect(store.get(terminalOutputAtomFamily("term-preview-1"))).toEqual({
+      chunks: [],
+      lastSeq: 0,
+    });
+  });
+
   it("renders the shortcuts settings scene with the shortcuts list", async () => {
     renderScene("settings-shortcuts");
 
@@ -163,7 +193,8 @@ describe("UI preview catalog", () => {
   it("renders the mobile settings root scene as the section list", async () => {
     renderScene("settings-mobile-root", "mobile");
 
-    expect(await screen.findByText("Settings")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /general/i })).toBeInTheDocument();
+    expect(document.querySelector(".settings-mobile-root-hero")).toBeTruthy();
     expect(document.querySelector(".settings-mobile-list")).toBeTruthy();
   });
 

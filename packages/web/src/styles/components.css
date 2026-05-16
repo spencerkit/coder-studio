@@ -157,7 +157,12 @@
   position: sticky;
   top: 0;
   z-index: 1;
-  background: var(--bg-surface);
+  padding-top: var(--sp-3);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg-surface) 98%, transparent) 0%,
+    color-mix(in srgb, var(--bg-page) 96%, var(--bg-surface) 4%) 100%
+  );
 }
 
 .command-palette-sheet__meta {
@@ -166,7 +171,8 @@
   justify-content: space-between;
   gap: var(--sp-3);
   padding: var(--sp-2) var(--sp-4);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  background: color-mix(in srgb, var(--bg-surface) 66%, transparent);
 }
 
 .command-palette-sheet-shell {
@@ -179,6 +185,19 @@
 
 .command-palette-sheet-layer {
   min-height: min(82dvh, 700px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .command-palette-overlay,
+  .command-palette,
+  .mobile-sheet-layer__backdrop,
+  .mobile-drawer-layer__backdrop,
+  .mobile-sheet,
+  .mobile-workspace-drawer {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
 }
 
 .mobile-select-sheet {
@@ -8229,8 +8248,12 @@ textarea.input {
     gap: var(--sp-3);
     padding: calc(var(--mobile-safe-top) + var(--sp-1)) calc(var(--mobile-safe-right) + var(--sp-4))
       var(--sp-1) calc(var(--mobile-safe-left) + var(--sp-4));
-    background: var(--bg-surface);
-    border-bottom: 1px solid var(--border);
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--bg-surface) 98%, transparent) 0%,
+      color-mix(in srgb, var(--bg-page) 96%, var(--bg-surface) 4%) 100%
+    );
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
   }
 
   .mobile-topbar__workspace-button,
@@ -8249,18 +8272,18 @@ textarea.input {
     gap: var(--sp-2);
     min-width: 0;
     width: 100%;
-    min-height: 32px;
-    height: 32px;
-    padding: 0 var(--sp-2);
-    border: 1px solid transparent;
-    border-radius: var(--radius-md);
-    background: transparent;
+    min-height: 36px;
+    height: 36px;
+    padding: 0 var(--sp-3);
+    border: 1px solid color-mix(in srgb, var(--border) 68%, transparent);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--bg-surface) 84%, var(--bg-page));
     color: var(--text-primary);
   }
 
   .mobile-topbar__workspace-leading {
     flex-shrink: 0;
-    color: var(--text-tertiary);
+    color: color-mix(in srgb, var(--text-secondary) 88%, var(--accent-blue) 12%);
   }
 
   .mobile-topbar__workspace-name {
@@ -8270,8 +8293,8 @@ textarea.input {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: var(--text-sm);
-    font-weight: var(--font-medium);
+    font-size: 13px;
+    font-weight: var(--font-semibold);
     line-height: 1.2;
   }
 
@@ -8355,7 +8378,7 @@ textarea.input {
     position: relative;
     display: inline-flex;
     align-items: center;
-    gap: var(--sp-1);
+    gap: var(--sp-2);
   }
 
   .mobile-shell__recovery-strip {
@@ -8394,14 +8417,14 @@ textarea.input {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 32px;
-    min-width: 32px;
-    min-height: 32px;
-    height: 32px;
+    width: 36px;
+    min-width: 36px;
+    min-height: 36px;
+    height: 36px;
     padding: 0;
-    border: 1px solid transparent;
-    border-radius: var(--radius-md);
-    background: transparent;
+    border: 1px solid color-mix(in srgb, var(--border) 66%, transparent);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--bg-surface) 82%, var(--bg-page));
     color: var(--text-primary);
     transition:
       background-color var(--mobile-shell-motion-surface-duration) var(--ease-out),
@@ -8573,14 +8596,14 @@ textarea.input {
     flex-direction: column;
     min-height: 0;
     overflow: hidden;
-    padding: var(--sp-1) var(--mobile-safe-right) 0 var(--mobile-safe-left);
+    padding: var(--sp-2) var(--mobile-safe-right) 0 var(--mobile-safe-left);
   }
 
   .mobile-shell__content {
     display: flex;
     flex-direction: column;
     flex: 1;
-    gap: var(--sp-2);
+    gap: var(--sp-3);
     min-height: 0;
     overflow: hidden;
   }
@@ -8622,7 +8645,7 @@ textarea.input {
     flex-direction: column;
     align-items: stretch;
     justify-content: flex-start;
-    padding: clamp(56px, 14vh, 116px) var(--sp-4) var(--sp-3);
+    padding: clamp(44px, 11vh, 92px) var(--sp-4) var(--sp-3);
     border: none;
     background: transparent;
     box-shadow: none;
@@ -8634,33 +8657,62 @@ textarea.input {
     width: min(100%, 344px);
     flex-direction: column;
     align-self: flex-start;
-    padding: var(--sp-2) 0 0 var(--sp-4);
+    gap: var(--sp-3);
+    padding: var(--sp-4) var(--sp-4) var(--sp-4) calc(var(--sp-4) + 2px);
     border-top: none;
-    background: transparent;
-    box-shadow: none;
+    border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+    border-radius: 24px;
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--bg-surface) 94%, transparent) 0%,
+      color-mix(in srgb, var(--bg-page) 96%, var(--bg-surface) 4%) 100%
+    );
+    box-shadow: 0 18px 40px color-mix(in srgb, var(--bg-page) 44%, transparent);
+    overflow: hidden;
   }
 
   .mobile-shell__empty-content::before {
     content: "";
     position: absolute;
-    inset: 0 auto 0 0;
-    width: 1px;
+    inset: 16px auto 16px 0;
+    width: 2px;
+    border-radius: var(--radius-full);
     background: linear-gradient(
       180deg,
-      color-mix(in srgb, var(--accent-blue) 18%, var(--border)) 0%,
-      color-mix(in srgb, var(--border) 58%, transparent) 34%,
+      color-mix(in srgb, var(--accent-blue) 34%, var(--border)) 0%,
+      color-mix(in srgb, var(--accent-blue) 14%, transparent) 36%,
       transparent 100%
     );
+  }
+
+  .mobile-shell__empty-panel {
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 96px;
+    background:
+      radial-gradient(
+        circle at top left,
+        color-mix(in srgb, var(--accent-blue) 18%, transparent),
+        transparent 58%
+      ),
+      linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--bg-surface) 8%, transparent) 0%,
+        transparent 100%
+      );
+    pointer-events: none;
   }
 
   .mobile-shell__empty-state {
     width: 100%;
     align-items: flex-start;
     justify-content: center;
-    gap: var(--sp-3);
+    gap: var(--sp-4);
     min-height: 0;
     padding: 0;
     text-align: left;
+    position: relative;
+    z-index: 1;
   }
 
   .mobile-shell__empty-heading {
@@ -8694,48 +8746,70 @@ textarea.input {
   .mobile-shell__empty-title {
     margin: 0;
     color: var(--text-primary);
-    font-size: var(--text-base);
+    font-size: clamp(22px, 5.8vw, 30px);
     font-weight: var(--font-semibold);
-    line-height: 1.42;
+    line-height: 1.2;
+    letter-spacing: -0.02em;
   }
 
   .mobile-shell__placeholder-copy {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: var(--sp-2);
+    gap: var(--sp-3);
     max-width: 31ch;
-    color: var(--text-tertiary);
+    color: var(--text-secondary);
     text-align: left;
   }
 
   .mobile-shell__placeholder-copy p {
     margin: 0;
-    font-size: var(--text-sm);
-    line-height: 1.55;
+    font-size: 15px;
+    line-height: 1.65;
+  }
+
+  .mobile-shell__placeholder-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-2);
+  }
+
+  .mobile-shell__placeholder-pill {
+    display: inline-flex;
+    align-items: center;
+    min-height: 26px;
+    padding: 0 10px;
+    border: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--bg-surface) 72%, transparent);
+    color: var(--text-tertiary);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
   }
 
   .mobile-shell__empty-action-row {
     display: flex;
     width: 100%;
     justify-content: flex-start;
-    margin-top: var(--sp-1);
+    margin-top: 0;
   }
 
   .mobile-shell__empty-cta {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-height: 36px;
+    min-height: 40px;
     width: auto;
-    min-width: 132px;
-    padding: 0 var(--sp-3);
-    border: 1px solid color-mix(in srgb, var(--accent-blue) 12%, var(--border));
-    border-radius: 8px;
-    background: color-mix(in srgb, var(--bg-surface) 56%, transparent);
+    min-width: 150px;
+    padding: 0 var(--sp-4);
+    border: 1px solid color-mix(in srgb, var(--accent-blue) 34%, var(--border));
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--accent-blue) 12%, var(--bg-surface));
     color: var(--text-primary);
-    font-size: var(--text-xs);
-    font-weight: var(--font-medium);
+    font-size: 13px;
+    font-weight: var(--font-semibold);
     transition:
       background-color var(--mobile-shell-motion-surface-duration) var(--ease-out),
       border-color var(--mobile-shell-motion-surface-duration) var(--ease-out),
@@ -8752,14 +8826,18 @@ textarea.input {
     flex-direction: column;
     gap: 0;
     padding: 0 0 var(--mobile-keyboard-inset) 0;
-    border-top: 1px solid var(--border);
-    background: var(--bg-surface);
+    border-top: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--bg-surface) 98%, transparent) 0%,
+      color-mix(in srgb, var(--bg-page) 94%, var(--bg-surface) 6%) 100%
+    );
     transition: padding-bottom var(--mobile-shell-motion-enter-duration) var(--ease-out);
   }
 
   .mobile-dock-shell {
     position: relative;
-    padding: 2px calc(var(--mobile-safe-right) + var(--sp-4)) 0
+    padding: 6px calc(var(--mobile-safe-right) + var(--sp-4)) 0
       calc(var(--mobile-safe-left) + var(--sp-4));
   }
 
@@ -8873,8 +8951,8 @@ textarea.input {
     position: static;
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 0;
-    padding: 0;
+    gap: var(--sp-2);
+    padding: 0 0 var(--sp-1);
     background: transparent;
     border-top: none;
     border-bottom: none;
@@ -8886,12 +8964,12 @@ textarea.input {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    min-height: 34px;
-    gap: 1px;
-    padding: 3px var(--sp-1) 5px;
-    border: none;
-    border-radius: 6px;
-    background: transparent;
+    min-height: 42px;
+    gap: 4px;
+    padding: 8px var(--sp-2) 7px;
+    border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+    border-radius: 18px;
+    background: color-mix(in srgb, var(--bg-surface) 74%, transparent);
     color: var(--text-tertiary);
     transition:
       background-color var(--mobile-shell-motion-surface-duration) var(--ease-out),
@@ -8902,20 +8980,20 @@ textarea.input {
   }
 
   .mobile-dock__item--active {
-    border-color: transparent;
-    background: transparent;
+    border-color: color-mix(in srgb, var(--accent-blue) 34%, var(--border));
+    background: color-mix(in srgb, var(--accent-blue) 10%, var(--bg-surface));
     color: var(--text-primary);
   }
 
   .mobile-dock__item--active::before {
     content: "";
     position: absolute;
-    top: -1px;
+    top: 6px;
     left: 50%;
-    width: 14px;
+    width: 18px;
     height: 2px;
     border-radius: var(--radius-full);
-    background: color-mix(in srgb, var(--accent-blue) 62%, transparent);
+    background: color-mix(in srgb, var(--accent-blue) 78%, transparent);
     transform: translateX(-50%);
   }
 
@@ -8927,12 +9005,12 @@ textarea.input {
   }
 
   .mobile-dock__icon svg {
-    width: 16px;
-    height: 16px;
+    width: 17px;
+    height: 17px;
   }
 
   .mobile-dock__label {
-    font-size: 10px;
+    font-size: 11px;
     font-weight: var(--font-medium);
     line-height: 1.1;
   }
@@ -9282,30 +9360,103 @@ textarea.input {
 
   .command-palette-sheet-layer {
     gap: 0;
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--bg-surface) 96%, transparent) 0%,
+      var(--bg-page) 100%
+    );
   }
 
   .command-palette-sheet__meta {
-    padding-inline: var(--sp-4);
+    padding: var(--sp-2) var(--sp-4) var(--sp-3);
+  }
+
+  .command-palette-sheet {
+    gap: var(--sp-2);
+  }
+
+  .command-palette-sheet .command-palette-search {
+    margin: 0 var(--sp-4);
+    padding: 0 var(--sp-3);
+    min-height: 46px;
+    border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+    border-radius: 16px;
+    background: color-mix(in srgb, var(--bg-surface) 88%, var(--bg-page));
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, var(--fg-white) 5%, transparent),
+      0 12px 28px color-mix(in srgb, var(--bg-page) 20%, transparent);
+  }
+
+  .command-palette-sheet .command-palette-search-icon {
+    color: color-mix(in srgb, var(--text-secondary) 86%, var(--accent-blue) 14%);
+  }
+
+  .command-palette-sheet .command-palette-input {
+    font-size: 15px;
+  }
+
+  .command-palette-sheet .command-palette-hint {
+    padding: 0;
+    border-bottom: none;
+  }
+
+  .command-palette-sheet .command-palette-meta {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
   }
 
   .command-palette-list {
     flex: 1;
     max-height: none;
+    padding: 0 var(--sp-3) var(--sp-4);
   }
 
   .command-palette-item {
     align-items: flex-start;
     gap: var(--sp-3);
+    padding: var(--sp-3);
+    border: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
+    border-radius: 16px;
+    background: color-mix(in srgb, var(--bg-surface) 74%, transparent);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--fg-white) 4%, transparent);
+  }
+
+  .command-palette-item + .command-palette-item {
+    margin-top: var(--sp-2);
+  }
+
+  .command-palette-item:hover,
+  .command-palette-item-selected {
+    background: color-mix(in srgb, var(--accent-blue) 10%, var(--bg-surface));
+    border-color: color-mix(in srgb, var(--accent-blue) 30%, var(--border));
   }
 
   .command-palette-item-content {
     flex: 1;
     min-width: 0;
+    gap: 3px;
+  }
+
+  .command-palette-item-label {
+    font-size: 14px;
+    font-weight: var(--font-semibold);
+  }
+
+  .command-palette-item-desc {
+    line-height: 1.5;
   }
 
   .command-palette-item-shortcut {
     flex-shrink: 0;
     margin-top: 2px;
+    padding: 4px 7px;
+    border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--bg-page) 76%, var(--bg-surface) 24%);
+    font-size: 10px;
+    letter-spacing: 0.06em;
   }
 
   .mobile-files-sheet,
@@ -9318,11 +9469,17 @@ textarea.input {
   }
 
   .mobile-files-sheet {
-    gap: 0;
+    gap: var(--sp-3);
+    padding: var(--sp-3) var(--sp-3) 0;
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--bg-surface) 96%, transparent) 0%,
+      var(--bg-page) 100%
+    );
   }
 
   .mobile-files-sheet__branch-row {
-    padding: 6px var(--sp-3) 0;
+    padding: 0;
     flex-shrink: 0;
   }
 
@@ -9333,16 +9490,26 @@ textarea.input {
     width: 100%;
     min-width: 0;
     margin-bottom: 0;
-    padding: 7px 10px;
-    border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
-    border-radius: 4px;
-    background: color-mix(in srgb, var(--bg-page) 76%, var(--bg-surface) 24%);
+    padding: 10px 12px;
+    border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+    border-radius: 16px;
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--bg-surface) 90%, transparent) 0%,
+      color-mix(in srgb, var(--bg-page) 92%, var(--bg-surface) 8%) 100%
+    );
     color: var(--text-primary);
-    box-shadow: none;
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, var(--fg-white) 6%, transparent),
+      0 10px 28px color-mix(in srgb, var(--bg-page) 18%, transparent);
   }
 
   .mobile-files-sheet__branch:hover {
-    background: color-mix(in srgb, var(--bg-hover) 82%, var(--accent-blue) 18%);
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--accent-blue) 8%, var(--bg-surface)) 0%,
+      color-mix(in srgb, var(--accent-blue) 12%, var(--bg-page)) 100%
+    );
   }
 
   .mobile-files-sheet__branch:active {
@@ -9364,7 +9531,7 @@ textarea.input {
     flex: 1;
     flex-direction: column;
     align-items: flex-start;
-    gap: 1px;
+    gap: 2px;
   }
 
   .mobile-files-sheet__branch-label {
@@ -9380,8 +9547,8 @@ textarea.input {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 11px;
-    line-height: 1.2;
+    font-size: 12px;
+    line-height: 1.25;
     font-weight: 600;
   }
 
@@ -9405,7 +9572,7 @@ textarea.input {
   .mobile-files-sheet__detail-toolbar {
     display: flex;
     align-items: center;
-    padding: 0 var(--sp-3) var(--sp-2);
+    padding: 0 var(--sp-1) var(--sp-2);
     flex-shrink: 0;
   }
 
@@ -9474,15 +9641,27 @@ textarea.input {
     min-height: 0;
   }
 
+  .mobile-terminal-sheet {
+    padding: var(--sp-3) var(--sp-3) 0;
+    gap: var(--sp-3);
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--bg-surface) 96%, transparent) 0%,
+      var(--bg-page) 100%
+    );
+  }
+
   .mobile-terminal-sheet .bottom-terminal {
-    border: none;
-    background: transparent;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+    border-radius: 20px 20px 0 0;
+    background: color-mix(in srgb, var(--bg-terminal) 94%, var(--bg-page));
     box-shadow: none;
   }
 
   .mobile-terminal-sheet .terminal-toolbar {
-    border-top-left-radius: 18px;
-    border-top-right-radius: 18px;
+    border-top-left-radius: 20px;
+    border-top-right-radius: 20px;
   }
 
   .mobile-sheet--files,
@@ -9569,14 +9748,33 @@ textarea.input {
     padding: 0;
   }
 
+  .mobile-sheet--files .mobile-files-sheet__content,
+  .mobile-sheet--files .mobile-files-sheet__detail,
+  .mobile-sheet--terminal .mobile-terminal-sheet,
+  .mobile-sheet--terminal .bottom-terminal {
+    min-height: 0;
+  }
+
+  .mobile-sheet--files .file-tree-shell--mobile,
+  .mobile-sheet--files .git-panel--mobile,
+  .mobile-sheet--files .workspace-git-editor,
+  .mobile-sheet--files .workspace-git-view {
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+    border-radius: 18px 18px 0 0;
+    background: color-mix(in srgb, var(--bg-surface) 90%, var(--bg-page));
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, var(--fg-white) 5%, transparent),
+      0 14px 34px color-mix(in srgb, var(--bg-page) 18%, transparent);
+  }
+
   .mobile-sheet--files .workspace-git-view {
     padding: 0;
-    background: transparent;
   }
 
   .mobile-sheet--files .workspace-git-editor {
     border: none;
-    border-radius: 0;
+    border-radius: 18px 18px 0 0;
     box-shadow: none;
   }
 
@@ -9595,12 +9793,16 @@ textarea.input {
   }
 
   .bottom-terminal--mobile-fullscreen .terminal-toolbar {
-    min-height: 32px;
-    padding: 3px var(--sp-3) 1px;
+    min-height: 36px;
+    padding: 5px var(--sp-3) 3px;
     border-radius: 0;
     border-bottom-color: color-mix(in srgb, var(--border) 74%, transparent);
-    background: color-mix(in srgb, var(--bg-page) 95%, var(--bg-surface) 5%);
-    gap: var(--sp-1);
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--bg-page) 90%, var(--bg-surface) 10%) 0%,
+      color-mix(in srgb, var(--bg-page) 96%, var(--bg-surface) 4%) 100%
+    );
+    gap: var(--sp-2);
   }
 
   .bottom-terminal--mobile-fullscreen .terminal-toolbar-left::before {
@@ -9628,16 +9830,16 @@ textarea.input {
   .bottom-terminal--mobile-fullscreen .terminal-selector-btn {
     display: flex;
     width: 100%;
-    height: 22px;
-    min-height: 22px;
+    height: 24px;
+    min-height: 24px;
     min-width: 0;
     align-items: center;
     gap: var(--sp-2);
     padding: 0 6px;
     justify-content: space-between;
-    border-radius: 3px;
+    border-radius: 999px;
     border-color: color-mix(in srgb, var(--border) 64%, transparent);
-    background: color-mix(in srgb, var(--bg-page) 74%, var(--bg-surface) 26%);
+    background: color-mix(in srgb, var(--bg-page) 70%, var(--bg-surface) 30%);
     color: var(--text-secondary);
     font-family: var(--font-mono);
     font-size: var(--text-xs);
@@ -9667,10 +9869,12 @@ textarea.input {
 
   .bottom-terminal--mobile-fullscreen .bottom-terminal-tabs {
     padding-inline: var(--sp-3);
+    border-bottom-color: color-mix(in srgb, var(--border) 74%, transparent);
+    background: color-mix(in srgb, var(--bg-page) 80%, var(--bg-surface) 20%);
   }
 
   .bottom-terminal--mobile-fullscreen .bottom-terminal-xterm {
-    padding: 0 var(--sp-1) var(--sp-1);
+    padding: 0 var(--sp-2) var(--sp-2);
   }
 
   .bottom-terminal--mobile-fullscreen .bottom-terminal-content {
@@ -9682,9 +9886,9 @@ textarea.input {
   }
 
   .bottom-terminal--mobile-fullscreen .panel-toolbar-btn {
-    width: 22px;
-    height: 22px;
-    border-radius: 3px;
+    width: 24px;
+    height: 24px;
+    border-radius: 999px;
     border: 1px solid color-mix(in srgb, var(--border) 46%, transparent);
     background: color-mix(in srgb, var(--bg-page) 74%, var(--bg-surface) 26%);
     color: var(--text-tertiary);
@@ -9705,6 +9909,12 @@ textarea.input {
 
   .mobile-supervisor-sheet {
     gap: var(--sp-3);
+    padding: var(--sp-3) var(--sp-3) 0;
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--bg-surface) 96%, transparent) 0%,
+      var(--bg-page) 100%
+    );
   }
 
   .mobile-sheet__body--supervisor-detail {
@@ -9727,6 +9937,13 @@ textarea.input {
     gap: var(--sp-4);
     padding: var(--sp-4);
     padding-bottom: var(--sp-5);
+    border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+    border-radius: 22px 22px 0 0;
+    background: color-mix(in srgb, var(--bg-surface) 90%, var(--bg-page));
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, var(--fg-white) 5%, transparent),
+      0 14px 34px color-mix(in srgb, var(--bg-page) 18%, transparent);
+    overflow: auto;
   }
 
   .mobile-supervisor-sheet__actions,
@@ -9768,6 +9985,14 @@ textarea.input {
     display: flex;
     align-items: flex-start;
     gap: var(--sp-3);
+    padding: var(--sp-3);
+    border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+    border-radius: 18px;
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--bg-surface) 90%, transparent) 0%,
+      color-mix(in srgb, var(--bg-page) 92%, var(--bg-surface) 8%) 100%
+    );
   }
 
   .mobile-supervisor-sheet__detail-header h3,
@@ -9787,6 +10012,14 @@ textarea.input {
     font-size: var(--text-xs);
     color: var(--text-tertiary);
     line-height: var(--leading-normal);
+  }
+
+  .mobile-supervisor-sheet__detail-header .supervisor-dialog-header-icon {
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--icon-surface-subtle) 84%, var(--bg-surface));
   }
 
   .mobile-supervisor-sheet__empty {
@@ -9815,11 +10048,15 @@ textarea.input {
     display: flex;
     flex-direction: column;
     gap: 0;
-    width: min(88vw, 376px);
+    width: min(88vw, 388px);
     padding: calc(var(--mobile-safe-top) + var(--sp-3)) calc(var(--mobile-safe-right) + var(--sp-3))
       calc(var(--sp-3) + var(--mobile-safe-bottom)) calc(var(--mobile-safe-left) + var(--sp-3));
     border-right: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
-    background: color-mix(in srgb, var(--bg-page) 95%, var(--bg-surface) 5%);
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--bg-surface) 96%, transparent) 0%,
+      color-mix(in srgb, var(--bg-page) 94%, var(--bg-surface) 6%) 100%
+    );
     box-shadow: none;
     transform: translateX(-12px);
     opacity: 0;
@@ -9831,7 +10068,7 @@ textarea.input {
     align-items: center;
     justify-content: space-between;
     gap: var(--sp-3);
-    padding-bottom: 10px;
+    padding: 0 0 var(--sp-3);
     border-bottom: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
   }
 
@@ -9840,30 +10077,46 @@ textarea.input {
     min-width: 0;
     flex: 1;
     flex-direction: column;
-    gap: 0;
+    gap: 4px;
   }
 
   .mobile-workspace-drawer__kicker {
-    display: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+  }
+
+  .mobile-workspace-drawer__kicker::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--accent-blue) 76%, transparent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-blue) 14%, transparent);
   }
 
   .mobile-workspace-drawer__title {
     margin: 0;
-    font-size: 16px;
+    font-size: 18px;
     font-weight: var(--font-semibold);
     line-height: 1.2;
-    letter-spacing: 0.01em;
+    letter-spacing: -0.01em;
     color: var(--text-primary);
   }
 
   .mobile-workspace-drawer__dismiss {
-    width: 28px;
-    min-width: 28px;
-    height: 28px;
-    min-height: 28px;
-    border: 1px solid color-mix(in srgb, var(--border) 44%, transparent);
-    border-radius: 3px;
-    background: transparent;
+    width: 34px;
+    min-width: 34px;
+    height: 34px;
+    min-height: 34px;
+    border: 1px solid color-mix(in srgb, var(--border) 66%, transparent);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--bg-surface) 78%, var(--bg-page));
     color: var(--text-secondary);
     box-shadow: none;
   }
@@ -9877,15 +10130,13 @@ textarea.input {
     display: flex;
     flex: 0 1 auto;
     flex-direction: column;
-    gap: 0;
+    gap: var(--sp-2);
     min-height: 0;
     max-height: 100%;
     overflow-y: auto;
-    border-top: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
-    border-bottom: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
-    border-right: none;
-    border-left: none;
-    border-radius: 0;
+    margin: var(--sp-3) 0;
+    padding-right: 2px;
+    border: none;
     background: transparent;
     box-shadow: none;
   }
@@ -9893,12 +10144,18 @@ textarea.input {
   .mobile-workspace-drawer__item {
     display: flex;
     align-items: stretch;
-    gap: 0;
-    padding: 0;
-    border: none;
-    box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--border) 92%, transparent);
-    border-radius: 0;
-    background: transparent;
+    gap: var(--sp-2);
+    padding: var(--sp-2);
+    border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+    border-radius: 18px;
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--bg-surface) 88%, transparent) 0%,
+      color-mix(in srgb, var(--bg-page) 92%, var(--bg-surface) 8%) 100%
+    );
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, var(--fg-white) 5%, transparent),
+      0 12px 30px color-mix(in srgb, var(--bg-page) 16%, transparent);
     text-align: left;
     transition:
       background-color var(--mobile-shell-motion-surface-duration) var(--ease-out),
@@ -9908,22 +10165,18 @@ textarea.input {
       box-shadow var(--mobile-shell-motion-surface-duration) var(--ease-out);
   }
 
-  .mobile-workspace-drawer__item:last-child {
-    box-shadow: none;
-  }
-
   .mobile-workspace-drawer__item--active {
     background:
       linear-gradient(
-        90deg,
-        color-mix(in srgb, var(--accent-blue) 12%, transparent) 0,
-        color-mix(in srgb, var(--accent-blue) 4%, transparent) 46%,
-        transparent 100%
+        180deg,
+        color-mix(in srgb, var(--accent-blue) 12%, var(--bg-surface)) 0%,
+        color-mix(in srgb, var(--accent-blue) 10%, var(--bg-page)) 100%
       ),
       color-mix(in srgb, var(--bg-panel) 92%, var(--surface-elevated));
     box-shadow:
-      inset 0 1px 0 color-mix(in srgb, var(--accent-blue) 10%, transparent),
-      inset 0 -1px 0 color-mix(in srgb, var(--accent-blue) 12%, transparent);
+      inset 0 1px 0 color-mix(in srgb, var(--accent-blue) 12%, transparent),
+      0 14px 32px color-mix(in srgb, var(--accent-blue) 8%, transparent);
+    border-color: color-mix(in srgb, var(--accent-blue) 28%, var(--border));
   }
 
   .mobile-workspace-drawer__item-main {
@@ -9933,9 +10186,9 @@ textarea.input {
     flex-direction: column;
     align-items: flex-start;
     justify-content: center;
-    gap: 1px;
-    padding: 10px 0;
-    padding-right: var(--sp-2);
+    gap: 3px;
+    padding: var(--sp-2);
+    padding-right: 0;
     text-align: left;
   }
 
@@ -9951,15 +10204,15 @@ textarea.input {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    min-width: 28px;
-    min-height: 28px;
+    width: 32px;
+    min-width: 32px;
+    min-height: 32px;
     margin: auto 0;
     align-self: auto;
-    border: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
-    border-radius: 3px;
+    border: 1px solid color-mix(in srgb, var(--border) 56%, transparent);
+    border-radius: 999px;
     color: color-mix(in srgb, var(--color-error) 82%, var(--text-primary));
-    background: transparent;
+    background: color-mix(in srgb, var(--bg-surface) 76%, transparent);
     transition:
       background-color var(--mobile-shell-motion-surface-duration) var(--ease-out),
       color var(--mobile-shell-motion-surface-duration) var(--ease-out);
@@ -9973,7 +10226,7 @@ textarea.input {
     min-width: 0;
     flex: 1;
     color: var(--text-primary);
-    font-size: 12px;
+    font-size: 13px;
     font-weight: var(--font-semibold);
     line-height: 1.35;
   }
@@ -9999,9 +10252,9 @@ textarea.input {
     overflow: hidden;
     color: var(--text-tertiary);
     font-family: var(--font-mono);
-    font-size: 9px;
-    line-height: 1.35;
-    letter-spacing: 0.03em;
+    font-size: 10px;
+    line-height: 1.45;
+    letter-spacing: 0.02em;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -10011,8 +10264,8 @@ textarea.input {
     grid-template-columns: minmax(0, 1fr);
     gap: 0;
     margin-top: auto;
-    padding-top: 0;
-    border-top: none;
+    padding-top: var(--sp-2);
+    border-top: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
   }
 
   .mobile-workspace-drawer__footer-button {
@@ -10021,13 +10274,11 @@ textarea.input {
     justify-content: flex-start;
     gap: var(--sp-2);
     width: 100%;
-    min-height: 42px;
-    padding: 10px 0;
-    border: none;
-    border-top: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
-    border-bottom: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
-    border-radius: 0;
-    background: transparent;
+    min-height: 46px;
+    padding: 0 var(--sp-3);
+    border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+    border-radius: 16px;
+    background: color-mix(in srgb, var(--bg-surface) 80%, transparent);
     color: var(--text-primary);
     font-size: 12px;
     font-weight: var(--font-medium);
@@ -10154,17 +10405,29 @@ textarea.input {
     align-items: stretch;
     justify-content: flex-start;
     min-height: 100dvh;
-    padding: calc(env(safe-area-inset-top, 0px) + var(--sp-6))
+    padding: calc(env(safe-area-inset-top, 0px) + var(--sp-4))
       calc(env(safe-area-inset-right, 0px) + var(--sp-4))
-      calc(env(safe-area-inset-bottom, 0px) + var(--sp-6))
+      calc(env(safe-area-inset-bottom, 0px) + var(--sp-5))
       calc(env(safe-area-inset-left, 0px) + var(--sp-4));
+    background:
+      radial-gradient(
+        circle at top center,
+        color-mix(in srgb, var(--accent-blue) 10%, transparent),
+        transparent 38%
+      ),
+      linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--bg-page) 92%, var(--bg-surface) 8%) 0%,
+        var(--bg-page) 100%
+      );
   }
 
   .welcome-card--mobile {
     width: 100%;
     max-width: none;
-    padding: var(--sp-8) var(--sp-5);
-    gap: var(--sp-4);
+    padding: var(--sp-7) var(--sp-5);
+    gap: var(--sp-5);
+    border-radius: 28px;
   }
 
   .welcome-card--mobile .welcome-card__actions {
@@ -10176,28 +10439,73 @@ textarea.input {
   }
 
   .welcome-card--mobile .welcome-title {
-    font-size: var(--text-2xl);
+    font-size: clamp(30px, 8vw, 40px);
+    line-height: 1.05;
+    letter-spacing: -0.03em;
   }
 
   .welcome-card--mobile .welcome-body {
     max-width: none;
-    font-size: var(--text-base);
+    font-size: 16px;
+    line-height: 1.7;
   }
 
   .welcome-card--mobile .welcome-features {
     grid-template-columns: 1fr;
+    margin-top: var(--sp-2);
+  }
+
+  .welcome-card--mobile .welcome-feature {
+    align-items: flex-start;
+    min-height: 0;
+    padding: var(--sp-4);
+    border-radius: 20px;
+    text-align: left;
+  }
+
+  .welcome-card--mobile .welcome-feature-text {
+    width: 100%;
+  }
+
+  .welcome-card--mobile .welcome-btn {
+    width: 100%;
+    justify-content: center;
+    padding-inline: var(--sp-5);
+    border-radius: 18px;
+  }
+
+  .welcome-card--mobile .welcome-link {
+    margin-top: 0;
   }
 
   .auth-screen--mobile {
-    padding: calc(env(safe-area-inset-top, 0px) + var(--sp-6))
+    padding: calc(env(safe-area-inset-top, 0px) + var(--sp-4))
       calc(env(safe-area-inset-right, 0px) + var(--sp-4))
-      calc(env(safe-area-inset-bottom, 0px) + var(--sp-6))
+      calc(env(safe-area-inset-bottom, 0px) + var(--sp-5))
       calc(env(safe-area-inset-left, 0px) + var(--sp-4));
   }
 
   .auth-card-shell--mobile {
     width: 100%;
-    padding: var(--sp-8) var(--sp-5);
+    padding: var(--sp-7) var(--sp-5);
+    gap: var(--sp-5);
+    border-radius: 28px;
+  }
+
+  .auth-card-shell--mobile .welcome-title {
+    font-size: clamp(28px, 7.8vw, 38px);
+    line-height: 1.06;
+    letter-spacing: -0.03em;
+  }
+
+  .auth-card-shell--mobile .welcome-body {
+    font-size: 15px;
+    line-height: 1.65;
+  }
+
+  .auth-card-shell--mobile .auth-status-panel {
+    padding: var(--sp-4);
+    border-radius: 20px;
   }
 
   .settings-page--mobile {
@@ -10245,8 +10553,43 @@ textarea.input {
   }
 
   .settings-page--mobile .settings-content--mobile-root {
-    padding-left: var(--sp-2);
-    padding-right: var(--sp-2);
+    padding-left: var(--sp-3);
+    padding-right: var(--sp-3);
+  }
+
+  .settings-mobile-root-hero {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+    padding: var(--sp-4) var(--sp-1) var(--sp-4);
+  }
+
+  .settings-mobile-root-hero__eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+  }
+
+  .settings-mobile-root-hero__eyebrow::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--accent-blue) 76%, transparent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-blue) 14%, transparent);
+  }
+
+  .settings-mobile-root-hero__body {
+    margin: 0;
+    max-width: 34ch;
+    color: var(--text-secondary);
+    font-size: 14px;
+    line-height: 1.6;
   }
 
   .settings-pills {
@@ -10287,21 +10630,38 @@ textarea.input {
   .settings-mobile-list {
     display: flex;
     flex-direction: column;
-    gap: 0;
-    border-top: 1px solid var(--border);
+    gap: var(--sp-3);
+    border-top: none;
+    padding-bottom: var(--sp-4);
   }
 
   .settings-mobile-item {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: var(--sp-3);
-    min-height: 48px;
-    padding: var(--sp-3) var(--sp-4);
-    border: none;
-    border-bottom: 1px solid var(--border);
-    border-radius: 0;
-    background: transparent;
+    min-height: 76px;
+    padding: var(--sp-4);
+    border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
+    border-radius: 22px;
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--bg-surface) 94%, transparent) 0%,
+      color-mix(in srgb, var(--bg-page) 96%, var(--bg-surface) 4%) 100%
+    );
     text-align: left;
+  }
+
+  .settings-mobile-item__icon-shell {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--icon-surface-subtle) 84%, var(--bg-surface));
+    border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+    flex-shrink: 0;
   }
 
   .settings-mobile-item__icon {
@@ -10309,13 +10669,33 @@ textarea.input {
     color: var(--icon-secondary);
   }
 
-  .settings-mobile-item__label {
+  .settings-mobile-item__copy {
+    display: flex;
     flex: 1;
-    font-size: var(--text-base);
+    min-width: 0;
+    flex-direction: column;
+    gap: 4px;
+    padding-top: 2px;
+  }
+
+  .settings-mobile-item__label {
+    font-size: 15px;
+    font-weight: var(--font-semibold);
     color: var(--text-primary);
   }
 
+  .settings-mobile-item__hint {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    color: var(--text-tertiary);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
   .settings-mobile-item__arrow {
+    margin-top: 10px;
     color: var(--text-tertiary);
   }
 
@@ -10373,6 +10753,12 @@ textarea.input {
   .settings-header {
     padding: calc(var(--mobile-safe-top) + var(--sp-1)) calc(var(--mobile-safe-right) + var(--sp-4))
       var(--sp-1) calc(var(--mobile-safe-left) + var(--sp-4));
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--bg-surface) 98%, transparent) 0%,
+      color-mix(in srgb, var(--bg-page) 95%, var(--bg-surface) 5%) 100%
+    );
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
   }
 
   .settings-page--mobile > .settings-header {
@@ -10402,6 +10788,7 @@ textarea.input {
     min-height: 32px;
     padding: var(--sp-2) calc(var(--mobile-safe-right) + var(--sp-4))
       calc(var(--mobile-safe-bottom) + var(--sp-4)) calc(var(--mobile-safe-left) + var(--sp-4));
+    color: var(--text-tertiary);
   }
 
   .settings-footer--mobile .settings-footer__meta {
@@ -11348,9 +11735,18 @@ textarea.input {
   display: flex;
   align-items: center;
   flex-shrink: 0;
-  gap: 10px;
-  padding: 6px 12px 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-3) var(--sp-2);
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  border-radius: 18px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg-surface) 92%, transparent) 0%,
+    color-mix(in srgb, var(--bg-page) 92%, var(--bg-surface) 8%) 100%
+  );
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--fg-white) 5%, transparent),
+    0 10px 24px color-mix(in srgb, var(--bg-page) 16%, transparent);
 }
 
 .mobile-files-sheet__segment {
@@ -11359,10 +11755,10 @@ textarea.input {
   align-items: center;
   justify-content: flex-start;
   gap: 6px;
-  min-height: 34px;
-  padding: 0 2px;
+  min-height: 36px;
+  padding: 0 4px;
   border: none;
-  border-radius: 0;
+  border-radius: 999px;
   background: transparent;
   color: var(--text-tertiary);
   font-size: 13px;
@@ -11382,10 +11778,10 @@ textarea.input {
 .mobile-files-sheet__segment.active::after {
   content: "";
   position: absolute;
-  right: 0;
-  bottom: -1px;
-  left: 0;
-  height: 1.5px;
+  right: 4px;
+  bottom: 2px;
+  left: 4px;
+  height: 2px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--accent-blue) 90%, white 10%);
 }
@@ -11393,22 +11789,22 @@ textarea.input {
 .mobile-files-sheet__tab-actions {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: 6px;
   flex-shrink: 0;
   margin-left: auto;
-  padding-bottom: 3px;
+  padding-bottom: 0;
 }
 
 .mobile-files-sheet__tab-action {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   padding: 0;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-surface) 74%, transparent);
   color: var(--text-tertiary);
   transition:
     background-color var(--duration-fast) var(--ease-out),
@@ -11416,7 +11812,7 @@ textarea.input {
 }
 
 .mobile-files-sheet__tab-action:hover {
-  background: var(--bg-hover);
+  background: color-mix(in srgb, var(--bg-hover) 82%, var(--accent-blue) 10%);
   color: var(--text-primary);
 }
 
@@ -11455,9 +11851,9 @@ textarea.input {
 }
 
 .git-panel--mobile .git-panel-scroll {
-  gap: 12px;
-  padding-inline: 12px;
-  padding-bottom: 18px;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+  padding-bottom: calc(var(--sp-4) + var(--mobile-safe-bottom));
 }
 
 .git-panel--mobile .git-panel-section-toggle,
@@ -11492,7 +11888,8 @@ textarea.input {
 }
 
 .git-panel--mobile .git-commit-primary {
-  min-height: 32px;
+  min-height: 36px;
+  border-radius: 999px;
 }
 
 .mobile-shell__bottom-stack .git-panel-status-strip {
