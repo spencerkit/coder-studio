@@ -15,7 +15,7 @@ describe("LSP shared surface", () => {
   });
 
   it("keeps the editor-facing range and payload shapes stable", () => {
-    expectTypeOf<LspLocation>().toMatchTypeOf<{
+    expectTypeOf<LspLocation>().toEqualTypeOf<{
       path: string;
       range: {
         startLine: number;
@@ -25,7 +25,7 @@ describe("LSP shared surface", () => {
       };
     }>();
 
-    expectTypeOf<LspDiagnostic>().toMatchTypeOf<{
+    expectTypeOf<LspDiagnostic>().toEqualTypeOf<{
       message: string;
       severity: "error" | "warning" | "info" | "hint";
       code?: string;
@@ -38,7 +38,7 @@ describe("LSP shared surface", () => {
       };
     }>();
 
-    expectTypeOf<LspDocumentSymbol>().toMatchTypeOf<{
+    expectTypeOf<LspDocumentSymbol>().toEqualTypeOf<{
       name: string;
       kind: number;
       range: {
@@ -56,7 +56,7 @@ describe("LSP shared surface", () => {
       children?: LspDocumentSymbol[];
     }>();
 
-    expectTypeOf<LspDiagnosticsEvent>().toMatchTypeOf<{
+    expectTypeOf<LspDiagnosticsEvent>().toEqualTypeOf<{
       workspaceId: string;
       serverKind: LspServerKind;
       path: string;
@@ -64,7 +64,7 @@ describe("LSP shared surface", () => {
       diagnostics: LspDiagnostic[];
     }>();
 
-    expectTypeOf<LspSessionSummary>().toMatchTypeOf<{
+    expectTypeOf<LspSessionSummary>().toEqualTypeOf<{
       workspaceId: string;
       serverKind: LspServerKind;
       status: "unsupported" | "starting" | "ready" | "degraded" | "stopped";
