@@ -7,6 +7,7 @@ import {
   type SupervisorConfig,
   type SupervisorCycle,
   type SupervisorCycleTargetRecord,
+  type SupervisorRuntimePhase,
   type SupervisorState,
   type SupervisorTargetMemory,
   Topics,
@@ -72,6 +73,15 @@ interface SupervisorRetrySnapshot {
   retryDelayMs: number;
   retryOnTimeout: boolean;
   retryOnEvaluatorError: boolean;
+}
+
+interface SupervisorCycleRuntimeSnapshot {
+  phase: SupervisorRuntimePhase;
+  currentAttemptIndex?: number;
+  attemptCount?: number;
+  maxAttempts?: number;
+  lastAttemptError?: string;
+  nextRetryAt?: number;
 }
 
 export interface SupervisorManagerDeps {
@@ -747,7 +757,12 @@ export class SupervisorManager {
         turnId: context.lastTurnId,
         createdAt: Date.now(),
       });
-      this.broadcastCycle(evaluatingSupervisor, activeCycle, "created");
+      this.broadcastCycle(evaluatingSupervisor, activeCycle, "created", {
+        phase: "waiting_evaluator",
+        currentAttemptIndex: 0,
+        attemptCount: 1,
+        maxAttempts: 1 + retrySettings.retryMaxCount,
+      });
 
       return {
         cycle: activeCycle,
@@ -995,6 +1010,12 @@ export class SupervisorManager {
         status: "evaluating",
         startedAt: Date.now(),
       });
+      this.broadcastCycle(started.supervisor, started.cycle, "updated", {
+        phase: "waiting_evaluator",
+        currentAttemptIndex: attemptIndex,
+        attemptCount: attemptIndex + 1,
+        maxAttempts: 1 + started.retry.retryMaxCount,
+      });
 
       try {
         const evaluation = await this.evaluator.evaluate(supervisor, started.context, { signal });
@@ -1041,6 +1062,12 @@ export class SupervisorManager {
         );
         this.storeSnapshot(injectingSupervisor);
         this.broadcastState(injectingSupervisor, "state_changed");
+        this.broadcastCycle(injectingSupervisor, started.cycle, "updated", {
+          phase: "injecting",
+          currentAttemptIndex: attemptIndex,
+          attemptCount: attemptIndex + 1,
+          maxAttempts: 1 + started.retry.retryMaxCount,
+        });
 
         const recentCycles = this.deps.cycleRepo
           .listRecentForSupervisor(supervisor.id, this.config.guidanceDedupeWindow + 1)
@@ -1081,6 +1108,16 @@ export class SupervisorManager {
         if (!this.shouldRetryAttempt(error, attemptIndex, started.retry)) {
           throw error;
         }
+
+        const nextRetryAt = Date.now() + started.retry.retryDelayMs;
+        this.broadcastCycle(supervisor, started.cycle, "updated", {
+          phase: "retry_wait",
+          currentAttemptIndex: attemptIndex,
+          attemptCount: attemptIndex + 1,
+          maxAttempts: 1 + started.retry.retryMaxCount,
+          lastAttemptError: reason,
+          nextRetryAt,
+        });
 
         await this.sleep(started.retry.retryDelayMs, signal);
 
@@ -1583,11 +1620,12 @@ export class SupervisorManager {
   private broadcastCycle(
     supervisor: Supervisor,
     cycle: SupervisorCycle,
-    event: "created" | "updated"
+    event: "created" | "updated",
+    runtime?: SupervisorCycleRuntimeSnapshot
   ): void {
     this.deps.broadcaster.broadcast(
       Topics.supervisorCycle(supervisor.workspaceId, supervisor.sessionId),
-      { cycle, event }
+      { cycle: runtime ? { ...cycle, runtime } : cycle, event }
     );
   }
 

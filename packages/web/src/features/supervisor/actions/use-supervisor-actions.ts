@@ -30,6 +30,7 @@ export function useSupervisorActions({ sessionId }: UseSupervisorActionsArgs) {
   const t = useTranslation();
   const supervisor = supervisors.get(sessionId);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
     if (!actionError) {
@@ -105,8 +106,39 @@ export function useSupervisorActions({ sessionId }: UseSupervisorActionsArgs) {
   const hasInFlightCycle = cycles.some(
     (cycle) => cycle.status === "evaluating" || cycle.status === "queued"
   );
+  useEffect(() => {
+    if (latestCycle?.runtime?.phase !== "retry_wait") {
+      return;
+    }
+
+    setNow(Date.now());
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [latestCycle?.runtime?.phase, latestCycle?.runtime?.nextRetryAt]);
+
+  const retryDelaySec =
+    latestCycle?.runtime?.nextRetryAt != null
+      ? Math.max(0, Math.ceil((latestCycle.runtime.nextRetryAt - now) / 1000))
+      : null;
+  const attemptSuffix =
+    latestCycle?.runtime?.attemptCount != null && latestCycle.runtime.maxAttempts != null
+      ? ` (${latestCycle.runtime.attemptCount}/${latestCycle.runtime.maxAttempts})`
+      : "";
+  const runtimeCycleText =
+    latestCycle?.runtime?.phase === "retry_wait"
+      ? `${t("supervisor.cycle.retry_wait", {
+          seconds: retryDelaySec != null ? String(retryDelaySec) : "-",
+        })}${attemptSuffix}${
+          latestCycle.runtime.lastAttemptError ? `: ${latestCycle.runtime.lastAttemptError}` : ""
+        }`
+      : latestCycle?.runtime?.phase === "waiting_evaluator"
+        ? `${t("supervisor.cycle.waiting_evaluator")}${attemptSuffix}`
+        : latestCycle?.runtime?.phase === "injecting"
+          ? t("supervisor.cycle.injecting")
+          : null;
   const latestCycleText = latestCycle
-    ? (latestCycle.result ??
+    ? (runtimeCycleText ??
+      latestCycle.result ??
       latestCycle.errorReason ??
       (latestCycle.status === "completed"
         ? t("supervisor.cycle.no_guidance")

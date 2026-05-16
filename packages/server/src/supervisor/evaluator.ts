@@ -301,7 +301,10 @@ async function runCommand(
         settleReject(terminationError);
         return;
       }
-      settleReject(error);
+      settleReject({
+        code: "supervisor_eval_failed",
+        message: error instanceof Error ? error.message : "Evaluator process failed to start",
+      });
     });
     child.on("exit", (code) => {
       if (terminationError) {

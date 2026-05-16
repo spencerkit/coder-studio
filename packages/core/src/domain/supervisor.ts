@@ -66,6 +66,11 @@ export interface SupervisorCycleTargetRecord {
 }
 
 export type SupervisorCycleAttemptStatus = "evaluating" | "completed" | "failed" | "cancelled";
+export type SupervisorRuntimePhase =
+  | "waiting_evaluator"
+  | "retry_wait"
+  | "injecting"
+  | "finalizing";
 
 export type EvidenceSource = "headless_snapshot" | "transcript" | "terminal_fallback";
 
@@ -85,6 +90,14 @@ export interface SupervisorCycle {
   createdAt: number;
   completedAt?: number;
   errorReason?: string;
+  runtime?: {
+    phase: SupervisorRuntimePhase;
+    currentAttemptIndex?: number;
+    attemptCount?: number;
+    maxAttempts?: number;
+    lastAttemptError?: string;
+    nextRetryAt?: number;
+  };
 }
 
 export interface SupervisorCycleAttempt {

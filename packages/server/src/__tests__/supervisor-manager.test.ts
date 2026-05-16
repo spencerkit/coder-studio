@@ -964,8 +964,64 @@ describe("SupervisorManager cycle triggers", () => {
         break;
       }
     }
+
+    const retryEvent = deps.broadcaster.broadcast.mock.calls.find(([, payload]) => {
+      const cycle = (payload as { cycle?: SupervisorCycle }).cycle;
+      return cycle?.runtime?.phase === "retry_wait";
+    });
+    expect(retryEvent).toBeDefined();
+    expect((retryEvent?.[1] as { cycle?: SupervisorCycle }).cycle?.runtime).toMatchObject({
+      phase: "retry_wait",
+      currentAttemptIndex: 0,
+      attemptCount: 1,
+      maxAttempts: 3,
+      lastAttemptError: "timed out",
+    });
+
     await vi.advanceTimersByTimeAsync(1000);
     const finished = await pending;
+
+    expect(finished?.status).toBe("injected");
+    expect(deps.cycleAttemptRepo.listForCycle(finished!.id)).toHaveLength(2);
+  });
+
+  it("retries evaluator process errors when retryOnEvaluatorError is enabled", async () => {
+    deps.settingsRepo.get = vi.fn((key: string) => {
+      switch (key) {
+        case "supervisor.retryEnabled":
+          return true;
+        case "supervisor.retryMaxCount":
+          return 1;
+        case "supervisor.retryDelaySec":
+          return 1;
+        case "supervisor.retryOnTimeout":
+          return false;
+        case "supervisor.retryOnEvaluatorError":
+          return true;
+        default:
+          return undefined;
+      }
+    });
+
+    const supervisor = await manager.create({
+      sessionId: "sess-retry-error",
+      workspaceId: "ws-1",
+      objective: "Ship the fix",
+      evaluatorProviderId: "codex",
+    });
+
+    vi.spyOn(getManagerInternals().evaluator, "evaluate")
+      .mockRejectedValueOnce({
+        code: "supervisor_eval_failed",
+        message: "spawn failed",
+      })
+      .mockResolvedValueOnce({
+        status: "continue",
+        reason: "Run tests",
+        guidance: "Run tests",
+      });
+
+    const finished = await getManagerInternals().runEvaluation(supervisor.id, "turn_completed");
 
     expect(finished?.status).toBe("injected");
     expect(deps.cycleAttemptRepo.listForCycle(finished!.id)).toHaveLength(2);
