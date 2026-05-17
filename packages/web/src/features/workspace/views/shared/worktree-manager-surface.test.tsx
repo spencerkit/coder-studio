@@ -161,6 +161,27 @@ describe("WorktreeManagerSurface", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("renders inline desktop preview chrome without a portal overlay when requested", () => {
+    render(
+      <Provider store={buildManagerStore(vi.fn(), worktrees, "/repo/main")}>
+        <WorktreeManagerSurface
+          workspaceId="ws-1"
+          openView="list"
+          onClose={vi.fn()}
+          desktopPreviewInline
+        />
+      </Provider>
+    );
+
+    const dialog = screen
+      .getByRole("heading", { name: "Worktrees" })
+      .closest(".worktree-manager-surface");
+
+    expect(dialog).toHaveClass("modal-card", "modal-card-lg", "worktree-manager-surface");
+    expect(dialog).toHaveClass("worktree-manager-surface--inline-preview");
+    expect(document.querySelector(".modal-overlay")).toBeNull();
+  });
+
   it("renders the shared empty state when the worktree list is empty", () => {
     render(
       <Provider store={buildManagerStore(vi.fn(), [], "/repo/main")}>

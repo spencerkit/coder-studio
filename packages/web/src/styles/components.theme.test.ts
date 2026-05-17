@@ -233,20 +233,42 @@ describe("components.css theme-sensitive surfaces", () => {
     const activeTab = getLastRuleBlock(".topbar-tab.active");
     const emptyCard = getLastRuleBlock(".workspace-empty-inner");
     const resolvingCard = getLastRuleBlock(".workspace-resolving-card");
+    const mainStage = getLastRuleBlock(".workspace-main-stage");
     const sessionTerminal = getLastRuleBlock(".session-terminal");
-    const bottomTerminalShell = getLastRuleBlock(
-      ".workspace-main-area > .bottom-terminal > .bottom-terminal"
-    );
+    const agentPanes = getLastRuleBlock(".workspace-main-stage > .agent-panes");
+    const bottomTerminalShell = getLastRuleBlock(".workspace-bottom-panel > .bottom-terminal");
 
     expect(topbar).toContain("var(--bg-surface)");
     expect(activeTab).toContain("var(--bg-active)");
     expect(activeTab).not.toContain("rgba(45, 63, 79, 0.92)");
     expect(emptyCard).toContain("var(--bg-surface)");
     expect(resolvingCard).toContain("var(--bg-surface)");
+    expect(mainStage).toContain("flex: 1");
+    expect(mainStage).toContain("min-height: 0");
+    expect(mainStage).toContain("min-width: 0");
+    expect(mainStage).toContain("display: flex");
+    expect(mainStage).toContain("flex-direction: column");
+    expect(agentPanes).toContain("flex: 1");
+    expect(agentPanes).toContain("min-height: 0");
     expect(sessionTerminal).toContain("var(--bg-terminal)");
     expect(sessionTerminal).not.toContain("rgba(11, 18, 24, 0.98)");
     expect(bottomTerminalShell).toContain("var(--bg-terminal)");
     expect(bottomTerminalShell).not.toContain("rgba(17, 24, 31, 0.96)");
+  });
+
+  it("maps desktop chrome blocks to the dedicated desktop layout tokens", () => {
+    const topbar = getLastRuleBlock(".app-topbar");
+    const statusBar = getLastRuleBlock(".workspace-status-bar");
+    const sidebarHeader = getLastRuleBlock(".workspace-sidebar-panel__header");
+    const commandPalette = getLastRuleBlock(".command-palette");
+    const launchModal = getLastRuleBlock(".launch-modal");
+
+    expect(topbar).toContain("min-height: var(--desktop-topbar-height)");
+    expect(statusBar).toContain("min-height: var(--desktop-statusbar-height)");
+    expect(sidebarHeader).toContain("min-height: var(--desktop-sidebar-header-height)");
+    expect(sidebarHeader).toContain("padding: 10px var(--desktop-panel-padding) 8px");
+    expect(commandPalette).toContain("max-width: var(--desktop-modal-max-width-md)");
+    expect(launchModal).toContain("max-width: min(var(--desktop-modal-max-width-lg), 90vw)");
   });
 
   it("keeps auth shells theme-aware instead of forcing dark gradients", () => {
@@ -399,10 +421,9 @@ describe("components.css theme-sensitive surfaces", () => {
       ".mobile-shell--landscape-compact .mobile-shell__viewport"
     );
 
-    expect(viewport).toContain(
-      "padding: var(--sp-1) var(--mobile-safe-right) 0 var(--mobile-safe-left)"
-    );
-    expect(viewport).not.toContain("var(--sp-3) var(--mobile-safe-left)");
+    expect(viewport).toContain("padding: 0");
+    expect(viewport).toContain("border-top:");
+    expect(viewport).not.toContain("padding: 4px");
     expect(compactViewport).toContain("padding-bottom: 0");
   });
 
@@ -451,6 +472,7 @@ describe("components.css theme-sensitive surfaces", () => {
 
   it("uses a unified inline sheet treatment for mobile selectors and keeps topbar controls height-aligned", () => {
     const inlineSheet = getLastRuleBlock(".mobile-inline-sheet");
+    const inlineSheetAction = getLastRuleBlock(".mobile-inline-sheet__action");
     const inlineSelectSheet = getLastRuleBlock(".mobile-select-sheet--inline");
     const workspaceButton = getLastGroupedRuleBlock(
       /\.mobile-topbar__workspace-button\s*\{([^}]*)\}/g
@@ -459,14 +481,15 @@ describe("components.css theme-sensitive surfaces", () => {
     const iconButton = getLastRuleBlock(".mobile-topbar__icon-button");
 
     expect(inlineSheet).toContain("position: absolute");
-    expect(inlineSheet).toContain("border-radius: 12px");
+    expect(inlineSheet).toContain("border-radius: var(--radius-xl)");
+    expect(inlineSheetAction).toContain("border-radius: var(--radius-md)");
     expect(inlineSelectSheet).toContain("flex: 1");
     expect(inlineSelectSheet).toContain("flex-direction: column");
-    expect(workspaceButton).toContain("height: 32px");
+    expect(workspaceButton).toContain("height: 36px");
     expect(workspaceButton).not.toContain("box-shadow:");
     expect(sessionButton).toContain("min-height: 40px");
     expect(sessionButton).not.toContain("box-shadow:");
-    expect(iconButton).toContain("height: 32px");
+    expect(iconButton).toContain("height: 36px");
     expect(iconButton).not.toContain("box-shadow:");
   });
 
@@ -501,17 +524,17 @@ describe("components.css theme-sensitive surfaces", () => {
       block.includes("display: flex")
     );
     const activeDockItem = getRuleBlocksFrom(stylesheet, ".mobile-dock__item--active").find(
-      (block) => block.includes("background:")
+      (block) => block.includes("border-top-color:")
     );
 
     expect(mobileDock).toContain("grid-template-columns: repeat(3, minmax(0, 1fr))");
-    expect(mobileDock).toContain("gap: 0");
+    expect(mobileDock).toContain("gap: var(--sp-2)");
     expect(mobileDockItem).toBeTruthy();
-    expect(mobileDockItem).toContain("border: none");
+    expect(mobileDockItem).toContain("border-top: 1px solid transparent");
     expect(mobileDockItem).toContain("background: transparent");
-    expect(mobileDockItem).toContain("min-height: 34px");
+    expect(mobileDockItem).toContain("min-height: 30px");
     expect(activeDockItem).toBeTruthy();
-    expect(activeDockItem).toContain("background: transparent");
+    expect(activeDockItem).toContain("border-top-color:");
   });
 
   it("keeps mobile sheets closer to IDE panes than floating cards", () => {
@@ -519,8 +542,8 @@ describe("components.css theme-sensitive surfaces", () => {
     const mobileSheetHandle = getLastRuleBlock(".mobile-sheet__handle");
     const fullscreenBack = getLastRuleBlock(".mobile-sheet--fullscreen .page-header__back");
 
-    expect(mobileSheet).toContain("border-top-left-radius: 12px");
-    expect(mobileSheet).toContain("border-top-right-radius: 12px");
+    expect(mobileSheet).toContain("border-top-left-radius: var(--radius-xl)");
+    expect(mobileSheet).toContain("border-top-right-radius: var(--radius-xl)");
     expect(mobileSheet).toContain("border: 1px solid");
     expect(mobileSheet).not.toContain("box-shadow: var(--shadow-xl)");
     expect(mobileSheetHandle).toContain("width: 32px");
@@ -530,9 +553,16 @@ describe("components.css theme-sensitive surfaces", () => {
   it("keeps settings navigation aligned with desktop editor chrome on both desktop and mobile", () => {
     const settingsPage = getLastRuleBlock(".settings-page");
     const baseSettingsHeader = getRuleBlocksFrom(stylesheet, ".settings-header")[0];
+    const desktopSettingsHeader = getLastRuleBlock(".settings-header__desktop");
+    const desktopSettingsCopy = getLastRuleBlock(".settings-header__copy");
+    const desktopSettingsTitle = getLastRuleBlock(".settings-header__title");
     const settingsBody = getLastRuleBlock(".settings-body");
     const settingsSidebar = getLastRuleBlock(".settings-sidebar");
     const settingsContent = getLastRuleBlock(".settings-content");
+    const settingsContentFillHeight = getLastRuleBlock(".settings-content--fill-height");
+    const settingsContentFillHeightSurface = getLastRuleBlock(
+      ".settings-content--fill-height > .settings-content-surface"
+    );
     const settingsNavItem = getLastRuleBlock(".settings-nav-item");
     const settingsNavItemHover = getLastRuleBlock(".settings-nav-item:hover");
     const settingsNavItemActive = getLastRuleBlock(".settings-nav-item-active");
@@ -542,7 +572,9 @@ describe("components.css theme-sensitive surfaces", () => {
     const mobileRootContent = getLastRuleBlock(
       ".settings-page--mobile .settings-content--mobile-root"
     );
-    const mobileList = getLastRuleBlock(".settings-mobile-list");
+    const mobileRoot = getLastRuleBlock(".settings-mobile-root");
+    const mobileGroup = getLastRuleBlock(".settings-mobile-group");
+    const mobileGroupList = getLastRuleBlock(".settings-mobile-group__list");
     const mobileItem = getLastRuleBlock(".settings-mobile-item");
     const mobileItemIcon = getLastRuleBlock(".settings-mobile-item__icon");
     const mobileItemArrow = getLastRuleBlock(".settings-mobile-item__arrow");
@@ -552,32 +584,53 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(settingsPage).toContain("background: var(--bg-page)");
     expect(baseSettingsHeader).toContain("background: var(--bg-surface)");
     expect(baseSettingsHeader).toContain("border-bottom: 1px solid var(--border)");
-    expect(baseSettingsHeader).toContain("padding: var(--sp-2) var(--sp-4)");
+    expect(baseSettingsHeader).toContain("padding: var(--sp-1) var(--sp-4)");
+    expect(desktopSettingsHeader).toContain("width: 100%");
+    expect(desktopSettingsHeader).toContain("margin: 0");
+    expect(desktopSettingsHeader).toContain("display: flex");
+    expect(desktopSettingsHeader).toContain("align-items: center");
+    expect(desktopSettingsHeader).toContain("justify-content: flex-start");
+    expect(desktopSettingsCopy).toContain("justify-content: flex-start");
+    expect(desktopSettingsCopy).toContain("flex: 0 1 auto");
+    expect(desktopSettingsCopy).toContain("gap: 0");
+    expect(desktopSettingsTitle).toContain("font-size: 18px");
+    expect(desktopSettingsTitle).toContain("line-height: 1.05");
     expect(settingsBody).toContain("align-items: stretch");
     expect(settingsBody).toContain("background: var(--bg-page)");
-    expect(settingsSidebar).toContain("background: var(--bg-sidebar)");
-    expect(settingsSidebar).toContain("padding: var(--sp-3)");
-    expect(settingsSidebar).toContain("width: 216px");
-    expect(settingsContent).toContain("padding: var(--sp-5) var(--sp-6) var(--sp-6)");
+    expect(settingsSidebar).toContain("background: var(--bg-panel)");
+    expect(settingsSidebar).toContain("padding: var(--sp-4)");
+    expect(settingsSidebar).toContain("width: 240px");
+    expect(settingsContent).toContain("display: flex");
+    expect(settingsContent).toContain("justify-content: center");
+    expect(settingsContent).toContain("padding: var(--sp-6)");
     expect(settingsContent).toContain("background: var(--bg-page)");
+    expect(settingsContentFillHeight).toContain("justify-content: flex-start");
+    expect(settingsContentFillHeightSurface).toContain("display: flex");
+    expect(settingsContentFillHeightSurface).toContain("flex-direction: column");
+    expect(settingsContentFillHeightSurface).toContain("flex: 1");
+    expect(settingsContentFillHeightSurface).toContain("min-height: 0");
     expect(settingsNavItem).toContain("min-height: 40px");
     expect(settingsNavItem).toContain("border: 1px solid transparent");
     expect(settingsNavItem).toContain("border-radius: var(--radius-md)");
     expect(settingsNavItemHover).toContain("background: var(--bg-hover)");
     expect(settingsNavItemActive).toContain("background: var(--bg-active)");
-    expect(settingsNavItemActive).toContain("border-color: var(--border-focus)");
-    expect(settingsNavItemActive).not.toContain("var(--accent-blue)");
+    expect(settingsNavItemActive).toContain("border-color: color-mix");
+    expect(settingsNavItemActive).toContain("var(--accent-blue)");
     expect(mobileContent).toContain("padding: 0");
-    expect(mobileRootContent).toContain("padding-left: var(--sp-2)");
-    expect(mobileRootContent).toContain("padding-right: var(--sp-2)");
-    expect(mobileList).toContain("gap: 0");
-    expect(mobileList).toContain("border-top: 1px solid var(--border)");
-    expect(mobileItem).toContain("min-height: 48px");
+    expect(mobileRootContent).toContain("padding-left: var(--sp-3)");
+    expect(mobileRootContent).toContain("padding-right: var(--sp-3)");
+    expect(mobileRoot).toContain("display: flex");
+    expect(mobileRoot).toContain("flex-direction: column");
+    expect(mobileRoot).toContain("gap: var(--sp-5)");
+    expect(mobileRoot).toContain("padding: var(--sp-4) 0 var(--sp-4)");
+    expect(mobileGroup).toContain("gap: var(--sp-2)");
+    expect(mobileGroupList).toContain("border: 1px solid");
+    expect(mobileGroupList).toContain("border-radius: 12px");
+    expect(mobileGroupList).toContain("overflow: hidden");
+    expect(mobileItem).toContain("min-height: 60px");
     expect(mobileItem).toContain("padding: var(--sp-3) var(--sp-4)");
     expect(mobileItem).toContain("border: none");
-    expect(mobileItem).toContain("border-bottom: 1px solid var(--border)");
-    expect(mobileItem).toContain("border-radius: 0");
-    expect(mobileItem).toContain("background: transparent");
+    expect(mobileItem).not.toContain("linear-gradient(");
     expect(mobileItemIcon).toContain("color: var(--icon-secondary)");
     expect(mobileItemArrow).toContain("color: var(--text-tertiary)");
   });
@@ -627,6 +680,14 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(mobileSettingsFooter).toContain("min-height: 32px");
   });
 
+  it("keeps mobile container surfaces on shared radius tokens instead of bespoke rounded-card values", () => {
+    const settingsGroupList = getLastRuleBlock(".settings-mobile-group__list");
+    const settingsItemIconShell = getLastRuleBlock(".settings-mobile-item__icon-shell");
+
+    expect(settingsGroupList).toContain("border-radius: 12px");
+    expect(settingsItemIconShell).toContain("border-radius: var(--radius-xl)");
+  });
+
   it("keeps the mobile workspace launch action docked in a compact editor-style footer rail", () => {
     const launchFooter = getLastRuleBlock(".mobile-sheet--launch .mobile-sheet__footer").replace(
       /\s+/g,
@@ -641,10 +702,10 @@ describe("components.css theme-sensitive surfaces", () => {
       "padding: var(--sp-2) calc(var(--mobile-safe-right) + var(--sp-4)) calc(var(--mobile-safe-bottom) + var(--sp-4)) calc(var(--mobile-safe-left) + var(--sp-4))"
     );
     expect(launchActionRail).toContain("padding: var(--sp-2)");
-    expect(launchActionRail).toContain("border-radius: 16px");
+    expect(launchActionRail).toContain("border-radius: var(--radius-xl)");
     expect(launchActionRail).toContain("background: color-mix(");
     expect(launchActionButton).toContain("min-height: 44px");
-    expect(launchActionButton).toContain("border-radius: 12px");
+    expect(launchActionButton).toContain("border-radius: var(--radius-md)");
     expect(launchActionButton).toContain("font-size: var(--text-sm)");
     expect(launchActionButton).toContain("box-shadow: none");
   });
@@ -676,7 +737,9 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(supervisorFooterButton).toContain("min-height: 44px");
     expect(supervisorFooterButton).toContain("box-shadow: none");
     expect(getLastRuleBlock(".mobile-supervisor-sheet__footer")).toContain("padding: var(--sp-2)");
-    expect(getLastRuleBlock(".mobile-supervisor-sheet__footer")).toContain("border-radius: 16px");
+    expect(getLastRuleBlock(".mobile-supervisor-sheet__footer")).toContain(
+      "border-radius: var(--radius-xl)"
+    );
     expect(getLastRuleBlock(".mobile-supervisor-sheet__footer")).toContain(
       "background: color-mix("
     );
@@ -699,25 +762,33 @@ describe("components.css theme-sensitive surfaces", () => {
       ".mobile-shell__bottom-stack .git-panel-status-strip"
     ).replace(/\s+/g, " ");
     const emptyPane = getLastRuleBlock(".mobile-shell__empty-content");
-    const emptyPaneBefore = getLastRuleBlock(".mobile-shell__empty-content::before");
     const emptyState = getLastRuleBlock(".mobile-shell__empty-state");
+    const emptyTitle = getLastRuleBlock(".mobile-shell__empty-title");
+    const placeholderCopy = getLastRuleBlock(".mobile-shell__placeholder-copy");
     const emptyCta = getLastRuleBlock(".mobile-shell__empty-cta");
+    const topbarWorkspaceButton = getLastGroupedRuleBlock(
+      /\.mobile-topbar__workspace-button\s*\{([^}]*)\}/g
+    );
+    const topbarIconButton = getLastRuleBlock(".mobile-topbar__icon-button");
 
     expect(topbar).toContain(
       "padding: calc(var(--mobile-safe-top) + var(--sp-1)) calc(var(--mobile-safe-right) + var(--sp-4)) var(--sp-1) calc(var(--mobile-safe-left) + var(--sp-4))"
     );
-    expect(emptyStage).toContain("padding: clamp(56px, 14vh, 116px) var(--sp-4) var(--sp-3)");
-    expect(bottomStack).toContain("background: var(--bg-surface)");
-    expect(bottomStack).toContain("border-top: 1px solid var(--border)");
+    expect(topbarWorkspaceButton).toContain("border-bottom: 1px solid");
+    expect(topbarWorkspaceButton).toContain("border-radius: 0");
+    expect(topbarIconButton).toContain("border-radius: 10px");
+    expect(emptyStage).toContain("padding: clamp(34px, 9vh, 72px) var(--sp-4) var(--sp-3)");
+    expect(bottomStack).toContain("background: linear-gradient(");
+    expect(bottomStack).toContain("border-top: 1px solid color-mix(");
     expect(bottomStack).not.toContain("backdrop-filter");
     expect(dockShell).toContain(
-      "padding: 2px calc(var(--mobile-safe-right) + var(--sp-4)) 0 calc(var(--mobile-safe-left) + var(--sp-4))"
+      "padding: 3px calc(var(--mobile-safe-right) + var(--sp-4)) 0 calc(var(--mobile-safe-left) + var(--sp-4))"
     );
-    expect(dock).toContain("gap: 0");
+    expect(dock).toContain("gap: var(--sp-2)");
     expect(dock).toContain("border-bottom: none");
     expect(dockItem).toBeTruthy();
-    expect(dockItem).toContain("min-height: 34px");
-    expect(dockItem).toContain("padding: 3px var(--sp-1) 5px");
+    expect(dockItem).toContain("min-height: 30px");
+    expect(dockItem).toContain("padding: 2px var(--sp-2) 2px");
     expect(dockLabel).toContain("font-size: 10px");
     expect(statusBar).toContain("padding-bottom: calc(var(--mobile-safe-bottom) + var(--sp-1))");
     expect(statusBar).toContain("border-top: 1px solid");
@@ -727,22 +798,59 @@ describe("components.css theme-sensitive surfaces", () => {
       "padding: 0 calc(var(--mobile-safe-right) + var(--sp-4)) 0 calc(var(--mobile-safe-left) + var(--sp-4))"
     );
     expect(emptyPane).toContain("position: relative");
-    expect(emptyPane).toContain("width: min(100%, 344px)");
+    expect(emptyPane).toContain("width: min(100%, 320px)");
     expect(emptyPane).toContain("align-self: flex-start");
-    expect(emptyPane).toContain("padding: var(--sp-2) 0 0 var(--sp-4)");
-    expect(emptyPane).toContain("border-top: none");
+    expect(emptyPane).toContain("padding: 0");
+    expect(emptyPane).toContain("border: none");
     expect(emptyPane).toContain("background: transparent");
-    expect(emptyPaneBefore).toContain('content: ""');
-    expect(emptyPaneBefore).toContain("position: absolute");
-    expect(emptyPaneBefore).toContain("width: 1px");
-    expect(emptyPaneBefore).toContain("background: linear-gradient(");
     expect(emptyState).toContain("align-items: flex-start");
     expect(emptyState).toContain("width: 100%");
     expect(emptyState).toContain("text-align: left");
-    expect(emptyCta).toContain("min-height: 36px");
+    expect(emptyState).toContain("gap: var(--sp-3)");
+    expect(emptyTitle).toContain("font-size: clamp(24px, 6.4vw, 32px)");
+    expect(placeholderCopy).toContain("gap: var(--sp-2)");
+    expect(emptyCta).toContain("min-height: 38px");
     expect(emptyCta).toContain("width: auto");
-    expect(emptyCta).toContain("min-width: 132px");
-    expect(emptyCta).toContain("border-radius: 8px");
+    expect(emptyCta).toContain("min-width: 136px");
+    expect(emptyCta).toContain("border-radius: 12px");
+  });
+
+  it("keeps mobile container surfaces on shared radius tokens instead of bespoke rounded-card values", () => {
+    const dockItem = getRuleBlocksFrom(stylesheet, ".mobile-dock__item").find((block) =>
+      block.includes("display: flex")
+    );
+    const mobileTerminalSheet = getLastRuleBlock(".mobile-terminal-sheet");
+    const mobileTerminal = getLastRuleBlock(".mobile-terminal-sheet .bottom-terminal");
+    const mobileFilesSurface = getLastRuleBlock(".mobile-sheet--files .file-tree-shell--mobile");
+    const supervisorRoot = getLastRuleBlock(".mobile-supervisor-sheet__root");
+    const supervisorHeader = getLastRuleBlock(".mobile-supervisor-sheet__detail-header");
+    const drawerItem = getLastRuleBlock(".mobile-workspace-drawer__item");
+    const drawerFooterButton = getLastRuleBlock(".mobile-workspace-drawer__footer-button");
+    const welcomeCard = getLastRuleBlock(".welcome-card--mobile");
+    const welcomeFeature = getLastRuleBlock(".welcome-card--mobile .welcome-feature");
+    const welcomeButton = getLastRuleBlock(".welcome-card--mobile .welcome-btn");
+    const authCard = getLastRuleBlock(".auth-card-shell--mobile");
+    const authStatusPanel = getLastRuleBlock(".auth-card-shell--mobile .auth-status-panel");
+    const settingsItem = getLastRuleBlock(".settings-mobile-item");
+    const settingsItemIconShell = getLastRuleBlock(".settings-mobile-item__icon-shell");
+
+    expect(dockItem).toBeTruthy();
+    expect(dockItem).toContain("border-radius: 0");
+    expect(mobileTerminalSheet).not.toContain("linear-gradient(");
+    expect(mobileTerminal).toContain("border-radius: 0");
+    expect(mobileTerminal).not.toContain("var(--radius-xl) var(--radius-xl) 0 0");
+    expect(mobileFilesSurface).toContain("border-radius: var(--radius-xl) var(--radius-xl) 0 0");
+    expect(supervisorRoot).toContain("border-radius: var(--radius-xl) var(--radius-xl) 0 0");
+    expect(supervisorHeader).toContain("border-radius: var(--radius-xl)");
+    expect(drawerItem).toContain("border-radius: var(--radius-xl)");
+    expect(drawerFooterButton).toContain("border-radius: var(--radius-md)");
+    expect(welcomeCard).toContain("border-radius: var(--radius-xl)");
+    expect(welcomeFeature).toContain("border-radius: var(--radius-xl)");
+    expect(welcomeButton).toContain("border-radius: var(--radius-md)");
+    expect(authCard).toContain("border-radius: var(--radius-xl)");
+    expect(authStatusPanel).toContain("border-radius: var(--radius-xl)");
+    expect(settingsItem).toContain("border-radius: 0");
+    expect(settingsItemIconShell).toContain("border-radius: var(--radius-xl)");
   });
 
   it("keeps settings content groups and provider controls aligned with editor configuration panels", () => {
@@ -820,7 +928,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(settingsFooter).toContain("background: var(--bg-surface)");
     expect(settingsFooter).toContain("border-top: 1px solid var(--border)");
     expect(settingsFooter).toContain("min-height: 32px");
-    expect(settingsFooter).toContain("padding: var(--sp-2) var(--sp-4)");
+    expect(settingsFooter).toContain("padding: var(--sp-3) var(--sp-6)");
   });
 
   it("keeps shared appearance pills aligned with flat editor option toggles instead of rounded app chips", () => {
@@ -984,6 +1092,13 @@ describe("components.css theme-sensitive surfaces", () => {
     const configCardBase = getRuleBlocksFrom(stylesheet, ".config-card")[0];
     const configCardHeaderBase = getRuleBlocksFrom(stylesheet, ".config-card-header")[0];
     const configCardBody = getLastRuleBlock(".config-card-body");
+    const configCardBodyFillHeight = getLastRuleBlock(".config-card-body--fill-height");
+    const configCardBodyFillHeightMonaco = getLastRuleBlock(
+      ".config-card-body--fill-height > .monaco-host"
+    );
+    const configCardBodyFillHeightActions = getLastRuleBlock(
+      ".config-card-body--fill-height > .config-card-actions"
+    );
     const configCardActionsBase = getRuleBlocksFrom(stylesheet, ".config-card-actions")[0];
     const configCardMobile = getLastGroupedRuleBlockFrom(
       stylesheet,
@@ -1010,6 +1125,11 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(configCardHeaderBase).not.toContain("cursor: pointer");
     expect(configHeaderActionsMobile).toContain("padding-left: var(--sp-4)");
     expect(configCardBody).toContain("background: transparent");
+    expect(configCardBodyFillHeight).toContain("display: flex");
+    expect(configCardBodyFillHeight).toContain("flex-direction: column");
+    expect(configCardBodyFillHeightMonaco).toContain("flex: 1");
+    expect(configCardBodyFillHeightMonaco).toContain("min-height: 0");
+    expect(configCardBodyFillHeightActions).toContain("flex: 0 0 auto");
     expect(configCardActionsBase).toContain("border-top: 1px solid var(--border)");
     expect(configCardActionsBase).toContain("background: transparent");
     expect(configEmptyStateBase).toContain("align-items: flex-start");
@@ -1072,6 +1192,51 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(desktopPanel).toContain("width: 100%");
   });
 
+  it("keeps the desktop file tree search and selected row aligned with the polished panel chrome", () => {
+    const search = getLastRuleBlock(".file-tree-shell .file-tree-search");
+    const searchInput = getLastRuleBlock(".file-tree-shell .file-tree-search-input");
+    const row = getLastRuleBlock(".file-tree-shell .tree-item");
+    const rowSelected = getLastRuleBlock(".file-tree-shell .tree-item.selected");
+    const rowActions = getLastRuleBlock(".file-tree-shell--desktop .tree-item-actions");
+
+    expect(search).toContain("margin: 8px 12px 10px");
+    expect(search).toContain("border-radius: 8px");
+    expect(search).toContain("background: color-mix(");
+    expect(searchInput).toContain("font-size: 13px");
+    expect(row).toContain("min-height: 26px");
+    expect(row).toContain("border-radius: 8px");
+    expect(row).toContain("transition:");
+    expect(rowSelected).toContain("border-left: 2px solid");
+    expect(rowSelected).toContain("background: color-mix(");
+    expect(rowActions).toContain("opacity: 0");
+  });
+
+  it("keeps the desktop git panel and command palette on tighter tool-surface chrome", () => {
+    const gitScroll = getLastRuleBlock(".git-panel-scroll");
+    const gitCommitBlock = getLastRuleBlock(".git-commit-block");
+    const gitSection = getLastRuleBlock(".git-panel-section");
+    const gitWorktreeRow = getLastRuleBlock(".git-worktree-row");
+    const gitHistoryRow = getLastRuleBlock(".git-history-row");
+    const commandPalette = getLastRuleBlock(".command-palette");
+    const commandPaletteDesktop = getLastRuleBlock(".command-palette--desktop");
+    const commandPaletteHeader = getLastRuleBlock(".command-palette-header");
+    const commandPaletteSearch = getLastRuleBlock(".command-palette-search");
+    const commandPaletteItem = getLastRuleBlock(".command-palette--desktop .command-palette-item");
+
+    expect(gitScroll).toContain("gap: 14px");
+    expect(gitCommitBlock).toContain("gap: 10px");
+    expect(gitSection).toContain("gap: 8px");
+    expect(gitWorktreeRow).toContain("min-height: 28px");
+    expect(gitHistoryRow).toContain("min-height: 34px");
+    expect(commandPalette).toContain("max-width: var(--desktop-modal-max-width-md)");
+    expect(commandPaletteDesktop).toContain("overflow: hidden");
+    expect(commandPaletteHeader).toContain("padding: var(--sp-3) var(--sp-4)");
+    expect(commandPaletteSearch).toContain("padding: var(--sp-3) var(--sp-4)");
+    expect(commandPaletteItem).toContain("align-items: center");
+    expect(commandPaletteItem).toContain("gap: var(--sp-3)");
+    expect(commandPaletteItem).toContain("padding: var(--sp-3) var(--sp-4)");
+  });
+
   it("keeps session header badges on a single line by truncating the title first", () => {
     const titleRow = getLastRuleBlock(".mobile-shell__agent-stage .session-title-row");
     const title = getLastRuleBlock(".mobile-shell__agent-stage .session-title");
@@ -1085,6 +1250,46 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(title).toContain("white-space: nowrap");
     expect(badges).toContain("flex-shrink: 0");
     expect(badges).toContain("max-width: 100%");
+  });
+
+  it("keeps the mobile active session chrome visually flat and aligned with the shell header", () => {
+    const viewport = getLastRuleBlock(".mobile-shell__viewport");
+    const content = getLastRuleBlock(".mobile-shell__content");
+    const landscapeViewport = getLastRuleBlock(
+      ".mobile-shell--landscape-compact .mobile-shell__viewport"
+    );
+    const sessionCard = getLastRuleBlock(".mobile-shell__agent-stage > .session-card");
+    const progress = getLastRuleBlock(".mobile-shell__agent-stage .session-progress");
+    const header = getLastRuleBlock(".mobile-shell__agent-stage .session-header");
+    const headerLeft = getLastRuleBlock(".mobile-shell__agent-stage .session-header-left");
+    const titleRow = getLastRuleBlock(".mobile-shell__agent-stage .session-title-row");
+    const badges = getLastGroupedRuleBlock(
+      /\.mobile-shell__agent-stage \.session-provider-badge,\s*\.mobile-shell__agent-stage \.session-state-badge\s*\{([^}]*)\}/g
+    );
+    const supervisorBadge = getLastRuleBlock(".mobile-shell__agent-stage .mobile-supervisor-badge");
+    const supervisorLabel = getLastRuleBlock(
+      ".mobile-shell__agent-stage .mobile-supervisor-badge__label"
+    );
+
+    expect(viewport).toContain("padding: 0");
+    expect(viewport).toContain("border-top:");
+    expect(viewport).not.toContain("padding: 4px");
+    expect(landscapeViewport).toContain("padding-top: 0");
+    expect(content).toContain("gap: 4px");
+    expect(sessionCard).toContain("border-radius: 0");
+    expect(sessionCard).toContain("box-shadow: none");
+    expect(progress).toContain("display: none");
+    expect(header).toContain("padding: 4px");
+    expect(header).toContain("border-bottom:");
+    expect(header).not.toContain("linear-gradient(");
+    expect(headerLeft).toContain("gap: 6px");
+    expect(titleRow).toContain("gap: 6px");
+    expect(badges).toContain("height: 15px");
+    expect(badges).toContain("border-radius: 3px");
+    expect(supervisorBadge).toContain("min-height: 26px");
+    expect(supervisorBadge).toContain("border-radius: 4px");
+    expect(supervisorBadge).not.toContain("border-radius: var(--radius-lg)");
+    expect(supervisorLabel).toContain("font-size: 11px");
   });
 
   it("keeps supervisor entry icons and labels vertically centered", () => {
@@ -1120,8 +1325,16 @@ describe("components.css theme-sensitive surfaces", () => {
     const shellWithMobileInput = getLastRuleBlock(".xterm-host-shell--mobile-input");
     const host = getLastRuleBlock(".xterm-host");
     const keybar = getLastRuleBlock(".mobile-terminal-input-bar");
+    const actions = getLastRuleBlock(".mobile-terminal-input-bar__actions");
+    const actionButton = getLastRuleBlock(".mobile-terminal-input-bar__action");
     const keys = getLastRuleBlock(".mobile-terminal-input-bar__keys");
     const key = getLastRuleBlock(".mobile-terminal-input-bar__key");
+    const ctrlKey = getLastRuleBlock(".mobile-terminal-input-bar__ctrl");
+    const shiftKey = getLastRuleBlock(".mobile-terminal-input-bar__shift");
+    const escapeKey = getLastRuleBlock('.mobile-terminal-input-bar__key[aria-label="Escape"]');
+    const tabKey = getLastRuleBlock('.mobile-terminal-input-bar__key[aria-label="Tab"]');
+    const enterKey = getLastRuleBlock('.mobile-terminal-input-bar__key[aria-label="Enter"]');
+    const upArrowKey = getLastRuleBlock('.mobile-terminal-input-bar__key[aria-label="Up arrow"]');
     const ctrlLocked = getLastRuleBlock(
       '.mobile-terminal-input-bar__ctrl[data-ctrl-mode="locked"]'
     );
@@ -1132,22 +1345,73 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(shell).toContain("display: flex");
     expect(shell).toContain("flex-direction: column");
     expect(shell).toContain("min-height: 0");
-    expect(shellWithMobileInput).toContain("gap: var(--sp-1)");
+    expect(shellWithMobileInput).toContain("gap: 0");
     expect(host).toContain("position: relative");
     expect(host).toContain("flex: 1 1 auto");
     expect(host).toContain("min-height: 0");
     expect(keybar).toContain("flex-shrink: 0");
     expect(keybar).not.toContain("position: absolute");
     expect(keybar).toContain("min-width: 0");
-    expect(keybar).toContain("padding:");
     expect(keybar).toContain("border-top:");
+    expect(keybar).not.toContain("border-bottom:");
+    expect(actions).toContain("border-right:");
+    expect(actions).toContain("gap: 3px");
+    expect(actions).toContain("margin-right: var(--sp-1)");
+    expect(actions).toContain("padding-right: var(--sp-1)");
+    expect(actionButton).toContain("min-height: 20px");
+    expect(actionButton).toContain("font-size: 9px");
     expect(keys).toContain("display: flex");
     expect(keys).toContain("overflow-x: auto");
+    expect(keys).toContain("gap: 3px");
     expect(key).toContain("min-height: 20px");
-    expect(key).toContain("flex: 0 0 auto");
-    expect(key).toContain("var(--bg-page)");
+    expect(key).toContain("font-size: 9px");
+    expect(key).toContain("border-radius: var(--radius-sm)");
+    expect(key).not.toContain("border-radius: 999px");
+    expect(ctrlKey).toContain("min-width: 28px");
+    expect(shiftKey).toContain("min-width: 28px");
+    expect(escapeKey).toContain("min-width: 28px");
+    expect(tabKey).toContain("min-width: 28px");
+    expect(enterKey).toContain("min-width: 34px");
+    expect(upArrowKey).toContain("min-width: 20px");
     expect(ctrlLocked).toContain("var(--accent-blue)");
     expect(shiftArmed).toContain("var(--accent-blue)");
+  });
+
+  it("keeps the mobile fullscreen terminal chrome on a single compact tool surface", () => {
+    const terminalSheet = getLastRuleBlock(".mobile-terminal-sheet");
+    const mobileTerminal = getLastRuleBlock(".mobile-terminal-sheet .bottom-terminal");
+    const toolbar = getLastRuleBlock(".bottom-terminal--mobile-fullscreen .terminal-toolbar");
+    const mobileToolbarRow = getLastRuleBlock(
+      ".bottom-terminal--mobile-fullscreen .terminal-toolbar-mobile-row"
+    );
+    const selector = getLastRuleBlock(".bottom-terminal--mobile-fullscreen .terminal-selector");
+    const selectorButton = getLastRuleBlock(
+      ".bottom-terminal--mobile-fullscreen .terminal-selector-btn"
+    );
+    const placeholder = getLastRuleBlock(
+      ".bottom-terminal--mobile-fullscreen .terminal-toolbar-mobile-placeholder"
+    );
+    const panelButton = getLastRuleBlock(".bottom-terminal--mobile-fullscreen .panel-toolbar-btn");
+    const xterm = getLastRuleBlock(".bottom-terminal--mobile-fullscreen .bottom-terminal-xterm");
+
+    expect(terminalSheet).toContain("padding: 0");
+    expect(terminalSheet).not.toContain("linear-gradient(");
+    expect(mobileTerminal).toContain("border-radius: 0");
+    expect(mobileTerminal).toContain("box-shadow: none");
+    expect(toolbar).toContain("min-height: 32px");
+    expect(toolbar).toContain("padding: 0 var(--sp-2)");
+    expect(toolbar).not.toContain("background: linear-gradient(");
+    expect(mobileToolbarRow).toContain("display: flex");
+    expect(mobileToolbarRow).toContain("align-items: center");
+    expect(mobileToolbarRow).toContain("width: 100%");
+    expect(selector).toContain("flex: 1");
+    expect(selectorButton).toContain("border-radius: var(--radius-sm)");
+    expect(selectorButton).not.toContain("border-radius: 999px");
+    expect(placeholder).toContain("border: none");
+    expect(placeholder).toContain("background: transparent");
+    expect(panelButton).toContain("border-radius: var(--radius-sm)");
+    expect(panelButton).not.toContain("border-radius: 999px");
+    expect(xterm).toContain("padding: 0 var(--sp-2) var(--sp-1)");
   });
 
   it("keeps the supervisor timeout setting aligned as a label-left control-right row", () => {

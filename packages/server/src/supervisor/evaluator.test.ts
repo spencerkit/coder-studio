@@ -293,6 +293,21 @@ describe("SupervisorEvaluator", () => {
     });
   });
 
+  it("rejects needs_user_input as a stopReason", async () => {
+    const evaluator = makeEvaluator(
+      JSON.stringify({
+        status: "stop",
+        stopReason: "needs_user_input",
+        reason: "Need user input",
+      }),
+      "claude"
+    );
+
+    await expect(evaluator.evaluate(makeSupervisor("claude"), makeContext())).rejects.toThrow(
+      "Supervisor stop result is missing a valid stopReason"
+    );
+  });
+
   it("falls back to provider.defaultConfig when evaluator config is missing", async () => {
     const evaluator = new SupervisorEvaluator({
       providerRegistry: [
@@ -434,8 +449,23 @@ describe("SupervisorEvaluator", () => {
     ).rejects.toThrow();
 
     const prompt = (logger.warn.mock.calls[0]?.[0] as { prompt?: string } | undefined)?.prompt;
-    expect(prompt).toContain("You are supervising a target-scoped software task.");
+    expect(prompt).toContain("You are an autonomous supervisor for a target-scoped software task.");
     expect(prompt).toContain("Return JSON only.");
+    expect(prompt).toContain('Prefer "continue" whenever there is a reasonable next action.');
+    expect(prompt).toContain(
+      "Do not ask the user to decide, clarify, or choose among implementation options."
+    );
+    expect(prompt).toContain("Use the target memory as the current supervision state.");
+    expect(prompt).toContain("Identify which plan step is currently active.");
+    expect(prompt).toContain("If the active step is done, advance to the next useful step.");
+    expect(prompt).toContain(
+      "If the agent appears stuck or repeated the same action, give a different concrete next action."
+    );
+    expect(prompt).toContain('Use "supervisor_uncertain" only as a last resort');
+    expect(prompt).toContain('Guidance requirements for "continue":');
+    expect(prompt).toContain(
+      "Be specific enough for the supervised agent to act without asking the user."
+    );
     expect(prompt).toContain("Current objective:");
     expect(prompt).toContain("Ship the fix");
     expect(prompt).toContain("Current target memory:");

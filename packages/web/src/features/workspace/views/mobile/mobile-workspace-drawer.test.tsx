@@ -36,6 +36,8 @@ vi.mock("../../../../lib/i18n", () => ({
         return `Switch to ${params?.name ?? ""}`;
       case "mobile.workspace_drawer.close_workspace":
         return `Close ${params?.name ?? ""}`;
+      case "worktree.current":
+        return "Current";
       case "action.close":
         return "Close";
       case "tooltip.new_workspace":

@@ -124,6 +124,7 @@ describe("GitPanel", () => {
       </Provider>
     );
 
+    expect(container.querySelector(".git-panel.git-panel--desktop")).toBeTruthy();
     await screen.findByText("Worktrees");
     expect(container.querySelector('[data-icon-semantic="git.status.staged"]')).toBeTruthy();
     expect(container.querySelector('[data-icon-semantic="git.status.modified"]')).toBeTruthy();
@@ -855,6 +856,64 @@ describe("GitPanel", () => {
       "textarea",
       "git-commit-input"
     );
+  });
+
+  it("keeps the desktop git chrome blocks and active change row visible in the polished shell", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args: unknown) => {
+      if (op === "git.status") {
+        return status;
+      }
+
+      if (op === "git.branches") {
+        return {
+          current: "feature/ai-agent",
+          branches: [],
+        };
+      }
+
+      if (op === "worktree.list") {
+        return { worktrees };
+      }
+
+      if (op === "git.log") {
+        return { entries: historyEntries };
+      }
+
+      if (op === "git.diff") {
+        return {
+          diff: `diff --git a/src/auth/AuthGate.tsx b/src/auth/AuthGate.tsx\n${JSON.stringify(args)}`,
+        };
+      }
+
+      return {};
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedWorkspaceStore(store);
+
+    const { container } = render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    const worktreesToggle = await screen.findByRole("button", { name: /Worktrees/ });
+    fireEvent.click(worktreesToggle);
+    fireEvent.click(screen.getByText("AuthGate.tsx"));
+    fireEvent.click(screen.getByRole("button", { name: "History" }));
+
+    expect(container.querySelector(".git-panel.git-panel--desktop")).toBeTruthy();
+    expect(container.querySelector(".git-commit-block")).toBeTruthy();
+    expect(container.querySelector(".git-panel-section")).toBeTruthy();
+    expect(await screen.findByText("feature/ai-agent")).toBeInTheDocument();
+    expect(container.querySelector(".git-worktree-row")).toBeTruthy();
+    expect(await screen.findByText("feat: refresh source control surface")).toBeInTheDocument();
+    expect(container.querySelector(".git-history-row")).toBeTruthy();
+    await waitFor(() => {
+      expect(container.querySelector(".git-row.active")).toBeTruthy();
+    });
   });
 
   it("loads branch list on mount", async () => {

@@ -18,28 +18,32 @@ export function NotFoundPage() {
   return (
     <div className={`welcome-container ${isMobile ? "welcome-container--mobile" : ""}`}>
       <div className={`welcome-card ${isMobile ? "welcome-card--mobile" : ""}`}>
-        <EmptyState
-          style={notFoundEmptyStateStyle}
-          title={
-            <div>
-              <div className="welcome-kicker">{t("not_found.kicker")}</div>
-              <h1 className="welcome-title">{t("not_found.title")}</h1>
-            </div>
-          }
-          description={
-            <div className="welcome-content">
-              <p className="welcome-body">{t("not_found.description")}</p>
-            </div>
-          }
-          action={
-            <button className="welcome-btn" onClick={() => navigate("/")}>
-              <span>{t("not_found.go_home")}</span>
-            </button>
-          }
-        />
-        <div className="auth-status-panel">
-          <div className="auth-status-eyebrow">{t("not_found.path_label")}</div>
-          <p className="auth-status-detail">{location.pathname}</p>
+        <div className="welcome-card__hero">
+          <EmptyState
+            style={notFoundEmptyStateStyle}
+            title={
+              <div>
+                <div className="welcome-kicker page-kicker">{t("not_found.kicker")}</div>
+                <h1 className="welcome-title page-title">{t("not_found.title")}</h1>
+              </div>
+            }
+            description={
+              <div className="welcome-content">
+                <p className="welcome-body meta-text">{t("not_found.description")}</p>
+              </div>
+            }
+          />
+        </div>
+        <div className="welcome-card__actions">
+          <button className="welcome-btn" onClick={() => navigate("/")}>
+            <span>{t("not_found.go_home")}</span>
+          </button>
+        </div>
+        <div className="welcome-card__panel">
+          <div className="auth-status-panel">
+            <div className="auth-status-eyebrow">{t("not_found.path_label")}</div>
+            <p className="auth-status-detail">{location.pathname}</p>
+          </div>
         </div>
       </div>
     </div>

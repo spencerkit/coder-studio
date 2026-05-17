@@ -230,6 +230,7 @@ export function Select<T extends string = string>(props: SelectProps<T>) {
       disabled,
       id,
       invalid,
+      mobile: _mobile,
       onClick,
       onOpen,
       options,

@@ -20,6 +20,7 @@ interface WorktreeManagerSurfaceProps {
   workspaceId: string;
   openView: "list" | "create" | null;
   onClose: () => void;
+  desktopPreviewInline?: boolean;
 }
 
 const worktreeListEmptyStateStyle = {
@@ -48,6 +49,7 @@ export function WorktreeManagerSurface({
   workspaceId,
   openView,
   onClose,
+  desktopPreviewInline = false,
 }: WorktreeManagerSurfaceProps) {
   const isMobile = useViewport() === "mobile";
   const t = useTranslation();
@@ -374,24 +376,56 @@ export function WorktreeManagerSurface({
     );
   }
 
-  return isMobile ? (
-    <Sheet
-      kicker={t("worktree.title").toUpperCase()}
-      title={title}
-      body={<div className="worktree-manager-surface">{body}</div>}
-      bodyClassName="mobile-sheet__body--flush"
-      contentClassName="mobile-sheet--worktree"
-      onBack={view === "list" ? undefined : () => setView("list")}
-      headerAction={
-        view === "list" ? (
-          <Button size="sm" variant="primary" onClick={openCreate}>
-            {t("worktree.new")}
-          </Button>
-        ) : undefined
-      }
-      onClose={onClose}
-    />
-  ) : (
+  if (isMobile) {
+    return (
+      <Sheet
+        kicker={t("worktree.title").toUpperCase()}
+        title={title}
+        body={<div className="worktree-manager-surface">{body}</div>}
+        bodyClassName="mobile-sheet__body--flush"
+        contentClassName="mobile-sheet--worktree"
+        onBack={view === "list" ? undefined : () => setView("list")}
+        headerAction={
+          view === "list" ? (
+            <Button size="sm" variant="primary" onClick={openCreate}>
+              {t("worktree.new")}
+            </Button>
+          ) : undefined
+        }
+        onClose={onClose}
+      />
+    );
+  }
+
+  if (desktopPreviewInline) {
+    return (
+      <div className="modal-card modal-card-lg worktree-manager-surface worktree-manager-surface--inline-preview">
+        <ModalHeader>
+          <div className="worktree-header-info">
+            <ModalTitle>{title}</ModalTitle>
+          </div>
+          <div className="worktree-manager-surface__header-actions">
+            {view === "list" ? (
+              <Button size="sm" variant="primary" onClick={openCreate}>
+                {t("worktree.new")}
+              </Button>
+            ) : (
+              <Button size="sm" variant="ghost" onClick={() => setView("list")}>
+                {t("action.back")}
+              </Button>
+            )}
+            <Button size="sm" variant="ghost" onClick={onClose}>
+              {t("action.close")}
+            </Button>
+          </div>
+        </ModalHeader>
+
+        <div className="modal-body">{body}</div>
+      </div>
+    );
+  }
+
+  return (
     <Modal
       className="worktree-manager-surface"
       initialFocus={() => (view === "create" ? branchInputRef.current : null)}

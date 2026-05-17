@@ -489,6 +489,10 @@
     "general": "通用",
     "appearance": "外观",
     "providers": "Agents",
+    "mobile_groups": {
+      "workspace_runtime": "工作区与运行",
+      "interface_interaction": "界面与交互"
+    },
     "autosave_hint": "设置已自动保存",
     "load_failed": "设置加载失败",
     "load_failed_unknown": "未收到服务端返回的设置数据",
@@ -598,6 +602,7 @@
     },
     "shortcuts": {
       "title": "快捷键",
+      "hint": "查看并调整常用键盘操作",
       "reset_all": "重置全部",
       "capture_hint": "按下新的快捷键组合",
       "reset_hint": "重置为默认"
@@ -676,8 +681,7 @@
     "stop_reason": {
       "objective_complete": "目标已达成，Supervisor 已自动停止。",
       "max_supervision_count_reached": "已达到配置的最大监督次数。",
-      "supervisor_uncertain": "Supervisor 暂时无法判断下一步，已停止自动监督。",
-      "needs_user_input": "Supervisor 需要更多用户输入后才能继续自动监督。"
+      "supervisor_uncertain": "Supervisor 暂时无法判断下一步，已停止自动监督。"
     },
     "target_memory": {
       "title": "目标记忆",

@@ -32,7 +32,7 @@ import {
   supervisorDialogAtom,
   supervisorsAtom,
 } from "../features/supervisor/atoms";
-import { terminalMetaAtomFamily, terminalOutputAtomFamily } from "../features/terminal-panel/atoms";
+import { terminalMetaAtomFamily } from "../features/terminal-panel/atoms";
 import {
   activeFilePathAtomFamily,
   branchQuickPickAtom,
@@ -142,6 +142,26 @@ export interface UiPreviewSeed {
 
 function ok<T>(data: T) {
   return { ok: true as const, data };
+}
+
+function getTerminalPreviewBytes(seed: UiPreviewSeed, terminalId: string): Uint8Array {
+  const chunks = seed.terminalOutputById?.[terminalId] ?? [];
+  if (chunks.length === 0) {
+    return new Uint8Array();
+  }
+
+  const totalLength = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
+  const bytes = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
+function getTerminalPreviewSeq(seed: UiPreviewSeed, terminalId: string): number {
+  return getTerminalPreviewBytes(seed, terminalId).byteLength;
 }
 
 function err(message: string) {
@@ -304,11 +324,41 @@ function createPreviewDispatcher(seed: UiPreviewSeed): DispatchCommand {
       } as unknown as T);
     }
 
+    if (op === "terminal.snapshot") {
+      const terminalId = (args as { terminalId?: string })?.terminalId ?? "";
+      const bytes = getTerminalPreviewBytes(seed, terminalId);
+      return ok({
+        status: "ok",
+        transport: "binary",
+        streamId: 1,
+        size: bytes.byteLength,
+        seq: getTerminalPreviewSeq(seed, terminalId),
+        rows: 28,
+        cols: 120,
+        source: "headless",
+        bytes,
+      } as unknown as T);
+    }
+
+    if (op === "terminal.replay") {
+      const terminalId = (args as { terminalId?: string })?.terminalId ?? "";
+      const lastSeq = (args as { lastSeq?: number })?.lastSeq ?? 0;
+      const fullBytes = getTerminalPreviewBytes(seed, terminalId);
+      const replayBytes = fullBytes.subarray(Math.max(0, lastSeq));
+      return ok({
+        status: "ok",
+        transport: "binary",
+        streamId: 1,
+        size: replayBytes.byteLength,
+        seq: fullBytes.byteLength,
+        bytes: replayBytes,
+      } as unknown as T);
+    }
+
     if (
       op === "terminal.close" ||
       op === "terminal.resize" ||
       op === "terminal.input" ||
-      op === "terminal.replay" ||
       op === "provider.runtimeStatus" ||
       op === "provider.install.start" ||
       op === "provider.install.get" ||
@@ -436,13 +486,6 @@ export function buildUiPreviewStore(seed: UiPreviewSeed): Store {
 
   for (const [terminalId, meta] of Object.entries(seed.terminalMetaById ?? {})) {
     store.set(terminalMetaAtomFamily(terminalId), meta);
-  }
-
-  for (const [terminalId, chunks] of Object.entries(seed.terminalOutputById ?? {})) {
-    store.set(terminalOutputAtomFamily(terminalId), {
-      chunks,
-      lastSeq: chunks.length,
-    });
   }
 
   return store;

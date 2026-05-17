@@ -207,6 +207,18 @@ describe("SettingsPage", () => {
     renderSettingsPage(store);
 
     expect(screen.getByText("v0.3.0")).toBeInTheDocument();
+    expect(document.querySelector(".settings-footer__meta")).toBeTruthy();
+  });
+
+  it("wraps desktop settings content in the shared content surface", async () => {
+    const store = createConnectedStore(vi.fn().mockResolvedValue({}));
+
+    renderSettingsPage(store);
+
+    await waitFor(() => {
+      expect(document.querySelector(".settings-content-surface")).toBeTruthy();
+    });
+    expect(document.querySelector(".settings-content-surface .settings-section")).toBeTruthy();
   });
 
   it("renders desktop and mobile settings entry icons through themed semantics", async () => {
@@ -258,6 +270,40 @@ describe("SettingsPage", () => {
     expect(
       mobileView.container.querySelector('[data-icon-semantic="nav.settings.shortcuts"]')
     ).toBeTruthy();
+  });
+
+  it("renders the mobile settings homepage as grouped sections without the legacy hero", async () => {
+    viewportMocks.viewport = "mobile";
+    const store = createConnectedStore(vi.fn().mockResolvedValue({}));
+
+    renderSettingsPage(store);
+
+    const mobileRoot = await screen.findByTestId("settings-mobile-root");
+    const groupHeadings = within(mobileRoot).getAllByRole("heading", { level: 2 });
+
+    expect(groupHeadings).toHaveLength(2);
+    expect(within(mobileRoot).getByText("工作区与运行")).toBeInTheDocument();
+    expect(within(mobileRoot).getByText("界面与交互")).toBeInTheDocument();
+    expect(document.querySelector(".settings-mobile-root-hero")).toBeNull();
+
+    const buttons = within(mobileRoot).getAllByRole("button");
+    const labels = buttons.map((button) => button.getAttribute("aria-label")).filter(Boolean);
+
+    expect(labels).toEqual(expect.arrayContaining(["通用", "Agents", "外观", "快捷键"]));
+    expect(labels.indexOf("通用")).toBeLessThan(labels.indexOf("Agents"));
+    expect(labels.indexOf("Agents")).toBeLessThan(labels.indexOf("外观"));
+    expect(labels.indexOf("外观")).toBeLessThan(labels.indexOf("快捷键"));
+  });
+
+  it("localizes the new mobile settings homepage section headings", async () => {
+    viewportMocks.viewport = "mobile";
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    const store = createConnectedStore(vi.fn().mockResolvedValue({}));
+
+    renderSettingsPage(store);
+
+    expect(await screen.findByText("Workspace & Runtime")).toBeInTheDocument();
+    expect(screen.getByText("Interface & Interaction")).toBeInTheDocument();
   });
 
   it("does not render default Agent Provider selection in general settings", async () => {
@@ -890,6 +936,30 @@ describe("SettingsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "返回" }));
 
     expect(routerMocks.navigate).toHaveBeenCalledWith("/");
+  });
+
+  it("renders a compact desktop header with only the settings title", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({});
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+
+    const desktopHeader = document.querySelector(".settings-header__desktop") as HTMLElement | null;
+    const mobileHeader = document.querySelector(
+      ".settings-header .mobile-page-header"
+    ) as HTMLElement | null;
+    const headerCopy = document.querySelector(".settings-header__copy") as HTMLElement | null;
+
+    expect(desktopHeader).not.toBeNull();
+    expect(mobileHeader).toBeNull();
+    expect(screen.getByRole("heading", { name: "设置" })).toBeInTheDocument();
+    expect(
+      within(desktopHeader as HTMLElement).getByRole("button", { name: "返回" })
+    ).toBeInTheDocument();
+    expect(headerCopy).not.toBeNull();
+    expect(within(headerCopy as HTMLElement).queryByText("Coder Studio")).toBeNull();
+    expect(within(headerCopy as HTMLElement).queryByText("设置已自动保存")).toBeNull();
+    expect(document.querySelector(".settings-header__section-pill")).toBeNull();
   });
 
   it("renders a mobile category list and returns from detail content to the settings root", async () => {
