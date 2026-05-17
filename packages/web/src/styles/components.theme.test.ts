@@ -561,6 +561,9 @@ describe("components.css theme-sensitive surfaces", () => {
     const settingsSidebar = getLastRuleBlock(".settings-sidebar");
     const settingsContent = getLastRuleBlock(".settings-content");
     const settingsContentFillHeight = getLastRuleBlock(".settings-content--fill-height");
+    const settingsContentFillHeightSurface = getLastRuleBlock(
+      ".settings-content--fill-height > .settings-content-surface"
+    );
     const settingsNavItem = getLastRuleBlock(".settings-nav-item");
     const settingsNavItemHover = getLastRuleBlock(".settings-nav-item:hover");
     const settingsNavItemActive = getLastRuleBlock(".settings-nav-item-active");
@@ -602,7 +605,11 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(settingsContent).toContain("justify-content: center");
     expect(settingsContent).toContain("padding: var(--sp-6)");
     expect(settingsContent).toContain("background: var(--bg-page)");
-    expect(settingsContentFillHeight).toContain("justify-content: center");
+    expect(settingsContentFillHeight).toContain("justify-content: flex-start");
+    expect(settingsContentFillHeightSurface).toContain("display: flex");
+    expect(settingsContentFillHeightSurface).toContain("flex-direction: column");
+    expect(settingsContentFillHeightSurface).toContain("flex: 1");
+    expect(settingsContentFillHeightSurface).toContain("min-height: 0");
     expect(settingsNavItem).toContain("min-height: 40px");
     expect(settingsNavItem).toContain("border: 1px solid transparent");
     expect(settingsNavItem).toContain("border-radius: var(--radius-md)");
@@ -1087,7 +1094,12 @@ describe("components.css theme-sensitive surfaces", () => {
     const configCardHeaderBase = getRuleBlocksFrom(stylesheet, ".config-card-header")[0];
     const configCardBody = getLastRuleBlock(".config-card-body");
     const configCardBodyFillHeight = getLastRuleBlock(".config-card-body--fill-height");
-    const configCardBodyFillHeightChild = getLastRuleBlock(".config-card-body--fill-height > *");
+    const configCardBodyFillHeightMonaco = getLastRuleBlock(
+      ".config-card-body--fill-height > .monaco-host"
+    );
+    const configCardBodyFillHeightActions = getLastRuleBlock(
+      ".config-card-body--fill-height > .config-card-actions"
+    );
     const configCardActionsBase = getRuleBlocksFrom(stylesheet, ".config-card-actions")[0];
     const configCardMobile = getLastGroupedRuleBlockFrom(
       stylesheet,
@@ -1116,8 +1128,9 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(configCardBody).toContain("background: transparent");
     expect(configCardBodyFillHeight).toContain("display: flex");
     expect(configCardBodyFillHeight).toContain("flex-direction: column");
-    expect(configCardBodyFillHeightChild).toContain("flex: 1");
-    expect(configCardBodyFillHeightChild).toContain("min-height: 0");
+    expect(configCardBodyFillHeightMonaco).toContain("flex: 1");
+    expect(configCardBodyFillHeightMonaco).toContain("min-height: 0");
+    expect(configCardBodyFillHeightActions).toContain("flex: 0 0 auto");
     expect(configCardActionsBase).toContain("border-top: 1px solid var(--border)");
     expect(configCardActionsBase).toContain("background: transparent");
     expect(configEmptyStateBase).toContain("align-items: flex-start");

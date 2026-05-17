@@ -822,7 +822,14 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
+}
+
+.settings-content--fill-height > .settings-content-surface {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
 }
 
 .settings-content-surface {
@@ -7938,9 +7945,13 @@ textarea.input {
   min-height: 0;
 }
 
-.config-card-body--fill-height > * {
+.config-card-body--fill-height > .monaco-host {
   flex: 1;
   min-height: 0;
+}
+
+.config-card-body--fill-height > .config-card-actions {
+  flex: 0 0 auto;
 }
 
 /* Monaco Editor */
