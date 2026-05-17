@@ -421,10 +421,9 @@ describe("components.css theme-sensitive surfaces", () => {
       ".mobile-shell--landscape-compact .mobile-shell__viewport"
     );
 
-    expect(viewport).toContain(
-      "padding: var(--sp-2) var(--mobile-safe-right) 0 var(--mobile-safe-left)"
-    );
-    expect(viewport).not.toContain("var(--sp-3) var(--mobile-safe-left)");
+    expect(viewport).toContain("padding: 0");
+    expect(viewport).toContain("border-top:");
+    expect(viewport).not.toContain("padding: 4px");
     expect(compactViewport).toContain("padding-bottom: 0");
   });
 
@@ -1398,7 +1397,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(terminalSheet).toContain("padding: 0");
     expect(terminalSheet).not.toContain("linear-gradient(");
     expect(mobileTerminal).toContain("border-radius: 0");
-    expect(mobileTerminal).not.toContain("box-shadow:");
+    expect(mobileTerminal).toContain("box-shadow: none");
     expect(toolbar).toContain("min-height: 32px");
     expect(toolbar).toContain("padding: 0 var(--sp-2)");
     expect(toolbar).not.toContain("background: linear-gradient(");
