@@ -22,6 +22,7 @@ export function resolveTerminalCopyOnSelectSetting(settings: Record<string, unkn
 export function resolveTerminalFontSizeSetting(settings: Record<string, unknown>): number {
   const value = settings["appearance.terminalFontSize"];
   return typeof value === "number" &&
+    Number.isInteger(value) &&
     Number.isFinite(value) &&
     value >= MIN_TERMINAL_FONT_SIZE &&
     value <= MAX_TERMINAL_FONT_SIZE

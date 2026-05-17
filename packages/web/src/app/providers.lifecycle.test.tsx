@@ -817,7 +817,7 @@ describe("AppProviders lifecycle recovery", () => {
     expect(sendCommand).toHaveBeenCalledWith("settings.get", {}, undefined);
   });
 
-  it("preserves a newer local terminal font size update when startup hydration resolves later", async () => {
+  it("preserves a newer local terminal font size update while hydrating untouched copy-on-select", async () => {
     const store = createStore();
     setVisibilityState("visible");
     const settingsGetDeferred = createDeferred<Record<string, unknown>>();
@@ -861,8 +861,91 @@ describe("AppProviders lifecycle recovery", () => {
     });
 
     expect(store.get(terminalPreferencesAtom)).toEqual({
-      copyOnSelect: false,
+      copyOnSelect: true,
       fontSize: 14,
+    });
+  });
+
+  it("hydrates untouched terminal preference fields when another field was updated locally first", async () => {
+    const store = createStore();
+    setVisibilityState("visible");
+    const settingsGetDeferred = createDeferred<Record<string, unknown>>();
+
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return settingsGetDeferred.promise;
+      }
+
+      return undefined;
+    });
+    wsState.client!.sendCommand = sendCommand;
+
+    renderProviders(store);
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
+
+    act(() => {
+      wsState.client?.statusHandler?.("connected");
+    });
+
+    await vi.waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith("settings.get", {}, undefined);
+    });
+
+    act(() => {
+      store.set(terminalPreferencesAtom, {
+        copyOnSelect: true,
+        fontSize: 11,
+      });
+    });
+
+    await act(async () => {
+      settingsGetDeferred.resolve({
+        "appearance.terminalCopyOnSelect": false,
+        "appearance.terminalFontSize": 18,
+      });
+      await settingsGetDeferred.promise;
+    });
+
+    expect(store.get(terminalPreferencesAtom)).toEqual({
+      copyOnSelect: true,
+      fontSize: 18,
+    });
+  });
+
+  it("falls back to the default terminal font size when persisted settings are fractional", async () => {
+    const store = createStore();
+    setVisibilityState("visible");
+
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "appearance.terminalCopyOnSelect": true,
+          "appearance.terminalFontSize": 11.5,
+        };
+      }
+
+      return undefined;
+    });
+    wsState.client!.sendCommand = sendCommand;
+
+    renderProviders(store);
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
+
+    act(() => {
+      wsState.client?.statusHandler?.("connected");
+    });
+
+    await vi.waitFor(() => {
+      expect(store.get(terminalPreferencesAtom)).toEqual({
+        copyOnSelect: true,
+        fontSize: 11,
+      });
     });
   });
 

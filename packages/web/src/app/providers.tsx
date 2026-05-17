@@ -297,9 +297,20 @@ export function AppProviders({ children }: AppProvidersProps) {
     }
 
     let cancelled = false;
-    let localTerminalPreferencesUpdated = false;
+    let terminalPreferencesAtSubscriptionStart = store.get(terminalPreferencesAtom);
+    let localTerminalCopyOnSelectUpdated = false;
+    let localTerminalFontSizeUpdated = false;
     const unsubscribeTerminalPreferences = store.sub(terminalPreferencesAtom, () => {
-      localTerminalPreferencesUpdated = true;
+      const nextTerminalPreferences = store.get(terminalPreferencesAtom);
+      if (
+        nextTerminalPreferences.copyOnSelect !== terminalPreferencesAtSubscriptionStart.copyOnSelect
+      ) {
+        localTerminalCopyOnSelectUpdated = true;
+      }
+      if (nextTerminalPreferences.fontSize !== terminalPreferencesAtSubscriptionStart.fontSize) {
+        localTerminalFontSizeUpdated = true;
+      }
+      terminalPreferencesAtSubscriptionStart = nextTerminalPreferences;
     });
 
     const hydrateTerminalPreferences = async () => {
@@ -308,13 +319,15 @@ export function AppProviders({ children }: AppProvidersProps) {
         return;
       }
 
-      if (localTerminalPreferencesUpdated) {
-        return;
-      }
+      const currentTerminalPreferences = store.get(terminalPreferencesAtom);
 
       setTerminalPreferences({
-        copyOnSelect: resolveTerminalCopyOnSelectSetting(result.data),
-        fontSize: resolveTerminalFontSizeSetting(result.data),
+        copyOnSelect: localTerminalCopyOnSelectUpdated
+          ? currentTerminalPreferences.copyOnSelect
+          : resolveTerminalCopyOnSelectSetting(result.data),
+        fontSize: localTerminalFontSizeUpdated
+          ? currentTerminalPreferences.fontSize
+          : resolveTerminalFontSizeSetting(result.data),
       });
     };
 
