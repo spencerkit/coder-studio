@@ -1087,6 +1087,17 @@ describe("components.css theme-sensitive surfaces", () => {
     const mobileTerminalSheet = getLastRuleBlock(".mobile-terminal-sheet");
     const mobileTerminal = getLastRuleBlock(".mobile-terminal-sheet .bottom-terminal");
     const mobileFilesSurface = getLastRuleBlock(".mobile-sheet--files .file-tree-shell--mobile");
+    const mobileFilesGitSurface = getLastRuleBlock(".mobile-sheet--files .git-panel--mobile");
+    const mobileFilesSegmented = getLastRuleBlock(".mobile-files-sheet__segmented");
+    const mobileFilesSegment = getLastRuleBlock(".mobile-files-sheet__segment");
+    const mobileFilesSegmentActive = getLastRuleBlock(".mobile-files-sheet__segment.active");
+    const mobileFilesSegmentIndicator = getLastRuleBlock(
+      ".mobile-files-sheet__segment.active::after"
+    );
+    const mobileFilesTabAction = getLastRuleBlock(".mobile-files-sheet__tab-action");
+    const mobileFileSearch = getLastRuleBlock(".file-tree-shell--mobile .file-tree-search");
+    const mobileFileRow = getLastRuleBlock(".file-tree-shell--mobile .tree-item");
+    const mobileFileRowSelected = getLastRuleBlock(".file-tree-shell--mobile .tree-item.selected");
     const supervisorRoot = getLastRuleBlock(".mobile-supervisor-sheet__root");
     const supervisorHeader = getLastRuleBlock(".mobile-supervisor-sheet__detail-header");
     const drawerItem = getLastRuleBlock(".mobile-workspace-drawer__item");
@@ -1104,7 +1115,40 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(mobileTerminalSheet).not.toContain("linear-gradient(");
     expect(mobileTerminal).toContain("border-radius: 0");
     expect(mobileTerminal).not.toContain("var(--radius-xl) var(--radius-xl) 0 0");
-    expect(mobileFilesSurface).toContain("border-radius: var(--radius-xl) var(--radius-xl) 0 0");
+    expect(mobileFilesSegmented).toContain(
+      "border-bottom: 1px solid color-mix(in srgb, var(--border) 78%, transparent)"
+    );
+    expect(mobileFilesSegmented).toContain("border-radius: 0");
+    expect(mobileFilesSegmented).not.toContain("linear-gradient(");
+    expect(mobileFilesSegmented).toContain("box-shadow: none");
+    expect(mobileFilesSegment).toContain("padding: 0");
+    expect(mobileFilesSegment).toContain("font-weight: var(--type-label-weight)");
+    expect(mobileFilesSegmentActive).toContain("background: transparent");
+    expect(mobileFilesSegmentIndicator).toContain("height: 1.5px");
+    expect(mobileFilesTabAction).toContain("border: none");
+    expect(mobileFilesTabAction).toContain("border-radius: 6px");
+    expect(mobileFilesTabAction).toContain("background: transparent");
+    expect(mobileFilesSurface).toContain(
+      "border: 1px solid color-mix(in srgb, var(--border) 80%, transparent)"
+    );
+    expect(mobileFilesSurface).toContain("border-radius: var(--radius-md)");
+    expect(mobileFilesSurface).toContain("box-shadow: none");
+    expect(mobileFilesSurface).not.toContain("linear-gradient(");
+    expect(mobileFilesGitSurface).toContain(
+      "border: 1px solid color-mix(in srgb, var(--border) 80%, transparent)"
+    );
+    expect(mobileFilesGitSurface).toContain("border-radius: var(--radius-md)");
+    expect(mobileFilesGitSurface).toContain("box-shadow: none");
+    expect(mobileFileSearch).toContain("margin: 0");
+    expect(mobileFileSearch).toContain("border-radius: 0");
+    expect(mobileFileSearch).toContain("border-right: none");
+    expect(mobileFileSearch).toContain("border-left: none");
+    expect(mobileFileSearch).toContain("background: transparent");
+    expect(mobileFileRow).toContain("min-height: 40px");
+    expect(mobileFileRow).toContain("border-radius: 0");
+    expect(mobileFileRowSelected).toContain(
+      "border-left: 2px solid color-mix(in srgb, var(--accent-blue) 88%, white 12%)"
+    );
     expect(supervisorRoot).toContain("border-radius: var(--radius-xl) var(--radius-xl) 0 0");
     expect(supervisorHeader).toContain("border-radius: var(--radius-xl)");
     expect(drawerItem).toContain("border-radius: var(--radius-xl)");

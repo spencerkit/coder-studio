@@ -10105,11 +10105,9 @@ textarea.input {
   .mobile-sheet--files .workspace-git-view {
     overflow: hidden;
     border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
-    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
-    background: color-mix(in srgb, var(--bg-surface) 90%, var(--bg-page));
-    box-shadow:
-      inset 0 1px 0 color-mix(in srgb, var(--fg-white) 5%, transparent),
-      0 14px 34px color-mix(in srgb, var(--bg-page) 18%, transparent);
+    border-radius: var(--radius-md);
+    background: var(--bg-panel);
+    box-shadow: none;
   }
 
   .mobile-sheet--files .workspace-git-view {
@@ -11583,7 +11581,7 @@ textarea.input {
 }
 
 .file-tree-shell--mobile .file-tree-search {
-  margin: 0 0 10px;
+  margin: 0;
   border-right: none;
   border-left: none;
   border-radius: 0;
@@ -11604,6 +11602,8 @@ textarea.input {
 }
 
 .file-tree-shell--mobile .tree-item.selected {
+  padding-left: 14px;
+  border-left: 2px solid color-mix(in srgb, var(--accent-blue) 88%, white 12%);
   background: color-mix(in srgb, var(--accent-blue) 12%, transparent);
 }
 
@@ -12114,17 +12114,11 @@ textarea.input {
   align-items: center;
   flex-shrink: 0;
   gap: var(--sp-3);
-  padding: var(--sp-3) var(--sp-3) var(--sp-2);
-  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
-  border-radius: 18px;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--bg-surface) 92%, transparent) 0%,
-    color-mix(in srgb, var(--bg-page) 92%, var(--bg-surface) 8%) 100%
-  );
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--fg-white) 5%, transparent),
-    0 10px 24px color-mix(in srgb, var(--bg-page) 16%, transparent);
+  padding: 0 0 var(--sp-2);
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .mobile-files-sheet__segment {
@@ -12133,10 +12127,10 @@ textarea.input {
   align-items: center;
   justify-content: flex-start;
   gap: 6px;
-  min-height: 36px;
-  padding: 0 4px;
+  min-height: 32px;
+  padding: 0;
   border: none;
-  border-radius: 999px;
+  border-radius: 0;
   background: transparent;
   color: var(--text-tertiary);
   font-size: var(--type-label-size);
@@ -12157,10 +12151,10 @@ textarea.input {
 .mobile-files-sheet__segment.active::after {
   content: "";
   position: absolute;
-  right: 4px;
-  bottom: 2px;
-  left: 4px;
-  height: 2px;
+  right: 0;
+  bottom: -10px;
+  left: 0;
+  height: 1.5px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--accent-blue) 90%, white 10%);
 }
@@ -12168,10 +12162,9 @@ textarea.input {
 .mobile-files-sheet__tab-actions {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   flex-shrink: 0;
   margin-left: auto;
-  padding-bottom: 0;
 }
 
 .mobile-files-sheet__tab-action {
@@ -12181,9 +12174,9 @@ textarea.input {
   width: 32px;
   height: 32px;
   padding: 0;
-  border: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--bg-surface) 74%, transparent);
+  border: none;
+  border-radius: 6px;
+  background: transparent;
   color: var(--text-tertiary);
   transition:
     background-color var(--duration-fast) var(--ease-out),
