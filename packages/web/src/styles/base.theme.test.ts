@@ -81,6 +81,7 @@ describe("base.css desktop typography foundation", () => {
     expect(getRuleBlock("body")).toContain("font-size: var(--type-body-size)");
     expect(getRuleBlock("body")).toContain("line-height: var(--type-body-line-height)");
     expect(getRuleBlock("body")).toContain("font-weight: var(--type-body-weight)");
+    expect(getRuleBlock("p")).toContain("line-height: var(--type-body-line-height)");
 
     expect(getRuleBlock("button")).toContain("font-size: var(--type-body-strong-size)");
     expect(getRuleBlock("button")).toContain("line-height: var(--type-body-strong-line-height)");
