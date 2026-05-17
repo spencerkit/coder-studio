@@ -550,19 +550,7 @@ export function SettingsPage() {
               <span>{t("action.back")}</span>
             </button>
             <div className="settings-header__copy">
-              <div className="page-kicker settings-header__kicker">{t("app.name")}</div>
               <h1 className="page-title settings-header__title">{t("settings.title")}</h1>
-              <p className="settings-header__summary meta-text">
-                <span>{t(activeSectionMeta.labelKey)}</span>
-                <span className="settings-header__summary-separator" aria-hidden="true">
-                  •
-                </span>
-                <span>{t("settings.autosave_hint")}</span>
-              </p>
-            </div>
-            <div className="settings-header__section-pill">
-              <ThemedIcon semantic={activeSectionMeta.iconSemantic} size={14} />
-              <span>{t(activeSectionMeta.labelKey)}</span>
             </div>
           </div>
         )}

@@ -713,63 +713,39 @@
 }
 
 .settings-header {
-  padding: var(--sp-2) var(--sp-4);
+  padding: var(--sp-1) var(--sp-4);
   background: var(--bg-surface);
   border-bottom: 1px solid var(--border);
 }
 
 .settings-header__desktop {
-  width: min(100%, calc(240px + var(--desktop-content-max-width) + (var(--sp-6) * 2)));
-  margin: 0 auto;
+  width: 100%;
+  margin: 0;
   display: flex;
   align-items: center;
-  gap: var(--sp-4);
+  justify-content: flex-start;
+  gap: var(--sp-3);
 }
 
 .settings-header__back {
   flex-shrink: 0;
+  min-height: 30px;
+  font-size: var(--text-xs);
 }
 
 .settings-header__copy {
   min-width: 0;
   display: flex;
-  flex: 1;
+  flex: 0 1 auto;
   flex-direction: column;
-  gap: var(--sp-1);
+  justify-content: flex-start;
+  gap: 0;
 }
 
-.settings-header__kicker,
-.settings-header__title,
-.settings-header__summary {
+.settings-header__title {
   margin: 0;
-}
-
-.settings-header__summary {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--sp-2);
-  color: var(--text-secondary);
-}
-
-.settings-header__summary-separator {
-  color: var(--text-tertiary);
-}
-
-.settings-header__section-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-2);
-  flex-shrink: 0;
-  margin-left: auto;
-  padding: var(--sp-2) var(--sp-3);
-  background: var(--bg-panel);
-  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
-  border-radius: var(--radius-full);
-  color: var(--text-primary);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  box-shadow: var(--shadow-sm);
+  font-size: 18px;
+  line-height: 1.05;
 }
 
 .settings-body {
@@ -845,6 +821,8 @@
 .settings-content--fill-height {
   display: flex;
   flex-direction: column;
+  align-items: center;
+  justify-content: center;
 }
 
 .settings-content-surface {

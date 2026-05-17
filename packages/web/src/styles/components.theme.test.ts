@@ -555,11 +555,12 @@ describe("components.css theme-sensitive surfaces", () => {
     const settingsPage = getLastRuleBlock(".settings-page");
     const baseSettingsHeader = getRuleBlocksFrom(stylesheet, ".settings-header")[0];
     const desktopSettingsHeader = getLastRuleBlock(".settings-header__desktop");
-    const desktopSettingsSummary = getLastRuleBlock(".settings-header__summary");
-    const desktopSettingsSectionPill = getLastRuleBlock(".settings-header__section-pill");
+    const desktopSettingsCopy = getLastRuleBlock(".settings-header__copy");
+    const desktopSettingsTitle = getLastRuleBlock(".settings-header__title");
     const settingsBody = getLastRuleBlock(".settings-body");
     const settingsSidebar = getLastRuleBlock(".settings-sidebar");
     const settingsContent = getLastRuleBlock(".settings-content");
+    const settingsContentFillHeight = getLastRuleBlock(".settings-content--fill-height");
     const settingsNavItem = getLastRuleBlock(".settings-nav-item");
     const settingsNavItemHover = getLastRuleBlock(".settings-nav-item:hover");
     const settingsNavItemActive = getLastRuleBlock(".settings-nav-item-active");
@@ -581,16 +582,17 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(settingsPage).toContain("background: var(--bg-page)");
     expect(baseSettingsHeader).toContain("background: var(--bg-surface)");
     expect(baseSettingsHeader).toContain("border-bottom: 1px solid var(--border)");
-    expect(baseSettingsHeader).toContain("padding: var(--sp-2) var(--sp-4)");
-    expect(desktopSettingsHeader).toContain(
-      "width: min(100%, calc(240px + var(--desktop-content-max-width) + (var(--sp-6) * 2)))"
-    );
-    expect(desktopSettingsHeader).toContain("margin: 0 auto");
+    expect(baseSettingsHeader).toContain("padding: var(--sp-1) var(--sp-4)");
+    expect(desktopSettingsHeader).toContain("width: 100%");
+    expect(desktopSettingsHeader).toContain("margin: 0");
     expect(desktopSettingsHeader).toContain("display: flex");
-    expect(desktopSettingsSummary).toContain("color: var(--text-secondary)");
-    expect(desktopSettingsSectionPill).toContain("background: var(--bg-panel)");
-    expect(desktopSettingsSectionPill).toContain("border: 1px solid");
-    expect(desktopSettingsSectionPill).toContain("border-radius: var(--radius-full)");
+    expect(desktopSettingsHeader).toContain("align-items: center");
+    expect(desktopSettingsHeader).toContain("justify-content: flex-start");
+    expect(desktopSettingsCopy).toContain("justify-content: flex-start");
+    expect(desktopSettingsCopy).toContain("flex: 0 1 auto");
+    expect(desktopSettingsCopy).toContain("gap: 0");
+    expect(desktopSettingsTitle).toContain("font-size: 18px");
+    expect(desktopSettingsTitle).toContain("line-height: 1.05");
     expect(settingsBody).toContain("align-items: stretch");
     expect(settingsBody).toContain("background: var(--bg-page)");
     expect(settingsSidebar).toContain("background: var(--bg-panel)");
@@ -600,6 +602,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(settingsContent).toContain("justify-content: center");
     expect(settingsContent).toContain("padding: var(--sp-6)");
     expect(settingsContent).toContain("background: var(--bg-page)");
+    expect(settingsContentFillHeight).toContain("justify-content: center");
     expect(settingsNavItem).toContain("min-height: 40px");
     expect(settingsNavItem).toContain("border: 1px solid transparent");
     expect(settingsNavItem).toContain("border-radius: var(--radius-md)");
