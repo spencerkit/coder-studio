@@ -744,7 +744,6 @@ describe("components.css theme-sensitive surfaces", () => {
     const mobilePageHeaderBack = getLastRuleBlock(".mobile-page-header .page-header__back");
     const headerLeading = getLastRuleBlock(".page-header__leading");
     const backButton = getLastRuleBlock(".mobile-sheet--fullscreen .page-header__back");
-    const fullscreenTitle = getLastRuleBlock(".mobile-sheet--fullscreen .page-header__title");
     const headerActions = getLastRuleBlock(".page-header__actions");
 
     expect(fullscreenHeader).toContain("padding: 0 var(--sp-3)");
@@ -759,9 +758,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(headerLeading).toContain("flex: 1");
     expect(backButton).toContain("background: transparent");
     expect(backButton).not.toContain("border-radius: 999px");
-    expect(fullscreenTitle).toContain("font-size: var(--type-app-title-size)");
-    expect(fullscreenTitle).toContain("line-height: var(--type-app-title-line-height)");
-    expect(fullscreenTitle).toContain("font-weight: var(--type-app-title-weight)");
+    expect(hasRuleBlock(".mobile-sheet--fullscreen .page-header__title")).toBe(false);
     expect(headerActions).toContain("margin-left: auto");
   });
 
@@ -824,6 +821,10 @@ describe("components.css theme-sensitive surfaces", () => {
       getRuleBlocksFrom(modalStylesheet, ".dialogHeader").find((block) =>
         block.includes("align-items: flex-start")
       ) ?? "";
+    const dialogDescription = getLastRuleBlockFrom(
+      modalStylesheet,
+      ":global(.dialog-header__description)"
+    );
     const dialogIcon = getLastRuleBlock(".supervisor-dialog-header-icon");
     const editTone = getLastRuleBlock(".supervisor-dialog--edit .supervisor-dialog-header-icon");
     const disableTone = getLastRuleBlock(
@@ -833,6 +834,9 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(modalTitle).toContain("font-size: var(--type-section-title-size)");
     expect(modalTitle).toContain("line-height: var(--type-section-title-line-height)");
     expect(modalTitle).toContain("font-weight: var(--type-section-title-weight)");
+    expect(dialogDescription).toContain("font-size: var(--type-meta-size)");
+    expect(dialogDescription).toContain("line-height: var(--type-meta-line-height)");
+    expect(dialogDescription).toContain("font-weight: var(--type-meta-weight)");
     expect(dialogHeader).toContain("align-items: flex-start");
     expect(dialogIcon).toContain("width: 28px");
     expect(dialogIcon).toContain("height: 28px");
@@ -842,6 +846,30 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(disableTone).toContain("var(--icon-error)");
     expect(hasRuleBlock(".supervisor-dialog-header")).toBe(false);
     expect(hasRuleBlock(".supervisor-dialog-subtitle")).toBe(false);
+    expect(hasRuleBlock(".supervisor-dialog .modal-header h3")).toBe(false);
+  });
+
+  it("does not allow page or modal wrappers to override approved header typography tokens", () => {
+    const settingsBack = getLastRuleBlock(
+      ".settings-header .mobile-page-header .page-header__back"
+    );
+    const mobileSettingsBack = getLastRuleBlock(
+      ".settings-page--mobile > .settings-header .mobile-page-header .page-header__back"
+    );
+
+    expect(hasRuleBlock(".mobile-sheet--fullscreen .page-header__title")).toBe(false);
+    expect(hasRuleBlock(".settings-header .mobile-page-header .page-header__title")).toBe(false);
+    expect(
+      hasRuleBlock(
+        ".settings-page--mobile > .settings-header .mobile-page-header .page-header__title"
+      )
+    ).toBe(false);
+    expect(settingsBack).not.toContain("font-size:");
+    expect(settingsBack).not.toContain("line-height:");
+    expect(settingsBack).not.toContain("font-weight:");
+    expect(mobileSettingsBack).not.toContain("font-size:");
+    expect(mobileSettingsBack).not.toContain("line-height:");
+    expect(mobileSettingsBack).not.toContain("font-weight:");
   });
 
   it("uses a unified inline sheet treatment for mobile selectors and keeps topbar controls height-aligned", () => {

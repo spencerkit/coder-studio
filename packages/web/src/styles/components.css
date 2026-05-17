@@ -3832,15 +3832,6 @@ body.is-resizing-panels * {
   color: var(--text-secondary);
 }
 
-/* Intent-coloured accent at the top of the supervisor dialog */
-.supervisor-dialog .modal-header h3 {
-  margin: 0;
-  font-size: var(--type-section-title-size);
-  line-height: var(--type-section-title-line-height);
-  font-weight: var(--type-section-title-weight);
-  color: var(--text-primary);
-}
-
 .supervisor-dialog-header-icon {
   display: inline-flex;
   align-items: center;
@@ -10061,12 +10052,6 @@ textarea.input {
     text-overflow: ellipsis;
     white-space: nowrap;
     letter-spacing: 0.12em;
-  }
-
-  .mobile-sheet--fullscreen .page-header__title {
-    font-size: var(--type-app-title-size);
-    line-height: var(--type-app-title-line-height);
-    font-weight: var(--type-app-title-weight);
   }
 
   .mobile-sheet__action {
