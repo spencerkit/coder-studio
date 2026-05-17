@@ -11580,7 +11580,7 @@ textarea.input {
   opacity: 1;
 }
 
-.file-tree-shell--mobile .file-tree-search {
+.mobile-sheet--files .file-tree-shell--mobile .file-tree-search {
   margin: 0;
   border-right: none;
   border-left: none;
@@ -11589,11 +11589,11 @@ textarea.input {
   background: transparent;
 }
 
-.file-tree-shell--mobile .file-tree {
+.mobile-sheet--files .file-tree-shell--mobile .file-tree {
   padding-bottom: 10px;
 }
 
-.file-tree-shell--mobile .tree-item {
+.mobile-sheet--files .file-tree-shell--mobile .tree-item {
   min-height: 40px;
   margin: 0;
   border-radius: 0;
@@ -11601,7 +11601,7 @@ textarea.input {
   padding-bottom: 8px;
 }
 
-.file-tree-shell--mobile .tree-item.selected {
+.mobile-sheet--files .file-tree-shell--mobile .tree-item.selected {
   padding-left: 14px;
   border-left: 2px solid color-mix(in srgb, var(--accent-blue) 88%, white 12%);
   background: color-mix(in srgb, var(--accent-blue) 12%, transparent);

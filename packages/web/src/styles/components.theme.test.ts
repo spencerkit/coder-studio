@@ -1095,9 +1095,15 @@ describe("components.css theme-sensitive surfaces", () => {
       ".mobile-files-sheet__segment.active::after"
     );
     const mobileFilesTabAction = getLastRuleBlock(".mobile-files-sheet__tab-action");
-    const mobileFileSearch = getLastRuleBlock(".file-tree-shell--mobile .file-tree-search");
-    const mobileFileRow = getLastRuleBlock(".file-tree-shell--mobile .tree-item");
-    const mobileFileRowSelected = getLastRuleBlock(".file-tree-shell--mobile .tree-item.selected");
+    const mobileFileSearch = getLastRuleBlock(
+      ".mobile-sheet--files .file-tree-shell--mobile .file-tree-search"
+    );
+    const mobileFileRow = getLastRuleBlock(
+      ".mobile-sheet--files .file-tree-shell--mobile .tree-item"
+    );
+    const mobileFileRowSelected = getLastRuleBlock(
+      ".mobile-sheet--files .file-tree-shell--mobile .tree-item.selected"
+    );
     const supervisorRoot = getLastRuleBlock(".mobile-supervisor-sheet__root");
     const supervisorHeader = getLastRuleBlock(".mobile-supervisor-sheet__detail-header");
     const drawerItem = getLastRuleBlock(".mobile-workspace-drawer__item");
