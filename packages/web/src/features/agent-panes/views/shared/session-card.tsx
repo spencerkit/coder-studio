@@ -113,7 +113,7 @@ export const SessionCard: FC<SessionCardProps> = ({
   return (
     <div
       ref={cardRef}
-      className={`session-card agent-pane${highlight ? " session-card--focus-pulse" : ""}`}
+      className={`session-card agent-pane${isActiveSession ? " session-card--active" : ""}${highlight ? " session-card--focus-pulse" : ""}`}
       data-session-id={sessionId}
       onClick={handleCardClick}
     >

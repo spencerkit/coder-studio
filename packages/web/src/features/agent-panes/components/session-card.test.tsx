@@ -157,6 +157,38 @@ describe("SessionCard", () => {
     );
   });
 
+  it("adds an active class when the workspace ui state targets this session", () => {
+    const { store } = createSessionStore({
+      terminalId: "term-live",
+      state: "running",
+      endedAt: undefined,
+    });
+
+    store.set(workspacesAtom, {
+      "ws-123": {
+        id: "ws-123",
+        path: "/tmp/ws-123",
+        targetRuntime: "native",
+        openedAt: Date.now() - 10_000,
+        lastActiveAt: Date.now() - 500,
+        uiState: {
+          leftPanelWidth: 320,
+          bottomPanelHeight: 240,
+          focusMode: false,
+          activeSessionId: "sess_123456",
+        },
+      },
+    });
+
+    const { container } = render(
+      <Provider store={store}>
+        <SessionCard sessionId="sess_123456" />
+      </Provider>
+    );
+
+    expect(container.querySelector(".session-card")).toHaveClass("session-card--active");
+  });
+
   it("hides header actions when showHeaderActions is false", () => {
     const { store } = createSessionStore({
       terminalId: "term-live",

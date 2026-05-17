@@ -7086,6 +7086,11 @@ textarea.input {
   box-shadow: none;
 }
 
+.session-card.session-card--active {
+  background: var(--bg-active);
+  box-shadow: inset 0 0 0 1px var(--border-focus);
+}
+
 .session-progress {
   height: 3px;
   background: rgba(108, 182, 255, 0.08);
@@ -7096,6 +7101,11 @@ textarea.input {
   border-bottom: 1px solid var(--border);
   background: var(--bg-page);
   backdrop-filter: none;
+}
+
+.session-card.session-card--active .session-header {
+  background: color-mix(in srgb, var(--bg-active) 88%, var(--bg-page) 12%);
+  border-bottom-color: var(--border-focus);
 }
 
 .session-header-left {
@@ -7116,6 +7126,10 @@ textarea.input {
   font-size: 11px;
   color: var(--text-secondary);
   letter-spacing: 0.04em;
+}
+
+.session-card.session-card--active .session-title {
+  color: var(--text-primary);
 }
 
 .session-dot {

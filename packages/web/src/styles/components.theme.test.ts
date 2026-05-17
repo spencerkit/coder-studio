@@ -236,6 +236,13 @@ describe("components.css theme-sensitive surfaces", () => {
     const mainStage = getLastRuleBlock(".workspace-main-stage");
     const sessionTerminal = getLastRuleBlock(".session-terminal");
     const sessionCard = getLastRuleBlock(".session-card");
+    const activeSessionCard = getLastRuleBlock(".session-card.session-card--active");
+    const activeSessionHeader = getLastRuleBlock(
+      ".session-card.session-card--active .session-header"
+    );
+    const activeSessionTitle = getLastRuleBlock(
+      ".session-card.session-card--active .session-title"
+    );
     const statusBar = getLastRuleBlock(".workspace-status-bar");
     const agentPanes = getLastRuleBlock(".workspace-main-stage > .agent-panes");
     const bottomPanel = getLastRuleBlock(".workspace-bottom-panel");
@@ -283,6 +290,12 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(sessionTerminal).not.toContain("rgba(11, 18, 24, 0.98)");
     expect(sessionCard).toContain("border: none");
     expect(sessionCard).not.toContain("border: 1px solid var(--border)");
+    expect(activeSessionCard).toContain("background: var(--bg-active)");
+    expect(activeSessionCard).toContain("box-shadow: inset 0 0 0 1px var(--border-focus)");
+    expect(activeSessionHeader).toContain(
+      "background: color-mix(in srgb, var(--bg-active) 88%, var(--bg-page) 12%)"
+    );
+    expect(activeSessionTitle).toContain("color: var(--text-primary)");
     expect(verticalDividerRules).toContain("width: 10px");
     expect(verticalDividerRules).not.toContain("width: 8px");
     expect(verticalDividerRules).toContain("margin-left: -5px");
