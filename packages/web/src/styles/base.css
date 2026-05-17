@@ -662,7 +662,9 @@ textarea::placeholder {
   justify-content: center;
   background: var(--accent-amber);
   color: var(--text-inverse);
-  font-size: var(--text-sm);
+  font-size: var(--type-label-size);
+  line-height: var(--type-label-line-height);
+  font-weight: var(--type-label-weight);
   z-index: var(--z-toast);
 }
 
@@ -716,24 +718,27 @@ textarea::placeholder {
 .app-loading-kicker {
   margin-bottom: var(--sp-3);
   color: var(--text-tertiary);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
+  font-size: var(--type-kicker-size);
+  line-height: var(--type-kicker-line-height);
+  font-weight: var(--type-kicker-weight);
+  letter-spacing: var(--type-kicker-letter-spacing);
   text-transform: uppercase;
 }
 
 .app-loading-title {
   margin: 0;
   color: var(--text-primary);
-  font-size: clamp(28px, 4vw, 38px);
-  font-weight: 600;
-  letter-spacing: -0.03em;
+  font-size: var(--type-display-size);
+  line-height: var(--type-display-line-height);
+  font-weight: var(--type-display-weight);
+  letter-spacing: var(--type-display-letter-spacing);
 }
 
 .app-loading-desc {
   margin-top: var(--sp-3);
   color: var(--text-secondary);
-  font-size: var(--text-sm);
-  line-height: 1.7;
+  font-size: var(--type-body-size);
+  line-height: var(--type-body-line-height);
+  font-weight: var(--type-body-weight);
   max-width: 42ch;
 }

@@ -12,8 +12,9 @@
   background: var(--bg-surface);
   color: var(--text-primary);
   box-shadow: var(--shadow-lg);
-  font-size: var(--text-xs);
-  line-height: 1.4;
+  font-size: var(--type-meta-size);
+  line-height: var(--type-meta-line-height);
+  font-weight: var(--type-meta-weight);
   pointer-events: none;
   white-space: nowrap;
 }

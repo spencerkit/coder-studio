@@ -90,7 +90,7 @@
 :global(.panel-tab.active) {
   background: var(--blue);
   color: var(--bg);
-  font-weight: 500;
+  font-weight: var(--type-label-weight);
 }
 
 :global(.worktree-tab) {

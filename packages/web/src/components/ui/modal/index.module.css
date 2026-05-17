@@ -59,8 +59,9 @@
   align-items: center;
   gap: var(--sp-2);
   margin: 0;
-  font-size: var(--text-lg);
-  font-weight: var(--font-semibold);
+  font-size: var(--type-section-title-size);
+  line-height: var(--type-section-title-line-height);
+  font-weight: var(--type-section-title-weight);
   color: var(--text-primary);
 }
 
