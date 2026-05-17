@@ -29,6 +29,19 @@ const confirmDialogStyles = readFileSync(
   `${process.cwd()}/src/components/ui/confirm-dialog/index.module.css`,
   "utf8"
 );
+const buttonStyles = readFileSync(
+  `${process.cwd()}/src/components/ui/button/index.module.css`,
+  "utf8"
+);
+const inputStyles = readFileSync(
+  `${process.cwd()}/src/components/ui/input/index.module.css`,
+  "utf8"
+);
+const textareaStyles = readFileSync(
+  `${process.cwd()}/src/components/ui/textarea/index.module.css`,
+  "utf8"
+);
+const tabsStyles = readFileSync(`${process.cwd()}/src/components/ui/tabs/index.module.css`, "utf8");
 
 function getLastGroupedRuleBlockFrom(source: string, pattern: RegExp) {
   const matches = Array.from(source.matchAll(pattern));
@@ -202,6 +215,40 @@ describe("components.css theme-sensitive surfaces", () => {
     );
     expect(getLastRuleBlockFrom(confirmDialogStyles, ".iconDanger")).toContain(
       "color: var(--icon-warning)"
+    );
+  });
+
+  it("maps text-entry and navigation primitives onto semantic typography tokens", () => {
+    expect(getLastRuleBlockFrom(buttonStyles, ".btn")).toContain(
+      "font-size: var(--type-body-strong-size)"
+    );
+    expect(getLastRuleBlockFrom(buttonStyles, ".btn")).toContain(
+      "line-height: var(--type-body-strong-line-height)"
+    );
+    expect(getLastRuleBlockFrom(buttonStyles, ".sm")).toContain(
+      "font-size: var(--type-label-size)"
+    );
+    expect(getLastRuleBlockFrom(buttonStyles, ".lg")).not.toContain("font-size:");
+
+    expect(getLastRuleBlockFrom(inputStyles, ".input")).toContain(
+      "font-size: var(--type-body-strong-size)"
+    );
+    expect(getLastRuleBlockFrom(inputStyles, ".sm")).toContain("font-size: var(--type-label-size)");
+    expect(getLastRuleBlockFrom(inputStyles, ".lg")).not.toContain("font-size:");
+
+    expect(getLastRuleBlockFrom(textareaStyles, ".input")).toContain(
+      "font-size: var(--type-body-strong-size)"
+    );
+    expect(getLastRuleBlockFrom(textareaStyles, ".lg")).not.toContain("font-size:");
+
+    expect(getLastRuleBlockFrom(tabsStyles, ":global(.panel-tab)")).toContain(
+      "font-size: var(--type-label-size)"
+    );
+    expect(getLastRuleBlockFrom(tabsStyles, ":global(.panel-tab)")).toContain(
+      "line-height: var(--type-label-line-height)"
+    );
+    expect(getLastRuleBlockFrom(tabsStyles, ":global(.worktree-tab)")).toContain(
+      "font-size: var(--type-label-size)"
     );
   });
 
