@@ -290,7 +290,7 @@ export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
     category: "sheet",
     source: "showcase",
     description:
-      "Mobile terminal fullscreen sheet using xterm placeholder chrome instead of live ws runtime.",
+      "Mobile terminal fullscreen sheet with compact tool chrome and status bar for screenshot comparison.",
     devices: ["mobile"],
     themes: allThemeIds(),
     locales: ["zh", "en"],

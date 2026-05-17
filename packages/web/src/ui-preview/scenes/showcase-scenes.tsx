@@ -1,4 +1,5 @@
 import type { FileNode, GitStatus, Supervisor, Workspace, WorktreeInfo } from "@coder-studio/core";
+import { type ReactNode, useState } from "react";
 import { ConfirmDialog, EmptyState, Notice, Sheet, ThemedIcon } from "../../components/ui";
 import { CommandPalette } from "../../features/command-palette";
 import { ToastContainer } from "../../features/notifications";
@@ -11,6 +12,7 @@ import { MobileFilesSheet } from "../../features/workspace/views/mobile/mobile-f
 import { MobileWorkspaceDrawer } from "../../features/workspace/views/mobile/mobile-workspace-drawer";
 import { BranchQuickPick } from "../../features/workspace/views/shared/branch-quick-pick";
 import { WorkspaceLaunchModal } from "../../features/workspace/views/shared/workspace-launch-modal";
+import { WorkspaceStatusBar } from "../../features/workspace/views/shared/workspace-status-bar";
 import { WorktreeManagerSurface } from "../../features/workspace/views/shared/worktree-manager-surface";
 import type { UiPreviewSceneDefinition } from "../catalog";
 import { getUiPreviewSceneMetadata } from "../scene-metadata";
@@ -574,21 +576,50 @@ export function createShowcaseScenes(): UiPreviewSceneDefinition[] {
           },
         },
       }),
-      render: () => (
-        <Sheet
-          title="Terminal"
-          kicker="Workspace"
-          fullscreen
-          bodyClassName="mobile-sheet__body--flush mobile-sheet__body--fullscreen"
-          contentClassName="mobile-sheet--terminal"
-          onClose={() => {}}
-          body={
-            <div className="mobile-terminal-sheet mobile-terminal-sheet--fullscreen">
-              <TerminalPanel chrome="mobile-fullscreen" />
-            </div>
-          }
-        />
-      ),
+      render: () => {
+        const MobileTerminalPreviewSheet = () => {
+          const [headerAction, setHeaderAction] = useState<ReactNode>(null);
+
+          return (
+            <Sheet
+              title="Terminal"
+              kicker={null}
+              fullscreen
+              bodyClassName="mobile-sheet__body--flush mobile-sheet__body--fullscreen"
+              contentClassName="mobile-sheet--terminal"
+              headerAction={headerAction}
+              onClose={() => {}}
+              body={
+                <div className="mobile-terminal-sheet mobile-terminal-sheet--fullscreen">
+                  <TerminalPanel
+                    chrome="mobile-fullscreen"
+                    onMobileHeaderActionsChange={setHeaderAction}
+                  />
+                </div>
+              }
+              footer={
+                <WorkspaceStatusBar
+                  workspaceId={workspace.id}
+                  gitState={{
+                    branch: "feature/mobile-terminal",
+                    ahead: 0,
+                    behind: 0,
+                    staged: [],
+                    modified: [
+                      { path: "packages/web/src/styles/components.css", status: "modified" },
+                    ],
+                    untracked: [],
+                    deleted: [],
+                  }}
+                  flush
+                />
+              }
+            />
+          );
+        };
+
+        return <MobileTerminalPreviewSheet />;
+      },
     }),
     scene("mobile-supervisor-sheet", {
       router: () => ({ initialEntries: ["/workspace"], path: "/workspace" }),

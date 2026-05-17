@@ -160,6 +160,29 @@ describe("UI preview catalog", () => {
       expect(screen.queryByText("Restoring terminal output...")).not.toBeInTheDocument();
     });
     expect(document.querySelector(".mobile-sheet--terminal")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "New Terminal" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Close Terminal" })).toBeInTheDocument();
+    expect(
+      document.querySelector(".mobile-sheet--terminal .terminal-toolbar-mobile-row")
+    ).toBeTruthy();
+    expect(
+      document.querySelector(
+        '.mobile-sheet--terminal .page-header__actions [aria-label="New Terminal"]'
+      )
+    ).toBeNull();
+    expect(
+      document.querySelector(
+        '.mobile-sheet--terminal .terminal-toolbar [aria-label="New Terminal"]'
+      )
+    ).toBeTruthy();
+    expect(document.querySelector(".mobile-sheet--terminal .workspace-status-bar")).toBeTruthy();
+    expect(document.querySelector(".mobile-sheet--terminal .terminal-toolbar-left")).toBeNull();
+  });
+
+  it("captures the mobile terminal showcase from the fullscreen terminal sheet root", () => {
+    const scene = getUiPreviewScene("mobile-terminal-sheet");
+    expect(scene?.capture?.selector).toBe(".mobile-sheet--terminal");
+    expect(scene?.devices).toEqual(["mobile"]);
   });
 
   it("keeps mobile terminal showcase history in replay state instead of preloading live output", () => {

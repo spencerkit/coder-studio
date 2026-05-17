@@ -1459,19 +1459,18 @@
 }
 
 .xterm-host-shell--mobile-input {
-  gap: var(--sp-1);
+  gap: 0;
 }
 
 .mobile-terminal-input-bar {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 0;
   flex-shrink: 0;
   min-width: 0;
-  padding: 2px var(--sp-2) 2px;
-  border-top: 1px solid color-mix(in srgb, var(--border) 36%, transparent);
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
-  background: color-mix(in srgb, var(--bg-page) 90%, var(--bg-surface) 10%);
+  padding: 4px var(--sp-2) 3px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 68%, transparent);
+  background: color-mix(in srgb, var(--bg-page) 92%, var(--bg-terminal) 8%);
 }
 
 .mobile-terminal-input-bar__actions {
@@ -1479,8 +1478,9 @@
   flex: 0 0 auto;
   align-items: center;
   gap: 3px;
-  padding-right: 4px;
-  border-right: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+  margin-right: var(--sp-1);
+  padding-right: var(--sp-1);
+  border-right: 1px solid color-mix(in srgb, var(--border) 56%, transparent);
 }
 
 .mobile-terminal-input-bar__action {
@@ -1490,12 +1490,12 @@
   flex: 0 0 auto;
   min-height: 20px;
   padding: 0 6px;
-  border: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
-  border-radius: 3px;
-  background: color-mix(in srgb, var(--bg-page) 70%, var(--bg-surface) 30%);
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--bg-page) 78%, var(--bg-surface) 22%);
   color: var(--text-secondary);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 9px;
   font-weight: var(--font-medium);
   line-height: 1;
   letter-spacing: 0.02em;
@@ -1508,7 +1508,7 @@
   min-width: 0;
   flex: 1 1 auto;
   justify-content: flex-start;
-  gap: 2px;
+  gap: 3px;
   overflow-x: auto;
   padding: 0;
   border: none;
@@ -1530,12 +1530,12 @@
   min-width: 0;
   min-height: 20px;
   padding: 0 5px;
-  border: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
-  border-radius: 3px;
-  background: color-mix(in srgb, var(--bg-page) 74%, var(--bg-surface) 26%);
+  border: 1px solid color-mix(in srgb, var(--border) 68%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--bg-page) 80%, var(--bg-surface) 20%);
   color: var(--text-secondary);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 9px;
   font-weight: var(--font-medium);
   line-height: 1;
   letter-spacing: 0.02em;
@@ -1546,18 +1546,18 @@
 .mobile-terminal-input-bar__shift,
 .mobile-terminal-input-bar__key[aria-label="Escape"],
 .mobile-terminal-input-bar__key[aria-label="Tab"] {
-  min-width: 34px;
+  min-width: 28px;
 }
 
 .mobile-terminal-input-bar__key[aria-label="Enter"] {
-  min-width: 40px;
+  min-width: 34px;
 }
 
 .mobile-terminal-input-bar__key[aria-label="Up arrow"],
 .mobile-terminal-input-bar__key[aria-label="Left arrow"],
 .mobile-terminal-input-bar__key[aria-label="Down arrow"],
 .mobile-terminal-input-bar__key[aria-label="Right arrow"] {
-  min-width: 24px;
+  min-width: 20px;
   padding: 0;
 }
 
@@ -8444,7 +8444,7 @@ textarea.input {
     gap: var(--sp-3);
     padding: var(--sp-2) var(--sp-2) var(--sp-3);
     border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
-    border-radius: 12px;
+    border-radius: var(--radius-xl);
     background: linear-gradient(
       180deg,
       color-mix(in srgb, var(--bg-surface) 98%, transparent) 0%,
@@ -8511,7 +8511,7 @@ textarea.input {
     min-height: 44px;
     padding: 0 var(--sp-3);
     border: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
-    border-radius: 14px;
+    border-radius: var(--radius-md);
     background: color-mix(in srgb, var(--bg-surface) 90%, transparent);
     color: var(--text-primary);
     text-align: left;
@@ -8661,7 +8661,7 @@ textarea.input {
     padding: var(--sp-4) var(--sp-4) var(--sp-4) calc(var(--sp-4) + 2px);
     border-top: none;
     border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
-    border-radius: 24px;
+    border-radius: var(--radius-xl);
     background: linear-gradient(
       180deg,
       color-mix(in srgb, var(--bg-surface) 94%, transparent) 0%,
@@ -8968,7 +8968,7 @@ textarea.input {
     gap: 4px;
     padding: 8px var(--sp-2) 7px;
     border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
-    border-radius: 18px;
+    border-radius: var(--radius-xl);
     background: color-mix(in srgb, var(--bg-surface) 74%, transparent);
     color: var(--text-tertiary);
     transition:
@@ -9045,8 +9045,8 @@ textarea.input {
       calc(var(--sp-5) + var(--mobile-safe-bottom)) calc(var(--mobile-safe-left) + var(--sp-4));
     border: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
     border-bottom: none;
-    border-top-left-radius: 16px;
-    border-top-right-radius: 16px;
+    border-top-left-radius: var(--radius-xl);
+    border-top-right-radius: var(--radius-xl);
     background: var(--bg-surface);
     box-shadow: none;
     transform: translateY(18px);
@@ -9090,8 +9090,8 @@ textarea.input {
     max-height: calc(100dvh - var(--sp-4));
     border: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
     border-bottom: none;
-    border-top-left-radius: 12px;
-    border-top-right-radius: 12px;
+    border-top-left-radius: var(--radius-xl);
+    border-top-right-radius: var(--radius-xl);
     box-shadow: none;
   }
 
@@ -9232,7 +9232,7 @@ textarea.input {
     min-height: 0;
     flex-direction: column;
     padding: var(--sp-3);
-    border-radius: 16px;
+    border-radius: var(--radius-xl);
     background: color-mix(in srgb, var(--bg-surface) 92%, var(--bg-page));
     box-shadow:
       inset 0 1px 0 color-mix(in srgb, var(--fg-white) 8%, transparent),
@@ -9277,7 +9277,7 @@ textarea.input {
     width: 100%;
     padding: var(--sp-2);
     border: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
-    border-radius: 16px;
+    border-radius: var(--radius-xl);
     background: color-mix(in srgb, var(--bg-surface) 96%, var(--bg-page));
     box-shadow: inset 0 1px 0 color-mix(in srgb, var(--fg-white) 6%, transparent);
   }
@@ -9290,7 +9290,7 @@ textarea.input {
     width: 100%;
     min-height: 44px;
     border: 1px solid color-mix(in srgb, var(--accent-blue) 52%, transparent);
-    border-radius: 12px;
+    border-radius: var(--radius-md);
     background: color-mix(in srgb, var(--accent-blue) 86%, var(--bg-surface));
     font-size: var(--text-sm);
     box-shadow: none;
@@ -9380,7 +9380,7 @@ textarea.input {
     padding: 0 var(--sp-3);
     min-height: 46px;
     border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
-    border-radius: 16px;
+    border-radius: var(--radius-xl);
     background: color-mix(in srgb, var(--bg-surface) 88%, var(--bg-page));
     box-shadow:
       inset 0 1px 0 color-mix(in srgb, var(--fg-white) 5%, transparent),
@@ -9418,7 +9418,7 @@ textarea.input {
     gap: var(--sp-3);
     padding: var(--sp-3);
     border: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
-    border-radius: 16px;
+    border-radius: var(--radius-xl);
     background: color-mix(in srgb, var(--bg-surface) 74%, transparent);
     box-shadow: inset 0 1px 0 color-mix(in srgb, var(--fg-white) 4%, transparent);
   }
@@ -9642,30 +9642,25 @@ textarea.input {
   }
 
   .mobile-terminal-sheet {
-    padding: var(--sp-3) var(--sp-3) 0;
-    gap: var(--sp-3);
-    background: linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--bg-surface) 96%, transparent) 0%,
-      var(--bg-page) 100%
-    );
+    padding: 0;
+    gap: 0;
+    background: var(--bg-page);
   }
 
   .mobile-terminal-sheet .bottom-terminal {
     overflow: hidden;
     border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
-    border-radius: 20px 20px 0 0;
-    background: color-mix(in srgb, var(--bg-terminal) 94%, var(--bg-page));
+    border-radius: 0;
+    background: color-mix(in srgb, var(--bg-terminal) 96%, var(--bg-page));
     box-shadow: none;
   }
 
   .mobile-terminal-sheet .terminal-toolbar {
-    border-top-left-radius: 20px;
-    border-top-right-radius: 20px;
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
   }
 
   .mobile-sheet--files,
-  .mobile-sheet--terminal,
   .mobile-sheet--launch {
     background: linear-gradient(
       180deg,
@@ -9683,6 +9678,11 @@ textarea.input {
     white-space: nowrap;
     font-size: var(--text-lg);
     line-height: 1.2;
+  }
+
+  .mobile-sheet--terminal,
+  .mobile-sheet--terminal .mobile-sheet__footer {
+    background: var(--bg-page);
   }
 
   .mobile-sheet--fullscreen .page-header__kicker {
@@ -9761,7 +9761,7 @@ textarea.input {
   .mobile-sheet--files .workspace-git-view {
     overflow: hidden;
     border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
-    border-radius: 18px 18px 0 0;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
     background: color-mix(in srgb, var(--bg-surface) 90%, var(--bg-page));
     box-shadow:
       inset 0 1px 0 color-mix(in srgb, var(--fg-white) 5%, transparent),
@@ -9774,7 +9774,7 @@ textarea.input {
 
   .mobile-sheet--files .workspace-git-editor {
     border: none;
-    border-radius: 18px 18px 0 0;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
     box-shadow: none;
   }
 
@@ -9793,30 +9793,19 @@ textarea.input {
   }
 
   .bottom-terminal--mobile-fullscreen .terminal-toolbar {
-    min-height: 36px;
-    padding: 5px var(--sp-3) 3px;
+    min-height: 32px;
+    padding: 0 var(--sp-2);
     border-radius: 0;
-    border-bottom-color: color-mix(in srgb, var(--border) 74%, transparent);
-    background: linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--bg-page) 90%, var(--bg-surface) 10%) 0%,
-      color-mix(in srgb, var(--bg-page) 96%, var(--bg-surface) 4%) 100%
-    );
-    gap: var(--sp-2);
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+    background: color-mix(in srgb, var(--bg-page) 94%, var(--bg-surface) 6%);
+    gap: 0;
   }
 
-  .bottom-terminal--mobile-fullscreen .terminal-toolbar-left::before {
-    display: none;
-  }
-
-  .bottom-terminal--mobile-fullscreen .terminal-toolbar-left {
-    flex: 0 0 auto;
+  .bottom-terminal--mobile-fullscreen .terminal-toolbar-mobile-row {
+    display: flex;
+    align-items: center;
+    width: 100%;
     min-width: 0;
-  }
-
-  .bottom-terminal--mobile-fullscreen .terminal-toolbar-right {
-    width: auto;
-    justify-content: flex-end;
     gap: 4px;
   }
 
@@ -9824,7 +9813,7 @@ textarea.input {
     min-width: 0;
     flex: 1;
     position: relative;
-    max-width: min(100%, 196px);
+    max-width: none;
   }
 
   .bottom-terminal--mobile-fullscreen .terminal-selector-btn {
@@ -9834,12 +9823,12 @@ textarea.input {
     min-height: 24px;
     min-width: 0;
     align-items: center;
-    gap: var(--sp-2);
-    padding: 0 6px;
+    gap: 4px;
+    padding: 0 7px;
     justify-content: space-between;
-    border-radius: 999px;
-    border-color: color-mix(in srgb, var(--border) 64%, transparent);
-    background: color-mix(in srgb, var(--bg-page) 70%, var(--bg-surface) 30%);
+    border-radius: var(--radius-sm);
+    border-color: color-mix(in srgb, var(--border) 66%, transparent);
+    background: color-mix(in srgb, var(--bg-page) 82%, var(--bg-surface) 18%);
     color: var(--text-secondary);
     font-family: var(--font-mono);
     font-size: var(--text-xs);
@@ -9867,6 +9856,18 @@ textarea.input {
     transform-origin: center;
   }
 
+  .bottom-terminal--mobile-fullscreen .terminal-selector-btn--static {
+    cursor: default;
+  }
+
+  .bottom-terminal--mobile-fullscreen .terminal-toolbar-mobile-placeholder {
+    flex: 1;
+    min-width: 0;
+    height: 24px;
+    border: none;
+    background: transparent;
+  }
+
   .bottom-terminal--mobile-fullscreen .bottom-terminal-tabs {
     padding-inline: var(--sp-3);
     border-bottom-color: color-mix(in srgb, var(--border) 74%, transparent);
@@ -9874,7 +9875,7 @@ textarea.input {
   }
 
   .bottom-terminal--mobile-fullscreen .bottom-terminal-xterm {
-    padding: 0 var(--sp-2) var(--sp-2);
+    padding: 0 var(--sp-2) var(--sp-1);
   }
 
   .bottom-terminal--mobile-fullscreen .bottom-terminal-content {
@@ -9888,9 +9889,9 @@ textarea.input {
   .bottom-terminal--mobile-fullscreen .panel-toolbar-btn {
     width: 24px;
     height: 24px;
-    border-radius: 999px;
-    border: 1px solid color-mix(in srgb, var(--border) 46%, transparent);
-    background: color-mix(in srgb, var(--bg-page) 74%, var(--bg-surface) 26%);
+    border-radius: var(--radius-sm);
+    border: 1px solid color-mix(in srgb, var(--border) 54%, transparent);
+    background: color-mix(in srgb, var(--bg-page) 80%, var(--bg-surface) 20%);
     color: var(--text-tertiary);
     box-shadow: none;
   }
@@ -9938,7 +9939,7 @@ textarea.input {
     padding: var(--sp-4);
     padding-bottom: var(--sp-5);
     border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
-    border-radius: 22px 22px 0 0;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
     background: color-mix(in srgb, var(--bg-surface) 90%, var(--bg-page));
     box-shadow:
       inset 0 1px 0 color-mix(in srgb, var(--fg-white) 5%, transparent),
@@ -9957,7 +9958,7 @@ textarea.input {
     width: 100%;
     padding: var(--sp-2);
     border: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
-    border-radius: 16px;
+    border-radius: var(--radius-xl);
     background: color-mix(in srgb, var(--bg-surface) 96%, var(--bg-page));
     box-shadow: inset 0 1px 0 color-mix(in srgb, var(--fg-white) 6%, transparent);
   }
@@ -9987,7 +9988,7 @@ textarea.input {
     gap: var(--sp-3);
     padding: var(--sp-3);
     border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
-    border-radius: 18px;
+    border-radius: var(--radius-xl);
     background: linear-gradient(
       180deg,
       color-mix(in srgb, var(--bg-surface) 90%, transparent) 0%,
@@ -10018,7 +10019,7 @@ textarea.input {
     flex-shrink: 0;
     width: 36px;
     height: 36px;
-    border-radius: 12px;
+    border-radius: var(--radius-md);
     background: color-mix(in srgb, var(--icon-surface-subtle) 84%, var(--bg-surface));
   }
 
@@ -10147,7 +10148,7 @@ textarea.input {
     gap: var(--sp-2);
     padding: var(--sp-2);
     border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
-    border-radius: 18px;
+    border-radius: var(--radius-xl);
     background: linear-gradient(
       180deg,
       color-mix(in srgb, var(--bg-surface) 88%, transparent) 0%,
@@ -10277,7 +10278,7 @@ textarea.input {
     min-height: 46px;
     padding: 0 var(--sp-3);
     border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
-    border-radius: 16px;
+    border-radius: var(--radius-md);
     background: color-mix(in srgb, var(--bg-surface) 80%, transparent);
     color: var(--text-primary);
     font-size: 12px;
@@ -10427,7 +10428,7 @@ textarea.input {
     max-width: none;
     padding: var(--sp-7) var(--sp-5);
     gap: var(--sp-5);
-    border-radius: 28px;
+    border-radius: var(--radius-xl);
   }
 
   .welcome-card--mobile .welcome-card__actions {
@@ -10459,7 +10460,7 @@ textarea.input {
     align-items: flex-start;
     min-height: 0;
     padding: var(--sp-4);
-    border-radius: 20px;
+    border-radius: var(--radius-xl);
     text-align: left;
   }
 
@@ -10471,7 +10472,7 @@ textarea.input {
     width: 100%;
     justify-content: center;
     padding-inline: var(--sp-5);
-    border-radius: 18px;
+    border-radius: var(--radius-md);
   }
 
   .welcome-card--mobile .welcome-link {
@@ -10489,7 +10490,7 @@ textarea.input {
     width: 100%;
     padding: var(--sp-7) var(--sp-5);
     gap: var(--sp-5);
-    border-radius: 28px;
+    border-radius: var(--radius-xl);
   }
 
   .auth-card-shell--mobile .welcome-title {
@@ -10505,7 +10506,7 @@ textarea.input {
 
   .auth-card-shell--mobile .auth-status-panel {
     padding: var(--sp-4);
-    border-radius: 20px;
+    border-radius: var(--radius-xl);
   }
 
   .settings-page--mobile {

@@ -1,5 +1,5 @@
 import { useAtomValue, useSetAtom } from "jotai";
-import { type CSSProperties, useEffect, useRef, useState } from "react";
+import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   lastViewedTargetAtom,
@@ -105,6 +105,7 @@ export function WorkspaceMobileView() {
   );
   const [mobileFileCollapseVersion, setMobileFileCollapseVersion] = useState(0);
   const [workspaceLaunchOpen, setWorkspaceLaunchOpen] = useState(false);
+  const [mobileTerminalHeaderAction, setMobileTerminalHeaderAction] = useState<ReactNode>(null);
   const keyboardInset = useVisualViewportInset();
   const layoutMode = useMobileLayoutMode();
   const motionMode = useMobileMotionMode();
@@ -279,7 +280,10 @@ export function WorkspaceMobileView() {
             title: t("label.terminal"),
             body: (
               <div className="mobile-terminal-sheet mobile-terminal-sheet--fullscreen">
-                <TerminalPanel chrome="mobile-fullscreen" />
+                <TerminalPanel
+                  chrome="mobile-fullscreen"
+                  onMobileHeaderActionsChange={setMobileTerminalHeaderAction}
+                />
               </div>
             ),
             footer: activeWorkspaceId ? (
@@ -291,6 +295,7 @@ export function WorkspaceMobileView() {
               />
             ) : null,
             kicker: null,
+            headerAction: mobileTerminalHeaderAction,
             fullscreen: true,
             bodyClassName: "mobile-sheet__body--flush mobile-sheet__body--fullscreen",
             contentClassName: "mobile-sheet--terminal",
