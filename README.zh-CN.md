@@ -4,7 +4,7 @@
 
 # Coder Studio
 
-**一个浏览器里的 AI 编程工作台，适合在桌面、平板和手机之间切换的开发者。**
+**一个浏览器里的 vibe coding 工作台，适合在桌面、平板和手机之间切换的开发者。**
 
 在同一个工作台里运行 Claude Code 和 Codex，让终端、文件、Git 视图和 AI 会话跟着你在不同设备间延续。
 
@@ -21,13 +21,33 @@
 
 [![工作区预览](docs/help/assets/screenshot-desktop-workspace-full.png)](docs/help/assets/screenshot-desktop-workspace-full.png)
 
-<div align="center">预览这个为 AI 编程、Supervisor 监督和跨设备切换而设计的完整工作区布局。</div>
+<div align="center">预览这个为 vibe coding、Supervisor 监督和跨设备切换而设计的完整工作区布局。</div>
 
 ## 为什么它不一样
 
 - **一个浏览器里完成 AI 编程工作流** — 把终端、文件、Git 和 AI 会话放到同一个工作台。
 - **真正为设备切换而设计** — 在桌面端开始，在平板继续，用手机随时查看 Agent 进度。
 - **目标驱动的多轮调度** — 让 Supervisor 接管长任务推进，你不必全程盯守每一轮输出，减少机械重复的人工催促，并获得更稳定的执行效果。
+
+## 为什么选择 Coder Studio？
+
+vibe coding agent 已经很强，但原始工作流仍然是割裂的：
+
+- Agent 跑在一个终端里
+- 文件和 diff 在另一个编辑器里
+- 验证命令散落在不同 shell tab
+- 长任务离开电脑后很难继续观察
+- 手机访问通常只能靠 SSH 或远程桌面
+
+Coder Studio 把这些分散的环节收进同一个本地浏览器工作台。
+
+| 痛点 | 没有 Coder Studio | 使用 Coder Studio |
+|------|-------------------|-------------------|
+| 长时间 Agent 任务 | 盯着终端，或者回来后重新拼上下文 | 会话、终端输出、文件和 Git 变更都在同一个工作区里 |
+| 跨设备继续 | SSH、远程桌面，或在另一台机器重新配置 | 桌面、平板、手机重新打开同一个本地工作区 |
+| 审阅 AI 改动 | 在终端、编辑器、Git 工具之间切换 | 在 Agent 会话旁边直接查看文件和 diff |
+| 多 Agent 并行 | 多个终端窗口和历史记录分散管理 | Claude 和 Codex 会话在同一个工作区里并行管理 |
+| 本地优先 | 把环境迁到云 IDE 或远程 VM | 运行时和项目文件留在自己的机器上 |
 
 ## 快速开始
 
@@ -123,6 +143,8 @@ coder-studio open
 | [常用工作流](docs/help/workflows.md) | 任务式教程 |
 | [故障排除](docs/help/troubleshooting.md) | 常见问题和修复 |
 | [CLI 参考](docs/help/cli.md) | 命令行选项 |
+| [GitHub Wiki 源文件](docs/wiki/README.md) | 产品定位、安全说明和工作流 Wiki 页面 |
+| [AI Coding 术语](docs/wiki/AI-Coding-Terms.md) | Vibe coding、agentic harness、eval harness，以及 Coder Studio 的定位 |
 
 ---
 

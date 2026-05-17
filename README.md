@@ -4,7 +4,7 @@
 
 # Coder Studio
 
-**A browser-based AI coding workspace for developers who move between desktop, tablet, and phone.**
+**A browser-based vibe coding workspace for developers who move between desktop, tablet, and phone.**
 
 Run Claude Code and Codex in one workspace. Keep your terminal, files, Git view, and AI sessions available from any device.
 
@@ -21,13 +21,33 @@ Run Claude Code and Codex in one workspace. Keep your terminal, files, Git view,
 
 [![Workspace Preview](docs/help/assets/screenshot-desktop-workspace-full.png)](docs/help/assets/screenshot-desktop-workspace-full.png)
 
-<div align="center">Preview the full workspace layout built for AI coding, supervision, and device switching.</div>
+<div align="center">Preview the full workspace layout built for vibe coding, supervision, and device switching.</div>
 
 ## Why It Feels Different
 
-- **One browser workspace for AI coding** — Keep terminal, files, Git, and AI sessions in one place.
+- **One browser workspace for vibe coding** — Keep terminal, files, Git, and agent sessions in one place.
 - **Built for device switching** — Start on desktop, continue on tablet, and check progress from your phone.
 - **Objective-driven multi-step orchestration** — Let Supervisor steer long-running AI tasks so you do not have to babysit every turn, reduce repetitive manual prompting, and get more consistent outcomes.
+
+## Why Coder Studio?
+
+Vibe coding agents are powerful, but the raw workflow is still fragmented:
+
+- the agent runs in one terminal
+- files and diffs live in another editor
+- verification happens in separate shell tabs
+- long-running tasks are hard to monitor away from your desk
+- mobile access usually means SSH or remote desktop
+
+Coder Studio turns that scattered workflow into one local browser workspace.
+
+| Pain | Without Coder Studio | With Coder Studio |
+|------|----------------------|-------------------|
+| Long agent tasks | Watch a terminal or come back later and reconstruct context | Keep sessions, terminal output, files, and Git changes visible in one workspace |
+| Cross-device work | Use SSH, remote desktop, or rebuild context on another machine | Reopen the same local workspace from desktop, tablet, or phone |
+| Reviewing AI changes | Jump between terminal, editor, and Git tools | Inspect files and diffs beside the agent session |
+| Multiple agents | Manage separate terminal windows and histories | Run Claude and Codex sessions side by side in one workspace |
+| Local-first control | Move work into a hosted IDE or cloud VM | Keep the runtime and project files on your own machine |
 
 ## Quick Start
 
@@ -123,6 +143,8 @@ The same workspace URL works across all devices — interface adapts automatical
 | [Common Workflows](docs/help/workflows.md) | Task-based tutorials |
 | [Troubleshooting](docs/help/troubleshooting.md) | FAQ and known issues |
 | [CLI Reference](docs/help/cli.md) | Command-line options |
+| [GitHub Wiki Source](docs/wiki/README.md) | Wiki pages for product positioning, security, and workflows |
+| [AI Coding Terms](docs/wiki/AI-Coding-Terms.md) | Vibe coding, agentic harnesses, eval harnesses, and where Coder Studio fits |
 
 ---
 
