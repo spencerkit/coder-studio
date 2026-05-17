@@ -941,19 +941,24 @@ describe("SettingsPage", () => {
     expect(routerMocks.navigate).toHaveBeenCalledWith("/");
   });
 
-  it("renders a compact desktop header with only the settings title", async () => {
+  it("renders the desktop settings header through the shared PageHeader contract", async () => {
     const sendCommand = vi.fn().mockResolvedValue({});
     const store = createConnectedStore(sendCommand);
 
     renderSettingsPage(store);
 
-    const desktopHeader = document.querySelector(".settings-header__desktop") as HTMLElement | null;
+    const desktopHeader = document.querySelector(
+      ".settings-header .page-header"
+    ) as HTMLElement | null;
     const mobileHeader = document.querySelector(
       ".settings-header .mobile-page-header"
     ) as HTMLElement | null;
-    const headerCopy = document.querySelector(".settings-header__copy") as HTMLElement | null;
+    const headerCopy = document.querySelector(
+      ".settings-header .page-header__copy"
+    ) as HTMLElement | null;
 
     expect(desktopHeader).not.toBeNull();
+    expect(desktopHeader).toHaveClass("page-header--secondary");
     expect(mobileHeader).toBeNull();
     expect(screen.getByRole("heading", { name: "设置" })).toBeInTheDocument();
     expect(
@@ -962,7 +967,7 @@ describe("SettingsPage", () => {
     expect(headerCopy).not.toBeNull();
     expect(within(headerCopy as HTMLElement).queryByText("Coder Studio")).toBeNull();
     expect(within(headerCopy as HTMLElement).queryByText("设置已自动保存")).toBeNull();
-    expect(document.querySelector(".settings-header__section-pill")).toBeNull();
+    expect(document.querySelector(".settings-header__desktop")).toBeNull();
   });
 
   it("renders a mobile category list and returns from detail content to the settings root", async () => {

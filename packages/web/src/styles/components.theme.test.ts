@@ -725,9 +725,7 @@ describe("components.css theme-sensitive surfaces", () => {
   it("keeps settings navigation aligned with desktop editor chrome on both desktop and mobile", () => {
     const settingsPage = getLastRuleBlock(".settings-page");
     const baseSettingsHeader = getRuleBlocksFrom(stylesheet, ".settings-header")[0];
-    const desktopSettingsHeader = getLastRuleBlock(".settings-header__desktop");
-    const desktopSettingsCopy = getLastRuleBlock(".settings-header__copy");
-    const desktopSettingsTitle = getLastRuleBlock(".settings-header__title");
+    const desktopSettingsHeader = getLastRuleBlock(".page-header--secondary");
     const settingsBody = getLastRuleBlock(".settings-body");
     const settingsSidebar = getLastRuleBlock(".settings-sidebar");
     const settingsContent = getLastRuleBlock(".settings-content");
@@ -757,16 +755,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(baseSettingsHeader).toContain("background: var(--bg-surface)");
     expect(baseSettingsHeader).toContain("border-bottom: 1px solid var(--border)");
     expect(baseSettingsHeader).toContain("padding: var(--sp-1) var(--sp-4)");
-    expect(desktopSettingsHeader).toContain("width: 100%");
-    expect(desktopSettingsHeader).toContain("margin: 0");
-    expect(desktopSettingsHeader).toContain("display: flex");
-    expect(desktopSettingsHeader).toContain("align-items: center");
-    expect(desktopSettingsHeader).toContain("justify-content: flex-start");
-    expect(desktopSettingsCopy).toContain("justify-content: flex-start");
-    expect(desktopSettingsCopy).toContain("flex: 0 1 auto");
-    expect(desktopSettingsCopy).toContain("gap: 0");
-    expect(desktopSettingsTitle).toContain("font-size: 18px");
-    expect(desktopSettingsTitle).toContain("line-height: 1.05");
+    expect(desktopSettingsHeader).toContain("min-height: 48px");
     expect(settingsBody).toContain("align-items: stretch");
     expect(settingsBody).toContain("background: var(--bg-page)");
     expect(settingsSidebar).toContain("background: var(--bg-panel)");

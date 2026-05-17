@@ -743,36 +743,6 @@
   border-bottom: 1px solid var(--border);
 }
 
-.settings-header__desktop {
-  width: 100%;
-  margin: 0;
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: var(--sp-3);
-}
-
-.settings-header__back {
-  flex-shrink: 0;
-  min-height: 30px;
-  font-size: var(--text-xs);
-}
-
-.settings-header__copy {
-  min-width: 0;
-  display: flex;
-  flex: 0 1 auto;
-  flex-direction: column;
-  justify-content: flex-start;
-  gap: 0;
-}
-
-.settings-header__title {
-  margin: 0;
-  font-size: 18px;
-  line-height: 1.05;
-}
-
 .settings-body {
   display: flex;
   flex: 1;
