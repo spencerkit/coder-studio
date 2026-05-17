@@ -8597,14 +8597,15 @@ textarea.input {
     flex-direction: column;
     min-height: 0;
     overflow: hidden;
-    padding: var(--sp-2) var(--mobile-safe-right) 0 var(--mobile-safe-left);
+    padding: 0;
+    border-top: 1px solid color-mix(in srgb, var(--border) 42%, transparent);
   }
 
   .mobile-shell__content {
     display: flex;
     flex-direction: column;
     flex: 1;
-    gap: var(--sp-3);
+    gap: 4px;
     min-height: 0;
     overflow: hidden;
   }
@@ -8633,6 +8634,10 @@ textarea.input {
     flex: 1 1 auto;
     min-height: 0;
     min-width: 0;
+  }
+
+  .mobile-shell__agent-stage .session-progress {
+    display: none;
   }
 
   .mobile-shell__agent-stage .xterm-host-shell,
@@ -8820,8 +8825,11 @@ textarea.input {
   }
 
   .mobile-shell__agent-stage .session-header {
-    padding: var(--sp-2) calc(var(--mobile-safe-right) + var(--sp-3)) var(--sp-2)
+    padding: 4px calc(var(--mobile-safe-right) + var(--sp-3)) 4px
       calc(var(--mobile-safe-left) + var(--sp-3));
+    gap: var(--sp-2);
+    background: color-mix(in srgb, var(--bg-page) 96%, var(--bg-surface) 4%);
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
   }
 
   .mobile-shell__agent-stage .session-header-left,
@@ -8830,8 +8838,8 @@ textarea.input {
     min-width: 0;
   }
 
-  .mobile-shell__agent-stage .session-header {
-    gap: var(--sp-2);
+  .mobile-shell__agent-stage .session-header-left {
+    gap: 6px;
   }
 
   .mobile-shell__agent-stage .session-header-right {
@@ -8842,7 +8850,7 @@ textarea.input {
   .mobile-shell__agent-stage .session-title-row {
     display: flex;
     align-items: center;
-    gap: var(--sp-2);
+    gap: 6px;
     min-width: 0;
     flex-wrap: nowrap;
   }
@@ -8857,20 +8865,26 @@ textarea.input {
 
   .mobile-shell__agent-stage .session-provider-badge,
   .mobile-shell__agent-stage .session-state-badge {
+    height: 15px;
+    padding: 0 5px;
+    border-radius: 3px;
+    font-size: 10px;
     flex-shrink: 0;
     max-width: 100%;
   }
 
   .mobile-shell__agent-stage .mobile-supervisor-badge {
-    min-height: 32px;
+    min-height: 26px;
     max-width: 100%;
-    padding: 0 var(--sp-2);
-    border-radius: var(--radius-lg);
+    padding: 0 8px;
+    border-radius: 4px;
+    border-color: color-mix(in srgb, var(--border) 78%, var(--accent-blue) 22%);
+    background: color-mix(in srgb, var(--accent-blue) 6%, var(--bg-page) 94%);
   }
 
   .mobile-shell__agent-stage .mobile-supervisor-badge__label {
     max-width: 100%;
-    font-size: var(--text-xs);
+    font-size: 11px;
   }
 
   .mobile-dock {
@@ -10719,7 +10733,7 @@ textarea.input {
   }
 
   .mobile-shell--landscape-compact .mobile-shell__viewport {
-    padding-top: var(--sp-1);
+    padding-top: 0;
     padding-bottom: 0;
   }
 

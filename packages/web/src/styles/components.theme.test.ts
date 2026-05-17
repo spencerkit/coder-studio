@@ -1231,6 +1231,46 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(badges).toContain("max-width: 100%");
   });
 
+  it("keeps the mobile active session chrome visually flat and aligned with the shell header", () => {
+    const viewport = getLastRuleBlock(".mobile-shell__viewport");
+    const content = getLastRuleBlock(".mobile-shell__content");
+    const landscapeViewport = getLastRuleBlock(
+      ".mobile-shell--landscape-compact .mobile-shell__viewport"
+    );
+    const sessionCard = getLastRuleBlock(".mobile-shell__agent-stage > .session-card");
+    const progress = getLastRuleBlock(".mobile-shell__agent-stage .session-progress");
+    const header = getLastRuleBlock(".mobile-shell__agent-stage .session-header");
+    const headerLeft = getLastRuleBlock(".mobile-shell__agent-stage .session-header-left");
+    const titleRow = getLastRuleBlock(".mobile-shell__agent-stage .session-title-row");
+    const badges = getLastGroupedRuleBlock(
+      /\.mobile-shell__agent-stage \.session-provider-badge,\s*\.mobile-shell__agent-stage \.session-state-badge\s*\{([^}]*)\}/g
+    );
+    const supervisorBadge = getLastRuleBlock(".mobile-shell__agent-stage .mobile-supervisor-badge");
+    const supervisorLabel = getLastRuleBlock(
+      ".mobile-shell__agent-stage .mobile-supervisor-badge__label"
+    );
+
+    expect(viewport).toContain("padding: 0");
+    expect(viewport).toContain("border-top:");
+    expect(viewport).not.toContain("padding: 4px");
+    expect(landscapeViewport).toContain("padding-top: 0");
+    expect(content).toContain("gap: 4px");
+    expect(sessionCard).toContain("border-radius: 0");
+    expect(sessionCard).toContain("box-shadow: none");
+    expect(progress).toContain("display: none");
+    expect(header).toContain("padding: 4px");
+    expect(header).toContain("border-bottom:");
+    expect(header).not.toContain("linear-gradient(");
+    expect(headerLeft).toContain("gap: 6px");
+    expect(titleRow).toContain("gap: 6px");
+    expect(badges).toContain("height: 15px");
+    expect(badges).toContain("border-radius: 3px");
+    expect(supervisorBadge).toContain("min-height: 26px");
+    expect(supervisorBadge).toContain("border-radius: 4px");
+    expect(supervisorBadge).not.toContain("border-radius: var(--radius-lg)");
+    expect(supervisorLabel).toContain("font-size: 11px");
+  });
+
   it("keeps supervisor entry icons and labels vertically centered", () => {
     const desktopButton = getLastRuleBlock(".supervisor-enable-btn");
     const desktopButtonIcon = getLastRuleBlock(".supervisor-enable-btn > .themed-icon");
