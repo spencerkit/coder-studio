@@ -39,6 +39,9 @@ import { getThemeById, resolveStoredThemeId, THEMES } from "../../../theme";
 import { notificationPreferencesAtom } from "../../notifications/atoms";
 import { MobilePageHeader } from "../../shared/components/mobile-page-header";
 import {
+  getTerminalFontSizePreference,
+  hasExplicitTerminalFontSizeSetting,
+  hasLegacyTerminalFontSizeSetting,
   MAX_TERMINAL_FONT_SIZE,
   MIN_TERMINAL_FONT_SIZE,
   resolveTerminalCopyOnSelectSetting,
@@ -253,7 +256,8 @@ export function SettingsPage() {
     locale: 0,
     terminalRenderer: 0,
     terminalCopyOnSelect: 0,
-    terminalFontSize: 0,
+    desktopTerminalFontSize: 0,
+    mobileTerminalFontSize: 0,
   });
   const detailSection =
     navigationState.kind === "detail" ? navigationState.section : navigationState.lastSection;
@@ -265,6 +269,8 @@ export function SettingsPage() {
     next: Partial<{
       copyOnSelect: boolean;
       fontSize: number;
+      desktopFontSize: number;
+      mobileFontSize: number;
     }>
   ) => {
     setTerminalPreferences({
@@ -355,18 +361,37 @@ export function SettingsPage() {
       const shouldHydrateTerminalCopyOnSelect =
         appearanceSelectionVersionRef.current.terminalCopyOnSelect ===
         appearanceSelectionVersionAtRequestStart.terminalCopyOnSelect;
-      const shouldHydrateTerminalFontSize =
-        appearanceSelectionVersionRef.current.terminalFontSize ===
-        appearanceSelectionVersionAtRequestStart.terminalFontSize;
-      if (shouldHydrateTerminalCopyOnSelect || shouldHydrateTerminalFontSize) {
+      const shouldHydrateDesktopTerminalFontSize =
+        appearanceSelectionVersionRef.current.desktopTerminalFontSize ===
+        appearanceSelectionVersionAtRequestStart.desktopTerminalFontSize;
+      const shouldHydrateMobileTerminalFontSize =
+        appearanceSelectionVersionRef.current.mobileTerminalFontSize ===
+        appearanceSelectionVersionAtRequestStart.mobileTerminalFontSize;
+      if (
+        shouldHydrateTerminalCopyOnSelect ||
+        shouldHydrateDesktopTerminalFontSize ||
+        shouldHydrateMobileTerminalFontSize
+      ) {
         const currentTerminalPreferences = store.get(terminalPreferencesAtom);
+        const desktopFontSize = shouldHydrateDesktopTerminalFontSize
+          ? resolveTerminalFontSizeSetting(settings, "desktop")
+          : getTerminalFontSizePreference(currentTerminalPreferences, "desktop");
+        const mobileFontSize = shouldHydrateMobileTerminalFontSize
+          ? resolveTerminalFontSizeSetting(settings, "mobile")
+          : getTerminalFontSizePreference(currentTerminalPreferences, "mobile");
+        const hasLegacyTerminalFontSize = hasLegacyTerminalFontSizeSetting(settings);
+        const hasExplicitDesktopFontSize = hasExplicitTerminalFontSizeSetting(settings, "desktop");
+        const hasExplicitMobileFontSize = hasExplicitTerminalFontSizeSetting(settings, "mobile");
         setTerminalPreferences({
           copyOnSelect: shouldHydrateTerminalCopyOnSelect
             ? resolveTerminalCopyOnSelectSetting(settings)
             : currentTerminalPreferences.copyOnSelect,
-          fontSize: shouldHydrateTerminalFontSize
-            ? resolveTerminalFontSizeSetting(settings)
-            : currentTerminalPreferences.fontSize,
+          desktopFontSize,
+          mobileFontSize,
+          fontSize:
+            hasExplicitDesktopFontSize || hasExplicitMobileFontSize || hasLegacyTerminalFontSize
+              ? desktopFontSize
+              : currentTerminalPreferences.fontSize,
         });
       }
       if (settings["appearance.locale"] === "zh" || settings["appearance.locale"] === "en") {
@@ -432,9 +457,19 @@ export function SettingsPage() {
     syncTerminalPreferences({ copyOnSelect: value });
   };
 
-  const handleTerminalFontSizeSelection = (value: number) => {
-    appearanceSelectionVersionRef.current.terminalFontSize += 1;
-    syncTerminalPreferences({ fontSize: value });
+  const handleDesktopTerminalFontSizeSelection = (value: number) => {
+    appearanceSelectionVersionRef.current.desktopTerminalFontSize += 1;
+    syncTerminalPreferences({
+      desktopFontSize: value,
+      fontSize: value,
+    });
+  };
+
+  const handleMobileTerminalFontSizeSelection = (value: number) => {
+    appearanceSelectionVersionRef.current.mobileTerminalFontSize += 1;
+    syncTerminalPreferences({
+      mobileFontSize: value,
+    });
   };
 
   useEffect(() => {
@@ -490,15 +525,17 @@ export function SettingsPage() {
             setTerminalRenderer={handleTerminalRendererSelection}
             terminalCopyOnSelect={terminalPreferences.copyOnSelect}
             setTerminalCopyOnSelect={handleTerminalCopyOnSelectSelection}
-            terminalFontSize={terminalPreferences.fontSize}
-            setTerminalFontSize={handleTerminalFontSizeSelection}
           />
         );
       case "appearance":
         return (
           <AppearanceSettings
+            desktopTerminalFontSize={getTerminalFontSizePreference(terminalPreferences, "desktop")}
+            mobileTerminalFontSize={getTerminalFontSizePreference(terminalPreferences, "mobile")}
             locale={locale}
+            setDesktopTerminalFontSize={handleDesktopTerminalFontSizeSelection}
             setLocale={handleLocaleSelection}
+            setMobileTerminalFontSize={handleMobileTerminalFontSizeSelection}
             theme={theme}
             setTheme={handleThemeSelection}
           />
@@ -690,8 +727,6 @@ interface GeneralSettingsProps {
   setTerminalRenderer: (value: "standard" | "compatibility") => void;
   terminalCopyOnSelect: boolean;
   setTerminalCopyOnSelect: (value: boolean) => void;
-  terminalFontSize: number;
-  setTerminalFontSize: (value: number) => void;
 }
 
 function parseSupervisorTimeoutInput(value: string): number | null {
@@ -780,8 +815,6 @@ function GeneralSettings({
   setTerminalRenderer,
   terminalCopyOnSelect,
   setTerminalCopyOnSelect,
-  terminalFontSize,
-  setTerminalFontSize,
 }: GeneralSettingsProps) {
   const t = useTranslation();
   const notificationsLabelId = useId();
@@ -792,8 +825,6 @@ function GeneralSettings({
   const terminalRendererDescId = useId();
   const copyOnSelectLabelId = useId();
   const copyOnSelectDescId = useId();
-  const terminalFontSizeLabelId = useId();
-  const terminalFontSizeDescId = useId();
   const dispatch = useAtomValue(dispatchCommandAtom);
   const setNotificationPreferences = useSetAtom(notificationPreferencesAtom);
   const [notificationPermission, setNotificationPermission] =
@@ -814,8 +845,6 @@ function GeneralSettings({
     null
   );
   const [supervisorRetryDelayError, setSupervisorRetryDelayError] = useState<string | null>(null);
-  const [terminalFontSizeDraft, setTerminalFontSizeDraft] = useState(String(terminalFontSize));
-  const [terminalFontSizeError, setTerminalFontSizeError] = useState<string | null>(null);
 
   const saveSettings = async (settings: Record<string, unknown>) => {
     return await dispatch("settings.update", { settings });
@@ -849,10 +878,6 @@ function GeneralSettings({
   }, [supervisorRetryDelaySec]);
 
   useEffect(() => {
-    setTerminalFontSizeDraft(String(terminalFontSize));
-  }, [terminalFontSize]);
-
-  useEffect(() => {
     setSupervisorTimeoutError(null);
   }, [supervisorEvaluationTimeoutSec]);
 
@@ -863,10 +888,6 @@ function GeneralSettings({
   useEffect(() => {
     setSupervisorRetryDelayError(null);
   }, [supervisorRetryDelaySec]);
-
-  useEffect(() => {
-    setTerminalFontSizeError(null);
-  }, [terminalFontSize]);
 
   const requestNotificationPermission = async () => {
     if ("Notification" in window) {
@@ -980,42 +1001,6 @@ function GeneralSettings({
     setSupervisorRetryDelaySec(parsed);
     setSupervisorRetryDelayDraft(String(parsed));
     setSupervisorRetryDelayError(null);
-  };
-
-  const commitTerminalFontSize = async () => {
-    const parsed = parseTerminalFontSizeInput(terminalFontSizeDraft);
-    if (parsed === null) {
-      setTerminalFontSizeDraft(String(terminalFontSize));
-      setTerminalFontSizeError(
-        t("settings.terminal_font_size_validation_error", {
-          min: MIN_TERMINAL_FONT_SIZE,
-          max: MAX_TERMINAL_FONT_SIZE,
-        })
-      );
-      return;
-    }
-
-    if (parsed === terminalFontSize) {
-      setTerminalFontSizeDraft(String(parsed));
-      setTerminalFontSizeError(null);
-      return;
-    }
-
-    const result = await saveSettings({
-      appearance: {
-        terminalFontSize: parsed,
-      },
-    });
-
-    if (!result.ok) {
-      setTerminalFontSizeDraft(String(terminalFontSize));
-      setTerminalFontSizeError(result.error?.message || t("settings.config_files.save_failed"));
-      return;
-    }
-
-    setTerminalFontSize(parsed);
-    setTerminalFontSizeDraft(String(parsed));
-    setTerminalFontSizeError(null);
   };
 
   return (
@@ -1188,54 +1173,6 @@ function GeneralSettings({
               void saveSettings({ appearance: { terminalCopyOnSelect: nextValue } });
             }}
           />
-        </div>
-
-        <div className="settings-config-field settings-config-field--inline">
-          <label
-            className="settings-config-label"
-            htmlFor="terminal-font-size"
-            id={terminalFontSizeLabelId}
-          >
-            {t("settings.terminal_font_size")}
-          </label>
-          <div className="settings-config-control">
-            <Input
-              id="terminal-font-size"
-              aria-describedby={terminalFontSizeDescId}
-              aria-labelledby={terminalFontSizeLabelId}
-              className="settings-input-compact"
-              type="number"
-              min={MIN_TERMINAL_FONT_SIZE}
-              max={MAX_TERMINAL_FONT_SIZE}
-              step={1}
-              inputMode="numeric"
-              invalid={Boolean(terminalFontSizeError)}
-              value={terminalFontSizeDraft}
-              onChange={(event) => {
-                setTerminalFontSizeDraft(event.target.value);
-                if (terminalFontSizeError) {
-                  setTerminalFontSizeError(null);
-                }
-              }}
-              onBlur={() => {
-                void commitTerminalFontSize();
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  void commitTerminalFontSize();
-                }
-              }}
-            />
-          </div>
-          <span className="settings-toggle-desc" id={terminalFontSizeDescId}>
-            {t("settings.terminal_font_size_hint")}
-          </span>
-          {terminalFontSizeError ? (
-            <span className="form-error" role="alert">
-              {terminalFontSizeError}
-            </span>
-          ) : null}
         </div>
       </div>
 
@@ -1428,29 +1365,74 @@ function GeneralSettings({
 }
 
 interface AppearanceSettingsProps {
+  desktopTerminalFontSize: number;
   locale: string;
+  mobileTerminalFontSize: number;
+  setDesktopTerminalFontSize: (value: number) => void;
   setLocale: (value: "zh" | "en") => void;
+  setMobileTerminalFontSize: (value: number) => void;
   theme: string;
   setTheme: (value: string) => void;
 }
 
-function AppearanceSettings({ locale, setLocale, theme, setTheme }: AppearanceSettingsProps) {
+function AppearanceSettings({
+  desktopTerminalFontSize,
+  locale,
+  mobileTerminalFontSize,
+  setDesktopTerminalFontSize,
+  setLocale,
+  setMobileTerminalFontSize,
+  theme,
+  setTheme,
+}: AppearanceSettingsProps) {
   const t = useTranslation();
   const themeTitleId = useId();
   const themeDescId = useId();
   const themeSelectId = useId();
   const languageTitleId = useId();
   const languageDescId = useId();
+  const desktopTerminalFontSizeLabelId = useId();
+  const desktopTerminalFontSizeDescId = useId();
+  const mobileTerminalFontSizeLabelId = useId();
+  const mobileTerminalFontSizeDescId = useId();
   const dispatch = useAtomValue(dispatchCommandAtom);
   const currentThemeId = resolveStoredThemeId(theme);
   const themeOptions = THEMES.map((registeredTheme) => ({
     value: registeredTheme.id,
     label: t(registeredTheme.labelKey),
   }));
+  const [desktopTerminalFontSizeDraft, setDesktopTerminalFontSizeDraft] = useState(
+    String(desktopTerminalFontSize)
+  );
+  const [desktopTerminalFontSizeError, setDesktopTerminalFontSizeError] = useState<string | null>(
+    null
+  );
+  const [mobileTerminalFontSizeDraft, setMobileTerminalFontSizeDraft] = useState(
+    String(mobileTerminalFontSize)
+  );
+  const [mobileTerminalFontSizeError, setMobileTerminalFontSizeError] = useState<string | null>(
+    null
+  );
 
   const saveSettings = async (settings: Record<string, unknown>) => {
     await dispatch("settings.update", { settings });
   };
+
+  useEffect(() => {
+    setDesktopTerminalFontSizeDraft(String(desktopTerminalFontSize));
+  }, [desktopTerminalFontSize]);
+
+  useEffect(() => {
+    setMobileTerminalFontSizeDraft(String(mobileTerminalFontSize));
+  }, [mobileTerminalFontSize]);
+
+  useEffect(() => {
+    setDesktopTerminalFontSizeError(null);
+  }, [desktopTerminalFontSize]);
+
+  useEffect(() => {
+    setMobileTerminalFontSizeError(null);
+  }, [mobileTerminalFontSize]);
 
   const handleThemeChange = (nextThemeId: string) => {
     const resolvedTheme = getThemeById(nextThemeId);
@@ -1463,8 +1445,182 @@ function AppearanceSettings({ locale, setLocale, theme, setTheme }: AppearanceSe
     void saveSettings({ appearance: { themeId: resolvedTheme.id } });
   };
 
+  const commitTerminalFontSize = async (
+    draft: string,
+    currentValue: number,
+    settingKey: "desktopTerminalFontSize" | "mobileTerminalFontSize",
+    setValue: (value: number) => void,
+    setDraft: (value: string) => void,
+    setError: (value: string | null) => void
+  ) => {
+    const parsed = parseTerminalFontSizeInput(draft);
+    if (parsed === null) {
+      setDraft(String(currentValue));
+      setError(
+        t("settings.terminal_font_size_validation_error", {
+          min: MIN_TERMINAL_FONT_SIZE,
+          max: MAX_TERMINAL_FONT_SIZE,
+        })
+      );
+      return;
+    }
+
+    if (parsed === currentValue) {
+      setDraft(String(parsed));
+      setError(null);
+      return;
+    }
+
+    const result = await dispatch("settings.update", {
+      settings: {
+        appearance: {
+          [settingKey]: parsed,
+        },
+      },
+    });
+
+    if (!result.ok) {
+      setDraft(String(currentValue));
+      setError(result.error?.message || t("settings.config_files.save_failed"));
+      return;
+    }
+
+    setValue(parsed);
+    setDraft(String(parsed));
+    setError(null);
+  };
+
   return (
     <div className="settings-section">
+      <div className="settings-group">
+        <h3 className="settings-group-title">{t("settings.terminal_appearance")}</h3>
+        <p className="settings-group-desc">{t("settings.terminal_font_size_hint")}</p>
+
+        <div className="settings-config-field settings-config-field--inline">
+          <label
+            className="settings-config-label"
+            htmlFor="desktop-terminal-font-size"
+            id={desktopTerminalFontSizeLabelId}
+          >
+            {t("settings.desktop_terminal_font_size")}
+          </label>
+          <div className="settings-config-control">
+            <Input
+              id="desktop-terminal-font-size"
+              aria-describedby={desktopTerminalFontSizeDescId}
+              aria-labelledby={desktopTerminalFontSizeLabelId}
+              className="settings-input-compact"
+              type="number"
+              min={MIN_TERMINAL_FONT_SIZE}
+              max={MAX_TERMINAL_FONT_SIZE}
+              step={1}
+              inputMode="numeric"
+              invalid={Boolean(desktopTerminalFontSizeError)}
+              value={desktopTerminalFontSizeDraft}
+              onChange={(event) => {
+                setDesktopTerminalFontSizeDraft(event.target.value);
+                if (desktopTerminalFontSizeError) {
+                  setDesktopTerminalFontSizeError(null);
+                }
+              }}
+              onBlur={() => {
+                void commitTerminalFontSize(
+                  desktopTerminalFontSizeDraft,
+                  desktopTerminalFontSize,
+                  "desktopTerminalFontSize",
+                  setDesktopTerminalFontSize,
+                  setDesktopTerminalFontSizeDraft,
+                  setDesktopTerminalFontSizeError
+                );
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  void commitTerminalFontSize(
+                    desktopTerminalFontSizeDraft,
+                    desktopTerminalFontSize,
+                    "desktopTerminalFontSize",
+                    setDesktopTerminalFontSize,
+                    setDesktopTerminalFontSizeDraft,
+                    setDesktopTerminalFontSizeError
+                  );
+                }
+              }}
+            />
+          </div>
+          <span className="settings-toggle-desc" id={desktopTerminalFontSizeDescId}>
+            {t("settings.desktop_terminal_font_size_hint")}
+          </span>
+          {desktopTerminalFontSizeError ? (
+            <span className="form-error" role="alert">
+              {desktopTerminalFontSizeError}
+            </span>
+          ) : null}
+        </div>
+
+        <div className="settings-config-field settings-config-field--inline">
+          <label
+            className="settings-config-label"
+            htmlFor="mobile-terminal-font-size"
+            id={mobileTerminalFontSizeLabelId}
+          >
+            {t("settings.mobile_terminal_font_size")}
+          </label>
+          <div className="settings-config-control">
+            <Input
+              id="mobile-terminal-font-size"
+              aria-describedby={mobileTerminalFontSizeDescId}
+              aria-labelledby={mobileTerminalFontSizeLabelId}
+              className="settings-input-compact"
+              type="number"
+              min={MIN_TERMINAL_FONT_SIZE}
+              max={MAX_TERMINAL_FONT_SIZE}
+              step={1}
+              inputMode="numeric"
+              invalid={Boolean(mobileTerminalFontSizeError)}
+              value={mobileTerminalFontSizeDraft}
+              onChange={(event) => {
+                setMobileTerminalFontSizeDraft(event.target.value);
+                if (mobileTerminalFontSizeError) {
+                  setMobileTerminalFontSizeError(null);
+                }
+              }}
+              onBlur={() => {
+                void commitTerminalFontSize(
+                  mobileTerminalFontSizeDraft,
+                  mobileTerminalFontSize,
+                  "mobileTerminalFontSize",
+                  setMobileTerminalFontSize,
+                  setMobileTerminalFontSizeDraft,
+                  setMobileTerminalFontSizeError
+                );
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  void commitTerminalFontSize(
+                    mobileTerminalFontSizeDraft,
+                    mobileTerminalFontSize,
+                    "mobileTerminalFontSize",
+                    setMobileTerminalFontSize,
+                    setMobileTerminalFontSizeDraft,
+                    setMobileTerminalFontSizeError
+                  );
+                }
+              }}
+            />
+          </div>
+          <span className="settings-toggle-desc" id={mobileTerminalFontSizeDescId}>
+            {t("settings.mobile_terminal_font_size_hint")}
+          </span>
+          {mobileTerminalFontSizeError ? (
+            <span className="form-error" role="alert">
+              {mobileTerminalFontSizeError}
+            </span>
+          ) : null}
+        </div>
+      </div>
+
       <div className="settings-group">
         <h3 className="settings-group-title" id={themeTitleId}>
           {t("settings.theme.title")}

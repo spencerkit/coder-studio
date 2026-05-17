@@ -70,6 +70,8 @@ const SettingsSchema = z.object({
       terminalRenderer: z.enum(["standard", "compatibility"]).optional(),
       terminalCopyOnSelect: z.boolean().optional(),
       terminalFontSize: z.number().int().min(10).max(18).optional(),
+      desktopTerminalFontSize: z.number().int().min(10).max(18).optional(),
+      mobileTerminalFontSize: z.number().int().min(10).max(18).optional(),
       locale: z.enum(["zh", "en"]).optional(),
     })
     .optional(),

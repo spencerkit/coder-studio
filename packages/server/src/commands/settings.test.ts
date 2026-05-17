@@ -137,16 +137,16 @@ describe("settings commands", () => {
     ).toEqual({ value: '"graphite-light"' });
   });
 
-  it("settings.update persists appearance.terminalFontSize into user_settings", async () => {
+  it("settings.update persists appearance.desktopTerminalFontSize into user_settings", async () => {
     const result = await dispatch(
       {
         kind: "command",
-        id: "settings-update-terminal-font-size",
+        id: "settings-update-desktop-terminal-font-size",
         op: "settings.update",
         args: {
           settings: {
             appearance: {
-              terminalFontSize: 16,
+              desktopTerminalFontSize: 16,
             },
           },
         },
@@ -156,8 +156,35 @@ describe("settings commands", () => {
 
     expect(result.ok).toBe(true);
     expect(
-      db.prepare("SELECT value FROM user_settings WHERE key = ?").get("appearance.terminalFontSize")
+      db
+        .prepare("SELECT value FROM user_settings WHERE key = ?")
+        .get("appearance.desktopTerminalFontSize")
     ).toEqual({ value: "16" });
+  });
+
+  it("settings.update persists appearance.mobileTerminalFontSize into user_settings", async () => {
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "settings-update-mobile-terminal-font-size",
+        op: "settings.update",
+        args: {
+          settings: {
+            appearance: {
+              mobileTerminalFontSize: 15,
+            },
+          },
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(
+      db
+        .prepare("SELECT value FROM user_settings WHERE key = ?")
+        .get("appearance.mobileTerminalFontSize")
+    ).toEqual({ value: "15" });
   });
 
   it("settings.update persists legacy appearance.theme light during themeId migration", async () => {
@@ -261,16 +288,16 @@ describe("settings commands", () => {
     ).toBeUndefined();
   });
 
-  it("settings.update rejects terminalFontSize values below the supported minimum", async () => {
+  it("settings.update rejects desktopTerminalFontSize values below the supported minimum", async () => {
     const result = await dispatch(
       {
         kind: "command",
-        id: "settings-update-terminal-font-size-too-small",
+        id: "settings-update-desktop-terminal-font-size-too-small",
         op: "settings.update",
         args: {
           settings: {
             appearance: {
-              terminalFontSize: 9,
+              desktopTerminalFontSize: 9,
             },
           },
         },
@@ -281,20 +308,22 @@ describe("settings commands", () => {
     expect(result.ok).toBe(false);
     expect(result.error?.code).toBe("validation_error");
     expect(
-      db.prepare("SELECT value FROM user_settings WHERE key = ?").get("appearance.terminalFontSize")
+      db
+        .prepare("SELECT value FROM user_settings WHERE key = ?")
+        .get("appearance.desktopTerminalFontSize")
     ).toBeUndefined();
   });
 
-  it("settings.update rejects terminalFontSize values above the supported maximum", async () => {
+  it("settings.update rejects mobileTerminalFontSize values above the supported maximum", async () => {
     const result = await dispatch(
       {
         kind: "command",
-        id: "settings-update-terminal-font-size-too-large",
+        id: "settings-update-mobile-terminal-font-size-too-large",
         op: "settings.update",
         args: {
           settings: {
             appearance: {
-              terminalFontSize: 19,
+              mobileTerminalFontSize: 19,
             },
           },
         },
@@ -305,20 +334,22 @@ describe("settings commands", () => {
     expect(result.ok).toBe(false);
     expect(result.error?.code).toBe("validation_error");
     expect(
-      db.prepare("SELECT value FROM user_settings WHERE key = ?").get("appearance.terminalFontSize")
+      db
+        .prepare("SELECT value FROM user_settings WHERE key = ?")
+        .get("appearance.mobileTerminalFontSize")
     ).toBeUndefined();
   });
 
-  it("settings.update rejects fractional terminalFontSize values", async () => {
+  it("settings.update rejects fractional desktopTerminalFontSize values", async () => {
     const result = await dispatch(
       {
         kind: "command",
-        id: "settings-update-terminal-font-size-fractional",
+        id: "settings-update-desktop-terminal-font-size-fractional",
         op: "settings.update",
         args: {
           settings: {
             appearance: {
-              terminalFontSize: 15.5,
+              desktopTerminalFontSize: 15.5,
             },
           },
         },
@@ -329,7 +360,9 @@ describe("settings commands", () => {
     expect(result.ok).toBe(false);
     expect(result.error?.code).toBe("validation_error");
     expect(
-      db.prepare("SELECT value FROM user_settings WHERE key = ?").get("appearance.terminalFontSize")
+      db
+        .prepare("SELECT value FROM user_settings WHERE key = ?")
+        .get("appearance.desktopTerminalFontSize")
     ).toBeUndefined();
   });
 
@@ -551,16 +584,20 @@ describe("settings commands", () => {
     });
   });
 
-  it("settings.get returns appearance.terminalFontSize from user_settings", async () => {
+  it("settings.get returns split terminal font size settings from user_settings", async () => {
     db.prepare("INSERT INTO user_settings (key, value) VALUES (?, ?)").run(
-      "appearance.terminalFontSize",
+      "appearance.desktopTerminalFontSize",
       "16"
+    );
+    db.prepare("INSERT INTO user_settings (key, value) VALUES (?, ?)").run(
+      "appearance.mobileTerminalFontSize",
+      "14"
     );
 
     const result = await dispatch(
       {
         kind: "command",
-        id: "settings-get-terminal-font-size",
+        id: "settings-get-split-terminal-font-size",
         op: "settings.get",
         args: {},
       },
@@ -569,7 +606,8 @@ describe("settings commands", () => {
 
     expect(result.ok).toBe(true);
     expect(result.data).toMatchObject({
-      "appearance.terminalFontSize": 16,
+      "appearance.desktopTerminalFontSize": 16,
+      "appearance.mobileTerminalFontSize": 14,
     });
   });
 

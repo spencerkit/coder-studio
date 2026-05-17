@@ -44,7 +44,7 @@ import {
   type SoftTerminalKeyId,
   toggleCtrlMode,
 } from "../../mobile/virtual-terminal-keys";
-import { terminalPreferencesAtom } from "../../preferences";
+import { getTerminalFontSizeForViewport, terminalPreferencesAtom } from "../../preferences";
 import {
   classifyReplayFailure,
   TERMINAL_REPLAY_TIMEOUT_MS,
@@ -424,6 +424,7 @@ export function XtermHost({
   const viewport = useViewport();
   const uiTheme = useAtomValue(themeAtom);
   const terminalPreferences = useAtomValue(terminalPreferencesAtom);
+  const terminalFontSize = getTerminalFontSizeForViewport(terminalPreferences, viewport);
   const wsClient = useAtomValue(wsClientAtom);
   const dispatch = useAtomValue(dispatchCommandAtom);
   const pushToast = useSetAtom(pushToastAtom);
@@ -929,16 +930,13 @@ export function XtermHost({
   }, []);
 
   useEffect(() => {
-    if (
-      !terminalRef.current ||
-      terminalRef.current.options.fontSize === terminalPreferences.fontSize
-    ) {
+    if (!terminalRef.current || terminalRef.current.options.fontSize === terminalFontSize) {
       return;
     }
 
-    terminalRef.current.options.fontSize = terminalPreferences.fontSize;
+    terminalRef.current.options.fontSize = terminalFontSize;
     scheduleFit();
-  }, [scheduleFit, terminalPreferences.fontSize]);
+  }, [scheduleFit, terminalFontSize]);
 
   const updateCtrlMode = useCallback((nextCtrlMode: CtrlMode) => {
     ctrlModeRef.current = nextCtrlMode;
@@ -1236,7 +1234,7 @@ export function XtermHost({
     const terminal = new Terminal({
       theme: getThemeById(initialThemeRef.current).terminalTheme,
       fontFamily: "JetBrains Mono, Fira Code, SF Mono, monospace",
-      fontSize: terminalPreferences.fontSize,
+      fontSize: terminalFontSize,
       scrollback: 5000,
       cursorBlink: isInteractive && !uploadBusy,
       cursorStyle: "block",

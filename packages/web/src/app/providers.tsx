@@ -45,6 +45,10 @@ import { useSessionNotifications } from "../features/notifications";
 import { supervisorCyclesAtom, supervisorsAtom } from "../features/supervisor/atoms";
 import { terminalMetaAtomFamily } from "../features/terminal-panel/atoms";
 import {
+  DESKTOP_TERMINAL_FONT_SIZE_SETTING_KEY,
+  hasExplicitTerminalFontSizeSetting,
+  hasLegacyTerminalFontSizeSetting,
+  MOBILE_TERMINAL_FONT_SIZE_SETTING_KEY,
   resolveTerminalCopyOnSelectSetting,
   resolveTerminalFontSizeSetting,
   terminalPreferencesAtom,
@@ -299,7 +303,8 @@ export function AppProviders({ children }: AppProvidersProps) {
     let cancelled = false;
     let terminalPreferencesAtSubscriptionStart = store.get(terminalPreferencesAtom);
     let localTerminalCopyOnSelectUpdated = false;
-    let localTerminalFontSizeUpdated = false;
+    let localDesktopTerminalFontSizeUpdated = false;
+    let localMobileTerminalFontSizeUpdated = false;
     const unsubscribeTerminalPreferences = store.sub(terminalPreferencesAtom, () => {
       const nextTerminalPreferences = store.get(terminalPreferencesAtom);
       if (
@@ -307,8 +312,17 @@ export function AppProviders({ children }: AppProvidersProps) {
       ) {
         localTerminalCopyOnSelectUpdated = true;
       }
-      if (nextTerminalPreferences.fontSize !== terminalPreferencesAtSubscriptionStart.fontSize) {
-        localTerminalFontSizeUpdated = true;
+      if (
+        nextTerminalPreferences.desktopFontSize !==
+        terminalPreferencesAtSubscriptionStart.desktopFontSize
+      ) {
+        localDesktopTerminalFontSizeUpdated = true;
+      }
+      if (
+        nextTerminalPreferences.mobileFontSize !==
+        terminalPreferencesAtSubscriptionStart.mobileFontSize
+      ) {
+        localMobileTerminalFontSizeUpdated = true;
       }
       terminalPreferencesAtSubscriptionStart = nextTerminalPreferences;
     });
@@ -320,15 +334,27 @@ export function AppProviders({ children }: AppProvidersProps) {
       }
 
       const currentTerminalPreferences = store.get(terminalPreferencesAtom);
-
-      setTerminalPreferences({
+      const shouldHydrateDesktopTerminalFontSize = localDesktopTerminalFontSizeUpdated
+        ? currentTerminalPreferences.desktopFontSize
+        : resolveTerminalFontSizeSetting(result.data, "desktop");
+      const shouldHydrateMobileTerminalFontSize = localMobileTerminalFontSizeUpdated
+        ? currentTerminalPreferences.mobileFontSize
+        : resolveTerminalFontSizeSetting(result.data, "mobile");
+      const hasLegacyFontSize = hasLegacyTerminalFontSizeSetting(result.data);
+      const hasExplicitDesktopFontSize = hasExplicitTerminalFontSizeSetting(result.data, "desktop");
+      const hasExplicitMobileFontSize = hasExplicitTerminalFontSizeSetting(result.data, "mobile");
+      const nextTerminalPreferences = {
         copyOnSelect: localTerminalCopyOnSelectUpdated
           ? currentTerminalPreferences.copyOnSelect
           : resolveTerminalCopyOnSelectSetting(result.data),
-        fontSize: localTerminalFontSizeUpdated
-          ? currentTerminalPreferences.fontSize
-          : resolveTerminalFontSizeSetting(result.data),
-      });
+        desktopFontSize: shouldHydrateDesktopTerminalFontSize,
+        mobileFontSize: shouldHydrateMobileTerminalFontSize,
+        fontSize:
+          hasExplicitDesktopFontSize || hasExplicitMobileFontSize || hasLegacyFontSize
+            ? resolveTerminalFontSizeSetting(result.data, "desktop")
+            : currentTerminalPreferences.fontSize,
+      };
+      setTerminalPreferences(nextTerminalPreferences);
     };
 
     void hydrateTerminalPreferences();

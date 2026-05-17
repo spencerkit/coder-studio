@@ -1423,6 +1423,8 @@ describe("XtermHost", () => {
     const store = createStore();
     store.set(terminalPreferencesAtom, {
       copyOnSelect: false,
+      desktopFontSize: 16,
+      mobileFontSize: 13,
       fontSize: 16,
     });
 
@@ -1440,10 +1442,33 @@ describe("XtermHost", () => {
     );
   });
 
-  it("updates the existing xterm instance when terminal font size changes", async () => {
+  it("initializes xterm with the mobile terminal font size on mobile viewport", async () => {
+    viewportMocks.viewport = "mobile";
     const store = createStore();
     store.set(terminalPreferencesAtom, {
       copyOnSelect: false,
+      desktopFontSize: 16,
+      mobileFontSize: 14,
+      fontSize: 16,
+    });
+
+    const { Terminal } = await import("@xterm/xterm");
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="mobile-font-size-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    expect(Terminal).toHaveBeenCalledWith(expect.objectContaining({ fontSize: 14 }));
+  });
+
+  it("updates the existing xterm instance when the current viewport terminal font size changes", async () => {
+    const store = createStore();
+    store.set(terminalPreferencesAtom, {
+      copyOnSelect: false,
+      desktopFontSize: 11,
+      mobileFontSize: 13,
       fontSize: 11,
     });
 
@@ -1462,6 +1487,8 @@ describe("XtermHost", () => {
     act(() => {
       store.set(terminalPreferencesAtom, {
         copyOnSelect: false,
+        desktopFontSize: 17,
+        mobileFontSize: 13,
         fontSize: 17,
       });
     });
