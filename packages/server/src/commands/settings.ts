@@ -69,6 +69,7 @@ const SettingsSchema = z.object({
       themeId: z.string().optional(),
       terminalRenderer: z.enum(["standard", "compatibility"]).optional(),
       terminalCopyOnSelect: z.boolean().optional(),
+      terminalFontSize: z.number().int().min(10).max(18).optional(),
       locale: z.enum(["zh", "en"]).optional(),
     })
     .optional(),

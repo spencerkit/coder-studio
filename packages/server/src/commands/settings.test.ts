@@ -137,6 +137,29 @@ describe("settings commands", () => {
     ).toEqual({ value: '"graphite-light"' });
   });
 
+  it("settings.update persists appearance.terminalFontSize into user_settings", async () => {
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "settings-update-terminal-font-size",
+        op: "settings.update",
+        args: {
+          settings: {
+            appearance: {
+              terminalFontSize: 16,
+            },
+          },
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(
+      db.prepare("SELECT value FROM user_settings WHERE key = ?").get("appearance.terminalFontSize")
+    ).toEqual({ value: "16" });
+  });
+
   it("settings.update persists legacy appearance.theme light during themeId migration", async () => {
     const result = await dispatch(
       {
@@ -235,6 +258,78 @@ describe("settings commands", () => {
     expect(result.error?.code).toBe("validation_error");
     expect(
       db.prepare("SELECT value FROM user_settings WHERE key = ?").get("supervisor.retryDelaySec")
+    ).toBeUndefined();
+  });
+
+  it("settings.update rejects terminalFontSize values below the supported minimum", async () => {
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "settings-update-terminal-font-size-too-small",
+        op: "settings.update",
+        args: {
+          settings: {
+            appearance: {
+              terminalFontSize: 9,
+            },
+          },
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("validation_error");
+    expect(
+      db.prepare("SELECT value FROM user_settings WHERE key = ?").get("appearance.terminalFontSize")
+    ).toBeUndefined();
+  });
+
+  it("settings.update rejects terminalFontSize values above the supported maximum", async () => {
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "settings-update-terminal-font-size-too-large",
+        op: "settings.update",
+        args: {
+          settings: {
+            appearance: {
+              terminalFontSize: 19,
+            },
+          },
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("validation_error");
+    expect(
+      db.prepare("SELECT value FROM user_settings WHERE key = ?").get("appearance.terminalFontSize")
+    ).toBeUndefined();
+  });
+
+  it("settings.update rejects fractional terminalFontSize values", async () => {
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "settings-update-terminal-font-size-fractional",
+        op: "settings.update",
+        args: {
+          settings: {
+            appearance: {
+              terminalFontSize: 15.5,
+            },
+          },
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("validation_error");
+    expect(
+      db.prepare("SELECT value FROM user_settings WHERE key = ?").get("appearance.terminalFontSize")
     ).toBeUndefined();
   });
 
