@@ -6,11 +6,13 @@
 >
 > **Spec:** `docs/superpowers/specs/2026-05-14-conversion-first-activation-design.md`
 
-**Goal:** Productize phone continuation so the user can move from first success on desktop to the next differentiated outcome without reading docs.
+**Goal:** Help users continue from desktop to phone or remote devices without overbuilding a low-value in-app assistant.
 
-**Architecture:** Phase 3 builds on the setup success state and the mobile-access command introduced in Phase 1. It adds a reusable mobile assistant surface, exposes it from setup success and settings, and promotes `Continue on Phone` into the workspace shell so cross-device continuation becomes a normal next step instead of hidden product knowledge.
+**Decision update:** The original Mobile Access Assistant mostly displayed LAN URLs and auth warnings. That is useful, but too thin to justify a dedicated feature surface right now. The higher-value user need is a clear remote-access guide that covers LAN access, auth, Tailscale, ngrok, Cloudflare Tunnel, and troubleshooting. Treat any product UI as a lightweight documentation entry point until real usage shows that a stateful assistant is needed.
 
-**Tech Stack:** TypeScript, React, Jotai, Vitest, setup/mobile status command, existing workspace shell
+**Architecture:** Phase 3 becomes documentation-first. Keep `setup.mobileAccessStatus` available as future infrastructure, but do not add `packages/web/src/features/mobile-access/*`, workspace-shell CTA, or a new setup success assistant in this phase. The product can later add a small settings/help link to the guide if the help surface supports it.
+
+**Tech Stack:** Markdown docs, existing help center, README links
 
 ---
 
@@ -18,82 +20,65 @@
 
 **Depends on:**
 
-- Phase 1 readiness contract
-- Phase 2 setup success state
+- Existing help center
+- Existing CLI config/status commands
 
 **Includes master task:**
 
-- [Task 5](./2026-05-14-conversion-first-activation.md#task-5-add-the-mobile-access-assistant-and-continue-on-phone): mobile assistant and cross-device CTA
+- Supersedes [Task 5](./2026-05-14-conversion-first-activation.md#task-5-add-the-mobile-access-assistant-and-continue-on-phone) for now. Do not implement the full mobile assistant until this decision is revisited.
 
 **Exit criteria:**
 
-- mobile assistant renders candidate LAN URLs
-- local-only or unauthenticated exposure states are explained in product language
-- setup success shows `Continue on Phone`
-- settings exposes the same assistant
-- workspace shell can surface the same continuation CTA
+- mobile guide explains LAN access from phone
+- guide explains why `localhost` is not reachable from another device
+- guide recommends enabling password before exposing the service
+- guide covers Tailscale, ngrok, and Cloudflare Tunnel at a practical level
+- README/help index points users to the guide
 
 ## Deliverables
 
-- `packages/web/src/features/mobile-access/*`
-- `SetupSuccessStep`
-- settings integration for mobile continuation
-- workspace-level `Continue on Phone` surface
-- localized strings for mobile continuation states
+- Update `docs/help/mobile-guide.md`
+- Update `docs/help/README.md`
+- Update README documentation table entries
+- Keep the original in-app assistant as a deferred idea, not Phase 3 scope
 
 ## Tracking Checklist
 
-- [ ] Add `useMobileAccess`
-- [ ] Render LAN candidate URLs from `setup.mobileAccessStatus`
-- [ ] Show the auth warning when only localhost/no password is configured
-- [ ] Add `SetupSuccessStep`
-- [ ] Show `Continue on Phone` in setup success
-- [ ] Expose the same assistant in settings
-- [ ] Expose the workspace-shell CTA
-- [ ] Pass targeted mobile-access, settings, and workspace tests
-- [ ] Commit Phase 3 changes
+- [x] Re-evaluate the value of a dedicated Mobile Access Assistant
+- [x] Change Phase 3 to documentation-first scope
+- [x] Expand the mobile guide with LAN access instructions
+- [x] Add Tailscale/ngrok/Cloudflare Tunnel guidance
+- [x] Add security and troubleshooting notes
+- [x] Update README/help links
+- [ ] Commit Phase 3 documentation changes
 
 ## Files In Play
 
-- Create: `packages/web/src/features/mobile-access/index.ts`
-- Create: `packages/web/src/features/mobile-access/actions/use-mobile-access.ts`
-- Create: `packages/web/src/features/mobile-access/views/mobile-access-assistant.tsx`
-- Create: `packages/web/src/features/mobile-access/views/mobile-access-assistant.test.tsx`
-- Modify: `packages/web/src/features/setup/views/setup-success-step.tsx`
-- Modify: `packages/web/src/features/settings/components/settings-page.tsx`
-- Modify: `packages/web/src/features/settings/components/settings-page.test.tsx`
-- Modify: `packages/web/src/features/workspace/views/desktop/workspace-desktop-view.tsx`
-- Create: `packages/web/src/features/workspace/views/desktop/workspace-desktop-view.test.tsx`
-- Modify: `packages/web/src/locales/en.json`
-- Modify: `packages/web/src/locales/zh.json`
+- Modify: `docs/help/mobile-guide.md`
+- Modify: `docs/help/README.md`
+- Modify: `README.md`
+- Modify: `README.zh-CN.md`
+- Modify: `docs/superpowers/plans/2026-05-14-conversion-first-activation-phase-3-mobile-continuation.md`
 
 ## Verification
 
-Run these before closing the phase:
-
-```bash
-pnpm exec vitest run \
-  packages/web/src/features/mobile-access/views/mobile-access-assistant.test.tsx \
-  packages/web/src/features/settings/components/settings-page.test.tsx \
-  packages/web/src/features/workspace/views/desktop/workspace-desktop-view.test.tsx
-```
-
-Expected outcome: the assistant is available from setup success and settings, and the workspace shell can promote phone continuation.
+No code tests are required for this documentation-only phase. Verify the Markdown renders and the links point to the intended local docs and official tunnel-provider docs.
 
 ## Watchouts
 
-- Keep the assistant productized; do not collapse back into doc-like instructions.
-- Use the server-reported URLs and auth state directly rather than adding duplicated client inference.
-- Avoid over-investing in QR or polish unless the core continuation path is clearly working.
+- Do not reintroduce a workspace-shell `Continue on Phone` CTA without evidence that users need it.
+- Do not encourage direct public port exposure.
+- Keep third-party tunnel instructions practical but not exhaustive; link official docs for provider-specific details.
+- If a future in-app assistant is revived, it should do more than static information display: status-aware diagnostics, copy actions, QR, and next-step fixes.
 
 ## Detailed Execution Source
 
-Use the detailed step-by-step instructions in the master plan:
+The master plan Task 5 is intentionally superseded for this phase:
 
 - [Task 5 detailed steps](./2026-05-14-conversion-first-activation.md#task-5-add-the-mobile-access-assistant-and-continue-on-phone)
 
 ## Suggested Commit Boundary
 
 ```bash
-git commit -m "feat: add phone continuation flow"
+git commit -m "docs: add mobile remote access guide"
 ```

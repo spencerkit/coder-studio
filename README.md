@@ -119,7 +119,7 @@ The same workspace URL works across all devices — interface adapts automatical
 | [App Overview](docs/help/app-overview.md) | Core concepts and features |
 | [Provider Setup](docs/help/providers.md) | Claude Code / Codex CLI installation |
 | [Desktop Guide](docs/help/desktop-guide.md) | PC interface and shortcuts |
-| [Mobile Guide](docs/help/mobile-guide.md) | Phone / tablet usage |
+| [Mobile & Remote Access Guide](docs/help/mobile-guide.md) | Phone / tablet usage, LAN access, Tailscale/ngrok/Cloudflare Tunnel |
 | [Common Workflows](docs/help/workflows.md) | Task-based tutorials |
 | [Troubleshooting](docs/help/troubleshooting.md) | FAQ and known issues |
 | [CLI Reference](docs/help/cli.md) | Command-line options |

@@ -119,7 +119,7 @@ coder-studio open
 | [功能总览](docs/help/app-overview.md) | 核心概念和功能 |
 | [Provider 配置](docs/help/providers.md) | Claude Code / Codex CLI 安装 |
 | [桌面端指南](docs/help/desktop-guide.md) | PC 界面和快捷键 |
-| [移动端指南](docs/help/mobile-guide.md) | 手机/平板使用 |
+| [移动端与远程访问指南](docs/help/mobile-guide.md) | 手机/平板使用、局域网访问、Tailscale/ngrok/Cloudflare Tunnel |
 | [常用工作流](docs/help/workflows.md) | 任务式教程 |
 | [故障排除](docs/help/troubleshooting.md) | 常见问题和修复 |
 | [CLI 参考](docs/help/cli.md) | 命令行选项 |
