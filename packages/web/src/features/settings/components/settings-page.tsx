@@ -22,7 +22,7 @@ import {
   resolveSupervisorRetryOnTimeout,
 } from "@coder-studio/core";
 import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
-import { Check, ChevronLeft, ChevronRight } from "lucide-react";
+import { Check, ChevronRight } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { localeAtom, themeAtom } from "../../../atoms/app-ui";
@@ -38,6 +38,7 @@ import { useTranslation } from "../../../lib/i18n";
 import { getThemeById, resolveStoredThemeId, THEMES } from "../../../theme";
 import { notificationPreferencesAtom } from "../../notifications/atoms";
 import { MobilePageHeader } from "../../shared/components/mobile-page-header";
+import { PageHeader } from "../../shared/components/page-header";
 import {
   getTerminalFontSizePreference,
   hasExplicitTerminalFontSizeSetting,
@@ -610,19 +611,13 @@ export function SettingsPage() {
             backLabel={t("action.back")}
           />
         ) : (
-          <div className="settings-header__desktop">
-            <button
-              type="button"
-              className="page-header__back settings-header__back"
-              onClick={handleBack}
-            >
-              <ChevronLeft size={16} />
-              <span>{t("action.back")}</span>
-            </button>
-            <div className="settings-header__copy">
-              <h1 className="page-title settings-header__title">{t("settings.title")}</h1>
-            </div>
-          </div>
+          <PageHeader
+            title={t("settings.title")}
+            titleAs="h1"
+            level="secondary"
+            onBack={handleBack}
+            backLabel={t("action.back")}
+          />
         )}
       </header>
 

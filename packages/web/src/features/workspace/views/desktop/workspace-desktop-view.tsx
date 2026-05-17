@@ -13,6 +13,7 @@ import {
 import { useTranslation } from "../../../../lib/i18n";
 import { AgentPanes } from "../../../agent-panes";
 import { CodeEditorHost } from "../../../code-editor/views/shared/code-editor-host";
+import { PanelHeader } from "../../../shared/components/panel-header";
 import { TerminalPanel } from "../../../terminal-panel";
 import { TopBar } from "../../../topbar";
 import { useGitDiffViewerActions } from "../../actions/use-git-actions";
@@ -115,56 +116,60 @@ export const WorkspaceDesktopView: FC = () => {
               style={{ width: `${leftPanelWidth}px` }}
             >
               <div className="nav-panel workspace-sidebar-panel">
-                <div className="workspace-sidebar-panel__header">
-                  <Tabs
-                    aria-label="Workspace sections"
-                    onValueChange={setSidebarTab}
-                    value={sidebarTab}
-                  >
-                    <TabList className="workspace-sidebar-panel__tabs">
-                      <Tab className="workspace-sidebar-panel__tab" value="files">
-                        <span>{t("file.title")}</span>
-                      </Tab>
-                      <Tab className="workspace-sidebar-panel__tab" value="git">
-                        <span>{t("label.git")}</span>
-                      </Tab>
-                    </TabList>
-                  </Tabs>
-
-                  <div className="workspace-sidebar-panel__actions">
-                    {sidebarTab === "files" ? (
-                      <>
-                        <Tooltip content={t("file.new_file")}>
-                          <IconButton
-                            className="panel-toolbar-btn"
-                            aria-label={t("file.new_file")}
-                            icon={<ThemedIcon semantic="file.action.new" size={14} />}
-                            onClick={handleOpenFileCreate}
-                            size="sm"
-                          />
-                        </Tooltip>
-                        <Tooltip content={t("file.new_folder")}>
-                          <IconButton
-                            className="panel-toolbar-btn"
-                            aria-label={t("file.new_folder")}
-                            icon={<ThemedIcon semantic="file.action.newFolder" size={14} />}
-                            onClick={handleOpenFolderCreate}
-                            size="sm"
-                          />
-                        </Tooltip>
-                        <Tooltip content={t("file.collapse_all")}>
-                          <IconButton
-                            className="panel-toolbar-btn"
-                            aria-label={t("file.collapse_all")}
-                            icon={<ChevronsUp size={14} />}
-                            onClick={() => setFileTreeCollapseVersion((value) => value + 1)}
-                            size="sm"
-                          />
-                        </Tooltip>
-                      </>
-                    ) : null}
-                  </div>
-                </div>
+                <PanelHeader
+                  title={t("workspace.title")}
+                  meta={
+                    <Tabs
+                      aria-label="Workspace sections"
+                      onValueChange={setSidebarTab}
+                      value={sidebarTab}
+                    >
+                      <TabList className="workspace-sidebar-panel__tabs">
+                        <Tab className="workspace-sidebar-panel__tab" value="files">
+                          <span>{t("file.title")}</span>
+                        </Tab>
+                        <Tab className="workspace-sidebar-panel__tab" value="git">
+                          <span>{t("label.git")}</span>
+                        </Tab>
+                      </TabList>
+                    </Tabs>
+                  }
+                  actions={
+                    <div className="workspace-sidebar-panel__actions">
+                      {sidebarTab === "files" ? (
+                        <>
+                          <Tooltip content={t("file.new_file")}>
+                            <IconButton
+                              className="panel-toolbar-btn"
+                              aria-label={t("file.new_file")}
+                              icon={<ThemedIcon semantic="file.action.new" size={14} />}
+                              onClick={handleOpenFileCreate}
+                              size="sm"
+                            />
+                          </Tooltip>
+                          <Tooltip content={t("file.new_folder")}>
+                            <IconButton
+                              className="panel-toolbar-btn"
+                              aria-label={t("file.new_folder")}
+                              icon={<ThemedIcon semantic="file.action.newFolder" size={14} />}
+                              onClick={handleOpenFolderCreate}
+                              size="sm"
+                            />
+                          </Tooltip>
+                          <Tooltip content={t("file.collapse_all")}>
+                            <IconButton
+                              className="panel-toolbar-btn"
+                              aria-label={t("file.collapse_all")}
+                              icon={<ChevronsUp size={14} />}
+                              onClick={() => setFileTreeCollapseVersion((value) => value + 1)}
+                              size="sm"
+                            />
+                          </Tooltip>
+                        </>
+                      ) : null}
+                    </div>
+                  }
+                />
 
                 <div className="workspace-sidebar-panel__body">
                   {sidebarTab === "files" ? (

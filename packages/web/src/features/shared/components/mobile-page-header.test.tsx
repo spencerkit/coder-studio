@@ -17,8 +17,20 @@ describe("MobilePageHeader", () => {
     const leading = header?.querySelector(".page-header__leading");
 
     expect(header).not.toBeNull();
+    expect(header).toHaveClass("page-header--secondary");
+    expect(header).toHaveAttribute("data-level", "secondary");
     expect(leading).not.toBeNull();
     expect(within(leading as HTMLElement).getByText("Open Workspace")).toBeInTheDocument();
     expect(screen.queryByText("WORKSPACE")).not.toBeInTheDocument();
+  });
+
+  it("passes the requested level through without showing the kicker by default", () => {
+    render(<MobilePageHeader title="Launch Task" kicker="Agent" level="primary" />);
+
+    const header = document.querySelector(".mobile-page-header");
+
+    expect(header).toHaveClass("page-header--primary");
+    expect(header).toHaveAttribute("data-level", "primary");
+    expect(screen.queryByText("Agent")).not.toBeInTheDocument();
   });
 });

@@ -321,7 +321,7 @@ describe("UI preview catalog", () => {
     renderScene("settings-density-review");
 
     expect(await screen.findByRole("heading", { name: /settings|设置/i })).toBeInTheDocument();
-    expect(document.querySelector(".settings-header__desktop")).toBeTruthy();
+    expect(document.querySelector(".settings-header .page-header")).toBeTruthy();
     expect(document.querySelector(".settings-sidebar")).toBeTruthy();
   });
 

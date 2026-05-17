@@ -23,7 +23,7 @@ export { Input } from "./input";
 export type { KbdProps } from "./kbd";
 export { Kbd } from "./kbd";
 export type { ModalProps, ModalSize } from "./modal";
-export { Modal, ModalBody, ModalFooter, ModalHeader, ModalTitle } from "./modal";
+export { DialogHeader, Modal, ModalBody, ModalFooter, ModalHeader, ModalTitle } from "./modal";
 export type { NoticeProps, NoticeTone } from "./notice";
 export { Notice } from "./notice";
 export type { PillProps } from "./pill";

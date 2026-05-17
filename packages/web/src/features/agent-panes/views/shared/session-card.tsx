@@ -14,6 +14,7 @@ import { pendingFocusSessionAtom } from "../../../../atoms/app-ui";
 import { sessionByIdAtomFamily } from "../../../../atoms/sessions";
 import { workspaceByIdAtomFamily } from "../../../../atoms/workspaces";
 import { IconButton, StatusDot, Tag, Tooltip } from "../../../../components/ui";
+import { PanelHeader } from "../../../shared/components/panel-header";
 import { useSupervisor } from "../../../supervisor/actions/use-supervisor";
 import { ObjectiveDialog } from "../../../supervisor/views/shared/objective-dialog";
 import { SupervisorCard } from "../../../supervisor/views/shared/supervisor-card";
@@ -117,70 +118,71 @@ export const SessionCard: FC<SessionCardProps> = ({
       data-session-id={sessionId}
       onClick={handleCardClick}
     >
-      <div className="session-header">
-        <div className="session-header-left">
+      <PanelHeader
+        title={sessionTitle}
+        status={
           <StatusDot
             tone={getSessionDotTone(session.state)}
             pulse={shouldPulseSessionDot(session.state)}
             className={`session-dot ${getSessionDotClass(session.state)}`}
           />
-          <div className="session-header-copy">
-            <div className="session-title-row">
-              <span className="session-title">{sessionTitle}</span>
-              <Tag color="blue" className="session-provider-badge">
-                {providerLabel}
-              </Tag>
-              <Tag
-                color={getSessionTagColor(session.state)}
-                className="session-state-badge"
-                caps={false}
-              >
-                {sessionStateLabel}
-              </Tag>
+        }
+        meta={
+          <div className="session-title-row">
+            <Tag color="blue" className="session-provider-badge">
+              {providerLabel}
+            </Tag>
+            <Tag
+              color={getSessionTagColor(session.state)}
+              className="session-state-badge"
+              caps={false}
+            >
+              {sessionStateLabel}
+            </Tag>
+          </div>
+        }
+        actions={
+          showHeaderActions || headerAccessory ? (
+            <div className="session-header-right">
+              {headerAccessory ? (
+                <div className="session-header-accessory">{headerAccessory}</div>
+              ) : null}
+
+              {showHeaderActions ? (
+                <div className="session-header-actions">
+                  <Tooltip content="Split horizontal">
+                    <IconButton
+                      aria-label="Split horizontal"
+                      className="session-action-btn"
+                      icon={<FlipHorizontal size={13} />}
+                      onClick={() => onSplitHorizontal?.()}
+                      size="sm"
+                    />
+                  </Tooltip>
+                  <Tooltip content="Split vertical">
+                    <IconButton
+                      aria-label="Split vertical"
+                      className="session-action-btn"
+                      icon={<FlipVertical size={13} />}
+                      onClick={() => onSplitVertical?.()}
+                      size="sm"
+                    />
+                  </Tooltip>
+                  <Tooltip content="Close">
+                    <IconButton
+                      aria-label="Close"
+                      className="session-action-btn session-action-btn-close"
+                      icon={<X size={14} />}
+                      onClick={() => void onClose?.()}
+                      size="sm"
+                    />
+                  </Tooltip>
+                </div>
+              ) : null}
             </div>
-          </div>
-        </div>
-
-        {showHeaderActions || headerAccessory ? (
-          <div className="session-header-right">
-            {headerAccessory ? (
-              <div className="session-header-accessory">{headerAccessory}</div>
-            ) : null}
-
-            {showHeaderActions ? (
-              <div className="session-header-actions">
-                <Tooltip content="Split horizontal">
-                  <IconButton
-                    aria-label="Split horizontal"
-                    className="session-action-btn"
-                    icon={<FlipHorizontal size={13} />}
-                    onClick={() => onSplitHorizontal?.()}
-                    size="sm"
-                  />
-                </Tooltip>
-                <Tooltip content="Split vertical">
-                  <IconButton
-                    aria-label="Split vertical"
-                    className="session-action-btn"
-                    icon={<FlipVertical size={13} />}
-                    onClick={() => onSplitVertical?.()}
-                    size="sm"
-                  />
-                </Tooltip>
-                <Tooltip content="Close">
-                  <IconButton
-                    aria-label="Close"
-                    className="session-action-btn session-action-btn-close"
-                    icon={<X size={14} />}
-                    onClick={() => void onClose?.()}
-                    size="sm"
-                  />
-                </Tooltip>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-      </div>
+          ) : null
+        }
+      />
 
       {showSupervisorInline &&
       session.capability === "full" &&
