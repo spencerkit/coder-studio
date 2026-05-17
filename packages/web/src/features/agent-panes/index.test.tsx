@@ -14,13 +14,11 @@ const mockSessionCard = vi.fn(
     sessionId,
     onSplitHorizontal,
     onSplitVertical,
-    onStop,
     onClose,
   }: {
     sessionId: string;
     onSplitHorizontal?: () => void;
     onSplitVertical?: () => void;
-    onStop?: () => void;
     onClose?: () => void;
   }) => (
     <div data-testid="session-card">
@@ -30,9 +28,6 @@ const mockSessionCard = vi.fn(
       </button>
       <button type="button" onClick={onSplitVertical}>
         split-vertical-{sessionId}
-      </button>
-      <button type="button" onClick={onStop}>
-        stop-{sessionId}
       </button>
       <button type="button" onClick={onClose}>
         close-{sessionId}

@@ -511,12 +511,7 @@ describe("SessionCard", () => {
       </Provider>
     );
 
-    expect(screen.getByRole("button", { name: "Stop" })).toHaveClass(
-      "btn",
-      "btn-ghost",
-      "btn-sm",
-      "session-action-btn"
-    );
+    expect(screen.queryByRole("button", { name: "Stop" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Split horizontal" })).toHaveClass(
       "btn",
       "btn-ghost",

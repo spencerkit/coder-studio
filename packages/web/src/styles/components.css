@@ -1836,7 +1836,7 @@ body.focus-mode-active .split-divider-h {
 .split-divider-h::before {
   content: "";
   position: absolute;
-  background: var(--border);
+  background: color-mix(in srgb, var(--border) 62%, transparent);
   pointer-events: none;
 }
 
@@ -1858,7 +1858,7 @@ body.focus-mode-active .split-divider-h {
 
 .split-divider-v:hover::before,
 .split-divider-h:hover::before {
-  background: var(--blue);
+  background: color-mix(in srgb, var(--border-focus) 58%, transparent);
 }
 
 /* Disable text selection during resize */
@@ -6221,7 +6221,7 @@ textarea.input {
   position: absolute;
   pointer-events: none;
   border-radius: 999px;
-  background: linear-gradient(180deg, transparent, rgba(108, 182, 255, 0.18), transparent);
+  background: color-mix(in srgb, var(--border) 62%, transparent);
 }
 
 .pane-layout-horizontal .pane-layout-divider::after {
@@ -6241,7 +6241,7 @@ textarea.input {
 }
 
 .pane-layout-divider:hover::after {
-  background: linear-gradient(180deg, transparent, rgba(108, 182, 255, 0.4), transparent);
+  background: color-mix(in srgb, var(--border-focus) 58%, transparent);
 }
 
 .session-card {
@@ -7081,7 +7081,7 @@ textarea.input {
 
 .session-card {
   background: var(--bg-page);
-  border: 1px solid var(--border);
+  border: none;
   border-radius: 0;
   box-shadow: none;
 }
@@ -7179,7 +7179,7 @@ textarea.input {
 .workspace-bottom-panel > .bottom-terminal {
   flex: 1;
   min-height: 0;
-  border-top: none;
+  border: none;
   background: linear-gradient(
     180deg,
     color-mix(in srgb, var(--bg-terminal) 96%, white 4%),
@@ -10991,7 +10991,7 @@ textarea.input {
   display: flex;
   min-height: var(--desktop-statusbar-height);
   flex-shrink: 0;
-  border-top: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--border) 62%, transparent);
   background: var(--bg-panel);
 }
 

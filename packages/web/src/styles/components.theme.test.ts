@@ -235,11 +235,23 @@ describe("components.css theme-sensitive surfaces", () => {
     const resolvingCard = getLastRuleBlock(".workspace-resolving-card");
     const mainStage = getLastRuleBlock(".workspace-main-stage");
     const sessionTerminal = getLastRuleBlock(".session-terminal");
+    const sessionCard = getLastRuleBlock(".session-card");
+    const statusBar = getLastRuleBlock(".workspace-status-bar");
     const agentPanes = getLastRuleBlock(".workspace-main-stage > .agent-panes");
     const bottomPanel = getLastRuleBlock(".workspace-bottom-panel");
     const verticalDividerRules = getRuleBlocksFrom(stylesheet, ".split-divider-v").join("\n");
     const horizontalDividerRules = getRuleBlocksFrom(stylesheet, ".split-divider-h").join("\n");
+    const verticalDividerLineRules = getRuleBlocksFrom(stylesheet, ".split-divider-v::before").join(
+      "\n"
+    );
+    const horizontalDividerLineRules = getRuleBlocksFrom(
+      stylesheet,
+      ".split-divider-h::before"
+    ).join("\n");
     const paneDividerBaseRules = getRuleBlocksFrom(stylesheet, ".pane-layout-divider").join("\n");
+    const paneDividerLineRules = getRuleBlocksFrom(stylesheet, ".pane-layout-divider::after").join(
+      "\n"
+    );
     const paneDividerHorizontalRules = getRuleBlocksFrom(
       stylesheet,
       ".pane-layout-horizontal .pane-layout-divider"
@@ -252,6 +264,7 @@ describe("components.css theme-sensitive surfaces", () => {
       stylesheet,
       ".workspace-bottom-panel > .bottom-terminal"
     ).join("\n");
+    const bottomTerminalShell = getLastRuleBlock(".workspace-bottom-panel > .bottom-terminal");
 
     expect(topbar).toContain("var(--bg-surface)");
     expect(activeTab).toContain("var(--bg-active)");
@@ -268,15 +281,26 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(agentPanes).toContain("padding: 0");
     expect(sessionTerminal).toContain("var(--bg-terminal)");
     expect(sessionTerminal).not.toContain("rgba(11, 18, 24, 0.98)");
+    expect(sessionCard).toContain("border: none");
+    expect(sessionCard).not.toContain("border: 1px solid var(--border)");
     expect(verticalDividerRules).toContain("width: 10px");
     expect(verticalDividerRules).not.toContain("width: 8px");
     expect(verticalDividerRules).toContain("margin-left: -5px");
     expect(verticalDividerRules).toContain("margin-right: -5px");
+    expect(verticalDividerLineRules).toContain(
+      "background: color-mix(in srgb, var(--border) 62%, transparent)"
+    );
     expect(horizontalDividerRules).toContain("height: 10px");
     expect(horizontalDividerRules).not.toContain("height: 8px");
     expect(horizontalDividerRules).toContain("margin-top: -5px");
     expect(horizontalDividerRules).toContain("margin-bottom: -5px");
+    expect(horizontalDividerLineRules).toContain(
+      "background: color-mix(in srgb, var(--border) 62%, transparent)"
+    );
     expect(paneDividerBaseRules).toContain("position: relative");
+    expect(paneDividerLineRules).toContain(
+      "background: color-mix(in srgb, var(--border) 62%, transparent)"
+    );
     expect(paneDividerHorizontalRules).toContain("width: 10px");
     expect(paneDividerHorizontalRules).toContain("margin-left: -5px");
     expect(paneDividerHorizontalRules).toContain("margin-right: -5px");
@@ -288,8 +312,12 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(bottomPanel).not.toContain("padding: 0 14px 14px");
     expect(bottomTerminalShellRules).toContain("var(--bg-terminal)");
     expect(bottomTerminalShellRules).not.toContain("rgba(17, 24, 31, 0.96)");
+    expect(bottomTerminalShell).toContain("border: none");
     expect(bottomTerminalShellRules).toContain("border-radius: 0");
     expect(bottomTerminalShellRules).not.toContain("border-radius: 14px");
+    expect(statusBar).toContain(
+      "border-top: 1px solid color-mix(in srgb, var(--border) 62%, transparent)"
+    );
   });
 
   it("maps desktop chrome blocks to the dedicated desktop layout tokens", () => {
