@@ -928,6 +928,18 @@ export function XtermHost({
     });
   }, []);
 
+  useEffect(() => {
+    if (
+      !terminalRef.current ||
+      terminalRef.current.options.fontSize === terminalPreferences.fontSize
+    ) {
+      return;
+    }
+
+    terminalRef.current.options.fontSize = terminalPreferences.fontSize;
+    scheduleFit();
+  }, [scheduleFit, terminalPreferences.fontSize]);
+
   const updateCtrlMode = useCallback((nextCtrlMode: CtrlMode) => {
     ctrlModeRef.current = nextCtrlMode;
     setCtrlMode(nextCtrlMode);
@@ -1224,7 +1236,7 @@ export function XtermHost({
     const terminal = new Terminal({
       theme: getThemeById(initialThemeRef.current).terminalTheme,
       fontFamily: "JetBrains Mono, Fira Code, SF Mono, monospace",
-      fontSize: 11,
+      fontSize: terminalPreferences.fontSize,
       scrollback: 5000,
       cursorBlink: isInteractive && !uploadBusy,
       cursorStyle: "block",

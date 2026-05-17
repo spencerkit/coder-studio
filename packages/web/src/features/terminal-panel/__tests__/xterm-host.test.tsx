@@ -17,7 +17,7 @@ import type { TerminalReplayPayload, TerminalSnapshotPayload } from "../../../ws
 import { toastsAtom } from "../../notifications/atoms";
 import { terminalMetaAtomFamily, terminalOutputAtomFamily } from "../atoms";
 import type { HydrationRequestHandle, HydrationTier } from "../hydration-coordinator";
-import { terminalPreferencesAtom } from "../preferences";
+import { DEFAULT_TERMINAL_FONT_SIZE, terminalPreferencesAtom } from "../preferences";
 import { TERMINAL_REPLAY_TIMEOUT_MS } from "../replay-state";
 import { trimWrittenChunks, XtermHost } from "../views/shared/xterm-host";
 
@@ -395,7 +395,10 @@ describe("XtermHost", () => {
     } satisfies Pick<Clipboard, "writeText">;
 
     store.set(localeAtom, "en");
-    store.set(terminalPreferencesAtom, { copyOnSelect: true });
+    store.set(terminalPreferencesAtom, {
+      copyOnSelect: true,
+      fontSize: DEFAULT_TERMINAL_FONT_SIZE,
+    });
     store.set(wsClientAtom, {
       sendCommand: vi.fn().mockResolvedValue({ status: "ok" }),
       subscribe: vi.fn(() => () => {}),
@@ -444,7 +447,10 @@ describe("XtermHost", () => {
     const execCommand = vi.fn().mockReturnValue(true);
 
     store.set(localeAtom, "en");
-    store.set(terminalPreferencesAtom, { copyOnSelect: true });
+    store.set(terminalPreferencesAtom, {
+      copyOnSelect: true,
+      fontSize: DEFAULT_TERMINAL_FONT_SIZE,
+    });
     store.set(wsClientAtom, {
       sendCommand: vi.fn().mockResolvedValue({ status: "ok" }),
       subscribe: vi.fn(() => () => {}),
@@ -500,7 +506,10 @@ describe("XtermHost", () => {
     } satisfies Pick<Clipboard, "writeText">;
 
     store.set(localeAtom, "en");
-    store.set(terminalPreferencesAtom, { copyOnSelect: true });
+    store.set(terminalPreferencesAtom, {
+      copyOnSelect: true,
+      fontSize: DEFAULT_TERMINAL_FONT_SIZE,
+    });
     store.set(wsClientAtom, {
       sendCommand: vi.fn().mockResolvedValue({ status: "ok" }),
       subscribe: vi.fn(() => () => {}),
@@ -548,7 +557,10 @@ describe("XtermHost", () => {
     } satisfies Pick<Clipboard, "writeText">;
 
     store.set(localeAtom, "en");
-    store.set(terminalPreferencesAtom, { copyOnSelect: true });
+    store.set(terminalPreferencesAtom, {
+      copyOnSelect: true,
+      fontSize: DEFAULT_TERMINAL_FONT_SIZE,
+    });
     store.set(wsClientAtom, {
       sendCommand: vi.fn().mockResolvedValue({ status: "ok" }),
       subscribe: vi.fn(() => () => {}),
@@ -603,7 +615,10 @@ describe("XtermHost", () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
 
     store.set(localeAtom, "en");
-    store.set(terminalPreferencesAtom, { copyOnSelect: false });
+    store.set(terminalPreferencesAtom, {
+      copyOnSelect: false,
+      fontSize: DEFAULT_TERMINAL_FONT_SIZE,
+    });
     store.set(wsClientAtom, {
       sendCommand: vi.fn().mockResolvedValue({ status: "ok" }),
       subscribe: vi.fn(() => () => {}),
@@ -646,7 +661,10 @@ describe("XtermHost", () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
 
     store.set(localeAtom, "en");
-    store.set(terminalPreferencesAtom, { copyOnSelect: true });
+    store.set(terminalPreferencesAtom, {
+      copyOnSelect: true,
+      fontSize: DEFAULT_TERMINAL_FONT_SIZE,
+    });
     store.set(wsClientAtom, {
       sendCommand: vi.fn().mockResolvedValue({ status: "ok" }),
       subscribe: vi.fn(() => () => {}),
@@ -687,7 +705,10 @@ describe("XtermHost", () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
 
     store.set(localeAtom, "en");
-    store.set(terminalPreferencesAtom, { copyOnSelect: true });
+    store.set(terminalPreferencesAtom, {
+      copyOnSelect: true,
+      fontSize: DEFAULT_TERMINAL_FONT_SIZE,
+    });
     store.set(wsClientAtom, {
       sendCommand: vi.fn().mockResolvedValue({ status: "ok" }),
       subscribe: vi.fn(() => () => {}),
@@ -731,7 +752,10 @@ describe("XtermHost", () => {
     const execCommand = vi.fn().mockReturnValue(false);
 
     store.set(localeAtom, "zh");
-    store.set(terminalPreferencesAtom, { copyOnSelect: true });
+    store.set(terminalPreferencesAtom, {
+      copyOnSelect: true,
+      fontSize: DEFAULT_TERMINAL_FONT_SIZE,
+    });
     store.set(wsClientAtom, {
       sendCommand: vi.fn().mockResolvedValue({ status: "ok" }),
       subscribe: vi.fn(() => () => {}),
@@ -1393,6 +1417,61 @@ describe("XtermHost", () => {
     expect(Terminal).toHaveBeenCalledWith(
       expect.not.objectContaining({ lineHeight: expect.any(Number) })
     );
+  });
+
+  it("initializes xterm with the configured terminal font size", async () => {
+    const store = createStore();
+    store.set(terminalPreferencesAtom, {
+      copyOnSelect: false,
+      fontSize: 16,
+    });
+
+    const { Terminal } = await import("@xterm/xterm");
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="font-size-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    expect(Terminal).toHaveBeenCalledWith(expect.objectContaining({ fontSize: 16 }));
+    expect(Terminal).toHaveBeenCalledWith(
+      expect.not.objectContaining({ lineHeight: expect.any(Number) })
+    );
+  });
+
+  it("updates the existing xterm instance when terminal font size changes", async () => {
+    const store = createStore();
+    store.set(terminalPreferencesAtom, {
+      copyOnSelect: false,
+      fontSize: 11,
+    });
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="font-size-live-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(mockFitAddon.fit).toHaveBeenCalled();
+    });
+
+    const fitCallsBeforeUpdate = mockFitAddon.fit.mock.calls.length;
+
+    act(() => {
+      store.set(terminalPreferencesAtom, {
+        copyOnSelect: false,
+        fontSize: 17,
+      });
+    });
+
+    await waitFor(() => {
+      expect(mockTerminal.options.fontSize).toBe(17);
+    });
+    await waitFor(() => {
+      expect(mockFitAddon.fit.mock.calls.length).toBeGreaterThan(fitCallsBeforeUpdate);
+    });
   });
 
   it("does not enable xterm's overview ruler just to size the scrollbar", async () => {
@@ -7170,7 +7249,10 @@ describe("XtermHost", () => {
     });
 
     store.set(localeAtom, "en");
-    store.set(terminalPreferencesAtom, { copyOnSelect: true });
+    store.set(terminalPreferencesAtom, {
+      copyOnSelect: true,
+      fontSize: DEFAULT_TERMINAL_FONT_SIZE,
+    });
     store.set(wsClientAtom, {
       sendCommand: vi.fn().mockResolvedValue({ ok: true, data: { status: "ok" } }),
       subscribe: vi.fn(() => () => {}),
@@ -7269,7 +7351,10 @@ describe("XtermHost", () => {
     });
 
     store.set(localeAtom, "en");
-    store.set(terminalPreferencesAtom, { copyOnSelect: true });
+    store.set(terminalPreferencesAtom, {
+      copyOnSelect: true,
+      fontSize: DEFAULT_TERMINAL_FONT_SIZE,
+    });
     store.set(wsClientAtom, {
       sendCommand: vi.fn().mockResolvedValue({ ok: true, data: { status: "ok" } }),
       subscribe: vi.fn(() => () => {}),
@@ -7360,7 +7445,10 @@ describe("XtermHost", () => {
     });
 
     store.set(localeAtom, "en");
-    store.set(terminalPreferencesAtom, { copyOnSelect: false });
+    store.set(terminalPreferencesAtom, {
+      copyOnSelect: false,
+      fontSize: DEFAULT_TERMINAL_FONT_SIZE,
+    });
     store.set(wsClientAtom, {
       sendCommand: vi.fn().mockResolvedValue({ ok: true, data: { status: "ok" } }),
       subscribe: vi.fn(() => () => {}),
@@ -7431,7 +7519,10 @@ describe("XtermHost", () => {
 
     const store = createStore();
     store.set(localeAtom, "en");
-    store.set(terminalPreferencesAtom, { copyOnSelect: true });
+    store.set(terminalPreferencesAtom, {
+      copyOnSelect: true,
+      fontSize: DEFAULT_TERMINAL_FONT_SIZE,
+    });
 
     const { container } = render(
       <Provider store={store}>
@@ -7506,7 +7597,10 @@ describe("XtermHost", () => {
 
     const store = createStore();
     store.set(localeAtom, "en");
-    store.set(terminalPreferencesAtom, { copyOnSelect: true });
+    store.set(terminalPreferencesAtom, {
+      copyOnSelect: true,
+      fontSize: DEFAULT_TERMINAL_FONT_SIZE,
+    });
 
     const { container } = render(
       <Provider store={store}>
@@ -7585,7 +7679,10 @@ describe("XtermHost", () => {
 
     const store = createStore();
     store.set(localeAtom, "en");
-    store.set(terminalPreferencesAtom, { copyOnSelect: true });
+    store.set(terminalPreferencesAtom, {
+      copyOnSelect: true,
+      fontSize: DEFAULT_TERMINAL_FONT_SIZE,
+    });
 
     const { container } = render(
       <Provider store={store}>
@@ -7668,7 +7765,10 @@ describe("XtermHost", () => {
     });
 
     store.set(localeAtom, "zh");
-    store.set(terminalPreferencesAtom, { copyOnSelect: true });
+    store.set(terminalPreferencesAtom, {
+      copyOnSelect: true,
+      fontSize: DEFAULT_TERMINAL_FONT_SIZE,
+    });
     store.set(wsClientAtom, {
       sendCommand: vi.fn().mockResolvedValue({ ok: true, data: { status: "ok" } }),
       subscribe: vi.fn(() => () => {}),
@@ -7764,7 +7864,10 @@ describe("XtermHost", () => {
     });
 
     store.set(localeAtom, "en");
-    store.set(terminalPreferencesAtom, { copyOnSelect: true });
+    store.set(terminalPreferencesAtom, {
+      copyOnSelect: true,
+      fontSize: DEFAULT_TERMINAL_FONT_SIZE,
+    });
     store.set(wsClientAtom, {
       sendCommand: vi.fn().mockResolvedValue({ ok: true, data: { status: "ok" } }),
       subscribe: vi.fn(() => () => {}),
@@ -7856,7 +7959,10 @@ describe("XtermHost", () => {
     });
 
     store.set(localeAtom, "en");
-    store.set(terminalPreferencesAtom, { copyOnSelect: true });
+    store.set(terminalPreferencesAtom, {
+      copyOnSelect: true,
+      fontSize: DEFAULT_TERMINAL_FONT_SIZE,
+    });
     store.set(wsClientAtom, {
       sendCommand: vi.fn().mockResolvedValue({ ok: true, data: { status: "ok" } }),
       subscribe: vi.fn(() => () => {}),
@@ -7948,7 +8054,10 @@ describe("XtermHost", () => {
     });
 
     store.set(localeAtom, "en");
-    store.set(terminalPreferencesAtom, { copyOnSelect: true });
+    store.set(terminalPreferencesAtom, {
+      copyOnSelect: true,
+      fontSize: DEFAULT_TERMINAL_FONT_SIZE,
+    });
     store.set(wsClientAtom, {
       sendCommand: vi.fn().mockResolvedValue({ ok: true, data: { status: "ok" } }),
       subscribe: vi.fn(() => () => {}),
@@ -8028,7 +8137,10 @@ describe("XtermHost", () => {
     });
 
     store.set(localeAtom, "en");
-    store.set(terminalPreferencesAtom, { copyOnSelect: true });
+    store.set(terminalPreferencesAtom, {
+      copyOnSelect: true,
+      fontSize: DEFAULT_TERMINAL_FONT_SIZE,
+    });
     store.set(wsClientAtom, {
       sendCommand: vi.fn().mockResolvedValue({ ok: true, data: { status: "ok" } }),
       subscribe: vi.fn(() => () => {}),
@@ -8113,7 +8225,10 @@ describe("XtermHost", () => {
     });
 
     store.set(localeAtom, "en");
-    store.set(terminalPreferencesAtom, { copyOnSelect: true });
+    store.set(terminalPreferencesAtom, {
+      copyOnSelect: true,
+      fontSize: DEFAULT_TERMINAL_FONT_SIZE,
+    });
     store.set(wsClientAtom, {
       sendCommand: vi.fn().mockResolvedValue({ ok: true, data: { status: "ok" } }),
       subscribe: vi.fn(() => () => {}),
@@ -8193,7 +8308,10 @@ describe("XtermHost", () => {
     });
 
     store.set(localeAtom, "en");
-    store.set(terminalPreferencesAtom, { copyOnSelect: true });
+    store.set(terminalPreferencesAtom, {
+      copyOnSelect: true,
+      fontSize: DEFAULT_TERMINAL_FONT_SIZE,
+    });
     store.set(wsClientAtom, {
       sendCommand: vi.fn().mockResolvedValue({ ok: true, data: { status: "ok" } }),
       subscribe: vi.fn(() => () => {}),

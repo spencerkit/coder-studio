@@ -10,7 +10,10 @@ import {
 } from "../../../atoms/connection";
 import { activeWorkspaceIdAtom } from "../../../atoms/workspaces";
 import { CommandResultError } from "../../../ws/client";
-import { terminalPreferencesAtom } from "../../terminal-panel/preferences";
+import {
+  DEFAULT_TERMINAL_FONT_SIZE,
+  terminalPreferencesAtom,
+} from "../../terminal-panel/preferences";
 import { SettingsPage } from "./settings-page";
 
 const viewportMocks = vi.hoisted(() => ({
@@ -1503,7 +1506,10 @@ describe("SettingsPage", () => {
         "true"
       );
     });
-    expect(store.get(terminalPreferencesAtom)).toEqual({ copyOnSelect: true });
+    expect(store.get(terminalPreferencesAtom)).toEqual({
+      copyOnSelect: true,
+      fontSize: DEFAULT_TERMINAL_FONT_SIZE,
+    });
   });
 
   it("updates copy-on-select through the general switch and syncs the global atom", async () => {
@@ -1535,7 +1541,10 @@ describe("SettingsPage", () => {
       );
     });
 
-    expect(store.get(terminalPreferencesAtom)).toEqual({ copyOnSelect: true });
+    expect(store.get(terminalPreferencesAtom)).toEqual({
+      copyOnSelect: true,
+      fontSize: DEFAULT_TERMINAL_FONT_SIZE,
+    });
   });
 
   it("renders copy-on-select from the terminal preferences atom before general settings load resolves", async () => {
@@ -1550,7 +1559,10 @@ describe("SettingsPage", () => {
       return {};
     });
     const store = createConnectedStore(sendCommand);
-    store.set(terminalPreferencesAtom, { copyOnSelect: true });
+    store.set(terminalPreferencesAtom, {
+      copyOnSelect: true,
+      fontSize: DEFAULT_TERMINAL_FONT_SIZE,
+    });
 
     renderSettingsPage(store);
     fireEvent.click(screen.getByRole("button", { name: "通用" }));
@@ -1606,7 +1618,165 @@ describe("SettingsPage", () => {
       "aria-checked",
       "true"
     );
-    expect(store.get(terminalPreferencesAtom)).toEqual({ copyOnSelect: true });
+    expect(store.get(terminalPreferencesAtom)).toEqual({
+      copyOnSelect: true,
+      fontSize: DEFAULT_TERMINAL_FONT_SIZE,
+    });
+  });
+
+  it("renders the terminal font-size input from loaded general settings", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "appearance.terminalFontSize": 16,
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "通用" }));
+
+    const input = await screen.findByRole("spinbutton", { name: "终端字号" });
+    await waitFor(() => {
+      expect(input).toHaveValue(16);
+    });
+    expect(store.get(terminalPreferencesAtom)).toEqual({
+      copyOnSelect: false,
+      fontSize: 16,
+    });
+  });
+
+  it("updates terminal font size through the general input and syncs the global atom", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "appearance.terminalFontSize": 11,
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "通用" }));
+
+    const input = await screen.findByRole("spinbutton", { name: "终端字号" });
+
+    fireEvent.change(input, { target: { value: "15" } });
+    fireEvent.blur(input);
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            appearance: {
+              terminalFontSize: 15,
+            },
+          },
+        },
+        undefined
+      );
+    });
+
+    expect(store.get(terminalPreferencesAtom)).toEqual({
+      copyOnSelect: false,
+      fontSize: 15,
+    });
+  });
+
+  it("shows a validation error and restores the current terminal font size for out-of-range values", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "appearance.terminalFontSize": 12,
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "通用" }));
+
+    const input = await screen.findByRole("spinbutton", { name: "终端字号" });
+    await waitFor(() => {
+      expect(input).toHaveValue(12);
+    });
+
+    fireEvent.change(input, { target: { value: "19" } });
+    fireEvent.blur(input);
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent("请输入 10 到 18 之间的整数");
+    });
+
+    expect(input).toHaveValue(12);
+    expect(sendCommand).not.toHaveBeenCalledWith(
+      "settings.update",
+      expect.objectContaining({
+        settings: {
+          appearance: {
+            terminalFontSize: 19,
+          },
+        },
+      }),
+      undefined
+    );
+    expect(store.get(terminalPreferencesAtom)).toEqual({
+      copyOnSelect: false,
+      fontSize: 12,
+    });
+  });
+
+  it("preserves terminal font size when a stale general settings load resolves afterward", async () => {
+    let resolveSettingsGet: ((value: Record<string, unknown>) => void) | undefined;
+    const settingsGetPromise = new Promise<Record<string, unknown>>((resolve) => {
+      resolveSettingsGet = resolve;
+    });
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return await settingsGetPromise;
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "通用" }));
+
+    const input = await screen.findByRole("spinbutton", { name: "终端字号" });
+    fireEvent.change(input, { target: { value: "17" } });
+    fireEvent.blur(input);
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            appearance: {
+              terminalFontSize: 17,
+            },
+          },
+        },
+        undefined
+      );
+    });
+
+    await act(async () => {
+      resolveSettingsGet?.({
+        "appearance.terminalFontSize": 11,
+      });
+      await settingsGetPromise;
+    });
+
+    expect(screen.getByRole("spinbutton", { name: "终端字号" })).toHaveValue(17);
+    expect(store.get(terminalPreferencesAtom)).toEqual({
+      copyOnSelect: false,
+      fontSize: 17,
+    });
   });
 
   it("updates language selection through the shared appearance pills", async () => {
