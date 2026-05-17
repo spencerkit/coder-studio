@@ -275,18 +275,14 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(getLastRuleBlockFrom(buttonStyles, ".btn")).toContain(
       "font-size: var(--type-body-strong-size)"
     );
-    expect(getLastRuleBlockFrom(buttonStyles, ".btn")).toContain(
-      "font-weight: var(--type-body-strong-weight)"
-    );
+    expect(getLastRuleBlockFrom(buttonStyles, ".btn")).toContain("font-weight: var(--font-medium)");
     expect(getLastRuleBlockFrom(buttonStyles, ".btn")).toContain(
       "line-height: var(--type-body-strong-line-height)"
     );
     expect(getLastRuleBlockFrom(buttonStyles, ".sm")).toContain(
       "font-size: var(--type-label-size)"
     );
-    expect(getLastRuleBlockFrom(buttonStyles, ".sm")).toContain(
-      "font-weight: var(--type-label-weight)"
-    );
+    expect(getLastRuleBlockFrom(buttonStyles, ".sm")).toContain("font-weight: var(--font-medium)");
     expect(getLastRuleBlockFrom(buttonStyles, ".lg")).not.toContain("font-size:");
 
     expect(getLastRuleBlockFrom(inputStyles, ".input")).toContain(
@@ -331,7 +327,7 @@ describe("components.css theme-sensitive surfaces", () => {
       "font-size:var(--type-body-strong-size)"
     );
     expect(getLastRuleBlockFrom(runtimeStylesheet, ".btn")).toContain(
-      "font-weight:var(--type-body-strong-weight)"
+      "font-weight:var(--font-medium)"
     );
     expect(getLastRuleBlockFrom(runtimeStylesheet, ".btn-sm")).toContain(
       "font-size:var(--type-label-size)"
@@ -792,10 +788,12 @@ describe("components.css theme-sensitive surfaces", () => {
 
     expect(mobileDock).toContain("grid-template-columns: repeat(3, minmax(0, 1fr))");
     expect(mobileDock).toContain("gap: var(--sp-2)");
+    expect(mobileDock).toContain("min-height: 36px");
     expect(mobileDockItem).toBeTruthy();
     expect(mobileDockItem).toContain("border-top: 1px solid transparent");
     expect(mobileDockItem).toContain("background: transparent");
-    expect(mobileDockItem).toContain("min-height: 30px");
+    expect(mobileDockItem).toContain("min-height: 36px");
+    expect(mobileDockItem).toContain("height: 36px");
     expect(activeDockItem).toBeTruthy();
     expect(activeDockItem).toContain("border-top-color:");
   });
@@ -1037,9 +1035,11 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(topbar).toContain(
       "padding: calc(var(--mobile-safe-top) + var(--sp-1)) calc(var(--mobile-safe-right) + var(--sp-4)) var(--sp-1) calc(var(--mobile-safe-left) + var(--sp-4))"
     );
-    expect(topbarWorkspaceButton).toContain("border-bottom: 1px solid");
+    expect(topbarWorkspaceButton).toContain("border-bottom: none");
     expect(topbarWorkspaceButton).toContain("border-radius: 0");
+    expect(topbarIconButton).toContain("border: none");
     expect(topbarIconButton).toContain("border-radius: 10px");
+    expect(topbarIconButton).toContain("background: transparent");
     expect(emptyStage).toContain("padding: clamp(34px, 9vh, 72px) var(--sp-4) var(--sp-3)");
     expect(bottomStack).toContain("background: linear-gradient(");
     expect(bottomStack).toContain("border-top: 1px solid color-mix(");
@@ -1049,9 +1049,11 @@ describe("components.css theme-sensitive surfaces", () => {
     );
     expect(dock).toContain("gap: var(--sp-2)");
     expect(dock).toContain("border-bottom: none");
+    expect(dock).toContain("min-height: 36px");
     expect(dockItem).toBeTruthy();
-    expect(dockItem).toContain("min-height: 30px");
-    expect(dockItem).toContain("padding: 2px var(--sp-2) 2px");
+    expect(dockItem).toContain("min-height: 36px");
+    expect(dockItem).toContain("height: 36px");
+    expect(dockItem).toContain("padding: 1px var(--sp-2) 0");
     expect(dockLabel).toContain("font-size: var(--type-kicker-size)");
     expect(statusBar).toContain("padding-bottom: calc(var(--mobile-safe-bottom) + var(--sp-1))");
     expect(statusBar).toContain("border-top: 1px solid");
@@ -1070,7 +1072,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(emptyState).toContain("width: 100%");
     expect(emptyState).toContain("text-align: left");
     expect(emptyState).toContain("gap: var(--sp-3)");
-    expect(emptyTitle).toContain("font-size: var(--type-display-size)");
+    expect(emptyTitle).toContain("font-size: var(--type-app-title-size)");
     expect(placeholderCopy).toContain("gap: var(--sp-2)");
     expect(emptyCta).toContain("min-height: 38px");
     expect(emptyCta).toContain("width: auto");

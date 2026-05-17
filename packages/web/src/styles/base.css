@@ -58,13 +58,13 @@ h3 {
 h4 {
   font-size: var(--type-body-strong-size);
   line-height: var(--type-body-strong-line-height);
-  font-weight: var(--type-body-strong-weight);
+  font-weight: var(--type-app-title-weight);
   color: var(--text-primary);
 }
 h5 {
   font-size: var(--type-label-size);
   line-height: var(--type-label-line-height);
-  font-weight: var(--type-label-weight);
+  font-weight: var(--type-app-title-weight);
   color: var(--text-primary);
 }
 h6 {
@@ -84,7 +84,7 @@ p {
 .section-title {
   font-size: var(--type-kicker-size);
   line-height: var(--type-kicker-line-height);
-  font-weight: var(--type-kicker-weight);
+  font-weight: var(--type-app-title-weight);
   text-transform: uppercase;
   letter-spacing: var(--type-kicker-letter-spacing);
   color: var(--text-tertiary);

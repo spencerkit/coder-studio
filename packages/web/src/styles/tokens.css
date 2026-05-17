@@ -50,12 +50,12 @@
 
   --type-kicker-size: var(--font-size-100);
   --type-kicker-line-height: 1.2;
-  --type-kicker-weight: var(--font-semibold);
+  --type-kicker-weight: var(--font-normal);
   --type-kicker-letter-spacing: 0.08em;
 
   --type-label-size: var(--font-size-200);
   --type-label-line-height: 1.35;
-  --type-label-weight: var(--font-medium);
+  --type-label-weight: var(--font-normal);
 
   --type-meta-size: var(--font-size-200);
   --type-meta-line-height: 1.45;
@@ -67,11 +67,11 @@
 
   --type-body-strong-size: var(--font-size-300);
   --type-body-strong-line-height: 1.45;
-  --type-body-strong-weight: var(--font-medium);
+  --type-body-strong-weight: var(--font-normal);
 
   --type-code-inline-size: var(--font-size-200);
   --type-code-inline-line-height: 1.4;
-  --type-code-inline-weight: var(--font-medium);
+  --type-code-inline-weight: var(--font-normal);
   --type-code-inline-family: var(--font-mono);
 
   --type-app-title-size: var(--font-size-400);

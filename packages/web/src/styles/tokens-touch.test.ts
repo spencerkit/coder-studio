@@ -108,12 +108,12 @@ describe("tokens.css touch tokens", () => {
 
     expect(root).toContain("--type-kicker-size: var(--font-size-100)");
     expect(root).toContain("--type-kicker-line-height: 1.2");
-    expect(root).toContain("--type-kicker-weight: var(--font-semibold)");
+    expect(root).toContain("--type-kicker-weight: var(--font-normal)");
     expect(root).toContain("--type-kicker-letter-spacing: 0.08em");
 
     expect(root).toContain("--type-label-size: var(--font-size-200)");
     expect(root).toContain("--type-label-line-height: 1.35");
-    expect(root).toContain("--type-label-weight: var(--font-medium)");
+    expect(root).toContain("--type-label-weight: var(--font-normal)");
 
     expect(root).toContain("--type-meta-size: var(--font-size-200)");
     expect(root).toContain("--type-meta-line-height: 1.45");
@@ -123,10 +123,10 @@ describe("tokens.css touch tokens", () => {
     expect(root).toContain("--type-body-weight: var(--font-normal)");
     expect(root).toContain("--type-body-strong-size: var(--font-size-300)");
     expect(root).toContain("--type-body-strong-line-height: 1.45");
-    expect(root).toContain("--type-body-strong-weight: var(--font-medium)");
+    expect(root).toContain("--type-body-strong-weight: var(--font-normal)");
     expect(root).toContain("--type-code-inline-size: var(--font-size-200)");
     expect(root).toContain("--type-code-inline-line-height: 1.4");
-    expect(root).toContain("--type-code-inline-weight: var(--font-medium)");
+    expect(root).toContain("--type-code-inline-weight: var(--font-normal)");
     expect(root).toContain("--type-code-inline-family: var(--font-mono)");
     expect(root).toContain("--type-app-title-size: var(--font-size-400)");
     expect(root).toContain("--type-app-title-line-height: 1.25");
