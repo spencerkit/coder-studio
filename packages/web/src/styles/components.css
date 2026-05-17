@@ -7932,6 +7932,13 @@ textarea.input {
 }
 
 .config-card-body--fill-height {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.config-card-body--fill-height > * {
   flex: 1;
   min-height: 0;
 }

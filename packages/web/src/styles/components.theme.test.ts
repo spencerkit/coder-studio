@@ -1086,6 +1086,8 @@ describe("components.css theme-sensitive surfaces", () => {
     const configCardBase = getRuleBlocksFrom(stylesheet, ".config-card")[0];
     const configCardHeaderBase = getRuleBlocksFrom(stylesheet, ".config-card-header")[0];
     const configCardBody = getLastRuleBlock(".config-card-body");
+    const configCardBodyFillHeight = getLastRuleBlock(".config-card-body--fill-height");
+    const configCardBodyFillHeightChild = getLastRuleBlock(".config-card-body--fill-height > *");
     const configCardActionsBase = getRuleBlocksFrom(stylesheet, ".config-card-actions")[0];
     const configCardMobile = getLastGroupedRuleBlockFrom(
       stylesheet,
@@ -1112,6 +1114,10 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(configCardHeaderBase).not.toContain("cursor: pointer");
     expect(configHeaderActionsMobile).toContain("padding-left: var(--sp-4)");
     expect(configCardBody).toContain("background: transparent");
+    expect(configCardBodyFillHeight).toContain("display: flex");
+    expect(configCardBodyFillHeight).toContain("flex-direction: column");
+    expect(configCardBodyFillHeightChild).toContain("flex: 1");
+    expect(configCardBodyFillHeightChild).toContain("min-height: 0");
     expect(configCardActionsBase).toContain("border-top: 1px solid var(--border)");
     expect(configCardActionsBase).toContain("background: transparent");
     expect(configEmptyStateBase).toContain("align-items: flex-start");
