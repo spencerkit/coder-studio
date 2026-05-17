@@ -6217,7 +6217,7 @@ textarea.input {
 
 .workspace-bottom-panel > .bottom-terminal {
   border: 1px solid color-mix(in srgb, var(--border-light) 64%, var(--accent-blue) 36%);
-  border-radius: 14px;
+  border-radius: 0;
   box-shadow: var(--shadow-lg);
   overflow: hidden;
   background: linear-gradient(
@@ -7107,7 +7107,7 @@ textarea.input {
   flex-shrink: 0;
   min-height: 0;
   overflow: visible;
-  padding: 0 14px 14px;
+  padding: 0 0 14px;
   background: transparent;
   border-top: none;
 }

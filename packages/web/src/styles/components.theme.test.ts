@@ -236,7 +236,11 @@ describe("components.css theme-sensitive surfaces", () => {
     const mainStage = getLastRuleBlock(".workspace-main-stage");
     const sessionTerminal = getLastRuleBlock(".session-terminal");
     const agentPanes = getLastRuleBlock(".workspace-main-stage > .agent-panes");
-    const bottomTerminalShell = getLastRuleBlock(".workspace-bottom-panel > .bottom-terminal");
+    const bottomPanel = getLastRuleBlock(".workspace-bottom-panel");
+    const bottomTerminalShellRules = getRuleBlocksFrom(
+      stylesheet,
+      ".workspace-bottom-panel > .bottom-terminal"
+    ).join("\n");
 
     expect(topbar).toContain("var(--bg-surface)");
     expect(activeTab).toContain("var(--bg-active)");
@@ -250,10 +254,15 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(mainStage).toContain("flex-direction: column");
     expect(agentPanes).toContain("flex: 1");
     expect(agentPanes).toContain("min-height: 0");
+    expect(agentPanes).toContain("padding: 0");
     expect(sessionTerminal).toContain("var(--bg-terminal)");
     expect(sessionTerminal).not.toContain("rgba(11, 18, 24, 0.98)");
-    expect(bottomTerminalShell).toContain("var(--bg-terminal)");
-    expect(bottomTerminalShell).not.toContain("rgba(17, 24, 31, 0.96)");
+    expect(bottomPanel).toContain("padding: 0 0 14px");
+    expect(bottomPanel).not.toContain("padding: 0 14px 14px");
+    expect(bottomTerminalShellRules).toContain("var(--bg-terminal)");
+    expect(bottomTerminalShellRules).not.toContain("rgba(17, 24, 31, 0.96)");
+    expect(bottomTerminalShellRules).toContain("border-radius: 0");
+    expect(bottomTerminalShellRules).not.toContain("border-radius: 14px");
   });
 
   it("maps desktop chrome blocks to the dedicated desktop layout tokens", () => {
