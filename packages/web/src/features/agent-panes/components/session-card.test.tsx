@@ -194,7 +194,7 @@ describe("SessionCard", () => {
     );
   });
 
-  it("renders a decorative session status strip with legacy session classes", () => {
+  it("does not render the legacy session progress strip", () => {
     const { store } = createSessionStore({
       terminalId: "term-live",
       state: "running",
@@ -207,15 +207,8 @@ describe("SessionCard", () => {
       </Provider>
     );
 
-    const progress = container.querySelector(".session-progress");
-    const fill = container.querySelector(".session-progress-bar.session-progress-running");
-
-    expect(progress).toHaveAttribute("aria-hidden", "true");
-    expect(progress).not.toHaveAttribute("role");
-    expect(progress).not.toHaveAttribute("aria-valuemin");
-    expect(progress).not.toHaveAttribute("aria-valuemax");
-    expect(progress).not.toHaveAttribute("aria-valuenow");
-    expect(fill).toHaveStyle({ "--progress-bar-width": "42%" });
+    expect(container.querySelector(".session-progress")).toBeNull();
+    expect(container.querySelector(".session-progress-bar")).toBeNull();
   });
 
   it("renders migrated provider and state tags with legacy badge compatibility classes", () => {

@@ -237,6 +237,17 @@ describe("components.css theme-sensitive surfaces", () => {
     const sessionTerminal = getLastRuleBlock(".session-terminal");
     const agentPanes = getLastRuleBlock(".workspace-main-stage > .agent-panes");
     const bottomPanel = getLastRuleBlock(".workspace-bottom-panel");
+    const verticalDividerRules = getRuleBlocksFrom(stylesheet, ".split-divider-v").join("\n");
+    const horizontalDividerRules = getRuleBlocksFrom(stylesheet, ".split-divider-h").join("\n");
+    const paneDividerBaseRules = getRuleBlocksFrom(stylesheet, ".pane-layout-divider").join("\n");
+    const paneDividerHorizontalRules = getRuleBlocksFrom(
+      stylesheet,
+      ".pane-layout-horizontal .pane-layout-divider"
+    ).join("\n");
+    const paneDividerVerticalRules = getRuleBlocksFrom(
+      stylesheet,
+      ".pane-layout-vertical .pane-layout-divider"
+    ).join("\n");
     const bottomTerminalShellRules = getRuleBlocksFrom(
       stylesheet,
       ".workspace-bottom-panel > .bottom-terminal"
@@ -257,7 +268,23 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(agentPanes).toContain("padding: 0");
     expect(sessionTerminal).toContain("var(--bg-terminal)");
     expect(sessionTerminal).not.toContain("rgba(11, 18, 24, 0.98)");
-    expect(bottomPanel).toContain("padding: 0 0 14px");
+    expect(verticalDividerRules).toContain("width: 10px");
+    expect(verticalDividerRules).not.toContain("width: 8px");
+    expect(verticalDividerRules).toContain("margin-left: -5px");
+    expect(verticalDividerRules).toContain("margin-right: -5px");
+    expect(horizontalDividerRules).toContain("height: 10px");
+    expect(horizontalDividerRules).not.toContain("height: 8px");
+    expect(horizontalDividerRules).toContain("margin-top: -5px");
+    expect(horizontalDividerRules).toContain("margin-bottom: -5px");
+    expect(paneDividerBaseRules).toContain("position: relative");
+    expect(paneDividerHorizontalRules).toContain("width: 10px");
+    expect(paneDividerHorizontalRules).toContain("margin-left: -5px");
+    expect(paneDividerHorizontalRules).toContain("margin-right: -5px");
+    expect(paneDividerVerticalRules).toContain("height: 10px");
+    expect(paneDividerVerticalRules).toContain("margin-top: -5px");
+    expect(paneDividerVerticalRules).toContain("margin-bottom: -5px");
+    expect(bottomPanel).toContain("padding: 0");
+    expect(bottomPanel).not.toContain("padding: 0 0 14px");
     expect(bottomPanel).not.toContain("padding: 0 14px 14px");
     expect(bottomTerminalShellRules).toContain("var(--bg-terminal)");
     expect(bottomTerminalShellRules).not.toContain("rgba(17, 24, 31, 0.96)");

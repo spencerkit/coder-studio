@@ -1800,27 +1800,64 @@ body.focus-mode-active .split-divider-h {
 
 /* ========== 分割线 ========== */
 .split-divider-v {
-  width: 8px;
-  background: var(--border);
+  width: 10px;
+  margin-left: -5px;
+  margin-right: -5px;
+  background: transparent;
   cursor: col-resize;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
+  position: relative;
+  z-index: 2;
 }
 
 .split-divider-v:hover {
-  background: var(--blue);
+  background: transparent;
 }
 
 .split-divider-h {
-  height: 8px;
-  background: var(--border);
+  height: 10px;
+  margin-top: -5px;
+  margin-bottom: -5px;
+  background: transparent;
   cursor: row-resize;
   flex-shrink: 0;
+  position: relative;
+  z-index: 2;
 }
 
 .split-divider-h:hover {
+  background: transparent;
+}
+
+.split-divider-v::before,
+.split-divider-h::before {
+  content: "";
+  position: absolute;
+  background: var(--border);
+  pointer-events: none;
+}
+
+.split-divider-v::before {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+}
+
+.split-divider-h::before {
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  transform: translateY(-50%);
+}
+
+.split-divider-v:hover::before,
+.split-divider-h:hover::before {
   background: var(--blue);
 }
 
@@ -2543,6 +2580,8 @@ body.is-resizing-panels * {
   background: var(--border);
   transition: background var(--duration-fast) var(--ease-out);
   flex-shrink: 0;
+  position: relative;
+  z-index: 2;
 }
 
 .pane-layout-divider:hover {
@@ -2551,10 +2590,20 @@ body.is-resizing-panels * {
 
 .pane-layout-horizontal .pane-layout-divider {
   cursor: col-resize;
+  width: 10px;
+  margin-left: -5px;
+  margin-right: -5px;
+  justify-self: center;
+  background: transparent;
 }
 
 .pane-layout-vertical .pane-layout-divider {
   cursor: row-resize;
+  height: 10px;
+  margin-top: -5px;
+  margin-bottom: -5px;
+  align-self: center;
+  background: transparent;
 }
 
 /* ========== Draft Launcher ========== */
@@ -6170,10 +6219,25 @@ textarea.input {
 .pane-layout-divider::after {
   content: "";
   position: absolute;
-  inset: 0;
-  margin: 2px;
+  pointer-events: none;
   border-radius: 999px;
   background: linear-gradient(180deg, transparent, rgba(108, 182, 255, 0.18), transparent);
+}
+
+.pane-layout-horizontal .pane-layout-divider::after {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+}
+
+.pane-layout-vertical .pane-layout-divider::after {
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  transform: translateY(-50%);
 }
 
 .pane-layout-divider:hover::after {
@@ -7107,7 +7171,7 @@ textarea.input {
   flex-shrink: 0;
   min-height: 0;
   overflow: visible;
-  padding: 0 0 14px;
+  padding: 0;
   background: transparent;
   border-top: none;
 }

@@ -13,7 +13,7 @@ import { useEffect, useRef, useState } from "react";
 import { pendingFocusSessionAtom } from "../../../../atoms/app-ui";
 import { sessionByIdAtomFamily } from "../../../../atoms/sessions";
 import { workspaceByIdAtomFamily } from "../../../../atoms/workspaces";
-import { IconButton, ProgressBar, StatusDot, Tag, Tooltip } from "../../../../components/ui";
+import { IconButton, StatusDot, Tag, Tooltip } from "../../../../components/ui";
 import { useSupervisor } from "../../../supervisor/actions/use-supervisor";
 import { ObjectiveDialog } from "../../../supervisor/views/shared/objective-dialog";
 import { SupervisorCard } from "../../../supervisor/views/shared/supervisor-card";
@@ -39,7 +39,6 @@ interface SessionCardProps {
  * Session Card
  *
  * PRD §8.3.1:
- *   - Progress bar (top)
  *   - Header: status dot, title, provider badge, status label, actions
  *   - Terminal area (xterm.js)
  */
@@ -87,7 +86,6 @@ export const SessionCard: FC<SessionCardProps> = ({
     return null;
   }
 
-  const progressWidth = getProgressWidth(session.state);
   const sessionTitle = session.title?.trim() || formatSessionLabel(session.id);
   const providerLabel = formatProviderLabel(session.providerId);
   const sessionStateLabel = formatSessionStateLabel(session.state);
@@ -121,15 +119,6 @@ export const SessionCard: FC<SessionCardProps> = ({
       data-session-id={sessionId}
       onClick={handleCardClick}
     >
-      <ProgressBar
-        aria-hidden="true"
-        className="session-progress"
-        fillClassName={`session-progress-bar ${getSessionProgressClass(session.state)}`}
-        max={100}
-        tone={getSessionProgressTone(session.state)}
-        value={progressWidth}
-      />
-
       <div className="session-header">
         <div className="session-header-left">
           <StatusDot
@@ -228,51 +217,6 @@ export const SessionCard: FC<SessionCardProps> = ({
     </div>
   );
 };
-
-function getProgressWidth(state: SessionState): number {
-  switch (state) {
-    case "starting":
-      return 18;
-    case "running":
-      return 42;
-    case "ended":
-      return 100;
-    default:
-      return 8;
-  }
-}
-
-function getSessionProgressTone(
-  state: SessionState
-): "success" | "warning" | "error" | "info" | "neutral" {
-  switch (state) {
-    case "starting":
-      return "warning";
-    case "running":
-      return "info";
-    case "idle":
-      return "neutral";
-    case "ended":
-      return "success";
-    default:
-      return "neutral";
-  }
-}
-
-function getSessionProgressClass(state: SessionState) {
-  switch (state) {
-    case "starting":
-      return "session-progress-starting";
-    case "running":
-      return "session-progress-running";
-    case "idle":
-      return "session-progress-idle";
-    case "ended":
-      return "session-progress-complete";
-    default:
-      return "session-progress-idle";
-  }
-}
 
 function getSessionDotClass(state: SessionState) {
   switch (state) {
