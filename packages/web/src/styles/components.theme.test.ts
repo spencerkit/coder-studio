@@ -67,6 +67,29 @@ function getRuleBlocksFrom(source: string, selector: string) {
   return blocks;
 }
 
+function hasRuleBlockFrom(source: string, selector: string) {
+  const matcher = /([^{}]+)\{([^}]*)\}/g;
+  const normalizedSelector = selector.replace(/\s+/g, " ").trim();
+  let match: RegExpExecArray | null = null;
+
+  while ((match = matcher.exec(source))) {
+    const selectors = match[1]
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .split(",")
+      .map((entry) => entry.replace(/\s+/g, " ").trim());
+
+    if (selectors.includes(normalizedSelector)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function hasRuleBlock(selector: string) {
+  return hasRuleBlockFrom(stylesheet, selector);
+}
+
 function getLastRuleBlock(selector: string) {
   return getLastRuleBlockFrom(stylesheet, selector);
 }
@@ -323,14 +346,11 @@ describe("components.css theme-sensitive surfaces", () => {
   it("maps desktop chrome blocks to the dedicated desktop layout tokens", () => {
     const topbar = getLastRuleBlock(".app-topbar");
     const statusBar = getLastRuleBlock(".workspace-status-bar");
-    const sidebarHeader = getLastRuleBlock(".workspace-sidebar-panel__header");
     const commandPalette = getLastRuleBlock(".command-palette");
     const launchModal = getLastRuleBlock(".launch-modal");
 
     expect(topbar).toContain("min-height: var(--desktop-topbar-height)");
     expect(statusBar).toContain("min-height: var(--desktop-statusbar-height)");
-    expect(sidebarHeader).toContain("min-height: var(--desktop-sidebar-header-height)");
-    expect(sidebarHeader).toContain("padding: 10px var(--desktop-panel-padding) 8px");
     expect(commandPalette).toContain("max-width: var(--desktop-modal-max-width-md)");
     expect(launchModal).toContain("max-width: min(var(--desktop-modal-max-width-lg), 90vw)");
   });
@@ -556,6 +576,41 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(secondaryTitle).toContain("font-size: 16px");
     expect(secondaryTitle).toContain("line-height: 24px");
     expect(secondaryTitle).toContain("font-weight: 600");
+  });
+
+  it("keeps panel headers on the approved dense container chrome contract", () => {
+    const panelHeader =
+      [...getRuleBlocksFrom(stylesheet, ".panel-header")]
+        .reverse()
+        .find((block) => block.includes("padding: 6px 12px")) ?? "";
+    const leading = getLastRuleBlock(".panel-header__leading");
+    const copy = getLastRuleBlock(".panel-header__copy");
+    const title = getLastRuleBlock(".panel-header__title");
+    const meta = getLastRuleBlock(".panel-header__meta");
+    const actions = getLastRuleBlock(".panel-header__actions");
+    const mobilePanelHeader = getLastGroupedRuleBlockFrom(
+      stylesheet,
+      /@media \(max-width: 640px\)\s*\{[\s\S]*?\n\s*\.panel-header\s*\{([^}]*)\}/g
+    );
+
+    expect(panelHeader).toContain("min-height: 40px");
+    expect(panelHeader).toContain("padding: 6px 12px");
+    expect(panelHeader).toContain("border-bottom: 1px solid var(--border)");
+    expect(leading).toContain("flex: 1");
+    expect(copy).toContain("min-width: 0");
+    expect(title).toContain("font-size: 14px");
+    expect(title).toContain("line-height: 20px");
+    expect(title).toContain("font-weight: 600");
+    expect(meta).toContain("display: flex");
+    expect(actions).toContain("margin-left: auto");
+    expect(actions).toContain("flex-shrink: 0");
+    expect(mobilePanelHeader).toContain("min-height: 44px");
+    expect(hasRuleBlock(".session-header .panel-header__title")).toBe(false);
+    expect(hasRuleBlock(".mobile-shell__agent-stage .session-header .panel-header__actions")).toBe(
+      false
+    );
+    expect(hasRuleBlock(".code-editor-header .panel-header__title")).toBe(false);
+    expect(hasRuleBlock(".workspace-sidebar-panel__header .panel-header__title-row")).toBe(false);
   });
 
   it("uses a unified inline sheet treatment for mobile selectors and keeps topbar controls height-aligned", () => {
@@ -1327,7 +1382,7 @@ describe("components.css theme-sensitive surfaces", () => {
 
   it("keeps session header badges on a single line by truncating the title first", () => {
     const titleRow = getLastRuleBlock(".mobile-shell__agent-stage .session-title-row");
-    const title = getLastRuleBlock(".mobile-shell__agent-stage .session-title");
+    const title = getLastRuleBlock(".panel-header__title");
     const badges = getLastGroupedRuleBlock(
       /\.mobile-shell__agent-stage \.session-provider-badge,\s*\.mobile-shell__agent-stage \.session-state-badge\s*\{([^}]*)\}/g
     );
@@ -1336,6 +1391,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(title).toContain("overflow: hidden");
     expect(title).toContain("text-overflow: ellipsis");
     expect(title).toContain("white-space: nowrap");
+    expect(hasRuleBlock(".mobile-shell__agent-stage .session-title")).toBe(false);
     expect(badges).toContain("flex-shrink: 0");
     expect(badges).toContain("max-width: 100%");
   });
@@ -1348,8 +1404,7 @@ describe("components.css theme-sensitive surfaces", () => {
     );
     const sessionCard = getLastRuleBlock(".mobile-shell__agent-stage > .session-card");
     const progress = getLastRuleBlock(".mobile-shell__agent-stage .session-progress");
-    const header = getLastRuleBlock(".mobile-shell__agent-stage .session-header");
-    const headerLeft = getLastRuleBlock(".mobile-shell__agent-stage .session-header-left");
+    const header = getLastRuleBlock(".mobile-shell__agent-stage > .session-card > .panel-header");
     const titleRow = getLastRuleBlock(".mobile-shell__agent-stage .session-title-row");
     const badges = getLastGroupedRuleBlock(
       /\.mobile-shell__agent-stage \.session-provider-badge,\s*\.mobile-shell__agent-stage \.session-state-badge\s*\{([^}]*)\}/g
@@ -1370,8 +1425,10 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(header).toContain("padding: 4px");
     expect(header).toContain("border-bottom:");
     expect(header).not.toContain("linear-gradient(");
-    expect(headerLeft).toContain("gap: 6px");
     expect(titleRow).toContain("gap: 6px");
+    expect(hasRuleBlock(".mobile-shell__agent-stage .session-header")).toBe(false);
+    expect(hasRuleBlock(".mobile-shell__agent-stage .session-header-left")).toBe(false);
+    expect(hasRuleBlock(".mobile-shell__agent-stage .session-title")).toBe(false);
     expect(badges).toContain("height: 15px");
     expect(badges).toContain("border-radius: 3px");
     expect(supervisorBadge).toContain("min-height: 26px");

@@ -247,15 +247,20 @@ describe("SessionCard", () => {
       </Provider>
     );
 
-    const header = screen.getByText("SESSION-56").closest(".session-header");
+    const bespokeHeader = screen.getByText("SESSION-56").closest(".session-header");
+    const header = screen.getByText("SESSION-56").closest(".panel-header");
+    const actions = header?.querySelector(".panel-header__actions");
     const accessory = screen.getByRole("button", { name: "Supervisor entry" });
     const right = header?.querySelector(".session-header-right");
 
+    expect(bespokeHeader).toBeNull();
     expect(header).not.toBeNull();
+    expect(actions).not.toBeNull();
     expect(accessory.parentElement).toHaveClass("session-header-accessory");
     expect(right).not.toBeNull();
     expect(right).toContainElement(accessory);
-    expect(header?.lastElementChild).toBe(right);
+    expect(actions).toContainElement(right as HTMLElement);
+    expect(header?.lastElementChild).toBe(actions);
   });
 
   it("forces the terminal read-only when terminalReadOnlyOverride is true", () => {
