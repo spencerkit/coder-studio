@@ -5,9 +5,9 @@
 
 ```tsx
 <Modal open onOpenChange={setOpen}>
-  <ModalHeader>
+  <DialogHeader>
     <ModalTitle>Workspace details</ModalTitle>
-  </ModalHeader>
+  </DialogHeader>
   <ModalBody>Body</ModalBody>
   <ModalFooter>Footer</ModalFooter>
 </Modal>
@@ -26,4 +26,6 @@
 ## 注意
 - 组件通过 portal 渲染到 `document.body`。
 - 打开后会把焦点移入弹窗，关闭后恢复到先前焦点。
+- `DialogHeader` 是弹层 header 的 canonical 入口；`ModalHeader` 保留为兼容命名。
+- 如需标准化 icon / copy / description 结构，使用 `dialog-header__leading`、`dialog-header__icon`、`dialog-header__copy`、`dialog-header__description`。
 - 迁移期仍保留 `modal-overlay`、`modal-card`、`modal-header`、`modal-title`、`modal-body`、`modal-footer` 等兼容类名。

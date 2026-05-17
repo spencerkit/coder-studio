@@ -2,7 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { Modal, ModalBody, ModalFooter, ModalHeader, ModalTitle } from ".";
+import { DialogHeader, Modal, ModalBody, ModalFooter, ModalHeader, ModalTitle } from ".";
 
 const activeElementState = {
   current: null as HTMLElement | null,
@@ -76,6 +76,20 @@ describe("Modal", () => {
     expect(dialog).toHaveAttribute("aria-modal", "true");
     expect(container).not.toContainElement(dialog);
     expect(document.body).toContainElement(dialog);
+  });
+
+  it("exports DialogHeader as the canonical modal header alias", () => {
+    render(
+      <DialogHeader>
+        <ModalTitle>Workspace details</ModalTitle>
+      </DialogHeader>
+    );
+
+    const header = document.querySelector(".dialog-header");
+
+    expect(header).not.toBeNull();
+    expect(header).toHaveClass("modal-header");
+    expect(screen.getByText("Workspace details")).toBeInTheDocument();
   });
 
   it("applies the large card variant for size='lg'", () => {

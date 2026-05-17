@@ -29,6 +29,10 @@ const confirmDialogStyles = readFileSync(
   `${process.cwd()}/src/components/ui/confirm-dialog/index.module.css`,
   "utf8"
 );
+const modalStylesheet = readFileSync(
+  `${process.cwd()}/src/components/ui/modal/index.module.css`,
+  "utf8"
+);
 
 function getLastGroupedRuleBlockFrom(source: string, pattern: RegExp) {
   const matches = Array.from(source.matchAll(pattern));
@@ -611,6 +615,31 @@ describe("components.css theme-sensitive surfaces", () => {
     );
     expect(hasRuleBlock(".code-editor-header .panel-header__title")).toBe(false);
     expect(hasRuleBlock(".workspace-sidebar-panel__header .panel-header__title-row")).toBe(false);
+  });
+
+  it("keeps dialog headers on the approved modal header contract", () => {
+    const modalTitle = getLastRuleBlockFrom(modalStylesheet, ".title");
+    const dialogHeader =
+      getRuleBlocksFrom(modalStylesheet, ".dialogHeader").find((block) =>
+        block.includes("align-items: flex-start")
+      ) ?? "";
+    const dialogIcon = getLastRuleBlock(".supervisor-dialog-header-icon");
+    const editTone = getLastRuleBlock(".supervisor-dialog--edit .supervisor-dialog-header-icon");
+    const disableTone = getLastRuleBlock(
+      ".supervisor-dialog--disable .supervisor-dialog-header-icon"
+    );
+
+    expect(modalTitle).toContain("font-size: var(--text-lg)");
+    expect(modalTitle).toContain("font-weight: var(--font-semibold)");
+    expect(dialogHeader).toContain("align-items: flex-start");
+    expect(dialogIcon).toContain("width: 28px");
+    expect(dialogIcon).toContain("height: 28px");
+    expect(editTone).toContain("var(--icon-surface-info)");
+    expect(editTone).toContain("var(--icon-info)");
+    expect(disableTone).toContain("var(--icon-surface-error)");
+    expect(disableTone).toContain("var(--icon-error)");
+    expect(hasRuleBlock(".supervisor-dialog-header")).toBe(false);
+    expect(hasRuleBlock(".supervisor-dialog-subtitle")).toBe(false);
   });
 
   it("uses a unified inline sheet treatment for mobile selectors and keeps topbar controls height-aligned", () => {
