@@ -551,6 +551,28 @@ describe("settings commands", () => {
     });
   });
 
+  it("settings.get returns appearance.terminalFontSize from user_settings", async () => {
+    db.prepare("INSERT INTO user_settings (key, value) VALUES (?, ?)").run(
+      "appearance.terminalFontSize",
+      "16"
+    );
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "settings-get-terminal-font-size",
+        op: "settings.get",
+        args: {},
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.data).toMatchObject({
+      "appearance.terminalFontSize": 16,
+    });
+  });
+
   it("settings.get normalizes invalid persisted supervisor timeout values", async () => {
     db.prepare("INSERT INTO user_settings (key, value) VALUES (?, ?)").run(
       "supervisor.evaluationTimeoutSec",
