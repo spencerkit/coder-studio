@@ -278,8 +278,12 @@ describe("SettingsPage", () => {
 
     renderSettingsPage(store);
 
-    expect(await screen.findByText("工作区与运行")).toBeInTheDocument();
-    expect(screen.getByText("界面与交互")).toBeInTheDocument();
+    const mobileRoot = await screen.findByTestId("settings-mobile-root");
+    const groupHeadings = within(mobileRoot).getAllByRole("heading", { level: 2 });
+
+    expect(groupHeadings).toHaveLength(2);
+    expect(within(mobileRoot).getByText("工作区与运行")).toBeInTheDocument();
+    expect(within(mobileRoot).getByText("界面与交互")).toBeInTheDocument();
     expect(document.querySelector(".settings-mobile-root-hero")).toBeNull();
 
     const buttons = screen.getAllByRole("button");
