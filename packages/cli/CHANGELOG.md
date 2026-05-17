@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.9
+
+### Patch Changes
+
+- [#41](https://github.com/spencerkit/coder-studio/pull/41) [`37f68b2`](https://github.com/spencerkit/coder-studio/commit/37f68b22fa605d1cbe92a6b8bc7e2ad550bfad89) Thanks [@pallyoung](https://github.com/pallyoung)! - Polish desktop and mobile workspace chrome, settings surfaces, terminal fullscreen layout, and supervisor evaluation guidance.
+
 ## 0.3.8
 
 ### Patch Changes
