@@ -1,12 +1,12 @@
 import { useAtomValue, useSetAtom } from "jotai";
-import { type CSSProperties, useEffect, useRef, useState } from "react";
+import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   lastViewedTargetAtom,
   pendingFocusSessionAtom,
   visibleMobileSessionIdAtom,
 } from "../../../../atoms/app-ui";
-import { EmptyState, Sheet } from "../../../../components/ui";
+import { Sheet } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { SessionCard } from "../../../agent-panes/views/shared/session-card";
 import { useCodeEditorActions } from "../../../code-editor/actions/use-code-editor-actions";
@@ -105,6 +105,7 @@ export function WorkspaceMobileView() {
   );
   const [mobileFileCollapseVersion, setMobileFileCollapseVersion] = useState(0);
   const [workspaceLaunchOpen, setWorkspaceLaunchOpen] = useState(false);
+  const [mobileTerminalHeaderAction, setMobileTerminalHeaderAction] = useState<ReactNode>(null);
   const keyboardInset = useVisualViewportInset();
   const layoutMode = useMobileLayoutMode();
   const motionMode = useMobileMotionMode();
@@ -279,7 +280,10 @@ export function WorkspaceMobileView() {
             title: t("label.terminal"),
             body: (
               <div className="mobile-terminal-sheet mobile-terminal-sheet--fullscreen">
-                <TerminalPanel chrome="mobile-fullscreen" />
+                <TerminalPanel
+                  chrome="mobile-fullscreen"
+                  onMobileHeaderActionsChange={setMobileTerminalHeaderAction}
+                />
               </div>
             ),
             footer: activeWorkspaceId ? (
@@ -291,6 +295,7 @@ export function WorkspaceMobileView() {
               />
             ) : null,
             kicker: null,
+            headerAction: mobileTerminalHeaderAction,
             fullscreen: true,
             bodyClassName: "mobile-sheet__body--flush mobile-sheet__body--fullscreen",
             contentClassName: "mobile-sheet--terminal",
@@ -360,33 +365,24 @@ export function WorkspaceMobileView() {
             </>
           ) : (
             <section className="mobile-shell__agent-empty" data-testid="mobile-agent-empty">
-              <div className="mobile-shell__empty-content">
-                <EmptyState
-                  className="mobile-shell__empty-state"
-                  style={{ minHeight: "auto" }}
-                  title={
-                    <div className="mobile-shell__empty-heading">
-                      <span className="mobile-shell__empty-kicker">{t("label.agent")}</span>
-                      <p className="mobile-shell__empty-title">{t("mobile.empty.start_session")}</p>
-                    </div>
-                  }
-                  description={
-                    <div className="mobile-shell__placeholder-copy">
-                      <p>{t("mobile.empty.files_terminal_hint")}</p>
-                    </div>
-                  }
-                  action={
-                    <div className="mobile-shell__empty-action-row">
-                      <button
-                        type="button"
-                        className="mobile-shell__empty-cta"
-                        onClick={() => setAgentSheetOpen(true)}
-                      >
-                        {t("action.create_session")}
-                      </button>
-                    </div>
-                  }
-                />
+              <div className="mobile-shell__empty-content mobile-shell__empty-content--flat">
+                <div className="mobile-shell__empty-state">
+                  <div className="mobile-shell__empty-heading">
+                    <p className="mobile-shell__empty-title">{t("mobile.empty.start_session")}</p>
+                  </div>
+                  <div className="mobile-shell__placeholder-copy">
+                    <p>{t("mobile.empty.files_terminal_hint")}</p>
+                  </div>
+                  <div className="mobile-shell__empty-action-row">
+                    <button
+                      type="button"
+                      className="mobile-shell__empty-cta"
+                      onClick={() => setAgentSheetOpen(true)}
+                    >
+                      {t("action.create_session")}
+                    </button>
+                  </div>
+                </div>
               </div>
             </section>
           )}

@@ -103,7 +103,7 @@ export const WorkspaceDesktopView: FC = () => {
   };
 
   return (
-    <div ref={fullscreenRootRef} className="workspace-page">
+    <div ref={fullscreenRootRef} className="workspace-page workspace-page--desktop">
       <TopBar fullscreenController={fullscreenController} />
 
       <div className="workspace-body">
@@ -193,15 +193,17 @@ export const WorkspaceDesktopView: FC = () => {
         )}
 
         <div className="workspace-main-area">
-          {mainAreaMode === "diff" ? (
-            <GitDiffViewer workspaceId={workspace.id} onClose={handleCloseDiff} />
-          ) : mainAreaMode === "editor" ? (
-            <CodeEditorHost />
-          ) : (
-            <div className="agent-panes">
-              <AgentPanes hydrateSessions={false} />
-            </div>
-          )}
+          <div className="workspace-main-stage">
+            {mainAreaMode === "diff" ? (
+              <GitDiffViewer workspaceId={workspace.id} onClose={handleCloseDiff} />
+            ) : mainAreaMode === "editor" ? (
+              <CodeEditorHost />
+            ) : (
+              <div className="agent-panes">
+                <AgentPanes hydrateSessions={false} />
+              </div>
+            )}
+          </div>
 
           {!focusMode && terminalPanelVisible && (
             <div

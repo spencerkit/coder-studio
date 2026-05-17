@@ -96,6 +96,9 @@ describe("WelcomePage", () => {
 
     expect(screen.getByText("DEPLOY ONCE, CODE EVERYWHERE")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Welcome to Coder Studio" })).toBeInTheDocument();
+    expect(document.querySelector(".welcome-card__hero")).toBeTruthy();
+    expect(document.querySelector(".welcome-card__actions")).toBeTruthy();
+    expect(document.querySelector(".welcome-card__panel")).toBeTruthy();
     const openWorkspaceButton = screen.getByRole("button", { name: "Open Workspace" });
     const settingsButton = screen.getByRole("button", { name: "Settings" });
     expect(document.querySelector(".welcome-divider")).toBeTruthy();

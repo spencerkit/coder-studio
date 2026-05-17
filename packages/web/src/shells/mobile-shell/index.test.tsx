@@ -2789,7 +2789,16 @@ describe("MobileShell Phase 2 workspace", () => {
       expect(screen.getByTestId("mobile-agent-empty")).toBeInTheDocument();
     });
     expect(screen.queryByTestId("agent-panes-empty-mock")).not.toBeInTheDocument();
+    expect(document.querySelector(".mobile-shell__empty-kicker")).toBeNull();
+    expect(document.querySelector(".mobile-shell__empty-panel")).toBeNull();
+    expect(document.querySelector(".mobile-shell__empty-content")).toHaveClass(
+      "mobile-shell__empty-content--flat"
+    );
+    expect(document.querySelector(".mobile-shell__placeholder-pills")).toBeNull();
     expect(screen.getByRole("button", { name: "Create Session" })).toBeInTheDocument();
+    expect(
+      document.querySelector(".mobile-shell__bottom-stack .workspace-status-bar")
+    ).not.toBeNull();
 
     await user.click(screen.getByRole("button", { name: "Create Session" }));
 
@@ -2826,6 +2835,7 @@ describe("MobileShell Phase 2 workspace", () => {
     expect(screen.getByRole("button", { name: "打开终端面板" })).toBeInTheDocument();
     expect(screen.getByText("为当前工作区启动一个新的 Agent 会话。")).toBeInTheDocument();
     expect(screen.getByText("文件和终端可继续通过底部栏访问。")).toBeInTheDocument();
+    expect(document.querySelector(".mobile-shell__empty-kicker")).toBeNull();
 
     await user.click(screen.getByRole("button", { name: "切换工作区" }));
 

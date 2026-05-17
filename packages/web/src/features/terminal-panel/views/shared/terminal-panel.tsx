@@ -1,6 +1,6 @@
 import { useStore } from "jotai";
 import { ChevronDown, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import {
   Button,
   EmptyState,
@@ -23,6 +23,7 @@ import { XtermHost } from "./xterm-host";
 
 interface TerminalPanelProps {
   chrome?: "default" | "mobile-fullscreen";
+  onMobileHeaderActionsChange?: (actions: ReactNode | null) => void;
 }
 
 /**
@@ -35,7 +36,10 @@ interface TerminalPanelProps {
  *   - xterm.js rendering area
  *   - Empty state when no terminals
  */
-export function TerminalPanel({ chrome = "default" }: TerminalPanelProps) {
+export function TerminalPanel({
+  chrome = "default",
+  onMobileHeaderActionsChange,
+}: TerminalPanelProps) {
   const t = useTranslation();
   const store = useStore();
   const [desktopSelectorOpen, setDesktopSelectorOpen] = useState(false);
@@ -76,126 +80,91 @@ export function TerminalPanel({ chrome = "default" }: TerminalPanelProps) {
     }
   }, [showSelector, terminalIds.length]);
 
+  useEffect(() => {
+    if (!onMobileHeaderActionsChange) {
+      return;
+    }
+
+    return () => {
+      onMobileHeaderActionsChange(null);
+    };
+  }, [onMobileHeaderActionsChange]);
+
+  useEffect(() => {
+    if (!onMobileHeaderActionsChange) {
+      return;
+    }
+
+    onMobileHeaderActionsChange(null);
+  }, [onMobileHeaderActionsChange]);
+
   return (
     <div
       className={`bottom-terminal${isMobileFullscreen ? " bottom-terminal--mobile-fullscreen" : ""}`}
     >
       <div className="terminal-toolbar">
-        <div className="terminal-toolbar-left">
-          {isMobileFullscreen ? null : (
-            <div className="terminal-title-stack">
-              <span className="terminal-kicker">{t("terminal.kicker")}</span>
-              {activeTerminalMeta ? (
-                <span className="terminal-title">{activeTerminalTitle}</span>
-              ) : null}
-            </div>
-          )}
-        </div>
-
-        <div className="terminal-toolbar-right">
-          {hasTerminals && (
-            <>
-              {showSelector ? (
-                <div className="terminal-selector">
-                  {isMobileFullscreen ? (
-                    <Select
-                      mobile
-                      aria-label={t("terminal.selector.switch")}
-                      aria-expanded={selectorSheetOpen}
-                      className="terminal-selector-btn"
-                      includeValueInAriaLabel={false}
-                      options={terminalSelectorOptions}
-                      value={selectedTerminalId}
-                      valueLabel={activeTerminalTitle}
-                      onClick={(event) => {
-                        if (!selectorSheetOpen) {
-                          return;
-                        }
-
-                        event.preventDefault();
-                        setSelectorSheetOpen(false);
-                      }}
-                      onOpen={() => setSelectorSheetOpen(true)}
-                    />
-                  ) : terminalIds.length > 1 ? (
-                    <Popover
-                      content={
-                        <>
-                          {terminalIds.map((id, index) => (
-                            <TerminalSelectorItem
-                              key={id}
-                              id={id}
-                              index={index}
-                              isActive={id === activeTerminalId}
-                              onSelect={() => {
-                                handleSwitchTerminal(id);
-                                setDesktopSelectorOpen(false);
-                              }}
-                              onClose={() => {
-                                setDesktopSelectorOpen(false);
-                                void handleCloseTerminal(id);
-                              }}
-                            />
-                          ))}
-                        </>
+        {isMobileFullscreen ? (
+          <div className="terminal-toolbar-mobile-row">
+            {hasTerminals ? (
+              <div className="terminal-selector">
+                {showSelector ? (
+                  <Select
+                    mobile
+                    aria-label={t("terminal.selector.switch")}
+                    aria-expanded={selectorSheetOpen}
+                    className="terminal-selector-btn"
+                    includeValueInAriaLabel={false}
+                    options={terminalSelectorOptions}
+                    value={selectedTerminalId}
+                    valueLabel={activeTerminalTitle}
+                    onClick={(event) => {
+                      if (!selectorSheetOpen) {
+                        return;
                       }
-                      contentClassName="terminal-selector-dropdown"
-                      forceMode="desktop"
-                      open={desktopSelectorOpen}
-                      placement="bottom-end"
-                      title={t("terminal.selector.title")}
-                      onOpenChange={setDesktopSelectorOpen}
-                    >
-                      <button
-                        type="button"
-                        className="terminal-selector-btn"
-                        aria-label={activeTerminalTitle}
-                      >
-                        <span>{activeTerminalTitle}</span>
-                        <ChevronDown size={12} />
-                      </button>
-                    </Popover>
-                  ) : (
-                    <button
-                      type="button"
-                      className="terminal-selector-btn"
-                      aria-label={activeTerminalTitle}
-                    >
-                      <span>{activeTerminalTitle}</span>
-                      <ChevronDown size={12} />
-                    </button>
-                  )}
 
-                  {isMobileFullscreen ? (
-                    selectorSheetOpen ? (
-                      <MobileSelectSheet
-                        className="mobile-select-sheet--command"
-                        title={t("terminal.selector.title")}
-                        sections={[
-                          {
-                            kind: "options",
-                            id: "terminals",
-                            items: terminalSelectorOptions.map((option, index) => {
-                              return {
-                                id: option.value,
-                                label: option.label,
-                                meta:
-                                  option.value === activeTerminalId
-                                    ? t("terminal.selector.current")
-                                    : t("terminal.selector.indexed", { index: index + 1 }),
-                              };
-                            }),
-                          },
-                        ]}
-                        selectedId={activeTerminalId}
-                        onSelect={handleSwitchTerminal}
-                        onClose={() => setSelectorSheetOpen(false)}
-                      />
-                    ) : null
-                  ) : null}
-                </div>
-              ) : null}
+                      event.preventDefault();
+                      setSelectorSheetOpen(false);
+                    }}
+                    onOpen={() => setSelectorSheetOpen(true)}
+                  />
+                ) : (
+                  <div
+                    className="terminal-selector-btn terminal-selector-btn--static"
+                    aria-label={activeTerminalTitle}
+                  >
+                    <span>{activeTerminalTitle}</span>
+                  </div>
+                )}
 
+                {showSelector && selectorSheetOpen ? (
+                  <MobileSelectSheet
+                    className="mobile-select-sheet--command"
+                    title={t("terminal.selector.title")}
+                    sections={[
+                      {
+                        kind: "options",
+                        id: "terminals",
+                        items: terminalSelectorOptions.map((option, index) => ({
+                          id: option.value,
+                          label: option.label,
+                          meta:
+                            option.value === activeTerminalId
+                              ? t("terminal.selector.current")
+                              : t("terminal.selector.indexed", { index: index + 1 }),
+                        })),
+                      },
+                    ]}
+                    selectedId={activeTerminalId}
+                    onSelect={handleSwitchTerminal}
+                    onClose={() => setSelectorSheetOpen(false)}
+                  />
+                ) : null}
+              </div>
+            ) : (
+              <div className="terminal-toolbar-mobile-placeholder" aria-hidden="true" />
+            )}
+
+            {hasTerminals && activeTerminalId ? (
               <div className="terminal-toolbar-actions">
                 <Tooltip content={t("action.close")}>
                   <IconButton
@@ -203,10 +172,6 @@ export function TerminalPanel({ chrome = "default" }: TerminalPanelProps) {
                     aria-label={t("terminal.close_terminal")}
                     icon={<X size={14} />}
                     onClick={() => {
-                      if (!activeTerminalId) {
-                        return;
-                      }
-
                       setDesktopSelectorOpen(false);
                       setSelectorSheetOpen(false);
                       void handleCloseTerminal(activeTerminalId);
@@ -215,21 +180,125 @@ export function TerminalPanel({ chrome = "default" }: TerminalPanelProps) {
                   />
                 </Tooltip>
               </div>
-            </>
-          )}
+            ) : null}
 
-          <div className="terminal-toolbar-actions">
-            <Tooltip content={t("action.open")}>
-              <IconButton
-                className="panel-toolbar-btn"
-                aria-label={t("terminal.new_terminal")}
-                icon={<ThemedIcon semantic="terminal.action.new" size={14} />}
-                onClick={handleCreateTerminal}
-                size="sm"
-              />
-            </Tooltip>
+            {isMobileFullscreen ? (
+              <div className="terminal-toolbar-actions">
+                <Tooltip content={t("action.open")}>
+                  <IconButton
+                    className="panel-toolbar-btn"
+                    aria-label={t("terminal.new_terminal")}
+                    icon={<ThemedIcon semantic="terminal.action.new" size={14} />}
+                    onClick={handleCreateTerminal}
+                    size="sm"
+                  />
+                </Tooltip>
+              </div>
+            ) : null}
           </div>
-        </div>
+        ) : (
+          <>
+            <div className="terminal-toolbar-left">
+              <div className="terminal-title-stack">
+                <span className="terminal-kicker">{t("terminal.kicker")}</span>
+                {activeTerminalMeta ? (
+                  <span className="terminal-title">{activeTerminalTitle}</span>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="terminal-toolbar-right">
+              {hasTerminals && (
+                <>
+                  {showSelector ? (
+                    <div className="terminal-selector">
+                      {terminalIds.length > 1 ? (
+                        <Popover
+                          content={
+                            <>
+                              {terminalIds.map((id, index) => (
+                                <TerminalSelectorItem
+                                  key={id}
+                                  id={id}
+                                  index={index}
+                                  isActive={id === activeTerminalId}
+                                  onSelect={() => {
+                                    handleSwitchTerminal(id);
+                                    setDesktopSelectorOpen(false);
+                                  }}
+                                  onClose={() => {
+                                    setDesktopSelectorOpen(false);
+                                    void handleCloseTerminal(id);
+                                  }}
+                                />
+                              ))}
+                            </>
+                          }
+                          contentClassName="terminal-selector-dropdown"
+                          forceMode="desktop"
+                          open={desktopSelectorOpen}
+                          placement="bottom-end"
+                          title={t("terminal.selector.title")}
+                          onOpenChange={setDesktopSelectorOpen}
+                        >
+                          <button
+                            type="button"
+                            className="terminal-selector-btn"
+                            aria-label={activeTerminalTitle}
+                          >
+                            <span>{activeTerminalTitle}</span>
+                            <ChevronDown size={12} />
+                          </button>
+                        </Popover>
+                      ) : (
+                        <button
+                          type="button"
+                          className="terminal-selector-btn"
+                          aria-label={activeTerminalTitle}
+                        >
+                          <span>{activeTerminalTitle}</span>
+                          <ChevronDown size={12} />
+                        </button>
+                      )}
+                    </div>
+                  ) : null}
+
+                  <div className="terminal-toolbar-actions">
+                    <Tooltip content={t("action.close")}>
+                      <IconButton
+                        className="panel-toolbar-btn"
+                        aria-label={t("terminal.close_terminal")}
+                        icon={<X size={14} />}
+                        onClick={() => {
+                          if (!activeTerminalId) {
+                            return;
+                          }
+
+                          setDesktopSelectorOpen(false);
+                          setSelectorSheetOpen(false);
+                          void handleCloseTerminal(activeTerminalId);
+                        }}
+                        size="sm"
+                      />
+                    </Tooltip>
+                  </div>
+                </>
+              )}
+
+              <div className="terminal-toolbar-actions">
+                <Tooltip content={t("action.open")}>
+                  <IconButton
+                    className="panel-toolbar-btn"
+                    aria-label={t("terminal.new_terminal")}
+                    icon={<ThemedIcon semantic="terminal.action.new" size={14} />}
+                    onClick={handleCreateTerminal}
+                    size="sm"
+                  />
+                </Tooltip>
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       <div className="bottom-terminal-content">

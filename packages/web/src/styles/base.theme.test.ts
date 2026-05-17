@@ -3,8 +3,10 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const stylesheet = readFileSync(`${process.cwd()}/src/styles/base.css`, "utf8");
+const tokensStylesheet = readFileSync(`${process.cwd()}/src/styles/tokens.css`, "utf8");
 
 function getRuleBlock(selector: string) {
+  const blocks: string[] = [];
   const matcher = /([^{}]+)\{([^}]*)\}/g;
   let match: RegExpExecArray | null = null;
   const normalizedSelector = selector.replace(/\s+/g, " ").trim();
@@ -16,11 +18,15 @@ function getRuleBlock(selector: string) {
       .map((entry) => entry.replace(/\s+/g, " ").trim());
 
     if (selectors.includes(normalizedSelector)) {
-      return match[2];
+      blocks.push(match[2]);
     }
   }
 
-  throw new Error(`expected CSS rule for ${selector}`);
+  if (blocks.length === 0) {
+    throw new Error(`expected CSS rule for ${selector}`);
+  }
+
+  return blocks.at(-1) ?? "";
 }
 
 describe("base.css theme-sensitive shells", () => {
@@ -52,5 +58,31 @@ describe("base.css theme-sensitive shells", () => {
     expect(themedIcon).toContain("line-height: 0");
     expect(themedTone).toContain("color: var(--icon-warning)");
     expect(themedSurface).toContain("background: var(--icon-surface-info)");
+  });
+});
+
+describe("base.css desktop typography foundation", () => {
+  it("defines the semantic and desktop layout tokens used by polished PC surfaces", () => {
+    expect(tokensStylesheet).toContain("--text-muted:");
+    expect(tokensStylesheet).toContain("--bg-panel:");
+    expect(tokensStylesheet).toContain("--bg-elevated:");
+    expect(tokensStylesheet).toContain("--accent-red:");
+    expect(tokensStylesheet).toContain("--desktop-topbar-height:");
+    expect(tokensStylesheet).toContain("--desktop-statusbar-height:");
+    expect(tokensStylesheet).toContain("--desktop-sidebar-header-height:");
+    expect(tokensStylesheet).toContain("--desktop-panel-padding:");
+    expect(tokensStylesheet).toContain("--desktop-panel-gap:");
+    expect(tokensStylesheet).toContain("--desktop-content-max-width:");
+    expect(tokensStylesheet).toContain("--desktop-modal-max-width-md:");
+    expect(tokensStylesheet).toContain("--desktop-modal-max-width-lg:");
+  });
+
+  it("maps desktop heading helpers to the corrected typography tokens", () => {
+    expect(getRuleBlock("h2")).toContain("font-size: var(--text-2xl)");
+    expect(getRuleBlock(".page-kicker")).toContain("font-size: var(--text-xs)");
+    expect(getRuleBlock(".page-title")).toContain("font-size: var(--text-3xl)");
+    expect(getRuleBlock(".section-title")).toContain("font-size: var(--text-base)");
+    expect(getRuleBlock(".hint-text")).toContain("color: var(--text-muted)");
+    expect(getRuleBlock(".mono-meta")).toContain("font-family: var(--font-mono)");
   });
 });

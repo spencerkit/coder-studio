@@ -38,8 +38,9 @@ describe("LoginPage", () => {
     expect(document.querySelector(".welcome-card")).toBeTruthy();
     expect(document.querySelector(".auth-form")).toBeTruthy();
     expect(document.querySelector(".auth-status-panel")).toBeTruthy();
-    expect(container.querySelector(".auth-card-shell > .auth-status-panel")).toBeTruthy();
-    expect(container.querySelector(".auth-card-shell > .auth-form")).toBeTruthy();
+    expect(container.querySelector(".auth-card-shell__content")).toBeTruthy();
+    expect(container.querySelector(".auth-card-shell__content > .auth-status-panel")).toBeTruthy();
+    expect(container.querySelector(".auth-card-shell__content > .auth-form")).toBeTruthy();
     expect(screen.getByRole("button")).toBeDisabled();
     expect(screen.getAllByText("连接中").length).toBeGreaterThan(0);
   });

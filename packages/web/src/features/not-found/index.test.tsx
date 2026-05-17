@@ -36,6 +36,8 @@ describe("NotFoundPage", () => {
 
     expect(document.querySelector(".welcome-container")).toBeTruthy();
     expect(document.querySelector(".welcome-card")).toBeTruthy();
+    expect(document.querySelector(".welcome-card__panel")).toBeTruthy();
+    expect(document.querySelector(".welcome-card__panel .auth-status-panel")).toBeTruthy();
     expect(screen.getByText("Requested path")).toBeInTheDocument();
     expect(screen.getByText("/missing/path")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Page not found" })).toBeInTheDocument();

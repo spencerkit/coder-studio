@@ -22,7 +22,7 @@ import {
   resolveSupervisorRetryOnTimeout,
 } from "@coder-studio/core";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { Check, ChevronRight } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { localeAtom, themeAtom } from "../../../atoms/app-ui";
@@ -123,6 +123,59 @@ function loadProviderAdditionalArgs(
       formatProviderAdditionalArgs(settings[`providers.${provider.id}.additionalArgs`]),
     ])
   );
+}
+
+function getMobileSectionHintKey(section: SettingsSection) {
+  switch (section) {
+    case "general":
+      return "settings.notifications_channel_hint";
+    case "providers":
+      return "settings.provider.command_preview_hint";
+    case "appearance":
+      return "settings.theme.hint";
+    case "shortcuts":
+      return "settings.shortcuts.hint";
+  }
+}
+
+const MOBILE_SETTINGS_GROUPS = [
+  {
+    titleKey: "settings.mobile_groups.workspace_runtime",
+    sections: ["general", "providers"],
+  },
+  {
+    titleKey: "settings.mobile_groups.interface_interaction",
+    sections: ["appearance", "shortcuts"],
+  },
+] as const satisfies readonly {
+  titleKey: string;
+  sections: readonly SettingsSection[];
+}[];
+
+function resolveMobileSettingsGroups(
+  availableSections: readonly {
+    id: SettingsSection;
+    labelKey: string;
+    iconSemantic: Parameters<typeof ThemedIcon>[0]["semantic"];
+  }[]
+) {
+  const sectionsById = new Map(availableSections.map((section) => [section.id, section]));
+  const groupedSectionIds = MOBILE_SETTINGS_GROUPS.flatMap((group) => group.sections);
+
+  if (groupedSectionIds.length !== availableSections.length) {
+    throw new Error("Mobile settings groups are out of sync with available sections.");
+  }
+
+  for (const sectionId of groupedSectionIds) {
+    if (!sectionsById.has(sectionId)) {
+      throw new Error(`Missing mobile settings section mapping for "${sectionId}".`);
+    }
+  }
+
+  return MOBILE_SETTINGS_GROUPS.map((group) => ({
+    titleKey: group.titleKey,
+    sections: group.sections.map((sectionId) => sectionsById.get(sectionId)!),
+  }));
 }
 
 /**
@@ -436,20 +489,35 @@ export function SettingsPage() {
 
   const renderMobileRoot = () => (
     <main className="settings-content settings-content--mobile-root">
-      <div className="settings-mobile-list">
-        {availableSections.map(({ id, labelKey, iconSemantic }) => (
-          <button
-            key={id}
-            type="button"
-            className="settings-mobile-item"
-            onClick={() => setNavigationState({ kind: "detail", section: id })}
-          >
-            <span className="settings-mobile-item__icon">
-              <ThemedIcon semantic={iconSemantic} size={18} />
-            </span>
-            <span className="settings-mobile-item__label">{t(labelKey)}</span>
-            <ChevronRight size={16} className="settings-mobile-item__arrow" />
-          </button>
+      <div className="settings-mobile-root" data-testid="settings-mobile-root">
+        {resolveMobileSettingsGroups(availableSections).map((group) => (
+          <section key={group.titleKey} className="settings-mobile-group">
+            <h2 className="settings-mobile-group__title">{t(group.titleKey)}</h2>
+            <div className="settings-mobile-group__list">
+              {group.sections.map((section) => (
+                <button
+                  key={section.id}
+                  type="button"
+                  className="settings-mobile-item"
+                  aria-label={t(section.labelKey)}
+                  onClick={() => setNavigationState({ kind: "detail", section: section.id })}
+                >
+                  <span className="settings-mobile-item__icon-shell" aria-hidden="true">
+                    <span className="settings-mobile-item__icon">
+                      <ThemedIcon semantic={section.iconSemantic} size={18} />
+                    </span>
+                  </span>
+                  <span className="settings-mobile-item__copy">
+                    <span className="settings-mobile-item__label">{t(section.labelKey)}</span>
+                    <span className="settings-mobile-item__hint">
+                      {t(getMobileSectionHintKey(section.id))}
+                    </span>
+                  </span>
+                  <ChevronRight size={16} className="settings-mobile-item__arrow" />
+                </button>
+              ))}
+            </div>
+          </section>
         ))}
       </div>
     </main>
@@ -464,12 +532,28 @@ export function SettingsPage() {
   return (
     <div className={`settings-page ${isMobile ? "settings-page--mobile" : ""}`}>
       <header className="settings-header">
-        <MobilePageHeader
-          title={headerTitle}
-          titleAs="div"
-          onBack={handleBack}
-          backLabel={t("action.back")}
-        />
+        {isMobile ? (
+          <MobilePageHeader
+            title={headerTitle}
+            titleAs="div"
+            onBack={handleBack}
+            backLabel={t("action.back")}
+          />
+        ) : (
+          <div className="settings-header__desktop">
+            <button
+              type="button"
+              className="page-header__back settings-header__back"
+              onClick={handleBack}
+            >
+              <ChevronLeft size={16} />
+              <span>{t("action.back")}</span>
+            </button>
+            <div className="settings-header__copy">
+              <h1 className="page-title settings-header__title">{t("settings.title")}</h1>
+            </div>
+          </div>
+        )}
       </header>
 
       {shouldShowMobileRoot ? (
@@ -497,31 +581,35 @@ export function SettingsPage() {
           <main
             className={`settings-content ${isMobile ? "settings-content--mobile" : ""} ${isMobileDetailView ? "settings-content--mobile-detail" : ""} ${contentLayoutMode === "fill-height" ? "settings-content--fill-height" : ""}`}
           >
-            {settingsLoadError && (
-              <Notice
-                role="alert"
-                tone="error"
-                title={t("settings.load_failed")}
-                message={settingsLoadError}
-                action={
-                  <button
-                    type="button"
-                    className="settings-link"
-                    onClick={() => setSettingsRefreshKey((value) => value + 1)}
-                  >
-                    {t("action.refresh")}
-                  </button>
-                }
-              />
-            )}
-            {renderContent()}
+            <div className="settings-content-surface">
+              {settingsLoadError && (
+                <Notice
+                  role="alert"
+                  tone="error"
+                  title={t("settings.load_failed")}
+                  message={settingsLoadError}
+                  action={
+                    <button
+                      type="button"
+                      className="settings-link"
+                      onClick={() => setSettingsRefreshKey((value) => value + 1)}
+                    >
+                      {t("action.refresh")}
+                    </button>
+                  }
+                />
+              )}
+              {renderContent()}
+            </div>
           </main>
         </div>
       )}
 
       <footer className={`settings-footer ${isMobile ? "settings-footer--mobile" : ""}`}>
-        <span className="settings-autosave">{t("settings.autosave_hint")}</span>
-        <span className="settings-version">v{serverInfo?.version ?? "0.0.0"}</span>
+        <div className="settings-footer__meta">
+          <span className="settings-autosave">{t("settings.autosave_hint")}</span>
+          <span className="settings-version">v{serverInfo?.version ?? "0.0.0"}</span>
+        </div>
       </footer>
     </div>
   );

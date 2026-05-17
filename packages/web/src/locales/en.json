@@ -489,6 +489,10 @@
     "general": "General",
     "appearance": "Appearance",
     "providers": "Agents",
+    "mobile_groups": {
+      "workspace_runtime": "Workspace & Runtime",
+      "interface_interaction": "Interface & Interaction"
+    },
     "autosave_hint": "Settings saved automatically",
     "load_failed": "Failed to load settings",
     "load_failed_unknown": "Server did not return settings data",
@@ -598,6 +602,7 @@
     },
     "shortcuts": {
       "title": "Keyboard Shortcuts",
+      "hint": "Review and adjust common keyboard actions",
       "reset_all": "Reset All",
       "capture_hint": "Press new shortcut combination",
       "reset_hint": "Reset to default"
