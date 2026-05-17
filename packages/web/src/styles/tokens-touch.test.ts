@@ -116,14 +116,31 @@ describe("tokens.css touch tokens", () => {
     expect(root).toContain("--type-label-weight: var(--font-medium)");
 
     expect(root).toContain("--type-meta-size: var(--font-size-200)");
+    expect(root).toContain("--type-meta-line-height: 1.45");
+    expect(root).toContain("--type-meta-weight: var(--font-normal)");
     expect(root).toContain("--type-body-size: var(--font-size-300)");
+    expect(root).toContain("--type-body-line-height: 1.5");
+    expect(root).toContain("--type-body-weight: var(--font-normal)");
     expect(root).toContain("--type-body-strong-size: var(--font-size-300)");
+    expect(root).toContain("--type-body-strong-line-height: 1.45");
+    expect(root).toContain("--type-body-strong-weight: var(--font-medium)");
     expect(root).toContain("--type-code-inline-size: var(--font-size-200)");
+    expect(root).toContain("--type-code-inline-line-height: 1.4");
+    expect(root).toContain("--type-code-inline-weight: var(--font-medium)");
     expect(root).toContain("--type-code-inline-family: var(--font-mono)");
     expect(root).toContain("--type-app-title-size: var(--font-size-400)");
+    expect(root).toContain("--type-app-title-line-height: 1.25");
+    expect(root).toContain("--type-app-title-weight: var(--font-semibold)");
     expect(root).toContain("--type-section-title-size: var(--font-size-500)");
+    expect(root).toContain("--type-section-title-line-height: 1.2");
+    expect(root).toContain("--type-section-title-weight: var(--font-semibold)");
     expect(root).toContain("--type-page-title-size: var(--font-size-600)");
+    expect(root).toContain("--type-page-title-line-height: 1.1");
+    expect(root).toContain("--type-page-title-weight: var(--font-semibold)");
     expect(root).toContain("--type-display-size: var(--font-size-700)");
+    expect(root).toContain("--type-display-line-height: 1.05");
+    expect(root).toContain("--type-display-weight: var(--font-semibold)");
+    expect(root).toContain("--type-display-letter-spacing: -0.03em");
   });
 
   it("overrides the typography scale and dense body line-heights for mobile viewports", () => {
