@@ -525,17 +525,17 @@ describe("components.css theme-sensitive surfaces", () => {
       block.includes("display: flex")
     );
     const activeDockItem = getRuleBlocksFrom(stylesheet, ".mobile-dock__item--active").find(
-      (block) => block.includes("background:")
+      (block) => block.includes("border-top-color:")
     );
 
     expect(mobileDock).toContain("grid-template-columns: repeat(3, minmax(0, 1fr))");
     expect(mobileDock).toContain("gap: var(--sp-2)");
     expect(mobileDockItem).toBeTruthy();
-    expect(mobileDockItem).toContain("border: 1px solid");
-    expect(mobileDockItem).toContain("background: color-mix(");
-    expect(mobileDockItem).toContain("min-height: 42px");
+    expect(mobileDockItem).toContain("border-top: 1px solid transparent");
+    expect(mobileDockItem).toContain("background: transparent");
+    expect(mobileDockItem).toContain("min-height: 30px");
     expect(activeDockItem).toBeTruthy();
-    expect(activeDockItem).toContain("background: color-mix(");
+    expect(activeDockItem).toContain("border-top-color:");
   });
 
   it("keeps mobile sheets closer to IDE panes than floating cards", () => {
@@ -753,26 +753,34 @@ describe("components.css theme-sensitive surfaces", () => {
       ".mobile-shell__bottom-stack .git-panel-status-strip"
     ).replace(/\s+/g, " ");
     const emptyPane = getLastRuleBlock(".mobile-shell__empty-content");
-    const emptyPaneBefore = getLastRuleBlock(".mobile-shell__empty-content::before");
     const emptyState = getLastRuleBlock(".mobile-shell__empty-state");
+    const emptyTitle = getLastRuleBlock(".mobile-shell__empty-title");
+    const placeholderCopy = getLastRuleBlock(".mobile-shell__placeholder-copy");
     const emptyCta = getLastRuleBlock(".mobile-shell__empty-cta");
+    const topbarWorkspaceButton = getLastGroupedRuleBlock(
+      /\.mobile-topbar__workspace-button\s*\{([^}]*)\}/g
+    );
+    const topbarIconButton = getLastRuleBlock(".mobile-topbar__icon-button");
 
     expect(topbar).toContain(
       "padding: calc(var(--mobile-safe-top) + var(--sp-1)) calc(var(--mobile-safe-right) + var(--sp-4)) var(--sp-1) calc(var(--mobile-safe-left) + var(--sp-4))"
     );
-    expect(emptyStage).toContain("padding: clamp(44px, 11vh, 92px) var(--sp-4) var(--sp-3)");
+    expect(topbarWorkspaceButton).toContain("border-bottom: 1px solid");
+    expect(topbarWorkspaceButton).toContain("border-radius: 0");
+    expect(topbarIconButton).toContain("border-radius: 10px");
+    expect(emptyStage).toContain("padding: clamp(34px, 9vh, 72px) var(--sp-4) var(--sp-3)");
     expect(bottomStack).toContain("background: linear-gradient(");
     expect(bottomStack).toContain("border-top: 1px solid color-mix(");
     expect(bottomStack).not.toContain("backdrop-filter");
     expect(dockShell).toContain(
-      "padding: 6px calc(var(--mobile-safe-right) + var(--sp-4)) 0 calc(var(--mobile-safe-left) + var(--sp-4))"
+      "padding: 3px calc(var(--mobile-safe-right) + var(--sp-4)) 0 calc(var(--mobile-safe-left) + var(--sp-4))"
     );
     expect(dock).toContain("gap: var(--sp-2)");
     expect(dock).toContain("border-bottom: none");
     expect(dockItem).toBeTruthy();
-    expect(dockItem).toContain("min-height: 42px");
-    expect(dockItem).toContain("padding: 8px var(--sp-2) 7px");
-    expect(dockLabel).toContain("font-size: 11px");
+    expect(dockItem).toContain("min-height: 30px");
+    expect(dockItem).toContain("padding: 2px var(--sp-2) 2px");
+    expect(dockLabel).toContain("font-size: 10px");
     expect(statusBar).toContain("padding-bottom: calc(var(--mobile-safe-bottom) + var(--sp-1))");
     expect(statusBar).toContain("border-top: 1px solid");
     expect(statusStrip).toContain("min-height: 28px");
@@ -781,27 +789,21 @@ describe("components.css theme-sensitive surfaces", () => {
       "padding: 0 calc(var(--mobile-safe-right) + var(--sp-4)) 0 calc(var(--mobile-safe-left) + var(--sp-4))"
     );
     expect(emptyPane).toContain("position: relative");
-    expect(emptyPane).toContain("width: min(100%, 344px)");
+    expect(emptyPane).toContain("width: min(100%, 320px)");
     expect(emptyPane).toContain("align-self: flex-start");
-    expect(emptyPane).toContain(
-      "padding: var(--sp-4) var(--sp-4) var(--sp-4) calc(var(--sp-4) + 2px)"
-    );
-    expect(emptyPane).toContain("border-top: none");
-    expect(emptyPane).toContain("border: 1px solid");
-    expect(emptyPane).toContain("border-radius: var(--radius-xl)");
-    expect(emptyPane).toContain("background:");
-    expect(emptyPane).toContain("linear-gradient(");
-    expect(emptyPaneBefore).toContain('content: ""');
-    expect(emptyPaneBefore).toContain("position: absolute");
-    expect(emptyPaneBefore).toContain("width: 2px");
-    expect(emptyPaneBefore).toContain("background: linear-gradient(");
+    expect(emptyPane).toContain("padding: 0");
+    expect(emptyPane).toContain("border: none");
+    expect(emptyPane).toContain("background: transparent");
     expect(emptyState).toContain("align-items: flex-start");
     expect(emptyState).toContain("width: 100%");
     expect(emptyState).toContain("text-align: left");
-    expect(emptyCta).toContain("min-height: 40px");
+    expect(emptyState).toContain("gap: var(--sp-3)");
+    expect(emptyTitle).toContain("font-size: clamp(24px, 6.4vw, 32px)");
+    expect(placeholderCopy).toContain("gap: var(--sp-2)");
+    expect(emptyCta).toContain("min-height: 38px");
     expect(emptyCta).toContain("width: auto");
-    expect(emptyCta).toContain("min-width: 150px");
-    expect(emptyCta).toContain("border-radius: 999px");
+    expect(emptyCta).toContain("min-width: 136px");
+    expect(emptyCta).toContain("border-radius: 12px");
   });
 
   it("keeps mobile container surfaces on shared radius tokens instead of bespoke rounded-card values", () => {
@@ -824,9 +826,9 @@ describe("components.css theme-sensitive surfaces", () => {
     const settingsItemIconShell = getLastRuleBlock(".settings-mobile-item__icon-shell");
 
     expect(dockItem).toBeTruthy();
-    expect(dockItem).toContain("border-radius: var(--radius-xl)");
+    expect(dockItem).toContain("border-radius: 0");
     expect(mobileTerminalSheet).not.toContain("linear-gradient(");
-    expect(mobileTerminal).toContain("border-radius: var(--radius-md) var(--radius-md) 0 0");
+    expect(mobileTerminal).toContain("border-radius: 0");
     expect(mobileTerminal).not.toContain("var(--radius-xl) var(--radius-xl) 0 0");
     expect(mobileFilesSurface).toContain("border-radius: var(--radius-xl) var(--radius-xl) 0 0");
     expect(supervisorRoot).toContain("border-radius: var(--radius-xl) var(--radius-xl) 0 0");

@@ -6,7 +6,7 @@ import {
   pendingFocusSessionAtom,
   visibleMobileSessionIdAtom,
 } from "../../../../atoms/app-ui";
-import { EmptyState, Sheet } from "../../../../components/ui";
+import { Sheet } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { SessionCard } from "../../../agent-panes/views/shared/session-card";
 import { useCodeEditorActions } from "../../../code-editor/actions/use-code-editor-actions";
@@ -365,41 +365,24 @@ export function WorkspaceMobileView() {
             </>
           ) : (
             <section className="mobile-shell__agent-empty" data-testid="mobile-agent-empty">
-              <div className="mobile-shell__empty-content">
-                <div className="mobile-shell__empty-panel" aria-hidden="true" />
-                <EmptyState
-                  className="mobile-shell__empty-state"
-                  style={{ minHeight: "auto" }}
-                  title={
-                    <div className="mobile-shell__empty-heading">
-                      <span className="mobile-shell__empty-kicker">{t("label.agent")}</span>
-                      <p className="mobile-shell__empty-title">{t("mobile.empty.start_session")}</p>
-                    </div>
-                  }
-                  description={
-                    <div className="mobile-shell__placeholder-copy">
-                      <p>{t("mobile.empty.files_terminal_hint")}</p>
-                      <div className="mobile-shell__placeholder-pills" aria-hidden="true">
-                        <span className="mobile-shell__placeholder-pill">{t("label.agent")}</span>
-                        <span className="mobile-shell__placeholder-pill">{t("file.title")}</span>
-                        <span className="mobile-shell__placeholder-pill">
-                          {t("label.terminal")}
-                        </span>
-                      </div>
-                    </div>
-                  }
-                  action={
-                    <div className="mobile-shell__empty-action-row">
-                      <button
-                        type="button"
-                        className="mobile-shell__empty-cta"
-                        onClick={() => setAgentSheetOpen(true)}
-                      >
-                        {t("action.create_session")}
-                      </button>
-                    </div>
-                  }
-                />
+              <div className="mobile-shell__empty-content mobile-shell__empty-content--flat">
+                <div className="mobile-shell__empty-state">
+                  <div className="mobile-shell__empty-heading">
+                    <p className="mobile-shell__empty-title">{t("mobile.empty.start_session")}</p>
+                  </div>
+                  <div className="mobile-shell__placeholder-copy">
+                    <p>{t("mobile.empty.files_terminal_hint")}</p>
+                  </div>
+                  <div className="mobile-shell__empty-action-row">
+                    <button
+                      type="button"
+                      className="mobile-shell__empty-cta"
+                      onClick={() => setAgentSheetOpen(true)}
+                    >
+                      {t("action.create_session")}
+                    </button>
+                  </div>
+                </div>
               </div>
             </section>
           )}

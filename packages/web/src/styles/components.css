@@ -8275,9 +8275,10 @@ textarea.input {
     min-height: 36px;
     height: 36px;
     padding: 0 var(--sp-3);
-    border: 1px solid color-mix(in srgb, var(--border) 68%, transparent);
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--bg-surface) 84%, var(--bg-page));
+    border: none;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 62%, transparent);
+    border-radius: 0;
+    background: color-mix(in srgb, var(--bg-surface) 24%, transparent);
     color: var(--text-primary);
   }
 
@@ -8423,8 +8424,8 @@ textarea.input {
     height: 36px;
     padding: 0;
     border: 1px solid color-mix(in srgb, var(--border) 66%, transparent);
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--bg-surface) 82%, var(--bg-page));
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--bg-surface) 42%, transparent);
     color: var(--text-primary);
     transition:
       background-color var(--mobile-shell-motion-surface-duration) var(--ease-out),
@@ -8645,7 +8646,7 @@ textarea.input {
     flex-direction: column;
     align-items: stretch;
     justify-content: flex-start;
-    padding: clamp(44px, 11vh, 92px) var(--sp-4) var(--sp-3);
+    padding: clamp(34px, 9vh, 72px) var(--sp-4) var(--sp-3);
     border: none;
     background: transparent;
     box-shadow: none;
@@ -8654,139 +8655,64 @@ textarea.input {
   .mobile-shell__empty-content {
     position: relative;
     display: flex;
-    width: min(100%, 344px);
+    width: min(100%, 320px);
     flex-direction: column;
     align-self: flex-start;
-    gap: var(--sp-3);
-    padding: var(--sp-4) var(--sp-4) var(--sp-4) calc(var(--sp-4) + 2px);
-    border-top: none;
-    border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
-    border-radius: var(--radius-xl);
-    background: linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--bg-surface) 94%, transparent) 0%,
-      color-mix(in srgb, var(--bg-page) 96%, var(--bg-surface) 4%) 100%
-    );
-    box-shadow: 0 18px 40px color-mix(in srgb, var(--bg-page) 44%, transparent);
-    overflow: hidden;
+    gap: 0;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    overflow: visible;
   }
 
-  .mobile-shell__empty-content::before {
-    content: "";
-    position: absolute;
-    inset: 16px auto 16px 0;
-    width: 2px;
-    border-radius: var(--radius-full);
-    background: linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--accent-blue) 34%, var(--border)) 0%,
-      color-mix(in srgb, var(--accent-blue) 14%, transparent) 36%,
-      transparent 100%
-    );
-  }
-
-  .mobile-shell__empty-panel {
-    position: absolute;
-    inset: 0 0 auto 0;
-    height: 96px;
-    background:
-      radial-gradient(
-        circle at top left,
-        color-mix(in srgb, var(--accent-blue) 18%, transparent),
-        transparent 58%
-      ),
-      linear-gradient(
-        180deg,
-        color-mix(in srgb, var(--bg-surface) 8%, transparent) 0%,
-        transparent 100%
-      );
-    pointer-events: none;
+  .mobile-shell__empty-content--flat {
+    width: min(100%, 320px);
   }
 
   .mobile-shell__empty-state {
     width: 100%;
     align-items: flex-start;
     justify-content: center;
-    gap: var(--sp-4);
+    gap: var(--sp-3);
     min-height: 0;
     padding: 0;
     text-align: left;
-    position: relative;
-    z-index: 1;
+    display: flex;
+    flex-direction: column;
   }
 
   .mobile-shell__empty-heading {
     display: flex;
     width: 100%;
     flex-direction: column;
-    gap: var(--sp-2);
-  }
-
-  .mobile-shell__empty-kicker {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 10px;
-    line-height: 1.1;
-    color: var(--text-tertiary);
-    font-family: var(--font-mono);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-  }
-
-  .mobile-shell__empty-kicker::before {
-    content: "";
-    width: 6px;
-    height: 6px;
-    border: 1px solid color-mix(in srgb, var(--accent-blue) 38%, var(--border));
-    border-radius: var(--radius-full);
-    background: color-mix(in srgb, var(--accent-blue) 22%, transparent);
+    gap: 0;
   }
 
   .mobile-shell__empty-title {
     margin: 0;
     color: var(--text-primary);
-    font-size: clamp(22px, 5.8vw, 30px);
+    font-size: clamp(24px, 6.4vw, 32px);
     font-weight: var(--font-semibold);
-    line-height: 1.2;
-    letter-spacing: -0.02em;
+    line-height: 1.08;
+    letter-spacing: -0.035em;
   }
 
   .mobile-shell__placeholder-copy {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: var(--sp-3);
-    max-width: 31ch;
+    gap: var(--sp-2);
+    max-width: 18ch;
     color: var(--text-secondary);
     text-align: left;
   }
 
   .mobile-shell__placeholder-copy p {
     margin: 0;
-    font-size: 15px;
-    line-height: 1.65;
-  }
-
-  .mobile-shell__placeholder-pills {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--sp-2);
-  }
-
-  .mobile-shell__placeholder-pill {
-    display: inline-flex;
-    align-items: center;
-    min-height: 26px;
-    padding: 0 10px;
-    border: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--bg-surface) 72%, transparent);
-    color: var(--text-tertiary);
-    font-family: var(--font-mono);
-    font-size: 10px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
+    font-size: 14px;
+    line-height: 1.62;
   }
 
   .mobile-shell__empty-action-row {
@@ -8800,13 +8726,13 @@ textarea.input {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-height: 40px;
+    min-height: 38px;
     width: auto;
-    min-width: 150px;
+    min-width: 136px;
     padding: 0 var(--sp-4);
     border: 1px solid color-mix(in srgb, var(--accent-blue) 34%, var(--border));
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--accent-blue) 12%, var(--bg-surface));
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--accent-blue) 8%, var(--bg-surface));
     color: var(--text-primary);
     font-size: 13px;
     font-weight: var(--font-semibold);
@@ -8837,7 +8763,7 @@ textarea.input {
 
   .mobile-dock-shell {
     position: relative;
-    padding: 6px calc(var(--mobile-safe-right) + var(--sp-4)) 0
+    padding: 3px calc(var(--mobile-safe-right) + var(--sp-4)) 0
       calc(var(--mobile-safe-left) + var(--sp-4));
   }
 
@@ -8964,12 +8890,13 @@ textarea.input {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    min-height: 42px;
+    min-height: 30px;
     gap: 4px;
-    padding: 8px var(--sp-2) 7px;
-    border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
-    border-radius: var(--radius-xl);
-    background: color-mix(in srgb, var(--bg-surface) 74%, transparent);
+    padding: 2px var(--sp-2) 2px;
+    border: none;
+    border-top: 1px solid transparent;
+    border-radius: 0;
+    background: transparent;
     color: var(--text-tertiary);
     transition:
       background-color var(--mobile-shell-motion-surface-duration) var(--ease-out),
@@ -8980,21 +8907,13 @@ textarea.input {
   }
 
   .mobile-dock__item--active {
-    border-color: color-mix(in srgb, var(--accent-blue) 34%, var(--border));
-    background: color-mix(in srgb, var(--accent-blue) 10%, var(--bg-surface));
+    border-top-color: color-mix(in srgb, var(--accent-blue) 72%, transparent);
+    background: transparent;
     color: var(--text-primary);
   }
 
   .mobile-dock__item--active::before {
-    content: "";
-    position: absolute;
-    top: 6px;
-    left: 50%;
-    width: 18px;
-    height: 2px;
-    border-radius: var(--radius-full);
-    background: color-mix(in srgb, var(--accent-blue) 78%, transparent);
-    transform: translateX(-50%);
+    content: none;
   }
 
   .mobile-dock__icon {
@@ -9010,7 +8929,7 @@ textarea.input {
   }
 
   .mobile-dock__label {
-    font-size: 11px;
+    font-size: 10px;
     font-weight: var(--font-medium);
     line-height: 1.1;
   }
