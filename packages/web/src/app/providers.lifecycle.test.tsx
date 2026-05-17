@@ -91,6 +91,16 @@ function createWsSendCommandMock(
   });
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 function setVisibilityState(value: "visible" | "hidden") {
   Object.defineProperty(document, "visibilityState", {
     configurable: true,
@@ -771,7 +781,7 @@ describe("AppProviders lifecycle recovery", () => {
     expect(wsState.client?.recoverConnection).not.toHaveBeenCalled();
   });
 
-  it("hydrates terminal copy-on-select preferences from settings.get once connected", async () => {
+  it("hydrates terminal copy-on-select and font size preferences from settings.get once connected", async () => {
     const store = createStore();
     setVisibilityState("visible");
 
@@ -779,6 +789,7 @@ describe("AppProviders lifecycle recovery", () => {
       if (op === "settings.get") {
         return {
           "appearance.terminalCopyOnSelect": true,
+          "appearance.terminalFontSize": 17,
         };
       }
 
@@ -797,10 +808,62 @@ describe("AppProviders lifecycle recovery", () => {
     });
 
     await vi.waitFor(() => {
-      expect(store.get(terminalPreferencesAtom)).toEqual({ copyOnSelect: true });
+      expect(store.get(terminalPreferencesAtom)).toEqual({
+        copyOnSelect: true,
+        fontSize: 17,
+      });
     });
 
     expect(sendCommand).toHaveBeenCalledWith("settings.get", {}, undefined);
+  });
+
+  it("preserves a newer local terminal font size update when startup hydration resolves later", async () => {
+    const store = createStore();
+    setVisibilityState("visible");
+    const settingsGetDeferred = createDeferred<Record<string, unknown>>();
+
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return settingsGetDeferred.promise;
+      }
+
+      return undefined;
+    });
+    wsState.client!.sendCommand = sendCommand;
+
+    renderProviders(store);
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
+
+    act(() => {
+      wsState.client?.statusHandler?.("connected");
+    });
+
+    await vi.waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith("settings.get", {}, undefined);
+    });
+
+    act(() => {
+      store.set(terminalPreferencesAtom, {
+        copyOnSelect: false,
+        fontSize: 14,
+      });
+    });
+
+    await act(async () => {
+      settingsGetDeferred.resolve({
+        "appearance.terminalCopyOnSelect": true,
+        "appearance.terminalFontSize": 18,
+      });
+      await settingsGetDeferred.promise;
+    });
+
+    expect(store.get(terminalPreferencesAtom)).toEqual({
+      copyOnSelect: false,
+      fontSize: 14,
+    });
   });
 
   it("bootstraps the document theme from legacy ui.theme localStorage", async () => {
@@ -1042,7 +1105,7 @@ describe("AppProviders lifecycle recovery", () => {
     });
 
     act(() => {
-      store.set(terminalPreferencesAtom, { copyOnSelect: true });
+      store.set(terminalPreferencesAtom, { copyOnSelect: true, fontSize: 11 });
     });
 
     await act(async () => {
@@ -1050,7 +1113,7 @@ describe("AppProviders lifecycle recovery", () => {
       await settingsGetPromise;
     });
 
-    expect(store.get(terminalPreferencesAtom)).toEqual({ copyOnSelect: true });
+    expect(store.get(terminalPreferencesAtom)).toEqual({ copyOnSelect: true, fontSize: 11 });
   });
 
   it("preserves an ABA local terminal copy-on-select update when startup hydration resolves later", async () => {
@@ -1058,7 +1121,7 @@ describe("AppProviders lifecycle recovery", () => {
     setVisibilityState("visible");
 
     act(() => {
-      store.set(terminalPreferencesAtom, { copyOnSelect: true });
+      store.set(terminalPreferencesAtom, { copyOnSelect: true, fontSize: 11 });
     });
 
     let resolveSettingsGet: ((value: Record<string, unknown>) => void) | undefined;
@@ -1089,8 +1152,8 @@ describe("AppProviders lifecycle recovery", () => {
     });
 
     act(() => {
-      store.set(terminalPreferencesAtom, { copyOnSelect: false });
-      store.set(terminalPreferencesAtom, { copyOnSelect: true });
+      store.set(terminalPreferencesAtom, { copyOnSelect: false, fontSize: 11 });
+      store.set(terminalPreferencesAtom, { copyOnSelect: true, fontSize: 11 });
     });
 
     await act(async () => {
@@ -1100,7 +1163,7 @@ describe("AppProviders lifecycle recovery", () => {
       await settingsGetPromise;
     });
 
-    expect(store.get(terminalPreferencesAtom)).toEqual({ copyOnSelect: true });
+    expect(store.get(terminalPreferencesAtom)).toEqual({ copyOnSelect: true, fontSize: 11 });
   });
 
   it("marks the session authenticated when /auth/status confirms an existing server session", async () => {

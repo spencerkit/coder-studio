@@ -46,6 +46,7 @@ import { supervisorCyclesAtom, supervisorsAtom } from "../features/supervisor/at
 import { terminalMetaAtomFamily } from "../features/terminal-panel/atoms";
 import {
   resolveTerminalCopyOnSelectSetting,
+  resolveTerminalFontSizeSetting,
   terminalPreferencesAtom,
 } from "../features/terminal-panel/preferences";
 import {
@@ -313,6 +314,7 @@ export function AppProviders({ children }: AppProvidersProps) {
 
       setTerminalPreferences({
         copyOnSelect: resolveTerminalCopyOnSelectSetting(result.data),
+        fontSize: resolveTerminalFontSizeSetting(result.data),
       });
     };
 
