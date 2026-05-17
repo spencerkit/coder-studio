@@ -103,7 +103,7 @@ export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
     devices: ["mobile"],
     themes: allThemeIds(),
     locales: ["zh", "en"],
-    capture: { selector: ".settings-mobile-list" },
+    capture: { selector: ".settings-mobile-root" },
   },
   {
     id: "app-loading-shell",

@@ -56,4 +56,10 @@ describe("ui preview scene metadata", () => {
     expect(scene?.devices).toEqual(["desktop"]);
     expect(scene?.themes.every((theme) => theme.endsWith("-light"))).toBe(true);
   });
+
+  it("captures the mobile settings homepage from the grouped root container", () => {
+    const scene = UI_PREVIEW_SCENE_METADATA.find((entry) => entry.id === "settings-mobile-root");
+
+    expect(scene?.capture?.selector).toBe(".settings-mobile-root");
+  });
 });

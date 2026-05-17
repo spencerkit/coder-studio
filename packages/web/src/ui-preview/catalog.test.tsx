@@ -194,8 +194,10 @@ describe("UI preview catalog", () => {
     renderScene("settings-mobile-root", "mobile");
 
     expect(await screen.findByRole("button", { name: /general/i })).toBeInTheDocument();
-    expect(document.querySelector(".settings-mobile-root-hero")).toBeTruthy();
-    expect(document.querySelector(".settings-mobile-list")).toBeTruthy();
+    expect(document.querySelector(".settings-mobile-root")).toBeTruthy();
+    expect(document.querySelector(".settings-mobile-group")).toBeTruthy();
+    expect(document.querySelector(".settings-mobile-group__list")).toBeTruthy();
+    expect(document.querySelector(".settings-mobile-root-hero")).toBeNull();
   });
 
   it("renders the app loading shell scene without bootstrapping routes", async () => {
