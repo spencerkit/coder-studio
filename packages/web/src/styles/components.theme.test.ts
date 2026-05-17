@@ -517,21 +517,45 @@ describe("components.css theme-sensitive surfaces", () => {
     const pageHeader = getLastRuleBlock(".mobile-sheet--fullscreen .page-header");
     const mobilePageHeader = getLastRuleBlock(".mobile-page-header");
     const mobilePageHeaderLeading = getLastRuleBlock(".mobile-page-header .page-header__leading");
+    const mobilePageHeaderTitle = getLastRuleBlock(".mobile-page-header .page-header__title");
     const mobilePageHeaderBack = getLastRuleBlock(".mobile-page-header .page-header__back");
     const headerLeading = getLastRuleBlock(".page-header__leading");
     const backButton = getLastRuleBlock(".mobile-sheet--fullscreen .page-header__back");
+    const fullscreenTitle = getLastRuleBlock(".mobile-sheet--fullscreen .page-header__title");
     const headerActions = getLastRuleBlock(".page-header__actions");
 
     expect(fullscreenHeader).toContain("padding: 0 var(--sp-3)");
     expect(pageHeader).toContain("width: 100%");
-    expect(mobilePageHeader).toContain("min-height: 38px");
+    expect(mobilePageHeader).toContain("min-height: 44px");
     expect(mobilePageHeaderLeading).toContain("gap: 8px");
+    expect(mobilePageHeaderTitle).toContain("font-size: 16px");
+    expect(mobilePageHeaderTitle).toContain("line-height: 24px");
     expect(mobilePageHeaderBack).toContain("min-height: 26px");
     expect(mobilePageHeaderBack).toContain("font-family: var(--font-mono)");
     expect(headerLeading).toContain("flex: 1");
     expect(backButton).toContain("background: transparent");
     expect(backButton).not.toContain("border-radius: 999px");
+    expect(fullscreenTitle).toContain("font-size: 16px");
+    expect(fullscreenTitle).toContain("line-height: 24px");
     expect(headerActions).toContain("margin-left: auto");
+  });
+
+  it("keeps page header levels on the approved desktop sizing contract", () => {
+    const baseTitle = getLastRuleBlock(".page-header__title");
+    const primaryHeader = getLastRuleBlock(".page-header--primary");
+    const secondaryHeader = getLastRuleBlock(".page-header--secondary");
+    const primaryTitle = getLastRuleBlock(".page-header--primary .page-header__title");
+    const secondaryTitle = getLastRuleBlock(".page-header--secondary .page-header__title");
+
+    expect(baseTitle).toContain("font-weight: 600");
+    expect(primaryHeader).toContain("min-height: 56px");
+    expect(secondaryHeader).toContain("min-height: 48px");
+    expect(primaryTitle).toContain("font-size: 20px");
+    expect(primaryTitle).toContain("line-height: 28px");
+    expect(primaryTitle).toContain("font-weight: 600");
+    expect(secondaryTitle).toContain("font-size: 16px");
+    expect(secondaryTitle).toContain("line-height: 24px");
+    expect(secondaryTitle).toContain("font-weight: 600");
   });
 
   it("uses a unified inline sheet treatment for mobile selectors and keeps topbar controls height-aligned", () => {
