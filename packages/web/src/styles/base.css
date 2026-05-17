@@ -22,8 +22,9 @@ html {
 
 body {
   font-family: var(--font-sans);
-  font-size: var(--text-base);
-  line-height: var(--leading-normal);
+  font-size: var(--type-body-size);
+  line-height: var(--type-body-line-height);
+  font-weight: var(--type-body-weight);
   color: var(--text-primary);
   background-color: var(--bg-page);
   overflow: hidden;
@@ -36,34 +37,41 @@ body {
 }
 
 /* ========== Typography ========== */
-h1,
-h2,
-h3,
-h4,
-h5,
-h6 {
-  font-weight: var(--font-semibold);
-  line-height: var(--leading-tight);
+h1 {
+  font-size: var(--type-page-title-size);
+  line-height: var(--type-page-title-line-height);
+  font-weight: var(--type-page-title-weight);
   color: var(--text-primary);
 }
-
-h1 {
-  font-size: var(--text-3xl);
-}
 h2 {
-  font-size: var(--text-2xl);
+  font-size: var(--type-section-title-size);
+  line-height: var(--type-section-title-line-height);
+  font-weight: var(--type-section-title-weight);
+  color: var(--text-primary);
 }
 h3 {
-  font-size: var(--text-xl);
+  font-size: var(--type-app-title-size);
+  line-height: var(--type-app-title-line-height);
+  font-weight: var(--type-app-title-weight);
+  color: var(--text-primary);
 }
 h4 {
-  font-size: var(--text-lg);
+  font-size: var(--type-body-strong-size);
+  line-height: var(--type-body-strong-line-height);
+  font-weight: var(--type-body-strong-weight);
+  color: var(--text-primary);
 }
 h5 {
-  font-size: var(--text-base);
+  font-size: var(--type-label-size);
+  line-height: var(--type-label-line-height);
+  font-weight: var(--type-label-weight);
+  color: var(--text-primary);
 }
 h6 {
-  font-size: var(--text-sm);
+  font-size: var(--type-meta-size);
+  line-height: var(--type-meta-line-height);
+  font-weight: var(--type-meta-weight);
+  color: var(--text-primary);
 }
 
 p {
@@ -72,52 +80,54 @@ p {
 }
 
 .page-kicker,
-.section-kicker {
-  font-size: var(--text-xs);
-  font-weight: var(--font-semibold);
+.section-kicker,
+.section-title {
+  font-size: var(--type-kicker-size);
+  line-height: var(--type-kicker-line-height);
+  font-weight: var(--type-kicker-weight);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: var(--type-kicker-letter-spacing);
   color: var(--text-tertiary);
 }
 
 .page-title {
-  font-size: var(--text-3xl);
-  font-weight: var(--font-semibold);
-  line-height: var(--leading-tight);
-  color: var(--text-primary);
-}
-
-.section-title {
-  font-size: var(--text-base);
-  font-weight: var(--font-semibold);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-size: var(--type-page-title-size);
+  line-height: var(--type-page-title-line-height);
+  font-weight: var(--type-page-title-weight);
   color: var(--text-primary);
 }
 
 .meta-text {
-  font-size: var(--text-sm);
+  font-size: var(--type-meta-size);
+  line-height: var(--type-meta-line-height);
+  font-weight: var(--type-meta-weight);
   color: var(--text-secondary);
 }
 
 .hint-text {
-  font-size: var(--text-xs);
-  line-height: 1.45;
+  font-size: var(--type-meta-size);
+  line-height: var(--type-meta-line-height);
+  font-weight: var(--type-meta-weight);
   color: var(--text-muted);
 }
 
 .mono-meta {
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
+  font-family: var(--type-code-inline-family);
+  font-size: var(--type-code-inline-size);
+  line-height: var(--type-code-inline-line-height);
+  font-weight: var(--type-code-inline-weight);
   color: var(--text-muted);
 }
 
+.mono-meta,
 code,
 pre,
 kbd,
 samp {
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
+  font-family: var(--type-code-inline-family);
+  font-size: var(--type-code-inline-size);
+  line-height: var(--type-code-inline-line-height);
+  font-weight: var(--type-code-inline-weight);
 }
 
 code {
@@ -188,7 +198,9 @@ a:hover {
 /* ========== Buttons Base ========== */
 button {
   font-family: var(--font-sans);
-  font-size: var(--text-base);
+  font-size: var(--type-body-strong-size);
+  line-height: var(--type-body-strong-line-height);
+  font-weight: var(--type-body-strong-weight);
   cursor: pointer;
   border: none;
   background: none;
@@ -205,7 +217,9 @@ input,
 textarea,
 select {
   font-family: var(--font-sans);
-  font-size: var(--text-base);
+  font-size: var(--type-body-strong-size);
+  line-height: var(--type-body-strong-line-height);
+  font-weight: var(--type-body-strong-weight);
   color: var(--text-primary);
   background-color: var(--bg-input);
   border: 1px solid var(--border);
