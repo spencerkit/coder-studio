@@ -10557,41 +10557,6 @@ textarea.input {
     padding-right: var(--sp-3);
   }
 
-  .settings-mobile-root-hero {
-    display: flex;
-    flex-direction: column;
-    gap: var(--sp-2);
-    padding: var(--sp-4) var(--sp-1) var(--sp-4);
-  }
-
-  .settings-mobile-root-hero__eyebrow {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-family: var(--font-mono);
-    font-size: 10px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--text-tertiary);
-  }
-
-  .settings-mobile-root-hero__eyebrow::before {
-    content: "";
-    width: 6px;
-    height: 6px;
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--accent-blue) 76%, transparent);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-blue) 14%, transparent);
-  }
-
-  .settings-mobile-root-hero__body {
-    margin: 0;
-    max-width: 34ch;
-    color: var(--text-secondary);
-    font-size: 14px;
-    line-height: 1.6;
-  }
-
   .settings-pills {
     gap: var(--sp-2);
   }
@@ -10627,40 +10592,63 @@ textarea.input {
     box-shadow: none;
   }
 
-  .settings-mobile-list {
+  .settings-mobile-root {
     display: flex;
     flex-direction: column;
-    gap: var(--sp-3);
-    border-top: none;
-    padding-bottom: var(--sp-4);
+    gap: var(--sp-5);
+    padding: var(--sp-4) 0 var(--sp-4);
+  }
+
+  .settings-mobile-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+  }
+
+  .settings-mobile-group__title {
+    margin: 0;
+    padding: 0 var(--sp-1);
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: var(--font-semibold);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .settings-mobile-group__list {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--bg-surface) 92%, var(--bg-page));
   }
 
   .settings-mobile-item {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     gap: var(--sp-3);
-    min-height: 76px;
-    padding: var(--sp-4);
-    border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
-    border-bottom: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
-    border-radius: 22px;
-    background: linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--bg-surface) 94%, transparent) 0%,
-      color-mix(in srgb, var(--bg-page) 96%, var(--bg-surface) 4%) 100%
-    );
+    min-height: 60px;
+    padding: var(--sp-3) var(--sp-4);
+    border: none;
+    border-radius: 0;
+    background: transparent;
     text-align: left;
+  }
+
+  .settings-mobile-item + .settings-mobile-item {
+    border-top: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
   }
 
   .settings-mobile-item__icon-shell {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 40px;
-    height: 40px;
-    border-radius: 14px;
-    background: color-mix(in srgb, var(--icon-surface-subtle) 84%, var(--bg-surface));
-    border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+    width: 34px;
+    height: 34px;
+    border-radius: var(--radius-xl);
+    background: color-mix(in srgb, var(--icon-surface-subtle) 82%, var(--bg-surface));
+    border: 1px solid color-mix(in srgb, var(--border) 68%, transparent);
     flex-shrink: 0;
   }
 
@@ -10674,8 +10662,7 @@ textarea.input {
     flex: 1;
     min-width: 0;
     flex-direction: column;
-    gap: 4px;
-    padding-top: 2px;
+    gap: 2px;
   }
 
   .settings-mobile-item__label {
@@ -10688,15 +10675,15 @@ textarea.input {
     display: -webkit-box;
     overflow: hidden;
     -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
+    -webkit-line-clamp: 1;
     color: var(--text-tertiary);
-    font-size: 12px;
-    line-height: 1.5;
+    font-size: 11px;
+    line-height: 1.45;
   }
 
   .settings-mobile-item__arrow {
-    margin-top: 10px;
     color: var(--text-tertiary);
+    flex-shrink: 0;
   }
 
   .settings-provider-mobile-entry {

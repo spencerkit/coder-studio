@@ -567,7 +567,9 @@ describe("components.css theme-sensitive surfaces", () => {
     const mobileRootContent = getLastRuleBlock(
       ".settings-page--mobile .settings-content--mobile-root"
     );
-    const mobileList = getLastRuleBlock(".settings-mobile-list");
+    const mobileRoot = getLastRuleBlock(".settings-mobile-root");
+    const mobileGroup = getLastRuleBlock(".settings-mobile-group");
+    const mobileGroupList = getLastRuleBlock(".settings-mobile-group__list");
     const mobileItem = getLastRuleBlock(".settings-mobile-item");
     const mobileItemIcon = getLastRuleBlock(".settings-mobile-item__icon");
     const mobileItemArrow = getLastRuleBlock(".settings-mobile-item__arrow");
@@ -606,15 +608,18 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(mobileContent).toContain("padding: 0");
     expect(mobileRootContent).toContain("padding-left: var(--sp-3)");
     expect(mobileRootContent).toContain("padding-right: var(--sp-3)");
-    expect(mobileList).toContain("gap: var(--sp-3)");
-    expect(mobileList).toContain("border-top: none");
-    expect(mobileItem).toContain("min-height: 76px");
-    expect(mobileItem).toContain("padding: var(--sp-4)");
-    expect(mobileItem).toContain("border: 1px solid");
-    expect(mobileItem).toContain("border-bottom: 1px solid");
-    expect(mobileItem).toContain("border-radius: 22px");
-    expect(mobileItem).toContain("background:");
-    expect(mobileItem).toContain("linear-gradient(");
+    expect(mobileRoot).toContain("display: flex");
+    expect(mobileRoot).toContain("flex-direction: column");
+    expect(mobileRoot).toContain("gap: var(--sp-5)");
+    expect(mobileRoot).toContain("padding: var(--sp-4) 0 var(--sp-4)");
+    expect(mobileGroup).toContain("gap: var(--sp-2)");
+    expect(mobileGroupList).toContain("border: 1px solid");
+    expect(mobileGroupList).toContain("border-radius: 12px");
+    expect(mobileGroupList).toContain("overflow: hidden");
+    expect(mobileItem).toContain("min-height: 60px");
+    expect(mobileItem).toContain("padding: var(--sp-3) var(--sp-4)");
+    expect(mobileItem).toContain("border: none");
+    expect(mobileItem).not.toContain("linear-gradient(");
     expect(mobileItemIcon).toContain("color: var(--icon-secondary)");
     expect(mobileItemArrow).toContain("color: var(--text-tertiary)");
   });
@@ -662,6 +667,14 @@ describe("components.css theme-sensitive surfaces", () => {
       "padding: var(--sp-2) calc(var(--mobile-safe-right) + var(--sp-4)) calc(var(--mobile-safe-bottom) + var(--sp-4)) calc(var(--mobile-safe-left) + var(--sp-4))"
     );
     expect(mobileSettingsFooter).toContain("min-height: 32px");
+  });
+
+  it("keeps mobile container surfaces on shared radius tokens instead of bespoke rounded-card values", () => {
+    const settingsGroupList = getLastRuleBlock(".settings-mobile-group__list");
+    const settingsItemIconShell = getLastRuleBlock(".settings-mobile-item__icon-shell");
+
+    expect(settingsGroupList).toContain("border-radius: 12px");
+    expect(settingsItemIconShell).toContain("border-radius: var(--radius-xl)");
   });
 
   it("keeps the mobile workspace launch action docked in a compact editor-style footer rail", () => {
