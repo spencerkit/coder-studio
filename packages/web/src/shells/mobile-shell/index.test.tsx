@@ -52,6 +52,17 @@ vi.mock("../../features/settings", () => ({
   SettingsPage: () => <div>SettingsPage</div>,
 }));
 
+vi.mock("../../features/diagnostics", async () => {
+  const actual = await vi.importActual<typeof import("../../features/diagnostics")>(
+    "../../features/diagnostics"
+  );
+
+  return {
+    ...actual,
+    DiagnosticsPage: () => <div>DiagnosticsPage</div>,
+  };
+});
+
 vi.mock("../../features/command-palette", () => ({
   CommandPalette: () => null,
 }));
@@ -597,6 +608,7 @@ afterEach(() => {
     configurable: true,
     value: undefined,
   });
+  window.history.replaceState({}, "", "/");
   window.localStorage.clear();
   mockMobileEditorHandleSave.mockReset();
   mockMobileEditorToggleSvgTextMode.mockReset();
@@ -984,6 +996,26 @@ describe("MobileShell Phase 2 workspace", () => {
     expect(screen.queryByText("正在连接工作区...")).not.toBeInTheDocument();
   });
 
+  it("renders DiagnosticsPage on mobile /diagnostics while auth status is still unknown", () => {
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(authEnabledAtom, null);
+    store.set(authenticatedAtom, false);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/diagnostics?context=manual_check"]}>
+          <LocationProbe />
+          <MobileShell />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    expect(screen.getByText("DiagnosticsPage")).toBeInTheDocument();
+    expect(screen.getByTestId("location-display")).toHaveTextContent("/diagnostics");
+    expect(screen.queryByText("正在连接工作区...")).not.toBeInTheDocument();
+  });
+
   it("does not bootstrap workspaces from / on mobile before redirecting to /login when auth is enabled and user is unauthenticated", async () => {
     const sendCommand = vi.fn();
     const store = createStore();
@@ -1271,7 +1303,7 @@ describe("MobileShell Phase 2 workspace", () => {
     });
   });
 
-  it("keeps the provider sheet open when provider launch fails", async () => {
+  it("keeps blocked provider launch inside the sheet and shows a diagnostics affordance", async () => {
     const user = userEvent.setup();
     const sendCommand = vi.fn(async (op: string) => {
       if (op === "session.list") {
@@ -1293,6 +1325,66 @@ describe("MobileShell Phase 2 workspace", () => {
             },
             codex: {
               providerId: "codex",
+              available: false,
+              missingCommands: ["codex"],
+              missingPrerequisites: [],
+              autoInstallSupported: false,
+              installReadiness: "unavailable",
+              manualGuideKeys: ["provider.install.codex.manual"],
+              docUrls: { provider: "", prerequisites: {} },
+            },
+          },
+        };
+      }
+
+      return undefined;
+    });
+
+    renderMobileShell({
+      initialEntry: "/workspace",
+      sendCommand,
+      sessions: [
+        createSession({
+          id: "sess_2",
+          terminalId: "term-2",
+          providerId: "codex",
+          state: "idle",
+          title: "Codex",
+        }),
+      ],
+      paneLayout: {
+        id: "root",
+        type: "leaf",
+        sessionId: "sess_2",
+      },
+    });
+
+    await user.click(await screen.findByRole("button", { name: "Open Agent sheet" }));
+    await user.click(screen.getByRole("button", { name: "Create Session" }));
+
+    await user.click(screen.getByRole("button", { name: /Codex/ }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Then run npm install -g @openai/codex.")).toBeInTheDocument();
+    });
+
+    expect(screen.getByRole("button", { name: "Open Diagnostics" })).toBeInTheDocument();
+    expect(window.location.pathname).toBe("/");
+    expect(sendCommand).not.toHaveBeenCalledWith("session.create", expect.anything(), undefined);
+  });
+
+  it("refreshes runtime status and shows inline launch help when session creation reports provider_cli_missing", async () => {
+    const user = userEvent.setup();
+    const sendCommand = vi.fn(async (op: string) => {
+      if (op === "session.list") {
+        return [];
+      }
+
+      if (op === "provider.runtimeStatus") {
+        return {
+          providers: {
+            claude: {
+              providerId: "claude",
               available: true,
               missingCommands: [],
               missingPrerequisites: [],
@@ -1301,12 +1393,29 @@ describe("MobileShell Phase 2 workspace", () => {
               manualGuideKeys: [],
               docUrls: { provider: "", prerequisites: {} },
             },
+            codex: {
+              providerId: "codex",
+              available: sendCommand.mock.calls.some(([name]) => name === "session.create")
+                ? false
+                : true,
+              missingCommands: sendCommand.mock.calls.some(([name]) => name === "session.create")
+                ? ["codex"]
+                : [],
+              missingPrerequisites: [],
+              autoInstallSupported: false,
+              installReadiness: "ready",
+              manualGuideKeys: ["provider.install.codex.manual"],
+              docUrls: { provider: "", prerequisites: {} },
+            },
           },
         };
       }
 
       if (op === "session.create") {
-        throw new Error("session create failed");
+        throw new CommandResultError({
+          code: "provider_cli_missing",
+          message: "Codex CLI is missing",
+        });
       }
 
       return undefined;
@@ -1335,12 +1444,7 @@ describe("MobileShell Phase 2 workspace", () => {
 
     expect(screen.getByRole("region", { name: "Select Agent sheet" })).toBeInTheDocument();
 
-    await user.click(
-      screen.getByRole("button", {
-        name: "Codex",
-        description: "Start Codex session Start new session",
-      })
-    );
+    await user.click(screen.getByRole("button", { name: /Codex/ }));
 
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith(
@@ -1353,8 +1457,12 @@ describe("MobileShell Phase 2 workspace", () => {
       );
     });
 
-    expect(screen.getByRole("region", { name: "Select Agent sheet" })).toBeInTheDocument();
-    expect(document.querySelectorAll(".mobile-sheet-layer")).toHaveLength(1);
+    await waitFor(() => {
+      expect(screen.getByText("Then run npm install -g @openai/codex.")).toBeInTheDocument();
+    });
+
+    expect(sendCommand).toHaveBeenCalledWith("provider.runtimeStatus", {}, undefined);
+    expect(screen.getByRole("button", { name: "Open Diagnostics" })).toBeInTheDocument();
   });
 
   it("switches from session mode to provider mode inside a single mobile select sheet", async () => {

@@ -21,6 +21,10 @@ vi.mock("../features/settings", () => ({
   SettingsPage: () => <div>SettingsPage</div>,
 }));
 
+vi.mock("../features/diagnostics", () => ({
+  DiagnosticsPage: () => <div>DiagnosticsPage</div>,
+}));
+
 vi.mock("../features/workspace/views/desktop/workspace-desktop-view", () => ({
   WorkspaceDesktopView: () => <div>WorkspacePage</div>,
 }));
@@ -102,6 +106,20 @@ describe("DesktopShell auth gating", () => {
     renderShell(store);
 
     expect(screen.getByText("SettingsPage")).toBeInTheDocument();
+    expect(screen.queryByText("正在连接工作区...")).not.toBeInTheDocument();
+  });
+
+  it("renders DiagnosticsPage on /diagnostics while auth status is still unknown", () => {
+    window.history.replaceState({}, "", "/diagnostics?context=manual_check");
+
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(authEnabledAtom, null);
+    store.set(authenticatedAtom, false);
+
+    renderShell(store);
+
+    expect(screen.getByText("DiagnosticsPage")).toBeInTheDocument();
     expect(screen.queryByText("正在连接工作区...")).not.toBeInTheDocument();
   });
 

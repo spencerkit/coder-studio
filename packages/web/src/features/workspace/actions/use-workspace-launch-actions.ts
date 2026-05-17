@@ -11,6 +11,7 @@ import {
   workspacesLoadStateAtom,
 } from "../../../atoms/workspaces";
 import { useTranslation } from "../../../lib/i18n";
+import { buildDiagnosticsPath } from "../../diagnostics";
 import { usePersistWorkspaceLastViewedTarget } from "./use-persist-workspace-last-viewed-target";
 
 export interface DirectoryInfo {
@@ -47,10 +48,11 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
   const [loading, setLoading] = useState(false);
   const [browsing, setBrowsing] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [rootPaths, setRootPaths] = useState<string[]>(["/"]);
+  const [homePath, setHomePath] = useState<string | null>(null);
 
   const launchTitle = t("workspace.launch.title");
   const launchHint = t("workspace.launch.hint");
-  const rootPaths = ["/", "~", "/home/spencer"];
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -79,6 +81,10 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
         setCurrentPath(result.data.currentPath);
         setDirectories(result.data.directories);
         setParentPath(result.data.parentPath);
+        const nextRootPaths = result.data.rootPaths?.filter(Boolean) ?? ["/"];
+        setRootPaths(nextRootPaths);
+        const detectedHomePath = nextRootPaths.find((candidate) => candidate !== "/") ?? null;
+        setHomePath(detectedHomePath);
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
       } finally {
@@ -140,10 +146,20 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
 
         onClose();
       } else {
-        setError(result.error?.message || t("workspace.launch.open_failed"));
+        navigate(
+          buildDiagnosticsPath({
+            context: "workspace_open",
+            workspacePath: selectedPath,
+          })
+        );
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      navigate(
+        buildDiagnosticsPath({
+          context: "workspace_open",
+          workspacePath: selectedPath,
+        })
+      );
     } finally {
       setLoading(false);
     }
@@ -162,15 +178,19 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
     t,
   ]);
 
-  const getShortPath = useCallback((path: string) => {
-    if (path === "~") return "~";
-    if (path === "/") return "/";
-    const homeMatch = path.match(/^\/home\/[^/]+/);
-    if (homeMatch) {
-      return path.replace(homeMatch[0], "~");
-    }
-    return path;
-  }, []);
+  const getShortPath = useCallback(
+    (path: string) => {
+      if (path === "/") return "/";
+      if (homePath && path === homePath) {
+        return "~";
+      }
+      if (homePath && path.startsWith(`${homePath}/`)) {
+        return `~${path.slice(homePath.length)}`;
+      }
+      return path;
+    },
+    [homePath]
+  );
 
   return {
     browsing,

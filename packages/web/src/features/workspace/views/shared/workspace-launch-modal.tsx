@@ -80,7 +80,7 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
               className={`fp-chip ${currentPath === rp ? "active" : ""}`}
               onClick={() => handleNavigate(rp)}
             >
-              {rp}
+              {getShortPath(rp)}
             </span>
           ))}
           {currentPath && !rootPaths.includes(currentPath) && (

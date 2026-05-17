@@ -6,11 +6,11 @@
 >
 > **Spec:** `docs/superpowers/specs/2026-05-14-conversion-first-activation-design.md`
 
-**Goal:** Productize phone continuation so the user can move from first success on desktop to the next differentiated outcome without reading docs.
+**Goal:** Productize phone continuation so the user can move from desktop success to the next differentiated outcome without reading docs.
 
-**Architecture:** Phase 3 builds on the setup success state and the mobile-access command introduced in Phase 1. It adds a reusable mobile assistant surface, exposes it from setup success and settings, and promotes `Continue on Phone` into the workspace shell so cross-device continuation becomes a normal next step instead of hidden product knowledge.
+**Architecture:** Phase 3 builds on the diagnostics foundation and the inline-first launch model. Phone continuation remains opt-in. Settings and workspace surfaces can initiate it, while the diagnostics page becomes the full environment report for `mobile_continue`: it explains host exposure, auth readiness, reachable links, and what still blocks continuation.
 
-**Tech Stack:** TypeScript, React, Jotai, Vitest, setup/mobile status command, existing workspace shell
+**Tech Stack:** TypeScript, React, Jotai, Vitest, diagnostics command surface, existing workspace shell
 
 ---
 
@@ -18,48 +18,47 @@
 
 **Depends on:**
 
-- Phase 1 readiness contract
-- Phase 2 setup success state
+- Phase 1 diagnostics foundation
+- Phase 2 inline-first launch recovery
 
 **Includes master task:**
 
-- [Task 5](./2026-05-14-conversion-first-activation.md#task-5-add-the-mobile-access-assistant-and-continue-on-phone): mobile assistant and cross-device CTA
+- [Task 3](./2026-05-14-conversion-first-activation.md#task-3-productize-phone-continuation-without-a-gate): phone continuation entry points and diagnostics-backed recovery
 
 **Exit criteria:**
 
-- mobile assistant renders candidate LAN URLs
-- local-only or unauthenticated exposure states are explained in product language
-- setup success shows `Continue on Phone`
-- settings exposes the same assistant
-- workspace shell can surface the same continuation CTA
+- users can explicitly ask to continue on phone from Settings or workspace surfaces
+- diagnostics can report host exposure, auth readiness, and candidate links for phone continuation
+- localhost-only or unprotected states are explained clearly
+- the continuation action preserves workspace or session context
+- the product does not advertise phone continuation before the user expresses that intent
 
 ## Deliverables
 
-- `packages/web/src/features/mobile-access/*`
-- `SetupSuccessStep`
-- settings integration for mobile continuation
-- workspace-level `Continue on Phone` surface
-- localized strings for mobile continuation states
+- `mobile_continue` support on the diagnostics page
+- explicit `Continue on Phone` entry points from Settings and desktop workspace surfaces
+- copyable mobile link handling tied to real readiness data
+- localized copy for host/auth/mobile continuation states
+- focused tests for phone continuation and diagnostics recheck behavior
 
 ## Tracking Checklist
 
-- [ ] Add `useMobileAccess`
-- [ ] Render LAN candidate URLs from `setup.mobileAccessStatus`
-- [ ] Show the auth warning when only localhost/no password is configured
-- [ ] Add `SetupSuccessStep`
-- [ ] Show `Continue on Phone` in setup success
-- [ ] Expose the same assistant in settings
-- [ ] Expose the workspace-shell CTA
-- [ ] Pass targeted mobile-access, settings, and workspace tests
+- [ ] Expose `Continue on Phone` from Settings
+- [ ] Add a workspace-level continuation entry point after desktop success
+- [ ] Show mobile links only when the diagnostics result says they are usable
+- [ ] Explain localhost-only and auth-disabled states in product language
+- [ ] Recheck and continue from diagnostics after environment changes
+- [ ] Preserve workspace/session intent while preparing phone continuation
+- [ ] Pass targeted diagnostics, settings, and workspace tests
 - [ ] Commit Phase 3 changes
 
 ## Files In Play
 
-- Create: `packages/web/src/features/mobile-access/index.ts`
-- Create: `packages/web/src/features/mobile-access/actions/use-mobile-access.ts`
-- Create: `packages/web/src/features/mobile-access/views/mobile-access-assistant.tsx`
-- Create: `packages/web/src/features/mobile-access/views/mobile-access-assistant.test.tsx`
-- Modify: `packages/web/src/features/setup/views/setup-success-step.tsx`
+- Modify: `packages/server/src/commands/diagnostics.ts`
+- Modify: `packages/server/src/__tests__/diagnostics-commands.test.ts`
+- Modify: `packages/web/src/features/diagnostics/navigation.ts`
+- Modify: `packages/web/src/features/diagnostics/page.tsx`
+- Modify: `packages/web/src/features/diagnostics/index.test.tsx`
 - Modify: `packages/web/src/features/settings/components/settings-page.tsx`
 - Modify: `packages/web/src/features/settings/components/settings-page.test.tsx`
 - Modify: `packages/web/src/features/workspace/views/desktop/workspace-desktop-view.tsx`
@@ -73,27 +72,29 @@ Run these before closing the phase:
 
 ```bash
 pnpm exec vitest run \
-  packages/web/src/features/mobile-access/views/mobile-access-assistant.test.tsx \
+  packages/server/src/__tests__/diagnostics-commands.test.ts \
+  packages/web/src/features/diagnostics/index.test.tsx \
   packages/web/src/features/settings/components/settings-page.test.tsx \
   packages/web/src/features/workspace/views/desktop/workspace-desktop-view.test.tsx
 ```
 
-Expected outcome: the assistant is available from setup success and settings, and the workspace shell can promote phone continuation.
+Expected outcome: phone continuation is explicit but optional, diagnostics can explain and recheck the environment when needed, and mobile links are only surfaced when they are actually usable.
 
 ## Watchouts
 
-- Keep the assistant productized; do not collapse back into doc-like instructions.
-- Use the server-reported URLs and auth state directly rather than adding duplicated client inference.
-- Avoid over-investing in QR or polish unless the core continuation path is clearly working.
+- Do not present localhost fallback links as if they were valid phone entry points.
+- Do not surface phone continuation before the user asks for it.
+- Keep the diagnostics page productized; it should clarify the environment, not turn into documentation copy.
+- Do not duplicate mobile-readiness inference on the client if the server already reports it.
 
 ## Detailed Execution Source
 
-Use the detailed step-by-step instructions in the master plan:
+Use the implementation guidance in the master plan:
 
-- [Task 5 detailed steps](./2026-05-14-conversion-first-activation.md#task-5-add-the-mobile-access-assistant-and-continue-on-phone)
+- [Task 3](./2026-05-14-conversion-first-activation.md#task-3-productize-phone-continuation-without-a-gate)
 
 ## Suggested Commit Boundary
 
 ```bash
-git commit -m "feat: add phone continuation flow"
+git commit -m "feat: add explicit phone continuation with diagnostics recovery"
 ```

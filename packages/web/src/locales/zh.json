@@ -489,6 +489,7 @@
     "general": "通用",
     "appearance": "外观",
     "providers": "Agents",
+    "help_diagnostics": "帮助与诊断",
     "autosave_hint": "设置已自动保存",
     "load_failed": "设置加载失败",
     "load_failed_unknown": "未收到服务端返回的设置数据",
@@ -803,6 +804,114 @@
       "terminals": {
         "title": "集成终端",
         "description": "在 AI 会话旁边直接运行命令和脚本。"
+      }
+    }
+  },
+  "diagnostics": {
+    "title": "诊断",
+    "settings_hint": "只在你需要帮助恢复环境时，再运行一次快速检查。",
+    "load_failed": "当前无法刷新诊断结果。",
+    "loading_description": "正在检查这次任务真正相关的环境项。",
+    "status": {
+      "checking": "检查中",
+      "ready": "已就绪",
+      "needs_attention": "需要处理"
+    },
+    "actions": {
+      "retry_workspace": "重试打开工作区",
+      "continue_session": "继续启动会话",
+      "continue_phone": "继续在手机上打开",
+      "recheck": "重新检查",
+      "open_diagnostics": "打开诊断",
+      "open_settings": "打开设置",
+      "copy_details": "复制错误详情",
+      "copied": "已复制",
+      "install_provider": "安装 Provider"
+    },
+    "details": {
+      "workspace": "工作区",
+      "provider": "Provider",
+      "missing_commands": "缺失命令",
+      "missing_prerequisites": "缺失前置依赖"
+    },
+    "context": {
+      "workspace_open": {
+        "title": "暂时无法打开工作区",
+        "description": "继续之前，需要先处理几个问题。"
+      },
+      "session_start": {
+        "title": "当前会话还不能启动",
+        "description": "我们发现了一个会阻塞启动的问题。"
+      },
+      "mobile_continue": {
+        "title": "继续到手机前还需修复几项",
+        "description": "手机继续使用这条链路里还有一些前置问题。"
+      },
+      "manual_check": {
+        "title": "环境诊断",
+        "description": "查看当前环境状态，并在需要时重新检查。"
+      }
+    },
+    "checks": {
+      "workspace_selection_missing": {
+        "title": "还没有选择工作区路径",
+        "description": "先选择一个目录，再继续重试。"
+      },
+      "workspace_path_ready": {
+        "title": "工作区路径可用",
+        "description": "所选目录当前可以访问。"
+      },
+      "workspace_path_not_found": {
+        "title": "工作区路径不存在",
+        "description": "之前选择的目录当前已经找不到了。"
+      },
+      "workspace_path_unreadable": {
+        "title": "工作区路径暂时不可读",
+        "description": "目录存在，但当前还不能正常打开。"
+      },
+      "session_workspace_ready": {
+        "title": "工作区已就绪",
+        "description": "当前工作区可以用于启动会话。"
+      },
+      "session_workspace_missing": {
+        "title": "工作区缺失",
+        "description": "先选择或重新打开工作区，再启动会话。"
+      },
+      "provider_runtime_ready": {
+        "title": "{provider} 已就绪",
+        "description": "{provider} 现在可以直接启动。"
+      },
+      "provider_cli_missing": {
+        "title": "{provider} CLI 缺失",
+        "description": "启动前还没有安装所需的 provider 命令。"
+      },
+      "provider_prerequisite_missing": {
+        "title": "{provider} 前置依赖缺失",
+        "description": "需要先补齐前置依赖，provider 才能运行。"
+      },
+      "provider_unknown": {
+        "title": "无法识别 Provider",
+        "description": "当前设置里无法解析这个 provider。"
+      },
+      "server_auth_ready": {
+        "title": "密码保护已开启",
+        "description": "当前服务端已经配置认证。"
+      },
+      "server_auth_not_required": {
+        "title": "密码保护未开启",
+        "description": "当前服务端没有要求认证。"
+      },
+      "mobile_host_ready": {
+        "title": "网络地址可用于手机继续",
+        "description": "当前 host 看起来适合手机访问。"
+      },
+      "mobile_host_local_only": {
+        "title": "当前 host 仅限本机",
+        "description": "手机继续需要可在局域网访问的地址，而不是 localhost。"
+      },
+      "mobile_auth_disabled": {
+        "title": "手机继续前需要认证",
+        "description": "请先开启认证，再继续到手机。"
       }
     }
   },

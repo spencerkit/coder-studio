@@ -123,4 +123,48 @@ describe("DraftLauncher", () => {
 
     expect(screen.getByText("Select Agent")).toBeInTheDocument();
   });
+
+  it("preserves session-start intent in diagnostics links for blocked providers", () => {
+    mockUseProviderLauncher.mockReturnValue({
+      states: {
+        claude: {
+          runtime: {
+            providerId: "claude",
+            available: false,
+            missingCommands: ["claude"],
+            missingPrerequisites: [],
+            autoInstallSupported: false,
+            installReadiness: "unsupported_platform",
+            manualGuideKeys: ["provider.install.claude.manual"],
+            docUrls: {
+              provider: "https://docs.anthropic.com/en/docs/claude-code/getting-started",
+              prerequisites: {},
+            },
+          },
+          loading: false,
+          inlineError: "manual",
+        },
+        codex: createRuntimeState("codex"),
+      },
+      launch: vi.fn(),
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn(),
+      subscribe: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <DraftLauncher workspaceId="ws-123" paneId="pane-1" />
+      </Provider>
+    );
+
+    expect(screen.getByRole("link", { name: "Open Diagnostics" })).toHaveAttribute(
+      "href",
+      "/diagnostics?context=session_start&workspaceId=ws-123&providerId=claude&paneId=pane-1&launchMode=assign"
+    );
+  });
 });

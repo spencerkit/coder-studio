@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../../../atoms/app-ui";
 import { wsClientAtom } from "../../../../atoms/connection";
+import { CommandResultError } from "../../../../ws/client";
 import { WorkspaceLaunchModal } from "./workspace-launch-modal";
 
 const viewportMocks = vi.hoisted(() => ({
@@ -117,6 +118,31 @@ describe("WorkspaceLaunchModal", () => {
 
     fireEvent.click(closeButton);
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders root chips from browse results instead of hardcoded workspace paths", async () => {
+    const store = createStore();
+
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn().mockResolvedValue({
+        currentPath: "/Users/tester",
+        parentPath: "/Users",
+        rootPaths: ["/", "/Users/tester"],
+        directories: [],
+      }),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <WorkspaceLaunchModal onClose={vi.fn()} />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    expect(await screen.findByText("~")).toBeInTheDocument();
+    expect(screen.queryByText("/home/spencer")).not.toBeInTheDocument();
   });
 
   it("renders the shared empty state when the current directory has no child directories", async () => {
@@ -254,6 +280,50 @@ describe("WorkspaceLaunchModal", () => {
 
     await waitFor(() => {
       expect(routerMocks.navigate).toHaveBeenCalledWith("/workspace");
+    });
+  });
+
+  it("redirects failed workspace opens into diagnostics with the selected path preserved", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args: { path?: string }) => {
+      if (op === "workspace.browse") {
+        return {
+          currentPath: "/home/spencer",
+          parentPath: "/home",
+          directories: [{ name: "workspace", path: "/home/spencer/workspace" }],
+        };
+      }
+
+      if (op === "workspace.open") {
+        throw new CommandResultError({
+          code: "workspace_open_failed",
+          message: "Workspace path is no longer available",
+        });
+      }
+
+      return {};
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    routerMocks.location.pathname = "/";
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <WorkspaceLaunchModal onClose={vi.fn()} />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    const folderName = await screen.findByText("workspace");
+    fireEvent.click(folderName);
+    fireEvent.click(screen.getByRole("button", { name: "Start Workspace" }));
+
+    await waitFor(() => {
+      expect(routerMocks.navigate).toHaveBeenCalledWith(
+        "/diagnostics?context=workspace_open&workspacePath=%2Fhome%2Fspencer%2Fworkspace"
+      );
     });
   });
 

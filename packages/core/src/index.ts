@@ -1,5 +1,6 @@
 // Protocol
 
+export * from "./domain/diagnostics";
 export * from "./domain/events";
 export * from "./domain/mcp";
 export * from "./domain/provider-install";

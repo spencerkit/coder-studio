@@ -70,6 +70,7 @@ describe("Session Commands", () => {
       providerRegistry: [],
       fencingMgr: {},
       supervisorMgr: {},
+      providerConfigRepo: providerConfigRepo(db),
     } as unknown as CommandContext;
   });
 

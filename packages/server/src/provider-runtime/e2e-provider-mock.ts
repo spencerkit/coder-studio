@@ -147,7 +147,6 @@ function getInstallProviderId(file: string, args: string[]): MockProviderId | nu
 
   return null;
 }
-
 function readMockState(statePath: string): ProviderMockState {
   if (!existsSync(statePath)) {
     return {};

@@ -216,6 +216,7 @@ export async function createServer(
     providerRuntimeDeps,
     providerInstallMgr,
     activationMgr,
+    config,
   };
 
   wsHub.setCommandContext(commandContext);
