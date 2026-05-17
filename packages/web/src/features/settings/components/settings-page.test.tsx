@@ -286,7 +286,7 @@ describe("SettingsPage", () => {
     expect(within(mobileRoot).getByText("界面与交互")).toBeInTheDocument();
     expect(document.querySelector(".settings-mobile-root-hero")).toBeNull();
 
-    const buttons = screen.getAllByRole("button");
+    const buttons = within(mobileRoot).getAllByRole("button");
     const labels = buttons.map((button) => button.getAttribute("aria-label")).filter(Boolean);
 
     expect(labels).toEqual(expect.arrayContaining(["通用", "Agents", "外观", "快捷键"]));

@@ -152,6 +152,32 @@ const MOBILE_SETTINGS_GROUPS = [
   sections: readonly SettingsSection[];
 }[];
 
+function resolveMobileSettingsGroups(
+  availableSections: readonly {
+    id: SettingsSection;
+    labelKey: string;
+    iconSemantic: Parameters<typeof ThemedIcon>[0]["semantic"];
+  }[]
+) {
+  const sectionsById = new Map(availableSections.map((section) => [section.id, section]));
+  const groupedSectionIds = MOBILE_SETTINGS_GROUPS.flatMap((group) => group.sections);
+
+  if (groupedSectionIds.length !== availableSections.length) {
+    throw new Error("Mobile settings groups are out of sync with available sections.");
+  }
+
+  for (const sectionId of groupedSectionIds) {
+    if (!sectionsById.has(sectionId)) {
+      throw new Error(`Missing mobile settings section mapping for "${sectionId}".`);
+    }
+  }
+
+  return MOBILE_SETTINGS_GROUPS.map((group) => ({
+    titleKey: group.titleKey,
+    sections: group.sections.map((sectionId) => sectionsById.get(sectionId)!),
+  }));
+}
+
 /**
  * Settings Page
  *
@@ -464,39 +490,32 @@ export function SettingsPage() {
   const renderMobileRoot = () => (
     <main className="settings-content settings-content--mobile-root">
       <div className="settings-mobile-root" data-testid="settings-mobile-root">
-        {MOBILE_SETTINGS_GROUPS.map((group) => (
+        {resolveMobileSettingsGroups(availableSections).map((group) => (
           <section key={group.titleKey} className="settings-mobile-group">
             <h2 className="settings-mobile-group__title">{t(group.titleKey)}</h2>
             <div className="settings-mobile-group__list">
-              {group.sections.map((sectionId) => {
-                const section = availableSections.find((entry) => entry.id === sectionId);
-                if (!section) {
-                  return null;
-                }
-
-                return (
-                  <button
-                    key={section.id}
-                    type="button"
-                    className="settings-mobile-item"
-                    aria-label={t(section.labelKey)}
-                    onClick={() => setNavigationState({ kind: "detail", section: section.id })}
-                  >
-                    <span className="settings-mobile-item__icon-shell" aria-hidden="true">
-                      <span className="settings-mobile-item__icon">
-                        <ThemedIcon semantic={section.iconSemantic} size={18} />
-                      </span>
+              {group.sections.map((section) => (
+                <button
+                  key={section.id}
+                  type="button"
+                  className="settings-mobile-item"
+                  aria-label={t(section.labelKey)}
+                  onClick={() => setNavigationState({ kind: "detail", section: section.id })}
+                >
+                  <span className="settings-mobile-item__icon-shell" aria-hidden="true">
+                    <span className="settings-mobile-item__icon">
+                      <ThemedIcon semantic={section.iconSemantic} size={18} />
                     </span>
-                    <span className="settings-mobile-item__copy">
-                      <span className="settings-mobile-item__label">{t(section.labelKey)}</span>
-                      <span className="settings-mobile-item__hint">
-                        {t(getMobileSectionHintKey(section.id))}
-                      </span>
+                  </span>
+                  <span className="settings-mobile-item__copy">
+                    <span className="settings-mobile-item__label">{t(section.labelKey)}</span>
+                    <span className="settings-mobile-item__hint">
+                      {t(getMobileSectionHintKey(section.id))}
                     </span>
-                    <ChevronRight size={16} className="settings-mobile-item__arrow" />
-                  </button>
-                );
-              })}
+                  </span>
+                  <ChevronRight size={16} className="settings-mobile-item__arrow" />
+                </button>
+              ))}
             </div>
           </section>
         ))}
