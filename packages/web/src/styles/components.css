@@ -671,6 +671,11 @@
   color: var(--text-tertiary);
 }
 
+.page-header--primary .page-header__kicker {
+  font-size: var(--text-sm);
+  letter-spacing: 0.1em;
+}
+
 .page-header__title {
   margin: 0;
   max-width: 100%;
@@ -681,6 +686,15 @@
   font-weight: 600;
   color: var(--text-primary);
   text-align: left;
+}
+
+.page-header--primary .page-header__title {
+  font-size: var(--text-lg);
+  line-height: 1.1;
+}
+
+.page-header--secondary .page-header__title {
+  line-height: 1.25;
 }
 
 .page-header__back {

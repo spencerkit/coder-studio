@@ -3,6 +3,7 @@ import { ArrowLeft } from "lucide-react";
 import type { ReactNode } from "react";
 
 type PageHeaderTitleElement = "div" | "h1" | "h2" | "h3" | "span";
+type PageHeaderLevel = "primary" | "secondary";
 
 export interface PageHeaderProps {
   title: string;
@@ -12,6 +13,7 @@ export interface PageHeaderProps {
   kicker?: ReactNode;
   rightSlot?: ReactNode;
   titleAs?: PageHeaderTitleElement;
+  level?: PageHeaderLevel;
   className?: string;
 }
 
@@ -23,12 +25,13 @@ export function PageHeader({
   kicker,
   rightSlot,
   titleAs = "h2",
+  level = "secondary",
   className,
 }: PageHeaderProps) {
   const TitleTag = titleAs;
 
   return (
-    <div className={clsx("page-header", className)}>
+    <div className={clsx("page-header", `page-header--${level}`, className)} data-level={level}>
       <div className="page-header__leading">
         {onBack ? (
           <button
