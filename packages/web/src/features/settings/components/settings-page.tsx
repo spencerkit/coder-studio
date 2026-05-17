@@ -138,6 +138,20 @@ function getMobileSectionHintKey(section: SettingsSection) {
   }
 }
 
+const MOBILE_SETTINGS_GROUPS = [
+  {
+    titleKey: "settings.mobile_groups.workspace_runtime",
+    sections: ["general", "providers"],
+  },
+  {
+    titleKey: "settings.mobile_groups.interface_interaction",
+    sections: ["appearance", "shortcuts"],
+  },
+] as const satisfies readonly {
+  titleKey: string;
+  sections: readonly SettingsSection[];
+}[];
+
 /**
  * Settings Page
  *
@@ -449,30 +463,42 @@ export function SettingsPage() {
 
   const renderMobileRoot = () => (
     <main className="settings-content settings-content--mobile-root">
-      <section className="settings-mobile-root-hero">
-        <div className="settings-mobile-root-hero__eyebrow">{t("settings.title")}</div>
-        <p className="settings-mobile-root-hero__body">{t("settings.autosave_hint")}</p>
-      </section>
-      <div className="settings-mobile-list">
-        {availableSections.map(({ id, labelKey, iconSemantic }) => (
-          <button
-            key={id}
-            type="button"
-            className="settings-mobile-item"
-            aria-label={t(labelKey)}
-            onClick={() => setNavigationState({ kind: "detail", section: id })}
-          >
-            <span className="settings-mobile-item__icon-shell" aria-hidden="true">
-              <span className="settings-mobile-item__icon">
-                <ThemedIcon semantic={iconSemantic} size={18} />
-              </span>
-            </span>
-            <span className="settings-mobile-item__copy">
-              <span className="settings-mobile-item__label">{t(labelKey)}</span>
-              <span className="settings-mobile-item__hint">{t(getMobileSectionHintKey(id))}</span>
-            </span>
-            <ChevronRight size={16} className="settings-mobile-item__arrow" />
-          </button>
+      <div className="settings-mobile-root" data-testid="settings-mobile-root">
+        {MOBILE_SETTINGS_GROUPS.map((group) => (
+          <section key={group.titleKey} className="settings-mobile-group">
+            <h2 className="settings-mobile-group__title">{t(group.titleKey)}</h2>
+            <div className="settings-mobile-group__list">
+              {group.sections.map((sectionId) => {
+                const section = availableSections.find((entry) => entry.id === sectionId);
+                if (!section) {
+                  return null;
+                }
+
+                return (
+                  <button
+                    key={section.id}
+                    type="button"
+                    className="settings-mobile-item"
+                    aria-label={t(section.labelKey)}
+                    onClick={() => setNavigationState({ kind: "detail", section: section.id })}
+                  >
+                    <span className="settings-mobile-item__icon-shell" aria-hidden="true">
+                      <span className="settings-mobile-item__icon">
+                        <ThemedIcon semantic={section.iconSemantic} size={18} />
+                      </span>
+                    </span>
+                    <span className="settings-mobile-item__copy">
+                      <span className="settings-mobile-item__label">{t(section.labelKey)}</span>
+                      <span className="settings-mobile-item__hint">
+                        {t(getMobileSectionHintKey(section.id))}
+                      </span>
+                    </span>
+                    <ChevronRight size={16} className="settings-mobile-item__arrow" />
+                  </button>
+                );
+              })}
+            </div>
+          </section>
         ))}
       </div>
     </main>

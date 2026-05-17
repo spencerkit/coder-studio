@@ -489,6 +489,10 @@
     "general": "通用",
     "appearance": "外观",
     "providers": "Agents",
+    "mobile_groups": {
+      "workspace_runtime": "工作区与运行",
+      "interface_interaction": "界面与交互"
+    },
     "autosave_hint": "设置已自动保存",
     "load_failed": "设置加载失败",
     "load_failed_unknown": "未收到服务端返回的设置数据",

@@ -272,6 +272,36 @@ describe("SettingsPage", () => {
     ).toBeTruthy();
   });
 
+  it("renders the mobile settings homepage as grouped sections without the legacy hero", async () => {
+    viewportMocks.viewport = "mobile";
+    const store = createConnectedStore(vi.fn().mockResolvedValue({}));
+
+    renderSettingsPage(store);
+
+    expect(await screen.findByText("工作区与运行")).toBeInTheDocument();
+    expect(screen.getByText("界面与交互")).toBeInTheDocument();
+    expect(document.querySelector(".settings-mobile-root-hero")).toBeNull();
+
+    const buttons = screen.getAllByRole("button");
+    const labels = buttons.map((button) => button.getAttribute("aria-label")).filter(Boolean);
+
+    expect(labels).toEqual(expect.arrayContaining(["通用", "Agents", "外观", "快捷键"]));
+    expect(labels.indexOf("通用")).toBeLessThan(labels.indexOf("Agents"));
+    expect(labels.indexOf("Agents")).toBeLessThan(labels.indexOf("外观"));
+    expect(labels.indexOf("外观")).toBeLessThan(labels.indexOf("快捷键"));
+  });
+
+  it("localizes the new mobile settings homepage section headings", async () => {
+    viewportMocks.viewport = "mobile";
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    const store = createConnectedStore(vi.fn().mockResolvedValue({}));
+
+    renderSettingsPage(store);
+
+    expect(await screen.findByText("Workspace & Runtime")).toBeInTheDocument();
+    expect(screen.getByText("Interface & Interaction")).toBeInTheDocument();
+  });
+
   it("does not render default Agent Provider selection in general settings", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "settings.get") {
