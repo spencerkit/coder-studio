@@ -4,7 +4,7 @@
 
 # Coder Studio
 
-**A browser-based vibe coding workspace for developers who move between desktop, tablet, and phone.**
+**Coder Studio, made for vibe coding.**
 
 Run Claude Code and Codex in one workspace. Keep your terminal, files, Git view, and AI sessions available from any device.
 

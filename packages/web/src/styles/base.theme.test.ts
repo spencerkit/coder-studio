@@ -77,12 +77,33 @@ describe("base.css desktop typography foundation", () => {
     expect(tokensStylesheet).toContain("--desktop-modal-max-width-lg:");
   });
 
-  it("maps desktop heading helpers to the corrected typography tokens", () => {
-    expect(getRuleBlock("h2")).toContain("font-size: var(--text-2xl)");
-    expect(getRuleBlock(".page-kicker")).toContain("font-size: var(--text-xs)");
-    expect(getRuleBlock(".page-title")).toContain("font-size: var(--text-3xl)");
-    expect(getRuleBlock(".section-title")).toContain("font-size: var(--text-base)");
-    expect(getRuleBlock(".hint-text")).toContain("color: var(--text-muted)");
-    expect(getRuleBlock(".mono-meta")).toContain("font-family: var(--font-mono)");
+  it("maps base text elements onto semantic typography tokens", () => {
+    expect(getRuleBlock("body")).toContain("font-size: var(--type-body-size)");
+    expect(getRuleBlock("body")).toContain("line-height: var(--type-body-line-height)");
+    expect(getRuleBlock("body")).toContain("font-weight: var(--type-body-weight)");
+    expect(getRuleBlock("p")).toContain("line-height: var(--type-body-line-height)");
+
+    expect(getRuleBlock("button")).toContain("font-size: var(--type-body-strong-size)");
+    expect(getRuleBlock("button")).toContain("line-height: var(--type-body-strong-line-height)");
+    expect(getRuleBlock("input")).toContain("font-size: var(--type-body-strong-size)");
+    expect(getRuleBlock("textarea")).toContain("font-size: var(--type-body-strong-size)");
+    expect(getRuleBlock("select")).toContain("font-size: var(--type-body-strong-size)");
+  });
+
+  it("maps headings and helper text onto the new semantic hierarchy", () => {
+    expect(getRuleBlock("h1")).toContain("font-size: var(--type-page-title-size)");
+    expect(getRuleBlock("h2")).toContain("font-size: var(--type-section-title-size)");
+    expect(getRuleBlock("h3")).toContain("font-size: var(--type-app-title-size)");
+    expect(getRuleBlock("h4")).toContain("font-size: var(--type-body-strong-size)");
+    expect(getRuleBlock("h5")).toContain("font-size: var(--type-label-size)");
+    expect(getRuleBlock("h6")).toContain("font-size: var(--type-meta-size)");
+
+    expect(getRuleBlock(".page-kicker")).toContain("font-size: var(--type-kicker-size)");
+    expect(getRuleBlock(".page-title")).toContain("font-size: var(--type-page-title-size)");
+    expect(getRuleBlock(".section-title")).toContain("font-size: var(--type-kicker-size)");
+    expect(getRuleBlock(".meta-text")).toContain("font-size: var(--type-meta-size)");
+    expect(getRuleBlock(".hint-text")).toContain("font-size: var(--type-meta-size)");
+    expect(getRuleBlock(".mono-meta")).toContain("font-size: var(--type-code-inline-size)");
+    expect(getRuleBlock(".mono-meta")).toContain("font-family: var(--type-code-inline-family)");
   });
 });

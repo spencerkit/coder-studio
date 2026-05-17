@@ -6,7 +6,9 @@
   border-radius: var(--radius-md);
   color: var(--text-primary);
   font-family: var(--font-sans);
-  font-size: var(--text-base);
+  font-size: var(--type-body-strong-size);
+  font-weight: var(--type-body-strong-weight);
+  line-height: var(--type-body-strong-line-height);
   outline: none;
   transition:
     border-color var(--duration-normal) var(--ease-out),
@@ -27,13 +29,14 @@
 .sm {
   height: var(--input-height-sm);
   border-radius: var(--radius-sm);
-  font-size: var(--text-sm);
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  line-height: var(--type-label-line-height);
 }
 
 .lg {
   height: var(--input-height-lg);
   border-radius: var(--radius-lg);
-  font-size: var(--text-lg);
 }
 
 .invalid,

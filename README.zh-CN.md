@@ -4,7 +4,7 @@
 
 # Coder Studio
 
-**一个浏览器里的 vibe coding 工作台，适合在桌面、平板和手机之间切换的开发者。**
+**Coder Studio，生来就是 vibe coding。**
 
 在同一个工作台里运行 Claude Code 和 Codex，让终端、文件、Git 视图和 AI 会话跟着你在不同设备间延续。
 

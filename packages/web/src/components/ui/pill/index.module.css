@@ -11,8 +11,9 @@
   background: transparent;
   color: var(--text-secondary);
   font-family: var(--font-sans);
-  font-size: var(--text-sm);
-  line-height: 1.4;
+  font-size: var(--type-label-size);
+  line-height: var(--type-label-line-height);
+  font-weight: var(--type-label-weight);
   transition:
     background var(--duration-fast) var(--ease-out),
     border-color var(--duration-fast) var(--ease-out),

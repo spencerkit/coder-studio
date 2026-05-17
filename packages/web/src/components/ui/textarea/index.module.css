@@ -6,7 +6,9 @@
   border-radius: var(--radius-md);
   color: var(--text-primary);
   font-family: var(--font-sans);
-  font-size: var(--text-base);
+  font-size: var(--type-body-strong-size);
+  font-weight: var(--type-body-strong-weight);
+  line-height: var(--type-body-strong-line-height);
   outline: none;
   transition:
     border-color var(--duration-normal) var(--ease-out),
@@ -34,7 +36,6 @@
 .lg {
   min-height: 120px;
   border-radius: var(--radius-lg);
-  font-size: var(--text-lg);
 }
 
 .invalid,
