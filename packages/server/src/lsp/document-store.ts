@@ -70,9 +70,16 @@ export class DocumentStore {
       return null;
     }
 
-    const relativePath = path.relative(path.resolve(this.workspacePath), absolutePath);
+    const workspaceInfo = normalizeFileSystemPath(this.workspacePath);
+    const absoluteInfo = normalizeFileSystemPath(absolutePath);
+    if (workspaceInfo.kind !== absoluteInfo.kind) {
+      return null;
+    }
 
-    if (relativePath.startsWith("..") || path.isAbsolute(relativePath) || relativePath === "") {
+    const pathApi = workspaceInfo.kind === "win32" ? path.win32 : path.posix;
+    const relativePath = pathApi.relative(workspaceInfo.value, absoluteInfo.value);
+
+    if (relativePath.startsWith("..") || pathApi.isAbsolute(relativePath) || relativePath === "") {
       return null;
     }
 
@@ -90,4 +97,22 @@ export class DocumentStore {
 
 function toFileUri(workspacePath: string, relativePath: string): string {
   return pathToFileURL(path.resolve(workspacePath, relativePath)).toString();
+}
+
+function normalizeFileSystemPath(input: string): { kind: "win32" | "posix"; value: string } {
+  const normalized = input.replace(/\\/g, "/");
+  const windowsMatch = normalized.match(/^\/?([A-Za-z]):\/?(.*)$/);
+  if (windowsMatch) {
+    const drive = windowsMatch[1]!.toLowerCase();
+    const segments = windowsMatch[2] ? windowsMatch[2].split("/").filter(Boolean) : [];
+    return {
+      kind: "win32",
+      value: path.win32.join(`${drive}:\\`, ...segments),
+    };
+  }
+
+  return {
+    kind: "posix",
+    value: path.posix.normalize(normalized),
+  };
 }

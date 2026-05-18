@@ -47,4 +47,13 @@ describe("DocumentStore", () => {
     expect(store.fromUri(opened.uri)).toBe("dir/a b.ts");
     expect(store.fromUri("untitled:buffer")).toBeNull();
   });
+
+  it("maps Windows file URIs back to workspace-relative paths even when the drive casing differs", () => {
+    const store = new DocumentStore("C:\\Repo");
+
+    expect(store.fromUri("file:///c:/Repo/src/main.tsx")).toBe("src/main.tsx");
+    expect(store.fromUri("file:///C:/Repo/node_modules/pkg/index.d.ts")).toBe(
+      "node_modules/pkg/index.d.ts"
+    );
+  });
 });
