@@ -71,12 +71,19 @@ describe("ConfirmDialog", () => {
     );
 
     expect(screen.getByRole("button", { name: "Delete" })).toHaveClass("btn", "btn-danger");
+    const header = screen.getByText("Delete file").closest(".modal-header");
+    expect(header?.querySelector(".confirmDialogHeaderLeading")).toBeTruthy();
+    expect(header?.querySelector(".confirmDialogHeaderIcon")).toBeTruthy();
+    expect(header?.querySelector(".confirmDialogHeaderCopy")).toBeTruthy();
+    expect(
+      header?.querySelector(".confirmDialogHeaderIcon [data-icon-semantic='state.warning']")
+    ).toBeTruthy();
     expect(
       screen
         .getByText("Delete file")
         .closest(".modal-title")
         ?.querySelector('[data-icon-semantic="state.warning"]')
-    ).toBeTruthy();
+    ).toBeNull();
   });
 
   it("accepts rich ReactNode descriptions", () => {

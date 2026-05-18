@@ -314,6 +314,13 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(getLastRuleBlockFrom(confirmDialogStyles, ".iconDanger")).toContain(
       "color: var(--icon-warning)"
     );
+    expect(getLastRuleBlockFrom(confirmDialogStyles, ".headerLeading")).toContain(
+      "align-items: center"
+    );
+    expect(getLastRuleBlockFrom(confirmDialogStyles, ".headerLeading")).toContain(
+      "gap: var(--sp-3)"
+    );
+    expect(getLastRuleBlockFrom(confirmDialogStyles, ".headerCopy")).toContain("min-width: 0");
   });
 
   it("maps text-entry and navigation primitives onto semantic typography tokens", async () => {

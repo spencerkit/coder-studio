@@ -64,17 +64,21 @@ export function ConfirmDialog({
       open={open}
     >
       <ModalHeader>
-        <ModalTitle className={clsx(tone === "danger" ? styles.titleDanger : undefined)}>
-          {tone === "danger" ? (
-            <ThemedIcon
+        {tone === "danger" ? (
+          <div className={clsx("confirmDialogHeaderLeading", styles.headerLeading)}>
+            <span
               aria-hidden="true"
-              className={styles.iconDanger}
-              semantic="state.warning"
-              size={16}
-            />
-          ) : null}
-          <span>{title}</span>
-        </ModalTitle>
+              className={clsx("confirmDialogHeaderIcon", styles.headerIcon, styles.iconDanger)}
+            >
+              <ThemedIcon semantic="state.warning" size={16} />
+            </span>
+            <div className={clsx("confirmDialogHeaderCopy", styles.headerCopy)}>
+              <ModalTitle className={styles.titleDanger}>{title}</ModalTitle>
+            </div>
+          </div>
+        ) : (
+          <ModalTitle>{title}</ModalTitle>
+        )}
         {dismissible || closeDisabled ? (
           <IconButton
             aria-label={closeLabel}
