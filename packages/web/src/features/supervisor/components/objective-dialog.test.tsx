@@ -179,7 +179,7 @@ describe("ObjectiveDialog", () => {
     expect(screen.getByRole("textbox", { name: "Objective" })).toHaveClass("input", "textarea");
   });
 
-  it("renders the intro strip in the desktop wrapper for enable mode", () => {
+  it("does not render the shared intro strip inside the desktop wrapper for enable mode", () => {
     const store = createStore();
     window.localStorage.setItem("ui.locale", JSON.stringify("en"));
     store.set(localeAtom, "en");
@@ -200,22 +200,12 @@ describe("ObjectiveDialog", () => {
 
     const dialog = screen.getByRole("dialog");
     const header = dialog.querySelector(".dialog-header");
-    const intro = dialog.querySelector(".supervisor-dialog-intro");
-    const introIcon = dialog.querySelector(".supervisor-dialog-intro__icon");
-    const introCopy = dialog.querySelector(".supervisor-dialog-intro__copy");
     const firstFormGroup = dialog.querySelector(".form-group");
 
     expect(header).toBeTruthy();
-    expect(intro).toBeTruthy();
-    expect(introIcon).toBeTruthy();
-    expect(introCopy).toBeTruthy();
-    expect(intro?.querySelector(".supervisor-dialog-intro__icon")).toBe(introIcon);
-    expect(intro?.querySelector(".supervisor-dialog-intro__copy")).toBe(introCopy);
-    expect(header?.contains(intro as Node)).toBe(false);
     expect(firstFormGroup).toBeTruthy();
-    expect(intro?.compareDocumentPosition(firstFormGroup as Node)).toBe(
-      Node.DOCUMENT_POSITION_FOLLOWING
-    );
+    expect(dialog.querySelector(".supervisor-dialog-intro")).toBeNull();
+    expect(header?.contains(firstFormGroup as Node)).toBe(false);
   });
 
   it("renders disable confirmation mode", () => {

@@ -11,7 +11,7 @@
   margin-top: 0;
   overflow: auto;
   outline: none;
-  z-index: var(--z-modal);
+  z-index: var(--z-popover);
   padding: var(--sp-3);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);

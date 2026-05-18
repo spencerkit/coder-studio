@@ -56,6 +56,10 @@ const buttonStyles = readFileSync(
   `${process.cwd()}/src/components/ui/button/index.module.css`,
   "utf8"
 );
+const popoverStyles = readFileSync(
+  `${process.cwd()}/src/components/ui/popover/index.module.css`,
+  "utf8"
+);
 const inputStyles = readFileSync(
   `${process.cwd()}/src/components/ui/input/index.module.css`,
   "utf8"
@@ -385,6 +389,13 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(getLastRuleBlockFrom(runtimeStylesheet, ".worktree-tab")).toContain(
       "font-weight:var(--type-label-weight)"
     );
+  });
+
+  it("keeps desktop popovers above modal shells so picker overlays are not occluded", () => {
+    expect(getLastRuleBlockFrom(modalStylesheet, ":global(.modal-overlay)")).toContain(
+      "z-index: var(--z-modal-backdrop)"
+    );
+    expect(getLastRuleBlockFrom(popoverStyles, ".content")).toContain("z-index: var(--z-popover)");
   });
 
   it("maps display and status primitives onto semantic typography roles", () => {
@@ -1172,6 +1183,9 @@ describe("components.css theme-sensitive surfaces", () => {
       /\s+/g,
       " "
     );
+    const supervisorDetailInputs = getLastGroupedRuleBlock(
+      /\.mobile-supervisor-sheet__detail \.input,\s*\n\s*\.mobile-supervisor-sheet__detail \.mobile-select-trigger,\s*\n\s*\.mobile-supervisor-sheet__detail \.textarea\s*\{([^}]*)\}/g
+    );
     const supervisorFullscreenFooter = getLastRuleBlock(
       ".mobile-supervisor-sheet.mobile-sheet--fullscreen .mobile-sheet__footer"
     ).replace(/\s+/g, " ");
@@ -1190,6 +1204,9 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(supervisorRoot).not.toContain("box-shadow:");
     expect(supervisorDetail).toContain("padding: var(--sp-3)");
     expect(supervisorDetail).toContain("padding-bottom: var(--sp-4)");
+    expect(supervisorDetailInputs).toContain("font-size: var(--type-label-size)");
+    expect(supervisorDetailInputs).toContain("line-height: var(--type-label-line-height)");
+    expect(supervisorDetailInputs).toContain("font-weight: var(--type-label-weight)");
     expect(supervisorDetail).not.toContain("border: 1px solid");
     expect(supervisorDetail).not.toContain("border-radius:");
     expect(supervisorDetail).not.toContain("box-shadow:");

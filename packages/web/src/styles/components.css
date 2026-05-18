@@ -3993,7 +3993,7 @@ body.is-resizing-panels * {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: var(--z-modal-backdrop);
 }
 
 .modal-content {
@@ -10398,6 +10398,14 @@ textarea.input {
     padding-bottom: var(--sp-4);
     background: transparent;
     overflow: auto;
+  }
+
+  .mobile-supervisor-sheet__detail .input,
+  .mobile-supervisor-sheet__detail .mobile-select-trigger,
+  .mobile-supervisor-sheet__detail .textarea {
+    font-size: var(--type-label-size);
+    line-height: var(--type-label-line-height);
+    font-weight: var(--type-label-weight);
   }
 
   .mobile-supervisor-sheet__actions,
