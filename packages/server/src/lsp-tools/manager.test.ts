@@ -110,6 +110,31 @@ describe("LspToolManager.resolve", () => {
     });
   });
 
+  it("wraps bundled TypeScript language server with the current node executable", async () => {
+    const root = mkdtempSync(join(tmpdir(), "lsp-tools-"));
+    const manager = new LspToolManager({
+      manifestStore: new FileManifestStore(root),
+      commandExists: vi.fn(async () => false),
+    });
+
+    const result = await manager.resolve({
+      workspace,
+      serverKind: "typescript",
+      env: {},
+    });
+
+    expect(result.kind).toBe("ready");
+    expect(result).toMatchObject({
+      source: "bundled",
+      command: process.execPath,
+    });
+    if (result.kind !== "ready") {
+      throw new Error("expected bundled TypeScript language server to resolve");
+    }
+    expect(result.args[0]).toMatch(/typescript-language-server[\\/]+lib[\\/]cli\.mjs$/);
+    expect(result.args.slice(1)).toEqual(["--stdio"]);
+  });
+
   it("returns tool_missing when no source is available", async () => {
     const root = mkdtempSync(join(tmpdir(), "lsp-tools-"));
     const manager = new LspToolManager({

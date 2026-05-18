@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
+import { join } from "node:path";
 import type {
   LspServerKind,
   LspToolRuntimeStatusEntry,
@@ -185,15 +186,20 @@ export class LspToolManager {
 
     try {
       const packageJsonPath = require.resolve(`${definition.bundled.packageName}/package.json`);
-      const packageRoot = packageJsonPath.slice(0, packageJsonPath.length - "package.json".length);
-      const command = new URL(definition.bundled.entry, `file://${packageRoot}`).pathname;
-      if (!existsSync(command)) {
+      const packageRoot = join(packageJsonPath, "..");
+      const entryPath = join(packageRoot, definition.bundled.entry);
+      if (!existsSync(entryPath)) {
         return null;
       }
 
+      const command = definition.bundled.launchWithNode ? process.execPath : entryPath;
+      const args = definition.bundled.launchWithNode
+        ? [entryPath, ...definition.bundled.args]
+        : definition.bundled.args;
+
       return {
         command,
-        args: definition.bundled.args,
+        args,
       };
     } catch {
       return null;

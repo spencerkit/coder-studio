@@ -9,6 +9,7 @@ export interface LspToolDefinition {
     packageName: string;
     entry: string;
     args: string[];
+    launchWithNode?: boolean;
   };
   managed?: {
     version: string;
@@ -27,6 +28,7 @@ export const LSP_TOOL_DEFINITIONS: Record<LspServerKind, LspToolDefinition> = {
       packageName: "typescript-language-server",
       entry: "lib/cli.mjs",
       args: ["--stdio"],
+      launchWithNode: true,
     },
   },
   python: {
