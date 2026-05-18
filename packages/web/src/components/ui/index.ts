@@ -62,3 +62,5 @@ export type { ToastProps, ToastTone, ToastViewportProps } from "./toast";
 export { Toast, ToastViewport } from "./toast";
 export type { TooltipProps } from "./tooltip";
 export { Tooltip } from "./tooltip";
+export type { WorkbenchLayerProps } from "./workbench-layer";
+export { WorkbenchLayer } from "./workbench-layer";

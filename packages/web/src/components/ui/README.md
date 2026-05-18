@@ -6,6 +6,7 @@
 - 业务代码禁止新增 `btn btn-*`、`input`、`input textarea` 这类旧式全局 className；未迁移的遗留调用点只允许原样保留，不允许扩散。
 - PC / 移动差异默认由 token 或共享内部逻辑解决，业务代码不直接写 `matchMedia`。
 - PC 阻塞式 overlay 只能使用共享治理家族：短决策用 `Modal` / `ConfirmDialog`，长内容与多区块工作流用 `Drawer`，移动端流程面用 `Sheet`。
+- 全局命令类桌面 overlay 只能使用 `WorkbenchLayer`；terminal / editor 这类宿主内局部 overlay 不允许借用它。
 
 ## 已实现组件
 | Component | Tier | Public API | Notes |
@@ -35,6 +36,7 @@
 | Textarea | 0 | `src/components/ui/index.ts` named export only | Shared multiline text entry with legacy `.input.textarea` compatibility and optional `autoResize` |
 | Toast | 1 | `src/components/ui/index.ts` named export only | `Toast` + `ToastViewport` presentational primitives，队列/计时/导航留在 feature 层 |
 | Tooltip | 1 | `src/components/ui/index.ts` named export only | Current bounded slice covers branch picker plus selected code-editor, file-tree, git-diff, fullscreen, and topbar actions |
+| WorkbenchLayer | 1 | `src/components/ui/index.ts` named export only | Shared governed desktop global command-surface shell for command palette, launcher, and similar workspace-level overlays |
 
 ## 迁移状态
 见 `./MIGRATION.md`。
