@@ -61,6 +61,18 @@ describe("base.css theme-sensitive shells", () => {
   });
 });
 
+describe("base.css viewport sizing", () => {
+  it("uses dynamic viewport height for the shared app shell", () => {
+    const root = getRuleBlock("#root");
+    const app = getRuleBlock(".app");
+
+    expect(root).toContain("height: 100dvh");
+    expect(root).not.toContain("height: 100vh");
+    expect(app).toContain("height: 100dvh");
+    expect(app).not.toContain("height: 100vh");
+  });
+});
+
 describe("base.css desktop typography foundation", () => {
   it("defines the semantic and desktop layout tokens used by polished PC surfaces", () => {
     expect(tokensStylesheet).toContain("--text-muted:");
