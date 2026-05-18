@@ -277,6 +277,44 @@ describe("ObjectiveDialog", () => {
     expect(closeButton).toHaveClass("modal-close");
   });
 
+  it("keeps the canonical dialog header anatomy for enable mode", () => {
+    const store = createStore();
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+    store.set(
+      supervisorDialogAtom,
+      createDialogState({
+        mode: "enable",
+        draftObjective: "Ship phase 4B1",
+      })
+    );
+    store.set(supervisorsAtom, new Map());
+
+    render(
+      <Provider store={store}>
+        <ObjectiveDialog workspaceId="ws-1" />
+      </Provider>
+    );
+
+    const dialog = screen.getByRole("dialog");
+    const header = dialog.querySelector(".dialog-header");
+    const leading = header?.querySelector(".dialog-header__leading");
+    const icon = header?.querySelector(".dialog-header__icon");
+    const copy = header?.querySelector(".dialog-header__copy");
+    const description = header?.querySelector(".dialog-header__description");
+    const closeButton = screen.getByRole("button", { name: "Close" });
+
+    expect(header).not.toBeNull();
+    expect(leading).not.toBeNull();
+    expect(icon).not.toBeNull();
+    expect(copy).not.toBeNull();
+    expect(description).toHaveTextContent(
+      "Describe an objective and Supervisor will evaluate progress and suggest the next step after each turn."
+    );
+    expect(closeButton).toHaveClass("modal-close");
+  });
+
   it("renders footer actions with shared button compatibility classes", () => {
     const store = createStore();
     window.localStorage.setItem("ui.locale", JSON.stringify("en"));

@@ -246,7 +246,7 @@ describe("ObjectiveDialogContent", () => {
     const trigger = screen.getByRole("button", {
       name: "supervisor.field.evaluator Codex",
     });
-    expect(trigger).toHaveClass("input", "mobile-select-trigger");
+    expect(trigger).toHaveClass("input", "mobile-select-trigger", "input-sm");
     expect(trigger).toHaveAttribute("aria-haspopup", "dialog");
     expect(trigger).toHaveAttribute("aria-describedby");
 
