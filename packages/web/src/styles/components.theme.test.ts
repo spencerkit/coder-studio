@@ -851,6 +851,38 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(hasRuleBlock(".supervisor-dialog .modal-header h3")).toBe(false);
   });
 
+  it("keeps supervisor dialog body styling flat and dense", () => {
+    const modalBody = getLastRuleBlock(".supervisor-dialog .modal-body");
+    const formGroup = getLastRuleBlock(".supervisor-dialog .form-group");
+    const intro = getLastRuleBlock(".supervisor-dialog-intro");
+    const introTitle = getLastRuleBlock(".supervisor-dialog-intro__title");
+    const introDescription = getLastRuleBlock(".supervisor-dialog-intro__description");
+    const compactInputGroup = getLastGroupedRuleBlock(
+      /\.supervisor-dialog \.input,\s*\n\.supervisor-dialog \.mobile-select-trigger\s*\{([^}]*)\}/g
+    );
+    const textarea = getLastRuleBlock(".supervisor-dialog .textarea");
+    const dangerCallout = getLastRuleBlock(".supervisor-danger-callout");
+    const dangerCalloutCopy = getLastRuleBlock(".supervisor-danger-callout-copy");
+
+    expect(modalBody).toContain("gap: var(--sp-3)");
+    expect(formGroup).toContain("gap: 6px");
+    expect(intro).toContain("display: flex");
+    expect(intro).toContain("padding: var(--sp-3)");
+    expect(introTitle).toContain("font-size: var(--type-body-size)");
+    expect(introTitle).toContain("line-height: var(--type-body-line-height)");
+    expect(introDescription).toContain("font-size: var(--type-meta-size)");
+    expect(introDescription).toContain("line-height: var(--type-meta-line-height)");
+    expect(compactInputGroup).toContain("font-size: var(--type-label-size)");
+    expect(compactInputGroup).toContain("line-height: var(--type-label-line-height)");
+    expect(textarea).toContain("font-size: var(--type-code-inline-size)");
+    expect(textarea).toContain("min-height: 104px");
+    expect(dangerCallout).toContain("gap: var(--sp-2)");
+    expect(dangerCallout).toContain("padding: var(--sp-2) var(--sp-3)");
+    expect(dangerCallout).toContain("border-left-width: 1px");
+    expect(dangerCalloutCopy).toContain("font-size: var(--type-label-size)");
+    expect(dangerCalloutCopy).toContain("line-height: var(--type-label-line-height)");
+  });
+
   it("does not allow page or modal wrappers to override approved header typography tokens", () => {
     const settingsBack = getLastRuleBlock(
       ".settings-header .mobile-page-header .page-header__back"
