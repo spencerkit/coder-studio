@@ -46,8 +46,19 @@ describe("ObjectiveDialogContent", () => {
     );
 
     let intro = document.querySelector(".supervisor-dialog-intro");
+    let introIcon = document.querySelector(".supervisor-dialog-intro__icon");
+    let introCopy = document.querySelector(".supervisor-dialog-intro__copy");
+    let firstFormGroup = document.querySelector(".form-group");
     expect(intro).toBeTruthy();
-    expect(intro?.querySelector('[data-icon-semantic="supervisor.mode.enable"]')).toBeTruthy();
+    expect(introIcon).toBeTruthy();
+    expect(introCopy).toBeTruthy();
+    expect(intro?.querySelector(".supervisor-dialog-intro__icon")).toBe(introIcon);
+    expect(intro?.querySelector(".supervisor-dialog-intro__copy")).toBe(introCopy);
+    expect(introIcon?.querySelector('[data-icon-semantic="supervisor.mode.enable"]')).toBeTruthy();
+    expect(firstFormGroup).toBeTruthy();
+    expect(intro?.compareDocumentPosition(firstFormGroup as Node)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    );
     expect(intro?.querySelector(".supervisor-dialog-intro__title")).toHaveTextContent(
       "supervisor.dialog.enable.title"
     );
@@ -73,8 +84,19 @@ describe("ObjectiveDialogContent", () => {
     );
 
     intro = document.querySelector(".supervisor-dialog-intro");
+    introIcon = document.querySelector(".supervisor-dialog-intro__icon");
+    introCopy = document.querySelector(".supervisor-dialog-intro__copy");
+    firstFormGroup = document.querySelector(".form-group");
     expect(intro).toBeTruthy();
-    expect(intro?.querySelector('[data-icon-semantic="supervisor.mode.edit"]')).toBeTruthy();
+    expect(introIcon).toBeTruthy();
+    expect(introCopy).toBeTruthy();
+    expect(intro?.querySelector(".supervisor-dialog-intro__icon")).toBe(introIcon);
+    expect(intro?.querySelector(".supervisor-dialog-intro__copy")).toBe(introCopy);
+    expect(introIcon?.querySelector('[data-icon-semantic="supervisor.mode.edit"]')).toBeTruthy();
+    expect(firstFormGroup).toBeTruthy();
+    expect(intro?.compareDocumentPosition(firstFormGroup as Node)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    );
     expect(intro?.querySelector(".supervisor-dialog-intro__title")).toHaveTextContent(
       "supervisor.dialog.edit.title"
     );

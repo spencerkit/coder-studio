@@ -198,7 +198,21 @@ describe("ObjectiveDialog", () => {
       </Provider>
     );
 
-    expect(document.querySelector(".supervisor-dialog-intro")).toBeTruthy();
+    const dialog = screen.getByRole("dialog");
+    const intro = dialog.querySelector(".supervisor-dialog-intro");
+    const introIcon = dialog.querySelector(".supervisor-dialog-intro__icon");
+    const introCopy = dialog.querySelector(".supervisor-dialog-intro__copy");
+    const firstFormGroup = dialog.querySelector(".form-group");
+
+    expect(intro).toBeTruthy();
+    expect(introIcon).toBeTruthy();
+    expect(introCopy).toBeTruthy();
+    expect(intro?.querySelector(".supervisor-dialog-intro__icon")).toBe(introIcon);
+    expect(intro?.querySelector(".supervisor-dialog-intro__copy")).toBe(introCopy);
+    expect(firstFormGroup).toBeTruthy();
+    expect(intro?.compareDocumentPosition(firstFormGroup as Node)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    );
   });
 
   it("renders disable confirmation mode", () => {
