@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.10
+
+### Patch Changes
+
+- [#43](https://github.com/spencerkit/coder-studio/pull/43) [`ee20f64`](https://github.com/spencerkit/coder-studio/commit/ee20f641888663152f1a5ce5774e5e2b5a52e7b3) Thanks [@pallyoung](https://github.com/pallyoung)! - Fix supervisor dialog polish by removing the duplicated desktop intro panel and ensuring the scheduled-time picker popover renders above modal overlays.
+
 ## 0.3.9
 
 ### Patch Changes
