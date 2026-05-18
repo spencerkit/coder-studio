@@ -8119,14 +8119,7 @@ textarea.input {
   margin: 0 auto;
 }
 
-.desktop-review-embedded-worktree .modal-overlay {
-  position: static;
-  inset: auto;
-  display: block;
-  background: transparent;
-}
-
-.desktop-review-embedded-worktree .modal-card.worktree-manager-surface {
+.desktop-review-embedded-worktree .drawer-panel.worktree-manager-surface {
   width: 100%;
   max-width: none;
   min-height: 540px;
