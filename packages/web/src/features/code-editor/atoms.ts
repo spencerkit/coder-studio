@@ -8,6 +8,7 @@ export interface PendingEditorNavigation {
   column?: number;
   endLine?: number;
   endColumn?: number;
+  requestId?: number;
   source: "manual" | "file-tree" | "lsp" | "search";
 }
 

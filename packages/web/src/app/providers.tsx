@@ -41,6 +41,7 @@ import {
 import { authenticatedAtom, themeAtom } from "../atoms/app-ui";
 import type { DispatchCommand } from "../atoms/connection";
 import { activeWorkspaceIdAtom } from "../atoms/workspaces";
+import { monacoModelRegistry } from "../features/code-editor/monaco/model-registry";
 import { useSessionNotifications } from "../features/notifications";
 import { supervisorCyclesAtom, supervisorsAtom } from "../features/supervisor/atoms";
 import { terminalMetaAtomFamily } from "../features/terminal-panel/atoms";
@@ -157,6 +158,7 @@ function mergeRefreshHints(
 
 function resetServerProjectedState(store: Store): void {
   const workspaceIds = store.get(workspaceOrderAtom);
+  const workspaces = store.get(workspacesAtom);
   const terminalIds = Object.values(store.get(sessionsAtom))
     .map((session) => session.terminalId)
     .filter((terminalId): terminalId is string => Boolean(terminalId));
@@ -171,6 +173,10 @@ function resetServerProjectedState(store: Store): void {
   store.set(supervisorCyclesAtom, new Map());
 
   for (const workspaceId of workspaceIds) {
+    const workspace = workspaces[workspaceId];
+    if (workspace) {
+      monacoModelRegistry.disposeWorkspace(workspace.path);
+    }
     store.set(fileTreeAtomFamily(workspaceId), null);
     store.set(loadedDirsAtomFamily(workspaceId), new Set());
     store.set(gitStateAtomFamily(workspaceId), null);

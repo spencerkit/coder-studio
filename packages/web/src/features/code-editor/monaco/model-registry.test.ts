@@ -93,6 +93,34 @@ describe("Monaco model registry", () => {
     expect(mockCreateModel).toHaveBeenCalledTimes(1);
   });
 
+  it("does not overwrite an existing shared Monaco model when the caller passes stale content", () => {
+    const registry = createModelRegistry();
+    const handle = registry.getOrCreate({
+      workspaceRootPath: "/repo",
+      path: "src/main.ts",
+      language: "typescript",
+      content: "export const a = 1;\n",
+    });
+
+    const model = handle.model as {
+      getValue: ReturnType<typeof vi.fn>;
+      setValue: ReturnType<typeof vi.fn>;
+    };
+
+    model.setValue("local edits");
+    model.setValue.mockClear();
+
+    registry.getOrCreate({
+      workspaceRootPath: "/repo",
+      path: "src/main.ts",
+      language: "typescript",
+      content: "stale props from react",
+    });
+
+    expect(model.getValue()).toBe("local edits");
+    expect(model.setValue).not.toHaveBeenCalled();
+  });
+
   it("updates an existing Monaco model from disk only when the content changes", () => {
     const registry = createModelRegistry();
     const handle = registry.getOrCreate({
@@ -120,11 +148,31 @@ describe("Monaco model registry", () => {
     registry.updateFromDisk({
       workspaceRootPath: "/repo",
       path: "src/main.ts",
-      language: "typescript",
       content: "export const a = 2;\n",
     });
 
     expect(model.setValue).toHaveBeenCalledWith("export const a = 2;\n");
+  });
+
+  it("disposes one shared model without affecting other workspace files", () => {
+    const registry = createModelRegistry();
+    const first = registry.getOrCreate({
+      workspaceRootPath: "/repo",
+      path: "src/main.ts",
+      language: "typescript",
+      content: "export const a = 1;\n",
+    });
+    const second = registry.getOrCreate({
+      workspaceRootPath: "/repo",
+      path: "src/other.ts",
+      language: "typescript",
+      content: "export const b = 2;\n",
+    });
+
+    registry.disposeFile("/repo", "src/main.ts");
+
+    expect((first.model as { dispose: ReturnType<typeof vi.fn> }).dispose).toHaveBeenCalledTimes(1);
+    expect((second.model as { dispose: ReturnType<typeof vi.fn> }).dispose).not.toHaveBeenCalled();
   });
 
   it("disposes all models for a workspace root", () => {

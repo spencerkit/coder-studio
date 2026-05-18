@@ -18,8 +18,22 @@ const viewportMocks = vi.hoisted(() => ({
   value: "desktop" as "desktop" | "mobile",
 }));
 
+const { mockRegistryUpdateFromDisk, mockRegistryDisposeFile } = vi.hoisted(() => ({
+  mockRegistryUpdateFromDisk: vi.fn(),
+  mockRegistryDisposeFile: vi.fn(),
+}));
+
 vi.mock("../../components/ui/_internal/use-viewport", () => ({
   useViewport: () => viewportMocks.value,
+}));
+
+vi.mock("./monaco/model-registry", () => ({
+  monacoModelRegistry: {
+    getOrCreate: vi.fn(),
+    updateFromDisk: mockRegistryUpdateFromDisk,
+    disposeFile: mockRegistryDisposeFile,
+    disposeWorkspace: vi.fn(),
+  },
 }));
 
 // Monaco is not happy in jsdom; stub it so we only assert our own chrome.
@@ -101,6 +115,8 @@ function setupStore(options?: {
 describe("CodeEditorHost", () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    mockRegistryUpdateFromDisk.mockClear();
+    mockRegistryDisposeFile.mockClear();
     viewportMocks.value = "desktop";
   });
 
@@ -203,6 +219,7 @@ describe("CodeEditorHost", () => {
 
     expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
     expect(store.get(openFilesAtomFamily("ws-1"))["src/c.ts"]).toBeUndefined();
+    expect(mockRegistryDisposeFile).toHaveBeenCalledWith("/tmp/ws", "src/c.ts");
   });
 
   it("can render without the editor header for mobile content-only chrome", async () => {
@@ -379,6 +396,11 @@ describe("CodeEditorHost", () => {
     await waitFor(() => {
       expect(screen.getByTestId("monaco-host")).toHaveTextContent("updated on disk");
     });
+    expect(mockRegistryUpdateFromDisk).toHaveBeenCalledWith({
+      workspaceRootPath: "/tmp/ws",
+      path: "src/live.ts",
+      content: "updated on disk",
+    });
     expect(screen.queryByText(/changed on disk/i)).not.toBeInTheDocument();
   });
 
@@ -427,6 +449,7 @@ describe("CodeEditorHost", () => {
       content: "local edits",
       baseHash: "hash-1",
     });
+    expect(mockRegistryUpdateFromDisk).not.toHaveBeenCalled();
   });
 
   it("marks an open file as deleted when an external refresh can no longer read it", async () => {

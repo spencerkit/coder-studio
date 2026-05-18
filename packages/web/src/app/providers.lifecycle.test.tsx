@@ -41,6 +41,10 @@ const wsState = vi.hoisted(() => ({
   } | null,
 }));
 
+const { mockDisposeWorkspace } = vi.hoisted(() => ({
+  mockDisposeWorkspace: vi.fn(),
+}));
+
 vi.mock("../ws", () => ({
   resolveWsUrl: () => "ws://127.0.0.1:4173/ws",
   WsClient: vi.fn().mockImplementation(function MockWsClient() {
@@ -50,6 +54,15 @@ vi.mock("../ws", () => ({
 
 vi.mock("../features/notifications", () => ({
   useSessionNotifications: () => {},
+}));
+
+vi.mock("../features/code-editor/monaco/model-registry", () => ({
+  monacoModelRegistry: {
+    getOrCreate: vi.fn(),
+    updateFromDisk: vi.fn(),
+    disposeFile: vi.fn(),
+    disposeWorkspace: mockDisposeWorkspace,
+  },
 }));
 
 function renderProviders(store = createStore()) {
@@ -155,6 +168,7 @@ describe("AppProviders lifecycle recovery", () => {
 
   beforeEach(() => {
     resetAppProvidersSingletonsForTests();
+    mockDisposeWorkspace.mockClear();
     document.documentElement.removeAttribute("data-theme");
     localStorage.removeItem("ui.theme");
     localStorage.removeItem("ui.themeId");
@@ -729,6 +743,7 @@ describe("AppProviders lifecycle recovery", () => {
 
     await vi.waitFor(() => {
       expect(wsState.client?.disconnect).toHaveBeenCalledWith("single_active_displaced");
+      expect(mockDisposeWorkspace).toHaveBeenCalledWith("/tmp/ws-1");
       expect(store.get(activationStatusAtom)).toBe("gated");
       expect(store.get(activationReasonAtom)).toBe("displaced");
       expect(store.get(activationGenerationAtom)).toBe(2);

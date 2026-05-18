@@ -1,5 +1,5 @@
 import { useAtomValue, useSetAtom } from "jotai";
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import { activeFilePathAtomFamily, openFilesAtomFamily } from "../../workspace/atoms";
 import { type PendingEditorNavigation, pendingEditorNavigationAtomFamily } from "../atoms";
 
@@ -10,6 +10,7 @@ export function useOpenLocation(workspaceId: string): {
   const openFiles = useAtomValue(openFilesAtomFamily(workspaceId));
   const setActiveFilePath = useSetAtom(activeFilePathAtomFamily(workspaceId));
   const setPendingNavigation = useSetAtom(pendingEditorNavigationAtomFamily(workspaceId));
+  const nextRequestIdRef = useRef(0);
 
   const openLocation = useCallback(
     async (input: PendingEditorNavigation) => {
@@ -20,7 +21,10 @@ export function useOpenLocation(workspaceId: string): {
         // enough to trigger file.read in useCodeEditorActions.
       }
 
-      setPendingNavigation(input);
+      setPendingNavigation({
+        ...input,
+        requestId: ++nextRequestIdRef.current,
+      });
     },
     [openFiles, setActiveFilePath, setPendingNavigation]
   );

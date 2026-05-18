@@ -16,12 +16,8 @@ export interface ModelRegistry {
     language: string;
     content: string;
   }): EditorModelHandle;
-  updateFromDisk(input: {
-    workspaceRootPath: string;
-    path: string;
-    content: string;
-    language: string;
-  }): void;
+  updateFromDisk(input: { workspaceRootPath: string; path: string; content: string }): void;
+  disposeFile(workspaceRootPath: string, path: string): void;
   disposeWorkspace(workspaceRootPath: string): void;
 }
 
@@ -29,8 +25,16 @@ function createKey(workspaceRootPath: string, path: string): string {
   return `${workspaceRootPath}::${path}`;
 }
 
-function syncModel(model: monaco.editor.ITextModel, language: string, content: string): void {
+function setModelLanguage(model: monaco.editor.ITextModel, language: string): void {
   monaco.editor.setModelLanguage(model, language);
+}
+
+function syncModelFromDisk(
+  model: monaco.editor.ITextModel,
+  language: string,
+  content: string
+): void {
+  setModelLanguage(model, language);
   if (model.getValue() !== content) {
     model.setValue(content);
   }
@@ -44,18 +48,26 @@ export function createModelRegistry(): ModelRegistry {
       const key = createKey(workspaceRootPath, path);
       const existing = handles.get(key);
       if (existing) {
-        syncModel(existing.model, language, content);
-        return {
-          ...existing,
-          language,
-        };
+        setModelLanguage(existing.model, language);
+        const handle =
+          existing.language === language
+            ? existing
+            : {
+                ...existing,
+                language,
+              };
+        handles.set(key, handle);
+        return handle;
       }
 
       const uri = toWorkspaceFileUri(workspaceRootPath, path);
-      const model =
-        monaco.editor.getModel(uri) ?? monaco.editor.createModel(content, language, uri);
+      const existingModel = monaco.editor.getModel(uri);
+      const model = existingModel ?? monaco.editor.createModel(content, language, uri);
 
-      syncModel(model, language, content);
+      setModelLanguage(model, language);
+      if (!existingModel && model.getValue() !== content) {
+        model.setValue(content);
+      }
 
       const handle: EditorModelHandle = {
         key,
@@ -68,14 +80,25 @@ export function createModelRegistry(): ModelRegistry {
       return handle;
     },
 
-    updateFromDisk({ workspaceRootPath, path, content, language }) {
+    updateFromDisk({ workspaceRootPath, path, content }) {
       const key = createKey(workspaceRootPath, path);
       const existing = handles.get(key);
       if (!existing) {
         return;
       }
 
-      syncModel(existing.model, language, content);
+      syncModelFromDisk(existing.model, existing.language, content);
+    },
+
+    disposeFile(workspaceRootPath, path) {
+      const key = createKey(workspaceRootPath, path);
+      const existing = handles.get(key);
+      if (!existing) {
+        return;
+      }
+
+      existing.model.dispose();
+      handles.delete(key);
     },
 
     disposeWorkspace(workspaceRootPath) {

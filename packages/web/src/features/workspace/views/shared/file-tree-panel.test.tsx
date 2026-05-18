@@ -1115,10 +1115,11 @@ describe("FileTreePanel", () => {
       expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/app.tsx");
     });
 
-    expect(store.get(pendingEditorNavigationAtomFamily("ws-test"))).toEqual({
+    expect(store.get(pendingEditorNavigationAtomFamily("ws-test"))).toMatchObject({
       workspaceId: "ws-test",
       path: "src/app.tsx",
       source: "file-tree",
+      requestId: expect.any(Number),
     });
   });
 

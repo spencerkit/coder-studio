@@ -12,16 +12,25 @@ const connection = createMessageConnection(
 );
 
 const docs = new Map();
+const exitAfterInitMs = Number(process.env.CODER_STUDIO_FAKE_LSP_EXIT_AFTER_INIT_MS ?? "0");
+const hoverDelayMs = Number(process.env.CODER_STUDIO_FAKE_LSP_HOVER_DELAY_MS ?? "0");
 
-connection.onRequest("initialize", () => ({
-  capabilities: {
-    definitionProvider: true,
-    referencesProvider: true,
-    hoverProvider: true,
-    documentSymbolProvider: true,
-    textDocumentSync: 1,
-  },
-}));
+connection.onRequest("initialize", () => {
+  if (exitAfterInitMs > 0) {
+    const timer = setTimeout(() => process.exit(0), exitAfterInitMs);
+    timer.unref?.();
+  }
+
+  return {
+    capabilities: {
+      definitionProvider: true,
+      referencesProvider: true,
+      hoverProvider: true,
+      documentSymbolProvider: true,
+      textDocumentSync: 1,
+    },
+  };
+});
 
 connection.onNotification("textDocument/didOpen", ({ textDocument }) => {
   docs.set(textDocument.uri, textDocument.text);
@@ -42,6 +51,32 @@ connection.onNotification("textDocument/didClose", ({ textDocument }) => {
 });
 
 connection.onRequest("textDocument/definition", ({ textDocument }) => {
+  if (textDocument.uri.endsWith("/single.ts")) {
+    return {
+      uri: textDocument.uri.replace("/single.ts", "/shared.ts"),
+      range: {
+        start: { line: 0, character: 13 },
+        end: { line: 0, character: 24 },
+      },
+    };
+  }
+
+  if (textDocument.uri.endsWith("/linked.ts")) {
+    return [
+      {
+        targetUri: textDocument.uri.replace("/linked.ts", "/shared.ts"),
+        targetRange: {
+          start: { line: 0, character: 0 },
+          end: { line: 0, character: 29 },
+        },
+        targetSelectionRange: {
+          start: { line: 0, character: 13 },
+          end: { line: 0, character: 24 },
+        },
+      },
+    ];
+  }
+
   if (!textDocument.uri.endsWith("/consumer.ts")) {
     return [];
   }
@@ -85,15 +120,40 @@ connection.onRequest("textDocument/hover", ({ textDocument }) => {
     return null;
   }
 
-  return {
+  const response = {
     contents: {
       kind: "markdown",
       value: "```ts\\nconst sharedValue: number\\n```",
     },
   };
+
+  if (hoverDelayMs <= 0) {
+    return response;
+  }
+
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(response), hoverDelayMs);
+    timer.unref?.();
+  });
 });
 
 connection.onRequest("textDocument/documentSymbol", ({ textDocument }) => {
+  if (textDocument.uri.endsWith("/symbols-flat.ts")) {
+    return [
+      {
+        name: "flatSymbol",
+        kind: 13,
+        location: {
+          uri: textDocument.uri,
+          range: {
+            start: { line: 0, character: 13 },
+            end: { line: 0, character: 23 },
+          },
+        },
+      },
+    ];
+  }
+
   if (!textDocument.uri.endsWith("/shared.ts")) {
     return [];
   }

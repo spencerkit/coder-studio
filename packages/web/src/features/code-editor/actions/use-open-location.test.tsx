@@ -29,12 +29,13 @@ describe("useOpenLocation", () => {
     });
 
     expect(store.get(activeFilePathAtomFamily("ws-1"))).toBe("src/utils/math.ts");
-    expect(store.get(pendingEditorNavigationAtomFamily("ws-1"))).toEqual({
+    expect(store.get(pendingEditorNavigationAtomFamily("ws-1"))).toMatchObject({
       workspaceId: "ws-1",
       path: "src/utils/math.ts",
       line: 12,
       column: 5,
       source: "manual",
+      requestId: expect.any(Number),
     });
   });
 
@@ -67,13 +68,48 @@ describe("useOpenLocation", () => {
       content: "export const sum = (a: number, b: number) => a + b;\n",
       savedContent: "export const sum = (a: number, b: number) => a + b;\n",
     });
-    expect(store.get(pendingEditorNavigationAtomFamily("ws-1"))).toEqual({
+    expect(store.get(pendingEditorNavigationAtomFamily("ws-1"))).toMatchObject({
       workspaceId: "ws-1",
       path: "src/utils/math.ts",
       line: 3,
       column: 1,
       source: "lsp",
+      requestId: expect.any(Number),
     });
+  });
+
+  it("assigns a fresh navigation request id for repeated open-location calls", async () => {
+    const store = createStore();
+    const wrapper = createWrapper(store);
+    const { result } = renderHook(() => useOpenLocation("ws-1"), { wrapper });
+
+    await act(async () => {
+      await result.current.openLocation({
+        workspaceId: "ws-1",
+        path: "src/utils/math.ts",
+        line: 1,
+        column: 1,
+        source: "search",
+      });
+    });
+
+    const first = store.get(pendingEditorNavigationAtomFamily("ws-1"));
+
+    await act(async () => {
+      await result.current.openLocation({
+        workspaceId: "ws-1",
+        path: "src/utils/math.ts",
+        line: 9,
+        column: 2,
+        source: "search",
+      });
+    });
+
+    const second = store.get(pendingEditorNavigationAtomFamily("ws-1"));
+
+    expect(first?.requestId).toEqual(expect.any(Number));
+    expect(second?.requestId).toEqual(expect.any(Number));
+    expect(second?.requestId).not.toBe(first?.requestId);
   });
 
   it("clears pending navigation only when the active path matches", async () => {

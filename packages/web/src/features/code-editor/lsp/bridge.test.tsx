@@ -1,0 +1,470 @@
+import * as monaco from "monaco-editor";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createLspBridge } from "./bridge";
+
+vi.mock("monaco-editor", () => ({
+  Uri: {
+    file: (path: string) => ({
+      fsPath: path,
+      path,
+      scheme: "file",
+      toString: () => `file://${path}`,
+    }),
+  },
+  languages: {
+    registerDefinitionProvider: vi.fn(),
+    registerHoverProvider: vi.fn(),
+    registerReferenceProvider: vi.fn(),
+    registerDocumentSymbolProvider: vi.fn(),
+    SymbolKind: {
+      Variable: 13,
+    },
+  },
+  MarkerSeverity: {
+    Error: 8,
+    Warning: 4,
+    Info: 2,
+    Hint: 1,
+  },
+  editor: {
+    getModel: vi.fn(() => null),
+    setModelMarkers: vi.fn(),
+  },
+}));
+
+function createMockModel(
+  initialValue: string,
+  version = 1,
+  uri = monaco.Uri.file("/repo/e2e/fixtures/lsp-workspace/shared.ts")
+) {
+  let currentValue = initialValue;
+  let currentVersion = version;
+  let listener: (() => void) | null = null;
+
+  return {
+    uri,
+    getValue: () => currentValue,
+    getVersionId: () => currentVersion,
+    onDidChangeContent(callback: () => void) {
+      listener = callback;
+      return { dispose() {} };
+    },
+    fireDidChangeContent(nextValue: string, nextVersion: number) {
+      currentValue = nextValue;
+      currentVersion = nextVersion;
+      listener?.();
+    },
+  } as monaco.editor.ITextModel & {
+    fireDidChangeContent(nextValue: string, nextVersion: number): void;
+  };
+}
+
+describe("createLspBridge", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.clearAllMocks();
+    vi.mocked(monaco.editor.getModel).mockReturnValue(null);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("ensures a session, opens a supported document, debounces changes, and closes on detach", async () => {
+    const sendCommand = vi
+      .fn()
+      .mockResolvedValueOnce({
+        workspaceId: "ws-1",
+        serverKind: "typescript",
+        status: "ready",
+        capabilities: {
+          definition: true,
+          references: true,
+          hover: true,
+          documentSymbols: true,
+          diagnostics: true,
+        },
+      })
+      .mockResolvedValue(undefined);
+
+    const unsubscribe = vi.fn();
+    const bridge = createLspBridge({
+      sendCommand,
+      subscribe: vi.fn(() => unsubscribe),
+    });
+
+    const model = createMockModel("export const sharedValue = 1;\n");
+    const detach = bridge.attachModel({
+      workspaceId: "ws-1",
+      workspaceRootPath: "/repo",
+      path: "e2e/fixtures/lsp-workspace/shared.ts",
+      monacoLanguage: "typescript",
+      model,
+    });
+
+    await vi.waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith("lsp.ensureSession", {
+        workspaceId: "ws-1",
+        path: "e2e/fixtures/lsp-workspace/shared.ts",
+      });
+      expect(sendCommand).toHaveBeenCalledWith("lsp.openDocument", {
+        workspaceId: "ws-1",
+        path: "e2e/fixtures/lsp-workspace/shared.ts",
+        languageId: "typescript",
+        text: "export const sharedValue = 1;\n",
+      });
+    });
+
+    model.fireDidChangeContent("export const sharedValue = 2;\n", 2);
+
+    await vi.advanceTimersByTimeAsync(75);
+
+    expect(sendCommand).toHaveBeenCalledWith("lsp.changeDocument", {
+      workspaceId: "ws-1",
+      path: "e2e/fixtures/lsp-workspace/shared.ts",
+      text: "export const sharedValue = 2;\n",
+    });
+
+    detach();
+
+    expect(sendCommand).toHaveBeenCalledWith("lsp.closeDocument", {
+      workspaceId: "ws-1",
+      path: "e2e/fixtures/lsp-workspace/shared.ts",
+    });
+  });
+
+  it("returns a no-op detach function for unsupported languages", () => {
+    const sendCommand = vi.fn();
+    const bridge = createLspBridge({
+      sendCommand,
+      subscribe: vi.fn(() => () => {}),
+    });
+
+    const detach = bridge.attachModel({
+      workspaceId: "ws-1",
+      workspaceRootPath: "/repo",
+      path: "README.md",
+      monacoLanguage: "markdown",
+      model: createMockModel("# title\n", 1, monaco.Uri.file("/repo/README.md")),
+    });
+
+    detach();
+
+    expect(sendCommand).not.toHaveBeenCalled();
+  });
+
+  it("reuses one diagnostics subscription per workspace until the last model detaches", async () => {
+    const readySummary = {
+      workspaceId: "ws-1",
+      serverKind: "typescript" as const,
+      status: "ready" as const,
+      capabilities: {
+        definition: true,
+        references: true,
+        hover: true,
+        documentSymbols: true,
+        diagnostics: true,
+      },
+    };
+
+    const unsubscribe = vi.fn();
+    const subscribe = vi.fn(() => unsubscribe);
+    const bridge = createLspBridge({
+      sendCommand: vi.fn().mockResolvedValue(readySummary),
+      subscribe,
+    });
+
+    const firstDetach = bridge.attachModel({
+      workspaceId: "ws-1",
+      workspaceRootPath: "/repo",
+      path: "src/a.ts",
+      monacoLanguage: "typescript",
+      model: createMockModel("export const a = 1;\n", 1, monaco.Uri.file("/repo/src/a.ts")),
+    });
+    const secondDetach = bridge.attachModel({
+      workspaceId: "ws-1",
+      workspaceRootPath: "/repo",
+      path: "src/b.ts",
+      monacoLanguage: "typescript",
+      model: createMockModel("export const b = 2;\n", 1, monaco.Uri.file("/repo/src/b.ts")),
+    });
+
+    await vi.waitFor(() => {
+      expect(subscribe).toHaveBeenCalledTimes(1);
+    });
+
+    firstDetach();
+    expect(unsubscribe).not.toHaveBeenCalled();
+
+    secondDetach();
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not reopen a document after it detaches before session startup completes", async () => {
+    let resolveEnsureSession:
+      | ((summary: {
+          workspaceId: string;
+          serverKind: "typescript";
+          status: "ready";
+          capabilities: {
+            definition: boolean;
+            references: boolean;
+            hover: boolean;
+            documentSymbols: boolean;
+            diagnostics: boolean;
+          };
+        }) => void)
+      | null = null;
+
+    const ensureSession = new Promise<{
+      workspaceId: string;
+      serverKind: "typescript";
+      status: "ready";
+      capabilities: {
+        definition: boolean;
+        references: boolean;
+        hover: boolean;
+        documentSymbols: boolean;
+        diagnostics: boolean;
+      };
+    }>((resolve) => {
+      resolveEnsureSession = resolve;
+    });
+
+    const sendCommand = vi.fn((op: string) => {
+      if (op === "lsp.ensureSession") {
+        return ensureSession;
+      }
+
+      return Promise.resolve(undefined);
+    });
+
+    const bridge = createLspBridge({
+      sendCommand,
+      subscribe: vi.fn(() => () => {}),
+    });
+
+    const detach = bridge.attachModel({
+      workspaceId: "ws-1",
+      workspaceRootPath: "/repo",
+      path: "src/a.ts",
+      monacoLanguage: "typescript",
+      model: createMockModel("export const a = 1;\n", 1, monaco.Uri.file("/repo/src/a.ts")),
+    });
+
+    detach();
+
+    await vi.waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith("lsp.closeDocument", {
+        workspaceId: "ws-1",
+        path: "src/a.ts",
+      });
+    });
+
+    resolveEnsureSession?.({
+      workspaceId: "ws-1",
+      serverKind: "typescript",
+      status: "ready",
+      capabilities: {
+        definition: true,
+        references: true,
+        hover: true,
+        documentSymbols: true,
+        diagnostics: true,
+      },
+    });
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(sendCommand.mock.calls.filter(([op]) => op === "lsp.openDocument")).toHaveLength(0);
+  });
+
+  it("applies diagnostics against the latest workspace root path for a reused workspace subscription", async () => {
+    const readySummary = {
+      workspaceId: "ws-1",
+      serverKind: "typescript" as const,
+      status: "ready" as const,
+      capabilities: {
+        definition: true,
+        references: true,
+        hover: true,
+        documentSymbols: true,
+        diagnostics: true,
+      },
+    };
+
+    let handler: ((topic: string, payload: unknown) => void) | null = null;
+    const subscribe = vi.fn(
+      (_topics: string[], nextHandler: (topic: string, payload: unknown) => void) => {
+        handler = nextHandler;
+        return () => {};
+      }
+    );
+
+    const staleModel = createMockModel(
+      "export const a = 1;\n",
+      1,
+      monaco.Uri.file("/repo/src/a.ts")
+    );
+    const currentModel = createMockModel(
+      "export const a = 1;\n",
+      1,
+      monaco.Uri.file("/repo-next/src/a.ts")
+    );
+
+    vi.mocked(monaco.editor.getModel).mockImplementation((uri) => {
+      if (uri.toString() === currentModel.uri.toString()) {
+        return currentModel;
+      }
+
+      if (uri.toString() === staleModel.uri.toString()) {
+        return staleModel;
+      }
+
+      return null;
+    });
+
+    const bridge = createLspBridge({
+      sendCommand: vi.fn().mockResolvedValue(readySummary),
+      subscribe,
+    });
+
+    const detachFirst = bridge.attachModel({
+      workspaceId: "ws-1",
+      workspaceRootPath: "/repo",
+      path: "src/a.ts",
+      monacoLanguage: "typescript",
+      model: staleModel,
+    });
+    const detachSecond = bridge.attachModel({
+      workspaceId: "ws-1",
+      workspaceRootPath: "/repo-next",
+      path: "src/a.ts",
+      monacoLanguage: "typescript",
+      model: currentModel,
+    });
+
+    await vi.waitFor(() => {
+      expect(subscribe).toHaveBeenCalledTimes(1);
+    });
+
+    handler?.("workspace:ws-1:lsp-diagnostics", {
+      workspaceId: "ws-1",
+      serverKind: "typescript",
+      path: "src/a.ts",
+      version: 1,
+      diagnostics: [
+        {
+          message: "boom",
+          severity: "error",
+          range: {
+            startLine: 1,
+            startColumn: 1,
+            endLine: 1,
+            endColumn: 5,
+          },
+        },
+      ],
+    });
+
+    expect(monaco.editor.setModelMarkers).toHaveBeenCalledTimes(1);
+    expect(monaco.editor.setModelMarkers).toHaveBeenCalledWith(currentModel, "coder-studio-lsp", [
+      expect.objectContaining({
+        message: "boom",
+      }),
+    ]);
+
+    detachFirst();
+    detachSecond();
+  });
+
+  it("re-subscribes workspace diagnostics when the transport subscribe function changes", async () => {
+    const readySummary = {
+      workspaceId: "ws-1",
+      serverKind: "typescript" as const,
+      status: "ready" as const,
+      capabilities: {
+        definition: true,
+        references: true,
+        hover: true,
+        documentSymbols: true,
+        diagnostics: true,
+      },
+    };
+
+    let nextHandler: ((topic: string, payload: unknown) => void) | null = null;
+    const initialUnsubscribe = vi.fn();
+    const initialSubscribe = vi.fn(
+      (_topics: string[], handler: (topic: string, payload: unknown) => void) => {
+        nextHandler = handler;
+        return initialUnsubscribe;
+      }
+    );
+
+    const replacementUnsubscribe = vi.fn();
+    const replacementSubscribe = vi.fn(
+      (_topics: string[], handler: (topic: string, payload: unknown) => void) => {
+        nextHandler = handler;
+        return replacementUnsubscribe;
+      }
+    );
+
+    const model = createMockModel("export const a = 1;\n", 1, monaco.Uri.file("/repo/src/a.ts"));
+    vi.mocked(monaco.editor.getModel).mockImplementation((uri) =>
+      uri.toString() === model.uri.toString() ? model : null
+    );
+
+    const bridge = createLspBridge({
+      sendCommand: vi.fn().mockResolvedValue(readySummary),
+      subscribe: initialSubscribe,
+    });
+
+    const detach = bridge.attachModel({
+      workspaceId: "ws-1",
+      workspaceRootPath: "/repo",
+      path: "src/a.ts",
+      monacoLanguage: "typescript",
+      model,
+    });
+
+    await vi.waitFor(() => {
+      expect(initialSubscribe).toHaveBeenCalledTimes(1);
+    });
+
+    bridge.configure({
+      subscribe: replacementSubscribe,
+    });
+
+    expect(initialUnsubscribe).toHaveBeenCalledTimes(1);
+    expect(replacementSubscribe).toHaveBeenCalledTimes(1);
+
+    nextHandler?.("workspace:ws-1:lsp-diagnostics", {
+      workspaceId: "ws-1",
+      serverKind: "typescript",
+      path: "src/a.ts",
+      version: 1,
+      diagnostics: [
+        {
+          message: "reconnected",
+          severity: "error",
+          range: {
+            startLine: 1,
+            startColumn: 1,
+            endLine: 1,
+            endColumn: 5,
+          },
+        },
+      ],
+    });
+
+    expect(monaco.editor.setModelMarkers).toHaveBeenCalledWith(model, "coder-studio-lsp", [
+      expect.objectContaining({
+        message: "reconnected",
+      }),
+    ]);
+
+    detach();
+    expect(replacementUnsubscribe).toHaveBeenCalledTimes(1);
+  });
+});

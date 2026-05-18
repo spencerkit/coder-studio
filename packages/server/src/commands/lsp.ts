@@ -1,0 +1,83 @@
+import { z } from "zod";
+import { registerCommand } from "../ws/dispatch.js";
+
+registerCommand(
+  "lsp.ensureSession",
+  z.object({
+    workspaceId: z.string(),
+    path: z.string(),
+  }),
+  async (args, ctx) => ctx.lspMgr.ensureSession(args)
+);
+
+registerCommand(
+  "lsp.openDocument",
+  z.object({
+    workspaceId: z.string(),
+    path: z.string(),
+    languageId: z.string(),
+    text: z.string(),
+  }),
+  async (args, ctx) => ctx.lspMgr.openDocument(args)
+);
+
+registerCommand(
+  "lsp.changeDocument",
+  z.object({
+    workspaceId: z.string(),
+    path: z.string(),
+    text: z.string(),
+  }),
+  async (args, ctx) => ctx.lspMgr.changeDocument(args)
+);
+
+registerCommand(
+  "lsp.closeDocument",
+  z.object({
+    workspaceId: z.string(),
+    path: z.string(),
+  }),
+  async (args, ctx) => ctx.lspMgr.closeDocument(args)
+);
+
+registerCommand(
+  "lsp.definition",
+  z.object({
+    workspaceId: z.string(),
+    path: z.string(),
+    line: z.number().int().positive(),
+    column: z.number().int().positive(),
+  }),
+  async (args, ctx) => ctx.lspMgr.definition(args)
+);
+
+registerCommand(
+  "lsp.references",
+  z.object({
+    workspaceId: z.string(),
+    path: z.string(),
+    line: z.number().int().positive(),
+    column: z.number().int().positive(),
+  }),
+  async (args, ctx) => ctx.lspMgr.references(args)
+);
+
+registerCommand(
+  "lsp.hover",
+  z.object({
+    workspaceId: z.string(),
+    path: z.string(),
+    line: z.number().int().positive(),
+    column: z.number().int().positive(),
+  }),
+  async (args, ctx) => ctx.lspMgr.hover(args)
+);
+
+registerCommand(
+  "lsp.documentSymbols",
+  z.object({
+    workspaceId: z.string(),
+    path: z.string(),
+  }),
+  async (args, ctx) => ctx.lspMgr.documentSymbols(args)
+);
