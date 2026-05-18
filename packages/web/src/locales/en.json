@@ -137,6 +137,8 @@
     "close": "Close",
     "path": "Path",
     "no_workspace": "No workspace open",
+    "refresh_partial_title": "Workspace refresh incomplete",
+    "refresh_partial_body": "Updated what we could, but these sections failed: {sections}",
     "fullscreen": {
       "unsupported_title": "Fullscreen unavailable",
       "unsupported_body": "Fullscreen is not available in this browser.",

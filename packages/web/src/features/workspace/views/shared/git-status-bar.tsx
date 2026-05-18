@@ -1,7 +1,7 @@
 import type { GitStatus } from "@coder-studio/core";
 import { useAtomValue } from "jotai";
 import { X } from "lucide-react";
-import { type FC, useLayoutEffect, useState } from "react";
+import { type FC, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { localeAtom } from "../../../../atoms/app-ui";
 import {
   Button,
@@ -24,7 +24,8 @@ interface GitStatusBarProps {
   workspaceId: string;
   gitState: GitStatus | null;
   inline?: boolean;
-  onRefresh?: () => void;
+  onRefresh?: () => Promise<boolean> | Promise<void> | boolean | void;
+  refreshStatus?: "idle" | "refreshing" | "error";
 }
 
 type GitSyncIntent = "push" | "pull";
@@ -39,6 +40,7 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({
   gitState,
   inline = false,
   onRefresh,
+  refreshStatus = "idle",
 }) => {
   const t = useTranslation();
   const locale = useAtomValue(localeAtom) as LocaleCode;
@@ -55,6 +57,7 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({
   const authFormId = `git-auth-form-${workspaceId}`;
   const [pendingAction, setPendingAction] = useState<SyncDialogState | null>(null);
   const [credentials, setCredentials] = useState({ username: "", password: "" });
+  const queuedWorkspaceRefreshRef = useRef(false);
 
   useLayoutEffect(() => {
     if (!authPrompt) {
@@ -67,6 +70,15 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({
       password: "",
     }));
   }, [authPrompt]);
+
+  useEffect(() => {
+    if (refreshStatus === "refreshing" || !queuedWorkspaceRefreshRef.current) {
+      return;
+    }
+
+    queuedWorkspaceRefreshRef.current = false;
+    void refreshAfterFetch();
+  }, [refreshStatus]);
 
   if (!gitState) {
     return null;
@@ -81,12 +93,14 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({
   const ahead = gitState.ahead;
   const behind = gitState.behind;
   const isFetching = fetchState.status === "fetching";
+  const isWorkspaceRefreshing = refreshStatus === "refreshing";
+  const showRefreshSpinner = isFetching || isWorkspaceRefreshing;
   const fetchTitle = fetchState.lastFetchAt
     ? t("git.fetch_last_at", {
         when: formatDate(fetchState.lastFetchAt, locale),
       })
     : t("git.fetch_last_never");
-  const fetchAriaLabel = isFetching ? t("git.fetch_in_progress") : t("git.fetch_label");
+  const fetchAriaLabel = showRefreshSpinner ? t("git.fetch_in_progress") : t("git.fetch_label");
   const confirmTitle =
     pendingAction?.intent === "push" ? t("git.push_confirm_title") : t("git.pull_confirm_title");
   const confirmMessage =
@@ -181,14 +195,21 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({
     if (success) {
       clearAuthPrompt();
       setPendingAction(null);
-      onRefresh?.();
+      if (authPrompt.intent === "fetch") {
+        await onRefresh?.();
+      }
     }
   };
 
   const refreshAfterFetch = async () => {
+    if (refreshStatus === "refreshing") {
+      queuedWorkspaceRefreshRef.current = true;
+      return;
+    }
+
     const success = await handleFetch();
     if (success) {
-      onRefresh?.();
+      await onRefresh?.();
     }
   };
 
@@ -234,7 +255,7 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({
               <ThemedIcon
                 semantic="git.footer.refresh"
                 size={13}
-                className={isFetching ? "spin" : undefined}
+                className={showRefreshSpinner ? "spin" : undefined}
               />
             }
             onClick={() => void refreshAfterFetch()}

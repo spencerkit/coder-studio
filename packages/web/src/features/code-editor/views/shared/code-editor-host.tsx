@@ -201,6 +201,7 @@ export const CodeEditorView: FC<CodeEditorViewProps> = ({ state, chrome = "full"
           ) : isImageFile ? (
             <ImagePreview
               url={currentFile.url}
+              version={currentFile.version}
               mime={currentFile.mime}
               sizeBytes={currentFile.size}
               alt={currentFile.path}

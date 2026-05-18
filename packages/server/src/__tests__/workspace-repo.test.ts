@@ -243,6 +243,29 @@ describe("WorkspaceRepo", () => {
         ],
       });
     });
+
+    it("updates fileTreeExpandedDirs inside ui state", () => {
+      repo.create({
+        id: "ws-expanded",
+        path: "/path/to/workspace",
+        targetRuntime: "native",
+        openedAt: Date.now(),
+        lastActiveAt: Date.now(),
+        uiState: { leftPanelWidth: 250, bottomPanelHeight: 150, focusMode: false },
+      });
+
+      repo.updateUiState("ws-expanded", {
+        leftPanelWidth: 250,
+        bottomPanelHeight: 150,
+        focusMode: false,
+        fileTreeExpandedDirs: ["src", "src/components"],
+      });
+
+      expect(repo.findById("ws-expanded")?.uiState.fileTreeExpandedDirs).toEqual([
+        "src",
+        "src/components",
+      ]);
+    });
   });
 
   describe("updateLastActive", () => {

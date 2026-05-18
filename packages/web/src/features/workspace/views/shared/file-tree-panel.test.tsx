@@ -2,8 +2,10 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { createStore, Provider } from "jotai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { wsClientAtom } from "../../../../atoms/connection";
+import { workspacesAtom } from "../../../../atoms/workspaces";
 import {
   activeFilePathAtomFamily,
+  expandedDirsAtomFamily,
   fileTreeAtomFamily,
   fileTreeStaleAtomFamily,
   loadedDirsAtomFamily,
@@ -157,6 +159,112 @@ describe("FileTreePanel", () => {
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it("restores expanded directories from workspace ui state", () => {
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+    store.set(workspacesAtom, {
+      "ws-test": {
+        id: "ws-test",
+        path: "/workspace",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+          fileTreeExpandedDirs: ["src"],
+        },
+      },
+    } as never);
+    store.set(
+      fileTreeAtomFamily("ws-test"),
+      new Map([
+        [".", [{ path: "src", name: "src", kind: "dir" }]],
+        ["src", [{ path: "src/index.ts", name: "index.ts", kind: "file" }]],
+      ])
+    );
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    expect(screen.getByText("index.ts")).toBeInTheDocument();
+    expect(Array.from(store.get(expandedDirsAtomFamily("ws-test")) ?? [])).toEqual(["src"]);
+  });
+
+  it("keeps fallback auto-expand disabled when persisted expansion is explicitly empty", () => {
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+    store.set(workspacesAtom, {
+      "ws-test": {
+        id: "ws-test",
+        path: "/workspace",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+          fileTreeExpandedDirs: [],
+        },
+      },
+    } as never);
+    store.set(
+      fileTreeAtomFamily("ws-test"),
+      new Map([
+        [".", [{ path: "src", name: "src", kind: "dir" }]],
+        ["src", [{ path: "src/index.ts", name: "index.ts", kind: "file" }]],
+      ])
+    );
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    expect(screen.queryByText("index.ts")).not.toBeInTheDocument();
+  });
+
+  it("keeps default root auto-expand when fileTreeExpandedDirs is still undefined", () => {
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+    store.set(workspacesAtom, {
+      "ws-test": {
+        id: "ws-test",
+        path: "/workspace",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    } as never);
+    store.set(
+      fileTreeAtomFamily("ws-test"),
+      new Map([
+        [".", [{ path: "src", name: "src", kind: "dir" }]],
+        ["src", [{ path: "src/index.ts", name: "index.ts", kind: "file" }]],
+      ])
+    );
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    expect(screen.getByText("index.ts")).toBeInTheDocument();
+    expect(store.get(expandedDirsAtomFamily("ws-test"))).toBeNull();
   });
 
   it("reloads the file tree after creating a file from the toolbar", async () => {
@@ -738,7 +846,36 @@ describe("FileTreePanel", () => {
 
   it("collapses expanded directories when the external collapse trigger changes", () => {
     const store = createStore();
-    store.set(wsClientAtom, { sendCommand: vi.fn().mockResolvedValue({}) } as never);
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args: any) => {
+      if (op === "workspace.uiState.set") {
+        return {
+          id: "ws-test",
+          path: "/workspace",
+          targetRuntime: "native",
+          openedAt: 1,
+          lastActiveAt: 1,
+          uiState: args.uiState,
+        };
+      }
+      return { path: "/workspace", children: [] };
+    });
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(workspacesAtom, {
+      "ws-test": {
+        id: "ws-test",
+        path: "/workspace",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+          fileTreeExpandedDirs: ["src"],
+        },
+      },
+    } as never);
+    store.set(expandedDirsAtomFamily("ws-test"), new Set(["src"]));
     store.set(
       fileTreeAtomFamily("ws-test"),
       new Map([
@@ -780,6 +917,15 @@ describe("FileTreePanel", () => {
     );
 
     expect(screen.queryByText("index.ts")).not.toBeInTheDocument();
+    expect(Array.from(store.get(expandedDirsAtomFamily("ws-test")) ?? [])).toEqual([]);
+    expect(sendCommand).toHaveBeenCalledWith(
+      "workspace.uiState.set",
+      expect.objectContaining({
+        workspaceId: "ws-test",
+        uiState: expect.objectContaining({ fileTreeExpandedDirs: [] }),
+      }),
+      undefined
+    );
   });
 
   it("uses translated empty-directory copy for expanded folders with no children", () => {

@@ -204,6 +204,48 @@ describe("Workspace Commands", () => {
         ],
       });
     });
+
+    it("persists fileTreeExpandedDirs into workspace ui state", async () => {
+      const dir = join(tmpdir(), `workspace-expanded-dirs-test-${Date.now()}`);
+      await mkdir(dir);
+
+      const openResult = await dispatch(
+        {
+          kind: "command",
+          id: "open-workspace-expanded-dirs",
+          op: "workspace.open",
+          args: { path: dir },
+        },
+        ctx
+      );
+
+      expect(openResult.ok).toBe(true);
+      const workspaceId = (openResult.data as { id: string }).id;
+
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "set-ui-state-expanded-dirs",
+          op: "workspace.uiState.set",
+          args: {
+            workspaceId,
+            uiState: {
+              leftPanelWidth: 320,
+              bottomPanelHeight: 210,
+              focusMode: false,
+              fileTreeExpandedDirs: ["packages", "packages/web"],
+            },
+          },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(true);
+      expect(
+        (result.data as { uiState: { fileTreeExpandedDirs?: string[] } }).uiState
+          .fileTreeExpandedDirs
+      ).toEqual(["packages", "packages/web"]);
+    });
   });
 
   describe("workspace.lastViewedTarget", () => {

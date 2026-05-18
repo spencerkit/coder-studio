@@ -26,6 +26,8 @@ export interface FileReadImageResult {
    * text and the UI should offer an "edit as text" toggle.
    */
   isTextBacked: boolean;
+  /** Version marker for cache-busting and external-refresh detection. */
+  version: string;
 }
 
 export type FileReadResult = FileReadTextResult | FileReadImageResult;
@@ -118,7 +120,7 @@ export async function readFile(
 
   const imageType = getImageTypeInfo(relPath);
   if (imageType) {
-    const stats = await stat(abs);
+    const bytes = await fsReadFile(abs);
     const params = new URLSearchParams({
       workspaceId,
       path: relPath,
@@ -127,8 +129,9 @@ export async function readFile(
       kind: "image",
       mime: imageType.mime,
       url: `/api/file?${params.toString()}`,
-      size: stats.size,
+      size: bytes.byteLength,
       isTextBacked: imageType.isTextBacked,
+      version: createHash("sha256").update(bytes).digest("hex"),
     };
   }
 

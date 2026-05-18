@@ -36,6 +36,7 @@ export interface UiState {
   focusMode: boolean;
   activeSessionId?: string;
   paneLayout?: WorkspacePaneNode;
+  fileTreeExpandedDirs?: string[];
 }
 
 export interface WorkspaceLastViewedTarget {

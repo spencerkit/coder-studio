@@ -18,6 +18,7 @@ import {
 } from "../atoms/workspaces";
 import { terminalPreferencesAtom } from "../features/terminal-panel/preferences";
 import {
+  expandedDirsAtomFamily,
   fileTreeAtomFamily,
   fileTreeStaleAtomFamily,
   gitBranchListAtomFamily,
@@ -693,6 +694,7 @@ describe("AppProviders lifecycle recovery", () => {
       });
       store.set(fileTreeAtomFamily("ws-1"), new Map([[".", []]]));
       store.set(loadedDirsAtomFamily("ws-1"), new Set(["src"]));
+      store.set(expandedDirsAtomFamily("ws-1"), new Set(["src"]));
       store.set(worktreeListAtomFamily("ws-1"), {
         items: [],
         loading: false,
@@ -738,6 +740,7 @@ describe("AppProviders lifecycle recovery", () => {
       expect(store.get(activeWorkspaceIdAtom)).toBeNull();
       expect(store.get(fileTreeAtomFamily("ws-1"))).toBeNull();
       expect(Array.from(store.get(loadedDirsAtomFamily("ws-1")))).toEqual([]);
+      expect(store.get(expandedDirsAtomFamily("ws-1"))).toBeNull();
       expect(store.get(gitStateAtomFamily("ws-1"))).toBeNull();
       expect(store.get(gitBranchListAtomFamily("ws-1")).current).toBe("");
       expect(store.get(worktreeListAtomFamily("ws-1")).items).toEqual([]);

@@ -22,6 +22,7 @@ type FileReadImagePayload = {
   mime: string;
   url: string;
   size: number;
+  version: string;
   isTextBacked: boolean;
 };
 
@@ -120,6 +121,7 @@ export function useCodeEditorActions() {
               mime: data.mime,
               url: data.url,
               size: data.size,
+              version: data.version,
               isTextBacked: data.isTextBacked,
               externalState: undefined,
             };
@@ -130,6 +132,15 @@ export function useCodeEditorActions() {
     },
     [dispatch, setOpenFiles, workspaceId]
   );
+
+  const loadTextBackedImageContent = useCallback(async (url: string) => {
+    const response = await fetch(url, { credentials: "include" });
+    if (!response.ok) {
+      throw new Error(`Failed to fetch text-backed image bytes: ${response.status}`);
+    }
+
+    return response.text();
+  }, []);
 
   const handleSave = useCallback(async () => {
     if (!workspaceId || !currentFile || currentFile.kind !== "text" || isSaving) {
@@ -298,8 +309,93 @@ export function useCodeEditorActions() {
           continue;
         }
 
+        if (
+          file.kind === "text" &&
+          file.viewingTextBackedImageAsText === true &&
+          nextData.kind === "image" &&
+          nextData.isTextBacked
+        ) {
+          if (file.isDirty) {
+            setOpenFiles((prev) => {
+              const existing = prev[path];
+              if (!existing || existing.kind !== "text") {
+                return prev;
+              }
+
+              return {
+                ...prev,
+                [path]: {
+                  ...existing,
+                  externalState: "modified",
+                },
+              };
+            });
+
+            if (activeFilePath === path) {
+              setExternalStatus({
+                path,
+                status: "modified",
+              });
+            }
+            continue;
+          }
+
+          try {
+            const content = await loadTextBackedImageContent(nextData.url);
+            if (cancelled) {
+              return;
+            }
+
+            setOpenFiles((prev) => {
+              const existing = prev[path];
+              if (!existing || existing.kind !== "text") {
+                return prev;
+              }
+
+              return {
+                ...prev,
+                [path]: {
+                  ...existing,
+                  content,
+                  isDirty: false,
+                  externalState: undefined,
+                  viewingTextBackedImageAsText: true,
+                },
+              };
+            });
+
+            if (activeFilePath === path) {
+              setExternalStatus((current) => (current?.path === path ? null : current));
+            }
+          } catch (error) {
+            console.error("Failed to refresh text-backed image bytes:", error);
+            setOpenFiles((prev) => {
+              const existing = prev[path];
+              if (!existing || existing.kind !== "text") {
+                return prev;
+              }
+
+              return {
+                ...prev,
+                [path]: {
+                  ...existing,
+                  externalState: "modified",
+                },
+              };
+            });
+
+            if (activeFilePath === path) {
+              setExternalStatus({
+                path,
+                status: "modified",
+              });
+            }
+          }
+          continue;
+        }
+
         if (file.kind === "image" && nextData.kind === "image") {
-          if (file.url === nextData.url && file.size === nextData.size) {
+          if (file.version === nextData.version && file.size === nextData.size) {
             continue;
           }
 
@@ -311,6 +407,7 @@ export function useCodeEditorActions() {
               mime: nextData.mime,
               url: nextData.url,
               size: nextData.size,
+              version: nextData.version,
               isTextBacked: nextData.isTextBacked,
               externalState: undefined,
             },
@@ -337,7 +434,15 @@ export function useCodeEditorActions() {
     return () => {
       cancelled = true;
     };
-  }, [activeFilePath, dispatch, editorRefreshToken, openFiles, setOpenFiles, workspaceId]);
+  }, [
+    activeFilePath,
+    dispatch,
+    editorRefreshToken,
+    loadTextBackedImageContent,
+    openFiles,
+    setOpenFiles,
+    workspaceId,
+  ]);
 
   const handleClose = useCallback(() => {
     if (!workspaceId) {

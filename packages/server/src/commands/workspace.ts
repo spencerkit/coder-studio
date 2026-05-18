@@ -72,6 +72,7 @@ registerCommand(
       bottomPanelHeight: z.number(),
       focusMode: z.boolean(),
       activeSessionId: z.string().optional(),
+      fileTreeExpandedDirs: z.array(z.string()).optional(),
       paneLayout: z
         .object({
           id: z.string(),

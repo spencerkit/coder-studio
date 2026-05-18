@@ -190,4 +190,81 @@ describe("File Commands", () => {
       reason: "file_content",
     });
   });
+
+  it("returns image version metadata from file.read", async () => {
+    await writeFile(join(testDir, "logo.svg"), '<svg xmlns="http://www.w3.org/2000/svg"></svg>');
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "file-read-image-1",
+        op: "file.read",
+        args: {
+          workspaceId,
+          path: "logo.svg",
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.data).toMatchObject({
+      kind: "image",
+      mime: "image/svg+xml",
+      url: `/api/file?workspaceId=${workspaceId}&path=logo.svg`,
+      isTextBacked: true,
+      version: expect.any(String),
+    });
+  });
+
+  it("changes image version metadata when contents change even if the file size stays the same", async () => {
+    const imagePath = join(testDir, "logo.svg");
+    await writeFile(
+      imagePath,
+      '<svg xmlns="http://www.w3.org/2000/svg"><rect width="10" height="10"/></svg>'
+    );
+
+    const first = await dispatch(
+      {
+        kind: "command",
+        id: "file-read-image-version-1",
+        op: "file.read",
+        args: {
+          workspaceId,
+          path: "logo.svg",
+        },
+      },
+      ctx
+    );
+
+    expect(first.ok).toBe(true);
+
+    await writeFile(
+      imagePath,
+      '<svg xmlns="http://www.w3.org/2000/svg"><rect width="20" height="20"/></svg>'
+    );
+
+    const second = await dispatch(
+      {
+        kind: "command",
+        id: "file-read-image-version-2",
+        op: "file.read",
+        args: {
+          workspaceId,
+          path: "logo.svg",
+        },
+      },
+      ctx
+    );
+
+    expect(second.ok).toBe(true);
+    expect((first.data as { kind: "image"; size: number; version: string }).kind).toBe("image");
+    expect((second.data as { kind: "image"; size: number; version: string }).kind).toBe("image");
+    expect((first.data as { kind: "image"; size: number; version: string }).size).toBe(
+      (second.data as { kind: "image"; size: number; version: string }).size
+    );
+    expect((first.data as { kind: "image"; size: number; version: string }).version).not.toBe(
+      (second.data as { kind: "image"; size: number; version: string }).version
+    );
+  });
 });

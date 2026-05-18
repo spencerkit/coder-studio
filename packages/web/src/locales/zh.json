@@ -137,6 +137,8 @@
     "close": "关闭",
     "path": "路径",
     "no_workspace": "未打开工作区",
+    "refresh_partial_title": "工作区刷新未完全成功",
+    "refresh_partial_body": "已完成可刷新的部分，但这些区域失败了：{sections}",
     "fullscreen": {
       "unsupported_title": "当前无法全屏",
       "unsupported_body": "当前浏览器不支持全屏功能。",

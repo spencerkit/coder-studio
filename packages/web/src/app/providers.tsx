@@ -55,6 +55,7 @@ import {
 } from "../features/terminal-panel/preferences";
 import {
   editorRefreshTokenAtomFamily,
+  expandedDirsAtomFamily,
   fileTreeAtomFamily,
   fileTreeStaleAtomFamily,
   gitBranchListAtomFamily,
@@ -173,6 +174,7 @@ function resetServerProjectedState(store: Store): void {
   for (const workspaceId of workspaceIds) {
     store.set(fileTreeAtomFamily(workspaceId), null);
     store.set(loadedDirsAtomFamily(workspaceId), new Set());
+    store.set(expandedDirsAtomFamily(workspaceId), null);
     store.set(gitStateAtomFamily(workspaceId), null);
     store.set(gitBranchListAtomFamily(workspaceId), {
       current: "",
