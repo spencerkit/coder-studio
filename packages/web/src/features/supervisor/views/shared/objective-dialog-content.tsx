@@ -22,6 +22,7 @@ const evaluatorOptions: ReadonlyArray<SelectOption<ObjectiveDialogEvaluatorProvi
 
 interface ObjectiveDialogContentProps {
   mode: ObjectiveDialogMode;
+  showIntro?: boolean;
   draftObjective: string;
   draftEvaluatorProviderId: ObjectiveDialogEvaluatorProviderId;
   draftEvaluatorModel: string;
@@ -44,6 +45,7 @@ export function ObjectiveDialogModeIcon({ mode }: { mode: ObjectiveDialogMode })
 
 export function ObjectiveDialogContent({
   mode,
+  showIntro = false,
   draftObjective,
   draftEvaluatorProviderId,
   draftEvaluatorModel,
@@ -92,15 +94,17 @@ export function ObjectiveDialogContent({
 
   return (
     <>
-      <div className="supervisor-dialog-intro">
-        <div className="supervisor-dialog-intro__icon" aria-hidden="true">
-          <ObjectiveDialogModeIcon mode={mode} />
+      {showIntro ? (
+        <div className="supervisor-dialog-intro">
+          <div className="supervisor-dialog-intro__icon" aria-hidden="true">
+            <ObjectiveDialogModeIcon mode={mode} />
+          </div>
+          <div className="supervisor-dialog-intro__copy">
+            <p className="supervisor-dialog-intro__title">{introTitle}</p>
+            <p className="supervisor-dialog-intro__description">{introDescription}</p>
+          </div>
         </div>
-        <div className="supervisor-dialog-intro__copy">
-          <p className="supervisor-dialog-intro__title">{introTitle}</p>
-          <p className="supervisor-dialog-intro__description">{introDescription}</p>
-        </div>
-      </div>
+      ) : null}
 
       <div className="form-group">
         <label htmlFor="objective">{t("supervisor.field.objective")}</label>

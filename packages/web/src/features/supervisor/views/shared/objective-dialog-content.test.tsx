@@ -27,10 +27,51 @@ afterEach(() => {
 });
 
 describe("ObjectiveDialogContent", () => {
-  it("renders a flat supervisor intro strip for enable and edit modes", () => {
+  it("does not render the supervisor intro strip by default for enable and edit modes", () => {
     const { rerender } = render(
       <ObjectiveDialogContent
         mode="enable"
+        draftObjective="Investigate regressions"
+        draftEvaluatorProviderId="claude"
+        draftEvaluatorModel=""
+        draftMaxSupervisionCount="0"
+        draftScheduledAt=""
+        disableObjective=""
+        onDraftObjectiveChange={vi.fn()}
+        onDraftEvaluatorProviderChange={vi.fn()}
+        onDraftEvaluatorModelChange={vi.fn()}
+        onDraftMaxSupervisionCountChange={vi.fn()}
+        onDraftScheduledAtChange={vi.fn()}
+      />
+    );
+
+    expect(document.querySelector(".supervisor-dialog-intro")).toBeNull();
+
+    rerender(
+      <ObjectiveDialogContent
+        mode="edit"
+        draftObjective="Investigate regressions"
+        draftEvaluatorProviderId="claude"
+        draftEvaluatorModel=""
+        draftMaxSupervisionCount="0"
+        draftScheduledAt=""
+        disableObjective=""
+        onDraftObjectiveChange={vi.fn()}
+        onDraftEvaluatorProviderChange={vi.fn()}
+        onDraftEvaluatorModelChange={vi.fn()}
+        onDraftMaxSupervisionCountChange={vi.fn()}
+        onDraftScheduledAtChange={vi.fn()}
+      />
+    );
+
+    expect(document.querySelector(".supervisor-dialog-intro")).toBeNull();
+  });
+
+  it("renders a flat supervisor intro strip when showIntro is true for enable and edit modes", () => {
+    const { rerender } = render(
+      <ObjectiveDialogContent
+        mode="enable"
+        showIntro
         draftObjective="Investigate regressions"
         draftEvaluatorProviderId="claude"
         draftEvaluatorModel=""
@@ -69,6 +110,7 @@ describe("ObjectiveDialogContent", () => {
     rerender(
       <ObjectiveDialogContent
         mode="edit"
+        showIntro
         draftObjective="Investigate regressions"
         draftEvaluatorProviderId="claude"
         draftEvaluatorModel=""
@@ -300,6 +342,7 @@ describe("ObjectiveDialogContent", () => {
     render(
       <ObjectiveDialogContent
         mode="disable"
+        showIntro
         draftObjective=""
         draftEvaluatorProviderId="codex"
         draftEvaluatorModel=""

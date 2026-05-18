@@ -62,6 +62,7 @@ export function ObjectiveDialog({ workspaceId, sessionId }: ObjectiveDialogProps
       <ModalBody>
         <ObjectiveDialogContent
           mode={mode}
+          showIntro
           draftObjective={dialog.draftObjective}
           draftEvaluatorProviderId={dialog.draftEvaluatorProviderId}
           draftEvaluatorModel={dialog.draftEvaluatorModel}
