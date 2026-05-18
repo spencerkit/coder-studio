@@ -73,6 +73,7 @@ type SettingsNavigationState =
 type SettingsContentLayoutMode = "default" | "fill-height";
 
 const DEFAULT_SETTINGS_SECTION: SettingsSection = SETTINGS_SECTIONS[0].id;
+const TERMINAL_FONT_SIZE_SAVE_THROTTLE_MS = 500;
 
 function isStandaloneWebApp(): boolean {
   if (typeof window === "undefined") {
@@ -404,8 +405,8 @@ export function SettingsPage() {
         }
       }
       const hasServerThemeSetting =
-        Object.hasOwn(settings, "appearance.themeId") ||
-        Object.hasOwn(settings, "appearance.theme");
+        Object.prototype.hasOwnProperty.call(settings, "appearance.themeId") ||
+        Object.prototype.hasOwnProperty.call(settings, "appearance.theme");
       if (
         hasServerThemeSetting &&
         appearanceSelectionVersionRef.current.theme ===
@@ -505,7 +506,6 @@ export function SettingsPage() {
       case "general":
         return (
           <GeneralSettings
-            isMobile={isMobile}
             notificationsEnabled={notificationsEnabled}
             setNotificationsEnabled={setNotificationsEnabled}
             soundEnabled={soundEnabled}
@@ -701,7 +701,6 @@ function SettingsNavItem({ icon, label, active, onClick }: SettingsNavItemProps)
 }
 
 interface GeneralSettingsProps {
-  isMobile: boolean;
   notificationsEnabled: boolean;
   setNotificationsEnabled: (value: boolean) => void;
   soundEnabled: boolean;
@@ -789,7 +788,6 @@ function parseTerminalFontSizeInput(value: string): number | null {
 }
 
 function GeneralSettings({
-  isMobile,
   notificationsEnabled,
   setNotificationsEnabled,
   soundEnabled,
@@ -1408,6 +1406,12 @@ function AppearanceSettings({
   const [mobileTerminalFontSizeError, setMobileTerminalFontSizeError] = useState<string | null>(
     null
   );
+  const lastTerminalFontSizeCommitAtRef = useRef<
+    Record<"desktopTerminalFontSize" | "mobileTerminalFontSize", number>
+  >({
+    desktopTerminalFontSize: 0,
+    mobileTerminalFontSize: 0,
+  });
 
   const saveSettings = async (settings: Record<string, unknown>) => {
     await dispatch("settings.update", { settings });
@@ -1465,6 +1469,15 @@ function AppearanceSettings({
       setError(null);
       return;
     }
+
+    const now = Date.now();
+    if (
+      now - lastTerminalFontSizeCommitAtRef.current[settingKey] <
+      TERMINAL_FONT_SIZE_SAVE_THROTTLE_MS
+    ) {
+      return;
+    }
+    lastTerminalFontSizeCommitAtRef.current[settingKey] = now;
 
     const result = await dispatch("settings.update", {
       settings: {

@@ -1737,6 +1737,52 @@ describe("SettingsPage", () => {
     });
   });
 
+  it("throttles duplicate desktop terminal font-size commits triggered back-to-back", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "appearance.desktopTerminalFontSize": 11,
+          "appearance.mobileTerminalFontSize": 13,
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "外观" }));
+
+    const input = await screen.findByRole("spinbutton", { name: "桌面端终端字号" });
+
+    fireEvent.change(input, { target: { value: "15" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    fireEvent.blur(input);
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            appearance: {
+              desktopTerminalFontSize: 15,
+            },
+          },
+        },
+        undefined
+      );
+    });
+
+    expect(
+      sendCommand.mock.calls.filter(
+        ([op, args]) =>
+          op === "settings.update" &&
+          typeof args === "object" &&
+          args !== null &&
+          "settings" in args
+      )
+    ).toHaveLength(1);
+  });
+
   it("updates mobile terminal font size through the appearance input without changing desktop size", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "settings.get") {

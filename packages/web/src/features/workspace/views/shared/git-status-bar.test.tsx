@@ -32,7 +32,7 @@ function renderStatusBar({
   locale?: "en" | "zh";
   status?: GitStatus | null;
   sendCommand?: ReturnType<typeof vi.fn>;
-  onRefresh?: ReturnType<typeof vi.fn>;
+  onRefresh?: () => Promise<boolean> | Promise<void> | boolean | void;
 } = {}) {
   const store = createStore();
   store.set(localeAtom, locale);
@@ -68,7 +68,7 @@ describe("GitStatusBar", () => {
     );
 
     const buttons = within(toolbar as HTMLElement).getAllByRole("button");
-    expect(buttons.at(-1)).toHaveAccessibleName("Fetch");
+    expect(buttons[buttons.length - 1]).toHaveAccessibleName("Fetch");
   });
 
   it("confirms and pushes local commits from the status bar", async () => {
@@ -996,6 +996,95 @@ describe("GitStatusBar", () => {
     });
 
     expect(store.get(gitFetchAtomFamily("ws-test")).status).toBe("idle");
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("runs local refresh after an auth-retried pull succeeds", async () => {
+    let pullAttempts = 0;
+    const onRefresh = vi.fn();
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.pull") {
+        pullAttempts += 1;
+        if (pullAttempts === 1) {
+          throw new CommandResultError({
+            code: "git_auth_required",
+            message: "Authentication is required",
+            details: {
+              operation: "pull",
+              remote: "origin",
+              remoteLabel: "origin (github.com)",
+              host: "github.com",
+              reason: "missing_credentials",
+              authMode: "username_password",
+              canPrompt: true,
+              usernameHint: "alice",
+            },
+          });
+        }
+
+        return {
+          success: true,
+          message: "Pull completed successfully",
+          remote: "origin",
+          branch: "main",
+          updated: true,
+        };
+      }
+
+      if (op === "git.branches") {
+        return {
+          current: "main",
+          branches: [{ name: "main", isRemote: false, isCurrent: true }],
+        };
+      }
+
+      if (op === "git.status") {
+        return {
+          ...baseStatus,
+          behind: 0,
+        };
+      }
+
+      throw new Error(`Unexpected command: ${op}`);
+    });
+
+    renderStatusBar({
+      sendCommand,
+      onRefresh,
+      status: {
+        ...baseStatus,
+        ahead: 0,
+        behind: 1,
+      },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Pull" }));
+    const confirmModal = screen.getByText("Pull Changes").closest(".modal-card");
+    expect(confirmModal).not.toBeNull();
+    fireEvent.click(within(confirmModal as HTMLElement).getByRole("button", { name: "Pull" }));
+
+    expect(await screen.findByLabelText("Username")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Password or token"), {
+      target: { value: "secret-token" },
+    });
+    const authModal = screen.getByLabelText("Username").closest(".modal-card");
+    expect(authModal).not.toBeNull();
+    fireEvent.click(within(authModal as HTMLElement).getByRole("button", { name: "Pull" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "git.pull",
+        {
+          workspaceId: "ws-test",
+          auth: {
+            username: "alice",
+            password: "secret-token",
+          },
+        },
+        { timeoutMs: 180000 }
+      );
+    });
+
     expect(onRefresh).toHaveBeenCalledTimes(1);
   });
 

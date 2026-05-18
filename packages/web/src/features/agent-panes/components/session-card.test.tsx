@@ -16,6 +16,11 @@ const mockXtermHost = vi.fn((props: Record<string, unknown>) => (
   <div data-testid="mock-xterm-host" data-readonly={String(props.readOnly)} />
 ));
 
+function getLastXtermHostProps() {
+  const lastCall = mockXtermHost.mock.calls[mockXtermHost.mock.calls.length - 1];
+  return lastCall?.[0];
+}
+
 vi.mock("../../terminal-panel/views/shared/xterm-host", () => ({
   XtermHost: (props: Record<string, unknown>) => mockXtermHost(props),
 }));
@@ -105,7 +110,7 @@ describe("SessionCard", () => {
 
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Start" })).not.toBeInTheDocument();
-    expect(mockXtermHost.mock.calls.at(-1)?.[0]).toEqual(
+    expect(getLastXtermHostProps()).toEqual(
       expect.objectContaining({
         terminalId: "term-live",
         readOnly: false,
@@ -149,7 +154,7 @@ describe("SessionCard", () => {
       </Provider>
     );
 
-    expect(mockXtermHost.mock.calls.at(-1)?.[0]).toEqual(
+    expect(getLastXtermHostProps()).toEqual(
       expect.objectContaining({
         terminalId: "term-live",
         isActiveSession: true,
@@ -308,7 +313,7 @@ describe("SessionCard", () => {
       </Provider>
     );
 
-    expect(mockXtermHost.mock.calls.at(-1)?.[0]).toEqual(
+    expect(getLastXtermHostProps()).toEqual(
       expect.objectContaining({
         terminalId: "term-live",
         readOnly: true,
@@ -460,7 +465,7 @@ describe("SessionCard", () => {
       </Provider>
     );
 
-    expect(mockXtermHost.mock.calls.at(-1)?.[0]).toEqual(
+    expect(getLastXtermHostProps()).toEqual(
       expect.objectContaining({
         terminalId: "term-ended",
         readOnly: true,
@@ -509,6 +514,25 @@ describe("SessionCard", () => {
     );
   });
 
+  it("renders stop for running sessions and routes it through the explicit callback", () => {
+    const { store } = createSessionStore({
+      terminalId: "term-live",
+      state: "running",
+      endedAt: undefined,
+    });
+    const onStop = vi.fn();
+
+    render(
+      <Provider store={store}>
+        <SessionCard sessionId="sess_123456" onStop={onStop} />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+
+    expect(onStop).toHaveBeenCalledTimes(1);
+  });
+
   it("routes split buttons through explicit callbacks", () => {
     const { store } = createSessionStore({
       terminalId: "term-live",
@@ -548,7 +572,12 @@ describe("SessionCard", () => {
       </Provider>
     );
 
-    expect(screen.queryByRole("button", { name: "Stop" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Stop" })).toHaveClass(
+      "btn",
+      "btn-ghost",
+      "btn-sm",
+      "session-action-btn"
+    );
     expect(screen.getByRole("button", { name: "Split horizontal" })).toHaveClass(
       "btn",
       "btn-ghost",

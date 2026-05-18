@@ -128,7 +128,6 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({
   const isSyncingAuthAction = Boolean(authIntent && syncingIntent === authIntent);
   const isDialogLocked = isSyncingCurrentAction || isSyncingAuthAction;
   const showConfirmDialog = Boolean(pendingAction && !authPrompt);
-  const showAuthDialog = Boolean(authPrompt);
 
   const openConfirm = (intent: GitSyncIntent, count: number) => {
     if (count <= 0) {
@@ -172,7 +171,8 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({
   };
 
   const submitAuth = async () => {
-    if (!authPrompt) {
+    const currentAuthPrompt = authPrompt;
+    if (!currentAuthPrompt) {
       return;
     }
 
@@ -186,16 +186,16 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({
     }
 
     const success =
-      authPrompt.intent === "push"
+      currentAuthPrompt.intent === "push"
         ? await handlePush(auth)
-        : authPrompt.intent === "pull"
+        : currentAuthPrompt.intent === "pull"
           ? await handlePull(auth)
           : await handleFetch(auth);
 
     if (success) {
       clearAuthPrompt();
       setPendingAction(null);
-      if (authPrompt.intent === "fetch") {
+      if (currentAuthPrompt.intent === "fetch" || currentAuthPrompt.intent === "pull") {
         await onRefresh?.();
       }
     }
@@ -212,6 +212,8 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({
       await onRefresh?.();
     }
   };
+
+  const dialogAuthPrompt = authPrompt;
 
   return (
     <>
@@ -294,7 +296,7 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({
         />
       ) : null}
 
-      {showAuthDialog ? (
+      {dialogAuthPrompt ? (
         <Modal
           className="git-status-bar__confirm"
           dismissible={!isDialogLocked}
@@ -322,7 +324,7 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({
           </ModalHeader>
 
           <ModalBody>
-            {authPrompt.details.canPrompt ? (
+            {dialogAuthPrompt.details.canPrompt ? (
               <form
                 id={authFormId}
                 className="form-group"
@@ -331,7 +333,7 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({
                   void submitAuth();
                 }}
               >
-                <p>{getAuthPromptMessage(authPrompt.details)}</p>
+                <p>{getAuthPromptMessage(dialogAuthPrompt.details)}</p>
                 <span className="dialog-helper">{t("git.auth_helper_http")}</span>
                 <label htmlFor={`git-auth-username-${workspaceId}`}>{t("git.auth_username")}</label>
                 <Input
@@ -344,7 +346,7 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({
                     }))
                   }
                   placeholder={
-                    authPrompt.details.usernameHint ?? t("git.auth_username_placeholder")
+                    dialogAuthPrompt.details.usernameHint ?? t("git.auth_username_placeholder")
                   }
                   autoFocus
                   disabled={isSyncingAuthAction}
@@ -366,7 +368,7 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({
               </form>
             ) : (
               <div className="form-group">
-                <p>{getAuthPromptMessage(authPrompt.details)}</p>
+                <p>{getAuthPromptMessage(dialogAuthPrompt.details)}</p>
                 <span className="dialog-helper">{t("git.auth_helper_unsupported")}</span>
               </div>
             )}
@@ -378,10 +380,10 @@ export const GitStatusBar: FC<GitStatusBarProps> = ({
             </Button>
             <Button
               variant="primary"
-              form={authPrompt.details.canPrompt ? authFormId : undefined}
-              type={authPrompt.details.canPrompt ? "submit" : "button"}
+              form={dialogAuthPrompt.details.canPrompt ? authFormId : undefined}
+              type={dialogAuthPrompt.details.canPrompt ? "submit" : "button"}
               disabled={
-                !authPrompt.details.canPrompt ||
+                !dialogAuthPrompt.details.canPrompt ||
                 isSyncingAuthAction ||
                 !credentials.username.trim() ||
                 !credentials.password
