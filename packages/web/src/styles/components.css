@@ -10763,6 +10763,7 @@ textarea.input {
   }
 
   .welcome-container--mobile {
+    flex-direction: column;
     align-items: stretch;
     justify-content: flex-start;
     min-height: 100dvh;

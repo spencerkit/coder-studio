@@ -1296,6 +1296,16 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(settingsItemIconShell).toContain("border-radius: var(--radius-xl)");
   });
 
+  it("stacks mobile welcome and auth shells vertically so cards size to content", () => {
+    const welcomeContainer = getLastRuleBlock(".welcome-container--mobile");
+    const authScreen = getLastRuleBlock(".auth-screen--mobile");
+
+    expect(welcomeContainer).toContain("flex-direction: column");
+    expect(welcomeContainer).toContain("align-items: stretch");
+    expect(welcomeContainer).toContain("justify-content: flex-start");
+    expect(authScreen).toContain("padding:");
+  });
+
   it("keeps settings content groups and provider controls aligned with editor configuration panels", () => {
     const settingsGroup = getLastRuleBlock(".settings-group");
     const settingsGroupTitle = getLastRuleBlock(".settings-group-title");
