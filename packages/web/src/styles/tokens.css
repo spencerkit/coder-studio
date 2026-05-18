@@ -32,6 +32,14 @@
   --font-mono: "JetBrains Mono", "Sarasa Mono SC", "PingFang SC", monospace;
 
   /* Font Sizes */
+  --font-size-100: 11px;
+  --font-size-200: 12px;
+  --font-size-300: 14px;
+  --font-size-400: 16px;
+  --font-size-500: 18px;
+  --font-size-600: 24px;
+  --font-size-700: 32px;
+
   --text-xs: 11px;
   --text-sm: 12px;
   --text-base: 13px;
@@ -39,6 +47,49 @@
   --text-xl: 16px;
   --text-2xl: 18px;
   --text-3xl: 20px;
+
+  --type-kicker-size: var(--font-size-100);
+  --type-kicker-line-height: 1.2;
+  --type-kicker-weight: var(--font-normal);
+  --type-kicker-letter-spacing: 0.08em;
+
+  --type-label-size: var(--font-size-200);
+  --type-label-line-height: 1.35;
+  --type-label-weight: var(--font-normal);
+
+  --type-meta-size: var(--font-size-200);
+  --type-meta-line-height: 1.45;
+  --type-meta-weight: var(--font-normal);
+
+  --type-body-size: var(--font-size-300);
+  --type-body-line-height: 1.5;
+  --type-body-weight: var(--font-normal);
+
+  --type-body-strong-size: var(--font-size-300);
+  --type-body-strong-line-height: 1.45;
+  --type-body-strong-weight: var(--font-normal);
+
+  --type-code-inline-size: var(--font-size-200);
+  --type-code-inline-line-height: 1.4;
+  --type-code-inline-weight: var(--font-normal);
+  --type-code-inline-family: var(--font-mono);
+
+  --type-app-title-size: var(--font-size-400);
+  --type-app-title-line-height: 1.25;
+  --type-app-title-weight: var(--font-semibold);
+
+  --type-section-title-size: var(--font-size-500);
+  --type-section-title-line-height: 1.2;
+  --type-section-title-weight: var(--font-semibold);
+
+  --type-page-title-size: var(--font-size-600);
+  --type-page-title-line-height: 1.1;
+  --type-page-title-weight: var(--font-semibold);
+
+  --type-display-size: var(--font-size-700);
+  --type-display-line-height: 1.05;
+  --type-display-weight: var(--font-semibold);
+  --type-display-letter-spacing: -0.03em;
 
   /* Line Heights */
   --leading-tight: 1.25;
@@ -94,6 +145,14 @@
 
   /* Topbar */
   --topbar-height: 36px;
+  --desktop-topbar-height: 40px;
+  --desktop-statusbar-height: 28px;
+  --desktop-sidebar-header-height: 40px;
+  --desktop-panel-padding: 12px;
+  --desktop-panel-gap: 12px;
+  --desktop-content-max-width: 880px;
+  --desktop-modal-max-width-md: 680px;
+  --desktop-modal-max-width-lg: 840px;
 
   /* Safe areas */
   --mobile-safe-top: env(safe-area-inset-top, 0px);
@@ -153,6 +212,7 @@
   --text-primary: #e5edf3;
   --text-secondary: #9fb0bc;
   --text-tertiary: #728492;
+  --text-muted: var(--text-tertiary);
   --text-disabled: #4a5b6a;
   --text-inverse: #0a1014;
 
@@ -161,6 +221,7 @@
   --accent-green: #78d7b2;
   --accent-amber: #f1b86a;
   --accent-pink: #ff9eb0;
+  --accent-red: var(--color-error);
   --accent-purple: #c792ea;
 
   /* ========== Semantic Colors ========== */
@@ -168,6 +229,8 @@
   --color-warning: #f1b86a;
   --color-error: #ff9eb0;
   --color-info: #6cb6ff;
+  --bg-panel: color-mix(in srgb, var(--bg-surface) 94%, var(--bg-page));
+  --bg-elevated: color-mix(in srgb, var(--bg-surface) 98%, white 2%);
 
   /* ========== Icon Tokens ========== */
   --icon-primary: var(--text-primary);
@@ -229,6 +292,7 @@
   --text-primary: #1f2328;
   --text-secondary: #557067;
   --text-tertiary: #8b949e;
+  --text-muted: var(--text-tertiary);
   --text-disabled: #6e7681;
   --text-inverse: #ffffff;
 
@@ -237,6 +301,7 @@
   --accent-green: #1a7f37;
   --accent-amber: #9a6700;
   --accent-pink: #cf222e;
+  --accent-red: var(--color-error);
   --accent-purple: #8250df;
 
   /* ========== Semantic Colors ========== */
@@ -244,6 +309,8 @@
   --color-warning: #9a6700;
   --color-error: #cf222e;
   --color-info: #148a7a;
+  --bg-panel: color-mix(in srgb, var(--bg-surface) 92%, var(--bg-sidebar));
+  --bg-elevated: color-mix(in srgb, var(--bg-surface) 96%, white 4%);
 
   /* ========== Icon Tokens ========== */
   --icon-primary: var(--text-primary);
@@ -305,6 +372,7 @@
   --text-primary: #e6e6e6;
   --text-secondary: #a8b0ba;
   --text-tertiary: #7d8590;
+  --text-muted: var(--text-tertiary);
   --text-disabled: #5d6672;
   --text-inverse: #111317;
 
@@ -313,6 +381,7 @@
   --accent-green: #8ddb8c;
   --accent-amber: #dcb86a;
   --accent-pink: #ff7b72;
+  --accent-red: var(--color-error);
   --accent-purple: #c099ff;
 
   /* ========== Semantic Colors ========== */
@@ -320,6 +389,8 @@
   --color-warning: #dcb86a;
   --color-error: #ff7b72;
   --color-info: #7aa2f7;
+  --bg-panel: color-mix(in srgb, var(--bg-surface) 94%, var(--bg-page));
+  --bg-elevated: color-mix(in srgb, var(--bg-surface) 98%, white 2%);
 
   /* ========== Icon Tokens ========== */
   --icon-primary: var(--text-primary);
@@ -381,6 +452,7 @@
   --text-primary: #1f2933;
   --text-secondary: #4d5b6a;
   --text-tertiary: #7b8794;
+  --text-muted: var(--text-tertiary);
   --text-disabled: #9aa5b1;
   --text-inverse: #ffffff;
 
@@ -389,6 +461,7 @@
   --accent-green: #15803d;
   --accent-amber: #a16207;
   --accent-pink: #d14343;
+  --accent-red: var(--color-error);
   --accent-purple: #7c3aed;
 
   /* ========== Semantic Colors ========== */
@@ -396,6 +469,8 @@
   --color-warning: #a16207;
   --color-error: #d14343;
   --color-info: #315fdd;
+  --bg-panel: color-mix(in srgb, var(--bg-surface) 92%, var(--bg-sidebar));
+  --bg-elevated: color-mix(in srgb, var(--bg-surface) 96%, white 4%);
 
   /* ========== Icon Tokens ========== */
   --icon-primary: var(--text-primary);
@@ -457,6 +532,7 @@
   --text-primary: #d8dee9;
   --text-secondary: #b5c1d2;
   --text-tertiary: #7b88a1;
+  --text-muted: var(--text-tertiary);
   --text-disabled: #616e88;
   --text-inverse: #2e3440;
 
@@ -465,6 +541,7 @@
   --accent-green: #a3be8c;
   --accent-amber: #ebcb8b;
   --accent-pink: #bf616a;
+  --accent-red: var(--color-error);
   --accent-purple: #b48ead;
 
   /* ========== Semantic Colors ========== */
@@ -472,6 +549,8 @@
   --color-warning: #ebcb8b;
   --color-error: #bf616a;
   --color-info: #88c0d0;
+  --bg-panel: color-mix(in srgb, var(--bg-surface) 94%, var(--bg-page));
+  --bg-elevated: color-mix(in srgb, var(--bg-surface) 98%, white 2%);
 
   /* ========== Icon Tokens ========== */
   --icon-primary: var(--text-primary);
@@ -533,6 +612,7 @@
   --text-primary: #2e3440;
   --text-secondary: #4d5a6f;
   --text-tertiary: #7b88a1;
+  --text-muted: var(--text-tertiary);
   --text-disabled: #93a0b7;
   --text-inverse: #ffffff;
 
@@ -541,6 +621,7 @@
   --accent-green: #4c7a5b;
   --accent-amber: #a77f2f;
   --accent-pink: #bf616a;
+  --accent-red: var(--color-error);
   --accent-purple: #8f5b9c;
 
   /* ========== Semantic Colors ========== */
@@ -548,6 +629,8 @@
   --color-warning: #a77f2f;
   --color-error: #bf616a;
   --color-info: #5b7fa8;
+  --bg-panel: color-mix(in srgb, var(--bg-surface) 92%, var(--bg-sidebar));
+  --bg-elevated: color-mix(in srgb, var(--bg-surface) 96%, white 4%);
 
   /* ========== Icon Tokens ========== */
   --icon-primary: var(--text-primary);
@@ -609,6 +692,7 @@
   --text-primary: #ffffff;
   --text-secondary: #f0f0f0;
   --text-tertiary: #d0d0d0;
+  --text-muted: var(--text-tertiary);
   --text-disabled: #8f8f8f;
   --text-inverse: #000000;
 
@@ -617,6 +701,7 @@
   --accent-green: #00ff7f;
   --accent-amber: #ffff66;
   --accent-pink: #ff4d4d;
+  --accent-red: var(--color-error);
   --accent-purple: #ff7fff;
 
   /* ========== Semantic Colors ========== */
@@ -624,6 +709,8 @@
   --color-warning: #ffff66;
   --color-error: #ff4d4d;
   --color-info: #66b3ff;
+  --bg-panel: color-mix(in srgb, var(--bg-surface) 92%, #101010);
+  --bg-elevated: color-mix(in srgb, var(--bg-surface) 98%, white 2%);
 
   /* ========== Icon Tokens ========== */
   --icon-primary: #ffffff;
@@ -685,6 +772,7 @@
   --text-primary: #000000;
   --text-secondary: #111111;
   --text-tertiary: #333333;
+  --text-muted: var(--text-tertiary);
   --text-disabled: #5c5c5c;
   --text-inverse: #ffffff;
 
@@ -693,6 +781,7 @@
   --accent-green: #006b3c;
   --accent-amber: #7a5c00;
   --accent-pink: #b00020;
+  --accent-red: var(--color-error);
   --accent-purple: #7a00cc;
 
   /* ========== Semantic Colors ========== */
@@ -700,6 +789,8 @@
   --color-warning: #7a5c00;
   --color-error: #b00020;
   --color-info: #0037da;
+  --bg-panel: color-mix(in srgb, var(--bg-surface) 92%, #f0f0f0);
+  --bg-elevated: color-mix(in srgb, var(--bg-surface) 96%, white 4%);
 
   /* ========== Icon Tokens ========== */
   --icon-primary: #000000;
@@ -743,6 +834,15 @@
 /* ========== Mobile / Touch Override (Phase 0) ========== */
 @media (max-width: 899px) {
   :root {
+    --font-size-100: 12px;
+    --font-size-200: 13px;
+    --font-size-300: 15px;
+    --font-size-400: 17px;
+    --font-size-500: 20px;
+    --font-size-600: 28px;
+    --font-size-700: 36px;
+    --type-body-line-height: 1.55;
+    --type-body-strong-line-height: 1.5;
     --touch-target-min: 44px;
     --touch-target-comfortable: 48px;
     --touch-target-large: 56px;

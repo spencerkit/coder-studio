@@ -7,15 +7,15 @@
   padding: 0 var(--sp-2);
   border-radius: var(--radius-sm);
   font-family: var(--font-sans);
-  font-size: 10px;
-  font-weight: var(--font-semibold);
-  letter-spacing: 0.04em;
+  font-size: var(--type-kicker-size);
+  line-height: var(--type-kicker-line-height);
+  font-weight: var(--type-kicker-weight);
+  letter-spacing: var(--type-kicker-letter-spacing);
   text-transform: uppercase;
 }
 
 .sm {
   height: 18px;
-  font-size: 9px;
   padding: 0 var(--sp-1);
 }
 

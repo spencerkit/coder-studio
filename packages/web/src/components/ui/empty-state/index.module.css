@@ -19,15 +19,18 @@
 
 .title {
   color: var(--text-primary);
-  font-size: var(--text-base);
-  font-weight: var(--font-medium);
+  font-size: var(--type-app-title-size);
+  line-height: var(--type-app-title-line-height);
+  font-weight: var(--type-app-title-weight);
 }
 
 .description {
   width: min(100%, 30rem);
   max-width: 30rem;
   color: var(--text-secondary);
-  line-height: 1.6;
+  font-size: var(--type-body-size);
+  line-height: var(--type-body-line-height);
+  font-weight: var(--type-body-weight);
 }
 
 .action {

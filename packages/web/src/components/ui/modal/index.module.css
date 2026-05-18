@@ -53,14 +53,56 @@
   border-bottom: 1px solid var(--border);
 }
 
+.dialogHeader,
+:global(.dialog-header) {
+  align-items: flex-start;
+}
+
+:global(.dialog-header__leading) {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  min-width: 0;
+  flex: 1;
+}
+
+:global(.dialog-header__copy) {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+:global(.dialog-header__icon) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-md);
+  flex-shrink: 0;
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+:global(.dialog-header__description) {
+  margin: 0;
+  font-size: var(--type-meta-size);
+  line-height: var(--type-meta-line-height);
+  font-weight: var(--type-meta-weight);
+  color: var(--text-tertiary);
+}
+
 .title,
 :global(.modal-title) {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
   margin: 0;
-  font-size: var(--text-lg);
-  font-weight: var(--font-semibold);
+  font-size: var(--type-section-title-size);
+  line-height: var(--type-section-title-line-height);
+  font-weight: var(--type-section-title-weight);
   color: var(--text-primary);
 }
 
@@ -110,6 +152,8 @@
 
   .header,
   :global(.modal-header),
+  .dialogHeader,
+  :global(.dialog-header),
   .body,
   :global(.modal-body),
   .footer,

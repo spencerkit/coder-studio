@@ -56,7 +56,7 @@ describe("database schema baseline", () => {
     const supervisorColumns = db.prepare("PRAGMA table_info(supervisors)").all() as Array<{
       name: string;
     }>;
-    expect(supervisorColumns.find((column) => column.name === "target_id")).toBeDefined();
+    expect(supervisorColumns.find((column) => column.name === "target_id")).toBeUndefined();
 
     const indexNames = (
       db.prepare("SELECT name FROM sqlite_master WHERE type='index' ORDER BY name").all() as Array<{

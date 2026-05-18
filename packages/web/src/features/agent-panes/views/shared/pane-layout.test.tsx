@@ -38,13 +38,13 @@ describe("PaneLayout", () => {
     const layout = container.firstElementChild as HTMLDivElement;
     const divider = container.querySelector(".pane-layout-divider");
 
-    expect(layout.style.gridTemplateColumns).toBe("50% 8px 50%");
+    expect(layout.style.gridTemplateColumns).toBe("50% 0px 50%");
 
     fireEvent.mouseDown(divider!);
     fireEvent.mouseMove(document, { clientX: 250 });
     fireEvent.mouseUp(document);
 
-    expect(layout.style.gridTemplateColumns).toBe("25% 8px 75%");
+    expect(layout.style.gridTemplateColumns).toBe("25% 0px 75%");
 
     rerender(
       <PaneLayout splitId="split-b" direction="horizontal" ratio={0.5}>
@@ -54,7 +54,7 @@ describe("PaneLayout", () => {
     );
 
     expect((container.firstElementChild as HTMLDivElement).style.gridTemplateColumns).toBe(
-      "50% 8px 50%"
+      "50% 0px 50%"
     );
   });
 
@@ -75,7 +75,7 @@ describe("PaneLayout", () => {
     fireEvent.mouseDown(divider!);
     fireEvent.mouseMove(document, { clientX: 300 });
 
-    expect(layout.style.gridTemplateColumns).toBe("30% 8px 70%");
+    expect(layout.style.gridTemplateColumns).toBe("30% 0px 70%");
     expect(onRatioCommit).not.toHaveBeenCalled();
 
     fireEvent.mouseMove(document, { clientX: 350 });

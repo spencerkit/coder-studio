@@ -90,8 +90,8 @@ export const PaneLayout: FC<PaneLayoutProps> = ({
 
   const style =
     direction === "horizontal"
-      ? { gridTemplateColumns: `${currentRatio * 100}% 8px ${(1 - currentRatio) * 100}%` }
-      : { gridTemplateRows: `${currentRatio * 100}% 8px ${(1 - currentRatio) * 100}%` };
+      ? { gridTemplateColumns: `${currentRatio * 100}% 0px ${(1 - currentRatio) * 100}%` }
+      : { gridTemplateRows: `${currentRatio * 100}% 0px ${(1 - currentRatio) * 100}%` };
 
   return (
     <div

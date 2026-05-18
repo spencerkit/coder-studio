@@ -1,7 +1,9 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Provider } from "jotai";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { terminalOutputAtomFamily } from "../features/terminal-panel/atoms";
+import { getThemeById } from "../theme";
 import { getUiPreviewScene, UI_PREVIEW_SCENES } from "./catalog";
 import { buildUiPreviewStore } from "./preview-store";
 
@@ -24,16 +26,24 @@ function installMatchMedia(device: "desktop" | "mobile") {
   });
 }
 
-function renderScene(sceneId: string, device: "desktop" | "mobile" = "desktop") {
+function renderScene(
+  sceneId: string,
+  device: "desktop" | "mobile" = "desktop",
+  theme: "mint-dark" | "mint-light" = "mint-dark"
+) {
   const scene = getUiPreviewScene(sceneId);
   if (!scene) {
     throw new Error(`Missing scene ${sceneId}`);
   }
 
   installMatchMedia(device);
-  const context = { theme: "mint-dark" as const, locale: "en" as const, device };
+  const context = { theme, locale: "en" as const, device };
   const store = buildUiPreviewStore(scene.seed(context));
   const router = scene.router(context);
+
+  document.documentElement.setAttribute("data-theme", getThemeById(theme).documentThemeAttr);
+  document.documentElement.setAttribute("lang", "en");
+  document.body.dataset.uiPreviewDevice = device;
 
   return render(
     <Provider store={store}>
@@ -56,6 +66,9 @@ describe("UI preview catalog", () => {
 
   afterEach(() => {
     window.matchMedia = originalMatchMedia;
+    document.documentElement.removeAttribute("data-theme");
+    document.documentElement.removeAttribute("lang");
+    delete document.body.dataset.uiPreviewDevice;
   });
 
   it("registers unique first-batch page scene ids", () => {
@@ -140,6 +153,58 @@ describe("UI preview catalog", () => {
     expect(document.querySelector(".launch-modal, .mobile-sheet--launch")).toBeTruthy();
   });
 
+  it("renders the mobile terminal showcase without the replay loading overlay", async () => {
+    renderScene("mobile-terminal-sheet", "mobile");
+
+    await waitFor(() => {
+      expect(screen.queryByText("Restoring terminal output...")).not.toBeInTheDocument();
+    });
+    expect(document.querySelector(".mobile-sheet--terminal")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "New Terminal" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Close Terminal" })).toBeInTheDocument();
+    expect(
+      document.querySelector(".mobile-sheet--terminal .terminal-toolbar-mobile-row")
+    ).toBeTruthy();
+    expect(
+      document.querySelector(
+        '.mobile-sheet--terminal .page-header__actions [aria-label="New Terminal"]'
+      )
+    ).toBeNull();
+    expect(
+      document.querySelector(
+        '.mobile-sheet--terminal .terminal-toolbar [aria-label="New Terminal"]'
+      )
+    ).toBeTruthy();
+    expect(document.querySelector(".mobile-sheet--terminal .workspace-status-bar")).toBeTruthy();
+    expect(document.querySelector(".mobile-sheet--terminal .terminal-toolbar-left")).toBeNull();
+  });
+
+  it("captures the mobile terminal showcase from the fullscreen terminal sheet root", () => {
+    const scene = getUiPreviewScene("mobile-terminal-sheet");
+    expect(scene?.capture?.selector).toBe(".mobile-sheet--terminal");
+    expect(scene?.devices).toEqual(["mobile"]);
+  });
+
+  it("keeps mobile terminal showcase history in replay state instead of preloading live output", () => {
+    const scene = getUiPreviewScene("mobile-terminal-sheet");
+    if (!scene) {
+      throw new Error("Missing mobile-terminal-sheet scene");
+    }
+
+    const store = buildUiPreviewStore(
+      scene.seed({
+        theme: "mint-dark",
+        locale: "en",
+        device: "mobile",
+      })
+    );
+
+    expect(store.get(terminalOutputAtomFamily("term-preview-1"))).toEqual({
+      chunks: [],
+      lastSeq: 0,
+    });
+  });
+
   it("renders the shortcuts settings scene with the shortcuts list", async () => {
     renderScene("settings-shortcuts");
 
@@ -151,8 +216,11 @@ describe("UI preview catalog", () => {
   it("renders the mobile settings root scene as the section list", async () => {
     renderScene("settings-mobile-root", "mobile");
 
-    expect(await screen.findByText("Settings")).toBeInTheDocument();
-    expect(document.querySelector(".settings-mobile-list")).toBeTruthy();
+    expect(await screen.findByRole("button", { name: /general/i })).toBeInTheDocument();
+    expect(document.querySelector(".settings-mobile-root")).toBeTruthy();
+    expect(document.querySelector(".settings-mobile-group")).toBeTruthy();
+    expect(document.querySelector(".settings-mobile-group__list")).toBeTruthy();
+    expect(document.querySelector(".settings-mobile-root-hero")).toBeNull();
   });
 
   it("renders the app loading shell scene without bootstrapping routes", async () => {
@@ -197,5 +265,101 @@ describe("UI preview catalog", () => {
 
     expect(await screen.findByText("Workspace opened")).toBeInTheDocument();
     expect(document.querySelectorAll(".toast").length).toBeGreaterThanOrEqual(4);
+  });
+
+  it("renders the workspace topbar review scene", async () => {
+    renderScene("workspace-topbar-review");
+
+    expect(await screen.findByRole("tablist", { name: "Workspace tabs" })).toBeInTheDocument();
+    expect(document.querySelector(".desktop-review-card--topbar .app-topbar")).toBeTruthy();
+  });
+
+  it("renders the workspace sidebar files review scene", async () => {
+    renderScene("workspace-sidebar-files-review");
+
+    expect(await screen.findByText("packages")).toBeInTheDocument();
+    expect(document.querySelector(".desktop-review-card--sidebar .file-tree-shell")).toBeTruthy();
+  });
+
+  it("renders the workspace sidebar git review scene", async () => {
+    renderScene("workspace-sidebar-git-review");
+
+    expect(await screen.findByText(/changes|更改/i)).toBeInTheDocument();
+    expect(document.querySelector(".desktop-review-card--sidebar .git-panel")).toBeTruthy();
+  });
+
+  it("renders the workspace editor review scene", async () => {
+    renderScene("workspace-editor-review");
+
+    expect(
+      await screen.findByText("packages/web/src/features/settings/components/settings-page.tsx")
+    ).toBeInTheDocument();
+    expect(
+      document.querySelector(".desktop-review-card--editor .workspace-git-editor")
+    ).toBeTruthy();
+    expect(screen.getByText("const headerTitle = isMobile")).toBeInTheDocument();
+  });
+
+  it("renders the workspace diff review scene", async () => {
+    renderScene("workspace-diff-review");
+
+    expect(await screen.findByText("packages/web/src/styles/components.css")).toBeInTheDocument();
+    expect(document.querySelector(".desktop-review-card--diff .workspace-git-editor")).toBeTruthy();
+    expect(screen.getByText(/\+\s+background: var\(--bg-elevated\);/)).toBeInTheDocument();
+  });
+
+  it("renders the workspace terminal empty review scene", async () => {
+    renderScene("workspace-terminal-empty-review");
+
+    expect(await screen.findByText(/no terminal|暂无终端/i)).toBeInTheDocument();
+    expect(
+      document.querySelector(".desktop-review-card--terminal .bottom-terminal-empty")
+    ).toBeTruthy();
+  });
+
+  it("renders the settings density review scene", async () => {
+    renderScene("settings-density-review");
+
+    expect(await screen.findByRole("heading", { name: /settings|设置/i })).toBeInTheDocument();
+    expect(document.querySelector(".settings-header .page-header")).toBeTruthy();
+    expect(document.querySelector(".settings-sidebar")).toBeTruthy();
+  });
+
+  it("renders the settings light theme review scene", async () => {
+    renderScene("settings-light-theme-review", "desktop", "mint-light");
+
+    expect(await screen.findByRole("heading", { name: /settings|设置/i })).toBeInTheDocument();
+    expect(document.querySelector(".settings-page")).toBeTruthy();
+    expect(document.querySelector(".settings-nav-item")).toBeTruthy();
+    expect(document.documentElement).toHaveAttribute("data-theme", "mint-light");
+  });
+
+  it("renders the desktop overlay review scene", async () => {
+    renderScene("desktop-overlay-review");
+
+    expect(await screen.findByText("Open Workspace")).toBeInTheDocument();
+    expect(document.querySelector(".desktop-review-grid")).toBeTruthy();
+    expect(document.querySelector(".desktop-review-card .command-palette")).toBeTruthy();
+    expect(document.querySelector(".desktop-review-card .launch-modal")).toBeTruthy();
+    expect(
+      document.querySelector(".desktop-review-card .desktop-review-embedded-worktree")
+    ).toBeTruthy();
+
+    const embeddedSurface = document.querySelector(
+      ".desktop-review-card--worktree .worktree-manager-surface"
+    );
+
+    expect(embeddedSurface).toBeTruthy();
+    expect(embeddedSurface?.closest(".desktop-review-card--worktree")).toBeTruthy();
+    expect(document.querySelector(".desktop-review-card--worktree .modal-overlay")).toBeNull();
+  });
+
+  it("renders the desktop statusbar review scene", async () => {
+    renderScene("desktop-statusbar-review");
+
+    expect(await screen.findByText("main")).toBeInTheDocument();
+    expect(
+      document.querySelector(".desktop-review-card--statusbar .workspace-status-bar")
+    ).toBeTruthy();
   });
 });

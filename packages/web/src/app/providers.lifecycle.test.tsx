@@ -1,6 +1,6 @@
 import type { Workspace } from "@coder-studio/core";
 import { act, render } from "@testing-library/react";
-import { createStore, Provider } from "jotai";
+import { createStore, Provider, useAtomValue } from "jotai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   activationGenerationAtom,
@@ -64,6 +64,11 @@ function renderProviders(store = createStore()) {
   return { store, ...rendered };
 }
 
+function TerminalPreferencesProbe() {
+  useAtomValue(terminalPreferencesAtom);
+  return null;
+}
+
 function createWsSendCommandMock(
   handler?: (op: string, args: unknown) => Promise<unknown> | unknown
 ) {
@@ -89,6 +94,16 @@ function createWsSendCommandMock(
 
     return undefined;
   });
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
 }
 
 function setVisibilityState(value: "visible" | "hidden") {
@@ -771,7 +786,7 @@ describe("AppProviders lifecycle recovery", () => {
     expect(wsState.client?.recoverConnection).not.toHaveBeenCalled();
   });
 
-  it("hydrates terminal copy-on-select preferences from settings.get once connected", async () => {
+  it("hydrates terminal copy-on-select and font size preferences from settings.get once connected", async () => {
     const store = createStore();
     setVisibilityState("visible");
 
@@ -779,6 +794,8 @@ describe("AppProviders lifecycle recovery", () => {
       if (op === "settings.get") {
         return {
           "appearance.terminalCopyOnSelect": true,
+          "appearance.desktopTerminalFontSize": 17,
+          "appearance.mobileTerminalFontSize": 15,
         };
       }
 
@@ -797,10 +814,223 @@ describe("AppProviders lifecycle recovery", () => {
     });
 
     await vi.waitFor(() => {
-      expect(store.get(terminalPreferencesAtom)).toEqual({ copyOnSelect: true });
+      expect(store.get(terminalPreferencesAtom)).toEqual({
+        copyOnSelect: true,
+        desktopFontSize: 17,
+        mobileFontSize: 15,
+        fontSize: 17,
+      });
     });
 
     expect(sendCommand).toHaveBeenCalledWith("settings.get", {}, undefined);
+  });
+
+  it("preserves a newer local desktop terminal font size update while hydrating untouched copy-on-select", async () => {
+    const store = createStore();
+    setVisibilityState("visible");
+    const settingsGetDeferred = createDeferred<Record<string, unknown>>();
+
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return settingsGetDeferred.promise;
+      }
+
+      return undefined;
+    });
+    wsState.client!.sendCommand = sendCommand;
+
+    renderProviders(store);
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
+
+    act(() => {
+      wsState.client?.statusHandler?.("connected");
+    });
+
+    await vi.waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith("settings.get", {}, undefined);
+    });
+
+    act(() => {
+      store.set(terminalPreferencesAtom, {
+        copyOnSelect: false,
+        desktopFontSize: 14,
+        mobileFontSize: 11,
+        fontSize: 14,
+      });
+    });
+
+    await act(async () => {
+      settingsGetDeferred.resolve({
+        "appearance.terminalCopyOnSelect": true,
+        "appearance.desktopTerminalFontSize": 18,
+        "appearance.mobileTerminalFontSize": 16,
+      });
+      await settingsGetDeferred.promise;
+    });
+
+    expect(store.get(terminalPreferencesAtom)).toEqual({
+      copyOnSelect: true,
+      desktopFontSize: 14,
+      mobileFontSize: 16,
+      fontSize: 18,
+    });
+  });
+
+  it("hydrates untouched terminal font size fields when another field was updated locally first", async () => {
+    const store = createStore();
+    setVisibilityState("visible");
+    const settingsGetDeferred = createDeferred<Record<string, unknown>>();
+
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return settingsGetDeferred.promise;
+      }
+
+      return undefined;
+    });
+    wsState.client!.sendCommand = sendCommand;
+
+    renderProviders(store);
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
+
+    act(() => {
+      wsState.client?.statusHandler?.("connected");
+    });
+
+    await vi.waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith("settings.get", {}, undefined);
+    });
+
+    act(() => {
+      store.set(terminalPreferencesAtom, {
+        copyOnSelect: true,
+        desktopFontSize: 11,
+        mobileFontSize: 11,
+        fontSize: 11,
+      });
+    });
+
+    await act(async () => {
+      settingsGetDeferred.resolve({
+        "appearance.terminalCopyOnSelect": false,
+        "appearance.desktopTerminalFontSize": 18,
+        "appearance.mobileTerminalFontSize": 12,
+      });
+      await settingsGetDeferred.promise;
+    });
+
+    expect(store.get(terminalPreferencesAtom)).toEqual({
+      copyOnSelect: true,
+      desktopFontSize: 18,
+      mobileFontSize: 12,
+      fontSize: 18,
+    });
+  });
+
+  it("falls back to the default terminal font size when persisted split settings are fractional", async () => {
+    const store = createStore();
+    setVisibilityState("visible");
+
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "appearance.terminalCopyOnSelect": true,
+          "appearance.desktopTerminalFontSize": 11.5,
+          "appearance.mobileTerminalFontSize": 12.2,
+        };
+      }
+
+      return undefined;
+    });
+    wsState.client!.sendCommand = sendCommand;
+
+    renderProviders(store);
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
+
+    act(() => {
+      wsState.client?.statusHandler?.("connected");
+    });
+
+    await vi.waitFor(() => {
+      expect(store.get(terminalPreferencesAtom)).toEqual({
+        copyOnSelect: true,
+        desktopFontSize: 11,
+        mobileFontSize: 11,
+        fontSize: 11,
+      });
+    });
+  });
+
+  it("falls back to the legacy shared terminal font size when split settings are absent", async () => {
+    const store = createStore();
+    setVisibilityState("visible");
+
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "appearance.terminalCopyOnSelect": true,
+          "appearance.terminalFontSize": 16,
+        };
+      }
+
+      return undefined;
+    });
+    wsState.client!.sendCommand = sendCommand;
+
+    renderProviders(store);
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
+
+    act(() => {
+      wsState.client?.statusHandler?.("connected");
+    });
+
+    await vi.waitFor(() => {
+      expect(store.get(terminalPreferencesAtom)).toEqual({
+        copyOnSelect: true,
+        desktopFontSize: 16,
+        mobileFontSize: 16,
+        fontSize: 16,
+      });
+    });
+  });
+
+  it("normalizes legacy local terminal preferences into split desktop and mobile font sizes", async () => {
+    localStorage.setItem(
+      "ui.terminalPreferences",
+      JSON.stringify({
+        copyOnSelect: true,
+        fontSize: 14,
+      })
+    );
+
+    const store = createStore();
+
+    render(
+      <Provider store={store}>
+        <TerminalPreferencesProbe />
+      </Provider>
+    );
+
+    await vi.waitFor(() => {
+      expect(store.get(terminalPreferencesAtom)).toEqual({
+        copyOnSelect: true,
+        desktopFontSize: 14,
+        mobileFontSize: 14,
+        fontSize: 14,
+      });
+    });
   });
 
   it("bootstraps the document theme from legacy ui.theme localStorage", async () => {
@@ -1042,7 +1272,12 @@ describe("AppProviders lifecycle recovery", () => {
     });
 
     act(() => {
-      store.set(terminalPreferencesAtom, { copyOnSelect: true });
+      store.set(terminalPreferencesAtom, {
+        copyOnSelect: true,
+        desktopFontSize: 11,
+        mobileFontSize: 11,
+        fontSize: 11,
+      });
     });
 
     await act(async () => {
@@ -1050,7 +1285,12 @@ describe("AppProviders lifecycle recovery", () => {
       await settingsGetPromise;
     });
 
-    expect(store.get(terminalPreferencesAtom)).toEqual({ copyOnSelect: true });
+    expect(store.get(terminalPreferencesAtom)).toEqual({
+      copyOnSelect: true,
+      desktopFontSize: 11,
+      mobileFontSize: 11,
+      fontSize: 11,
+    });
   });
 
   it("preserves an ABA local terminal copy-on-select update when startup hydration resolves later", async () => {
@@ -1058,7 +1298,12 @@ describe("AppProviders lifecycle recovery", () => {
     setVisibilityState("visible");
 
     act(() => {
-      store.set(terminalPreferencesAtom, { copyOnSelect: true });
+      store.set(terminalPreferencesAtom, {
+        copyOnSelect: true,
+        desktopFontSize: 11,
+        mobileFontSize: 11,
+        fontSize: 11,
+      });
     });
 
     let resolveSettingsGet: ((value: Record<string, unknown>) => void) | undefined;
@@ -1089,8 +1334,18 @@ describe("AppProviders lifecycle recovery", () => {
     });
 
     act(() => {
-      store.set(terminalPreferencesAtom, { copyOnSelect: false });
-      store.set(terminalPreferencesAtom, { copyOnSelect: true });
+      store.set(terminalPreferencesAtom, {
+        copyOnSelect: false,
+        desktopFontSize: 11,
+        mobileFontSize: 11,
+        fontSize: 11,
+      });
+      store.set(terminalPreferencesAtom, {
+        copyOnSelect: true,
+        desktopFontSize: 11,
+        mobileFontSize: 11,
+        fontSize: 11,
+      });
     });
 
     await act(async () => {
@@ -1100,7 +1355,12 @@ describe("AppProviders lifecycle recovery", () => {
       await settingsGetPromise;
     });
 
-    expect(store.get(terminalPreferencesAtom)).toEqual({ copyOnSelect: true });
+    expect(store.get(terminalPreferencesAtom)).toEqual({
+      copyOnSelect: true,
+      desktopFontSize: 11,
+      mobileFontSize: 11,
+      fontSize: 11,
+    });
   });
 
   it("marks the session authenticated when /auth/status confirms an existing server session", async () => {

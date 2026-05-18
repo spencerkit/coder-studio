@@ -489,6 +489,10 @@
     "general": "通用",
     "appearance": "外观",
     "providers": "Agents",
+    "mobile_groups": {
+      "workspace_runtime": "工作区与运行",
+      "interface_interaction": "界面与交互"
+    },
     "autosave_hint": "设置已自动保存",
     "load_failed": "设置加载失败",
     "load_failed_unknown": "未收到服务端返回的设置数据",
@@ -528,8 +532,16 @@
     },
     "terminal_renderer": "终端渲染器",
     "terminal_renderer_hint": "选择终端渲染模式",
+    "terminal_appearance": "终端外观",
     "copy_on_select": "选中自动复制",
     "copy_on_select_hint": "选中文本后自动复制到系统剪贴板",
+    "terminal_font_size": "终端字号",
+    "terminal_font_size_hint": "分别设置桌面端和移动端终端字号，已打开的终端会立即更新。",
+    "desktop_terminal_font_size": "桌面端终端字号",
+    "desktop_terminal_font_size_hint": "应用于 PC 和其他桌面端终端。",
+    "mobile_terminal_font_size": "移动端终端字号",
+    "mobile_terminal_font_size_hint": "应用于手机和平板等移动端终端。",
+    "terminal_font_size_validation_error": "请输入 {min} 到 {max} 之间的整数。",
     "copy_on_select_failed_title": "自动复制失败",
     "copy_on_select_failed_body": "请使用 Ctrl/Cmd+C 手动复制",
     "terminal_standard": "标准",
@@ -598,6 +610,7 @@
     },
     "shortcuts": {
       "title": "快捷键",
+      "hint": "查看并调整常用键盘操作",
       "reset_all": "重置全部",
       "capture_hint": "按下新的快捷键组合",
       "reset_hint": "重置为默认"
@@ -676,8 +689,7 @@
     "stop_reason": {
       "objective_complete": "目标已达成，Supervisor 已自动停止。",
       "max_supervision_count_reached": "已达到配置的最大监督次数。",
-      "supervisor_uncertain": "Supervisor 暂时无法判断下一步，已停止自动监督。",
-      "needs_user_input": "Supervisor 需要更多用户输入后才能继续自动监督。"
+      "supervisor_uncertain": "Supervisor 暂时无法判断下一步，已停止自动监督。"
     },
     "target_memory": {
       "title": "目标记忆",

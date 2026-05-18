@@ -203,6 +203,43 @@ describe("ObjectiveDialog", () => {
     expect(screen.getByRole("dialog")).toHaveClass("supervisor-dialog--disable");
   });
 
+  it("renders the dialog header through the canonical dialog header anatomy", () => {
+    const store = createStore();
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+    store.set(
+      supervisorDialogAtom,
+      createDialogState({
+        mode: "disable",
+      })
+    );
+    store.set(supervisorsAtom, new Map([["sess-1", createSupervisor()]]));
+
+    render(
+      <Provider store={store}>
+        <ObjectiveDialog workspaceId="ws-1" />
+      </Provider>
+    );
+
+    const dialog = screen.getByRole("dialog");
+    const header = dialog.querySelector(".dialog-header");
+    const leading = header?.querySelector(".dialog-header__leading");
+    const icon = header?.querySelector(".dialog-header__icon");
+    const copy = header?.querySelector(".dialog-header__copy");
+    const description = header?.querySelector(".dialog-header__description");
+    const closeButton = screen.getByRole("button", { name: "Close" });
+
+    expect(header).not.toBeNull();
+    expect(leading).not.toBeNull();
+    expect(icon).not.toBeNull();
+    expect(copy).not.toBeNull();
+    expect(description).toHaveTextContent(
+      "Stop automatic evaluation. The current session's supervision cycles will be removed."
+    );
+    expect(closeButton).toHaveClass("modal-close");
+  });
+
   it("renders footer actions with shared button compatibility classes", () => {
     const store = createStore();
     window.localStorage.setItem("ui.locale", JSON.stringify("en"));

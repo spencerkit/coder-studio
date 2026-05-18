@@ -1,14 +1,6 @@
-import { Button, EmptyState } from "../../components/ui";
+import { Button } from "../../components/ui";
 import { useViewport } from "../../hooks/use-viewport";
 import { useTranslation } from "../../lib/i18n";
-
-const gateEmptyStateStyle = {
-  minHeight: "auto",
-  padding: 0,
-  gap: "var(--sp-5)",
-  alignItems: "stretch",
-  textAlign: "left" as const,
-};
 
 export function SessionGatePage() {
   const t = useTranslation();
@@ -33,31 +25,30 @@ export function SessionGatePage() {
           .filter(Boolean)
           .join(" ")}
       >
-        <EmptyState
-          style={gateEmptyStateStyle}
-          title={
-            <div>
-              <div className="welcome-kicker">{t("auth.session_gate_title")}</div>
-              <h1 className="welcome-title">{t("app.name")}</h1>
-            </div>
-          }
-          description={
-            <p className="welcome-body auth-card-desc">{t("auth.session_gate_description")}</p>
-          }
-        />
-        <div className="auth-status-panel auth-status-panel-error">
-          <div className="auth-status-eyebrow">{t("auth.status_title")}</div>
-          <p className="auth-status-detail">{t("auth.session_gate_detail")}</p>
+        <div className="auth-card-shell__content">
+          <section className="auth-hero">
+            <div className="welcome-kicker page-kicker">{t("auth.session_gate_title")}</div>
+            <h1 className="welcome-title page-title">{t("app.name")}</h1>
+            <p className="welcome-body auth-card-desc meta-text">
+              {t("auth.session_gate_description")}
+            </p>
+          </section>
+          <section className="auth-status-panel auth-status-panel-error">
+            <div className="auth-status-eyebrow">{t("auth.status_title")}</div>
+            <p className="auth-status-detail">{t("auth.session_gate_detail")}</p>
+          </section>
+          <div className="auth-actions">
+            <Button
+              className="auth-submit"
+              variant="primary"
+              size="lg"
+              type="button"
+              onClick={() => window.location.replace("/")}
+            >
+              {t("auth.session_gate_reenter")}
+            </Button>
+          </div>
         </div>
-        <Button
-          className="auth-submit"
-          variant="primary"
-          size="lg"
-          type="button"
-          onClick={() => window.location.replace("/")}
-        >
-          {t("auth.session_gate_reenter")}
-        </Button>
       </div>
     </div>
   );

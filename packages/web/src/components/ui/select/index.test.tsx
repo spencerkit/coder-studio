@@ -202,6 +202,7 @@ describe("Select", () => {
     expect(trigger).toHaveClass("input", "mobile-select-trigger");
     expect(trigger).toHaveAttribute("aria-describedby", "evaluator-helper");
     expect(trigger).toHaveAttribute("aria-haspopup", "dialog");
+    expect(trigger).not.toHaveAttribute("mobile");
 
     fireEvent.click(trigger);
     expect(onOpen).toHaveBeenCalledTimes(1);

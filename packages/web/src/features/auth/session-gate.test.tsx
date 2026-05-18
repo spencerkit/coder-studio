@@ -60,6 +60,25 @@ describe("SessionGatePage", () => {
     expect(screen.getByRole("button", { name: "重新进入" })).toBeInTheDocument();
   });
 
+  it("uses the same segmented auth shell without rendering a password field", () => {
+    const store = createStore();
+    store.set(authEnabledAtom, false);
+    store.set(activationStatusAtom, "gated");
+
+    const { container } = render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <SessionGatePage />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    expect(container.querySelector(".auth-hero")).toBeTruthy();
+    expect(container.querySelector(".auth-status-panel")).toBeTruthy();
+    expect(container.querySelector(".auth-actions")).toBeTruthy();
+    expect(screen.queryByLabelText("密码")).not.toBeInTheDocument();
+  });
+
   it("returns to the app bootstrap entry when re-enter is clicked", async () => {
     const store = createStore();
     store.set(authEnabledAtom, false);

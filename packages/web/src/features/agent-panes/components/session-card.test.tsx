@@ -157,6 +157,38 @@ describe("SessionCard", () => {
     );
   });
 
+  it("adds an active class when the workspace ui state targets this session", () => {
+    const { store } = createSessionStore({
+      terminalId: "term-live",
+      state: "running",
+      endedAt: undefined,
+    });
+
+    store.set(workspacesAtom, {
+      "ws-123": {
+        id: "ws-123",
+        path: "/tmp/ws-123",
+        targetRuntime: "native",
+        openedAt: Date.now() - 10_000,
+        lastActiveAt: Date.now() - 500,
+        uiState: {
+          leftPanelWidth: 320,
+          bottomPanelHeight: 240,
+          focusMode: false,
+          activeSessionId: "sess_123456",
+        },
+      },
+    });
+
+    const { container } = render(
+      <Provider store={store}>
+        <SessionCard sessionId="sess_123456" />
+      </Provider>
+    );
+
+    expect(container.querySelector(".session-card")).toHaveClass("session-card--active");
+  });
+
   it("hides header actions when showHeaderActions is false", () => {
     const { store } = createSessionStore({
       terminalId: "term-live",
@@ -194,7 +226,7 @@ describe("SessionCard", () => {
     );
   });
 
-  it("renders a decorative session status strip with legacy session classes", () => {
+  it("does not render the legacy session progress strip", () => {
     const { store } = createSessionStore({
       terminalId: "term-live",
       state: "running",
@@ -207,15 +239,8 @@ describe("SessionCard", () => {
       </Provider>
     );
 
-    const progress = container.querySelector(".session-progress");
-    const fill = container.querySelector(".session-progress-bar.session-progress-running");
-
-    expect(progress).toHaveAttribute("aria-hidden", "true");
-    expect(progress).not.toHaveAttribute("role");
-    expect(progress).not.toHaveAttribute("aria-valuemin");
-    expect(progress).not.toHaveAttribute("aria-valuemax");
-    expect(progress).not.toHaveAttribute("aria-valuenow");
-    expect(fill).toHaveStyle({ "--progress-bar-width": "42%" });
+    expect(container.querySelector(".session-progress")).toBeNull();
+    expect(container.querySelector(".session-progress-bar")).toBeNull();
   });
 
   it("renders migrated provider and state tags with legacy badge compatibility classes", () => {
@@ -254,15 +279,20 @@ describe("SessionCard", () => {
       </Provider>
     );
 
-    const header = screen.getByText("SESSION-56").closest(".session-header");
+    const bespokeHeader = screen.getByText("SESSION-56").closest(".session-header");
+    const header = screen.getByText("SESSION-56").closest(".panel-header");
+    const actions = header?.querySelector(".panel-header__actions");
     const accessory = screen.getByRole("button", { name: "Supervisor entry" });
     const right = header?.querySelector(".session-header-right");
 
+    expect(bespokeHeader).toBeNull();
     expect(header).not.toBeNull();
+    expect(actions).not.toBeNull();
     expect(accessory.parentElement).toHaveClass("session-header-accessory");
     expect(right).not.toBeNull();
     expect(right).toContainElement(accessory);
-    expect(header?.lastElementChild).toBe(right);
+    expect(actions).toContainElement(right as HTMLElement);
+    expect(header?.lastElementChild).toBe(actions);
   });
 
   it("forces the terminal read-only when terminalReadOnlyOverride is true", () => {
@@ -518,12 +548,7 @@ describe("SessionCard", () => {
       </Provider>
     );
 
-    expect(screen.getByRole("button", { name: "Stop" })).toHaveClass(
-      "btn",
-      "btn-ghost",
-      "btn-sm",
-      "session-action-btn"
-    );
+    expect(screen.queryByRole("button", { name: "Stop" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Split horizontal" })).toHaveClass(
       "btn",
       "btn-ghost",

@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.3.9
+
+### Patch Changes
+
+- [#41](https://github.com/spencerkit/coder-studio/pull/41) [`37f68b2`](https://github.com/spencerkit/coder-studio/commit/37f68b22fa605d1cbe92a6b8bc7e2ad550bfad89) Thanks [@pallyoung](https://github.com/pallyoung)! - Polish desktop and mobile workspace chrome, settings surfaces, terminal fullscreen layout, and supervisor evaluation guidance.
+
+## 0.3.8
+
+### Patch Changes
+
+- [#37](https://github.com/spencerkit/coder-studio/pull/37) [`e27cd04`](https://github.com/spencerkit/coder-studio/commit/e27cd048832ff72d337512329695d6914ad38f37) Thanks [@pallyoung](https://github.com/pallyoung)! - Fix Windows runtime verification by preserving supervisor plan step status literals during evaluation payload parsing so the bundled server package builds cleanly in CI.
+
+- [#37](https://github.com/spencerkit/coder-studio/pull/37) [`2ed1034`](https://github.com/spencerkit/coder-studio/commit/2ed10341e1af65290545731525f7fe7e6435dac7) Thanks [@pallyoung](https://github.com/pallyoung)! - Fix supervisor creation rollback when target files fail, and keep manual trigger disabled while an earlier supervisor cycle is still in flight.
+
 ## 0.3.7
 
 ### Why this patch matters

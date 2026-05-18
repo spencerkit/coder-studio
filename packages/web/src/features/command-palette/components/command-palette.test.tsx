@@ -233,6 +233,43 @@ describe("CommandPalette", () => {
     expect(store.get(terminalPanelVisibleAtom)).toBe(true);
   });
 
+  it("keeps the desktop palette overlay, chrome, and selected item styling visible", () => {
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(commandPaletteOpenAtom, true);
+    store.set(workspacesAtom, {
+      "ws-1": createWorkspace("ws-1", "/tmp/one"),
+    });
+    store.set(workspaceOrderAtom, ["ws-1"]);
+    store.set(workspacesLoadStateAtom, "ready");
+
+    render(
+      <Provider store={store}>
+        <CommandPalette />
+      </Provider>
+    );
+
+    const palette = document.querySelector(".command-palette");
+    const overlay = document.querySelector(".command-palette-overlay");
+    const searchInput = screen.getByRole("textbox");
+
+    expect(overlay).toBeTruthy();
+    expect(palette).toBeTruthy();
+    expect(document.querySelector(".command-palette-header")).toBeTruthy();
+    expect(document.querySelector(".command-palette-search")).toBeTruthy();
+    expect(document.querySelector(".command-palette-hint")).toBeTruthy();
+    expect(document.querySelector(".command-palette-list")).toBeTruthy();
+    expect(palette).toContainElement(searchInput);
+
+    fireEvent.change(searchInput, {
+      target: { value: "settings" },
+    });
+
+    fireEvent.keyDown(palette!, { key: "ArrowDown" });
+
+    expect(document.querySelector(".command-palette-item-selected")).toBeTruthy();
+  });
+
   it("closes the mobile palette before opening the workspace launcher", () => {
     viewportMocks.viewport = "mobile";
 

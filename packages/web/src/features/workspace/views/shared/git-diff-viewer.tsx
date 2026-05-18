@@ -3,6 +3,7 @@ import type { FC } from "react";
 import { useMemo } from "react";
 import { EmptyState, IconButton, Tooltip } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
+import { PanelHeader } from "../../../shared/components/panel-header";
 import { useGitDiffViewerActions } from "../../actions/use-git-actions";
 
 interface GitDiffViewerProps {
@@ -65,24 +66,24 @@ export const GitDiffViewer: FC<GitDiffViewerProps> = ({
   return (
     <div className="workspace-git-view">
       <div className="code-editor workspace-git-editor">
-        <div className="code-editor-header">
-          <span className="code-file-path">
-            {preview?.title ?? preview?.path ?? "Select a changed file to inspect"}
-          </span>
-          {preview && showCloseButton ? (
-            <div className="code-mode-toggle">
-              <Tooltip content={t("action.close")}>
-                <IconButton
-                  aria-label={t("action.close")}
-                  className="code-mode-btn"
-                  icon={<X size={12} />}
-                  onClick={handleClose}
-                  size="sm"
-                />
-              </Tooltip>
-            </div>
-          ) : null}
-        </div>
+        <PanelHeader
+          title={preview?.title ?? preview?.path ?? "Select a changed file to inspect"}
+          actions={
+            preview && showCloseButton ? (
+              <div className="code-mode-toggle">
+                <Tooltip content={t("action.close")}>
+                  <IconButton
+                    aria-label={t("action.close")}
+                    className="code-mode-btn"
+                    icon={<X size={12} />}
+                    onClick={handleClose}
+                    size="sm"
+                  />
+                </Tooltip>
+              </div>
+            ) : null
+          }
+        />
 
         <div className="code-editor-body">
           {preview ? (

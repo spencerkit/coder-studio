@@ -3,8 +3,10 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const stylesheet = readFileSync(`${process.cwd()}/src/styles/base.css`, "utf8");
+const tokensStylesheet = readFileSync(`${process.cwd()}/src/styles/tokens.css`, "utf8");
 
 function getRuleBlock(selector: string) {
+  const blocks: string[] = [];
   const matcher = /([^{}]+)\{([^}]*)\}/g;
   let match: RegExpExecArray | null = null;
   const normalizedSelector = selector.replace(/\s+/g, " ").trim();
@@ -16,11 +18,15 @@ function getRuleBlock(selector: string) {
       .map((entry) => entry.replace(/\s+/g, " ").trim());
 
     if (selectors.includes(normalizedSelector)) {
-      return match[2];
+      blocks.push(match[2]);
     }
   }
 
-  throw new Error(`expected CSS rule for ${selector}`);
+  if (blocks.length === 0) {
+    throw new Error(`expected CSS rule for ${selector}`);
+  }
+
+  return blocks.at(-1) ?? "";
 }
 
 describe("base.css theme-sensitive shells", () => {
@@ -52,5 +58,52 @@ describe("base.css theme-sensitive shells", () => {
     expect(themedIcon).toContain("line-height: 0");
     expect(themedTone).toContain("color: var(--icon-warning)");
     expect(themedSurface).toContain("background: var(--icon-surface-info)");
+  });
+});
+
+describe("base.css desktop typography foundation", () => {
+  it("defines the semantic and desktop layout tokens used by polished PC surfaces", () => {
+    expect(tokensStylesheet).toContain("--text-muted:");
+    expect(tokensStylesheet).toContain("--bg-panel:");
+    expect(tokensStylesheet).toContain("--bg-elevated:");
+    expect(tokensStylesheet).toContain("--accent-red:");
+    expect(tokensStylesheet).toContain("--desktop-topbar-height:");
+    expect(tokensStylesheet).toContain("--desktop-statusbar-height:");
+    expect(tokensStylesheet).toContain("--desktop-sidebar-header-height:");
+    expect(tokensStylesheet).toContain("--desktop-panel-padding:");
+    expect(tokensStylesheet).toContain("--desktop-panel-gap:");
+    expect(tokensStylesheet).toContain("--desktop-content-max-width:");
+    expect(tokensStylesheet).toContain("--desktop-modal-max-width-md:");
+    expect(tokensStylesheet).toContain("--desktop-modal-max-width-lg:");
+  });
+
+  it("maps base text elements onto semantic typography tokens", () => {
+    expect(getRuleBlock("body")).toContain("font-size: var(--type-body-size)");
+    expect(getRuleBlock("body")).toContain("line-height: var(--type-body-line-height)");
+    expect(getRuleBlock("body")).toContain("font-weight: var(--type-body-weight)");
+    expect(getRuleBlock("p")).toContain("line-height: var(--type-body-line-height)");
+
+    expect(getRuleBlock("button")).toContain("font-size: var(--type-body-strong-size)");
+    expect(getRuleBlock("button")).toContain("line-height: var(--type-body-strong-line-height)");
+    expect(getRuleBlock("input")).toContain("font-size: var(--type-body-strong-size)");
+    expect(getRuleBlock("textarea")).toContain("font-size: var(--type-body-strong-size)");
+    expect(getRuleBlock("select")).toContain("font-size: var(--type-body-strong-size)");
+  });
+
+  it("maps headings and helper text onto the new semantic hierarchy", () => {
+    expect(getRuleBlock("h1")).toContain("font-size: var(--type-page-title-size)");
+    expect(getRuleBlock("h2")).toContain("font-size: var(--type-section-title-size)");
+    expect(getRuleBlock("h3")).toContain("font-size: var(--type-app-title-size)");
+    expect(getRuleBlock("h4")).toContain("font-size: var(--type-body-strong-size)");
+    expect(getRuleBlock("h5")).toContain("font-size: var(--type-label-size)");
+    expect(getRuleBlock("h6")).toContain("font-size: var(--type-meta-size)");
+
+    expect(getRuleBlock(".page-kicker")).toContain("font-size: var(--type-kicker-size)");
+    expect(getRuleBlock(".page-title")).toContain("font-size: var(--type-page-title-size)");
+    expect(getRuleBlock(".section-title")).toContain("font-size: var(--type-kicker-size)");
+    expect(getRuleBlock(".meta-text")).toContain("font-size: var(--type-meta-size)");
+    expect(getRuleBlock(".hint-text")).toContain("font-size: var(--type-meta-size)");
+    expect(getRuleBlock(".mono-meta")).toContain("font-size: var(--type-code-inline-size)");
+    expect(getRuleBlock(".mono-meta")).toContain("font-family: var(--type-code-inline-family)");
   });
 });

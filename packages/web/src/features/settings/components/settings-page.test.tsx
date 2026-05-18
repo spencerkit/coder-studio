@@ -10,7 +10,10 @@ import {
 } from "../../../atoms/connection";
 import { activeWorkspaceIdAtom } from "../../../atoms/workspaces";
 import { CommandResultError } from "../../../ws/client";
-import { terminalPreferencesAtom } from "../../terminal-panel/preferences";
+import {
+  DEFAULT_TERMINAL_FONT_SIZE,
+  terminalPreferencesAtom,
+} from "../../terminal-panel/preferences";
 import { SettingsPage } from "./settings-page";
 
 const viewportMocks = vi.hoisted(() => ({
@@ -207,6 +210,18 @@ describe("SettingsPage", () => {
     renderSettingsPage(store);
 
     expect(screen.getByText("v0.3.0")).toBeInTheDocument();
+    expect(document.querySelector(".settings-footer__meta")).toBeTruthy();
+  });
+
+  it("wraps desktop settings content in the shared content surface", async () => {
+    const store = createConnectedStore(vi.fn().mockResolvedValue({}));
+
+    renderSettingsPage(store);
+
+    await waitFor(() => {
+      expect(document.querySelector(".settings-content-surface")).toBeTruthy();
+    });
+    expect(document.querySelector(".settings-content-surface .settings-section")).toBeTruthy();
   });
 
   it("renders desktop and mobile settings entry icons through themed semantics", async () => {
@@ -258,6 +273,40 @@ describe("SettingsPage", () => {
     expect(
       mobileView.container.querySelector('[data-icon-semantic="nav.settings.shortcuts"]')
     ).toBeTruthy();
+  });
+
+  it("renders the mobile settings homepage as grouped sections without the legacy hero", async () => {
+    viewportMocks.viewport = "mobile";
+    const store = createConnectedStore(vi.fn().mockResolvedValue({}));
+
+    renderSettingsPage(store);
+
+    const mobileRoot = await screen.findByTestId("settings-mobile-root");
+    const groupHeadings = within(mobileRoot).getAllByRole("heading", { level: 2 });
+
+    expect(groupHeadings).toHaveLength(2);
+    expect(within(mobileRoot).getByText("工作区与运行")).toBeInTheDocument();
+    expect(within(mobileRoot).getByText("界面与交互")).toBeInTheDocument();
+    expect(document.querySelector(".settings-mobile-root-hero")).toBeNull();
+
+    const buttons = within(mobileRoot).getAllByRole("button");
+    const labels = buttons.map((button) => button.getAttribute("aria-label")).filter(Boolean);
+
+    expect(labels).toEqual(expect.arrayContaining(["通用", "Agents", "外观", "快捷键"]));
+    expect(labels.indexOf("通用")).toBeLessThan(labels.indexOf("Agents"));
+    expect(labels.indexOf("Agents")).toBeLessThan(labels.indexOf("外观"));
+    expect(labels.indexOf("外观")).toBeLessThan(labels.indexOf("快捷键"));
+  });
+
+  it("localizes the new mobile settings homepage section headings", async () => {
+    viewportMocks.viewport = "mobile";
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    const store = createConnectedStore(vi.fn().mockResolvedValue({}));
+
+    renderSettingsPage(store);
+
+    expect(await screen.findByText("Workspace & Runtime")).toBeInTheDocument();
+    expect(screen.getByText("Interface & Interaction")).toBeInTheDocument();
   });
 
   it("does not render default Agent Provider selection in general settings", async () => {
@@ -892,6 +941,35 @@ describe("SettingsPage", () => {
     expect(routerMocks.navigate).toHaveBeenCalledWith("/");
   });
 
+  it("renders the desktop settings header through the shared PageHeader contract", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({});
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+
+    const desktopHeader = document.querySelector(
+      ".settings-header .page-header"
+    ) as HTMLElement | null;
+    const mobileHeader = document.querySelector(
+      ".settings-header .mobile-page-header"
+    ) as HTMLElement | null;
+    const headerCopy = document.querySelector(
+      ".settings-header .page-header__copy"
+    ) as HTMLElement | null;
+
+    expect(desktopHeader).not.toBeNull();
+    expect(desktopHeader).toHaveClass("page-header--secondary");
+    expect(mobileHeader).toBeNull();
+    expect(screen.getByRole("heading", { name: "设置" })).toBeInTheDocument();
+    expect(
+      within(desktopHeader as HTMLElement).getByRole("button", { name: "返回" })
+    ).toBeInTheDocument();
+    expect(headerCopy).not.toBeNull();
+    expect(within(headerCopy as HTMLElement).queryByText("Coder Studio")).toBeNull();
+    expect(within(headerCopy as HTMLElement).queryByText("设置已自动保存")).toBeNull();
+    expect(document.querySelector(".settings-header__desktop")).toBeNull();
+  });
+
   it("renders a mobile category list and returns from detail content to the settings root", async () => {
     viewportMocks.viewport = "mobile";
     const sendCommand = vi.fn().mockImplementation(async (op: string, args: unknown) => {
@@ -1433,7 +1511,12 @@ describe("SettingsPage", () => {
         "true"
       );
     });
-    expect(store.get(terminalPreferencesAtom)).toEqual({ copyOnSelect: true });
+    expect(store.get(terminalPreferencesAtom)).toEqual({
+      copyOnSelect: true,
+      desktopFontSize: DEFAULT_TERMINAL_FONT_SIZE,
+      mobileFontSize: DEFAULT_TERMINAL_FONT_SIZE,
+      fontSize: DEFAULT_TERMINAL_FONT_SIZE,
+    });
   });
 
   it("updates copy-on-select through the general switch and syncs the global atom", async () => {
@@ -1465,7 +1548,12 @@ describe("SettingsPage", () => {
       );
     });
 
-    expect(store.get(terminalPreferencesAtom)).toEqual({ copyOnSelect: true });
+    expect(store.get(terminalPreferencesAtom)).toEqual({
+      copyOnSelect: true,
+      desktopFontSize: DEFAULT_TERMINAL_FONT_SIZE,
+      mobileFontSize: DEFAULT_TERMINAL_FONT_SIZE,
+      fontSize: DEFAULT_TERMINAL_FONT_SIZE,
+    });
   });
 
   it("renders copy-on-select from the terminal preferences atom before general settings load resolves", async () => {
@@ -1480,7 +1568,12 @@ describe("SettingsPage", () => {
       return {};
     });
     const store = createConnectedStore(sendCommand);
-    store.set(terminalPreferencesAtom, { copyOnSelect: true });
+    store.set(terminalPreferencesAtom, {
+      copyOnSelect: true,
+      desktopFontSize: DEFAULT_TERMINAL_FONT_SIZE,
+      mobileFontSize: DEFAULT_TERMINAL_FONT_SIZE,
+      fontSize: DEFAULT_TERMINAL_FONT_SIZE,
+    });
 
     renderSettingsPage(store);
     fireEvent.click(screen.getByRole("button", { name: "通用" }));
@@ -1536,7 +1629,252 @@ describe("SettingsPage", () => {
       "aria-checked",
       "true"
     );
-    expect(store.get(terminalPreferencesAtom)).toEqual({ copyOnSelect: true });
+    expect(store.get(terminalPreferencesAtom)).toEqual({
+      copyOnSelect: true,
+      desktopFontSize: DEFAULT_TERMINAL_FONT_SIZE,
+      mobileFontSize: DEFAULT_TERMINAL_FONT_SIZE,
+      fontSize: DEFAULT_TERMINAL_FONT_SIZE,
+    });
+  });
+
+  it("renders split terminal font-size inputs from loaded appearance settings", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "appearance.desktopTerminalFontSize": 16,
+          "appearance.mobileTerminalFontSize": 14,
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "外观" }));
+
+    const desktopInput = await screen.findByRole("spinbutton", { name: "桌面端终端字号" });
+    const mobileInput = await screen.findByRole("spinbutton", { name: "移动端终端字号" });
+    await waitFor(() => {
+      expect(desktopInput).toHaveValue(16);
+      expect(mobileInput).toHaveValue(14);
+    });
+    expect(store.get(terminalPreferencesAtom)).toEqual({
+      copyOnSelect: false,
+      desktopFontSize: 16,
+      mobileFontSize: 14,
+      fontSize: 16,
+    });
+  });
+
+  it("falls back to the legacy shared terminal font size when split settings are absent", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "appearance.terminalFontSize": 11,
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "外观" }));
+
+    const desktopInput = await screen.findByRole("spinbutton", { name: "桌面端终端字号" });
+    const mobileInput = await screen.findByRole("spinbutton", { name: "移动端终端字号" });
+
+    await waitFor(() => {
+      expect(desktopInput).toHaveValue(11);
+      expect(mobileInput).toHaveValue(11);
+    });
+    expect(store.get(terminalPreferencesAtom)).toEqual({
+      copyOnSelect: false,
+      desktopFontSize: 11,
+      mobileFontSize: 11,
+      fontSize: 11,
+    });
+  });
+
+  it("updates desktop terminal font size through the appearance input and syncs the global atom", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "appearance.desktopTerminalFontSize": 11,
+          "appearance.mobileTerminalFontSize": 13,
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "外观" }));
+
+    const input = await screen.findByRole("spinbutton", { name: "桌面端终端字号" });
+
+    fireEvent.change(input, { target: { value: "15" } });
+    fireEvent.blur(input);
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            appearance: {
+              desktopTerminalFontSize: 15,
+            },
+          },
+        },
+        undefined
+      );
+    });
+
+    expect(store.get(terminalPreferencesAtom)).toEqual({
+      copyOnSelect: false,
+      desktopFontSize: 15,
+      mobileFontSize: 13,
+      fontSize: 15,
+    });
+  });
+
+  it("updates mobile terminal font size through the appearance input without changing desktop size", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "appearance.desktopTerminalFontSize": 12,
+          "appearance.mobileTerminalFontSize": 11,
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "外观" }));
+
+    const input = await screen.findByRole("spinbutton", { name: "移动端终端字号" });
+
+    fireEvent.change(input, { target: { value: "14" } });
+    fireEvent.blur(input);
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            appearance: {
+              mobileTerminalFontSize: 14,
+            },
+          },
+        },
+        undefined
+      );
+    });
+
+    expect(store.get(terminalPreferencesAtom)).toEqual({
+      copyOnSelect: false,
+      desktopFontSize: 12,
+      mobileFontSize: 14,
+      fontSize: 12,
+    });
+  });
+
+  it("shows a validation error and restores the current desktop terminal font size for out-of-range values", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "appearance.desktopTerminalFontSize": 12,
+          "appearance.mobileTerminalFontSize": 11,
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "外观" }));
+
+    const input = await screen.findByRole("spinbutton", { name: "桌面端终端字号" });
+    await waitFor(() => {
+      expect(input).toHaveValue(12);
+    });
+
+    fireEvent.change(input, { target: { value: "19" } });
+    fireEvent.blur(input);
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent("请输入 10 到 18 之间的整数");
+    });
+
+    expect(input).toHaveValue(12);
+    expect(sendCommand).not.toHaveBeenCalledWith(
+      "settings.update",
+      expect.objectContaining({
+        settings: {
+          appearance: {
+            desktopTerminalFontSize: 19,
+          },
+        },
+      }),
+      undefined
+    );
+    expect(store.get(terminalPreferencesAtom)).toEqual({
+      copyOnSelect: false,
+      desktopFontSize: 12,
+      mobileFontSize: 11,
+      fontSize: 12,
+    });
+  });
+
+  it("preserves desktop terminal font size when a stale appearance settings load resolves afterward", async () => {
+    let resolveSettingsGet: ((value: Record<string, unknown>) => void) | undefined;
+    const settingsGetPromise = new Promise<Record<string, unknown>>((resolve) => {
+      resolveSettingsGet = resolve;
+    });
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return await settingsGetPromise;
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "外观" }));
+
+    const input = await screen.findByRole("spinbutton", { name: "桌面端终端字号" });
+    fireEvent.change(input, { target: { value: "17" } });
+    fireEvent.blur(input);
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            appearance: {
+              desktopTerminalFontSize: 17,
+            },
+          },
+        },
+        undefined
+      );
+    });
+
+    await act(async () => {
+      resolveSettingsGet?.({
+        "appearance.desktopTerminalFontSize": 11,
+        "appearance.mobileTerminalFontSize": 13,
+      });
+      await settingsGetPromise;
+    });
+
+    expect(screen.getByRole("spinbutton", { name: "桌面端终端字号" })).toHaveValue(17);
+    expect(store.get(terminalPreferencesAtom)).toEqual({
+      copyOnSelect: false,
+      desktopFontSize: 17,
+      mobileFontSize: 13,
+      fontSize: 17,
+    });
   });
 
   it("updates language selection through the shared appearance pills", async () => {

@@ -30,10 +30,7 @@ const NOOP_LOGGER: FastifyBaseLogger = {
 
 export interface SupervisorEvaluationResult {
   status: "continue" | "stop";
-  stopReason?: Extract<
-    SupervisorStopReason,
-    "objective_complete" | "supervisor_uncertain" | "needs_user_input"
-  >;
+  stopReason?: Extract<SupervisorStopReason, "objective_complete" | "supervisor_uncertain">;
   reason: string;
   guidance?: string;
   plan?: SupervisorPlanStep[];
@@ -135,8 +132,26 @@ export class SupervisorEvaluator {
 
 function buildPrompt(context: SupervisorEvaluationContext): string {
   const lines: string[] = [
-    "You are supervising a target-scoped software task.",
+    "You are an autonomous supervisor for a target-scoped software task.",
+    "Your job is to keep the agent moving toward the objective until the objective is complete.",
+    "",
     "Return JSON only.",
+    "",
+    "Decision policy:",
+    '- Prefer "continue" whenever there is a reasonable next action.',
+    "- Do not ask the user to decide, clarify, or choose among implementation options.",
+    "- When information is incomplete, choose a conservative next action based on the objective, target memory, latest user input, and terminal snapshot.",
+    "- Stop only when the objective is complete, or when continuing would likely push the agent in an unsafe or clearly unsupported direction.",
+    "",
+    "Stage decision policy:",
+    "- Use the target memory as the current supervision state.",
+    "- Base your decision on the objective, current plan, activeStepId, progressSummary, lastGuidance, stalledCount, latest user input, and terminal snapshot.",
+    "- Identify which plan step is currently active.",
+    "- Decide whether the active step is done, still in progress, blocked, or obsolete.",
+    "- If the active step is done, advance to the next useful step.",
+    "- If the active step is still in progress, give guidance that moves it forward.",
+    "- If the agent appears stuck or repeated the same action, give a different concrete next action.",
+    "- If the plan is obsolete, update only the affected steps unless a full replacement is necessary.",
     "",
     "Allowed statuses:",
     '- "continue": more work is needed; include "reason" and "guidance".',
@@ -145,10 +160,43 @@ function buildPrompt(context: SupervisorEvaluationContext): string {
     "Allowed stop reasons:",
     '- "objective_complete"',
     '- "supervisor_uncertain"',
-    '- "needs_user_input"',
     "",
-    "If planGenerated is false, bootstrap a plan with 3 to 7 milestone-sized steps.",
-    "If planGenerated is true, update progress incrementally; do not rewrite the full plan unless absolutely necessary.",
+    'Use "objective_complete" only when the objective has been satisfied.',
+    'Use "supervisor_uncertain" only as a last resort when no useful next action can be inferred and additional guidance would likely be misleading.',
+    "",
+    'Guidance requirements for "continue":',
+    "- Give one concrete next action or a short ordered set of concrete actions.",
+    "- Focus on the highest-value step toward completing the objective.",
+    "- Be specific enough for the supervised agent to act without asking the user.",
+    "- Avoid generic reminders, encouragement, or restating the objective.",
+    "- If verification is needed, tell the agent exactly what to verify next.",
+    "- If implementation is needed, point to the likely area, behavior, or file/module based on available evidence.",
+    "",
+    "Planning policy:",
+    "- If planGenerated is false, include a plan with 3 to 7 milestone-sized steps.",
+    "- If planGenerated is true, update progress incrementally.",
+    "- Do not rewrite the full plan unless the existing plan is clearly wrong or obsolete.",
+    "- Use stepUpdates to mark completed or active steps when the terminal snapshot shows progress.",
+    "- Keep activeStepId aligned with the next useful step.",
+    "",
+    "Output schema:",
+    "For continue:",
+    "{",
+    '  "status": "continue",',
+    '  "reason": "brief explanation of why more work is needed",',
+    '  "guidance": "specific next action for the supervised agent",',
+    '  "plan": optional array of plan steps,',
+    '  "activeStepId": optional step id,',
+    '  "progressSummary": optional brief progress summary,',
+    '  "stepUpdates": optional array of { "id": string, "status": "pending" | "in_progress" | "done" }',
+    "}",
+    "",
+    "For stop:",
+    "{",
+    '  "status": "stop",',
+    '  "stopReason": "objective_complete" | "supervisor_uncertain",',
+    '  "reason": "brief explanation"',
+    "}",
     "",
     "Current objective:",
     context.objective,
@@ -563,11 +611,7 @@ function parseSupervisorEvaluationResult(
 
   if (status === "stop") {
     const stopReason = record.stopReason;
-    if (
-      stopReason !== "objective_complete" &&
-      stopReason !== "supervisor_uncertain" &&
-      stopReason !== "needs_user_input"
-    ) {
+    if (stopReason !== "objective_complete" && stopReason !== "supervisor_uncertain") {
       throw new Error("Supervisor stop result is missing a valid stopReason");
     }
 
@@ -583,8 +627,8 @@ function parseSupervisorEvaluationResult(
       ? record.guidance.trim().slice(0, guidanceMaxChars)
       : undefined;
 
-  const plan = Array.isArray(record.plan)
-    ? record.plan.flatMap((value) => {
+  const plan: SupervisorPlanStep[] | undefined = Array.isArray(record.plan)
+    ? record.plan.flatMap<SupervisorPlanStep>((value) => {
         if (!value || typeof value !== "object") {
           return [];
         }
@@ -600,8 +644,8 @@ function parseSupervisorEvaluationResult(
       })
     : undefined;
 
-  const stepUpdates = Array.isArray(record.stepUpdates)
-    ? record.stepUpdates.flatMap((value) => {
+  const stepUpdates: SupervisorCycleStepUpdate[] | undefined = Array.isArray(record.stepUpdates)
+    ? record.stepUpdates.flatMap<SupervisorCycleStepUpdate>((value) => {
         if (!value || typeof value !== "object") {
           return [];
         }

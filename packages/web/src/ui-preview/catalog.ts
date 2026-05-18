@@ -13,6 +13,7 @@ import type {
   UiPreviewSeed,
   UiPreviewTheme,
 } from "./preview-store";
+import { createDesktopReviewScenes } from "./scenes/desktop-review-scenes";
 import { createPageScenes } from "./scenes/page-scenes";
 import { createShowcaseScenes } from "./scenes/showcase-scenes";
 
@@ -34,6 +35,7 @@ export interface UiPreviewSceneDefinition extends UiPreviewSceneMetadata {
 export const UI_PREVIEW_SCENES: UiPreviewSceneDefinition[] = [
   ...createPageScenes(),
   ...createShowcaseScenes(),
+  ...createDesktopReviewScenes(),
 ];
 
 export function getUiPreviewScene(id: string): UiPreviewSceneDefinition | null {

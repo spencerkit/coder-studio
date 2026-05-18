@@ -95,6 +95,72 @@ describe("tokens.css touch tokens", () => {
     expect(body).toContain("--touch-hit-slop: 8px");
   });
 
+  it("defines the desktop typography scale and semantic aliases on :root", () => {
+    const root = getRuleBlock(":root");
+
+    expect(root).toContain("--font-size-100: 11px");
+    expect(root).toContain("--font-size-200: 12px");
+    expect(root).toContain("--font-size-300: 14px");
+    expect(root).toContain("--font-size-400: 16px");
+    expect(root).toContain("--font-size-500: 18px");
+    expect(root).toContain("--font-size-600: 24px");
+    expect(root).toContain("--font-size-700: 32px");
+
+    expect(root).toContain("--type-kicker-size: var(--font-size-100)");
+    expect(root).toContain("--type-kicker-line-height: 1.2");
+    expect(root).toContain("--type-kicker-weight: var(--font-normal)");
+    expect(root).toContain("--type-kicker-letter-spacing: 0.08em");
+
+    expect(root).toContain("--type-label-size: var(--font-size-200)");
+    expect(root).toContain("--type-label-line-height: 1.35");
+    expect(root).toContain("--type-label-weight: var(--font-normal)");
+
+    expect(root).toContain("--type-meta-size: var(--font-size-200)");
+    expect(root).toContain("--type-meta-line-height: 1.45");
+    expect(root).toContain("--type-meta-weight: var(--font-normal)");
+    expect(root).toContain("--type-body-size: var(--font-size-300)");
+    expect(root).toContain("--type-body-line-height: 1.5");
+    expect(root).toContain("--type-body-weight: var(--font-normal)");
+    expect(root).toContain("--type-body-strong-size: var(--font-size-300)");
+    expect(root).toContain("--type-body-strong-line-height: 1.45");
+    expect(root).toContain("--type-body-strong-weight: var(--font-normal)");
+    expect(root).toContain("--type-code-inline-size: var(--font-size-200)");
+    expect(root).toContain("--type-code-inline-line-height: 1.4");
+    expect(root).toContain("--type-code-inline-weight: var(--font-normal)");
+    expect(root).toContain("--type-code-inline-family: var(--font-mono)");
+    expect(root).toContain("--type-app-title-size: var(--font-size-400)");
+    expect(root).toContain("--type-app-title-line-height: 1.25");
+    expect(root).toContain("--type-app-title-weight: var(--font-semibold)");
+    expect(root).toContain("--type-section-title-size: var(--font-size-500)");
+    expect(root).toContain("--type-section-title-line-height: 1.2");
+    expect(root).toContain("--type-section-title-weight: var(--font-semibold)");
+    expect(root).toContain("--type-page-title-size: var(--font-size-600)");
+    expect(root).toContain("--type-page-title-line-height: 1.1");
+    expect(root).toContain("--type-page-title-weight: var(--font-semibold)");
+    expect(root).toContain("--type-display-size: var(--font-size-700)");
+    expect(root).toContain("--type-display-line-height: 1.05");
+    expect(root).toContain("--type-display-weight: var(--font-semibold)");
+    expect(root).toContain("--type-display-letter-spacing: -0.03em");
+  });
+
+  it("overrides the typography scale and dense body line-heights for mobile viewports", () => {
+    const mediaMatch = /@media\s*\(max-width:\s*899px\)\s*\{([\s\S]*?)\}\s*\}/m.exec(stylesheet);
+
+    expect(mediaMatch, "expected @media (max-width: 899px) block").not.toBeNull();
+
+    const body = mediaMatch![1];
+
+    expect(body).toContain("--font-size-100: 12px");
+    expect(body).toContain("--font-size-200: 13px");
+    expect(body).toContain("--font-size-300: 15px");
+    expect(body).toContain("--font-size-400: 17px");
+    expect(body).toContain("--font-size-500: 20px");
+    expect(body).toContain("--font-size-600: 28px");
+    expect(body).toContain("--font-size-700: 36px");
+    expect(body).toContain("--type-body-line-height: 1.55");
+    expect(body).toContain("--type-body-strong-line-height: 1.5");
+  });
+
   it("keeps the light theme families visually separated through structure tokens", () => {
     const mintLight = getRuleBlock('[data-theme="mint-light"]');
     const graphiteLight = getRuleBlock('[data-theme="graphite-light"]');

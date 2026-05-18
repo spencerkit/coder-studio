@@ -99,7 +99,7 @@ export function MobileWorkspaceDrawer({
                     {isActive ? (
                       <span className="mobile-workspace-drawer__item-state">
                         <Check size={12} />
-                        <span>Current</span>
+                        <span>{t("worktree.current")}</span>
                       </span>
                     ) : null}
                   </span>

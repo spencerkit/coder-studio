@@ -9,9 +9,9 @@
   border: 1px solid transparent;
   border-radius: var(--radius-md);
   font-family: var(--font-sans);
-  font-size: var(--text-base);
+  font-size: var(--type-body-strong-size);
   font-weight: var(--font-medium);
-  line-height: 1;
+  line-height: var(--type-body-strong-line-height);
   white-space: nowrap;
   transition:
     background var(--duration-normal) var(--ease-out),
@@ -83,7 +83,9 @@
   height: 24px;
   padding: 0 var(--sp-2);
   border-radius: var(--radius-sm);
-  font-size: var(--text-xs);
+  font-size: var(--type-label-size);
+  font-weight: var(--font-medium);
+  line-height: var(--type-label-line-height);
 }
 
 .lg,
@@ -91,7 +93,6 @@
   height: 40px;
   padding: 0 var(--sp-6);
   border-radius: var(--radius-lg);
-  font-size: var(--text-lg);
 }
 
 .label {

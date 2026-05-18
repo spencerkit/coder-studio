@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { SupervisorCycleTargetRecord, SupervisorTargetMemory } from "@coder-studio/core";
 
@@ -30,6 +30,40 @@ function cyclesPath(workspacePath: string, targetId: string): string {
   return join(targetDir(workspacePath, targetId), "cycles.jsonl");
 }
 
+function metaFilePath(dirPath: string): string {
+  return join(dirPath, "meta.json");
+}
+
+function memoryFilePath(dirPath: string): string {
+  return join(dirPath, "memory.json");
+}
+
+function cyclesFilePath(dirPath: string): string {
+  return join(dirPath, "cycles.jsonl");
+}
+
+function hasCode(error: unknown, code: string): boolean {
+  return Boolean(
+    error &&
+      typeof error === "object" &&
+      "code" in error &&
+      (error as { code?: unknown }).code === code
+  );
+}
+
+function errorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (error && typeof error === "object" && "message" in error) {
+    const value = (error as { message?: unknown }).message;
+    if (typeof value === "string") {
+      return value;
+    }
+  }
+  return fallback;
+}
+
 async function writeJsonIfMissing(path: string, value: unknown): Promise<void> {
   try {
     await writeFile(path, JSON.stringify(value, null, 2) + "\n", {
@@ -37,15 +71,64 @@ async function writeJsonIfMissing(path: string, value: unknown): Promise<void> {
       flag: "wx",
     });
   } catch (error) {
-    if (
-      !error ||
-      typeof error !== "object" ||
-      !("code" in error) ||
-      (error as { code?: string }).code !== "EEXIST"
-    ) {
+    if (!hasCode(error, "EEXIST")) {
       throw error;
     }
   }
+}
+
+function buildTargetMeta(input: {
+  targetId: string;
+  sessionId: string;
+  workspaceId: string;
+  objective: string;
+  createdAt: number;
+}): SupervisorTargetMeta {
+  return {
+    targetId: input.targetId,
+    sessionId: input.sessionId,
+    workspaceId: input.workspaceId,
+    objective: input.objective,
+    status: "active",
+    createdAt: input.createdAt,
+    updatedAt: input.createdAt,
+    supersededBy: null,
+    completedAt: null,
+  };
+}
+
+function buildTargetMemory(targetId: string, createdAt: number): SupervisorTargetMemory {
+  return {
+    targetId,
+    planGenerated: false,
+    plan: [],
+    stalledCount: 0,
+    updatedAt: createdAt,
+  };
+}
+
+async function writeResetTargetFiles(
+  dirPath: string,
+  input: {
+    targetId: string;
+    sessionId: string;
+    workspaceId: string;
+    objective: string;
+    createdAt: number;
+  }
+): Promise<void> {
+  await mkdir(dirPath, { recursive: true });
+  await writeFile(
+    metaFilePath(dirPath),
+    JSON.stringify(buildTargetMeta(input), null, 2) + "\n",
+    "utf-8"
+  );
+  await writeFile(
+    memoryFilePath(dirPath),
+    JSON.stringify(buildTargetMemory(input.targetId, input.createdAt), null, 2) + "\n",
+    "utf-8"
+  );
+  await writeFile(cyclesFilePath(dirPath), "", "utf-8");
 }
 
 export async function createTargetFiles(
@@ -60,29 +143,79 @@ export async function createTargetFiles(
 ): Promise<void> {
   const dir = targetDir(workspacePath, input.targetId);
   await mkdir(dir, { recursive: true });
+  await writeJsonIfMissing(metaPath(workspacePath, input.targetId), buildTargetMeta(input));
+  await writeJsonIfMissing(
+    memoryPath(workspacePath, input.targetId),
+    buildTargetMemory(input.targetId, input.createdAt)
+  );
+}
 
-  const meta: SupervisorTargetMeta = {
-    targetId: input.targetId,
-    sessionId: input.sessionId,
-    workspaceId: input.workspaceId,
-    objective: input.objective,
-    status: "active",
-    createdAt: input.createdAt,
-    updatedAt: input.createdAt,
-    supersededBy: null,
-    completedAt: null,
-  };
+export async function resetTargetFiles(
+  workspacePath: string,
+  input: {
+    targetId: string;
+    sessionId: string;
+    workspaceId: string;
+    objective: string;
+    createdAt: number;
+  }
+): Promise<void> {
+  const dir = targetDir(workspacePath, input.targetId);
+  const parentDir = dirname(dir);
+  const backupDir = `${dir}.backup-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-  const memory: SupervisorTargetMemory = {
-    targetId: input.targetId,
-    planGenerated: false,
-    plan: [],
-    stalledCount: 0,
-    updatedAt: input.createdAt,
-  };
+  await mkdir(parentDir, { recursive: true });
+  const stagingDir = await mkdtemp(join(parentDir, `${input.targetId}.reset-`));
 
-  await writeJsonIfMissing(metaPath(workspacePath, input.targetId), meta);
-  await writeJsonIfMissing(memoryPath(workspacePath, input.targetId), memory);
+  let backupCreated = false;
+  let promoted = false;
+  let restored = false;
+
+  try {
+    await writeResetTargetFiles(stagingDir, input);
+
+    try {
+      await rename(dir, backupDir);
+      backupCreated = true;
+    } catch (error) {
+      if (!hasCode(error, "ENOENT")) {
+        throw error;
+      }
+    }
+
+    try {
+      await rename(stagingDir, dir);
+      promoted = true;
+    } catch (promoteError) {
+      if (backupCreated) {
+        try {
+          await rename(backupDir, dir);
+          backupCreated = false;
+          restored = true;
+        } catch (restoreError) {
+          throw new Error(
+            `Failed to promote target reset (${errorMessage(
+              promoteError,
+              "unknown promote error"
+            )}); restore also failed (${errorMessage(restoreError, "unknown restore error")})`
+          );
+        }
+      }
+      throw promoteError;
+    }
+  } catch (error) {
+    if (restored || !backupCreated) {
+      await rm(stagingDir, { recursive: true, force: true }).catch(() => {});
+    }
+    throw error;
+  }
+
+  if (backupCreated) {
+    await rm(backupDir, { recursive: true, force: true }).catch(() => {});
+  }
+  if (!promoted) {
+    await rm(stagingDir, { recursive: true, force: true }).catch(() => {});
+  }
 }
 
 export async function readTargetMeta(

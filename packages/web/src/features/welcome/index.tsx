@@ -8,7 +8,7 @@
 import type { FC } from "react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { EmptyState, ThemedIcon } from "../../components/ui";
+import { ThemedIcon } from "../../components/ui";
 import { useViewport } from "../../hooks/use-viewport";
 import { useTranslation } from "../../lib/i18n";
 import type { IconSemantic } from "../../theme";
@@ -19,12 +19,6 @@ interface FeatureItem {
   title: string;
   description: string;
 }
-
-const welcomeEmptyStateStyle = {
-  minHeight: "auto",
-  padding: 0,
-  gap: "var(--sp-5)",
-};
 
 /**
  * Welcome Page
@@ -70,40 +64,42 @@ export const WelcomePage: FC = () => {
     <>
       <div className={`welcome-container ${isMobile ? "welcome-container--mobile" : ""}`}>
         <div className={`welcome-card ${isMobile ? "welcome-card--mobile" : ""}`}>
-          <EmptyState
-            style={welcomeEmptyStateStyle}
-            title={
-              <div>
-                <div className="welcome-kicker">{t("welcome.kicker")}</div>
-                <h1 className="welcome-title">{t("welcome.title")}</h1>
-              </div>
-            }
-            description={<p className="welcome-body">{t("welcome.description")}</p>}
-            action={
+          <div className="welcome-card__hero">
+            <div className="welcome-kicker page-kicker">{t("welcome.kicker")}</div>
+            <h1 className="welcome-title page-title">{t("welcome.title")}</h1>
+            <p className="welcome-body meta-text">{t("welcome.description")}</p>
+          </div>
+
+          <div className="welcome-card__actions">
+            <div className="welcome-actions-group">
               <button className="welcome-btn" onClick={handleOpenWorkspace}>
                 <ThemedIcon semantic="nav.newWorkspace" size={18} />
                 <span>{t("action.open_workspace")}</span>
               </button>
-            }
-          />
 
-          <button className="welcome-link" onClick={handleOpenSettings}>
-            <ThemedIcon semantic="nav.settings" size={14} />
-            <span>{t("action.settings")}</span>
-          </button>
+              <button className="welcome-link" onClick={handleOpenSettings}>
+                <ThemedIcon semantic="nav.settings" size={14} />
+                <span>{t("action.settings")}</span>
+              </button>
+            </div>
+          </div>
 
-          <div className="welcome-divider" />
-
-          <div className="welcome-features">
-            {features.map((f, i) => (
-              <div className="welcome-feature" key={i}>
-                <ThemedIcon className="welcome-feature-icon" semantic={f.iconSemantic} size={18} />
-                <div className="welcome-feature-text">
-                  <div className="welcome-feature-title">{f.title}</div>
-                  <div className="welcome-feature-desc">{f.description}</div>
+          <div className="welcome-card__features">
+            <div className="welcome-features">
+              {features.map((feature) => (
+                <div className="welcome-feature" key={feature.iconSemantic}>
+                  <ThemedIcon
+                    className="welcome-feature-icon"
+                    semantic={feature.iconSemantic}
+                    size={18}
+                  />
+                  <div className="welcome-feature-text">
+                    <div className="welcome-feature-title">{feature.title}</div>
+                    <div className="welcome-feature-desc">{feature.description}</div>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
       </div>

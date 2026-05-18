@@ -65,6 +65,8 @@ describe("FileTreePanel", () => {
       </Provider>
     );
 
+    expect(document.querySelector(".file-tree-shell.file-tree-shell--desktop")).toBeTruthy();
+
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith(
         "file.readTree",
@@ -922,6 +924,44 @@ describe("FileTreePanel", () => {
     const emptyShell = emptyText.closest(".file-tree-empty");
 
     expect(emptyShell).not.toBeNull();
+  });
+
+  it("marks desktop search chrome and active rows with the polished desktop selectors", () => {
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand: vi.fn().mockResolvedValue({}) } as never);
+    store.set(
+      fileTreeAtomFamily("ws-test"),
+      new Map([
+        [
+          ".",
+          [
+            {
+              path: "src/app.tsx",
+              name: "app.tsx",
+              kind: "file",
+            },
+          ],
+        ],
+      ])
+    );
+    store.set(activeFilePathAtomFamily("ws-test"), "src/app.tsx");
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    const desktopSearch = document.querySelector(
+      ".file-tree-search.file-tree-search--desktop"
+    ) as HTMLElement | null;
+    const searchInput = screen.getByLabelText("action.search_files");
+    const activeRow = screen.getByText("app.tsx").closest(".tree-item");
+
+    expect(desktopSearch).toBeTruthy();
+    expect(desktopSearch).toContainElement(searchInput);
+    expect(activeRow).toHaveClass("selected");
+    expect(activeRow?.querySelector(".tree-item-actions")).toBeTruthy();
   });
 
   it("uses shared tooltip behavior for the search result delete action", async () => {

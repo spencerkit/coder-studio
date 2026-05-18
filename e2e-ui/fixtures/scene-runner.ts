@@ -41,7 +41,7 @@ async function openSettingsSection(
   const index = sectionOrder[section];
 
   if (device === "mobile") {
-    await page.locator(".settings-mobile-item").nth(index).click();
+    await page.locator(".settings-mobile-root .settings-mobile-item").nth(index).click();
     await page.locator(".settings-content--mobile, .settings-content").first().waitFor();
     return;
   }
