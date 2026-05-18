@@ -14,6 +14,8 @@ export type { ConfirmDialogProps, ConfirmDialogTone } from "./confirm-dialog";
 export { ConfirmDialog } from "./confirm-dialog";
 export type { DateTimePickerProps, DateTimePickerSize } from "./datetime-picker";
 export { DateTimePicker } from "./datetime-picker";
+export type { DrawerProps } from "./drawer";
+export { Drawer } from "./drawer";
 export type { EmptyStateProps } from "./empty-state";
 export { EmptyState } from "./empty-state";
 export type { IconButtonProps, IconButtonSize, IconButtonVariant } from "./icon-button";

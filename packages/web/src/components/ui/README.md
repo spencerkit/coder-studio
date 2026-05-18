@@ -5,6 +5,7 @@
 - 所有颜色、间距、字号、圆角、阴影、动效必须来自 `src/styles/tokens.css`。
 - 业务代码禁止新增 `btn btn-*`、`input`、`input textarea` 这类旧式全局 className；未迁移的遗留调用点只允许原样保留，不允许扩散。
 - PC / 移动差异默认由 token 或共享内部逻辑解决，业务代码不直接写 `matchMedia`。
+- PC 阻塞式 overlay 只能使用共享治理家族：短决策用 `Modal` / `ConfirmDialog`，长内容与多区块工作流用 `Drawer`，移动端流程面用 `Sheet`。
 
 ## 已实现组件
 | Component | Tier | Public API | Notes |
@@ -13,6 +14,7 @@
 | Button | 0 | `src/components/ui/index.ts` named export only | `primary / secondary / ghost / danger` × `sm / md / lg` |
 | Badge | 0 | `src/components/ui/index.ts` named export only | Shared count badge with legacy `topbar-unread` compatibility |
 | ConfirmDialog | 1 | `src/components/ui/index.ts` named export only | Shared confirm/cancel wrapper for the bounded destructive-flow slice; the current bounded feature inventory is complete |
+| Drawer | 1 | `src/components/ui/index.ts` named export only | Shared governed desktop right-side blocking surface for large detail and edit workflows; backdrop dismissal is opt-in |
 | EmptyState | 1 | `src/components/ui/index.ts` named export only | Shared centered empty-state shell with `title / description / icon / action` slots; the current bounded empty-state inventory is complete |
 | IconButton | 0 | `src/components/ui/index.ts` named export only | `ghost / filled` × `sm / md / lg`，保留 legacy `btn` icon-only 兼容类；当前已覆盖 bounded topbar / fullscreen / close-action slice |
 | Input | 0 | `src/components/ui/index.ts` named export only | Shared single-line text entry with legacy `.input` compatibility |
