@@ -1303,6 +1303,93 @@ describe("FileTreePanel", () => {
     expect(screen.queryByText("old.ts")).not.toBeInTheDocument();
   });
 
+  it("restores expanded directories after switching away and back to a workspace", async () => {
+    const sendCommand = vi
+      .fn()
+      .mockImplementation(async (_op: string, args?: { subPath?: string }) => {
+        if (args?.subPath === "src") {
+          return {
+            path: "src",
+            children: [{ path: "src/index.ts", name: "index.ts", kind: "file" }],
+          };
+        }
+
+        return {
+          path: "/workspace",
+          children: [{ path: "src", name: "src", kind: "dir" }],
+        };
+      });
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(workspacesAtom, {
+      "ws-1": {
+        id: "ws-1",
+        path: "/workspace-1",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+          fileTreeExpandedDirs: ["src"],
+        },
+      },
+      "ws-2": {
+        id: "ws-2",
+        path: "/workspace-2",
+        targetRuntime: "native",
+        openedAt: 2,
+        lastActiveAt: 2,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    } as never);
+    store.set(
+      fileTreeAtomFamily("ws-1"),
+      new Map([[".", [{ path: "src", name: "src", kind: "dir" }]]])
+    );
+    store.set(
+      fileTreeAtomFamily("ws-2"),
+      new Map([[".", [{ path: "docs", name: "docs", kind: "dir" }]]])
+    );
+
+    const { rerender } = render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-1" />
+      </Provider>
+    );
+
+    expect(await screen.findByText("index.ts")).toBeInTheDocument();
+    expect(Array.from(store.get(expandedDirsAtomFamily("ws-1")) ?? [])).toEqual(["src"]);
+    expect(Array.from(store.get(loadedDirsAtomFamily("ws-1")))).toEqual(["src"]);
+
+    rerender(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-2" />
+      </Provider>
+    );
+
+    expect(screen.getByText("docs")).toBeInTheDocument();
+    expect(screen.queryByText("index.ts")).not.toBeInTheDocument();
+
+    store.set(
+      fileTreeAtomFamily("ws-1"),
+      new Map([[".", [{ path: "src", name: "src", kind: "dir" }]]])
+    );
+
+    rerender(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-1" />
+      </Provider>
+    );
+
+    expect(await screen.findByText("index.ts")).toBeInTheDocument();
+  });
+
   it("reloads the file tree after deleting a file", async () => {
     const sendCommand = vi.fn().mockResolvedValueOnce({ ok: true }).mockResolvedValueOnce({
       path: "/workspace",
