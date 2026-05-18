@@ -26,6 +26,9 @@
 | Select | 🟢 complete | `.input`, `.mobile-select-*` | 0 | 2026-05-09 |
 | Popover | 🟢 complete | new | 0 | 2026-05-10 |
 | ActionMenu | 🟢 complete | new | 0 | 2026-05-10 |
+| Drawer | 🟡 pending | `worktree-modal`, `worktree-manager-surface` | 2 | 2026-05-19 |
+| WorkbenchLayer | 🟡 pending | `command-palette-overlay`, `launch-overlay` | 2 | 2026-05-19 |
+| LocalOverlay | 🟡 pending | upload busy inline overlay, `paste-dialog-overlay`, `xterm-replay-overlay` | 2 | 2026-05-19 |
 
 `Input` now completes the legacy `.input` single-line text-entry migration inventory: the auth password field, the settings supervisor timeout field, the git sync auth username/password fields, the worktree manager create-form branch/path fields, the file-tree create-path modal field, and the shortcuts capture input all use the shared primitive from the public UI barrel while preserving legacy `.input` compatibility classes and caller-owned layout hooks such as `auth-input`, `settings-input-compact`, and `shortcuts-capture`.
 

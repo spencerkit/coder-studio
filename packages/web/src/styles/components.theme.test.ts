@@ -52,6 +52,7 @@ const modalStylesheet = readFileSync(
   `${process.cwd()}/src/components/ui/modal/index.module.css`,
   "utf8"
 );
+const migrationInventory = readFileSync(`${process.cwd()}/src/components/ui/MIGRATION.md`, "utf8");
 const buttonStyles = readFileSync(
   `${process.cwd()}/src/components/ui/button/index.module.css`,
   "utf8"
@@ -458,6 +459,18 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(tokensStylesheet).toContain("--mobile-safe-right: env(safe-area-inset-right, 0px);");
     expect(tokensStylesheet).toContain("--mobile-safe-bottom: env(safe-area-inset-bottom, 0px);");
     expect(tokensStylesheet).toContain("--mobile-safe-left: env(safe-area-inset-left, 0px);");
+  });
+
+  it("tracks governed overlay families as pending before convergence completes", () => {
+    expect(migrationInventory).toContain(
+      "| Drawer | 🟡 pending | `worktree-modal`, `worktree-manager-surface` | 2 | 2026-05-19 |"
+    );
+    expect(migrationInventory).toContain(
+      "| WorkbenchLayer | 🟡 pending | `command-palette-overlay`, `launch-overlay` | 2 | 2026-05-19 |"
+    );
+    expect(migrationInventory).toContain(
+      "| LocalOverlay | 🟡 pending | upload busy inline overlay, `paste-dialog-overlay`, `xterm-replay-overlay` | 2 | 2026-05-19 |"
+    );
   });
 
   it("keeps the workspace launch modal theme-aware", () => {

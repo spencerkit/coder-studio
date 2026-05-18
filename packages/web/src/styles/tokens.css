@@ -113,11 +113,16 @@
   /* ========== Z-Index Scale ========== */
   --z-dropdown: 100;
   --z-sticky: 200;
+  --z-local-overlay: 240;
   --z-modal-backdrop: 300;
-  --z-modal: 400;
-  --z-popover: 500;
-  --z-tooltip: 600;
-  --z-toast: 700;
+  --z-modal: 310;
+  --z-drawer-backdrop: 320;
+  --z-drawer: 330;
+  --z-workbench-backdrop: 340;
+  --z-workbench: 350;
+  --z-popover: 360;
+  --z-tooltip: 370;
+  --z-toast: 380;
 
   /* ========== Visual稿别名 (short aliases) ========== */
   --text: var(--text-primary);
