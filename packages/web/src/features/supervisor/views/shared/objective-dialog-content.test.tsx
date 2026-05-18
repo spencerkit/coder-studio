@@ -27,8 +27,35 @@ afterEach(() => {
 });
 
 describe("ObjectiveDialogContent", () => {
-  it("renders shared textarea and desktop select trigger primitives with helper text wiring", () => {
-    render(
+  it("renders a flat supervisor intro strip for enable and edit modes", () => {
+    const { rerender } = render(
+      <ObjectiveDialogContent
+        mode="enable"
+        draftObjective="Investigate regressions"
+        draftEvaluatorProviderId="claude"
+        draftEvaluatorModel=""
+        draftMaxSupervisionCount="0"
+        draftScheduledAt=""
+        disableObjective=""
+        onDraftObjectiveChange={vi.fn()}
+        onDraftEvaluatorProviderChange={vi.fn()}
+        onDraftEvaluatorModelChange={vi.fn()}
+        onDraftMaxSupervisionCountChange={vi.fn()}
+        onDraftScheduledAtChange={vi.fn()}
+      />
+    );
+
+    let intro = document.querySelector(".supervisor-dialog-intro");
+    expect(intro).toBeTruthy();
+    expect(intro?.querySelector('[data-icon-semantic="supervisor.mode.enable"]')).toBeTruthy();
+    expect(intro?.querySelector(".supervisor-dialog-intro__title")).toHaveTextContent(
+      "supervisor.dialog.enable.title"
+    );
+    expect(intro?.querySelector(".supervisor-dialog-intro__description")).toHaveTextContent(
+      "supervisor.dialog.enable.subtitle"
+    );
+
+    rerender(
       <ObjectiveDialogContent
         mode="edit"
         draftObjective="Investigate regressions"
@@ -45,8 +72,38 @@ describe("ObjectiveDialogContent", () => {
       />
     );
 
+    intro = document.querySelector(".supervisor-dialog-intro");
+    expect(intro).toBeTruthy();
+    expect(intro?.querySelector('[data-icon-semantic="supervisor.mode.edit"]')).toBeTruthy();
+    expect(intro?.querySelector(".supervisor-dialog-intro__title")).toHaveTextContent(
+      "supervisor.dialog.edit.title"
+    );
+    expect(intro?.querySelector(".supervisor-dialog-intro__description")).toHaveTextContent(
+      "supervisor.dialog.edit.subtitle"
+    );
+  });
+
+  it("renders compact control classes instead of large form controls", () => {
+    render(
+      <ObjectiveDialogContent
+        mode="edit"
+        draftObjective="Investigate regressions"
+        draftEvaluatorProviderId="claude"
+        draftEvaluatorModel="sonnet"
+        draftMaxSupervisionCount="3"
+        draftScheduledAt=""
+        disableObjective=""
+        onDraftObjectiveChange={vi.fn()}
+        onDraftEvaluatorProviderChange={vi.fn()}
+        onDraftEvaluatorModelChange={vi.fn()}
+        onDraftMaxSupervisionCountChange={vi.fn()}
+        onDraftScheduledAtChange={vi.fn()}
+      />
+    );
+
     const textarea = screen.getByLabelText("supervisor.field.objective");
-    expect(textarea).toHaveClass("input", "textarea", "textarea-lg");
+    expect(textarea).toHaveClass("input", "textarea");
+    expect(textarea).not.toHaveClass("textarea-lg");
     expect(textarea).toHaveAttribute("rows", "5");
     expect(textarea).toHaveValue("Investigate regressions");
     expect(textarea).toHaveAttribute("aria-describedby");
@@ -58,11 +115,24 @@ describe("ObjectiveDialogContent", () => {
     const trigger = screen.getByRole("button", {
       name: "supervisor.field.evaluator Claude",
     });
-    expect(trigger).toHaveClass("input", "mobile-select-trigger");
+    expect(trigger).toHaveClass("input", "mobile-select-trigger", "input-sm");
     expect(trigger).toHaveAttribute("aria-describedby");
     expect(screen.getByText("supervisor.field.evaluator_helper")).toHaveAttribute(
       "id",
       trigger.getAttribute("aria-describedby")
+    );
+
+    expect(screen.getByLabelText("supervisor.field.evaluator_model")).toHaveClass(
+      "input",
+      "input-sm"
+    );
+    expect(screen.getByLabelText("supervisor.field.max_supervision_count")).toHaveClass(
+      "input",
+      "input-sm"
+    );
+    expect(screen.getByRole("button", { name: "supervisor.field.scheduled_at" })).toHaveClass(
+      "input",
+      "input-sm"
     );
   });
 
@@ -222,6 +292,7 @@ describe("ObjectiveDialogContent", () => {
       />
     );
 
+    expect(document.querySelector(".supervisor-dialog-intro")).toBeNull();
     expect(
       screen.getByRole("alert").querySelector('[data-icon-semantic="state.warning"]')
     ).toBeTruthy();

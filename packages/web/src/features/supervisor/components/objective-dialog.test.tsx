@@ -179,6 +179,28 @@ describe("ObjectiveDialog", () => {
     expect(screen.getByRole("textbox", { name: "Objective" })).toHaveClass("input", "textarea");
   });
 
+  it("renders the intro strip in the desktop wrapper for enable mode", () => {
+    const store = createStore();
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+    store.set(
+      supervisorDialogAtom,
+      createDialogState({
+        draftObjective: "Ship phase 4B1",
+      })
+    );
+    store.set(supervisorsAtom, new Map());
+
+    render(
+      <Provider store={store}>
+        <ObjectiveDialog workspaceId="ws-1" />
+      </Provider>
+    );
+
+    expect(document.querySelector(".supervisor-dialog-intro")).toBeTruthy();
+  });
+
   it("renders disable confirmation mode", () => {
     const store = createStore();
     window.localStorage.setItem("ui.locale", JSON.stringify("en"));
@@ -201,6 +223,7 @@ describe("ObjectiveDialog", () => {
     expect(screen.getByText("Disabling stops evaluation cycles")).toBeInTheDocument();
     expect(screen.getByText("Finish the server refactor")).toBeInTheDocument();
     expect(screen.getByRole("dialog")).toHaveClass("supervisor-dialog--disable");
+    expect(document.querySelector(".supervisor-dialog-intro")).toBeNull();
   });
 
   it("renders the dialog header through the canonical dialog header anatomy", () => {

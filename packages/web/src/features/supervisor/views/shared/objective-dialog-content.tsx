@@ -64,6 +64,8 @@ export function ObjectiveDialogContent({
   const evaluatorModelHelperId = useId();
   const maxSupervisionCountHelperId = useId();
   const scheduledAtHelperId = useId();
+  const introTitle = t(`supervisor.dialog.${mode}.title`);
+  const introDescription = t(`supervisor.dialog.${mode}.subtitle`);
 
   if (mode === "disable") {
     return (
@@ -90,11 +92,20 @@ export function ObjectiveDialogContent({
 
   return (
     <>
+      <div className="supervisor-dialog-intro">
+        <div className="supervisor-dialog-intro__icon" aria-hidden="true">
+          <ObjectiveDialogModeIcon mode={mode} />
+        </div>
+        <div className="supervisor-dialog-intro__copy">
+          <p className="supervisor-dialog-intro__title">{introTitle}</p>
+          <p className="supervisor-dialog-intro__description">{introDescription}</p>
+        </div>
+      </div>
+
       <div className="form-group">
         <label htmlFor="objective">{t("supervisor.field.objective")}</label>
         <Textarea
           id="objective"
-          size="lg"
           rows={5}
           value={draftObjective}
           onChange={(event) => onDraftObjectiveChange(event.target.value)}
@@ -113,6 +124,7 @@ export function ObjectiveDialogContent({
         </label>
         <Select
           id="evaluator-provider"
+          size="sm"
           desktopMode="listbox"
           mobileSheetTitle={t("supervisor.field.evaluator")}
           mobileSheetPresentation="inline"
@@ -131,7 +143,7 @@ export function ObjectiveDialogContent({
         <label htmlFor="evaluator-model">{t("supervisor.field.evaluator_model")}</label>
         <Input
           id="evaluator-model"
-          size="lg"
+          size="sm"
           value={draftEvaluatorModel}
           onChange={(event) => onDraftEvaluatorModelChange(event.target.value)}
           aria-describedby={evaluatorModelHelperId}
@@ -146,7 +158,7 @@ export function ObjectiveDialogContent({
         <label htmlFor="max-supervision-count">{t("supervisor.field.max_supervision_count")}</label>
         <Input
           id="max-supervision-count"
-          size="lg"
+          size="sm"
           type="number"
           min={0}
           step={1}
@@ -165,6 +177,7 @@ export function ObjectiveDialogContent({
         <label htmlFor="scheduled-at">{t("supervisor.field.scheduled_at")}</label>
         <DateTimePicker
           label={t("supervisor.field.scheduled_at")}
+          size="sm"
           value={draftScheduledAt}
           onValueChange={onDraftScheduledAtChange}
           placeholder={t("supervisor.field.scheduled_at_placeholder")}
