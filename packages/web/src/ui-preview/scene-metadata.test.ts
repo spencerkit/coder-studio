@@ -20,6 +20,9 @@ describe("ui preview scene metadata", () => {
   it("registers the desktop review scene ids", () => {
     expect(UI_PREVIEW_SCENE_METADATA.map((scene) => scene.id)).toEqual(
       expect.arrayContaining([
+        "readme-desktop-hero",
+        "readme-desktop-review",
+        "readme-mobile-progress",
         "workspace-topbar-review",
         "workspace-sidebar-files-review",
         "workspace-sidebar-git-review",
@@ -61,5 +64,19 @@ describe("ui preview scene metadata", () => {
     const scene = UI_PREVIEW_SCENE_METADATA.find((entry) => entry.id === "settings-mobile-root");
 
     expect(scene?.capture?.selector).toBe(".settings-mobile-root");
+  });
+
+  it("captures the README scenes from their full workspace shells", () => {
+    const heroScene = UI_PREVIEW_SCENE_METADATA.find((entry) => entry.id === "readme-desktop-hero");
+    const reviewScene = UI_PREVIEW_SCENE_METADATA.find(
+      (entry) => entry.id === "readme-desktop-review"
+    );
+    const mobileScene = UI_PREVIEW_SCENE_METADATA.find(
+      (entry) => entry.id === "readme-mobile-progress"
+    );
+
+    expect(heroScene?.capture?.selector).toBe(".workspace-page");
+    expect(reviewScene?.capture?.selector).toBe(".workspace-page");
+    expect(mobileScene?.capture?.selector).toBe("[data-testid='mobile-shell']");
   });
 });

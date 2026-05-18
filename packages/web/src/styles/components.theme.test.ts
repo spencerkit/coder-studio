@@ -1,5 +1,6 @@
 // @vitest-environment node
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { build } from "vite";
 import { describe, expect, it } from "vitest";
 
@@ -130,38 +131,51 @@ function getLastRuleBlock(selector: string) {
 }
 
 async function buildRuntimeStylesheet() {
-  const output = await build({
-    configFile: false,
-    root: process.cwd(),
-    plugins: [],
-    build: {
-      write: false,
-      outDir: "dist-test",
-      cssCodeSplit: true,
-      rollupOptions: {
-        input: `${process.cwd()}/src/main.tsx`,
-      },
-    },
-    resolve: {
-      alias: {
-        "@": `${process.cwd()}/src`,
-      },
-    },
-  });
+  const tempDir = mkdtempSync(join(process.cwd(), ".vite-style-build-"));
+  const entryFile = join(tempDir, "runtime-entry.ts");
 
-  const bundle = Array.isArray(output) ? output[0] : output;
-  const chunks = "output" in bundle ? bundle.output : [];
-  const cssAssets = chunks.filter(
-    (chunk): chunk is { type: "asset"; fileName: string; source: string | Uint8Array } =>
-      chunk.type === "asset" && chunk.fileName.endsWith(".css")
+  writeFileSync(
+    entryFile,
+    [
+      'import buttonStyles from "../src/components/ui/button/index.module.css";',
+      'import tabsStyles from "../src/components/ui/tabs/index.module.css";',
+      "void [buttonStyles.btn, tabsStyles.tab];",
+    ].join("\n"),
+    "utf8"
   );
 
-  expect(cssAssets.length, "expected built CSS asset").toBeGreaterThan(0);
-  return cssAssets
-    .map((asset) =>
-      typeof asset.source === "string" ? asset.source : Buffer.from(asset.source).toString("utf8")
-    )
-    .join("\n");
+  try {
+    const output = await build({
+      configFile: false,
+      root: process.cwd(),
+      plugins: [],
+      build: {
+        write: false,
+        outDir: join(tempDir, "dist"),
+        cssCodeSplit: true,
+        lib: {
+          entry: entryFile,
+          formats: ["es"],
+        },
+      },
+    });
+
+    const bundle = Array.isArray(output) ? output[0] : output;
+    const chunks = "output" in bundle ? bundle.output : [];
+    const cssAssets = chunks.filter(
+      (chunk): chunk is { type: "asset"; fileName: string; source: string | Uint8Array } =>
+        chunk.type === "asset" && chunk.fileName.endsWith(".css")
+    );
+
+    expect(cssAssets.length, "expected built CSS asset").toBeGreaterThan(0);
+    return cssAssets
+      .map((asset) =>
+        typeof asset.source === "string" ? asset.source : Buffer.from(asset.source).toString("utf8")
+      )
+      .join("\n");
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
 }
 
 describe("components.css theme-sensitive surfaces", () => {
@@ -447,10 +461,10 @@ describe("components.css theme-sensitive surfaces", () => {
     const sessionCard = getLastRuleBlock(".session-card");
     const activeSessionCard = getLastRuleBlock(".session-card.session-card--active");
     const activeSessionHeader = getLastRuleBlock(
-      ".session-card.session-card--active .session-header"
+      ".session-card.session-card--active > .panel-header"
     );
     const activeSessionTitle = getLastRuleBlock(
-      ".session-card.session-card--active .session-title"
+      ".session-card.session-card--active > .panel-header .panel-header__title"
     );
     const statusBar = getLastRuleBlock(".workspace-status-bar");
     const agentPanes = getLastRuleBlock(".workspace-main-stage > .agent-panes");
@@ -1725,6 +1739,7 @@ describe("components.css theme-sensitive surfaces", () => {
     const progress = getLastRuleBlock(".mobile-shell__agent-stage .session-progress");
     const header = getLastRuleBlock(".mobile-shell__agent-stage > .session-card > .panel-header");
     const titleRow = getLastRuleBlock(".mobile-shell__agent-stage .session-title-row");
+    const headerRight = getLastRuleBlock(".mobile-shell__agent-stage .session-header-right");
     const badges = getLastGroupedRuleBlock(
       /\.mobile-shell__agent-stage \.session-provider-badge,\s*\.mobile-shell__agent-stage \.session-state-badge\s*\{([^}]*)\}/g
     );
@@ -1745,12 +1760,15 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(header).toContain("border-bottom:");
     expect(header).not.toContain("linear-gradient(");
     expect(titleRow).toContain("gap: 6px");
+    expect(headerRight).toContain("max-width: 100%");
+    expect(headerRight).not.toContain("max-width: min(48%, 220px)");
     expect(hasRuleBlock(".mobile-shell__agent-stage .session-header")).toBe(false);
     expect(hasRuleBlock(".mobile-shell__agent-stage .session-header-left")).toBe(false);
     expect(hasRuleBlock(".mobile-shell__agent-stage .session-title")).toBe(false);
     expect(badges).toContain("height: 15px");
     expect(badges).toContain("border-radius: 3px");
     expect(supervisorBadge).toContain("min-height: 26px");
+    expect(supervisorBadge).not.toContain("width: max-content");
     expect(supervisorBadge).toContain("border-radius: 4px");
     expect(supervisorBadge).not.toContain("border-radius: var(--radius-lg)");
     expect(supervisorLabel).toContain("font-size: var(--type-kicker-size)");

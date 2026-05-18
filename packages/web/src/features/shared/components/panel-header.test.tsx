@@ -41,4 +41,26 @@ describe("PanelHeader", () => {
     expect(within(status as HTMLElement).getByText("Modified")).toBeInTheDocument();
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
+
+  it("can render meta inline inside the title row when requested", () => {
+    render(
+      <PanelHeader
+        title="SESSION-20"
+        meta={<span>Codex</span>}
+        status={<span>Online</span>}
+        metaPlacement="inline"
+      />
+    );
+
+    const header = document.querySelector(".panel-header");
+    const titleRow = header?.querySelector(".panel-header__title-row");
+    const inlineMeta = header?.querySelector(".panel-header__meta--inline");
+
+    expect(header).toHaveClass("panel-header", "panel-header--inline-meta");
+    expect(titleRow).not.toBeNull();
+    expect(inlineMeta).not.toBeNull();
+    expect(titleRow).toContainElement(screen.getByText("SESSION-20"));
+    expect(titleRow).toContainElement(screen.getByText("Codex"));
+    expect(titleRow).toContainElement(inlineMeta as HTMLElement);
+  });
 });

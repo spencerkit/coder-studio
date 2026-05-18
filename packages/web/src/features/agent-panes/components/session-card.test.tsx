@@ -265,6 +265,30 @@ describe("SessionCard", () => {
     expect(screen.getByText("Running")).toHaveClass("badge", "badge-green", "session-state-badge");
   });
 
+  it("renders the session title and badges inside one header row", () => {
+    const { store } = createSessionStore({
+      terminalId: "term-live",
+      state: "idle",
+      endedAt: undefined,
+    });
+
+    const { container } = render(
+      <Provider store={store}>
+        <SessionCard sessionId="sess_123456" />
+      </Provider>
+    );
+
+    const headerRow = container.querySelector(".panel-header__title-row");
+    const inlineMeta = container.querySelector(".panel-header__meta--inline");
+
+    expect(headerRow).not.toBeNull();
+    expect(headerRow).toContainElement(screen.getByText("SESSION-56"));
+    expect(headerRow).toContainElement(screen.getByText("Codex"));
+    expect(headerRow).toContainElement(screen.getByText("Idle"));
+    expect(inlineMeta).not.toBeNull();
+    expect(headerRow).toContainElement(inlineMeta as HTMLElement);
+  });
+
   it("renders a header accessory on the right side of the session header", () => {
     const { store } = createSessionStore({
       terminalId: "term-live",
