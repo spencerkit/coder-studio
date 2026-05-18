@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 
 import type { GitStatus } from "@coder-studio/core";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
+import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../../../atoms/app-ui";
 import { wsClientAtom } from "../../../../atoms/connection";
@@ -26,10 +27,12 @@ function renderStatusBar({
   locale = "en",
   status = baseStatus,
   sendCommand = vi.fn(),
+  onRefresh,
 }: {
   locale?: "en" | "zh";
   status?: GitStatus | null;
   sendCommand?: ReturnType<typeof vi.fn>;
+  onRefresh?: () => Promise<boolean> | Promise<void> | boolean | void;
 } = {}) {
   const store = createStore();
   store.set(localeAtom, locale);
@@ -38,7 +41,7 @@ function renderStatusBar({
 
   const { container } = render(
     <Provider store={store}>
-      <GitStatusBar workspaceId="ws-test" gitState={status} inline />
+      <GitStatusBar workspaceId="ws-test" gitState={status} inline onRefresh={onRefresh} />
     </Provider>
   );
 
@@ -65,7 +68,7 @@ describe("GitStatusBar", () => {
     );
 
     const buttons = within(toolbar as HTMLElement).getAllByRole("button");
-    expect(buttons.at(-1)).toHaveAccessibleName("Fetch");
+    expect(buttons[buttons.length - 1]).toHaveAccessibleName("Fetch");
   });
 
   it("confirms and pushes local commits from the status bar", async () => {
@@ -354,6 +357,76 @@ describe("GitStatusBar", () => {
         { timeoutMs: 180000 }
       );
     });
+  });
+
+  it("does not run local refresh after an authenticated push retry succeeds", async () => {
+    let pushAttempts = 0;
+    const onRefresh = vi.fn();
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.push") {
+        pushAttempts += 1;
+        if (pushAttempts === 1) {
+          throw new CommandResultError({
+            code: "git_auth_required",
+            message: "Authentication is required",
+            details: {
+              operation: "push",
+              remote: "origin",
+              remoteLabel: "origin (github.com)",
+              host: "github.com",
+              reason: "missing_credentials",
+              authMode: "username_password",
+              canPrompt: true,
+              usernameHint: "alice",
+            },
+          });
+        }
+
+        return { success: true, message: "Push completed successfully" };
+      }
+
+      if (op === "git.branches") {
+        return {
+          current: "main",
+          branches: [{ name: "main", isRemote: false, isCurrent: true }],
+        };
+      }
+
+      if (op === "git.status") {
+        return {
+          ...baseStatus,
+          ahead: 0,
+        };
+      }
+
+      throw new Error(`Unexpected command: ${op}`);
+    });
+
+    renderStatusBar({ sendCommand, onRefresh });
+
+    fireEvent.click(screen.getByRole("button", { name: "Push" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Push" })[1] as HTMLElement);
+
+    fireEvent.change(await screen.findByLabelText("Password or token"), {
+      target: { value: "secret-token" },
+    });
+    fireEvent.click(screen.getAllByRole("button", { name: "Push" })[1] as HTMLElement);
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "git.push",
+        {
+          workspaceId: "ws-test",
+          auth: {
+            username: "alice",
+            password: "secret-token",
+          },
+        },
+        { timeoutMs: 180000 }
+      );
+    });
+
+    expect(onRefresh).not.toHaveBeenCalled();
   });
 
   it("submits the credential form with Enter", async () => {
@@ -858,6 +931,7 @@ describe("GitStatusBar", () => {
 
   it("opens the auth form and retries fetch when remote authentication is required", async () => {
     let fetchAttempts = 0;
+    const onRefresh = vi.fn();
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "git.fetch") {
         fetchAttempts += 1;
@@ -895,7 +969,7 @@ describe("GitStatusBar", () => {
       throw new Error(`Unexpected command: ${op}`);
     });
 
-    const { store } = renderStatusBar({ sendCommand });
+    const { store } = renderStatusBar({ sendCommand, onRefresh });
 
     fireEvent.click(screen.getByRole("button", { name: "Fetch" }));
 
@@ -922,6 +996,96 @@ describe("GitStatusBar", () => {
     });
 
     expect(store.get(gitFetchAtomFamily("ws-test")).status).toBe("idle");
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("runs local refresh after an auth-retried pull succeeds", async () => {
+    let pullAttempts = 0;
+    const onRefresh = vi.fn();
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.pull") {
+        pullAttempts += 1;
+        if (pullAttempts === 1) {
+          throw new CommandResultError({
+            code: "git_auth_required",
+            message: "Authentication is required",
+            details: {
+              operation: "pull",
+              remote: "origin",
+              remoteLabel: "origin (github.com)",
+              host: "github.com",
+              reason: "missing_credentials",
+              authMode: "username_password",
+              canPrompt: true,
+              usernameHint: "alice",
+            },
+          });
+        }
+
+        return {
+          success: true,
+          message: "Pull completed successfully",
+          remote: "origin",
+          branch: "main",
+          updated: true,
+        };
+      }
+
+      if (op === "git.branches") {
+        return {
+          current: "main",
+          branches: [{ name: "main", isRemote: false, isCurrent: true }],
+        };
+      }
+
+      if (op === "git.status") {
+        return {
+          ...baseStatus,
+          behind: 0,
+        };
+      }
+
+      throw new Error(`Unexpected command: ${op}`);
+    });
+
+    renderStatusBar({
+      sendCommand,
+      onRefresh,
+      status: {
+        ...baseStatus,
+        ahead: 0,
+        behind: 1,
+      },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Pull" }));
+    const confirmModal = screen.getByText("Pull Changes").closest(".modal-card");
+    expect(confirmModal).not.toBeNull();
+    fireEvent.click(within(confirmModal as HTMLElement).getByRole("button", { name: "Pull" }));
+
+    expect(await screen.findByLabelText("Username")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Password or token"), {
+      target: { value: "secret-token" },
+    });
+    const authModal = screen.getByLabelText("Username").closest(".modal-card");
+    expect(authModal).not.toBeNull();
+    fireEvent.click(within(authModal as HTMLElement).getByRole("button", { name: "Pull" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "git.pull",
+        {
+          workspaceId: "ws-test",
+          auth: {
+            username: "alice",
+            password: "secret-token",
+          },
+        },
+        { timeoutMs: 180000 }
+      );
+    });
+
+    expect(onRefresh).toHaveBeenCalledTimes(1);
   });
 
   it("does not mark fetch successful when refreshing git state fails afterward", async () => {
@@ -952,6 +1116,63 @@ describe("GitStatusBar", () => {
 
     expect(store.get(gitFetchAtomFamily("ws-test")).lastFetchAt).toBeUndefined();
     expect(store.get(gitFetchAtomFamily("ws-test")).status).toBe("error");
+  });
+
+  it("queues one rerun when the footer button is clicked during a workspace refresh", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({
+      success: true,
+      message: "Fetch completed successfully",
+      updatedRefs: [],
+    });
+
+    let releaseLocalRefresh: (() => void) | null = null;
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(gitStateAtomFamily("ws-test"), baseStatus);
+
+    function Wrapper() {
+      const [refreshStatus, setRefreshStatus] = useState<"idle" | "refreshing" | "error">("idle");
+
+      return (
+        <Provider store={store}>
+          <GitStatusBar
+            workspaceId="ws-test"
+            gitState={baseStatus}
+            inline
+            refreshStatus={refreshStatus}
+            onRefresh={async () => {
+              setRefreshStatus("refreshing");
+              await new Promise<void>((resolve) => {
+                releaseLocalRefresh = () => {
+                  setRefreshStatus("idle");
+                  resolve();
+                };
+              });
+            }}
+          />
+        </Provider>
+      );
+    }
+
+    render(<Wrapper />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Fetch" }));
+    await waitFor(() => {
+      expect(sendCommand.mock.calls.filter(([op]) => op === "git.fetch")).toHaveLength(1);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Fetching..." }));
+    expect(sendCommand.mock.calls.filter(([op]) => op === "git.fetch")).toHaveLength(1);
+
+    await act(async () => {
+      releaseLocalRefresh?.();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(sendCommand.mock.calls.filter(([op]) => op === "git.fetch")).toHaveLength(2);
+    });
   });
 });
 

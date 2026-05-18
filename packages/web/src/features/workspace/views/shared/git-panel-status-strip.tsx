@@ -3,6 +3,7 @@ import type { KeyboardEventHandler, MouseEventHandler } from "react";
 import { ThemedIcon, Tooltip } from "../../../../components/ui";
 import { useViewport } from "../../../../hooks/use-viewport";
 import { useTranslation } from "../../../../lib/i18n";
+import { useWorkspaceRefreshActions } from "../../actions/use-workspace-refresh-actions";
 import { DesktopBranchQuickPickPopover } from "./branch-quick-pick";
 import { GitStatusBar } from "./git-status-bar";
 
@@ -64,6 +65,7 @@ export function GitPanelStatusStrip({
 }: GitPanelStatusStripProps) {
   const t = useTranslation();
   const viewport = useViewport();
+  const { refreshWorkspace, status: refreshStatus } = useWorkspaceRefreshActions(workspaceId);
   const branchName = gitState?.branch?.trim() || t("git.no_branch");
   const branchSummary =
     gitState && (gitState.ahead > 0 || gitState.behind > 0)
@@ -98,7 +100,13 @@ export function GitPanelStatusStrip({
         branchTrigger
       )}
       <div className="git-panel-status-strip__meta">
-        <GitStatusBar workspaceId={workspaceId} gitState={gitState} inline />
+        <GitStatusBar
+          workspaceId={workspaceId}
+          gitState={gitState}
+          inline
+          onRefresh={refreshWorkspace}
+          refreshStatus={refreshStatus}
+        />
       </div>
     </div>
   );

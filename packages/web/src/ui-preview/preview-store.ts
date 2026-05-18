@@ -88,6 +88,7 @@ export interface UiPreviewCommands {
       createdAt: number;
     }>
   >;
+  supervisorBySessionId?: Record<string, Supervisor>;
 }
 
 export interface UiPreviewSeed {
@@ -370,10 +371,18 @@ function createPreviewDispatcher(seed: UiPreviewSeed): DispatchCommand {
       op === "file.delete" ||
       op === "supervisor.create" ||
       op === "supervisor.update" ||
-      op === "supervisor.delete" ||
-      op === "supervisor.get"
+      op === "supervisor.delete"
     ) {
       return ok({} as unknown as T);
+    }
+
+    if (op === "supervisor.get") {
+      const sessionId = (args as { sessionId?: string })?.sessionId ?? "";
+      const supervisor =
+        commands.supervisorBySessionId?.[sessionId] ??
+        seed.supervisorBySessionId?.[sessionId] ??
+        null;
+      return ok({ supervisor } as unknown as T);
     }
 
     return err(`Missing preview handler for ${op}`);

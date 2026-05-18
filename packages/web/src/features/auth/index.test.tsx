@@ -45,6 +45,25 @@ describe("LoginPage", () => {
     expect(screen.getAllByText("连接中").length).toBeGreaterThan(0);
   });
 
+  it("renders the flat auth shell sections in order while auth status is loading", () => {
+    globalThis.fetch = vi.fn(() => new Promise(() => {})) as typeof fetch;
+
+    const { container } = render(
+      <Provider>
+        <LoginPage />
+      </Provider>
+    );
+
+    const content = container.querySelector(".auth-card-shell__content");
+    expect(content).toBeTruthy();
+    expect(container.querySelector(".auth-hero")).toBeTruthy();
+    expect(container.querySelector(".auth-status-panel")).toBeTruthy();
+    expect(container.querySelector(".auth-form")).toBeTruthy();
+    expect(content?.firstElementChild).toHaveClass("auth-hero");
+    expect(content?.children[1]).toHaveClass("auth-status-panel");
+    expect(content?.lastElementChild).toHaveClass("auth-form");
+  });
+
   it("renders the password field with a dedicated hint when auth is available", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,

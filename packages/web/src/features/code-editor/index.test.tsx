@@ -30,8 +30,8 @@ vi.mock("./components/monaco-host", () => ({
 // ImagePreview mount would try to decode the <img>; in jsdom the load event
 // never fires for data: URLs, so we stub it to assert routing only.
 vi.mock("./components/image-preview", () => ({
-  ImagePreview: ({ url, mime }: { url: string; mime: string }) => (
-    <div data-testid="image-preview" data-url={url} data-mime={mime} />
+  ImagePreview: ({ url, mime, version }: { url: string; mime: string; version: string }) => (
+    <div data-testid="image-preview" data-url={url} data-mime={mime} data-version={version} />
   ),
 }));
 
@@ -223,6 +223,7 @@ describe("CodeEditorHost", () => {
           url: "/api/file?workspaceId=ws-1&path=assets%2Flogo.png",
           size: 1234,
           isTextBacked: false,
+          version: "1",
         };
       }
       return null;
@@ -243,6 +244,7 @@ describe("CodeEditorHost", () => {
     const preview = screen.getByTestId("image-preview");
     expect(preview.getAttribute("data-mime")).toBe("image/png");
     expect(preview.getAttribute("data-url")).toContain("/api/file?");
+    expect(preview.getAttribute("data-version")).toBe("1");
     expect(screen.queryByTestId("monaco-host")).not.toBeInTheDocument();
 
     // Save button must be disabled for images (nothing to write back).
@@ -412,6 +414,156 @@ describe("CodeEditorHost", () => {
     });
   });
 
+  it("refreshes an open image when version changes but url and size stay the same", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({
+      kind: "image",
+      mime: "image/png",
+      url: "/api/file?workspaceId=ws-1&path=logo.png",
+      size: 128,
+      isTextBacked: false,
+      version: "2",
+    });
+
+    const { store } = setupStore({
+      activePath: "logo.png",
+      sendCommand,
+      openFiles: {
+        "logo.png": {
+          kind: "image",
+          path: "logo.png",
+          mime: "image/png",
+          url: "/api/file?workspaceId=ws-1&path=logo.png",
+          size: 128,
+          isTextBacked: false,
+          version: "1",
+        },
+      },
+    });
+
+    render(
+      <Provider store={store}>
+        <CodeEditorHost />
+      </Provider>
+    );
+
+    act(() => {
+      store.set(editorRefreshTokenAtomFamily("ws-1"), 1);
+    });
+
+    await waitFor(() => {
+      expect(store.get(openFilesAtomFamily("ws-1"))["logo.png"]).toMatchObject({ version: "2" });
+      expect(screen.getByTestId("image-preview")).toHaveAttribute("data-version", "2");
+    });
+  });
+
+  it("keeps dirty SVG text edits when a refresh rereads the file as an image descriptor", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({
+      kind: "image",
+      mime: "image/svg+xml",
+      url: "/api/file?workspaceId=ws-1&path=icon.svg",
+      size: 256,
+      isTextBacked: true,
+      version: "2",
+    });
+
+    const { store } = setupStore({
+      activePath: "icon.svg",
+      sendCommand,
+      openFiles: {
+        "icon.svg": {
+          kind: "text",
+          path: "icon.svg",
+          content: "<svg>local edits</svg>",
+          baseHash: "hash-1",
+          isDirty: true,
+          viewingTextBackedImageAsText: true,
+        },
+      },
+    });
+
+    render(
+      <Provider store={store}>
+        <CodeEditorHost />
+      </Provider>
+    );
+
+    expect(screen.getByTestId("monaco-host")).toHaveTextContent("<svg>local edits</svg>");
+
+    act(() => {
+      store.set(editorRefreshTokenAtomFamily("ws-1"), 1);
+    });
+
+    await waitFor(() => {
+      expect(store.get(openFilesAtomFamily("ws-1"))["icon.svg"]).toMatchObject({
+        kind: "text",
+        content: "<svg>local edits</svg>",
+        isDirty: true,
+        viewingTextBackedImageAsText: true,
+        externalState: "modified",
+      });
+    });
+
+    expect(screen.getByTestId("monaco-host")).toHaveTextContent("<svg>local edits</svg>");
+    expect(screen.queryByTestId("image-preview")).not.toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("changed on disk");
+  });
+
+  it("keeps clean SVG text mode open and refreshes its text bytes on external refresh", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      text: async () => "<svg>fresh from disk</svg>",
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const sendCommand = vi.fn().mockResolvedValue({
+      kind: "image",
+      mime: "image/svg+xml",
+      url: "/api/file?workspaceId=ws-1&path=icon.svg",
+      size: 256,
+      isTextBacked: true,
+      version: "2",
+    });
+
+    const { store } = setupStore({
+      activePath: "icon.svg",
+      sendCommand,
+      openFiles: {
+        "icon.svg": {
+          kind: "text",
+          path: "icon.svg",
+          content: "<svg>stale</svg>",
+          baseHash: "hash-1",
+          isDirty: false,
+          viewingTextBackedImageAsText: true,
+        },
+      },
+    });
+
+    render(
+      <Provider store={store}>
+        <CodeEditorHost />
+      </Provider>
+    );
+
+    act(() => {
+      store.set(editorRefreshTokenAtomFamily("ws-1"), 1);
+    });
+
+    await waitFor(() => {
+      expect(store.get(openFilesAtomFamily("ws-1"))["icon.svg"]).toMatchObject({
+        kind: "text",
+        content: "<svg>fresh from disk</svg>",
+        isDirty: false,
+        viewingTextBackedImageAsText: true,
+        externalState: undefined,
+      });
+    });
+
+    expect(screen.getByTestId("monaco-host")).toHaveTextContent("<svg>fresh from disk</svg>");
+    expect(screen.queryByTestId("image-preview")).not.toBeInTheDocument();
+    vi.unstubAllGlobals();
+  });
+
   describe("SVG edit-as-text toggle", () => {
     beforeEach(() => {
       // The toggle fetches the file bytes over HTTP to reuse them as text.
@@ -439,6 +591,7 @@ describe("CodeEditorHost", () => {
             url: "/api/file?workspaceId=ws-1&path=icon.svg",
             size: 200,
             isTextBacked: true,
+            version: "1",
           };
         }
         return null;
@@ -455,6 +608,7 @@ describe("CodeEditorHost", () => {
             url: "/api/file?workspaceId=ws-1&path=icon.svg",
             size: 200,
             isTextBacked: true,
+            version: "1",
           },
         },
       });
@@ -496,6 +650,7 @@ describe("CodeEditorHost", () => {
             url: "/api/file?workspaceId=ws-1&path=logo.png",
             size: 4096,
             isTextBacked: false,
+            version: "1",
           },
         },
       });

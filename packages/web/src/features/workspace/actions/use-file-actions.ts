@@ -99,7 +99,8 @@ export function useFileActions({
 
   const loadChildren = useCallback(
     async (dirPath: string) => {
-      if (!workspaceId || isLoadingDir === dirPath || loadedDirs.has(dirPath)) return;
+      const alreadyLoaded = loadedDirs.has(dirPath) && fileTree?.has(dirPath);
+      if (!workspaceId || isLoadingDir === dirPath || alreadyLoaded) return;
 
       setIsLoadingDir(dirPath);
       const result = await dispatch<ReadTreeResult>("file.readTree", {
@@ -119,7 +120,7 @@ export function useFileActions({
 
       setIsLoadingDir(null);
     },
-    [workspaceId, isLoadingDir, loadedDirs, dispatch, setFileTree, setLoadedDirs]
+    [workspaceId, isLoadingDir, loadedDirs, fileTree, dispatch, setFileTree, setLoadedDirs]
   );
 
   const loadSearchResults = useCallback(

@@ -1,11 +1,11 @@
 import { X } from "lucide-react";
 import {
   Button,
+  DialogHeader,
   IconButton,
   Modal,
   ModalBody,
   ModalFooter,
-  ModalHeader,
   ModalTitle,
 } from "../../../../components/ui";
 import { useViewport } from "../../../../hooks/use-viewport";
@@ -40,23 +40,23 @@ export function ObjectiveDialog({ workspaceId, sessionId }: ObjectiveDialogProps
 
   return (
     <Modal className={`supervisor-dialog supervisor-dialog--${mode}`} onOpenChange={close} open>
-      <ModalHeader>
-        <div className="supervisor-dialog-header">
-          <span className="supervisor-dialog-header-icon" aria-hidden="true">
+      <DialogHeader>
+        <div className="dialog-header__leading">
+          <span className="dialog-header__icon supervisor-dialog-header-icon" aria-hidden="true">
             <ObjectiveDialogModeIcon mode={mode} />
           </span>
-          <div>
+          <div className="dialog-header__copy">
             <ModalTitle>{copy.title}</ModalTitle>
-            <span className="supervisor-dialog-subtitle">{copy.subtitle}</span>
           </div>
         </div>
         <IconButton
           aria-label={t("action.close")}
+          className="modal-close"
           icon={<X size={14} />}
           onClick={close}
           size="sm"
         />
-      </ModalHeader>
+      </DialogHeader>
 
       <ModalBody>
         <ObjectiveDialogContent

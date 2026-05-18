@@ -13,7 +13,8 @@ import { useEffect, useRef, useState } from "react";
 import { pendingFocusSessionAtom } from "../../../../atoms/app-ui";
 import { sessionByIdAtomFamily } from "../../../../atoms/sessions";
 import { workspaceByIdAtomFamily } from "../../../../atoms/workspaces";
-import { IconButton, ProgressBar, StatusDot, Tag, Tooltip } from "../../../../components/ui";
+import { IconButton, StatusDot, Tag, Tooltip } from "../../../../components/ui";
+import { PanelHeader } from "../../../shared/components/panel-header";
 import { useSupervisor } from "../../../supervisor/actions/use-supervisor";
 import { ObjectiveDialog } from "../../../supervisor/views/shared/objective-dialog";
 import { SupervisorCard } from "../../../supervisor/views/shared/supervisor-card";
@@ -39,7 +40,6 @@ interface SessionCardProps {
  * Session Card
  *
  * PRD §8.3.1:
- *   - Progress bar (top)
  *   - Header: status dot, title, provider badge, status label, actions
  *   - Terminal area (xterm.js)
  */
@@ -87,7 +87,6 @@ export const SessionCard: FC<SessionCardProps> = ({
     return null;
   }
 
-  const progressWidth = getProgressWidth(session.state);
   const sessionTitle = session.title?.trim() || formatSessionLabel(session.id);
   const providerLabel = formatProviderLabel(session.providerId);
   const sessionStateLabel = formatSessionStateLabel(session.state);
@@ -117,94 +116,87 @@ export const SessionCard: FC<SessionCardProps> = ({
   return (
     <div
       ref={cardRef}
-      className={`session-card agent-pane${highlight ? " session-card--focus-pulse" : ""}`}
+      className={`session-card agent-pane${isActiveSession ? " session-card--active" : ""}${highlight ? " session-card--focus-pulse" : ""}`}
       data-session-id={sessionId}
       onClick={handleCardClick}
     >
-      <ProgressBar
-        aria-hidden="true"
-        className="session-progress"
-        fillClassName={`session-progress-bar ${getSessionProgressClass(session.state)}`}
-        max={100}
-        tone={getSessionProgressTone(session.state)}
-        value={progressWidth}
-      />
-
-      <div className="session-header">
-        <div className="session-header-left">
+      <PanelHeader
+        title={sessionTitle}
+        metaPlacement="inline"
+        status={
           <StatusDot
             tone={getSessionDotTone(session.state)}
             pulse={shouldPulseSessionDot(session.state)}
             className={`session-dot ${getSessionDotClass(session.state)}`}
           />
-          <div className="session-header-copy">
-            <div className="session-title-row">
-              <span className="session-title">{sessionTitle}</span>
-              <Tag color="blue" className="session-provider-badge">
-                {providerLabel}
-              </Tag>
-              <Tag
-                color={getSessionTagColor(session.state)}
-                className="session-state-badge"
-                caps={false}
-              >
-                {sessionStateLabel}
-              </Tag>
-            </div>
+        }
+        meta={
+          <div className="session-title-row">
+            <Tag color="blue" className="session-provider-badge">
+              {providerLabel}
+            </Tag>
+            <Tag
+              color={getSessionTagColor(session.state)}
+              className="session-state-badge"
+              caps={false}
+            >
+              {sessionStateLabel}
+            </Tag>
           </div>
-        </div>
+        }
+        actions={
+          showHeaderActions || headerAccessory ? (
+            <div className="session-header-right">
+              {headerAccessory ? (
+                <div className="session-header-accessory">{headerAccessory}</div>
+              ) : null}
 
-        {showHeaderActions || headerAccessory ? (
-          <div className="session-header-right">
-            {headerAccessory ? (
-              <div className="session-header-accessory">{headerAccessory}</div>
-            ) : null}
-
-            {showHeaderActions ? (
-              <div className="session-header-actions">
-                {session.state === "running" ? (
-                  <Tooltip content="Stop">
+              {showHeaderActions ? (
+                <div className="session-header-actions">
+                  {session.state === "running" ? (
+                    <Tooltip content="Stop">
+                      <IconButton
+                        aria-label="Stop"
+                        className="session-action-btn"
+                        icon={<Square size={13} />}
+                        onClick={() => void onStop?.()}
+                        size="sm"
+                      />
+                    </Tooltip>
+                  ) : null}
+                  <Tooltip content="Split horizontal">
                     <IconButton
-                      aria-label="Stop"
+                      aria-label="Split horizontal"
                       className="session-action-btn"
-                      icon={<Square size={13} />}
-                      onClick={() => void onStop?.()}
+                      icon={<FlipHorizontal size={13} />}
+                      onClick={() => onSplitHorizontal?.()}
                       size="sm"
                     />
                   </Tooltip>
-                ) : null}
-                <Tooltip content="Split horizontal">
-                  <IconButton
-                    aria-label="Split horizontal"
-                    className="session-action-btn"
-                    icon={<FlipHorizontal size={13} />}
-                    onClick={() => onSplitHorizontal?.()}
-                    size="sm"
-                  />
-                </Tooltip>
-                <Tooltip content="Split vertical">
-                  <IconButton
-                    aria-label="Split vertical"
-                    className="session-action-btn"
-                    icon={<FlipVertical size={13} />}
-                    onClick={() => onSplitVertical?.()}
-                    size="sm"
-                  />
-                </Tooltip>
-                <Tooltip content="Close">
-                  <IconButton
-                    aria-label="Close"
-                    className="session-action-btn session-action-btn-close"
-                    icon={<X size={14} />}
-                    onClick={() => void onClose?.()}
-                    size="sm"
-                  />
-                </Tooltip>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-      </div>
+                  <Tooltip content="Split vertical">
+                    <IconButton
+                      aria-label="Split vertical"
+                      className="session-action-btn"
+                      icon={<FlipVertical size={13} />}
+                      onClick={() => onSplitVertical?.()}
+                      size="sm"
+                    />
+                  </Tooltip>
+                  <Tooltip content="Close">
+                    <IconButton
+                      aria-label="Close"
+                      className="session-action-btn session-action-btn-close"
+                      icon={<X size={14} />}
+                      onClick={() => void onClose?.()}
+                      size="sm"
+                    />
+                  </Tooltip>
+                </div>
+              ) : null}
+            </div>
+          ) : null
+        }
+      />
 
       {showSupervisorInline &&
       session.capability === "full" &&
@@ -228,51 +220,6 @@ export const SessionCard: FC<SessionCardProps> = ({
     </div>
   );
 };
-
-function getProgressWidth(state: SessionState): number {
-  switch (state) {
-    case "starting":
-      return 18;
-    case "running":
-      return 42;
-    case "ended":
-      return 100;
-    default:
-      return 8;
-  }
-}
-
-function getSessionProgressTone(
-  state: SessionState
-): "success" | "warning" | "error" | "info" | "neutral" {
-  switch (state) {
-    case "starting":
-      return "warning";
-    case "running":
-      return "info";
-    case "idle":
-      return "neutral";
-    case "ended":
-      return "success";
-    default:
-      return "neutral";
-  }
-}
-
-function getSessionProgressClass(state: SessionState) {
-  switch (state) {
-    case "starting":
-      return "session-progress-starting";
-    case "running":
-      return "session-progress-running";
-    case "idle":
-      return "session-progress-idle";
-    case "ended":
-      return "session-progress-complete";
-    default:
-      return "session-progress-idle";
-  }
-}
 
 function getSessionDotClass(state: SessionState) {
   switch (state) {

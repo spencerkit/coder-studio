@@ -130,7 +130,7 @@ const editorReviewLines = [
   "return (",
   '  <div className={`settings-page ${isMobile ? "settings-page--mobile" : ""}`}>',
   '    <header className="settings-header">',
-  '      <div className="settings-header__desktop">',
+  "      <PageHeader",
   "        ...",
 ];
 

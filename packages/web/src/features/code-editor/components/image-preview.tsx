@@ -13,6 +13,7 @@ import { EmptyState } from "../../../components/ui";
 
 interface ImagePreviewProps {
   url: string;
+  version: string;
   mime: string;
   sizeBytes: number;
   alt: string;
@@ -31,16 +32,17 @@ function mimeToLabel(mime: string): string {
   return head.toUpperCase();
 }
 
-export const ImagePreview: FC<ImagePreviewProps> = ({ url, mime, sizeBytes, alt }) => {
+export const ImagePreview: FC<ImagePreviewProps> = ({ url, version, mime, sizeBytes, alt }) => {
   const [dimensions, setDimensions] = useState<{ w: number; h: number } | null>(null);
   const [errored, setErrored] = useState(false);
+  const src = `${url}${url.includes("?") ? "&" : "?"}v=${version}`;
 
   useEffect(() => {
     // Reset when the underlying image changes so stale dimensions from the
     // previous file don't get shown for a frame.
     setDimensions(null);
     setErrored(false);
-  }, [url]);
+  }, [url, version]);
 
   return (
     <div className="image-preview">
@@ -59,7 +61,7 @@ export const ImagePreview: FC<ImagePreviewProps> = ({ url, mime, sizeBytes, alt 
         ) : (
           <img
             className="image-preview-img"
-            src={url}
+            src={src}
             alt={alt}
             draggable={false}
             onLoad={(e) => {

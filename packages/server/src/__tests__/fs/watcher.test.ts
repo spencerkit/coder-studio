@@ -93,7 +93,7 @@ describe("WorkspaceWatcher", () => {
     expect(ignored?.(join(testDir, "src/index.ts"))).toBe(false);
   });
 
-  it("continues to respect .gitignore entries after tree visibility was relaxed", async () => {
+  it("does not let .gitignore shrink watcher coverage", async () => {
     await writeFile(join(testDir, ".gitignore"), "dist/\n*.log\n");
 
     new WorkspaceWatcher("test-workspace-id", testDir, broadcaster);
@@ -103,9 +103,10 @@ describe("WorkspaceWatcher", () => {
     const ignored = options?.ignored;
 
     expect(typeof ignored).toBe("function");
-    expect(ignored?.(join(testDir, "dist", "bundle.js"))).toBe(true);
-    expect(ignored?.(join(testDir, "debug.log"))).toBe(true);
+    expect(ignored?.(join(testDir, "dist", "bundle.js"))).toBe(false);
+    expect(ignored?.(join(testDir, "debug.log"))).toBe(false);
     expect(ignored?.(join(testDir, ".git", "index"))).toBe(false);
+    expect(ignored?.(join(testDir, "node_modules", "pkg", "index.js"))).toBe(true);
     expect(ignored?.(join(testDir, "src", "index.ts"))).toBe(false);
   });
 

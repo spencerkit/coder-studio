@@ -16,6 +16,11 @@ const mockXtermHost = vi.fn((props: Record<string, unknown>) => (
   <div data-testid="mock-xterm-host" data-readonly={String(props.readOnly)} />
 ));
 
+function getLastXtermHostProps() {
+  const lastCall = mockXtermHost.mock.calls[mockXtermHost.mock.calls.length - 1];
+  return lastCall?.[0];
+}
+
 vi.mock("../../terminal-panel/views/shared/xterm-host", () => ({
   XtermHost: (props: Record<string, unknown>) => mockXtermHost(props),
 }));
@@ -105,7 +110,7 @@ describe("SessionCard", () => {
 
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Start" })).not.toBeInTheDocument();
-    expect(mockXtermHost.mock.calls.at(-1)?.[0]).toEqual(
+    expect(getLastXtermHostProps()).toEqual(
       expect.objectContaining({
         terminalId: "term-live",
         readOnly: false,
@@ -149,12 +154,44 @@ describe("SessionCard", () => {
       </Provider>
     );
 
-    expect(mockXtermHost.mock.calls.at(-1)?.[0]).toEqual(
+    expect(getLastXtermHostProps()).toEqual(
       expect.objectContaining({
         terminalId: "term-live",
         isActiveSession: true,
       })
     );
+  });
+
+  it("adds an active class when the workspace ui state targets this session", () => {
+    const { store } = createSessionStore({
+      terminalId: "term-live",
+      state: "running",
+      endedAt: undefined,
+    });
+
+    store.set(workspacesAtom, {
+      "ws-123": {
+        id: "ws-123",
+        path: "/tmp/ws-123",
+        targetRuntime: "native",
+        openedAt: Date.now() - 10_000,
+        lastActiveAt: Date.now() - 500,
+        uiState: {
+          leftPanelWidth: 320,
+          bottomPanelHeight: 240,
+          focusMode: false,
+          activeSessionId: "sess_123456",
+        },
+      },
+    });
+
+    const { container } = render(
+      <Provider store={store}>
+        <SessionCard sessionId="sess_123456" />
+      </Provider>
+    );
+
+    expect(container.querySelector(".session-card")).toHaveClass("session-card--active");
   });
 
   it("hides header actions when showHeaderActions is false", () => {
@@ -194,7 +231,7 @@ describe("SessionCard", () => {
     );
   });
 
-  it("renders a decorative session status strip with legacy session classes", () => {
+  it("does not render the legacy session progress strip", () => {
     const { store } = createSessionStore({
       terminalId: "term-live",
       state: "running",
@@ -207,15 +244,8 @@ describe("SessionCard", () => {
       </Provider>
     );
 
-    const progress = container.querySelector(".session-progress");
-    const fill = container.querySelector(".session-progress-bar.session-progress-running");
-
-    expect(progress).toHaveAttribute("aria-hidden", "true");
-    expect(progress).not.toHaveAttribute("role");
-    expect(progress).not.toHaveAttribute("aria-valuemin");
-    expect(progress).not.toHaveAttribute("aria-valuemax");
-    expect(progress).not.toHaveAttribute("aria-valuenow");
-    expect(fill).toHaveStyle({ "--progress-bar-width": "42%" });
+    expect(container.querySelector(".session-progress")).toBeNull();
+    expect(container.querySelector(".session-progress-bar")).toBeNull();
   });
 
   it("renders migrated provider and state tags with legacy badge compatibility classes", () => {
@@ -233,6 +263,30 @@ describe("SessionCard", () => {
 
     expect(screen.getByText("Codex")).toHaveClass("badge", "badge-blue", "session-provider-badge");
     expect(screen.getByText("Running")).toHaveClass("badge", "badge-green", "session-state-badge");
+  });
+
+  it("renders the session title and badges inside one header row", () => {
+    const { store } = createSessionStore({
+      terminalId: "term-live",
+      state: "idle",
+      endedAt: undefined,
+    });
+
+    const { container } = render(
+      <Provider store={store}>
+        <SessionCard sessionId="sess_123456" />
+      </Provider>
+    );
+
+    const headerRow = container.querySelector(".panel-header__title-row");
+    const inlineMeta = container.querySelector(".panel-header__meta--inline");
+
+    expect(headerRow).not.toBeNull();
+    expect(headerRow).toContainElement(screen.getByText("SESSION-56"));
+    expect(headerRow).toContainElement(screen.getByText("Codex"));
+    expect(headerRow).toContainElement(screen.getByText("Idle"));
+    expect(inlineMeta).not.toBeNull();
+    expect(headerRow).toContainElement(inlineMeta as HTMLElement);
   });
 
   it("renders a header accessory on the right side of the session header", () => {
@@ -254,15 +308,20 @@ describe("SessionCard", () => {
       </Provider>
     );
 
-    const header = screen.getByText("SESSION-56").closest(".session-header");
+    const bespokeHeader = screen.getByText("SESSION-56").closest(".session-header");
+    const header = screen.getByText("SESSION-56").closest(".panel-header");
+    const actions = header?.querySelector(".panel-header__actions");
     const accessory = screen.getByRole("button", { name: "Supervisor entry" });
     const right = header?.querySelector(".session-header-right");
 
+    expect(bespokeHeader).toBeNull();
     expect(header).not.toBeNull();
+    expect(actions).not.toBeNull();
     expect(accessory.parentElement).toHaveClass("session-header-accessory");
     expect(right).not.toBeNull();
     expect(right).toContainElement(accessory);
-    expect(header?.lastElementChild).toBe(right);
+    expect(actions).toContainElement(right as HTMLElement);
+    expect(header?.lastElementChild).toBe(actions);
   });
 
   it("forces the terminal read-only when terminalReadOnlyOverride is true", () => {
@@ -278,7 +337,7 @@ describe("SessionCard", () => {
       </Provider>
     );
 
-    expect(mockXtermHost.mock.calls.at(-1)?.[0]).toEqual(
+    expect(getLastXtermHostProps()).toEqual(
       expect.objectContaining({
         terminalId: "term-live",
         readOnly: true,
@@ -430,7 +489,7 @@ describe("SessionCard", () => {
       </Provider>
     );
 
-    expect(mockXtermHost.mock.calls.at(-1)?.[0]).toEqual(
+    expect(getLastXtermHostProps()).toEqual(
       expect.objectContaining({
         terminalId: "term-ended",
         readOnly: true,
@@ -477,6 +536,25 @@ describe("SessionCard", () => {
       { sessionId: "sess_123456" },
       undefined
     );
+  });
+
+  it("renders stop for running sessions and routes it through the explicit callback", () => {
+    const { store } = createSessionStore({
+      terminalId: "term-live",
+      state: "running",
+      endedAt: undefined,
+    });
+    const onStop = vi.fn();
+
+    render(
+      <Provider store={store}>
+        <SessionCard sessionId="sess_123456" onStop={onStop} />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+
+    expect(onStop).toHaveBeenCalledTimes(1);
   });
 
   it("routes split buttons through explicit callbacks", () => {

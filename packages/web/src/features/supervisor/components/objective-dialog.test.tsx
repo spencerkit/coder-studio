@@ -179,6 +179,35 @@ describe("ObjectiveDialog", () => {
     expect(screen.getByRole("textbox", { name: "Objective" })).toHaveClass("input", "textarea");
   });
 
+  it("does not render the shared intro strip inside the desktop wrapper for enable mode", () => {
+    const store = createStore();
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+    store.set(
+      supervisorDialogAtom,
+      createDialogState({
+        draftObjective: "Ship phase 4B1",
+      })
+    );
+    store.set(supervisorsAtom, new Map());
+
+    render(
+      <Provider store={store}>
+        <ObjectiveDialog workspaceId="ws-1" />
+      </Provider>
+    );
+
+    const dialog = screen.getByRole("dialog");
+    const header = dialog.querySelector(".dialog-header");
+    const firstFormGroup = dialog.querySelector(".form-group");
+
+    expect(header).toBeTruthy();
+    expect(firstFormGroup).toBeTruthy();
+    expect(dialog.querySelector(".supervisor-dialog-intro")).toBeNull();
+    expect(header?.contains(firstFormGroup as Node)).toBe(false);
+  });
+
   it("renders disable confirmation mode", () => {
     const store = createStore();
     window.localStorage.setItem("ui.locale", JSON.stringify("en"));
@@ -201,6 +230,80 @@ describe("ObjectiveDialog", () => {
     expect(screen.getByText("Disabling stops evaluation cycles")).toBeInTheDocument();
     expect(screen.getByText("Finish the server refactor")).toBeInTheDocument();
     expect(screen.getByRole("dialog")).toHaveClass("supervisor-dialog--disable");
+    expect(document.querySelector(".supervisor-dialog-intro")).toBeNull();
+  });
+
+  it("renders the dialog header through the canonical dialog header anatomy", () => {
+    const store = createStore();
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+    store.set(
+      supervisorDialogAtom,
+      createDialogState({
+        mode: "disable",
+      })
+    );
+    store.set(supervisorsAtom, new Map([["sess-1", createSupervisor()]]));
+
+    render(
+      <Provider store={store}>
+        <ObjectiveDialog workspaceId="ws-1" />
+      </Provider>
+    );
+
+    const dialog = screen.getByRole("dialog");
+    const header = dialog.querySelector(".dialog-header");
+    const leading = header?.querySelector(".dialog-header__leading");
+    const icon = header?.querySelector(".dialog-header__icon");
+    const copy = header?.querySelector(".dialog-header__copy");
+    const description = header?.querySelector(".dialog-header__description");
+    const closeButton = screen.getByRole("button", { name: "Close" });
+
+    expect(header).not.toBeNull();
+    expect(leading).not.toBeNull();
+    expect(icon).not.toBeNull();
+    expect(copy).not.toBeNull();
+    expect(copy).toHaveTextContent("Disable Supervisor");
+    expect(description).toBeNull();
+    expect(closeButton).toHaveClass("modal-close");
+  });
+
+  it("keeps the canonical dialog header anatomy for enable mode", () => {
+    const store = createStore();
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+    store.set(
+      supervisorDialogAtom,
+      createDialogState({
+        mode: "enable",
+        draftObjective: "Ship phase 4B1",
+      })
+    );
+    store.set(supervisorsAtom, new Map());
+
+    render(
+      <Provider store={store}>
+        <ObjectiveDialog workspaceId="ws-1" />
+      </Provider>
+    );
+
+    const dialog = screen.getByRole("dialog");
+    const header = dialog.querySelector(".dialog-header");
+    const leading = header?.querySelector(".dialog-header__leading");
+    const icon = header?.querySelector(".dialog-header__icon");
+    const copy = header?.querySelector(".dialog-header__copy");
+    const description = header?.querySelector(".dialog-header__description");
+    const closeButton = screen.getByRole("button", { name: "Close" });
+
+    expect(header).not.toBeNull();
+    expect(leading).not.toBeNull();
+    expect(icon).not.toBeNull();
+    expect(copy).not.toBeNull();
+    expect(copy).toHaveTextContent("Enable Supervisor");
+    expect(description).toBeNull();
+    expect(closeButton).toHaveClass("modal-close");
   });
 
   it("renders footer actions with shared button compatibility classes", () => {

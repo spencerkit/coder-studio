@@ -122,6 +122,9 @@ describe("UI preview catalog", () => {
     const ids = UI_PREVIEW_SCENES.map((scene) => scene.id);
     expect(ids).toEqual(
       expect.arrayContaining([
+        "readme-desktop-hero",
+        "readme-desktop-review",
+        "readme-mobile-progress",
         "workspace-launch-modal",
         "command-palette",
         "branch-quick-pick",
@@ -308,6 +311,36 @@ describe("UI preview catalog", () => {
     expect(screen.getByText(/\+\s+background: var\(--bg-elevated\);/)).toBeInTheDocument();
   });
 
+  it("renders the README desktop hero scene with a live session and shell terminal", async () => {
+    renderScene("readme-desktop-hero");
+
+    expect(
+      await screen.findByText("Ship the header polish and verify README visuals")
+    ).toBeInTheDocument();
+    expect(screen.getByText("Supervisor")).toBeInTheDocument();
+    expect(screen.getByText("Preview Runner")).toBeInTheDocument();
+    expect(document.querySelector(".workspace-page--desktop .session-card")).toBeTruthy();
+    expect(document.querySelector(".workspace-page--desktop .bottom-terminal")).toBeTruthy();
+  });
+
+  it("renders the README desktop review scene with git and diff context", async () => {
+    renderScene("readme-desktop-review");
+
+    expect(await screen.findByText("README capture polish")).toBeInTheDocument();
+    expect(screen.getByText(/Refine the desktop topbar hierarchy/)).toBeInTheDocument();
+    expect(document.querySelector(".workspace-page--desktop .git-panel")).toBeTruthy();
+    expect(document.querySelector(".workspace-page--desktop .workspace-git-editor")).toBeTruthy();
+  });
+
+  it("renders the README mobile progress scene with session continuity and supervisor state", async () => {
+    renderScene("readme-mobile-progress", "mobile");
+
+    expect(await screen.findByText("Resume mobile progress review")).toBeInTheDocument();
+    expect(screen.getAllByText("Supervisor").length).toBeGreaterThan(0);
+    expect(document.querySelector(".mobile-shell .session-card")).toBeTruthy();
+    expect(document.querySelector(".mobile-shell .workspace-status-bar")).toBeTruthy();
+  });
+
   it("renders the workspace terminal empty review scene", async () => {
     renderScene("workspace-terminal-empty-review");
 
@@ -321,7 +354,7 @@ describe("UI preview catalog", () => {
     renderScene("settings-density-review");
 
     expect(await screen.findByRole("heading", { name: /settings|设置/i })).toBeInTheDocument();
-    expect(document.querySelector(".settings-header__desktop")).toBeTruthy();
+    expect(document.querySelector(".settings-header .page-header")).toBeTruthy();
     expect(document.querySelector(".settings-sidebar")).toBeTruthy();
   });
 

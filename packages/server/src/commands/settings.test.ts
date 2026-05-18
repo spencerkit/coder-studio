@@ -137,6 +137,56 @@ describe("settings commands", () => {
     ).toEqual({ value: '"graphite-light"' });
   });
 
+  it("settings.update persists appearance.desktopTerminalFontSize into user_settings", async () => {
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "settings-update-desktop-terminal-font-size",
+        op: "settings.update",
+        args: {
+          settings: {
+            appearance: {
+              desktopTerminalFontSize: 16,
+            },
+          },
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(
+      db
+        .prepare("SELECT value FROM user_settings WHERE key = ?")
+        .get("appearance.desktopTerminalFontSize")
+    ).toEqual({ value: "16" });
+  });
+
+  it("settings.update persists appearance.mobileTerminalFontSize into user_settings", async () => {
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "settings-update-mobile-terminal-font-size",
+        op: "settings.update",
+        args: {
+          settings: {
+            appearance: {
+              mobileTerminalFontSize: 15,
+            },
+          },
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(
+      db
+        .prepare("SELECT value FROM user_settings WHERE key = ?")
+        .get("appearance.mobileTerminalFontSize")
+    ).toEqual({ value: "15" });
+  });
+
   it("settings.update persists legacy appearance.theme light during themeId migration", async () => {
     const result = await dispatch(
       {
@@ -235,6 +285,84 @@ describe("settings commands", () => {
     expect(result.error?.code).toBe("validation_error");
     expect(
       db.prepare("SELECT value FROM user_settings WHERE key = ?").get("supervisor.retryDelaySec")
+    ).toBeUndefined();
+  });
+
+  it("settings.update rejects desktopTerminalFontSize values below the supported minimum", async () => {
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "settings-update-desktop-terminal-font-size-too-small",
+        op: "settings.update",
+        args: {
+          settings: {
+            appearance: {
+              desktopTerminalFontSize: 9,
+            },
+          },
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("validation_error");
+    expect(
+      db
+        .prepare("SELECT value FROM user_settings WHERE key = ?")
+        .get("appearance.desktopTerminalFontSize")
+    ).toBeUndefined();
+  });
+
+  it("settings.update rejects mobileTerminalFontSize values above the supported maximum", async () => {
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "settings-update-mobile-terminal-font-size-too-large",
+        op: "settings.update",
+        args: {
+          settings: {
+            appearance: {
+              mobileTerminalFontSize: 19,
+            },
+          },
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("validation_error");
+    expect(
+      db
+        .prepare("SELECT value FROM user_settings WHERE key = ?")
+        .get("appearance.mobileTerminalFontSize")
+    ).toBeUndefined();
+  });
+
+  it("settings.update rejects fractional desktopTerminalFontSize values", async () => {
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "settings-update-desktop-terminal-font-size-fractional",
+        op: "settings.update",
+        args: {
+          settings: {
+            appearance: {
+              desktopTerminalFontSize: 15.5,
+            },
+          },
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("validation_error");
+    expect(
+      db
+        .prepare("SELECT value FROM user_settings WHERE key = ?")
+        .get("appearance.desktopTerminalFontSize")
     ).toBeUndefined();
   });
 
@@ -453,6 +581,33 @@ describe("settings commands", () => {
     expect(result.ok).toBe(true);
     expect(result.data).toMatchObject({
       "appearance.themeId": "nord-dark",
+    });
+  });
+
+  it("settings.get returns split terminal font size settings from user_settings", async () => {
+    db.prepare("INSERT INTO user_settings (key, value) VALUES (?, ?)").run(
+      "appearance.desktopTerminalFontSize",
+      "16"
+    );
+    db.prepare("INSERT INTO user_settings (key, value) VALUES (?, ?)").run(
+      "appearance.mobileTerminalFontSize",
+      "14"
+    );
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "settings-get-split-terminal-font-size",
+        op: "settings.get",
+        args: {},
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.data).toMatchObject({
+      "appearance.desktopTerminalFontSize": 16,
+      "appearance.mobileTerminalFontSize": 14,
     });
   });
 

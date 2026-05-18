@@ -134,6 +134,21 @@ export function ModalHeader({ className, ...props }: HTMLAttributes<HTMLDivEleme
   return <div {...props} className={clsx(styles.header, "modal-header", className)} />;
 }
 
+export function DialogHeader({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div
+      {...props}
+      className={clsx(
+        styles.header,
+        styles.dialogHeader,
+        "modal-header",
+        "dialog-header",
+        className
+      )}
+    />
+  );
+}
+
 export function ModalTitle({ className, ...props }: HTMLAttributes<HTMLHeadingElement>) {
   const context = useContext(ModalContext);
   const fallbackId = useId();

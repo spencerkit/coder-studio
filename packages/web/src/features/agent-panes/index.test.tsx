@@ -1,3 +1,4 @@
+import type { Session } from "@coder-studio/core";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -9,30 +10,26 @@ import { seedReadyWorkspaceState } from "../../test-utils/workspace-state";
 import { LEGACY_PANE_LAYOUT_STORAGE_KEY_PREFIX, paneLayoutAtomFamily } from "./atoms/pane-layout";
 import { AgentPanes } from "./index";
 
+type MockSessionCardProps = {
+  sessionId: string;
+  onStop?: () => void;
+  onSplitHorizontal?: () => void;
+  onSplitVertical?: () => void;
+  onClose?: () => void;
+};
+
 const mockSessionCard = vi.fn(
-  ({
-    sessionId,
-    onSplitHorizontal,
-    onSplitVertical,
-    onStop,
-    onClose,
-  }: {
-    sessionId: string;
-    onSplitHorizontal?: () => void;
-    onSplitVertical?: () => void;
-    onStop?: () => void;
-    onClose?: () => void;
-  }) => (
+  ({ sessionId, onStop, onSplitHorizontal, onSplitVertical, onClose }: MockSessionCardProps) => (
     <div data-testid="session-card">
       <span>{sessionId}</span>
+      <button type="button" onClick={onStop}>
+        stop-{sessionId}
+      </button>
       <button type="button" onClick={onSplitHorizontal}>
         split-{sessionId}
       </button>
       <button type="button" onClick={onSplitVertical}>
         split-vertical-{sessionId}
-      </button>
-      <button type="button" onClick={onStop}>
-        stop-{sessionId}
       </button>
       <button type="button" onClick={onClose}>
         close-{sessionId}
@@ -42,7 +39,7 @@ const mockSessionCard = vi.fn(
 );
 
 vi.mock("./views/shared/session-card", () => ({
-  SessionCard: (props: Record<string, unknown>) => mockSessionCard(props),
+  SessionCard: (props: MockSessionCardProps) => mockSessionCard(props),
 }));
 
 vi.mock("./views/shared/pane-layout", () => ({
@@ -77,7 +74,7 @@ function createAgentPaneStore(
     | "rejected" = "connected"
 ) {
   const store = createStore();
-  const sessions = [
+  const sessions: Session[] = [
     {
       id: "sess_1",
       workspaceId: "ws-1",
@@ -130,7 +127,10 @@ function createAgentPaneStore(
       },
     },
   });
-  store.set(sessionsAtom, Object.fromEntries(sessions.map((session) => [session.id, session])));
+  store.set(
+    sessionsAtom,
+    Object.fromEntries(sessions.map((session) => [session.id, session])) as Record<string, Session>
+  );
   store.set(
     paneLayoutAtomFamily("ws-1"),
     (initialLayout as never) ?? {
@@ -342,6 +342,39 @@ describe("AgentPanes", () => {
         ],
       });
     });
+  });
+
+  it("stops a running session without removing its pane", async () => {
+    const { store, sendCommand } = createAgentPaneStore();
+
+    render(
+      <Provider store={store}>
+        <AgentPanes />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(store.get(paneLayoutAtomFamily("ws-1"))).toEqual({
+        id: expect.any(String),
+        type: "split",
+        direction: "horizontal",
+        ratio: 0.5,
+        children: [
+          expect.objectContaining({ type: "leaf", sessionId: "sess_1" }),
+          expect.objectContaining({ type: "leaf", sessionId: "sess_2" }),
+        ],
+      });
+    });
+
+    const layoutBeforeStop = structuredClone(store.get(paneLayoutAtomFamily("ws-1")));
+
+    fireEvent.click(screen.getByRole("button", { name: "stop-sess_1" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith("session.stop", { sessionId: "sess_1" }, undefined);
+    });
+
+    expect(store.get(paneLayoutAtomFamily("ws-1"))).toEqual(layoutBeforeStop);
   });
 
   it("waits for the websocket connection before requesting session.list", async () => {

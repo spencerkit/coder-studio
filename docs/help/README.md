@@ -14,7 +14,7 @@
 
 ## 我主要在手机上使用
 
-- [移动端使用指南](mobile-guide.md) — 手机端界面和操作
+- [移动端与远程访问指南](mobile-guide.md) — 手机端界面、局域网访问、Tailscale/ngrok/Cloudflare Tunnel
 
 ## 我想了解产品结构
 

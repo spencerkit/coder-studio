@@ -75,7 +75,9 @@
 }
 
 :global(.panel-tab) {
-  font-size: 12px;
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  line-height: var(--type-label-line-height);
   padding: 2px 8px;
   border-radius: 4px;
   color: var(--text-ter);
@@ -88,12 +90,14 @@
 :global(.panel-tab.active) {
   background: var(--blue);
   color: var(--bg);
-  font-weight: 500;
+  font-weight: var(--type-label-weight);
 }
 
 :global(.worktree-tab) {
   padding: var(--sp-3) var(--sp-4);
-  font-size: var(--text-sm);
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  line-height: var(--type-label-line-height);
   color: var(--text-secondary);
 }
 

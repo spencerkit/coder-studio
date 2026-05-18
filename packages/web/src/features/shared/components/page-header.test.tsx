@@ -17,6 +17,8 @@ describe("PageHeader", () => {
     const leading = header?.querySelector(".page-header__leading");
     const actions = header?.querySelector(".page-header__actions");
 
+    expect(header).toHaveClass("page-header--secondary");
+    expect(header).toHaveAttribute("data-level", "secondary");
     expect(leading).not.toBeNull();
     expect(actions).not.toBeNull();
     expect(
@@ -37,5 +39,15 @@ describe("PageHeader", () => {
     expect(within(copy as HTMLElement).getByText("Workspace")).toBeInTheDocument();
     expect(within(copy as HTMLElement).getByText("Config")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
+  });
+
+  it("renders stable primary level hooks for shared styling", () => {
+    render(<PageHeader title="Workspace Settings" level="primary" />);
+
+    const header = document.querySelector(".page-header");
+
+    expect(header).toHaveClass("page-header--primary");
+    expect(header).toHaveAttribute("data-level", "primary");
+    expect(header).not.toHaveClass("page-header--secondary");
   });
 });

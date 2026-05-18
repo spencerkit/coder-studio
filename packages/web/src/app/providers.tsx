@@ -45,11 +45,17 @@ import { useSessionNotifications } from "../features/notifications";
 import { supervisorCyclesAtom, supervisorsAtom } from "../features/supervisor/atoms";
 import { terminalMetaAtomFamily } from "../features/terminal-panel/atoms";
 import {
+  DESKTOP_TERMINAL_FONT_SIZE_SETTING_KEY,
+  hasExplicitTerminalFontSizeSetting,
+  hasLegacyTerminalFontSizeSetting,
+  MOBILE_TERMINAL_FONT_SIZE_SETTING_KEY,
   resolveTerminalCopyOnSelectSetting,
+  resolveTerminalFontSizeSetting,
   terminalPreferencesAtom,
 } from "../features/terminal-panel/preferences";
 import {
   editorRefreshTokenAtomFamily,
+  expandedDirsAtomFamily,
   fileTreeAtomFamily,
   fileTreeStaleAtomFamily,
   gitBranchListAtomFamily,
@@ -168,6 +174,7 @@ function resetServerProjectedState(store: Store): void {
   for (const workspaceId of workspaceIds) {
     store.set(fileTreeAtomFamily(workspaceId), null);
     store.set(loadedDirsAtomFamily(workspaceId), new Set());
+    store.set(expandedDirsAtomFamily(workspaceId), null);
     store.set(gitStateAtomFamily(workspaceId), null);
     store.set(gitBranchListAtomFamily(workspaceId), {
       current: "",
@@ -296,9 +303,30 @@ export function AppProviders({ children }: AppProvidersProps) {
     }
 
     let cancelled = false;
-    let localTerminalPreferencesUpdated = false;
+    let terminalPreferencesAtSubscriptionStart = store.get(terminalPreferencesAtom);
+    let localTerminalCopyOnSelectUpdated = false;
+    let localDesktopTerminalFontSizeUpdated = false;
+    let localMobileTerminalFontSizeUpdated = false;
     const unsubscribeTerminalPreferences = store.sub(terminalPreferencesAtom, () => {
-      localTerminalPreferencesUpdated = true;
+      const nextTerminalPreferences = store.get(terminalPreferencesAtom);
+      if (
+        nextTerminalPreferences.copyOnSelect !== terminalPreferencesAtSubscriptionStart.copyOnSelect
+      ) {
+        localTerminalCopyOnSelectUpdated = true;
+      }
+      if (
+        nextTerminalPreferences.desktopFontSize !==
+        terminalPreferencesAtSubscriptionStart.desktopFontSize
+      ) {
+        localDesktopTerminalFontSizeUpdated = true;
+      }
+      if (
+        nextTerminalPreferences.mobileFontSize !==
+        terminalPreferencesAtSubscriptionStart.mobileFontSize
+      ) {
+        localMobileTerminalFontSizeUpdated = true;
+      }
+      terminalPreferencesAtSubscriptionStart = nextTerminalPreferences;
     });
 
     const hydrateTerminalPreferences = async () => {
@@ -307,13 +335,28 @@ export function AppProviders({ children }: AppProvidersProps) {
         return;
       }
 
-      if (localTerminalPreferencesUpdated) {
-        return;
-      }
-
-      setTerminalPreferences({
-        copyOnSelect: resolveTerminalCopyOnSelectSetting(result.data),
-      });
+      const currentTerminalPreferences = store.get(terminalPreferencesAtom);
+      const shouldHydrateDesktopTerminalFontSize = localDesktopTerminalFontSizeUpdated
+        ? currentTerminalPreferences.desktopFontSize
+        : resolveTerminalFontSizeSetting(result.data, "desktop");
+      const shouldHydrateMobileTerminalFontSize = localMobileTerminalFontSizeUpdated
+        ? currentTerminalPreferences.mobileFontSize
+        : resolveTerminalFontSizeSetting(result.data, "mobile");
+      const hasLegacyFontSize = hasLegacyTerminalFontSizeSetting(result.data);
+      const hasExplicitDesktopFontSize = hasExplicitTerminalFontSizeSetting(result.data, "desktop");
+      const hasExplicitMobileFontSize = hasExplicitTerminalFontSizeSetting(result.data, "mobile");
+      const nextTerminalPreferences = {
+        copyOnSelect: localTerminalCopyOnSelectUpdated
+          ? currentTerminalPreferences.copyOnSelect
+          : resolveTerminalCopyOnSelectSetting(result.data),
+        desktopFontSize: shouldHydrateDesktopTerminalFontSize,
+        mobileFontSize: shouldHydrateMobileTerminalFontSize,
+        fontSize:
+          hasExplicitDesktopFontSize || hasExplicitMobileFontSize || hasLegacyFontSize
+            ? resolveTerminalFontSizeSetting(result.data, "desktop")
+            : currentTerminalPreferences.fontSize,
+      };
+      setTerminalPreferences(nextTerminalPreferences);
     };
 
     void hydrateTerminalPreferences();

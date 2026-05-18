@@ -39,6 +39,14 @@ export const loadedDirsAtomFamily = atomFamily((workspaceId: string) =>
 );
 
 /**
+ * Expanded directories tracking (workspace-scoped UI state).
+ * `null` means "not hydrated yet", otherwise the current expanded paths.
+ */
+export const expandedDirsAtomFamily = atomFamily((workspaceId: string) =>
+  atom<Set<string> | null>(null)
+);
+
+/**
  * Open file atom family (UI local state).
  */
 export interface OpenTextFile {
@@ -58,6 +66,7 @@ export interface OpenImageFile {
   mime: string;
   url: string;
   size: number;
+  version: string;
   isTextBacked: boolean;
   externalState?: "modified" | "deleted";
 }

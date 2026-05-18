@@ -123,16 +123,17 @@ describe("createWatcherIgnoreFilter", () => {
     expect(filter(join(testDir, "file.txt"))).toBe(false);
   });
 
-  it("respects .gitignore rules", async () => {
+  it("does not apply .gitignore rules to watcher filtering", async () => {
     await writeFile(join(testDir, ".gitignore"), "*.log\n*.tmp\nbuild/");
 
     const filter = createWatcherIgnoreFilter(testDir);
-    expect(filter(join(testDir, "app.log"))).toBe(true);
-    expect(filter(join(testDir, "error.tmp"))).toBe(true);
+    expect(filter(join(testDir, "app.log"))).toBe(false);
+    expect(filter(join(testDir, "error.tmp"))).toBe(false);
+    expect(filter(join(testDir, "build", "bundle.js"))).toBe(false);
     expect(filter(join(testDir, "file.txt"))).toBe(false);
   });
 
-  it("keeps default watcher behavior when .gitignore exists", async () => {
+  it("keeps hard watcher ignores even when .gitignore exists", async () => {
     await writeFile(join(testDir, ".gitignore"), "*.log");
 
     const filter = createWatcherIgnoreFilter(testDir);
@@ -140,7 +141,7 @@ describe("createWatcherIgnoreFilter", () => {
     expect(filter(join(testDir, ".git/config"))).toBe(false);
     expect(filter(join(testDir, "node_modules/package"))).toBe(true);
     expect(filter(join(testDir, ".playwright-mcp/page.yml"))).toBe(true);
-    expect(filter(join(testDir, "app.log"))).toBe(true);
+    expect(filter(join(testDir, "app.log"))).toBe(false);
     expect(filter(join(testDir, "src/index.ts"))).toBe(false);
   });
 });

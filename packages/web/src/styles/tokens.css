@@ -32,6 +32,14 @@
   --font-mono: "JetBrains Mono", "Sarasa Mono SC", "PingFang SC", monospace;
 
   /* Font Sizes */
+  --font-size-100: 11px;
+  --font-size-200: 12px;
+  --font-size-300: 14px;
+  --font-size-400: 16px;
+  --font-size-500: 18px;
+  --font-size-600: 24px;
+  --font-size-700: 32px;
+
   --text-xs: 11px;
   --text-sm: 12px;
   --text-base: 13px;
@@ -39,6 +47,49 @@
   --text-xl: 16px;
   --text-2xl: 18px;
   --text-3xl: 20px;
+
+  --type-kicker-size: var(--font-size-100);
+  --type-kicker-line-height: 1.2;
+  --type-kicker-weight: var(--font-normal);
+  --type-kicker-letter-spacing: 0.08em;
+
+  --type-label-size: var(--font-size-200);
+  --type-label-line-height: 1.35;
+  --type-label-weight: var(--font-normal);
+
+  --type-meta-size: var(--font-size-200);
+  --type-meta-line-height: 1.45;
+  --type-meta-weight: var(--font-normal);
+
+  --type-body-size: var(--font-size-300);
+  --type-body-line-height: 1.5;
+  --type-body-weight: var(--font-normal);
+
+  --type-body-strong-size: var(--font-size-300);
+  --type-body-strong-line-height: 1.45;
+  --type-body-strong-weight: var(--font-normal);
+
+  --type-code-inline-size: var(--font-size-200);
+  --type-code-inline-line-height: 1.4;
+  --type-code-inline-weight: var(--font-normal);
+  --type-code-inline-family: var(--font-mono);
+
+  --type-app-title-size: var(--font-size-400);
+  --type-app-title-line-height: 1.25;
+  --type-app-title-weight: var(--font-semibold);
+
+  --type-section-title-size: var(--font-size-500);
+  --type-section-title-line-height: 1.2;
+  --type-section-title-weight: var(--font-semibold);
+
+  --type-page-title-size: var(--font-size-600);
+  --type-page-title-line-height: 1.1;
+  --type-page-title-weight: var(--font-semibold);
+
+  --type-display-size: var(--font-size-700);
+  --type-display-line-height: 1.05;
+  --type-display-weight: var(--font-semibold);
+  --type-display-letter-spacing: -0.03em;
 
   /* Line Heights */
   --leading-tight: 1.25;
@@ -783,6 +834,15 @@
 /* ========== Mobile / Touch Override (Phase 0) ========== */
 @media (max-width: 899px) {
   :root {
+    --font-size-100: 12px;
+    --font-size-200: 13px;
+    --font-size-300: 15px;
+    --font-size-400: 17px;
+    --font-size-500: 20px;
+    --font-size-600: 28px;
+    --font-size-700: 36px;
+    --type-body-line-height: 1.55;
+    --type-body-strong-line-height: 1.5;
     --touch-target-min: 44px;
     --touch-target-comfortable: 48px;
     --touch-target-large: 56px;

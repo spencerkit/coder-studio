@@ -1,7 +1,9 @@
 import type { FileNode } from "@coder-studio/core";
+import { useAtomValue, useSetAtom } from "jotai";
 import { ChevronDown, ChevronRight, FilePlus, FolderPlus, Trash2, X } from "lucide-react";
 import type { FC } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { workspaceByIdAtomFamily } from "../../../../atoms/workspaces";
 import {
   Button,
   ConfirmDialog,
@@ -23,7 +25,12 @@ import {
   type PendingDeleteState,
   useFileActions,
 } from "../../actions/use-file-actions";
+import { useWorkspaceUiStatePersistence } from "../../actions/use-workspace-ui-state-persistence";
+import { expandedDirsAtomFamily } from "../../atoms";
 import { getFileNodeSemantic } from "./file-tree-icon-semantics";
+
+const DEFAULT_EXPANDED_ROOT_DIRS = new Set(["app", "packages", "src"]);
+const MAX_PERSISTED_EXPANDED_DIRS = 200;
 
 const fileTreeEmptyStateStyle = {
   minHeight: "auto",
@@ -91,6 +98,12 @@ interface FileTreePanelProps {
   variant?: "desktop" | "mobile";
 }
 
+function normalizeExpandedDirs(paths: Iterable<string>): string[] {
+  return [...new Set([...paths].map(normalizeDirPath).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b))
+    .slice(0, MAX_PERSISTED_EXPANDED_DIRS);
+}
+
 export const FileTreePanel: FC<FileTreePanelProps> = ({
   workspaceId,
   refreshToken = 0,
@@ -102,6 +115,10 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
   variant = "desktop",
 }) => {
   const t = useTranslation();
+  const workspace = useAtomValue(workspaceByIdAtomFamily(workspaceId));
+  const expandedDirs = useAtomValue(expandedDirsAtomFamily(workspaceId));
+  const setExpandedDirs = useSetAtom(expandedDirsAtomFamily(workspaceId));
+  const { persistUiState } = useWorkspaceUiStatePersistence(workspaceId);
   const {
     activeFilePath,
     createDialog,
@@ -140,6 +157,34 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
     () => (hasSearch ? searchResults.length : countVisibleFiles(treeNodes)),
     [hasSearch, searchResults.length, treeNodes]
   );
+  const defaultExpandedRootPaths = useMemo(
+    () =>
+      treeNodes
+        .filter(
+          (node) => node.kind === "dir" && DEFAULT_EXPANDED_ROOT_DIRS.has(node.name.toLowerCase())
+        )
+        .map((node) => node.path),
+    [treeNodes]
+  );
+
+  useEffect(() => {
+    if (expandedDirs !== null || !workspace) {
+      return;
+    }
+
+    if (workspace.uiState.fileTreeExpandedDirs !== undefined) {
+      setExpandedDirs(new Set(normalizeExpandedDirs(workspace.uiState.fileTreeExpandedDirs)));
+    }
+  }, [expandedDirs, setExpandedDirs, workspace]);
+
+  const applyExpandedDirs = useCallback(
+    (nextPaths: Iterable<string>) => {
+      const normalized = normalizeExpandedDirs(nextPaths);
+      setExpandedDirs(new Set(normalized));
+      void persistUiState({ fileTreeExpandedDirs: normalized });
+    },
+    [persistUiState, setExpandedDirs]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -177,6 +222,14 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
   useEffect(() => {
     onVisibleCountChange?.(visibleFileCount, searchLoading || isLoading);
   }, [isLoading, onVisibleCountChange, searchLoading, visibleFileCount]);
+
+  useEffect(() => {
+    if (collapseVersion <= 0) {
+      return;
+    }
+
+    applyExpandedDirs([]);
+  }, [applyExpandedDirs, collapseVersion]);
 
   return (
     <>
@@ -225,13 +278,15 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
                 key={node.path}
                 node={node}
                 depth={0}
+                expandedDirs={expandedDirs}
                 selectedPath={activeFilePath}
                 onRequestCreate={openCreateDialog}
                 onRequestDelete={(path, name) => requestDelete({ path, name, error: null })}
                 onSelectFile={handleSelectFile}
                 onLoadChildren={loadChildren}
+                onToggleDirs={applyExpandedDirs}
+                defaultExpandedRootPaths={defaultExpandedRootPaths}
                 isLoadingDir={isLoadingDir}
-                collapseVersion={collapseVersion}
               />
             ))
           ) : (
@@ -310,31 +365,38 @@ const FileSearchResultRow: FC<FileSearchResultRowProps> = ({
 interface FileTreeNodeProps {
   node: FileNode;
   depth: number;
+  expandedDirs: Set<string> | null;
+  defaultExpandedRootPaths: string[];
   selectedPath: string | null;
   onRequestCreate: (mode: "file" | "folder", baseDir: string | null) => void;
   onRequestDelete: (path: string, name: string) => void;
   onSelectFile: (path: string) => void;
   onLoadChildren: (dirPath: string) => void;
+  onToggleDirs: (nextPaths: Iterable<string>) => void;
   isLoadingDir: string | null;
-  collapseVersion: number;
 }
 
 const FileTreeNode: FC<FileTreeNodeProps> = ({
   node,
   depth,
+  expandedDirs,
+  defaultExpandedRootPaths,
   selectedPath,
   onRequestCreate,
   onRequestDelete,
   onSelectFile,
   onLoadChildren,
+  onToggleDirs,
   isLoadingDir,
-  collapseVersion,
 }) => {
   const t = useTranslation();
   const isFolder = node.kind === "dir";
-  const defaultExpanded =
-    isFolder && depth === 0 && ["app", "packages", "src"].includes(node.name.toLowerCase());
-  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+  const hasPersistedExpansionState = expandedDirs !== null;
+  const isExpanded =
+    isFolder &&
+    (hasPersistedExpansionState
+      ? expandedDirs.has(node.path)
+      : depth === 0 && DEFAULT_EXPANDED_ROOT_DIRS.has(node.name.toLowerCase()));
   const autoLoadRequestedRef = useRef(false);
 
   useEffect(() => {
@@ -350,21 +412,23 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
     }
   }, [isFolder, isExpanded, node.children, node.path, onLoadChildren]);
 
-  useEffect(() => {
-    if (collapseVersion > 0) {
-      setIsExpanded(false);
-    }
-  }, [collapseVersion]);
-
   const handleClick = () => {
-    if (isFolder) {
-      if (!isExpanded) {
+    if (!isFolder) {
+      onSelectFile(node.path);
+      return;
+    }
+
+    const nextExpanded = new Set(expandedDirs ?? defaultExpandedRootPaths);
+    if (isExpanded) {
+      nextExpanded.delete(node.path);
+    } else {
+      nextExpanded.add(node.path);
+      if (!node.children) {
         onLoadChildren(node.path);
       }
-      setIsExpanded(!isExpanded);
-    } else {
-      onSelectFile(node.path);
     }
+
+    onToggleDirs(nextExpanded);
   };
 
   const paddingLeft = depth * 14 + 16;
@@ -450,13 +514,15 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
               key={child.path}
               node={child}
               depth={depth + 1}
+              expandedDirs={expandedDirs}
               selectedPath={selectedPath}
               onRequestCreate={onRequestCreate}
               onRequestDelete={onRequestDelete}
               onSelectFile={onSelectFile}
               onLoadChildren={onLoadChildren}
+              onToggleDirs={onToggleDirs}
+              defaultExpandedRootPaths={defaultExpandedRootPaths}
               isLoadingDir={isLoadingDir}
-              collapseVersion={collapseVersion}
             />
           ))}
           {node.children.length === 0 && !isLoadingDir && (
@@ -595,6 +661,13 @@ const DeleteFileModal: FC<DeleteFileModalProps> = ({ pendingDelete, onCancel, on
 };
 
 export default FileTreePanel;
+
+function normalizeDirPath(path: string): string {
+  return path
+    .trim()
+    .replace(/^\.\/+/, "")
+    .replace(/\/+$/, "");
+}
 
 function countVisibleFiles(nodes: FileNode[]): number {
   return nodes.reduce((count, node) => {

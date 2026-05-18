@@ -105,15 +105,16 @@
 
 .title {
   color: var(--text-primary);
-  font-size: var(--text-base);
-  font-weight: var(--font-medium);
-  line-height: var(--leading-tight);
+  font-size: var(--type-body-strong-size);
+  line-height: var(--type-body-strong-line-height);
+  font-weight: var(--type-body-strong-weight);
 }
 
 .body {
   color: var(--text-secondary);
-  font-size: var(--text-sm);
-  line-height: var(--leading-normal);
+  font-size: var(--type-meta-size);
+  line-height: var(--type-meta-line-height);
+  font-weight: var(--type-meta-weight);
   white-space: pre-line;
   word-break: break-word;
 }
@@ -123,8 +124,9 @@
   align-self: center;
   border-radius: var(--radius-sm);
   color: var(--accent-blue);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
+  font-size: var(--type-body-strong-size);
+  line-height: var(--type-body-strong-line-height);
+  font-weight: var(--type-body-strong-weight);
   transition:
     background var(--duration-fast) var(--ease-out),
     color var(--duration-fast) var(--ease-out);

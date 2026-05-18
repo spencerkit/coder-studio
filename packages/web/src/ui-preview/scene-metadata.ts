@@ -319,6 +319,42 @@ export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
     capture: { selector: ".supervisor-dialog" },
   },
   {
+    id: "readme-desktop-hero",
+    title: "README / Desktop Hero",
+    category: "page",
+    source: "showcase",
+    description:
+      "README-focused desktop workspace scene with a live agent session, supervisor summary, and shell verification terminal.",
+    devices: ["desktop"],
+    themes: allThemeIds(),
+    locales: ["zh", "en"],
+    capture: { selector: ".workspace-page" },
+  },
+  {
+    id: "readme-desktop-review",
+    title: "README / Desktop Review",
+    category: "page",
+    source: "showcase",
+    description:
+      "README-focused desktop scene showing git review workflow with changed files, history, and an open diff.",
+    devices: ["desktop"],
+    themes: allThemeIds(),
+    locales: ["zh", "en"],
+    capture: { selector: ".workspace-page" },
+  },
+  {
+    id: "readme-mobile-progress",
+    title: "README / Mobile Progress",
+    category: "page",
+    source: "showcase",
+    description:
+      "README-focused mobile scene showing an active session with supervisor continuity and branch status.",
+    devices: ["mobile"],
+    themes: allThemeIds(),
+    locales: ["zh", "en"],
+    capture: { selector: "[data-testid='mobile-shell']" },
+  },
+  {
     id: "workspace-topbar-review",
     title: "Workspace / Topbar Review",
     category: "page",

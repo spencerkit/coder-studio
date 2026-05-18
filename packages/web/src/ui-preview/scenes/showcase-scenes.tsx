@@ -1,16 +1,23 @@
 import type { FileNode, GitStatus, Supervisor, Workspace, WorktreeInfo } from "@coder-studio/core";
-import { type ReactNode, useState } from "react";
+import { type CSSProperties, type ReactNode, useState } from "react";
 import { ConfirmDialog, EmptyState, Notice, Sheet, ThemedIcon } from "../../components/ui";
+import { SessionCard } from "../../features/agent-panes/views/shared/session-card";
 import { CommandPalette } from "../../features/command-palette";
 import { ToastContainer } from "../../features/notifications";
 import { MobileSupervisorBadge } from "../../features/supervisor/views/mobile/mobile-supervisor-badge";
 import { MobileSupervisorSheet } from "../../features/supervisor/views/mobile/mobile-supervisor-sheet";
 import { ObjectiveDialog } from "../../features/supervisor/views/shared/objective-dialog";
+import { SupervisorCard } from "../../features/supervisor/views/shared/supervisor-card";
 import { TerminalPanel } from "../../features/terminal-panel";
+import { TopBar } from "../../features/topbar";
+import { WorkspaceDesktopView } from "../../features/workspace/views/desktop/workspace-desktop-view";
 import { MobileDock } from "../../features/workspace/views/mobile/mobile-dock";
 import { MobileFilesSheet } from "../../features/workspace/views/mobile/mobile-files-sheet";
+import { MobileTopBar } from "../../features/workspace/views/mobile/mobile-topbar";
 import { MobileWorkspaceDrawer } from "../../features/workspace/views/mobile/mobile-workspace-drawer";
 import { BranchQuickPick } from "../../features/workspace/views/shared/branch-quick-pick";
+import { GitDiffViewer } from "../../features/workspace/views/shared/git-diff-viewer";
+import { GitPanel } from "../../features/workspace/views/shared/git-panel";
 import { WorkspaceLaunchModal } from "../../features/workspace/views/shared/workspace-launch-modal";
 import { WorkspaceStatusBar } from "../../features/workspace/views/shared/workspace-status-bar";
 import { WorktreeManagerSurface } from "../../features/workspace/views/shared/worktree-manager-surface";
@@ -106,6 +113,614 @@ const fileTreePackages: FileNode[] = [
   { name: "web", path: "packages/web", kind: "dir" },
   { name: "core", path: "packages/core", kind: "dir" },
 ];
+
+const readmeDesktopGitStatus: GitStatus = {
+  branch: "feature/readme-refresh",
+  ahead: 2,
+  behind: 0,
+  headSha: "97cc218f926d61bbeca0d6a8bd4b62582cbf93ea",
+  headShortSha: "97cc218",
+  headSubject: "feat: stage readme screenshot refresh scenes",
+  staged: [{ path: "README.md", status: "modified" }],
+  modified: [
+    { path: "packages/web/src/ui-preview/scenes/showcase-scenes.tsx", status: "modified" },
+    { path: "docs/help/assets/screenshot-desktop-workspace-full.png", status: "modified" },
+  ],
+  untracked: [{ path: "docs/help/assets/screenshot-mobile-progress.png", status: "untracked" }],
+  deleted: [],
+};
+
+const readmeDesktopHistory = [
+  {
+    sha: "97cc218f926d61bbeca0d6a8bd4b62582cbf93ea",
+    shortSha: "97cc218",
+    subject: "feat: stage readme screenshot refresh scenes",
+    authorName: "Spencer",
+    authoredAt: 1_715_731_200_000,
+  },
+  {
+    sha: "4d6fd0bbce5100f39277c9c9c92677b87de17b73",
+    shortSha: "4d6fd0b",
+    subject: "style: tighten header action hierarchy",
+    authorName: "Spencer",
+    authoredAt: 1_715_644_800_000,
+  },
+] as const;
+
+const readmeDesktopSessions = [
+  {
+    id: "session-readme-hero",
+    workspaceId: workspace.id,
+    terminalId: "term-agent-readme-hero",
+    providerId: "codex",
+    state: "running" as const,
+    capability: "full" as const,
+    startedAt: 1,
+    lastActiveAt: 3,
+    title: "Ship the header polish and verify README visuals",
+  },
+];
+
+const readmeMobileSessions = [
+  {
+    id: "session-readme-mobile",
+    workspaceId: workspace.id,
+    terminalId: "term-agent-readme-mobile",
+    providerId: "claude",
+    state: "idle" as const,
+    capability: "full" as const,
+    startedAt: 1,
+    lastActiveAt: 4,
+    title: "Resume mobile progress review",
+  },
+];
+
+const readmeSupervisor: Supervisor = {
+  id: "sup-readme-hero",
+  sessionId: "session-readme-hero",
+  workspaceId: workspace.id,
+  state: "evaluating",
+  targetId: "target-readme-refresh",
+  objective: "Refresh README screenshots to highlight active cross-device coding flows",
+  evaluatorProviderId: "claude",
+  maxSupervisionCount: 0,
+  completedSupervisionCount: 3,
+  currentTargetMemory: {
+    targetId: "target-readme-refresh",
+    planGenerated: true,
+    plan: [
+      { id: "step-1", title: "Capture a desktop hero with active session context", status: "done" },
+      {
+        id: "step-2",
+        title: "Capture a focused git review scene for README",
+        status: "in_progress",
+      },
+      {
+        id: "step-3",
+        title: "Capture a mobile progress check with supervisor status",
+        status: "pending",
+      },
+    ],
+    activeStepId: "step-2",
+    progressSummary: "Hero scene locked. Review capture is being polished for README readability.",
+    stalledCount: 0,
+    updatedAt: 4,
+  },
+  recentTargetCycles: [
+    {
+      cycleId: "target-cycle-readme-1",
+      targetId: "target-readme-refresh",
+      startedAt: 2,
+      completedAt: 3,
+      result: "continue",
+      reason: "Hero screenshot is readable. Review scene still needs clearer diff emphasis.",
+    },
+  ],
+  cycles: [
+    {
+      id: "cycle-readme-1",
+      supervisorId: "sup-readme-hero",
+      sessionId: "session-readme-hero",
+      status: "evaluating",
+      trigger: "manual",
+      evidenceSource: "headless_snapshot",
+      objective: "Refresh README screenshots to highlight active cross-device coding flows",
+      evaluatorProviderId: "claude",
+      progress: 66,
+      result: "Review scene readability still under evaluation",
+      createdAt: 2,
+    },
+  ],
+  createdAt: 1,
+  updatedAt: 4,
+};
+
+const readmeMobileSupervisor: Supervisor = {
+  ...readmeSupervisor,
+  id: "sup-readme-mobile",
+  sessionId: "session-readme-mobile",
+  state: "idle",
+  currentTargetMemory: {
+    targetId: "target-readme-refresh",
+    planGenerated: true,
+    plan: [
+      { id: "step-1", title: "Capture a desktop hero with active session context", status: "done" },
+      { id: "step-2", title: "Capture a focused git review scene for README", status: "done" },
+      {
+        id: "step-3",
+        title: "Capture a mobile progress check with supervisor status",
+        status: "in_progress",
+      },
+    ],
+    activeStepId: "step-3",
+    progressSummary:
+      "Desktop captures are ready. Mobile continuity shot is the last remaining asset.",
+    stalledCount: 0,
+    updatedAt: 5,
+  },
+  recentTargetCycles: [
+    {
+      cycleId: "target-cycle-readme-mobile-1",
+      targetId: "target-readme-refresh",
+      startedAt: 4,
+      completedAt: 5,
+      result: "continue",
+      reason:
+        "Desktop assets are approved. Capture a mobile status-check scene that shows continuity.",
+    },
+  ],
+  cycles: [
+    {
+      id: "cycle-readme-mobile-1",
+      supervisorId: "sup-readme-mobile",
+      sessionId: "session-readme-mobile",
+      status: "completed",
+      trigger: "manual",
+      evidenceSource: "headless_snapshot",
+      objective: "Refresh README screenshots to highlight active cross-device coding flows",
+      evaluatorProviderId: "claude",
+      progress: 85,
+      result: "Desktop scenes approved. Mobile continuity shot requested.",
+      createdAt: 4,
+      completedAt: 5,
+    },
+  ],
+  createdAt: 1,
+  updatedAt: 5,
+};
+
+function createReadmeWorkspaceFileTree() {
+  return {
+    ".": [
+      { name: "docs", path: "docs", kind: "dir" },
+      { name: "packages", path: "packages", kind: "dir" },
+      { name: "README.md", path: "README.md", kind: "file" },
+      { name: "README.zh-CN.md", path: "README.zh-CN.md", kind: "file" },
+    ] satisfies FileNode[],
+    docs: [
+      { name: "help", path: "docs/help", kind: "dir" },
+      { name: "promotion", path: "docs/promotion", kind: "dir" },
+    ] satisfies FileNode[],
+    "docs/help": [
+      { name: "assets", path: "docs/help/assets", kind: "dir" },
+      { name: "desktop-guide.md", path: "docs/help/desktop-guide.md", kind: "file" },
+    ] satisfies FileNode[],
+    "docs/help/assets": [
+      {
+        name: "screenshot-desktop-workspace-full.png",
+        path: "docs/help/assets/screenshot-desktop-workspace-full.png",
+        kind: "file",
+      },
+      {
+        name: "screenshot-pc.png",
+        path: "docs/help/assets/screenshot-pc.png",
+        kind: "file",
+      },
+      {
+        name: "screenshot-mobile.png",
+        path: "docs/help/assets/screenshot-mobile.png",
+        kind: "file",
+      },
+    ] satisfies FileNode[],
+    packages: [
+      { name: "web", path: "packages/web", kind: "dir" },
+      { name: "core", path: "packages/core", kind: "dir" },
+    ] satisfies FileNode[],
+  };
+}
+
+function buildReadmeDesktopHeroSeed(context: {
+  theme: string;
+  locale: "zh" | "en";
+  device: "desktop" | "mobile";
+}) {
+  const fileTreeByPath = createReadmeWorkspaceFileTree();
+
+  return {
+    ...context,
+    workspaces: [workspace],
+    activeWorkspaceId: workspace.id,
+    sessions: readmeDesktopSessions,
+    paneLayoutByWorkspaceId: {
+      [workspace.id]: {
+        id: "root",
+        type: "split",
+        direction: "horizontal",
+        children: [
+          {
+            id: "hero-left",
+            type: "leaf",
+            sessionId: "session-readme-hero",
+          },
+          {
+            id: "hero-right",
+            type: "leaf",
+            sessionId: "session-readme-hero",
+          },
+        ],
+        sessionId: "session-readme-hero",
+      },
+    },
+    fileTreeByWorkspaceId: {
+      [workspace.id]: new Map<string, FileNode[]>(Object.entries(fileTreeByPath)),
+    },
+    gitStateByWorkspaceId: {
+      [workspace.id]: readmeDesktopGitStatus,
+    },
+    gitBranchListByWorkspaceId: {
+      [workspace.id]: {
+        current: "feature/readme-refresh",
+        branches: [
+          { name: "feature/readme-refresh", isCurrent: true, isRemote: false },
+          { name: "main", isCurrent: false, isRemote: false },
+          { name: "origin/main", isCurrent: false, isRemote: true },
+        ],
+      },
+    },
+    terminalMetaById: {
+      "term-agent-readme-hero": {
+        id: "term-agent-readme-hero",
+        workspaceId: workspace.id,
+        kind: "agent",
+        alive: true,
+        title: "Codex session",
+      },
+      "term-shell-readme-hero": {
+        id: "term-shell-readme-hero",
+        workspaceId: workspace.id,
+        kind: "shell",
+        alive: true,
+        title: "Workspace Shell",
+      },
+    },
+    terminalOutputById: {
+      "term-agent-readme-hero": [
+        new TextEncoder().encode(
+          [
+            '$ codex run --model gpt-5.5 --task "refresh readme screenshots"',
+            "Analyzing README usage and current preview scenes...",
+            "Plan: add README-specific preview scenes, capture desktop hero, capture mobile continuity shot.",
+            "",
+            "Editing packages/web/src/ui-preview/scenes/showcase-scenes.tsx",
+            "Preparing fresh assets in docs/help/assets/",
+          ].join("\n")
+        ),
+      ],
+      "term-shell-readme-hero": [
+        new TextEncoder().encode(
+          [
+            "$ pnpm --filter @coder-studio/web exec vitest run src/ui-preview/scene-metadata.test.ts src/ui-preview/catalog.test.tsx",
+            "✓ src/ui-preview/scene-metadata.test.ts (9)",
+            "✓ src/ui-preview/catalog.test.tsx (35)",
+            "",
+            '$ pnpm --dir e2e-ui exec playwright test --grep "README /"',
+            "capturing desktop hero and mobile progress scenes...",
+          ].join("\n")
+        ),
+      ],
+    },
+    supervisorBySessionId: {
+      "session-readme-hero": readmeSupervisor,
+    },
+    commands: {
+      workspaceList: [workspace],
+      sessionListByWorkspaceId: {
+        [workspace.id]: readmeDesktopSessions,
+      },
+      fileTreeByWorkspaceId: {
+        [workspace.id]: fileTreeByPath,
+      },
+      gitStatusByWorkspaceId: {
+        [workspace.id]: readmeDesktopGitStatus,
+      },
+      gitBranchesByWorkspaceId: {
+        [workspace.id]: {
+          current: "feature/readme-refresh",
+          branches: [
+            { name: "feature/readme-refresh", isCurrent: true, isRemote: false },
+            { name: "main", isCurrent: false, isRemote: false },
+            { name: "origin/main", isCurrent: false, isRemote: true },
+          ],
+        },
+      },
+      terminalListByWorkspaceId: {
+        [workspace.id]: [
+          {
+            id: "term-shell-readme-hero",
+            workspaceId: workspace.id,
+            kind: "shell",
+            title: "Workspace Shell",
+            cwd: workspace.path,
+            argv: ["zsh"],
+            cols: 120,
+            rows: 28,
+            alive: true,
+            createdAt: 2,
+          },
+          {
+            id: "term-shell-readme-verify",
+            workspaceId: workspace.id,
+            kind: "shell",
+            title: "Preview Runner",
+            cwd: workspace.path,
+            argv: ["zsh"],
+            cols: 120,
+            rows: 28,
+            alive: true,
+            createdAt: 3,
+          },
+        ],
+      },
+      supervisorBySessionId: {
+        "session-readme-hero": readmeSupervisor,
+      },
+    },
+  };
+}
+
+function buildReadmeDesktopReviewSeed(context: {
+  theme: string;
+  locale: "zh" | "en";
+  device: "desktop" | "mobile";
+}) {
+  const fileTreeByPath = createReadmeWorkspaceFileTree();
+
+  return {
+    ...buildReadmeDesktopHeroSeed(context),
+    fileTreeByWorkspaceId: {
+      [workspace.id]: new Map<string, FileNode[]>(Object.entries(fileTreeByPath)),
+    },
+    gitDiffPreviewByWorkspaceId: {
+      [workspace.id]: {
+        path: "packages/web/src/features/topbar/index.tsx",
+        title: "README capture polish",
+        diff: [
+          "diff --git a/packages/web/src/features/topbar/index.tsx b/packages/web/src/features/topbar/index.tsx",
+          "@@ Refine the desktop topbar hierarchy",
+          '-        <span className=\"topbar-btn-label\">Quick Actions</span>',
+          '+        <span className=\"topbar-btn-label\">Quick Actions</span>',
+          '+        <span className=\"topbar-btn-hint\">Review README capture targets</span>',
+          "",
+          "@@ screenshot staging",
+          "+      <WorkspaceLaunchModal onClose={() => setWorkspaceLaunchOpen(false)} />",
+        ].join("\n"),
+        source: "file" as const,
+      },
+    },
+    commands: {
+      ...buildReadmeDesktopHeroSeed(context).commands,
+      fileTreeByWorkspaceId: {
+        [workspace.id]: fileTreeByPath,
+      },
+      gitStatusByWorkspaceId: {
+        [workspace.id]: readmeDesktopGitStatus,
+      },
+      gitLogByWorkspaceId: {
+        [workspace.id]: { entries: [...readmeDesktopHistory] },
+      },
+      gitDiffByWorkspaceId: {
+        [workspace.id]: {
+          diff: [
+            "diff --git a/packages/web/src/features/topbar/index.tsx b/packages/web/src/features/topbar/index.tsx",
+            "@@ Refine the desktop topbar hierarchy",
+            '+  <span className="topbar-btn-hint">Review README capture targets</span>',
+            '+  <span className="topbar-btn-hint">Keep the workspace hero readable at README width</span>',
+          ].join("\n"),
+        },
+      },
+      gitShowByWorkspaceId: {
+        [workspace.id]: {
+          diff: "@@ latest commit\n+ refresh README desktop review capture",
+        },
+      },
+      supervisorBySessionId: {
+        "session-readme-hero": readmeSupervisor,
+      },
+    },
+  };
+}
+
+function ReadmeDesktopReviewWorkspace() {
+  return (
+    <div className="workspace-page workspace-page--desktop">
+      <TopBar />
+      <div className="workspace-body">
+        <aside className="left-panel" style={{ width: "324px" }}>
+          <div className="nav-panel workspace-sidebar-panel">
+            <div className="workspace-sidebar-panel__body">
+              <GitPanel workspaceId={workspace.id} variant="desktop" />
+            </div>
+          </div>
+        </aside>
+        <div className="split-divider-v" aria-hidden="true" />
+        <div className="workspace-main-area">
+          <div className="workspace-main-stage">
+            <GitDiffViewer workspaceId={workspace.id} showCloseButton={false} />
+          </div>
+        </div>
+      </div>
+      <WorkspaceStatusBar
+        align="start"
+        workspaceId={workspace.id}
+        gitState={readmeDesktopGitStatus}
+      />
+    </div>
+  );
+}
+
+function ReadmeMobileProgressWorkspace() {
+  const readmeMobileGitState: GitStatus = {
+    branch: "feature/readme-refresh",
+    ahead: 2,
+    behind: 0,
+    staged: [{ path: "README.md", status: "modified" }],
+    modified: [{ path: "docs/help/assets/screenshot-mobile.png", status: "modified" }],
+    untracked: [],
+    deleted: [],
+  };
+
+  return (
+    <div
+      className="mobile-shell mobile-shell--stacked mobile-shell--motion-reduced"
+      data-testid="mobile-shell"
+    >
+      <MobileTopBar
+        activeWorkspace={workspace}
+        drawerOpen={false}
+        onOpenSettings={() => {}}
+        onToggleDrawer={() => {}}
+      />
+      <main className="mobile-shell__viewport">
+        <div className="mobile-shell__content" style={{ gap: "12px", paddingBottom: "144px" }}>
+          <section className="mobile-shell__agent-stage" style={{ flex: "0 0 420px" }}>
+            <SessionCard
+              sessionId="session-readme-mobile"
+              showHeaderActions={false}
+              showSupervisorInline={false}
+              headerAccessory={
+                <MobileSupervisorBadge sessionId="session-readme-mobile" onOpen={() => {}} />
+              }
+            />
+          </section>
+          <section style={{ padding: "0 12px" }}>
+            <SupervisorCard
+              sessionId="session-readme-mobile"
+              workspaceId={workspace.id}
+              defaultDetailsOpen
+            />
+          </section>
+        </div>
+      </main>
+      <div
+        className="mobile-shell__bottom-stack"
+        data-testid="mobile-bottom-stack"
+        style={{ "--mobile-keyboard-inset": "0px" } as CSSProperties}
+      >
+        <div className="mobile-dock-shell">
+          <MobileDock activeItem="agent" onSelectItem={() => {}} />
+        </div>
+        <WorkspaceStatusBar workspaceId={workspace.id} gitState={readmeMobileGitState} />
+      </div>
+    </div>
+  );
+}
+
+function buildReadmeMobileProgressSeed(context: {
+  theme: string;
+  locale: "zh" | "en";
+  device: "desktop" | "mobile";
+}) {
+  const mobileWorkspace = {
+    ...workspace,
+    uiState: {
+      ...workspace.uiState,
+      activeSessionId: "session-readme-mobile",
+      paneLayout: {
+        id: "root",
+        type: "leaf" as const,
+        sessionId: "session-readme-mobile",
+      },
+    },
+  };
+
+  return {
+    ...context,
+    workspaces: [mobileWorkspace],
+    activeWorkspaceId: mobileWorkspace.id,
+    sessions: readmeMobileSessions,
+    paneLayoutByWorkspaceId: {
+      [mobileWorkspace.id]: {
+        id: "root",
+        type: "leaf",
+        sessionId: "session-readme-mobile",
+      },
+    },
+    gitStateByWorkspaceId: {
+      [mobileWorkspace.id]: {
+        branch: "feature/readme-refresh",
+        ahead: 2,
+        behind: 0,
+        staged: [{ path: "README.md", status: "modified" }],
+        modified: [{ path: "docs/help/assets/screenshot-mobile.png", status: "modified" }],
+        untracked: [],
+        deleted: [],
+      },
+    },
+    terminalMetaById: {
+      "term-agent-readme-mobile": {
+        id: "term-agent-readme-mobile",
+        workspaceId: mobileWorkspace.id,
+        kind: "agent",
+        alive: true,
+        title: "Claude progress review",
+      },
+    },
+    terminalOutputById: {
+      "term-agent-readme-mobile": [
+        new TextEncoder().encode(
+          [
+            "$ claude review --scene readme-mobile-progress",
+            "Checking continuity between desktop hero and mobile status view...",
+            "Recommendation: keep supervisor progress visible above the dock.",
+            "Status: desktop captures approved, mobile continuity shot queued for export.",
+          ].join("\n")
+        ),
+      ],
+    },
+    supervisorBySessionId: {
+      "session-readme-mobile": readmeMobileSupervisor,
+    },
+    commands: {
+      workspaceList: [mobileWorkspace],
+      sessionListByWorkspaceId: {
+        [mobileWorkspace.id]: readmeMobileSessions,
+      },
+      gitStatusByWorkspaceId: {
+        [mobileWorkspace.id]: {
+          branch: "feature/readme-refresh",
+          ahead: 2,
+          behind: 0,
+          staged: [{ path: "README.md", status: "modified" }],
+          modified: [{ path: "docs/help/assets/screenshot-mobile.png", status: "modified" }],
+          untracked: [],
+          deleted: [],
+        },
+      },
+      gitBranchesByWorkspaceId: {
+        [mobileWorkspace.id]: {
+          current: "feature/readme-refresh",
+          branches: [
+            { name: "feature/readme-refresh", isCurrent: true, isRemote: false },
+            { name: "main", isCurrent: false, isRemote: false },
+          ],
+        },
+      },
+      supervisorBySessionId: {
+        "session-readme-mobile": readmeMobileSupervisor,
+      },
+    },
+  };
+}
 
 function scene(
   id: string,
@@ -654,6 +1269,21 @@ export function createShowcaseScenes(): UiPreviewSceneDefinition[] {
         },
       }),
       render: () => <ObjectiveDialog workspaceId={workspace.id} sessionId="session-preview-1" />,
+    }),
+    scene("readme-desktop-hero", {
+      router: () => ({ initialEntries: ["/workspace"], path: "/workspace" }),
+      seed: (context) => buildReadmeDesktopHeroSeed(context),
+      render: () => <WorkspaceDesktopView />,
+    }),
+    scene("readme-desktop-review", {
+      router: () => ({ initialEntries: ["/workspace"], path: "/workspace" }),
+      seed: (context) => buildReadmeDesktopReviewSeed(context),
+      render: () => <ReadmeDesktopReviewWorkspace />,
+    }),
+    scene("readme-mobile-progress", {
+      router: () => ({ initialEntries: ["/workspace"], path: "/workspace" }),
+      seed: (context) => buildReadmeMobileProgressSeed({ ...context, device: "mobile" }),
+      render: () => <ReadmeMobileProgressWorkspace />,
     }),
     scene("worktree-manager", {
       router: () => ({ initialEntries: ["/workspace"], path: "/workspace" }),

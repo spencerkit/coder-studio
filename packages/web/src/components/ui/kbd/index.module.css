@@ -9,8 +9,10 @@
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--bg-input) 82%, var(--bg-surface) 18%);
   color: var(--text-primary);
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
+  font-family: var(--type-code-inline-family);
+  font-size: var(--type-code-inline-size);
+  line-height: var(--type-code-inline-line-height);
+  font-weight: var(--type-code-inline-weight);
   text-align: center;
 }
 
@@ -30,7 +32,6 @@
 .sm {
   min-width: 64px;
   padding: var(--sp-1) var(--sp-2);
-  font-size: var(--text-xs);
 }
 
 .interactive {

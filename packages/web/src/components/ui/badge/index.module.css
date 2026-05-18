@@ -10,7 +10,7 @@
   background: var(--accent-blue);
   color: var(--bg-page);
   font-family: var(--font-sans);
-  font-size: 10px;
-  font-weight: var(--font-semibold);
-  line-height: 1;
+  font-size: var(--type-kicker-size);
+  line-height: var(--type-kicker-line-height);
+  font-weight: var(--type-kicker-weight);
 }
