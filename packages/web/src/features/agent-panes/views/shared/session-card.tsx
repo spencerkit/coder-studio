@@ -122,6 +122,7 @@ export const SessionCard: FC<SessionCardProps> = ({
     >
       <PanelHeader
         title={sessionTitle}
+        metaPlacement="inline"
         status={
           <StatusDot
             tone={getSessionDotTone(session.state)}
