@@ -85,25 +85,11 @@ export function createTreeVisibilityFilter(): (name: string) => boolean {
  * Returns a function suitable for chokidar's `ignored` option.
  */
 export function createWatcherIgnoreFilter(rootPath: string): (path: string) => boolean {
-  const gitignorePath = join(rootPath, ".gitignore");
+  void rootPath;
 
-  if (!existsSync(gitignorePath)) {
-    // Default: ignore obvious noise, but keep .git metadata watched so git
-    // operations can trigger refreshes.
-    return (path: string) =>
-      DEFAULT_WATCHER_IGNORED_PATTERNS.some((p) => p.test(normalizePath(path)));
-  }
-
-  const gitignoreContent = readFileSync(gitignorePath, "utf-8");
-  const ig = ignore().add(gitignoreContent);
-
-  return (path: string) => {
-    const normalizedPath = normalizePath(path);
-    if (DEFAULT_WATCHER_IGNORED_PATTERNS.some((p) => p.test(normalizedPath))) {
-      return true;
-    }
-
-    const relativePath = relativeToRoot(rootPath, path);
-    return isIgnoredByGitignore(ig, relativePath);
-  };
+  // Watcher coverage intentionally ignores .gitignore so frontend refreshes
+  // can react to generated files and other ignored paths. Keep only the
+  // hard-coded noise filters here.
+  return (path: string) =>
+    DEFAULT_WATCHER_IGNORED_PATTERNS.some((p) => p.test(normalizePath(path)));
 }
