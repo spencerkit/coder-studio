@@ -858,7 +858,7 @@ describe("AppProviders lifecycle recovery", () => {
 
     act(() => {
       store.set(terminalPreferencesAtom, {
-        copyOnSelect: false,
+        copyOnSelect: true,
         desktopFontSize: 14,
         mobileFontSize: 11,
         fontSize: 14,
@@ -929,10 +929,46 @@ describe("AppProviders lifecycle recovery", () => {
     });
 
     expect(store.get(terminalPreferencesAtom)).toEqual({
-      copyOnSelect: true,
+      copyOnSelect: false,
       desktopFontSize: 18,
       mobileFontSize: 12,
       fontSize: 18,
+    });
+  });
+
+  it("defaults terminal copy-on-select to enabled when settings.get omits the value", async () => {
+    const store = createStore();
+    setVisibilityState("visible");
+
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "appearance.desktopTerminalFontSize": 16,
+          "appearance.mobileTerminalFontSize": 14,
+        };
+      }
+
+      return undefined;
+    });
+    wsState.client!.sendCommand = sendCommand;
+
+    renderProviders(store);
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
+
+    act(() => {
+      wsState.client?.statusHandler?.("connected");
+    });
+
+    await vi.waitFor(() => {
+      expect(store.get(terminalPreferencesAtom)).toEqual({
+        copyOnSelect: true,
+        desktopFontSize: 16,
+        mobileFontSize: 14,
+        fontSize: 16,
+      });
     });
   });
 

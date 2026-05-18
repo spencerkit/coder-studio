@@ -1612,7 +1612,7 @@ describe("SettingsPage", () => {
         {
           settings: {
             appearance: {
-              terminalCopyOnSelect: true,
+              terminalCopyOnSelect: false,
             },
           },
         },
@@ -1627,8 +1627,34 @@ describe("SettingsPage", () => {
 
     expect(screen.getByRole("switch", { name: "选中自动复制" })).toHaveAttribute(
       "aria-checked",
-      "true"
+      "false"
     );
+    expect(store.get(terminalPreferencesAtom)).toEqual({
+      copyOnSelect: false,
+      desktopFontSize: DEFAULT_TERMINAL_FONT_SIZE,
+      mobileFontSize: DEFAULT_TERMINAL_FONT_SIZE,
+      fontSize: DEFAULT_TERMINAL_FONT_SIZE,
+    });
+  });
+
+  it("defaults copy-on-select to enabled when general settings do not provide a value", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {};
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "通用" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("switch", { name: "选中自动复制" })).toHaveAttribute(
+        "aria-checked",
+        "true"
+      );
+    });
     expect(store.get(terminalPreferencesAtom)).toEqual({
       copyOnSelect: true,
       desktopFontSize: DEFAULT_TERMINAL_FONT_SIZE,
@@ -1659,7 +1685,7 @@ describe("SettingsPage", () => {
       expect(mobileInput).toHaveValue(14);
     });
     expect(store.get(terminalPreferencesAtom)).toEqual({
-      copyOnSelect: false,
+      copyOnSelect: true,
       desktopFontSize: 16,
       mobileFontSize: 14,
       fontSize: 16,
@@ -1688,7 +1714,7 @@ describe("SettingsPage", () => {
       expect(mobileInput).toHaveValue(11);
     });
     expect(store.get(terminalPreferencesAtom)).toEqual({
-      copyOnSelect: false,
+      copyOnSelect: true,
       desktopFontSize: 11,
       mobileFontSize: 11,
       fontSize: 11,
@@ -1730,7 +1756,7 @@ describe("SettingsPage", () => {
     });
 
     expect(store.get(terminalPreferencesAtom)).toEqual({
-      copyOnSelect: false,
+      copyOnSelect: true,
       desktopFontSize: 15,
       mobileFontSize: 13,
       fontSize: 15,
@@ -1818,7 +1844,7 @@ describe("SettingsPage", () => {
     });
 
     expect(store.get(terminalPreferencesAtom)).toEqual({
-      copyOnSelect: false,
+      copyOnSelect: true,
       desktopFontSize: 12,
       mobileFontSize: 14,
       fontSize: 12,
@@ -1865,7 +1891,7 @@ describe("SettingsPage", () => {
       undefined
     );
     expect(store.get(terminalPreferencesAtom)).toEqual({
-      copyOnSelect: false,
+      copyOnSelect: true,
       desktopFontSize: 12,
       mobileFontSize: 11,
       fontSize: 12,
@@ -1916,7 +1942,7 @@ describe("SettingsPage", () => {
 
     expect(screen.getByRole("spinbutton", { name: "桌面端终端字号" })).toHaveValue(17);
     expect(store.get(terminalPreferencesAtom)).toEqual({
-      copyOnSelect: false,
+      copyOnSelect: true,
       desktopFontSize: 17,
       mobileFontSize: 13,
       fontSize: 17,
