@@ -3866,12 +3866,81 @@ body.is-resizing-panels * {
   color: var(--icon-error);
 }
 
+.supervisor-dialog .modal-body {
+  gap: var(--sp-3);
+}
+
+.supervisor-dialog .form-group {
+  gap: 6px;
+}
+
+.supervisor-dialog-intro {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+  border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-surface) 88%, var(--bg-hover));
+}
+
+.supervisor-dialog-intro__icon {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  background: var(--icon-surface-success);
+  color: var(--icon-success);
+  flex-shrink: 0;
+}
+
+.supervisor-dialog--edit .supervisor-dialog-intro__icon {
+  background: var(--icon-surface-info);
+  color: var(--icon-info);
+}
+
+.supervisor-dialog--disable .supervisor-dialog-intro__icon {
+  background: var(--icon-surface-error);
+  color: var(--icon-error);
+}
+
+.supervisor-dialog-intro__copy {
+  min-width: 0;
+}
+
+.supervisor-dialog-intro__title {
+  display: block;
+  margin: 0;
+  font-size: var(--type-body-size);
+  line-height: var(--type-body-line-height);
+  font-weight: var(--font-medium);
+  color: var(--text-primary);
+}
+
+.supervisor-dialog-intro__description {
+  margin: 2px 0 0;
+  font-size: var(--type-meta-size);
+  line-height: var(--type-meta-line-height);
+  font-weight: var(--type-meta-weight);
+  color: var(--text-secondary);
+}
+
+.supervisor-dialog .input,
+.supervisor-dialog .mobile-select-trigger {
+  font-size: var(--type-label-size);
+  line-height: var(--type-label-line-height);
+  font-weight: var(--type-label-weight);
+}
+
 .supervisor-dialog .textarea {
+  min-height: 104px;
   font-family: var(--type-code-inline-family);
   font-size: var(--type-code-inline-size);
   line-height: var(--type-code-inline-line-height);
   font-weight: var(--type-code-inline-weight);
-  min-height: 120px;
+  color: var(--text-secondary);
 }
 
 .supervisor-dialog .input[type="select"],
@@ -3882,11 +3951,11 @@ body.is-resizing-panels * {
 /* Destructive action callout for the disable flow */
 .supervisor-danger-callout {
   display: flex;
-  gap: var(--sp-3);
-  padding: var(--sp-3);
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
   background: var(--icon-surface-error);
-  border: 1px solid color-mix(in srgb, var(--icon-error) 36%, var(--border));
-  border-left-width: 2px;
+  border: 1px solid color-mix(in srgb, var(--icon-error) 24%, var(--border));
+  border-left-width: 1px;
   border-radius: var(--radius-md);
 }
 
@@ -3898,10 +3967,10 @@ body.is-resizing-panels * {
 .supervisor-danger-callout-copy {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-1);
-  font-size: var(--type-body-size);
-  line-height: var(--type-body-line-height);
-  font-weight: var(--type-body-weight);
+  gap: 2px;
+  font-size: var(--type-label-size);
+  line-height: var(--type-label-line-height);
+  font-weight: var(--type-label-weight);
   color: var(--text-primary);
 }
 

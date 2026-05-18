@@ -47,7 +47,6 @@ export function ObjectiveDialog({ workspaceId, sessionId }: ObjectiveDialogProps
           </span>
           <div className="dialog-header__copy">
             <ModalTitle>{copy.title}</ModalTitle>
-            <p className="dialog-header__description">{copy.subtitle}</p>
           </div>
         </div>
         <IconButton
@@ -62,6 +61,7 @@ export function ObjectiveDialog({ workspaceId, sessionId }: ObjectiveDialogProps
       <ModalBody>
         <ObjectiveDialogContent
           mode={mode}
+          showIntro
           draftObjective={dialog.draftObjective}
           draftEvaluatorProviderId={dialog.draftEvaluatorProviderId}
           draftEvaluatorModel={dialog.draftEvaluatorModel}

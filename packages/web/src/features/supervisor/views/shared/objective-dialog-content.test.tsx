@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ComponentProps } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ObjectiveDialogContent } from "./objective-dialog-content";
 
@@ -26,27 +27,115 @@ afterEach(() => {
   delete (window as typeof window & { matchMedia?: typeof window.matchMedia }).matchMedia;
 });
 
+type ObjectiveDialogContentProps = ComponentProps<typeof ObjectiveDialogContent>;
+
+function createObjectiveDialogContentProps(
+  overrides: Partial<ObjectiveDialogContentProps> = {}
+): ObjectiveDialogContentProps {
+  return {
+    mode: "enable",
+    draftObjective: "Investigate regressions",
+    draftEvaluatorProviderId: "claude",
+    draftEvaluatorModel: "",
+    draftMaxSupervisionCount: "0",
+    draftScheduledAt: "",
+    isMaxSupervisionCountValid: true,
+    disableObjective: "",
+    onDraftObjectiveChange: vi.fn(),
+    onDraftEvaluatorProviderChange: vi.fn(),
+    onDraftEvaluatorModelChange: vi.fn(),
+    onDraftMaxSupervisionCountChange: vi.fn(),
+    onDraftScheduledAtChange: vi.fn(),
+    ...overrides,
+  };
+}
+
+function renderObjectiveDialogContent(overrides: Partial<ObjectiveDialogContentProps> = {}) {
+  return render(<ObjectiveDialogContent {...createObjectiveDialogContentProps(overrides)} />);
+}
+
 describe("ObjectiveDialogContent", () => {
-  it("renders shared textarea and desktop select trigger primitives with helper text wiring", () => {
-    render(
+  it("renders the max supervision count field as valid by default in shared-content tests", () => {
+    renderObjectiveDialogContent();
+
+    expect(screen.getByLabelText("supervisor.field.max_supervision_count")).toHaveAttribute(
+      "aria-invalid",
+      "false"
+    );
+  });
+
+  it("does not render the supervisor intro strip by default for enable and edit modes", () => {
+    const { rerender } = renderObjectiveDialogContent();
+
+    expect(document.querySelector(".supervisor-dialog-intro")).toBeNull();
+
+    rerender(<ObjectiveDialogContent {...createObjectiveDialogContentProps({ mode: "edit" })} />);
+
+    expect(document.querySelector(".supervisor-dialog-intro")).toBeNull();
+  });
+
+  it("renders a flat supervisor intro strip when showIntro is true for enable and edit modes", () => {
+    const { rerender } = renderObjectiveDialogContent({ showIntro: true });
+
+    let intro = document.querySelector(".supervisor-dialog-intro");
+    let introIcon = document.querySelector(".supervisor-dialog-intro__icon");
+    let introCopy = document.querySelector(".supervisor-dialog-intro__copy");
+    let firstFormGroup = document.querySelector(".form-group");
+    expect(intro).toBeTruthy();
+    expect(introIcon).toBeTruthy();
+    expect(introCopy).toBeTruthy();
+    expect(intro?.querySelector(".supervisor-dialog-intro__icon")).toBe(introIcon);
+    expect(intro?.querySelector(".supervisor-dialog-intro__copy")).toBe(introCopy);
+    expect(introIcon?.querySelector('[data-icon-semantic="supervisor.mode.enable"]')).toBeTruthy();
+    expect(firstFormGroup).toBeTruthy();
+    expect(intro?.compareDocumentPosition(firstFormGroup as Node)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    );
+    expect(intro?.querySelector(".supervisor-dialog-intro__title")).toHaveTextContent(
+      "supervisor.dialog.enable.title"
+    );
+    expect(intro?.querySelector(".supervisor-dialog-intro__description")).toHaveTextContent(
+      "supervisor.dialog.enable.subtitle"
+    );
+
+    rerender(
       <ObjectiveDialogContent
-        mode="edit"
-        draftObjective="Investigate regressions"
-        draftEvaluatorProviderId="claude"
-        draftEvaluatorModel=""
-        draftMaxSupervisionCount="0"
-        draftScheduledAt=""
-        disableObjective=""
-        onDraftObjectiveChange={vi.fn()}
-        onDraftEvaluatorProviderChange={vi.fn()}
-        onDraftEvaluatorModelChange={vi.fn()}
-        onDraftMaxSupervisionCountChange={vi.fn()}
-        onDraftScheduledAtChange={vi.fn()}
+        {...createObjectiveDialogContentProps({ mode: "edit", showIntro: true })}
       />
     );
 
+    intro = document.querySelector(".supervisor-dialog-intro");
+    introIcon = document.querySelector(".supervisor-dialog-intro__icon");
+    introCopy = document.querySelector(".supervisor-dialog-intro__copy");
+    firstFormGroup = document.querySelector(".form-group");
+    expect(intro).toBeTruthy();
+    expect(introIcon).toBeTruthy();
+    expect(introCopy).toBeTruthy();
+    expect(intro?.querySelector(".supervisor-dialog-intro__icon")).toBe(introIcon);
+    expect(intro?.querySelector(".supervisor-dialog-intro__copy")).toBe(introCopy);
+    expect(introIcon?.querySelector('[data-icon-semantic="supervisor.mode.edit"]')).toBeTruthy();
+    expect(firstFormGroup).toBeTruthy();
+    expect(intro?.compareDocumentPosition(firstFormGroup as Node)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    );
+    expect(intro?.querySelector(".supervisor-dialog-intro__title")).toHaveTextContent(
+      "supervisor.dialog.edit.title"
+    );
+    expect(intro?.querySelector(".supervisor-dialog-intro__description")).toHaveTextContent(
+      "supervisor.dialog.edit.subtitle"
+    );
+  });
+
+  it("renders compact control classes instead of large form controls", () => {
+    renderObjectiveDialogContent({
+      mode: "edit",
+      draftEvaluatorModel: "sonnet",
+      draftMaxSupervisionCount: "3",
+    });
+
     const textarea = screen.getByLabelText("supervisor.field.objective");
-    expect(textarea).toHaveClass("input", "textarea", "textarea-lg");
+    expect(textarea).toHaveClass("input", "textarea");
+    expect(textarea).not.toHaveClass("textarea-lg");
     expect(textarea).toHaveAttribute("rows", "5");
     expect(textarea).toHaveValue("Investigate regressions");
     expect(textarea).toHaveAttribute("aria-describedby");
@@ -58,33 +147,35 @@ describe("ObjectiveDialogContent", () => {
     const trigger = screen.getByRole("button", {
       name: "supervisor.field.evaluator Claude",
     });
-    expect(trigger).toHaveClass("input", "mobile-select-trigger");
+    expect(trigger).toHaveClass("input", "mobile-select-trigger", "input-sm");
     expect(trigger).toHaveAttribute("aria-describedby");
     expect(screen.getByText("supervisor.field.evaluator_helper")).toHaveAttribute(
       "id",
       trigger.getAttribute("aria-describedby")
+    );
+
+    expect(screen.getByLabelText("supervisor.field.evaluator_model")).toHaveClass(
+      "input",
+      "input-sm"
+    );
+    expect(screen.getByLabelText("supervisor.field.max_supervision_count")).toHaveClass(
+      "input",
+      "input-sm"
+    );
+    expect(screen.getByRole("button", { name: "supervisor.field.scheduled_at" })).toHaveClass(
+      "input",
+      "input-sm"
     );
   });
 
   it("keeps objective editing behavior unchanged", () => {
     const onDraftObjectiveChange = vi.fn();
 
-    render(
-      <ObjectiveDialogContent
-        mode="enable"
-        draftObjective=""
-        draftEvaluatorProviderId="heuristic"
-        draftEvaluatorModel=""
-        draftMaxSupervisionCount="0"
-        draftScheduledAt=""
-        disableObjective=""
-        onDraftObjectiveChange={onDraftObjectiveChange}
-        onDraftEvaluatorProviderChange={vi.fn()}
-        onDraftEvaluatorModelChange={vi.fn()}
-        onDraftMaxSupervisionCountChange={vi.fn()}
-        onDraftScheduledAtChange={vi.fn()}
-      />
-    );
+    renderObjectiveDialogContent({
+      draftObjective: "",
+      draftEvaluatorProviderId: "heuristic",
+      onDraftObjectiveChange,
+    });
 
     const textarea = screen.getByLabelText("supervisor.field.objective");
     fireEvent.change(textarea, { target: { value: "Ship a safe rollout plan" } });
@@ -97,22 +188,10 @@ describe("ObjectiveDialogContent", () => {
     const user = userEvent.setup();
     const onDraftEvaluatorProviderChange = vi.fn();
 
-    render(
-      <ObjectiveDialogContent
-        mode="enable"
-        draftObjective=""
-        draftEvaluatorProviderId="claude"
-        draftEvaluatorModel=""
-        draftMaxSupervisionCount="0"
-        draftScheduledAt=""
-        disableObjective=""
-        onDraftObjectiveChange={vi.fn()}
-        onDraftEvaluatorProviderChange={onDraftEvaluatorProviderChange}
-        onDraftEvaluatorModelChange={vi.fn()}
-        onDraftMaxSupervisionCountChange={vi.fn()}
-        onDraftScheduledAtChange={vi.fn()}
-      />
-    );
+    renderObjectiveDialogContent({
+      draftObjective: "",
+      onDraftEvaluatorProviderChange,
+    });
 
     await user.click(screen.getByRole("button", { name: "supervisor.field.evaluator Claude" }));
 
@@ -134,27 +213,16 @@ describe("ObjectiveDialogContent", () => {
       (query) => query.includes("max-width: 899px") || query.includes("pointer: coarse")
     );
 
-    render(
-      <ObjectiveDialogContent
-        mode="enable"
-        draftObjective=""
-        draftEvaluatorProviderId="codex"
-        draftEvaluatorModel=""
-        draftMaxSupervisionCount="0"
-        draftScheduledAt=""
-        disableObjective=""
-        onDraftObjectiveChange={vi.fn()}
-        onDraftEvaluatorProviderChange={onDraftEvaluatorProviderChange}
-        onDraftEvaluatorModelChange={vi.fn()}
-        onDraftMaxSupervisionCountChange={vi.fn()}
-        onDraftScheduledAtChange={vi.fn()}
-      />
-    );
+    renderObjectiveDialogContent({
+      draftObjective: "",
+      draftEvaluatorProviderId: "codex",
+      onDraftEvaluatorProviderChange,
+    });
 
     const trigger = screen.getByRole("button", {
       name: "supervisor.field.evaluator Codex",
     });
-    expect(trigger).toHaveClass("input", "mobile-select-trigger");
+    expect(trigger).toHaveClass("input", "mobile-select-trigger", "input-sm");
     expect(trigger).toHaveAttribute("aria-haspopup", "dialog");
     expect(trigger).toHaveAttribute("aria-describedby");
 
@@ -176,22 +244,16 @@ describe("ObjectiveDialogContent", () => {
     const onDraftMaxSupervisionCountChange = vi.fn();
     const onDraftScheduledAtChange = vi.fn();
 
-    render(
-      <ObjectiveDialogContent
-        mode="enable"
-        draftObjective=""
-        draftEvaluatorProviderId="codex"
-        draftEvaluatorModel="o3"
-        draftMaxSupervisionCount="5"
-        draftScheduledAt="2026-05-11T03:00"
-        disableObjective=""
-        onDraftObjectiveChange={vi.fn()}
-        onDraftEvaluatorProviderChange={vi.fn()}
-        onDraftEvaluatorModelChange={onDraftEvaluatorModelChange}
-        onDraftMaxSupervisionCountChange={onDraftMaxSupervisionCountChange}
-        onDraftScheduledAtChange={onDraftScheduledAtChange}
-      />
-    );
+    renderObjectiveDialogContent({
+      draftObjective: "",
+      draftEvaluatorProviderId: "codex",
+      draftEvaluatorModel: "o3",
+      draftMaxSupervisionCount: "5",
+      draftScheduledAt: "2026-05-11T03:00",
+      onDraftEvaluatorModelChange,
+      onDraftMaxSupervisionCountChange,
+      onDraftScheduledAtChange,
+    });
 
     fireEvent.change(screen.getByLabelText("supervisor.field.evaluator_model"), {
       target: { value: "gpt-5" },
@@ -205,23 +267,15 @@ describe("ObjectiveDialogContent", () => {
   });
 
   it("renders the semantic warning icon for disable mode", () => {
-    render(
-      <ObjectiveDialogContent
-        mode="disable"
-        draftObjective=""
-        draftEvaluatorProviderId="codex"
-        draftEvaluatorModel=""
-        draftMaxSupervisionCount="0"
-        draftScheduledAt=""
-        disableObjective="Current objective"
-        onDraftObjectiveChange={vi.fn()}
-        onDraftEvaluatorProviderChange={vi.fn()}
-        onDraftEvaluatorModelChange={vi.fn()}
-        onDraftMaxSupervisionCountChange={vi.fn()}
-        onDraftScheduledAtChange={vi.fn()}
-      />
-    );
+    renderObjectiveDialogContent({
+      mode: "disable",
+      showIntro: true,
+      draftObjective: "",
+      draftEvaluatorProviderId: "codex",
+      disableObjective: "Current objective",
+    });
 
+    expect(document.querySelector(".supervisor-dialog-intro")).toBeNull();
     expect(
       screen.getByRole("alert").querySelector('[data-icon-semantic="state.warning"]')
     ).toBeTruthy();
