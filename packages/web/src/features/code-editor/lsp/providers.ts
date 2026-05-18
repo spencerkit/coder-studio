@@ -74,6 +74,12 @@ export function createLspProviderRegistry(deps: LspProviderRegistryDeps) {
     monaco.languages.registerDocumentSymbolProvider(languageId, {
       provideDocumentSymbols,
     });
+    if (supportsImportSpecifierLinks(languageId)) {
+      monaco.languages.registerLinkProvider?.(languageId, {
+        provideLinks,
+        resolveLink,
+      });
+    }
   }
 
   async function provideDefinition(
@@ -118,12 +124,31 @@ export function createLspProviderRegistry(deps: LspProviderRegistryDeps) {
       return [];
     }
 
-    const requestVersion = model.getVersionId();
+    return await requestLocations(model, meta, position.lineNumber, position.column, requests);
+  }
+
+  async function requestLocations(
+    model: monaco.editor.ITextModel,
+    meta: LspModelMetadata,
+    line: number,
+    column: number,
+    requests: Array<
+      (input: {
+        meta: LspModelMetadata;
+        line: number;
+        column: number;
+        version: number;
+      }) => Promise<LspLocation[] | null>
+    >,
+    version = model.getVersionId()
+  ): Promise<monaco.languages.Location[]> {
+    const requestVersion = version;
+
     for (const request of requests) {
       const result = await request({
         meta,
-        line: position.lineNumber,
-        column: position.column,
+        line,
+        column,
         version: requestVersion,
       });
 
@@ -219,6 +244,60 @@ export function createLspProviderRegistry(deps: LspProviderRegistryDeps) {
     return result.map(toMonacoSymbol);
   }
 
+  async function provideLinks(
+    model: monaco.editor.ITextModel
+  ): Promise<monaco.languages.ILinksList> {
+    const meta = deps.lookupModelMetadata(model);
+    if (!meta) {
+      return { links: [] };
+    }
+
+    const links = collectImportSpecifierLinks(model.getValue());
+    if (links.length === 0) {
+      return { links: [] };
+    }
+
+    return {
+      links: links.map((link) => ({
+        range: link.range,
+        tooltip: link.specifier,
+        __lspImportLink: {
+          model,
+          meta,
+          line: link.targetLineNumber,
+          column: link.targetColumn,
+          version: model.getVersionId(),
+        },
+      })),
+    };
+  }
+
+  async function resolveLink(link: monaco.languages.ILink): Promise<monaco.languages.ILink | null> {
+    const request = (link as ResolvableImportLink).__lspImportLink;
+    if (!request) {
+      return link;
+    }
+    if (request.model.getVersionId() !== request.version) {
+      return link;
+    }
+
+    const locations = await requestLocations(
+      request.model,
+      request.meta,
+      request.line,
+      request.column,
+      [deps.requestDefinition, deps.requestDeclaration, deps.requestTypeDefinition],
+      request.version
+    );
+    if (locations.length === 0) {
+      return link;
+    }
+    return {
+      ...link,
+      url: locations[0]!.uri,
+    };
+  }
+
   return {
     register,
     provideDefinition,
@@ -227,7 +306,145 @@ export function createLspProviderRegistry(deps: LspProviderRegistryDeps) {
     provideHover,
     provideReferences,
     provideDocumentSymbols,
+    provideLinks,
+    resolveLink,
   };
+}
+
+interface ImportSpecifierLink {
+  range: monaco.IRange;
+  specifier: string;
+  targetLineNumber: number;
+  targetColumn: number;
+}
+
+interface ResolvableImportLink extends monaco.languages.ILink {
+  __lspImportLink?: {
+    model: monaco.editor.ITextModel;
+    meta: LspModelMetadata;
+    line: number;
+    column: number;
+    version: number;
+  };
+}
+
+const importSpecifierPatterns = [
+  /\bimport\s+(?:type\s+)?(?:[^"'`\n]+?\s+from\s+)?(["'])([^"'`\n]+)\1/g,
+  /\bexport\s+(?:type\s+)?(?:[^"'`\n]+?\s+from\s+)(["'])([^"'`\n]+)\1/g,
+  /\bimport\s*\(\s*(["'])([^"'`\n]+)\1\s*\)/g,
+  /\brequire\s*\(\s*(["'])([^"'`\n]+)\1\s*\)/g,
+];
+
+function collectImportSpecifierLinks(text: string): ImportSpecifierLink[] {
+  const links: ImportSpecifierLink[] = [];
+  const lineStarts = computeLineStarts(text);
+
+  for (const pattern of importSpecifierPatterns) {
+    for (const match of text.matchAll(pattern)) {
+      const specifier = match[2];
+      if (!specifier) {
+        continue;
+      }
+
+      const fullMatch = match[0];
+      const specifierOffsetInMatch = fullMatch.indexOf(specifier);
+      if (specifierOffsetInMatch < 0) {
+        continue;
+      }
+
+      const specifierStartOffset = (match.index ?? 0) + specifierOffsetInMatch;
+      const quoteStartOffset = specifierStartOffset - 1;
+      const quoteEndOffset = specifierStartOffset + specifier.length + 1;
+      const targetOffset = specifierStartOffset + getImportTargetOffset(specifier);
+      const targetPosition = offsetToMonacoPosition(lineStarts, targetOffset);
+
+      links.push({
+        specifier,
+        range: offsetRangeToMonacoRange(lineStarts, quoteStartOffset, quoteEndOffset),
+        targetLineNumber: targetPosition.lineNumber,
+        targetColumn: targetPosition.column,
+      });
+    }
+  }
+
+  return links;
+}
+
+function getImportTargetOffset(specifier: string): number {
+  const slashIndex = specifier.lastIndexOf("/");
+  if (slashIndex >= 0 && slashIndex + 1 < specifier.length) {
+    return slashIndex + 1;
+  }
+  return 0;
+}
+
+function computeLineStarts(text: string): number[] {
+  const starts = [0];
+  for (let index = 0; index < text.length; index += 1) {
+    if (text[index] === "\n") {
+      starts.push(index + 1);
+    }
+  }
+  return starts;
+}
+
+function offsetRangeToMonacoRange(
+  lineStarts: number[],
+  startOffset: number,
+  endOffset: number
+): monaco.IRange {
+  const start = offsetToMonacoPosition(lineStarts, startOffset);
+  const end = offsetToMonacoPosition(lineStarts, endOffset);
+  return {
+    startLineNumber: start.lineNumber,
+    startColumn: start.column,
+    endLineNumber: end.lineNumber,
+    endColumn: end.column,
+  };
+}
+
+function offsetToMonacoPosition(
+  lineStarts: number[],
+  offset: number
+): { lineNumber: number; column: number } {
+  let low = 0;
+  let high = lineStarts.length - 1;
+
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+    const lineStart = lineStarts[mid]!;
+    const nextLineStart = lineStarts[mid + 1] ?? Number.POSITIVE_INFINITY;
+
+    if (offset < lineStart) {
+      high = mid - 1;
+      continue;
+    }
+
+    if (offset >= nextLineStart) {
+      low = mid + 1;
+      continue;
+    }
+
+    return {
+      lineNumber: mid + 1,
+      column: offset - lineStart + 1,
+    };
+  }
+
+  const lastLineStart = lineStarts[lineStarts.length - 1] ?? 0;
+  return {
+    lineNumber: lineStarts.length,
+    column: offset - lastLineStart + 1,
+  };
+}
+
+function supportsImportSpecifierLinks(languageId: string): boolean {
+  return (
+    languageId === "typescript" ||
+    languageId === "typescriptreact" ||
+    languageId === "javascript" ||
+    languageId === "javascriptreact"
+  );
 }
 
 function toMonacoRange(range: {

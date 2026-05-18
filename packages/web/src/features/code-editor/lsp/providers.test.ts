@@ -1,6 +1,7 @@
 import * as monaco from "monaco-editor";
 import { describe, expect, it, vi } from "vitest";
 import { createLspBridge } from "./bridge";
+import { createLspProviderRegistry } from "./providers";
 
 type BridgeSendCommand = NonNullable<
   NonNullable<Parameters<typeof createLspBridge>[0]>["sendCommand"]
@@ -26,6 +27,7 @@ vi.mock("monaco-editor", () => ({
     registerHoverProvider: vi.fn(),
     registerReferenceProvider: vi.fn(),
     registerDocumentSymbolProvider: vi.fn(),
+    registerLinkProvider: vi.fn(),
     SymbolKind: {
       Variable: 13,
     },
@@ -70,6 +72,89 @@ function createMockModel(
 }
 
 describe("LSP providers", () => {
+  it("registers a link provider that resolves relative import specifiers to workspace files", async () => {
+    const registerLinkProvider = vi.mocked(monaco.languages.registerLinkProvider);
+    const requestDefinition = vi.fn(async () => [
+      {
+        path: "src/shared.ts",
+        range: {
+          startLine: 1,
+          startColumn: 14,
+          endLine: 1,
+          endColumn: 25,
+        },
+      },
+    ]);
+
+    const registry = createLspProviderRegistry({
+      lookupModelMetadata: () => ({
+        workspaceId: "ws-1",
+        workspaceRootPath: "/repo",
+        path: "src/consumer.ts",
+      }),
+      requestDefinition,
+      requestDeclaration: async () => [],
+      requestTypeDefinition: async () => [],
+      requestHover: async () => null,
+      requestReferences: async () => [],
+      requestDocumentSymbols: async () => [],
+    });
+
+    registry.register("typescript");
+
+    expect(registerLinkProvider).toHaveBeenCalledWith(
+      "typescript",
+      expect.objectContaining({
+        provideLinks: expect.any(Function),
+        resolveLink: expect.any(Function),
+      })
+    );
+
+    const provider =
+      registerLinkProvider.mock.calls[registerLinkProvider.mock.calls.length - 1]![1];
+    const model = createMockModel(
+      'import { sharedValue } from "./shared";\nexport const computedValue = sharedValue + 1;\n',
+      1,
+      monaco.Uri.file("/repo/src/consumer.ts")
+    );
+
+    const linksList = await provider.provideLinks(model, {
+      isCancellationRequested: false,
+    } as never);
+    expect(linksList?.links).toEqual([
+      expect.objectContaining({
+        range: {
+          startLineNumber: 1,
+          startColumn: 29,
+          endLineNumber: 1,
+          endColumn: 39,
+        },
+      }),
+    ]);
+
+    const resolvedLink = await provider.resolveLink?.(linksList!.links[0]!, {
+      isCancellationRequested: false,
+    } as never);
+    expect(requestDefinition).toHaveBeenCalledWith({
+      meta: {
+        workspaceId: "ws-1",
+        workspaceRootPath: "/repo",
+        path: "src/consumer.ts",
+      },
+      line: 1,
+      column: 32,
+      version: 1,
+    });
+    expect(resolvedLink).toEqual(
+      expect.objectContaining({
+        url: expect.objectContaining({
+          path: "/repo/src/shared.ts",
+          scheme: "file",
+        }),
+      })
+    );
+  });
+
   it("returns same-file definitions as Monaco locations", async () => {
     const bridge = createLspBridge({
       sendCommand: vi.fn(async (op) => {
