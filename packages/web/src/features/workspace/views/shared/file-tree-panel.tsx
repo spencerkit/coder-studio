@@ -157,6 +157,15 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
     () => (hasSearch ? searchResults.length : countVisibleFiles(treeNodes)),
     [hasSearch, searchResults.length, treeNodes]
   );
+  const defaultExpandedRootPaths = useMemo(
+    () =>
+      treeNodes
+        .filter(
+          (node) => node.kind === "dir" && DEFAULT_EXPANDED_ROOT_DIRS.has(node.name.toLowerCase())
+        )
+        .map((node) => node.path),
+    [treeNodes]
+  );
 
   useEffect(() => {
     if (expandedDirs !== null || !workspace) {
@@ -276,6 +285,7 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
                 onSelectFile={handleSelectFile}
                 onLoadChildren={loadChildren}
                 onToggleDirs={applyExpandedDirs}
+                defaultExpandedRootPaths={defaultExpandedRootPaths}
                 isLoadingDir={isLoadingDir}
               />
             ))
@@ -356,6 +366,7 @@ interface FileTreeNodeProps {
   node: FileNode;
   depth: number;
   expandedDirs: Set<string> | null;
+  defaultExpandedRootPaths: string[];
   selectedPath: string | null;
   onRequestCreate: (mode: "file" | "folder", baseDir: string | null) => void;
   onRequestDelete: (path: string, name: string) => void;
@@ -369,6 +380,7 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
   node,
   depth,
   expandedDirs,
+  defaultExpandedRootPaths,
   selectedPath,
   onRequestCreate,
   onRequestDelete,
@@ -406,7 +418,7 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
       return;
     }
 
-    const nextExpanded = new Set(expandedDirs ?? []);
+    const nextExpanded = new Set(expandedDirs ?? defaultExpandedRootPaths);
     if (isExpanded) {
       nextExpanded.delete(node.path);
     } else {
@@ -509,6 +521,7 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
               onSelectFile={onSelectFile}
               onLoadChildren={onLoadChildren}
               onToggleDirs={onToggleDirs}
+              defaultExpandedRootPaths={defaultExpandedRootPaths}
               isLoadingDir={isLoadingDir}
             />
           ))}

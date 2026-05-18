@@ -267,6 +267,104 @@ describe("FileTreePanel", () => {
     expect(store.get(expandedDirsAtomFamily("ws-test"))).toBeNull();
   });
 
+  it("preserves default root expansion when the user first expands a non-default directory", async () => {
+    const sendCommand = vi
+      .fn()
+      .mockImplementation(async (op: string, args?: { subPath?: string }) => {
+        if (op === "workspace.uiState.set") {
+          return {
+            id: "ws-test",
+            path: "/workspace",
+            targetRuntime: "native",
+            openedAt: 1,
+            lastActiveAt: 1,
+            uiState: args?.uiState,
+          };
+        }
+
+        if (args?.subPath === "src") {
+          return {
+            path: "src",
+            children: [{ path: "src/index.ts", name: "index.ts", kind: "file" }],
+          };
+        }
+
+        if (args?.subPath === "lib") {
+          return {
+            path: "lib",
+            children: [{ path: "lib/foo.ts", name: "foo.ts", kind: "file" }],
+          };
+        }
+
+        return {
+          path: "/workspace",
+          children: [
+            { path: "lib", name: "lib", kind: "dir" },
+            { path: "src", name: "src", kind: "dir" },
+          ],
+        };
+      });
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(workspacesAtom, {
+      "ws-test": {
+        id: "ws-test",
+        path: "/workspace",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    } as never);
+    store.set(
+      fileTreeAtomFamily("ws-test"),
+      new Map([
+        [
+          ".",
+          [
+            {
+              path: "lib",
+              name: "lib",
+              kind: "dir",
+            },
+            {
+              path: "src",
+              name: "src",
+              kind: "dir",
+            },
+          ],
+        ],
+      ])
+    );
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByText("lib"));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "workspace.uiState.set",
+        expect.objectContaining({
+          workspaceId: "ws-test",
+          uiState: expect.objectContaining({
+            fileTreeExpandedDirs: expect.arrayContaining(["lib", "src"]),
+          }),
+        }),
+        undefined
+      );
+    });
+
+    expect(Array.from(store.get(expandedDirsAtomFamily("ws-test")) ?? [])).toEqual(["lib", "src"]);
+  });
+
   it("reloads the file tree after creating a file from the toolbar", async () => {
     const sendCommand = vi
       .fn()
