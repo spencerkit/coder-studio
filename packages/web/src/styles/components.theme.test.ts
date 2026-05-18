@@ -1182,23 +1182,32 @@ describe("components.css theme-sensitive surfaces", () => {
       ".mobile-supervisor-sheet__footer > .btn"
     ).replace(/\s+/g, " ");
 
-    expect(supervisorRoot).toContain("padding: var(--sp-4)");
-    expect(supervisorRoot).toContain("padding-bottom: var(--sp-5)");
-    expect(supervisorDetail).toContain("padding: var(--sp-4)");
-    expect(supervisorDetail).toContain("padding-bottom: var(--sp-5)");
+    expect(hasRuleBlock(".mobile-supervisor-sheet__detail-header")).toBe(false);
+    expect(supervisorRoot).toContain("padding: var(--sp-3)");
+    expect(supervisorRoot).toContain("padding-bottom: var(--sp-4)");
+    expect(supervisorRoot).not.toContain("border: 1px solid");
+    expect(supervisorRoot).not.toContain("border-radius:");
+    expect(supervisorRoot).not.toContain("box-shadow:");
+    expect(supervisorDetail).toContain("padding: var(--sp-3)");
+    expect(supervisorDetail).toContain("padding-bottom: var(--sp-4)");
+    expect(supervisorDetail).not.toContain("border: 1px solid");
+    expect(supervisorDetail).not.toContain("border-radius:");
+    expect(supervisorDetail).not.toContain("box-shadow:");
     expect(supervisorFullscreenFooter).toContain(
-      "padding: var(--sp-2) var(--sp-4) calc(var(--mobile-safe-bottom) + var(--sp-4))"
+      "padding: var(--sp-1) var(--sp-3) calc(var(--mobile-safe-bottom) + var(--sp-3))"
     );
     expect(supervisorActionButton).toContain("min-height: 44px");
     expect(supervisorFooterButton).toContain("min-height: 44px");
     expect(supervisorFooterButton).toContain("box-shadow: none");
-    expect(getLastRuleBlock(".mobile-supervisor-sheet__footer")).toContain("padding: var(--sp-2)");
     expect(getLastRuleBlock(".mobile-supervisor-sheet__footer")).toContain(
-      "border-radius: var(--radius-xl)"
+      "padding: var(--sp-1) var(--sp-2)"
     );
+    expect(getLastRuleBlock(".mobile-supervisor-sheet__footer")).toContain("border: none");
+    expect(getLastRuleBlock(".mobile-supervisor-sheet__footer")).toContain("border-radius: 0");
     expect(getLastRuleBlock(".mobile-supervisor-sheet__footer")).toContain(
-      "background: color-mix("
+      "background: transparent"
     );
+    expect(getLastRuleBlock(".mobile-supervisor-sheet__footer")).toContain("box-shadow: none");
   });
 
   it("keeps the mobile workspace home screen aligned to settings chrome and editor-pane empty states", () => {
@@ -1300,7 +1309,6 @@ describe("components.css theme-sensitive surfaces", () => {
       ".mobile-sheet--files .file-tree-shell--mobile .tree-item.selected"
     );
     const supervisorRoot = getLastRuleBlock(".mobile-supervisor-sheet__root");
-    const supervisorHeader = getLastRuleBlock(".mobile-supervisor-sheet__detail-header");
     const drawerItem = getLastRuleBlock(".mobile-workspace-drawer__item");
     const drawerFooterButton = getLastRuleBlock(".mobile-workspace-drawer__footer-button");
     const welcomeCard = getLastRuleBlock(".welcome-card--mobile");
@@ -1316,6 +1324,8 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(mobileTerminalSheet).not.toContain("linear-gradient(");
     expect(mobileTerminal).toContain("border-radius: 0");
     expect(mobileTerminal).not.toContain("var(--radius-xl) var(--radius-xl) 0 0");
+    expect(supervisorRoot).not.toContain("border-radius: var(--radius-xl) var(--radius-xl) 0 0");
+    expect(hasRuleBlock(".mobile-supervisor-sheet__detail-header")).toBe(false);
     expect(mobileFilesSegmented).toContain(
       "border-bottom: 1px solid color-mix(in srgb, var(--border) 78%, transparent)"
     );
@@ -1350,8 +1360,8 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(mobileFileRowSelected).toContain(
       "border-left: 2px solid color-mix(in srgb, var(--accent-blue) 88%, white 12%)"
     );
-    expect(supervisorRoot).toContain("border-radius: var(--radius-xl) var(--radius-xl) 0 0");
-    expect(supervisorHeader).toContain("border-radius: var(--radius-xl)");
+    expect(supervisorRoot).toContain("background: transparent");
+    expect(supervisorRoot).not.toContain("border-radius:");
     expect(drawerItem).toContain("border-radius: var(--radius-xl)");
     expect(drawerFooterButton).toContain("border-radius: var(--radius-md)");
     expect(welcomeCard).toContain("border-radius: var(--radius-lg)");

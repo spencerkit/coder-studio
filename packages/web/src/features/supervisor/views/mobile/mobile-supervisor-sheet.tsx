@@ -9,10 +9,7 @@ import {
   useObjectiveDialogState,
 } from "../../actions/use-objective-dialog-state";
 import { supervisorDialogAtom } from "../../atoms";
-import {
-  ObjectiveDialogContent,
-  ObjectiveDialogModeIcon,
-} from "../shared/objective-dialog-content";
+import { ObjectiveDialogContent } from "../shared/objective-dialog-content";
 import { SupervisorCard } from "../shared/supervisor-card";
 
 interface MobileSupervisorSheetProps {
@@ -108,15 +105,6 @@ export function MobileSupervisorSheet({
 
   const detailBody = (
     <div className="mobile-supervisor-sheet__detail">
-      <div className="mobile-supervisor-sheet__detail-header">
-        <span className="supervisor-dialog-header-icon" aria-hidden="true">
-          <ObjectiveDialogModeIcon mode={mode} />
-        </span>
-        <div>
-          <h3>{copy.title}</h3>
-          <p>{copy.subtitle}</p>
-        </div>
-      </div>
       <ObjectiveDialogContent
         mode={mode}
         draftObjective={dialog.draftObjective}

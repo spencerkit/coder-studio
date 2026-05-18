@@ -10371,19 +10371,15 @@ textarea.input {
   }
 
   .mobile-supervisor-sheet {
-    gap: var(--sp-3);
-    padding: var(--sp-3) var(--sp-3) 0;
-    background: linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--bg-surface) 96%, transparent) 0%,
-      var(--bg-page) 100%
-    );
+    gap: 0;
+    padding: 0;
+    background: color-mix(in srgb, var(--bg-page) 98%, var(--bg-surface) 2%);
   }
 
   .mobile-sheet__body--supervisor-detail {
     display: flex;
     flex-direction: column;
-    gap: var(--sp-4);
+    gap: var(--sp-3);
   }
 
   .mobile-supervisor-sheet--root,
@@ -10397,15 +10393,10 @@ textarea.input {
     flex: 1;
     min-height: 0;
     flex-direction: column;
-    gap: var(--sp-4);
-    padding: var(--sp-4);
-    padding-bottom: var(--sp-5);
-    border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
-    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
-    background: color-mix(in srgb, var(--bg-surface) 90%, var(--bg-page));
-    box-shadow:
-      inset 0 1px 0 color-mix(in srgb, var(--fg-white) 5%, transparent),
-      0 14px 34px color-mix(in srgb, var(--bg-page) 18%, transparent);
+    gap: var(--sp-3);
+    padding: var(--sp-3);
+    padding-bottom: var(--sp-4);
+    background: transparent;
     overflow: auto;
   }
 
@@ -10418,15 +10409,16 @@ textarea.input {
 
   .mobile-supervisor-sheet__footer {
     width: 100%;
-    padding: var(--sp-2);
-    border: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
-    border-radius: var(--radius-xl);
-    background: color-mix(in srgb, var(--bg-surface) 96%, var(--bg-page));
-    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--fg-white) 6%, transparent);
+    padding: var(--sp-1) var(--sp-2);
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
   }
 
   .mobile-supervisor-sheet.mobile-sheet--fullscreen .mobile-sheet__footer {
-    padding: var(--sp-2) var(--sp-4) calc(var(--mobile-safe-bottom) + var(--sp-4));
+    padding: var(--sp-1) var(--sp-3) calc(var(--mobile-safe-bottom) + var(--sp-3));
+    background: color-mix(in srgb, var(--bg-page) 94%, var(--bg-surface) 6%);
   }
 
   .mobile-supervisor-sheet__actions > .btn,
@@ -10442,48 +10434,6 @@ textarea.input {
   .mobile-supervisor-sheet__footer > .btn:hover:not(:disabled) {
     transform: none;
     box-shadow: none;
-  }
-
-  .mobile-supervisor-sheet__detail-header {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--sp-3);
-    padding: var(--sp-3);
-    border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
-    border-radius: var(--radius-xl);
-    background: linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--bg-surface) 90%, transparent) 0%,
-      color-mix(in srgb, var(--bg-page) 92%, var(--bg-surface) 8%) 100%
-    );
-  }
-
-  .mobile-supervisor-sheet__detail-header h3,
-  .mobile-supervisor-sheet__detail-header p {
-    margin: 0;
-  }
-
-  .mobile-supervisor-sheet__detail-header h3 {
-    font-size: var(--type-app-title-size);
-    line-height: var(--type-app-title-line-height);
-    font-weight: var(--type-app-title-weight);
-    color: var(--text-primary);
-  }
-
-  .mobile-supervisor-sheet__detail-header p {
-    margin-top: 2px;
-    font-size: var(--type-meta-size);
-    line-height: var(--type-meta-line-height);
-    font-weight: var(--type-meta-weight);
-    color: var(--text-tertiary);
-  }
-
-  .mobile-supervisor-sheet__detail-header .supervisor-dialog-header-icon {
-    flex-shrink: 0;
-    width: 36px;
-    height: 36px;
-    border-radius: var(--radius-md);
-    background: color-mix(in srgb, var(--icon-surface-subtle) 84%, var(--bg-surface));
   }
 
   .mobile-supervisor-sheet__empty {

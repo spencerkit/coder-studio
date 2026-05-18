@@ -128,6 +128,7 @@ describe("MobileSupervisorSheet", () => {
     expect(
       document.querySelector(".mobile-supervisor-sheet.mobile-sheet--fullscreen")
     ).not.toBeNull();
+    expect(document.querySelector(".mobile-supervisor-sheet__detail-header")).toBeNull();
 
     fireEvent.change(screen.getByLabelText("Objective"), {
       target: { value: "Reduce mobile regression bugs" },
@@ -171,6 +172,10 @@ describe("MobileSupervisorSheet", () => {
     fireEvent.click(
       within(rootActions as HTMLElement).getByRole("button", { name: "Edit Supervisor" })
     );
+
+    expect(document.querySelector(".mobile-supervisor-sheet__detail-header")).toBeNull();
+    expect(screen.getByRole("heading", { name: "Edit Supervisor", level: 2 })).toBeInTheDocument();
+
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
 
     expect(screen.getByText("Reduce mobile regression bugs")).toBeInTheDocument();
@@ -241,5 +246,30 @@ describe("MobileSupervisorSheet", () => {
     expect(trigger).toHaveClass("input", "mobile-select-trigger");
     expect(trigger.querySelector(".mobile-select-trigger__value")).not.toBeNull();
     expect(trigger.querySelector(".mobile-select-trigger__icon")).not.toBeNull();
+  });
+
+  it("does not render a duplicate detail header card after opening edit mode", () => {
+    const store = createStore();
+
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+    store.set(supervisorsAtom, new Map([["sess-1", createSupervisor()]]));
+
+    render(
+      <Provider store={store}>
+        <MobileSupervisorSheet sessionId="sess-1" workspaceId="ws-1" onClose={vi.fn()} />
+      </Provider>
+    );
+
+    const rootActions = document.querySelector(".mobile-supervisor-sheet__actions");
+    expect(rootActions).not.toBeNull();
+
+    fireEvent.click(
+      within(rootActions as HTMLElement).getByRole("button", { name: "Edit Supervisor" })
+    );
+
+    expect(document.querySelector(".mobile-supervisor-sheet__detail-header")).toBeNull();
+    expect(screen.getByRole("heading", { name: "Edit Supervisor", level: 2 })).toBeInTheDocument();
   });
 });
