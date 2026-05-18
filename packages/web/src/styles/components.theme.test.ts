@@ -855,6 +855,12 @@ describe("components.css theme-sensitive surfaces", () => {
     const modalBody = getLastRuleBlock(".supervisor-dialog .modal-body");
     const formGroup = getLastRuleBlock(".supervisor-dialog .form-group");
     const intro = getLastRuleBlock(".supervisor-dialog-intro");
+    const introEditTone = getLastRuleBlock(
+      ".supervisor-dialog--edit .supervisor-dialog-intro__icon"
+    );
+    const introDisableTone = getLastRuleBlock(
+      ".supervisor-dialog--disable .supervisor-dialog-intro__icon"
+    );
     const introTitle = getLastRuleBlock(".supervisor-dialog-intro__title");
     const introDescription = getLastRuleBlock(".supervisor-dialog-intro__description");
     const compactInputGroup = getLastGroupedRuleBlock(
@@ -868,6 +874,14 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(formGroup).toContain("gap: 6px");
     expect(intro).toContain("display: flex");
     expect(intro).toContain("padding: var(--sp-3)");
+    expect(intro).toContain("border: 1px solid color-mix(in srgb, var(--border) 90%, transparent)");
+    expect(intro).toContain(
+      "background: color-mix(in srgb, var(--bg-surface) 88%, var(--bg-hover))"
+    );
+    expect(introEditTone).toContain("var(--icon-surface-info)");
+    expect(introEditTone).toContain("var(--icon-info)");
+    expect(introDisableTone).toContain("var(--icon-surface-error)");
+    expect(introDisableTone).toContain("var(--icon-error)");
     expect(introTitle).toContain("font-size: var(--type-body-size)");
     expect(introTitle).toContain("line-height: var(--type-body-line-height)");
     expect(introDescription).toContain("font-size: var(--type-meta-size)");
@@ -876,6 +890,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(compactInputGroup).toContain("line-height: var(--type-label-line-height)");
     expect(textarea).toContain("font-size: var(--type-code-inline-size)");
     expect(textarea).toContain("min-height: 104px");
+    expect(textarea).toContain("color: var(--text-secondary)");
     expect(dangerCallout).toContain("gap: var(--sp-2)");
     expect(dangerCallout).toContain("padding: var(--sp-2) var(--sp-3)");
     expect(dangerCallout).toContain("border-left-width: 1px");
