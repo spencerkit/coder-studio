@@ -21,6 +21,12 @@ interface LspSessionLike {
   changeDocument(path: string, text: string): Promise<number>;
   closeDocument(path: string): Promise<void>;
   definition(input: { path: string; line: number; column: number }): Promise<LspLocation[] | null>;
+  declaration(input: { path: string; line: number; column: number }): Promise<LspLocation[] | null>;
+  typeDefinition(input: {
+    path: string;
+    line: number;
+    column: number;
+  }): Promise<LspLocation[] | null>;
   references(input: { path: string; line: number; column: number }): Promise<LspLocation[] | null>;
   hover(input: { path: string; line: number; column: number }): Promise<LspHoverResult | null>;
   documentSymbols(input: { path: string }): Promise<LspDocumentSymbol[] | null>;
@@ -208,6 +214,26 @@ export class LspManager {
   }): Promise<LspLocation[] | null> {
     const session = await this.getSessionForPath(input.workspaceId, input.path);
     return session ? await session.references(input) : null;
+  }
+
+  async declaration(input: {
+    workspaceId: string;
+    path: string;
+    line: number;
+    column: number;
+  }): Promise<LspLocation[] | null> {
+    const session = await this.getSessionForPath(input.workspaceId, input.path);
+    return session ? await session.declaration(input) : null;
+  }
+
+  async typeDefinition(input: {
+    workspaceId: string;
+    path: string;
+    line: number;
+    column: number;
+  }): Promise<LspLocation[] | null> {
+    const session = await this.getSessionForPath(input.workspaceId, input.path);
+    return session ? await session.typeDefinition(input) : null;
   }
 
   async hover(input: { workspaceId: string; path: string; line: number; column: number }) {

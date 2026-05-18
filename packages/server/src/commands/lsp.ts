@@ -135,6 +135,28 @@ registerCommand(
 );
 
 registerCommand(
+  "lsp.declaration",
+  z.object({
+    workspaceId: z.string(),
+    path: z.string(),
+    line: z.number().int().positive(),
+    column: z.number().int().positive(),
+  }),
+  async (args, ctx) => ctx.lspMgr.declaration(args)
+);
+
+registerCommand(
+  "lsp.typeDefinition",
+  z.object({
+    workspaceId: z.string(),
+    path: z.string(),
+    line: z.number().int().positive(),
+    column: z.number().int().positive(),
+  }),
+  async (args, ctx) => ctx.lspMgr.typeDefinition(args)
+);
+
+registerCommand(
   "lsp.references",
   z.object({
     workspaceId: z.string(),

@@ -21,6 +21,8 @@ vi.mock("monaco-editor", () => ({
   },
   languages: {
     registerDefinitionProvider: vi.fn(),
+    registerDeclarationProvider: vi.fn(),
+    registerTypeDefinitionProvider: vi.fn(),
     registerHoverProvider: vi.fn(),
     registerReferenceProvider: vi.fn(),
     registerDocumentSymbolProvider: vi.fn(),
@@ -193,6 +195,102 @@ describe("LSP providers", () => {
       expect.objectContaining({
         uri: expect.objectContaining({
           path: "/repo/e2e/fixtures/lsp-workspace/shared.ts",
+          scheme: "file",
+        }),
+      }),
+    ]);
+  });
+
+  it("falls back to declaration and type definition when definition is empty", async () => {
+    const sendCommand = vi.fn(async (op) => {
+      if (op === "lsp.ensureSession") {
+        return {
+          kind: "ready",
+          displayName: "TypeScript language server",
+          source: "bundled",
+          summary: {
+            workspaceId: "ws-1",
+            serverKind: "typescript",
+            status: "ready",
+            capabilities: {
+              definition: true,
+              references: true,
+              hover: true,
+              documentSymbols: true,
+              diagnostics: true,
+            },
+          },
+        };
+      }
+
+      if (op === "lsp.definition") {
+        return [];
+      }
+
+      if (op === "lsp.declaration") {
+        return [];
+      }
+
+      if (op === "lsp.typeDefinition") {
+        return [
+          {
+            path: "node_modules/.pnpm/jotai@2.8.4/node_modules/jotai/esm/index.d.mts",
+            range: {
+              startLine: 1,
+              startColumn: 1,
+              endLine: 1,
+              endColumn: 10,
+            },
+          },
+        ];
+      }
+
+      return undefined;
+    }) as BridgeSendCommand;
+
+    const bridge = createLspBridge({
+      sendCommand,
+      subscribe: vi.fn(() => () => {}),
+    });
+
+    const model = createMockModel(
+      'import { atom } from "jotai";\nexport const value = atom(1);\n',
+      1,
+      monaco.Uri.file("/repo/src/store.ts")
+    );
+
+    bridge.attachModel({
+      workspaceId: "ws-1",
+      workspaceRootPath: "/repo",
+      path: "src/store.ts",
+      monacoLanguage: "typescript",
+      model,
+    });
+
+    const location = await bridge.provideDefinition(model, createMockPosition(1, 11));
+
+    expect(sendCommand).toHaveBeenCalledWith("lsp.definition", {
+      workspaceId: "ws-1",
+      path: "src/store.ts",
+      line: 1,
+      column: 11,
+    });
+    expect(sendCommand).toHaveBeenCalledWith("lsp.declaration", {
+      workspaceId: "ws-1",
+      path: "src/store.ts",
+      line: 1,
+      column: 11,
+    });
+    expect(sendCommand).toHaveBeenCalledWith("lsp.typeDefinition", {
+      workspaceId: "ws-1",
+      path: "src/store.ts",
+      line: 1,
+      column: 11,
+    });
+    expect(location).toEqual([
+      expect.objectContaining({
+        uri: expect.objectContaining({
+          path: "/repo/node_modules/.pnpm/jotai@2.8.4/node_modules/jotai/esm/index.d.mts",
           scheme: "file",
         }),
       }),

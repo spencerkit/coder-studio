@@ -41,6 +41,8 @@ export interface LspSessionSummary {
   status: "unsupported" | "starting" | "ready" | "degraded" | "stopped";
   capabilities: {
     definition: boolean;
+    declaration: boolean;
+    typeDefinition: boolean;
     references: boolean;
     hover: boolean;
     documentSymbols: boolean;

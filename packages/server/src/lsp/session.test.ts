@@ -201,6 +201,78 @@ describe("LspSession", () => {
     await session.stop();
   });
 
+  it("serves declaration and type definition location queries", async () => {
+    const session = new LspSession({
+      workspaceId: "ws-1",
+      workspacePath: process.cwd(),
+      spec: {
+        serverKind: "typescript",
+        command: "node",
+        args: [join(process.cwd(), "packages/server/src/__tests__/fixtures/fake-lsp-server.js")],
+        rootPath: process.cwd(),
+      },
+      onDiagnostics: vi.fn(),
+      requestTimeoutMs: 2000,
+      logger: {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      },
+    });
+
+    await session.openDocument({
+      path: "e2e/fixtures/lsp-workspace/shared.ts",
+      languageId: "typescript",
+      text: "export const sharedValue = 1;\n",
+    });
+    await session.openDocument({
+      path: "e2e/fixtures/lsp-workspace/declaration.ts",
+      languageId: "typescript",
+      text: 'import { sharedValue } from "./shared";\nexport const declared = sharedValue;\n',
+    });
+    await session.openDocument({
+      path: "e2e/fixtures/lsp-workspace/type-target.ts",
+      languageId: "typescript",
+      text: "type SharedValue = ExampleType;\n",
+    });
+
+    const declaration = await session.declaration({
+      path: "e2e/fixtures/lsp-workspace/declaration.ts",
+      line: 1,
+      column: 12,
+    });
+    const typeDefinition = await session.typeDefinition({
+      path: "e2e/fixtures/lsp-workspace/type-target.ts",
+      line: 1,
+      column: 20,
+    });
+
+    expect(declaration).toEqual([
+      expect.objectContaining({
+        path: "e2e/fixtures/lsp-workspace/shared.ts",
+        range: expect.objectContaining({
+          startLine: 1,
+          startColumn: 14,
+          endLine: 1,
+          endColumn: 25,
+        }),
+      }),
+    ]);
+    expect(typeDefinition).toEqual([
+      expect.objectContaining({
+        path: "e2e/fixtures/lsp-workspace/types.d.ts",
+        range: expect.objectContaining({
+          startLine: 1,
+          startColumn: 13,
+          endLine: 1,
+          endColumn: 22,
+        }),
+      }),
+    ]);
+
+    await session.stop();
+  });
+
   it("restarts after child exit and replays open documents", async () => {
     const previous = process.env.CODER_STUDIO_FAKE_LSP_EXIT_AFTER_INIT_MS;
     process.env.CODER_STUDIO_FAKE_LSP_EXIT_AFTER_INIT_MS = "150";

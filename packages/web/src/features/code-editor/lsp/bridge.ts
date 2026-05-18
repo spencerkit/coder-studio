@@ -90,6 +90,20 @@ export function createLspBridge(initialTransport: Partial<LspBridgeTransport> = 
         line,
         column,
       }),
+    requestDeclaration: async ({ meta, line, column }) =>
+      await transport.sendCommand<LspLocation[] | null>("lsp.declaration", {
+        workspaceId: meta.workspaceId,
+        path: meta.path,
+        line,
+        column,
+      }),
+    requestTypeDefinition: async ({ meta, line, column }) =>
+      await transport.sendCommand<LspLocation[] | null>("lsp.typeDefinition", {
+        workspaceId: meta.workspaceId,
+        path: meta.path,
+        line,
+        column,
+      }),
     requestHover: async ({ meta, line, column }) =>
       await transport.sendCommand<LspHoverResult | null>("lsp.hover", {
         workspaceId: meta.workspaceId,

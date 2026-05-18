@@ -24,6 +24,8 @@ connection.onRequest("initialize", () => {
   return {
     capabilities: {
       definitionProvider: true,
+      declarationProvider: true,
+      typeDefinitionProvider: true,
       referencesProvider: true,
       hoverProvider: true,
       documentSymbolProvider: true,
@@ -87,6 +89,36 @@ connection.onRequest("textDocument/definition", ({ textDocument }) => {
       range: {
         start: { line: 0, character: 13 },
         end: { line: 0, character: 24 },
+      },
+    },
+  ];
+});
+
+connection.onRequest("textDocument/declaration", ({ textDocument }) => {
+  if (!textDocument.uri.endsWith("/declaration.ts")) {
+    return [];
+  }
+
+  return {
+    uri: textDocument.uri.replace("/declaration.ts", "/shared.ts"),
+    range: {
+      start: { line: 0, character: 13 },
+      end: { line: 0, character: 24 },
+    },
+  };
+});
+
+connection.onRequest("textDocument/typeDefinition", ({ textDocument }) => {
+  if (!textDocument.uri.endsWith("/type-target.ts")) {
+    return [];
+  }
+
+  return [
+    {
+      uri: textDocument.uri.replace("/type-target.ts", "/types.d.ts"),
+      range: {
+        start: { line: 0, character: 12 },
+        end: { line: 0, character: 21 },
       },
     },
   ];

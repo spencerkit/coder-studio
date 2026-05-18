@@ -16,6 +16,18 @@ export interface LspProviderRegistryDeps {
     column: number;
     version: number;
   }) => Promise<LspLocation[] | null>;
+  requestDeclaration: (input: {
+    meta: LspModelMetadata;
+    line: number;
+    column: number;
+    version: number;
+  }) => Promise<LspLocation[] | null>;
+  requestTypeDefinition: (input: {
+    meta: LspModelMetadata;
+    line: number;
+    column: number;
+    version: number;
+  }) => Promise<LspLocation[] | null>;
   requestHover: (input: {
     meta: LspModelMetadata;
     line: number;
@@ -47,6 +59,12 @@ export function createLspProviderRegistry(deps: LspProviderRegistryDeps) {
     monaco.languages.registerDefinitionProvider(languageId, {
       provideDefinition,
     });
+    monaco.languages.registerDeclarationProvider?.(languageId, {
+      provideDeclaration,
+    });
+    monaco.languages.registerTypeDefinitionProvider?.(languageId, {
+      provideTypeDefinition,
+    });
     monaco.languages.registerHoverProvider(languageId, {
       provideHover,
     });
@@ -62,27 +80,68 @@ export function createLspProviderRegistry(deps: LspProviderRegistryDeps) {
     model: monaco.editor.ITextModel,
     position: monaco.Position
   ): Promise<monaco.languages.Location[]> {
+    return await provideLocationRequest(model, position, [
+      deps.requestDefinition,
+      deps.requestDeclaration,
+      deps.requestTypeDefinition,
+    ]);
+  }
+
+  async function provideDeclaration(
+    model: monaco.editor.ITextModel,
+    position: monaco.Position
+  ): Promise<monaco.languages.Location[]> {
+    return await provideLocationRequest(model, position, [deps.requestDeclaration]);
+  }
+
+  async function provideTypeDefinition(
+    model: monaco.editor.ITextModel,
+    position: monaco.Position
+  ): Promise<monaco.languages.Location[]> {
+    return await provideLocationRequest(model, position, [deps.requestTypeDefinition]);
+  }
+
+  async function provideLocationRequest(
+    model: monaco.editor.ITextModel,
+    position: monaco.Position,
+    requests: Array<
+      (input: {
+        meta: LspModelMetadata;
+        line: number;
+        column: number;
+        version: number;
+      }) => Promise<LspLocation[] | null>
+    >
+  ): Promise<monaco.languages.Location[]> {
     const meta = deps.lookupModelMetadata(model);
     if (!meta) {
       return [];
     }
 
     const requestVersion = model.getVersionId();
-    const result = await deps.requestDefinition({
-      meta,
-      line: position.lineNumber,
-      column: position.column,
-      version: requestVersion,
-    });
+    for (const request of requests) {
+      const result = await request({
+        meta,
+        line: position.lineNumber,
+        column: position.column,
+        version: requestVersion,
+      });
 
-    if (!result || model.getVersionId() !== requestVersion) {
-      return [];
+      if (model.getVersionId() !== requestVersion) {
+        return [];
+      }
+
+      if (!result || result.length === 0) {
+        continue;
+      }
+
+      return result.map((location) => ({
+        uri: toWorkspaceFileUri(meta.workspaceRootPath, location.path),
+        range: toMonacoRange(location.range),
+      }));
     }
 
-    return result.map((location) => ({
-      uri: toWorkspaceFileUri(meta.workspaceRootPath, location.path),
-      range: toMonacoRange(location.range),
-    }));
+    return [];
   }
 
   async function provideHover(
@@ -163,6 +222,8 @@ export function createLspProviderRegistry(deps: LspProviderRegistryDeps) {
   return {
     register,
     provideDefinition,
+    provideDeclaration,
+    provideTypeDefinition,
     provideHover,
     provideReferences,
     provideDocumentSymbols,

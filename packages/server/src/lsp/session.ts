@@ -24,6 +24,12 @@ const PublishDiagnosticsNotification = new NotificationType<PublishDiagnosticsPa
   "textDocument/publishDiagnostics"
 );
 const DefinitionRequest = new RequestType<PositionParams, unknown, void>("textDocument/definition");
+const DeclarationRequest = new RequestType<PositionParams, unknown, void>(
+  "textDocument/declaration"
+);
+const TypeDefinitionRequest = new RequestType<PositionParams, unknown, void>(
+  "textDocument/typeDefinition"
+);
 const ReferencesRequest = new RequestType<PositionParams, unknown, void>("textDocument/references");
 const HoverRequest = new RequestType<PositionParams, unknown, void>("textDocument/hover");
 const DocumentSymbolsRequest = new RequestType<TextDocumentParams, unknown, void>(
@@ -121,6 +127,8 @@ export class LspSession {
       status: "starting",
       capabilities: {
         definition: false,
+        declaration: false,
+        typeDefinition: false,
         references: false,
         hover: false,
         documentSymbols: false,
@@ -227,6 +235,14 @@ export class LspSession {
           definition: Boolean(
             (initializeResult as { capabilities?: Record<string, unknown> }).capabilities
               ?.definitionProvider
+          ),
+          declaration: Boolean(
+            (initializeResult as { capabilities?: Record<string, unknown> }).capabilities
+              ?.declarationProvider
+          ),
+          typeDefinition: Boolean(
+            (initializeResult as { capabilities?: Record<string, unknown> }).capabilities
+              ?.typeDefinitionProvider
           ),
           references: Boolean(
             (initializeResult as { capabilities?: Record<string, unknown> }).capabilities
@@ -337,6 +353,44 @@ export class LspSession {
     }
   }
 
+  async declaration(input: {
+    path: string;
+    line: number;
+    column: number;
+  }): Promise<LspLocation[] | null> {
+    if (!this.documents.get(input.path)) {
+      return null;
+    }
+
+    try {
+      await this.start();
+      return (await this.requestLocations(DeclarationRequest, input)) ?? [];
+    } catch (error) {
+      this.recoverFromRequestFailure(error);
+      this.deps.logger.warn({ error }, "lsp declaration request failed");
+      return [];
+    }
+  }
+
+  async typeDefinition(input: {
+    path: string;
+    line: number;
+    column: number;
+  }): Promise<LspLocation[] | null> {
+    if (!this.documents.get(input.path)) {
+      return null;
+    }
+
+    try {
+      await this.start();
+      return (await this.requestLocations(TypeDefinitionRequest, input)) ?? [];
+    } catch (error) {
+      this.recoverFromRequestFailure(error);
+      this.deps.logger.warn({ error }, "lsp type definition request failed");
+      return [];
+    }
+  }
+
   async hover(input: {
     path: string;
     line: number;
@@ -422,7 +476,14 @@ export class LspSession {
     return this.summary;
   }
 
-  listReplayableDocuments() {
+  listReplayableDocuments(): Array<{
+    path: string;
+    uri: string;
+    languageId: string;
+    text: string;
+    version: number;
+    open: boolean;
+  }> {
     return this.documents.listReplayable();
   }
 
