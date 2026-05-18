@@ -98,10 +98,10 @@ describe("WelcomePage", () => {
     expect(screen.getByRole("heading", { name: "Welcome to Coder Studio" })).toBeInTheDocument();
     expect(document.querySelector(".welcome-card__hero")).toBeTruthy();
     expect(document.querySelector(".welcome-card__actions")).toBeTruthy();
-    expect(document.querySelector(".welcome-card__panel")).toBeTruthy();
+    expect(document.querySelector(".welcome-card__features")).toBeTruthy();
+    expect(document.querySelector(".welcome-actions-group")).toBeTruthy();
     const openWorkspaceButton = screen.getByRole("button", { name: "Open Workspace" });
     const settingsButton = screen.getByRole("button", { name: "Settings" });
-    expect(document.querySelector(".welcome-divider")).toBeTruthy();
     const featureCards = Array.from(document.querySelectorAll(".welcome-feature"));
 
     expect(featureCards).toHaveLength(3);
@@ -122,5 +122,24 @@ describe("WelcomePage", () => {
         card.querySelector('[data-icon-semantic="state.welcome.terminal"]')
       )
     ).toBe(true);
+  });
+
+  it("renders the flat welcome shell with hero, actions, and features sections", () => {
+    const store = createStore();
+    store.set(localeAtom, "en");
+
+    const { container } = render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <WelcomePage />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    expect(container.querySelector(".welcome-card__hero")).toBeTruthy();
+    expect(container.querySelector(".welcome-card__actions")).toBeTruthy();
+    expect(container.querySelector(".welcome-card__features")).toBeTruthy();
+    expect(container.querySelector(".welcome-actions-group")).toBeTruthy();
+    expect(container.querySelector(".welcome-card__panel")).toBeFalsy();
   });
 });

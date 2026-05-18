@@ -2343,57 +2343,65 @@ body.is-resizing-panels * {
 }
 
 /* ========== Welcome Page ========== */
-.welcome-container {
+.welcome-container,
+.auth-screen {
   flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
   min-height: 100vh;
+  padding: var(--sp-8);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg-page) 97%, var(--bg-surface) 3%) 0%,
+    var(--bg-page) 100%
+  );
+}
+
+.welcome-container {
   padding: var(--sp-10);
-  background:
-    radial-gradient(
-      circle at top,
-      color-mix(in srgb, var(--accent-green) 10%, transparent),
-      transparent 36%
-    ),
-    radial-gradient(
-      circle at bottom right,
-      color-mix(in srgb, var(--accent-blue) 12%, transparent),
-      transparent 32%
-    ),
-    var(--bg-page);
 }
 
 .welcome-card {
-  width: min(100%, 760px);
-  max-width: 760px;
-  text-align: center;
-  padding: var(--sp-10);
+  width: min(100%, 920px);
+  max-width: 920px;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   gap: var(--sp-6);
-  background: var(--bg-elevated);
+  padding: var(--sp-8);
+  background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-xl);
+  box-shadow: var(--shadow-sm);
+  text-align: left;
 }
 
 .welcome-card__hero,
 .welcome-card__actions,
-.welcome-card__panel {
+.welcome-card__panel,
+.welcome-card__features {
   width: 100%;
 }
 
-.welcome-card__actions {
+.welcome-card__hero {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: var(--sp-2);
+  gap: var(--sp-3);
 }
 
-.welcome-card__panel {
-  padding-top: var(--sp-2);
+.welcome-card__actions,
+.welcome-card__panel,
+.welcome-card__features {
+  padding-top: var(--sp-5);
+  border-top: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+}
+
+.welcome-actions-group {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
 }
 
 .welcome-kicker {
@@ -2417,8 +2425,9 @@ body.is-resizing-panels * {
   font-size: var(--type-body-size);
   line-height: var(--type-body-line-height);
   font-weight: var(--type-body-weight);
-  color: var(--text-sec);
+  color: var(--text-secondary);
   max-width: 440px;
+  margin: 0;
 }
 
 .welcome-btn {
@@ -2426,23 +2435,28 @@ body.is-resizing-panels * {
   align-items: center;
   justify-content: center;
   gap: var(--sp-3);
-  padding: var(--sp-3) var(--sp-8);
+  min-height: var(--btn-height-lg);
+  min-width: 220px;
+  padding: 0 var(--sp-6);
+  border: 1px solid color-mix(in srgb, var(--accent-blue) 28%, var(--border));
   border-radius: var(--radius-md);
-  background: var(--blue);
-  color: var(--bg);
+  background: var(--accent-blue);
+  color: var(--text-inverse);
   font-size: var(--type-body-strong-size);
   line-height: var(--type-body-strong-line-height);
   font-weight: var(--font-medium);
-  border: none;
   cursor: pointer;
   font-family: var(--sans);
-  transition: filter var(--duration-fast) var(--ease-out);
-  min-height: var(--btn-height-lg);
-  width: min(100%, 320px);
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+  width: auto;
 }
 
 .welcome-btn:hover {
-  filter: brightness(1.1);
+  filter: none;
+  background: color-mix(in srgb, var(--accent-blue) 88%, white 12%);
 }
 
 .welcome-link {
@@ -2450,27 +2464,27 @@ body.is-resizing-panels * {
   align-items: center;
   justify-content: center;
   gap: var(--sp-2);
+  min-height: 40px;
+  padding: 0 var(--sp-4);
   font-size: var(--type-meta-size);
   line-height: var(--type-meta-line-height);
   font-weight: var(--type-meta-weight);
-  color: var(--text-ter);
-  background: none;
-  border: none;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
   cursor: pointer;
   font-family: var(--sans);
-  padding: var(--sp-2);
-  transition: color var(--duration-fast) var(--ease-out);
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out);
 }
 
 .welcome-link:hover {
-  color: var(--text-sec);
-}
-
-.welcome-divider {
-  width: 48px;
-  height: 1px;
-  background: var(--border);
-  margin: var(--sp-4) 0;
+  color: var(--text-primary);
+  border-color: var(--border-light);
+  background: var(--bg-hover);
 }
 
 .welcome-features {
@@ -2485,12 +2499,13 @@ body.is-resizing-panels * {
   align-items: flex-start;
   gap: var(--sp-3);
   padding: var(--sp-4);
-  border-radius: var(--radius-md);
-  background: var(--bg-panel);
-  min-height: 148px;
+  border-radius: var(--radius-lg);
+  background: transparent;
+  min-height: 0;
   justify-content: flex-start;
   flex-direction: column;
-  border: 1px solid var(--border);
+  border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
+  box-shadow: none;
   text-align: left;
 }
 
@@ -2520,46 +2535,28 @@ body.is-resizing-panels * {
   color: var(--text-tertiary);
 }
 
-.auth-screen {
-  padding: var(--sp-8);
-  background:
-    radial-gradient(
-      circle at top,
-      color-mix(in srgb, var(--accent-green) 12%, transparent),
-      transparent 34%
-    ),
-    radial-gradient(
-      circle at bottom right,
-      color-mix(in srgb, var(--accent-blue) 14%, transparent),
-      transparent 30%
-    ),
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--bg-page) 92%, var(--bg-surface) 8%),
-      var(--bg-page)
-    );
-}
-
 .auth-card-shell {
-  width: min(100%, 480px);
+  width: min(100%, 520px);
   align-items: stretch;
   text-align: left;
-  gap: var(--sp-4);
-  padding: var(--sp-10);
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--bg-surface) 98%, white 2%),
-    color-mix(in srgb, var(--bg-surface) 88%, var(--bg-page) 12%)
-  );
-  border-color: color-mix(in srgb, var(--border) 88%, var(--accent-blue) 12%);
-  box-shadow: var(--shadow-xl);
+  gap: var(--sp-6);
+  padding: var(--sp-8);
+  background: var(--bg-surface);
+  border-color: color-mix(in srgb, var(--border) 88%, transparent);
+  box-shadow: var(--shadow-sm);
 }
 
 .auth-card-shell__content {
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: var(--sp-4);
+  gap: var(--sp-5);
+}
+
+.auth-hero {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
 }
 
 .auth-card-shell .welcome-kicker,
@@ -2577,15 +2574,20 @@ body.is-resizing-panels * {
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
-  padding: var(--sp-4);
-  border-radius: var(--radius-lg);
-  border: 1px solid color-mix(in srgb, var(--border) 92%, rgba(255, 255, 255, 0.04));
-  background: color-mix(in srgb, var(--bg-surface) 92%, rgba(255, 255, 255, 0.02));
+  padding-top: var(--sp-5);
+  padding-bottom: 0;
+  padding-inline: 0;
+  border-top: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  border-radius: 0;
+  border-right: none;
+  border-bottom: none;
+  border-left: none;
+  background: transparent;
 }
 
 .auth-status-panel-error {
-  border-color: color-mix(in srgb, var(--color-error) 38%, transparent);
-  background: color-mix(in srgb, var(--color-error) 10%, var(--bg-surface));
+  border-top-color: color-mix(in srgb, var(--color-error) 34%, var(--border));
+  background: transparent;
 }
 
 .auth-status-eyebrow {
@@ -2606,7 +2608,7 @@ body.is-resizing-panels * {
 }
 
 .auth-status-panel-error .auth-status-detail {
-  color: var(--color-error);
+  color: color-mix(in srgb, var(--color-error) 84%, var(--text-primary));
 }
 
 .auth-form {
@@ -2614,7 +2616,9 @@ body.is-resizing-panels * {
   display: flex;
   flex-direction: column;
   gap: var(--sp-4);
-  margin-top: var(--sp-1);
+  padding-top: var(--sp-5);
+  border-top: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  margin-top: 0;
 }
 
 .auth-input {
@@ -2623,6 +2627,15 @@ body.is-resizing-panels * {
 
 .auth-input.input {
   height: 44px;
+  background: var(--bg-page);
+}
+
+.auth-actions {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  padding-top: var(--sp-5);
+  border-top: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
 }
 
 .auth-submit {
@@ -10771,33 +10784,24 @@ textarea.input {
       calc(env(safe-area-inset-right, 0px) + var(--sp-4))
       calc(env(safe-area-inset-bottom, 0px) + var(--sp-5))
       calc(env(safe-area-inset-left, 0px) + var(--sp-4));
-    background:
-      radial-gradient(
-        circle at top center,
-        color-mix(in srgb, var(--accent-blue) 10%, transparent),
-        transparent 38%
-      ),
-      linear-gradient(
-        180deg,
-        color-mix(in srgb, var(--bg-page) 92%, var(--bg-surface) 8%) 0%,
-        var(--bg-page) 100%
-      );
   }
 
   .welcome-card--mobile {
     width: 100%;
     max-width: none;
-    padding: var(--sp-7) var(--sp-5);
+    padding: var(--sp-6) var(--sp-4);
     gap: var(--sp-5);
-    border-radius: var(--radius-xl);
+    border-radius: var(--radius-lg);
+    box-shadow: none;
   }
 
   .welcome-card--mobile .welcome-card__actions {
     align-items: stretch;
   }
 
-  .welcome-card--mobile .welcome-btn {
-    width: 100%;
+  .welcome-card--mobile .welcome-actions-group {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .welcome-card--mobile .welcome-title {
@@ -10816,14 +10820,13 @@ textarea.input {
 
   .welcome-card--mobile .welcome-features {
     grid-template-columns: 1fr;
-    margin-top: var(--sp-2);
   }
 
   .welcome-card--mobile .welcome-feature {
     align-items: flex-start;
     min-height: 0;
     padding: var(--sp-4);
-    border-radius: var(--radius-xl);
+    border-radius: var(--radius-lg);
     text-align: left;
   }
 
@@ -10839,7 +10842,7 @@ textarea.input {
   }
 
   .welcome-card--mobile .welcome-link {
-    margin-top: 0;
+    width: 100%;
   }
 
   .auth-screen--mobile {
@@ -10851,9 +10854,10 @@ textarea.input {
 
   .auth-card-shell--mobile {
     width: 100%;
-    padding: var(--sp-7) var(--sp-5);
+    padding: var(--sp-6) var(--sp-4);
     gap: var(--sp-5);
-    border-radius: var(--radius-xl);
+    border-radius: var(--radius-lg);
+    box-shadow: none;
   }
 
   .auth-card-shell--mobile .welcome-title {
@@ -10870,8 +10874,8 @@ textarea.input {
   }
 
   .auth-card-shell--mobile .auth-status-panel {
-    padding: var(--sp-4);
-    border-radius: var(--radius-xl);
+    padding-top: var(--sp-4);
+    border-radius: var(--radius-md);
   }
 
   .settings-page--mobile {

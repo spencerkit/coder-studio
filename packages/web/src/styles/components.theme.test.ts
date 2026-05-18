@@ -554,17 +554,23 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(launchModal).toContain("max-width: min(var(--desktop-modal-max-width-lg), 90vw)");
   });
 
-  it("keeps auth shells theme-aware instead of forcing dark gradients", () => {
+  it("keeps auth and welcome shells on flat page surfaces", () => {
     const authScreen = getLastRuleBlock(".auth-screen");
     const authCard = getLastRuleBlock(".auth-card-shell");
+    const welcomeCard = getLastRuleBlock(".welcome-card");
+    const welcomeFeature = getLastRuleBlock(".welcome-feature");
 
     expect(authScreen).toContain("var(--bg-page)");
-    expect(authScreen).toContain("var(--accent-green)");
-    expect(authScreen).toContain("var(--accent-blue)");
+    expect(authScreen).not.toContain("radial-gradient(");
     expect(authScreen).not.toContain("rgba(17, 24, 31, 0.96)");
-    expect(authCard).toContain("var(--bg-surface)");
-    expect(authCard).toContain("var(--accent-blue)");
-    expect(authCard).toContain("var(--shadow-xl)");
+    expect(authCard).toContain("background: var(--bg-surface)");
+    expect(authCard).toContain("box-shadow: var(--shadow-sm)");
+    expect(authCard).not.toContain("linear-gradient(");
+    expect(welcomeCard).toContain("background: var(--bg-surface)");
+    expect(welcomeCard).toContain("align-items: stretch");
+    expect(welcomeCard).not.toContain("box-shadow: var(--shadow-xl)");
+    expect(welcomeFeature).toContain("background: transparent");
+    expect(welcomeFeature).not.toContain("min-height: 148px");
     expect(authCard).not.toContain("rgba(13, 20, 26, 0.94)");
   });
 
@@ -1287,11 +1293,11 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(supervisorHeader).toContain("border-radius: var(--radius-xl)");
     expect(drawerItem).toContain("border-radius: var(--radius-xl)");
     expect(drawerFooterButton).toContain("border-radius: var(--radius-md)");
-    expect(welcomeCard).toContain("border-radius: var(--radius-xl)");
-    expect(welcomeFeature).toContain("border-radius: var(--radius-xl)");
+    expect(welcomeCard).toContain("border-radius: var(--radius-lg)");
+    expect(welcomeFeature).toContain("border-radius: var(--radius-lg)");
     expect(welcomeButton).toContain("border-radius: var(--radius-md)");
-    expect(authCard).toContain("border-radius: var(--radius-xl)");
-    expect(authStatusPanel).toContain("border-radius: var(--radius-xl)");
+    expect(authCard).toContain("border-radius: var(--radius-lg)");
+    expect(authStatusPanel).toContain("border-radius: var(--radius-md)");
     expect(settingsItem).toContain("border-radius: 0");
     expect(settingsItemIconShell).toContain("border-radius: var(--radius-xl)");
   });
