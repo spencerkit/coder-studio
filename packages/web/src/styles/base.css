@@ -660,12 +660,49 @@ textarea::placeholder {
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: var(--sp-2);
+  padding: 0 var(--sp-4);
   background: var(--accent-amber);
   color: var(--text-inverse);
   font-size: var(--type-label-size);
   line-height: var(--type-label-line-height);
   font-weight: var(--type-label-weight);
   z-index: var(--z-toast);
+}
+
+.connection-banner__primary,
+.connection-banner__hint {
+  min-width: 0;
+}
+
+.connection-banner__hint {
+  opacity: 0.88;
+}
+
+.connection-banner--mobile {
+  min-height: calc(var(--sp-6) + var(--mobile-safe-top));
+  padding-top: var(--mobile-safe-top);
+  padding-right: calc(var(--mobile-safe-right) + var(--sp-3));
+  padding-left: calc(var(--mobile-safe-left) + var(--sp-3));
+}
+
+.connection-banner--stacked {
+  height: auto;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+  padding-top: calc(var(--mobile-safe-top) + var(--sp-1));
+  padding-right: calc(var(--mobile-safe-right) + var(--sp-3));
+  padding-bottom: var(--sp-1);
+  padding-left: calc(var(--mobile-safe-left) + var(--sp-3));
+}
+
+.connection-banner--stacked .connection-banner__primary,
+.connection-banner--stacked .connection-banner__hint {
+  width: 100%;
+  text-align: left;
+  overflow-wrap: anywhere;
 }
 
 .connection-banner--error {
