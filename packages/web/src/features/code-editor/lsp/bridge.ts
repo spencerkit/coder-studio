@@ -1,9 +1,10 @@
 import type {
   LspDiagnosticsEvent,
   LspDocumentSymbol,
+  LspEnsureSessionResult,
   LspHoverResult,
   LspLocation,
-  LspSessionSummary,
+  LspToolInstallJobSnapshot,
 } from "@coder-studio/core";
 import { Topics } from "@coder-studio/core";
 import * as monaco from "monaco-editor";
@@ -32,10 +33,32 @@ type WorkspaceSubscription = {
   handleEvent: (topic: string, payload: unknown) => void;
 };
 
+export type LspBridgeState =
+  | { kind: "ready" | "unsupported_language" }
+  | (Exclude<LspEnsureSessionResult, { kind: "ready" | "unsupported_language" }> & {
+      installJob?: LspToolInstallJobSnapshot;
+    });
+
+type AttachedModelHandle = (() => void) & {
+  install: () => Promise<void>;
+  retry: () => Promise<void>;
+};
+
 const noopTransport: LspBridgeTransport = {
-  sendCommand: async () => null,
+  sendCommand: async <T>() => null as T,
   subscribe: () => () => {},
 };
+
+type MissingOrFailedReadiness = Exclude<
+  LspEnsureSessionResult,
+  { kind: "ready" | "unsupported_language" }
+>;
+
+function isMissingOrFailedReadiness(
+  readiness: LspEnsureSessionResult
+): readiness is MissingOrFailedReadiness {
+  return readiness.kind !== "ready" && readiness.kind !== "unsupported_language";
+}
 
 export function createLspBridge(initialTransport: Partial<LspBridgeTransport> = {}) {
   let transport: LspBridgeTransport = {
@@ -46,6 +69,7 @@ export function createLspBridge(initialTransport: Partial<LspBridgeTransport> = 
   const diagnostics = createDiagnosticsController();
   const workspaceSubscriptions = new Map<string, WorkspaceSubscription>();
   const changeTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const installPollTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const providers = createLspProviderRegistry({
     lookupModelMetadata: (model) => {
       const meta = models.get(model.uri.toString());
@@ -106,40 +130,111 @@ export function createLspBridge(initialTransport: Partial<LspBridgeTransport> = 
     }
   }
 
-  function attachModel(input: AttachedModel): () => void {
+  function attachModel(
+    input: AttachedModel,
+    onStateChange?: (state: LspBridgeState) => void
+  ): AttachedModelHandle {
     const serverKind = resolveLspServerKind(input.path, input.monacoLanguage);
     if (!serverKind) {
-      return () => {};
+      onStateChange?.({ kind: "unsupported_language" });
+      const noopHandle = Object.assign(() => {}, {
+        install: async () => {},
+        retry: async () => {},
+      });
+      return noopHandle;
     }
 
     const key = input.model.uri.toString();
     let detached = false;
+    let currentJobId: string | undefined;
     models.set(key, input);
     providers.register(input.monacoLanguage);
     ensureDiagnosticsSubscription(input.workspaceId, input.workspaceRootPath);
 
-    void transport
-      .sendCommand<LspSessionSummary | null>("lsp.ensureSession", {
+    const ensureReady = async (): Promise<void> => {
+      const readiness = await transport.sendCommand<LspEnsureSessionResult>("lsp.ensureSession", {
         workspaceId: input.workspaceId,
         path: input.path,
-      })
-      .then((summary) => {
-        if (!summary || summary.status !== "ready" || summary.serverKind !== serverKind) {
-          return null;
-        }
+      });
 
-        if (detached || models.get(key) !== input) {
-          return null;
+      if (readiness.kind !== "ready") {
+        onStateChange?.(readiness);
+        if (isMissingOrFailedReadiness(readiness) && readiness.installJob) {
+          currentJobId = readiness.installJob.jobId;
+          schedulePoll();
         }
+        return;
+      }
 
-        return transport.sendCommand("lsp.openDocument", {
-          workspaceId: input.workspaceId,
-          path: input.path,
-          languageId: input.monacoLanguage,
-          text: input.model.getValue(),
+      onStateChange?.({ kind: "ready" });
+
+      if (readiness.summary.serverKind !== serverKind || detached || models.get(key) !== input) {
+        return;
+      }
+
+      await transport.sendCommand("lsp.openDocument", {
+        workspaceId: input.workspaceId,
+        path: input.path,
+        languageId: input.monacoLanguage,
+        text: input.model.getValue(),
+      });
+    };
+
+    const pollInstallJob = async () => {
+      if (!currentJobId || detached) {
+        return;
+      }
+
+      const job = await transport.sendCommand<LspToolInstallJobSnapshot>("lsp.install.get", {
+        jobId: currentJobId,
+      });
+
+      if (job.status === "queued" || job.status === "running") {
+        onStateChange?.({
+          kind: "installing",
+          serverKind,
+          displayName: `${serverKind} language server`,
+          errorCode: "lsp_install_in_progress",
+          message: "Install in progress",
+          autoInstallSupported: true,
+          missingCommands: [],
+          missingPrerequisites: [],
+          installJob: job,
         });
-      })
-      .catch(() => null);
+        schedulePoll();
+        return;
+      }
+
+      if (job.status === "failed") {
+        onStateChange?.({
+          kind: "failed",
+          serverKind,
+          displayName: `${serverKind} language server`,
+          errorCode: "lsp_install_failed",
+          message: job.failure?.message ?? "Install failed",
+          autoInstallSupported: true,
+          missingCommands: job.failure?.missingCommands ?? [],
+          missingPrerequisites: [],
+          installJob: job,
+        });
+        return;
+      }
+
+      currentJobId = undefined;
+      await ensureReady().catch(() => null);
+    };
+
+    const schedulePoll = () => {
+      clearTimeout(installPollTimers.get(key));
+      installPollTimers.set(
+        key,
+        setTimeout(() => {
+          void pollInstallJob().catch(() => null);
+        }, 1500)
+      );
+    };
+
+    void ensureReady().catch(() => null);
 
     const changeDisposable = input.model.onDidChangeContent(() => {
       clearTimeout(changeTimers.get(key));
@@ -157,10 +252,12 @@ export function createLspBridge(initialTransport: Partial<LspBridgeTransport> = 
       );
     });
 
-    return () => {
+    const detach = () => {
       detached = true;
       clearTimeout(changeTimers.get(key));
       changeTimers.delete(key);
+      clearTimeout(installPollTimers.get(key));
+      installPollTimers.delete(key);
       models.delete(key);
       diagnostics.clearFile(input.workspaceRootPath, input.path);
       changeDisposable.dispose();
@@ -173,6 +270,37 @@ export function createLspBridge(initialTransport: Partial<LspBridgeTransport> = 
         })
         .catch(() => null);
     };
+
+    return Object.assign(detach, {
+      install: async () => {
+        const job = await transport.sendCommand<LspToolInstallJobSnapshot>("lsp.install.start", {
+          workspaceId: input.workspaceId,
+          serverKind,
+        });
+        currentJobId = job.jobId;
+        onStateChange?.({
+          kind: job.status === "failed" ? "failed" : "installing",
+          serverKind,
+          displayName: `${serverKind} language server`,
+          errorCode: job.status === "failed" ? "lsp_install_failed" : "lsp_install_in_progress",
+          message: job.failure?.message ?? "Install in progress",
+          autoInstallSupported: true,
+          missingCommands: job.failure?.missingCommands ?? [],
+          missingPrerequisites: [],
+          installJob: job,
+        });
+        if (job.status === "queued" || job.status === "running") {
+          schedulePoll();
+          return;
+        }
+        if (job.status === "succeeded") {
+          await ensureReady().catch(() => null);
+        }
+      },
+      retry: async () => {
+        await ensureReady().catch(() => null);
+      },
+    });
   }
 
   function ensureDiagnosticsSubscription(workspaceId: string, workspaceRootPath: string): void {

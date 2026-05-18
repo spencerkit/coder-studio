@@ -15,21 +15,28 @@ import htmlWorker from "monaco-editor/esm/vs/language/html/html.worker?worker";
 import jsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
 import tsWorker from "monaco-editor/esm/vs/language/typescript/ts.worker?worker";
 import type { FC } from "react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { themeAtom } from "../../../atoms/app-ui";
 import { dispatchCommandAtom, wsClientAtom } from "../../../atoms/connection";
 import { getThemeById } from "../../../theme";
 import { useOpenLocation } from "../actions/use-open-location";
 import { type PendingEditorNavigation, pendingEditorNavigationAtomFamily } from "../atoms";
-import { globalLspBridge } from "../lsp/bridge";
+import { globalLspBridge, type LspBridgeState } from "../lsp/bridge";
 import { monacoModelRegistry } from "../monaco/model-registry";
 import { fromWorkspaceFileUri } from "../monaco/uri";
+import { LspStatusNotice } from "./lsp-status-notice";
 
 const monacoGlobal = globalThis as typeof globalThis & {
   MonacoEnvironment?: monaco.Environment;
 };
 
 const registeredMonacoThemeIds = new Set<string>();
+
+type NoticeLspState = Exclude<LspBridgeState, { kind: "ready" | "unsupported_language" }>;
+
+function isNoticeLspState(state: LspBridgeState): state is NoticeLspState {
+  return state.kind !== "ready" && state.kind !== "unsupported_language";
+}
 
 monacoGlobal.MonacoEnvironment ??= {
   getWorker(_workerId: string, label: string) {
@@ -115,6 +122,9 @@ export const MonacoHost: FC<MonacoHostProps> = ({
   const workspaceIdRef = useRef(workspaceId);
   const workspaceRootPathRef = useRef(workspaceRootPath);
   const isWorkspaceBacked = Boolean(workspaceRootPath) && !standalone;
+  const lspHandleRef = useRef<ReturnType<typeof globalLspBridge.attachModel> | null>(null);
+  const [lspState, setLspState] = useState<LspBridgeState>({ kind: "unsupported_language" });
+  const [installing, setInstalling] = useState(false);
 
   useEffect(() => {
     onContentChangeRef.current = onContentChange;
@@ -137,7 +147,10 @@ export const MonacoHost: FC<MonacoHostProps> = ({
 
   useEffect(() => {
     if (!registeredMonacoThemeIds.has(editorTheme)) {
-      monaco.editor.defineTheme(editorTheme, resolvedTheme.monaco);
+      monaco.editor.defineTheme(
+        editorTheme,
+        resolvedTheme.monaco as Parameters<typeof monaco.editor.defineTheme>[1]
+      );
       registeredMonacoThemeIds.add(editorTheme);
     }
   }, [editorTheme, resolvedTheme]);
@@ -210,9 +223,9 @@ export const MonacoHost: FC<MonacoHostProps> = ({
 
   useEffect(() => {
     globalLspBridge.configure({
-      sendCommand: async (op, args) => {
+      sendCommand: async <T,>(op: string, args: unknown) => {
         const result = await dispatchCommand(op, args);
-        return result.ok ? (result.data as unknown) : null;
+        return result.ok ? (result.data as T) : (null as T);
       },
       subscribe: (topics, handler) =>
         wsClient?.subscribe(topics, (topic, payload) => handler(topic, payload)) ?? (() => {}),
@@ -249,14 +262,41 @@ export const MonacoHost: FC<MonacoHostProps> = ({
       return;
     }
 
-    return globalLspBridge.attachModel({
-      workspaceId,
-      workspaceRootPath,
-      path: filePath,
-      monacoLanguage: language,
-      model,
-    });
+    const handle = globalLspBridge.attachModel(
+      {
+        workspaceId,
+        workspaceRootPath,
+        path: filePath,
+        monacoLanguage: language,
+        model,
+      },
+      setLspState
+    );
+    lspHandleRef.current = handle;
+
+    return () => {
+      lspHandleRef.current = null;
+      handle();
+    };
   }, [filePath, isWorkspaceBacked, language, workspaceId, workspaceRootPath]);
+
+  const showLspNotice = isWorkspaceBacked && workspaceId && isNoticeLspState(lspState);
+
+  const handleInstall = async () => {
+    if (!lspHandleRef.current) {
+      return;
+    }
+    setInstalling(true);
+    try {
+      await lspHandleRef.current.install();
+    } finally {
+      setInstalling(false);
+    }
+  };
+
+  const handleRetry = async () => {
+    await lspHandleRef.current?.retry();
+  };
 
   useEffect(() => {
     const editor = editorRef.current;
@@ -311,11 +351,25 @@ export const MonacoHost: FC<MonacoHostProps> = ({
   }, [visible]);
 
   return (
-    <div
-      ref={containerRef}
-      className="monaco-host"
-      data-monaco-mode={isWorkspaceBacked ? "workspace" : "standalone"}
-    />
+    <>
+      {showLspNotice ? (
+        <LspStatusNotice
+          state={lspState}
+          onInstall={
+            lspState.autoInstallSupported && lspState.missingPrerequisites.length === 0
+              ? handleInstall
+              : undefined
+          }
+          onRetry={handleRetry}
+          installing={installing}
+        />
+      ) : null}
+      <div
+        ref={containerRef}
+        className="monaco-host"
+        data-monaco-mode={isWorkspaceBacked ? "workspace" : "standalone"}
+      />
+    </>
   );
 };
 
@@ -484,7 +538,7 @@ function waitForEditorModel(
 
   return new Promise((resolve) => {
     let settled = false;
-    let timeoutId = 0;
+    let timeoutId: ReturnType<typeof globalThis.setTimeout> | null = null;
 
     const finish = (value: monaco.editor.IStandaloneCodeEditor | null) => {
       if (settled) {
@@ -492,7 +546,9 @@ function waitForEditorModel(
       }
 
       settled = true;
-      globalThis.clearTimeout(timeoutId);
+      if (timeoutId !== null) {
+        globalThis.clearTimeout(timeoutId);
+      }
       modelChangeDisposable.dispose();
       resolve(value);
     };

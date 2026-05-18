@@ -15,15 +15,20 @@ import "../commands/lsp.js";
 class FakeLspManager {
   async ensureSession() {
     return {
-      workspaceId: "ws-1",
-      serverKind: "typescript" as const,
-      status: "ready" as const,
-      capabilities: {
-        definition: true,
-        references: true,
-        hover: true,
-        documentSymbols: true,
-        diagnostics: true,
+      kind: "ready" as const,
+      displayName: "TypeScript language server",
+      source: "bundled" as const,
+      summary: {
+        workspaceId: "ws-1",
+        serverKind: "typescript" as const,
+        status: "ready" as const,
+        capabilities: {
+          definition: true,
+          references: true,
+          hover: true,
+          documentSymbols: true,
+          diagnostics: true,
+        },
       },
     };
   }
@@ -65,6 +70,28 @@ class FakeLspManager {
   }
 }
 
+class FakeLspToolInstallManager {
+  async start() {
+    return {
+      jobId: "job-1",
+      serverKind: "python" as const,
+      status: "queued" as const,
+      currentStepId: "install-python-lsp",
+      steps: [],
+    };
+  }
+
+  get() {
+    return {
+      jobId: "job-1",
+      serverKind: "python" as const,
+      status: "running" as const,
+      currentStepId: "install-python-lsp",
+      steps: [],
+    };
+  }
+}
+
 describe("LSP commands", () => {
   let ctx: CommandContext;
 
@@ -87,6 +114,18 @@ describe("LSP commands", () => {
       supervisorMgr: {} as never,
       activationMgr: { getLease: () => ({ wsClientId: "test-client" }) } as never,
       lspMgr: new FakeLspManager() as never,
+      lspToolMgr: {
+        runtimeStatus: vi.fn(async () => ({
+          serverKind: "python",
+          displayName: "Python language server",
+          available: false,
+          autoInstallSupported: true,
+          installReadiness: "ready",
+          missingCommands: ["pylsp"],
+          missingPrerequisites: [],
+        })),
+      } as never,
+      lspToolInstallMgr: new FakeLspToolInstallManager() as never,
     } as unknown as CommandContext;
   });
 
@@ -120,6 +159,12 @@ describe("LSP commands", () => {
     );
 
     expect(ensure.ok).toBe(true);
+    expect(ensure.data).toMatchObject({
+      kind: "ready",
+      summary: {
+        serverKind: "typescript",
+      },
+    });
 
     const definition = await dispatch(
       {
@@ -142,5 +187,73 @@ describe("LSP commands", () => {
         expect.objectContaining({ path: "e2e/fixtures/lsp-workspace/shared.ts" }),
       ])
     );
+  });
+
+  it("exposes lsp runtime status and install commands", async () => {
+    const dir = join(tmpdir(), `lsp-command-test-${Date.now()}`);
+    await mkdir(dir);
+
+    const openWorkspace = await dispatch(
+      {
+        kind: "command",
+        id: crypto.randomUUID(),
+        op: "workspace.open",
+        args: { path: dir },
+      },
+      ctx
+    );
+    const workspaceId = (openWorkspace.data as { id: string }).id;
+
+    const runtimeStatus = await dispatch(
+      {
+        kind: "command",
+        id: crypto.randomUUID(),
+        op: "lsp.runtimeStatus",
+        args: { workspaceId },
+      },
+      ctx
+    );
+
+    expect(runtimeStatus.ok).toBe(true);
+    expect(runtimeStatus.data).toMatchObject({
+      tools: {
+        python: {
+          available: false,
+          autoInstallSupported: true,
+        },
+      },
+    });
+
+    const start = await dispatch(
+      {
+        kind: "command",
+        id: crypto.randomUUID(),
+        op: "lsp.install.start",
+        args: { workspaceId, serverKind: "python" },
+      },
+      ctx
+    );
+
+    expect(start.ok).toBe(true);
+    expect(start.data).toMatchObject({
+      jobId: "job-1",
+      serverKind: "python",
+    });
+
+    const get = await dispatch(
+      {
+        kind: "command",
+        id: crypto.randomUUID(),
+        op: "lsp.install.get",
+        args: { jobId: "job-1" },
+      },
+      ctx
+    );
+
+    expect(get.ok).toBe(true);
+    expect(get.data).toMatchObject({
+      jobId: "job-1",
+      status: "running",
+    });
   });
 });

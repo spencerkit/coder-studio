@@ -1,0 +1,159 @@
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import type { Workspace } from "@coder-studio/core";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { LspToolManager } from "./manager.js";
+import { FileManifestStore } from "./manifest-store.js";
+
+const workspace: Workspace = {
+  id: "ws-1",
+  path: "/repo",
+  targetRuntime: "native",
+  openedAt: 1,
+  lastActiveAt: 1,
+  uiState: { leftPanelWidth: 240, bottomPanelHeight: 180, focusMode: false },
+};
+
+describe("LspToolManager.resolve", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("prefers an env override over managed, bundled, and system sources", async () => {
+    const root = mkdtempSync(join(tmpdir(), "lsp-tools-"));
+    const manager = new LspToolManager({
+      manifestStore: new FileManifestStore(root),
+      commandExists: vi.fn(async () => true),
+      resolveBundledCommand: vi.fn(() => ({
+        command: "/bundled/tsls",
+        args: ["--stdio"],
+      })),
+    });
+
+    const result = await manager.resolve({
+      workspace,
+      serverKind: "typescript",
+      env: {
+        CODER_STUDIO_LSP_TYPESCRIPT_COMMAND: "node",
+        CODER_STUDIO_LSP_TYPESCRIPT_ARGS_JSON: '["scripts/fake-tsls.mjs"]',
+      },
+    });
+
+    expect(result).toMatchObject({
+      kind: "ready",
+      source: "override",
+      command: "node",
+      args: ["scripts/fake-tsls.mjs"],
+    });
+  });
+
+  it("prefers a managed install over bundled and system sources", async () => {
+    const root = mkdtempSync(join(tmpdir(), "lsp-tools-"));
+    const executablePath = join(root, "python", "1.14.0", "bin", "pylsp");
+    mkdirSync(dirname(executablePath), { recursive: true });
+    writeFileSync(executablePath, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+    writeFileSync(
+      join(root, "python", "manifest.json"),
+      JSON.stringify({
+        serverKind: "python",
+        version: "1.14.0",
+        executablePath,
+        installedAt: 1,
+        source: "managed",
+        platform: process.platform,
+      })
+    );
+
+    const manager = new LspToolManager({
+      manifestStore: new FileManifestStore(root),
+      commandExists: vi.fn(async () => true),
+      resolveBundledCommand: vi.fn(() => null),
+    });
+
+    const result = await manager.resolve({
+      workspace,
+      serverKind: "python",
+      env: {},
+    });
+
+    expect(result).toMatchObject({
+      kind: "ready",
+      source: "managed",
+      command: executablePath,
+      args: [],
+    });
+  });
+
+  it("uses the bundled TypeScript language server before system PATH", async () => {
+    const root = mkdtempSync(join(tmpdir(), "lsp-tools-"));
+    const manager = new LspToolManager({
+      manifestStore: new FileManifestStore(root),
+      commandExists: vi.fn(async () => true),
+      resolveBundledCommand: vi.fn(() => ({
+        command: "/app/node_modules/typescript-language-server/lib/cli.mjs",
+        args: ["--stdio"],
+      })),
+    });
+
+    const result = await manager.resolve({
+      workspace,
+      serverKind: "typescript",
+      env: {},
+    });
+
+    expect(result).toMatchObject({
+      kind: "ready",
+      source: "bundled",
+      command: "/app/node_modules/typescript-language-server/lib/cli.mjs",
+      args: ["--stdio"],
+    });
+  });
+
+  it("returns tool_missing when no source is available", async () => {
+    const root = mkdtempSync(join(tmpdir(), "lsp-tools-"));
+    const manager = new LspToolManager({
+      manifestStore: new FileManifestStore(root),
+      commandExists: vi.fn(async (command: string) => command === "python3"),
+      resolveBundledCommand: vi.fn(() => null),
+    });
+
+    const result = await manager.resolve({
+      workspace,
+      serverKind: "python",
+      env: {},
+    });
+
+    expect(result).toMatchObject({
+      kind: "tool_missing",
+      serverKind: "python",
+      errorCode: "lsp_tool_missing",
+      autoInstallSupported: true,
+      missingCommands: ["pylsp"],
+      missingPrerequisites: [],
+    });
+  });
+
+  it("marks native managed install unsupported for WSL workspaces", async () => {
+    const root = mkdtempSync(join(tmpdir(), "lsp-tools-"));
+    const manager = new LspToolManager({
+      manifestStore: new FileManifestStore(root),
+      commandExists: vi.fn(async () => false),
+      resolveBundledCommand: vi.fn(() => null),
+    });
+
+    const result = await manager.resolve({
+      workspace: { ...workspace, targetRuntime: "wsl", wslDistro: "Ubuntu" },
+      serverKind: "rust",
+      env: {},
+    });
+
+    expect(result).toMatchObject({
+      kind: "tool_missing",
+      serverKind: "rust",
+      autoInstallSupported: false,
+      installReadiness: "unsupported_platform",
+      missingCommands: ["rust-analyzer"],
+    });
+  });
+});

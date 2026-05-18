@@ -2,6 +2,14 @@ import * as monaco from "monaco-editor";
 import { describe, expect, it, vi } from "vitest";
 import { createLspBridge } from "./bridge";
 
+type BridgeSendCommand = NonNullable<
+  NonNullable<Parameters<typeof createLspBridge>[0]>["sendCommand"]
+>;
+
+function createMockPosition(lineNumber: number, column: number): monaco.Position {
+  return { lineNumber, column } as monaco.Position;
+}
+
 vi.mock("monaco-editor", () => ({
   Uri: {
     file: (path: string) => ({
@@ -65,15 +73,20 @@ describe("LSP providers", () => {
       sendCommand: vi.fn(async (op) => {
         if (op === "lsp.ensureSession") {
           return {
-            workspaceId: "ws-1",
-            serverKind: "typescript",
-            status: "ready",
-            capabilities: {
-              definition: true,
-              references: true,
-              hover: true,
-              documentSymbols: true,
-              diagnostics: true,
+            kind: "ready",
+            displayName: "TypeScript language server",
+            source: "bundled",
+            summary: {
+              workspaceId: "ws-1",
+              serverKind: "typescript",
+              status: "ready",
+              capabilities: {
+                definition: true,
+                references: true,
+                hover: true,
+                documentSymbols: true,
+                diagnostics: true,
+              },
             },
           };
         }
@@ -93,7 +106,7 @@ describe("LSP providers", () => {
         }
 
         return undefined;
-      }),
+      }) as BridgeSendCommand,
       subscribe: vi.fn(() => () => {}),
     });
 
@@ -106,7 +119,7 @@ describe("LSP providers", () => {
       model,
     });
 
-    const location = await bridge.provideDefinition(model, { lineNumber: 1, column: 16 });
+    const location = await bridge.provideDefinition(model, createMockPosition(1, 16));
 
     expect(location).toEqual([
       expect.objectContaining({
@@ -123,15 +136,20 @@ describe("LSP providers", () => {
       sendCommand: vi.fn(async (op) => {
         if (op === "lsp.ensureSession") {
           return {
-            workspaceId: "ws-1",
-            serverKind: "typescript",
-            status: "ready",
-            capabilities: {
-              definition: true,
-              references: true,
-              hover: true,
-              documentSymbols: true,
-              diagnostics: true,
+            kind: "ready",
+            displayName: "TypeScript language server",
+            source: "bundled",
+            summary: {
+              workspaceId: "ws-1",
+              serverKind: "typescript",
+              status: "ready",
+              capabilities: {
+                definition: true,
+                references: true,
+                hover: true,
+                documentSymbols: true,
+                diagnostics: true,
+              },
             },
           };
         }
@@ -151,7 +169,7 @@ describe("LSP providers", () => {
         }
 
         return undefined;
-      }),
+      }) as BridgeSendCommand,
       subscribe: vi.fn(() => () => {}),
     });
 
@@ -169,7 +187,7 @@ describe("LSP providers", () => {
       model,
     });
 
-    const location = await bridge.provideDefinition(model, { lineNumber: 1, column: 10 });
+    const location = await bridge.provideDefinition(model, createMockPosition(1, 10));
 
     expect(location).toEqual([
       expect.objectContaining({
@@ -183,15 +201,20 @@ describe("LSP providers", () => {
 
   it("converts hover, references, and document symbols into Monaco payloads", async () => {
     const readySummary = {
-      workspaceId: "ws-1",
-      serverKind: "typescript" as const,
-      status: "ready" as const,
-      capabilities: {
-        definition: true,
-        references: true,
-        hover: true,
-        documentSymbols: true,
-        diagnostics: true,
+      kind: "ready" as const,
+      displayName: "TypeScript language server",
+      source: "bundled" as const,
+      summary: {
+        workspaceId: "ws-1",
+        serverKind: "typescript" as const,
+        status: "ready" as const,
+        capabilities: {
+          definition: true,
+          references: true,
+          hover: true,
+          documentSymbols: true,
+          diagnostics: true,
+        },
       },
     };
 
@@ -259,7 +282,7 @@ describe("LSP providers", () => {
         }
 
         return null;
-      }),
+      }) as BridgeSendCommand,
       subscribe: vi.fn(() => () => {}),
     });
 
@@ -272,13 +295,13 @@ describe("LSP providers", () => {
       model,
     });
 
-    await expect(bridge.provideHover(model, { lineNumber: 1, column: 16 })).resolves.toEqual(
+    await expect(bridge.provideHover(model, createMockPosition(1, 16))).resolves.toEqual(
       expect.objectContaining({
         contents: [{ value: "```ts\nconst sharedValue: number\n```" }],
       })
     );
 
-    await expect(bridge.provideReferences(model, { lineNumber: 1, column: 16 })).resolves.toEqual(
+    await expect(bridge.provideReferences(model, createMockPosition(1, 16))).resolves.toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           uri: expect.objectContaining({
@@ -296,15 +319,20 @@ describe("LSP providers", () => {
 
   it("drops stale hover results after the model version advances", async () => {
     const readySummary = {
-      workspaceId: "ws-1",
-      serverKind: "typescript" as const,
-      status: "ready" as const,
-      capabilities: {
-        definition: true,
-        references: true,
-        hover: true,
-        documentSymbols: true,
-        diagnostics: true,
+      kind: "ready" as const,
+      displayName: "TypeScript language server",
+      source: "bundled" as const,
+      summary: {
+        workspaceId: "ws-1",
+        serverKind: "typescript" as const,
+        status: "ready" as const,
+        capabilities: {
+          definition: true,
+          references: true,
+          hover: true,
+          documentSymbols: true,
+          diagnostics: true,
+        },
       },
     };
 
@@ -325,7 +353,7 @@ describe("LSP providers", () => {
     });
 
     const bridge = createLspBridge({
-      sendCommand,
+      sendCommand: sendCommand as BridgeSendCommand,
       subscribe: vi.fn(() => () => {}),
     });
     const model = createMockModel("export const sharedValue = 1;\n", 1);
@@ -337,7 +365,7 @@ describe("LSP providers", () => {
       model,
     });
 
-    const hoverPromise = bridge.provideHover(model, { lineNumber: 1, column: 16 });
+    const hoverPromise = bridge.provideHover(model, createMockPosition(1, 16));
     model.fireDidChangeContent("export const sharedValue = 2;\n", 2);
 
     await expect(hoverPromise).resolves.toBeNull();

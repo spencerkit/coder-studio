@@ -21,70 +21,53 @@ const PYTHON_EXTENSIONS = new Set([".py"]);
 const GO_EXTENSIONS = new Set([".go"]);
 const RUST_EXTENSIONS = new Set([".rs"]);
 
-export function resolveLspServerSpec(args: {
-  workspace: Workspace;
-  path: string;
-  env?: NodeJS.ProcessEnv;
-}): LspServerSpec | null {
-  const env = args.env ?? process.env;
-  const extension = args.path.slice(args.path.lastIndexOf(".")).toLowerCase();
+export function resolveLspServerKind(path: string): LspServerKind | null {
+  const extension = path.slice(path.lastIndexOf(".")).toLowerCase();
 
-  const base = TYPESCRIPT_EXTENSIONS.has(extension)
-    ? overrideable("typescript", args.workspace.path, env, "typescript-language-server", [
-        "--stdio",
-      ])
-    : PYTHON_EXTENSIONS.has(extension)
-      ? overrideable("python", args.workspace.path, env, "pylsp", [])
-      : GO_EXTENSIONS.has(extension)
-        ? overrideable("go", args.workspace.path, env, "gopls", [])
-        : RUST_EXTENSIONS.has(extension)
-          ? overrideable("rust", args.workspace.path, env, "rust-analyzer", [])
-          : null;
-
-  if (!base) {
-    return null;
+  if (TYPESCRIPT_EXTENSIONS.has(extension)) {
+    return "typescript";
   }
 
-  if (args.workspace.targetRuntime !== "wsl") {
-    return base;
+  if (PYTHON_EXTENSIONS.has(extension)) {
+    return "python";
+  }
+
+  if (GO_EXTENSIONS.has(extension)) {
+    return "go";
+  }
+
+  if (RUST_EXTENSIONS.has(extension)) {
+    return "rust";
+  }
+
+  return null;
+}
+
+export function wrapLspCommandForWorkspace(spec: {
+  workspace: Workspace;
+  serverKind: LspServerKind;
+  command: string;
+  args: string[];
+  rootPath: string;
+}): LspServerSpec {
+  if (spec.workspace.targetRuntime !== "wsl") {
+    return {
+      serverKind: spec.serverKind,
+      command: spec.command,
+      args: spec.args,
+      rootPath: spec.rootPath,
+    };
   }
 
   return {
-    ...base,
+    serverKind: spec.serverKind,
     command: "wsl",
     args: [
-      ...(args.workspace.wslDistro ? ["-d", args.workspace.wslDistro] : []),
+      ...(spec.workspace.wslDistro ? ["-d", spec.workspace.wslDistro] : []),
       "--",
-      base.command,
-      ...base.args,
+      spec.command,
+      ...spec.args,
     ],
+    rootPath: spec.rootPath,
   };
-}
-
-function overrideable(
-  serverKind: LspServerKind,
-  rootPath: string,
-  env: NodeJS.ProcessEnv,
-  defaultCommand: string,
-  defaultArgs: string[]
-): LspServerSpec {
-  const prefix = `CODER_STUDIO_LSP_${serverKind.toUpperCase()}`;
-  const command = env[`${prefix}_COMMAND`] ?? defaultCommand;
-  const argsJson = env[`${prefix}_ARGS_JSON`];
-  const args = argsJson ? parseOverrideArgs(argsJson, `${prefix}_ARGS_JSON`) : defaultArgs;
-
-  return {
-    serverKind,
-    command,
-    args,
-    rootPath,
-  };
-}
-
-function parseOverrideArgs(raw: string, envVarName: string): string[] {
-  try {
-    return JSON.parse(raw) as string[];
-  } catch {
-    throw new Error(`Invalid JSON in ${envVarName}`);
-  }
 }

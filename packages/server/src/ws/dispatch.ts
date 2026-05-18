@@ -9,6 +9,8 @@ import { z } from "zod";
 import type { EventBus } from "../bus/event-bus.js";
 import type { AutoFetchRuntime } from "../git/auto-fetch.js";
 import type { LspManager } from "../lsp/manager.js";
+import type { LspToolInstallManager } from "../lsp-tools/install-manager.js";
+import type { LspToolManager } from "../lsp-tools/manager.js";
 import type { ProviderInstallManager } from "../provider-runtime/install-manager.js";
 import type { RuntimeStatusDeps } from "../provider-runtime/runtime-status.js";
 import type { SessionManager } from "../session/manager.js";
@@ -38,6 +40,8 @@ export interface CommandContext {
   providerInstallMgr?: ProviderInstallManager;
   activationMgr: ActivationManager;
   lspMgr: LspManager;
+  lspToolMgr?: LspToolManager;
+  lspToolInstallMgr?: LspToolInstallManager;
 }
 
 /**

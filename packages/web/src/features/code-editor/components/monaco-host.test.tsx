@@ -1,4 +1,4 @@
-import { act, render, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { themeAtom } from "../../../atoms/app-ui";
@@ -137,7 +137,16 @@ const {
   const mockSetTypeScriptEagerModelSync = vi.fn();
   const mockSetJavaScriptEagerModelSync = vi.fn();
   const mockConfigureLspBridge = vi.fn();
-  const mockAttachLspBridgeModel = vi.fn(() => vi.fn());
+  const mockAttachLspBridgeModel = vi.fn((_input, onStateChange?: (state: unknown) => void) => {
+    const handle = Object.assign(vi.fn(), {
+      install: vi.fn(async () => {}),
+      retry: vi.fn(async () => {}),
+    });
+    if (onStateChange) {
+      onStateChange({ kind: "ready" });
+    }
+    return handle;
+  });
 
   return {
     mockCreateEditor: vi.fn(() => mockEditorInstance),
@@ -454,13 +463,16 @@ describe("MonacoHost", () => {
           sendCommand: expect.any(Function),
         })
       );
-      expect(mockAttachLspBridgeModel).toHaveBeenCalledWith({
-        workspaceId: "ws-test",
-        workspaceRootPath: "/repo",
-        path: "src/example.ts",
-        monacoLanguage: "typescript",
-        model: workspaceModelA,
-      });
+      expect(mockAttachLspBridgeModel).toHaveBeenCalledWith(
+        {
+          workspaceId: "ws-test",
+          workspaceRootPath: "/repo",
+          path: "src/example.ts",
+          monacoLanguage: "typescript",
+          model: workspaceModelA,
+        },
+        expect.any(Function)
+      );
     });
   });
 
@@ -487,6 +499,47 @@ describe("MonacoHost", () => {
           subscribe: expect.any(Function),
         })
       );
+    });
+  });
+
+  it("renders an LSP notice and wires the install action", async () => {
+    const install = vi.fn(async () => {});
+    mockAttachLspBridgeModel.mockImplementationOnce(
+      (_input, onStateChange?: (state: unknown) => void) => {
+        const handle = Object.assign(vi.fn(), {
+          install,
+          retry: vi.fn(async () => {}),
+        });
+        onStateChange?.({
+          kind: "tool_missing",
+          serverKind: "python",
+          displayName: "Python language server",
+          errorCode: "lsp_tool_missing",
+          message: "Python language server is not installed",
+          autoInstallSupported: true,
+          missingCommands: ["pylsp"],
+          missingPrerequisites: [],
+        });
+        return handle;
+      }
+    );
+
+    render(
+      <Provider store={createStore()}>
+        <MonacoHost
+          workspaceId="ws-test"
+          workspaceRootPath="/repo"
+          filePath="src/main.py"
+          content="print('hi')"
+        />
+      </Provider>
+    );
+
+    expect(await screen.findByText("Python language server unavailable")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Install" }));
+
+    await waitFor(() => {
+      expect(install).toHaveBeenCalledTimes(1);
     });
   });
 

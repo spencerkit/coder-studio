@@ -2,6 +2,29 @@ import * as monaco from "monaco-editor";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createLspBridge } from "./bridge";
 
+type BridgeSendCommand = NonNullable<
+  NonNullable<Parameters<typeof createLspBridge>[0]>["sendCommand"]
+>;
+type BridgeEventHandler = (topic: string, payload: unknown) => void;
+type ReadyEnsureSessionResult = {
+  kind: "ready";
+  displayName: string;
+  source: "bundled";
+  summary: {
+    workspaceId: string;
+    serverKind: "typescript";
+    status: "ready";
+    capabilities: {
+      definition: boolean;
+      references: boolean;
+      hover: boolean;
+      documentSymbols: boolean;
+      diagnostics: boolean;
+    };
+  };
+};
+type ResolveEnsureSession = (summary: ReadyEnsureSessionResult) => void;
+
 vi.mock("monaco-editor", () => ({
   Uri: {
     file: (path: string) => ({
@@ -74,22 +97,27 @@ describe("createLspBridge", () => {
     const sendCommand = vi
       .fn()
       .mockResolvedValueOnce({
-        workspaceId: "ws-1",
-        serverKind: "typescript",
-        status: "ready",
-        capabilities: {
-          definition: true,
-          references: true,
-          hover: true,
-          documentSymbols: true,
-          diagnostics: true,
+        kind: "ready",
+        displayName: "TypeScript language server",
+        source: "bundled",
+        summary: {
+          workspaceId: "ws-1",
+          serverKind: "typescript",
+          status: "ready",
+          capabilities: {
+            definition: true,
+            references: true,
+            hover: true,
+            documentSymbols: true,
+            diagnostics: true,
+          },
         },
       })
       .mockResolvedValue(undefined);
 
     const unsubscribe = vi.fn();
     const bridge = createLspBridge({
-      sendCommand,
+      sendCommand: sendCommand as BridgeSendCommand,
       subscribe: vi.fn(() => unsubscribe),
     });
 
@@ -136,7 +164,7 @@ describe("createLspBridge", () => {
   it("returns a no-op detach function for unsupported languages", () => {
     const sendCommand = vi.fn();
     const bridge = createLspBridge({
-      sendCommand,
+      sendCommand: sendCommand as BridgeSendCommand,
       subscribe: vi.fn(() => () => {}),
     });
 
@@ -155,22 +183,27 @@ describe("createLspBridge", () => {
 
   it("reuses one diagnostics subscription per workspace until the last model detaches", async () => {
     const readySummary = {
-      workspaceId: "ws-1",
-      serverKind: "typescript" as const,
-      status: "ready" as const,
-      capabilities: {
-        definition: true,
-        references: true,
-        hover: true,
-        documentSymbols: true,
-        diagnostics: true,
+      kind: "ready" as const,
+      displayName: "TypeScript language server",
+      source: "bundled" as const,
+      summary: {
+        workspaceId: "ws-1",
+        serverKind: "typescript" as const,
+        status: "ready" as const,
+        capabilities: {
+          definition: true,
+          references: true,
+          hover: true,
+          documentSymbols: true,
+          diagnostics: true,
+        },
       },
     };
 
     const unsubscribe = vi.fn();
     const subscribe = vi.fn(() => unsubscribe);
     const bridge = createLspBridge({
-      sendCommand: vi.fn().mockResolvedValue(readySummary),
+      sendCommand: vi.fn().mockResolvedValue(readySummary) as BridgeSendCommand,
       subscribe,
     });
 
@@ -201,33 +234,9 @@ describe("createLspBridge", () => {
   });
 
   it("does not reopen a document after it detaches before session startup completes", async () => {
-    let resolveEnsureSession:
-      | ((summary: {
-          workspaceId: string;
-          serverKind: "typescript";
-          status: "ready";
-          capabilities: {
-            definition: boolean;
-            references: boolean;
-            hover: boolean;
-            documentSymbols: boolean;
-            diagnostics: boolean;
-          };
-        }) => void)
-      | null = null;
+    let resolveEnsureSession: ResolveEnsureSession | null = null;
 
-    const ensureSession = new Promise<{
-      workspaceId: string;
-      serverKind: "typescript";
-      status: "ready";
-      capabilities: {
-        definition: boolean;
-        references: boolean;
-        hover: boolean;
-        documentSymbols: boolean;
-        diagnostics: boolean;
-      };
-    }>((resolve) => {
+    const ensureSession = new Promise<ReadyEnsureSessionResult>((resolve) => {
       resolveEnsureSession = resolve;
     });
 
@@ -240,7 +249,7 @@ describe("createLspBridge", () => {
     });
 
     const bridge = createLspBridge({
-      sendCommand,
+      sendCommand: sendCommand as BridgeSendCommand,
       subscribe: vi.fn(() => () => {}),
     });
 
@@ -261,18 +270,26 @@ describe("createLspBridge", () => {
       });
     });
 
-    resolveEnsureSession?.({
-      workspaceId: "ws-1",
-      serverKind: "typescript",
-      status: "ready",
-      capabilities: {
-        definition: true,
-        references: true,
-        hover: true,
-        documentSymbols: true,
-        diagnostics: true,
-      },
-    });
+    if (resolveEnsureSession) {
+      const resolveEnsureSessionFn: ResolveEnsureSession = resolveEnsureSession;
+      resolveEnsureSessionFn({
+        kind: "ready",
+        displayName: "TypeScript language server",
+        source: "bundled",
+        summary: {
+          workspaceId: "ws-1",
+          serverKind: "typescript",
+          status: "ready",
+          capabilities: {
+            definition: true,
+            references: true,
+            hover: true,
+            documentSymbols: true,
+            diagnostics: true,
+          },
+        },
+      });
+    }
 
     await Promise.resolve();
     await Promise.resolve();
@@ -282,19 +299,24 @@ describe("createLspBridge", () => {
 
   it("applies diagnostics against the latest workspace root path for a reused workspace subscription", async () => {
     const readySummary = {
-      workspaceId: "ws-1",
-      serverKind: "typescript" as const,
-      status: "ready" as const,
-      capabilities: {
-        definition: true,
-        references: true,
-        hover: true,
-        documentSymbols: true,
-        diagnostics: true,
+      kind: "ready" as const,
+      displayName: "TypeScript language server",
+      source: "bundled" as const,
+      summary: {
+        workspaceId: "ws-1",
+        serverKind: "typescript" as const,
+        status: "ready" as const,
+        capabilities: {
+          definition: true,
+          references: true,
+          hover: true,
+          documentSymbols: true,
+          diagnostics: true,
+        },
       },
     };
 
-    let handler: ((topic: string, payload: unknown) => void) | null = null;
+    let handler: BridgeEventHandler | null = null;
     const subscribe = vi.fn(
       (_topics: string[], nextHandler: (topic: string, payload: unknown) => void) => {
         handler = nextHandler;
@@ -326,7 +348,7 @@ describe("createLspBridge", () => {
     });
 
     const bridge = createLspBridge({
-      sendCommand: vi.fn().mockResolvedValue(readySummary),
+      sendCommand: vi.fn().mockResolvedValue(readySummary) as BridgeSendCommand,
       subscribe,
     });
 
@@ -349,24 +371,27 @@ describe("createLspBridge", () => {
       expect(subscribe).toHaveBeenCalledTimes(1);
     });
 
-    handler?.("workspace:ws-1:lsp-diagnostics", {
-      workspaceId: "ws-1",
-      serverKind: "typescript",
-      path: "src/a.ts",
-      version: 1,
-      diagnostics: [
-        {
-          message: "boom",
-          severity: "error",
-          range: {
-            startLine: 1,
-            startColumn: 1,
-            endLine: 1,
-            endColumn: 5,
+    if (handler) {
+      const diagnosticsHandler: BridgeEventHandler = handler;
+      diagnosticsHandler("workspace:ws-1:lsp-diagnostics", {
+        workspaceId: "ws-1",
+        serverKind: "typescript",
+        path: "src/a.ts",
+        version: 1,
+        diagnostics: [
+          {
+            message: "boom",
+            severity: "error",
+            range: {
+              startLine: 1,
+              startColumn: 1,
+              endLine: 1,
+              endColumn: 5,
+            },
           },
-        },
-      ],
-    });
+        ],
+      });
+    }
 
     expect(monaco.editor.setModelMarkers).toHaveBeenCalledTimes(1);
     expect(monaco.editor.setModelMarkers).toHaveBeenCalledWith(currentModel, "coder-studio-lsp", [
@@ -381,19 +406,24 @@ describe("createLspBridge", () => {
 
   it("re-subscribes workspace diagnostics when the transport subscribe function changes", async () => {
     const readySummary = {
-      workspaceId: "ws-1",
-      serverKind: "typescript" as const,
-      status: "ready" as const,
-      capabilities: {
-        definition: true,
-        references: true,
-        hover: true,
-        documentSymbols: true,
-        diagnostics: true,
+      kind: "ready" as const,
+      displayName: "TypeScript language server",
+      source: "bundled" as const,
+      summary: {
+        workspaceId: "ws-1",
+        serverKind: "typescript" as const,
+        status: "ready" as const,
+        capabilities: {
+          definition: true,
+          references: true,
+          hover: true,
+          documentSymbols: true,
+          diagnostics: true,
+        },
       },
     };
 
-    let nextHandler: ((topic: string, payload: unknown) => void) | null = null;
+    let nextHandler: BridgeEventHandler | null = null;
     const initialUnsubscribe = vi.fn();
     const initialSubscribe = vi.fn(
       (_topics: string[], handler: (topic: string, payload: unknown) => void) => {
@@ -416,7 +446,7 @@ describe("createLspBridge", () => {
     );
 
     const bridge = createLspBridge({
-      sendCommand: vi.fn().mockResolvedValue(readySummary),
+      sendCommand: vi.fn().mockResolvedValue(readySummary) as BridgeSendCommand,
       subscribe: initialSubscribe,
     });
 
@@ -439,24 +469,27 @@ describe("createLspBridge", () => {
     expect(initialUnsubscribe).toHaveBeenCalledTimes(1);
     expect(replacementSubscribe).toHaveBeenCalledTimes(1);
 
-    nextHandler?.("workspace:ws-1:lsp-diagnostics", {
-      workspaceId: "ws-1",
-      serverKind: "typescript",
-      path: "src/a.ts",
-      version: 1,
-      diagnostics: [
-        {
-          message: "reconnected",
-          severity: "error",
-          range: {
-            startLine: 1,
-            startColumn: 1,
-            endLine: 1,
-            endColumn: 5,
+    if (nextHandler) {
+      const replacementHandler: BridgeEventHandler = nextHandler;
+      replacementHandler("workspace:ws-1:lsp-diagnostics", {
+        workspaceId: "ws-1",
+        serverKind: "typescript",
+        path: "src/a.ts",
+        version: 1,
+        diagnostics: [
+          {
+            message: "reconnected",
+            severity: "error",
+            range: {
+              startLine: 1,
+              startColumn: 1,
+              endLine: 1,
+              endColumn: 5,
+            },
           },
-        },
-      ],
-    });
+        ],
+      });
+    }
 
     expect(monaco.editor.setModelMarkers).toHaveBeenCalledWith(model, "coder-studio-lsp", [
       expect.objectContaining({
@@ -466,5 +499,115 @@ describe("createLspBridge", () => {
 
     detach();
     expect(replacementUnsubscribe).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports tool_missing, installs, polls, and auto-opens after install succeeds", async () => {
+    const sendCommand = vi.fn(async (op: string) => {
+      if (op === "lsp.ensureSession") {
+        if (sendCommand.mock.calls.filter(([name]) => name === "lsp.ensureSession").length === 1) {
+          return {
+            kind: "tool_missing",
+            serverKind: "python",
+            displayName: "Python language server",
+            errorCode: "lsp_tool_missing",
+            message: "Python language server is not installed",
+            autoInstallSupported: true,
+            missingCommands: ["pylsp"],
+            missingPrerequisites: [],
+          };
+        }
+
+        return {
+          kind: "ready",
+          displayName: "Python language server",
+          source: "managed",
+          summary: {
+            workspaceId: "ws-1",
+            serverKind: "python",
+            status: "ready",
+            capabilities: {
+              definition: true,
+              references: true,
+              hover: true,
+              documentSymbols: true,
+              diagnostics: true,
+            },
+          },
+        };
+      }
+
+      if (op === "lsp.install.start") {
+        return {
+          jobId: "job-1",
+          serverKind: "python",
+          status: "queued",
+          currentStepId: "install-python-lsp",
+          steps: [
+            {
+              id: "install-python-lsp",
+              title: "Install python-lsp-server",
+              kind: "install",
+              status: "pending",
+              command: "python3",
+              args: ["-m", "pip", "install"],
+            },
+          ],
+        };
+      }
+
+      if (op === "lsp.install.get") {
+        return {
+          jobId: "job-1",
+          serverKind: "python",
+          status: "succeeded",
+          steps: [],
+        };
+      }
+
+      return undefined;
+    });
+
+    const stateChanges: Array<unknown> = [];
+    const bridge = createLspBridge({
+      sendCommand: sendCommand as BridgeSendCommand,
+      subscribe: vi.fn(() => () => {}),
+    });
+
+    const handle = bridge.attachModel(
+      {
+        workspaceId: "ws-1",
+        workspaceRootPath: "/repo",
+        path: "src/main.py",
+        monacoLanguage: "python",
+        model: createMockModel("print('hi')\n", 1, monaco.Uri.file("/repo/src/main.py")),
+      },
+      (state) => {
+        stateChanges.push(state);
+      }
+    );
+
+    await vi.waitFor(() => {
+      expect(stateChanges[0]).toMatchObject({
+        kind: "tool_missing",
+        serverKind: "python",
+      });
+    });
+
+    await handle.install();
+    await vi.advanceTimersByTimeAsync(1500);
+
+    await vi.waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith("lsp.install.start", {
+        workspaceId: "ws-1",
+        serverKind: "python",
+      });
+      expect(sendCommand).toHaveBeenCalledWith("lsp.install.get", { jobId: "job-1" });
+      expect(sendCommand).toHaveBeenCalledWith("lsp.openDocument", {
+        workspaceId: "ws-1",
+        path: "src/main.py",
+        languageId: "python",
+        text: "print('hi')\n",
+      });
+    });
   });
 });
