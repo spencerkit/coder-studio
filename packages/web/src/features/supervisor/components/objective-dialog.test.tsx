@@ -274,9 +274,8 @@ describe("ObjectiveDialog", () => {
     expect(leading).not.toBeNull();
     expect(icon).not.toBeNull();
     expect(copy).not.toBeNull();
-    expect(description).toHaveTextContent(
-      "Stop automatic evaluation. The current session's supervision cycles will be removed."
-    );
+    expect(copy).toHaveTextContent("Disable Supervisor");
+    expect(description).toBeNull();
     expect(closeButton).toHaveClass("modal-close");
   });
 
@@ -312,9 +311,8 @@ describe("ObjectiveDialog", () => {
     expect(leading).not.toBeNull();
     expect(icon).not.toBeNull();
     expect(copy).not.toBeNull();
-    expect(description).toHaveTextContent(
-      "Describe an objective and Supervisor will evaluate progress and suggest the next step after each turn."
-    );
+    expect(copy).toHaveTextContent("Enable Supervisor");
+    expect(description).toBeNull();
     expect(closeButton).toHaveClass("modal-close");
   });
 
