@@ -8104,8 +8104,7 @@ textarea.input {
   padding: 0;
 }
 
-.desktop-review-card .command-palette-overlay,
-.desktop-review-card .launch-overlay {
+.desktop-review-card .workbench-layer-backdrop {
   position: static;
   inset: auto;
   min-height: 100%;

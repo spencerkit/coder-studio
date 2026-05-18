@@ -1,5 +1,12 @@
 import { ArrowUp, X } from "lucide-react";
-import { EmptyState, IconButton, Sheet, Spinner, ThemedIcon } from "../../../../components/ui";
+import {
+  EmptyState,
+  IconButton,
+  Sheet,
+  Spinner,
+  ThemedIcon,
+  WorkbenchLayer,
+} from "../../../../components/ui";
 import { useViewport } from "../../../../hooks/use-viewport";
 import { useTranslation } from "../../../../lib/i18n";
 import { useWorkspaceLaunchActions } from "../../actions/use-workspace-launch-actions";
@@ -178,8 +185,16 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
   }
 
   return (
-    <div className="launch-overlay" onClick={onClose}>
-      <div className="launch-modal" onClick={(event) => event.stopPropagation()}>
+    <WorkbenchLayer
+      ariaLabel={launchTitle}
+      onOpenChange={(open) => {
+        if (!open) {
+          onClose();
+        }
+      }}
+      open
+    >
+      <div className="launch-modal">
         <div className="launch-header">
           <div className="launch-header-left">
             <div className="launch-kicker">{t("workspace.launch.kicker")}</div>
@@ -209,7 +224,7 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
           </button>
         </div>
       </div>
-    </div>
+    </WorkbenchLayer>
   );
 }
 
