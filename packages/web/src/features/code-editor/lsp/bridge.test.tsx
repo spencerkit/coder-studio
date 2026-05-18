@@ -161,6 +161,55 @@ describe("createLspBridge", () => {
     });
   });
 
+  it("uses the react TypeScript language id for tsx files", async () => {
+    const sendCommand = vi
+      .fn()
+      .mockResolvedValueOnce({
+        kind: "ready",
+        displayName: "TypeScript language server",
+        source: "bundled",
+        summary: {
+          workspaceId: "ws-1",
+          serverKind: "typescript",
+          status: "ready",
+          capabilities: {
+            definition: true,
+            references: true,
+            hover: true,
+            documentSymbols: true,
+            diagnostics: true,
+          },
+        },
+      })
+      .mockResolvedValue(undefined);
+
+    const bridge = createLspBridge({
+      sendCommand: sendCommand as BridgeSendCommand,
+      subscribe: vi.fn(() => () => {}),
+    });
+
+    bridge.attachModel({
+      workspaceId: "ws-1",
+      workspaceRootPath: "/repo",
+      path: "src/app.tsx",
+      monacoLanguage: "typescriptreact",
+      model: createMockModel(
+        "export function App() { return <div />; }\n",
+        1,
+        monaco.Uri.file("/repo/src/app.tsx")
+      ),
+    });
+
+    await vi.waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith("lsp.openDocument", {
+        workspaceId: "ws-1",
+        path: "src/app.tsx",
+        languageId: "typescriptreact",
+        text: "export function App() { return <div />; }\n",
+      });
+    });
+  });
+
   it("returns a no-op detach function for unsupported languages", () => {
     const sendCommand = vi.fn();
     const bridge = createLspBridge({

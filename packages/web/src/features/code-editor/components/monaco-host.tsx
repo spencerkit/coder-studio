@@ -67,10 +67,18 @@ interface MonacoTypeScriptLanguage {
   };
   javascriptDefaults: {
     setCompilerOptions(options: Record<string, unknown>): void;
+    setDiagnosticsOptions(options: {
+      noSemanticValidation?: boolean;
+      noSyntaxValidation?: boolean;
+    }): void;
     setEagerModelSync(value: boolean): void;
   };
   typescriptDefaults: {
     setCompilerOptions(options: Record<string, unknown>): void;
+    setDiagnosticsOptions(options: {
+      noSemanticValidation?: boolean;
+      noSyntaxValidation?: boolean;
+    }): void;
     setEagerModelSync(value: boolean): void;
   };
 }
@@ -141,7 +149,8 @@ export const MonacoHost: FC<MonacoHostProps> = ({
     workspaceRootPathRef.current = workspaceRootPath;
   }, [filePath, openLocation, workspaceId, workspaceRootPath]);
 
-  const language = detectLanguage(filePath);
+  const editorLanguage = detectEditorLanguage(filePath);
+  const lspLanguage = detectLspLanguage(filePath, editorLanguage);
   const resolvedTheme = getThemeById(uiTheme);
   const editorTheme = `coder-studio-${resolvedTheme.id}`;
 
@@ -194,7 +203,7 @@ export const MonacoHost: FC<MonacoHostProps> = ({
       const handle = monacoModelRegistry.getOrCreate({
         workspaceRootPath,
         path: filePath,
-        language,
+        language: editorLanguage,
         content,
       });
       if (editor.getModel() !== handle.model) {
@@ -204,18 +213,18 @@ export const MonacoHost: FC<MonacoHostProps> = ({
     }
 
     if (!standaloneModelRef.current) {
-      standaloneModelRef.current = monaco.editor.createModel(content, language);
+      standaloneModelRef.current = monaco.editor.createModel(content, editorLanguage);
     }
 
     const model = standaloneModelRef.current;
-    monaco.editor.setModelLanguage(model, language);
+    monaco.editor.setModelLanguage(model, editorLanguage);
     if (model.getValue() !== content) {
       model.setValue(content);
     }
     if (editor.getModel() !== model) {
       editor.setModel(model);
     }
-  }, [content, filePath, isWorkspaceBacked, language, workspaceRootPath]);
+  }, [content, editorLanguage, filePath, isWorkspaceBacked, workspaceRootPath]);
 
   useEffect(() => {
     monaco.editor.setTheme(editorTheme);
@@ -267,7 +276,7 @@ export const MonacoHost: FC<MonacoHostProps> = ({
         workspaceId,
         workspaceRootPath,
         path: filePath,
-        monacoLanguage: language,
+        monacoLanguage: lspLanguage,
         model,
       },
       setLspState
@@ -278,7 +287,7 @@ export const MonacoHost: FC<MonacoHostProps> = ({
       lspHandleRef.current = null;
       handle();
     };
-  }, [filePath, isWorkspaceBacked, language, workspaceId, workspaceRootPath]);
+  }, [filePath, isWorkspaceBacked, lspLanguage, workspaceId, workspaceRootPath]);
 
   const showLspNotice = isWorkspaceBacked && workspaceId && isNoticeLspState(lspState);
 
@@ -376,7 +385,7 @@ export const MonacoHost: FC<MonacoHostProps> = ({
 /**
  * Detect language from file extension
  */
-function detectLanguage(filePath: string): string {
+function detectEditorLanguage(filePath: string): string {
   const ext = filePath.split(".").pop()?.toLowerCase();
   const langMap: Record<string, string> = {
     ts: "typescript",
@@ -401,6 +410,18 @@ function detectLanguage(filePath: string): string {
   };
 
   return langMap[ext || ""] || "plaintext";
+}
+
+function detectLspLanguage(filePath: string, editorLanguage: string): string {
+  const ext = filePath.split(".").pop()?.toLowerCase();
+  if (ext === "tsx") {
+    return "typescriptreact";
+  }
+  if (ext === "jsx") {
+    return "javascriptreact";
+  }
+
+  return editorLanguage;
 }
 
 function applyPendingNavigation(
@@ -480,6 +501,14 @@ function configureJavaScriptTypeScriptDefaults(): void {
 
   typeScriptLanguage.typescriptDefaults.setCompilerOptions(sharedCompilerOptions);
   typeScriptLanguage.javascriptDefaults.setCompilerOptions(sharedCompilerOptions);
+  typeScriptLanguage.typescriptDefaults.setDiagnosticsOptions({
+    noSemanticValidation: true,
+    noSyntaxValidation: true,
+  });
+  typeScriptLanguage.javascriptDefaults.setDiagnosticsOptions({
+    noSemanticValidation: true,
+    noSyntaxValidation: true,
+  });
   typeScriptLanguage.typescriptDefaults.setEagerModelSync(true);
   typeScriptLanguage.javascriptDefaults.setEagerModelSync(true);
 }

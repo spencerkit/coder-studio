@@ -25,8 +25,10 @@ const {
   mockRegistryGetOrCreate,
   mockRegisterCodeEditorOpenHandler,
   mockSetJavaScriptCompilerOptions,
+  mockSetJavaScriptDiagnosticsOptions,
   mockSetJavaScriptEagerModelSync,
   mockSetTypeScriptCompilerOptions,
+  mockSetTypeScriptDiagnosticsOptions,
   mockSetTypeScriptEagerModelSync,
   modelState,
   modelChangeListenerState,
@@ -134,6 +136,8 @@ const {
   );
   const mockSetTypeScriptCompilerOptions = vi.fn();
   const mockSetJavaScriptCompilerOptions = vi.fn();
+  const mockSetTypeScriptDiagnosticsOptions = vi.fn();
+  const mockSetJavaScriptDiagnosticsOptions = vi.fn();
   const mockSetTypeScriptEagerModelSync = vi.fn();
   const mockSetJavaScriptEagerModelSync = vi.fn();
   const mockConfigureLspBridge = vi.fn();
@@ -165,8 +169,10 @@ const {
     mockRegistryGetOrCreate,
     mockRegisterCodeEditorOpenHandler,
     mockSetJavaScriptCompilerOptions,
+    mockSetJavaScriptDiagnosticsOptions,
     mockSetJavaScriptEagerModelSync,
     mockSetTypeScriptCompilerOptions,
+    mockSetTypeScriptDiagnosticsOptions,
     mockSetTypeScriptEagerModelSync,
     modelState,
     modelChangeListenerState,
@@ -216,10 +222,12 @@ vi.mock("monaco-editor", () => ({
       },
       javascriptDefaults: {
         setCompilerOptions: mockSetJavaScriptCompilerOptions,
+        setDiagnosticsOptions: mockSetJavaScriptDiagnosticsOptions,
         setEagerModelSync: mockSetJavaScriptEagerModelSync,
       },
       typescriptDefaults: {
         setCompilerOptions: mockSetTypeScriptCompilerOptions,
+        setDiagnosticsOptions: mockSetTypeScriptDiagnosticsOptions,
         setEagerModelSync: mockSetTypeScriptEagerModelSync,
       },
     },
@@ -297,6 +305,14 @@ describe("MonacoHost", () => {
     );
     expect(mockSetTypeScriptEagerModelSync).toHaveBeenCalledWith(true);
     expect(mockSetJavaScriptEagerModelSync).toHaveBeenCalledWith(true);
+    expect(mockSetTypeScriptDiagnosticsOptions).toHaveBeenCalledWith({
+      noSemanticValidation: true,
+      noSyntaxValidation: true,
+    });
+    expect(mockSetJavaScriptDiagnosticsOptions).toHaveBeenCalledWith({
+      noSemanticValidation: true,
+      noSyntaxValidation: true,
+    });
   });
 
   it("creates the editor with a named Monaco theme when ui theme is mint-light", async () => {
@@ -469,6 +485,32 @@ describe("MonacoHost", () => {
           workspaceRootPath: "/repo",
           path: "src/example.ts",
           monacoLanguage: "typescript",
+          model: workspaceModelA,
+        },
+        expect.any(Function)
+      );
+    });
+  });
+
+  it("attaches tsx workspace-backed models with the react TypeScript language id", async () => {
+    render(
+      <Provider store={createStore()}>
+        <MonacoHost
+          workspaceId="ws-test"
+          workspaceRootPath="/repo"
+          filePath="src/app.tsx"
+          content="export function App() { return <div />; }"
+        />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(mockAttachLspBridgeModel).toHaveBeenCalledWith(
+        {
+          workspaceId: "ws-test",
+          workspaceRootPath: "/repo",
+          path: "src/app.tsx",
+          monacoLanguage: "typescriptreact",
           model: workspaceModelA,
         },
         expect.any(Function)
