@@ -1,5 +1,13 @@
 import { Topics } from "@coder-studio/core";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createStore, Provider } from "jotai";
 import { type ReactNode, useState } from "react";
@@ -7,10 +15,18 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../../atoms/app-ui";
 import { wsClientAtom } from "../../../atoms/connection";
+import { activeWorkspaceIdAtom } from "../../../atoms/workspaces";
 import { seedReadyWorkspaceState } from "../../../test-utils/workspace-state";
 import { toastsAtom } from "../../notifications";
 import { bottomPanelHeightAtom } from "../../workspace/atoms";
-import { type TerminalMeta, terminalMetaAtomFamily, terminalOutputAtomFamily } from "../atoms";
+import { useTerminalActions } from "../actions/use-terminal-actions";
+import {
+  type TerminalMeta,
+  terminalActiveIdAtomFamily,
+  terminalIdsAtomFamily,
+  terminalMetaAtomFamily,
+  terminalOutputAtomFamily,
+} from "../atoms";
 import { TerminalPanel } from "../views/shared/terminal-panel";
 
 const mockXtermHost = vi.fn(
@@ -199,6 +215,8 @@ describe("TerminalPanel", () => {
         terminalKind: "shell",
       })
     );
+    expect(store.get(terminalIdsAtomFamily("ws-test"))).toEqual(["term_2"]);
+    expect(store.get(terminalActiveIdAtomFamily("ws-test"))).toBe("term_2");
     expect(consoleSpy).not.toHaveBeenCalled();
   });
 
@@ -537,6 +555,120 @@ describe("TerminalPanel", () => {
     expect(
       (emptyPanel as HTMLElement).querySelector('[data-icon-semantic="terminal.action.new"]')
     ).toBeTruthy();
+  });
+
+  it("mutates the current workspace terminal state after switching workspaces", async () => {
+    const store = createStore();
+    const subscribe = vi.fn(() => () => {});
+    const sendCommand = vi
+      .fn()
+      .mockImplementation((op: string, args?: { workspaceId?: string }) => {
+        if (op === "terminal.list") {
+          if (args?.workspaceId === "ws-2") {
+            return Promise.resolve([
+              {
+                id: "term-2a",
+                workspaceId: "ws-2",
+                kind: "shell",
+                title: "Workspace Shell 2",
+                cwd: "/tmp/ws-2",
+                argv: ["/bin/bash"],
+                cols: 120,
+                rows: 30,
+                alive: true,
+                createdAt: 2,
+              },
+            ]);
+          }
+
+          return Promise.resolve([
+            {
+              id: "term-1a",
+              workspaceId: "ws-1",
+              kind: "shell",
+              title: "Workspace Shell 1",
+              cwd: "/tmp/ws-1",
+              argv: ["/bin/bash"],
+              cols: 120,
+              rows: 30,
+              alive: true,
+              createdAt: 1,
+            },
+          ]);
+        }
+
+        if (op === "terminal.close") {
+          return Promise.resolve(true);
+        }
+
+        return Promise.resolve(undefined);
+      });
+
+    seedReadyWorkspaceState(store, {
+      "ws-1": {
+        id: "ws-1",
+        path: "/tmp/ws-1",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+      "ws-2": {
+        id: "ws-2",
+        path: "/tmp/ws-2",
+        targetRuntime: "native",
+        openedAt: 2,
+        lastActiveAt: 2,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+    store.set(activeWorkspaceIdAtom, "ws-1");
+    store.set(bottomPanelHeightAtom, 240);
+    setEnglishLocale(store);
+    store.set(wsClientAtom, { subscribe, sendCommand } as never);
+
+    const { result, rerender } = renderHook(() => useTerminalActions(), {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <Provider store={store}>{children}</Provider>
+      ),
+    });
+
+    await waitFor(() => {
+      expect(store.get(terminalIdsAtomFamily("ws-1"))).toEqual(["term-1a"]);
+      expect(store.get(terminalActiveIdAtomFamily("ws-1"))).toBe("term-1a");
+    });
+
+    await act(async () => {
+      store.set(activeWorkspaceIdAtom, "ws-2");
+      rerender();
+    });
+
+    await waitFor(() => {
+      expect(store.get(terminalIdsAtomFamily("ws-2"))).toEqual(["term-2a"]);
+      expect(store.get(terminalActiveIdAtomFamily("ws-2"))).toBe("term-2a");
+    });
+
+    await act(async () => {
+      await result.current.handleCloseTerminal("term-2a");
+    });
+
+    expect(sendCommand).toHaveBeenCalledWith(
+      "terminal.close",
+      { terminalId: "term-2a" },
+      undefined
+    );
+    expect(store.get(terminalIdsAtomFamily("ws-1"))).toEqual(["term-1a"]);
+    expect(store.get(terminalActiveIdAtomFamily("ws-1"))).toBe("term-1a");
+    expect(store.get(terminalIdsAtomFamily("ws-2"))).toEqual([]);
+    expect(store.get(terminalActiveIdAtomFamily("ws-2"))).toBeNull();
   });
 
   it("caches terminal output to atom for shell terminals before xterm-host subscribes", async () => {

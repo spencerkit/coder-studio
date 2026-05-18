@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { wsClientAtom } from "../../../../atoms/connection";
@@ -13,10 +13,21 @@ import {
 } from "../../atoms";
 import { FileTreePanel } from "./file-tree-panel";
 
+const { copyTextWithFallbackMock } = vi.hoisted(() => ({
+  copyTextWithFallbackMock: vi.fn(() => Promise.resolve()),
+}));
+
+vi.mock("../../../../lib/clipboard", () => ({
+  copyTextWithFallback: copyTextWithFallbackMock,
+}));
+
 vi.mock("../../../../lib/i18n", () => ({
   useTranslation: () => (key: string, params?: Record<string, string | number>) => {
     if (key === "file.delete_confirm") {
       return `Are you sure you want to delete "${params?.name ?? ""}"?`;
+    }
+    if (key === "mobile.sheet.region") {
+      return `${params?.title ?? ""} sheet`;
     }
     if (key === "action.cancel") return "Cancel";
     if (key === "action.confirm") return "Confirm";
@@ -27,6 +38,8 @@ vi.mock("../../../../lib/i18n", () => ({
 describe("FileTreePanel", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    copyTextWithFallbackMock.mockReset();
+    copyTextWithFallbackMock.mockResolvedValue(undefined);
   });
 
   it("clears the stale flag after reloading the file tree for an fs.dirty event", async () => {
@@ -846,19 +859,21 @@ describe("FileTreePanel", () => {
 
   it("collapses expanded directories when the external collapse trigger changes", () => {
     const store = createStore();
-    const sendCommand = vi.fn().mockImplementation(async (op: string, args: any) => {
-      if (op === "workspace.uiState.set") {
-        return {
-          id: "ws-test",
-          path: "/workspace",
-          targetRuntime: "native",
-          openedAt: 1,
-          lastActiveAt: 1,
-          uiState: args.uiState,
-        };
-      }
-      return { path: "/workspace", children: [] };
-    });
+    const sendCommand = vi
+      .fn()
+      .mockImplementation(async (op: string, args: { uiState?: Record<string, unknown> }) => {
+        if (op === "workspace.uiState.set") {
+          return {
+            id: "ws-test",
+            path: "/workspace",
+            targetRuntime: "native",
+            openedAt: 1,
+            lastActiveAt: 1,
+            uiState: args.uiState,
+          };
+        }
+        return { path: "/workspace", children: [] };
+      });
     store.set(wsClientAtom, { sendCommand } as never);
     store.set(workspacesAtom, {
       "ws-test": {
@@ -1109,7 +1124,46 @@ describe("FileTreePanel", () => {
     expect(activeRow?.querySelector(".tree-item-actions")).toBeTruthy();
   });
 
-  it("uses shared tooltip behavior for the search result delete action", async () => {
+  it("right-clicks a file row to open the custom menu and prevents the native menu", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({ ok: true });
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(
+      fileTreeAtomFamily("ws-test"),
+      new Map([
+        [
+          ".",
+          [
+            {
+              path: "src/app.tsx",
+              name: "app.tsx",
+              kind: "file",
+            },
+          ],
+        ],
+      ])
+    );
+    const onSelectFile = vi.fn();
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" onSelectFile={onSelectFile} />
+      </Provider>
+    );
+
+    const row = screen.getByText("app.tsx").closest(".tree-item");
+    expect(row).toBeTruthy();
+
+    fireEvent.contextMenu(row!, { clientX: 90, clientY: 120 });
+    expect(onSelectFile).toHaveBeenCalledWith("src/app.tsx");
+    expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/app.tsx");
+
+    const menu = await screen.findByRole("menu", { name: "file.context_menu_title" });
+    expect(menu).toBeInTheDocument();
+    expect(within(menu).getByRole("menuitem", { name: "Rename" })).toBeInTheDocument();
+  });
+
+  it("right-clicks a search result row to open the same custom menu", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string, args: { query?: string }) => {
       if (op === "file.search") {
         const query = args.query?.toLowerCase() ?? "";
@@ -1136,25 +1190,239 @@ describe("FileTreePanel", () => {
       target: { value: "app" },
     });
 
-    const deleteButton = await screen.findByRole("button", {
-      name: "file.delete src/app.tsx",
-    });
-    expect(deleteButton).toHaveClass("btn", "btn-ghost", "btn-sm", "git-row-action");
-    expect(deleteButton).not.toHaveAttribute("title");
+    const searchRow = (await screen.findByText("app.tsx")).closest(".tree-item");
+    expect(searchRow).toBeTruthy();
 
-    fireEvent.mouseEnter(deleteButton);
-
-    const tooltip = screen.getByRole("tooltip");
-    expect(tooltip).toHaveTextContent("file.delete");
-    expect(deleteButton).toHaveAttribute("aria-describedby", tooltip.getAttribute("id") ?? "");
-
-    fireEvent.click(deleteButton);
-
-    expect(onSelectFile).not.toHaveBeenCalled();
-    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    fireEvent.contextMenu(searchRow!, { clientX: 120, clientY: 80 });
+    expect(onSelectFile).toHaveBeenCalledWith("src/app.tsx");
+    expect(
+      await screen.findByRole("menu", { name: "file.context_menu_title" })
+    ).toBeInTheDocument();
   });
 
-  it("uses shared tooltips for file-tree action triggers without showing row path labels", () => {
+  it("opens the rename modal from the context menu and submits file.rename", async () => {
+    const sendCommand = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true })
+      .mockResolvedValueOnce({
+        path: "/workspace",
+        children: [
+          {
+            path: "src/renamed.tsx",
+            name: "renamed.tsx",
+            kind: "file",
+          },
+        ],
+      });
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(
+      fileTreeAtomFamily("ws-test"),
+      new Map([
+        [
+          ".",
+          [
+            {
+              path: "src/app.tsx",
+              name: "app.tsx",
+              kind: "file",
+            },
+          ],
+        ],
+      ])
+    );
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    fireEvent.contextMenu(screen.getByText("app.tsx").closest(".tree-item")!, {
+      clientX: 120,
+      clientY: 80,
+    });
+
+    const menu = await screen.findByRole("menu", { name: "file.context_menu_title" });
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Rename" }));
+
+    const input = await screen.findByLabelText("file.rename_name");
+    expect(input).toHaveValue("app.tsx");
+
+    fireEvent.change(input, { target: { value: "renamed.tsx" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenNthCalledWith(
+        1,
+        "file.rename",
+        {
+          workspaceId: "ws-test",
+          fromPath: "src/app.tsx",
+          toPath: "src/renamed.tsx",
+        },
+        undefined
+      );
+    });
+  });
+
+  it("copies relative and absolute paths from the context menu", async () => {
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand: vi.fn().mockResolvedValue({ ok: true }) } as never);
+    store.set(workspacesAtom, {
+      "ws-test": {
+        id: "ws-test",
+        path: "/workspace",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    } as never);
+    store.set(
+      fileTreeAtomFamily("ws-test"),
+      new Map([
+        [
+          ".",
+          [
+            {
+              path: "src/app.tsx",
+              name: "app.tsx",
+              kind: "file",
+            },
+          ],
+        ],
+      ])
+    );
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    fireEvent.contextMenu(screen.getByText("app.tsx").closest(".tree-item")!, {
+      clientX: 120,
+      clientY: 80,
+    });
+
+    let menu = await screen.findByRole("menu", { name: "file.context_menu_title" });
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Copy Relative Path" }));
+    expect(copyTextWithFallbackMock).toHaveBeenCalledWith("src/app.tsx");
+    await waitFor(() => {
+      expect(screen.queryByRole("menu", { name: "file.context_menu_title" })).toBeNull();
+    });
+
+    fireEvent.contextMenu(screen.getByText("app.tsx").closest(".tree-item")!, {
+      clientX: 120,
+      clientY: 80,
+    });
+
+    menu = await screen.findByRole("menu", { name: "file.context_menu_title" });
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Copy Absolute Path" }));
+    expect(copyTextWithFallbackMock).toHaveBeenCalledWith("/workspace/src/app.tsx");
+  });
+
+  it("opens a terminal from the context menu with root-vs-folder cwd behavior", async () => {
+    const sendCommand = vi
+      .fn()
+      .mockResolvedValue({
+        ok: true,
+        data: {
+          id: "term-1",
+          workspaceId: "ws-test",
+          kind: "shell",
+          alive: true,
+          exitCode: null,
+          title: "Shell",
+        },
+      })
+      .mockImplementation(async (op: string, args: Record<string, unknown>) => {
+        if (op === "terminal.create") {
+          return {
+            id: `${String(args.cwdPath ?? "root")}-terminal`,
+            workspaceId: "ws-test",
+            kind: "shell",
+            alive: true,
+            exitCode: null,
+            title: "Shell",
+          };
+        }
+
+        return { ok: true };
+      });
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(
+      fileTreeAtomFamily("ws-test"),
+      new Map([
+        [
+          ".",
+          [
+            {
+              path: "src",
+              name: "src",
+              kind: "dir",
+              children: [],
+            },
+            {
+              path: "README.md",
+              name: "README.md",
+              kind: "file",
+            },
+          ],
+        ],
+      ])
+    );
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    fireEvent.contextMenu(screen.getByText("src").closest(".tree-item")!, {
+      clientX: 80,
+      clientY: 80,
+    });
+    let menu = await screen.findByRole("menu", { name: "file.context_menu_title" });
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Open in Terminal" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "terminal.create",
+        {
+          workspaceId: "ws-test",
+          cwdPath: "src",
+        },
+        undefined
+      );
+    });
+
+    fireEvent.contextMenu(screen.getByText("README.md").closest(".tree-item")!, {
+      clientX: 80,
+      clientY: 80,
+    });
+    menu = await screen.findByRole("menu", { name: "file.context_menu_title" });
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Open in Terminal" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "terminal.create",
+        {
+          workspaceId: "ws-test",
+          cwdPath: undefined,
+        },
+        undefined
+      );
+    });
+  });
+
+  it("shows desktop row-action visibility changes for file and folder rows", () => {
     const store = createStore();
     store.set(wsClientAtom, { sendCommand: vi.fn().mockResolvedValue({}) } as never);
     store.set(
@@ -1185,48 +1453,12 @@ describe("FileTreePanel", () => {
       </Provider>
     );
 
-    const newFileButton = screen.getByRole("button", { name: "file.new_file src" });
-    const newFolderButton = screen.getByRole("button", { name: "file.new_folder src" });
-    const deleteDirectoryButton = screen.getByRole("button", { name: "file.delete src" });
-    const deleteFileButton = screen.getByRole("button", { name: "file.delete src/app.tsx" });
-
-    expect(newFileButton).toHaveClass("btn", "btn-ghost", "btn-sm", "git-row-action");
-    expect(newFolderButton).toHaveClass("btn", "btn-ghost", "btn-sm", "git-row-action");
-    expect(deleteDirectoryButton).toHaveClass("btn", "btn-ghost", "btn-sm", "git-row-action");
-    expect(deleteFileButton).toHaveClass("btn", "btn-ghost", "btn-sm", "git-row-action");
-    expect(newFileButton).not.toHaveAttribute("title");
-    expect(newFolderButton).not.toHaveAttribute("title");
-    expect(deleteDirectoryButton).not.toHaveAttribute("title");
-    expect(deleteFileButton).not.toHaveAttribute("title");
-    const directoryLabel = screen.getByText("src");
-    const fileLabel = screen.getByText("app.tsx");
-    expect(directoryLabel).not.toHaveAttribute("title");
-    expect(fileLabel).not.toHaveAttribute("title");
-    expect(directoryLabel.closest(".tree-item")).not.toHaveAttribute("title");
-    expect(fileLabel.closest(".tree-item")).not.toHaveAttribute("title");
-
-    fireEvent.mouseEnter(newFileButton);
-    expect(screen.getByRole("tooltip")).toHaveTextContent("file.new_file");
-
-    fireEvent.mouseLeave(newFileButton);
-    fireEvent.mouseEnter(newFolderButton);
-    expect(screen.getByRole("tooltip")).toHaveTextContent("file.new_folder");
-
-    fireEvent.mouseLeave(newFolderButton);
-    fireEvent.mouseEnter(deleteDirectoryButton);
-    expect(screen.getByRole("tooltip")).toHaveTextContent("file.delete");
-
-    fireEvent.mouseLeave(deleteDirectoryButton);
-    fireEvent.mouseEnter(deleteFileButton);
-    expect(screen.getByRole("tooltip")).toHaveTextContent("file.delete");
-
-    fireEvent.mouseLeave(deleteFileButton);
-    fireEvent.mouseEnter(directoryLabel);
-    expect(screen.queryByRole("tooltip")).toBeNull();
-
-    fireEvent.mouseLeave(directoryLabel);
-    fireEvent.mouseEnter(fileLabel);
-    expect(screen.queryByRole("tooltip")).toBeNull();
+    expect(screen.getByRole("button", { name: "file.new_file src" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "file.new_folder src" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "file.delete src" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "file.delete src/app.tsx" })
+    ).not.toBeInTheDocument();
   });
 
   it("keeps expanded directories populated after refreshing the file tree", async () => {
@@ -1390,7 +1622,7 @@ describe("FileTreePanel", () => {
     expect(await screen.findByText("index.ts")).toBeInTheDocument();
   });
 
-  it("reloads the file tree after deleting a file", async () => {
+  it("reloads the file tree after deleting a file from the context menu", async () => {
     const sendCommand = vi.fn().mockResolvedValueOnce({ ok: true }).mockResolvedValueOnce({
       path: "/workspace",
       children: [],
@@ -1419,7 +1651,12 @@ describe("FileTreePanel", () => {
       </Provider>
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "file.delete src/app.tsx" }));
+    fireEvent.contextMenu(screen.getByText("app.tsx").closest(".tree-item")!, {
+      clientX: 100,
+      clientY: 100,
+    });
+    const menu = await screen.findByRole("menu", { name: "file.context_menu_title" });
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Delete" }));
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
     fireEvent.click(await screen.findByRole("button", { name: "Confirm" }));
 
@@ -1451,7 +1688,7 @@ describe("FileTreePanel", () => {
     });
   });
 
-  it("confirms directory deletion and reloads the file tree", async () => {
+  it("confirms directory deletion and reloads the file tree from the context menu", async () => {
     const sendCommand = vi.fn().mockResolvedValueOnce({ ok: true }).mockResolvedValueOnce({
       path: "/workspace",
       children: [],
@@ -1481,7 +1718,12 @@ describe("FileTreePanel", () => {
       </Provider>
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "file.delete src" }));
+    fireEvent.contextMenu(screen.getByText("src").closest(".tree-item")!, {
+      clientX: 100,
+      clientY: 100,
+    });
+    const menu = await screen.findByRole("menu", { name: "file.context_menu_title" });
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Delete" }));
 
     const dialog = await screen.findByRole("dialog");
     expect(dialog).toBeInTheDocument();
@@ -1565,7 +1807,12 @@ describe("FileTreePanel", () => {
       </Provider>
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "file.delete src/app.tsx" }));
+    fireEvent.contextMenu(screen.getByText("app.tsx").closest(".tree-item")!, {
+      clientX: 100,
+      clientY: 100,
+    });
+    const menu = await screen.findByRole("menu", { name: "file.context_menu_title" });
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Delete" }));
 
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
     expect(
@@ -1621,9 +1868,133 @@ describe("FileTreePanel", () => {
     expect(document.querySelector(".git-panel-status-strip")).toBeNull();
     expect(document.querySelector(".file-tree-status-strip")).toBeNull();
     expect(screen.queryByText("file.visible_count")).toBeNull();
+    expect(document.querySelector(".tree-item-actions")).toBeNull();
   });
 
-  it("requires explicit confirmation before deleting a file", async () => {
+  it("opens the mobile action sheet on long press but not on ordinary tap", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({ ok: true });
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(
+      fileTreeAtomFamily("ws-test"),
+      new Map([
+        [
+          ".",
+          [
+            {
+              path: "src/app.tsx",
+              name: "app.tsx",
+              kind: "file",
+            },
+          ],
+        ],
+      ])
+    );
+    const onSelectFile = vi.fn();
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" variant="mobile" onSelectFile={onSelectFile} />
+      </Provider>
+    );
+
+    const row = screen.getByText("app.tsx").closest(".tree-item");
+    expect(row).toBeTruthy();
+
+    vi.useFakeTimers();
+    fireEvent.pointerDown(row!, {
+      pointerId: 1,
+      pointerType: "touch",
+      clientX: 30,
+      clientY: 30,
+    });
+    fireEvent.pointerUp(row!, {
+      pointerId: 1,
+      pointerType: "touch",
+      clientX: 30,
+      clientY: 30,
+    });
+    fireEvent.click(row!);
+
+    expect(onSelectFile).toHaveBeenCalledWith("src/app.tsx");
+    expect(screen.queryByRole("region", { name: "file.context_menu_title sheet" })).toBeNull();
+
+    onSelectFile.mockClear();
+
+    fireEvent.pointerDown(row!, {
+      pointerId: 2,
+      pointerType: "touch",
+      clientX: 30,
+      clientY: 30,
+    });
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+    expect(
+      screen.getByRole("region", { name: "file.context_menu_title sheet" })
+    ).toBeInTheDocument();
+
+    fireEvent.pointerUp(row!, {
+      pointerId: 2,
+      pointerType: "touch",
+      clientX: 30,
+      clientY: 30,
+    });
+    fireEvent.click(row!);
+    expect(onSelectFile).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it("cancels a mobile long press when the pointer moves before timeout", () => {
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand: vi.fn().mockResolvedValue({ ok: true }) } as never);
+    store.set(
+      fileTreeAtomFamily("ws-test"),
+      new Map([
+        [
+          ".",
+          [
+            {
+              path: "src/app.tsx",
+              name: "app.tsx",
+              kind: "file",
+            },
+          ],
+        ],
+      ])
+    );
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" variant="mobile" />
+      </Provider>
+    );
+
+    const row = screen.getByText("app.tsx").closest(".tree-item");
+    expect(row).toBeTruthy();
+
+    vi.useFakeTimers();
+    fireEvent.pointerDown(row!, {
+      pointerId: 1,
+      pointerType: "touch",
+      clientX: 10,
+      clientY: 10,
+    });
+    fireEvent.pointerMove(row!, {
+      pointerId: 1,
+      pointerType: "touch",
+      clientX: 40,
+      clientY: 10,
+    });
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+
+    expect(screen.queryByRole("region", { name: "file.context_menu_title sheet" })).toBeNull();
+    vi.useRealTimers();
+  });
+
+  it("requires explicit confirmation before deleting a file from the context menu", async () => {
     const sendCommand = vi.fn().mockResolvedValue({ ok: true });
     const store = createStore();
     store.set(wsClientAtom, { sendCommand } as never);
@@ -1649,7 +2020,12 @@ describe("FileTreePanel", () => {
       </Provider>
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "file.delete src/app.tsx" }));
+    fireEvent.contextMenu(screen.getByText("app.tsx").closest(".tree-item")!, {
+      clientX: 100,
+      clientY: 100,
+    });
+    const menu = await screen.findByRole("menu", { name: "file.context_menu_title" });
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Delete" }));
 
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Confirm" })).toHaveClass("btn", "btn-danger");

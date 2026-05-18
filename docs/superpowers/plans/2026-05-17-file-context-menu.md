@@ -106,7 +106,7 @@ it("renames directories recursively", async () => {
   expect(await fsReadFile(join(testDir, "guides", "src-note.md"), "utf-8")).toBe("note\n");
 });
 
-it("rejects colliding or escaping rename targets", async () => {
+it("rejects colliding, cross-directory, or escaping rename targets", async () => {
   const collision = await dispatch(
     {
       kind: "command",
@@ -121,10 +121,24 @@ it("rejects colliding or escaping rename targets", async () => {
     ctx
   );
 
-  const escaped = await dispatch(
+  const crossDirectory = await dispatch(
     {
       kind: "command",
       id: "file-rename-4",
+      op: "file.rename",
+      args: {
+        workspaceId,
+        fromPath: "README.md",
+        toPath: "docs/README.md",
+      },
+    },
+    ctx
+  );
+
+  const escaped = await dispatch(
+    {
+      kind: "command",
+      id: "file-rename-5",
       op: "file.rename",
       args: {
         workspaceId,
@@ -137,6 +151,8 @@ it("rejects colliding or escaping rename targets", async () => {
 
   expect(collision.ok).toBe(false);
   expect(collision.error).toMatchObject({ code: "already_exists" });
+  expect(crossDirectory.ok).toBe(false);
+  expect(crossDirectory.error).toMatchObject({ code: "rename_across_directories_not_supported" });
   expect(escaped.ok).toBe(false);
   expect(escaped.error).toMatchObject({ code: "path_escape" });
 });
@@ -161,10 +177,10 @@ import {
   readFile as fsReadFile,
   rename as fsRename,
   writeFile as fsWriteFile,
-  mkdir,
   rm,
   stat,
 } from "fs/promises";
+import { dirname } from "path";
 
 export async function renameEntry(
   rootPath: string,
@@ -175,16 +191,24 @@ export async function renameEntry(
   const toAbs = resolveSafe(rootPath, toPath);
   const source = await statSafe(fromAbs);
   const target = await statSafe(toAbs);
+  const fromParent = dirname(fromPath);
+  const toParent = dirname(toPath);
 
   if (!source) {
     throw { code: "not_found", message: "Source not found" };
+  }
+
+  if (fromParent !== toParent) {
+    throw {
+      code: "rename_across_directories_not_supported",
+      message: "Rename must stay within the current directory",
+    };
   }
 
   if (target) {
     throw { code: "already_exists", message: "Target already exists" };
   }
 
-  await mkdir(dirname(toAbs), { recursive: true });
   await fsRename(fromAbs, toAbs);
 }
 ```
@@ -468,6 +492,7 @@ import { createStore, Provider } from "jotai";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../../atoms/app-ui";
+import { CommandResultError } from "../../../ws/client";
 import { wsClientAtom } from "../../../atoms/connection";
 import { toastsAtom } from "../../notifications/atoms";
 import {
@@ -528,8 +553,10 @@ it("creates a shell terminal, stores it under the workspace, and activates it im
   });
 });
 
-it("shows an error toast and leaves terminal atoms unchanged when creation fails", async () => {
-  const sendCommand = vi.fn().mockRejectedValue(new Error("spawn failed"));
+it("shows an error toast and leaves terminal atoms unchanged when terminal.create returns a command error", async () => {
+  const sendCommand = vi.fn().mockRejectedValue(
+    new CommandResultError("terminal_spawn_failed", "spawn failed")
+  );
   const store = createStore();
   store.set(localeAtom, "en");
   store.set(wsClientAtom, { sendCommand } as never);
@@ -589,7 +616,7 @@ Create `packages/web/src/features/terminal-panel/actions/use-create-shell-termin
 ```ts
 import type { Terminal as TerminalDto } from "@coder-studio/core";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
-import { dispatchCommandAtom } from "../../../atoms/connection";
+import { dispatchCommandAtom, type CommandResult } from "../../../atoms/connection";
 import { useTranslation } from "../../../lib/i18n";
 import { pushToastAtom } from "../../notifications/atoms";
 import {
@@ -629,7 +656,16 @@ export function useCreateShellTerminal(workspaceId: string | null) {
       const result = await dispatch<TerminalDto>("terminal.create", {
         workspaceId,
         cwdPath: args.cwdPath,
-      });
+      }).catch(
+        (error) =>
+          ({
+            ok: false,
+            error: {
+              code: "command_error",
+              message: error instanceof Error ? error.message : t("terminal.create_failed_body"),
+            },
+          }) satisfies CommandResult<TerminalDto>
+      );
 
       if (!result.ok || !result.data) {
         pushToast({
@@ -1493,6 +1529,19 @@ Continue the same file with long-press open/cancel behavior:
     suppressNextClickRef.current = false;
     return suppressed;
   }, []);
+
+  return {
+    contextTarget,
+    desktopAnchorPoint,
+    mobileOpen,
+    isOpen: Boolean(desktopAnchorPoint) || mobileOpen,
+    closeMenu,
+    openDesktopMenu,
+    beginLongPress,
+    updateLongPress,
+    cancelLongPress,
+    consumeSuppressedClick,
+  };
 ```
 
 - [ ] **Step 4: Implement the dedicated desktop menu and mobile sheet**

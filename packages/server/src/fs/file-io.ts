@@ -3,7 +3,14 @@
  */
 
 import { createHash } from "crypto";
-import { readFile as fsReadFile, writeFile as fsWriteFile, mkdir, rm, stat } from "fs/promises";
+import {
+  readFile as fsReadFile,
+  rename as fsRename,
+  writeFile as fsWriteFile,
+  mkdir,
+  rm,
+  stat,
+} from "fs/promises";
 import { dirname, isAbsolute, relative, resolve } from "path";
 import { getImageTypeInfo } from "./image.js";
 
@@ -76,6 +83,36 @@ export async function deleteEntry(rootPath: string, relPath: string): Promise<vo
   }
 
   await rm(abs, { recursive: true });
+}
+
+export async function renameEntry(
+  rootPath: string,
+  fromPath: string,
+  toPath: string
+): Promise<void> {
+  const fromAbs = resolveSafe(rootPath, fromPath);
+  const toAbs = resolveSafe(rootPath, toPath);
+  const source = await statSafe(fromAbs);
+  const target = await statSafe(toAbs);
+  const fromParent = dirname(fromAbs);
+  const toParent = dirname(toAbs);
+
+  if (!source) {
+    throw { code: "not_found", message: "Source not found" };
+  }
+
+  if (fromParent !== toParent) {
+    throw {
+      code: "rename_across_directories_not_supported",
+      message: "Rename must stay within the current directory",
+    };
+  }
+
+  if (target) {
+    throw { code: "already_exists", message: "Target already exists" };
+  }
+
+  await fsRename(fromAbs, toAbs);
 }
 
 /**
