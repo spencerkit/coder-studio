@@ -75,9 +75,27 @@ const uploadHookMocks = vi.hoisted(() => ({
   handleFiles: vi.fn().mockResolvedValue(undefined),
 }));
 
+const clipboardHelperMocks = vi.hoisted(() => ({
+  copyTextWithFallback: vi.fn(),
+}));
+
 vi.mock("../../../hooks/use-viewport", () => ({
   useViewport: () => viewportMocks.viewport,
 }));
+
+vi.mock("../../../lib/clipboard", async () => {
+  const actual =
+    await vi.importActual<typeof import("../../../lib/clipboard")>("../../../lib/clipboard");
+
+  clipboardHelperMocks.copyTextWithFallback.mockImplementation((text: string) =>
+    actual.copyTextWithFallback(text)
+  );
+
+  return {
+    ...actual,
+    copyTextWithFallback: clipboardHelperMocks.copyTextWithFallback,
+  };
+});
 
 vi.mock("../hydration-coordinator", async () => {
   const actual = await vi.importActual<typeof import("../hydration-coordinator")>(
@@ -313,6 +331,7 @@ describe("XtermHost", () => {
     uploadHookMocks.handleClipboardPaste.mockResolvedValue(undefined);
     uploadHookMocks.handleFiles.mockReset();
     uploadHookMocks.handleFiles.mockResolvedValue(undefined);
+    clipboardHelperMocks.copyTextWithFallback.mockClear();
     mockTerminal.options = {};
     mockTerminal.cols = undefined;
     mockTerminal.rows = undefined;
@@ -438,6 +457,7 @@ describe("XtermHost", () => {
 
     await waitFor(() => {
       expect(writeText).toHaveBeenCalledWith("selected text");
+      expect(clipboardHelperMocks.copyTextWithFallback).toHaveBeenCalledWith("selected text");
     });
   });
 

@@ -23,6 +23,7 @@ import {
 import { themeAtom } from "../../../../atoms/app-ui";
 import { dispatchCommandAtom, wsClientAtom } from "../../../../atoms/connection";
 import { useViewport } from "../../../../hooks/use-viewport";
+import { copyTextWithFallback } from "../../../../lib/clipboard";
 import { useTranslation } from "../../../../lib/i18n";
 import { getThemeById } from "../../../../theme";
 import type { ConnectionStatus, TerminalBinaryPayload } from "../../../../ws/client";
@@ -77,49 +78,6 @@ interface TouchScrollSample {
 }
 
 type TouchScrollDeltaResult = "idle" | "buffered" | "scrolled" | "blocked";
-
-async function copyTextWithFallback(text: string): Promise<void> {
-  let clipboardError: unknown;
-
-  try {
-    await navigator.clipboard.writeText(text);
-    return;
-  } catch (error) {
-    clipboardError = error;
-  }
-
-  if (typeof document === "undefined" || typeof document.execCommand !== "function") {
-    throw clipboardError ?? new Error("Clipboard copy unavailable");
-  }
-
-  const textarea = document.createElement("textarea");
-  textarea.value = text;
-  textarea.setAttribute("readonly", "true");
-  textarea.setAttribute("aria-hidden", "true");
-  textarea.style.position = "fixed";
-  textarea.style.top = "0";
-  textarea.style.left = "0";
-  textarea.style.width = "1px";
-  textarea.style.height = "1px";
-  textarea.style.padding = "0";
-  textarea.style.border = "0";
-  textarea.style.opacity = "0";
-  textarea.style.pointerEvents = "none";
-
-  document.body.appendChild(textarea);
-
-  try {
-    textarea.focus();
-    textarea.select();
-    textarea.setSelectionRange(0, textarea.value.length);
-
-    if (!document.execCommand("copy")) {
-      throw clipboardError ?? new Error("Clipboard copy unavailable");
-    }
-  } finally {
-    textarea.remove();
-  }
-}
 
 function isReplayGeneratedTerminalResponse(data: string): boolean {
   return /^\x1b\[\d+;\d+R$/.test(data) || /^\x1b\[(?:\?|>)(?:\d+;)*\d*c$/.test(data);
