@@ -16,6 +16,7 @@
   min-width: min(420px, 100%);
   max-height: calc(100vh - var(--sp-8));
   flex-direction: column;
+  z-index: var(--z-drawer);
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
