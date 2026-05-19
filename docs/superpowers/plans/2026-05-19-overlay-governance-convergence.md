@@ -15,6 +15,8 @@
 ## File Structure
 
 **Create:**
+- `packages/web/src/components/ui/_internal/body-scroll-lock.ts`
+  - Ref-counted document scroll lock helper shared by root blocking overlay primitives.
 - `packages/web/src/components/ui/drawer/index.tsx`
   - Shared desktop/mobile governed drawer shell for the desktop right-side blocking surface.
 - `packages/web/src/components/ui/drawer/index.module.css`
@@ -50,7 +52,7 @@
 - `packages/web/src/styles/tokens.css`
   - Add semantic z-index tokens for local overlay, drawer, and workbench layer.
 - `packages/web/src/styles/components.css`
-  - Remove or reduce feature-owned overlay style blocks once callers move to shared primitives.
+  - Remove or reduce feature-owned overlay style blocks once callers move to shared primitives, and update desktop review-shell selectors to the new governed classnames.
 - `packages/web/src/styles/base.theme.test.ts`
   - Verify overlay token presence where theme-sensitive token contracts are checked.
 - `packages/web/src/styles/components.theme.test.ts`
@@ -77,6 +79,8 @@
   - Align placeholder/replay surface with the same local overlay contract.
 - `packages/web/src/features/terminal-panel/__tests__/xterm-host.test.tsx`
   - Add or update local overlay behavior assertions.
+- `packages/web/src/ui-preview/scenes/desktop-review-scenes.tsx`
+  - Keep the inline preview scene aligned if `desktopPreviewInline` remains as a review-only exception.
 
 **No changes in this plan:**
 - `packages/web/src/components/ui/popover/*`
@@ -111,30 +115,22 @@ it("defines semantic overlay z-index tokens for governed layers", () => {
 });
 ```
 
-Add `components.theme.test.ts` coverage that expects shared overlay families to own semantic z-index usage:
+Add migration-baseline coverage that tracks the governed overlay families as pending before convergence completes:
 
 ```ts
-it("uses semantic z-index tokens for governed overlay families", () => {
-  expect(stylesheet).not.toContain("z-index: 10");
-  expect(stylesheet).not.toContain("z-index: 100");
-  expect(readFileSync(`${process.cwd()}/src/components/ui/drawer/index.module.css`, "utf8")).toContain(
-    "var(--z-drawer)"
+const migrationInventory = readFileSync(`${process.cwd()}/src/components/ui/MIGRATION.md`, "utf8");
+
+it("tracks governed overlay families as pending before convergence completes", () => {
+  expect(migrationInventory).toContain(
+    "| Drawer | 🟡 pending | `worktree-modal`, `worktree-manager-surface` | 2 | 2026-05-19 |"
   );
-  expect(
-    readFileSync(`${process.cwd()}/src/components/ui/workbench-layer/index.module.css`, "utf8")
-  ).toContain("var(--z-workbench)");
-  expect(
-    readFileSync(`${process.cwd()}/src/components/ui/local-overlay/index.module.css`, "utf8")
-  ).toContain("var(--z-local-overlay)");
+  expect(migrationInventory).toContain(
+    "| WorkbenchLayer | 🟡 pending | `command-palette-overlay`, `launch-overlay` | 2 | 2026-05-19 |"
+  );
+  expect(migrationInventory).toContain(
+    "| LocalOverlay | 🟡 pending | upload busy inline overlay, `paste-dialog-overlay`, `xterm-replay-overlay` | 2 | 2026-05-19 |"
+  );
 });
-```
-
-Add a migration inventory row assertion after the file exists:
-
-```md
-| Drawer | 🟢 complete | new | 0 | 2026-05-19 |
-| WorkbenchLayer | 🟢 complete | `command-palette-overlay`, `launch-overlay` | 0 | 2026-05-19 |
-| LocalOverlay | 🟢 complete | `paste-dialog-overlay`, `xterm-replay-overlay` | 0 | 2026-05-19 |
 ```
 
 - [ ] **Step 2: Run the token/style tests to verify they fail**
@@ -150,7 +146,7 @@ pnpm --filter @coder-studio/web exec vitest run \
 Expected:
 
 - FAIL because the new z-index tokens do not exist yet
-- FAIL because the new shared overlay stylesheets do not exist yet
+- FAIL because the new pending migration rows do not exist yet
 
 - [ ] **Step 3: Add the semantic overlay tokens and migration placeholders**
 
@@ -171,9 +167,15 @@ In `packages/web/src/styles/tokens.css`, add the new overlay tokens in the z-ind
   --z-toast: 380;
 ```
 
-In `packages/web/src/components/ui/MIGRATION.md`, add pending rows for `Drawer`, `WorkbenchLayer`, and `LocalOverlay` with caller counts matching the spec before implementation begins.
+In `packages/web/src/components/ui/MIGRATION.md`, add pending rows for `Drawer`, `WorkbenchLayer`, and `LocalOverlay` with caller counts matching the spec before implementation begins:
 
-- [ ] **Step 4: Run the token/style tests to verify the token additions pass and the style-file assertions still fail**
+```md
+| Drawer | 🟡 pending | `worktree-modal`, `worktree-manager-surface` | 2 | 2026-05-19 |
+| WorkbenchLayer | 🟡 pending | `command-palette-overlay`, `launch-overlay` | 2 | 2026-05-19 |
+| LocalOverlay | 🟡 pending | upload busy inline overlay, `paste-dialog-overlay`, `xterm-replay-overlay` | 2 | 2026-05-19 |
+```
+
+- [ ] **Step 4: Run the token/style tests to verify the baseline additions pass**
 
 Run:
 
@@ -186,7 +188,7 @@ pnpm --filter @coder-studio/web exec vitest run \
 Expected:
 
 - PASS for token presence assertions
-- FAIL for shared overlay stylesheet assertions until the primitives are implemented
+- PASS for pending migration inventory assertions
 
 - [ ] **Step 5: Commit**
 
@@ -202,6 +204,7 @@ git commit -m "chore: add governed overlay token baseline"
 ## Task 2: Implement the shared `Drawer` primitive
 
 **Files:**
+- Create: `packages/web/src/components/ui/_internal/body-scroll-lock.ts`
 - Create: `packages/web/src/components/ui/drawer/index.tsx`
 - Create: `packages/web/src/components/ui/drawer/index.module.css`
 - Create: `packages/web/src/components/ui/drawer/index.test.tsx`
@@ -222,12 +225,13 @@ render(
 
 Add assertions for:
 
-- `role="dialog"` plus `aria-modal="true"`
+- `role="dialog"` plus `aria-modal="true"` and an accessible name derived from the title
 - portal rendering into `document.body`
 - right-side placement shell
 - focus entering the drawer and restoring on close
+- document scroll locking while the drawer is open and restoration on close
 - `Escape` dismissal
-- optional `dismissible={false}` preventing backdrop close
+- backdrop click staying disabled by default, with `backdropDismiss` enabling preview/read-only dismissal
 - support for header actions and footer content
 
 - [ ] **Step 2: Run the focused drawer tests to verify they fail**
@@ -258,8 +262,38 @@ export interface DrawerProps {
   readonly footer?: ReactNode;
   readonly className?: string;
   readonly dismissible?: boolean;
+  readonly backdropDismiss?: boolean;
   readonly initialFocus?: HTMLElement | null | (() => HTMLElement | null);
   readonly headerActions?: ReactNode;
+  readonly ariaLabel?: string;
+}
+```
+
+In `packages/web/src/components/ui/_internal/body-scroll-lock.ts`, add a small shared helper:
+
+```ts
+let lockCount = 0;
+let previousOverflow = "";
+
+export function lockBodyScroll() {
+  if (typeof document === "undefined") {
+    return () => {};
+  }
+
+  if (lockCount === 0) {
+    previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+  }
+
+  lockCount += 1;
+
+  return () => {
+    lockCount = Math.max(0, lockCount - 1);
+    if (lockCount === 0) {
+      document.body.style.overflow = previousOverflow;
+      previousOverflow = "";
+    }
+  };
 }
 ```
 
@@ -269,6 +303,8 @@ Implement the shell with:
 <Portal>
   <div className={clsx(styles.backdrop, "drawer-backdrop")} onClick={...}>
     <section
+      aria-label={title ? undefined : ariaLabel}
+      aria-labelledby={title ? titleId : undefined}
       aria-modal="true"
       role="dialog"
       className={clsx(styles.panel, "drawer-panel", className)}
@@ -276,13 +312,18 @@ Implement the shell with:
       ref={panelRef}
       tabIndex={-1}
     >
-      <header className={styles.header}>...</header>
+      <header className={styles.header}>
+        {title ? <h2 id={titleId} className={styles.title}>{title}</h2> : null}
+        {headerActions}
+      </header>
       <div className={styles.body}>{children}</div>
       {footer ? <footer className={styles.footer}>{footer}</footer> : null}
     </section>
   </div>
 </Portal>
 ```
+
+Mirror the existing `Modal` focus lifecycle and call `lockBodyScroll()` while `open` is true so the drawer matches the root-blocking spec contract.
 
 In `index.module.css`, bind the backdrop and panel to the new semantic tokens:
 
@@ -308,6 +349,8 @@ In `index.module.css`, bind the backdrop and panel to the new semantic tokens:
 }
 ```
 
+Use `dismissible = true` and `backdropDismiss = false` as the default contract: `Escape` and explicit close affordances remain enabled, while backdrop dismissal is opt-in for preview/read-only flows.
+
 Export `Drawer` from `packages/web/src/components/ui/index.ts` and document the bounded use case in `README.md`.
 
 - [ ] **Step 4: Run the focused drawer tests to verify they pass**
@@ -327,6 +370,7 @@ Expected:
 
 ```bash
 git add \
+  packages/web/src/components/ui/_internal/body-scroll-lock.ts \
   packages/web/src/components/ui/drawer \
   packages/web/src/components/ui/index.ts
 git commit -m "feat: add governed drawer primitive"
@@ -346,7 +390,7 @@ git commit -m "feat: add governed drawer primitive"
 Add desktop-path assertions like:
 
 ```tsx
-expect(screen.getByRole("dialog")).toBeInTheDocument();
+expect(screen.getByRole("dialog", { name: worktree.name })).toBeInTheDocument();
 expect(document.querySelector(".drawer-panel")).toBeTruthy();
 expect(document.querySelector(".modal-card-lg")).toBeNull();
 ```
@@ -356,6 +400,7 @@ Also assert:
 - `WorktreeModal` still uses `Sheet` on mobile
 - `WorktreeManagerSurface` still supports list/create/delete flows
 - desktop header actions still exist
+- `desktopPreviewInline` stays non-portaled and renders preview-only drawer chrome without a backdrop
 
 - [ ] **Step 2: Run the targeted worktree tests to verify they fail**
 
@@ -390,6 +435,7 @@ to:
     }
   }}
   title={worktree.name}
+  backdropDismiss
   headerActions={
     <IconButton
       aria-label={t("action.close")}
@@ -406,7 +452,7 @@ to:
 In `worktree-manager-surface.tsx`, replace both desktop shells:
 
 - remove the `Modal`-owned desktop shell
-- remove or hard-cap `desktopPreviewInline` as preview-only, not a governed business dialog
+- keep `desktopPreviewInline` as a review-only preview path, not a governed business dialog
 - use a single `Drawer` shell for the interactive desktop managed surface
 
 Example:
@@ -422,13 +468,22 @@ Example:
   }}
   title={title}
   initialFocus={() => (view === "create" ? branchInputRef.current : null)}
+  backdropDismiss={false}
   headerActions={...}
 >
   {body}
 </Drawer>
 ```
 
-Move any `.modal-card`-shaped feature selectors in `styles/components.css` to feature-owned drawer selectors instead of raw modal class dependencies.
+For the `desktopPreviewInline` branch, keep the preview non-portaled but re-skin it to drawer compatibility classes instead of modal classes:
+
+```tsx
+<div className="drawer-panel worktree-manager-surface worktree-manager-surface--inline-preview">
+  ...
+</div>
+```
+
+Move any `.modal-card`-shaped feature selectors in `styles/components.css` to feature-owned drawer selectors instead of raw modal class dependencies, and update the desktop review selector from `.desktop-review-embedded-worktree .modal-card.worktree-manager-surface` to `.desktop-review-embedded-worktree .drawer-panel.worktree-manager-surface`.
 
 - [ ] **Step 4: Run the targeted worktree tests to verify they pass**
 
@@ -480,11 +535,12 @@ render(
 
 Assertions:
 
-- `role="dialog"` or equivalent workbench-region semantics
+- `role="dialog"` with an accessible name supplied by `aria-label` or `aria-labelledby`
 - portal rendering into `document.body`
 - centered shell with workbench backdrop token usage
 - outside click dismissal
 - `Escape` dismissal
+- document scroll locking while the layer is open and restoration on close
 - no enforced footer semantics
 
 - [ ] **Step 2: Run the focused workbench tests to verify they fail**
@@ -512,6 +568,8 @@ export interface WorkbenchLayerProps {
   readonly className?: string;
   readonly dismissible?: boolean;
   readonly initialFocus?: HTMLElement | null | (() => HTMLElement | null);
+  readonly ariaLabel?: string;
+  readonly ariaLabelledBy?: string;
 }
 ```
 
@@ -521,6 +579,8 @@ Implement a portal-backed centered shell without modal footer/header assumptions
 <Portal>
   <div className={clsx(styles.backdrop, "workbench-layer-backdrop")} onClick={...}>
     <div
+      aria-label={ariaLabel}
+      aria-labelledby={ariaLabelledBy}
       aria-modal="true"
       role="dialog"
       className={clsx(styles.surface, "workbench-layer", className)}
@@ -533,6 +593,8 @@ Implement a portal-backed centered shell without modal footer/header assumptions
   </div>
 </Portal>
 ```
+
+Reuse the `lockBodyScroll()` helper from Task 2 so `WorkbenchLayer` matches the same root-blocking scroll contract as `Drawer`.
 
 In `index.module.css`, use:
 
@@ -596,7 +658,7 @@ git commit -m "feat: add governed workbench layer primitive"
 Add desktop assertions such as:
 
 ```tsx
-expect(screen.getByRole("dialog")).toBeInTheDocument();
+expect(screen.getByRole("dialog", { name: "Command Palette" })).toBeInTheDocument();
 expect(document.querySelector(".workbench-layer")).toBeTruthy();
 expect(document.querySelector(".command-palette-overlay")).toBeNull();
 ```
@@ -633,7 +695,12 @@ In `command-palette.tsx`, change the desktop return path from:
 to:
 
 ```tsx
-<WorkbenchLayer open onOpenChange={setIsOpen} initialFocus={() => inputRef.current}>
+<WorkbenchLayer
+  open
+  onOpenChange={setIsOpen}
+  initialFocus={() => inputRef.current}
+  ariaLabel={t("command.palette")}
+>
   <div className="command-palette command-palette--desktop" onKeyDown={handleKeyDown}>
     ...
   </div>
@@ -650,18 +717,22 @@ In `workspace-launch-modal.tsx`, change the desktop return path from:
 to:
 
 ```tsx
-<WorkbenchLayer open onOpenChange={(open) => {
-  if (!open) {
-    onClose();
-  }
-}}>
+<WorkbenchLayer
+  open
+  onOpenChange={(open) => {
+    if (!open) {
+      onClose();
+    }
+  }}
+  ariaLabel={launchTitle}
+>
   <div className="launch-modal">
     ...
   </div>
 </WorkbenchLayer>
 ```
 
-Move the overlay chrome from `components.css` into `workbench-layer/index.module.css` and keep feature-owned internal layout classes like `command-palette-*` and `launch-*` local to the features.
+Move the overlay chrome from `components.css` into `workbench-layer/index.module.css` and keep feature-owned internal layout classes like `command-palette-*` and `launch-*` local to the features. Update the desktop review selectors from `.desktop-review-card .command-palette-overlay, .desktop-review-card .launch-overlay` to `.desktop-review-card .workbench-layer-backdrop`.
 
 - [ ] **Step 4: Run the targeted command/launcher tests to verify they pass**
 
@@ -718,6 +789,8 @@ Assertions:
 - renders inside host flow instead of portal-to-body
 - uses scoped absolute positioning
 - supports optional `role="dialog"` and non-dialog status modes
+- keeps status overlays pass-through by default so degraded replay does not block terminal interaction
+- supports interactive dialog overlays that can dismiss on backdrop click when `onDismiss` is supplied
 - does not lock document scroll
 - optional dismiss action only when supplied
 
@@ -743,7 +816,9 @@ export interface LocalOverlayProps {
   readonly open: boolean;
   readonly children: ReactNode;
   readonly className?: string;
+  readonly surfaceClassName?: string;
   readonly mode?: "status" | "dialog";
+  readonly interactive?: boolean;
   readonly onDismiss?: () => void;
   readonly ariaLabelledBy?: string;
 }
@@ -756,15 +831,23 @@ if (!open) {
   return null;
 }
 
+const isInteractive = interactive ?? mode === "dialog";
+
 return (
   <div
     className={clsx(styles.overlay, "local-overlay", className)}
+    data-interactive={isInteractive ? "true" : "false"}
     role={mode === "dialog" ? "dialog" : "status"}
     aria-modal={mode === "dialog" ? "true" : undefined}
     aria-live={mode === "status" ? "polite" : undefined}
     aria-labelledby={ariaLabelledBy}
+    onClick={(event) => {
+      if (isInteractive && onDismiss && isOverlayClick(event)) {
+        onDismiss();
+      }
+    }}
   >
-    <div className={clsx(styles.card, "local-overlay__card")}>{children}</div>
+    <div className={clsx(styles.card, "local-overlay__card", surfaceClassName)}>{children}</div>
   </div>
 );
 ```
@@ -780,6 +863,11 @@ In `index.module.css`:
   align-items: center;
   justify-content: center;
   background: rgba(0, 0, 0, 0.42);
+  pointer-events: none;
+}
+
+.overlay[data-interactive="true"] {
+  pointer-events: auto;
 }
 
 .card {
@@ -788,6 +876,11 @@ In `index.module.css`:
   border-radius: var(--radius-xl);
   background: var(--bg-surface);
   box-shadow: var(--shadow-xl);
+  pointer-events: none;
+}
+
+.overlay[data-interactive="true"] .card {
+  pointer-events: auto;
 }
 ```
 
@@ -835,6 +928,7 @@ Also assert:
 - upload busy state still blocks interaction visually
 - paste dialog still exposes `role="dialog"` semantics
 - replay placeholder still renders its title/body copy
+- degraded replay and upload status overlays remain pass-through instead of trapping pointer input
 
 - [ ] **Step 2: Run the targeted terminal tests to verify they fail**
 
@@ -855,7 +949,7 @@ In `xterm-host.tsx`, replace the raw upload busy block:
 
 ```tsx
 {uploadBusy ? (
-  <LocalOverlay open className="terminal-upload-overlay" mode="status">
+  <LocalOverlay open className="terminal-upload-overlay" mode="status" interactive={false}>
     <div>Uploading…</div>
   </LocalOverlay>
 ) : null}
@@ -865,7 +959,13 @@ Replace the paste dialog overlay:
 
 ```tsx
 {showPasteDialog ? (
-  <LocalOverlay open mode="dialog" ariaLabelledBy="paste-dialog-title">
+  <LocalOverlay
+    open
+    mode="dialog"
+    interactive
+    ariaLabelledBy="paste-dialog-title"
+    onDismiss={handlePasteDialogCancel}
+  >
     <div className="paste-dialog">
       ...
     </div>
@@ -877,15 +977,19 @@ Replace the replay/status shell:
 
 ```tsx
 {showReplayOverlay ? (
-  <LocalOverlay open className={replayClassName} mode="status">
-    <div className="xterm-replay-overlay__card">
-      ...
-    </div>
+  <LocalOverlay
+    open
+    className={replayClassName}
+    surfaceClassName="xterm-replay-overlay__card"
+    mode="status"
+    interactive={false}
+  >
+    ...
   </LocalOverlay>
 ) : null}
 ```
 
-In `xterm-placeholder.tsx`, align the placeholder root to the same shared overlay structure if it remains a host-scoped blocking layer.
+In `xterm-placeholder.tsx`, align the placeholder root to the same shared overlay structure if it remains a host-scoped blocking layer, also using `interactive={false}` plus `surfaceClassName="xterm-replay-overlay__card"` so the placeholder keeps the shared replay card styling without blocking the host.
 
 Remove or minimize raw overlay style blocks in `components.css` that are now owned by the shared primitive, leaving only feature-specific card/body/title styling.
 
@@ -921,6 +1025,7 @@ git commit -m "refactor: move terminal runtime overlays to local overlay"
 - Modify: `packages/web/src/components/ui/MIGRATION.md`
 - Modify: `packages/web/src/styles/components.theme.test.ts`
 - Modify: `packages/web/src/styles/base.theme.test.ts`
+- Modify: `packages/web/src/ui-preview/scenes/desktop-review-scenes.tsx`
 
 - [ ] **Step 1: Update the shared UI docs and migration inventory**
 
@@ -936,7 +1041,7 @@ with notes that:
 - `WorkbenchLayer` is for global command surfaces only
 - `LocalOverlay` is for host-scoped runtime overlays only
 
-In `packages/web/src/components/ui/MIGRATION.md`, update the rows to complete status with `0` callers left in the governed inventory.
+In `packages/web/src/components/ui/MIGRATION.md`, update the rows to complete status with `0` callers left in the governed inventory. Also note that `desktopPreviewInline` remains a review-only preview exception rather than a product overlay caller.
 
 - [ ] **Step 2: Add the final style contract assertions**
 
@@ -944,9 +1049,9 @@ In `packages/web/src/styles/components.theme.test.ts`, add assertions such as:
 
 ```ts
 it("does not leave governed desktop overlays on raw feature-owned backdrops", () => {
-  expect(stylesheet).not.toContain(".command-palette-overlay {");
-  expect(stylesheet).not.toContain(".launch-overlay {");
-  expect(stylesheet).not.toContain(".paste-dialog-overlay {");
+  expect(stylesheet).not.toMatch(/(^|,)\s*\.command-palette-overlay\b/m);
+  expect(stylesheet).not.toMatch(/(^|,)\s*\.launch-overlay\b/m);
+  expect(stylesheet).not.toMatch(/(^|,)\s*\.paste-dialog-overlay\b/m);
 });
 ```
 
@@ -969,6 +1074,24 @@ it("keeps shared overlay families on semantic z-index tokens", () => {
   expect(workbenchStyles).toContain("var(--z-workbench-backdrop)");
   expect(workbenchStyles).toContain("var(--z-workbench)");
   expect(localOverlayStyles).toContain("var(--z-local-overlay)");
+});
+```
+
+and:
+
+```ts
+const migrationInventory = readFileSync(`${process.cwd()}/src/components/ui/MIGRATION.md`, "utf8");
+
+it("marks governed overlay families complete after convergence", () => {
+  expect(migrationInventory).toContain(
+    "| Drawer | 🟢 complete | `worktree-modal`, `worktree-manager-surface` | 0 | 2026-05-19 |"
+  );
+  expect(migrationInventory).toContain(
+    "| WorkbenchLayer | 🟢 complete | `command-palette-overlay`, `launch-overlay` | 0 | 2026-05-19 |"
+  );
+  expect(migrationInventory).toContain(
+    "| LocalOverlay | 🟢 complete | upload busy inline overlay, `paste-dialog-overlay`, `xterm-replay-overlay` | 0 | 2026-05-19 |"
+  );
 });
 ```
 
@@ -1001,6 +1124,7 @@ Run:
 ```bash
 pnpm --filter @coder-studio/web exec biome check \
   src/components/ui/drawer \
+  src/components/ui/_internal/body-scroll-lock.ts \
   src/components/ui/workbench-layer \
   src/components/ui/local-overlay \
   src/components/ui/index.ts \
@@ -1010,6 +1134,7 @@ pnpm --filter @coder-studio/web exec biome check \
   src/styles/components.css \
   src/styles/base.theme.test.ts \
   src/styles/components.theme.test.ts \
+  src/ui-preview/scenes/desktop-review-scenes.tsx \
   src/features/workspace/views/shared/worktree-modal.tsx \
   src/features/workspace/views/shared/worktree-modal.test.tsx \
   src/features/workspace/views/shared/worktree-manager-surface.tsx \
@@ -1032,7 +1157,7 @@ Expected:
 Run:
 
 ```bash
-rg -n 'command-palette-overlay|launch-overlay|paste-dialog-overlay|z-index:\\s*(10|100)|className=\"[^\"]*(overlay|modal|drawer)\"' \
+rg -n 'command-palette-overlay|launch-overlay|paste-dialog-overlay|(?:z-index|zIndex):\\s*(5|10|100)|backgroundColor:\\s*\"rgba\\(0,0,0,0\\.35\\)\"|className=\"[^\"]*(overlay|modal|drawer)\"' \
   packages/web/src \
   -g '!**/*.test.tsx' \
   -g '!**/*.test.ts'
