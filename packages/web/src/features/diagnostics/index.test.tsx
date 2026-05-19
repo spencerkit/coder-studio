@@ -191,6 +191,59 @@ describe("DiagnosticsPage", () => {
     expect(await screen.findByText("Claude is ready")).toBeInTheDocument();
   });
 
+  it("uses the shared secondary-page chrome instead of the welcome card shell", async () => {
+    const sendCommand = vi.fn().mockResolvedValue(
+      createResponse(
+        {
+          context: "manual_check",
+          canContinue: true,
+        },
+        [
+          {
+            id: "workspace-ready",
+            code: "workspace_path_ready",
+            status: "ready",
+            workspacePath: "/repo",
+          },
+        ]
+      )
+    );
+
+    const { rerender } = renderDiagnostics(
+      "/diagnostics?context=manual_check&workspacePath=%2Frepo",
+      sendCommand
+    );
+
+    expect(await screen.findByText("Environment diagnostics")).toBeInTheDocument();
+
+    expect(document.querySelector(".diagnostics-page")).not.toBeNull();
+    expect(document.querySelector(".diagnostics-header .page-header")).not.toBeNull();
+    expect(document.querySelector(".diagnostics-header .page-header--secondary")).not.toBeNull();
+    expect(document.querySelector(".diagnostics-body")).not.toBeNull();
+    expect(document.querySelector(".diagnostics-content")).not.toBeNull();
+    expect(document.querySelector(".diagnostics-content-surface")).not.toBeNull();
+    expect(document.querySelector(".welcome-card")).toBeNull();
+
+    viewportMocks.viewport = "mobile";
+    rerender(
+      <Provider store={createStoreWithClient(sendCommand)}>
+        <MemoryRouter initialEntries={["/diagnostics?context=manual_check&workspacePath=%2Frepo"]}>
+          <Routes>
+            <Route path="/diagnostics" element={<DiagnosticsPage />} />
+            <Route path="/workspace" element={<LocationDisplay />} />
+            <Route path="/settings" element={<LocationDisplay />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>
+    );
+
+    expect(await screen.findByText("Environment diagnostics")).toBeInTheDocument();
+    expect(document.querySelector(".diagnostics-page--mobile")).not.toBeNull();
+    expect(document.querySelector(".diagnostics-header .mobile-page-header")).not.toBeNull();
+    expect(document.querySelector(".diagnostics-content--mobile")).not.toBeNull();
+    expect(document.querySelector(".welcome-card")).toBeNull();
+  });
+
   it("opens the workspace and updates workspace state when retrying workspace continuation", async () => {
     const workspace = createWorkspace("ws-1", "/repo");
     const sendCommand = vi.fn(async (op: string, args?: Record<string, unknown>) => {

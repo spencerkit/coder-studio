@@ -19,7 +19,7 @@ import {
   workspacesLoadErrorAtom,
   workspacesLoadStateAtom,
 } from "../../atoms/workspaces";
-import { Button, EmptyState, Notice, Tag, ThemedIcon } from "../../components/ui";
+import { Button, Notice, Tag, ThemedIcon } from "../../components/ui";
 import { useViewport } from "../../hooks/use-viewport";
 import { useTranslation } from "../../lib/i18n";
 import {
@@ -28,6 +28,8 @@ import {
   paneLayoutAtomFamily,
 } from "../agent-panes/atoms/pane-layout";
 import { assignSessionToPane } from "../agent-panes/pane-layout-tree";
+import { MobilePageHeader } from "../shared/components/mobile-page-header";
+import { PageHeader } from "../shared/components/page-header";
 import { usePersistWorkspaceLastViewedTarget } from "../workspace/actions/use-persist-workspace-last-viewed-target";
 import { useWorkspaceUiStatePersistence } from "../workspace/actions/use-workspace-ui-state-persistence";
 import { parseDiagnosticsSearch } from "./navigation";
@@ -459,152 +461,175 @@ export function DiagnosticsPage() {
 
   const contextTitle = t(`diagnostics.context.${intent.context}.title`);
   const contextDescription = t(`diagnostics.context.${intent.context}.description`);
+  const handleBack = () => {
+    navigate(-1);
+  };
 
   return (
-    <div className={`welcome-container ${isMobile ? "welcome-container--mobile" : ""}`}>
-      <div className={`welcome-card diagnostics-card ${isMobile ? "welcome-card--mobile" : ""}`}>
-        <EmptyState
-          style={{ minHeight: "auto", padding: 0, gap: "var(--sp-4)", alignItems: "stretch" }}
-          icon={<ThemedIcon semantic="state.warning" size={20} />}
-          title={
-            <div>
-              <div className="welcome-kicker">{t("diagnostics.title")}</div>
-              <h1 className="welcome-title diagnostics-title">{contextTitle}</h1>
-            </div>
-          }
-          description={<p className="welcome-body diagnostics-body">{contextDescription}</p>}
-          action={
-            <div className="diagnostics-actions">
-              <Button
-                leadingIcon={<RefreshCw size={16} />}
-                loading={loading}
-                disabled={!canPrimaryContinue}
-                onClick={() => {
-                  void handlePrimaryAction();
-                }}
-                variant="primary"
-              >
-                {getPrimaryActionLabel()}
-              </Button>
-              <Button onClick={() => navigate(-1)} variant="ghost">
-                {t("action.back")}
-              </Button>
-            </div>
-          }
-        />
-
-        {loadError || actionError ? (
-          <Notice
-            role="alert"
-            tone="error"
-            title={t("diagnostics.load_failed")}
-            message={actionError ?? loadError ?? ""}
+    <div className={`diagnostics-page ${isMobile ? "diagnostics-page--mobile" : ""}`}>
+      <header className="diagnostics-header">
+        {isMobile ? (
+          <MobilePageHeader
+            title={t("diagnostics.title")}
+            titleAs="div"
+            onBack={handleBack}
+            backLabel={t("action.back")}
           />
-        ) : null}
+        ) : (
+          <PageHeader
+            title={t("diagnostics.title")}
+            titleAs="h1"
+            level="secondary"
+            onBack={handleBack}
+            backLabel={t("action.back")}
+          />
+        )}
+      </header>
 
-        <div className="diagnostics-toolbar">
-          <Button
-            leadingIcon={<Settings size={16} />}
-            onClick={handleOpenSettings}
-            size="sm"
-            variant="ghost"
-          >
-            {t("diagnostics.actions.open_settings")}
-          </Button>
-          {navigator.clipboard?.writeText ? (
-            <Button
-              leadingIcon={<Copy size={16} />}
-              onClick={() => {
-                void handleCopyDetails();
-              }}
-              size="sm"
-              variant="ghost"
-            >
-              {copyConfirmed
-                ? t("diagnostics.actions.copied")
-                : t("diagnostics.actions.copy_details")}
-            </Button>
-          ) : null}
-        </div>
-
-        {loading ? (
-          <div className="diagnostics-loading">{t("diagnostics.loading_description")}</div>
-        ) : null}
-
-        {response ? (
-          <div className="diagnostics-issues">
-            {response.checks.map((check) => {
-              const copy = buildCheckCopy(t, check);
-
-              return (
-                <div className="diagnostics-issue" key={check.id}>
-                  <div className="diagnostics-issue__header">
-                    <Tag
-                      caps={false}
-                      color={
-                        check.status === "ready"
-                          ? "green"
-                          : check.status === "checking"
-                            ? "blue"
-                            : "amber"
-                      }
-                      size="sm"
-                    >
-                      {t(`diagnostics.status.${check.status}`)}
-                    </Tag>
-                    <div className="diagnostics-issue__title">{copy.title}</div>
-                  </div>
-                  <p className="diagnostics-issue__description">{copy.description}</p>
-                  <div className="diagnostics-issue__meta">
-                    {check.workspacePath ? (
-                      <span>
-                        {t("diagnostics.details.workspace")}: {check.workspacePath}
-                      </span>
-                    ) : null}
-                    {check.providerId ? (
-                      <span>
-                        {t("diagnostics.details.provider")}: {getProviderLabel(check.providerId)}
-                      </span>
-                    ) : null}
-                    {check.missingCommands?.length ? (
-                      <span>
-                        {t("diagnostics.details.missing_commands")}:{" "}
-                        {formatList(check.missingCommands)}
-                      </span>
-                    ) : null}
-                    {check.missingPrerequisites?.length ? (
-                      <span>
-                        {t("diagnostics.details.missing_prerequisites")}:{" "}
-                        {formatList(check.missingPrerequisites)}
-                      </span>
-                    ) : null}
-                  </div>
-                  {check.manualGuideKeys?.length ? (
-                    <div className="diagnostics-issue__guides">
-                      {check.manualGuideKeys.map((guideKey) => (
-                        <span key={guideKey}>{t(guideKey)}</span>
-                      ))}
-                    </div>
-                  ) : null}
-                  <div className="diagnostics-issue__actions">
-                    {check.docUrl ? (
-                      <Button
-                        as="a"
-                        href={check.docUrl}
-                        rel="noreferrer"
-                        size="sm"
-                        target="_blank"
-                        variant="ghost"
-                      >
-                        {t("provider.install.open_docs")}
-                      </Button>
-                    ) : null}
-                  </div>
+      <div className={`diagnostics-body ${isMobile ? "diagnostics-body--mobile" : ""}`}>
+        <main className={`diagnostics-content ${isMobile ? "diagnostics-content--mobile" : ""}`}>
+          <div className="diagnostics-content-surface">
+            <section className="diagnostics-summary">
+              <div className="diagnostics-summary__copy">
+                <div className="diagnostics-summary__eyebrow">
+                  <ThemedIcon semantic="state.warning" size={16} />
+                  <span>{t("diagnostics.title")}</span>
                 </div>
-              );
-            })}
+                <h2 className="diagnostics-summary__title">{contextTitle}</h2>
+                <p className="diagnostics-summary__description">{contextDescription}</p>
+              </div>
+              <div className="diagnostics-actions">
+                <Button
+                  leadingIcon={<RefreshCw size={16} />}
+                  loading={loading}
+                  disabled={!canPrimaryContinue}
+                  onClick={() => {
+                    void handlePrimaryAction();
+                  }}
+                  variant="primary"
+                >
+                  {getPrimaryActionLabel()}
+                </Button>
+              </div>
+            </section>
+
+            {loadError || actionError ? (
+              <Notice
+                role="alert"
+                tone="error"
+                title={t("diagnostics.load_failed")}
+                message={actionError ?? loadError ?? ""}
+              />
+            ) : null}
+
+            <div className="diagnostics-toolbar">
+              <Button
+                leadingIcon={<Settings size={16} />}
+                onClick={handleOpenSettings}
+                size="sm"
+                variant="ghost"
+              >
+                {t("diagnostics.actions.open_settings")}
+              </Button>
+              {navigator.clipboard?.writeText ? (
+                <Button
+                  leadingIcon={<Copy size={16} />}
+                  onClick={() => {
+                    void handleCopyDetails();
+                  }}
+                  size="sm"
+                  variant="ghost"
+                >
+                  {copyConfirmed
+                    ? t("diagnostics.actions.copied")
+                    : t("diagnostics.actions.copy_details")}
+                </Button>
+              ) : null}
+            </div>
+
+            {loading ? (
+              <div className="diagnostics-loading">{t("diagnostics.loading_description")}</div>
+            ) : null}
+
+            {response ? (
+              <section className="diagnostics-results" aria-label={t("diagnostics.title")}>
+                <div className="diagnostics-issues">
+                  {response.checks.map((check) => {
+                    const copy = buildCheckCopy(t, check);
+
+                    return (
+                      <div className="diagnostics-issue" key={check.id}>
+                        <div className="diagnostics-issue__header">
+                          <Tag
+                            caps={false}
+                            color={
+                              check.status === "ready"
+                                ? "green"
+                                : check.status === "checking"
+                                  ? "blue"
+                                  : "amber"
+                            }
+                            size="sm"
+                          >
+                            {t(`diagnostics.status.${check.status}`)}
+                          </Tag>
+                          <div className="diagnostics-issue__title">{copy.title}</div>
+                        </div>
+                        <p className="diagnostics-issue__description">{copy.description}</p>
+                        <div className="diagnostics-issue__meta">
+                          {check.workspacePath ? (
+                            <span>
+                              {t("diagnostics.details.workspace")}: {check.workspacePath}
+                            </span>
+                          ) : null}
+                          {check.providerId ? (
+                            <span>
+                              {t("diagnostics.details.provider")}:{" "}
+                              {getProviderLabel(check.providerId)}
+                            </span>
+                          ) : null}
+                          {check.missingCommands?.length ? (
+                            <span>
+                              {t("diagnostics.details.missing_commands")}:{" "}
+                              {formatList(check.missingCommands)}
+                            </span>
+                          ) : null}
+                          {check.missingPrerequisites?.length ? (
+                            <span>
+                              {t("diagnostics.details.missing_prerequisites")}:{" "}
+                              {formatList(check.missingPrerequisites)}
+                            </span>
+                          ) : null}
+                        </div>
+                        {check.manualGuideKeys?.length ? (
+                          <div className="diagnostics-issue__guides">
+                            {check.manualGuideKeys.map((guideKey) => (
+                              <span key={guideKey}>{t(guideKey)}</span>
+                            ))}
+                          </div>
+                        ) : null}
+                        <div className="diagnostics-issue__actions">
+                          {check.docUrl ? (
+                            <Button
+                              as="a"
+                              href={check.docUrl}
+                              rel="noreferrer"
+                              size="sm"
+                              target="_blank"
+                              variant="ghost"
+                            >
+                              {t("provider.install.open_docs")}
+                            </Button>
+                          ) : null}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            ) : null}
           </div>
-        ) : null}
+        </main>
       </div>
     </div>
   );
