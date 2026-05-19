@@ -528,6 +528,7 @@ export function SettingsPage() {
             setTerminalRenderer={handleTerminalRendererSelection}
             terminalCopyOnSelect={terminalPreferences.copyOnSelect}
             setTerminalCopyOnSelect={handleTerminalCopyOnSelectSelection}
+            activeWorkspaceId={activeWorkspaceId}
           />
         );
       case "appearance":
@@ -556,8 +557,6 @@ export function SettingsPage() {
         );
       case "shortcuts":
         return <ShortcutsSettings />;
-      case "diagnostics":
-        return <DiagnosticsSettings activeWorkspaceId={activeWorkspaceId} />;
       default:
         return null;
     }
@@ -726,6 +725,7 @@ interface GeneralSettingsProps {
   setTerminalRenderer: (value: "standard" | "compatibility") => void;
   terminalCopyOnSelect: boolean;
   setTerminalCopyOnSelect: (value: boolean) => void;
+  activeWorkspaceId: string | null;
 }
 
 function parseSupervisorTimeoutInput(value: string): number | null {
@@ -813,8 +813,10 @@ function GeneralSettings({
   setTerminalRenderer,
   terminalCopyOnSelect,
   setTerminalCopyOnSelect,
+  activeWorkspaceId,
 }: GeneralSettingsProps) {
   const t = useTranslation();
+  const navigate = useNavigate();
   const notificationsLabelId = useId();
   const notificationsDescId = useId();
   const soundLabelId = useId();
@@ -1358,23 +1360,12 @@ function GeneralSettings({
           />
         </div>
       </div>
-    </div>
-  );
-}
 
-interface DiagnosticsSettingsProps {
-  activeWorkspaceId: string | null;
-}
-
-function DiagnosticsSettings({ activeWorkspaceId }: DiagnosticsSettingsProps) {
-  const t = useTranslation();
-  const navigate = useNavigate();
-
-  return (
-    <div className="settings-section settings-section--diagnostics">
-      <div className="settings-group">
-        <h3 className="settings-group-title">{t("diagnostics.title")}</h3>
-        <p className="settings-group-desc">{t("diagnostics.settings_hint")}</p>
+      <div className="settings-toggle-row settings-toggle-row--action">
+        <div className="settings-toggle-info">
+          <span className="settings-toggle-label">{t("diagnostics.title")}</span>
+          <span className="settings-toggle-desc">{t("diagnostics.settings_hint")}</span>
+        </div>
         <Button
           className="settings-diagnostics-button"
           leadingIcon={<ThemedIcon semantic="state.warning" size={16} />}
@@ -1386,9 +1377,10 @@ function DiagnosticsSettings({ activeWorkspaceId }: DiagnosticsSettingsProps) {
               })
             )
           }
+          size="sm"
           variant="ghost"
         >
-          {t("diagnostics.actions.open_diagnostics")}
+          {t("action.open")}
         </Button>
       </div>
     </div>

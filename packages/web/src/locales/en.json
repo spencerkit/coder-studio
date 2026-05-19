@@ -768,7 +768,6 @@
       "enable_objective": "Enable Objective",
       "details": "Supervisor Details",
       "edit_objective": "Edit Supervisor",
-      "disable": "Disable",
       "pause": "Pause",
       "resume": "Resume",
       "trigger": "Trigger Evaluation",
@@ -789,13 +788,6 @@
       },
       "details": {
         "title": "Supervisor Details"
-      },
-      "disable": {
-        "title": "Disable Supervisor",
-        "subtitle": "Stop automatic evaluation. The current session's supervision cycles will be removed.",
-        "confirm": "Disable",
-        "warning_title": "Disabling stops evaluation cycles",
-        "warning_body": "Supervisor will be removed from the current session and its cycle history will be cleared. You can enable it again later, but previous records cannot be restored."
       }
     }
   },
@@ -855,7 +847,7 @@
   },
   "diagnostics": {
     "title": "Diagnostics",
-    "settings_hint": "Run a quick environment check only when you need help recovering.",
+    "settings_hint": "Diagnose the runtime environment to help identify and recover from issues.",
     "load_failed": "Diagnostics could not be refreshed right now.",
     "loading_description": "Checking the parts that matter for this task.",
     "status": {

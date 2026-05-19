@@ -768,7 +768,6 @@
       "enable_objective": "启用目标",
       "details": "Supervisor 详情",
       "edit_objective": "编辑 Supervisor",
-      "disable": "禁用",
       "pause": "暂停",
       "resume": "恢复",
       "trigger": "触发评估",
@@ -789,13 +788,6 @@
       },
       "details": {
         "title": "Supervisor 详情"
-      },
-      "disable": {
-        "title": "禁用 Supervisor",
-        "subtitle": "停止自动评估。当前会话的监督周期将被移除",
-        "confirm": "禁用",
-        "warning_title": "禁用后会停止评估周期",
-        "warning_body": "当前会话的 Supervisor 将被移除，历史 cycles 会一并清理。可重新启用，但无法恢复记录。"
       }
     }
   },
@@ -855,7 +847,7 @@
   },
   "diagnostics": {
     "title": "诊断",
-    "settings_hint": "只在你需要帮助恢复环境时，再运行一次快速检查。",
+    "settings_hint": "诊断运行环境，便于排查和恢复问题。",
     "load_failed": "当前无法刷新诊断结果。",
     "loading_description": "正在检查这次任务真正相关的环境项。",
     "status": {

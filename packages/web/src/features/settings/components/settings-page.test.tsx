@@ -250,7 +250,7 @@ describe("SettingsPage", () => {
     ).toBeTruthy();
     expect(
       desktopView.container.querySelector('[data-icon-semantic="nav.settings.diagnostics"]')
-    ).toBeTruthy();
+    ).toBeNull();
 
     desktopView.unmount();
 
@@ -278,22 +278,20 @@ describe("SettingsPage", () => {
     ).toBeTruthy();
     expect(
       mobileView.container.querySelector('[data-icon-semantic="nav.settings.diagnostics"]')
-    ).toBeTruthy();
+    ).toBeNull();
   });
 
-  it("opens diagnostics from the diagnostics settings section", async () => {
+  it("opens diagnostics from the general settings section", async () => {
     const store = createConnectedStore(vi.fn().mockResolvedValue({}));
 
     renderSettingsPage(store);
 
-    const diagnosticsSection = await screen.findByRole("button", {
-      name: /Help & Diagnostics|帮助与诊断/,
-    });
-    fireEvent.click(diagnosticsSection);
+    expect(screen.getByText(/诊断运行环境|Diagnose the runtime environment/)).toBeInTheDocument();
 
     const diagnosticsButton = await screen.findByRole("button", {
-      name: /Open Diagnostics|打开诊断/,
+      name: /Open|打开/,
     });
+    expect(diagnosticsButton).toHaveClass("settings-diagnostics-button");
     fireEvent.click(diagnosticsButton);
 
     expect(routerMocks.navigate).toHaveBeenCalledWith("/diagnostics?context=manual_check");
