@@ -680,6 +680,7 @@
   "supervisor": {
     "title": "Supervisor",
     "empty": "Supervisor 未启用",
+    "completed_cycles": "轮次 {count}",
     "latest_evaluation": "最近一次评估",
     "state": {
       "inactive": "未启用",

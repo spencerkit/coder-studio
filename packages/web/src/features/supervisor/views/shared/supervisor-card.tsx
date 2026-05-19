@@ -15,8 +15,6 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
     handleResume,
     handleTrigger,
     isBusy,
-    latestCycle,
-    latestCycleText,
     openDialog,
     stopReasonLabel,
     stateClass,
@@ -50,7 +48,14 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
           <span className="supervisor-provider-pill">{supervisor.evaluatorProviderId}</span>
         </span>
 
-        <span className={`supervisor-state-tag ${stateClass}`}>{stateLabel}</span>
+        <span className="supervisor-status-cluster">
+          <span className={`supervisor-state-tag ${stateClass}`}>{stateLabel}</span>
+          <span className="supervisor-cycle-count">
+            {t("supervisor.completed_cycles", {
+              count: String(supervisor.completedSupervisionCount),
+            })}
+          </span>
+        </span>
 
         <div className="supervisor-actions">
           <Tooltip content={t("supervisor.action.edit_objective")}>
@@ -119,21 +124,6 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
           <span className="supervisor-objective-text">{supervisor.objective}</span>
         </Tooltip>
       </div>
-
-      {latestCycle ? (
-        <ol className="supervisor-history-list" aria-label={t("supervisor.latest_evaluation")}>
-          <li className="supervisor-history-item" data-trigger={latestCycle.trigger}>
-            <span className="supervisor-history-trigger">
-              {latestCycle.trigger === "manual"
-                ? t("supervisor.trigger.manual")
-                : latestCycle.trigger === "scheduled"
-                  ? t("supervisor.trigger.scheduled")
-                  : t("supervisor.trigger.auto")}
-            </span>
-            <span className="supervisor-history-result">{latestCycleText}</span>
-          </li>
-        </ol>
-      ) : null}
 
       {supervisor.state === "stopped" && stopReasonLabel ? (
         <div className="supervisor-error" role="status">

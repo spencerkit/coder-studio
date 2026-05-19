@@ -3487,6 +3487,26 @@ body.is-resizing-panels * {
   color: var(--text-tertiary);
 }
 
+.supervisor-status-cluster {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+
+.supervisor-cycle-count {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px var(--sp-2);
+  border-radius: var(--radius-sm);
+  background: rgba(114, 132, 146, 0.14);
+  color: var(--text-tertiary);
+  font-size: var(--type-kicker-size);
+  line-height: var(--type-kicker-line-height);
+  font-weight: var(--type-kicker-weight);
+  letter-spacing: var(--type-kicker-letter-spacing);
+  text-transform: uppercase;
+}
+
 /* Actions — icon-only mini buttons pushed to the row end */
 .supervisor-actions {
   display: inline-flex;

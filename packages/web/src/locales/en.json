@@ -680,6 +680,7 @@
   "supervisor": {
     "title": "Supervisor",
     "empty": "Supervisor is not enabled",
+    "completed_cycles": "Cycles {count}",
     "latest_evaluation": "Latest evaluation",
     "state": {
       "inactive": "Inactive",
