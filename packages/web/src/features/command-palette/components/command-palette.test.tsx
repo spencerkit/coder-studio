@@ -233,7 +233,7 @@ describe("CommandPalette", () => {
     expect(store.get(terminalPanelVisibleAtom)).toBe(true);
   });
 
-  it("keeps the desktop palette overlay, chrome, and selected item styling visible", () => {
+  it("keeps the desktop palette inside the shared workbench layer", () => {
     const store = createStore();
     store.set(localeAtom, "en");
     store.set(commandPaletteOpenAtom, true);
@@ -250,10 +250,11 @@ describe("CommandPalette", () => {
     );
 
     const palette = document.querySelector(".command-palette");
-    const overlay = document.querySelector(".command-palette-overlay");
+    const overlay = document.querySelector(".workbench-layer-backdrop");
     const searchInput = screen.getByRole("textbox");
 
     expect(overlay).toBeTruthy();
+    expect(screen.getByRole("dialog", { name: "Command Palette" })).toBeInTheDocument();
     expect(palette).toBeTruthy();
     expect(document.querySelector(".command-palette-header")).toBeTruthy();
     expect(document.querySelector(".command-palette-search")).toBeTruthy();
@@ -295,7 +296,7 @@ describe("CommandPalette", () => {
     fireEvent.click(launchItem!);
 
     expect(screen.getByTestId("workspace-launch-modal-mock")).toBeInTheDocument();
-    expect(document.querySelector(".command-palette-overlay")).toBeNull();
+    expect(document.querySelector(".workbench-layer-backdrop")).toBeNull();
     expect(document.querySelector(".mobile-sheet")).toBeNull();
     expect(store.get(commandPaletteOpenAtom)).toBe(false);
   });

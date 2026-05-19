@@ -2,14 +2,7 @@ import type { WorktreeInfo } from "@coder-studio/core";
 import { useAtomValue } from "jotai";
 import { X } from "lucide-react";
 import { resolvedActiveWorkspaceIdAtom } from "../../../../atoms/workspaces";
-import {
-  IconButton,
-  Modal,
-  ModalBody,
-  ModalHeader,
-  ModalTitle,
-  Sheet,
-} from "../../../../components/ui";
+import { Drawer, IconButton, Sheet } from "../../../../components/ui";
 import { useViewport } from "../../../../hooks/use-viewport";
 import { useTranslation } from "../../../../lib/i18n";
 import { WorktreeDetailPanel } from "./worktree-detail-panel";
@@ -48,21 +41,25 @@ export function WorktreeModal({ workspaceId, worktree, onClose }: WorktreeModalP
   }
 
   return (
-    <Modal open onOpenChange={onClose} size="lg">
-      <ModalHeader>
-        <div className="worktree-header-info">
-          <ModalTitle>{worktree.name}</ModalTitle>
-        </div>
+    <Drawer
+      backdropDismiss
+      headerActions={
         <IconButton
           aria-label={t("action.close")}
           icon={<X size={14} />}
           onClick={onClose}
           size="sm"
         />
-      </ModalHeader>
-      <ModalBody>
-        <WorktreeDetailPanel workspaceId={resolvedWorkspaceId} worktree={worktree} />
-      </ModalBody>
-    </Modal>
+      }
+      onOpenChange={(open) => {
+        if (!open) {
+          onClose();
+        }
+      }}
+      open
+      title={worktree.name}
+    >
+      <WorktreeDetailPanel workspaceId={resolvedWorkspaceId} worktree={worktree} />
+    </Drawer>
   );
 }

@@ -375,6 +375,35 @@ describe("WorkspaceLaunchModal", () => {
     });
   });
 
+  it("uses the shared workbench layer on desktop", async () => {
+    const onClose = vi.fn();
+    const sendCommand = vi.fn().mockResolvedValue({
+      currentPath: "/home/spencer",
+      parentPath: "/home",
+      directories: [{ name: "workspace", path: "/home/spencer/workspace", itemCount: 3 }],
+    });
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <WorkspaceLaunchModal onClose={onClose} />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    expect(await screen.findByRole("dialog", { name: "Open Workspace" })).toBeInTheDocument();
+    expect(document.querySelector(".workbench-layer-backdrop")).toBeTruthy();
+    expect(document.querySelector(".launch-overlay")).toBeNull();
+    expect(document.querySelector(".launch-modal")).toBeTruthy();
+
+    fireEvent.click(document.querySelector(".workbench-layer-backdrop") as HTMLElement);
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it("renders English labels when locale is set to en", async () => {
     const sendCommand = vi.fn().mockResolvedValue({
       currentPath: "/home/spencer",
@@ -415,7 +444,7 @@ describe("WorkspaceLaunchModal", () => {
     store.set(localeAtom, "en");
     store.set(wsClientAtom, { sendCommand } as never);
 
-    const { container } = render(
+    render(
       <Provider store={store}>
         <MemoryRouter>
           <WorkspaceLaunchModal onClose={vi.fn()} />
@@ -424,11 +453,11 @@ describe("WorkspaceLaunchModal", () => {
     );
 
     const spinner = screen.getByRole("status", { name: "Loading..." });
-    const loadingShell = container.querySelector(".directory-loading");
+    const loadingShell = document.querySelector(".directory-loading");
 
     expect(screen.getByText("Loading...")).toBeInTheDocument();
     expect(loadingShell).toBeTruthy();
     expect(spinner).toHaveClass("animate-spin");
-    expect(container.querySelector(".directory-loading .animate-spin")).toBe(spinner);
+    expect(document.querySelector(".directory-loading .animate-spin")).toBe(spinner);
   });
 });

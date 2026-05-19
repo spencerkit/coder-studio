@@ -89,6 +89,19 @@ describe("base.css desktop typography foundation", () => {
     expect(tokensStylesheet).toContain("--desktop-modal-max-width-lg:");
   });
 
+  it("defines semantic overlay z-index tokens for governed layers", () => {
+    expect(tokensStylesheet).toContain("--z-local-overlay:");
+    expect(tokensStylesheet).toContain("--z-drawer-backdrop:");
+    expect(tokensStylesheet).toContain("--z-drawer:");
+    expect(tokensStylesheet).toContain("--z-workbench-backdrop:");
+    expect(tokensStylesheet).toContain("--z-workbench:");
+    expect(tokensStylesheet).toContain("--z-modal-backdrop:");
+    expect(tokensStylesheet).toContain("--z-modal:");
+    expect(tokensStylesheet).toContain("--z-popover:");
+    expect(tokensStylesheet).toContain("--z-tooltip:");
+    expect(tokensStylesheet).toContain("--z-toast:");
+  });
+
   it("maps base text elements onto semantic typography tokens", () => {
     expect(getRuleBlock("body")).toContain("font-size: var(--type-body-size)");
     expect(getRuleBlock("body")).toContain("line-height: var(--type-body-line-height)");
