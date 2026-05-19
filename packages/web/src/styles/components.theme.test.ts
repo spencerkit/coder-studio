@@ -70,6 +70,10 @@ const textareaStyles = readFileSync(
   "utf8"
 );
 const tabsStyles = readFileSync(`${process.cwd()}/src/components/ui/tabs/index.module.css`, "utf8");
+const statusDotStylesheet = readFileSync(
+  `${process.cwd()}/src/components/ui/status-dot/index.module.css`,
+  "utf8"
+);
 
 function getLastGroupedRuleBlockFrom(source: string, pattern: RegExp) {
   const matches = Array.from(source.matchAll(pattern));
@@ -1893,6 +1897,44 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(supervisorLabel).toContain("font-size: var(--type-kicker-size)");
     expect(supervisorLabel).toContain("line-height: var(--type-kicker-line-height)");
     expect(supervisorLabel).toContain("font-weight: var(--type-kicker-weight)");
+  });
+
+  it("keeps running session header emphasis theme-safe and motion-aware", () => {
+    const runningDot = getLastRuleBlock(".session-dot-running");
+    const runningBadge = getLastRuleBlock(
+      ".session-card > .panel-header .session-state-badge.badge-green"
+    );
+    const darkRunningBadge = getLastRuleBlock(
+      '[data-theme$="-dark"] .session-card > .panel-header .session-state-badge.badge-green'
+    );
+    const lightRunningBadge = getLastRuleBlock(
+      '[data-theme$="-light"] .session-card > .panel-header .session-state-badge.badge-green'
+    );
+    const statusDotStyles = getLastRuleBlockFrom(
+      statusDotStylesheet,
+      ":global(.session-dot-running)"
+    );
+    const runningRingStyles = getRuleBlocksFrom(
+      statusDotStylesheet,
+      ":global(.session-dot-running)::after"
+    );
+    const reducedDotMotion = getLastGroupedRuleBlockFrom(
+      statusDotStylesheet,
+      /@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*?:global\(\.session-dot-running\)::after\s*\{([^}]*)\}/g
+    );
+
+    expect(runningDot).toContain("box-shadow:");
+    expect(runningBadge).toContain("border: 1px solid color-mix(");
+    expect(runningBadge).toContain("background: color-mix(in srgb, currentColor");
+    expect(darkRunningBadge).toContain("box-shadow:");
+    expect(lightRunningBadge).toContain("box-shadow:");
+    expect(statusDotStyles).toContain("animation: statusDotRunningPulse 1.7s ease-in-out infinite");
+    expect(
+      runningRingStyles.some((block) =>
+        block.includes("animation: statusDotRunningRing 1.7s ease-out infinite")
+      )
+    ).toBe(true);
+    expect(reducedDotMotion).toContain("animation: none");
   });
 
   it("keeps supervisor entry icons and labels vertically centered", () => {

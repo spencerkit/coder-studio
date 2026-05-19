@@ -1,4 +1,5 @@
 .dot {
+  position: relative;
   display: inline-flex;
   width: var(--status-dot-current-size, var(--status-dot-size));
   height: var(--status-dot-current-size, var(--status-dot-size));
@@ -52,7 +53,21 @@
   animation: statusDotPulse 1s ease-in-out infinite;
 }
 
-:global(.session-dot-running),
+:global(.session-dot-running) {
+  --status-dot-current-color: var(--color-info);
+  animation: statusDotRunningPulse 1.7s ease-in-out infinite;
+}
+
+:global(.session-dot-running)::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: inherit;
+  border: 1px solid color-mix(in srgb, var(--color-info) 28%, transparent);
+  opacity: 0.55;
+  animation: statusDotRunningRing 1.7s ease-out infinite;
+}
+
 :global(.connection-status-dot-connected) {
   --status-dot-current-color: var(--color-info);
 }
@@ -63,4 +78,49 @@
 
 :global(.connection-status-dot-disconnected) {
   --status-dot-current-color: var(--color-error);
+}
+
+@keyframes statusDotRunningPulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+
+  50% {
+    transform: scale(1.06);
+    opacity: 0.82;
+  }
+}
+
+@keyframes statusDotRunningRing {
+  0% {
+    transform: scale(0.72);
+    opacity: 0;
+  }
+
+  30% {
+    opacity: 0.5;
+  }
+
+  100% {
+    transform: scale(1.18);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pulse,
+  :global(.session-dot-starting),
+  :global(.session-dot-running),
+  :global(.connection-status-dot-connecting),
+  :global(.connection-status-dot-reconnecting) {
+    animation: none;
+  }
+
+  :global(.session-dot-running)::after {
+    animation: none;
+    opacity: 0.36;
+    transform: none;
+  }
 }

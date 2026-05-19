@@ -7813,6 +7813,24 @@ textarea.input {
   white-space: nowrap;
 }
 
+.session-card > .panel-header .session-state-badge.badge-green {
+  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+
+[data-theme$="-dark"] .session-card > .panel-header .session-state-badge.badge-green {
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 8%, transparent),
+    0 0 0 1px color-mix(in srgb, currentColor 10%, transparent),
+    0 8px 18px color-mix(in srgb, currentColor 16%, transparent);
+}
+
+[data-theme$="-light"] .session-card > .panel-header .session-state-badge.badge-green {
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 50%, transparent),
+    0 0 0 1px color-mix(in srgb, currentColor 8%, transparent);
+}
+
 .session-card > .panel-header.panel-header--inline-meta .panel-header__meta {
   overflow: hidden;
 }

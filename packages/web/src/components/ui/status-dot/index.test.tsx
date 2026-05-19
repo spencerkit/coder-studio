@@ -49,4 +49,16 @@ describe("StatusDot", () => {
     expect(dot).toHaveClass("connection-status-dot", "connection-status-dot-disconnected");
     expect(dot.style.getPropertyValue("--status-dot-current-size")).toBe("6px");
   });
+
+  it("allows running session dots to combine legacy classes with the shared pulse variant", () => {
+    render(
+      <StatusDot tone="info" pulse className="session-dot session-dot-running" data-testid="dot" />
+    );
+
+    const dot = screen.getByTestId("dot");
+
+    expect(dot).toHaveClass("session-dot", "session-dot-running");
+    expect(dot.className).toContain("pulse");
+    expect(dot.style.getPropertyValue("--status-dot-current-color")).toBe("var(--color-info)");
+  });
 });

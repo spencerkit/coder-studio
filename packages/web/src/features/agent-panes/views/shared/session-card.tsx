@@ -235,6 +235,7 @@ function getSessionDotTone(state: SessionState): "success" | "warning" | "info" 
 function shouldPulseSessionDot(state: SessionState) {
   switch (state) {
     case "starting":
+    case "running":
       return true;
     default:
       return false;
