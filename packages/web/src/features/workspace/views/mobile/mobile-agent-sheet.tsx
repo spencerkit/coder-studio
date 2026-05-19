@@ -41,6 +41,21 @@ function formatSessionLabel(session: Session) {
   return session.id.replace(/[_-]/g, " ").toUpperCase();
 }
 
+function formatSessionStateLabel(state: Session["state"], t: ReturnType<typeof useTranslation>) {
+  switch (state) {
+    case "starting":
+      return t("status.starting");
+    case "running":
+      return t("status.running");
+    case "idle":
+      return t("status.idle");
+    case "ended":
+      return t("status.ended");
+    default:
+      return state;
+  }
+}
+
 export function MobileAgentSheet({
   activeSessionId,
   activeWorkspaceId,
@@ -123,7 +138,7 @@ export function MobileAgentSheet({
               description: t("mobile.agent.switch_to_agent", {
                 name: formatSessionLabel(session),
               }),
-              meta: session.providerId.toUpperCase(),
+              meta: `${session.providerId.toUpperCase()} · ${formatSessionStateLabel(session.state, t)}`,
               trailingAction: {
                 id: `${session.id}-close`,
                 ariaLabel: t("mobile.agent.close_current_session"),

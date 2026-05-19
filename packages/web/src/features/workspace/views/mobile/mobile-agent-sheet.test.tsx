@@ -213,4 +213,74 @@ describe("MobileAgentSheet", () => {
       },
     });
   });
+
+  it("renders session state in the mobile agent list", () => {
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+
+    mockUseProviderLauncher.mockReturnValue({
+      states: {
+        claude: {
+          runtime: {
+            available: true,
+            autoInstallSupported: true,
+            installReadiness: "ready",
+            manualGuideKeys: [],
+          },
+          loading: false,
+          installJob: null,
+        },
+        codex: {
+          runtime: {
+            available: true,
+            autoInstallSupported: true,
+            installReadiness: "ready",
+            manualGuideKeys: [],
+          },
+          loading: false,
+          installJob: null,
+        },
+      },
+      launch: vi.fn(),
+    });
+
+    render(
+      <Provider store={store}>
+        <MobileAgentSheet
+          activeSessionId="sess-1"
+          activeWorkspaceId="ws-1"
+          sessions={[
+            {
+              id: "sess-1",
+              workspaceId: "ws-1",
+              terminalId: "term-1",
+              providerId: "claude",
+              state: "running",
+              capability: "full",
+              startedAt: 1,
+              lastActiveAt: 1,
+            },
+            {
+              id: "sess-2",
+              workspaceId: "ws-1",
+              terminalId: "term-2",
+              providerId: "codex",
+              state: "idle",
+              capability: "full",
+              startedAt: 1,
+              lastActiveAt: 1,
+            },
+          ]}
+          onClose={vi.fn()}
+          onCloseSession={vi.fn().mockResolvedValue(undefined)}
+          onSelectSession={vi.fn()}
+          onSessionCreated={vi.fn()}
+        />
+      </Provider>
+    );
+
+    expect(screen.getByText("CLAUDE · Running")).toBeInTheDocument();
+    expect(screen.getByText("CODEX · Idle")).toBeInTheDocument();
+  });
 });
