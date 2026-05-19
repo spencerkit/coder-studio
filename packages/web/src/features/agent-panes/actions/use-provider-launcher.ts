@@ -22,6 +22,10 @@ interface UseProviderLauncherResult {
   launch: (providerId: ProviderId) => Promise<void>;
 }
 
+function canAutoInstall(runtime: ProviderRuntimeStatusEntry): boolean {
+  return runtime.autoInstallSupported && runtime.installReadiness === "ready";
+}
+
 function createFallbackRuntimeEntry(providerId: ProviderId): ProviderRuntimeStatusEntry {
   return {
     providerId,
@@ -56,7 +60,8 @@ function buildStateMap(
 export function useProviderLauncher(
   dispatch: DispatchCommand,
   workspaceId: string,
-  onSessionCreated: (session: Session, providerId: ProviderId) => void
+  onSessionCreated: (session: Session, providerId: ProviderId) => void,
+  _continuation?: { paneId?: string; launchMode?: "assign" | "replace" }
 ): UseProviderLauncherResult {
   const [states, setStates] = useState<Record<ProviderId, ProviderCardState>>(buildStateMap());
   const pollingTimers = useRef<Partial<Record<ProviderId, number>>>({});
@@ -78,14 +83,16 @@ export function useProviderLauncher(
         return;
       }
 
+      const nextStates = buildStateMap(result.data.providers);
+
       setStates((prev) => ({
         claude: {
           ...prev.claude,
-          ...buildStateMap(result.data.providers).claude,
+          ...nextStates.claude,
         },
         codex: {
           ...prev.codex,
-          ...buildStateMap(result.data.providers).codex,
+          ...nextStates.codex,
         },
       }));
     };
@@ -108,15 +115,17 @@ export function useProviderLauncher(
       return;
     }
 
+    const nextStates = buildStateMap(result.data.providers);
+
     setStates((prev) => ({
       claude: {
         ...prev.claude,
-        runtime: result.data.providers.claude,
+        runtime: nextStates.claude.runtime,
         loading: false,
       },
       codex: {
         ...prev.codex,
-        runtime: result.data.providers.codex,
+        runtime: nextStates.codex.runtime,
         loading: false,
       },
     }));
@@ -139,6 +148,25 @@ export function useProviderLauncher(
               failure,
             }
           : prev[providerId].installJob,
+      },
+    }));
+  };
+
+  const handleSessionCreateFailure = async (
+    providerId: ProviderId,
+    message?: string,
+    code?: string
+  ) => {
+    if (code === "provider_cli_missing") {
+      await refreshStatus();
+    }
+
+    setStates((prev) => ({
+      ...prev,
+      [providerId]: {
+        ...prev[providerId],
+        loading: false,
+        inlineError: message,
       },
     }));
   };
@@ -176,22 +204,15 @@ export function useProviderLauncher(
         return;
       }
 
-      if (createResult.error?.code === "provider_cli_missing") {
-        await refreshStatus();
-      }
-
-      setStates((prev) => ({
-        ...prev,
-        [providerId]: {
-          ...prev[providerId],
-          loading: false,
-          inlineError: createResult.error?.message,
-        },
-      }));
+      await handleSessionCreateFailure(
+        providerId,
+        createResult.error?.message,
+        createResult.error?.code
+      );
       return;
     }
 
-    if (!runtime.autoInstallSupported) {
+    if (!canAutoInstall(runtime)) {
       setStates((prev) => ({
         ...prev,
         [providerId]: {
@@ -242,6 +263,13 @@ export function useProviderLauncher(
 
       if (createResult.ok && createResult.data) {
         onSessionCreated(createResult.data, providerId);
+      }
+      if (!createResult.ok) {
+        await handleSessionCreateFailure(
+          providerId,
+          createResult.error?.message,
+          createResult.error?.code
+        );
       }
       return;
     }
@@ -294,14 +322,11 @@ export function useProviderLauncher(
         return;
       }
 
-      setStates((prev) => ({
-        ...prev,
-        [providerId]: {
-          ...prev[providerId],
-          inlineError: createResult.error?.message,
-          loading: false,
-        },
-      }));
+      await handleSessionCreateFailure(
+        providerId,
+        createResult.error?.message,
+        createResult.error?.code
+      );
     };
 
     pollingTimers.current[providerId] = window.setTimeout(poll, 1500);

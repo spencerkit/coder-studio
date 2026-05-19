@@ -32,10 +32,11 @@ import {
   serverInfoAtom,
 } from "../../../atoms/connection";
 import { resolvedActiveWorkspaceIdAtom } from "../../../atoms/workspaces";
-import { Input, Notice, Pill, Select, Switch, ThemedIcon } from "../../../components/ui";
+import { Button, Input, Notice, Pill, Select, Switch, ThemedIcon } from "../../../components/ui";
 import { useViewport } from "../../../hooks/use-viewport";
 import { useTranslation } from "../../../lib/i18n";
 import { getThemeById, resolveStoredThemeId, THEMES } from "../../../theme";
+import { buildDiagnosticsPath } from "../../diagnostics";
 import { notificationPreferencesAtom } from "../../notifications/atoms";
 import { MobilePageHeader } from "../../shared/components/mobile-page-header";
 import { PageHeader } from "../../shared/components/page-header";
@@ -205,7 +206,8 @@ export function SettingsPage() {
   const dispatch = useAtomValue(dispatchCommandAtom);
   const connectionStatus = useAtomValue(connectionStatusAtom);
   const serverInfo = useAtomValue(serverInfoAtom);
-  const activeWorkspaceId = useAtomValue(resolvedActiveWorkspaceIdAtom);
+  const resolvedActiveWorkspaceId = useAtomValue(resolvedActiveWorkspaceIdAtom);
+  const activeWorkspaceId = resolvedActiveWorkspaceId;
   const [navigationState, setNavigationState] = useState<SettingsNavigationState>(() =>
     isMobile
       ? { kind: "root", lastSection: DEFAULT_SETTINGS_SECTION }
@@ -548,11 +550,14 @@ export function SettingsPage() {
             additionalArgsById={providerAdditionalArgsById}
             setAdditionalArgsById={setProviderAdditionalArgsById}
             isMobile={isMobile}
+            activeWorkspaceId={activeWorkspaceId}
             onLayoutModeChange={setContentLayoutMode}
           />
         );
       case "shortcuts":
         return <ShortcutsSettings />;
+      case "diagnostics":
+        return <DiagnosticsSettings activeWorkspaceId={activeWorkspaceId} />;
       default:
         return null;
     }
@@ -1352,6 +1357,39 @@ function GeneralSettings({
             }}
           />
         </div>
+      </div>
+    </div>
+  );
+}
+
+interface DiagnosticsSettingsProps {
+  activeWorkspaceId: string | null;
+}
+
+function DiagnosticsSettings({ activeWorkspaceId }: DiagnosticsSettingsProps) {
+  const t = useTranslation();
+  const navigate = useNavigate();
+
+  return (
+    <div className="settings-section settings-section--diagnostics">
+      <div className="settings-group">
+        <h3 className="settings-group-title">{t("diagnostics.title")}</h3>
+        <p className="settings-group-desc">{t("diagnostics.settings_hint")}</p>
+        <Button
+          className="settings-diagnostics-button"
+          leadingIcon={<ThemedIcon semantic="state.warning" size={16} />}
+          onClick={() =>
+            navigate(
+              buildDiagnosticsPath({
+                context: "manual_check",
+                workspaceId: activeWorkspaceId ?? undefined,
+              })
+            )
+          }
+          variant="ghost"
+        >
+          {t("diagnostics.actions.open_diagnostics")}
+        </Button>
       </div>
     </div>
   );

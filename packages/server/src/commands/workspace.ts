@@ -2,11 +2,45 @@
  * Workspace Commands
  */
 
-import { readdir } from "node:fs/promises";
+import { readdir, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import { z } from "zod";
 import { registerCommand } from "../ws/dispatch.js";
+
+function resolveBrowsePath(path: string | undefined): string {
+  const home = homedir();
+
+  if (!path || path === "~") {
+    return home;
+  }
+
+  if (path.startsWith("~/")) {
+    return join(home, path.slice(2));
+  }
+
+  return isAbsolute(path) ? path : resolve(home, path);
+}
+
+async function buildRootPaths(currentPath: string): Promise<string[]> {
+  const roots = new Set<string>(["/"]);
+  const home = homedir();
+
+  roots.add(home);
+
+  try {
+    roots.add(await realpath(home));
+  } catch {
+    // Ignore realpath resolution failures and keep the visible home path.
+  }
+
+  const currentSegments = currentPath.split("/").filter(Boolean);
+  if (currentSegments.length > 0) {
+    roots.add(`/${currentSegments[0]}`);
+  }
+
+  return Array.from(roots);
+}
 
 // workspace.list
 registerCommand("workspace.list", z.object({}), async (_args, ctx) => {
@@ -20,7 +54,7 @@ registerCommand(
     path: z.string().optional(),
   }),
   async (args) => {
-    const basePath = args.path || homedir();
+    const basePath = resolveBrowsePath(args.path);
     const entries = await readdir(basePath, { withFileTypes: true });
 
     const directories = entries
@@ -35,6 +69,7 @@ registerCommand(
       currentPath: basePath,
       parentPath: basePath !== "/" ? join(basePath, "..") : null,
       directories,
+      rootPaths: await buildRootPaths(basePath),
     };
   }
 );

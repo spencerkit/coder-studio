@@ -7,6 +7,7 @@
 import type { Command, ProviderDefinition, Result } from "@coder-studio/core";
 import { z } from "zod";
 import type { EventBus } from "../bus/event-bus.js";
+import type { ServerConfig } from "../config.js";
 import type { AutoFetchRuntime } from "../git/auto-fetch.js";
 import type { ProviderInstallManager } from "../provider-runtime/install-manager.js";
 import type { RuntimeStatusDeps } from "../provider-runtime/runtime-status.js";
@@ -36,6 +37,7 @@ export interface CommandContext {
   providerRuntimeDeps?: RuntimeStatusDeps;
   providerInstallMgr?: ProviderInstallManager;
   activationMgr: ActivationManager;
+  config?: Pick<ServerConfig, "auth" | "host">;
 }
 
 /**

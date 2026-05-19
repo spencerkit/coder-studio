@@ -1,5 +1,5 @@
 import { mkdir } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { EventBus } from "../bus/event-bus.js";
@@ -125,6 +125,46 @@ describe("Workspace Commands", () => {
       expect(result.ok).toBe(true);
       const workspaceId = (result.data as { id: string }).id;
       expect(triggerOpenTimeFetch).toHaveBeenCalledWith(workspaceId);
+    });
+  });
+
+  describe("workspace.browse", () => {
+    it("expands ~ to the current home directory", async () => {
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "workspace-browse-home",
+          op: "workspace.browse",
+          args: {
+            path: "~",
+          },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.data).toMatchObject({
+        currentPath: homedir(),
+      });
+    });
+
+    it("returns dynamic root paths based on the current browse target", async () => {
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "workspace-browse-roots",
+          op: "workspace.browse",
+          args: {
+            path: homedir(),
+          },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(true);
+      expect((result.data as { rootPaths?: string[] }).rootPaths).toEqual(
+        expect.arrayContaining(["/", homedir()])
+      );
     });
   });
 

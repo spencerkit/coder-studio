@@ -1,12 +1,13 @@
 import type { Session } from "@coder-studio/core";
 import { useAtomValue, useSetAtom } from "jotai";
-import { X } from "lucide-react";
+import { LifeBuoy, X } from "lucide-react";
 import { useState } from "react";
 import { dispatchCommandAtom } from "../../../../atoms/connection";
 import { sessionsAtom } from "../../../../atoms/sessions";
 import { ThemedIcon } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { useProviderLauncher } from "../../../agent-panes/actions/use-provider-launcher";
+import { buildDiagnosticsPath } from "../../../diagnostics";
 import { MobileSelectSheet } from "../../../mobile-select";
 import { usePersistWorkspaceLastViewedTarget } from "../../actions/use-persist-workspace-last-viewed-target";
 
@@ -73,6 +74,11 @@ export function MobileAgentSheet({
       icon: <ThemedIcon semantic="agent.provider.codex" size={16} />,
     },
   ];
+
+  const canAutoInstall = (providerId: "claude" | "codex"): boolean => {
+    const runtime = states[providerId].runtime;
+    return Boolean(runtime?.autoInstallSupported && runtime.installReadiness === "ready");
+  };
 
   const closeSheet = () => {
     setMode(defaultMode === "create" ? "providers" : "sessions");
@@ -143,14 +149,36 @@ export function MobileAgentSheet({
           state.loading ||
           state.installJob?.status === "queued" ||
           state.installJob?.status === "running";
+        const guideMessage =
+          state.inlineError === "manual" || !canAutoInstall(provider.id)
+            ? (state.runtime?.manualGuideKeys ?? []).map((key) => t(key)).join(" ")
+            : state.inlineError || state.installJob?.failure?.message;
 
         return {
           id: provider.id,
           label: provider.title,
-          description: t("mobile.agent.start_session", { provider: provider.title }),
+          description:
+            guideMessage || t("mobile.agent.start_session", { provider: provider.title }),
           meta: busy ? t("mobile.agent.starting") : t("mobile.agent.start_new_session"),
           icon: provider.icon,
           disabled: !canLaunchSession || busy,
+          trailingAction:
+            !busy && guideMessage && activeWorkspaceId
+              ? {
+                  id: `${provider.id}-diagnostics`,
+                  ariaLabel: t("diagnostics.actions.open_diagnostics"),
+                  icon: <LifeBuoy size={16} />,
+                  onAction: () => {
+                    window.location.assign(
+                      buildDiagnosticsPath({
+                        context: "session_start",
+                        workspaceId: activeWorkspaceId,
+                        providerId: provider.id,
+                      })
+                    );
+                  },
+                }
+              : undefined,
         };
       }),
     },

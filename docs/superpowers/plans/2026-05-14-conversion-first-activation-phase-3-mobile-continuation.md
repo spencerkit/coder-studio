@@ -6,13 +6,13 @@
 >
 > **Spec:** `docs/superpowers/specs/2026-05-14-conversion-first-activation-design.md`
 
-**Goal:** Help users continue from desktop to phone or remote devices without overbuilding a low-value in-app assistant.
+**Goal:** Productize phone continuation so the user can move from desktop success to the next differentiated outcome without reading docs.
 
-**Decision update:** The original Mobile Access Assistant mostly displayed LAN URLs and auth warnings. That is useful, but too thin to justify a dedicated feature surface right now. The higher-value user need is a clear remote-access guide that covers LAN access, auth, Tailscale, ngrok, Cloudflare Tunnel, and troubleshooting. Treat any product UI as a lightweight documentation entry point until real usage shows that a stateful assistant is needed.
+**Decision update:** Do not ship a heavyweight Mobile Access Assistant. Instead, make phone continuation explicit and diagnostics-backed: users opt in from Settings or workspace surfaces, and the diagnostics page explains host exposure, auth readiness, reachable links, and what still blocks continuation.
 
-**Architecture:** Phase 3 becomes documentation-first. Keep `setup.mobileAccessStatus` available as future infrastructure, but do not add `packages/web/src/features/mobile-access/*`, workspace-shell CTA, or a new setup success assistant in this phase. The product can later add a small settings/help link to the guide if the help surface supports it.
+**Architecture:** Phase 3 builds on the diagnostics foundation and the inline-first launch model. Phone continuation remains opt-in. Product surfaces can start the flow, while the diagnostics page acts as the authoritative environment report for `mobile_continue`. Documentation remains useful, but the primary continuation path is now in-product rather than doc-only.
 
-**Tech Stack:** Markdown docs, existing help center, README links
+**Tech Stack:** TypeScript, React, Jotai, Vitest, diagnostics command surface, existing workspace shell, help docs for fallback guidance
 
 ---
 
@@ -20,65 +20,81 @@
 
 **Depends on:**
 
-- Existing help center
-- Existing CLI config/status commands
+- Phase 1 diagnostics foundation
+- Phase 2 inline-first launch recovery
+- Existing help center and remote-access documentation
 
 **Includes master task:**
 
-- Supersedes [Task 5](./2026-05-14-conversion-first-activation.md#task-5-add-the-mobile-access-assistant-and-continue-on-phone) for now. Do not implement the full mobile assistant until this decision is revisited.
+- [Task 3](./2026-05-14-conversion-first-activation.md#task-3-productize-phone-continuation-without-a-gate): phone continuation entry points and diagnostics-backed recovery
 
 **Exit criteria:**
 
-- mobile guide explains LAN access from phone
-- guide explains why `localhost` is not reachable from another device
-- guide recommends enabling password before exposing the service
-- guide covers Tailscale, ngrok, and Cloudflare Tunnel at a practical level
-- README/help index points users to the guide
+- users can explicitly ask to continue on phone from Settings or workspace surfaces
+- diagnostics can report host exposure, auth readiness, and candidate links for phone continuation
+- localhost-only or unprotected states are explained clearly
+- the continuation action preserves workspace or session context
+- the product does not advertise phone continuation before the user expresses that intent
 
 ## Deliverables
 
-- Update `docs/help/mobile-guide.md`
-- Update `docs/help/README.md`
-- Update README documentation table entries
-- Keep the original in-app assistant as a deferred idea, not Phase 3 scope
+- `mobile_continue` support on the diagnostics page
+- explicit `Continue on Phone` entry points from Settings and desktop workspace surfaces
+- copyable mobile link handling tied to real readiness data
+- localized copy for host/auth/mobile continuation states
+- focused tests for phone continuation and diagnostics recheck behavior
 
 ## Tracking Checklist
 
-- [x] Re-evaluate the value of a dedicated Mobile Access Assistant
-- [x] Change Phase 3 to documentation-first scope
-- [x] Expand the mobile guide with LAN access instructions
-- [x] Add Tailscale/ngrok/Cloudflare Tunnel guidance
-- [x] Add security and troubleshooting notes
-- [x] Update README/help links
-- [ ] Commit Phase 3 documentation changes
+- [x] Expose `Continue on Phone` from Settings
+- [x] Add a workspace-level continuation entry point after desktop success
+- [x] Show mobile links only when the diagnostics result says they are usable
+- [x] Explain localhost-only and auth-disabled states in product language
+- [x] Recheck and continue from diagnostics after environment changes
+- [x] Preserve workspace/session intent while preparing phone continuation
+- [ ] Pass targeted diagnostics, settings, and workspace tests
+- [ ] Commit Phase 3 changes
 
 ## Files In Play
 
-- Modify: `docs/help/mobile-guide.md`
-- Modify: `docs/help/README.md`
-- Modify: `README.md`
-- Modify: `README.zh-CN.md`
-- Modify: `docs/superpowers/plans/2026-05-14-conversion-first-activation-phase-3-mobile-continuation.md`
+- Modify: `packages/server/src/commands/diagnostics.ts`
+- Modify: `packages/server/src/__tests__/diagnostics-commands.test.ts`
+- Modify: `packages/web/src/features/diagnostics/navigation.ts`
+- Modify: `packages/web/src/features/diagnostics/page.tsx`
+- Modify: `packages/web/src/features/diagnostics/index.test.tsx`
+- Modify: `packages/web/src/features/settings/components/settings-page.tsx`
+- Modify: `packages/web/src/features/settings/components/settings-page.test.tsx`
+- Modify: `packages/web/src/features/workspace/views/desktop/workspace-desktop-view.tsx`
+- Create: `packages/web/src/features/workspace/views/desktop/workspace-desktop-view.test.tsx`
+- Modify: `packages/web/src/locales/en.json`
+- Modify: `packages/web/src/locales/zh.json`
 
 ## Verification
 
-No code tests are required for this documentation-only phase. Verify the Markdown renders and the links point to the intended local docs and official tunnel-provider docs.
+Run these before closing the phase:
+
+```bash
+pnpm exec vitest run \
+  packages/server/src/__tests__/diagnostics-commands.test.ts \
+  packages/web/src/features/diagnostics/index.test.tsx \
+  packages/web/src/features/settings/components/settings-page.test.tsx \
+  packages/web/src/features/workspace/views/desktop/workspace-desktop-view.test.tsx
+```
+
+Expected outcome: phone continuation is explicit but optional, diagnostics can explain and recheck the environment when needed, and mobile links are only surfaced when they are actually usable.
 
 ## Watchouts
 
-- Do not reintroduce a workspace-shell `Continue on Phone` CTA without evidence that users need it.
-- Do not encourage direct public port exposure.
-- Keep third-party tunnel instructions practical but not exhaustive; link official docs for provider-specific details.
-- If a future in-app assistant is revived, it should do more than static information display: status-aware diagnostics, copy actions, QR, and next-step fixes.
+- Do not present localhost fallback links as if they were valid phone entry points.
+- Do not surface phone continuation before the user asks for it.
+- Keep the diagnostics page productized; it should clarify the environment, not turn into documentation copy.
+- Do not duplicate mobile-readiness inference on the client if the server already reports it.
+- Keep help docs updated as fallback guidance for LAN access, auth, and third-party tunnels.
 
-## Detailed Execution Source
-
-The master plan Task 5 is intentionally superseded for this phase:
-
-- [Task 5 detailed steps](./2026-05-14-conversion-first-activation.md#task-5-add-the-mobile-access-assistant-and-continue-on-phone)
+- [Task 3](./2026-05-14-conversion-first-activation.md#task-3-productize-phone-continuation-without-a-gate)
 
 ## Suggested Commit Boundary
 
 ```bash
-git commit -m "docs: add mobile remote access guide"
+git commit -m "feat: add explicit phone continuation with diagnostics recovery"
 ```

@@ -248,6 +248,9 @@ describe("SettingsPage", () => {
     expect(
       desktopView.container.querySelector('[data-icon-semantic="nav.settings.shortcuts"]')
     ).toBeTruthy();
+    expect(
+      desktopView.container.querySelector('[data-icon-semantic="nav.settings.diagnostics"]')
+    ).toBeTruthy();
 
     desktopView.unmount();
 
@@ -273,6 +276,40 @@ describe("SettingsPage", () => {
     expect(
       mobileView.container.querySelector('[data-icon-semantic="nav.settings.shortcuts"]')
     ).toBeTruthy();
+    expect(
+      mobileView.container.querySelector('[data-icon-semantic="nav.settings.diagnostics"]')
+    ).toBeTruthy();
+  });
+
+  it("opens diagnostics from the diagnostics settings section", async () => {
+    const store = createConnectedStore(vi.fn().mockResolvedValue({}));
+
+    renderSettingsPage(store);
+
+    const diagnosticsSection = await screen.findByRole("button", {
+      name: /Help & Diagnostics|帮助与诊断/,
+    });
+    fireEvent.click(diagnosticsSection);
+
+    const diagnosticsButton = await screen.findByRole("button", {
+      name: /Open Diagnostics|打开诊断/,
+    });
+    fireEvent.click(diagnosticsButton);
+
+    expect(routerMocks.navigate).toHaveBeenCalledWith("/diagnostics?context=manual_check");
+  });
+
+  it("does not render phone continuation entry from settings even when a workspace is active", async () => {
+    const store = createConnectedStore(vi.fn().mockResolvedValue({}));
+    store.set(activeWorkspaceIdAtom, "ws-1");
+
+    renderSettingsPage(store);
+
+    expect(
+      screen.queryByRole("button", {
+        name: /Continue on Phone|继续在手机上打开/,
+      })
+    ).not.toBeInTheDocument();
   });
 
   it("renders the mobile settings homepage as grouped sections without the legacy hero", async () => {

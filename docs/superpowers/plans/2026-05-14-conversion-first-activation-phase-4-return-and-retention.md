@@ -8,7 +8,7 @@
 
 **Goal:** Improve retention by making return visits legible and by offering higher-order next steps after activation succeeds.
 
-**Architecture:** Phase 4 productizes the return experience with `home.summary`, a welcome-page returning state, and resume routing. It then layers in Supervisor quick-start templates so the user who has already activated can more easily graduate into long-running workflows.
+**Architecture:** Phase 4 productizes the return experience with `home.summary`, a welcome-page returning state, and resume routing. It then layers in Supervisor quick-start templates so already-activated users can move into longer-running workflows more easily. This work is independent of diagnostics and does not rely on a separate onboarding state machine.
 
 **Tech Stack:** TypeScript, React, Vitest, shared DTOs, server commands, bootstrap flow, supervisor UI
 
@@ -18,41 +18,41 @@
 
 **Depends on:**
 
-- Phase 1 setup/mobile DTO foundation
-- preferably Phase 2 first-task launch, since return state is more valuable once sessions exist
+- Phase 1 diagnostics foundation
+- preferably Phase 2 first-value launch behavior, because return state is more meaningful once sessions exist
 
 **Includes master tasks:**
 
-- [Task 6](./2026-05-14-conversion-first-activation.md#task-6-add-the-returning-home-summary-and-resume-behavior): returning summary and resume behavior
-- [Task 7](./2026-05-14-conversion-first-activation.md#task-7-add-supervisor-quick-start-templates-and-run-the-final-regression-sweep): Supervisor quick-start templates
+- [Task 4](./2026-05-14-conversion-first-activation.md#task-4-add-a-returning-summary-and-resume-behavior): returning summary and resume behavior
+- [Task 5](./2026-05-14-conversion-first-activation.md#task-5-add-supervisor-quick-start-after-activation): Supervisor quick-start templates
 
 **Exit criteria:**
 
 - server can return `home.summary`
-- welcome page can render a returning summary card
-- user can resume into the last relevant workspace/session path
+- welcome can render a returning summary card
+- the user can resume the last relevant workspace or session target
 - Supervisor dialog supports preset objective templates
-- core activation regression suite is still green
+- the broader activation regression suite remains green
 
 ## Deliverables
 
 - `HomeSummaryDto`
 - `packages/server/src/commands/home.ts`
 - `ReturnSummaryCard`
-- bootstrap and route-gate updates for resume
-- Supervisor quick-start chips/templates
+- bootstrap and route-gate updates for resume behavior
+- Supervisor quick-start templates and localized copy
 
 ## Tracking Checklist
 
 - [ ] Add `HomeSummaryDto`
 - [ ] Implement `home.summary`
-- [ ] Update bootstrap to hydrate returning state
+- [ ] Hydrate returning state during bootstrap
 - [ ] Render returning summary on welcome
-- [ ] Wire resume CTA into workspace routing
+- [ ] Wire the resume CTA into workspace routing
 - [ ] Add Supervisor objective templates
 - [ ] Render quick-start template chips in the dialog
 - [ ] Pass targeted home-summary, welcome, and Supervisor tests
-- [ ] Run the final core activation regression sweep
+- [ ] Run the final activation regression sweep
 - [ ] Commit Phase 4 changes
 
 ## Files In Play
@@ -88,25 +88,25 @@ pnpm exec vitest run \
   packages/web/src/features/welcome/index.test.tsx \
   packages/web/src/features/welcome/components/return-summary-card.test.tsx \
   packages/web/src/features/supervisor/components/supervisor-card.test.tsx \
-  packages/web/src/features/setup/views/setup-page.test.tsx \
-  packages/web/src/features/mobile-access/views/mobile-access-assistant.test.tsx \
-  packages/server/src/commands/setup.test.ts
+  packages/web/src/features/diagnostics/index.test.tsx \
+  packages/web/src/features/agent-panes/actions/use-provider-launcher.test.tsx
 ```
 
-Expected outcome: return/resume and Supervisor templates are green, and the core activation path has not regressed.
+Expected outcome: return/resume and Supervisor templates are green, and the inline-first activation path plus diagnostics helper behavior has not regressed.
 
 ## Watchouts
 
 - Keep return state short and decisive; it should reduce cognitive load, not add a dashboard.
 - Resume routing must respect the actual last-viewed target instead of inventing a parallel navigation state.
 - Supervisor quick-start is valuable only after activation; do not move it earlier in the funnel.
+- Do not make return behavior depend on prior diagnostics entry; it should work from real usage history alone.
 
 ## Detailed Execution Source
 
-Use the detailed step-by-step instructions in the master plan:
+Use the implementation guidance in the master plan:
 
-- [Task 6 detailed steps](./2026-05-14-conversion-first-activation.md#task-6-add-the-returning-home-summary-and-resume-behavior)
-- [Task 7 detailed steps](./2026-05-14-conversion-first-activation.md#task-7-add-supervisor-quick-start-templates-and-run-the-final-regression-sweep)
+- [Task 4](./2026-05-14-conversion-first-activation.md#task-4-add-a-returning-summary-and-resume-behavior)
+- [Task 5](./2026-05-14-conversion-first-activation.md#task-5-add-supervisor-quick-start-after-activation)
 
 ## Suggested Commit Boundary
 

@@ -1,8 +1,11 @@
+import type { ProviderRuntimeStatusEntry, ProviderRuntimeStatusResponse } from "@coder-studio/core";
 import { useAtomValue } from "jotai";
 import { type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { connectionStatusAtom, dispatchCommandAtom } from "../../../atoms/connection";
-import { SegmentedControl, Textarea } from "../../../components/ui";
+import { Button, Notice, SegmentedControl, Textarea } from "../../../components/ui";
 import { useTranslation } from "../../../lib/i18n";
+import { buildDiagnosticsPath } from "../../diagnostics";
 import { ConfigEditor, type ConfigType } from "./config-editor";
 
 export interface ProviderInfo {
@@ -15,6 +18,7 @@ interface ProviderSettingsProps {
   additionalArgsById: Record<string, string>;
   setAdditionalArgsById: Dispatch<SetStateAction<Record<string, string>>>;
   isMobile: boolean;
+  activeWorkspaceId?: string | null;
   onLayoutModeChange?: (mode: "default" | "fill-height") => void;
 }
 
@@ -39,9 +43,11 @@ export function ProviderSettings({
   additionalArgsById,
   setAdditionalArgsById,
   isMobile,
+  activeWorkspaceId,
   onLayoutModeChange,
 }: ProviderSettingsProps) {
   const t = useTranslation();
+  const navigate = useNavigate();
   const dispatch = useAtomValue(dispatchCommandAtom);
   const connectionStatus = useAtomValue(connectionStatusAtom);
   const commandPreviewTitle = t("settings.provider.command_preview_title");
@@ -54,6 +60,9 @@ export function ProviderSettings({
   const [previewByProvider, setPreviewByProvider] = useState<Record<string, string>>(() =>
     createProviderRecord(providers, () => "")
   );
+  const [runtimeByProvider, setRuntimeByProvider] = useState<
+    Record<string, ProviderRuntimeStatusEntry | null>
+  >(() => createProviderRecord(providers, () => null));
   const [visitedConfigProviders, setVisitedConfigProviders] = useState<Record<string, boolean>>(
     () => createProviderRecord(providers, () => false)
   );
@@ -72,6 +81,25 @@ export function ProviderSettings({
   useEffect(() => {
     setPreviewByProvider((previous) => {
       const next = createProviderRecord(providers, () => "");
+      let changed = false;
+
+      for (const provider of providers) {
+        if (provider.id in previous) {
+          next[provider.id] = previous[provider.id];
+        } else {
+          changed = true;
+        }
+      }
+
+      if (Object.keys(previous).length !== providers.length) {
+        changed = true;
+      }
+
+      return changed ? next : previous;
+    });
+
+    setRuntimeByProvider((previous) => {
+      const next = createProviderRecord(providers, () => null);
       let changed = false;
 
       for (const provider of providers) {
@@ -118,6 +146,7 @@ export function ProviderSettings({
   }, [providers]);
 
   const provider = providers.find((entry) => entry.id === selectedProvider);
+  const runtime = provider ? runtimeByProvider[provider.id] : null;
   const additionalArgsText = provider ? (additionalArgsById[provider.id] ?? "") : "";
   const additionalArgs = useMemo(
     () => parseProviderAdditionalArgs(additionalArgsText),
@@ -131,6 +160,38 @@ export function ProviderSettings({
   useEffect(() => {
     onLayoutModeChange?.(useFillHeightLayout ? "fill-height" : "default");
   }, [onLayoutModeChange, useFillHeightLayout]);
+
+  useEffect(() => {
+    if (connectionStatus !== "connected") {
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadRuntimeStatus = async () => {
+      const result = await dispatch<ProviderRuntimeStatusResponse>("provider.runtimeStatus", {});
+      if (cancelled || !result.ok || !result.data) {
+        return;
+      }
+      const providersData = result.data.providers ?? {};
+
+      setRuntimeByProvider((previous) => {
+        const next = { ...previous };
+
+        for (const entry of providers) {
+          next[entry.id] = providersData[entry.id] ?? null;
+        }
+
+        return next;
+      });
+    };
+
+    void loadRuntimeStatus();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [connectionStatus, dispatch, providers]);
 
   useEffect(() => {
     if (connectionStatus !== "connected") {
@@ -201,6 +262,29 @@ export function ProviderSettings({
     });
   };
 
+  const providerGuideMessage =
+    runtime && !runtime.available ? runtime.manualGuideKeys.map((key) => t(key)).join(" ") : "";
+  const providerStatusTitle =
+    provider && runtime
+      ? runtime.available
+        ? t("diagnostics.checks.provider_runtime_ready.title", {
+            provider: provider.displayName,
+          })
+        : t("diagnostics.checks.provider_cli_missing.title", {
+            provider: provider.displayName,
+          })
+      : "";
+  const providerStatusDescription =
+    provider && runtime
+      ? runtime.available
+        ? t("diagnostics.checks.provider_runtime_ready.description", {
+            provider: provider.displayName,
+          })
+        : t("diagnostics.checks.provider_cli_missing.description", {
+            provider: provider.displayName,
+          })
+      : "";
+
   return (
     <div
       className={`settings-section ${useFillHeightLayout ? "settings-section--fill-height settings-provider-section--config-active" : ""}`}
@@ -241,6 +325,52 @@ export function ProviderSettings({
         <div
           className={`settings-provider-content ${useFillHeightLayout ? "settings-provider-content--fill-height" : ""}`}
         >
+          {runtime ? (
+            <div className="settings-group">
+              <h3 className="settings-group-title">{t("settings.provider.status")}</h3>
+              <Notice
+                tone={runtime.available ? "success" : "warning"}
+                title={providerStatusTitle}
+                message={
+                  providerGuideMessage
+                    ? `${providerStatusDescription} ${providerGuideMessage}`
+                    : providerStatusDescription
+                }
+                action={
+                  <div style={{ display: "flex", gap: "var(--sp-2)", flexWrap: "wrap" }}>
+                    {runtime.docUrls.provider ? (
+                      <Button
+                        as="a"
+                        href={runtime.docUrls.provider}
+                        rel="noreferrer"
+                        size="sm"
+                        target="_blank"
+                        variant="ghost"
+                      >
+                        {t("provider.install.open_docs")}
+                      </Button>
+                    ) : null}
+                    <Button
+                      onClick={() =>
+                        navigate(
+                          buildDiagnosticsPath({
+                            context: "manual_check",
+                            workspaceId: activeWorkspaceId ?? undefined,
+                            providerId: provider.id,
+                          })
+                        )
+                      }
+                      size="sm"
+                      variant="ghost"
+                    >
+                      {t("diagnostics.actions.open_diagnostics")}
+                    </Button>
+                  </div>
+                }
+              />
+            </div>
+          ) : null}
+
           <div className="settings-group">
             <h3 className="settings-group-title">{t("settings.provider.config")}</h3>
             <p className="settings-group-desc">{t("settings.provider.startup_args_hint")}</p>

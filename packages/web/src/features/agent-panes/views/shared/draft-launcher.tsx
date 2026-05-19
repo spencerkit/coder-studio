@@ -6,6 +6,7 @@ import { dispatchCommandAtom } from "../../../../atoms/connection";
 import { sessionsAtom } from "../../../../atoms/sessions";
 import { Button, IconButton, StatusDot, Tag, ThemedIcon, Tooltip } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
+import { buildDiagnosticsPath } from "../../../diagnostics";
 import { type ProviderId, useProviderLauncher } from "../../actions/use-provider-launcher";
 
 interface DraftLauncherProps {
@@ -42,8 +43,26 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
       } else {
         onReplaceWithSession?.(session.id);
       }
+    },
+    {
+      paneId,
+      launchMode: paneId ? "assign" : "replace",
     }
   );
+
+  const buildProviderDiagnosticsPath = (providerId: ProviderId) =>
+    buildDiagnosticsPath({
+      context: "session_start",
+      workspaceId,
+      providerId,
+      paneId,
+      launchMode: paneId ? "assign" : "replace",
+    });
+
+  const canAutoInstall = (providerId: ProviderId): boolean => {
+    const runtime = states[providerId].runtime;
+    return Boolean(runtime?.autoInstallSupported && runtime.installReadiness === "ready");
+  };
 
   const getProviderCta = (providerId: ProviderId): string => {
     const state = states[providerId];
@@ -57,7 +76,7 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
     if (state.runtime?.available) {
       return t("provider.install.cta.start");
     }
-    if (state.runtime?.autoInstallSupported) {
+    if (canAutoInstall(providerId)) {
       return t("provider.install.cta.install_and_start");
     }
     return t("provider.install.cta.manual");
@@ -81,7 +100,7 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
       };
     }
 
-    if (state.inlineError === "manual" || state.runtime?.autoInstallSupported === false) {
+    if (state.inlineError === "manual" || !canAutoInstall(providerId)) {
       return {
         message: state.runtime?.manualGuideKeys.map((key) => t(key)).join(" "),
         docUrl: state.runtime?.docUrls.provider,
@@ -223,10 +242,21 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
                       <span className="agent-provider-card-guide">
                         <span>{guide.message}</span>
                         {guide.docUrl ? (
-                          <a href={guide.docUrl} target="_blank" rel="noreferrer">
+                          <a
+                            href={guide.docUrl}
+                            onClick={(event) => event.stopPropagation()}
+                            rel="noreferrer"
+                            target="_blank"
+                          >
                             {t("provider.install.open_docs")}
                           </a>
                         ) : null}
+                        <a
+                          href={buildProviderDiagnosticsPath(provider.id)}
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          {t("diagnostics.actions.open_diagnostics")}
+                        </a>
                       </span>
                     ) : null}
                   </span>
