@@ -7831,6 +7831,15 @@ textarea.input {
     0 0 0 1px color-mix(in srgb, currentColor 8%, transparent);
 }
 
+.session-card > .panel-header.session-header--running {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--bg-page) 96%, var(--color-info) 4%),
+    color-mix(in srgb, var(--bg-page) 92%, var(--color-info) 8%),
+    color-mix(in srgb, var(--bg-page) 97%, var(--color-info) 3%)
+  );
+}
+
 .session-card > .panel-header.panel-header--inline-meta .panel-header__meta {
   overflow: hidden;
 }

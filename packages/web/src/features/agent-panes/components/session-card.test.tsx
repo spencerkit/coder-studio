@@ -250,6 +250,26 @@ describe("SessionCard", () => {
     expect(dot?.className).toMatch(/pulse/);
   });
 
+  it("marks running session cards and headers with explicit running state classes", () => {
+    const { store } = createSessionStore({
+      terminalId: "term-live",
+      state: "running",
+      endedAt: undefined,
+    });
+
+    const { container } = render(
+      <Provider store={store}>
+        <SessionCard sessionId="sess_123456" />
+      </Provider>
+    );
+
+    const card = container.querySelector(".session-card");
+    const header = container.querySelector(".session-card > .panel-header");
+
+    expect(card).toHaveClass("session-card--running");
+    expect(header).toHaveClass("session-header--running");
+  });
+
   it("does not render the legacy session progress strip", () => {
     const { store } = createSessionStore({
       terminalId: "term-live",

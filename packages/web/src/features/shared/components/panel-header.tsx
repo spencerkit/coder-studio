@@ -6,6 +6,7 @@ export interface PanelHeaderProps {
   status?: ReactNode;
   actions?: ReactNode;
   metaPlacement?: "stacked" | "inline";
+  className?: string;
 }
 
 export function PanelHeader({
@@ -14,6 +15,7 @@ export function PanelHeader({
   status,
   actions,
   metaPlacement = "stacked",
+  className,
 }: PanelHeaderProps) {
   const metaNode = meta ? (
     <div
@@ -25,7 +27,7 @@ export function PanelHeader({
 
   return (
     <div
-      className={`panel-header${metaPlacement === "inline" ? " panel-header--inline-meta" : ""}`}
+      className={`panel-header${metaPlacement === "inline" ? " panel-header--inline-meta" : ""}${className ? ` ${className}` : ""}`}
     >
       <div className="panel-header__leading">
         <div className="panel-header__copy">

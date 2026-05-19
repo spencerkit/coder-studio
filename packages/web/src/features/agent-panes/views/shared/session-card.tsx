@@ -89,6 +89,7 @@ export const SessionCard: FC<SessionCardProps> = ({
   const sessionStateLabel = formatSessionStateLabel(session.state);
   const terminalReadOnly = terminalReadOnlyOverride ?? !isSessionInteractive(session.state);
   const isActiveSession = workspace?.uiState.activeSessionId === session.id;
+  const isRunning = session.state === "running";
   const handleCardClick = (event: React.MouseEvent<HTMLDivElement>) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) {
@@ -113,11 +114,12 @@ export const SessionCard: FC<SessionCardProps> = ({
   return (
     <div
       ref={cardRef}
-      className={`session-card agent-pane${isActiveSession ? " session-card--active" : ""}${highlight ? " session-card--focus-pulse" : ""}`}
+      className={`session-card agent-pane${isActiveSession ? " session-card--active" : ""}${highlight ? " session-card--focus-pulse" : ""}${isRunning ? " session-card--running" : ""}`}
       data-session-id={sessionId}
       onClick={handleCardClick}
     >
       <PanelHeader
+        className={isRunning ? "session-header--running" : undefined}
         title={sessionTitle}
         metaPlacement="inline"
         status={

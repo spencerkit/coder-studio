@@ -1900,6 +1900,7 @@ describe("components.css theme-sensitive surfaces", () => {
   });
 
   it("keeps running session header emphasis theme-safe and motion-aware", () => {
+    const runningHeader = getLastRuleBlock(".session-card > .panel-header.session-header--running");
     const runningDot = getLastRuleBlock(".session-dot-running");
     const runningBadge = getLastRuleBlock(
       ".session-card > .panel-header .session-state-badge.badge-green"
@@ -1918,22 +1919,36 @@ describe("components.css theme-sensitive surfaces", () => {
       statusDotStylesheet,
       ":global(.session-dot-running)::after"
     );
+    const runningRingGhostStyles = getRuleBlocksFrom(
+      statusDotStylesheet,
+      ":global(.session-dot-running)::before"
+    );
     const reducedDotMotion = getLastGroupedRuleBlockFrom(
       statusDotStylesheet,
       /@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*?:global\(\.session-dot-running\)::after\s*\{([^}]*)\}/g
     );
 
+    expect(hasRuleBlock(".session-card.session-card--running")).toBe(false);
+    expect(runningHeader).toContain("background:");
+    expect(runningHeader).not.toContain("animation:");
     expect(runningDot).toContain("box-shadow:");
     expect(runningBadge).toContain("border: 1px solid color-mix(");
     expect(runningBadge).toContain("background: color-mix(in srgb, currentColor");
+    expect(runningBadge).not.toContain("animation:");
     expect(darkRunningBadge).toContain("box-shadow:");
     expect(lightRunningBadge).toContain("box-shadow:");
-    expect(statusDotStyles).toContain("animation: statusDotRunningPulse 1.7s ease-in-out infinite");
+    expect(statusDotStyles).toContain("animation: statusDotRunningPulse 1.18s");
     expect(
-      runningRingStyles.some((block) =>
-        block.includes("animation: statusDotRunningRing 1.7s ease-out infinite")
+      runningRingStyles.some((block) => block.includes("animation: statusDotRunningRing 1.18s"))
+    ).toBe(true);
+    expect(
+      runningRingGhostStyles.some((block) =>
+        block.includes("animation: statusDotRunningRingGhost 1.18s")
       )
     ).toBe(true);
+    expect(hasRuleBlock(".session-card > .panel-header.session-header--running::after")).toBe(
+      false
+    );
     expect(reducedDotMotion).toContain("animation: none");
   });
 
