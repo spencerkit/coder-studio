@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.11
+
+### Patch Changes
+
+- [#46](https://github.com/spencerkit/coder-studio/pull/46) [`382479f`](https://github.com/spencerkit/coder-studio/commit/382479ffa377eb83f7a7afe6e6a7400822e72af9) Thanks [@pallyoung](https://github.com/pallyoung)! - Minor bug fixes and polish.
+
 ## 0.3.10
 
 ### Patch Changes
