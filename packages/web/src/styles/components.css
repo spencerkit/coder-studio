@@ -3929,6 +3929,10 @@ body.is-resizing-panels * {
   background: color-mix(in srgb, var(--bg-surface) 90%, var(--bg-page) 10%);
 }
 
+.supervisor-details-surface--runtime {
+  background: color-mix(in srgb, var(--bg-surface) 92%, var(--bg-page) 8%);
+}
+
 .supervisor-summary-card {
   padding: var(--sp-3);
   border: none;

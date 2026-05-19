@@ -110,7 +110,7 @@ describe("SupervisorCard", () => {
     expect(store.get(supervisorDialogAtom).mode).toBe("enable");
   });
 
-  it("shows cycle count next to state and trigger action", () => {
+  it("shows cycle count inside the strip row without inline objective or error details", () => {
     const sendCommand = vi.fn().mockResolvedValue(undefined);
     const store = createStore();
     window.localStorage.setItem("ui.locale", JSON.stringify("en"));
@@ -141,19 +141,21 @@ describe("SupervisorCard", () => {
     );
 
     const titleRow = document.querySelector(".supervisor-strip-eyebrow");
-    const objectiveRow = document.querySelector(".supervisor-objective-row");
+    const stripRow = document.querySelector(".supervisor-strip-row");
     const statusCluster = document.querySelector(".supervisor-status-cluster");
 
-    expect(screen.getByText("Finish the server refactor")).toBeInTheDocument();
     expect(screen.getByText("codex")).toBeInTheDocument();
     expect(screen.getByText("Cycles 3")).toBeInTheDocument();
+    expect(screen.queryByText("Finish the server refactor")).not.toBeInTheDocument();
     expect(titleRow).not.toBeNull();
-    expect(objectiveRow).not.toBeNull();
+    expect(stripRow).not.toBeNull();
     expect(statusCluster).not.toBeNull();
     expect(titleRow?.querySelector(".supervisor-provider-pill")).toHaveTextContent("codex");
-    expect(objectiveRow?.querySelector(".supervisor-provider-pill")).toBeNull();
+    expect(stripRow?.querySelector(".supervisor-objective-row")).toBeNull();
     expect(statusCluster?.querySelector(".supervisor-state-tag")).toHaveTextContent("Idle");
     expect(statusCluster?.querySelector(".supervisor-cycle-count")).toHaveTextContent("Cycles 3");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Latest evaluation")).not.toBeInTheDocument();
     expect(screen.queryByText("Persistence and hydration are done.")).not.toBeInTheDocument();
     expect(screen.queryByText("Verify the refactor")).not.toBeInTheDocument();
@@ -244,7 +246,9 @@ describe("SupervisorCard", () => {
     expect(screen.queryByRole("button", { name: /展开/i })).not.toBeInTheDocument();
     expect(screen.queryByText("目标记忆")).not.toBeInTheDocument();
     expect(screen.getByText("轮次 0")).toBeInTheDocument();
-    expect(screen.getByText("Supervisor 暂时无法判断下一步，已停止自动监督。")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Supervisor 暂时无法判断下一步，已停止自动监督。")
+    ).not.toBeInTheDocument();
   });
 
   it("uses shared IconButton compatibility classes for supervisor icon actions", () => {
@@ -279,17 +283,10 @@ describe("SupervisorCard", () => {
       "btn-sm",
       "supervisor-icon-btn"
     );
-    expect(screen.getByRole("button", { name: "Disable" })).toHaveClass(
-      "btn",
-      "btn-ghost",
-      "btn-sm",
-      "supervisor-icon-btn",
-      "supervisor-icon-btn-danger"
-    );
     expect(
       screen
         .getByRole("button", { name: "Supervisor Details" })
-        .querySelector('[data-icon-semantic="supervisor.mode.edit"]')
+        .querySelector('[data-icon-semantic="supervisor.action.details"]')
     ).toBeTruthy();
     expect(
       screen
@@ -301,11 +298,7 @@ describe("SupervisorCard", () => {
         .getByRole("button", { name: "Trigger Evaluation" })
         .querySelector('[data-icon-semantic="supervisor.action.trigger"]')
     ).toBeTruthy();
-    expect(
-      screen
-        .getByRole("button", { name: "Disable" })
-        .querySelector('[data-icon-semantic="supervisor.mode.disable"]')
-    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Disable" })).not.toBeInTheDocument();
   });
 
   it("renders the resume semantic when the supervisor is paused", () => {
@@ -327,29 +320,6 @@ describe("SupervisorCard", () => {
         .getByRole("button", { name: "Resume" })
         .querySelector('[data-icon-semantic="supervisor.action.resume"]')
     ).toBeTruthy();
-  });
-
-  it("uses the shared tooltip for the supervisor objective text", () => {
-    const store = createStore();
-    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
-    store.set(localeAtom, "en");
-    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
-    store.set(supervisorsAtom, new Map([["sess-1", createSupervisor()]]));
-    store.set(supervisorCyclesAtom, new Map());
-
-    render(
-      <Provider store={store}>
-        <SupervisorCard sessionId="sess-1" workspaceId="ws-1" />
-      </Provider>
-    );
-
-    const objective = screen.getByText("Finish the server refactor");
-    expect(objective).not.toHaveAttribute("title");
-
-    fireEvent.mouseEnter(objective);
-    const tooltip = screen.getByRole("tooltip");
-    expect(tooltip).toHaveTextContent("Finish the server refactor");
-    expect(objective).toHaveAttribute("aria-describedby", tooltip.getAttribute("id") ?? "");
   });
 
   it("hides completed cycle guidance text", () => {
@@ -596,8 +566,8 @@ describe("SupervisorCard", () => {
     expect(screen.queryByText("SCHEDULED")).not.toBeInTheDocument();
     expect(screen.queryByText("Cancelled")).not.toBeInTheDocument();
     expect(
-      screen.getByText("Objective complete. Supervisor stopped automatically.")
-    ).toBeInTheDocument();
+      screen.queryByText("Objective complete. Supervisor stopped automatically.")
+    ).not.toBeInTheDocument();
   });
 
   it("does not expose a default details state for preview surfaces", () => {
@@ -615,6 +585,6 @@ describe("SupervisorCard", () => {
     );
 
     expect(screen.queryByRole("button", { name: /expand/i })).not.toBeInTheDocument();
-    expect(screen.getByText("Finish the server refactor")).toBeInTheDocument();
+    expect(screen.queryByText("Finish the server refactor")).not.toBeInTheDocument();
   });
 });

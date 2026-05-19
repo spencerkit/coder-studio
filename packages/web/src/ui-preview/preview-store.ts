@@ -131,7 +131,7 @@ export interface UiPreviewSeed {
   supervisorDialog?: {
     open: boolean;
     sessionId: string | null;
-    mode: "enable" | "edit" | "disable";
+    mode: "enable" | "edit";
     draftObjective: string;
     draftEvaluatorProviderId: "claude" | "codex";
     draftEvaluatorModel?: string;

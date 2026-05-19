@@ -253,7 +253,6 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(getLastRuleBlock(".welcome-feature-icon")).toContain("height: 32px");
     expect(getLastRuleBlock(".config-empty-icon")).toContain("margin-bottom: var(--sp-2)");
     expect(getLastRuleBlock(".tree-icon")).toContain("color: var(--text-tertiary)");
-    expect(getLastRuleBlock(".supervisor-danger-callout")).toContain("var(--icon-surface-error)");
     expect(
       accentSurfaceBlocks.some((block) => block.includes("background: var(--icon-surface-accent)"))
     ).toBe(true);
@@ -456,6 +455,33 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(getLastRuleBlock(".config-status--warning")).toContain("var(--icon-warning)");
     expect(getLastRuleBlock(".config-status--info")).toContain("var(--icon-info)");
     expect(getLastRuleBlock(".config-status--error")).toContain("var(--icon-error)");
+  });
+
+  it("keeps supervisor detail section titles on the denser body-strong scale", () => {
+    const supervisorDetailTitle = getLastRuleBlock(".supervisor-details-section-title");
+
+    expect(supervisorDetailTitle).toContain("font-size: var(--type-body-strong-size)");
+    expect(supervisorDetailTitle).toContain("line-height: var(--type-body-strong-line-height)");
+    expect(supervisorDetailTitle).toContain("font-weight: var(--type-body-strong-weight)");
+  });
+
+  it("keeps supervisor details on a flatter single-surface hierarchy", () => {
+    const editButton = getLastRuleBlock(".supervisor-details-edit-btn");
+    const summaryCard = getLastRuleBlock(".supervisor-summary-card");
+    const stackedMetaGrid = getLastRuleBlock(".supervisor-meta-grid--stacked");
+    const runtimeSurface = getLastRuleBlock(".supervisor-details-surface--runtime");
+    const metaItem = getLastRuleBlock(".supervisor-meta-item");
+    const reasoningItem = getLastRuleBlock(".supervisor-meta-item--reasoning");
+
+    expect(editButton).toContain("font-size: var(--type-label-size)");
+    expect(editButton).toContain("border-color: transparent");
+    expect(summaryCard).toContain("border: none");
+    expect(summaryCard).toContain("box-shadow: none");
+    expect(stackedMetaGrid).toContain("grid-template-columns: 1fr");
+    expect(runtimeSurface).toContain("background:");
+    expect(metaItem).toContain("padding: 0");
+    expect(metaItem).not.toContain("border:");
+    expect(reasoningItem).not.toContain("border-style: dashed");
   });
 
   it("exposes global mobile safe-area tokens so standalone mobile views keep their padding", () => {
@@ -903,9 +929,6 @@ describe("components.css theme-sensitive surfaces", () => {
     );
     const dialogIcon = getLastRuleBlock(".supervisor-dialog-header-icon");
     const editTone = getLastRuleBlock(".supervisor-dialog--edit .supervisor-dialog-header-icon");
-    const disableTone = getLastRuleBlock(
-      ".supervisor-dialog--disable .supervisor-dialog-header-icon"
-    );
 
     expect(modalTitle).toContain("font-size: var(--type-section-title-size)");
     expect(modalTitle).toContain("line-height: var(--type-section-title-line-height)");
@@ -918,8 +941,6 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(dialogIcon).toContain("height: 28px");
     expect(editTone).toContain("var(--icon-surface-info)");
     expect(editTone).toContain("var(--icon-info)");
-    expect(disableTone).toContain("var(--icon-surface-error)");
-    expect(disableTone).toContain("var(--icon-error)");
     expect(hasRuleBlock(".supervisor-dialog-header")).toBe(false);
     expect(hasRuleBlock(".supervisor-dialog-subtitle")).toBe(false);
     expect(hasRuleBlock(".supervisor-dialog .modal-header h3")).toBe(false);
@@ -932,17 +953,12 @@ describe("components.css theme-sensitive surfaces", () => {
     const introEditTone = getLastRuleBlock(
       ".supervisor-dialog--edit .supervisor-dialog-intro__icon"
     );
-    const introDisableTone = getLastRuleBlock(
-      ".supervisor-dialog--disable .supervisor-dialog-intro__icon"
-    );
     const introTitle = getLastRuleBlock(".supervisor-dialog-intro__title");
     const introDescription = getLastRuleBlock(".supervisor-dialog-intro__description");
     const compactInputGroup = getLastGroupedRuleBlock(
       /\.supervisor-dialog \.input,\s*\n\.supervisor-dialog \.mobile-select-trigger\s*\{([^}]*)\}/g
     );
     const textarea = getLastRuleBlock(".supervisor-dialog .textarea");
-    const dangerCallout = getLastRuleBlock(".supervisor-danger-callout");
-    const dangerCalloutCopy = getLastRuleBlock(".supervisor-danger-callout-copy");
 
     expect(modalBody).toContain("gap: var(--sp-3)");
     expect(formGroup).toContain("gap: 6px");
@@ -954,8 +970,6 @@ describe("components.css theme-sensitive surfaces", () => {
     );
     expect(introEditTone).toContain("var(--icon-surface-info)");
     expect(introEditTone).toContain("var(--icon-info)");
-    expect(introDisableTone).toContain("var(--icon-surface-error)");
-    expect(introDisableTone).toContain("var(--icon-error)");
     expect(introTitle).toContain("font-size: var(--type-body-size)");
     expect(introTitle).toContain("line-height: var(--type-body-line-height)");
     expect(introDescription).toContain("font-size: var(--type-meta-size)");
@@ -965,11 +979,6 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(textarea).toContain("font-size: var(--type-code-inline-size)");
     expect(textarea).toContain("min-height: 104px");
     expect(textarea).toContain("color: var(--text-secondary)");
-    expect(dangerCallout).toContain("gap: var(--sp-2)");
-    expect(dangerCallout).toContain("padding: var(--sp-2) var(--sp-3)");
-    expect(dangerCallout).toContain("border-left-width: 1px");
-    expect(dangerCalloutCopy).toContain("font-size: var(--type-label-size)");
-    expect(dangerCalloutCopy).toContain("line-height: var(--type-label-line-height)");
   });
 
   it("does not allow page or modal wrappers to override approved header typography tokens", () => {
@@ -1227,7 +1236,6 @@ describe("components.css theme-sensitive surfaces", () => {
   });
 
   it("keeps mobile supervisor sheets aligned with the shared fullscreen page spacing and action sizing", () => {
-    const supervisorRoot = getLastRuleBlock(".mobile-supervisor-sheet__root").replace(/\s+/g, " ");
     const supervisorDetail = getLastRuleBlock(".mobile-supervisor-sheet__detail").replace(
       /\s+/g,
       " "
@@ -1238,19 +1246,14 @@ describe("components.css theme-sensitive surfaces", () => {
     const supervisorFullscreenFooter = getLastRuleBlock(
       ".mobile-supervisor-sheet.mobile-sheet--fullscreen .mobile-sheet__footer"
     ).replace(/\s+/g, " ");
-    const supervisorActionButton = getLastRuleBlock(
-      ".mobile-supervisor-sheet__actions > .btn"
-    ).replace(/\s+/g, " ");
     const supervisorFooterButton = getLastRuleBlock(
       ".mobile-supervisor-sheet__footer > .btn"
     ).replace(/\s+/g, " ");
 
     expect(hasRuleBlock(".mobile-supervisor-sheet__detail-header")).toBe(false);
-    expect(supervisorRoot).toContain("padding: var(--sp-3)");
-    expect(supervisorRoot).toContain("padding-bottom: var(--sp-4)");
-    expect(supervisorRoot).not.toContain("border: 1px solid");
-    expect(supervisorRoot).not.toContain("border-radius:");
-    expect(supervisorRoot).not.toContain("box-shadow:");
+    expect(hasRuleBlock(".mobile-supervisor-sheet__root")).toBe(false);
+    expect(hasRuleBlock(".mobile-supervisor-sheet__actions")).toBe(false);
+    expect(hasRuleBlock(".mobile-supervisor-sheet--root")).toBe(false);
     expect(supervisorDetail).toContain("padding: var(--sp-3)");
     expect(supervisorDetail).toContain("padding-bottom: var(--sp-4)");
     expect(supervisorDetailInputs).toContain("font-size: var(--type-label-size)");
@@ -1262,7 +1265,6 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(supervisorFullscreenFooter).toContain(
       "padding: var(--sp-1) var(--sp-3) calc(var(--mobile-safe-bottom) + var(--sp-3))"
     );
-    expect(supervisorActionButton).toContain("min-height: 44px");
     expect(supervisorFooterButton).toContain("min-height: 44px");
     expect(supervisorFooterButton).toContain("box-shadow: none");
     expect(getLastRuleBlock(".mobile-supervisor-sheet__footer")).toContain(
@@ -1374,7 +1376,6 @@ describe("components.css theme-sensitive surfaces", () => {
     const mobileFileRowSelected = getLastRuleBlock(
       ".mobile-sheet--files .file-tree-shell--mobile .tree-item.selected"
     );
-    const supervisorRoot = getLastRuleBlock(".mobile-supervisor-sheet__root");
     const drawerItem = getLastRuleBlock(".mobile-workspace-drawer__item");
     const drawerFooterButton = getLastRuleBlock(".mobile-workspace-drawer__footer-button");
     const welcomeCard = getLastRuleBlock(".welcome-card--mobile");
@@ -1390,7 +1391,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(mobileTerminalSheet).not.toContain("linear-gradient(");
     expect(mobileTerminal).toContain("border-radius: 0");
     expect(mobileTerminal).not.toContain("var(--radius-xl) var(--radius-xl) 0 0");
-    expect(supervisorRoot).not.toContain("border-radius: var(--radius-xl) var(--radius-xl) 0 0");
+    expect(hasRuleBlock(".mobile-supervisor-sheet__root")).toBe(false);
     expect(hasRuleBlock(".mobile-supervisor-sheet__detail-header")).toBe(false);
     expect(mobileFilesSegmented).toContain(
       "border-bottom: 1px solid color-mix(in srgb, var(--border) 78%, transparent)"
@@ -1426,8 +1427,6 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(mobileFileRowSelected).toContain(
       "border-left: 2px solid color-mix(in srgb, var(--accent-blue) 88%, white 12%)"
     );
-    expect(supervisorRoot).toContain("background: transparent");
-    expect(supervisorRoot).not.toContain("border-radius:");
     expect(drawerItem).toContain("border-radius: var(--radius-xl)");
     expect(drawerFooterButton).toContain("border-radius: var(--radius-md)");
     expect(welcomeCard).toContain("border-radius: var(--radius-lg)");

@@ -40,7 +40,6 @@ function createObjectiveDialogContentProps(
     draftMaxSupervisionCount: "0",
     draftScheduledAt: "",
     isMaxSupervisionCountValid: true,
-    disableObjective: "",
     onDraftObjectiveChange: vi.fn(),
     onDraftEvaluatorProviderChange: vi.fn(),
     onDraftEvaluatorModelChange: vi.fn(),
@@ -264,20 +263,5 @@ describe("ObjectiveDialogContent", () => {
 
     expect(onDraftEvaluatorModelChange).toHaveBeenCalledWith("gpt-5");
     expect(onDraftMaxSupervisionCountChange).toHaveBeenCalledWith("8");
-  });
-
-  it("renders the semantic warning icon for disable mode", () => {
-    renderObjectiveDialogContent({
-      mode: "disable",
-      showIntro: true,
-      draftObjective: "",
-      draftEvaluatorProviderId: "codex",
-      disableObjective: "Current objective",
-    });
-
-    expect(document.querySelector(".supervisor-dialog-intro")).toBeNull();
-    expect(
-      screen.getByRole("alert").querySelector('[data-icon-semantic="state.warning"]')
-    ).toBeTruthy();
   });
 });

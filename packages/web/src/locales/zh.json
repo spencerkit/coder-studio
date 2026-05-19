@@ -720,6 +720,9 @@
       "decomposition_mode_title": "模式",
       "decomposition_title": "拆解结构",
       "basic_info_title": "基本信息",
+      "runtime_title": "运行状态",
+      "runtime_status_label": "状态",
+      "error_reason_label": "异常原因",
       "cycles_title": "轮次",
       "progress_list_title": "进展列表",
       "item_objective_title": "阶段目标",
@@ -728,6 +731,11 @@
       "progress_title": "目标进展",
       "progress_badge": "进展",
       "reasoning_title": "目标轮次判断",
+      "runtime_status": {
+        "idle": "空闲",
+        "running": "运行中",
+        "error": "异常"
+      },
       "decomposition_mode": {
         "stage": "阶段",
         "subtarget": "子目标"

@@ -41,7 +41,7 @@ export function useSupervisorActions({ sessionId }: UseSupervisorActionsArgs) {
   }, [actionError]);
 
   const openDialog = useCallback(
-    (mode: "enable" | "edit" | "disable") => {
+    (mode: "enable" | "edit") => {
       setDialog({
         open: true,
         sessionId,

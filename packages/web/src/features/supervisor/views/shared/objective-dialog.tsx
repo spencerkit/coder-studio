@@ -21,18 +21,8 @@ interface ObjectiveDialogProps {
 export function ObjectiveDialog({ workspaceId, sessionId }: ObjectiveDialogProps) {
   const viewport = useViewport();
   const t = useTranslation();
-  const {
-    dialog,
-    isVisible,
-    mode,
-    copy,
-    isDisable,
-    disableObjective,
-    isMaxSupervisionCountValid,
-    close,
-    updateDraft,
-    confirm,
-  } = useObjectiveDialogState({ workspaceId, sessionId });
+  const { dialog, isVisible, mode, copy, isMaxSupervisionCountValid, close, updateDraft, confirm } =
+    useObjectiveDialogState({ workspaceId, sessionId });
 
   if (!isVisible || viewport === "mobile") {
     return null;
@@ -67,7 +57,6 @@ export function ObjectiveDialog({ workspaceId, sessionId }: ObjectiveDialogProps
           draftMaxSupervisionCount={dialog.draftMaxSupervisionCount}
           draftScheduledAt={dialog.draftScheduledAt}
           isMaxSupervisionCountValid={isMaxSupervisionCountValid}
-          disableObjective={disableObjective}
           onDraftObjectiveChange={(draftObjective) => updateDraft({ draftObjective })}
           onDraftEvaluatorProviderChange={(draftEvaluatorProviderId) =>
             updateDraft({ draftEvaluatorProviderId })
@@ -85,11 +74,11 @@ export function ObjectiveDialog({ workspaceId, sessionId }: ObjectiveDialogProps
       <ModalFooter>
         <Button onClick={close}>{t("action.cancel")}</Button>
         <Button
-          variant={isDisable ? "danger" : "primary"}
+          variant="primary"
           onClick={() => {
             void confirm();
           }}
-          disabled={!isDisable && (!dialog.draftObjective.trim() || !isMaxSupervisionCountValid)}
+          disabled={!dialog.draftObjective.trim() || !isMaxSupervisionCountValid}
         >
           {copy.confirm}
         </Button>

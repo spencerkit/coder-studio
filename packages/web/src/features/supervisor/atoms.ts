@@ -19,7 +19,7 @@ export const supervisorHydratedAtomFamily = atomFamily((_sessionId: string) => a
 export const supervisorDialogAtom = atom<{
   open: boolean;
   sessionId: string | null;
-  mode: "enable" | "edit" | "disable";
+  mode: "enable" | "edit";
   draftObjective: string;
   draftEvaluatorProviderId: "claude" | "codex";
   draftEvaluatorModel: string;

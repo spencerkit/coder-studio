@@ -29,7 +29,6 @@ interface ObjectiveDialogContentProps {
   draftMaxSupervisionCount: string;
   draftScheduledAt: string;
   isMaxSupervisionCountValid: boolean;
-  disableObjective: string;
   onDraftObjectiveChange: (value: string) => void;
   onDraftEvaluatorProviderChange: (value: ObjectiveDialogEvaluatorProviderId) => void;
   onDraftEvaluatorModelChange: (value: string) => void;
@@ -39,8 +38,7 @@ interface ObjectiveDialogContentProps {
 
 export function ObjectiveDialogModeIcon({ mode }: { mode: ObjectiveDialogMode }) {
   if (mode === "enable") return <ThemedIcon semantic="supervisor.mode.enable" size={14} />;
-  if (mode === "edit") return <ThemedIcon semantic="supervisor.mode.edit" size={14} />;
-  return <ThemedIcon semantic="supervisor.mode.disable" size={14} />;
+  return <ThemedIcon semantic="supervisor.mode.edit" size={14} />;
 }
 
 export function ObjectiveDialogContent({
@@ -52,7 +50,6 @@ export function ObjectiveDialogContent({
   draftMaxSupervisionCount,
   draftScheduledAt,
   isMaxSupervisionCountValid,
-  disableObjective,
   onDraftObjectiveChange,
   onDraftEvaluatorProviderChange,
   onDraftEvaluatorModelChange,
@@ -68,29 +65,6 @@ export function ObjectiveDialogContent({
   const scheduledAtHelperId = useId();
   const introTitle = t(`supervisor.dialog.${mode}.title`);
   const introDescription = t(`supervisor.dialog.${mode}.subtitle`);
-
-  if (mode === "disable") {
-    return (
-      <>
-        <div className="supervisor-danger-callout" role="alert">
-          <ThemedIcon
-            aria-hidden="true"
-            className="supervisor-danger-callout-icon"
-            semantic="state.warning"
-            size={16}
-          />
-          <div className="supervisor-danger-callout-copy">
-            <strong>{t("supervisor.dialog.disable.warning_title")}</strong>
-            <small>{t("supervisor.dialog.disable.warning_body")}</small>
-          </div>
-        </div>
-        <div className="form-group">
-          <label>{t("supervisor.field.current_objective")}</label>
-          <pre className="objective-preview">{disableObjective}</pre>
-        </div>
-      </>
-    );
-  }
 
   return (
     <>

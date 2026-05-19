@@ -89,6 +89,8 @@ describe("SupervisorDetailsContent", () => {
     expect(screen.getByText("Reduce mobile regression bugs")).toBeInTheDocument();
     expect(screen.getByText("Cycles")).toBeInTheDocument();
     expect(screen.getByText("1 / 3")).toBeInTheDocument();
+    expect(screen.getByText("Runtime Status")).toBeInTheDocument();
+    expect(screen.getByText("Idle")).toBeInTheDocument();
     expect(screen.queryByText("Target progress")).not.toBeInTheDocument();
     expect(screen.queryByText("Active item")).not.toBeInTheDocument();
 
@@ -107,5 +109,92 @@ describe("SupervisorDetailsContent", () => {
     expect(screen.getByText("In progress")).toBeInTheDocument();
     expect(screen.getByText("Not started")).toBeInTheDocument();
     expect(screen.getByText("A compact summary block and progress list")).toBeInTheDocument();
+  });
+
+  it("stacks objective and cycle information into separate rows inside basic info", () => {
+    const store = createStore();
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+    store.set(supervisorsAtom, new Map([["sess-1", createSupervisor()]]));
+
+    render(
+      <Provider store={store}>
+        <SupervisorDetailsContent sessionId="sess-1" workspaceId="ws-1" onEdit={vi.fn()} />
+      </Provider>
+    );
+
+    const summaryGrid = document.querySelector(".supervisor-summary-card .supervisor-meta-grid");
+
+    expect(summaryGrid).not.toBeNull();
+    expect(summaryGrid).toHaveClass("supervisor-meta-grid", "supervisor-meta-grid--stacked");
+  });
+
+  it("renders the edit button inside the basic info section header instead of a detached footer row", () => {
+    const store = createStore();
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+    store.set(supervisorsAtom, new Map([["sess-1", createSupervisor()]]));
+
+    render(
+      <Provider store={store}>
+        <SupervisorDetailsContent sessionId="sess-1" workspaceId="ws-1" onEdit={vi.fn()} />
+      </Provider>
+    );
+
+    const basicInfoTitle = screen.getByText("Basic Info");
+    const editButton = screen.getByRole("button", { name: "Edit Supervisor" });
+    const sectionHeader = document.querySelector(".supervisor-details-section-header");
+    const detachedActions = document.querySelector(".supervisor-details-actions");
+
+    expect(sectionHeader).not.toBeNull();
+    expect(sectionHeader?.contains(basicInfoTitle)).toBe(true);
+    expect(sectionHeader?.contains(editButton)).toBe(true);
+    expect(editButton).toHaveClass("btn", "btn-ghost", "btn-sm", "supervisor-details-edit-btn");
+    expect(detachedActions).toBeNull();
+  });
+
+  it("renders runtime status with an error reason only when supervisor is in error state", () => {
+    const store = createStore();
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+    store.set(
+      supervisorsAtom,
+      new Map([
+        [
+          "sess-1",
+          {
+            ...createSupervisor(),
+            state: "error" as const,
+            errorReason: "Evaluator process exited unexpectedly.",
+            recentTargetCycles: [
+              {
+                cycleId: "target-cycle-2",
+                targetId: "tgt-1",
+                startedAt: 3,
+                completedAt: 4,
+                result: "error" as const,
+                errorReason: "Model call timed out after 600 seconds.",
+              },
+            ],
+          },
+        ],
+      ])
+    );
+
+    render(
+      <Provider store={store}>
+        <SupervisorDetailsContent sessionId="sess-1" workspaceId="ws-1" onEdit={vi.fn()} />
+      </Provider>
+    );
+
+    expect(screen.getByText("Runtime Status")).toBeInTheDocument();
+    expect(screen.getByText("Error")).toBeInTheDocument();
+    expect(screen.getByText("Error reason")).toBeInTheDocument();
+    expect(screen.getByText("Model call timed out after 600 seconds.")).toBeInTheDocument();
+    expect(screen.queryByText("Target cycle reasoning")).not.toBeInTheDocument();
+    expect(screen.queryByText("Evaluator process exited unexpectedly.")).not.toBeInTheDocument();
   });
 });

@@ -1076,7 +1076,7 @@ export function createShowcaseScenes(): UiPreviewSceneDefinition[] {
         supervisorDialog: {
           open: true,
           sessionId: "session-preview-1",
-          mode: "disable",
+          mode: "edit",
           draftObjective: supervisor.objective,
           draftEvaluatorProviderId: "claude",
           draftEvaluatorModel: "",

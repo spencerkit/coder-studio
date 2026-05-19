@@ -11,7 +11,6 @@ import {
 import { useSupervisorDetails } from "../../actions/use-supervisor-details";
 import { supervisorDialogAtom } from "../../atoms";
 import { ObjectiveDialogContent } from "../shared/objective-dialog-content";
-import { SupervisorCard } from "../shared/supervisor-card";
 import { SupervisorDetailsContent } from "../shared/supervisor-details-content";
 
 interface MobileSupervisorSheetProps {
@@ -26,26 +25,29 @@ export function MobileSupervisorSheet({
   onClose,
 }: MobileSupervisorSheetProps) {
   const t = useTranslation();
-  const [detailMode, setDetailMode] = useState<ObjectiveDialogMode | "details" | null>(null);
   const setDialog = useSetAtom(supervisorDialogAtom);
-  const { closeDetails, openDetails } = useSupervisorDetails(sessionId);
+  const { closeDetails } = useSupervisorDetails(sessionId);
   const {
     dialog,
     supervisor,
     mode,
     copy,
-    isDisable,
-    disableObjective,
     isMaxSupervisionCountValid,
     close,
     updateDraft,
     confirm,
   } = useObjectiveDialogState({ workspaceId, sessionId });
+  const [detailMode, setDetailMode] = useState<"details" | "edit" | null>(() =>
+    supervisor ? "details" : null
+  );
 
   useEffect(() => {
-    if (supervisor || detailMode) {
+    if (supervisor) {
+      setDetailMode((current) => current ?? "details");
       return;
     }
+
+    setDetailMode((current) => (current === "details" ? null : current));
 
     setDialog((current) => {
       if (current.sessionId === sessionId && current.mode === "enable" && !current.open) {
@@ -78,21 +80,23 @@ export function MobileSupervisorSheet({
             : "",
       };
     });
-  }, [detailMode, sessionId, setDialog, supervisor]);
+  }, [sessionId, setDialog, supervisor]);
 
   useEffect(() => {
     if (!dialog.open || dialog.sessionId !== sessionId) {
       return;
     }
 
-    setDetailMode(dialog.mode);
+    if (dialog.mode === "edit") {
+      setDetailMode("edit");
+    }
   }, [dialog.mode, dialog.open, dialog.sessionId, sessionId]);
 
-  const openDetail = (nextMode: ObjectiveDialogMode) => {
+  const openEdit = () => {
     setDialog({
       open: true,
       sessionId,
-      mode: nextMode,
+      mode: "edit",
       draftObjective: supervisor?.objective ?? "",
       draftEvaluatorProviderId:
         (supervisor?.evaluatorProviderId as ObjectiveDialogEvaluatorProviderId) ?? "claude",
@@ -100,12 +104,7 @@ export function MobileSupervisorSheet({
       draftMaxSupervisionCount: String(supervisor?.maxSupervisionCount ?? 0),
       draftScheduledAt: formatScheduledAtInput(supervisor?.scheduledAt),
     });
-    setDetailMode(nextMode);
-  };
-
-  const openDetailsView = () => {
-    openDetails(sessionId);
-    setDetailMode("details");
+    setDetailMode("edit");
   };
 
   const detailBody = (
@@ -118,7 +117,6 @@ export function MobileSupervisorSheet({
         draftMaxSupervisionCount={dialog.draftMaxSupervisionCount}
         draftScheduledAt={dialog.draftScheduledAt}
         isMaxSupervisionCountValid={isMaxSupervisionCountValid}
-        disableObjective={disableObjective}
         onDraftObjectiveChange={(draftObjective) => updateDraft({ draftObjective })}
         onDraftEvaluatorProviderChange={(draftEvaluatorProviderId) =>
           updateDraft({ draftEvaluatorProviderId })
@@ -140,7 +138,7 @@ export function MobileSupervisorSheet({
           workspaceId={workspaceId}
           onEdit={() => {
             closeDetails();
-            openDetail("edit");
+            openEdit();
           }}
         />
       </div>
@@ -151,8 +149,10 @@ export function MobileSupervisorSheet({
       <Button
         onClick={() => {
           close();
-          setDetailMode(null);
-          if (!supervisor) {
+          if (supervisor) {
+            setDetailMode("details");
+          } else {
+            setDetailMode(null);
             onClose();
           }
         }}
@@ -160,7 +160,7 @@ export function MobileSupervisorSheet({
         {t("action.cancel")}
       </Button>
       <Button
-        variant={isDisable ? "danger" : "primary"}
+        variant="primary"
         onClick={() => {
           void (async () => {
             const ok = await confirm();
@@ -169,91 +169,60 @@ export function MobileSupervisorSheet({
             }
 
             closeDetails();
-            setDetailMode(null);
-
-            if (!supervisor) {
-              onClose();
-            }
+            setDetailMode(supervisor ? "details" : null);
+            onClose();
           })();
         }}
-        disabled={!isDisable && !dialog.draftObjective.trim()}
+        disabled={!dialog.draftObjective.trim()}
       >
         {copy.confirm}
       </Button>
     </div>
   );
 
-  if (detailMode) {
+  if (supervisor && detailMode === "details") {
     return (
       <Sheet
-        title={detailMode === "details" ? t("supervisor.dialog.details.title") : copy.title}
+        title={t("supervisor.dialog.details.title")}
         kicker={t("supervisor.title")}
-        onBack={
-          detailMode === "details"
-            ? () => {
-                closeDetails();
-                setDetailMode(null);
-              }
-            : () => {
-                close();
-                setDetailMode(supervisor ? "details" : null);
-              }
-        }
         onClose={() => {
           close();
           closeDetails();
-          setDetailMode(null);
+          setDetailMode("details");
           onClose();
         }}
         bodyClassName="mobile-sheet__body--supervisor-detail"
         contentClassName="mobile-supervisor-sheet mobile-supervisor-sheet--detail"
         fullscreen
-        body={detailMode === "details" ? detailsBody : detailBody}
-        footer={detailMode === "details" ? undefined : detailFooter}
-      />
-    );
-  }
-
-  if (!supervisor) {
-    return (
-      <Sheet
-        title={copy.title}
-        kicker={t("supervisor.title")}
-        onClose={() => {
-          close();
-          onClose();
-        }}
-        bodyClassName="mobile-sheet__body--supervisor-detail"
-        contentClassName="mobile-supervisor-sheet mobile-supervisor-sheet--detail"
-        fullscreen
-        body={detailBody}
-        footer={detailFooter}
+        body={detailsBody}
       />
     );
   }
 
   return (
     <Sheet
-      title={t("supervisor.title")}
+      title={copy.title}
       kicker={t("supervisor.title")}
-      onClose={onClose}
-      contentClassName="mobile-supervisor-sheet mobile-supervisor-sheet--root"
-      fullscreen
-      body={
-        <div className="mobile-supervisor-sheet__root">
-          {supervisor ? (
-            <>
-              <SupervisorCard sessionId={sessionId} workspaceId={workspaceId} />
-              <div className="mobile-supervisor-sheet__actions">
-                <Button onClick={openDetailsView}>{t("supervisor.action.details")}</Button>
-                <Button onClick={() => openDetail("disable")}>
-                  {t("supervisor.action.disable")}
-                </Button>
-              </div>
-            </>
-          ) : null}
-        </div>
+      onBack={
+        supervisor && detailMode === "edit"
+          ? () => {
+              close();
+              closeDetails();
+              setDetailMode("details");
+            }
+          : undefined
       }
+      onClose={() => {
+        close();
+        closeDetails();
+        setDetailMode(supervisor ? "details" : null);
+        onClose();
+      }}
+      bodyClassName="mobile-sheet__body--supervisor-detail"
+      contentClassName="mobile-supervisor-sheet mobile-supervisor-sheet--detail"
+      fullscreen
+      body={detailBody}
+      footer={detailFooter}
     />
   );
 }

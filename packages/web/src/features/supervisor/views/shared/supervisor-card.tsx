@@ -12,14 +12,12 @@ interface SupervisorCardProps {
 export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) {
   const t = useTranslation();
   const {
-    actionError,
     handlePause,
     handleResume,
     handleTrigger,
     isBusy,
     openDetails,
     openDialog,
-    stopReasonLabel,
     stateClass,
     stateLabel,
     supervisor,
@@ -69,7 +67,7 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
             <IconButton
               aria-label={t("supervisor.action.details")}
               className="supervisor-icon-btn"
-              icon={<ThemedIcon semantic="supervisor.mode.edit" size={12} />}
+              icon={<ThemedIcon semantic="supervisor.action.details" size={12} />}
               onClick={openDetails}
               size="sm"
             />
@@ -113,40 +111,8 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
               size="sm"
             />
           </Tooltip>
-
-          <Tooltip content={t("supervisor.action.disable")}>
-            <IconButton
-              aria-label={t("supervisor.action.disable")}
-              className="supervisor-icon-btn supervisor-icon-btn-danger"
-              icon={<ThemedIcon semantic="supervisor.mode.disable" size={12} />}
-              onClick={() => openDialog("disable")}
-              size="sm"
-            />
-          </Tooltip>
         </div>
       </div>
-
-      <div className="supervisor-objective-row" onDoubleClick={() => openDialog("edit")}>
-        <Tooltip content={supervisor.objective}>
-          <span className="supervisor-objective-text">{supervisor.objective}</span>
-        </Tooltip>
-      </div>
-
-      {supervisor.state === "stopped" && stopReasonLabel ? (
-        <div className="supervisor-error" role="status">
-          {stopReasonLabel}
-        </div>
-      ) : null}
-
-      {actionError ? (
-        <div className="supervisor-error" role="alert">
-          {actionError}
-        </div>
-      ) : supervisor.errorReason ? (
-        <div className="supervisor-error" role="alert">
-          {supervisor.errorReason}
-        </div>
-      ) : null}
 
       <SupervisorDetailsDialog workspaceId={workspaceId} sessionId={sessionId} />
       <ObjectiveDialog workspaceId={workspaceId} sessionId={sessionId} />

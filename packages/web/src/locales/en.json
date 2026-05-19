@@ -720,6 +720,9 @@
       "decomposition_mode_title": "Mode",
       "decomposition_title": "Decomposition",
       "basic_info_title": "Basic Info",
+      "runtime_title": "Runtime Status",
+      "runtime_status_label": "Status",
+      "error_reason_label": "Error reason",
       "cycles_title": "Cycles",
       "progress_list_title": "Progress List",
       "item_objective_title": "Stage objective",
@@ -728,6 +731,11 @@
       "progress_title": "Target progress",
       "progress_badge": "PROGRESS",
       "reasoning_title": "Target cycle reasoning",
+      "runtime_status": {
+        "idle": "Idle",
+        "running": "Running",
+        "error": "Error"
+      },
       "decomposition_mode": {
         "stage": "Stages",
         "subtarget": "Subtargets"

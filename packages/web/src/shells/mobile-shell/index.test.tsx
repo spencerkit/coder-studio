@@ -29,7 +29,12 @@ import {
 } from "../../atoms/workspaces";
 import { paneLayoutAtomFamily } from "../../features/agent-panes/atoms/pane-layout";
 import { toastsAtom } from "../../features/notifications/atoms";
-import { supervisorCyclesAtom, supervisorsAtom } from "../../features/supervisor/atoms";
+import {
+  supervisorCyclesAtom,
+  supervisorDetailsAtom,
+  supervisorDialogAtom,
+  supervisorsAtom,
+} from "../../features/supervisor/atoms";
 import {
   branchQuickPickAtom,
   gitDiffPreviewAtomFamily,
@@ -94,36 +99,41 @@ vi.mock("../../features/agent-panes", () => ({
   AgentPanes: () => <div data-testid="agent-panes-empty-mock">AgentPanes</div>,
 }));
 
-vi.mock("../../features/agent-panes/views/shared/session-card", () => ({
-  SessionCard: ({
-    sessionId,
-    showHeaderActions,
-    showSupervisorInline,
-    terminalReadOnlyOverride,
-    headerAccessory,
-  }: {
-    sessionId: string;
-    showHeaderActions?: boolean;
-    showSupervisorInline?: boolean;
-    terminalReadOnlyOverride?: boolean;
-    headerAccessory?: ReactNode;
-  }) => (
-    <div
-      data-testid="mobile-session-card"
-      data-show-header-actions={String(showHeaderActions)}
-      data-show-supervisor-inline={String(showSupervisorInline)}
-      data-readonly={String(terminalReadOnlyOverride)}
-      style={{ display: "flex", flex: "1 1 auto", minHeight: 0, minWidth: 0 }}
-    >
-      <div data-testid="mobile-session-card-header">
-        <span>{sessionId}</span>
-        {headerAccessory ? (
-          <div data-testid="mobile-session-card-header-accessory">{headerAccessory}</div>
-        ) : null}
+vi.mock("../../features/agent-panes/views/shared/session-card", async () => {
+  const { SupervisorCard } = await import("../../features/supervisor/views/shared/supervisor-card");
+
+  return {
+    SessionCard: ({
+      sessionId,
+      showHeaderActions,
+      showSupervisorInline,
+      terminalReadOnlyOverride,
+      headerAccessory,
+    }: {
+      sessionId: string;
+      showHeaderActions?: boolean;
+      showSupervisorInline?: boolean;
+      terminalReadOnlyOverride?: boolean;
+      headerAccessory?: ReactNode;
+    }) => (
+      <div
+        data-testid="mobile-session-card"
+        data-show-header-actions={String(showHeaderActions)}
+        data-show-supervisor-inline={String(showSupervisorInline)}
+        data-readonly={String(terminalReadOnlyOverride)}
+        style={{ display: "flex", flex: "1 1 auto", minHeight: 0, minWidth: 0 }}
+      >
+        <div data-testid="mobile-session-card-header">
+          <span>{sessionId}</span>
+          {headerAccessory ? (
+            <div data-testid="mobile-session-card-header-accessory">{headerAccessory}</div>
+          ) : null}
+        </div>
+        {showSupervisorInline ? <SupervisorCard sessionId={sessionId} workspaceId="ws-1" /> : null}
       </div>
-    </div>
-  ),
-}));
+    ),
+  };
+});
 
 vi.mock("../../features/workspace/views/shared/file-tree-panel", () => ({
   FileTreePanel: ({ onSelectFile }: { onSelectFile?: (path: string) => void }) => (
@@ -636,6 +646,8 @@ describe("MobileShell Phase 2 workspace", () => {
     expect(screen.queryByText("已连接")).not.toBeInTheDocument();
     expect(screen.getByTestId("mobile-session-card")).toHaveTextContent("sess_2");
     expect(screen.getByTestId("mobile-session-card")).not.toHaveAttribute("data-readonly", "true");
+    expect(document.querySelector(".mobile-shell__agent-stage .supervisor-card")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Supervisor Details" })).toBeInTheDocument();
     expect(screen.getByTestId("mobile-session-card")).toHaveStyle({
       display: "flex",
       flex: "1 1 auto",
@@ -646,6 +658,36 @@ describe("MobileShell Phase 2 workspace", () => {
       "mobile-shell__agent-stage"
     );
     expect(screen.queryByRole("textbox", { name: "Agent composer" })).not.toBeInTheDocument();
+  });
+
+  it("opens the mobile supervisor sheet when the shared strip-row details action is tapped", async () => {
+    const user = userEvent.setup();
+    renderMobileShell({ initialEntry: "/workspace" });
+
+    await user.click(screen.getByRole("button", { name: "Supervisor Details" }));
+
+    expect(
+      await screen.findByRole("heading", { name: "Supervisor Details", level: 2 })
+    ).toBeInTheDocument();
+    expect(screen.getByText("Basic Info")).toBeInTheDocument();
+    expect(
+      document.querySelector(".mobile-supervisor-sheet.mobile-sheet--fullscreen")
+    ).not.toBeNull();
+  });
+
+  it("opens the mobile supervisor enable sheet when the shared inactive strip is tapped", async () => {
+    const user = userEvent.setup();
+    renderMobileShell({ initialEntry: "/workspace", seedSupervisor: false });
+
+    await user.click(screen.getByRole("button", { name: "Enable Supervisor" }));
+
+    expect(
+      await screen.findByRole("heading", { name: "Enable Supervisor", level: 2 })
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Objective")).toBeInTheDocument();
+    expect(
+      document.querySelector(".mobile-supervisor-sheet.mobile-sheet--fullscreen")
+    ).not.toBeNull();
   });
 
   it("renders the shared workspace footer below the mobile dock", async () => {
@@ -751,6 +793,47 @@ describe("MobileShell Phase 2 workspace", () => {
       inputValue: "",
     });
     expect(screen.getByTestId("branch-quick-pick-overlay-mock")).toBeInTheDocument();
+  });
+
+  it("keeps mobile supervisor sheets closed until the shared supervisor state requests them", async () => {
+    const { store } = renderMobileShell({ initialEntry: "/workspace" });
+
+    expect(
+      screen.queryByRole("heading", { name: "Supervisor Details", level: 2 })
+    ).not.toBeInTheDocument();
+    expect(document.querySelector(".mobile-supervisor-sheet.mobile-sheet--fullscreen")).toBeNull();
+
+    act(() => {
+      store.set(supervisorDetailsAtom, {
+        open: true,
+        sessionId: "sess_2",
+      });
+    });
+
+    expect(
+      await screen.findByRole("heading", { name: "Supervisor Details", level: 2 })
+    ).toBeInTheDocument();
+
+    act(() => {
+      store.set(supervisorDetailsAtom, {
+        open: false,
+        sessionId: null,
+      });
+      store.set(supervisorDialogAtom, {
+        open: true,
+        sessionId: "sess_2",
+        mode: "edit",
+        draftObjective: "Ship mobile phase 3",
+        draftEvaluatorProviderId: "claude",
+        draftEvaluatorModel: "",
+        draftMaxSupervisionCount: "0",
+        draftScheduledAt: "",
+      });
+    });
+
+    expect(
+      await screen.findByRole("heading", { name: "Edit Supervisor", level: 2 })
+    ).toBeInTheDocument();
   });
 
   it("opens the workspace drawer and switches active workspace", async () => {
@@ -1251,13 +1334,13 @@ describe("MobileShell Phase 2 workspace", () => {
     const activeRow = screen
       .getByRole("button", {
         name: "Codex",
-        description: "Switch to agent Codex CODEX",
+        description: /Switch to agent Codex CODEX/,
       })
       .closest(".mobile-select-sheet__item-row");
     const inactiveRow = screen
       .getByRole("button", {
         name: "Claude",
-        description: "Switch to agent Claude CLAUDE",
+        description: /Switch to agent Claude CLAUDE/,
       })
       .closest(".mobile-select-sheet__item-row");
     expect(activeRow).not.toBeNull();
@@ -1271,7 +1354,7 @@ describe("MobileShell Phase 2 workspace", () => {
     await user.click(
       screen.getByRole("button", {
         name: "Claude",
-        description: "Switch to agent Claude CLAUDE",
+        description: /Switch to agent Claude CLAUDE/,
       })
     );
 
@@ -1611,7 +1694,7 @@ describe("MobileShell Phase 2 workspace", () => {
     await user.click(
       screen.getByRole("button", {
         name: "Claude",
-        description: "Switch to agent Claude CLAUDE",
+        description: /Switch to agent Claude CLAUDE/,
       })
     );
 
@@ -1655,7 +1738,7 @@ describe("MobileShell Phase 2 workspace", () => {
     const activeRow = screen
       .getByRole("button", {
         name: "Codex",
-        description: "Switch to agent Codex CODEX",
+        description: /Switch to agent Codex CODEX/,
       })
       .closest(".mobile-select-sheet__item-row");
     expect(activeRow).not.toBeNull();
@@ -1828,7 +1911,7 @@ describe("MobileShell Phase 2 workspace", () => {
     const createdRow = screen
       .getByRole("button", {
         name: "Codex 2",
-        description: "Switch to agent Codex 2 CODEX",
+        description: /Switch to agent Codex 2 CODEX/,
       })
       .closest(".mobile-select-sheet__item-row");
     expect(createdRow).not.toBeNull();
@@ -1955,7 +2038,7 @@ describe("MobileShell Phase 2 workspace", () => {
     const createdRow = screen
       .getByRole("button", {
         name: "Codex 2",
-        description: "Switch to agent Codex 2 CODEX",
+        description: /Switch to agent Codex 2 CODEX/,
       })
       .closest(".mobile-select-sheet__item-row");
     expect(createdRow).not.toBeNull();
@@ -2122,7 +2205,7 @@ describe("MobileShell Phase 2 workspace", () => {
     const geminiRow = screen
       .getByRole("button", {
         name: "Gemini",
-        description: "Switch to agent Gemini GEMINI",
+        description: /Switch to agent Gemini GEMINI/,
       })
       .closest(".mobile-select-sheet__item-row");
     expect(geminiRow).not.toBeNull();
@@ -2142,7 +2225,7 @@ describe("MobileShell Phase 2 workspace", () => {
     await user.click(
       screen.getByRole("button", {
         name: "Codex",
-        description: "Switch to agent Codex CODEX",
+        description: /Switch to agent Codex CODEX/,
       })
     );
 
@@ -2199,7 +2282,7 @@ describe("MobileShell Phase 2 workspace", () => {
     const inactiveRow = screen
       .getByRole("button", {
         name: "Claude",
-        description: "Switch to agent Claude CLAUDE",
+        description: /Switch to agent Claude CLAUDE/,
       })
       .closest(".mobile-select-sheet__item-row");
     expect(inactiveRow).not.toBeNull();
@@ -2270,7 +2353,7 @@ describe("MobileShell Phase 2 workspace", () => {
     const hiddenRow = screen
       .getByRole("button", {
         name: "Remote Codex",
-        description: "Switch to agent Remote Codex CODEX",
+        description: /Switch to agent Remote Codex CODEX/,
       })
       .closest(".mobile-select-sheet__item-row");
     expect(hiddenRow).not.toBeNull();
@@ -2341,7 +2424,7 @@ describe("MobileShell Phase 2 workspace", () => {
     await user.click(
       screen.getByRole("button", {
         name: "Claude",
-        description: "Switch to agent Claude CLAUDE",
+        description: /Switch to agent Claude CLAUDE/,
       })
     );
 
@@ -2667,7 +2750,7 @@ describe("MobileShell Phase 2 workspace", () => {
     const restoredRow = screen
       .getByRole("button", {
         name: "New Mobile Codex",
-        description: "Switch to agent New Mobile Codex CODEX",
+        description: /Switch to agent New Mobile Codex CODEX/,
       })
       .closest(".mobile-select-sheet__item-row");
     expect(restoredRow).not.toBeNull();
@@ -3134,28 +3217,30 @@ describe("MobileShell Phase 2 workspace", () => {
     expect(screen.queryByText("Phase 1")).not.toBeInTheDocument();
   });
 
-  it("shows a supervisor badge for the active session and opens the supervisor sheet", async () => {
+  it("shows the shared supervisor strip for the active session and opens the supervisor sheet", async () => {
     const user = userEvent.setup();
     renderMobileShell({ locale: "zh" });
 
-    const badge = await screen.findByRole("button", { name: "打开 Supervisor 面板" });
-    expect(screen.getByTestId("mobile-session-card-header-accessory")).toContainElement(badge);
-    expect(badge.querySelector('[data-icon-semantic="supervisor.entry"]')).toBeTruthy();
+    const detailsButton = await screen.findByRole("button", { name: "Supervisor 详情" });
+    expect(document.querySelector(".mobile-shell__agent-stage .supervisor-card")).not.toBeNull();
+    expect(
+      detailsButton.querySelector('[data-icon-semantic="supervisor.action.details"]')
+    ).toBeTruthy();
 
-    await user.click(badge);
+    await user.click(detailsButton);
 
-    expect(screen.getByRole("region", { name: "Supervisor面板" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Supervisor 详情面板" })).toBeInTheDocument();
   });
 
-  it("keeps the supervisor entry available when the active session has not enabled supervisor yet", async () => {
+  it("keeps the supervisor enable strip available when the active session has not enabled supervisor yet", async () => {
     const user = userEvent.setup();
     renderMobileShell({ seedSupervisor: false, locale: "en" });
 
-    const badge = await screen.findByRole("button", { name: "Open Supervisor sheet" });
-    expect(screen.getByTestId("mobile-session-card-header-accessory")).toContainElement(badge);
-    expect(badge).toHaveTextContent("Supervisor");
+    const enableButton = await screen.findByRole("button", { name: "Enable Supervisor" });
+    expect(document.querySelector(".mobile-shell__agent-stage .supervisor-card")).not.toBeNull();
+    expect(enableButton).toHaveTextContent("Supervisor");
 
-    await user.click(badge);
+    await user.click(enableButton);
 
     expect(
       screen.getByRole("heading", { name: "Enable Supervisor", level: 2 })
