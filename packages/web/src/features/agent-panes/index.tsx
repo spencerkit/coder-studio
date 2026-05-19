@@ -96,7 +96,10 @@ interface PaneNodeRendererProps {
   onAssignSession: (paneId: string, sessionId: string) => void;
   onCloseDraftPane: (paneId: string) => void;
   onCloseSession: (sessionId: string) => void;
-  onCloseSessionCommand: (sessionId: string) => Promise<boolean | void>;
+  onCloseSessionCommand: (
+    sessionId: string,
+    paneDisposition?: "draft" | "remove"
+  ) => Promise<boolean | void>;
   onReplaceWithSession: (sessionId: string) => void;
   onSplitDraftPane: (paneId: string, direction: "horizontal" | "vertical") => void;
   onSplitSession: (sessionId: string, direction: "horizontal" | "vertical") => void;
@@ -124,7 +127,7 @@ const PaneNodeRenderer: FC<PaneNodeRendererProps> = ({
           sessionId={node.sessionId}
           onClose={async () => {
             onCloseSession(node.sessionId!);
-            await onCloseSessionCommand(node.sessionId!);
+            await onCloseSessionCommand(node.sessionId!, "draft");
           }}
           onSplitHorizontal={() => onSplitSession(node.sessionId!, "horizontal")}
           onSplitVertical={() => onSplitSession(node.sessionId!, "vertical")}

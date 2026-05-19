@@ -6,6 +6,7 @@ import { sessionByIdAtomFamily } from "../../../atoms/sessions";
 const terminalInputEncoder = new TextEncoder();
 const SESSION_REMOVAL_POLL_INTERVAL_MS = 100;
 const SESSION_REMOVAL_TIMEOUT_MS = 5_000;
+type PaneDisposition = "draft" | "remove";
 
 function delay(ms: number) {
   return new Promise<void>((resolve) => {
@@ -29,10 +30,19 @@ export function useSessionActions() {
   );
 
   const closeSession = useCallback(
-    async (sessionId: string) => {
+    async (sessionId: string, paneDisposition: PaneDisposition = "draft") => {
       const session = store.get(sessionByIdAtomFamily(sessionId));
       if (!session) {
         return false;
+      }
+
+      if (paneDisposition === "remove") {
+        const closeResult = await dispatch<void>("session.close", { sessionId, paneDisposition });
+        if (!closeResult.ok) {
+          console.error("Failed to close session:", closeResult.error?.message);
+          return false;
+        }
+        return true;
       }
 
       if (session.state === "ended") {

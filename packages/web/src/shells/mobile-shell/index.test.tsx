@@ -1667,7 +1667,11 @@ describe("MobileShell Phase 2 workspace", () => {
     await waitFor(() => {
       expect(screen.getByTestId("mobile-session-card")).toHaveTextContent("sess_1");
     });
-    expect(sendCommand).toHaveBeenCalledWith("session.stop", { sessionId: "sess_2" }, undefined);
+    expect(sendCommand).toHaveBeenCalledWith(
+      "session.close",
+      { sessionId: "sess_2", paneDisposition: "remove" },
+      undefined
+    );
   });
 
   it("removes a mobile-created pane after closing that session so desktop panes do not accumulate", async () => {
@@ -1713,12 +1717,31 @@ describe("MobileShell Phase 2 workspace", () => {
         };
       }
 
-      if (op === "session.stop") {
+      if (op === "session.close") {
         queueMicrotask(() => {
           if (!closeStore) {
             return;
           }
 
+          closeStore.set(workspacesAtom, {
+            ...closeStore.get(workspacesAtom),
+            "ws-1": {
+              ...closeStore.get(workspacesAtom)["ws-1"],
+              uiState: {
+                ...closeStore.get(workspacesAtom)["ws-1"].uiState,
+                paneLayout: {
+                  id: "root",
+                  type: "leaf",
+                  sessionId: "sess_1",
+                },
+              },
+            },
+          });
+          closeStore.set(paneLayoutAtomFamily("ws-1"), {
+            id: "root",
+            type: "leaf",
+            sessionId: "sess_1",
+          });
           closeStore.set(sessionsAtom, {
             sess_1: createSession({
               id: "sess_1",
@@ -1734,25 +1757,6 @@ describe("MobileShell Phase 2 workspace", () => {
               state: "ended",
               title: "Codex 2",
               endedAt: Date.now(),
-            }),
-          });
-        });
-        return undefined;
-      }
-
-      if (op === "session.remove") {
-        queueMicrotask(() => {
-          if (!closeStore) {
-            return;
-          }
-
-          closeStore.set(sessionsAtom, {
-            sess_1: createSession({
-              id: "sess_1",
-              terminalId: "term-1",
-              providerId: "claude",
-              state: "idle",
-              title: "Claude",
             }),
           });
         });
@@ -1843,8 +1847,11 @@ describe("MobileShell Phase 2 workspace", () => {
         sessionId: "sess_1",
       });
     });
-    expect(sendCommand).toHaveBeenCalledWith("session.stop", { sessionId: "sess_3" }, undefined);
-    expect(sendCommand).toHaveBeenCalledWith("session.remove", { sessionId: "sess_3" }, undefined);
+    expect(sendCommand).toHaveBeenCalledWith(
+      "session.close",
+      { sessionId: "sess_3", paneDisposition: "remove" },
+      undefined
+    );
   });
 
   it("keeps the pane when mobile session close fails", async () => {
@@ -1899,7 +1906,7 @@ describe("MobileShell Phase 2 workspace", () => {
         });
       }
 
-      if (op === "session.stop") {
+      if (op === "session.close") {
         throw new CommandResultError({
           code: "permission_denied",
           message: "stop failed",
@@ -1958,7 +1965,11 @@ describe("MobileShell Phase 2 workspace", () => {
     );
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith("session.stop", { sessionId: "sess_3" }, undefined);
+      expect(sendCommand).toHaveBeenCalledWith(
+        "session.close",
+        { sessionId: "sess_3", paneDisposition: "remove" },
+        undefined
+      );
     });
 
     expect(store.get(paneLayoutAtomFamily("ws-1"))).toEqual(
@@ -2040,7 +2051,7 @@ describe("MobileShell Phase 2 workspace", () => {
         };
       }
 
-      if (op === "session.stop") {
+      if (op === "session.close") {
         return await new Promise<undefined>((_, reject) => {
           rejectStop = reject;
         });
@@ -2121,7 +2132,11 @@ describe("MobileShell Phase 2 workspace", () => {
     );
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith("session.stop", { sessionId: "sess_3" }, undefined);
+      expect(sendCommand).toHaveBeenCalledWith(
+        "session.close",
+        { sessionId: "sess_3", paneDisposition: "remove" },
+        undefined
+      );
     });
 
     await user.click(
@@ -2194,7 +2209,11 @@ describe("MobileShell Phase 2 workspace", () => {
     );
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith("session.stop", { sessionId: "sess_1" }, undefined);
+      expect(sendCommand).toHaveBeenCalledWith(
+        "session.close",
+        { sessionId: "sess_1", paneDisposition: "remove" },
+        undefined
+      );
     });
     expect(screen.getByTestId("mobile-session-card")).toHaveTextContent("sess_2");
   });
@@ -2262,8 +2281,8 @@ describe("MobileShell Phase 2 workspace", () => {
 
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith(
-        "session.stop",
-        { sessionId: "sess_hidden" },
+        "session.close",
+        { sessionId: "sess_hidden", paneDisposition: "remove" },
         undefined
       );
     });
@@ -2555,41 +2574,31 @@ describe("MobileShell Phase 2 workspace", () => {
         return sessions;
       }
 
-      if (op === "session.stop") {
+      if (op === "session.close") {
         queueMicrotask(() => {
           if (!closeStore) {
             return;
           }
 
-          closeStore.set(sessionsAtom, {
-            sess_existing: createSession({
-              id: "sess_existing",
-              terminalId: "term-existing",
-              providerId: "claude",
-              state: "idle",
-              lastActiveAt: Date.now() - 5_000,
-              title: "Existing Claude",
-            }),
-            sess_new_mobile: createSession({
-              id: "sess_new_mobile",
-              terminalId: "term-new-mobile",
-              providerId: "codex",
-              state: "ended",
-              lastActiveAt: Date.now() - 500,
-              title: "New Mobile Codex",
-              endedAt: Date.now(),
-            }),
+          closeStore.set(workspacesAtom, {
+            ...closeStore.get(workspacesAtom),
+            "ws-1": {
+              ...closeStore.get(workspacesAtom)["ws-1"],
+              uiState: {
+                ...closeStore.get(workspacesAtom)["ws-1"].uiState,
+                paneLayout: {
+                  id: "root",
+                  type: "leaf",
+                  sessionId: "sess_existing",
+                },
+              },
+            },
           });
-        });
-        return undefined;
-      }
-
-      if (op === "session.remove") {
-        queueMicrotask(() => {
-          if (!closeStore) {
-            return;
-          }
-
+          closeStore.set(paneLayoutAtomFamily("ws-1"), {
+            id: "root",
+            type: "leaf",
+            sessionId: "sess_existing",
+          });
           closeStore.set(sessionsAtom, {
             sess_existing: createSession({
               id: "sess_existing",

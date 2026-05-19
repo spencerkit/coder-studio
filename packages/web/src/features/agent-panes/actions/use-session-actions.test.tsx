@@ -143,4 +143,48 @@ describe("useSessionActions", () => {
       undefined
     );
   });
+
+  it("uses the atomic server close command for remove disposition", async () => {
+    const store = createStore();
+    const sendCommand = vi.fn(async (op: string) => {
+      if (op === "session.close") {
+        return undefined;
+      }
+      throw new Error(`Unexpected op: ${op}`);
+    });
+
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe: vi.fn(() => () => {}),
+    } as never);
+    store.set(sessionsAtom, {
+      "sess-1": {
+        id: "sess-1",
+        workspaceId: "ws-1",
+        terminalId: "term-1",
+        providerId: "codex",
+        state: "running",
+        capability: "full",
+        startedAt: 1,
+        lastActiveAt: 1,
+      },
+    });
+
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <Provider store={store}>{children}</Provider>
+    );
+
+    const { result } = renderHook(() => useSessionActions(), { wrapper });
+
+    await act(async () => {
+      await result.current.closeSession("sess-1", "remove");
+    });
+
+    expect(sendCommand).toHaveBeenCalledTimes(1);
+    expect(sendCommand).toHaveBeenCalledWith(
+      "session.close",
+      { sessionId: "sess-1", paneDisposition: "remove" },
+      undefined
+    );
+  });
 });

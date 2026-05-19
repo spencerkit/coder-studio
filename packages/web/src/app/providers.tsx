@@ -41,6 +41,7 @@ import {
 import { authenticatedAtom, themeAtom } from "../atoms/app-ui";
 import type { DispatchCommand } from "../atoms/connection";
 import { activeWorkspaceIdAtom } from "../atoms/workspaces";
+import { type PaneNode, paneLayoutAtomFamily } from "../features/agent-panes/atoms/pane-layout";
 import { useSessionNotifications } from "../features/notifications";
 import { supervisorCyclesAtom, supervisorsAtom } from "../features/supervisor/atoms";
 import { terminalMetaAtomFamily } from "../features/terminal-panel/atoms";
@@ -1133,6 +1134,10 @@ export function routeEventToAtom(topic: string, payload: unknown, store: Store):
           id: workspaceId,
         } as Workspace,
       }));
+      const paneLayout = patch.uiState?.paneLayout;
+      if (paneLayout) {
+        store.set(paneLayoutAtomFamily(workspaceId), normalizePaneLayout(paneLayout));
+      }
       store.set(workspaceOrderAtom, (prev: string[]) => {
         if (prev.includes(workspaceId)) {
           return prev;
@@ -1301,4 +1306,14 @@ export function routeEventToAtom(topic: string, payload: unknown, store: Store):
 
   // Unknown topic - log for debugging
   console.log(`Unhandled event topic: ${topic}`, payload);
+}
+
+function normalizePaneLayout(layout: Workspace["uiState"]["paneLayout"]): PaneNode {
+  return {
+    id: layout?.id ?? "root",
+    type: layout?.type ?? "leaf",
+    sessionId: layout?.sessionId,
+    direction: layout?.direction,
+    children: layout?.children?.map((child) => normalizePaneLayout(child)),
+  };
 }
