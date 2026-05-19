@@ -44,6 +44,9 @@ function createContext(overrides: Partial<CommandContext> = {}): CommandContext 
       get: () => undefined,
       getAll: () => ({}),
     },
+    providerRuntimeDeps: {
+      commandExists: async () => true,
+    },
     ...overrides,
   };
 }

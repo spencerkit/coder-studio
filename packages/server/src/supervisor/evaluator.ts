@@ -39,7 +39,7 @@ export interface SupervisorDecomposeResult {
 
 export interface SupervisorContinueResult {
   mode: "evaluate";
-  status: "continue" | "stop";
+  status: "continue";
   reason: string;
   guidance?: string;
   activeItemId?: string;

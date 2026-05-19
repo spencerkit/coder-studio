@@ -48,6 +48,7 @@ const NOOP_LOGGER: FastifyBaseLogger = {
 };
 
 type SessionLifecycleEvent = Extract<DomainEvent, { type: "session.lifecycle" }>;
+type SupervisorEvaluateResult = Extract<SupervisorEvaluationResult, { mode: "evaluate" }>;
 
 /**
  * Internal handoff between the synchronous `beginCycle` and the async
@@ -85,7 +86,7 @@ interface SupervisorCycleRuntimeSnapshot {
 }
 
 interface CompletedCycleEvaluation {
-  evaluation: SupervisorEvaluationResult;
+  evaluation: SupervisorEvaluateResult;
   injected: boolean;
   injectedText?: string;
   targetMemory: SupervisorTargetMemory;
@@ -188,9 +189,9 @@ function isDecomposeResult(
 }
 
 function isEvaluateStopResult(
-  result: SupervisorEvaluationResult | { status?: string }
-): result is Extract<SupervisorEvaluationResult, { mode: "evaluate"; status: "stop" }> {
-  return result.status === "stop";
+  result: SupervisorEvaluateResult | { status?: string }
+): result is Extract<SupervisorEvaluateResult, { status: "stop" }> {
+  return "status" in result && result.status === "stop";
 }
 
 export class SupervisorManager {
@@ -1227,13 +1228,14 @@ export class SupervisorManager {
     const currentSupervisor =
       this.supervisors.get(activeCycle.supervisorId) ??
       this.requireSupervisor(activeCycle.supervisorId);
+    const evaluation = result.evaluation;
     const finalStatus: CycleStatus = result.injected ? "injected" : "completed";
-    const cycleReason = isEvaluateStopResult(result.evaluation)
-      ? result.evaluation.reason
+    const cycleReason = isEvaluateStopResult(evaluation)
+      ? evaluation.reason
       : result.injected
         ? result.injectedText
-        : result.evaluation.guidance
-          ? `Skipped duplicate: ${result.evaluation.guidance}`
+        : evaluation.guidance
+          ? `Skipped duplicate: ${evaluation.guidance}`
           : undefined;
 
     const finishedCycle = this.deps.cycleRepo.update(activeCycle.id, {
@@ -1250,19 +1252,18 @@ export class SupervisorManager {
     };
     await this.deps.targetStore.saveTargetMemory(workspace.path, targetId, nextTargetMemory);
 
-    const cycleRecord: SupervisorCycleTargetRecord = isEvaluateStopResult(result.evaluation)
+    const cycleRecord: SupervisorCycleTargetRecord = isEvaluateStopResult(evaluation)
       ? {
           cycleId: activeCycle.id,
           targetId,
           startedAt: activeCycle.createdAt,
           completedAt: finishedCycle.completedAt ?? Date.now(),
           result: "stop",
-          stopReason: result.evaluation.stopReason,
-          reason: result.evaluation.reason,
-          progressSummary: result.evaluation.progressSummary ?? nextTargetMemory.progressSummary,
+          stopReason: evaluation.stopReason,
+          reason: evaluation.reason,
+          progressSummary: nextTargetMemory.progressSummary,
           decompositionMode: nextTargetMemory.decompositionMode,
-          activeItemId: result.evaluation.activeItemId ?? nextTargetMemory.activeItemId,
-          itemUpdates: result.evaluation.itemUpdates,
+          activeItemId: nextTargetMemory.activeItemId,
           injected: false,
           attemptCount: this.deps.cycleAttemptRepo.listForCycle(activeCycle.id).length,
         }
@@ -1272,20 +1273,20 @@ export class SupervisorManager {
           startedAt: activeCycle.createdAt,
           completedAt: finishedCycle.completedAt ?? Date.now(),
           result: "continue",
-          reason: result.evaluation.reason,
-          guidance: result.injected ? result.injectedText : result.evaluation.guidance,
+          reason: evaluation.reason,
+          guidance: result.injected ? result.injectedText : evaluation.guidance,
           progressSummary: nextTargetMemory.progressSummary,
           decompositionMode: nextTargetMemory.decompositionMode,
           activeItemId: nextTargetMemory.activeItemId,
-          itemUpdates: result.evaluation.itemUpdates,
+          itemUpdates: evaluation.itemUpdates,
           injected: result.injected,
           attemptCount: this.deps.cycleAttemptRepo.listForCycle(activeCycle.id).length,
         };
     await this.deps.targetStore.appendTargetCycleRecord(workspace.path, targetId, cycleRecord);
 
-    if (isEvaluateStopResult(result.evaluation)) {
+    if (isEvaluateStopResult(evaluation)) {
       await this.updateTargetMetaStatus(workspace.path, targetId, {
-        status: result.evaluation.stopReason === "objective_complete" ? "completed" : "cancelled",
+        status: evaluation.stopReason === "objective_complete" ? "completed" : "cancelled",
         completedAt: finishedCycle.completedAt ?? Date.now(),
       });
     }
@@ -1307,7 +1308,7 @@ export class SupervisorManager {
           state: isEvaluateStopResult(result.evaluation) ? "stopped" : "idle",
           completedSupervisionCount:
             (this.supervisors.get(activeCycle.supervisorId)?.completedSupervisionCount ?? 0) + 1,
-          stopReason: isEvaluateStopResult(result.evaluation) ? result.evaluation.stopReason : null,
+          stopReason: isEvaluateStopResult(evaluation) ? evaluation.stopReason : null,
           lastCycleAt: finishedCycle.completedAt,
           lastEvaluatedTurnId: context.lastTurnId ?? undefined,
           errorReason: null,
@@ -1513,6 +1514,20 @@ export class SupervisorManager {
       };
     }
 
+    if (isEvaluateStopResult(evaluation)) {
+      return {
+        ...memory,
+        decompositionGenerated: memory.decompositionGenerated,
+        decompositionMode: memory.decompositionMode,
+        items: memory.items,
+        activeItemId: memory.activeItemId,
+        progressSummary: memory.progressSummary,
+        lastGuidance: memory.lastGuidance,
+        stalledCount: 0,
+        updatedAt,
+      };
+    }
+
     let items = memory.items;
     if (evaluation.itemUpdates?.length) {
       const updates = new Map(evaluation.itemUpdates.map((item) => [item.id, item.status]));
@@ -1522,16 +1537,9 @@ export class SupervisorManager {
     }
 
     const progressSummary = evaluation.progressSummary ?? memory.progressSummary;
-    const lastGuidance =
-      evaluation.status === "continue"
-        ? (injectedText ?? evaluation.guidance ?? memory.lastGuidance)
-        : memory.lastGuidance;
+    const lastGuidance = injectedText ?? evaluation.guidance ?? memory.lastGuidance;
     const stalledCount =
-      evaluation.status === "continue" &&
-      !evaluation.progressSummary &&
-      !evaluation.itemUpdates?.length
-        ? memory.stalledCount + 1
-        : 0;
+      !evaluation.progressSummary && !evaluation.itemUpdates?.length ? memory.stalledCount + 1 : 0;
 
     return {
       ...memory,
