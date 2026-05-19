@@ -4,7 +4,7 @@ import { createStore, Provider } from "jotai";
 import { describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../../atoms/app-ui";
 import { wsClientAtom } from "../../../atoms/connection";
-import { supervisorCyclesAtom, supervisorsAtom } from "../atoms";
+import { supervisorCyclesAtom, supervisorDialogAtom, supervisorsAtom } from "../atoms";
 import { SupervisorCard } from "../views/shared/supervisor-card";
 
 describe("SupervisorCard", () => {
@@ -133,18 +133,49 @@ describe("SupervisorCard", () => {
     expect(statusCluster?.querySelector(".supervisor-cycle-count")).toHaveTextContent("Cycles 3");
     expect(screen.queryByLabelText("Latest evaluation")).not.toBeInTheDocument();
     expect(screen.queryByText("Persistence and hydration are done.")).not.toBeInTheDocument();
-    expect(screen.getAllByText("Verify the refactor").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Verify the refactor")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /expand/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /collapse/i })).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Target memory")).toBeInTheDocument();
-    expect(screen.getByText("Decomposition ready")).toBeInTheDocument();
-    expect(screen.getByText("Stages")).toBeInTheDocument();
-    expect(screen.getByText("Validation in progress")).toBeInTheDocument();
-    expect(screen.getByText("Need to finish the validation step.")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Target memory")).not.toBeInTheDocument();
+    expect(screen.queryByText("Decomposition ready")).not.toBeInTheDocument();
+    expect(screen.queryByText("Stages")).not.toBeInTheDocument();
+    expect(screen.queryByText("Validation in progress")).not.toBeInTheDocument();
+    expect(screen.queryByText("Need to finish the validation step.")).not.toBeInTheDocument();
     expect(screen.queryByText("65%")).not.toBeInTheDocument();
     expect(document.querySelector(".supervisor-progress-track")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Trigger Evaluation" }));
     expect(sendCommand).toHaveBeenCalledWith("supervisor.trigger", { id: "sup-1" }, undefined);
+  });
+
+  it("opens details from the primary supervisor action and exposes edit from details", () => {
+    const store = createStore();
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+    store.set(supervisorsAtom, new Map([["sess-1", createSupervisor()]]));
+    store.set(supervisorCyclesAtom, new Map());
+
+    render(
+      <Provider store={store}>
+        <SupervisorCard sessionId="sess-1" workspaceId="ws-1" />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Supervisor Details" }));
+
+    expect(
+      screen.getByRole("heading", { name: "Supervisor Details", level: 2 })
+    ).toBeInTheDocument();
+    expect(screen.getByText("Decomposition ready")).toBeInTheDocument();
+    expect(screen.getByText("Validation in progress")).toBeInTheDocument();
+    expect(screen.getByText("Need to finish the validation step.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit Supervisor" }));
+
+    const dialogState = store.get(supervisorDialogAtom);
+    expect(dialogState.open).toBe(true);
+    expect(dialogState.mode).toBe("edit");
+    expect(screen.getByRole("heading", { name: "Edit Supervisor", level: 2 })).toBeInTheDocument();
   });
 
   it("localizes stop reasons in Chinese", () => {
@@ -203,7 +234,7 @@ describe("SupervisorCard", () => {
       </Provider>
     );
 
-    expect(screen.getByRole("button", { name: "Edit Supervisor" })).toHaveClass(
+    expect(screen.getByRole("button", { name: "Supervisor Details" })).toHaveClass(
       "btn",
       "btn-ghost",
       "btn-sm",
@@ -230,7 +261,7 @@ describe("SupervisorCard", () => {
     );
     expect(
       screen
-        .getByRole("button", { name: "Edit Supervisor" })
+        .getByRole("button", { name: "Supervisor Details" })
         .querySelector('[data-icon-semantic="supervisor.mode.edit"]')
     ).toBeTruthy();
     expect(

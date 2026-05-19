@@ -8,9 +8,11 @@ import {
   type ObjectiveDialogMode,
   useObjectiveDialogState,
 } from "../../actions/use-objective-dialog-state";
+import { useSupervisorDetails } from "../../actions/use-supervisor-details";
 import { supervisorDialogAtom } from "../../atoms";
 import { ObjectiveDialogContent } from "../shared/objective-dialog-content";
 import { SupervisorCard } from "../shared/supervisor-card";
+import { SupervisorDetailsContent } from "../shared/supervisor-details-content";
 
 interface MobileSupervisorSheetProps {
   sessionId: string;
@@ -24,8 +26,9 @@ export function MobileSupervisorSheet({
   onClose,
 }: MobileSupervisorSheetProps) {
   const t = useTranslation();
-  const [detailMode, setDetailMode] = useState<ObjectiveDialogMode | null>(null);
+  const [detailMode, setDetailMode] = useState<ObjectiveDialogMode | "details" | null>(null);
   const setDialog = useSetAtom(supervisorDialogAtom);
+  const { closeDetails, openDetails } = useSupervisorDetails(sessionId);
   const {
     dialog,
     supervisor,
@@ -79,7 +82,6 @@ export function MobileSupervisorSheet({
 
   useEffect(() => {
     if (!dialog.open || dialog.sessionId !== sessionId) {
-      setDetailMode(null);
       return;
     }
 
@@ -99,6 +101,11 @@ export function MobileSupervisorSheet({
       draftScheduledAt: formatScheduledAtInput(supervisor?.scheduledAt),
     });
     setDetailMode(nextMode);
+  };
+
+  const openDetailsView = () => {
+    openDetails(sessionId);
+    setDetailMode("details");
   };
 
   const detailBody = (
@@ -125,6 +132,20 @@ export function MobileSupervisorSheet({
     </div>
   );
 
+  const detailsBody =
+    supervisor && detailMode === "details" ? (
+      <div className="mobile-supervisor-sheet__detail">
+        <SupervisorDetailsContent
+          sessionId={sessionId}
+          workspaceId={workspaceId}
+          onEdit={() => {
+            closeDetails();
+            openDetail("edit");
+          }}
+        />
+      </div>
+    ) : null;
+
   const detailFooter = (
     <div className="mobile-supervisor-sheet__footer">
       <Button
@@ -143,7 +164,14 @@ export function MobileSupervisorSheet({
         onClick={() => {
           void (async () => {
             const ok = await confirm();
-            if (ok && !supervisor) {
+            if (!ok) {
+              return;
+            }
+
+            closeDetails();
+            setDetailMode(null);
+
+            if (!supervisor) {
               onClose();
             }
           })();
@@ -158,22 +186,30 @@ export function MobileSupervisorSheet({
   if (detailMode) {
     return (
       <Sheet
-        title={copy.title}
+        title={detailMode === "details" ? t("supervisor.dialog.details.title") : copy.title}
         kicker={t("supervisor.title")}
-        onBack={() => {
-          close();
-          setDetailMode(null);
-        }}
+        onBack={
+          detailMode === "details"
+            ? () => {
+                closeDetails();
+                setDetailMode(null);
+              }
+            : () => {
+                close();
+                setDetailMode(supervisor ? "details" : null);
+              }
+        }
         onClose={() => {
           close();
+          closeDetails();
           setDetailMode(null);
           onClose();
         }}
         bodyClassName="mobile-sheet__body--supervisor-detail"
         contentClassName="mobile-supervisor-sheet mobile-supervisor-sheet--detail"
         fullscreen
-        body={detailBody}
-        footer={detailFooter}
+        body={detailMode === "details" ? detailsBody : detailBody}
+        footer={detailMode === "details" ? undefined : detailFooter}
       />
     );
   }
@@ -209,9 +245,7 @@ export function MobileSupervisorSheet({
             <>
               <SupervisorCard sessionId={sessionId} workspaceId={workspaceId} />
               <div className="mobile-supervisor-sheet__actions">
-                <Button onClick={() => openDetail("edit")}>
-                  {t("supervisor.action.edit_objective")}
-                </Button>
+                <Button onClick={openDetailsView}>{t("supervisor.action.details")}</Button>
                 <Button onClick={() => openDetail("disable")}>
                   {t("supervisor.action.disable")}
                 </Button>

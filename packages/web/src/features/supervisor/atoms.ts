@@ -36,6 +36,14 @@ export const supervisorDialogAtom = atom<{
   draftScheduledAt: "",
 });
 
+export const supervisorDetailsAtom = atom<{
+  open: boolean;
+  sessionId: string | null;
+}>({
+  open: false,
+  sessionId: null,
+});
+
 // Derived atom for getting supervisor by session
 export const supervisorBySessionAtom = atom((get) => (sessionId: string) => {
   const supervisors = get(supervisorsAtom);

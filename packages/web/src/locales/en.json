@@ -760,6 +760,7 @@
     "action": {
       "enable": "Enable Supervisor",
       "enable_objective": "Enable Objective",
+      "details": "Supervisor Details",
       "edit_objective": "Edit Supervisor",
       "disable": "Disable",
       "pause": "Pause",
@@ -779,6 +780,9 @@
         "title": "Edit Supervisor",
         "subtitle": "Adjust the objective or switch evaluators without clearing evaluation history.",
         "confirm": "Save"
+      },
+      "details": {
+        "title": "Supervisor Details"
       },
       "disable": {
         "title": "Disable Supervisor",

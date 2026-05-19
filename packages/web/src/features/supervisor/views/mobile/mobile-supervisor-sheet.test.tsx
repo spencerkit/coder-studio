@@ -57,7 +57,36 @@ describe("MobileSupervisorSheet", () => {
     evaluatorProviderId: "claude",
     maxSupervisionCount: 0,
     completedSupervisionCount: 0,
-    recentTargetCycles: [],
+    currentTargetMemory: {
+      targetId: "tgt-1",
+      decompositionGenerated: true,
+      decompositionMode: "stage" as const,
+      items: [
+        {
+          id: "stage-1",
+          kind: "stage" as const,
+          title: "Verify the refactor",
+          objective: "Confirm the refactor still behaves correctly",
+          deliverable: "A passing focused verification run",
+          acceptanceCriteria: ["Focused verification passes"],
+          status: "in_progress" as const,
+        },
+      ],
+      activeItemId: "stage-1",
+      progressSummary: "Validation in progress",
+      stalledCount: 0,
+      updatedAt: 1,
+    },
+    recentTargetCycles: [
+      {
+        cycleId: "target-cycle-1",
+        targetId: "tgt-1",
+        startedAt: 1,
+        completedAt: 2,
+        result: "continue" as const,
+        reason: "Need to finish the validation step.",
+      },
+    ],
     cycles: [],
     createdAt: 1,
     updatedAt: 1,
@@ -93,15 +122,19 @@ describe("MobileSupervisorSheet", () => {
 
     expect(screen.getByText("Reduce mobile regression bugs")).toBeInTheDocument();
     expect(
-      within(rootActions as HTMLElement).getByRole("button", { name: "Edit Supervisor" })
+      within(rootActions as HTMLElement).getByRole("button", { name: "Supervisor Details" })
     ).toBeInTheDocument();
     expect(
       within(rootActions as HTMLElement).getByRole("button", { name: "Disable" })
     ).toBeInTheDocument();
+    expect(
+      within(rootActions as HTMLElement).queryByRole("button", { name: "Edit Supervisor" })
+    ).not.toBeInTheDocument();
     expect(screen.queryByText("Supervisor is not enabled")).not.toBeInTheDocument();
     expect(
       document.querySelector(".mobile-supervisor-sheet.mobile-sheet--fullscreen")
     ).not.toBeNull();
+    expect(screen.queryByText("Verify the refactor")).not.toBeInTheDocument();
   });
 
   it("renders the enable form directly when supervisor is not enabled", async () => {
@@ -152,7 +185,7 @@ describe("MobileSupervisorSheet", () => {
     });
   });
 
-  it("returns from edit detail view to the supervisor root when tapping back", () => {
+  it("returns from edit detail view to the supervisor details when tapping back", () => {
     const store = createStore();
     window.localStorage.setItem("ui.locale", JSON.stringify("en"));
     store.set(localeAtom, "en");
@@ -170,15 +203,24 @@ describe("MobileSupervisorSheet", () => {
     expect(rootActions).not.toBeNull();
 
     fireEvent.click(
-      within(rootActions as HTMLElement).getByRole("button", { name: "Edit Supervisor" })
+      within(rootActions as HTMLElement).getByRole("button", { name: "Supervisor Details" })
     );
 
     expect(document.querySelector(".mobile-supervisor-sheet__detail-header")).toBeNull();
+    expect(
+      screen.getByRole("heading", { name: "Supervisor Details", level: 2 })
+    ).toBeInTheDocument();
+    expect(screen.getByText("Decomposition ready")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit Supervisor" }));
+
     expect(screen.getByRole("heading", { name: "Edit Supervisor", level: 2 })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
 
-    expect(screen.getByText("Reduce mobile regression bugs")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Supervisor Details", level: 2 })
+    ).toBeInTheDocument();
     expect(screen.queryByLabelText("Objective")).not.toBeInTheDocument();
   });
 
@@ -266,8 +308,10 @@ describe("MobileSupervisorSheet", () => {
     expect(rootActions).not.toBeNull();
 
     fireEvent.click(
-      within(rootActions as HTMLElement).getByRole("button", { name: "Edit Supervisor" })
+      within(rootActions as HTMLElement).getByRole("button", { name: "Supervisor Details" })
     );
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit Supervisor" }));
 
     expect(document.querySelector(".mobile-supervisor-sheet__detail-header")).toBeNull();
     expect(screen.getByRole("heading", { name: "Edit Supervisor", level: 2 })).toBeInTheDocument();

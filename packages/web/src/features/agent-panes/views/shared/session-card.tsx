@@ -16,7 +16,6 @@ import { workspaceByIdAtomFamily } from "../../../../atoms/workspaces";
 import { IconButton, StatusDot, Tag, Tooltip } from "../../../../components/ui";
 import { PanelHeader } from "../../../shared/components/panel-header";
 import { useSupervisor } from "../../../supervisor/actions/use-supervisor";
-import { ObjectiveDialog } from "../../../supervisor/views/shared/objective-dialog";
 import { SupervisorCard } from "../../../supervisor/views/shared/supervisor-card";
 import { XtermHost } from "../../../terminal-panel/views/shared/xterm-host";
 import { usePersistWorkspaceLastViewedTarget } from "../../../workspace/actions/use-persist-workspace-last-viewed-target";
@@ -204,7 +203,6 @@ export const SessionCard: FC<SessionCardProps> = ({
       session.state !== "ended" ? (
         <>
           <SupervisorCard sessionId={session.id} workspaceId={session.workspaceId} />
-          <ObjectiveDialog workspaceId={session.workspaceId} sessionId={session.id} />
         </>
       ) : null}
 

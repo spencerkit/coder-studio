@@ -5,6 +5,7 @@ import { dispatchCommandAtom } from "../../../atoms/connection";
 import { useTranslation } from "../../../lib/i18n";
 import { supervisorCyclesAtom, supervisorDialogAtom, supervisorsAtom } from "../atoms";
 import { formatScheduledAtInput } from "./use-objective-dialog-state";
+import { useSupervisorDetails } from "./use-supervisor-details";
 
 const STATE_CLASSES: Record<SupervisorState, string> = {
   inactive: "supervisor-state-inactive",
@@ -25,6 +26,7 @@ export function useSupervisorActions({ sessionId }: UseSupervisorActionsArgs) {
   const cyclesBySupervisor = useAtomValue(supervisorCyclesAtom);
   const dispatch = useAtomValue(dispatchCommandAtom);
   const setDialog = useSetAtom(supervisorDialogAtom);
+  const { openDetails } = useSupervisorDetails();
   const t = useTranslation();
   const supervisor = supervisors.get(sessionId);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -124,6 +126,11 @@ export function useSupervisorActions({ sessionId }: UseSupervisorActionsArgs) {
     handleTrigger,
     isBusy:
       supervisor?.state === "evaluating" || supervisor?.state === "injecting" || hasInFlightCycle,
+    openDetails: () => {
+      if (supervisor) {
+        openDetails(supervisor.sessionId);
+      }
+    },
     openDialog,
     recentReasoning,
     stopReasonLabel,

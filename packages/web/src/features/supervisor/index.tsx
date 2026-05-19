@@ -10,3 +10,4 @@ export {
 } from "./atoms";
 export { ObjectiveDialog } from "./views/shared/objective-dialog";
 export { SupervisorCard } from "./views/shared/supervisor-card";
+export { SupervisorDetailsDialog } from "./views/shared/supervisor-details-dialog";

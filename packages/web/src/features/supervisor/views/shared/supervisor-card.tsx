@@ -1,6 +1,8 @@
 import { IconButton, ThemedIcon, Tooltip } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { useSupervisorActions } from "../../actions/use-supervisor-actions";
+import { ObjectiveDialog } from "./objective-dialog";
+import { SupervisorDetailsDialog } from "./supervisor-details-dialog";
 
 interface SupervisorCardProps {
   sessionId: string;
@@ -10,21 +12,17 @@ interface SupervisorCardProps {
 export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) {
   const t = useTranslation();
   const {
-    activeItem,
     actionError,
-    decompositionModeLabel,
-    decompositionStatusLabel,
     handlePause,
     handleResume,
     handleTrigger,
     isBusy,
+    openDetails,
     openDialog,
-    recentReasoning,
     stopReasonLabel,
     stateClass,
     stateLabel,
     supervisor,
-    targetMemory,
   } = useSupervisorActions({ sessionId });
 
   if (!supervisor) {
@@ -63,12 +61,12 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
         </span>
 
         <div className="supervisor-actions">
-          <Tooltip content={t("supervisor.action.edit_objective")}>
+          <Tooltip content={t("supervisor.action.details")}>
             <IconButton
-              aria-label={t("supervisor.action.edit_objective")}
+              aria-label={t("supervisor.action.details")}
               className="supervisor-icon-btn"
               icon={<ThemedIcon semantic="supervisor.mode.edit" size={12} />}
-              onClick={() => openDialog("edit")}
+              onClick={openDetails}
               size="sm"
             />
           </Tooltip>
@@ -130,71 +128,6 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
         </Tooltip>
       </div>
 
-      {targetMemory ? (
-        <div className="supervisor-details" aria-label={t("supervisor.target_memory.title")}>
-          <div className="supervisor-meta-grid">
-            <div className="supervisor-meta-item">
-              <p className="supervisor-meta-label">{t("supervisor.target_memory.target")}</p>
-              <p className="supervisor-meta-value">{decompositionStatusLabel}</p>
-            </div>
-            {decompositionModeLabel ? (
-              <div className="supervisor-meta-item">
-                <p className="supervisor-meta-label">
-                  {t("supervisor.target_memory.decomposition_mode_title")}
-                </p>
-                <p className="supervisor-meta-value">{decompositionModeLabel}</p>
-              </div>
-            ) : null}
-            {activeItem ? (
-              <div className="supervisor-meta-item">
-                <p className="supervisor-meta-label">{t("supervisor.target_memory.active_item")}</p>
-                <p className="supervisor-meta-value">{activeItem.title}</p>
-              </div>
-            ) : null}
-            <div className="supervisor-meta-item">
-              <p className="supervisor-meta-label">{t("supervisor.target_memory.stalled")}</p>
-              <p className="supervisor-meta-value">{String(targetMemory.stalledCount)}</p>
-            </div>
-          </div>
-
-          {targetMemory.progressSummary ? (
-            <div className="supervisor-meta-item">
-              <p className="supervisor-meta-label">
-                {t("supervisor.target_memory.progress_title")}
-              </p>
-              <p className="supervisor-meta-value">{targetMemory.progressSummary}</p>
-            </div>
-          ) : null}
-
-          {targetMemory.items.length > 0 ? (
-            <div className="supervisor-meta-item">
-              <p className="supervisor-meta-label">
-                {t("supervisor.target_memory.decomposition_title")}
-              </p>
-              <div className="supervisor-details-panel">
-                {targetMemory.items.map((item) => (
-                  <div key={item.id} className="supervisor-meta-item">
-                    <p className="supervisor-meta-label">
-                      {t(`supervisor.target_memory.step_status.${item.status}`)}
-                    </p>
-                    <p className="supervisor-meta-value">{item.title}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
-
-          {recentReasoning ? (
-            <div className="supervisor-meta-item">
-              <p className="supervisor-meta-label">
-                {t("supervisor.target_memory.reasoning_title")}
-              </p>
-              <p className="supervisor-meta-value">{recentReasoning}</p>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-
       {supervisor.state === "stopped" && stopReasonLabel ? (
         <div className="supervisor-error" role="status">
           {stopReasonLabel}
@@ -210,6 +143,9 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
           {supervisor.errorReason}
         </div>
       ) : null}
+
+      <SupervisorDetailsDialog workspaceId={workspaceId} sessionId={sessionId} />
+      <ObjectiveDialog workspaceId={workspaceId} sessionId={sessionId} />
     </div>
   );
 }
