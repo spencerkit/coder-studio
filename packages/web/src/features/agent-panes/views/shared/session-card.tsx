@@ -7,7 +7,7 @@
 
 import type { SessionState } from "@coder-studio/core";
 import { useAtomValue, useSetAtom } from "jotai";
-import { FlipHorizontal, FlipVertical, Square, X } from "lucide-react";
+import { FlipHorizontal, FlipVertical, X } from "lucide-react";
 import type { FC, ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { pendingFocusSessionAtom } from "../../../../atoms/app-ui";
@@ -32,7 +32,6 @@ interface SessionCardProps {
   onClose?: SessionCardAction;
   onSplitHorizontal?: SessionCardAction;
   onSplitVertical?: SessionCardAction;
-  onStop?: SessionCardAction;
 }
 
 /**
@@ -51,7 +50,6 @@ export const SessionCard: FC<SessionCardProps> = ({
   onClose,
   onSplitHorizontal,
   onSplitVertical,
-  onStop,
 }) => {
   const session = useAtomValue(sessionByIdAtomFamily(sessionId));
   const workspace = useAtomValue(
@@ -152,17 +150,6 @@ export const SessionCard: FC<SessionCardProps> = ({
 
               {showHeaderActions ? (
                 <div className="session-header-actions">
-                  {session.state === "running" ? (
-                    <Tooltip content="Stop">
-                      <IconButton
-                        aria-label="Stop"
-                        className="session-action-btn"
-                        icon={<Square size={13} />}
-                        onClick={() => void onStop?.()}
-                        size="sm"
-                      />
-                    </Tooltip>
-                  ) : null}
                   <Tooltip content="Split horizontal">
                     <IconButton
                       aria-label="Split horizontal"

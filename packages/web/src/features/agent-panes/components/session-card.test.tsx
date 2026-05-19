@@ -231,6 +231,25 @@ describe("SessionCard", () => {
     );
   });
 
+  it("routes running sessions through the shared pulse dot behavior", () => {
+    const { store } = createSessionStore({
+      terminalId: "term-live",
+      state: "running",
+      endedAt: undefined,
+    });
+
+    const { container } = render(
+      <Provider store={store}>
+        <SessionCard sessionId="sess_123456" />
+      </Provider>
+    );
+
+    const dot = container.querySelector(".session-dot.session-dot-running");
+
+    expect(dot).not.toBeNull();
+    expect(dot?.className).toMatch(/pulse/);
+  });
+
   it("does not render the legacy session progress strip", () => {
     const { store } = createSessionStore({
       terminalId: "term-live",
@@ -538,23 +557,20 @@ describe("SessionCard", () => {
     );
   });
 
-  it("renders stop for running sessions and routes it through the explicit callback", () => {
+  it("does not render stop for running sessions", () => {
     const { store } = createSessionStore({
       terminalId: "term-live",
       state: "running",
       endedAt: undefined,
     });
-    const onStop = vi.fn();
 
     render(
       <Provider store={store}>
-        <SessionCard sessionId="sess_123456" onStop={onStop} />
+        <SessionCard sessionId="sess_123456" />
       </Provider>
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
-
-    expect(onStop).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "Stop" })).not.toBeInTheDocument();
   });
 
   it("routes split buttons through explicit callbacks", () => {
@@ -583,7 +599,7 @@ describe("SessionCard", () => {
     expect(onSplitVertical).toHaveBeenCalledTimes(1);
   });
 
-  it("uses shared IconButton compatibility classes for header actions", () => {
+  it("uses shared IconButton compatibility classes for split and close header actions", () => {
     const { store } = createSessionStore({
       terminalId: "term-live",
       state: "running",
@@ -596,12 +612,6 @@ describe("SessionCard", () => {
       </Provider>
     );
 
-    expect(screen.getByRole("button", { name: "Stop" })).toHaveClass(
-      "btn",
-      "btn-ghost",
-      "btn-sm",
-      "session-action-btn"
-    );
     expect(screen.getByRole("button", { name: "Split horizontal" })).toHaveClass(
       "btn",
       "btn-ghost",

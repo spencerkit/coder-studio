@@ -12,19 +12,15 @@ import { AgentPanes } from "./index";
 
 type MockSessionCardProps = {
   sessionId: string;
-  onStop?: () => void;
   onSplitHorizontal?: () => void;
   onSplitVertical?: () => void;
   onClose?: () => void;
 };
 
 const mockSessionCard = vi.fn(
-  ({ sessionId, onStop, onSplitHorizontal, onSplitVertical, onClose }: MockSessionCardProps) => (
+  ({ sessionId, onSplitHorizontal, onSplitVertical, onClose }: MockSessionCardProps) => (
     <div data-testid="session-card">
       <span>{sessionId}</span>
-      <button type="button" onClick={onStop}>
-        stop-{sessionId}
-      </button>
       <button type="button" onClick={onSplitHorizontal}>
         split-{sessionId}
       </button>
@@ -345,8 +341,8 @@ describe("AgentPanes", () => {
     });
   });
 
-  it("stops a running session without removing its pane", async () => {
-    const { store, sendCommand } = createAgentPaneStore();
+  it("does not wire a standalone stop action into the session card header", async () => {
+    const { store } = createAgentPaneStore();
 
     render(
       <Provider store={store}>
@@ -369,11 +365,7 @@ describe("AgentPanes", () => {
 
     const layoutBeforeStop = structuredClone(store.get(paneLayoutAtomFamily("ws-1")));
 
-    fireEvent.click(screen.getByRole("button", { name: "stop-sess_1" }));
-
-    await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith("session.stop", { sessionId: "sess_1" }, undefined);
-    });
+    expect(screen.queryByRole("button", { name: "stop-sess_1" })).not.toBeInTheDocument();
 
     expect(store.get(paneLayoutAtomFamily("ws-1"))).toEqual(layoutBeforeStop);
   });
