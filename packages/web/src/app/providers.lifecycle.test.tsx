@@ -323,6 +323,13 @@ describe("AppProviders lifecycle recovery", () => {
 
     act(() => {
       wsState.client?.statusHandler?.("reconnecting");
+    });
+
+    await vi.waitFor(() => {
+      expect(store.get(activationStatusAtom)).toBe("idle");
+    });
+
+    act(() => {
       wsState.client?.statusHandler?.("connected");
     });
 
@@ -333,6 +340,126 @@ describe("AppProviders lifecycle recovery", () => {
         ) ?? [];
       expect(activateCalls.length).toBe(2);
     });
+  });
+
+  it("refreshes stale git-derived workspace state after websocket reconnect once activation is reclaimed", async () => {
+    const store = createStore();
+    setVisibilityState("visible");
+    seedWorkspaces(store, ["ws-1"], "ws-1");
+
+    let activationClaimed = false;
+
+    act(() => {
+      store.set(gitStateAtomFamily("ws-1"), {
+        branch: "feature/reconnect",
+        ahead: 0,
+        behind: 0,
+        staged: [],
+        modified: Array.from({ length: 20 }, (_, index) => ({ path: `file-${index}.ts` })),
+        untracked: [],
+        deleted: [],
+      });
+      store.set(gitBranchListAtomFamily("ws-1"), {
+        current: "feature/reconnect",
+        branches: [],
+        loading: false,
+      });
+      store.set(worktreeListAtomFamily("ws-1"), {
+        items: [],
+        loading: false,
+      });
+    });
+
+    wsState.client!.sendCommand = createWsSendCommandMock(async (op: string) => {
+      if (op === "activation.claim") {
+        activationClaimed = true;
+        return {
+          active: true,
+          generation: 2,
+          recoveryMode: "grace_recover",
+        };
+      }
+
+      if (op === "workspace.activate") {
+        if (!activationClaimed) {
+          throw new Error("activation_required");
+        }
+        return {};
+      }
+
+      if (op === "git.status") {
+        return {
+          branch: "feature/reconnect",
+          ahead: 1,
+          behind: 0,
+          staged: [],
+          modified: [],
+          untracked: [],
+          deleted: [],
+        };
+      }
+
+      if (op === "git.branches") {
+        return {
+          current: "feature/reconnect",
+          branches: [{ name: "feature/reconnect", isCurrent: true, isRemote: false }],
+        };
+      }
+
+      if (op === "worktree.list") {
+        return {
+          worktrees: [
+            {
+              name: "feature/reconnect",
+              path: "/tmp/ws-1",
+              branch: "feature/reconnect",
+              commit: "abc123",
+              status: "clean" as const,
+            },
+          ],
+        };
+      }
+
+      return undefined;
+    });
+
+    renderProviders(store);
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.sendCommand).toHaveBeenCalledWith("workspace.activate", {
+        workspaceId: "ws-1",
+      });
+    });
+
+    act(() => {
+      wsState.client?.statusHandler?.("reconnecting");
+    });
+
+    await vi.waitFor(() => {
+      expect(store.get(activationStatusAtom)).toBe("idle");
+    });
+
+    act(() => {
+      wsState.client?.statusHandler?.("connected");
+    });
+
+    await vi.waitFor(() => {
+      const activateCalls =
+        wsState.client?.sendCommand?.mock.calls.filter(
+          ([op, args]) => op === "workspace.activate" && args?.workspaceId === "ws-1"
+        ) ?? [];
+      expect(activateCalls.length).toBeGreaterThanOrEqual(2);
+    });
+
+    await vi.waitFor(() => {
+      expect(store.get(gitStateAtomFamily("ws-1"))?.modified).toHaveLength(0);
+      expect(store.get(gitStateAtomFamily("ws-1"))?.ahead).toBe(1);
+      expect(store.get(gitBranchListAtomFamily("ws-1")).current).toBe("feature/reconnect");
+      expect(store.get(worktreeListAtomFamily("ws-1")).items).toHaveLength(1);
+    });
+
+    const calls = wsState.client?.sendCommand?.mock.calls ?? [];
+    expect(calls.filter(([op]) => op === "git.status")).toHaveLength(1);
   });
 
   it("sends workspace.deactivate when the active workspace intent is cleared", async () => {
