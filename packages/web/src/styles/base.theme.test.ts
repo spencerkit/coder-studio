@@ -83,6 +83,11 @@ describe("base.css desktop typography foundation", () => {
     expect(tokensStylesheet).toContain("--z-drawer:");
     expect(tokensStylesheet).toContain("--z-workbench-backdrop:");
     expect(tokensStylesheet).toContain("--z-workbench:");
+    expect(tokensStylesheet).toContain("--z-modal-backdrop:");
+    expect(tokensStylesheet).toContain("--z-modal:");
+    expect(tokensStylesheet).toContain("--z-popover:");
+    expect(tokensStylesheet).toContain("--z-tooltip:");
+    expect(tokensStylesheet).toContain("--z-toast:");
   });
 
   it("maps base text elements onto semantic typography tokens", () => {

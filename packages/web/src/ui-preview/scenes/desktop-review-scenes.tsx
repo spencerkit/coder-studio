@@ -452,6 +452,7 @@ export function createDesktopReviewScenes(): UiPreviewSceneDefinition[] {
             <WorkspaceLaunchModal onClose={() => {}} />
           </div>
           <div className="desktop-review-card desktop-review-card--worktree">
+            {/* Review-only inline preview: this remains a non-portaled inspection surface, not a product overlay. */}
             <div className="desktop-review-embedded-worktree">
               <WorktreeManagerSurface
                 desktopPreviewInline

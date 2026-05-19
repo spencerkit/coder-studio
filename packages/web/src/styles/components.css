@@ -4,19 +4,6 @@
  * Styles for all UI components using CSS tokens only.
  */
 
-/* ========== Command Palette ========== */
-.command-palette-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding-top: var(--sp-16);
-  z-index: var(--z-modal-backdrop);
-  animation: fadeIn var(--duration-fast) var(--ease-out);
-}
-
 .command-palette {
   width: 100%;
   max-width: var(--desktop-modal-max-width-md);
@@ -201,7 +188,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .command-palette-overlay,
   .command-palette,
   .mobile-sheet-layer__backdrop,
   .mobile-drawer-layer__backdrop,
@@ -1623,21 +1609,6 @@
 .mobile-shell__agent-stage .mobile-terminal-input-bar {
   padding: 3px calc(var(--mobile-safe-right) + var(--sp-3)) 4px
     calc(var(--mobile-safe-left) + var(--sp-3));
-}
-
-.xterm-replay-overlay {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--sp-4);
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--bg-terminal) 88%, transparent),
-    color-mix(in srgb, var(--bg-terminal) 96%, transparent)
-  );
-  pointer-events: none;
 }
 
 .xterm-replay-overlay__card {
@@ -4644,17 +4615,6 @@ body.is-resizing-panels * {
   flex-shrink: 0;
 }
 
-/* ========== Workspace Launch Modal ========== */
-.launch-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-}
-
 .launch-modal {
   width: min(var(--desktop-modal-max-width-lg), 90vw);
   max-width: min(var(--desktop-modal-max-width-lg), 90vw);
@@ -6760,17 +6720,6 @@ textarea.input {
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
-.launch-overlay {
-  background: rgba(4, 8, 12, 0.58);
-  backdrop-filter: blur(8px);
-}
-
-.launch-modal {
-  background: linear-gradient(180deg, rgba(17, 24, 31, 0.98), rgba(11, 18, 24, 0.98));
-  border-color: color-mix(in srgb, var(--border-light) 64%, var(--accent-blue) 36%);
-  box-shadow: var(--shadow-xl);
-}
-
 .app-topbar {
   padding: 0 10px;
   background: linear-gradient(180deg, rgba(20, 29, 38, 0.96), rgba(17, 24, 31, 0.98));
@@ -7993,11 +7942,6 @@ textarea.input {
  * Earlier alignment passes introduced a few dark-only fills; keep the
  * polish, but derive it from tokens so light mode stays coherent.
  */
-.launch-overlay {
-  background: color-mix(in srgb, black 58%, transparent);
-  backdrop-filter: blur(8px);
-}
-
 .launch-modal {
   width: min(var(--desktop-modal-max-width-lg), 90vw);
   max-width: min(var(--desktop-modal-max-width-lg), 90vw);
@@ -12356,17 +12300,6 @@ textarea.input {
 
 .mobile-sheet__footer .git-panel-status-strip {
   padding-top: 0;
-}
-
-/* ========== Paste Dialog ========== */
-.paste-dialog-overlay {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.6);
-  z-index: 10;
 }
 
 .paste-dialog {

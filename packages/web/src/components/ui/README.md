@@ -28,6 +28,7 @@
 | SegmentedControl | 1 | `src/components/ui/index.ts` named export only | Shared compact selector used by provider chooser/subnav and shortcuts categories |
 | Select | 2 | `src/components/ui/index.ts` named export only | Current bounded slice now completes the scoped selector family for supervisor and terminal mobile-sheet trigger flows |
 | Sheet | 2 | `src/components/ui/index.ts` named export only | Shared bounded mobile bottom-sheet shell preserving `.mobile-sheet*` compatibility DOM |
+| LocalOverlay | 1 | `src/components/ui/index.ts` named export only | Shared host-scoped runtime overlay shell for terminal/editor/panel-local status and dialog states; status overlays stay pass-through and dialog dismissal is opt-in |
 | Spinner | 0 | `src/components/ui/index.ts` named export only | Shared loading indicator with legacy `.animate-spin` compatibility |
 | StatusDot | 0 | `src/components/ui/index.ts` named export only | Shared token-backed status dot primitive |
 | Switch | 0 | `src/components/ui/index.ts` named export only | Shared boolean switch used by bounded settings toggle flows |

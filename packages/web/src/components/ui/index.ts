@@ -24,6 +24,8 @@ export type { InputProps, InputSize } from "./input";
 export { Input } from "./input";
 export type { KbdProps } from "./kbd";
 export { Kbd } from "./kbd";
+export type { LocalOverlayProps } from "./local-overlay";
+export { LocalOverlay } from "./local-overlay";
 export type { ModalProps, ModalSize } from "./modal";
 export { DialogHeader, Modal, ModalBody, ModalFooter, ModalHeader, ModalTitle } from "./modal";
 export type { NoticeProps, NoticeTone } from "./notice";

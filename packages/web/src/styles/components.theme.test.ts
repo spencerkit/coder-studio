@@ -461,23 +461,48 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(tokensStylesheet).toContain("--mobile-safe-left: env(safe-area-inset-left, 0px);");
   });
 
-  it("tracks governed overlay families as pending before convergence completes", () => {
+  it("tracks governed overlay families as complete after convergence", () => {
     expect(migrationInventory).toContain(
-      "| Drawer | 🟡 pending | `worktree-modal`, `worktree-manager-surface` | 2 | 2026-05-19 |"
+      "| Drawer | 🟢 complete | `worktree-modal`, `worktree-manager-surface` | 0 | 2026-05-19 |"
     );
     expect(migrationInventory).toContain(
-      "| WorkbenchLayer | 🟡 pending | `command-palette-overlay`, `launch-overlay` | 2 | 2026-05-19 |"
+      "| WorkbenchLayer | 🟢 complete | `command-palette-overlay`, `launch-overlay` | 0 | 2026-05-19 |"
     );
     expect(migrationInventory).toContain(
-      "| LocalOverlay | 🟡 pending | upload busy inline overlay, `paste-dialog-overlay`, `xterm-replay-overlay` | 2 | 2026-05-19 |"
+      "| LocalOverlay | 🟢 complete | upload busy inline overlay, `paste-dialog-overlay`, `xterm-replay-overlay` | 0 | 2026-05-19 |"
     );
   });
 
+  it("does not leave governed desktop overlays on raw feature-owned backdrops", () => {
+    expect(stylesheet).not.toMatch(/(^|,)\s*\.command-palette-overlay\b/m);
+    expect(stylesheet).not.toMatch(/(^|,)\s*\.launch-overlay\b/m);
+    expect(stylesheet).not.toMatch(/(^|,)\s*\.paste-dialog-overlay\b/m);
+  });
+
+  it("keeps shared overlay families on semantic z-index tokens", () => {
+    const drawerStyles = readFileSync(
+      `${process.cwd()}/src/components/ui/drawer/index.module.css`,
+      "utf8"
+    );
+    const workbenchStyles = readFileSync(
+      `${process.cwd()}/src/components/ui/workbench-layer/index.module.css`,
+      "utf8"
+    );
+    const localOverlayStyles = readFileSync(
+      `${process.cwd()}/src/components/ui/local-overlay/index.module.css`,
+      "utf8"
+    );
+
+    expect(drawerStyles).toContain("var(--z-drawer-backdrop)");
+    expect(drawerStyles).toContain("var(--z-drawer)");
+    expect(workbenchStyles).toContain("var(--z-workbench-backdrop)");
+    expect(workbenchStyles).toContain("var(--z-workbench)");
+    expect(localOverlayStyles).toContain("var(--z-local-overlay)");
+  });
+
   it("keeps the workspace launch modal theme-aware", () => {
-    const overlay = getLastRuleBlock(".launch-overlay");
     const modal = getLastRuleBlock(".launch-modal");
 
-    expect(overlay).not.toContain("rgba(4, 8, 12, 0.58)");
     expect(modal).not.toContain("rgba(17, 24, 31, 0.98)");
     expect(modal).toContain("var(--bg-surface)");
   });
