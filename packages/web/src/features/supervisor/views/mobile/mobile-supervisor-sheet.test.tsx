@@ -211,7 +211,10 @@ describe("MobileSupervisorSheet", () => {
       screen.getByRole("heading", { name: "Supervisor Details", level: 2 })
     ).toBeInTheDocument();
     expect(screen.getByText("Basic Info")).toBeInTheDocument();
+    expect(screen.getByText("Target cycle reasoning")).toBeInTheDocument();
     expect(screen.getByText("Progress List")).toBeInTheDocument();
+    expect(screen.queryByText("Target progress")).not.toBeInTheDocument();
+    expect(screen.queryByText("Active item")).not.toBeInTheDocument();
     expect(screen.getByText("In progress")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Edit Supervisor" }));

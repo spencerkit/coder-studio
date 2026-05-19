@@ -14,9 +14,7 @@ export function SupervisorDetailsContent({
   onEdit,
 }: SupervisorDetailsContentProps) {
   const t = useTranslation();
-  const { activeItem, recentReasoning, supervisor, targetMemory } = useSupervisorActions({
-    sessionId,
-  });
+  const { recentReasoning, supervisor, targetMemory } = useSupervisorActions({ sessionId });
 
   if (!supervisor) {
     return null;
@@ -27,10 +25,6 @@ export function SupervisorDetailsContent({
     supervisor.maxSupervisionCount > 0
       ? String(supervisor.maxSupervisionCount)
       : t("supervisor.meta.no_cap");
-
-  const progressSummary =
-    targetMemory?.progressSummary ?? t(`supervisor.state.${supervisor.state}`);
-
   return (
     <div className="supervisor-details" aria-label={t("supervisor.target_memory.title")}>
       <section className="supervisor-details-section">
@@ -51,23 +45,20 @@ export function SupervisorDetailsContent({
                 {completedCycles} / {cycleCap}
               </p>
             </div>
-            <div className="supervisor-meta-item">
-              <p className="supervisor-meta-label">
-                {t("supervisor.target_memory.progress_title")}
-              </p>
-              <p className="supervisor-meta-value supervisor-meta-value--wrap">{progressSummary}</p>
-            </div>
-            {activeItem ? (
-              <div className="supervisor-meta-item">
-                <p className="supervisor-meta-label">{t("supervisor.target_memory.active_item")}</p>
-                <p className="supervisor-meta-value supervisor-meta-value--wrap">
-                  {activeItem.title}
-                </p>
-              </div>
-            ) : null}
           </div>
         </div>
       </section>
+
+      {recentReasoning ? (
+        <section className="supervisor-details-section">
+          <h3 className="supervisor-details-section-title">
+            {t("supervisor.target_memory.reasoning_title")}
+          </h3>
+          <div className="supervisor-meta-item supervisor-meta-item--reasoning">
+            <p className="supervisor-meta-value supervisor-meta-value--wrap">{recentReasoning}</p>
+          </div>
+        </section>
+      ) : null}
 
       {targetMemory?.items.length ? (
         <section className="supervisor-details-section">
@@ -114,15 +105,6 @@ export function SupervisorDetailsContent({
               );
             })}
           </div>
-
-          {recentReasoning ? (
-            <div className="supervisor-meta-item supervisor-meta-item--reasoning">
-              <p className="supervisor-meta-label">
-                {t("supervisor.target_memory.reasoning_title")}
-              </p>
-              <p className="supervisor-meta-value supervisor-meta-value--wrap">{recentReasoning}</p>
-            </div>
-          ) : null}
         </section>
       ) : null}
 

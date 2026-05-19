@@ -89,17 +89,23 @@ describe("SupervisorDetailsContent", () => {
     expect(screen.getByText("Reduce mobile regression bugs")).toBeInTheDocument();
     expect(screen.getByText("Cycles")).toBeInTheDocument();
     expect(screen.getByText("1 / 3")).toBeInTheDocument();
-    expect(screen.getByText("Validation in progress")).toBeInTheDocument();
+    expect(screen.queryByText("Target progress")).not.toBeInTheDocument();
+    expect(screen.queryByText("Active item")).not.toBeInTheDocument();
 
-    expect(screen.getByText("Progress List")).toBeInTheDocument();
+    const reasoningTitle = screen.getByText("Target cycle reasoning");
+    const progressListTitle = screen.getByText("Progress List");
+    expect(
+      reasoningTitle.compareDocumentPosition(progressListTitle) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(screen.getByText("Need to finish the validation step.")).toBeInTheDocument();
+
     expect(document.querySelector(".supervisor-progress-list--checklist")).not.toBeNull();
     expect(screen.getByText("Audit the mobile sheet layout")).toBeInTheDocument();
-    expect(screen.getAllByText("Refine the details modal structure")).toHaveLength(2);
+    expect(screen.getByText("Refine the details modal structure")).toBeInTheDocument();
     expect(screen.getByText("Verify the updated interaction")).toBeInTheDocument();
     expect(screen.getByText("Completed")).toBeInTheDocument();
     expect(screen.getByText("In progress")).toBeInTheDocument();
     expect(screen.getByText("Not started")).toBeInTheDocument();
     expect(screen.getByText("A compact summary block and progress list")).toBeInTheDocument();
-    expect(screen.getByText("Need to finish the validation step.")).toBeInTheDocument();
   });
 });
