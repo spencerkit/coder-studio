@@ -540,6 +540,48 @@ describe("SupervisorEvaluator", () => {
     expect(prompt).toContain('"stop"');
   });
 
+  it("builds a decompose prompt that forbids questions and requires autonomous decisions", async () => {
+    const logger = createLogger();
+    const evaluator = new SupervisorEvaluator({
+      providerRegistry: [createProvider("codex", "")],
+      providerConfigRepo: createProviderConfigRepo(),
+      timeoutMs: 5000,
+      logger,
+    });
+
+    await expect(
+      evaluator.evaluate(
+        makeSupervisor("codex"),
+        {
+          ...makeContext(),
+          objective: "Ship the fix",
+          terminalExcerpt: "latest output",
+          targetMemory: {
+            targetId: "tgt-1",
+            decompositionGenerated: false,
+            items: [],
+            stalledCount: 0,
+            updatedAt: 1,
+          },
+        },
+        { mode: "decompose" }
+      )
+    ).rejects.toThrow();
+
+    const prompt = (logger.warn.mock.calls[0]?.[0] as { prompt?: string } | undefined)?.prompt;
+    expect(prompt).toContain("Return JSON only.");
+    expect(prompt).toContain("Do not ask the user any questions.");
+    expect(prompt).toContain("Do not ask for clarification, confirmation, or approval.");
+    expect(prompt).toContain("Do not propose options for the user to choose from.");
+    expect(prompt).toContain(
+      "If information is incomplete, make the most conservative reasonable assumptions and decide the decomposition yourself."
+    );
+    expect(prompt).toContain(
+      "Your job is to return the best useful decomposition now, not to begin a discussion or planning workflow."
+    );
+    expect(prompt).toContain("No prose before or after the JSON.");
+  });
+
   it("aborts the evaluator process group when the signal is cancelled", async () => {
     const tempDir = mkdtempSync(path.join(tmpdir(), "supervisor-evaluator-"));
     const pidFile = path.join(tempDir, "pids.json");
