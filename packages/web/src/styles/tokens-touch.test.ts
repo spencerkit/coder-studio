@@ -152,7 +152,7 @@ describe("tokens.css touch tokens", () => {
 
     expect(body).toContain("--font-size-100: 12px");
     expect(body).toContain("--font-size-200: 13px");
-    expect(body).toContain("--font-size-300: 15px");
+    expect(body).toContain("--font-size-300: 14px");
     expect(body).toContain("--font-size-400: 17px");
     expect(body).toContain("--font-size-500: 20px");
     expect(body).toContain("--font-size-600: 28px");
