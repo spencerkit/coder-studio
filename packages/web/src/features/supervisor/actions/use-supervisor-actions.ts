@@ -1,9 +1,8 @@
 import type { SupervisorCycle, SupervisorState } from "@coder-studio/core";
 import { useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useState } from "react";
-import { localeAtom } from "../../../atoms/app-ui";
 import { dispatchCommandAtom } from "../../../atoms/connection";
-import { formatDate, type LocaleCode, useTranslation } from "../../../lib/i18n";
+import { useTranslation } from "../../../lib/i18n";
 import { supervisorCyclesAtom, supervisorDialogAtom, supervisorsAtom } from "../atoms";
 import { formatScheduledAtInput } from "./use-objective-dialog-state";
 
@@ -26,7 +25,6 @@ export function useSupervisorActions({ sessionId }: UseSupervisorActionsArgs) {
   const cyclesBySupervisor = useAtomValue(supervisorCyclesAtom);
   const dispatch = useAtomValue(dispatchCommandAtom);
   const setDialog = useSetAtom(supervisorDialogAtom);
-  const locale = useAtomValue(localeAtom) as LocaleCode;
   const t = useTranslation();
   const supervisor = supervisors.get(sessionId);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -149,55 +147,13 @@ export function useSupervisorActions({ sessionId }: UseSupervisorActionsArgs) {
             : t("supervisor.cycle.waiting")))
     : null;
 
-  const targetMemory = supervisor?.currentTargetMemory ?? null;
-  const targetPlanItems = targetMemory?.plan ?? [];
-  const recentTargetCycles = supervisor?.recentTargetCycles ?? [];
-  const planGeneratedLabel = targetMemory
-    ? targetMemory.planGenerated
-      ? t("supervisor.target_memory.plan_ready")
-      : t("supervisor.target_memory.plan_pending")
-    : null;
-  const targetProgressLabel = t("supervisor.target_memory.progress_badge");
-  const targetCycleResultLabel =
-    recentTargetCycles[0] != null
-      ? t(`supervisor.target_memory.cycle_result.${recentTargetCycles[0].result}`)
-      : null;
-
   const stopReasonLabel = supervisor?.stopReason
     ? t(`supervisor.stop_reason.${supervisor.stopReason}`)
     : null;
 
-  const executionPolicyItems = supervisor
-    ? [
-        supervisor.evaluatorModel
-          ? {
-              key: "model",
-              label: t("supervisor.field.evaluator_model"),
-              value: supervisor.evaluatorModel,
-            }
-          : null,
-        {
-          key: "max-count",
-          label: t("supervisor.field.max_supervision_count"),
-          value:
-            supervisor.maxSupervisionCount > 0
-              ? String(supervisor.maxSupervisionCount)
-              : t("supervisor.meta.no_cap"),
-        },
-        supervisor.scheduledAt
-          ? {
-              key: "scheduled-at",
-              label: t("supervisor.field.scheduled_at"),
-              value: formatDate(supervisor.scheduledAt, locale),
-            }
-          : null,
-      ].filter((item): item is { key: string; label: string; value: string } => item !== null)
-    : [];
-
   return {
     actionError,
     cycles,
-    executionPolicyItems,
     handlePause,
     handleResume,
     handleTrigger,
@@ -205,12 +161,6 @@ export function useSupervisorActions({ sessionId }: UseSupervisorActionsArgs) {
       supervisor?.state === "evaluating" || supervisor?.state === "injecting" || hasInFlightCycle,
     latestCycle,
     latestCycleText,
-    planGeneratedLabel,
-    recentTargetCycles,
-    targetCycleResultLabel,
-    targetMemory,
-    targetProgressLabel,
-    targetPlanItems,
     openDialog,
     stopReasonLabel,
     stateClass: supervisor ? STATE_CLASSES[supervisor.state] : STATE_CLASSES.inactive,

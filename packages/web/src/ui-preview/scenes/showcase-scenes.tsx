@@ -603,11 +603,7 @@ function ReadmeMobileProgressWorkspace() {
             />
           </section>
           <section style={{ padding: "0 12px" }}>
-            <SupervisorCard
-              sessionId="session-readme-mobile"
-              workspaceId={workspace.id}
-              defaultDetailsOpen
-            />
+            <SupervisorCard sessionId="session-readme-mobile" workspaceId={workspace.id} />
           </section>
         </div>
       </main>
@@ -1249,7 +1245,6 @@ export function createShowcaseScenes(): UiPreviewSceneDefinition[] {
           sessionId="session-preview-1"
           workspaceId={workspace.id}
           onClose={() => {}}
-          defaultSupervisorDetailsOpen
         />
       ),
     }),

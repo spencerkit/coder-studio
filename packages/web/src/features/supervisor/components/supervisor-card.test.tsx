@@ -4,7 +4,6 @@ import { createStore, Provider } from "jotai";
 import { describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../../atoms/app-ui";
 import { wsClientAtom } from "../../../atoms/connection";
-import { formatDate } from "../../../lib/i18n";
 import { supervisorCyclesAtom, supervisorsAtom } from "../atoms";
 import { SupervisorCard } from "../views/shared/supervisor-card";
 
@@ -105,29 +104,22 @@ describe("SupervisorCard", () => {
     );
 
     expect(screen.getByText("Persistence and hydration are done.")).toBeInTheDocument();
-    expect(screen.getByText("Target memory")).toBeInTheDocument();
+    expect(screen.getByText("Finish the server refactor")).toBeInTheDocument();
+    expect(screen.getByText("codex")).toBeInTheDocument();
     expect(screen.queryByText("Verify the refactor")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /expand/i })).toHaveAttribute(
-      "aria-expanded",
-      "false"
-    );
-    fireEvent.click(screen.getByRole("button", { name: /expand/i }));
-    expect(screen.getByRole("button", { name: /collapse/i })).toHaveAttribute(
-      "aria-expanded",
-      "true"
-    );
-    expect(screen.getByText("tgt-1")).toBeInTheDocument();
-    expect(screen.getByText("Plan ready")).toBeInTheDocument();
-    expect(screen.getByText("Validation in progress")).toBeInTheDocument();
-    expect(screen.getByText("Verify the refactor")).toBeInTheDocument();
-    expect(screen.getByText("Need to finish the validation step.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /expand/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /collapse/i })).not.toBeInTheDocument();
+    expect(screen.queryByText("Target memory")).not.toBeInTheDocument();
+    expect(screen.queryByText("Plan ready")).not.toBeInTheDocument();
+    expect(screen.queryByText("Validation in progress")).not.toBeInTheDocument();
+    expect(screen.queryByText("Need to finish the validation step.")).not.toBeInTheDocument();
     expect(screen.queryByText("65%")).not.toBeInTheDocument();
     expect(document.querySelector(".supervisor-progress-track")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Trigger Evaluation" }));
     expect(sendCommand).toHaveBeenCalledWith("supervisor.trigger", { id: "sup-1" }, undefined);
   });
 
-  it("localizes target memory details and stop reasons in Chinese", () => {
+  it("localizes stop reasons in Chinese", () => {
     const store = createStore();
     window.localStorage.setItem("ui.locale", JSON.stringify("zh"));
     store.set(localeAtom, "zh");
@@ -163,15 +155,8 @@ describe("SupervisorCard", () => {
       </Provider>
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /展开/i }));
-    expect(screen.getByLabelText("目标记忆")).toBeInTheDocument();
-    expect(screen.getByText("计划已就绪")).toBeInTheDocument();
-    expect(screen.getByLabelText("目标进展")).toBeInTheDocument();
-    expect(screen.getByText("进展")).toBeInTheDocument();
-    expect(screen.getByLabelText("目标计划")).toBeInTheDocument();
-    expect(screen.getByText("进行中")).toBeInTheDocument();
-    expect(screen.getByLabelText("目标轮次判断")).toBeInTheDocument();
-    expect(screen.getByText("停止")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /展开/i })).not.toBeInTheDocument();
+    expect(screen.queryByText("目标记忆")).not.toBeInTheDocument();
     expect(screen.getByText("Supervisor 暂时无法判断下一步，已停止自动监督。")).toBeInTheDocument();
   });
 
@@ -430,7 +415,7 @@ describe("SupervisorCard", () => {
     expect(screen.getByRole("button", { name: "Trigger Evaluation" })).toBeDisabled();
   });
 
-  it("renders configured execution policy metadata", () => {
+  it("keeps execution policy metadata hidden", () => {
     const store = createStore();
     const scheduledAt = Date.UTC(2026, 4, 11, 3, 0);
     window.localStorage.setItem("ui.locale", JSON.stringify("en"));
@@ -458,16 +443,15 @@ describe("SupervisorCard", () => {
       </Provider>
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /expand/i }));
-    expect(screen.getByText("Evaluator Model")).toBeInTheDocument();
-    expect(screen.getByText("o3")).toBeInTheDocument();
-    expect(screen.getByText("Max Supervision Count")).toBeInTheDocument();
-    expect(screen.getByText("5")).toBeInTheDocument();
-    expect(screen.getByText("Scheduled Run Time")).toBeInTheDocument();
-    expect(screen.getByText(formatDate(scheduledAt, "en"))).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /expand/i })).not.toBeInTheDocument();
+    expect(screen.queryByText("Evaluator Model")).not.toBeInTheDocument();
+    expect(screen.queryByText("o3")).not.toBeInTheDocument();
+    expect(screen.queryByText("Max Supervision Count")).not.toBeInTheDocument();
+    expect(screen.queryByText("5")).not.toBeInTheDocument();
+    expect(screen.queryByText("Scheduled Run Time")).not.toBeInTheDocument();
   });
 
-  it("shows a no-cap max supervision count when the limit is disabled", () => {
+  it("keeps max supervision count hidden when the limit is disabled", () => {
     const store = createStore();
     window.localStorage.setItem("ui.locale", JSON.stringify("en"));
     store.set(localeAtom, "en");
@@ -481,9 +465,9 @@ describe("SupervisorCard", () => {
       </Provider>
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /expand/i }));
-    expect(screen.getByText("Max Supervision Count")).toBeInTheDocument();
-    expect(screen.getByText("No cap")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /expand/i })).not.toBeInTheDocument();
+    expect(screen.queryByText("Max Supervision Count")).not.toBeInTheDocument();
+    expect(screen.queryByText("No cap")).not.toBeInTheDocument();
   });
 
   it("renders stopped reason and scheduled cancelled cycle details", () => {
@@ -534,7 +518,7 @@ describe("SupervisorCard", () => {
     ).toBeInTheDocument();
   });
 
-  it("can render target memory details expanded by default for preview surfaces", () => {
+  it("does not expose a default details state for preview surfaces", () => {
     const store = createStore();
     window.localStorage.setItem("ui.locale", JSON.stringify("en"));
     store.set(localeAtom, "en");
@@ -544,14 +528,11 @@ describe("SupervisorCard", () => {
 
     render(
       <Provider store={store}>
-        <SupervisorCard sessionId="sess-1" workspaceId="ws-1" defaultDetailsOpen />
+        <SupervisorCard sessionId="sess-1" workspaceId="ws-1" />
       </Provider>
     );
 
-    expect(screen.getByRole("button", { name: /collapse/i })).toHaveAttribute(
-      "aria-expanded",
-      "true"
-    );
-    expect(screen.getByText("Verify the refactor")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /expand/i })).not.toBeInTheDocument();
+    expect(screen.getByText("Finish the server refactor")).toBeInTheDocument();
   });
 });
