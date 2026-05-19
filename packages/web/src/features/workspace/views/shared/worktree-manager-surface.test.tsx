@@ -140,7 +140,7 @@ describe("WorktreeManagerSurface", () => {
     expect(screen.getByRole("region", { name: "Worktrees sheet" })).toBeInTheDocument();
   });
 
-  it("uses shared Modal chrome on desktop viewports", () => {
+  it("uses shared Drawer chrome on desktop viewports", () => {
     const onClose = vi.fn();
 
     render(
@@ -150,15 +150,15 @@ describe("WorktreeManagerSurface", () => {
     );
 
     const dialog = screen.getByRole("dialog", { name: "Worktrees" });
-    expect(dialog).toHaveClass("modal-card", "modal-card-lg", "worktree-manager-surface");
+    expect(dialog).toHaveClass("drawer-panel", "worktree-manager-surface");
     expect(document.querySelector(".mobile-sheet--worktree")).toBeNull();
 
-    const overlay = document.querySelector(".modal-overlay");
+    const overlay = document.querySelector(".drawer-backdrop");
     expect(overlay).toBeTruthy();
 
     fireEvent.click(overlay as Element);
 
-    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it("renders inline desktop preview chrome without a portal overlay when requested", () => {
@@ -177,9 +177,9 @@ describe("WorktreeManagerSurface", () => {
       .getByRole("heading", { name: "Worktrees" })
       .closest(".worktree-manager-surface");
 
-    expect(dialog).toHaveClass("modal-card", "modal-card-lg", "worktree-manager-surface");
+    expect(dialog).toHaveClass("drawer-panel", "worktree-manager-surface");
     expect(dialog).toHaveClass("worktree-manager-surface--inline-preview");
-    expect(document.querySelector(".modal-overlay")).toBeNull();
+    expect(document.querySelector(".drawer-backdrop")).toBeNull();
   });
 
   it("renders the shared empty state when the worktree list is empty", () => {

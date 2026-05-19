@@ -54,6 +54,7 @@ function createProvider(): ProviderDefinition {
         "-e",
         `process.stdout.write(${JSON.stringify(
           JSON.stringify({
+            mode: "evaluate",
             status: "continue",
             reason: "Need more work",
             guidance: "continue with the work",
@@ -163,8 +164,22 @@ describe("SupervisorManager", () => {
         })),
         loadTargetMemory: vi.fn(async () => ({
           targetId: "tgt-1",
-          planGenerated: false,
-          plan: [],
+          decompositionGenerated: true,
+          decompositionMode: "stage",
+          items: [
+            {
+              id: "stage-1",
+              kind: "stage",
+              title: "Verify the fix",
+              objective: "Confirm the fix works",
+              deliverable: "A passing focused verification run",
+              acceptanceCriteria: ["Focused verification passes"],
+              status: "in_progress",
+            },
+          ],
+          activeItemId: "stage-1",
+          progressSummary: "Verification in progress",
+          lastGuidance: "continue with the work",
           stalledCount: 0,
           updatedAt: 1,
         })),

@@ -7,7 +7,7 @@
 
 import type { SessionState } from "@coder-studio/core";
 import { useAtomValue, useSetAtom } from "jotai";
-import { FlipHorizontal, FlipVertical, Square, X } from "lucide-react";
+import { FlipHorizontal, FlipVertical, X } from "lucide-react";
 import type { FC, ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { pendingFocusSessionAtom } from "../../../../atoms/app-ui";
@@ -16,7 +16,6 @@ import { workspaceByIdAtomFamily } from "../../../../atoms/workspaces";
 import { IconButton, StatusDot, Tag, Tooltip } from "../../../../components/ui";
 import { PanelHeader } from "../../../shared/components/panel-header";
 import { useSupervisor } from "../../../supervisor/actions/use-supervisor";
-import { ObjectiveDialog } from "../../../supervisor/views/shared/objective-dialog";
 import { SupervisorCard } from "../../../supervisor/views/shared/supervisor-card";
 import { XtermHost } from "../../../terminal-panel/views/shared/xterm-host";
 import { usePersistWorkspaceLastViewedTarget } from "../../../workspace/actions/use-persist-workspace-last-viewed-target";
@@ -33,7 +32,6 @@ interface SessionCardProps {
   onClose?: SessionCardAction;
   onSplitHorizontal?: SessionCardAction;
   onSplitVertical?: SessionCardAction;
-  onStop?: SessionCardAction;
 }
 
 /**
@@ -52,7 +50,6 @@ export const SessionCard: FC<SessionCardProps> = ({
   onClose,
   onSplitHorizontal,
   onSplitVertical,
-  onStop,
 }) => {
   const session = useAtomValue(sessionByIdAtomFamily(sessionId));
   const workspace = useAtomValue(
@@ -92,6 +89,7 @@ export const SessionCard: FC<SessionCardProps> = ({
   const sessionStateLabel = formatSessionStateLabel(session.state);
   const terminalReadOnly = terminalReadOnlyOverride ?? !isSessionInteractive(session.state);
   const isActiveSession = workspace?.uiState.activeSessionId === session.id;
+  const isRunning = session.state === "running";
   const handleCardClick = (event: React.MouseEvent<HTMLDivElement>) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) {
@@ -116,11 +114,12 @@ export const SessionCard: FC<SessionCardProps> = ({
   return (
     <div
       ref={cardRef}
-      className={`session-card agent-pane${isActiveSession ? " session-card--active" : ""}${highlight ? " session-card--focus-pulse" : ""}`}
+      className={`session-card agent-pane${isActiveSession ? " session-card--active" : ""}${highlight ? " session-card--focus-pulse" : ""}${isRunning ? " session-card--running" : ""}`}
       data-session-id={sessionId}
       onClick={handleCardClick}
     >
       <PanelHeader
+        className={isRunning ? "session-header--running" : undefined}
         title={sessionTitle}
         metaPlacement="inline"
         status={
@@ -153,17 +152,6 @@ export const SessionCard: FC<SessionCardProps> = ({
 
               {showHeaderActions ? (
                 <div className="session-header-actions">
-                  {session.state === "running" ? (
-                    <Tooltip content="Stop">
-                      <IconButton
-                        aria-label="Stop"
-                        className="session-action-btn"
-                        icon={<Square size={13} />}
-                        onClick={() => void onStop?.()}
-                        size="sm"
-                      />
-                    </Tooltip>
-                  ) : null}
                   <Tooltip content="Split horizontal">
                     <IconButton
                       aria-label="Split horizontal"
@@ -204,7 +192,6 @@ export const SessionCard: FC<SessionCardProps> = ({
       session.state !== "ended" ? (
         <>
           <SupervisorCard sessionId={session.id} workspaceId={session.workspaceId} />
-          <ObjectiveDialog workspaceId={session.workspaceId} sessionId={session.id} />
         </>
       ) : null}
 
@@ -250,6 +237,7 @@ function getSessionDotTone(state: SessionState): "success" | "warning" | "info" 
 function shouldPulseSessionDot(state: SessionState) {
   switch (state) {
     case "starting":
+    case "running":
       return true;
     default:
       return false;

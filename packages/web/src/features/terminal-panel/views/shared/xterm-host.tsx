@@ -22,7 +22,9 @@ import {
 } from "react";
 import { themeAtom } from "../../../../atoms/app-ui";
 import { dispatchCommandAtom, wsClientAtom } from "../../../../atoms/connection";
+import { LocalOverlay } from "../../../../components/ui";
 import { useViewport } from "../../../../hooks/use-viewport";
+import { copyTextWithFallback } from "../../../../lib/clipboard";
 import { useTranslation } from "../../../../lib/i18n";
 import { getThemeById } from "../../../../theme";
 import type { ConnectionStatus, TerminalBinaryPayload } from "../../../../ws/client";
@@ -77,49 +79,6 @@ interface TouchScrollSample {
 }
 
 type TouchScrollDeltaResult = "idle" | "buffered" | "scrolled" | "blocked";
-
-async function copyTextWithFallback(text: string): Promise<void> {
-  let clipboardError: unknown;
-
-  try {
-    await navigator.clipboard.writeText(text);
-    return;
-  } catch (error) {
-    clipboardError = error;
-  }
-
-  if (typeof document === "undefined" || typeof document.execCommand !== "function") {
-    throw clipboardError ?? new Error("Clipboard copy unavailable");
-  }
-
-  const textarea = document.createElement("textarea");
-  textarea.value = text;
-  textarea.setAttribute("readonly", "true");
-  textarea.setAttribute("aria-hidden", "true");
-  textarea.style.position = "fixed";
-  textarea.style.top = "0";
-  textarea.style.left = "0";
-  textarea.style.width = "1px";
-  textarea.style.height = "1px";
-  textarea.style.padding = "0";
-  textarea.style.border = "0";
-  textarea.style.opacity = "0";
-  textarea.style.pointerEvents = "none";
-
-  document.body.appendChild(textarea);
-
-  try {
-    textarea.focus();
-    textarea.select();
-    textarea.setSelectionRange(0, textarea.value.length);
-
-    if (!document.execCommand("copy")) {
-      throw clipboardError ?? new Error("Clipboard copy unavailable");
-    }
-  } finally {
-    textarea.remove();
-  }
-}
 
 function isReplayGeneratedTerminalResponse(data: string): boolean {
   return /^\x1b\[\d+;\d+R$/.test(data) || /^\x1b\[(?:\?|>)(?:\d+;)*\d*c$/.test(data);
@@ -2312,76 +2271,71 @@ export function XtermHost({
         }}
       />
       {uploadBusy ? (
-        <div
-          role="status"
-          aria-live="polite"
-          style={{
-            position: "absolute",
-            inset: 0,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            backgroundColor: "rgba(0,0,0,0.35)",
-            pointerEvents: "none",
-            zIndex: 5,
-            fontSize: 12,
-            color: "var(--text-muted, #ddd)",
-          }}
+        <LocalOverlay
+          className="terminal-upload-overlay"
+          open
+          interactive={false}
+          mode="status"
+          surfaceClassName="xterm-replay-overlay__card"
         >
-          Uploading…
-        </div>
+          <div>Uploading…</div>
+        </LocalOverlay>
       ) : null}
       {showPasteDialog ? (
-        <div
-          className="paste-dialog-overlay"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="paste-dialog-title"
+        <LocalOverlay
+          ariaLabelledBy="paste-dialog-title"
+          interactive
+          mode="dialog"
+          open
+          onDismiss={handlePasteDialogCancel}
+          surfaceClassName="paste-dialog"
         >
-          <div className="paste-dialog">
-            <h3 id="paste-dialog-title" className="paste-dialog__title">
-              {t("terminal.paste_dialog_title")}
-            </h3>
-            <textarea
-              ref={pasteTextareaRef}
-              className="paste-dialog__textarea"
-              placeholder={t("terminal.paste_dialog_placeholder")}
-              autoFocus
-            />
-            <div className="paste-dialog__actions">
-              <button
-                type="button"
-                className="paste-dialog__button paste-dialog__button--secondary"
-                onClick={handlePasteDialogCancel}
-              >
-                {t("common.cancel")}
-              </button>
-              <button
-                type="button"
-                className="paste-dialog__button paste-dialog__button--primary"
-                onClick={() => {
-                  void handlePasteDialogSubmit();
-                }}
-              >
-                {t("terminal.paste_dialog_submit")}
-              </button>
-            </div>
+          <h3 id="paste-dialog-title" className="paste-dialog__title">
+            {t("terminal.paste_dialog_title")}
+          </h3>
+          <textarea
+            ref={pasteTextareaRef}
+            className="paste-dialog__textarea"
+            placeholder={t("terminal.paste_dialog_placeholder")}
+            autoFocus
+          />
+          <div className="paste-dialog__actions">
+            <button
+              type="button"
+              className="paste-dialog__button paste-dialog__button--secondary"
+              onClick={handlePasteDialogCancel}
+            >
+              {t("common.cancel")}
+            </button>
+            <button
+              type="button"
+              className="paste-dialog__button paste-dialog__button--primary"
+              onClick={() => {
+                void handlePasteDialogSubmit();
+              }}
+            >
+              {t("terminal.paste_dialog_submit")}
+            </button>
           </div>
-        </div>
+        </LocalOverlay>
       ) : null}
       {viewport !== "mobile" && hydrationState.kind === "queued" ? (
         <XtermPlaceholder state="queued" queuePosition={hydrationState.queuePosition} />
       ) : null}
       {showReplayOverlay ? (
-        <div className={replayClassName} role="status" aria-live="polite">
-          <div className="xterm-replay-overlay__card">
-            {replayUiState.kind === "loading" ? (
-              <div className="xterm-replay-overlay__spinner" aria-hidden="true" />
-            ) : null}
-            <div className="xterm-replay-overlay__title">{replayTitle}</div>
-            {replayBody ? <div className="xterm-replay-overlay__body">{replayBody}</div> : null}
-          </div>
-        </div>
+        <LocalOverlay
+          className={replayClassName}
+          interactive={false}
+          mode="status"
+          open
+          surfaceClassName="xterm-replay-overlay__card"
+        >
+          {replayUiState.kind === "loading" ? (
+            <div className="xterm-replay-overlay__spinner" aria-hidden="true" />
+          ) : null}
+          <div className="xterm-replay-overlay__title">{replayTitle}</div>
+          {replayBody ? <div className="xterm-replay-overlay__body">{replayBody}</div> : null}
+        </LocalOverlay>
       ) : null}
     </div>
   );

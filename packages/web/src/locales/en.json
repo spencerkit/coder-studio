@@ -318,8 +318,21 @@
     "new_folder": "New Folder",
     "collapse_all": "Collapse All",
     "rename": "Rename",
+    "rename_name": "Name",
+    "rename_helper": "Rename within the current directory only.",
+    "rename_required": "Name is required.",
+    "rename_invalid_name": "Name cannot contain / or \\.",
+    "rename_failed": "Could not rename file",
     "delete": "Delete",
     "delete_confirm": "Are you sure you want to delete \"{name}\"?",
+    "copy_relative_path": "Copy Relative Path",
+    "copy_absolute_path": "Copy Absolute Path",
+    "open_in_terminal": "Open in Terminal",
+    "context_menu_title": "File actions",
+    "context_section_create": "Create",
+    "context_section_edit": "Edit",
+    "context_section_path": "Path",
+    "context_section_terminal": "Terminal",
     "path": "Path",
     "path_required": "Enter a path",
     "invalid_file_path": "File paths cannot end with /",
@@ -495,6 +508,7 @@
       "workspace_runtime": "Workspace & Runtime",
       "interface_interaction": "Interface & Interaction"
     },
+    "help_diagnostics": "Help & Diagnostics",
     "autosave_hint": "Settings saved automatically",
     "load_failed": "Failed to load settings",
     "load_failed_unknown": "Server did not return settings data",
@@ -667,6 +681,7 @@
   "supervisor": {
     "title": "Supervisor",
     "empty": "Supervisor is not enabled",
+    "completed_cycles": "Cycles {count}",
     "latest_evaluation": "Latest evaluation",
     "state": {
       "inactive": "Inactive",
@@ -686,6 +701,9 @@
       "no_guidance": "No guidance injected this cycle",
       "evaluating": "Evaluating...",
       "waiting": "Waiting for evaluation result",
+      "waiting_evaluator": "Waiting for evaluator response",
+      "retry_wait": "Retrying evaluator in {seconds}s",
+      "injecting": "Injecting guidance",
       "cancelled": "Cancelled"
     },
     "stop_reason": {
@@ -696,23 +714,41 @@
     "target_memory": {
       "title": "Target memory",
       "target": "Target",
-      "plan": "Plan",
       "stalled": "Stalled",
-      "plan_ready": "Plan ready",
-      "plan_pending": "Plan pending",
+      "decomposition_ready": "Decomposition ready",
+      "decomposition_pending": "Decomposition pending",
+      "decomposition_mode_title": "Mode",
+      "decomposition_title": "Decomposition",
+      "basic_info_title": "Basic Info",
+      "runtime_title": "Runtime Status",
+      "runtime_status_label": "Status",
+      "error_reason_label": "Error reason",
+      "cycles_title": "Cycles",
+      "progress_list_title": "Progress List",
+      "item_objective_title": "Stage objective",
+      "item_deliverable_title": "Deliverable",
+      "active_item": "Active item",
       "progress_title": "Target progress",
       "progress_badge": "PROGRESS",
-      "plan_title": "Target plan",
       "reasoning_title": "Target cycle reasoning",
+      "runtime_status": {
+        "idle": "Idle",
+        "running": "Running",
+        "error": "Error"
+      },
+      "decomposition_mode": {
+        "stage": "Stages",
+        "subtarget": "Subtargets"
+      },
       "cycle_result": {
         "continue": "CONTINUE",
         "stop": "STOP",
         "error": "ERROR"
       },
       "step_status": {
-        "pending": "PENDING",
-        "in_progress": "IN PROGRESS",
-        "done": "DONE"
+        "pending": "Not started",
+        "in_progress": "In progress",
+        "done": "Completed"
       }
     },
     "meta": {
@@ -738,8 +774,8 @@
     "action": {
       "enable": "Enable Supervisor",
       "enable_objective": "Enable Objective",
+      "details": "Supervisor Details",
       "edit_objective": "Edit Supervisor",
-      "disable": "Disable",
       "pause": "Pause",
       "resume": "Resume",
       "trigger": "Trigger Evaluation",
@@ -758,12 +794,8 @@
         "subtitle": "Adjust the objective or switch evaluators without clearing evaluation history.",
         "confirm": "Save"
       },
-      "disable": {
-        "title": "Disable Supervisor",
-        "subtitle": "Stop automatic evaluation. The current session's supervision cycles will be removed.",
-        "confirm": "Disable",
-        "warning_title": "Disabling stops evaluation cycles",
-        "warning_body": "Supervisor will be removed from the current session and its cycle history will be cleared. You can enable it again later, but previous records cannot be restored."
+      "details": {
+        "title": "Supervisor Details"
       }
     }
   },
@@ -818,6 +850,114 @@
       "terminals": {
         "title": "Integrated terminals",
         "description": "Run commands and scripts alongside your AI sessions."
+      }
+    }
+  },
+  "diagnostics": {
+    "title": "Diagnostics",
+    "settings_hint": "Diagnose the runtime environment to help identify and recover from issues.",
+    "load_failed": "Diagnostics could not be refreshed right now.",
+    "loading_description": "Checking the parts that matter for this task.",
+    "status": {
+      "checking": "Checking",
+      "ready": "Ready",
+      "needs_attention": "Needs attention"
+    },
+    "actions": {
+      "retry_workspace": "Retry Opening Workspace",
+      "continue_session": "Continue Starting Session",
+      "continue_phone": "Continue on Phone",
+      "recheck": "Recheck",
+      "open_diagnostics": "Open Diagnostics",
+      "open_settings": "Open Settings",
+      "copy_details": "Copy error details",
+      "copied": "Copied",
+      "install_provider": "Install Provider"
+    },
+    "details": {
+      "workspace": "Workspace",
+      "provider": "Provider",
+      "missing_commands": "Missing commands",
+      "missing_prerequisites": "Missing prerequisites"
+    },
+    "context": {
+      "workspace_open": {
+        "title": "We couldn't open your workspace",
+        "description": "A few issues need attention before we can continue."
+      },
+      "session_start": {
+        "title": "Your session is not ready to start",
+        "description": "We found a problem that would block session startup."
+      },
+      "mobile_continue": {
+        "title": "Phone continuation needs a few fixes",
+        "description": "We checked the phone handoff path and found something to fix first."
+      },
+      "manual_check": {
+        "title": "Environment diagnostics",
+        "description": "Review the current environment and refresh anything that looks off."
+      }
+    },
+    "checks": {
+      "workspace_selection_missing": {
+        "title": "Workspace path needed",
+        "description": "Choose a directory before retrying."
+      },
+      "workspace_path_ready": {
+        "title": "Workspace path is ready",
+        "description": "The selected directory is reachable."
+      },
+      "workspace_path_not_found": {
+        "title": "Workspace path no longer exists",
+        "description": "The selected directory could not be found."
+      },
+      "workspace_path_unreadable": {
+        "title": "Workspace path is not readable",
+        "description": "The selected directory exists but cannot be opened right now."
+      },
+      "session_workspace_ready": {
+        "title": "Workspace is ready",
+        "description": "The target workspace is available for session startup."
+      },
+      "session_workspace_missing": {
+        "title": "Workspace is missing",
+        "description": "Select or reopen the workspace before starting a session."
+      },
+      "provider_runtime_ready": {
+        "title": "{provider} is ready",
+        "description": "{provider} can be launched from this workspace."
+      },
+      "provider_cli_missing": {
+        "title": "{provider} CLI is missing",
+        "description": "The required provider command is not installed yet."
+      },
+      "provider_prerequisite_missing": {
+        "title": "{provider} prerequisites are missing",
+        "description": "A prerequisite must be installed before the provider can run."
+      },
+      "provider_unknown": {
+        "title": "Provider is unknown",
+        "description": "This provider could not be resolved from current settings."
+      },
+      "server_auth_ready": {
+        "title": "Password protection is enabled",
+        "description": "Authentication is configured for this server."
+      },
+      "server_auth_not_required": {
+        "title": "Password protection is optional",
+        "description": "Authentication is currently not required."
+      },
+      "mobile_host_ready": {
+        "title": "Network host is reachable",
+        "description": "The current host looks suitable for phone continuation."
+      },
+      "mobile_host_local_only": {
+        "title": "Host is local-only",
+        "description": "Phone continuation needs a LAN-reachable host instead of localhost."
+      },
+      "mobile_auth_disabled": {
+        "title": "Phone continuation needs auth",
+        "description": "Enable authentication before continuing on your phone."
       }
     }
   },

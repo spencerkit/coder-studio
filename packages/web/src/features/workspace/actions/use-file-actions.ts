@@ -8,6 +8,7 @@ import {
   fileTreeAtomFamily,
   fileTreeStaleAtomFamily,
   loadedDirsAtomFamily,
+  type OpenFile,
   openFilesAtomFamily,
 } from "../atoms";
 
@@ -38,12 +39,56 @@ export interface PendingDeleteState {
   error: string | null;
 }
 
+export interface RenameDialogState {
+  fromPath: string;
+  currentName: string;
+  nextName: string;
+  kind: "file" | "dir";
+  error: string | null;
+}
+
 interface UseFileActionsArgs {
   workspaceId: string;
   refreshToken?: number;
   createRequest?: CreateRequest | null;
   onCreateRequestConsumed?: () => void;
   onSelectFile?: (path: string) => void;
+}
+
+function rewriteDescendantPath(path: string, fromPath: string, toPath: string): string {
+  if (path === fromPath) {
+    return toPath;
+  }
+
+  if (path.startsWith(`${fromPath}/`)) {
+    return `${toPath}${path.slice(fromPath.length)}`;
+  }
+
+  return path;
+}
+
+function rewriteOpenFiles(
+  openFiles: Record<string, OpenFile>,
+  fromPath: string,
+  toPath: string
+): Record<string, OpenFile> {
+  const nextEntries = Object.entries(openFiles).map(([path, file]) => {
+    const rewrittenPath = rewriteDescendantPath(path, fromPath, toPath);
+
+    if (rewrittenPath === path) {
+      return [path, file] as const;
+    }
+
+    return [
+      rewrittenPath,
+      {
+        ...file,
+        path: rewrittenPath,
+      },
+    ] as const;
+  });
+
+  return Object.fromEntries(nextEntries);
 }
 
 export function useFileActions({
@@ -68,6 +113,7 @@ export function useFileActions({
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingDir, setIsLoadingDir] = useState<string | null>(null);
   const [createDialog, setCreateDialog] = useState<CreateDialogState | null>(null);
+  const [renameDialog, setRenameDialog] = useState<RenameDialogState | null>(null);
   const [pendingDelete, setPendingDelete] = useState<PendingDeleteState | null>(null);
   const lastRefreshTokenRef = useRef(refreshToken);
   const lastCreateRequestRef = useRef(0);
@@ -157,6 +203,35 @@ export function useFileActions({
     setCreateDialog(null);
   }, []);
 
+  const openRenameDialog = useCallback(
+    ({ path, name, kind }: { path: string; name: string; kind: "file" | "dir" }) => {
+      setRenameDialog({
+        fromPath: path,
+        currentName: name,
+        nextName: name,
+        kind,
+        error: null,
+      });
+    },
+    []
+  );
+
+  const closeRenameDialog = useCallback(() => {
+    setRenameDialog(null);
+  }, []);
+
+  const updateRenameDraft = useCallback((nextName: string) => {
+    setRenameDialog((current) =>
+      current
+        ? {
+            ...current,
+            nextName,
+            error: null,
+          }
+        : current
+    );
+  }, []);
+
   const updateDraftPath = useCallback((draftPath: string) => {
     setCreateDialog((current) => {
       if (!current) {
@@ -226,6 +301,71 @@ export function useFileActions({
       setActiveFilePath(path);
     }
   }, [createDialog, dispatch, workspaceId, loadFileTree, closeCreateDialog, setActiveFilePath, t]);
+
+  const submitRenameDialog = useCallback(async () => {
+    if (!renameDialog) {
+      return;
+    }
+
+    const nextName = renameDialog.nextName.trim();
+    if (!nextName) {
+      setRenameDialog((current) =>
+        current
+          ? {
+              ...current,
+              error: t("file.rename_required"),
+            }
+          : current
+      );
+      return;
+    }
+
+    if (nextName.includes("/") || nextName.includes("\\")) {
+      setRenameDialog((current) =>
+        current
+          ? {
+              ...current,
+              error: t("file.rename_invalid_name"),
+            }
+          : current
+      );
+      return;
+    }
+
+    if (nextName === renameDialog.currentName) {
+      setRenameDialog(null);
+      return;
+    }
+
+    const lastSlashIndex = renameDialog.fromPath.lastIndexOf("/");
+    const parentDir = lastSlashIndex === -1 ? "" : renameDialog.fromPath.slice(0, lastSlashIndex);
+    const toPath = parentDir ? `${parentDir}/${nextName}` : nextName;
+
+    const result = await dispatch("file.rename", {
+      workspaceId,
+      fromPath: renameDialog.fromPath,
+      toPath,
+    });
+
+    if (!result.ok) {
+      setRenameDialog((current) =>
+        current
+          ? {
+              ...current,
+              error: result.error?.message ?? t("file.rename_failed"),
+            }
+          : current
+      );
+      return;
+    }
+
+    setActiveFilePath((current) =>
+      current ? rewriteDescendantPath(current, renameDialog.fromPath, toPath) : current
+    );
+    setOpenFiles((current) => rewriteOpenFiles(current, renameDialog.fromPath, toPath));
+    await loadFileTree();
+    setRenameDialog(null);
+  }, [dispatch, loadFileTree, renameDialog, setActiveFilePath, setOpenFiles, t, workspaceId]);
 
   const cancelDelete = useCallback(() => {
     setPendingDelete(null);
@@ -325,6 +465,7 @@ export function useFileActions({
     fileTree,
     isLoading,
     isLoadingDir,
+    renameDialog,
     pendingDelete,
     cancelDelete,
     confirmDelete,
@@ -332,7 +473,11 @@ export function useFileActions({
     loadChildren,
     loadSearchResults,
     openCreateDialog,
+    openRenameDialog,
     requestDelete: setPendingDelete,
+    updateRenameDraft,
+    submitRenameDialog,
+    closeRenameDialog,
     submitCreateDialog,
     updateDraftPath,
     closeCreateDialog,

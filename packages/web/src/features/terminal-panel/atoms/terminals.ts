@@ -45,11 +45,15 @@ export const terminalMetaAtomFamily = atomFamily((_terminalId: string) =>
   atom<TerminalMeta | null>(null)
 );
 
+export const terminalIdsAtomFamily = atomFamily((_workspaceId: string) => atom<string[]>([]));
+
+export const terminalActiveIdAtomFamily = atomFamily((_workspaceId: string) =>
+  atom<string | null>(null)
+);
+
 /**
  * Active terminal IDs in workspace (derived)
  */
-export const activeTerminalsAtomFamily = atomFamily((_workspaceId: string) =>
-  atom<string[]>((_get) => {
-    return [];
-  })
+export const activeTerminalsAtomFamily = atomFamily((workspaceId: string) =>
+  atom((get) => get(terminalIdsAtomFamily(workspaceId)))
 );

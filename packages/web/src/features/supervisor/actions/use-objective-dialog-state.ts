@@ -4,7 +4,7 @@ import { dispatchCommandAtom } from "../../../atoms/connection";
 import { useTranslation } from "../../../lib/i18n";
 import { supervisorDialogAtom, supervisorsAtom } from "../atoms";
 
-export type ObjectiveDialogMode = "enable" | "edit" | "disable";
+export type ObjectiveDialogMode = "enable" | "edit";
 export type ObjectiveDialogEvaluatorProviderId = "claude" | "codex";
 
 export const OBJECTIVE_DIALOG_EVALUATOR_OPTIONS = [
@@ -87,8 +87,6 @@ export function useObjectiveDialogState({
     subtitle: t(`supervisor.dialog.${mode}.subtitle`),
     confirm: t(`supervisor.dialog.${mode}.confirm`),
   };
-  const isDisable = mode === "disable";
-  const disableObjective = supervisor?.objective ?? dialog.draftObjective;
   const isMaxSupervisionCountValid = isValidDraftMaxSupervisionCount(
     dialog.draftMaxSupervisionCount
   );
@@ -114,19 +112,6 @@ export function useObjectiveDialogState({
 
   const confirm = useCallback(async () => {
     if (!dialog.sessionId) {
-      return false;
-    }
-
-    if (dialog.mode === "disable") {
-      if (!supervisor) {
-        return false;
-      }
-
-      const result = await dispatch("supervisor.delete", { id: supervisor.id });
-      if (result.ok) {
-        close();
-        return true;
-      }
       return false;
     }
 
@@ -188,8 +173,6 @@ export function useObjectiveDialogState({
     isVisible,
     mode,
     copy,
-    isDisable,
-    disableObjective,
     isMaxSupervisionCountValid,
     close,
     updateDraft,

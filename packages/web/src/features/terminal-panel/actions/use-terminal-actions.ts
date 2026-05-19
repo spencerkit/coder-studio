@@ -1,14 +1,21 @@
 import { type Terminal as TerminalDto, Topics } from "@coder-studio/core";
-import { useAtomValue, useSetAtom, useStore } from "jotai";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
+import { useCallback, useEffect, useRef } from "react";
 import { dispatchCommandAtom, wsClientAtom } from "../../../atoms/connection";
 import { resolvedActiveWorkspaceIdAtom } from "../../../atoms/workspaces";
 import { useTranslation } from "../../../lib/i18n";
 import type { TerminalBinaryPayload } from "../../../ws/client";
 import { pushToastAtom } from "../../notifications/atoms";
-import { terminalMetaAtomFamily, terminalOutputAtomFamily } from "../atoms";
+import {
+  terminalActiveIdAtomFamily,
+  terminalIdsAtomFamily,
+  terminalMetaAtomFamily,
+  terminalOutputAtomFamily,
+} from "../atoms";
+import { useCreateShellTerminal } from "./use-create-shell-terminal";
 
 const EMPTY_TERMINAL_ID = "__terminal_panel_empty__";
+const EMPTY_WORKSPACE_ID = "__terminal_panel_empty_workspace__";
 
 function mergeTerminalIds(existing: string[], incoming: string[]): string[] {
   const seen = new Set(incoming);
@@ -42,9 +49,12 @@ export function useTerminalActions() {
   const wsClient = useAtomValue(wsClientAtom);
   const pushToast = useSetAtom(pushToastAtom);
   const store = useStore();
-
-  const [terminalIds, setTerminalIds] = useState<string[]>([]);
-  const [activeTerminalId, setActiveTerminalId] = useState<string | null>(null);
+  const workspaceAtomKey = activeWorkspaceId ?? EMPTY_WORKSPACE_ID;
+  const [terminalIds, setTerminalIds] = useAtom(terminalIdsAtomFamily(workspaceAtomKey));
+  const [activeTerminalId, setActiveTerminalId] = useAtom(
+    terminalActiveIdAtomFamily(workspaceAtomKey)
+  );
+  const { createShellTerminal } = useCreateShellTerminal(activeWorkspaceId);
   const unsubscribeRef = useRef<(() => void) | null>(null);
 
   const activeTerminalMetaState = useAtomValue(
@@ -166,48 +176,8 @@ export function useTerminalActions() {
   }, [activeWorkspaceId, store, wsClient]);
 
   const handleCreateTerminal = useCallback(async () => {
-    if (!activeWorkspaceId) {
-      pushToast({
-        kind: "warning",
-        title: t("terminal.create_unavailable_title"),
-        body: t("terminal.create_unavailable_body"),
-      });
-      return;
-    }
-
-    try {
-      const result = await dispatch<TerminalDto>("terminal.create", {
-        workspaceId: activeWorkspaceId,
-        kind: "shell",
-      });
-
-      if (!result.ok || !result.data) {
-        pushToast({
-          kind: "error",
-          title: t("terminal.create_failed_title"),
-          body: result.error?.message ?? t("terminal.create_failed_body"),
-        });
-        return;
-      }
-
-      const terminal = result.data;
-      store.set(terminalMetaAtomFamily(terminal.id), toTerminalMeta(terminal));
-
-      setTerminalIds((previous) => {
-        if (previous.includes(terminal.id)) {
-          return previous;
-        }
-        return [...previous, terminal.id];
-      });
-      setActiveTerminalId(terminal.id);
-    } catch (error) {
-      pushToast({
-        kind: "error",
-        title: t("terminal.create_failed_title"),
-        body: error instanceof Error ? error.message : t("terminal.create_failed_body"),
-      });
-    }
-  }, [activeWorkspaceId, dispatch, pushToast, store, t]);
+    await createShellTerminal();
+  }, [createShellTerminal]);
 
   const handleCloseTerminal = useCallback(
     async (terminalId: string) => {
@@ -227,12 +197,15 @@ export function useTerminalActions() {
         return remainingIds;
       });
     },
-    [dispatch]
+    [dispatch, setActiveTerminalId, setTerminalIds]
   );
 
-  const handleSwitchTerminal = useCallback((terminalId: string) => {
-    setActiveTerminalId(terminalId);
-  }, []);
+  const handleSwitchTerminal = useCallback(
+    (terminalId: string) => {
+      setActiveTerminalId(terminalId);
+    },
+    [setActiveTerminalId]
+  );
 
   return {
     activeTerminalId,

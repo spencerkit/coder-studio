@@ -1,0 +1,99 @@
+.backdrop,
+:global(.drawer-backdrop) {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-drawer-backdrop);
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--sp-4);
+  background: rgba(0, 0, 0, 0.48);
+}
+
+.panel,
+:global(.drawer-panel) {
+  display: flex;
+  width: min(100%, 720px);
+  min-width: min(420px, 100%);
+  max-height: calc(100vh - var(--sp-8));
+  flex-direction: column;
+  z-index: var(--z-drawer);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-xl);
+  outline: none;
+}
+
+.header,
+:global(.drawer-header) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-5);
+  border-bottom: 1px solid var(--border);
+}
+
+.headerActions,
+:global(.drawer-header-actions) {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.title,
+:global(.drawer-title) {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0;
+  font-size: var(--type-section-title-size);
+  line-height: var(--type-section-title-line-height);
+  font-weight: var(--type-section-title-weight);
+  color: var(--text-primary);
+}
+
+.body,
+:global(.drawer-body) {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-5);
+  overflow-y: auto;
+}
+
+.footer,
+:global(.drawer-footer) {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-5);
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 640px) {
+  .backdrop,
+  :global(.drawer-backdrop) {
+    padding: var(--sp-3);
+  }
+
+  .panel,
+  :global(.drawer-panel) {
+    width: 100%;
+    min-width: 0;
+    max-height: calc(100vh - var(--sp-6));
+  }
+
+  .header,
+  :global(.drawer-header),
+  .body,
+  :global(.drawer-body),
+  .footer,
+  :global(.drawer-footer) {
+    padding-left: var(--sp-4);
+    padding-right: var(--sp-4);
+  }
+}

@@ -1,0 +1,35 @@
+.backdrop,
+:global(.workbench-layer-backdrop) {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-workbench-backdrop);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: var(--sp-16) var(--sp-4) var(--sp-4);
+  background: color-mix(in srgb, black 58%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+.surface,
+:global(.workbench-layer) {
+  display: flex;
+  width: 100%;
+  max-width: var(--desktop-modal-max-width-lg);
+  max-height: calc(100vh - var(--sp-20));
+  flex-direction: column;
+  z-index: var(--z-workbench);
+  outline: none;
+}
+
+@media (max-width: 640px) {
+  .backdrop,
+  :global(.workbench-layer-backdrop) {
+    padding: var(--sp-6) var(--sp-3) var(--sp-3);
+  }
+
+  .surface,
+  :global(.workbench-layer) {
+    max-height: calc(100vh - var(--sp-10));
+  }
+}

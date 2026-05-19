@@ -5,7 +5,18 @@
 import type { ProviderDefinition } from "@coder-studio/core";
 import { z } from "zod";
 import { buildProviderRuntimeStatus } from "../provider-runtime/runtime-status.js";
+import { withTransaction } from "../storage/database.js";
+import { applyPaneDisposition } from "../workspace/pane-layout.js";
 import { registerCommand } from "../ws/dispatch.js";
+
+const SESSION_CLOSE_POLL_INTERVAL_MS = 100;
+const SESSION_CLOSE_TIMEOUT_MS = 5_000;
+
+function delay(ms: number) {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
 
 function getProviderFromRegistry(
   providerId: string,
@@ -97,5 +108,76 @@ registerCommand(
     }
 
     ctx.sessionMgr.delete(args.sessionId);
+  }
+);
+
+registerCommand(
+  "session.close",
+  z.object({
+    sessionId: z.string(),
+    paneDisposition: z.enum(["draft", "remove"]).default("draft"),
+  }),
+  async (args, ctx) => {
+    let session = ctx.sessionMgr.get(args.sessionId);
+    if (!session) {
+      throw { code: "session_not_found", message: `Session not found: ${args.sessionId}` };
+    }
+
+    if (session.state !== "ended") {
+      try {
+        await ctx.sessionMgr.stop(args.sessionId);
+      } catch (error) {
+        const candidate = error as { message?: string };
+        throw {
+          code: "session_close_failed",
+          message: candidate.message ?? `Failed to stop session: ${args.sessionId}`,
+        };
+      }
+
+      const deadline = Date.now() + SESSION_CLOSE_TIMEOUT_MS;
+      while (Date.now() < deadline) {
+        session = ctx.sessionMgr.get(args.sessionId);
+        if (!session) {
+          return;
+        }
+        if (session.state === "ended") {
+          break;
+        }
+        await delay(SESSION_CLOSE_POLL_INTERVAL_MS);
+      }
+
+      session = ctx.sessionMgr.get(args.sessionId);
+      if (!session) {
+        return;
+      }
+      if (session.state !== "ended") {
+        throw {
+          code: "session_close_timeout",
+          message: `Timed out waiting for session to end before closing: ${args.sessionId}`,
+        };
+      }
+    }
+
+    const workspace = ctx.workspaceMgr.get(session.workspaceId);
+    if (!workspace) {
+      throw {
+        code: "workspace_not_found",
+        message: `Workspace not found: ${session.workspaceId}`,
+      };
+    }
+
+    const nextUiState = {
+      ...workspace.uiState,
+      paneLayout: applyPaneDisposition(
+        workspace.uiState.paneLayout,
+        args.sessionId,
+        args.paneDisposition
+      ),
+    };
+
+    withTransaction(ctx.db, () => {
+      ctx.workspaceMgr.updateUiState(session.workspaceId, nextUiState);
+      ctx.sessionMgr.delete(args.sessionId);
+    });
   }
 );

@@ -75,9 +75,27 @@ const uploadHookMocks = vi.hoisted(() => ({
   handleFiles: vi.fn().mockResolvedValue(undefined),
 }));
 
+const clipboardHelperMocks = vi.hoisted(() => ({
+  copyTextWithFallback: vi.fn(),
+}));
+
 vi.mock("../../../hooks/use-viewport", () => ({
   useViewport: () => viewportMocks.viewport,
 }));
+
+vi.mock("../../../lib/clipboard", async () => {
+  const actual =
+    await vi.importActual<typeof import("../../../lib/clipboard")>("../../../lib/clipboard");
+
+  clipboardHelperMocks.copyTextWithFallback.mockImplementation((text: string) =>
+    actual.copyTextWithFallback(text)
+  );
+
+  return {
+    ...actual,
+    copyTextWithFallback: clipboardHelperMocks.copyTextWithFallback,
+  };
+});
 
 vi.mock("../hydration-coordinator", async () => {
   const actual = await vi.importActual<typeof import("../hydration-coordinator")>(
@@ -313,6 +331,7 @@ describe("XtermHost", () => {
     uploadHookMocks.handleClipboardPaste.mockResolvedValue(undefined);
     uploadHookMocks.handleFiles.mockReset();
     uploadHookMocks.handleFiles.mockResolvedValue(undefined);
+    clipboardHelperMocks.copyTextWithFallback.mockClear();
     mockTerminal.options = {};
     mockTerminal.cols = undefined;
     mockTerminal.rows = undefined;
@@ -438,6 +457,7 @@ describe("XtermHost", () => {
 
     await waitFor(() => {
       expect(writeText).toHaveBeenCalledWith("selected text");
+      expect(clipboardHelperMocks.copyTextWithFallback).toHaveBeenCalledWith("selected text");
     });
   });
 
@@ -810,6 +830,9 @@ describe("XtermHost", () => {
     );
 
     expect(screen.getByText("Uploading…")).toBeInTheDocument();
+    expect(document.querySelector(".local-overlay")).toBeTruthy();
+    expect(document.querySelector(".terminal-upload-overlay")).toBeTruthy();
+    expect(document.querySelector(".paste-dialog-overlay")).toBeNull();
     await waitFor(() => {
       expect(mockTerminal.options).toEqual(
         expect.objectContaining({
@@ -931,6 +954,8 @@ describe("XtermHost", () => {
         "恢复期间暂时无法使用当前终端；请耐心等待，历史内容恢复完成后再继续。内容较多时可能需要更久。"
       )
     ).toBeInTheDocument();
+    expect(document.querySelector(".local-overlay")).toBeTruthy();
+    expect(document.querySelector(".xterm-replay-overlay")).toBeTruthy();
 
     global.requestAnimationFrame = originalRequestAnimationFrame;
     global.cancelAnimationFrame = originalCancelAnimationFrame;
@@ -1791,6 +1816,40 @@ describe("XtermHost", () => {
     await user.click(screen.getByRole("button", { name: "Paste" }));
 
     expect(uploadHookMocks.handleClipboardPaste).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back to a local overlay paste dialog when clipboard paste fails", async () => {
+    viewportMocks.viewport = "mobile";
+    uploadHookMocks.handleClipboardPaste.mockRejectedValueOnce(new Error("clipboard failed"));
+    const store = createStore();
+    const user = userEvent.setup();
+
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn().mockResolvedValue({ status: "ok" }),
+      sendTerminalInput: vi.fn().mockResolvedValue(undefined),
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => "connected"),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        readText: vi.fn().mockRejectedValue(new Error("clipboard unavailable")),
+      } satisfies Pick<Clipboard, "readText">,
+    });
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="mobile-paste-fallback-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await user.click(screen.getByRole("button", { name: "Paste" }));
+
+    expect(document.querySelector(".local-overlay")).toBeTruthy();
+    expect(screen.getByRole("dialog", { name: "Paste Text" })).toBeInTheDocument();
+    expect(document.querySelector(".paste-dialog-overlay")).toBeNull();
   });
 
   it("opens the hidden file picker from the mobile upload button and forwards selected files", async () => {

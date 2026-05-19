@@ -63,4 +63,12 @@ describe("PanelHeader", () => {
     expect(titleRow).toContainElement(screen.getByText("Codex"));
     expect(titleRow).toContainElement(inlineMeta as HTMLElement);
   });
+
+  it("supports additional class names on the root header", () => {
+    render(<PanelHeader title="Session" className="session-header--running" />);
+
+    const header = document.querySelector(".panel-header");
+
+    expect(header).toHaveClass("panel-header", "session-header--running");
+  });
 });

@@ -85,7 +85,6 @@ export const AgentPanes: FC<AgentPanesProps> = ({ hydrateSessions = true }) => {
         onAssignSession={paneActions.assignSession}
         onReplaceWithSession={paneActions.replaceWithSession}
         onCloseSessionCommand={sessionActions.closeSession}
-        onStopSession={sessionActions.stopSession}
       />
     </div>
   );
@@ -97,11 +96,13 @@ interface PaneNodeRendererProps {
   onAssignSession: (paneId: string, sessionId: string) => void;
   onCloseDraftPane: (paneId: string) => void;
   onCloseSession: (sessionId: string) => void;
-  onCloseSessionCommand: (sessionId: string) => Promise<boolean | void>;
+  onCloseSessionCommand: (
+    sessionId: string,
+    paneDisposition?: "draft" | "remove"
+  ) => Promise<boolean | void>;
   onReplaceWithSession: (sessionId: string) => void;
   onSplitDraftPane: (paneId: string, direction: "horizontal" | "vertical") => void;
   onSplitSession: (sessionId: string, direction: "horizontal" | "vertical") => void;
-  onStopSession: (sessionId: string) => Promise<void>;
 }
 
 /**
@@ -117,7 +118,6 @@ const PaneNodeRenderer: FC<PaneNodeRendererProps> = ({
   onReplaceWithSession,
   onSplitDraftPane,
   onSplitSession,
-  onStopSession,
 }) => {
   if (node.type === "leaf") {
     // Render session card or draft launcher
@@ -127,11 +127,10 @@ const PaneNodeRenderer: FC<PaneNodeRendererProps> = ({
           sessionId={node.sessionId}
           onClose={async () => {
             onCloseSession(node.sessionId!);
-            await onCloseSessionCommand(node.sessionId!);
+            await onCloseSessionCommand(node.sessionId!, "draft");
           }}
           onSplitHorizontal={() => onSplitSession(node.sessionId!, "horizontal")}
           onSplitVertical={() => onSplitSession(node.sessionId!, "vertical")}
-          onStop={() => onStopSession(node.sessionId!)}
         />
       );
     } else {
@@ -170,7 +169,6 @@ const PaneNodeRenderer: FC<PaneNodeRendererProps> = ({
           onReplaceWithSession={onReplaceWithSession}
           onSplitDraftPane={onSplitDraftPane}
           onSplitSession={onSplitSession}
-          onStopSession={onStopSession}
         />
       ))}
     </PaneLayout>

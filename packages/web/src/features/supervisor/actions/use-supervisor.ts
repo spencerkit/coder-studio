@@ -74,7 +74,7 @@ export function useSupervisor(session: Session | null | undefined) {
   }, [dispatch, hydrated, session, setCycles, setHydrated, setSupervisors]);
 
   const openDialog = useCallback(
-    (mode: "enable" | "edit" | "disable", supervisor?: Supervisor) => {
+    (mode: "enable" | "edit", supervisor?: Supervisor) => {
       setDialog({
         open: true,
         sessionId,

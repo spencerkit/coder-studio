@@ -14,7 +14,7 @@ import {
   orderedWorkspacesAtom,
   resolvedActiveWorkspaceIdAtom,
 } from "../../../atoms/workspaces";
-import { EmptyState, Sheet, ThemedIcon } from "../../../components/ui";
+import { EmptyState, Sheet, ThemedIcon, WorkbenchLayer } from "../../../components/ui";
 import { useViewport } from "../../../hooks/use-viewport";
 import { useTranslation } from "../../../lib/i18n";
 import { formatWorkspaceLabel } from "../../notifications/format";
@@ -255,12 +255,13 @@ export function CommandPalette() {
   }
 
   return (
-    <div className="command-palette-overlay" onClick={() => setIsOpen(false)}>
-      <div
-        className="command-palette command-palette--desktop"
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={handleKeyDown}
-      >
+    <WorkbenchLayer
+      ariaLabel={t("command.palette")}
+      initialFocus={() => inputRef.current}
+      onOpenChange={setIsOpen}
+      open
+    >
+      <div className="command-palette command-palette--desktop" onKeyDown={handleKeyDown}>
         <div className="command-palette-header">
           <span className="command-palette-kicker">{t("command.palette").toUpperCase()}</span>
           <span className="command-palette-meta">{filteredCommands.length} actions</span>
@@ -270,7 +271,7 @@ export function CommandPalette() {
         <div className="command-palette-hint">{t("placeholder.command")}</div>
         {paletteList}
       </div>
-    </div>
+    </WorkbenchLayer>
   );
 }
 

@@ -32,10 +32,11 @@ import {
   serverInfoAtom,
 } from "../../../atoms/connection";
 import { resolvedActiveWorkspaceIdAtom } from "../../../atoms/workspaces";
-import { Input, Notice, Pill, Select, Switch, ThemedIcon } from "../../../components/ui";
+import { Button, Input, Notice, Pill, Select, Switch, ThemedIcon } from "../../../components/ui";
 import { useViewport } from "../../../hooks/use-viewport";
 import { useTranslation } from "../../../lib/i18n";
 import { getThemeById, resolveStoredThemeId, THEMES } from "../../../theme";
+import { buildDiagnosticsPath } from "../../diagnostics";
 import { notificationPreferencesAtom } from "../../notifications/atoms";
 import { MobilePageHeader } from "../../shared/components/mobile-page-header";
 import { PageHeader } from "../../shared/components/page-header";
@@ -205,7 +206,8 @@ export function SettingsPage() {
   const dispatch = useAtomValue(dispatchCommandAtom);
   const connectionStatus = useAtomValue(connectionStatusAtom);
   const serverInfo = useAtomValue(serverInfoAtom);
-  const activeWorkspaceId = useAtomValue(resolvedActiveWorkspaceIdAtom);
+  const resolvedActiveWorkspaceId = useAtomValue(resolvedActiveWorkspaceIdAtom);
+  const activeWorkspaceId = resolvedActiveWorkspaceId;
   const [navigationState, setNavigationState] = useState<SettingsNavigationState>(() =>
     isMobile
       ? { kind: "root", lastSection: DEFAULT_SETTINGS_SECTION }
@@ -526,6 +528,7 @@ export function SettingsPage() {
             setTerminalRenderer={handleTerminalRendererSelection}
             terminalCopyOnSelect={terminalPreferences.copyOnSelect}
             setTerminalCopyOnSelect={handleTerminalCopyOnSelectSelection}
+            activeWorkspaceId={activeWorkspaceId}
           />
         );
       case "appearance":
@@ -548,6 +551,7 @@ export function SettingsPage() {
             additionalArgsById={providerAdditionalArgsById}
             setAdditionalArgsById={setProviderAdditionalArgsById}
             isMobile={isMobile}
+            activeWorkspaceId={activeWorkspaceId}
             onLayoutModeChange={setContentLayoutMode}
           />
         );
@@ -721,6 +725,7 @@ interface GeneralSettingsProps {
   setTerminalRenderer: (value: "standard" | "compatibility") => void;
   terminalCopyOnSelect: boolean;
   setTerminalCopyOnSelect: (value: boolean) => void;
+  activeWorkspaceId: string | null;
 }
 
 function parseSupervisorTimeoutInput(value: string): number | null {
@@ -808,8 +813,10 @@ function GeneralSettings({
   setTerminalRenderer,
   terminalCopyOnSelect,
   setTerminalCopyOnSelect,
+  activeWorkspaceId,
 }: GeneralSettingsProps) {
   const t = useTranslation();
+  const navigate = useNavigate();
   const notificationsLabelId = useId();
   const notificationsDescId = useId();
   const soundLabelId = useId();
@@ -1352,6 +1359,29 @@ function GeneralSettings({
             }}
           />
         </div>
+      </div>
+
+      <div className="settings-toggle-row settings-toggle-row--action">
+        <div className="settings-toggle-info">
+          <span className="settings-toggle-label">{t("diagnostics.title")}</span>
+          <span className="settings-toggle-desc">{t("diagnostics.settings_hint")}</span>
+        </div>
+        <Button
+          className="settings-diagnostics-button"
+          leadingIcon={<ThemedIcon semantic="state.warning" size={16} />}
+          onClick={() =>
+            navigate(
+              buildDiagnosticsPath({
+                context: "manual_check",
+                workspaceId: activeWorkspaceId ?? undefined,
+              })
+            )
+          }
+          size="sm"
+          variant="ghost"
+        >
+          {t("action.open")}
+        </Button>
       </div>
     </div>
   );

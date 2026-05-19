@@ -6,11 +6,32 @@
   margin: 0;
 }
 
+.headerLeading {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-width: 0;
+  flex: 1;
+}
+
+.headerCopy {
+  min-width: 0;
+  flex: 1;
+}
+
+.headerIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex: none;
+}
+
 .titleDanger {
   color: var(--icon-warning);
 }
 
 .iconDanger {
-  flex: none;
   color: var(--icon-warning);
 }

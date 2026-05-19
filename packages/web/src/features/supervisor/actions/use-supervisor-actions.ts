@@ -1,11 +1,11 @@
-import type { SupervisorCycle, SupervisorState } from "@coder-studio/core";
+import type { SupervisorState } from "@coder-studio/core";
 import { useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useState } from "react";
-import { localeAtom } from "../../../atoms/app-ui";
 import { dispatchCommandAtom } from "../../../atoms/connection";
-import { formatDate, type LocaleCode, useTranslation } from "../../../lib/i18n";
+import { useTranslation } from "../../../lib/i18n";
 import { supervisorCyclesAtom, supervisorDialogAtom, supervisorsAtom } from "../atoms";
 import { formatScheduledAtInput } from "./use-objective-dialog-state";
+import { useSupervisorDetails } from "./use-supervisor-details";
 
 const STATE_CLASSES: Record<SupervisorState, string> = {
   inactive: "supervisor-state-inactive",
@@ -26,7 +26,7 @@ export function useSupervisorActions({ sessionId }: UseSupervisorActionsArgs) {
   const cyclesBySupervisor = useAtomValue(supervisorCyclesAtom);
   const dispatch = useAtomValue(dispatchCommandAtom);
   const setDialog = useSetAtom(supervisorDialogAtom);
-  const locale = useAtomValue(localeAtom) as LocaleCode;
+  const { openDetails } = useSupervisorDetails();
   const t = useTranslation();
   const supervisor = supervisors.get(sessionId);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -41,7 +41,7 @@ export function useSupervisorActions({ sessionId }: UseSupervisorActionsArgs) {
   }, [actionError]);
 
   const openDialog = useCallback(
-    (mode: "enable" | "edit" | "disable") => {
+    (mode: "enable" | "edit") => {
       setDialog({
         open: true,
         sessionId,
@@ -94,97 +94,51 @@ export function useSupervisorActions({ sessionId }: UseSupervisorActionsArgs) {
     await runAction("supervisor.trigger", supervisor.id, t("supervisor.action.trigger_failed"));
   }, [runAction, supervisor, t]);
 
-  const cycles = supervisor
-    ? [...(cyclesBySupervisor.get(supervisor.id) ?? supervisor.cycles ?? [])].sort(
-        (left, right) =>
-          (right.completedAt ?? right.createdAt) - (left.completedAt ?? left.createdAt)
-      )
-    : ([] as SupervisorCycle[]);
-
-  const latestCycle = cycles[0];
-  const hasInFlightCycle = cycles.some(
-    (cycle) => cycle.status === "evaluating" || cycle.status === "queued"
-  );
-  const latestCycleText = latestCycle
-    ? (latestCycle.result ??
-      latestCycle.errorReason ??
-      (latestCycle.status === "completed"
-        ? t("supervisor.cycle.no_guidance")
-        : latestCycle.status === "evaluating"
-          ? t("supervisor.cycle.evaluating")
-          : latestCycle.status === "cancelled"
-            ? t("supervisor.cycle.cancelled")
-            : t("supervisor.cycle.waiting")))
-    : null;
-
-  const targetMemory = supervisor?.currentTargetMemory ?? null;
-  const targetPlanItems = targetMemory?.plan ?? [];
-  const recentTargetCycles = supervisor?.recentTargetCycles ?? [];
-  const planGeneratedLabel = targetMemory
-    ? targetMemory.planGenerated
-      ? t("supervisor.target_memory.plan_ready")
-      : t("supervisor.target_memory.plan_pending")
-    : null;
-  const targetProgressLabel = t("supervisor.target_memory.progress_badge");
-  const targetCycleResultLabel =
-    recentTargetCycles[0] != null
-      ? t(`supervisor.target_memory.cycle_result.${recentTargetCycles[0].result}`)
-      : null;
+  const hasInFlightCycle = [
+    ...(cyclesBySupervisor.get(supervisor?.id ?? "") ?? supervisor?.cycles ?? []),
+  ].some((cycle) => cycle.status === "evaluating" || cycle.status === "queued");
 
   const stopReasonLabel = supervisor?.stopReason
     ? t(`supervisor.stop_reason.${supervisor.stopReason}`)
     : null;
-
-  const executionPolicyItems = supervisor
-    ? [
-        supervisor.evaluatorModel
-          ? {
-              key: "model",
-              label: t("supervisor.field.evaluator_model"),
-              value: supervisor.evaluatorModel,
-            }
-          : null,
-        {
-          key: "max-count",
-          label: t("supervisor.field.max_supervision_count"),
-          value:
-            supervisor.maxSupervisionCount > 0
-              ? String(supervisor.maxSupervisionCount)
-              : t("supervisor.meta.no_cap"),
-        },
-        supervisor.scheduledAt
-          ? {
-              key: "scheduled-at",
-              label: t("supervisor.field.scheduled_at"),
-              value: formatDate(supervisor.scheduledAt, locale),
-            }
-          : null,
-      ].filter((item): item is { key: string; label: string; value: string } => item !== null)
-    : [];
+  const targetMemory = supervisor?.currentTargetMemory;
+  const activeItem =
+    targetMemory?.items.find((item) => item.id === targetMemory.activeItemId) ??
+    targetMemory?.items[0] ??
+    null;
+  const decompositionModeLabel = targetMemory?.decompositionMode
+    ? t(`supervisor.target_memory.decomposition_mode.${targetMemory.decompositionMode}`)
+    : null;
+  const decompositionStatusLabel = targetMemory
+    ? targetMemory.decompositionGenerated
+      ? t("supervisor.target_memory.decomposition_ready")
+      : t("supervisor.target_memory.decomposition_pending")
+    : null;
+  const recentReasoning = supervisor?.recentTargetCycles?.[0]?.reason ?? null;
 
   return {
+    activeItem,
     actionError,
-    cycles,
-    executionPolicyItems,
+    decompositionModeLabel,
+    decompositionStatusLabel,
     handlePause,
     handleResume,
     handleTrigger,
     isBusy:
       supervisor?.state === "evaluating" || supervisor?.state === "injecting" || hasInFlightCycle,
-    latestCycle,
-    latestCycleText,
-    planGeneratedLabel,
-    recentTargetCycles,
-    targetCycleResultLabel,
-    targetMemory,
-    targetProgressLabel,
-    targetPlanItems,
+    openDetails: () => {
+      if (supervisor) {
+        openDetails(supervisor.sessionId);
+      }
+    },
     openDialog,
+    recentReasoning,
     stopReasonLabel,
     stateClass: supervisor ? STATE_CLASSES[supervisor.state] : STATE_CLASSES.inactive,
     stateLabel: t(
       `supervisor.state.${supervisor ? supervisor.state : ("inactive" as SupervisorState)}`
     ),
     supervisor,
+    targetMemory,
   };
 }

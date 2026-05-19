@@ -1,4 +1,5 @@
 .dot {
+  position: relative;
   display: inline-flex;
   width: var(--status-dot-current-size, var(--status-dot-size));
   height: var(--status-dot-current-size, var(--status-dot-size));
@@ -52,7 +53,37 @@
   animation: statusDotPulse 1s ease-in-out infinite;
 }
 
-:global(.session-dot-running),
+:global(.session-dot-running) {
+  --status-dot-current-color: var(--color-info);
+  animation: statusDotRunningPulse 1.18s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--color-info) 26%, transparent),
+    0 0 0 5px color-mix(in srgb, var(--color-info) 12%, transparent),
+    0 0 12px color-mix(in srgb, var(--color-info) 22%, transparent);
+}
+
+:global(.session-dot-running)::before,
+:global(.session-dot-running)::after {
+  content: "";
+  position: absolute;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+:global(.session-dot-running)::before {
+  inset: -4px;
+  border: 1px solid color-mix(in srgb, var(--color-info) 28%, transparent);
+  opacity: 0.7;
+  animation: statusDotRunningRingGhost 1.18s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+:global(.session-dot-running)::after {
+  inset: -7px;
+  border: 1px solid color-mix(in srgb, var(--color-info) 34%, transparent);
+  opacity: 0.75;
+  animation: statusDotRunningRing 1.18s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
 :global(.connection-status-dot-connected) {
   --status-dot-current-color: var(--color-info);
 }
@@ -63,4 +94,71 @@
 
 :global(.connection-status-dot-disconnected) {
   --status-dot-current-color: var(--color-error);
+}
+
+@keyframes statusDotRunningPulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+
+  38% {
+    transform: scale(1.18);
+    opacity: 0.92;
+  }
+
+  62% {
+    transform: scale(0.96);
+    opacity: 1;
+  }
+}
+
+@keyframes statusDotRunningRing {
+  0% {
+    transform: scale(0.78);
+    opacity: 0.14;
+  }
+
+  35% {
+    opacity: 0.68;
+  }
+
+  100% {
+    transform: scale(1.55);
+    opacity: 0;
+  }
+}
+
+@keyframes statusDotRunningRingGhost {
+  0% {
+    transform: scale(0.92);
+    opacity: 0.22;
+  }
+
+  45% {
+    opacity: 0.5;
+  }
+
+  100% {
+    transform: scale(1.34);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pulse,
+  :global(.session-dot-starting),
+  :global(.session-dot-running),
+  :global(.connection-status-dot-connecting),
+  :global(.connection-status-dot-reconnecting) {
+    animation: none;
+  }
+
+  :global(.session-dot-running)::before,
+  :global(.session-dot-running)::after {
+    animation: none;
+    opacity: 0.36;
+    transform: none;
+  }
 }

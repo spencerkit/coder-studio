@@ -54,8 +54,9 @@ function makeContext(): SupervisorEvaluationContext {
     latestUserInput: "run the tests",
     targetMemory: {
       targetId: "tgt-1",
-      planGenerated: true,
-      plan: [],
+      decompositionGenerated: true,
+      decompositionMode: "stage",
+      items: [],
       stalledCount: 0,
       updatedAt: 1,
     },
@@ -131,13 +132,13 @@ describe("SupervisorEvaluator windows child-process options", () => {
     });
 
     await expect(evaluator.evaluate(makeSupervisor(), makeContext())).resolves.toEqual({
+      mode: "evaluate",
       status: "continue",
       reason: "Need more work",
       guidance: "Run pnpm vitest to verify",
-      plan: undefined,
-      activeStepId: undefined,
+      activeItemId: undefined,
       progressSummary: undefined,
-      stepUpdates: undefined,
+      itemUpdates: undefined,
     });
 
     expect(spawnMock).toHaveBeenCalledWith(

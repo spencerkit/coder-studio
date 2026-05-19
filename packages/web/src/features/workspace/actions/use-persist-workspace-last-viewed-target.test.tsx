@@ -74,6 +74,34 @@ describe("usePersistWorkspaceLastViewedTarget", () => {
       undefined
     );
   });
+
+  it("keeps the session id when the server response omits it during a session-start persist", async () => {
+    const store = createStore();
+    const sendCommand = vi.fn().mockResolvedValueOnce({
+      workspaceId: "ws-2",
+      sessionId: "sess-1",
+      updatedAt: 11,
+    });
+
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe: vi.fn(() => () => {}),
+    } as never);
+    store.set(lastViewedTargetAtom, null);
+
+    const { result } = renderHook(() => usePersistWorkspaceLastViewedTarget(), {
+      wrapper: wrapperFor(store),
+    });
+
+    await act(async () => {
+      await result.current({ workspaceId: "ws-2", sessionId: "sess-1" });
+    });
+
+    expect(store.get(lastViewedTargetAtom)).toMatchObject({
+      workspaceId: "ws-2",
+      sessionId: "sess-1",
+    });
+  });
   it("does not roll back a newer target when an older write fails out of order", async () => {
     const store = createStore();
     const firstWrite = createDeferred<{ workspaceId: string; updatedAt: number }>();

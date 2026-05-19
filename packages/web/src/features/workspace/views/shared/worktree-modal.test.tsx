@@ -50,7 +50,7 @@ describe("WorktreeModal", () => {
     vi.restoreAllMocks();
   });
 
-  it("keeps the centered modal shell on desktop viewports", async () => {
+  it("uses the shared drawer shell on desktop viewports", async () => {
     const sendCommand = vi.fn().mockResolvedValue({
       status: {
         branch: "feature/mobile-sheet",
@@ -87,16 +87,18 @@ describe("WorktreeModal", () => {
       });
     });
 
-    expect(document.querySelector(".modal-overlay")).toBeTruthy();
+    expect(document.querySelector(".drawer-backdrop")).toBeTruthy();
     expect(document.querySelector(".mobile-sheet")).toBeNull();
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: worktree.name })).toBeInTheDocument();
+    expect(document.querySelector(".drawer-panel")).toBeTruthy();
+    expect(document.querySelector(".modal-card-lg")).toBeNull();
     expect(screen.getByText("Latest Commit")).toBeInTheDocument();
     expect(screen.getByText("abc1234")).toBeInTheDocument();
     expect(screen.getByText("Initial mobile sheet setup")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Close" })).toHaveClass("btn", "btn-ghost", "btn-sm");
   });
 
-  it("keeps the large modal size and tab content on desktop viewports", async () => {
+  it("keeps tab content inside the desktop drawer viewport", async () => {
     const sendCommand = vi.fn().mockResolvedValue({
       status: {
         branch: "feature/mobile-sheet",
@@ -139,7 +141,7 @@ describe("WorktreeModal", () => {
       });
     });
 
-    expect(screen.getByRole("dialog")).toHaveClass("modal-card", "modal-card-lg");
+    expect(screen.getByRole("dialog", { name: worktree.name })).toHaveClass("drawer-panel");
     expect(screen.getByRole("tablist", { name: "Worktree" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Status" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tab", { name: "Status" })).toHaveClass("worktree-tab", "active");

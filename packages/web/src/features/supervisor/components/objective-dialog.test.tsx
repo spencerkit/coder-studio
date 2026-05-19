@@ -24,7 +24,7 @@ describe("ObjectiveDialog", () => {
     overrides: Partial<{
       open: boolean;
       sessionId: string | null;
-      mode: "enable" | "edit" | "disable";
+      mode: "enable" | "edit";
       draftObjective: string;
       draftEvaluatorProviderId: "claude" | "codex";
       draftEvaluatorModel: string;
@@ -208,31 +208,6 @@ describe("ObjectiveDialog", () => {
     expect(header?.contains(firstFormGroup as Node)).toBe(false);
   });
 
-  it("renders disable confirmation mode", () => {
-    const store = createStore();
-    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
-    store.set(localeAtom, "en");
-    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
-    store.set(
-      supervisorDialogAtom,
-      createDialogState({
-        mode: "disable",
-      })
-    );
-    store.set(supervisorsAtom, new Map([["sess-1", createSupervisor()]]));
-
-    render(
-      <Provider store={store}>
-        <ObjectiveDialog workspaceId="ws-1" />
-      </Provider>
-    );
-
-    expect(screen.getByText("Disabling stops evaluation cycles")).toBeInTheDocument();
-    expect(screen.getByText("Finish the server refactor")).toBeInTheDocument();
-    expect(screen.getByRole("dialog")).toHaveClass("supervisor-dialog--disable");
-    expect(document.querySelector(".supervisor-dialog-intro")).toBeNull();
-  });
-
   it("renders the dialog header through the canonical dialog header anatomy", () => {
     const store = createStore();
     window.localStorage.setItem("ui.locale", JSON.stringify("en"));
@@ -241,7 +216,7 @@ describe("ObjectiveDialog", () => {
     store.set(
       supervisorDialogAtom,
       createDialogState({
-        mode: "disable",
+        mode: "edit",
       })
     );
     store.set(supervisorsAtom, new Map([["sess-1", createSupervisor()]]));
@@ -264,7 +239,7 @@ describe("ObjectiveDialog", () => {
     expect(leading).not.toBeNull();
     expect(icon).not.toBeNull();
     expect(copy).not.toBeNull();
-    expect(copy).toHaveTextContent("Disable Supervisor");
+    expect(copy).toHaveTextContent("Edit Supervisor");
     expect(description).toBeNull();
     expect(closeButton).toHaveClass("modal-close");
   });
@@ -314,7 +289,8 @@ describe("ObjectiveDialog", () => {
     store.set(
       supervisorDialogAtom,
       createDialogState({
-        mode: "disable",
+        mode: "edit",
+        draftObjective: "Finish the server refactor",
       })
     );
     store.set(supervisorsAtom, new Map());
@@ -326,7 +302,7 @@ describe("ObjectiveDialog", () => {
     );
 
     expect(screen.getByRole("button", { name: "Cancel" })).toHaveClass("btn", "btn-secondary");
-    expect(screen.getByRole("button", { name: "Disable" })).toHaveClass("btn", "btn-danger");
+    expect(screen.getByRole("button", { name: "Save" })).toHaveClass("btn", "btn-primary");
   });
 
   it("renders the close action with icon button compatibility classes", () => {
@@ -337,7 +313,7 @@ describe("ObjectiveDialog", () => {
     store.set(
       supervisorDialogAtom,
       createDialogState({
-        mode: "disable",
+        mode: "edit",
       })
     );
     store.set(supervisorsAtom, new Map());

@@ -12,19 +12,15 @@ import { AgentPanes } from "./index";
 
 type MockSessionCardProps = {
   sessionId: string;
-  onStop?: () => void;
   onSplitHorizontal?: () => void;
   onSplitVertical?: () => void;
   onClose?: () => void;
 };
 
 const mockSessionCard = vi.fn(
-  ({ sessionId, onStop, onSplitHorizontal, onSplitVertical, onClose }: MockSessionCardProps) => (
+  ({ sessionId, onSplitHorizontal, onSplitVertical, onClose }: MockSessionCardProps) => (
     <div data-testid="session-card">
       <span>{sessionId}</span>
-      <button type="button" onClick={onStop}>
-        stop-{sessionId}
-      </button>
       <button type="button" onClick={onSplitHorizontal}>
         split-{sessionId}
       </button>
@@ -151,6 +147,7 @@ describe("AgentPanes", () => {
   afterEach(() => {
     vi.useRealTimers();
     window.localStorage.clear();
+    window.history.replaceState({}, "", "/");
   });
 
   it("renders the shared empty state when no workspace is active", () => {
@@ -344,8 +341,8 @@ describe("AgentPanes", () => {
     });
   });
 
-  it("stops a running session without removing its pane", async () => {
-    const { store, sendCommand } = createAgentPaneStore();
+  it("does not wire a standalone stop action into the session card header", async () => {
+    const { store } = createAgentPaneStore();
 
     render(
       <Provider store={store}>
@@ -368,11 +365,7 @@ describe("AgentPanes", () => {
 
     const layoutBeforeStop = structuredClone(store.get(paneLayoutAtomFamily("ws-1")));
 
-    fireEvent.click(screen.getByRole("button", { name: "stop-sess_1" }));
-
-    await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith("session.stop", { sessionId: "sess_1" }, undefined);
-    });
+    expect(screen.queryByRole("button", { name: "stop-sess_1" })).not.toBeInTheDocument();
 
     expect(store.get(paneLayoutAtomFamily("ws-1"))).toEqual(layoutBeforeStop);
   });
@@ -799,7 +792,7 @@ describe("AgentPanes", () => {
     });
   });
 
-  it("shows install and start CTA when the provider is missing but auto-install is supported", async () => {
+  it("shows inline install guidance and a secondary diagnostics link when the provider is unavailable", async () => {
     const sendCommand = vi.fn(async (op: string) => {
       if (op === "session.list") return [];
       if (op === "provider.runtimeStatus") {
@@ -835,6 +828,23 @@ describe("AgentPanes", () => {
           },
         };
       }
+      if (op === "provider.install.start") {
+        return {
+          jobId: "job-1",
+          providerId: "claude",
+          strategyIds: ["npm"],
+          status: "failed",
+          steps: [],
+          failure: {
+            code: "install_failed",
+            message: "Install Claude Code CLI to continue.",
+            docUrls: {
+              provider: "https://docs.anthropic.com/en/docs/claude-code/getting-started",
+              prerequisites: {},
+            },
+          },
+        };
+      }
       return undefined;
     });
 
@@ -850,10 +860,20 @@ describe("AgentPanes", () => {
     );
 
     expect(await screen.findByText("Install & Start")).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(screen.getByText("Install & Start")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Claude/i }));
+
+    expect(await screen.findByText("Install Claude Code CLI to continue.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open Diagnostics" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open official docs" })).toBeInTheDocument();
   });
 
-  it("runs install polling and creates the session after install succeeds", async () => {
-    const sendCommand = vi.fn(async (op: string) => {
+  it("starts an inline install flow for standalone launches instead of redirecting to diagnostics", async () => {
+    const sendCommand = vi.fn(async (op: string, args?: Record<string, unknown>) => {
       if (op === "session.list") return [];
       if (op === "provider.runtimeStatus") {
         return {
@@ -892,31 +912,18 @@ describe("AgentPanes", () => {
         return {
           jobId: "job-1",
           providerId: "codex",
-          strategyIds: ["npm-install-codex"],
-          status: "running",
-          currentStepId: "install-provider-codex",
+          strategyIds: ["npm"],
+          status: "failed",
           steps: [],
-        };
-      }
-      if (op === "provider.install.get") {
-        return {
-          jobId: "job-1",
-          providerId: "codex",
-          strategyIds: ["npm-install-codex"],
-          status: "succeeded",
-          steps: [],
-        };
-      }
-      if (op === "session.create") {
-        return {
-          id: "sess_new",
-          workspaceId: "ws-1",
-          terminalId: "term-new",
-          providerId: "codex",
-          state: "starting",
-          capability: "full",
-          startedAt: Date.now(),
-          lastActiveAt: Date.now(),
+          failure: {
+            code: "install_failed",
+            message: "Automatic install failed",
+            docUrls: {
+              provider:
+                "https://help.openai.com/en/articles/11096431-openai-codex-ci-getting-started",
+              prerequisites: {},
+            },
+          },
         };
       }
       return undefined;
@@ -933,33 +940,27 @@ describe("AgentPanes", () => {
       </Provider>
     );
 
-    const installCta = await screen.findByText("Install & Start");
-    vi.useFakeTimers();
-
-    fireEvent.click(installCta.closest("button")!);
-
-    expect(sendCommand).toHaveBeenCalledWith(
-      "provider.install.start",
-      { providerId: "codex" },
-      undefined
-    );
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1500);
+    await waitFor(() => {
+      expect(screen.getByText("Install & Start")).toBeInTheDocument();
     });
 
-    expect(sendCommand).toHaveBeenCalledWith("provider.install.get", { jobId: "job-1" }, undefined);
-    expect(sendCommand).toHaveBeenCalledWith(
-      "session.create",
-      {
-        workspaceId: "ws-1",
-        providerId: "codex",
-      },
-      undefined
-    );
+    fireEvent.click(screen.getByRole("button", { name: /Codex/i }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "provider.install.start",
+        {
+          providerId: "codex",
+        },
+        undefined
+      );
+    });
+
+    expect(window.location.pathname).toBe("/");
+    expect(await screen.findByText("Automatic install failed")).toBeInTheDocument();
   });
 
-  it("shows install failure details and docs link when automatic install fails", async () => {
+  it("shows inline prerequisite guidance while keeping diagnostics as a secondary link", async () => {
     const sendCommand = vi.fn(async (op: string) => {
       if (op === "session.list") return [];
       if (op === "provider.runtimeStatus") {
@@ -995,40 +996,6 @@ describe("AgentPanes", () => {
           },
         };
       }
-      if (op === "provider.install.start") {
-        return {
-          jobId: "job-failed",
-          providerId: "codex",
-          strategyIds: ["winget-nodejs-lts"],
-          status: "running",
-          currentStepId: "install-prerequisite-npm",
-          steps: [],
-        };
-      }
-      if (op === "provider.install.get") {
-        return {
-          jobId: "job-failed",
-          providerId: "codex",
-          strategyIds: ["winget-nodejs-lts"],
-          status: "failed",
-          steps: [],
-          failure: {
-            code: "missing_prerequisite",
-            providerId: "codex",
-            failedStepId: "install-prerequisite-npm",
-            message: "Missing prerequisite commands: npm",
-            command: "",
-            args: [],
-            missingCommands: ["npm"],
-            manualGuideKeys: ["provider.install.nodejs.manual", "provider.install.codex.manual"],
-            docUrls: {
-              provider:
-                "https://help.openai.com/en/articles/11096431-openai-codex-ci-getting-started",
-              prerequisites: { npm: "https://nodejs.org/en/download" },
-            },
-          },
-        };
-      }
       return undefined;
     });
 
@@ -1043,19 +1010,24 @@ describe("AgentPanes", () => {
       </Provider>
     );
 
-    const installCta = await screen.findByText("Install & Start");
-    vi.useFakeTimers();
-
-    fireEvent.click(installCta.closest("button")!);
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1500);
+    await waitFor(() => {
+      expect(screen.getByText("View Install Steps")).toBeInTheDocument();
     });
 
-    expect(screen.getByText("Missing prerequisite commands: npm")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open official docs" })).toHaveAttribute(
-      "href",
-      "https://help.openai.com/en/articles/11096431-openai-codex-ci-getting-started"
+    fireEvent.click(screen.getByRole("button", { name: /Codex/i }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/Install Node\.js from the official download page\./)
+      ).toBeInTheDocument();
+    });
+
+    expect(sendCommand).not.toHaveBeenCalledWith(
+      "provider.install.start",
+      expect.anything(),
+      undefined
     );
+    expect(screen.getByRole("link", { name: "Open Diagnostics" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open official docs" })).toBeInTheDocument();
   });
 });

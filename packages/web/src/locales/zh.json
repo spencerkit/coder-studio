@@ -318,8 +318,21 @@
     "new_folder": "新建文件夹",
     "collapse_all": "折叠全部",
     "rename": "重命名",
+    "rename_name": "名称",
+    "rename_helper": "当前版本仅支持在同级目录内重命名。",
+    "rename_required": "请输入名称",
+    "rename_invalid_name": "名称不能包含 / 或 \\。",
+    "rename_failed": "重命名失败",
     "delete": "删除",
     "delete_confirm": "确定要删除 \"{name}\" 吗？",
+    "copy_relative_path": "复制相对路径",
+    "copy_absolute_path": "复制绝对路径",
+    "open_in_terminal": "在终端中打开",
+    "context_menu_title": "文件操作",
+    "context_section_create": "创建",
+    "context_section_edit": "编辑",
+    "context_section_path": "路径",
+    "context_section_terminal": "终端",
     "path": "路径",
     "path_required": "请输入路径",
     "invalid_file_path": "文件路径不能以 / 结尾",
@@ -495,6 +508,7 @@
       "workspace_runtime": "工作区与运行",
       "interface_interaction": "界面与交互"
     },
+    "help_diagnostics": "帮助与诊断",
     "autosave_hint": "设置已自动保存",
     "load_failed": "设置加载失败",
     "load_failed_unknown": "未收到服务端返回的设置数据",
@@ -667,6 +681,7 @@
   "supervisor": {
     "title": "Supervisor",
     "empty": "Supervisor 未启用",
+    "completed_cycles": "轮次 {count}",
     "latest_evaluation": "最近一次评估",
     "state": {
       "inactive": "未启用",
@@ -686,6 +701,9 @@
       "no_guidance": "本轮无需注入 guidance",
       "evaluating": "评估中…",
       "waiting": "等待评估结果",
+      "waiting_evaluator": "等待 evaluator 响应",
+      "retry_wait": "{seconds}s 后重试 evaluator",
+      "injecting": "正在注入 guidance",
       "cancelled": "已取消"
     },
     "stop_reason": {
@@ -696,21 +714,39 @@
     "target_memory": {
       "title": "目标记忆",
       "target": "目标",
-      "plan": "计划",
       "stalled": "停滞",
-      "plan_ready": "计划已就绪",
-      "plan_pending": "计划待生成",
+      "decomposition_ready": "拆解已就绪",
+      "decomposition_pending": "拆解待生成",
+      "decomposition_mode_title": "模式",
+      "decomposition_title": "拆解结构",
+      "basic_info_title": "基本信息",
+      "runtime_title": "运行状态",
+      "runtime_status_label": "状态",
+      "error_reason_label": "异常原因",
+      "cycles_title": "轮次",
+      "progress_list_title": "进展列表",
+      "item_objective_title": "阶段目标",
+      "item_deliverable_title": "交付产物",
+      "active_item": "当前项",
       "progress_title": "目标进展",
       "progress_badge": "进展",
-      "plan_title": "目标计划",
       "reasoning_title": "目标轮次判断",
+      "runtime_status": {
+        "idle": "空闲",
+        "running": "运行中",
+        "error": "异常"
+      },
+      "decomposition_mode": {
+        "stage": "阶段",
+        "subtarget": "子目标"
+      },
       "cycle_result": {
         "continue": "继续",
         "stop": "停止",
         "error": "错误"
       },
       "step_status": {
-        "pending": "待处理",
+        "pending": "未开始",
         "in_progress": "进行中",
         "done": "已完成"
       }
@@ -738,8 +774,8 @@
     "action": {
       "enable": "启用 Supervisor",
       "enable_objective": "启用目标",
+      "details": "Supervisor 详情",
       "edit_objective": "编辑 Supervisor",
-      "disable": "禁用",
       "pause": "暂停",
       "resume": "恢复",
       "trigger": "触发评估",
@@ -758,12 +794,8 @@
         "subtitle": "调整目标描述或切换评估方，历史评估不会被清除",
         "confirm": "保存"
       },
-      "disable": {
-        "title": "禁用 Supervisor",
-        "subtitle": "停止自动评估。当前会话的监督周期将被移除",
-        "confirm": "禁用",
-        "warning_title": "禁用后会停止评估周期",
-        "warning_body": "当前会话的 Supervisor 将被移除，历史 cycles 会一并清理。可重新启用，但无法恢复记录。"
+      "details": {
+        "title": "Supervisor 详情"
       }
     }
   },
@@ -818,6 +850,114 @@
       "terminals": {
         "title": "集成终端",
         "description": "在 AI 会话旁边直接运行命令和脚本。"
+      }
+    }
+  },
+  "diagnostics": {
+    "title": "诊断",
+    "settings_hint": "诊断运行环境，便于排查和恢复问题。",
+    "load_failed": "当前无法刷新诊断结果。",
+    "loading_description": "正在检查这次任务真正相关的环境项。",
+    "status": {
+      "checking": "检查中",
+      "ready": "已就绪",
+      "needs_attention": "需要处理"
+    },
+    "actions": {
+      "retry_workspace": "重试打开工作区",
+      "continue_session": "继续启动会话",
+      "continue_phone": "继续在手机上打开",
+      "recheck": "重新检查",
+      "open_diagnostics": "打开诊断",
+      "open_settings": "打开设置",
+      "copy_details": "复制错误详情",
+      "copied": "已复制",
+      "install_provider": "安装 Provider"
+    },
+    "details": {
+      "workspace": "工作区",
+      "provider": "Provider",
+      "missing_commands": "缺失命令",
+      "missing_prerequisites": "缺失前置依赖"
+    },
+    "context": {
+      "workspace_open": {
+        "title": "暂时无法打开工作区",
+        "description": "继续之前，需要先处理几个问题。"
+      },
+      "session_start": {
+        "title": "当前会话还不能启动",
+        "description": "我们发现了一个会阻塞启动的问题。"
+      },
+      "mobile_continue": {
+        "title": "继续到手机前还需修复几项",
+        "description": "手机继续使用这条链路里还有一些前置问题。"
+      },
+      "manual_check": {
+        "title": "环境诊断",
+        "description": "查看当前环境状态，并在需要时重新检查。"
+      }
+    },
+    "checks": {
+      "workspace_selection_missing": {
+        "title": "还没有选择工作区路径",
+        "description": "先选择一个目录，再继续重试。"
+      },
+      "workspace_path_ready": {
+        "title": "工作区路径可用",
+        "description": "所选目录当前可以访问。"
+      },
+      "workspace_path_not_found": {
+        "title": "工作区路径不存在",
+        "description": "之前选择的目录当前已经找不到了。"
+      },
+      "workspace_path_unreadable": {
+        "title": "工作区路径暂时不可读",
+        "description": "目录存在，但当前还不能正常打开。"
+      },
+      "session_workspace_ready": {
+        "title": "工作区已就绪",
+        "description": "当前工作区可以用于启动会话。"
+      },
+      "session_workspace_missing": {
+        "title": "工作区缺失",
+        "description": "先选择或重新打开工作区，再启动会话。"
+      },
+      "provider_runtime_ready": {
+        "title": "{provider} 已就绪",
+        "description": "{provider} 现在可以直接启动。"
+      },
+      "provider_cli_missing": {
+        "title": "{provider} CLI 缺失",
+        "description": "启动前还没有安装所需的 provider 命令。"
+      },
+      "provider_prerequisite_missing": {
+        "title": "{provider} 前置依赖缺失",
+        "description": "需要先补齐前置依赖，provider 才能运行。"
+      },
+      "provider_unknown": {
+        "title": "无法识别 Provider",
+        "description": "当前设置里无法解析这个 provider。"
+      },
+      "server_auth_ready": {
+        "title": "密码保护已开启",
+        "description": "当前服务端已经配置认证。"
+      },
+      "server_auth_not_required": {
+        "title": "密码保护未开启",
+        "description": "当前服务端没有要求认证。"
+      },
+      "mobile_host_ready": {
+        "title": "网络地址可用于手机继续",
+        "description": "当前 host 看起来适合手机访问。"
+      },
+      "mobile_host_local_only": {
+        "title": "当前 host 仅限本机",
+        "description": "手机继续需要可在局域网访问的地址，而不是 localhost。"
+      },
+      "mobile_auth_disabled": {
+        "title": "手机继续前需要认证",
+        "description": "请先开启认证，再继续到手机。"
       }
     }
   },

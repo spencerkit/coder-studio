@@ -61,6 +61,18 @@ describe("base.css theme-sensitive shells", () => {
   });
 });
 
+describe("base.css viewport sizing", () => {
+  it("uses dynamic viewport height for the shared app shell", () => {
+    const root = getRuleBlock("#root");
+    const app = getRuleBlock(".app");
+
+    expect(root).toContain("height: 100dvh");
+    expect(root).not.toContain("height: 100vh");
+    expect(app).toContain("height: 100dvh");
+    expect(app).not.toContain("height: 100vh");
+  });
+});
+
 describe("base.css desktop typography foundation", () => {
   it("defines the semantic and desktop layout tokens used by polished PC surfaces", () => {
     expect(tokensStylesheet).toContain("--text-muted:");
@@ -75,6 +87,19 @@ describe("base.css desktop typography foundation", () => {
     expect(tokensStylesheet).toContain("--desktop-content-max-width:");
     expect(tokensStylesheet).toContain("--desktop-modal-max-width-md:");
     expect(tokensStylesheet).toContain("--desktop-modal-max-width-lg:");
+  });
+
+  it("defines semantic overlay z-index tokens for governed layers", () => {
+    expect(tokensStylesheet).toContain("--z-local-overlay:");
+    expect(tokensStylesheet).toContain("--z-drawer-backdrop:");
+    expect(tokensStylesheet).toContain("--z-drawer:");
+    expect(tokensStylesheet).toContain("--z-workbench-backdrop:");
+    expect(tokensStylesheet).toContain("--z-workbench:");
+    expect(tokensStylesheet).toContain("--z-modal-backdrop:");
+    expect(tokensStylesheet).toContain("--z-modal:");
+    expect(tokensStylesheet).toContain("--z-popover:");
+    expect(tokensStylesheet).toContain("--z-tooltip:");
+    expect(tokensStylesheet).toContain("--z-toast:");
   });
 
   it("maps base text elements onto semantic typography tokens", () => {

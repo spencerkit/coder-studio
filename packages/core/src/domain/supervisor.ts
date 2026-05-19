@@ -24,28 +24,35 @@ export type SupervisorStopReason =
   | "max_supervision_count_reached"
   | "supervisor_uncertain";
 
-export type SupervisorPlanStepStatus = "pending" | "in_progress" | "done";
+export type SupervisorWorkItemStatus = "pending" | "in_progress" | "done";
+export type SupervisorDecompositionMode = "stage" | "subtarget";
+export type SupervisorWorkItemKind = SupervisorDecompositionMode;
 
-export interface SupervisorPlanStep {
+export interface SupervisorWorkItem {
   id: string;
+  kind: SupervisorWorkItemKind;
   title: string;
-  status: SupervisorPlanStepStatus;
+  objective: string;
+  deliverable: string;
+  acceptanceCriteria: string[];
+  status: SupervisorWorkItemStatus;
 }
 
 export interface SupervisorTargetMemory {
   targetId: string;
-  planGenerated: boolean;
-  plan: SupervisorPlanStep[];
-  activeStepId?: string;
+  decompositionGenerated: boolean;
+  decompositionMode?: SupervisorDecompositionMode;
+  items: SupervisorWorkItem[];
+  activeItemId?: string;
   progressSummary?: string;
   lastGuidance?: string;
   stalledCount: number;
   updatedAt: number;
 }
 
-export interface SupervisorCycleStepUpdate {
+export interface SupervisorCycleItemUpdate {
   id: string;
-  status: SupervisorPlanStepStatus;
+  status: SupervisorWorkItemStatus;
 }
 
 export interface SupervisorCycleTargetRecord {
@@ -58,14 +65,20 @@ export interface SupervisorCycleTargetRecord {
   reason?: string;
   guidance?: string;
   progressSummary?: string;
-  activeStepId?: string;
-  stepUpdates?: SupervisorCycleStepUpdate[];
+  decompositionMode?: SupervisorDecompositionMode;
+  activeItemId?: string;
+  itemUpdates?: SupervisorCycleItemUpdate[];
   injected?: boolean;
   attemptCount?: number;
   errorReason?: string;
 }
 
 export type SupervisorCycleAttemptStatus = "evaluating" | "completed" | "failed" | "cancelled";
+export type SupervisorRuntimePhase =
+  | "waiting_evaluator"
+  | "retry_wait"
+  | "injecting"
+  | "finalizing";
 
 export type EvidenceSource = "headless_snapshot" | "transcript" | "terminal_fallback";
 
@@ -85,6 +98,14 @@ export interface SupervisorCycle {
   createdAt: number;
   completedAt?: number;
   errorReason?: string;
+  runtime?: {
+    phase: SupervisorRuntimePhase;
+    currentAttemptIndex?: number;
+    attemptCount?: number;
+    maxAttempts?: number;
+    lastAttemptError?: string;
+    nextRetryAt?: number;
+  };
 }
 
 export interface SupervisorCycleAttempt {

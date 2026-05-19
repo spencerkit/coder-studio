@@ -52,13 +52,38 @@ const supervisor: Supervisor = {
   completedSupervisionCount: 0,
   currentTargetMemory: {
     targetId: "target-preview-1",
-    planGenerated: true,
-    plan: [
-      { id: "step-1", title: "Audit compact strip density", status: "done" },
-      { id: "step-2", title: "Move memory into expandable detail", status: "in_progress" },
-      { id: "step-3", title: "Validate preview coverage across themes", status: "pending" },
+    decompositionGenerated: true,
+    decompositionMode: "stage",
+    items: [
+      {
+        id: "stage-1",
+        kind: "stage",
+        title: "Audit compact strip density",
+        objective: "Review density regressions in the compact strip",
+        deliverable: "A verified density audit",
+        acceptanceCriteria: ["Density issues are identified"],
+        status: "done",
+      },
+      {
+        id: "stage-2",
+        kind: "stage",
+        title: "Move memory into expandable detail",
+        objective: "Expose target memory without bloating the strip",
+        deliverable: "A compact card with explicit decomposition detail",
+        acceptanceCriteria: ["Decomposition is visible without expanding layout noise"],
+        status: "in_progress",
+      },
+      {
+        id: "stage-3",
+        kind: "stage",
+        title: "Validate preview coverage across themes",
+        objective: "Ensure preview coverage is representative",
+        deliverable: "A validated preview pass",
+        acceptanceCriteria: ["Preview coverage is confirmed"],
+        status: "pending",
+      },
     ],
-    activeStepId: "step-2",
+    activeItemId: "stage-2",
     progressSummary: "Compact strip restored; preview coverage still under review.",
     stalledCount: 0,
     updatedAt: 1,
@@ -187,21 +212,38 @@ const readmeSupervisor: Supervisor = {
   completedSupervisionCount: 3,
   currentTargetMemory: {
     targetId: "target-readme-refresh",
-    planGenerated: true,
-    plan: [
-      { id: "step-1", title: "Capture a desktop hero with active session context", status: "done" },
+    decompositionGenerated: true,
+    decompositionMode: "stage",
+    items: [
       {
-        id: "step-2",
+        id: "stage-1",
+        kind: "stage",
+        title: "Capture a desktop hero with active session context",
+        objective: "Show an active desktop coding flow",
+        deliverable: "A readable hero screenshot",
+        acceptanceCriteria: ["Hero capture is readable"],
+        status: "done",
+      },
+      {
+        id: "stage-2",
+        kind: "stage",
         title: "Capture a focused git review scene for README",
+        objective: "Highlight review context clearly",
+        deliverable: "A focused review screenshot",
+        acceptanceCriteria: ["Diff emphasis is readable"],
         status: "in_progress",
       },
       {
-        id: "step-3",
+        id: "stage-3",
+        kind: "stage",
         title: "Capture a mobile progress check with supervisor status",
+        objective: "Show mobile progress visibility",
+        deliverable: "A mobile supervisor progress screenshot",
+        acceptanceCriteria: ["Mobile supervisor state is legible"],
         status: "pending",
       },
     ],
-    activeStepId: "step-2",
+    activeItemId: "stage-2",
     progressSummary: "Hero scene locked. Review capture is being polished for README readability.",
     stalledCount: 0,
     updatedAt: 4,
@@ -242,17 +284,38 @@ const readmeMobileSupervisor: Supervisor = {
   state: "idle",
   currentTargetMemory: {
     targetId: "target-readme-refresh",
-    planGenerated: true,
-    plan: [
-      { id: "step-1", title: "Capture a desktop hero with active session context", status: "done" },
-      { id: "step-2", title: "Capture a focused git review scene for README", status: "done" },
+    decompositionGenerated: true,
+    decompositionMode: "stage",
+    items: [
       {
-        id: "step-3",
+        id: "stage-1",
+        kind: "stage",
+        title: "Capture a desktop hero with active session context",
+        objective: "Show an active desktop coding flow",
+        deliverable: "A readable hero screenshot",
+        acceptanceCriteria: ["Hero capture is readable"],
+        status: "done",
+      },
+      {
+        id: "stage-2",
+        kind: "stage",
+        title: "Capture a focused git review scene for README",
+        objective: "Highlight review context clearly",
+        deliverable: "A focused review screenshot",
+        acceptanceCriteria: ["Diff emphasis is readable"],
+        status: "done",
+      },
+      {
+        id: "stage-3",
+        kind: "stage",
         title: "Capture a mobile progress check with supervisor status",
+        objective: "Show mobile progress visibility",
+        deliverable: "A mobile supervisor progress screenshot",
+        acceptanceCriteria: ["Mobile supervisor state is legible"],
         status: "in_progress",
       },
     ],
-    activeStepId: "step-3",
+    activeItemId: "stage-3",
     progressSummary:
       "Desktop captures are ready. Mobile continuity shot is the last remaining asset.",
     stalledCount: 0,
@@ -603,11 +666,7 @@ function ReadmeMobileProgressWorkspace() {
             />
           </section>
           <section style={{ padding: "0 12px" }}>
-            <SupervisorCard
-              sessionId="session-readme-mobile"
-              workspaceId={workspace.id}
-              defaultDetailsOpen
-            />
+            <SupervisorCard sessionId="session-readme-mobile" workspaceId={workspace.id} />
           </section>
         </div>
       </main>
@@ -1017,7 +1076,7 @@ export function createShowcaseScenes(): UiPreviewSceneDefinition[] {
         supervisorDialog: {
           open: true,
           sessionId: "session-preview-1",
-          mode: "disable",
+          mode: "edit",
           draftObjective: supervisor.objective,
           draftEvaluatorProviderId: "claude",
           draftEvaluatorModel: "",
@@ -1249,7 +1308,6 @@ export function createShowcaseScenes(): UiPreviewSceneDefinition[] {
           sessionId="session-preview-1"
           workspaceId={workspace.id}
           onClose={() => {}}
-          defaultSupervisorDetailsOpen
         />
       ),
     }),

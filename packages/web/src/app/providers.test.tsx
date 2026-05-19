@@ -9,6 +9,7 @@ import {
   workspacesLoadErrorAtom,
   workspacesLoadStateAtom,
 } from "../atoms/workspaces";
+import { paneLayoutAtomFamily } from "../features/agent-panes/atoms/pane-layout";
 import { supervisorCyclesAtom, supervisorsAtom } from "../features/supervisor/atoms";
 import { terminalMetaAtomFamily } from "../features/terminal-panel/atoms";
 import { fileTreeStaleAtomFamily } from "../features/workspace/atoms";
@@ -122,6 +123,35 @@ describe("routeEventToAtom", () => {
     routeEventToAtom("workspace.ws-1.meta", { path: "/tmp/ws-1", targetRuntime: "native" }, store);
 
     expect(store.get(activeWorkspaceAtom)?.id).toBe("ws-1");
+  });
+
+  it("projects workspace pane layout updates into the pane layout atom", () => {
+    const store = createStore();
+
+    routeEventToAtom(
+      "workspace.ws-1.meta",
+      {
+        path: "/tmp/ws-1",
+        targetRuntime: "native",
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+          paneLayout: {
+            id: "root",
+            type: "leaf",
+            sessionId: "sess-1",
+          },
+        },
+      },
+      store
+    );
+
+    expect(store.get(paneLayoutAtomFamily("ws-1"))).toEqual({
+      id: "root",
+      type: "leaf",
+      sessionId: "sess-1",
+    });
   });
 
   it("marks the file tree stale when an fs.dirty event arrives", () => {

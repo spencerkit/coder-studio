@@ -105,19 +105,51 @@ describe("Supervisor integration", () => {
         latestUserInput: "run the tests",
         targetMemory: {
           targetId: "tgt-1",
-          planGenerated: false,
-          plan: [],
+          decompositionGenerated: true,
+          decompositionMode: "stage",
+          items: [
+            {
+              id: "stage-1",
+              kind: "stage",
+              title: "Verify end-to-end persistence",
+              objective: "Confirm the end-to-end persistence flow works",
+              deliverable: "A validated persistence verification pass",
+              acceptanceCriteria: ["Persistence flow is verified"],
+              status: "in_progress",
+            },
+          ],
+          activeItemId: "stage-1",
           stalledCount: 0,
           updatedAt: 1,
         },
       }),
     };
     supervisorManager.evaluator = {
-      evaluate: async () => ({
-        status: "continue",
-        reason: "Keep going",
-        guidance: "",
-      }),
+      evaluate: async (_supervisor, _context, options) =>
+        options?.mode === "decompose"
+          ? {
+              mode: "decompose",
+              decompositionMode: "stage",
+              items: [
+                {
+                  id: "stage-1",
+                  kind: "stage",
+                  title: "Verify end-to-end persistence",
+                  objective: "Confirm the end-to-end persistence flow works",
+                  deliverable: "A validated persistence verification pass",
+                  acceptanceCriteria: ["Persistence flow is verified"],
+                  status: "in_progress",
+                },
+              ],
+              activeItemId: "stage-1",
+              progressSummary: "Decomposition complete",
+            }
+          : {
+              mode: "evaluate",
+              status: "continue",
+              reason: "Keep going",
+              guidance: "",
+            },
     };
   });
 

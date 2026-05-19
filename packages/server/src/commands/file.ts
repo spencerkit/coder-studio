@@ -3,7 +3,14 @@
  */
 
 import { z } from "zod";
-import { createDirectory, createFile, deleteEntry, readFile, writeFile } from "../fs/file-io.js";
+import {
+  createDirectory,
+  createFile,
+  deleteEntry,
+  readFile,
+  renameEntry,
+  writeFile,
+} from "../fs/file-io.js";
 import { readTree, searchFiles } from "../fs/tree.js";
 import { registerCommand } from "../ws/dispatch.js";
 
@@ -119,6 +126,30 @@ registerCommand(
     }
 
     await deleteEntry(workspace.path, args.path);
+    ctx.eventBus.emit({
+      type: "fs.dirty",
+      workspaceId: args.workspaceId,
+      reason: "fs_change",
+    });
+    return { ok: true };
+  }
+);
+
+// file.rename
+registerCommand(
+  "file.rename",
+  z.object({
+    workspaceId: z.string(),
+    fromPath: z.string(),
+    toPath: z.string(),
+  }),
+  async (args, ctx) => {
+    const workspace = ctx.workspaceMgr.get(args.workspaceId);
+    if (!workspace) {
+      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
+    }
+
+    await renameEntry(workspace.path, args.fromPath, args.toPath);
     ctx.eventBus.emit({
       type: "fs.dirty",
       workspaceId: args.workspaceId,

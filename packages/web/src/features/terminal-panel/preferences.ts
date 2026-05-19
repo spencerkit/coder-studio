@@ -17,7 +17,7 @@ export const MOBILE_TERMINAL_FONT_SIZE_SETTING_KEY = "appearance.mobileTerminalF
 export type TerminalFontSizeTarget = "desktop" | "mobile";
 
 export const DEFAULT_TERMINAL_PREFERENCES: TerminalPreferences = {
-  copyOnSelect: false,
+  copyOnSelect: true,
   fontSize: DEFAULT_TERMINAL_FONT_SIZE,
 };
 
@@ -111,7 +111,8 @@ function normalizeStoredTerminalPreferences(
   const mobileFontSize = resolveTerminalFontSizeValue(stored.mobileFontSize) ?? fallbackFontSize;
 
   return {
-    copyOnSelect: typeof stored.copyOnSelect === "boolean" ? stored.copyOnSelect : false,
+    copyOnSelect:
+      typeof stored.copyOnSelect === "boolean" ? stored.copyOnSelect : initialValue.copyOnSelect,
     fontSize: fallbackFontSize,
     desktopFontSize,
     mobileFontSize,

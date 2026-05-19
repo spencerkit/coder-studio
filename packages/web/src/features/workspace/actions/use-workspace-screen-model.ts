@@ -197,7 +197,7 @@ export function useWorkspaceScreenModel() {
         setMobileActiveSessionId(nextActiveSessionId);
       }
 
-      const closed = await sessionActions.closeSession(sessionId);
+      const closed = await sessionActions.closeSession(sessionId, "remove");
       if (!closed) {
         if (!wasActive || mobileSelectionVersionRef.current !== selectionVersionAtCloseStart) {
           return;
@@ -209,9 +209,9 @@ export function useWorkspaceScreenModel() {
         return;
       }
 
-      paneActions.removeSessionPane(sessionId);
+      mobileSelectionVersionRef.current += 1;
     },
-    [mobileActiveSessionId, mobileAgentSessions, paneActions, sessionActions]
+    [mobileActiveSessionId, mobileAgentSessions, sessionActions]
   );
 
   const restoreMobileSession = useCallback(

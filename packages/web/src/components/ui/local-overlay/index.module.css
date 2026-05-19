@@ -1,0 +1,33 @@
+.overlay,
+:global(.local-overlay) {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-local-overlay);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-4);
+  background: rgba(0, 0, 0, 0.42);
+  pointer-events: none;
+}
+
+.overlay[data-interactive="true"],
+:global(.local-overlay[data-interactive="true"]) {
+  pointer-events: auto;
+}
+
+.card,
+:global(.local-overlay__card) {
+  width: auto;
+  max-width: min(24rem, calc(100% - var(--sp-4)));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-xl);
+  pointer-events: none;
+}
+
+.overlay[data-interactive="true"] .card,
+:global(.local-overlay[data-interactive="true"]) :global(.local-overlay__card) {
+  pointer-events: auto;
+}

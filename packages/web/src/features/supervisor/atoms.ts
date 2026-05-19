@@ -19,7 +19,7 @@ export const supervisorHydratedAtomFamily = atomFamily((_sessionId: string) => a
 export const supervisorDialogAtom = atom<{
   open: boolean;
   sessionId: string | null;
-  mode: "enable" | "edit" | "disable";
+  mode: "enable" | "edit";
   draftObjective: string;
   draftEvaluatorProviderId: "claude" | "codex";
   draftEvaluatorModel: string;
@@ -34,6 +34,14 @@ export const supervisorDialogAtom = atom<{
   draftEvaluatorModel: "",
   draftMaxSupervisionCount: "0",
   draftScheduledAt: "",
+});
+
+export const supervisorDetailsAtom = atom<{
+  open: boolean;
+  sessionId: string | null;
+}>({
+  open: false,
+  sessionId: null,
 });
 
 // Derived atom for getting supervisor by session

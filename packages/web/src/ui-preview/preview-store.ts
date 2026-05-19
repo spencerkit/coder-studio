@@ -131,7 +131,7 @@ export interface UiPreviewSeed {
   supervisorDialog?: {
     open: boolean;
     sessionId: string | null;
-    mode: "enable" | "edit" | "disable";
+    mode: "enable" | "edit";
     draftObjective: string;
     draftEvaluatorProviderId: "claude" | "codex";
     draftEvaluatorModel?: string;
@@ -218,6 +218,11 @@ function createPreviewDispatcher(seed: UiPreviewSeed): DispatchCommand {
     }
 
     if (op === "workspace.uiState.set") {
+      const workspaceId = (args as { workspaceId?: string })?.workspaceId ?? "";
+      const uiState = (args as { uiState?: Workspace["uiState"] })?.uiState;
+      if (workspaceId && uiState?.paneLayout) {
+        store.set(paneLayoutAtomFamily(workspaceId), uiState.paneLayout as PaneNode);
+      }
       return ok(
         (commands.workspaceUiStateSet ?? commands.workspaceOpen ?? seed.workspaces?.[0]) as T
       );

@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../../../atoms/app-ui";
 import { wsClientAtom } from "../../../../atoms/connection";
+import { CommandResultError } from "../../../../ws/client";
 import { WorkspaceLaunchModal } from "./workspace-launch-modal";
 
 const viewportMocks = vi.hoisted(() => ({
@@ -117,6 +118,31 @@ describe("WorkspaceLaunchModal", () => {
 
     fireEvent.click(closeButton);
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders root chips from browse results instead of hardcoded workspace paths", async () => {
+    const store = createStore();
+
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn().mockResolvedValue({
+        currentPath: "/Users/tester",
+        parentPath: "/Users",
+        rootPaths: ["/", "/Users/tester"],
+        directories: [],
+      }),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <WorkspaceLaunchModal onClose={vi.fn()} />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    expect(await screen.findByText("~")).toBeInTheDocument();
+    expect(screen.queryByText("/home/spencer")).not.toBeInTheDocument();
   });
 
   it("renders the shared empty state when the current directory has no child directories", async () => {
@@ -257,6 +283,50 @@ describe("WorkspaceLaunchModal", () => {
     });
   });
 
+  it("redirects failed workspace opens into diagnostics with the selected path preserved", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args: { path?: string }) => {
+      if (op === "workspace.browse") {
+        return {
+          currentPath: "/home/spencer",
+          parentPath: "/home",
+          directories: [{ name: "workspace", path: "/home/spencer/workspace" }],
+        };
+      }
+
+      if (op === "workspace.open") {
+        throw new CommandResultError({
+          code: "workspace_open_failed",
+          message: "Workspace path is no longer available",
+        });
+      }
+
+      return {};
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    routerMocks.location.pathname = "/";
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <WorkspaceLaunchModal onClose={vi.fn()} />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    const folderName = await screen.findByText("workspace");
+    fireEvent.click(folderName);
+    fireEvent.click(screen.getByRole("button", { name: "Start Workspace" }));
+
+    await waitFor(() => {
+      expect(routerMocks.navigate).toHaveBeenCalledWith(
+        "/diagnostics?context=workspace_open&workspacePath=%2Fhome%2Fspencer%2Fworkspace"
+      );
+    });
+  });
+
   it("persists a workspace-only target after opening a workspace", async () => {
     const onClose = vi.fn();
     const sendCommand = vi.fn().mockImplementation(async (op: string, args: { path?: string }) => {
@@ -375,6 +445,35 @@ describe("WorkspaceLaunchModal", () => {
     });
   });
 
+  it("uses the shared workbench layer on desktop", async () => {
+    const onClose = vi.fn();
+    const sendCommand = vi.fn().mockResolvedValue({
+      currentPath: "/home/spencer",
+      parentPath: "/home",
+      directories: [{ name: "workspace", path: "/home/spencer/workspace", itemCount: 3 }],
+    });
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <WorkspaceLaunchModal onClose={onClose} />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    expect(await screen.findByRole("dialog", { name: "Open Workspace" })).toBeInTheDocument();
+    expect(document.querySelector(".workbench-layer-backdrop")).toBeTruthy();
+    expect(document.querySelector(".launch-overlay")).toBeNull();
+    expect(document.querySelector(".launch-modal")).toBeTruthy();
+
+    fireEvent.click(document.querySelector(".workbench-layer-backdrop") as HTMLElement);
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it("renders English labels when locale is set to en", async () => {
     const sendCommand = vi.fn().mockResolvedValue({
       currentPath: "/home/spencer",
@@ -415,7 +514,7 @@ describe("WorkspaceLaunchModal", () => {
     store.set(localeAtom, "en");
     store.set(wsClientAtom, { sendCommand } as never);
 
-    const { container } = render(
+    render(
       <Provider store={store}>
         <MemoryRouter>
           <WorkspaceLaunchModal onClose={vi.fn()} />
@@ -424,11 +523,11 @@ describe("WorkspaceLaunchModal", () => {
     );
 
     const spinner = screen.getByRole("status", { name: "Loading..." });
-    const loadingShell = container.querySelector(".directory-loading");
+    const loadingShell = document.querySelector(".directory-loading");
 
     expect(screen.getByText("Loading...")).toBeInTheDocument();
     expect(loadingShell).toBeTruthy();
     expect(spinner).toHaveClass("animate-spin");
-    expect(container.querySelector(".directory-loading .animate-spin")).toBe(spinner);
+    expect(document.querySelector(".directory-loading .animate-spin")).toBe(spinner);
   });
 });

@@ -11,7 +11,7 @@ import { useTranslation } from "../../../../lib/i18n";
 import { SessionCard } from "../../../agent-panes/views/shared/session-card";
 import { useCodeEditorActions } from "../../../code-editor/actions/use-code-editor-actions";
 import { CodeEditorHeaderActions } from "../../../code-editor/views/shared/code-editor-host";
-import { MobileSupervisorBadge } from "../../../supervisor/views/mobile/mobile-supervisor-badge";
+import { supervisorDetailsAtom, supervisorDialogAtom } from "../../../supervisor/atoms";
 import { MobileSupervisorSheet } from "../../../supervisor/views/mobile/mobile-supervisor-sheet";
 import { TerminalPanel } from "../../../terminal-panel";
 import type { CreateRequest } from "../../actions/use-file-actions";
@@ -74,6 +74,8 @@ export function WorkspaceMobileView() {
   const pendingFocusSessionId = useAtomValue(pendingFocusSessionAtom);
   const lastViewedTarget = useAtomValue(lastViewedTargetAtom);
   const setVisibleMobileSessionId = useSetAtom(visibleMobileSessionIdAtom);
+  const supervisorDetails = useAtomValue(supervisorDetailsAtom);
+  const supervisorDialog = useAtomValue(supervisorDialogAtom);
   const {
     activeSession,
     activeWorkspaceId,
@@ -207,6 +209,31 @@ export function WorkspaceMobileView() {
       setVisibleMobileSessionId(null);
     };
   }, [mobileActiveSessionId, setVisibleMobileSessionId]);
+
+  useEffect(() => {
+    if (!activeSession || mobileSheet === "supervisor") {
+      return;
+    }
+
+    const shouldOpenSupervisorSheet =
+      (supervisorDetails.open && supervisorDetails.sessionId === activeSession.id) ||
+      (supervisorDialog.open && supervisorDialog.sessionId === activeSession.id);
+
+    if (!shouldOpenSupervisorSheet) {
+      return;
+    }
+
+    setAgentSheetOpen(false);
+    openMobileSheet("supervisor");
+  }, [
+    activeSession,
+    mobileSheet,
+    openMobileSheet,
+    supervisorDetails.open,
+    supervisorDetails.sessionId,
+    supervisorDialog.open,
+    supervisorDialog.sessionId,
+  ]);
 
   const filesSheetKicker =
     mobileFilesRoute.kind === "editor"
@@ -349,15 +376,10 @@ export function WorkspaceMobileView() {
                   <SessionCard
                     sessionId={activeSession.id}
                     showHeaderActions={false}
-                    showSupervisorInline={false}
-                    headerAccessory={
-                      <MobileSupervisorBadge
-                        sessionId={activeSession.id}
-                        onOpen={() => {
-                          setAgentSheetOpen(false);
-                          openMobileSheet("supervisor");
-                        }}
-                      />
+                    showSupervisorInline={
+                      activeSession.capability === "full" &&
+                      activeSession.state !== "draft" &&
+                      activeSession.state !== "ended"
                     }
                   />
                 </section>

@@ -41,6 +41,7 @@ import {
 import { authenticatedAtom, themeAtom } from "../atoms/app-ui";
 import type { DispatchCommand } from "../atoms/connection";
 import { activeWorkspaceIdAtom } from "../atoms/workspaces";
+import { type PaneNode, paneLayoutAtomFamily } from "../features/agent-panes/atoms/pane-layout";
 import { useSessionNotifications } from "../features/notifications";
 import { supervisorCyclesAtom, supervisorsAtom } from "../features/supervisor/atoms";
 import { terminalMetaAtomFamily } from "../features/terminal-panel/atoms";
@@ -251,6 +252,7 @@ export function AppProviders({ children }: AppProvidersProps) {
   const authEnabled = useAtomValue(authEnabledAtom);
   const authenticated = useAtomValue(authenticatedAtom);
   const connectionStatus = useAtomValue(connectionStatusAtom);
+  const activationStatus = useAtomValue(activationStatusAtom);
   const activeWorkspaceId = useAtomValue(activeWorkspaceIdAtom);
   const setConnectionStatus = useSetAtom(connectionStatusAtom);
   const setConnectionError = useSetAtom(connectionErrorAtom);
@@ -281,7 +283,7 @@ export function AppProviders({ children }: AppProvidersProps) {
   const refreshTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const refreshHintsRef = useRef<Map<string, WorkspaceRefreshHint>>(new Map());
   const activeWorkspaceIdRef = useRef<string | null>(activeWorkspaceId);
-  const connectionStatusRef = useRef<ConnectionStatus>(connectionStatus);
+  const pendingReconnectRefreshRef = useRef(false);
   const lastForegroundRecoveryAtRef = useRef<number | null>(null);
   const workspaceActivityRef = useRef<WorkspaceActivityState>({
     mode: "inactive",
@@ -296,6 +298,62 @@ export function AppProviders({ children }: AppProvidersProps) {
   useEffect(() => {
     dispatchRef.current = dispatch;
   }, [dispatch]);
+
+  const refreshPendingReconnectState = () => {
+    if (!pendingReconnectRefreshRef.current) {
+      return;
+    }
+
+    if (connectionStatus !== "connected") {
+      return;
+    }
+
+    if (document.visibilityState !== "visible") {
+      return;
+    }
+
+    if (activationStatus !== "active") {
+      return;
+    }
+
+    const workspaceId = activeWorkspaceId;
+    if (!workspaceId) {
+      return;
+    }
+
+    pendingReconnectRefreshRef.current = false;
+    dispatchRef.current<GitStatus>("git.status", { workspaceId }).then((result) => {
+      if (result.ok && result.data) {
+        store.set(gitStateAtomFamily(workspaceId), result.data);
+      }
+    });
+    dispatchRef
+      .current<{ current: string; branches: GitBranch[] }>("git.branches", { workspaceId })
+      .then((result) => {
+        if (result.ok && result.data) {
+          store.set(gitBranchListAtomFamily(workspaceId), {
+            current: result.data.current,
+            branches: result.data.branches,
+            loading: false,
+          });
+        }
+      });
+    dispatchRef
+      .current<{ worktrees: WorktreeInfo[] }>("worktree.list", { workspaceId })
+      .then((result) => {
+        if (result.ok && result.data && Array.isArray(result.data.worktrees)) {
+          store.set(worktreeListAtomFamily(workspaceId), {
+            items: result.data.worktrees,
+            loading: false,
+            lastLoadedAt: Date.now(),
+          });
+        }
+      });
+  };
+
+  useEffect(() => {
+    refreshPendingReconnectState();
+  }, [activationStatus, activeWorkspaceId, connectionStatus]);
 
   useEffect(() => {
     if (connectionStatus !== "connected") {
@@ -370,10 +428,6 @@ export function AppProviders({ children }: AppProvidersProps) {
   useEffect(() => {
     activeWorkspaceIdRef.current = activeWorkspaceId;
   }, [activeWorkspaceId]);
-
-  useEffect(() => {
-    connectionStatusRef.current = connectionStatus;
-  }, [connectionStatus]);
 
   useEffect(() => {
     if (connectionStatus !== "connected") {
@@ -507,11 +561,25 @@ export function AppProviders({ children }: AppProvidersProps) {
       if (status === "reconnecting") {
         setReconnectCount((count) => count + 1);
         setLastReconnect((previous) => previous ?? Date.now());
+        store.set(activationStatusAtom, (current) => (current === "gated" ? current : "idle"));
+        workspaceActivityRef.current = {
+          mode: "inactive",
+          workspaceId: null,
+        };
+        pendingReconnectRefreshRef.current = true;
       }
 
       // Reset writer status on disconnect
       if (status === "disconnected" || status === "rejected") {
         setIsWriter(false);
+        store.set(activationStatusAtom, (current) => (current === "gated" ? current : "idle"));
+        workspaceActivityRef.current = {
+          mode: "inactive",
+          workspaceId: null,
+        };
+        if (status === "disconnected") {
+          pendingReconnectRefreshRef.current = true;
+        }
       }
 
       if (status === "connected") {
@@ -551,6 +619,10 @@ export function AppProviders({ children }: AppProvidersProps) {
     };
 
     const sendWorkspaceActivate = (workspaceId: string) => {
+      if (store.get(activationStatusAtom) !== "active") {
+        return;
+      }
+
       const currentState = workspaceActivityRef.current;
       if (currentState.mode === "active" && currentState.workspaceId === workspaceId) {
         return;
@@ -755,6 +827,7 @@ export function AppProviders({ children }: AppProvidersProps) {
           mode: "inactive",
           workspaceId: null,
         };
+        pendingReconnectRefreshRef.current = false;
         wsClientRef.current?.disconnect("single_active_displaced");
         return;
       }
@@ -911,6 +984,10 @@ export function AppProviders({ children }: AppProvidersProps) {
       return;
     }
 
+    if (activationStatus !== "active") {
+      return;
+    }
+
     if (document.visibilityState === "hidden") {
       if (workspaceActivityRef.current.mode !== "inactive") {
         const client = wsClientRef.current;
@@ -960,7 +1037,7 @@ export function AppProviders({ children }: AppProvidersProps) {
     void client
       .sendCommand("workspace.activate", { workspaceId: activeWorkspaceId })
       .catch(() => {});
-  }, [activeWorkspaceId, authEnabled, authenticated, connectionStatus]);
+  }, [activeWorkspaceId, activationStatus, authEnabled, authenticated, connectionStatus]);
 
   return <>{children}</>;
 }
@@ -1057,6 +1134,10 @@ export function routeEventToAtom(topic: string, payload: unknown, store: Store):
           id: workspaceId,
         } as Workspace,
       }));
+      const paneLayout = patch.uiState?.paneLayout;
+      if (paneLayout) {
+        store.set(paneLayoutAtomFamily(workspaceId), normalizePaneLayout(paneLayout));
+      }
       store.set(workspaceOrderAtom, (prev: string[]) => {
         if (prev.includes(workspaceId)) {
           return prev;
@@ -1225,4 +1306,14 @@ export function routeEventToAtom(topic: string, payload: unknown, store: Store):
 
   // Unknown topic - log for debugging
   console.log(`Unhandled event topic: ${topic}`, payload);
+}
+
+function normalizePaneLayout(layout: Workspace["uiState"]["paneLayout"]): PaneNode {
+  return {
+    id: layout?.id ?? "root",
+    type: layout?.type ?? "leaf",
+    sessionId: layout?.sessionId,
+    direction: layout?.direction,
+    children: layout?.children?.map((child) => normalizePaneLayout(child)),
+  };
 }

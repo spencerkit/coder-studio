@@ -1,11 +1,10 @@
 import type { Supervisor, SupervisorCycle } from "@coder-studio/core";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../../atoms/app-ui";
 import { wsClientAtom } from "../../../atoms/connection";
-import { formatDate } from "../../../lib/i18n";
-import { supervisorCyclesAtom, supervisorsAtom } from "../atoms";
+import { supervisorCyclesAtom, supervisorDialogAtom, supervisorsAtom } from "../atoms";
 import { SupervisorCard } from "../views/shared/supervisor-card";
 
 describe("SupervisorCard", () => {
@@ -21,9 +20,20 @@ describe("SupervisorCard", () => {
     completedSupervisionCount: 0,
     currentTargetMemory: {
       targetId: "tgt-1",
-      planGenerated: true,
-      plan: [{ id: "step-1", title: "Verify the refactor", status: "in_progress" }],
-      activeStepId: "step-1",
+      decompositionGenerated: true,
+      decompositionMode: "stage",
+      items: [
+        {
+          id: "stage-1",
+          kind: "stage",
+          title: "Verify the refactor",
+          objective: "Confirm the refactor still behaves correctly",
+          deliverable: "A passing focused verification run",
+          acceptanceCriteria: ["Focused verification passes"],
+          status: "in_progress",
+        },
+      ],
+      activeItemId: "stage-1",
       progressSummary: "Validation in progress",
       stalledCount: 0,
       updatedAt: 1,
@@ -77,13 +87,39 @@ describe("SupervisorCard", () => {
     expect(button.querySelector('[data-icon-semantic="supervisor.entry"]')).toBeTruthy();
   });
 
-  it("shows the latest cycle history and trigger action", () => {
+  it("opens the enable dialog from the inactive supervisor button", () => {
+    const store = createStore();
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+    store.set(supervisorsAtom, new Map());
+    store.set(supervisorCyclesAtom, new Map());
+
+    render(
+      <Provider store={store}>
+        <SupervisorCard sessionId="sess-1" workspaceId="ws-1" />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Enable Supervisor" }));
+
+    expect(
+      screen.getByRole("heading", { name: "Enable Supervisor", level: 2 })
+    ).toBeInTheDocument();
+    expect(store.get(supervisorDialogAtom).open).toBe(true);
+    expect(store.get(supervisorDialogAtom).mode).toBe("enable");
+  });
+
+  it("shows cycle count inside the strip row without inline objective or error details", () => {
     const sendCommand = vi.fn().mockResolvedValue(undefined);
     const store = createStore();
     window.localStorage.setItem("ui.locale", JSON.stringify("en"));
     store.set(localeAtom, "en");
     store.set(wsClientAtom, { sendCommand } as never);
-    store.set(supervisorsAtom, new Map([["sess-1", createSupervisor()]]));
+    store.set(
+      supervisorsAtom,
+      new Map([["sess-1", { ...createSupervisor(), completedSupervisionCount: 3 }]])
+    );
     store.set(
       supervisorCyclesAtom,
       new Map([
@@ -104,30 +140,74 @@ describe("SupervisorCard", () => {
       </Provider>
     );
 
-    expect(screen.getByText("Persistence and hydration are done.")).toBeInTheDocument();
-    expect(screen.getByText("Target memory")).toBeInTheDocument();
+    const titleRow = document.querySelector(".supervisor-strip-eyebrow");
+    const stripRow = document.querySelector(".supervisor-strip-row");
+    const statusCluster = document.querySelector(".supervisor-status-cluster");
+
+    expect(screen.getByText("codex")).toBeInTheDocument();
+    expect(screen.getByText("Cycles 3")).toBeInTheDocument();
+    expect(screen.queryByText("Finish the server refactor")).not.toBeInTheDocument();
+    expect(titleRow).not.toBeNull();
+    expect(stripRow).not.toBeNull();
+    expect(statusCluster).not.toBeNull();
+    expect(titleRow?.querySelector(".supervisor-provider-pill")).toHaveTextContent("codex");
+    expect(stripRow?.querySelector(".supervisor-objective-row")).toBeNull();
+    expect(statusCluster?.querySelector(".supervisor-state-tag")).toHaveTextContent("Idle");
+    expect(statusCluster?.querySelector(".supervisor-cycle-count")).toHaveTextContent("Cycles 3");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Latest evaluation")).not.toBeInTheDocument();
+    expect(screen.queryByText("Persistence and hydration are done.")).not.toBeInTheDocument();
     expect(screen.queryByText("Verify the refactor")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /expand/i })).toHaveAttribute(
-      "aria-expanded",
-      "false"
-    );
-    fireEvent.click(screen.getByRole("button", { name: /expand/i }));
-    expect(screen.getByRole("button", { name: /collapse/i })).toHaveAttribute(
-      "aria-expanded",
-      "true"
-    );
-    expect(screen.getByText("tgt-1")).toBeInTheDocument();
-    expect(screen.getByText("Plan ready")).toBeInTheDocument();
-    expect(screen.getByText("Validation in progress")).toBeInTheDocument();
-    expect(screen.getByText("Verify the refactor")).toBeInTheDocument();
-    expect(screen.getByText("Need to finish the validation step.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /expand/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /collapse/i })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Target memory")).not.toBeInTheDocument();
+    expect(screen.queryByText("Decomposition ready")).not.toBeInTheDocument();
+    expect(screen.queryByText("Stages")).not.toBeInTheDocument();
+    expect(screen.queryByText("Validation in progress")).not.toBeInTheDocument();
+    expect(screen.queryByText("Need to finish the validation step.")).not.toBeInTheDocument();
     expect(screen.queryByText("65%")).not.toBeInTheDocument();
     expect(document.querySelector(".supervisor-progress-track")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Trigger Evaluation" }));
     expect(sendCommand).toHaveBeenCalledWith("supervisor.trigger", { id: "sup-1" }, undefined);
   });
 
-  it("localizes target memory details and stop reasons in Chinese", () => {
+  it("opens details from the primary supervisor action and exposes edit from details", () => {
+    const store = createStore();
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+    store.set(supervisorsAtom, new Map([["sess-1", createSupervisor()]]));
+    store.set(supervisorCyclesAtom, new Map());
+
+    render(
+      <Provider store={store}>
+        <SupervisorCard sessionId="sess-1" workspaceId="ws-1" />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Supervisor Details" }));
+
+    expect(
+      screen.getByRole("heading", { name: "Supervisor Details", level: 2 })
+    ).toBeInTheDocument();
+    expect(screen.getByText("Basic Info")).toBeInTheDocument();
+    expect(screen.getByText("Target cycle reasoning")).toBeInTheDocument();
+    expect(screen.getByText("Progress List")).toBeInTheDocument();
+    expect(screen.queryByText("Target progress")).not.toBeInTheDocument();
+    expect(screen.queryByText("Active item")).not.toBeInTheDocument();
+    expect(screen.getByText("Need to finish the validation step.")).toBeInTheDocument();
+    expect(screen.getByText("In progress")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit Supervisor" }));
+
+    const dialogState = store.get(supervisorDialogAtom);
+    expect(dialogState.open).toBe(true);
+    expect(dialogState.mode).toBe("edit");
+    expect(screen.getByRole("heading", { name: "Edit Supervisor", level: 2 })).toBeInTheDocument();
+  });
+
+  it("localizes stop reasons in Chinese", () => {
     const store = createStore();
     window.localStorage.setItem("ui.locale", JSON.stringify("zh"));
     store.set(localeAtom, "zh");
@@ -163,16 +243,12 @@ describe("SupervisorCard", () => {
       </Provider>
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /展开/i }));
-    expect(screen.getByLabelText("目标记忆")).toBeInTheDocument();
-    expect(screen.getByText("计划已就绪")).toBeInTheDocument();
-    expect(screen.getByLabelText("目标进展")).toBeInTheDocument();
-    expect(screen.getByText("进展")).toBeInTheDocument();
-    expect(screen.getByLabelText("目标计划")).toBeInTheDocument();
-    expect(screen.getByText("进行中")).toBeInTheDocument();
-    expect(screen.getByLabelText("目标轮次判断")).toBeInTheDocument();
-    expect(screen.getByText("停止")).toBeInTheDocument();
-    expect(screen.getByText("Supervisor 暂时无法判断下一步，已停止自动监督。")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /展开/i })).not.toBeInTheDocument();
+    expect(screen.queryByText("目标记忆")).not.toBeInTheDocument();
+    expect(screen.getByText("轮次 0")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Supervisor 暂时无法判断下一步，已停止自动监督。")
+    ).not.toBeInTheDocument();
   });
 
   it("uses shared IconButton compatibility classes for supervisor icon actions", () => {
@@ -189,7 +265,7 @@ describe("SupervisorCard", () => {
       </Provider>
     );
 
-    expect(screen.getByRole("button", { name: "Edit Supervisor" })).toHaveClass(
+    expect(screen.getByRole("button", { name: "Supervisor Details" })).toHaveClass(
       "btn",
       "btn-ghost",
       "btn-sm",
@@ -207,17 +283,10 @@ describe("SupervisorCard", () => {
       "btn-sm",
       "supervisor-icon-btn"
     );
-    expect(screen.getByRole("button", { name: "Disable" })).toHaveClass(
-      "btn",
-      "btn-ghost",
-      "btn-sm",
-      "supervisor-icon-btn",
-      "supervisor-icon-btn-danger"
-    );
     expect(
       screen
-        .getByRole("button", { name: "Edit Supervisor" })
-        .querySelector('[data-icon-semantic="supervisor.mode.edit"]')
+        .getByRole("button", { name: "Supervisor Details" })
+        .querySelector('[data-icon-semantic="supervisor.action.details"]')
     ).toBeTruthy();
     expect(
       screen
@@ -229,11 +298,7 @@ describe("SupervisorCard", () => {
         .getByRole("button", { name: "Trigger Evaluation" })
         .querySelector('[data-icon-semantic="supervisor.action.trigger"]')
     ).toBeTruthy();
-    expect(
-      screen
-        .getByRole("button", { name: "Disable" })
-        .querySelector('[data-icon-semantic="supervisor.mode.disable"]')
-    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Disable" })).not.toBeInTheDocument();
   });
 
   it("renders the resume semantic when the supervisor is paused", () => {
@@ -257,36 +322,16 @@ describe("SupervisorCard", () => {
     ).toBeTruthy();
   });
 
-  it("uses the shared tooltip for the supervisor objective text", () => {
-    const store = createStore();
-    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
-    store.set(localeAtom, "en");
-    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
-    store.set(supervisorsAtom, new Map([["sess-1", createSupervisor()]]));
-    store.set(supervisorCyclesAtom, new Map());
-
-    render(
-      <Provider store={store}>
-        <SupervisorCard sessionId="sess-1" workspaceId="ws-1" />
-      </Provider>
-    );
-
-    const objective = screen.getByText("Finish the server refactor");
-    expect(objective).not.toHaveAttribute("title");
-
-    fireEvent.mouseEnter(objective);
-    const tooltip = screen.getByRole("tooltip");
-    expect(tooltip).toHaveTextContent("Finish the server refactor");
-    expect(objective).toHaveAttribute("aria-describedby", tooltip.getAttribute("id") ?? "");
-  });
-
-  it('shows "No guidance injected this cycle" for a completed cycle with no result and no errorReason', () => {
+  it("hides completed cycle guidance text", () => {
     const sendCommand = vi.fn().mockResolvedValue(undefined);
     const store = createStore();
     window.localStorage.setItem("ui.locale", JSON.stringify("en"));
     store.set(localeAtom, "en");
     store.set(wsClientAtom, { sendCommand } as never);
-    store.set(supervisorsAtom, new Map([["sess-1", createSupervisor()]]));
+    store.set(
+      supervisorsAtom,
+      new Map([["sess-1", { ...createSupervisor(), completedSupervisionCount: 1 }]])
+    );
     store.set(
       supervisorCyclesAtom,
       new Map([
@@ -307,9 +352,54 @@ describe("SupervisorCard", () => {
       </Provider>
     );
 
-    expect(screen.getByText("No guidance injected this cycle")).toBeInTheDocument();
+    expect(screen.getByText("Cycles 1")).toBeInTheDocument();
+    expect(screen.queryByText("No guidance injected this cycle")).not.toBeInTheDocument();
     expect(screen.queryByText("65%")).not.toBeInTheDocument();
     expect(document.querySelector(".supervisor-progress-track")).not.toBeInTheDocument();
+  });
+
+  it("hides in-flight retry details", () => {
+    const store = createStore();
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+    store.set(
+      supervisorsAtom,
+      new Map([["sess-1", { ...createSupervisor(), completedSupervisionCount: 1 }]])
+    );
+    store.set(
+      supervisorCyclesAtom,
+      new Map([
+        [
+          "sup-1",
+          [
+            createCycle({
+              status: "evaluating",
+              completedAt: undefined,
+              runtime: {
+                phase: "retry_wait",
+                currentAttemptIndex: 0,
+                attemptCount: 1,
+                maxAttempts: 3,
+                lastAttemptError: "rate limited",
+                nextRetryAt: Date.now() + 1000,
+              },
+            }),
+          ],
+        ],
+      ])
+    );
+
+    render(
+      <Provider store={store}>
+        <SupervisorCard sessionId="sess-1" workspaceId="ws-1" />
+      </Provider>
+    );
+
+    expect(screen.getByText("Cycles 1")).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Retrying evaluator in 1s \(1\/3\): rate limited/)
+    ).not.toBeInTheDocument();
   });
 
   it("keeps pause available while the supervisor is evaluating", () => {
@@ -375,7 +465,7 @@ describe("SupervisorCard", () => {
     expect(screen.getByRole("button", { name: "Trigger Evaluation" })).toBeDisabled();
   });
 
-  it("renders configured execution policy metadata", () => {
+  it("keeps execution policy metadata hidden", () => {
     const store = createStore();
     const scheduledAt = Date.UTC(2026, 4, 11, 3, 0);
     window.localStorage.setItem("ui.locale", JSON.stringify("en"));
@@ -403,16 +493,15 @@ describe("SupervisorCard", () => {
       </Provider>
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /expand/i }));
-    expect(screen.getByText("Evaluator Model")).toBeInTheDocument();
-    expect(screen.getByText("o3")).toBeInTheDocument();
-    expect(screen.getByText("Max Supervision Count")).toBeInTheDocument();
-    expect(screen.getByText("5")).toBeInTheDocument();
-    expect(screen.getByText("Scheduled Run Time")).toBeInTheDocument();
-    expect(screen.getByText(formatDate(scheduledAt, "en"))).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /expand/i })).not.toBeInTheDocument();
+    expect(screen.queryByText("Evaluator Model")).not.toBeInTheDocument();
+    expect(screen.queryByText("o3")).not.toBeInTheDocument();
+    expect(screen.queryByText("Max Supervision Count")).not.toBeInTheDocument();
+    expect(screen.queryByText("5")).not.toBeInTheDocument();
+    expect(screen.queryByText("Scheduled Run Time")).not.toBeInTheDocument();
   });
 
-  it("shows a no-cap max supervision count when the limit is disabled", () => {
+  it("keeps max supervision count hidden when the limit is disabled", () => {
     const store = createStore();
     window.localStorage.setItem("ui.locale", JSON.stringify("en"));
     store.set(localeAtom, "en");
@@ -426,12 +515,12 @@ describe("SupervisorCard", () => {
       </Provider>
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /expand/i }));
-    expect(screen.getByText("Max Supervision Count")).toBeInTheDocument();
-    expect(screen.getByText("No cap")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /expand/i })).not.toBeInTheDocument();
+    expect(screen.queryByText("Max Supervision Count")).not.toBeInTheDocument();
+    expect(screen.queryByText("No cap")).not.toBeInTheDocument();
   });
 
-  it("renders stopped reason and scheduled cancelled cycle details", () => {
+  it("renders stopped reason without cycle detail history", () => {
     const store = createStore();
     window.localStorage.setItem("ui.locale", JSON.stringify("en"));
     store.set(localeAtom, "en");
@@ -445,6 +534,7 @@ describe("SupervisorCard", () => {
             ...createSupervisor(),
             state: "stopped",
             stopReason: "objective_complete",
+            completedSupervisionCount: 2,
           },
         ],
       ])
@@ -472,14 +562,15 @@ describe("SupervisorCard", () => {
     );
 
     expect(screen.getByText("Stopped")).toHaveClass("supervisor-state-stopped");
-    expect(screen.getByText("SCHEDULED")).toBeInTheDocument();
-    expect(screen.getByText("Cancelled")).toBeInTheDocument();
+    expect(screen.getByText("Cycles 2")).toBeInTheDocument();
+    expect(screen.queryByText("SCHEDULED")).not.toBeInTheDocument();
+    expect(screen.queryByText("Cancelled")).not.toBeInTheDocument();
     expect(
-      screen.getByText("Objective complete. Supervisor stopped automatically.")
-    ).toBeInTheDocument();
+      screen.queryByText("Objective complete. Supervisor stopped automatically.")
+    ).not.toBeInTheDocument();
   });
 
-  it("can render target memory details expanded by default for preview surfaces", () => {
+  it("does not expose a default details state for preview surfaces", () => {
     const store = createStore();
     window.localStorage.setItem("ui.locale", JSON.stringify("en"));
     store.set(localeAtom, "en");
@@ -489,14 +580,11 @@ describe("SupervisorCard", () => {
 
     render(
       <Provider store={store}>
-        <SupervisorCard sessionId="sess-1" workspaceId="ws-1" defaultDetailsOpen />
+        <SupervisorCard sessionId="sess-1" workspaceId="ws-1" />
       </Provider>
     );
 
-    expect(screen.getByRole("button", { name: /collapse/i })).toHaveAttribute(
-      "aria-expanded",
-      "true"
-    );
-    expect(screen.getByText("Verify the refactor")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /expand/i })).not.toBeInTheDocument();
+    expect(screen.queryByText("Finish the server refactor")).not.toBeInTheDocument();
   });
 });

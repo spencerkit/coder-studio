@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { useState } from "react";
+import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../../atoms/app-ui";
 import {
@@ -108,7 +109,9 @@ function renderHarness({
     store,
     ...render(
       <Provider store={store}>
-        <Harness />
+        <MemoryRouter initialEntries={["/settings"]}>
+          <Harness />
+        </MemoryRouter>
       </Provider>
     ),
   };
@@ -247,6 +250,75 @@ describe("ProviderSettings desktop", () => {
     });
 
     expect(await screen.findByText("claude --verbose")).toBeInTheDocument();
+  });
+
+  it("shows provider runtime state with diagnostics and docs affordances", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args: unknown) => {
+      if (op === "provider.runtimeStatus") {
+        return {
+          providers: {
+            claude: {
+              providerId: "claude",
+              available: false,
+              missingCommands: ["claude"],
+              missingPrerequisites: [],
+              autoInstallSupported: false,
+              installReadiness: "unsupported_platform",
+              manualGuideKeys: ["provider.install.claude.manual"],
+              docUrls: {
+                provider: "https://docs.anthropic.com/en/docs/claude-code/getting-started",
+                prerequisites: {},
+              },
+            },
+            codex: {
+              providerId: "codex",
+              available: true,
+              missingCommands: [],
+              missingPrerequisites: [],
+              autoInstallSupported: true,
+              installReadiness: "ready",
+              manualGuideKeys: [],
+              docUrls: {
+                provider:
+                  "https://help.openai.com/en/articles/11096431-openai-codex-ci-getting-started",
+                prerequisites: {},
+              },
+            },
+          },
+        };
+      }
+
+      if (op === "settings.previewCommand") {
+        const request = args as { providerId: string; config: { additionalArgs?: string[] } };
+        return {
+          preview: [request.providerId, ...(request.config.additionalArgs ?? [])].join(" "),
+        };
+      }
+
+      if (op === "settings.readConfigFile") {
+        return {
+          configPath: "/tmp/config.json",
+          content: "{}",
+          exists: true,
+        };
+      }
+
+      return {};
+    });
+
+    renderHarness({ sendCommand });
+
+    expect(await screen.findByText("Claude CLI 缺失")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "启动前还没有安装所需的 provider 命令。 然后执行 npm install -g @anthropic-ai/claude-code。"
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "打开官方文档" })).toHaveAttribute(
+      "href",
+      "https://docs.anthropic.com/en/docs/claude-code/getting-started"
+    );
+    expect(screen.getByRole("button", { name: "打开诊断" })).toBeInTheDocument();
   });
 
   it("keeps each provider config editor mounted once after first visit", async () => {

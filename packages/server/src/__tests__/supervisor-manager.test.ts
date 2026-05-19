@@ -149,12 +149,35 @@ function createManagerDeps() {
     error: vi.fn(),
   };
 
+  const defaultTargetMemory: SupervisorTargetMemory = {
+    targetId: "tgt-1",
+    decompositionGenerated: true,
+    decompositionMode: "stage",
+    items: [
+      {
+        id: "stage-1",
+        kind: "stage",
+        title: "Verify the fix",
+        objective: "Confirm the fix works",
+        deliverable: "A passing focused verification run",
+        acceptanceCriteria: ["Focused verification passes"],
+        status: "in_progress",
+      },
+    ],
+    activeItemId: "stage-1",
+    progressSummary: "Verification in progress",
+    lastGuidance: "Run the focused parser test.",
+    stalledCount: 0,
+    updatedAt: 1,
+  };
+
   const codexBuildSupervisorEvalCommand = vi.fn(() => ({
     argv: [
       "node",
       "-e",
       `process.stdout.write(${JSON.stringify(
         JSON.stringify({
+          mode: "evaluate",
           status: "continue",
           reason: "Need more work",
           guidance: "Run the focused parser test.",
@@ -297,11 +320,8 @@ function createManagerDeps() {
       completedAt: null,
     })),
     loadTargetMemory: vi.fn(async (_workspacePath: string, targetId: string) => ({
+      ...defaultTargetMemory,
       targetId,
-      planGenerated: false,
-      plan: [],
-      stalledCount: 0,
-      updatedAt: 1,
     })),
     saveTargetMeta: vi.fn(async () => {}),
     saveTargetMemory: vi.fn(async () => {}),
@@ -449,6 +469,98 @@ describe("SupervisorManager cycle triggers", () => {
     expect(updated?.cycles).toHaveLength(1);
     expect(updated?.cycles[0]?.trigger).toBe("turn_completed");
     expect(updated?.cycles[0]?.status).toBe("injected");
+  });
+
+  it("runs decompose before evaluate on the first cycle when target memory is empty", async () => {
+    const supervisor = await manager.create({
+      sessionId: "sess-bootstrap",
+      workspaceId: "ws-1",
+      objective: "Ship the fix",
+      evaluatorProviderId: "codex",
+    });
+    const managerInternals = getManagerInternals();
+
+    deps.targetStore.loadTargetMemory.mockResolvedValueOnce({
+      targetId: supervisor.targetId,
+      decompositionGenerated: false,
+      items: [],
+      stalledCount: 0,
+      updatedAt: 1,
+    });
+
+    const evaluateSpy = vi.spyOn(managerInternals.evaluator, "evaluate");
+    evaluateSpy
+      .mockResolvedValueOnce({
+        mode: "decompose",
+        decompositionMode: "stage",
+        items: [
+          {
+            id: "stage-1",
+            kind: "stage",
+            title: "Inspect current behavior",
+            objective: "Understand the current implementation",
+            deliverable: "A verified behavior summary",
+            acceptanceCriteria: ["Behavior summary is captured"],
+            status: "in_progress",
+          },
+        ],
+        activeItemId: "stage-1",
+        progressSummary: "Decomposition complete",
+      })
+      .mockResolvedValueOnce({
+        mode: "evaluate",
+        status: "continue",
+        reason: "Need more work",
+        guidance: "Run the focused parser test.",
+        activeItemId: "stage-1",
+        itemUpdates: [{ id: "stage-1", status: "in_progress" }],
+      });
+
+    const finished = await managerInternals.runEvaluation(supervisor.id, "turn_completed");
+
+    expect(finished?.status).toBe("injected");
+    expect(evaluateSpy).toHaveBeenNthCalledWith(
+      1,
+      expect.anything(),
+      expect.objectContaining({
+        targetMemory: expect.objectContaining({
+          decompositionGenerated: false,
+          items: [],
+        }),
+      }),
+      expect.objectContaining({ mode: "decompose" })
+    );
+    expect(evaluateSpy).toHaveBeenNthCalledWith(
+      2,
+      expect.anything(),
+      expect.objectContaining({
+        targetMemory: expect.objectContaining({
+          decompositionGenerated: true,
+          decompositionMode: "stage",
+          items: [
+            expect.objectContaining({
+              id: "stage-1",
+              title: "Inspect current behavior",
+            }),
+          ],
+        }),
+      }),
+      expect.objectContaining({ mode: "evaluate" })
+    );
+    expect(deps.targetStore.saveTargetMemory).toHaveBeenCalledWith(
+      expect.any(String),
+      supervisor.targetId,
+      expect.objectContaining({
+        decompositionGenerated: true,
+        decompositionMode: "stage",
+        items: [
+          expect.objectContaining({
+            id: "stage-1",
+            title: "Inspect current behavior",
+          }),
+        ],
+      })
+    );
   });
 
   it("stops the supervisor when evaluator returns objective complete", async () => {
@@ -964,8 +1076,64 @@ describe("SupervisorManager cycle triggers", () => {
         break;
       }
     }
+
+    const retryEvent = deps.broadcaster.broadcast.mock.calls.find(([, payload]) => {
+      const cycle = (payload as { cycle?: SupervisorCycle }).cycle;
+      return cycle?.runtime?.phase === "retry_wait";
+    });
+    expect(retryEvent).toBeDefined();
+    expect((retryEvent?.[1] as { cycle?: SupervisorCycle }).cycle?.runtime).toMatchObject({
+      phase: "retry_wait",
+      currentAttemptIndex: 0,
+      attemptCount: 1,
+      maxAttempts: 3,
+      lastAttemptError: "timed out",
+    });
+
     await vi.advanceTimersByTimeAsync(1000);
     const finished = await pending;
+
+    expect(finished?.status).toBe("injected");
+    expect(deps.cycleAttemptRepo.listForCycle(finished!.id)).toHaveLength(2);
+  });
+
+  it("retries evaluator process errors when retryOnEvaluatorError is enabled", async () => {
+    deps.settingsRepo.get = vi.fn((key: string) => {
+      switch (key) {
+        case "supervisor.retryEnabled":
+          return true;
+        case "supervisor.retryMaxCount":
+          return 1;
+        case "supervisor.retryDelaySec":
+          return 1;
+        case "supervisor.retryOnTimeout":
+          return false;
+        case "supervisor.retryOnEvaluatorError":
+          return true;
+        default:
+          return undefined;
+      }
+    });
+
+    const supervisor = await manager.create({
+      sessionId: "sess-retry-error",
+      workspaceId: "ws-1",
+      objective: "Ship the fix",
+      evaluatorProviderId: "codex",
+    });
+
+    vi.spyOn(getManagerInternals().evaluator, "evaluate")
+      .mockRejectedValueOnce({
+        code: "supervisor_eval_failed",
+        message: "spawn failed",
+      })
+      .mockResolvedValueOnce({
+        status: "continue",
+        reason: "Run tests",
+        guidance: "Run tests",
+      });
+
+    const finished = await getManagerInternals().runEvaluation(supervisor.id, "turn_completed");
 
     expect(finished?.status).toBe("injected");
     expect(deps.cycleAttemptRepo.listForCycle(finished!.id)).toHaveLength(2);

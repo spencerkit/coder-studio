@@ -1,14 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  Button,
-  ConfirmDialog,
-  EmptyState,
-  Input,
-  Modal,
-  ModalHeader,
-  ModalTitle,
-  Sheet,
-} from "../../../../components/ui";
+import { Button, ConfirmDialog, Drawer, EmptyState, Input, Sheet } from "../../../../components/ui";
 import { useViewport } from "../../../../hooks/use-viewport";
 import { useTranslation } from "../../../../lib/i18n";
 import { useWorktreeManagementActions } from "../../actions/use-worktree-management-actions";
@@ -399,10 +390,10 @@ export function WorktreeManagerSurface({
 
   if (desktopPreviewInline) {
     return (
-      <div className="modal-card modal-card-lg worktree-manager-surface worktree-manager-surface--inline-preview">
-        <ModalHeader>
+      <div className="drawer-panel worktree-manager-surface worktree-manager-surface--inline-preview">
+        <div className="drawer-header">
           <div className="worktree-header-info">
-            <ModalTitle>{title}</ModalTitle>
+            <h2 className="drawer-title">{title}</h2>
           </div>
           <div className="worktree-manager-surface__header-actions">
             {view === "list" ? (
@@ -418,29 +409,18 @@ export function WorktreeManagerSurface({
               {t("action.close")}
             </Button>
           </div>
-        </ModalHeader>
+        </div>
 
-        <div className="modal-body">{body}</div>
+        <div className="drawer-body">{body}</div>
       </div>
     );
   }
 
   return (
-    <Modal
+    <Drawer
+      backdropDismiss={false}
       className="worktree-manager-surface"
-      initialFocus={() => (view === "create" ? branchInputRef.current : null)}
-      onOpenChange={(open) => {
-        if (!open) {
-          onClose();
-        }
-      }}
-      open
-      size="lg"
-    >
-      <ModalHeader>
-        <div className="worktree-header-info">
-          <ModalTitle>{title}</ModalTitle>
-        </div>
+      headerActions={
         <div className="worktree-manager-surface__header-actions">
           {view === "list" ? (
             <Button size="sm" variant="primary" onClick={openCreate}>
@@ -455,9 +435,17 @@ export function WorktreeManagerSurface({
             {t("action.close")}
           </Button>
         </div>
-      </ModalHeader>
-
+      }
+      initialFocus={() => (view === "create" ? branchInputRef.current : null)}
+      onOpenChange={(open) => {
+        if (!open) {
+          onClose();
+        }
+      }}
+      open
+      title={title}
+    >
       {body}
-    </Modal>
+    </Drawer>
   );
 }
