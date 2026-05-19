@@ -3603,7 +3603,21 @@ body.is-resizing-panels * {
 .supervisor-details {
   display: flex;
   flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.supervisor-details-section {
+  display: flex;
+  flex-direction: column;
   gap: var(--sp-2);
+}
+
+.supervisor-details-section-title {
+  margin: 0;
+  font-size: var(--type-section-title-size);
+  line-height: var(--type-section-title-line-height);
+  font-weight: var(--type-section-title-weight);
+  color: var(--text-primary);
 }
 
 .supervisor-details-toggle {
@@ -3685,9 +3699,21 @@ body.is-resizing-panels * {
   gap: var(--sp-2);
 }
 
+.supervisor-summary-card {
+  padding: var(--sp-2);
+  border: 1px solid color-mix(in srgb, var(--border) 88%, var(--bg-page) 12%);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg-surface) 94%, var(--bg-page) 6%) 0%,
+    color-mix(in srgb, var(--bg-surface) 80%, var(--bg-page) 20%) 100%
+  );
+  box-shadow: 0 14px 32px color-mix(in srgb, var(--shadow-color) 9%, transparent);
+}
+
 .supervisor-meta-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
   gap: var(--sp-2);
   margin: 0;
 }
@@ -3695,9 +3721,14 @@ body.is-resizing-panels * {
 .supervisor-meta-item {
   min-width: 0;
   padding: var(--sp-1) var(--sp-2);
-  background: color-mix(in srgb, var(--bg-surface) 82%, var(--bg-page) 18%);
-  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-surface) 72%, var(--bg-page) 28%);
+  border: 1px solid color-mix(in srgb, var(--border) 84%, var(--bg-page) 16%);
   border-radius: var(--radius-sm);
+}
+
+.supervisor-meta-item--reasoning {
+  background: color-mix(in srgb, var(--bg-surface) 74%, var(--bg-page) 26%);
+  border-style: dashed;
 }
 
 .supervisor-meta-label {
@@ -3720,6 +3751,148 @@ body.is-resizing-panels * {
   line-height: var(--type-code-inline-line-height);
   font-weight: var(--type-code-inline-weight);
   color: var(--text-secondary);
+}
+
+.supervisor-meta-value--wrap {
+  overflow: visible;
+  text-overflow: unset;
+  white-space: normal;
+}
+
+.supervisor-progress-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.supervisor-progress-list--checklist {
+  position: relative;
+  gap: var(--sp-1);
+}
+
+.supervisor-progress-item {
+  display: flex;
+  align-items: stretch;
+  gap: var(--sp-1);
+  padding: var(--sp-2);
+  background: color-mix(in srgb, var(--bg-surface) 76%, var(--bg-page) 24%);
+  border: 1px solid color-mix(in srgb, var(--border) 84%, var(--bg-page) 16%);
+  border-radius: var(--radius-md);
+}
+
+.supervisor-progress-item--active {
+  border-color: color-mix(in srgb, var(--accent-blue) 36%, var(--border) 64%);
+  background: color-mix(in srgb, var(--accent-blue) 8%, var(--bg-surface) 92%);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--accent-blue) 18%, transparent),
+    0 10px 24px color-mix(in srgb, var(--accent-blue) 10%, transparent);
+}
+
+.supervisor-progress-item__rail {
+  position: relative;
+  flex: 0 0 22px;
+  align-self: stretch;
+}
+
+.supervisor-progress-item__rail::after {
+  content: "";
+  position: absolute;
+  top: 18px;
+  bottom: 4px;
+  left: 10px;
+  width: 1px;
+  background: color-mix(in srgb, var(--border) 78%, transparent);
+}
+
+.supervisor-progress-item:last-child .supervisor-progress-item__rail::after {
+  display: none;
+}
+
+.supervisor-progress-item__marker {
+  position: absolute;
+  top: 6px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  border: 2px solid color-mix(in srgb, var(--border) 70%, var(--bg-page) 30%);
+  background: color-mix(in srgb, var(--bg-page) 74%, var(--bg-surface) 26%);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--bg-page) 82%, transparent);
+}
+
+.supervisor-progress-item__marker--done {
+  border-color: color-mix(in srgb, var(--accent-green) 60%, var(--border) 40%);
+  background: color-mix(in srgb, var(--accent-green) 70%, var(--bg-surface) 30%);
+}
+
+.supervisor-progress-item__marker--in_progress {
+  border-color: color-mix(in srgb, var(--accent-blue) 62%, var(--border) 38%);
+  background: color-mix(in srgb, var(--accent-blue) 62%, var(--bg-surface) 38%);
+}
+
+.supervisor-progress-item__marker--pending {
+  border-color: color-mix(in srgb, var(--border) 72%, var(--bg-page) 28%);
+  background: color-mix(in srgb, var(--bg-page) 68%, var(--bg-surface) 32%);
+}
+
+.supervisor-progress-item__body {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.supervisor-progress-item__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+
+.supervisor-progress-item__title {
+  margin: 0;
+  min-width: 0;
+  font-size: var(--type-body-size);
+  line-height: var(--type-body-line-height);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+}
+
+.supervisor-progress-item__meta-label {
+  margin: 0;
+  font-size: var(--type-kicker-size);
+  line-height: var(--type-kicker-line-height);
+  font-weight: var(--type-kicker-weight);
+  letter-spacing: var(--type-kicker-letter-spacing);
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.supervisor-progress-item__meta-value {
+  margin: 0;
+  font-size: var(--type-body-size);
+  line-height: var(--type-body-line-height);
+  color: var(--text-secondary);
+}
+
+@media (max-width: 640px) {
+  .supervisor-summary-card {
+    padding: var(--sp-2);
+  }
+
+  .supervisor-meta-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .supervisor-progress-item {
+    padding: var(--sp-1) var(--sp-2);
+  }
+
+  .supervisor-progress-item__header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
 
 /* Latest-cycle banner */

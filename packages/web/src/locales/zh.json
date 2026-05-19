@@ -718,6 +718,11 @@
       "decomposition_pending": "拆解待生成",
       "decomposition_mode_title": "模式",
       "decomposition_title": "拆解结构",
+      "basic_info_title": "基本信息",
+      "cycles_title": "轮次",
+      "progress_list_title": "进展列表",
+      "item_objective_title": "阶段目标",
+      "item_deliverable_title": "交付产物",
       "active_item": "当前项",
       "progress_title": "目标进展",
       "progress_badge": "进展",
@@ -732,7 +737,7 @@
         "error": "错误"
       },
       "step_status": {
-        "pending": "待处理",
+        "pending": "未开始",
         "in_progress": "进行中",
         "done": "已完成"
       }

@@ -718,6 +718,11 @@
       "decomposition_pending": "Decomposition pending",
       "decomposition_mode_title": "Mode",
       "decomposition_title": "Decomposition",
+      "basic_info_title": "Basic Info",
+      "cycles_title": "Cycles",
+      "progress_list_title": "Progress List",
+      "item_objective_title": "Stage objective",
+      "item_deliverable_title": "Deliverable",
       "active_item": "Active item",
       "progress_title": "Target progress",
       "progress_badge": "PROGRESS",
@@ -732,9 +737,9 @@
         "error": "ERROR"
       },
       "step_status": {
-        "pending": "PENDING",
-        "in_progress": "IN PROGRESS",
-        "done": "DONE"
+        "pending": "Not started",
+        "in_progress": "In progress",
+        "done": "Completed"
       }
     },
     "meta": {

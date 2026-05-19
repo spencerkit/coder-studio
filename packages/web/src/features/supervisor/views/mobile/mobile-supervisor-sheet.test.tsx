@@ -210,7 +210,9 @@ describe("MobileSupervisorSheet", () => {
     expect(
       screen.getByRole("heading", { name: "Supervisor Details", level: 2 })
     ).toBeInTheDocument();
-    expect(screen.getByText("Decomposition ready")).toBeInTheDocument();
+    expect(screen.getByText("Basic Info")).toBeInTheDocument();
+    expect(screen.getByText("Progress List")).toBeInTheDocument();
+    expect(screen.getByText("In progress")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Edit Supervisor" }));
 
