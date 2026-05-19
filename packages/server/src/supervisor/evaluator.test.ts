@@ -512,21 +512,47 @@ describe("SupervisorEvaluator", () => {
     const prompt = (logger.warn.mock.calls[0]?.[0] as { prompt?: string } | undefined)?.prompt;
     expect(prompt).toContain("You are an autonomous supervisor for a target-scoped software task.");
     expect(prompt).toContain("Return JSON only.");
-    expect(prompt).toContain('Prefer "continue" whenever there is a reasonable next action.');
+    expect(prompt).toContain("No prose before or after the JSON.");
+    expect(prompt).toContain(
+      'Prefer "continue" over "stop" whenever the objective is not yet verified complete and there is a concrete next action.'
+    );
     expect(prompt).toContain(
       "Do not ask the user to decide, clarify, or choose among implementation options."
     );
+    expect(prompt).toContain(
+      "Do not treat the agent's claims, summaries, or self-reports as sufficient evidence of completion."
+    );
+    expect(prompt).toContain(
+      "If the agent asks a question or presents multiple options, choose the most conservative reasonable option yourself and direct the next action."
+    );
     expect(prompt).toContain("Use the target memory as the current supervision state.");
     expect(prompt).toContain("Identify which decomposition item is currently active.");
-    expect(prompt).toContain("If the active item is done, advance to the next useful item.");
+    expect(prompt).toContain(
+      "Keep the current active item unless there is evidence that it is done, blocked, or obsolete."
+    );
+    expect(prompt).toContain(
+      'Mark an item as "done" only when there is observable evidence that its deliverable or acceptanceCriteria were satisfied.'
+    );
+    expect(prompt).toContain(
+      "If the current item appears nearly complete but is not yet verified, keep the same active item and direct targeted verification."
+    );
+    expect(prompt).toContain(
+      "Advance to the next item only after the current item's deliverable or acceptanceCriteria are supported by observable evidence."
+    );
     expect(prompt).toContain(
       "If the agent appears stuck or repeated the same action, give a different concrete next action."
     );
-    expect(prompt).toContain("Use itemUpdates to mark completed or active items");
-    expect(prompt).toContain('Use "supervisor_uncertain" only as a last resort');
+    expect(prompt).toContain("Do not stop only because the agent says the work is complete");
     expect(prompt).toContain('Guidance requirements for "continue":');
     expect(prompt).toContain(
       "Be specific enough for the supervised agent to act without asking the user."
+    );
+    expect(prompt).toContain(
+      "If the agent asked a question, answer it directly in the guidance and continue with a concrete next action."
+    );
+    expect(prompt).toContain("Use itemUpdates to reflect evidence-backed status changes only.");
+    expect(prompt).toContain(
+      "If evidence is missing or ambiguous, prefer verification over further implementation."
     );
     expect(prompt).toContain("Current objective:");
     expect(prompt).toContain("Ship the fix");
