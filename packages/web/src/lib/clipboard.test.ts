@@ -21,6 +21,7 @@ describe("copyTextWithFallback", () => {
   it("prefers navigator.clipboard.writeText", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     const execCommand = vi.fn();
+    const createElement = vi.spyOn(document, "createElement");
     Object.defineProperty(navigator, "clipboard", {
       value: { writeText },
       configurable: true,
@@ -30,6 +31,7 @@ describe("copyTextWithFallback", () => {
     await copyTextWithFallback("hello");
 
     expect(writeText).toHaveBeenCalledWith("hello");
+    expect(createElement).not.toHaveBeenCalled();
     expect(execCommand).not.toHaveBeenCalled();
   });
 

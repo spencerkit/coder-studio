@@ -1,3 +1,6 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   decodeTerminalBinaryFrame,
   type Terminal,
@@ -65,6 +68,10 @@ describe("terminal commands", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
   });
+
+  function createWorkspaceDir(): string {
+    return mkdtempSync(join(tmpdir(), "terminal-commands-"));
+  }
 
   it("returns binary metadata and sends replay payload to requesting client", async () => {
     const replayData = Buffer.from("replay payload");
@@ -290,6 +297,164 @@ describe("terminal commands", () => {
         terminalKind: "shell",
       },
     });
+  });
+
+  it("passes resolved cwdPath to terminalMgr.create", async () => {
+    const workspacePath = createWorkspaceDir();
+    const targetDir = join(workspacePath, "packages");
+    const cleanup = () => rmSync(workspacePath, { recursive: true, force: true });
+    rmSync(targetDir, { recursive: true, force: true });
+    try {
+      mkdirSync(targetDir);
+      const ctx = createContext({
+        workspaceMgr: {
+          get: vi.fn().mockReturnValue({
+            id: "ws-1",
+            path: workspacePath,
+          }),
+        } as never,
+      });
+
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "terminal-create-cwd-1",
+          op: "terminal.create",
+          args: {
+            workspaceId: "ws-1",
+            cwdPath: "packages",
+          },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(true);
+      expect(ctx.terminalMgr.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          cwd: targetDir,
+        })
+      );
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("returns invalid_cwd_path for absolute cwdPath", async () => {
+    const ctx = createContext();
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "terminal-create-cwd-absolute-1",
+        op: "terminal.create",
+        args: {
+          workspaceId: "ws-1",
+          cwdPath: "/tmp/workspace/packages",
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatchObject({
+      code: "invalid_cwd_path",
+    });
+    expect(ctx.terminalMgr.create).not.toHaveBeenCalled();
+  });
+
+  it("returns invalid_cwd_path for cwdPath traversal outside the workspace", async () => {
+    const ctx = createContext();
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "terminal-create-cwd-traversal-1",
+        op: "terminal.create",
+        args: {
+          workspaceId: "ws-1",
+          cwdPath: "../outside",
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatchObject({
+      code: "invalid_cwd_path",
+    });
+    expect(ctx.terminalMgr.create).not.toHaveBeenCalled();
+  });
+
+  it("returns cwd_not_found for missing cwdPath", async () => {
+    const workspacePath = createWorkspaceDir();
+    try {
+      const ctx = createContext({
+        workspaceMgr: {
+          get: vi.fn().mockReturnValue({
+            id: "ws-1",
+            path: workspacePath,
+          }),
+        } as never,
+      });
+
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "terminal-create-cwd-missing-1",
+          op: "terminal.create",
+          args: {
+            workspaceId: "ws-1",
+            cwdPath: "missing-dir",
+          },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.error).toMatchObject({
+        code: "cwd_not_found",
+      });
+      expect(ctx.terminalMgr.create).not.toHaveBeenCalled();
+    } finally {
+      rmSync(workspacePath, { recursive: true, force: true });
+    }
+  });
+
+  it("returns cwd_not_directory for cwdPath that resolves to a file", async () => {
+    const workspacePath = createWorkspaceDir();
+    const filePath = join(workspacePath, "README.md");
+    try {
+      writeFileSync(filePath, "test");
+      const ctx = createContext({
+        workspaceMgr: {
+          get: vi.fn().mockReturnValue({
+            id: "ws-1",
+            path: workspacePath,
+          }),
+        } as never,
+      });
+
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "terminal-create-cwd-file-1",
+          op: "terminal.create",
+          args: {
+            workspaceId: "ws-1",
+            cwdPath: "README.md",
+          },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.error).toMatchObject({
+        code: "cwd_not_directory",
+      });
+      expect(ctx.terminalMgr.create).not.toHaveBeenCalled();
+    } finally {
+      rmSync(workspacePath, { recursive: true, force: true });
+    }
   });
 
   it("returns snapshot metadata and sends snapshot payload to requesting client", async () => {

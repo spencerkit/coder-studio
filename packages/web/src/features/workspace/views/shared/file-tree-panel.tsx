@@ -1,7 +1,7 @@
 import type { FileNode } from "@coder-studio/core";
 import { useAtomValue, useSetAtom } from "jotai";
-import { ChevronDown, ChevronRight, FilePlus, FolderPlus, Trash2, X } from "lucide-react";
-import type { FC } from "react";
+import { ChevronDown, ChevronRight, X } from "lucide-react";
+import type { FC, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { workspaceByIdAtomFamily } from "../../../../atoms/workspaces";
 import {
@@ -19,14 +19,22 @@ import {
   Tooltip,
 } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
+import { useCreateShellTerminal } from "../../../terminal-panel/actions/use-create-shell-terminal";
 import {
   type CreateDialogState,
   type CreateRequest,
   type PendingDeleteState,
+  type RenameDialogState,
   useFileActions,
 } from "../../actions/use-file-actions";
+import { useFileContextActions } from "../../actions/use-file-context-actions";
+import {
+  type FileContextTarget,
+  useFileTreeContextMenu,
+} from "../../actions/use-file-tree-context-menu";
 import { useWorkspaceUiStatePersistence } from "../../actions/use-workspace-ui-state-persistence";
 import { expandedDirsAtomFamily } from "../../atoms";
+import { FileContextMenu } from "./file-context-menu";
 import { getFileNodeSemantic } from "./file-tree-icon-semantics";
 
 const DEFAULT_EXPANDED_ROOT_DIRS = new Set(["app", "packages", "src"]);
@@ -119,12 +127,14 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
   const expandedDirs = useAtomValue(expandedDirsAtomFamily(workspaceId));
   const setExpandedDirs = useSetAtom(expandedDirsAtomFamily(workspaceId));
   const { persistUiState } = useWorkspaceUiStatePersistence(workspaceId);
+  const { createShellTerminal } = useCreateShellTerminal(workspaceId);
   const {
     activeFilePath,
     createDialog,
     fileTree,
     isLoading,
     isLoadingDir,
+    renameDialog,
     pendingDelete,
     cancelDelete,
     confirmDelete,
@@ -132,7 +142,11 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
     loadChildren,
     loadSearchResults,
     openCreateDialog,
+    openRenameDialog,
     requestDelete,
+    updateRenameDraft,
+    submitRenameDialog,
+    closeRenameDialog,
     submitCreateDialog,
     updateDraftPath,
     closeCreateDialog,
@@ -151,7 +165,19 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
   );
   const [searchResults, setSearchResults] = useState<FileNode[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [contextTargetPath, setContextTargetPath] = useState<string | null>(null);
   const searchRequestIdRef = useRef(0);
+  const {
+    contextTarget,
+    desktopAnchorPoint,
+    isOpen: isContextMenuOpen,
+    closeMenu,
+    openDesktopMenu,
+    beginLongPress,
+    updateLongPress,
+    cancelLongPress,
+    consumeSuppressedClick,
+  } = useFileTreeContextMenu();
   const hasSearch = searchQuery.length > 0;
   const visibleFileCount = useMemo(
     () => (hasSearch ? searchResults.length : countVisibleFiles(treeNodes)),
@@ -166,6 +192,14 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
         .map((node) => node.path),
     [treeNodes]
   );
+  const contextMenuSections = useFileContextActions({
+    workspacePath: workspace?.path ?? null,
+    target: contextTarget,
+    createShellTerminal,
+    openCreateDialog,
+    openRenameDialog,
+    requestDelete: ({ path, name, error }) => requestDelete({ path, name, error }),
+  });
 
   useEffect(() => {
     if (expandedDirs !== null || !workspace) {
@@ -231,6 +265,54 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
     applyExpandedDirs([]);
   }, [applyExpandedDirs, collapseVersion]);
 
+  useEffect(() => {
+    if (!contextTarget) {
+      return;
+    }
+
+    setContextTargetPath(contextTarget.node.path);
+  }, [contextTarget]);
+
+  const closeContextMenu = useCallback(() => {
+    setContextTargetPath(null);
+    closeMenu();
+  }, [closeMenu]);
+
+  const openRowContextMenu = useCallback(
+    (
+      event: ReactMouseEvent<HTMLElement>,
+      node: FileNode,
+      surface: FileContextTarget["surface"]
+    ) => {
+      if (node.kind === "file") {
+        handleSelectFile(node.path);
+      }
+
+      setContextTargetPath(node.path);
+      openDesktopMenu(event, {
+        node,
+        surface,
+        triggerElement: event.currentTarget,
+      });
+    },
+    [handleSelectFile, openDesktopMenu]
+  );
+
+  const beginRowLongPress = useCallback(
+    (
+      event: ReactPointerEvent<HTMLElement>,
+      node: FileNode,
+      surface: FileContextTarget["surface"]
+    ) => {
+      beginLongPress(event, {
+        node,
+        surface,
+        triggerElement: event.currentTarget,
+      });
+    },
+    [beginLongPress]
+  );
+
   return (
     <>
       <div className={`file-tree-shell file-tree-shell--${variant}`}>
@@ -264,9 +346,15 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
                 <FileSearchResultRow
                   key={node.path}
                   node={node}
+                  variant={variant}
                   selectedPath={activeFilePath}
-                  onRequestDelete={(path, name) => requestDelete({ path, name, error: null })}
+                  isContextTarget={contextTargetPath === node.path}
                   onSelectFile={handleSelectFile}
+                  onOpenContextMenu={openRowContextMenu}
+                  onBeginLongPress={beginRowLongPress}
+                  onUpdateLongPress={updateLongPress}
+                  onCancelLongPress={cancelLongPress}
+                  consumeSuppressedClick={consumeSuppressedClick}
                 />
               ))
             ) : (
@@ -278,15 +366,21 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
                 key={node.path}
                 node={node}
                 depth={0}
+                variant={variant}
                 expandedDirs={expandedDirs}
+                defaultExpandedRootPaths={defaultExpandedRootPaths}
                 selectedPath={activeFilePath}
+                contextTargetPath={contextTargetPath}
                 onRequestCreate={openCreateDialog}
-                onRequestDelete={(path, name) => requestDelete({ path, name, error: null })}
                 onSelectFile={handleSelectFile}
                 onLoadChildren={loadChildren}
                 onToggleDirs={applyExpandedDirs}
-                defaultExpandedRootPaths={defaultExpandedRootPaths}
                 isLoadingDir={isLoadingDir}
+                onOpenContextMenu={openRowContextMenu}
+                onBeginLongPress={beginRowLongPress}
+                onUpdateLongPress={updateLongPress}
+                onCancelLongPress={cancelLongPress}
+                consumeSuppressedClick={consumeSuppressedClick}
               />
             ))
           ) : (
@@ -307,30 +401,82 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
         onCancel={cancelDelete}
         onConfirm={confirmDelete}
       />
+
+      <RenamePathModal
+        dialog={renameDialog}
+        onCancel={closeRenameDialog}
+        onConfirm={submitRenameDialog}
+        onDraftChange={updateRenameDraft}
+      />
+
+      <FileContextMenu
+        title={t("file.context_menu_title")}
+        open={isContextMenuOpen && contextMenuSections.length > 0}
+        mode={variant === "mobile" ? "mobile" : "desktop"}
+        sections={contextMenuSections}
+        anchorPoint={desktopAnchorPoint}
+        restoreFocusTo={contextTarget?.triggerElement ?? null}
+        onClose={closeContextMenu}
+      />
     </>
   );
 };
 
 interface FileSearchResultRowProps {
   node: FileNode;
+  variant: "desktop" | "mobile";
   selectedPath: string | null;
-  onRequestDelete: (path: string, name: string) => void;
+  isContextTarget: boolean;
   onSelectFile: (path: string) => void;
+  onOpenContextMenu: (
+    event: ReactMouseEvent<HTMLElement>,
+    node: FileNode,
+    surface: FileContextTarget["surface"]
+  ) => void;
+  onBeginLongPress: (
+    event: ReactPointerEvent<HTMLElement>,
+    node: FileNode,
+    surface: FileContextTarget["surface"]
+  ) => void;
+  onUpdateLongPress: (event: ReactPointerEvent<HTMLElement>) => void;
+  onCancelLongPress: (pointerId?: number) => void;
+  consumeSuppressedClick: () => boolean;
 }
 
 const FileSearchResultRow: FC<FileSearchResultRowProps> = ({
   node,
+  variant,
   selectedPath,
-  onRequestDelete,
+  isContextTarget,
   onSelectFile,
+  onOpenContextMenu,
+  onBeginLongPress,
+  onUpdateLongPress,
+  onCancelLongPress,
+  consumeSuppressedClick,
 }) => {
-  const t = useTranslation();
   const dirName = node.path.includes("/") ? node.path.slice(0, node.path.lastIndexOf("/")) : "";
+  const surface = variant === "mobile" ? "mobile" : "search";
 
   return (
     <div
-      className={`tree-item ${selectedPath === node.path ? "selected" : ""}`}
-      onClick={() => onSelectFile(node.path)}
+      className={`tree-item tree-item--file ${selectedPath === node.path ? "selected" : ""} ${
+        isContextTarget ? "tree-item--context-target" : ""
+      }`}
+      onClick={() => {
+        if (consumeSuppressedClick()) {
+          return;
+        }
+
+        onSelectFile(node.path);
+      }}
+      onContextMenu={
+        variant === "desktop" ? (event) => onOpenContextMenu(event, node, surface) : undefined
+      }
+      onPointerDown={(event) => onBeginLongPress(event, node, surface)}
+      onPointerMove={onUpdateLongPress}
+      onPointerCancel={(event) => onCancelLongPress(event.pointerId)}
+      onPointerUp={(event) => onCancelLongPress(event.pointerId)}
       style={{ paddingLeft: 12 }}
     >
       <span className="tree-chevron" aria-hidden="true" />
@@ -343,21 +489,6 @@ const FileSearchResultRow: FC<FileSearchResultRowProps> = ({
         <span className="tree-label">{node.name}</span>
         {dirName ? <span className="tree-search-path">{dirName}</span> : null}
       </span>
-
-      <div className="tree-item-actions">
-        <Tooltip content={t("file.delete")}>
-          <IconButton
-            aria-label={`${t("file.delete")} ${node.path}`}
-            className="git-row-action"
-            icon={<Trash2 size={12} />}
-            onClick={(event) => {
-              event.stopPropagation();
-              onRequestDelete(node.path, node.name);
-            }}
-            size="sm"
-          />
-        </Tooltip>
-      </div>
     </div>
   );
 };
@@ -365,29 +496,49 @@ const FileSearchResultRow: FC<FileSearchResultRowProps> = ({
 interface FileTreeNodeProps {
   node: FileNode;
   depth: number;
+  variant: "desktop" | "mobile";
   expandedDirs: Set<string> | null;
   defaultExpandedRootPaths: string[];
   selectedPath: string | null;
+  contextTargetPath: string | null;
   onRequestCreate: (mode: "file" | "folder", baseDir: string | null) => void;
-  onRequestDelete: (path: string, name: string) => void;
   onSelectFile: (path: string) => void;
   onLoadChildren: (dirPath: string) => void;
   onToggleDirs: (nextPaths: Iterable<string>) => void;
   isLoadingDir: string | null;
+  onOpenContextMenu: (
+    event: ReactMouseEvent<HTMLElement>,
+    node: FileNode,
+    surface: FileContextTarget["surface"]
+  ) => void;
+  onBeginLongPress: (
+    event: ReactPointerEvent<HTMLElement>,
+    node: FileNode,
+    surface: FileContextTarget["surface"]
+  ) => void;
+  onUpdateLongPress: (event: ReactPointerEvent<HTMLElement>) => void;
+  onCancelLongPress: (pointerId?: number) => void;
+  consumeSuppressedClick: () => boolean;
 }
 
 const FileTreeNode: FC<FileTreeNodeProps> = ({
   node,
   depth,
+  variant,
   expandedDirs,
   defaultExpandedRootPaths,
   selectedPath,
+  contextTargetPath,
   onRequestCreate,
-  onRequestDelete,
   onSelectFile,
   onLoadChildren,
   onToggleDirs,
   isLoadingDir,
+  onOpenContextMenu,
+  onBeginLongPress,
+  onUpdateLongPress,
+  onCancelLongPress,
+  consumeSuppressedClick,
 }) => {
   const t = useTranslation();
   const isFolder = node.kind === "dir";
@@ -396,7 +547,7 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
     isFolder &&
     (hasPersistedExpansionState
       ? expandedDirs.has(node.path)
-      : depth === 0 && DEFAULT_EXPANDED_ROOT_DIRS.has(node.name.toLowerCase()));
+      : depth === 0 && defaultExpandedRootPaths.includes(node.path));
   const autoLoadRequestedRef = useRef(false);
 
   useEffect(() => {
@@ -413,6 +564,10 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
   }, [isFolder, isExpanded, node.children, node.path, onLoadChildren]);
 
   const handleClick = () => {
+    if (variant === "mobile" && consumeSuppressedClick()) {
+      return;
+    }
+
     if (!isFolder) {
       onSelectFile(node.path);
       return;
@@ -436,8 +591,23 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
   return (
     <>
       <div
-        className={`tree-item ${selectedPath === node.path ? "selected" : ""}`}
+        className={`tree-item tree-item--${node.kind} ${
+          selectedPath === node.path ? "selected" : ""
+        } ${contextTargetPath === node.path ? "tree-item--context-target" : ""}`}
         onClick={handleClick}
+        onContextMenu={
+          variant === "desktop" ? (event) => onOpenContextMenu(event, node, "tree") : undefined
+        }
+        onPointerDown={
+          variant === "mobile" ? (event) => onBeginLongPress(event, node, "mobile") : undefined
+        }
+        onPointerMove={variant === "mobile" ? onUpdateLongPress : undefined}
+        onPointerCancel={
+          variant === "mobile" ? (event) => onCancelLongPress(event.pointerId) : undefined
+        }
+        onPointerUp={
+          variant === "mobile" ? (event) => onCancelLongPress(event.pointerId) : undefined
+        }
         style={{ paddingLeft }}
       >
         <span className="tree-chevron" aria-hidden="true">
@@ -450,61 +620,38 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
 
         <span className="tree-label">{node.name}</span>
 
-        <div className="tree-item-actions">
-          {isFolder ? (
-            <>
-              <Tooltip content={t("file.new_file")}>
-                <IconButton
-                  aria-label={`${t("file.new_file")} ${node.path}`}
-                  className="git-row-action"
-                  icon={<ThemedIcon semantic="file.action.new" size={12} />}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onRequestCreate("file", node.path);
-                  }}
-                  size="sm"
-                />
-              </Tooltip>
-              <Tooltip content={t("file.new_folder")}>
-                <IconButton
-                  aria-label={`${t("file.new_folder")} ${node.path}`}
-                  className="git-row-action"
-                  icon={<ThemedIcon semantic="file.action.newFolder" size={12} />}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onRequestCreate("folder", node.path);
-                  }}
-                  size="sm"
-                />
-              </Tooltip>
-              <Tooltip content={t("file.delete")}>
-                <IconButton
-                  aria-label={`${t("file.delete")} ${node.path}`}
-                  className="git-row-action"
-                  icon={<Trash2 size={12} />}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onRequestDelete(node.path, node.name);
-                  }}
-                  size="sm"
-                />
-              </Tooltip>
-            </>
-          ) : (
-            <Tooltip content={t("file.delete")}>
-              <IconButton
-                aria-label={`${t("file.delete")} ${node.path}`}
-                className="git-row-action"
-                icon={<Trash2 size={12} />}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onRequestDelete(node.path, node.name);
-                }}
-                size="sm"
-              />
-            </Tooltip>
-          )}
-        </div>
+        {variant === "desktop" ? (
+          <div className="tree-item-actions">
+            {isFolder ? (
+              <>
+                <Tooltip content={t("file.new_file")}>
+                  <IconButton
+                    aria-label={`${t("file.new_file")} ${node.path}`}
+                    className="git-row-action"
+                    icon={<ThemedIcon semantic="file.action.new" size={12} />}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onRequestCreate("file", node.path);
+                    }}
+                    size="sm"
+                  />
+                </Tooltip>
+                <Tooltip content={t("file.new_folder")}>
+                  <IconButton
+                    aria-label={`${t("file.new_folder")} ${node.path}`}
+                    className="git-row-action"
+                    icon={<ThemedIcon semantic="file.action.newFolder" size={12} />}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onRequestCreate("folder", node.path);
+                    }}
+                    size="sm"
+                  />
+                </Tooltip>
+              </>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       {isFolder && isExpanded && node.children && (
@@ -514,15 +661,21 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
               key={child.path}
               node={child}
               depth={depth + 1}
+              variant={variant}
               expandedDirs={expandedDirs}
               selectedPath={selectedPath}
+              contextTargetPath={contextTargetPath}
               onRequestCreate={onRequestCreate}
-              onRequestDelete={onRequestDelete}
               onSelectFile={onSelectFile}
               onLoadChildren={onLoadChildren}
               onToggleDirs={onToggleDirs}
               defaultExpandedRootPaths={defaultExpandedRootPaths}
               isLoadingDir={isLoadingDir}
+              onOpenContextMenu={onOpenContextMenu}
+              onBeginLongPress={onBeginLongPress}
+              onUpdateLongPress={onUpdateLongPress}
+              onCancelLongPress={onCancelLongPress}
+              consumeSuppressedClick={consumeSuppressedClick}
             />
           ))}
           {node.children.length === 0 && !isLoadingDir && (
@@ -657,6 +810,80 @@ const DeleteFileModal: FC<DeleteFileModalProps> = ({ pendingDelete, onCancel, on
       }}
       tone="danger"
     />
+  );
+};
+
+interface RenamePathModalProps {
+  dialog: RenameDialogState | null;
+  onCancel: () => void;
+  onConfirm: () => Promise<void>;
+  onDraftChange: (value: string) => void;
+}
+
+const RenamePathModal: FC<RenamePathModalProps> = ({
+  dialog,
+  onCancel,
+  onConfirm,
+  onDraftChange,
+}) => {
+  const t = useTranslation();
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  if (!dialog) {
+    return null;
+  }
+
+  const helperId = "file-rename-helper";
+  const errorId = dialog.error ? "file-rename-error" : undefined;
+  const describedBy = [helperId, errorId].filter(Boolean).join(" ");
+
+  return (
+    <Modal initialFocus={() => inputRef.current} onOpenChange={onCancel} open>
+      <ModalHeader>
+        <ModalTitle>
+          <span>{t("file.rename")}</span>
+        </ModalTitle>
+        <IconButton
+          aria-label={t("action.close")}
+          icon={<X size={14} />}
+          onClick={onCancel}
+          size="sm"
+        />
+      </ModalHeader>
+      <ModalBody>
+        <div className="form-group">
+          <label htmlFor="file-rename">{t("file.rename_name")}</label>
+          <Input
+            id="file-rename"
+            ref={inputRef}
+            value={dialog.nextName}
+            onChange={(event) => onDraftChange(event.target.value)}
+            aria-describedby={describedBy}
+            invalid={Boolean(dialog.error)}
+            autoFocus
+          />
+          <span id={helperId} className="dialog-helper">
+            {t("file.rename_helper")}
+          </span>
+          {dialog.error ? (
+            <span id={errorId} className="form-error" role="alert">
+              {dialog.error}
+            </span>
+          ) : null}
+        </div>
+      </ModalBody>
+      <ModalFooter>
+        <Button onClick={onCancel}>{t("action.cancel")}</Button>
+        <Button
+          variant="primary"
+          onClick={() => {
+            void onConfirm();
+          }}
+        >
+          {t("action.confirm")}
+        </Button>
+      </ModalFooter>
+    </Modal>
   );
 };
 

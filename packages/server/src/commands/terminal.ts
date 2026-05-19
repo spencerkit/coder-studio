@@ -2,7 +2,8 @@
  * Terminal Commands
  */
 
-import { basename } from "node:path";
+import { stat } from "node:fs/promises";
+import { basename, isAbsolute } from "node:path";
 import {
   encodeTerminalBinaryFrame,
   TERMINAL_BINARY_PROTOCOL_VERSION,
@@ -14,6 +15,7 @@ import {
   TerminalSnapshotBinaryResult,
 } from "@coder-studio/core";
 import { z } from "zod";
+import { resolveSafe } from "../fs/file-io.js";
 import { registerCommand } from "../ws/dispatch.js";
 
 const TerminalInputActivitySchema = z.enum(TERMINAL_INPUT_ACTIVITIES).optional();
@@ -151,11 +153,44 @@ registerCommand(
     workspaceId: z.string(),
     cols: z.number().int().positive().optional(),
     rows: z.number().int().positive().optional(),
+    cwdPath: z.string().optional(),
   }),
   async (args, ctx) => {
     const workspace = ctx.workspaceMgr.get(args.workspaceId);
     if (!workspace) {
       throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
+    }
+
+    let cwd = workspace.path;
+    if (args.cwdPath && args.cwdPath !== ".") {
+      if (isAbsolute(args.cwdPath)) {
+        throw { code: "invalid_cwd_path", message: "cwdPath must be workspace-relative" };
+      }
+
+      let resolvedCwd: string;
+      try {
+        resolvedCwd = resolveSafe(workspace.path, args.cwdPath);
+      } catch (error) {
+        if (
+          typeof error === "object" &&
+          error !== null &&
+          "code" in error &&
+          error.code === "path_escape"
+        ) {
+          throw { code: "invalid_cwd_path", message: "cwdPath must be workspace-relative" };
+        }
+        throw error;
+      }
+
+      const cwdStats = await stat(resolvedCwd).catch(() => null);
+      if (!cwdStats) {
+        throw { code: "cwd_not_found", message: `Directory not found: ${args.cwdPath}` };
+      }
+      if (!cwdStats.isDirectory()) {
+        throw { code: "cwd_not_directory", message: `Not a directory: ${args.cwdPath}` };
+      }
+
+      cwd = resolvedCwd;
     }
 
     const shell = resolveShellCommand();
@@ -166,7 +201,7 @@ registerCommand(
       kind: "shell",
       argv: shell.argv,
       title: shell.title,
-      cwd: workspace.path,
+      cwd,
       cols: args.cols ?? 120,
       rows: args.rows ?? 30,
     });

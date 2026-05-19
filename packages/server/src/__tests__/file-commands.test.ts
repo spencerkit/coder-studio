@@ -3,7 +3,7 @@
  */
 
 import { execFile } from "child_process";
-import { mkdir, rm, writeFile } from "fs/promises";
+import { readFile as fsReadFile, mkdir, rm, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { promisify } from "util";
@@ -189,6 +189,137 @@ describe("File Commands", () => {
       workspaceId,
       reason: "file_content",
     });
+  });
+
+  it("renames files and emits fs.dirty", async () => {
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "file-rename-1",
+        op: "file.rename",
+        args: {
+          workspaceId,
+          fromPath: "README.md",
+          toPath: "GUIDE.md",
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(await fsReadFile(join(testDir, "GUIDE.md"), "utf-8")).toBe("readme\n");
+    expect(eventBus.emit).toHaveBeenCalledWith({
+      type: "fs.dirty",
+      workspaceId,
+      reason: "fs_change",
+    });
+  });
+
+  it("renames directories recursively", async () => {
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "file-rename-2",
+        op: "file.rename",
+        args: {
+          workspaceId,
+          fromPath: "docs",
+          toPath: "guides",
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(await fsReadFile(join(testDir, "guides", "src-note.md"), "utf-8")).toBe("note\n");
+  });
+
+  it("allows same-directory renames when equivalent paths use different syntax", async () => {
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "file-rename-2b",
+        op: "file.rename",
+        args: {
+          workspaceId,
+          fromPath: "./README.md",
+          toPath: "docs/../GUIDE.md",
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(await fsReadFile(join(testDir, "GUIDE.md"), "utf-8")).toBe("readme\n");
+  });
+
+  it("rejects colliding, cross-directory, or escaping rename targets", async () => {
+    const collision = await dispatch(
+      {
+        kind: "command",
+        id: "file-rename-3",
+        op: "file.rename",
+        args: {
+          workspaceId,
+          fromPath: "README.md",
+          toPath: "src.ts",
+        },
+      },
+      ctx
+    );
+
+    const crossDirectory = await dispatch(
+      {
+        kind: "command",
+        id: "file-rename-4",
+        op: "file.rename",
+        args: {
+          workspaceId,
+          fromPath: "README.md",
+          toPath: "docs/README.md",
+        },
+      },
+      ctx
+    );
+
+    const escaped = await dispatch(
+      {
+        kind: "command",
+        id: "file-rename-5",
+        op: "file.rename",
+        args: {
+          workspaceId,
+          fromPath: "README.md",
+          toPath: "../outside.md",
+        },
+      },
+      ctx
+    );
+
+    const escapedSource = await dispatch(
+      {
+        kind: "command",
+        id: "file-rename-6",
+        op: "file.rename",
+        args: {
+          workspaceId,
+          fromPath: "../README.md",
+          toPath: "GUIDE.md",
+        },
+      },
+      ctx
+    );
+
+    expect(collision.ok).toBe(false);
+    expect(collision.error).toMatchObject({ code: "already_exists" });
+    expect(crossDirectory.ok).toBe(false);
+    expect(crossDirectory.error).toMatchObject({
+      code: "rename_across_directories_not_supported",
+    });
+    expect(escaped.ok).toBe(false);
+    expect(escaped.error).toMatchObject({ code: "path_escape" });
+    expect(escapedSource.ok).toBe(false);
+    expect(escapedSource.error).toMatchObject({ code: "path_escape" });
   });
 
   it("returns image version metadata from file.read", async () => {
