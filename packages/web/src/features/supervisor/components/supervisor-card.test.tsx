@@ -1,5 +1,5 @@
 import type { Supervisor, SupervisorCycle } from "@coder-studio/core";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../../atoms/app-ui";
@@ -310,6 +310,61 @@ describe("SupervisorCard", () => {
     expect(screen.getByText("No guidance injected this cycle")).toBeInTheDocument();
     expect(screen.queryByText("65%")).not.toBeInTheDocument();
     expect(document.querySelector(".supervisor-progress-track")).not.toBeInTheDocument();
+  });
+
+  it("shows retry attempt details for an in-flight supervisor cycle", () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-05-16T12:00:00Z"));
+      const store = createStore();
+      window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+      store.set(localeAtom, "en");
+      store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+      store.set(supervisorsAtom, new Map([["sess-1", createSupervisor()]]));
+      store.set(
+        supervisorCyclesAtom,
+        new Map([
+          [
+            "sup-1",
+            [
+              createCycle({
+                status: "evaluating",
+                completedAt: undefined,
+                runtime: {
+                  phase: "retry_wait",
+                  currentAttemptIndex: 0,
+                  attemptCount: 1,
+                  maxAttempts: 3,
+                  lastAttemptError: "rate limited",
+                  nextRetryAt: Date.now() + 1000,
+                },
+              }),
+            ],
+          ],
+        ])
+      );
+
+      render(
+        <Provider store={store}>
+          <SupervisorCard sessionId="sess-1" workspaceId="ws-1" />
+        </Provider>
+      );
+
+      expect(
+        screen.getByText(/Retrying evaluator in 1s \(1\/3\): rate limited/)
+      ).toBeInTheDocument();
+
+      act(() => {
+        vi.setSystemTime(new Date("2026-05-16T12:00:01Z"));
+        vi.advanceTimersByTime(1000);
+      });
+
+      expect(
+        screen.getByText(/Retrying evaluator in 0s \(1\/3\): rate limited/)
+      ).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("keeps pause available while the supervisor is evaluating", () => {

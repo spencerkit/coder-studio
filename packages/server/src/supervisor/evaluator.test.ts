@@ -87,15 +87,6 @@ function continuePayload(overrides?: Partial<Record<string, unknown>>): string {
   });
 }
 
-function stopPayload(overrides?: Partial<Record<string, unknown>>): string {
-  return JSON.stringify({
-    status: "stop",
-    stopReason: "objective_complete",
-    reason: "The target is complete",
-    ...overrides,
-  });
-}
-
 function codexJsonlPayload(text: string): string {
   return [
     JSON.stringify({ type: "thread.started", thread_id: "t1" }),
@@ -406,6 +397,29 @@ describe("SupervisorEvaluator", () => {
 
     expect(result.guidance).toBe("next step: run tests");
     expect(settingsRepo.get).toHaveBeenCalledWith("supervisor.evaluationTimeoutSec");
+  });
+
+  it("normalizes evaluator process start errors as retryable evaluator failures", async () => {
+    const evaluator = new SupervisorEvaluator({
+      providerRegistry: [
+        {
+          id: "claude",
+          buildSupervisorEvalCommand: vi.fn(() => ({
+            argv: ["definitely-missing-supervisor-evaluator-binary"],
+            cwd: process.cwd(),
+            env: {},
+          })),
+        } as unknown as ProviderDefinition,
+      ],
+      providerConfigRepo: createProviderConfigRepo(),
+      timeoutMs: 5000,
+    });
+
+    await expect(evaluator.evaluate(makeSupervisor("claude"), makeContext())).rejects.toMatchObject(
+      {
+        code: "supervisor_eval_failed",
+      }
+    );
   });
 
   it("falls back to the default timeout when the stored row is malformed JSON", async () => {

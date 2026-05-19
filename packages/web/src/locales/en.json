@@ -699,6 +699,9 @@
       "no_guidance": "No guidance injected this cycle",
       "evaluating": "Evaluating...",
       "waiting": "Waiting for evaluation result",
+      "waiting_evaluator": "Waiting for evaluator response",
+      "retry_wait": "Retrying evaluator in {seconds}s",
+      "injecting": "Injecting guidance",
       "cancelled": "Cancelled"
     },
     "stop_reason": {

@@ -699,6 +699,9 @@
       "no_guidance": "本轮无需注入 guidance",
       "evaluating": "评估中…",
       "waiting": "等待评估结果",
+      "waiting_evaluator": "等待 evaluator 响应",
+      "retry_wait": "{seconds}s 后重试 evaluator",
+      "injecting": "正在注入 guidance",
       "cancelled": "已取消"
     },
     "stop_reason": {
