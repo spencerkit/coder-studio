@@ -372,8 +372,9 @@ describe("UI preview catalog", () => {
 
     expect(await screen.findByText("Open Workspace")).toBeInTheDocument();
     expect(document.querySelector(".desktop-review-grid")).toBeTruthy();
-    expect(document.querySelector(".desktop-review-card .command-palette")).toBeTruthy();
-    expect(document.querySelector(".desktop-review-card .launch-modal")).toBeTruthy();
+    expect(document.body.querySelector(".workbench-layer-backdrop")).toBeTruthy();
+    expect(document.body.querySelector(".command-palette")).toBeTruthy();
+    expect(document.body.querySelector(".launch-modal")).toBeTruthy();
     expect(
       document.querySelector(".desktop-review-card .desktop-review-embedded-worktree")
     ).toBeTruthy();

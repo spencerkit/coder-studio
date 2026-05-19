@@ -49,6 +49,7 @@ const exemptComponentSelectors = [
   /\.git-diff/,
   /\.diff-/,
   /\.review-/,
+  /\.diagnostics-/,
   /\.image-preview-/,
   /\.code-file-path/,
   /\.code-lines/,
@@ -86,7 +87,7 @@ describe("typography guardrails", () => {
     }
   });
 
-  it("limits raw or legacy font-size values in components.css to exempt code surfaces", () => {
+  it("limits raw or legacy font-size values in components.css to exempt code and diagnostics surfaces", () => {
     expect(componentsStyles).toMatch(fontSizePattern);
 
     const offenderBlocks = getOffenderBlocks(
