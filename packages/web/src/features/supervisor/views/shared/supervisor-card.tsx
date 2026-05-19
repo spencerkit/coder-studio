@@ -27,18 +27,22 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
 
   if (!supervisor) {
     return (
-      <div className="supervisor-card supervisor-card-inactive">
-        <Tooltip content={t("supervisor.action.enable")}>
-          <button
-            className="supervisor-enable-btn"
-            onClick={() => openDialog("enable")}
-            aria-label={t("supervisor.action.enable")}
-          >
-            <ThemedIcon semantic="supervisor.entry" size={13} />
-            <span>{t("supervisor.title")}</span>
-          </button>
-        </Tooltip>
-      </div>
+      <>
+        <div className="supervisor-card supervisor-card-inactive">
+          <Tooltip content={t("supervisor.action.enable")}>
+            <button
+              className="supervisor-enable-btn"
+              onClick={() => openDialog("enable")}
+              aria-label={t("supervisor.action.enable")}
+            >
+              <ThemedIcon semantic="supervisor.entry" size={13} />
+              <span>{t("supervisor.title")}</span>
+            </button>
+          </Tooltip>
+        </div>
+
+        <ObjectiveDialog workspaceId={workspaceId} sessionId={sessionId} />
+      </>
     );
   }
 

@@ -87,6 +87,29 @@ describe("SupervisorCard", () => {
     expect(button.querySelector('[data-icon-semantic="supervisor.entry"]')).toBeTruthy();
   });
 
+  it("opens the enable dialog from the inactive supervisor button", () => {
+    const store = createStore();
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+    store.set(supervisorsAtom, new Map());
+    store.set(supervisorCyclesAtom, new Map());
+
+    render(
+      <Provider store={store}>
+        <SupervisorCard sessionId="sess-1" workspaceId="ws-1" />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Enable Supervisor" }));
+
+    expect(
+      screen.getByRole("heading", { name: "Enable Supervisor", level: 2 })
+    ).toBeInTheDocument();
+    expect(store.get(supervisorDialogAtom).open).toBe(true);
+    expect(store.get(supervisorDialogAtom).mode).toBe("enable");
+  });
+
   it("shows cycle count next to state and trigger action", () => {
     const sendCommand = vi.fn().mockResolvedValue(undefined);
     const store = createStore();
