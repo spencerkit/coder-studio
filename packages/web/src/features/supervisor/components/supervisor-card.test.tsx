@@ -103,9 +103,16 @@ describe("SupervisorCard", () => {
       </Provider>
     );
 
+    const titleRow = document.querySelector(".supervisor-strip-eyebrow");
+    const objectiveRow = document.querySelector(".supervisor-objective-row");
+
     expect(screen.getByText("Persistence and hydration are done.")).toBeInTheDocument();
     expect(screen.getByText("Finish the server refactor")).toBeInTheDocument();
     expect(screen.getByText("codex")).toBeInTheDocument();
+    expect(titleRow).not.toBeNull();
+    expect(objectiveRow).not.toBeNull();
+    expect(titleRow?.querySelector(".supervisor-provider-pill")).toHaveTextContent("codex");
+    expect(objectiveRow?.querySelector(".supervisor-provider-pill")).toBeNull();
     expect(screen.queryByText("Verify the refactor")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /expand/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /collapse/i })).not.toBeInTheDocument();

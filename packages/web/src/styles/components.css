@@ -3565,6 +3565,8 @@ body.is-resizing-panels * {
 }
 
 .supervisor-provider-pill {
+  display: inline-flex;
+  align-items: center;
   flex-shrink: 0;
   padding: 1px var(--sp-2);
   border-radius: var(--radius-sm);

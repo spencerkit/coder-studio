@@ -47,6 +47,7 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
         <span className="supervisor-strip-eyebrow">
           <span className={`supervisor-pulse ${stateClass}`} aria-hidden="true" />
           <span className="supervisor-label">{t("supervisor.title")}</span>
+          <span className="supervisor-provider-pill">{supervisor.evaluatorProviderId}</span>
         </span>
 
         <span className={`supervisor-state-tag ${stateClass}`}>{stateLabel}</span>
@@ -117,7 +118,6 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
         <Tooltip content={supervisor.objective}>
           <span className="supervisor-objective-text">{supervisor.objective}</span>
         </Tooltip>
-        <span className="supervisor-provider-pill">{supervisor.evaluatorProviderId}</span>
       </div>
 
       {latestCycle ? (
