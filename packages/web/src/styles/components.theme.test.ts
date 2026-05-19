@@ -467,21 +467,26 @@ describe("components.css theme-sensitive surfaces", () => {
 
   it("keeps supervisor details on a flatter single-surface hierarchy", () => {
     const editButton = getLastRuleBlock(".supervisor-details-edit-btn");
+    const detailsSurface = getLastRuleBlock(".supervisor-details-surface");
     const summaryCard = getLastRuleBlock(".supervisor-summary-card");
     const stackedMetaGrid = getLastRuleBlock(".supervisor-meta-grid--stacked");
-    const runtimeSurface = getLastRuleBlock(".supervisor-details-surface--runtime");
     const metaItem = getLastRuleBlock(".supervisor-meta-item");
     const reasoningItem = getLastRuleBlock(".supervisor-meta-item--reasoning");
+    const errorText = getLastRuleBlock(".supervisor-error");
 
     expect(editButton).toContain("font-size: var(--type-label-size)");
     expect(editButton).toContain("border-color: transparent");
+    expect(detailsSurface).not.toContain("border:");
     expect(summaryCard).toContain("border: none");
     expect(summaryCard).toContain("box-shadow: none");
     expect(stackedMetaGrid).toContain("grid-template-columns: 1fr");
-    expect(runtimeSurface).toContain("background:");
+    expect(stylesheet).not.toMatch(/(^|,)\s*\.supervisor-details-surface--runtime\b/m);
     expect(metaItem).toContain("padding: 0");
     expect(metaItem).not.toContain("border:");
     expect(reasoningItem).not.toContain("border-style: dashed");
+    expect(errorText).toContain("color: var(--accent-pink)");
+    expect(errorText).not.toContain("background:");
+    expect(errorText).not.toContain("border-left:");
   });
 
   it("exposes global mobile safe-area tokens so standalone mobile views keep their padding", () => {

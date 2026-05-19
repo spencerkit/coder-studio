@@ -64,20 +64,8 @@ export function SupervisorDetailsContent({
                 {completedCycles} / {cycleCap}
               </p>
             </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="supervisor-details-section">
-        <h3 className="supervisor-details-section-title">
-          {t("supervisor.target_memory.runtime_title")}
-        </h3>
-        <div className="supervisor-details-surface supervisor-details-surface--runtime">
-          <div className="supervisor-meta-grid supervisor-meta-grid--stacked">
             <div className="supervisor-meta-item">
-              <p className="supervisor-meta-label">
-                {t("supervisor.target_memory.runtime_status_label")}
-              </p>
+              <p className="supervisor-meta-label">{t("supervisor.target_memory.runtime_title")}</p>
               <p className="supervisor-meta-value supervisor-meta-value--strong">
                 {t(`supervisor.target_memory.runtime_status.${runtimeStatus}`)}
               </p>

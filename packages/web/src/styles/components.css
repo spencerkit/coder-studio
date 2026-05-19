@@ -3924,13 +3924,8 @@ body.is-resizing-panels * {
 
 .supervisor-details-surface {
   padding: var(--sp-3);
-  border: 1px solid color-mix(in srgb, var(--border) 74%, var(--bg-page) 26%);
   border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--bg-surface) 90%, var(--bg-page) 10%);
-}
-
-.supervisor-details-surface--runtime {
-  background: color-mix(in srgb, var(--bg-surface) 92%, var(--bg-page) 8%);
 }
 
 .supervisor-summary-card {
@@ -4204,12 +4199,7 @@ body.is-resizing-panels * {
   color: var(--text-secondary);
 }
 
-/* Error banner — left accent bar ties the message to severity */
 .supervisor-error {
-  padding: var(--sp-1) var(--sp-2);
-  background: rgba(255, 158, 176, 0.08);
-  border-left: 2px solid var(--accent-pink);
-  border-radius: var(--radius-sm);
   font-size: var(--type-body-size);
   line-height: var(--type-body-line-height);
   font-weight: var(--type-body-weight);

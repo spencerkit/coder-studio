@@ -123,6 +123,10 @@ describe("MobileSupervisorSheet", () => {
     expect(screen.getByText("Basic Info")).toBeInTheDocument();
     expect(screen.getByText("Runtime Status")).toBeInTheDocument();
     expect(screen.getByText("Idle")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Runtime Status", level: 3 })
+    ).not.toBeInTheDocument();
+    expect(document.querySelector(".supervisor-details-surface--runtime")).toBeNull();
     expect(screen.getByText("Target cycle reasoning")).toBeInTheDocument();
     expect(screen.getByText("Progress List")).toBeInTheDocument();
     expect(screen.getByText("Reduce mobile regression bugs")).toBeInTheDocument();
@@ -176,6 +180,10 @@ describe("MobileSupervisorSheet", () => {
     expect(screen.getByText("Error")).toBeInTheDocument();
     expect(screen.getByText("Error reason")).toBeInTheDocument();
     expect(screen.getByText("Model call timed out after 600 seconds.")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Runtime Status", level: 3 })
+    ).not.toBeInTheDocument();
+    expect(document.querySelector(".supervisor-details-surface--runtime")).toBeNull();
     expect(screen.queryByText("Target cycle reasoning")).not.toBeInTheDocument();
   });
 

@@ -70,7 +70,7 @@ describe("SupervisorDetailsContent", () => {
     updatedAt: 1,
   });
 
-  it("renders basic supervisor information above a structured progress list", () => {
+  it("renders basic supervisor information and runtime status inside a single summary card above a structured progress list", () => {
     const store = createStore();
     window.localStorage.setItem("ui.locale", JSON.stringify("en"));
     store.set(localeAtom, "en");
@@ -91,6 +91,10 @@ describe("SupervisorDetailsContent", () => {
     expect(screen.getByText("1 / 3")).toBeInTheDocument();
     expect(screen.getByText("Runtime Status")).toBeInTheDocument();
     expect(screen.getByText("Idle")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Runtime Status", level: 3 })
+    ).not.toBeInTheDocument();
+    expect(document.querySelector(".supervisor-details-surface--runtime")).toBeNull();
     expect(screen.queryByText("Target progress")).not.toBeInTheDocument();
     expect(screen.queryByText("Active item")).not.toBeInTheDocument();
 
@@ -194,6 +198,10 @@ describe("SupervisorDetailsContent", () => {
     expect(screen.getByText("Error")).toBeInTheDocument();
     expect(screen.getByText("Error reason")).toBeInTheDocument();
     expect(screen.getByText("Model call timed out after 600 seconds.")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Runtime Status", level: 3 })
+    ).not.toBeInTheDocument();
+    expect(document.querySelector(".supervisor-details-surface--runtime")).toBeNull();
     expect(screen.queryByText("Target cycle reasoning")).not.toBeInTheDocument();
     expect(screen.queryByText("Evaluator process exited unexpectedly.")).not.toBeInTheDocument();
   });
