@@ -4,9 +4,10 @@ import {
   type ProviderDefinition,
   type Supervisor,
   type SupervisorConfig,
-  type SupervisorCycleStepUpdate,
-  type SupervisorPlanStep,
+  type SupervisorCycleItemUpdate,
+  type SupervisorDecompositionMode,
   type SupervisorStopReason,
+  type SupervisorWorkItem,
 } from "@coder-studio/core";
 import type { FastifyBaseLogger } from "fastify";
 import { mergeProviderLaunchConfig } from "../provider-config.js";
@@ -28,21 +29,41 @@ const NOOP_LOGGER: FastifyBaseLogger = {
   warn: () => {},
 };
 
-export interface SupervisorEvaluationResult {
+export interface SupervisorDecomposeResult {
+  mode: "decompose";
+  decompositionMode: SupervisorDecompositionMode;
+  items: SupervisorWorkItem[];
+  activeItemId?: string;
+  progressSummary?: string;
+}
+
+export interface SupervisorContinueResult {
+  mode: "evaluate";
   status: "continue" | "stop";
-  stopReason?: Extract<SupervisorStopReason, "objective_complete" | "supervisor_uncertain">;
   reason: string;
   guidance?: string;
-  plan?: SupervisorPlanStep[];
-  activeStepId?: string;
+  activeItemId?: string;
   progressSummary?: string;
-  stepUpdates?: SupervisorCycleStepUpdate[];
+  itemUpdates?: SupervisorCycleItemUpdate[];
 }
+
+export interface SupervisorStopResult {
+  mode: "evaluate";
+  status: "stop";
+  stopReason?: Extract<SupervisorStopReason, "objective_complete" | "supervisor_uncertain">;
+  reason: string;
+}
+
+export type SupervisorEvaluationResult =
+  | SupervisorDecomposeResult
+  | SupervisorContinueResult
+  | SupervisorStopResult;
 
 export type SupervisorResult = SupervisorEvaluationResult;
 
 interface EvaluateOptions {
   signal?: AbortSignal;
+  mode?: "decompose" | "evaluate";
 }
 
 export class SupervisorEvaluator {
@@ -83,7 +104,8 @@ export class SupervisorEvaluator {
       this.deps.providerConfigRepo.get(provider.id)
     );
 
-    const prompt = buildPrompt(context);
+    const mode = options.mode ?? "evaluate";
+    const prompt = buildPrompt(context, mode);
     const command = provider.buildSupervisorEvalCommand(config, {
       prompt,
       sessionId: supervisor.sessionId,
@@ -126,11 +148,59 @@ export class SupervisorEvaluator {
       throw error;
     }
 
-    return parseSupervisorEvaluationResult(payloadText, this.config.guidanceMaxChars);
+    return parseSupervisorEvaluationResult(payloadText, this.config.guidanceMaxChars, mode);
   }
 }
 
-function buildPrompt(context: SupervisorEvaluationContext): string {
+function buildPrompt(context: SupervisorEvaluationContext, mode: "decompose" | "evaluate"): string {
+  if (mode === "decompose") {
+    return [
+      "You are an autonomous supervisor for a target-scoped software task.",
+      "Your first job is to decompose the target into a supervision structure before evaluation begins.",
+      "",
+      "Return JSON only.",
+      "",
+      "Decomposition policy:",
+      "- Keep the user-visible target as the top-level supervision owner.",
+      '- Choose "stage" by default.',
+      '- Choose "subtarget" only when the work clearly breaks into independently deliverable and independently verifiable workstreams.',
+      "- If the distinction is unclear, choose stage.",
+      "- Produce 1 to 7 decomposition items.",
+      "- Each item must be concrete, milestone-sized, and useful for subsequent evaluation.",
+      "- Do not leave the structure empty.",
+      "",
+      "Item requirements:",
+      '- Each item must include "id", "kind", "title", "objective", "deliverable", "acceptanceCriteria", and "status".',
+      '- "kind" must match the selected decompositionMode: all "stage" or all "subtarget".',
+      '- "acceptanceCriteria" must be a non-empty string array.',
+      '- Use statuses "pending", "in_progress", or "done".',
+      "- Usually mark the first active item as in_progress and the rest as pending.",
+      "",
+      "Output schema:",
+      "{",
+      '  "mode": "decompose",',
+      '  "decompositionMode": "stage" | "subtarget",',
+      '  "items": [',
+      '    { "id": string, "kind": "stage" | "subtarget", "title": string, "objective": string, "deliverable": string, "acceptanceCriteria": string[], "status": "pending" | "in_progress" | "done" }',
+      "  ],",
+      '  "activeItemId": optional string,',
+      '  "progressSummary": optional brief summary',
+      "}",
+      "",
+      "Current objective:",
+      context.objective,
+      "",
+      "Current target memory:",
+      JSON.stringify(context.targetMemory, null, 2),
+      "",
+      "Latest user input:",
+      context.latestUserInput?.trim() || "(none)",
+      "",
+      "Current terminal snapshot:",
+      context.terminalExcerpt || "(no output yet)",
+    ].join("\n");
+  }
+
   const lines: string[] = [
     "You are an autonomous supervisor for a target-scoped software task.",
     "Your job is to keep the agent moving toward the objective until the objective is complete.",
@@ -145,13 +215,13 @@ function buildPrompt(context: SupervisorEvaluationContext): string {
     "",
     "Stage decision policy:",
     "- Use the target memory as the current supervision state.",
-    "- Base your decision on the objective, current plan, activeStepId, progressSummary, lastGuidance, stalledCount, latest user input, and terminal snapshot.",
-    "- Identify which plan step is currently active.",
-    "- Decide whether the active step is done, still in progress, blocked, or obsolete.",
-    "- If the active step is done, advance to the next useful step.",
-    "- If the active step is still in progress, give guidance that moves it forward.",
+    "- Base your decision on the objective, current decompositionMode, items, activeItemId, progressSummary, lastGuidance, stalledCount, latest user input, and terminal snapshot.",
+    "- Identify which decomposition item is currently active.",
+    "- Decide whether the active item is done, still in progress, blocked, or obsolete.",
+    "- If the active item is done, advance to the next useful item.",
+    "- If the active item is still in progress, give guidance that moves it forward.",
     "- If the agent appears stuck or repeated the same action, give a different concrete next action.",
-    "- If the plan is obsolete, update only the affected steps unless a full replacement is necessary.",
+    "- Do not rewrite the decomposition structure during normal evaluation cycles.",
     "",
     "Allowed statuses:",
     '- "continue": more work is needed; include "reason" and "guidance".',
@@ -172,27 +242,26 @@ function buildPrompt(context: SupervisorEvaluationContext): string {
     "- If verification is needed, tell the agent exactly what to verify next.",
     "- If implementation is needed, point to the likely area, behavior, or file/module based on available evidence.",
     "",
-    "Planning policy:",
-    "- If planGenerated is false, include a plan with 3 to 7 milestone-sized steps.",
-    "- If planGenerated is true, update progress incrementally.",
-    "- Do not rewrite the full plan unless the existing plan is clearly wrong or obsolete.",
-    "- Use stepUpdates to mark completed or active steps when the terminal snapshot shows progress.",
-    "- Keep activeStepId aligned with the next useful step.",
+    "Evaluation policy:",
+    "- Update progress incrementally against the existing decomposition.",
+    "- Use itemUpdates to mark completed or active items when the terminal snapshot shows progress.",
+    "- Keep activeItemId aligned with the next useful item.",
     "",
     "Output schema:",
     "For continue:",
     "{",
+    '  "mode": "evaluate",',
     '  "status": "continue",',
     '  "reason": "brief explanation of why more work is needed",',
     '  "guidance": "specific next action for the supervised agent",',
-    '  "plan": optional array of plan steps,',
-    '  "activeStepId": optional step id,',
+    '  "activeItemId": optional item id,',
     '  "progressSummary": optional brief progress summary,',
-    '  "stepUpdates": optional array of { "id": string, "status": "pending" | "in_progress" | "done" }',
+    '  "itemUpdates": optional array of { "id": string, "status": "pending" | "in_progress" | "done" }',
     "}",
     "",
     "For stop:",
     "{",
+    '  "mode": "evaluate",',
     '  "status": "stop",',
     '  "stopReason": "objective_complete" | "supervisor_uncertain",',
     '  "reason": "brief explanation"',
@@ -585,7 +654,8 @@ function extractSupervisorPayload(output: string, providerId: string): string {
 
 function parseSupervisorEvaluationResult(
   payloadText: string,
-  guidanceMaxChars: number
+  guidanceMaxChars: number,
+  requestedMode: "decompose" | "evaluate"
 ): SupervisorEvaluationResult {
   let parsed: unknown;
   try {
@@ -601,10 +671,77 @@ function parseSupervisorEvaluationResult(
   }
 
   const record = parsed as Record<string, unknown>;
+  const payloadMode = record.mode;
+
+  if (requestedMode === "decompose") {
+    if (payloadMode !== "decompose") {
+      throw new Error("Supervisor returned invalid decompose payload");
+    }
+
+    const decompositionMode = record.decompositionMode;
+    if (decompositionMode !== "stage" && decompositionMode !== "subtarget") {
+      throw new Error("Supervisor decompose result is missing a valid decompositionMode");
+    }
+
+    const items = Array.isArray(record.items)
+      ? record.items.flatMap<SupervisorWorkItem>((value) => {
+          if (!value || typeof value !== "object") {
+            return [];
+          }
+          const item = value as Record<string, unknown>;
+          if (
+            typeof item.id !== "string" ||
+            (item.kind !== "stage" && item.kind !== "subtarget") ||
+            item.kind !== decompositionMode ||
+            typeof item.title !== "string" ||
+            typeof item.objective !== "string" ||
+            typeof item.deliverable !== "string" ||
+            !Array.isArray(item.acceptanceCriteria) ||
+            item.acceptanceCriteria.length === 0 ||
+            item.acceptanceCriteria.some((entry) => typeof entry !== "string") ||
+            (item.status !== "pending" && item.status !== "in_progress" && item.status !== "done")
+          ) {
+            return [];
+          }
+
+          return [
+            {
+              id: item.id,
+              kind: item.kind,
+              title: item.title,
+              objective: item.objective,
+              deliverable: item.deliverable,
+              acceptanceCriteria: item.acceptanceCriteria as string[],
+              status: item.status,
+            },
+          ];
+        })
+      : [];
+
+    if (items.length === 0) {
+      throw new Error("Supervisor decompose result must include at least one valid item");
+    }
+
+    return {
+      mode: "decompose",
+      decompositionMode,
+      items,
+      activeItemId:
+        typeof record.activeItemId === "string" && record.activeItemId.trim()
+          ? record.activeItemId
+          : undefined,
+      progressSummary:
+        typeof record.progressSummary === "string" && record.progressSummary.trim()
+          ? record.progressSummary.trim()
+          : undefined,
+    };
+  }
+
   const status = record.status;
   const reason = record.reason;
 
   if (
+    (payloadMode !== undefined && payloadMode !== "evaluate") ||
     (status !== "continue" && status !== "stop") ||
     typeof reason !== "string" ||
     !reason.trim()
@@ -619,6 +756,7 @@ function parseSupervisorEvaluationResult(
     }
 
     return {
+      mode: "evaluate",
       status,
       stopReason,
       reason: reason.trim(),
@@ -630,25 +768,8 @@ function parseSupervisorEvaluationResult(
       ? record.guidance.trim().slice(0, guidanceMaxChars)
       : undefined;
 
-  const plan: SupervisorPlanStep[] | undefined = Array.isArray(record.plan)
-    ? record.plan.flatMap<SupervisorPlanStep>((value) => {
-        if (!value || typeof value !== "object") {
-          return [];
-        }
-        const step = value as Record<string, unknown>;
-        if (
-          typeof step.id !== "string" ||
-          typeof step.title !== "string" ||
-          (step.status !== "pending" && step.status !== "in_progress" && step.status !== "done")
-        ) {
-          return [];
-        }
-        return [{ id: step.id, title: step.title, status: step.status }];
-      })
-    : undefined;
-
-  const stepUpdates: SupervisorCycleStepUpdate[] | undefined = Array.isArray(record.stepUpdates)
-    ? record.stepUpdates.flatMap<SupervisorCycleStepUpdate>((value) => {
+  const itemUpdates: SupervisorCycleItemUpdate[] | undefined = Array.isArray(record.itemUpdates)
+    ? record.itemUpdates.flatMap<SupervisorCycleItemUpdate>((value) => {
         if (!value || typeof value !== "object") {
           return [];
         }
@@ -666,18 +787,18 @@ function parseSupervisorEvaluationResult(
     : undefined;
 
   return {
+    mode: "evaluate",
     status,
     reason: reason.trim(),
     guidance,
-    plan,
-    activeStepId:
-      typeof record.activeStepId === "string" && record.activeStepId.trim()
-        ? record.activeStepId
+    activeItemId:
+      typeof record.activeItemId === "string" && record.activeItemId.trim()
+        ? record.activeItemId
         : undefined,
     progressSummary:
       typeof record.progressSummary === "string" && record.progressSummary.trim()
         ? record.progressSummary.trim()
         : undefined,
-    stepUpdates,
+    itemUpdates,
   };
 }

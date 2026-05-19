@@ -10,16 +10,21 @@ interface SupervisorCardProps {
 export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) {
   const t = useTranslation();
   const {
+    activeItem,
     actionError,
+    decompositionModeLabel,
+    decompositionStatusLabel,
     handlePause,
     handleResume,
     handleTrigger,
     isBusy,
     openDialog,
+    recentReasoning,
     stopReasonLabel,
     stateClass,
     stateLabel,
     supervisor,
+    targetMemory,
   } = useSupervisorActions({ sessionId });
 
   if (!supervisor) {
@@ -124,6 +129,71 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
           <span className="supervisor-objective-text">{supervisor.objective}</span>
         </Tooltip>
       </div>
+
+      {targetMemory ? (
+        <div className="supervisor-details" aria-label={t("supervisor.target_memory.title")}>
+          <div className="supervisor-meta-grid">
+            <div className="supervisor-meta-item">
+              <p className="supervisor-meta-label">{t("supervisor.target_memory.target")}</p>
+              <p className="supervisor-meta-value">{decompositionStatusLabel}</p>
+            </div>
+            {decompositionModeLabel ? (
+              <div className="supervisor-meta-item">
+                <p className="supervisor-meta-label">
+                  {t("supervisor.target_memory.decomposition_mode_title")}
+                </p>
+                <p className="supervisor-meta-value">{decompositionModeLabel}</p>
+              </div>
+            ) : null}
+            {activeItem ? (
+              <div className="supervisor-meta-item">
+                <p className="supervisor-meta-label">{t("supervisor.target_memory.active_item")}</p>
+                <p className="supervisor-meta-value">{activeItem.title}</p>
+              </div>
+            ) : null}
+            <div className="supervisor-meta-item">
+              <p className="supervisor-meta-label">{t("supervisor.target_memory.stalled")}</p>
+              <p className="supervisor-meta-value">{String(targetMemory.stalledCount)}</p>
+            </div>
+          </div>
+
+          {targetMemory.progressSummary ? (
+            <div className="supervisor-meta-item">
+              <p className="supervisor-meta-label">
+                {t("supervisor.target_memory.progress_title")}
+              </p>
+              <p className="supervisor-meta-value">{targetMemory.progressSummary}</p>
+            </div>
+          ) : null}
+
+          {targetMemory.items.length > 0 ? (
+            <div className="supervisor-meta-item">
+              <p className="supervisor-meta-label">
+                {t("supervisor.target_memory.decomposition_title")}
+              </p>
+              <div className="supervisor-details-panel">
+                {targetMemory.items.map((item) => (
+                  <div key={item.id} className="supervisor-meta-item">
+                    <p className="supervisor-meta-label">
+                      {t(`supervisor.target_memory.step_status.${item.status}`)}
+                    </p>
+                    <p className="supervisor-meta-value">{item.title}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {recentReasoning ? (
+            <div className="supervisor-meta-item">
+              <p className="supervisor-meta-label">
+                {t("supervisor.target_memory.reasoning_title")}
+              </p>
+              <p className="supervisor-meta-value">{recentReasoning}</p>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {supervisor.state === "stopped" && stopReasonLabel ? (
         <div className="supervisor-error" role="status">

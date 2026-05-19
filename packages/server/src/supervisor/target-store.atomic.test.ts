@@ -67,9 +67,20 @@ describe("target store atomic reset", () => {
 
     await saveTargetMemory(workspacePath, "tgt-1", {
       targetId: "tgt-1",
-      planGenerated: true,
-      plan: [{ id: "step-1", title: "Old step", status: "in_progress" }],
-      activeStepId: "step-1",
+      decompositionGenerated: true,
+      decompositionMode: "stage",
+      items: [
+        {
+          id: "stage-1",
+          kind: "stage",
+          title: "Old step",
+          objective: "Keep the old scope",
+          deliverable: "The original stage remains intact",
+          acceptanceCriteria: ["Original stage is preserved"],
+          status: "in_progress",
+        },
+      ],
+      activeItemId: "stage-1",
       progressSummary: "In progress",
       lastGuidance: "Do old thing",
       stalledCount: 1,
@@ -107,8 +118,9 @@ describe("target store atomic reset", () => {
     expect(meta.objective).toBe("Old objective");
     expect(memory).toMatchObject({
       targetId: "tgt-1",
-      planGenerated: true,
-      activeStepId: "step-1",
+      decompositionGenerated: true,
+      decompositionMode: "stage",
+      activeItemId: "stage-1",
       progressSummary: "In progress",
       lastGuidance: "Do old thing",
       stalledCount: 1,
@@ -150,7 +162,7 @@ describe("target store atomic reset", () => {
     expect(meta.objective).toBe("New objective");
     expect(memory).toMatchObject({
       targetId: "tgt-1",
-      planGenerated: false,
+      decompositionGenerated: false,
       stalledCount: 0,
       updatedAt: 3,
     });

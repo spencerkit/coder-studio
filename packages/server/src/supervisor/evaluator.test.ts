@@ -131,9 +131,20 @@ function makeContext(): SupervisorEvaluationContext {
     latestUserInput: "run the tests",
     targetMemory: {
       targetId: "tgt-1",
-      planGenerated: true,
-      plan: [{ id: "step-1", title: "Verify the fix", status: "in_progress" }],
-      activeStepId: "step-1",
+      decompositionGenerated: true,
+      decompositionMode: "stage",
+      items: [
+        {
+          id: "stage-1",
+          kind: "stage",
+          title: "Verify the fix",
+          objective: "Confirm the fix works",
+          deliverable: "A passing focused verification run",
+          acceptanceCriteria: ["Focused verification passes"],
+          status: "in_progress",
+        },
+      ],
+      activeItemId: "stage-1",
       progressSummary: "Verification in progress",
       lastGuidance: "Run the focused tests",
       stalledCount: 0,
@@ -232,39 +243,74 @@ describe("SupervisorEvaluator", () => {
     );
   });
 
-  it("builds a bootstrap prompt when planGenerated is false", async () => {
+  it("parses a valid decompose result with stage items", async () => {
     const evaluator = makeEvaluator(
       JSON.stringify({
-        status: "continue",
-        reason: "Need a plan first",
-        guidance: "Break the objective into 3 to 7 steps",
-        plan: [
-          { id: "step-1", title: "Inspect current behavior", status: "in_progress" },
-          { id: "step-2", title: "Implement target store", status: "pending" },
+        mode: "decompose",
+        decompositionMode: "stage",
+        items: [
+          {
+            id: "stage-1",
+            kind: "stage",
+            title: "Inspect current behavior",
+            objective: "Understand the current implementation",
+            deliverable: "A verified behavior summary",
+            acceptanceCriteria: ["Behavior summary is captured"],
+            status: "in_progress",
+          },
         ],
-        activeStepId: "step-1",
-        progressSummary: "Initial decomposition complete",
+        activeItemId: "stage-1",
+        progressSummary: "Decomposition complete",
       }),
       "claude"
     );
 
-    const result = await evaluator.evaluate(makeSupervisor("claude"), {
-      ...makeContext(),
-      targetMemory: {
-        targetId: "tgt-1",
-        planGenerated: false,
-        plan: [],
-        stalledCount: 0,
-        updatedAt: 1,
+    const result = await evaluator.evaluate(
+      makeSupervisor("claude"),
+      {
+        ...makeContext(),
+        targetMemory: {
+          targetId: "tgt-1",
+          decompositionGenerated: false,
+          items: [],
+          stalledCount: 0,
+          updatedAt: 1,
+        },
       },
-    });
+      { mode: "decompose" }
+    );
 
-    expect(result.status).toBe("continue");
-    expect(result.plan?.map((step) => step.title)).toEqual([
-      "Inspect current behavior",
-      "Implement target store",
-    ]);
-    expect(result.guidance).toBe("Break the objective into 3 to 7 steps");
+    expect(result.mode).toBe("decompose");
+    expect(result.decompositionMode).toBe("stage");
+    expect(result.items?.[0]?.title).toBe("Inspect current behavior");
+  });
+
+  it("rejects decompose results that do not return any items", async () => {
+    const evaluator = makeEvaluator(
+      JSON.stringify({
+        mode: "decompose",
+        decompositionMode: "stage",
+        items: [],
+      }),
+      "claude"
+    );
+
+    await expect(
+      evaluator.evaluate(
+        makeSupervisor("claude"),
+        {
+          ...makeContext(),
+          targetMemory: {
+            targetId: "tgt-1",
+            decompositionGenerated: false,
+            items: [],
+            stalledCount: 0,
+            updatedAt: 1,
+          },
+        },
+        { mode: "decompose" }
+      )
+    ).rejects.toThrow(/at least one valid item/i);
   });
 
   it("parses a stop result with stopReason", async () => {
@@ -278,6 +324,7 @@ describe("SupervisorEvaluator", () => {
     );
 
     await expect(evaluator.evaluate(makeSupervisor("claude"), makeContext())).resolves.toEqual({
+      mode: "evaluate",
       status: "stop",
       stopReason: "objective_complete",
       reason: "The target is complete",
@@ -470,11 +517,12 @@ describe("SupervisorEvaluator", () => {
       "Do not ask the user to decide, clarify, or choose among implementation options."
     );
     expect(prompt).toContain("Use the target memory as the current supervision state.");
-    expect(prompt).toContain("Identify which plan step is currently active.");
-    expect(prompt).toContain("If the active step is done, advance to the next useful step.");
+    expect(prompt).toContain("Identify which decomposition item is currently active.");
+    expect(prompt).toContain("If the active item is done, advance to the next useful item.");
     expect(prompt).toContain(
       "If the agent appears stuck or repeated the same action, give a different concrete next action."
     );
+    expect(prompt).toContain("Use itemUpdates to mark completed or active items");
     expect(prompt).toContain('Use "supervisor_uncertain" only as a last resort');
     expect(prompt).toContain('Guidance requirements for "continue":');
     expect(prompt).toContain(

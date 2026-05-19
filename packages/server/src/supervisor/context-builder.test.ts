@@ -70,8 +70,8 @@ const baseSupervisor: Supervisor = {
 
 const baseTargetMemory = {
   targetId: "tgt-1",
-  planGenerated: false,
-  plan: [],
+  decompositionGenerated: false,
+  items: [],
   stalledCount: 0,
   updatedAt: 1,
 } as const;

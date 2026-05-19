@@ -713,14 +713,19 @@
     "target_memory": {
       "title": "目标记忆",
       "target": "目标",
-      "plan": "计划",
       "stalled": "停滞",
-      "plan_ready": "计划已就绪",
-      "plan_pending": "计划待生成",
+      "decomposition_ready": "拆解已就绪",
+      "decomposition_pending": "拆解待生成",
+      "decomposition_mode_title": "模式",
+      "decomposition_title": "拆解结构",
+      "active_item": "当前项",
       "progress_title": "目标进展",
       "progress_badge": "进展",
-      "plan_title": "目标计划",
       "reasoning_title": "目标轮次判断",
+      "decomposition_mode": {
+        "stage": "阶段",
+        "subtarget": "子目标"
+      },
       "cycle_result": {
         "continue": "继续",
         "stop": "停止",

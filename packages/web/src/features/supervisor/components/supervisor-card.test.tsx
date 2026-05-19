@@ -20,9 +20,20 @@ describe("SupervisorCard", () => {
     completedSupervisionCount: 0,
     currentTargetMemory: {
       targetId: "tgt-1",
-      planGenerated: true,
-      plan: [{ id: "step-1", title: "Verify the refactor", status: "in_progress" }],
-      activeStepId: "step-1",
+      decompositionGenerated: true,
+      decompositionMode: "stage",
+      items: [
+        {
+          id: "stage-1",
+          kind: "stage",
+          title: "Verify the refactor",
+          objective: "Confirm the refactor still behaves correctly",
+          deliverable: "A passing focused verification run",
+          acceptanceCriteria: ["Focused verification passes"],
+          status: "in_progress",
+        },
+      ],
+      activeItemId: "stage-1",
       progressSummary: "Validation in progress",
       stalledCount: 0,
       updatedAt: 1,
@@ -122,13 +133,14 @@ describe("SupervisorCard", () => {
     expect(statusCluster?.querySelector(".supervisor-cycle-count")).toHaveTextContent("Cycles 3");
     expect(screen.queryByLabelText("Latest evaluation")).not.toBeInTheDocument();
     expect(screen.queryByText("Persistence and hydration are done.")).not.toBeInTheDocument();
-    expect(screen.queryByText("Verify the refactor")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Verify the refactor").length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: /expand/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /collapse/i })).not.toBeInTheDocument();
-    expect(screen.queryByText("Target memory")).not.toBeInTheDocument();
-    expect(screen.queryByText("Plan ready")).not.toBeInTheDocument();
-    expect(screen.queryByText("Validation in progress")).not.toBeInTheDocument();
-    expect(screen.queryByText("Need to finish the validation step.")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Target memory")).toBeInTheDocument();
+    expect(screen.getByText("Decomposition ready")).toBeInTheDocument();
+    expect(screen.getByText("Stages")).toBeInTheDocument();
+    expect(screen.getByText("Validation in progress")).toBeInTheDocument();
+    expect(screen.getByText("Need to finish the validation step.")).toBeInTheDocument();
     expect(screen.queryByText("65%")).not.toBeInTheDocument();
     expect(document.querySelector(".supervisor-progress-track")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Trigger Evaluation" }));

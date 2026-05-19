@@ -1,6 +1,13 @@
 import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import type { SupervisorCycleTargetRecord, SupervisorTargetMemory } from "@coder-studio/core";
+import type {
+  SupervisorCycleTargetRecord,
+  SupervisorDecompositionMode,
+  SupervisorTargetMemory,
+  SupervisorWorkItem,
+  SupervisorWorkItemKind,
+  SupervisorWorkItemStatus,
+} from "@coder-studio/core";
 
 export interface SupervisorTargetMeta {
   targetId: string;
@@ -64,6 +71,154 @@ function errorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object";
+}
+
+function readNonEmptyString(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const next = value.trim();
+  return next ? next : undefined;
+}
+
+function readStatus(value: unknown): SupervisorWorkItemStatus {
+  return value === "in_progress" || value === "done" || value === "pending" ? value : "pending";
+}
+
+function readDecompositionMode(value: unknown): SupervisorDecompositionMode | undefined {
+  return value === "stage" || value === "subtarget" ? value : undefined;
+}
+
+function readNonNegativeInteger(value: unknown, fallback: number): number {
+  if (!Number.isSafeInteger(value) || typeof value !== "number" || value < 0) {
+    return fallback;
+  }
+  return value;
+}
+
+function readTimestamp(value: unknown, fallback: number): number {
+  if (!Number.isSafeInteger(value) || typeof value !== "number") {
+    return fallback;
+  }
+  return value;
+}
+
+function fallbackAcceptanceCriteria(title: string): string[] {
+  return [`${title} is complete`];
+}
+
+function normalizeItem(
+  value: unknown,
+  fallbackKind?: SupervisorWorkItemKind
+): SupervisorWorkItem | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const id = readNonEmptyString(value.id);
+  const title = readNonEmptyString(value.title);
+  if (!id || !title) {
+    return null;
+  }
+
+  const kind = readDecompositionMode(value.kind) ?? fallbackKind ?? "stage";
+  const objective = readNonEmptyString(value.objective) ?? title;
+  const deliverable = readNonEmptyString(value.deliverable) ?? `${title} completed`;
+  const acceptanceCriteria = Array.isArray(value.acceptanceCriteria)
+    ? value.acceptanceCriteria.flatMap<string>((entry) => {
+        const next = readNonEmptyString(entry);
+        return next ? [next] : [];
+      })
+    : [];
+
+  return {
+    id,
+    kind,
+    title,
+    objective,
+    deliverable,
+    acceptanceCriteria:
+      acceptanceCriteria.length > 0 ? acceptanceCriteria : fallbackAcceptanceCriteria(title),
+    status: readStatus(value.status),
+  };
+}
+
+function normalizeLegacyPlanItems(plan: unknown): SupervisorWorkItem[] {
+  if (!Array.isArray(plan)) {
+    return [];
+  }
+
+  return plan.flatMap<SupervisorWorkItem>((value) => {
+    const item = normalizeItem(
+      isRecord(value)
+        ? {
+            id: value.id,
+            kind: "stage",
+            title: value.title,
+            objective: value.title,
+            deliverable: `${readNonEmptyString(value.title) ?? "Legacy step"} completed`,
+            acceptanceCriteria: fallbackAcceptanceCriteria(
+              readNonEmptyString(value.title) ?? "Legacy step"
+            ),
+            status: value.status,
+          }
+        : value,
+      "stage"
+    );
+
+    return item ? [item] : [];
+  });
+}
+
+function resolveActiveItemId(items: SupervisorWorkItem[], candidate: unknown): string | undefined {
+  const next = readNonEmptyString(candidate);
+  if (next && items.some((item) => item.id === next)) {
+    return next;
+  }
+
+  return (
+    items.find((item) => item.status === "in_progress")?.id ??
+    items.find((item) => item.status === "pending")?.id ??
+    items[0]?.id
+  );
+}
+
+function normalizeTargetMemory(raw: unknown, targetId: string): SupervisorTargetMemory {
+  if (!isRecord(raw)) {
+    return buildTargetMemory(targetId, 0);
+  }
+
+  const updatedAt = readTimestamp(raw.updatedAt, 0);
+  const declaredMode = readDecompositionMode(raw.decompositionMode);
+
+  let items = Array.isArray(raw.items)
+    ? raw.items.flatMap<SupervisorWorkItem>((value) => {
+        const item = normalizeItem(value, declaredMode);
+        return item ? [item] : [];
+      })
+    : [];
+  let decompositionMode = declaredMode ?? items[0]?.kind;
+
+  if (items.length === 0) {
+    items = normalizeLegacyPlanItems(raw.plan);
+    decompositionMode = items.length > 0 ? "stage" : undefined;
+  }
+
+  return {
+    targetId: readNonEmptyString(raw.targetId) ?? targetId,
+    decompositionGenerated: items.length > 0,
+    decompositionMode,
+    items,
+    activeItemId: resolveActiveItemId(items, raw.activeItemId ?? raw.activeStepId),
+    progressSummary: readNonEmptyString(raw.progressSummary),
+    lastGuidance: readNonEmptyString(raw.lastGuidance),
+    stalledCount: readNonNegativeInteger(raw.stalledCount, 0),
+    updatedAt,
+  };
+}
+
 async function writeJsonIfMissing(path: string, value: unknown): Promise<void> {
   try {
     await writeFile(path, JSON.stringify(value, null, 2) + "\n", {
@@ -100,8 +255,12 @@ function buildTargetMeta(input: {
 function buildTargetMemory(targetId: string, createdAt: number): SupervisorTargetMemory {
   return {
     targetId,
-    planGenerated: false,
-    plan: [],
+    decompositionGenerated: false,
+    decompositionMode: undefined,
+    items: [],
+    activeItemId: undefined,
+    progressSummary: undefined,
+    lastGuidance: undefined,
     stalledCount: 0,
     updatedAt: createdAt,
   };
@@ -231,9 +390,10 @@ export async function loadTargetMemory(
   workspacePath: string,
   targetId: string
 ): Promise<SupervisorTargetMemory> {
-  return JSON.parse(
-    await readFile(memoryPath(workspacePath, targetId), "utf-8")
-  ) as SupervisorTargetMemory;
+  return normalizeTargetMemory(
+    JSON.parse(await readFile(memoryPath(workspacePath, targetId), "utf-8")),
+    targetId
+  );
 }
 
 export async function saveTargetMemory(

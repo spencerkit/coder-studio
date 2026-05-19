@@ -713,14 +713,19 @@
     "target_memory": {
       "title": "Target memory",
       "target": "Target",
-      "plan": "Plan",
       "stalled": "Stalled",
-      "plan_ready": "Plan ready",
-      "plan_pending": "Plan pending",
+      "decomposition_ready": "Decomposition ready",
+      "decomposition_pending": "Decomposition pending",
+      "decomposition_mode_title": "Mode",
+      "decomposition_title": "Decomposition",
+      "active_item": "Active item",
       "progress_title": "Target progress",
       "progress_badge": "PROGRESS",
-      "plan_title": "Target plan",
       "reasoning_title": "Target cycle reasoning",
+      "decomposition_mode": {
+        "stage": "Stages",
+        "subtarget": "Subtargets"
+      },
       "cycle_result": {
         "continue": "CONTINUE",
         "stop": "STOP",
