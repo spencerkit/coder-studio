@@ -1,4 +1,4 @@
-import type { Supervisor, SupervisorCycle } from "@coder-studio/core";
+import type { Supervisor } from "@coder-studio/core";
 import { createStore } from "jotai";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { isWriterAtom, serverInfoAtom, sessionsAtom } from "../atoms";
@@ -10,7 +10,7 @@ import {
   workspacesLoadStateAtom,
 } from "../atoms/workspaces";
 import { paneLayoutAtomFamily } from "../features/agent-panes/atoms/pane-layout";
-import { supervisorCyclesAtom, supervisorsAtom } from "../features/supervisor/atoms";
+import { supervisorsAtom } from "../features/supervisor/atoms";
 import { terminalMetaAtomFamily } from "../features/terminal-panel/atoms";
 import { fileTreeStaleAtomFamily } from "../features/workspace/atoms";
 import { resetAppProvidersSingletonsForTests, routeEventToAtom } from "./providers";
@@ -27,22 +27,8 @@ describe("routeEventToAtom", () => {
     maxSupervisionCount: 0,
     completedSupervisionCount: 0,
     recentTargetCycles: [],
-    cycles: [],
     createdAt: 1,
     updatedAt: 1,
-  });
-
-  const createCycle = (): SupervisorCycle => ({
-    id: "cycle-1",
-    supervisorId: "sup-1",
-    sessionId: "sess-1",
-    status: "completed",
-    trigger: "manual",
-    evidenceSource: "transcript",
-    objective: "Track progress",
-    evaluatorProviderId: "claude",
-    createdAt: 1,
-    completedAt: 2,
   });
 
   beforeEach(() => {
@@ -53,10 +39,9 @@ describe("routeEventToAtom", () => {
     resetAppProvidersSingletonsForTests();
   });
 
-  it("removes supervisor state and cycles on delete events", () => {
+  it("removes supervisor state on delete events", () => {
     const store = createStore();
     store.set(supervisorsAtom, new Map([["sess-1", createSupervisor()]]));
-    store.set(supervisorCyclesAtom, new Map([["sup-1", [createCycle()]]]));
 
     routeEventToAtom(
       "workspace.ws-1.session.sess-1.supervisor.state",
@@ -65,7 +50,6 @@ describe("routeEventToAtom", () => {
     );
 
     expect(store.get(supervisorsAtom).size).toBe(0);
-    expect(store.get(supervisorCyclesAtom).size).toBe(0);
   });
 
   it("stores server metadata from the initial connected status event", () => {

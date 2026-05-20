@@ -7,7 +7,6 @@ import {
   type SupervisorConfig,
   type SupervisorCycle,
   type SupervisorCycleTargetRecord,
-  type SupervisorRuntimePhase,
   type SupervisorState,
   type SupervisorTargetMemory,
   Topics,
@@ -17,8 +16,6 @@ import type { EventBus } from "../bus/event-bus.js";
 import type { SessionManager } from "../session/manager.js";
 import type { ProviderConfigRepo } from "../storage/repositories/provider-config-repo.js";
 import type { SettingsRepo } from "../storage/repositories/settings-repo.js";
-import type { SupervisorCycleAttemptRepo } from "../storage/repositories/supervisor-cycle-attempt-repo.js";
-import type { SupervisorCycleRepo } from "../storage/repositories/supervisor-cycle-repo.js";
 import type { SupervisorRepo } from "../storage/repositories/supervisor-repo.js";
 import type { TerminalManager } from "../terminal/manager.js";
 import type { WorkspaceManager } from "../workspace/manager.js";
@@ -76,20 +73,12 @@ interface SupervisorRetrySnapshot {
   retryOnEvaluatorError: boolean;
 }
 
-interface SupervisorCycleRuntimeSnapshot {
-  phase: SupervisorRuntimePhase;
-  currentAttemptIndex?: number;
-  attemptCount?: number;
-  maxAttempts?: number;
-  lastAttemptError?: string;
-  nextRetryAt?: number;
-}
-
 interface CompletedCycleEvaluation {
   evaluation: SupervisorEvaluateResult;
   injected: boolean;
   injectedText?: string;
   targetMemory: SupervisorTargetMemory;
+  attemptCount: number;
 }
 
 export interface SupervisorManagerDeps {
@@ -102,11 +91,6 @@ export interface SupervisorManagerDeps {
   providerConfigRepo: ProviderConfigRepo;
   settingsRepo: Pick<SettingsRepo, "get">;
   supervisorRepo: SupervisorRepo;
-  cycleRepo: SupervisorCycleRepo;
-  cycleAttemptRepo: Pick<
-    SupervisorCycleAttemptRepo,
-    "create" | "update" | "listForCycle" | "deleteForCycle"
-  >;
   targetStore: {
     cloneTargetFiles: typeof import("./target-store.js").cloneTargetFiles;
     createTargetFiles: typeof import("./target-store.js").createTargetFiles;
@@ -167,10 +151,6 @@ function generateSupervisorId(): string {
 
 function generateCycleId(): string {
   return `cycle_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-}
-
-function generateAttemptId(): string {
-  return `attempt_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 }
 
 function messageOf(error: unknown, fallback: string): string {
@@ -311,28 +291,7 @@ export class SupervisorManager {
               })
             );
 
-      // Any cycle still in a transient state belongs to a previous server
-      // process (or a long-fixed buggy code path). Mark it as failed so it
-      // doesn't sit forever in the UI as "queued"/"evaluating".
-      const stale = this.deps.cycleRepo
-        .listRecentForSupervisor(hydratedWithTarget.id, this.config.maxCyclesPerSession)
-        .filter((cycle) => cycle.status === "queued" || cycle.status === "evaluating");
-      for (const cycle of stale) {
-        try {
-          this.deps.cycleRepo.update(cycle.id, {
-            status: "failed",
-            errorReason: "Orphaned before server restart",
-            completedAt: Date.now(),
-          });
-        } catch (error) {
-          this.logger.warn(
-            { err: error, cycleId: cycle.id, supervisorId: hydratedWithTarget.id },
-            "Failed to clean up stale cycle on hydrate"
-          );
-        }
-      }
-
-      this.storeSnapshot(this.attachCycles(recovered));
+      this.storeSnapshot(recovered);
     }
 
     this.start();
@@ -415,22 +374,20 @@ export class SupervisorManager {
     const objective = req.objective.trim();
     const workspace = this.requireWorkspace(req.workspaceId);
     const supervisorId = generateSupervisorId();
-    const supervisor = this.attachCycles(
-      this.deps.supervisorRepo.create({
-        id: supervisorId,
-        sessionId: req.sessionId,
-        workspaceId: req.workspaceId,
-        state: "idle",
-        objective,
-        evaluatorProviderId: req.evaluatorProviderId,
-        evaluatorModel: req.evaluatorModel?.trim() || undefined,
-        maxSupervisionCount: req.maxSupervisionCount ?? 0,
-        completedSupervisionCount: 0,
-        scheduledAt: req.scheduledAt,
-        createdAt: now,
-        updatedAt: now,
-      })
-    );
+    const supervisor = this.deps.supervisorRepo.create({
+      id: supervisorId,
+      sessionId: req.sessionId,
+      workspaceId: req.workspaceId,
+      state: "idle",
+      objective,
+      evaluatorProviderId: req.evaluatorProviderId,
+      evaluatorModel: req.evaluatorModel?.trim() || undefined,
+      maxSupervisionCount: req.maxSupervisionCount ?? 0,
+      completedSupervisionCount: 0,
+      scheduledAt: req.scheduledAt,
+      createdAt: now,
+      updatedAt: now,
+    });
     let enriched: Supervisor;
     try {
       await this.deps.targetStore.createTargetFiles(workspace.path, {
@@ -492,12 +449,10 @@ export class SupervisorManager {
         objective: source.objective,
         createdAt: created.createdAt,
       });
-      const updated = this.attachCycles(
-        this.deps.supervisorRepo.update(created.id, {
-          completedSupervisionCount: cycleCount,
-          updatedAt: now,
-        })
-      );
+      const updated = this.deps.supervisorRepo.update(created.id, {
+        completedSupervisionCount: cycleCount,
+        updatedAt: now,
+      });
       const enriched = await this.attachTargetState(updated, workspace.path);
 
       await this.deps.targetStore.deleteTarget(workspace.path, req.sourceTargetId);
@@ -515,21 +470,19 @@ export class SupervisorManager {
       objective: source.objective,
       createdAt: existing.createdAt,
     });
-    const updated = this.attachCycles(
-      this.deps.supervisorRepo.update(existing.id, {
-        objective: source.objective,
-        evaluatorProviderId: req.evaluatorProviderId,
-        evaluatorModel: req.evaluatorModel?.trim() || null,
-        maxSupervisionCount: req.maxSupervisionCount ?? existing.maxSupervisionCount,
-        scheduledAt: req.scheduledAt ?? null,
-        state: existing.state === "paused" ? "paused" : "idle",
-        stopReason: null,
-        completedSupervisionCount: cycleCount,
-        lastEvaluatedTurnId: null,
-        errorReason: null,
-        updatedAt: now,
-      })
-    );
+    const updated = this.deps.supervisorRepo.update(existing.id, {
+      objective: source.objective,
+      evaluatorProviderId: req.evaluatorProviderId,
+      evaluatorModel: req.evaluatorModel?.trim() || null,
+      maxSupervisionCount: req.maxSupervisionCount ?? existing.maxSupervisionCount,
+      scheduledAt: req.scheduledAt ?? null,
+      state: existing.state === "paused" ? "paused" : "idle",
+      stopReason: null,
+      completedSupervisionCount: cycleCount,
+      lastEvaluatedTurnId: null,
+      errorReason: null,
+      updatedAt: now,
+    });
     const enriched = await this.attachTargetState(updated, workspace.path);
 
     await this.deps.targetStore.deleteTarget(workspace.path, req.sourceTargetId);
@@ -624,13 +577,11 @@ export class SupervisorManager {
       this.evaluationAbortControllers.get(id)?.abort();
     }
 
-    const updated = this.attachCycles(
-      this.withCurrentTargetState(
-        this.deps.supervisorRepo.update(id, {
-          state: "paused",
-          updatedAt: Date.now(),
-        })
-      )
+    const updated = this.withCurrentTargetState(
+      this.deps.supervisorRepo.update(id, {
+        state: "paused",
+        updatedAt: Date.now(),
+      })
     );
 
     this.storeSnapshot(updated);
@@ -640,14 +591,12 @@ export class SupervisorManager {
   }
 
   async resume(id: string): Promise<Supervisor> {
-    const updated = this.attachCycles(
-      this.withCurrentTargetState(
-        this.deps.supervisorRepo.update(id, {
-          state: "idle",
-          errorReason: null,
-          updatedAt: Date.now(),
-        })
-      )
+    const updated = this.withCurrentTargetState(
+      this.deps.supervisorRepo.update(id, {
+        state: "idle",
+        errorReason: null,
+        updatedAt: Date.now(),
+      })
     );
 
     this.storeSnapshot(updated);
@@ -781,13 +730,11 @@ export class SupervisorManager {
       supervisor.maxSupervisionCount > 0 &&
       supervisor.completedSupervisionCount >= supervisor.maxSupervisionCount
     ) {
-      const stopped = this.attachCycles(
-        this.deps.supervisorRepo.update(id, {
-          state: "stopped",
-          stopReason: "max_supervision_count_reached",
-          updatedAt: Date.now(),
-        })
-      );
+      const stopped = this.deps.supervisorRepo.update(id, {
+        state: "stopped",
+        stopReason: "max_supervision_count_reached",
+        updatedAt: Date.now(),
+      });
       this.storeSnapshot(stopped);
       this.broadcastState(stopped, "state_changed");
       this.scheduler.refresh();
@@ -853,22 +800,20 @@ export class SupervisorManager {
           supervisor.scheduledAt !== null &&
           supervisor.scheduledAt <= Date.now());
 
-      const evaluatingSupervisor = this.attachCycles(
-        this.withCurrentTargetState(
-          this.deps.supervisorRepo.update(supervisor.id, {
-            state: "evaluating",
-            scheduledAt: shouldConsumeScheduledAt ? null : (supervisor.scheduledAt ?? undefined),
-            stopReason: null,
-            errorReason: null,
-            updatedAt: Date.now(),
-          })
-        )
+      const evaluatingSupervisor = this.withCurrentTargetState(
+        this.deps.supervisorRepo.update(supervisor.id, {
+          state: "evaluating",
+          scheduledAt: shouldConsumeScheduledAt ? null : (supervisor.scheduledAt ?? undefined),
+          stopReason: null,
+          errorReason: null,
+          updatedAt: Date.now(),
+        })
       );
       this.storeSnapshot(evaluatingSupervisor);
       this.broadcastState(evaluatingSupervisor, "state_changed");
       this.scheduler.refresh();
 
-      const activeCycle = this.deps.cycleRepo.create({
+      const activeCycle: SupervisorCycle = {
         id: generateCycleId(),
         supervisorId: supervisor.id,
         sessionId: supervisor.sessionId,
@@ -879,13 +824,7 @@ export class SupervisorManager {
         evaluatorProviderId: supervisor.evaluatorProviderId,
         turnId: context.lastTurnId,
         createdAt: Date.now(),
-      });
-      this.broadcastCycle(evaluatingSupervisor, activeCycle, "created", {
-        phase: "waiting_evaluator",
-        currentAttemptIndex: 0,
-        attemptCount: 1,
-        maxAttempts: 1 + retrySettings.retryMaxCount,
-      });
+      };
 
       return {
         cycle: activeCycle,
@@ -939,11 +878,12 @@ export class SupervisorManager {
     } catch (error: unknown) {
       if (isSupervisorEvalAborted(error)) {
         const cancelled = this.isCancellationRequested(supervisorId);
-        const abortedCycle = this.deps.cycleRepo.update(activeCycle.id, {
+        const abortedCycle: SupervisorCycle = {
+          ...activeCycle,
           status: cancelled ? "cancelled" : "failed",
-          errorReason: cancelled ? null : messageOf(error, "Supervisor evaluator aborted"),
+          errorReason: cancelled ? undefined : messageOf(error, "Supervisor evaluator aborted"),
           completedAt: Date.now(),
-        });
+        };
 
         const currentSupervisor =
           this.supervisors.get(supervisorId) ?? this.requireSupervisor(supervisorId);
@@ -955,11 +895,11 @@ export class SupervisorManager {
               workspace.path,
               targetId,
               activeCycle,
-              abortedCycle.errorReason ?? "Supervisor evaluator aborted"
+              abortedCycle.errorReason ?? "Supervisor evaluator aborted",
+              1
             );
             await this.markTargetCancelledIfActive(workspace.path, currentSupervisor);
           }
-          this.broadcastCycle(currentSupervisor, abortedCycle, "updated");
           this.pendingDeletes.delete(supervisorId);
           this.deleteNow(currentSupervisor);
           return abortedCycle;
@@ -969,19 +909,15 @@ export class SupervisorManager {
           const nextState: SupervisorState = this.pendingPauses.has(supervisorId)
             ? "paused"
             : "idle";
-          const recoveredSupervisor = this.attachCycles(
-            this.deps.supervisorRepo.update(supervisorId, {
-              state: nextState,
-              stopReason: null,
-              errorReason: null,
-              updatedAt: Date.now(),
-            })
-          );
+          const recoveredSupervisor = this.deps.supervisorRepo.update(supervisorId, {
+            state: nextState,
+            stopReason: null,
+            errorReason: null,
+            updatedAt: Date.now(),
+          });
 
           this.storeSnapshot(recoveredSupervisor);
-          this.broadcastCycle(recoveredSupervisor, abortedCycle, "updated");
           this.broadcastState(recoveredSupervisor, "state_changed");
-          this.deps.cycleRepo.pruneOldest(supervisorId, this.config.maxCyclesPerSession);
           this.scheduler.refresh();
 
           return abortedCycle;
@@ -989,22 +925,19 @@ export class SupervisorManager {
 
         if (currentSupervisor.targetId !== targetId) {
           const workspace = this.deps.workspaceMgr.get(currentSupervisor.workspaceId);
-          const enriched = this.attachCycles(
-            workspace
-              ? await this.attachTargetState(currentSupervisor, workspace.path)
-              : currentSupervisor
-          );
+          const enriched = workspace
+            ? await this.attachTargetState(currentSupervisor, workspace.path)
+            : currentSupervisor;
           if (workspace && abortedCycle.status === "failed") {
             await this.writeErrorTargetCycleRecord(
               workspace.path,
               targetId,
               activeCycle,
-              abortedCycle.errorReason ?? "Supervisor evaluator aborted"
+              abortedCycle.errorReason ?? "Supervisor evaluator aborted",
+              1
             );
           }
           this.storeSnapshot(enriched);
-          this.broadcastCycle(enriched, abortedCycle, "updated");
-          this.deps.cycleRepo.pruneOldest(supervisorId, this.config.maxCyclesPerSession);
           this.scheduler.refresh();
           this.pendingPauses.delete(supervisorId);
           return abortedCycle;
@@ -1013,14 +946,12 @@ export class SupervisorManager {
         const latestState = this.supervisors.get(supervisorId)?.state;
         const nextState: SupervisorState =
           cancelled || latestState === "paused" ? "paused" : "idle";
-        const recoveredSupervisor = this.attachCycles(
-          this.deps.supervisorRepo.update(supervisorId, {
-            state: nextState,
-            stopReason: null,
-            errorReason: null,
-            updatedAt: Date.now(),
-          })
-        );
+        const recoveredSupervisor = this.deps.supervisorRepo.update(supervisorId, {
+          state: nextState,
+          stopReason: null,
+          errorReason: null,
+          updatedAt: Date.now(),
+        });
 
         this.storeSnapshot(recoveredSupervisor);
         const workspace = this.deps.workspaceMgr.get(recoveredSupervisor.workspaceId);
@@ -1029,12 +960,11 @@ export class SupervisorManager {
             workspace.path,
             targetId,
             activeCycle,
-            abortedCycle.errorReason ?? "Supervisor evaluator aborted"
+            abortedCycle.errorReason ?? "Supervisor evaluator aborted",
+            1
           );
         }
-        this.broadcastCycle(recoveredSupervisor, abortedCycle, "updated");
         this.broadcastState(recoveredSupervisor, "state_changed");
-        this.deps.cycleRepo.pruneOldest(supervisorId, this.config.maxCyclesPerSession);
         this.scheduler.refresh();
         this.pendingPauses.delete(supervisorId);
 
@@ -1048,30 +978,29 @@ export class SupervisorManager {
         "Supervisor evaluation failed"
       );
       const reason = messageOf(error, "Supervisor evaluation failed");
-      const failedCycle = this.deps.cycleRepo.update(activeCycle.id, {
+      const failedCycle: SupervisorCycle = {
+        ...activeCycle,
         status: "failed",
         errorReason: reason,
         completedAt: Date.now(),
-      });
+      };
       const currentSupervisor =
         this.supervisors.get(supervisorId) ?? this.requireSupervisor(supervisorId);
       const workspace = this.deps.workspaceMgr.get(currentSupervisor.workspaceId);
       if (currentSupervisor.targetId !== targetId) {
-        const enriched = this.attachCycles(
-          workspace
-            ? await this.attachTargetState(currentSupervisor, workspace.path)
-            : currentSupervisor
-        );
+        const enriched = workspace
+          ? await this.attachTargetState(currentSupervisor, workspace.path)
+          : currentSupervisor;
         if (workspace) {
           await this.writeErrorTargetCycleRecord(
             workspace.path,
             targetId,
             activeCycle,
-            failedCycle.errorReason ?? reason
+            failedCycle.errorReason ?? reason,
+            1
           );
         }
         this.storeSnapshot(enriched);
-        this.broadcastCycle(enriched, failedCycle, "updated");
 
         if (this.pendingDeletes.has(supervisorId)) {
           this.pendingDeletes.delete(supervisorId);
@@ -1081,14 +1010,12 @@ export class SupervisorManager {
         throw error;
       }
 
-      const failedSupervisor = this.attachCycles(
-        this.deps.supervisorRepo.update(supervisorId, {
-          state: "error",
-          stopReason: null,
-          errorReason: reason,
-          updatedAt: Date.now(),
-        })
-      );
+      const failedSupervisor = this.deps.supervisorRepo.update(supervisorId, {
+        state: "error",
+        stopReason: null,
+        errorReason: reason,
+        updatedAt: Date.now(),
+      });
 
       this.storeSnapshot(failedSupervisor);
       if (workspace) {
@@ -1096,10 +1023,10 @@ export class SupervisorManager {
           workspace.path,
           targetId,
           activeCycle,
-          failedCycle.errorReason ?? reason
+          failedCycle.errorReason ?? reason,
+          1
         );
       }
-      this.broadcastCycle(failedSupervisor, failedCycle, "updated");
       this.broadcastState(failedSupervisor, "state_changed");
 
       if (this.pendingDeletes.has(supervisorId)) {
@@ -1118,26 +1045,12 @@ export class SupervisorManager {
   private async executeCycleWithRetry(
     started: StartedCycle,
     signal?: AbortSignal
-  ): Promise<CompletedCycleEvaluation> {
+  ): Promise<CompletedCycleEvaluation & { attemptCount: number }> {
     const supervisor = started.supervisor;
     let context = started.context;
     let currentMemory = context.targetMemory;
 
     for (let attemptIndex = 0; ; attemptIndex += 1) {
-      const attempt = this.deps.cycleAttemptRepo.create({
-        id: generateAttemptId(),
-        cycleId: started.cycle.id,
-        attemptIndex,
-        status: "evaluating",
-        startedAt: Date.now(),
-      });
-      this.broadcastCycle(started.supervisor, started.cycle, "updated", {
-        phase: "waiting_evaluator",
-        currentAttemptIndex: attemptIndex,
-        attemptCount: attemptIndex + 1,
-        maxAttempts: 1 + started.retry.retryMaxCount,
-      });
-
       try {
         if (!currentMemory.decompositionGenerated || currentMemory.items.length === 0) {
           const decomposition = await this.evaluator.evaluate(supervisor, context, {
@@ -1168,10 +1081,10 @@ export class SupervisorManager {
           const currentSupervisor =
             this.supervisors.get(supervisor.id) ?? this.requireSupervisor(supervisor.id);
           if (currentSupervisor.targetId === started.targetId) {
-            const refreshed = this.attachCycles({
+            const refreshed = {
               ...currentSupervisor,
               currentTargetMemory: currentMemory,
-            });
+            };
             this.storeSnapshot(refreshed);
           }
 
@@ -1184,11 +1097,6 @@ export class SupervisorManager {
         const evaluation = await this.evaluator.evaluate(supervisor, context, {
           signal,
           mode: "evaluate",
-        });
-        this.deps.cycleAttemptRepo.update(attempt.id, {
-          status: "completed",
-          completedAt: Date.now(),
-          providerModel: supervisor.evaluatorModel ?? null,
         });
 
         if (isDecomposeResult(evaluation)) {
@@ -1207,6 +1115,7 @@ export class SupervisorManager {
             evaluation,
             injected: false,
             targetMemory: nextTargetMemory,
+            attemptCount: attemptIndex + 1,
           };
         }
 
@@ -1215,6 +1124,7 @@ export class SupervisorManager {
             evaluation,
             injected: false,
             targetMemory: nextTargetMemory,
+            attemptCount: attemptIndex + 1,
           };
         }
 
@@ -1229,36 +1139,25 @@ export class SupervisorManager {
             evaluation,
             injected: false,
             targetMemory: nextTargetMemory,
+            attemptCount: attemptIndex + 1,
           };
         }
 
-        const injectingSupervisor = this.attachCycles(
-          this.withCurrentTargetState(
-            this.deps.supervisorRepo.update(supervisor.id, {
-              state: "injecting",
-              updatedAt: Date.now(),
-            })
-          )
+        const injectingSupervisor = this.withCurrentTargetState(
+          this.deps.supervisorRepo.update(supervisor.id, {
+            state: "injecting",
+            updatedAt: Date.now(),
+          })
         );
         this.storeSnapshot(injectingSupervisor);
         this.broadcastState(injectingSupervisor, "state_changed");
-        this.broadcastCycle(injectingSupervisor, started.cycle, "updated", {
-          phase: "injecting",
-          currentAttemptIndex: attemptIndex,
-          attemptCount: attemptIndex + 1,
-          maxAttempts: 1 + started.retry.retryMaxCount,
-        });
-
-        const recentCycles = this.deps.cycleRepo
-          .listRecentForSupervisor(supervisor.id, this.config.guidanceDedupeWindow + 1)
-          .filter((cycle) => cycle.id !== started.cycle.id);
 
         const injection = await this.injector.inject(
           injectingSupervisor,
           {
             message: evaluation.guidance,
           },
-          recentCycles,
+          [],
           { signal }
         );
 
@@ -1272,48 +1171,24 @@ export class SupervisorManager {
             injection.injected ? injection.text : undefined,
             Date.now()
           ),
+          attemptCount: attemptIndex + 1,
         };
       } catch (error) {
         if (isSupervisorEvalAborted(error)) {
-          const cancelled = this.isCancellationRequested(supervisor.id);
-          this.deps.cycleAttemptRepo.update(attempt.id, {
-            status: cancelled ? "cancelled" : "failed",
-            completedAt: Date.now(),
-            errorReason: cancelled ? null : messageOf(error, "Supervisor evaluator aborted"),
-          });
           throw error;
         }
-
-        const reason = messageOf(error, "Supervisor evaluation failed");
-        this.deps.cycleAttemptRepo.update(attempt.id, {
-          status: "failed",
-          completedAt: Date.now(),
-          errorReason: reason,
-        });
 
         if (!this.shouldRetryAttempt(error, attemptIndex, started.retry)) {
           throw error;
         }
 
-        const nextRetryAt = Date.now() + started.retry.retryDelayMs;
-        this.broadcastCycle(supervisor, started.cycle, "updated", {
-          phase: "retry_wait",
-          currentAttemptIndex: attemptIndex,
-          attemptCount: attemptIndex + 1,
-          maxAttempts: 1 + started.retry.retryMaxCount,
-          lastAttemptError: reason,
-          nextRetryAt,
-        });
-
         await this.sleep(started.retry.retryDelayMs, signal);
 
-        const evaluatingSupervisor = this.attachCycles(
-          this.withCurrentTargetState(
-            this.deps.supervisorRepo.update(supervisor.id, {
-              state: "evaluating",
-              updatedAt: Date.now(),
-            })
-          )
+        const evaluatingSupervisor = this.withCurrentTargetState(
+          this.deps.supervisorRepo.update(supervisor.id, {
+            state: "evaluating",
+            updatedAt: Date.now(),
+          })
         );
         this.storeSnapshot(evaluatingSupervisor);
         this.broadcastState(evaluatingSupervisor, "state_changed");
@@ -1337,17 +1212,16 @@ export class SupervisorManager {
       ? evaluation.reason
       : result.injected
         ? result.injectedText
-        : evaluation.guidance
-          ? `Skipped duplicate: ${evaluation.guidance}`
-          : undefined;
+        : evaluation.guidance;
 
-    const finishedCycle = this.deps.cycleRepo.update(activeCycle.id, {
+    const finishedCycle: SupervisorCycle = {
+      ...activeCycle,
       status: finalStatus,
-      result: cycleReason ?? null,
-      injectedGuidance: result.injectedText ?? null,
-      errorReason: null,
+      result: cycleReason,
+      injectedGuidance: result.injectedText,
+      errorReason: undefined,
       completedAt: Date.now(),
-    });
+    };
 
     const nextTargetMemory = {
       ...result.targetMemory,
@@ -1368,7 +1242,7 @@ export class SupervisorManager {
           decompositionMode: nextTargetMemory.decompositionMode,
           activeItemId: nextTargetMemory.activeItemId,
           injected: false,
-          attemptCount: this.deps.cycleAttemptRepo.listForCycle(activeCycle.id).length,
+          attemptCount: result.attemptCount,
         }
       : {
           cycleId: activeCycle.id,
@@ -1383,7 +1257,7 @@ export class SupervisorManager {
           activeItemId: nextTargetMemory.activeItemId,
           itemUpdates: evaluation.itemUpdates,
           injected: result.injected,
-          attemptCount: this.deps.cycleAttemptRepo.listForCycle(activeCycle.id).length,
+          attemptCount: result.attemptCount,
         };
     await this.deps.targetStore.appendTargetCycleRecord(workspace.path, targetId, cycleRecord);
 
@@ -1395,36 +1269,28 @@ export class SupervisorManager {
     }
 
     if (currentSupervisor.targetId !== targetId) {
-      const enriched = this.attachCycles(
-        await this.attachTargetState(currentSupervisor, workspace.path)
-      );
+      const enriched = await this.attachTargetState(currentSupervisor, workspace.path);
       this.storeSnapshot(enriched);
-      this.broadcastCycle(enriched, finishedCycle, "updated");
-      this.deps.cycleRepo.pruneOldest(activeCycle.supervisorId, this.config.maxCyclesPerSession);
       this.scheduler.refresh();
       return { cycle: finishedCycle, supervisor: enriched };
     }
 
-    const finishedSupervisor = this.attachCycles(
-      this.withCurrentTargetState(
-        this.deps.supervisorRepo.update(activeCycle.supervisorId, {
-          state: isEvaluateStopResult(result.evaluation) ? "stopped" : "idle",
-          completedSupervisionCount:
-            (this.supervisors.get(activeCycle.supervisorId)?.completedSupervisionCount ?? 0) + 1,
-          stopReason: isEvaluateStopResult(evaluation) ? evaluation.stopReason : null,
-          lastCycleAt: finishedCycle.completedAt,
-          lastEvaluatedTurnId: context.lastTurnId ?? undefined,
-          errorReason: null,
-          updatedAt: Date.now(),
-        })
-      )
+    const finishedSupervisor = this.withCurrentTargetState(
+      this.deps.supervisorRepo.update(activeCycle.supervisorId, {
+        state: isEvaluateStopResult(result.evaluation) ? "stopped" : "idle",
+        completedSupervisionCount:
+          (this.supervisors.get(activeCycle.supervisorId)?.completedSupervisionCount ?? 0) + 1,
+        stopReason: isEvaluateStopResult(evaluation) ? evaluation.stopReason : null,
+        lastCycleAt: finishedCycle.completedAt,
+        lastEvaluatedTurnId: context.lastTurnId ?? undefined,
+        errorReason: null,
+        updatedAt: Date.now(),
+      })
     );
     const enriched = await this.attachTargetState(finishedSupervisor, workspace.path);
 
     this.storeSnapshot(enriched);
-    this.broadcastCycle(enriched, finishedCycle, "updated");
     this.broadcastState(enriched, "state_changed");
-    this.deps.cycleRepo.pruneOldest(activeCycle.supervisorId, this.config.maxCyclesPerSession);
     this.scheduler.refresh();
 
     return { cycle: finishedCycle, supervisor: enriched };
@@ -1444,13 +1310,11 @@ export class SupervisorManager {
     );
     const reason = messageOf(error, "Supervisor evaluation failed");
     try {
-      const failed = this.attachCycles(
-        this.deps.supervisorRepo.update(id, {
-          state: "error",
-          errorReason: reason,
-          updatedAt: Date.now(),
-        })
-      );
+      const failed = this.deps.supervisorRepo.update(id, {
+        state: "error",
+        errorReason: reason,
+        updatedAt: Date.now(),
+      });
       this.storeSnapshot(failed);
       this.broadcastState(failed, "state_changed");
     } catch (writeError) {
@@ -1546,18 +1410,18 @@ export class SupervisorManager {
       return null;
     }
 
-    const hydrated = await this.attachTargetState(this.attachCycles(persisted), workspacePath);
+    const hydrated = await this.attachTargetState(persisted, workspacePath);
     const latest = this.deps.supervisorRepo.findById(supervisorId);
     if (!latest) {
       return null;
     }
 
     if (latest.targetId !== hydrated.targetId) {
-      return await this.attachTargetState(this.attachCycles(latest), workspacePath);
+      return await this.attachTargetState(latest, workspacePath);
     }
 
     return {
-      ...this.attachCycles(latest),
+      ...latest,
       currentTargetMemory: hydrated.currentTargetMemory,
       recentTargetCycles: hydrated.recentTargetCycles,
     };
@@ -1682,7 +1546,8 @@ export class SupervisorManager {
     workspacePath: string,
     targetId: string,
     cycle: SupervisorCycle,
-    errorReason: string
+    errorReason: string,
+    attemptCount: number
   ): Promise<void> {
     await this.deps.targetStore.appendTargetCycleRecord(workspacePath, targetId, {
       cycleId: cycle.id,
@@ -1691,7 +1556,7 @@ export class SupervisorManager {
       completedAt: Date.now(),
       result: "error",
       errorReason,
-      attemptCount: this.deps.cycleAttemptRepo.listForCycle(cycle.id).length,
+      attemptCount,
     });
   }
 
@@ -1726,13 +1591,6 @@ export class SupervisorManager {
         message: `Missing config for evaluator provider ${providerId}`,
       };
     }
-  }
-
-  private attachCycles(supervisor: Supervisor): Supervisor {
-    return {
-      ...supervisor,
-      cycles: this.deps.cycleRepo.listRecentForSupervisor(supervisor.id, 20),
-    };
   }
 
   private listScheduledSupervisors(): Array<{ supervisorId: string; scheduledAt: number }> {
@@ -1808,18 +1666,6 @@ export class SupervisorManager {
     this.deps.broadcaster.broadcast(
       Topics.supervisorState(supervisor.workspaceId, supervisor.sessionId),
       { supervisor, event }
-    );
-  }
-
-  private broadcastCycle(
-    supervisor: Supervisor,
-    cycle: SupervisorCycle,
-    event: "created" | "updated",
-    runtime?: SupervisorCycleRuntimeSnapshot
-  ): void {
-    this.deps.broadcaster.broadcast(
-      Topics.supervisorCycle(supervisor.workspaceId, supervisor.sessionId),
-      { cycle: runtime ? { ...cycle, runtime } : cycle, event }
     );
   }
 

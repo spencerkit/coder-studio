@@ -3,7 +3,7 @@ import { useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useState } from "react";
 import { dispatchCommandAtom } from "../../../atoms/connection";
 import { useTranslation } from "../../../lib/i18n";
-import { supervisorCyclesAtom, supervisorDialogAtom, supervisorsAtom } from "../atoms";
+import { supervisorDialogAtom, supervisorsAtom } from "../atoms";
 import { formatScheduledAtInput } from "./use-objective-dialog-state";
 import { useSupervisorDetails } from "./use-supervisor-details";
 
@@ -23,7 +23,6 @@ interface UseSupervisorActionsArgs {
 
 export function useSupervisorActions({ sessionId }: UseSupervisorActionsArgs) {
   const supervisors = useAtomValue(supervisorsAtom);
-  const cyclesBySupervisor = useAtomValue(supervisorCyclesAtom);
   const dispatch = useAtomValue(dispatchCommandAtom);
   const setDialog = useSetAtom(supervisorDialogAtom);
   const { openDetails } = useSupervisorDetails();
@@ -100,10 +99,6 @@ export function useSupervisorActions({ sessionId }: UseSupervisorActionsArgs) {
     await runAction("supervisor.trigger", supervisor.id, t("supervisor.action.trigger_failed"));
   }, [runAction, supervisor, t]);
 
-  const hasInFlightCycle = [
-    ...(cyclesBySupervisor.get(supervisor?.id ?? "") ?? supervisor?.cycles ?? []),
-  ].some((cycle) => cycle.status === "evaluating" || cycle.status === "queued");
-
   const stopReasonLabel = supervisor?.stopReason
     ? t(`supervisor.stop_reason.${supervisor.stopReason}`)
     : null;
@@ -130,8 +125,7 @@ export function useSupervisorActions({ sessionId }: UseSupervisorActionsArgs) {
     handlePause,
     handleResume,
     handleTrigger,
-    isBusy:
-      supervisor?.state === "evaluating" || supervisor?.state === "injecting" || hasInFlightCycle,
+    isBusy: supervisor?.state === "evaluating" || supervisor?.state === "injecting",
     openDetails: () => {
       if (supervisor) {
         openDetails(supervisor.sessionId);

@@ -36,6 +36,4 @@ export const Topics = {
   // Supervisor-level (Phase 3)
   supervisorState: (workspaceId: string, sessionId: string) =>
     `workspace.${workspaceId}.session.${sessionId}.supervisor.state`,
-  supervisorCycle: (workspaceId: string, sessionId: string) =>
-    `workspace.${workspaceId}.session.${sessionId}.supervisor.cycle`,
 } as const;

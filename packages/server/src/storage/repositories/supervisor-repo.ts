@@ -189,7 +189,6 @@ export class SupervisorRepo {
       stopReason: row.stop_reason ?? undefined,
       currentTargetMemory: undefined,
       recentTargetCycles: [],
-      cycles: [],
       lastCycleAt: row.last_cycle_at ?? undefined,
       lastEvaluatedTurnId: row.last_evaluated_turn_id ?? undefined,
       errorReason: row.error_reason ?? undefined,

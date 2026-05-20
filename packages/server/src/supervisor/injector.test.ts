@@ -29,10 +29,13 @@ const supervisor = {
   id: "sup-1",
   sessionId: "sess-1",
   workspaceId: "ws-1",
+  targetId: "tgt-1",
   state: "idle" as const,
   objective: "Finish the repo migration",
   evaluatorProviderId: "claude",
-  cycles: [],
+  maxSupervisionCount: 0,
+  completedSupervisionCount: 0,
+  recentTargetCycles: [],
   createdAt: 1,
   updatedAt: 1,
 };
@@ -74,6 +77,36 @@ describe("SupervisorInjector", () => {
     const payload = buffer.toString("utf8");
     expect(payload.startsWith("\x1b[200~")).toBe(true);
     expect(payload.endsWith("\x1b[201~\r")).toBe(true);
+  });
+
+  it("still injects when the same guidance was recently injected", async () => {
+    const sendInputSpy = vi.fn();
+    const injector = makeInjector(sendInputSpy);
+
+    const result = await injector.inject(
+      supervisor,
+      {
+        message: "Run the focused parser test.",
+      },
+      [
+        {
+          id: "cycle-0",
+          supervisorId: "sup-1",
+          sessionId: "sess-1",
+          status: "injected",
+          trigger: "manual",
+          evidenceSource: "headless_snapshot",
+          objective: "Finish the repo migration",
+          evaluatorProviderId: "claude",
+          injectedGuidance: "[Supervisor] Run the focused parser test.",
+          createdAt: 0,
+          completedAt: 0,
+        },
+      ]
+    );
+
+    expect(result.injected).toBe(true);
+    expect(sendInputSpy).toHaveBeenCalledTimes(1);
   });
 
   it("refuses to write into a session that has not finished handshake (state=starting)", async () => {

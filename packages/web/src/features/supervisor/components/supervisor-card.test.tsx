@@ -1,11 +1,11 @@
-import type { Supervisor, SupervisorCycle } from "@coder-studio/core";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { Supervisor } from "@coder-studio/core";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createStore, Provider } from "jotai";
 import { describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../../atoms/app-ui";
 import { wsClientAtom } from "../../../atoms/connection";
-import { supervisorCyclesAtom, supervisorDialogAtom, supervisorsAtom } from "../atoms";
+import { supervisorDialogAtom, supervisorsAtom } from "../atoms";
 import { SupervisorCard } from "../views/shared/supervisor-card";
 
 describe("SupervisorCard", () => {
@@ -49,24 +49,8 @@ describe("SupervisorCard", () => {
         reason: "Need to finish the validation step.",
       },
     ],
-    cycles: [],
     createdAt: 1,
     updatedAt: 1,
-  });
-
-  const createCycle = (overrides?: Partial<SupervisorCycle>): SupervisorCycle => ({
-    id: "cycle-1",
-    supervisorId: "sup-1",
-    sessionId: "sess-1",
-    status: "completed",
-    trigger: "manual",
-    evidenceSource: "transcript",
-    objective: "Finish the server refactor",
-    evaluatorProviderId: "codex",
-    progress: 65,
-    createdAt: 1,
-    completedAt: 2,
-    ...overrides,
   });
 
   it("shows a unified Supervisor label for the inactive enable button", () => {
@@ -75,7 +59,6 @@ describe("SupervisorCard", () => {
     store.set(localeAtom, "en");
     store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
     store.set(supervisorsAtom, new Map());
-    store.set(supervisorCyclesAtom, new Map());
 
     render(
       <Provider store={store}>
@@ -94,7 +77,6 @@ describe("SupervisorCard", () => {
     store.set(localeAtom, "en");
     store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
     store.set(supervisorsAtom, new Map());
-    store.set(supervisorCyclesAtom, new Map());
 
     render(
       <Provider store={store}>
@@ -121,19 +103,6 @@ describe("SupervisorCard", () => {
       supervisorsAtom,
       new Map([["sess-1", { ...createSupervisor(), completedSupervisionCount: 3 }]])
     );
-    store.set(
-      supervisorCyclesAtom,
-      new Map([
-        [
-          "sup-1",
-          [
-            createCycle({
-              result: "Persistence and hydration are done.",
-            }),
-          ],
-        ],
-      ])
-    );
 
     render(
       <Provider store={store}>
@@ -158,7 +127,6 @@ describe("SupervisorCard", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Latest evaluation")).not.toBeInTheDocument();
-    expect(screen.queryByText("Persistence and hydration are done.")).not.toBeInTheDocument();
     expect(screen.queryByText("Verify the refactor")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /expand/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /collapse/i })).not.toBeInTheDocument();
@@ -167,7 +135,6 @@ describe("SupervisorCard", () => {
     expect(screen.queryByText("Stages")).not.toBeInTheDocument();
     expect(screen.queryByText("Validation in progress")).not.toBeInTheDocument();
     expect(screen.queryByText("Need to finish the validation step.")).not.toBeInTheDocument();
-    expect(screen.queryByText("65%")).not.toBeInTheDocument();
     expect(document.querySelector(".supervisor-progress-track")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Trigger Evaluation" }));
     expect(sendCommand).toHaveBeenCalledWith("supervisor.trigger", { id: "sup-1" }, undefined);
@@ -179,7 +146,6 @@ describe("SupervisorCard", () => {
     store.set(localeAtom, "en");
     store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
     store.set(supervisorsAtom, new Map([["sess-1", createSupervisor()]]));
-    store.set(supervisorCyclesAtom, new Map());
 
     render(
       <Provider store={store}>
@@ -215,7 +181,6 @@ describe("SupervisorCard", () => {
     store.set(localeAtom, "en");
     store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
     store.set(supervisorsAtom, new Map([["sess-1", createSupervisor()]]));
-    store.set(supervisorCyclesAtom, new Map());
 
     render(
       <Provider store={store}>
@@ -272,7 +237,6 @@ describe("SupervisorCard", () => {
     store.set(localeAtom, "en");
     store.set(wsClientAtom, { sendCommand } as never);
     store.set(supervisorsAtom, new Map([["sess-1", createSupervisor()]]));
-    store.set(supervisorCyclesAtom, new Map());
 
     render(
       <Provider store={store}>
@@ -342,7 +306,6 @@ describe("SupervisorCard", () => {
         ],
       ])
     );
-    store.set(supervisorCyclesAtom, new Map());
 
     render(
       <Provider store={store}>
@@ -364,7 +327,6 @@ describe("SupervisorCard", () => {
     store.set(localeAtom, "en");
     store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
     store.set(supervisorsAtom, new Map([["sess-1", createSupervisor()]]));
-    store.set(supervisorCyclesAtom, new Map());
 
     render(
       <Provider store={store}>
@@ -414,7 +376,6 @@ describe("SupervisorCard", () => {
     store.set(localeAtom, "en");
     store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
     store.set(supervisorsAtom, new Map([["sess-1", { ...createSupervisor(), state: "paused" }]]));
-    store.set(supervisorCyclesAtom, new Map());
 
     render(
       <Provider store={store}>
@@ -439,19 +400,6 @@ describe("SupervisorCard", () => {
       supervisorsAtom,
       new Map([["sess-1", { ...createSupervisor(), completedSupervisionCount: 1 }]])
     );
-    store.set(
-      supervisorCyclesAtom,
-      new Map([
-        [
-          "sup-1",
-          [
-            createCycle({
-              result: undefined,
-            }),
-          ],
-        ],
-      ])
-    );
 
     render(
       <Provider store={store}>
@@ -461,7 +409,6 @@ describe("SupervisorCard", () => {
 
     expect(screen.getByText("Cycles 1")).toBeInTheDocument();
     expect(screen.queryByText("No guidance injected this cycle")).not.toBeInTheDocument();
-    expect(screen.queryByText("65%")).not.toBeInTheDocument();
     expect(document.querySelector(".supervisor-progress-track")).not.toBeInTheDocument();
   });
 
@@ -473,28 +420,6 @@ describe("SupervisorCard", () => {
     store.set(
       supervisorsAtom,
       new Map([["sess-1", { ...createSupervisor(), completedSupervisionCount: 1 }]])
-    );
-    store.set(
-      supervisorCyclesAtom,
-      new Map([
-        [
-          "sup-1",
-          [
-            createCycle({
-              status: "evaluating",
-              completedAt: undefined,
-              runtime: {
-                phase: "retry_wait",
-                currentAttemptIndex: 0,
-                attemptCount: 1,
-                maxAttempts: 3,
-                lastAttemptError: "rate limited",
-                nextRetryAt: Date.now() + 1000,
-              },
-            }),
-          ],
-        ],
-      ])
     );
 
     render(
@@ -518,7 +443,6 @@ describe("SupervisorCard", () => {
       supervisorsAtom,
       new Map([["sess-1", { ...createSupervisor(), state: "evaluating" }]])
     );
-    store.set(supervisorCyclesAtom, new Map());
 
     render(
       <Provider store={store}>
@@ -529,7 +453,7 @@ describe("SupervisorCard", () => {
     expect(screen.getByRole("button", { name: "Pause" })).not.toBeDisabled();
   });
 
-  it("keeps manual trigger disabled while an older cycle is still evaluating", () => {
+  it("keeps manual trigger disabled while the supervisor is evaluating", () => {
     const store = createStore();
     window.localStorage.setItem("ui.locale", JSON.stringify("en"));
     store.set(localeAtom, "en");
@@ -541,24 +465,9 @@ describe("SupervisorCard", () => {
           "sess-1",
           {
             ...createSupervisor(),
-            state: "idle",
+            state: "evaluating",
             objective: "Finish the follow-up refactor",
           },
-        ],
-      ])
-    );
-    store.set(
-      supervisorCyclesAtom,
-      new Map([
-        [
-          "sup-1",
-          [
-            createCycle({
-              status: "evaluating",
-              objective: "Finish the original refactor",
-              completedAt: undefined,
-            }),
-          ],
         ],
       ])
     );
@@ -592,7 +501,6 @@ describe("SupervisorCard", () => {
         ],
       ])
     );
-    store.set(supervisorCyclesAtom, new Map());
 
     render(
       <Provider store={store}>
@@ -614,7 +522,6 @@ describe("SupervisorCard", () => {
     store.set(localeAtom, "en");
     store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
     store.set(supervisorsAtom, new Map([["sess-1", createSupervisor()]]));
-    store.set(supervisorCyclesAtom, new Map());
 
     render(
       <Provider store={store}>
@@ -646,21 +553,6 @@ describe("SupervisorCard", () => {
         ],
       ])
     );
-    store.set(
-      supervisorCyclesAtom,
-      new Map([
-        [
-          "sup-1",
-          [
-            createCycle({
-              status: "cancelled",
-              trigger: "scheduled",
-              completedAt: 3,
-            }),
-          ],
-        ],
-      ])
-    );
 
     render(
       <Provider store={store}>
@@ -683,7 +575,6 @@ describe("SupervisorCard", () => {
     store.set(localeAtom, "en");
     store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
     store.set(supervisorsAtom, new Map([["sess-1", createSupervisor()]]));
-    store.set(supervisorCyclesAtom, new Map());
 
     render(
       <Provider store={store}>

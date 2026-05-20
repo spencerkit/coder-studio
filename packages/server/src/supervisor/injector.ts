@@ -1,10 +1,8 @@
-import { createHash } from "node:crypto";
 import {
   DEFAULT_SUPERVISOR_CONFIG,
   type SessionState,
   type Supervisor,
   type SupervisorConfig,
-  type SupervisorCycle,
 } from "@coder-studio/core";
 import type { SessionManager } from "../session/manager.js";
 import type { TerminalManager } from "../terminal/manager.js";
@@ -49,7 +47,7 @@ export class SupervisorInjector {
   async inject(
     supervisor: Supervisor,
     input: { message: string },
-    recentCycles: SupervisorCycle[],
+    _recentCycles: unknown[],
     options: { signal?: AbortSignal } = {}
   ): Promise<{ injected: boolean; text: string }> {
     if (options.signal?.aborted) {
@@ -75,17 +73,6 @@ export class SupervisorInjector {
 
     const message = input.message.slice(0, this.config.guidanceMaxChars);
     const text = `[Supervisor] ${message}`;
-
-    const hash = createHash("sha1").update(text).digest("hex");
-    const duplicate = recentCycles
-      .slice(0, this.config.guidanceDedupeWindow)
-      .map((cycle) => cycle.injectedGuidance)
-      .filter((value): value is string => Boolean(value))
-      .some((value) => createHash("sha1").update(value).digest("hex") === hash);
-
-    if (duplicate) {
-      return { injected: false, text };
-    }
 
     if (options.signal?.aborted) {
       throw {

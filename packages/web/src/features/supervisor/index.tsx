@@ -4,7 +4,6 @@
 
 export {
   supervisorBySessionAtom,
-  supervisorCyclesAtom,
   supervisorDialogAtom,
   supervisorsAtom,
 } from "./atoms";

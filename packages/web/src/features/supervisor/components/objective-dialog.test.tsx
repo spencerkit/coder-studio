@@ -58,7 +58,6 @@ describe("ObjectiveDialog", () => {
     maxSupervisionCount: 0,
     completedSupervisionCount: 0,
     recentTargetCycles: [],
-    cycles: [],
     createdAt: 1,
     updatedAt: 1,
   });

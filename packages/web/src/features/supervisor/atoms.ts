@@ -2,7 +2,7 @@
  * Supervisor atoms (Phase 3)
  */
 
-import type { Supervisor, SupervisorCycle } from "@coder-studio/core";
+import type { Supervisor } from "@coder-studio/core";
 import { atom } from "jotai";
 import { atomFamily } from "jotai-family";
 
@@ -39,9 +39,6 @@ export interface SupervisorDialogState {
 
 // Supervisor by session ID
 export const supervisorsAtom = atom<Map<string, Supervisor>>(new Map());
-
-// Supervisor cycles by supervisor ID
-export const supervisorCyclesAtom = atom<Map<string, SupervisorCycle[]>>(new Map());
 
 // Tracks whether a session has already loaded its supervisor state from supervisor.get
 export const supervisorHydratedAtomFamily = atomFamily((_sessionId: string) => atom(false));

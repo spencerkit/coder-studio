@@ -19,19 +19,10 @@ type MockSupervisorManagerDeps = {
     listAll: ReturnType<typeof vi.fn>;
     delete: ReturnType<typeof vi.fn>;
   };
-  cycleRepo: {
-    create: ReturnType<typeof vi.fn>;
-    update: ReturnType<typeof vi.fn>;
-    listRecentForSupervisor: ReturnType<typeof vi.fn>;
-    pruneOldest: ReturnType<typeof vi.fn>;
-  };
-  cycleAttemptRepo: {
-    create: ReturnType<typeof vi.fn>;
-    update: ReturnType<typeof vi.fn>;
-    listForCycle: ReturnType<typeof vi.fn>;
-    deleteForCycle: ReturnType<typeof vi.fn>;
-  };
   targetStore: {
+    cloneTargetFiles: ReturnType<typeof vi.fn>;
+    deleteTarget: ReturnType<typeof vi.fn>;
+    listRecoverableTargets: ReturnType<typeof vi.fn>;
     createTargetFiles: ReturnType<typeof vi.fn>;
     resetTargetFiles: ReturnType<typeof vi.fn>;
     readTargetMeta: ReturnType<typeof vi.fn>;
@@ -100,7 +91,11 @@ describe("SupervisorManager", () => {
         get: vi.fn(() => undefined),
       },
       supervisorRepo: {
-        create: vi.fn((value) => ({ ...value, targetId: value.id, cycles: [] })),
+        create: vi.fn((value) => ({
+          ...value,
+          targetId: value.id,
+          recentTargetCycles: [],
+        })),
         update: vi.fn((id, patch) => ({
           id,
           sessionId: "sess-1",
@@ -109,7 +104,9 @@ describe("SupervisorManager", () => {
           state: patch.state ?? "idle",
           objective: patch.objective ?? "Persist supervisors",
           evaluatorProviderId: patch.evaluatorProviderId ?? "claude",
-          cycles: [],
+          maxSupervisionCount: patch.maxSupervisionCount ?? 0,
+          completedSupervisionCount: patch.completedSupervisionCount ?? 0,
+          recentTargetCycles: [],
           createdAt: 1,
           updatedAt: patch.updatedAt ?? 1,
           lastEvaluatedTurnId: patch.lastEvaluatedTurnId,
@@ -119,36 +116,10 @@ describe("SupervisorManager", () => {
         listAll: vi.fn(() => []),
         delete: vi.fn(),
       },
-      cycleRepo: {
-        create: vi.fn((cycle) => cycle),
-        update: vi.fn((id, patch) => ({
-          id,
-          supervisorId: "sup-1",
-          sessionId: "sess-1",
-          status: patch.status ?? "completed",
-          trigger: "manual",
-          evidenceSource: "headless_snapshot",
-          objective: "Persist supervisors",
-          evaluatorProviderId: "claude",
-          createdAt: 1,
-          completedAt: patch.completedAt ?? 1,
-        })),
-        listRecentForSupervisor: vi.fn(() => []),
-        pruneOldest: vi.fn(),
-      },
-      cycleAttemptRepo: {
-        create: vi.fn((attempt) => attempt),
-        update: vi.fn((id, patch) => ({
-          id,
-          cycleId: "cycle-1",
-          attemptIndex: 0,
-          status: patch.status ?? "completed",
-          startedAt: 1,
-        })),
-        listForCycle: vi.fn(() => []),
-        deleteForCycle: vi.fn(),
-      },
       targetStore: {
+        cloneTargetFiles: vi.fn(async () => 0),
+        deleteTarget: vi.fn(async () => {}),
+        listRecoverableTargets: vi.fn(async () => []),
         createTargetFiles: vi.fn(async () => {}),
         resetTargetFiles: vi.fn(async () => {}),
         readTargetMeta: vi.fn(async () => ({
@@ -209,10 +180,13 @@ describe("SupervisorManager", () => {
         id: "sup-1",
         sessionId: "sess-1",
         workspaceId: "ws-1",
+        targetId: "sup-1",
         state: "evaluating",
         objective: "Persist supervisors",
         evaluatorProviderId: "claude",
-        cycles: [],
+        maxSupervisionCount: 0,
+        completedSupervisionCount: 0,
+        recentTargetCycles: [],
         createdAt: 1,
         updatedAt: 1,
       },
@@ -235,10 +209,13 @@ describe("SupervisorManager", () => {
         id: "sup-1",
         sessionId: "sess-1",
         workspaceId: "ws-1",
+        targetId: "sup-1",
         state: "idle",
         objective: "Persist supervisors",
         evaluatorProviderId: "claude",
-        cycles: [],
+        maxSupervisionCount: 0,
+        completedSupervisionCount: 0,
+        recentTargetCycles: [],
         createdAt: 1,
         updatedAt: 1,
       },
@@ -246,10 +223,13 @@ describe("SupervisorManager", () => {
         id: "sup-2",
         sessionId: "sess-2",
         workspaceId: "ws-2",
+        targetId: "sup-2",
         state: "idle",
         objective: "Leave this one alone",
         evaluatorProviderId: "claude",
-        cycles: [],
+        maxSupervisionCount: 0,
+        completedSupervisionCount: 0,
+        recentTargetCycles: [],
         createdAt: 1,
         updatedAt: 1,
       },
