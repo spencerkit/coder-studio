@@ -4,9 +4,9 @@
   align-items: center;
   justify-content: center;
   min-width: 80px;
-  padding: var(--sp-2) var(--sp-3);
+  padding: var(--inset-control-block) var(--inset-control-inline);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-control-sm);
   background: color-mix(in srgb, var(--bg-input) 82%, var(--bg-surface) 18%);
   color: var(--text-primary);
   font-family: var(--type-code-inline-family);
@@ -25,13 +25,14 @@
 .kbd:focus-visible,
 :global(.shortcuts-key):focus-visible {
   outline: none;
-  border-color: var(--border-focus);
-  box-shadow: 0 0 0 1px rgba(108, 182, 255, 0.4);
+  border-color: var(--state-focus-ring-color);
+  box-shadow: 0 0 0 var(--state-focus-ring-width)
+    color-mix(in srgb, var(--state-focus-ring-color) 40%, transparent);
 }
 
 .sm {
   min-width: 64px;
-  padding: var(--sp-1) var(--sp-2);
+  padding: var(--gap-cluster-sm) var(--gap-cluster-md);
 }
 
 .interactive {

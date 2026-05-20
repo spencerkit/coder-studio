@@ -1,34 +1,34 @@
 .root {
   height: 3px;
-  background: rgba(108, 182, 255, 0.08);
+  background: var(--state-info-bg);
   overflow: hidden;
 }
 
 .fill {
   height: 100%;
   width: var(--progress-bar-width, 0%);
-  background: var(--progress-bar-color, var(--accent-blue));
+  background: var(--progress-bar-color, var(--state-info-text));
   transition: width var(--duration-slower) var(--ease-out);
 }
 
 .success {
-  --progress-bar-color: var(--accent-green);
+  --progress-bar-color: var(--state-success-text);
 }
 
 .warning {
-  --progress-bar-color: var(--accent-amber);
+  --progress-bar-color: var(--state-warning-text);
 }
 
 .error {
-  --progress-bar-color: var(--color-error);
+  --progress-bar-color: var(--state-error-text);
 }
 
 .info {
-  --progress-bar-color: var(--accent-blue);
+  --progress-bar-color: var(--state-info-text);
 }
 
 .neutral {
-  --progress-bar-color: var(--text-tertiary);
+  --progress-bar-color: var(--state-disabled-text);
 }
 
 .indeterminate .fill {
@@ -43,7 +43,7 @@
   position: absolute;
   inset: 0 auto 0 0;
   width: 40%;
-  background: var(--progress-bar-color, var(--accent-blue));
+  background: var(--progress-bar-color, var(--state-info-text));
   animation: progressBarIndeterminate 1.2s var(--ease-out) infinite;
 }
 

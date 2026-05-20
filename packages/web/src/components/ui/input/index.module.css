@@ -1,9 +1,9 @@
 .input {
-  height: var(--input-height-md);
-  padding: 0 var(--sp-3);
+  height: var(--control-height-md);
+  padding: 0 var(--inset-control-inline);
   background: var(--bg-page);
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-control);
   color: var(--text-primary);
   font-family: var(--font-sans);
   font-size: var(--type-body-strong-size);
@@ -22,21 +22,22 @@
 
 .input:focus,
 .input:focus-visible {
-  border-color: var(--accent-blue);
-  box-shadow: 0 0 0 1px rgba(108, 182, 255, 0.4);
+  border-color: var(--state-focus-ring-color);
+  box-shadow: 0 0 0 var(--state-focus-ring-width)
+    color-mix(in srgb, var(--state-focus-ring-color) 40%, transparent);
 }
 
 .sm {
-  height: var(--input-height-sm);
-  border-radius: var(--radius-sm);
+  height: var(--control-height-sm);
+  border-radius: var(--radius-control-sm);
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
   line-height: var(--type-label-line-height);
 }
 
 .lg {
-  height: var(--input-height-lg);
-  border-radius: var(--radius-lg);
+  height: var(--control-height-lg);
+  border-radius: var(--radius-control-lg);
 }
 
 .invalid,

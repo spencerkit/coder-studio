@@ -32,50 +32,124 @@
   --icon-button-size-sm: 28px;
   --icon-button-size-md: 32px;
   --icon-button-size-lg: 40px;
-  --list-row-height-sm: 32px;
-  --list-row-height-md: 36px;
-  --list-row-height-lg: 44px;
-  --toolbar-height-sm: 36px;
-  --toolbar-height-md: 40px;
-  --toolbar-height-lg: 48px;
+  --list-row-height-compact: 32px;
+  --list-row-height-regular: 40px;
+  --toolbar-height-compact: 32px;
+  --toolbar-height-regular: 40px;
   --panel-header-height: 40px;
 
   /* ========== Foundation: Spacing / Rhythm ========== */
-  --gap-stack-2xs: var(--sp-1);
-  --gap-stack-xs: var(--sp-2);
-  --gap-stack-sm: var(--sp-3);
-  --gap-stack-md: var(--sp-4);
-  --gap-stack-lg: var(--sp-6);
-  --gap-stack-xl: var(--sp-8);
-  --gap-cluster-2xs: var(--sp-1);
-  --gap-cluster-xs: var(--sp-2);
-  --gap-cluster-sm: var(--sp-3);
-  --gap-cluster-md: var(--sp-4);
-  --gap-cluster-lg: var(--sp-5);
-  --gap-cluster-xl: var(--sp-6);
-  --inset-control-sm: 0 var(--sp-2);
-  --inset-control-md: 0 var(--sp-3);
-  --inset-control-lg: 0 var(--sp-4);
-  --inset-row-sm: var(--sp-2) var(--sp-3);
-  --inset-row-md: var(--sp-3) var(--sp-4);
-  --inset-row-lg: var(--sp-4) var(--sp-5);
-  --inset-panel: var(--sp-3);
-  --inset-dialog: var(--sp-4);
+  --gap-stack-xs: var(--sp-1);
+  --gap-stack-sm: var(--sp-2);
+  --gap-stack-md: var(--sp-3);
+  --gap-stack-lg: var(--sp-4);
+  --gap-cluster-2xs: calc(var(--sp-1) / 2);
+  --gap-cluster-3xs: calc(var(--sp-1) - (var(--sp-1) / 4));
+  --gap-cluster-tight: calc(var(--sp-1) + (var(--sp-1) / 2));
+  --gap-cluster-hairline: calc(var(--sp-1) / 4);
+  --gap-cluster-sm: var(--sp-1);
+  --gap-cluster-md: var(--sp-2);
+  --inset-control-inline: var(--sp-3);
+  --inset-control-block: var(--sp-2);
+  --inset-row-inline: var(--sp-4);
+  --inset-row-inline-tight: calc(var(--inset-control-inline) - (var(--sp-1) / 2));
+  --inset-row-inline-selected: calc(var(--inset-row-inline) - (var(--sp-1) / 2));
+  --inset-row-block: var(--sp-3);
+  --inset-row-block-compact: var(--gap-cluster-3xs);
+  --inset-row-copy-offset: calc(
+    var(--inset-row-inline) +
+    var(--gap-cluster-md) +
+    (var(--sp-1) / 2)
+  );
+  --inset-chip-block-tight: var(--sp-1);
+  --inset-chip-inline-tight: calc(var(--sp-2) - var(--gap-cluster-hairline));
+  --inset-panel: var(--sp-4);
+  --inset-dialog: var(--sp-6);
   --inset-drawer: var(--sp-4);
   --section-gap: var(--sp-6);
-  --form-group-gap: var(--sp-4);
+  --form-group-gap: var(--sp-3);
 
   /* ========== Foundation: Radius Roles ========== */
+  --radius-control: var(--radius-md);
   --radius-control-sm: var(--radius-sm);
-  --radius-control-md: var(--radius-md);
-  --radius-control-lg: var(--radius-xl);
+  --radius-control-lg: var(--radius-lg);
   --radius-chip: var(--radius-full);
-  --radius-tag: var(--radius-sm);
+  --radius-tag: var(--radius-full);
   --radius-pill: var(--radius-full);
-  --radius-panel: var(--radius-lg);
+  --radius-panel: var(--radius-xl);
   --radius-overlay: var(--radius-xl);
   --radius-local-overlay: var(--radius-lg);
   --radius-flush: 0px;
+
+  /* ========== Foundation: State / Interaction ========== */
+  --state-focus-ring-color: var(--border-focus);
+  --state-focus-ring-width: 2px;
+  --state-hover-bg-subtle: var(--bg-hover);
+  --state-hover-bg-strong: var(--bg-active);
+  --state-active-bg: var(--bg-active);
+  --state-selected-bg: color-mix(in srgb, var(--accent-blue) 12%, var(--bg-panel));
+  --state-selected-border: color-mix(in srgb, var(--accent-blue) 22%, transparent);
+  --state-disabled-bg: var(--bg-disabled);
+  --state-disabled-border: var(--border);
+  --state-disabled-text: var(--text-disabled);
+  --state-success-bg: color-mix(in srgb, var(--color-success) 14%, transparent);
+  --state-success-border: color-mix(in srgb, var(--color-success) 28%, transparent);
+  --state-success-text: var(--color-success);
+  --state-success-icon: var(--icon-success);
+  --state-warning-bg: color-mix(in srgb, var(--color-warning) 14%, transparent);
+  --state-warning-border: color-mix(in srgb, var(--color-warning) 28%, transparent);
+  --state-warning-text: var(--color-warning);
+  --state-warning-icon: var(--icon-warning);
+  --state-error-bg: color-mix(in srgb, var(--color-error) 14%, transparent);
+  --state-error-border: color-mix(in srgb, var(--color-error) 28%, transparent);
+  --state-error-text: var(--color-error);
+  --state-error-icon: var(--icon-error);
+  --state-info-bg: color-mix(in srgb, var(--color-info) 14%, transparent);
+  --state-info-border: color-mix(in srgb, var(--color-info) 28%, transparent);
+  --state-info-text: var(--color-info);
+  --state-info-icon: var(--icon-info);
+
+  /* ========== Foundation: Surface / Overlay ========== */
+  --surface-page-bg: var(--bg-page);
+  --surface-panel-bg: var(--bg-panel);
+  --surface-elevated-bg: var(--bg-elevated);
+  --surface-overlay-bg: color-mix(in srgb, var(--bg-elevated) 96%, transparent);
+  --surface-overlay-border: var(--border);
+  --surface-overlay-shadow: var(--shadow-lg);
+  --surface-overlay-backdrop: color-mix(in srgb, var(--bg-page) 72%, black 28%);
+  --surface-sticky-bg: color-mix(in srgb, var(--bg-page) 96%, var(--bg-surface) 4%);
+  --overlay-width-sm: 360px;
+  --overlay-width-md: 480px;
+  --overlay-width-lg: 680px;
+  --overlay-backdrop-opacity: 0.48;
+
+  /* ========== Foundation: Code Surface Sub-Specs ========== */
+  --terminal-panel-inset: var(--inset-panel);
+  --terminal-toolbar-gap: var(--gap-cluster-md);
+  --terminal-local-overlay-radius: var(--radius-local-overlay);
+  --terminal-state-running-bg: var(--state-info-bg);
+  --terminal-state-running-border: var(--state-info-border);
+  --terminal-state-running-text: var(--state-info-text);
+  --terminal-state-reconnecting-bg: var(--state-warning-bg);
+  --terminal-state-reconnecting-border: var(--state-warning-border);
+  --terminal-state-failed-bg: var(--state-error-bg);
+  --terminal-state-failed-border: var(--state-error-border);
+  --session-card-gap: var(--gap-stack-md);
+  --session-row-gap: var(--gap-cluster-md);
+  --session-state-radius: var(--radius-chip);
+  --editor-pane-inset: var(--inset-panel);
+  --editor-toolbar-inset: var(--inset-control-inline);
+  --editor-peek-radius: var(--radius-overlay);
+  --editor-selection-bg: var(--state-selected-bg);
+  --editor-selection-inactive-bg: color-mix(in srgb, var(--state-selected-bg) 60%, transparent);
+  --editor-diagnostic-warning-bg: var(--state-warning-bg);
+  --editor-diagnostic-error-bg: var(--state-error-bg);
+  --diff-section-gap: var(--section-gap);
+  --diff-thread-inset: var(--inset-row-inline);
+  --diff-thread-radius: var(--radius-panel);
+  --diff-add-bg: var(--state-success-bg);
+  --diff-modify-bg: var(--state-info-bg);
+  --diff-delete-bg: var(--state-error-bg);
 
   /* ========== Typography ========== */
   --font-sans:
@@ -163,6 +237,8 @@
   --duration-slower: 300ms;
 
   /* ========== Z-Index Scale ========== */
+  --z-inline: 1;
+  --z-inline-raised: 2;
   --z-dropdown: 100;
   --z-sticky: 200;
   --z-local-overlay: 240;
@@ -1248,6 +1324,62 @@
 
   /* Scrollbar */
   --scrollbar-thumb: #5c5c5c;
+}
+
+[data-theme="mint-dark"] {
+  --gap-stack-md: var(--sp-3);
+  --radius-overlay: var(--radius-xl);
+  --state-focus-ring-color: #6cb6ff;
+  --surface-overlay-bg: color-mix(in srgb, #131b22 96%, transparent);
+}
+
+[data-theme="mint-light"] {
+  --gap-stack-md: var(--sp-3);
+  --radius-overlay: var(--radius-xl);
+  --state-focus-ring-color: #158f77;
+  --surface-overlay-bg: color-mix(in srgb, #ffffff 96%, transparent);
+}
+
+[data-theme="graphite-dark"] {
+  --gap-stack-md: var(--sp-3);
+  --radius-overlay: var(--radius-xl);
+  --state-focus-ring-color: #9bb8ff;
+  --surface-overlay-bg: color-mix(in srgb, #1a1f27 96%, transparent);
+}
+
+[data-theme="graphite-light"] {
+  --gap-stack-md: var(--sp-3);
+  --radius-overlay: var(--radius-xl);
+  --state-focus-ring-color: #315fdd;
+  --surface-overlay-bg: color-mix(in srgb, #ffffff 96%, transparent);
+}
+
+[data-theme="nord-dark"] {
+  --gap-stack-md: var(--sp-3);
+  --radius-overlay: var(--radius-xl);
+  --state-focus-ring-color: #88c0d0;
+  --surface-overlay-bg: color-mix(in srgb, #2e3440 96%, transparent);
+}
+
+[data-theme="nord-light"] {
+  --gap-stack-md: var(--sp-3);
+  --radius-overlay: var(--radius-xl);
+  --state-focus-ring-color: #5b7fa8;
+  --surface-overlay-bg: color-mix(in srgb, #ffffff 96%, transparent);
+}
+
+[data-theme="hc-dark"] {
+  --gap-stack-md: var(--sp-3);
+  --radius-overlay: var(--radius-xl);
+  --state-focus-ring-color: #ffff00;
+  --surface-overlay-bg: color-mix(in srgb, #111111 96%, transparent);
+}
+
+[data-theme="hc-light"] {
+  --gap-stack-md: var(--sp-3);
+  --radius-overlay: var(--radius-xl);
+  --state-focus-ring-color: #0037da;
+  --surface-overlay-bg: color-mix(in srgb, #ffffff 96%, transparent);
 }
 
 /* ========== Mobile / Touch Override (Phase 0) ========== */

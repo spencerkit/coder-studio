@@ -34,10 +34,10 @@ describe("base.css theme-sensitive shells", () => {
     const shell = getRuleBlock(".app-loading-shell");
     const card = getRuleBlock(".app-loading-card");
 
-    expect(shell).toContain("var(--bg-page)");
-    expect(shell).not.toContain("rgba(17, 24, 31, 0.92)");
-    expect(card).toContain("var(--bg-surface)");
-    expect(card).not.toContain("rgba(17, 24, 31, 0.96)");
+    expect(shell).toContain("background: var(--surface-page-bg)");
+    expect(card).toContain("background: var(--surface-overlay-bg)");
+    expect(card).toContain("box-shadow: var(--surface-overlay-shadow)");
+    expect(card).toContain("border-radius: var(--radius-overlay)");
   });
 
   it("defines shared icon tone and surface utilities", () => {
@@ -49,15 +49,29 @@ describe("base.css theme-sensitive shells", () => {
     const themedSurface = getRuleBlock(".themed-icon--surface-info");
 
     expect(tone).toContain("color: var(--icon-secondary)");
-    expect(surface).toContain("background: var(--icon-surface-warning)");
+    expect(surface).toContain("background: var(--state-warning-bg)");
     expect(chip).toContain("display: inline-flex");
     expect(chip).toContain("align-items: center");
     expect(chip).toContain("justify-content: center");
-    expect(chip).toContain("border-radius: var(--radius-md)");
+    expect(chip).toContain("border-radius: var(--radius-control)");
     expect(themedIcon).toContain("display: inline-flex");
     expect(themedIcon).toContain("line-height: 0");
     expect(themedTone).toContain("color: var(--icon-warning)");
     expect(themedSurface).toContain("background: var(--icon-surface-info)");
+  });
+
+  it("routes focus and shell chrome through semantic foundation tokens", () => {
+    expect(getRuleBlock(":focus-visible")).toContain(
+      "outline: var(--state-focus-ring-width) solid var(--state-focus-ring-color)"
+    );
+    expect(getRuleBlock(".app-loading-shell")).toContain("background: var(--surface-page-bg)");
+    expect(getRuleBlock(".app-loading-card")).toContain("background: var(--surface-overlay-bg)");
+    expect(getRuleBlock(".app-loading-card")).toContain(
+      "box-shadow: var(--surface-overlay-shadow)"
+    );
+    expect(getRuleBlock(".app-loading-card")).toContain("border-radius: var(--radius-overlay)");
+    expect(getRuleBlock(".icon-chip")).toContain("border-radius: var(--radius-control)");
+    expect(getRuleBlock(".icon-surface-warning")).toContain("background: var(--state-warning-bg)");
   });
 });
 

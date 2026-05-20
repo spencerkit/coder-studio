@@ -7,7 +7,7 @@
   align-items: center;
   justify-content: center;
   padding: var(--sp-4);
-  background: rgba(0, 0, 0, 0.6);
+  background: var(--surface-overlay-backdrop);
 }
 
 .card,
@@ -18,10 +18,10 @@
   max-height: calc(100vh - var(--sp-16));
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--bg-surface);
-  box-shadow: var(--shadow-lg);
+  border: 1px solid var(--surface-overlay-border);
+  border-radius: var(--radius-overlay);
+  background: var(--surface-overlay-bg);
+  box-shadow: var(--surface-overlay-shadow);
   outline: none;
 }
 
@@ -71,7 +71,7 @@
   min-width: 0;
   flex: 1;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--gap-cluster-sm);
 }
 
 :global(.dialog-header__icon) {

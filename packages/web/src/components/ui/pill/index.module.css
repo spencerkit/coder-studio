@@ -7,7 +7,7 @@
   gap: var(--sp-2);
   padding: var(--sp-2) var(--sp-3);
   border: 1px solid transparent;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-pill);
   background: transparent;
   color: var(--text-secondary);
   font-family: var(--font-sans);
@@ -21,20 +21,21 @@
 }
 
 .pill:hover:not(:disabled) {
-  background: var(--bg-hover);
-  border-color: color-mix(in srgb, var(--border-light) 72%, transparent);
+  background: var(--state-hover-bg-subtle);
+  border-color: var(--state-selected-border);
   color: var(--text-primary);
 }
 
 .pill:focus-visible {
   outline: none;
-  border-color: var(--border-focus);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-blue) 35%, transparent);
+  border-color: var(--state-focus-ring-color);
+  box-shadow: 0 0 0 var(--state-focus-ring-width)
+    color-mix(in srgb, var(--state-focus-ring-color) 35%, transparent);
 }
 
 .active {
-  background: var(--bg-active);
-  border-color: var(--border-focus);
+  background: var(--state-selected-bg);
+  border-color: var(--state-selected-border);
   color: var(--text-primary);
 }
 

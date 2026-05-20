@@ -5,13 +5,20 @@
   gap: var(--sp-1);
   height: 20px;
   padding: 0 var(--sp-2);
-  border-radius: var(--radius-sm);
   font-family: var(--font-sans);
   font-size: var(--type-kicker-size);
   line-height: var(--type-kicker-line-height);
   font-weight: var(--type-kicker-weight);
   letter-spacing: var(--type-kicker-letter-spacing);
   text-transform: uppercase;
+}
+
+:where(.tag) {
+  border-radius: var(--radius-tag);
+}
+
+:global(:where(.badge)) {
+  border-radius: var(--radius-chip);
 }
 
 .sm {

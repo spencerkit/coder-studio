@@ -3,10 +3,10 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--sp-3);
+  gap: var(--gap-stack-md);
   width: 100%;
   min-height: 100%;
-  padding: var(--sp-8) var(--sp-6);
+  padding: var(--inset-dialog) var(--inset-panel);
   text-align: center;
 }
 

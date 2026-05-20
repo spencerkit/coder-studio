@@ -44,6 +44,18 @@ const toastStyles = readFileSync(
   `${process.cwd()}/src/components/ui/toast/index.module.css`,
   "utf8"
 );
+const drawerStylesheet = readFileSync(
+  `${process.cwd()}/src/components/ui/drawer/index.module.css`,
+  "utf8"
+);
+const localOverlayStylesheet = readFileSync(
+  `${process.cwd()}/src/components/ui/local-overlay/index.module.css`,
+  "utf8"
+);
+const progressBarStylesheet = readFileSync(
+  `${process.cwd()}/src/components/ui/progress-bar/index.module.css`,
+  "utf8"
+);
 const confirmDialogStyles = readFileSync(
   `${process.cwd()}/src/components/ui/confirm-dialog/index.module.css`,
   "utf8"
@@ -281,7 +293,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(getLastRuleBlock(".mobile-dock__icon")).toContain("color: currentColor");
   });
 
-  it("keeps toast icons on icon semantic tokens instead of raw status colors", () => {
+  it("keeps toast feedback chrome on semantic foundation tokens", () => {
     expect(getLastRuleBlock(".toast__icon")).toContain("display: inline-flex");
     expect(getLastRuleBlock(".toast__icon-symbol")).toContain("width: 20px");
     expect(getLastRuleBlockFrom(baseStylesheet, ".themed-icon--tone-success")).toContain(
@@ -296,19 +308,42 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(getLastRuleBlockFrom(baseStylesheet, ".themed-icon--tone-info")).toContain(
       "var(--icon-info)"
     );
+    expect(getLastRuleBlockFrom(toastStyles, ".success")).toContain(
+      "border-left: 3px solid var(--state-success-text)"
+    );
+    expect(getLastRuleBlockFrom(toastStyles, ".error")).toContain(
+      "border-left: 3px solid var(--state-error-text)"
+    );
+    expect(getLastRuleBlockFrom(toastStyles, ".warning")).toContain(
+      "border-left: 3px solid var(--state-warning-text)"
+    );
+    expect(getLastRuleBlockFrom(toastStyles, ".info")).toContain(
+      "border-left: 3px solid var(--state-info-text)"
+    );
     expect(getLastRuleBlockFrom(toastStyles, ".success .icon")).toContain(
-      "background: var(--icon-surface-success)"
+      "color: var(--state-success-icon)"
+    );
+    expect(getLastRuleBlockFrom(toastStyles, ".success .icon")).toContain(
+      "background: var(--state-success-bg)"
     );
     expect(getLastRuleBlockFrom(toastStyles, ".error .icon")).toContain(
-      "background: var(--icon-surface-error)"
+      "color: var(--state-error-icon)"
+    );
+    expect(getLastRuleBlockFrom(toastStyles, ".error .icon")).toContain(
+      "background: var(--state-error-bg)"
     );
     expect(getLastRuleBlockFrom(toastStyles, ".warning .icon")).toContain(
-      "background: var(--icon-surface-warning)"
+      "color: var(--state-warning-icon)"
+    );
+    expect(getLastRuleBlockFrom(toastStyles, ".warning .icon")).toContain(
+      "background: var(--state-warning-bg)"
     );
     expect(getLastRuleBlockFrom(toastStyles, ".info .icon")).toContain(
-      "background: var(--icon-surface-info)"
+      "color: var(--state-info-icon)"
     );
-    expect(getLastRuleBlockFrom(toastStyles, ".success .icon")).toContain("var(--icon-success)");
+    expect(getLastRuleBlockFrom(toastStyles, ".info .icon")).toContain(
+      "background: var(--state-info-bg)"
+    );
   });
 
   it("keeps confirm dialog danger icons on icon tokens", () => {
@@ -402,6 +437,88 @@ describe("components.css theme-sensitive surfaces", () => {
     );
   });
 
+  it("maps control and navigation primitives onto semantic density and radius roles", () => {
+    expect(getLastRuleBlockFrom(buttonStyles, ".btn")).toContain(
+      "height: var(--control-height-md)"
+    );
+    expect(getLastRuleBlockFrom(buttonStyles, ".btn")).toContain(
+      "border-radius: var(--radius-control)"
+    );
+    expect(getLastRuleBlockFrom(buttonStyles, ".btn")).toContain(
+      "padding: 0 var(--inset-control-inline)"
+    );
+
+    const iconButtonStyles = readFileSync(
+      `${process.cwd()}/src/components/ui/icon-button/index.module.css`,
+      "utf8"
+    );
+    expect(getLastRuleBlockFrom(iconButtonStyles, ".root")).toContain(
+      "width: var(--icon-button-size-md)"
+    );
+    expect(getLastRuleBlockFrom(iconButtonStyles, ".root")).toContain(
+      "height: var(--icon-button-size-md)"
+    );
+    expect(getLastRuleBlockFrom(iconButtonStyles, ".root")).toContain(
+      "border-radius: var(--radius-control)"
+    );
+
+    expect(getLastRuleBlockFrom(inputStyles, ".input")).toContain(
+      "height: var(--control-height-md)"
+    );
+    expect(getLastRuleBlockFrom(inputStyles, ".input")).toContain(
+      "padding: 0 var(--inset-control-inline)"
+    );
+    expect(getLastRuleBlockFrom(inputStyles, ".input")).toContain(
+      "border-radius: var(--radius-control)"
+    );
+
+    expect(getLastRuleBlockFrom(textareaStyles, ".input")).toContain(
+      "border-radius: var(--radius-control)"
+    );
+    expect(getLastRuleBlockFrom(textareaStyles, ".textarea")).toContain(
+      "padding: var(--inset-control-block) var(--inset-control-inline)"
+    );
+
+    const switchStyles = readFileSync(
+      `${process.cwd()}/src/components/ui/switch/index.module.css`,
+      "utf8"
+    );
+    expect(getLastRuleBlockFrom(switchStyles, ".track")).toContain(
+      "border-radius: var(--radius-pill)"
+    );
+
+    expect(getLastRuleBlockFrom(tabsStyles, ":global(.panel-tab)")).toContain(
+      "border-radius: var(--radius-control)"
+    );
+    expect(getLastRuleBlockFrom(tabsStyles, ":global(.panel-tab)")).toContain(
+      "padding: var(--inset-control-block) var(--inset-control-inline)"
+    );
+
+    expect(
+      getRuleBlocksFrom(segmentedControlStylesheet, ":global(.shortcuts-category-tabs)").some(
+        (block) => block.includes("gap: var(--gap-cluster-sm)")
+      )
+    ).toBe(true);
+    expect(getLastRuleBlockFrom(segmentedControlStylesheet, ".segmentedControlOption")).toContain(
+      "border-radius: var(--radius-control)"
+    );
+
+    expect(getLastRuleBlockFrom(kbdStylesheet, ".kbd")).toContain(
+      "border-radius: var(--radius-control-sm)"
+    );
+    expect(getLastRuleBlockFrom(popoverStyles, ".content")).toContain(
+      "border-radius: var(--radius-overlay)"
+    );
+
+    const actionMenuStyles = readFileSync(
+      `${process.cwd()}/src/components/ui/action-menu/index.module.css`,
+      "utf8"
+    );
+    expect(getLastRuleBlockFrom(actionMenuStyles, ".menu")).toContain(
+      "padding: var(--inset-panel)"
+    );
+  });
+
   it("keeps desktop popovers above modal shells so picker overlays are not occluded", () => {
     expect(getLastRuleBlockFrom(modalStylesheet, ":global(.modal-overlay)")).toContain(
       "z-index: var(--z-modal-backdrop)"
@@ -410,12 +527,16 @@ describe("components.css theme-sensitive surfaces", () => {
   });
 
   it("maps display and status primitives onto semantic typography roles", () => {
-    expect(getLastRuleBlockFrom(tagStyles, ":where(.tag)")).toContain(
-      "font-size: var(--type-kicker-size)"
-    );
-    expect(getLastRuleBlockFrom(tagStyles, ":where(.tag)")).toContain(
-      "letter-spacing: var(--type-kicker-letter-spacing)"
-    );
+    expect(
+      getRuleBlocksFrom(tagStyles, ":where(.tag)").some((block) =>
+        block.includes("font-size: var(--type-kicker-size)")
+      )
+    ).toBe(true);
+    expect(
+      getRuleBlocksFrom(tagStyles, ":where(.tag)").some((block) =>
+        block.includes("letter-spacing: var(--type-kicker-letter-spacing)")
+      )
+    ).toBe(true);
     expect(getLastRuleBlockFrom(tagStyles, ".sm")).not.toContain("font-size:");
 
     expect(getLastRuleBlockFrom(badgeStyles, ":where(.badge)")).toContain(
@@ -448,6 +569,144 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(getLastRuleBlockFrom(emptyStateStyles, ".description")).toContain(
       "font-size: var(--type-body-size)"
     );
+  });
+
+  it("maps feedback and overlay primitives onto semantic foundation roles", () => {
+    const notice = getLastRuleBlockFrom(noticeStylesheet, ".notice");
+    const tooltip = getLastRuleBlockFrom(tooltipStyles, ".tooltip");
+    const modalOverlay = getLastRuleBlockFrom(modalStyles, ".overlay");
+    const drawerBackdrop = getLastRuleBlockFrom(drawerStylesheet, ".backdrop");
+    const localOverlay = getLastRuleBlockFrom(localOverlayStylesheet, ".overlay");
+    const localOverlayCard = getLastRuleBlockFrom(localOverlayStylesheet, ".card");
+    const toast = getLastRuleBlockFrom(toastStyles, ".toast");
+    const progressRoot = getLastRuleBlockFrom(progressBarStylesheet, ".root");
+    const emptyState = getLastRuleBlockFrom(emptyStateStyles, ".root");
+
+    expect(getLastRuleBlockFrom(tagStyles, ":where(.tag)")).toContain(
+      "border-radius: var(--radius-tag)"
+    );
+    expect(getLastRuleBlockFrom(badgeStyles, ":where(.badge)")).toContain(
+      "border-radius: var(--radius-chip)"
+    );
+    expect(getLastRuleBlockFrom(pillStylesheet, ".pill")).toContain(
+      "border-radius: var(--radius-pill)"
+    );
+
+    expect(tooltip).toContain("border: 1px solid var(--surface-overlay-border)");
+    expect(tooltip).toContain("border-radius: var(--radius-overlay)");
+    expect(tooltip).toContain("background: var(--surface-overlay-bg)");
+    expect(tooltip).toContain("box-shadow: var(--surface-overlay-shadow)");
+
+    expect(notice).toContain("gap: var(--form-group-gap)");
+    expect(notice).toContain("padding: var(--inset-control-block) var(--inset-control-inline)");
+    expect(notice).toContain("border-radius: var(--radius-overlay)");
+    expect(notice).toContain("background: var(--surface-elevated-bg)");
+    expect(getLastRuleBlockFrom(noticeStylesheet, ".info")).toContain(
+      "border-color: var(--state-info-border)"
+    );
+    expect(getLastRuleBlockFrom(noticeStylesheet, ".info")).toContain(
+      "background: var(--state-info-bg)"
+    );
+    expect(getLastRuleBlockFrom(noticeStylesheet, ".success")).toContain(
+      "border-color: var(--state-success-border)"
+    );
+    expect(getLastRuleBlockFrom(noticeStylesheet, ".success")).toContain(
+      "background: var(--state-success-bg)"
+    );
+    expect(getLastRuleBlockFrom(noticeStylesheet, ".warning")).toContain(
+      "border-color: var(--state-warning-border)"
+    );
+    expect(getLastRuleBlockFrom(noticeStylesheet, ".warning")).toContain(
+      "background: var(--state-warning-bg)"
+    );
+    expect(getLastRuleBlockFrom(noticeStylesheet, ".error")).toContain(
+      "border-color: var(--state-error-border)"
+    );
+    expect(getLastRuleBlockFrom(noticeStylesheet, ".error")).toContain(
+      "background: var(--state-error-bg)"
+    );
+
+    expect(modalOverlay).toContain("background: var(--surface-overlay-backdrop)");
+    expect(
+      getRuleBlocksFrom(modalStyles, ".card").some((block) =>
+        block.includes("border: 1px solid var(--surface-overlay-border)")
+      )
+    ).toBe(true);
+    expect(
+      getRuleBlocksFrom(modalStyles, ".card").some((block) =>
+        block.includes("border-radius: var(--radius-overlay)")
+      )
+    ).toBe(true);
+    expect(
+      getRuleBlocksFrom(modalStyles, ".card").some((block) =>
+        block.includes("background: var(--surface-overlay-bg)")
+      )
+    ).toBe(true);
+    expect(
+      getRuleBlocksFrom(modalStyles, ".card").some((block) =>
+        block.includes("box-shadow: var(--surface-overlay-shadow)")
+      )
+    ).toBe(true);
+
+    expect(drawerBackdrop).toContain("background: var(--surface-overlay-backdrop)");
+    expect(
+      getRuleBlocksFrom(drawerStylesheet, ".panel").some((block) =>
+        block.includes("border: 1px solid var(--surface-overlay-border)")
+      )
+    ).toBe(true);
+    expect(
+      getRuleBlocksFrom(drawerStylesheet, ".panel").some((block) =>
+        block.includes("border-radius: var(--radius-overlay)")
+      )
+    ).toBe(true);
+    expect(
+      getRuleBlocksFrom(drawerStylesheet, ".panel").some((block) =>
+        block.includes("background: var(--surface-overlay-bg)")
+      )
+    ).toBe(true);
+    expect(
+      getRuleBlocksFrom(drawerStylesheet, ".panel").some((block) =>
+        block.includes("box-shadow: var(--surface-overlay-shadow)")
+      )
+    ).toBe(true);
+
+    expect(localOverlay).toContain("background: var(--surface-overlay-backdrop)");
+    expect(localOverlayCard).toContain("border: 1px solid var(--surface-overlay-border)");
+    expect(localOverlayCard).toContain("border-radius: var(--radius-local-overlay)");
+    expect(localOverlayCard).toContain("background: var(--surface-overlay-bg)");
+    expect(localOverlayCard).toContain("box-shadow: var(--surface-overlay-shadow)");
+
+    expect(toast).toContain("border: 1px solid var(--surface-overlay-border)");
+    expect(toast).toContain("border-radius: var(--radius-overlay)");
+    expect(toast).toContain("background: var(--surface-overlay-bg)");
+    expect(toast).toContain("box-shadow: var(--surface-overlay-shadow)");
+
+    expect(progressRoot).toContain("background: var(--state-info-bg)");
+    expect(getLastRuleBlockFrom(progressBarStylesheet, ".success")).toContain(
+      "--progress-bar-color: var(--state-success-text)"
+    );
+    expect(getLastRuleBlockFrom(progressBarStylesheet, ".warning")).toContain(
+      "--progress-bar-color: var(--state-warning-text)"
+    );
+    expect(getLastRuleBlockFrom(progressBarStylesheet, ".error")).toContain(
+      "--progress-bar-color: var(--state-error-text)"
+    );
+    expect(getLastRuleBlockFrom(progressBarStylesheet, ".info")).toContain(
+      "--progress-bar-color: var(--state-info-text)"
+    );
+    expect(getLastRuleBlockFrom(progressBarStylesheet, ".neutral")).toContain(
+      "--progress-bar-color: var(--state-disabled-text)"
+    );
+
+    expect(getLastRuleBlockFrom(statusDotStylesheet, ".dot")).toContain(
+      "border-radius: var(--radius-chip)"
+    );
+    expect(getLastRuleBlockFrom(statusDotStylesheet, ":global(.session-dot-running)")).toContain(
+      "--status-dot-current-color: var(--state-info-text)"
+    );
+
+    expect(emptyState).toContain("gap: var(--gap-stack-md)");
+    expect(emptyState).toContain("padding: var(--inset-dialog) var(--inset-panel)");
   });
 
   it("keeps config status colors on icon tokens", () => {
@@ -537,16 +796,36 @@ describe("components.css theme-sensitive surfaces", () => {
 
   it("keeps the workspace launch modal theme-aware", () => {
     const modal = getLastRuleBlock(".launch-modal");
+    const launchButton = getLastRuleBlock(".launch-start-btn");
+    const launchButtonFocus = getLastRuleBlock(".launch-start-btn:focus-visible");
+    const launchButtonHover = getLastRuleBlock(".launch-start-btn:hover");
+    const mobileLaunchButton = getLastRuleBlock(".launch-start-btn--mobile");
 
     expect(modal).not.toContain("rgba(17, 24, 31, 0.98)");
     expect(modal).toContain("var(--bg-surface)");
+    expect(launchButton).toContain("gap: var(--gap-cluster-md)");
+    expect(launchButton).toContain("border-radius: var(--radius-control-lg)");
+    expect(launchButtonFocus).toContain("var(--state-focus-ring-width)");
+    expect(launchButtonFocus).toContain("var(--state-focus-ring-color)");
+    expect(launchButtonHover).toContain("box-shadow: var(--shadow-lg)");
+    expect(mobileLaunchButton).toContain("border-radius: var(--radius-xl)");
+    expect(mobileLaunchButton).toContain("box-shadow: var(--shadow-lg)");
   });
 
   it("keeps workspace chrome on tokens instead of hardcoded dark fills", () => {
     const topbar = getLastRuleBlock(".app-topbar");
+    const topbarTabs = getLastRuleBlock(".topbar-tabs");
+    const topbarTab = getLastRuleBlock(".topbar-tab");
     const activeTab = getLastRuleBlock(".topbar-tab.active");
+    const workspaceResizer = getLastRuleBlock(".workspace-resizer");
     const emptyCard = getLastRuleBlock(".workspace-empty-inner");
     const resolvingCard = getLastRuleBlock(".workspace-resolving-card");
+    const workspaceGitEditor = getLastRuleBlock(".workspace-git-editor");
+    const resolvingConsoleStatus = getLastRuleBlock(".workspace-resolving-console-status");
+    const resolvingSkeleton = getLastGroupedRuleBlock(
+      /\.workspace-resolving-pill,\s*\.workspace-resolving-line,\s*\.workspace-resolving-console-line\s*\{([^}]*)\}/g
+    );
+    const resolvingStrongLine = getLastRuleBlock(".workspace-resolving-line-strong");
     const mainStage = getLastRuleBlock(".workspace-main-stage");
     const sessionTerminal = getLastRuleBlock(".session-terminal");
     const sessionCard = getLastRuleBlock(".session-card");
@@ -560,6 +839,10 @@ describe("components.css theme-sensitive surfaces", () => {
     const statusBar = getLastRuleBlock(".workspace-status-bar");
     const agentPanes = getLastRuleBlock(".workspace-main-stage > .agent-panes");
     const bottomPanel = getLastRuleBlock(".workspace-bottom-panel");
+    const sidebarTabs = getLastRuleBlock(".workspace-sidebar-panel__tabs");
+    const sidebarTab = getLastRuleBlock(".workspace-sidebar-panel__tab");
+    const sidebarTabActiveAfter = getLastRuleBlock(".workspace-sidebar-panel__tab.active::after");
+    const sidebarActions = getLastRuleBlock(".workspace-sidebar-panel__actions");
     const verticalDividerRules = getRuleBlocksFrom(stylesheet, ".split-divider-v").join("\n");
     const horizontalDividerRules = getRuleBlocksFrom(stylesheet, ".split-divider-h").join("\n");
     const verticalDividerLineRules = getRuleBlocksFrom(stylesheet, ".split-divider-v::before").join(
@@ -588,10 +871,17 @@ describe("components.css theme-sensitive surfaces", () => {
     const bottomTerminalShell = getLastRuleBlock(".workspace-bottom-panel > .bottom-terminal");
 
     expect(topbar).toContain("var(--bg-surface)");
+    expect(topbarTabs).toContain("gap: var(--gap-cluster-3xs)");
+    expect(topbarTab).toContain("gap: var(--gap-cluster-tight)");
+    expect(topbarTab).toContain(
+      "padding: 0 var(--control-height-md) 0 var(--inset-control-inline)"
+    );
     expect(activeTab).toContain("var(--bg-active)");
     expect(activeTab).not.toContain("rgba(45, 63, 79, 0.92)");
+    expect(workspaceResizer).toContain("z-index: var(--z-inline)");
     expect(emptyCard).toContain("var(--bg-surface)");
     expect(resolvingCard).toContain("var(--bg-surface)");
+    expect(workspaceGitEditor).toContain("var(--bg-terminal)");
     expect(mainStage).toContain("flex: 1");
     expect(mainStage).toContain("min-height: 0");
     expect(mainStage).toContain("min-width: 0");
@@ -610,6 +900,18 @@ describe("components.css theme-sensitive surfaces", () => {
       "background: color-mix(in srgb, var(--bg-active) 88%, var(--bg-page) 12%)"
     );
     expect(activeSessionTitle).toContain("color: var(--text-primary)");
+    expect(resolvingConsoleStatus).toContain("background: var(--state-success-text)");
+    expect(resolvingConsoleStatus).toContain("border-radius: var(--radius-chip)");
+    expect(resolvingConsoleStatus).toContain("var(--state-success-border)");
+    expect(resolvingSkeleton).toContain(
+      "background: color-mix(in srgb, var(--bg-hover) 74%, var(--bg-surface) 26%)"
+    );
+    expect(resolvingStrongLine).toContain("border: 1px solid var(--state-info-border)");
+    expect(resolvingStrongLine).toContain("background: var(--state-info-bg)");
+    expect(sidebarTabs).toContain("gap: var(--gap-cluster-md)");
+    expect(sidebarTab).toContain("gap: var(--gap-cluster-sm)");
+    expect(sidebarTabActiveAfter).toContain("border-radius: var(--radius-pill)");
+    expect(sidebarActions).toContain("gap: var(--gap-cluster-sm)");
     expect(verticalDividerRules).toContain("width: 10px");
     expect(verticalDividerRules).not.toContain("width: 8px");
     expect(verticalDividerRules).toContain("margin-left: -5px");
@@ -625,9 +927,11 @@ describe("components.css theme-sensitive surfaces", () => {
       "background: color-mix(in srgb, var(--border) 62%, transparent)"
     );
     expect(paneDividerBaseRules).toContain("position: relative");
+    expect(paneDividerBaseRules).toContain("z-index: var(--z-inline-raised)");
     expect(paneDividerLineRules).toContain(
       "background: color-mix(in srgb, var(--border) 62%, transparent)"
     );
+    expect(paneDividerLineRules).toContain("border-radius: var(--radius-pill)");
     expect(paneDividerHorizontalRules).toContain("width: 10px");
     expect(paneDividerHorizontalRules).toContain("margin-left: -5px");
     expect(paneDividerHorizontalRules).toContain("margin-right: -5px");
@@ -685,6 +989,42 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(quickActions).toContain("width: auto");
     expect(quickActions).toContain("min-width: max-content");
     expect(quickActions).toContain("flex-shrink: 0");
+    expect(quickActions).toContain("padding: 0 var(--inset-row-inline-tight)");
+    expect(quickActions).toContain("gap: var(--gap-cluster-tight)");
+  });
+
+  it("keeps app topbar and left panel compatibility overrides on shared foundation tokens", () => {
+    const appTopbarBlocks = getRuleBlocksFrom(stylesheet, ".app-topbar");
+    const leftPanelBlocks = getRuleBlocksFrom(stylesheet, ".left-panel");
+
+    expect(appTopbarBlocks.some((block) => block.includes("padding: 0 var(--sp-2)"))).toBe(true);
+    expect(appTopbarBlocks.some((block) => block.includes("gap: var(--gap-cluster-2xs)"))).toBe(
+      true
+    );
+    expect(leftPanelBlocks.some((block) => block.includes("background: var(--bg-sidebar)"))).toBe(
+      true
+    );
+    expect(leftPanelBlocks.some((block) => block.includes("box-shadow: none"))).toBe(true);
+  });
+
+  it("keeps file context menu action stacks on compact cluster gaps", () => {
+    const sectionItems = getLastRuleBlock(".file-context-menu__section-items");
+    const sheetActions = getLastRuleBlock(".file-context-menu__sheet-actions");
+
+    expect(sectionItems).toContain("gap: var(--gap-cluster-2xs)");
+    expect(sheetActions).toContain("gap: var(--gap-cluster-2xs)");
+  });
+
+  it("keeps worktree state chips and mobile tabs on shared state and layer tokens", () => {
+    const cleanChip = getLastRuleBlock(".worktree-chip-status.worktree-clean");
+    const dirtyChip = getLastRuleBlock(".worktree-chip-status.worktree-dirty");
+    const mobileTabs = getLastRuleBlock(".mobile-worktree-sheet__tabs");
+
+    expect(cleanChip).toContain("color: var(--state-success-text)");
+    expect(cleanChip).toContain("background: var(--state-success-bg)");
+    expect(dirtyChip).toContain("color: var(--state-warning-text)");
+    expect(dirtyChip).toContain("background: var(--state-warning-bg)");
+    expect(mobileTabs).toContain("z-index: var(--z-inline)");
   });
 
   it("keeps terminal toolbar controls grouped at the far right", () => {
@@ -700,6 +1040,12 @@ describe("components.css theme-sensitive surfaces", () => {
   it("keeps workspace editor and diff surfaces theme-aware", () => {
     const editorShell = getLastRuleBlock(".workspace-git-editor");
     const editorHeader = getLastRuleBlock(".code-editor-header");
+    const editorError = getLastRuleBlock(".code-editor-error");
+    const codeLines = getLastRuleBlock(".code-lines");
+    const codeModeToggleRules = getRuleBlocksFrom(stylesheet, ".code-mode-toggle").join("\n");
+    const activeCodeMode = getLastRuleBlock(".code-mode-btn.active");
+    const imageCanvasRules = getRuleBlocksFrom(stylesheet, ".image-preview-canvas").join("\n");
+    const imagePreview = getLastRuleBlock(".image-preview-img");
     const imageMeta = getLastRuleBlock(".image-preview-meta");
     const addedLine = getLastRuleBlock(".git-diff-line-added");
     const removedLine = getLastRuleBlock(".git-diff-line-removed");
@@ -708,12 +1054,93 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(editorShell).not.toContain("rgba(11, 18, 24, 0.92)");
     expect(editorHeader).toContain("var(--bg-surface)");
     expect(editorHeader).not.toContain("rgba(18, 26, 34, 0.96)");
+    expect(editorError).toContain("gap: var(--gap-cluster-tight)");
+    expect(editorError).toContain("padding: var(--gap-cluster-tight) var(--inset-control-inline)");
+    expect(editorError).toContain("background: var(--editor-diagnostic-error-bg)");
+    expect(editorError).toContain("color: var(--state-error-text)");
+    expect(codeLines).toContain("padding: var(--editor-pane-inset) 0");
+    expect(codeModeToggleRules).toContain("padding: var(--gap-cluster-2xs)");
+    expect(codeModeToggleRules).toContain("gap: var(--gap-cluster-2xs)");
+    expect(codeModeToggleRules).toContain("border-radius: var(--radius-lg)");
+    expect(codeModeToggleRules).toContain(
+      "background: color-mix(in srgb, var(--bg-hover) 72%, var(--bg-surface) 28%)"
+    );
+    expect(activeCodeMode).toContain("box-shadow: inset 0 0 0 1px var(--border-focus)");
+    expect(imageCanvasRules).toContain("padding: var(--sp-6)");
+    expect(imageCanvasRules).toContain(
+      "background-color: color-mix(in srgb, var(--bg-terminal) 90%, var(--bg-page) 10%)"
+    );
+    expect(imagePreview).toContain("box-shadow: var(--shadow-md)");
     expect(imageMeta).toContain("var(--bg-surface)");
     expect(imageMeta).not.toContain("rgba(17, 24, 31, 0.92)");
     expect(addedLine).toContain("var(--color-success)");
     expect(addedLine).not.toContain("#9ce7c8");
     expect(removedLine).toContain("var(--color-error)");
     expect(removedLine).not.toContain("#ffb7c4");
+  });
+
+  it("routes terminal, session, editor, and diff chrome through domain sub-spec tokens", () => {
+    const xtermShell = getLastRuleBlock(".xterm-host-shell");
+    const xtermHost = getLastRuleBlock(".xterm-host");
+    const xtermReplayCard = getLastRuleBlock(".xterm-replay-overlay__card");
+    const sessionProgress = getLastRuleBlock(".session-progress");
+    const sessionHeader = getLastRuleBlock(".session-header");
+    const sessionHeaderLeft = getLastRuleBlock(".session-header-left");
+    const sessionHeaderCopyBlocks = getRuleBlocksFrom(stylesheet, ".session-header-copy");
+    const sessionTitleRow = getLastRuleBlock(".session-title-row");
+    const sessionHeaderActions = getRuleBlocksFrom(stylesheet, ".session-header-actions");
+    const sessionBadges = getLastGroupedRuleBlock(
+      /\.session-provider-badge,\s*\.session-state-badge\s*\{([^}]*)\}/g
+    );
+    const sessionMetaSeparator = getLastRuleBlock(".session-meta span + span::before");
+    const sessionDotBlocks = getRuleBlocksFrom(stylesheet, ".session-dot");
+    const runningHeader = getLastRuleBlock(".session-card > .panel-header.session-header--running");
+    const runningDot = getLastRuleBlock(".session-dot-running");
+    const focusPulse = getLastRuleBlock(".session-card--focus-pulse");
+    const gitView = getLastRuleBlock(".workspace-git-view");
+    const editorHeader = getLastRuleBlock(".code-editor-header");
+    const editorBody = getLastRuleBlock(".code-editor-body");
+    const addedLine = getLastRuleBlock(".git-diff-line-added");
+    const removedLine = getLastRuleBlock(".git-diff-line-removed");
+    const diffEmpty = getLastRuleBlock(".git-diff-empty");
+
+    expect(xtermShell).toContain("padding: var(--terminal-panel-inset)");
+    expect(xtermHost).toContain("border-radius: var(--terminal-local-overlay-radius)");
+    expect(xtermReplayCard).toContain("border-radius: var(--terminal-local-overlay-radius)");
+    expect(sessionProgress).toContain("background: var(--state-info-bg)");
+    expect(sessionHeader).toContain(
+      "padding: var(--gap-cluster-tight) var(--inset-control-inline)"
+    );
+    expect(sessionHeaderLeft).toContain("gap: var(--gap-cluster-md)");
+    expect(
+      sessionHeaderCopyBlocks.some((block) => block.includes("gap: var(--gap-cluster-2xs)"))
+    ).toBe(true);
+    expect(sessionTitleRow).toContain("gap: var(--session-row-gap)");
+    expect(sessionHeaderActions.some((block) => block.includes("gap: var(--gap-cluster-sm)"))).toBe(
+      true
+    );
+    expect(sessionBadges).toContain("border-radius: var(--session-state-radius)");
+    expect(sessionMetaSeparator).toContain("border-radius: var(--radius-chip)");
+    expect(
+      sessionDotBlocks.some(
+        (block) =>
+          block.includes("box-shadow: 0 0 0 4px") &&
+          block.includes("var(--status-dot-current-color, var(--text-tertiary))")
+      )
+    ).toBe(true);
+    expect(runningHeader).toContain("background: var(--terminal-state-running-bg)");
+    expect(runningHeader).toContain("border-bottom-color: var(--terminal-state-running-border)");
+    expect(runningDot).toContain("background: var(--terminal-state-running-text)");
+    expect(runningDot).toContain("var(--terminal-state-running-border)");
+    expect(focusPulse).toContain("z-index: var(--z-inline-raised)");
+    expect(gitView).toContain("padding: var(--editor-pane-inset)");
+    expect(editorHeader).toContain("padding: var(--gap-cluster-md) var(--editor-toolbar-inset)");
+    expect(editorBody).toContain("background: var(--surface-panel-bg)");
+    expect(addedLine).toContain("background: var(--diff-add-bg)");
+    expect(removedLine).toContain("background: var(--diff-delete-bg)");
+    expect(diffEmpty).toContain("gap: var(--diff-section-gap)");
+    expect(diffEmpty).toContain("padding: var(--diff-thread-inset)");
+    expect(diffEmpty).toContain("border-radius: var(--diff-thread-radius)");
   });
 
   it("keeps xterm and monaco scrollbars aligned with shared tokens", () => {
@@ -788,15 +1215,53 @@ describe("components.css theme-sensitive surfaces", () => {
     const providerCard = getLastRuleBlock(".agent-provider-card");
     const providerBody = getLastRuleBlock(".agent-provider-card-body");
     const providerArrow = getLastRuleBlock(".agent-provider-card-arrow");
+    const claudeCard = getLastRuleBlock(".agent-provider-card-claude");
+    const codexCard = getLastRuleBlock(".agent-provider-card-codex");
+    const providerIcon = getLastRuleBlock(".agent-provider-card-icon");
 
     expect(launcher).toContain("container-type: inline-size");
     expect(content).toContain("max-width: 100%");
     expect(providerCard).toContain("min-width: 0");
     expect(providerBody).toContain("width: 100%");
+    expect(providerBody).toContain("gap: var(--gap-cluster-tight)");
     expect(providerArrow).toContain("flex-shrink: 0");
+    expect(claudeCard).toContain("background: var(--state-warning-bg)");
+    expect(claudeCard).toContain("border-color: var(--state-warning-border)");
+    expect(codexCard).toContain("background: var(--state-info-bg)");
+    expect(codexCard).toContain("border-color: var(--state-info-border)");
+    expect(providerIcon).toContain("background: var(--icon-surface-subtle)");
     expect(stylesheet).toMatch(
       /@container\s*\(max-width:\s*36rem\)\s*\{[\s\S]*?\.agent-draft-providers\s*\{[\s\S]*?grid-template-columns:\s*1fr;[\s\S]*?\}/
     );
+  });
+
+  it("keeps legacy agent pane chrome aligned to shared density and state tokens", () => {
+    const progress = getLastRuleBlock(".agent-progress");
+    const header = getLastRuleBlock(".agent-header");
+    const badge = getLastRuleBlock(".agent-badge");
+    const runningStatus = getLastRuleBlock(".agent-status.running");
+    const idleStatus = getLastRuleBlock(".agent-status.idle");
+    const headerLeft = getLastRuleBlock(".agent-header-left");
+    const actions = getLastRuleBlock(".agent-actions");
+    const terminal = getLastRuleBlock(".agent-terminal");
+
+    expect(progress).toContain("background: var(--state-info-bg)");
+    expect(header).toContain("gap: var(--gap-cluster-md)");
+    expect(header).toContain("padding: var(--gap-cluster-tight) var(--inset-control-inline)");
+    expect(badge).toContain(
+      "padding: var(--inset-chip-block-tight) var(--inset-chip-inline-tight)"
+    );
+    expect(badge).toContain("border-radius: var(--radius-control-sm)");
+    expect(runningStatus).toContain("background: var(--state-success-bg)");
+    expect(runningStatus).toContain("color: var(--state-success-text)");
+    expect(idleStatus).toContain("background: var(--state-disabled-bg)");
+    expect(idleStatus).toContain("color: var(--state-disabled-text)");
+    expect(headerLeft).toContain("gap: var(--gap-cluster-md)");
+    expect(actions).toContain("gap: var(--gap-cluster-sm)");
+    expect(terminal).toContain("padding: var(--terminal-panel-inset)");
+    expect(terminal).toContain("font-size: var(--terminal-font-size)");
+    expect(terminal).toContain("line-height: var(--terminal-line-height)");
+    expect(terminal).toContain("color: var(--terminal-text)");
   });
 
   it("keeps mobile sheet bodies as flex columns so sheet content can fill the viewport", () => {
@@ -860,7 +1325,8 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(mobilePageHeaderTitle).toContain("font-size: var(--type-app-title-size)");
     expect(mobilePageHeaderTitle).toContain("line-height: var(--type-app-title-line-height)");
     expect(mobilePageHeaderTitle).toContain("font-weight: var(--type-app-title-weight)");
-    expect(mobilePageHeaderBack).toContain("min-height: 26px");
+    expect(mobilePageHeaderBack).toContain("min-height: var(--control-height-sm)");
+    expect(mobilePageHeaderBack).toContain("gap: var(--gap-cluster-tight)");
     expect(mobilePageHeaderBack).toContain("font-family: var(--font-mono)");
     expect(headerLeading).toContain("flex: 1");
     expect(backButton).toContain("background: transparent");
@@ -871,12 +1337,14 @@ describe("components.css theme-sensitive surfaces", () => {
 
   it("keeps page header levels on the approved desktop sizing contract", () => {
     const baseTitle = getLastRuleBlock(".page-header__title");
+    const copy = getLastRuleBlock(".page-header__copy");
     const primaryHeader = getLastRuleBlock(".page-header--primary");
     const secondaryHeader = getLastRuleBlock(".page-header--secondary");
     const primaryTitle = getLastRuleBlock(".page-header--primary .page-header__title");
     const secondaryTitle = getLastRuleBlock(".page-header--secondary .page-header__title");
 
     expect(baseTitle).toContain("font-weight: var(--type-app-title-weight)");
+    expect(copy).toContain("gap: var(--gap-cluster-2xs)");
     expect(primaryHeader).toContain("min-height: 56px");
     expect(secondaryHeader).toContain("min-height: 48px");
     expect(primaryTitle).toContain("font-size: var(--type-section-title-size)");
@@ -891,28 +1359,49 @@ describe("components.css theme-sensitive surfaces", () => {
     const panelHeader =
       [...getRuleBlocksFrom(stylesheet, ".panel-header")]
         .reverse()
-        .find((block) => block.includes("padding: 6px 12px")) ?? "";
+        .find((block) => block.includes("border-bottom: 1px solid var(--border)")) ?? "";
     const leading = getLastRuleBlock(".panel-header__leading");
     const copy = getLastRuleBlock(".panel-header__copy");
     const title = getLastRuleBlock(".panel-header__title");
     const meta = getLastRuleBlock(".panel-header__meta");
     const actions = getLastRuleBlock(".panel-header__actions");
+    const branch = getLastRuleBlock(".panel-branch");
+    const branchButton = getLastRuleBlock(".panel-branch-button");
+    const tabs = getLastRuleBlock(".panel-tabs");
+    const tab = getLastRuleBlock(".panel-tab");
+    const toolbar = getLastRuleBlock(".panel-toolbar");
+    const tabsRow = getLastRuleBlock(".panel-tabs-row");
     const mobilePanelHeader = getLastGroupedRuleBlockFrom(
       stylesheet,
       /@media \(max-width: 640px\)\s*\{[\s\S]*?\n\s*\.panel-header\s*\{([^}]*)\}/g
     );
 
-    expect(panelHeader).toContain("min-height: 40px");
-    expect(panelHeader).toContain("padding: 6px 12px");
+    expect(panelHeader).toContain("min-height: var(--panel-header-height)");
+    expect(panelHeader).toContain("gap: var(--sp-3)");
+    expect(panelHeader).toContain("padding: var(--gap-cluster-tight) var(--inset-control-inline)");
     expect(panelHeader).toContain("border-bottom: 1px solid var(--border)");
     expect(leading).toContain("flex: 1");
     expect(copy).toContain("min-width: 0");
+    expect(copy).toContain("gap: var(--gap-cluster-2xs)");
     expect(title).toContain("font-size: var(--type-app-title-size)");
     expect(title).toContain("line-height: var(--type-app-title-line-height)");
     expect(title).toContain("font-weight: var(--type-app-title-weight)");
     expect(meta).toContain("display: flex");
     expect(actions).toContain("margin-left: auto");
     expect(actions).toContain("flex-shrink: 0");
+    expect(branch).toContain("margin-bottom: var(--gap-cluster-md)");
+    expect(branch).toContain("padding: var(--gap-cluster-2xs) var(--sp-2)");
+    expect(branch).toContain("border-radius: var(--radius-control-sm)");
+    expect(branch).toContain("background: var(--state-hover-bg-subtle)");
+    expect(branchButton).toContain("gap: var(--gap-cluster-sm)");
+    expect(tabs).toContain("gap: var(--gap-cluster-sm)");
+    expect(tab).toContain("padding: var(--gap-cluster-2xs) var(--sp-2)");
+    expect(tab).toContain("border-radius: var(--radius-control-sm)");
+    expect(toolbar).toContain(
+      "min-height: calc(var(--control-height-sm) + var(--gap-cluster-tight))"
+    );
+    expect(toolbar).toContain("padding: var(--gap-cluster-tight) var(--inset-control-inline)");
+    expect(tabsRow).toContain("gap: var(--gap-cluster-md)");
     expect(mobilePanelHeader).toContain("min-height: 44px");
     expect(hasRuleBlock(".session-header .panel-header__title")).toBe(false);
     expect(hasRuleBlock(".mobile-shell__agent-stage .session-header .panel-header__actions")).toBe(
@@ -967,7 +1456,7 @@ describe("components.css theme-sensitive surfaces", () => {
     const textarea = getLastRuleBlock(".supervisor-dialog .textarea");
 
     expect(modalBody).toContain("gap: var(--sp-3)");
-    expect(formGroup).toContain("gap: 6px");
+    expect(formGroup).toContain("gap: var(--gap-cluster-tight)");
     expect(intro).toContain("display: flex");
     expect(intro).toContain("padding: var(--sp-3)");
     expect(intro).toContain("border: 1px solid color-mix(in srgb, var(--border) 90%, transparent)");
@@ -989,6 +1478,101 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(textarea).toContain("font-size: var(--type-code-inline-size)");
     expect(textarea).toContain("min-height: 104px");
     expect(textarea).toContain("color: var(--text-secondary)");
+  });
+
+  it("keeps supervisor strip, history badges, and restore cards on shared state tokens", () => {
+    const enableHover = getLastRuleBlock(".supervisor-enable-btn:hover");
+    const pulse = getLastRuleBlock(".supervisor-pulse");
+    const evaluatingPulse = getLastRuleBlock(".supervisor-pulse.supervisor-state-evaluating");
+    const injectingPulse = getLastRuleBlock(".supervisor-pulse.supervisor-state-injecting");
+    const errorPulse = getLastRuleBlock(".supervisor-pulse.supervisor-state-error");
+    const stateTag = getLastRuleBlock(".supervisor-state-tag");
+    const idleTag = getLastRuleBlock(".supervisor-state-tag.supervisor-state-idle");
+    const evaluatingTag = getLastRuleBlock(".supervisor-state-tag.supervisor-state-evaluating");
+    const injectingTag = getLastRuleBlock(".supervisor-state-tag.supervisor-state-injecting");
+    const pausedTag = getLastRuleBlock(".supervisor-state-tag.supervisor-state-paused");
+    const errorTag = getLastRuleBlock(".supervisor-state-tag.supervisor-state-error");
+    const stoppedTag = getLastRuleBlock(".supervisor-state-tag.supervisor-state-stopped");
+    const cycleCount = getLastRuleBlock(".supervisor-cycle-count");
+    const actions = getLastRuleBlock(".supervisor-actions");
+    const dangerHover = getLastRuleBlock(".supervisor-icon-btn-danger:hover:not(:disabled)");
+    const providerPill = getLastRuleBlock(".supervisor-provider-pill");
+    const progressMarker = getLastRuleBlock(".supervisor-progress-item__marker");
+    const manualTrigger = getLastRuleBlock(
+      '.supervisor-history-item[data-trigger="manual"] .supervisor-history-trigger'
+    );
+    const scheduledTrigger = getLastRuleBlock(
+      '.supervisor-history-item[data-trigger="scheduled"] .supervisor-history-trigger'
+    );
+    const continueTrigger = getLastRuleBlock(
+      '.supervisor-history-item[data-trigger="continue"] .supervisor-history-trigger'
+    );
+    const stopTrigger = getLastRuleBlock(
+      '.supervisor-history-item[data-trigger="stop"] .supervisor-history-trigger'
+    );
+    const errorTrigger = getLastRuleBlock(
+      '.supervisor-history-item[data-trigger="error"] .supervisor-history-trigger'
+    );
+    const inProgressTrigger = getLastRuleBlock(
+      '.supervisor-history-item[data-trigger="in_progress"] .supervisor-history-trigger'
+    );
+    const restoreEntry = getLastRuleBlock(".supervisor-restore-entry");
+    const restoreCard = getLastRuleBlock(".supervisor-restore-card");
+
+    expect(enableHover).toContain("background: var(--state-success-bg)");
+    expect(enableHover).toContain("border-color: var(--state-success-border)");
+    expect(enableHover).toContain("color: var(--state-success-text)");
+    expect(pulse).toContain("background: var(--state-success-text)");
+    expect(pulse).toContain("var(--state-success-border)");
+    expect(evaluatingPulse).toContain("background: var(--state-info-text)");
+    expect(evaluatingPulse).toContain("var(--state-info-border)");
+    expect(injectingPulse).toContain("background: var(--state-warning-text)");
+    expect(injectingPulse).toContain("var(--state-warning-border)");
+    expect(errorPulse).toContain("background: var(--state-error-text)");
+    expect(errorPulse).toContain("var(--state-error-border)");
+    expect(stateTag).toContain(
+      "padding: var(--inset-chip-block-tight) var(--inset-chip-inline-tight)"
+    );
+    expect(stateTag).toContain("border-radius: var(--radius-control-sm)");
+    expect(idleTag).toContain("background: var(--state-success-bg)");
+    expect(idleTag).toContain("color: var(--state-success-text)");
+    expect(evaluatingTag).toContain("background: var(--state-info-bg)");
+    expect(evaluatingTag).toContain("color: var(--state-info-text)");
+    expect(injectingTag).toContain("background: var(--state-warning-bg)");
+    expect(injectingTag).toContain("color: var(--state-warning-text)");
+    expect(pausedTag).toContain("background: var(--state-disabled-bg)");
+    expect(pausedTag).toContain("color: var(--state-disabled-text)");
+    expect(errorTag).toContain("background: var(--state-error-bg)");
+    expect(errorTag).toContain("color: var(--state-error-text)");
+    expect(stoppedTag).toContain("background: var(--state-disabled-bg)");
+    expect(stoppedTag).toContain("color: var(--state-disabled-text)");
+    expect(cycleCount).toContain(
+      "padding: var(--inset-chip-block-tight) var(--inset-chip-inline-tight)"
+    );
+    expect(cycleCount).toContain("background: var(--state-disabled-bg)");
+    expect(actions).toContain("gap: var(--gap-cluster-2xs)");
+    expect(dangerHover).toContain("background: var(--state-error-bg)");
+    expect(dangerHover).toContain("color: var(--state-error-text)");
+    expect(providerPill).toContain(
+      "padding: var(--inset-chip-block-tight) var(--inset-chip-inline-tight)"
+    );
+    expect(providerPill).toContain("background: var(--state-info-bg)");
+    expect(providerPill).toContain("color: var(--state-info-text)");
+    expect(progressMarker).toContain("border-radius: var(--radius-pill)");
+    expect(manualTrigger).toContain("color: var(--accent-purple)");
+    expect(manualTrigger).toContain("background: color-mix(in srgb, var(--accent-purple)");
+    expect(scheduledTrigger).toContain("background: var(--state-info-bg)");
+    expect(scheduledTrigger).toContain("color: var(--state-info-text)");
+    expect(continueTrigger).toContain("background: var(--state-success-bg)");
+    expect(continueTrigger).toContain("color: var(--state-success-text)");
+    expect(stopTrigger).toContain("background: var(--state-disabled-bg)");
+    expect(stopTrigger).toContain("color: var(--state-disabled-text)");
+    expect(errorTrigger).toContain("background: var(--state-error-bg)");
+    expect(errorTrigger).toContain("color: var(--state-error-text)");
+    expect(inProgressTrigger).toContain("background: var(--state-warning-bg)");
+    expect(inProgressTrigger).toContain("color: var(--state-warning-text)");
+    expect(restoreEntry).toContain("gap: var(--gap-cluster-sm)");
+    expect(restoreCard).toContain("gap: var(--gap-cluster-tight)");
   });
 
   it("does not allow page or modal wrappers to override approved header typography tokens", () => {
@@ -1121,6 +1705,7 @@ describe("components.css theme-sensitive surfaces", () => {
     const mobileGroupList = getLastRuleBlock(".settings-mobile-group__list");
     const mobileItem = getLastRuleBlock(".settings-mobile-item");
     const mobileItemIcon = getLastRuleBlock(".settings-mobile-item__icon");
+    const mobileItemCopy = getLastRuleBlock(".settings-mobile-item__copy");
     const mobileItemArrow = getLastRuleBlock(".settings-mobile-item__arrow");
 
     expect(settingsPage).toContain("display: flex");
@@ -1165,6 +1750,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(mobileItem).toContain("min-height: 60px");
     expect(mobileItem).toContain("padding: var(--sp-3) var(--sp-4)");
     expect(mobileItem).toContain("border: none");
+    expect(mobileItemCopy).toContain("gap: var(--gap-cluster-2xs)");
     expect(mobileItem).not.toContain("linear-gradient(");
     expect(mobileItemIcon).toContain("color: var(--icon-secondary)");
     expect(mobileItemArrow).toContain("color: var(--text-tertiary)");
@@ -1243,6 +1829,28 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(launchActionButton).toContain("border-radius: var(--radius-md)");
     expect(launchActionButton).toContain("font-size: var(--type-body-strong-size)");
     expect(launchActionButton).toContain("box-shadow: none");
+  });
+
+  it("keeps folder picker selection affordances on shared state tokens", () => {
+    const directoryHover = getLastRuleBlock(".fp-dir:hover");
+    const directorySelected = getLastRuleBlock(".fp-dir.selected");
+    const directoryAction = getLastRuleBlock(".fp-dir-action");
+    const directoryActionHover = getLastRuleBlock(".fp-dir-action:hover");
+    const directoryActionFocus = getLastRuleBlock(".fp-dir-action:focus-visible");
+
+    expect(directoryHover).toContain(
+      "background: color-mix(in srgb, var(--state-selected-bg) 72%, transparent)"
+    );
+    expect(directorySelected).toContain("background: var(--state-selected-bg)");
+    expect(directoryAction).toContain("padding: 0 var(--inset-chip-inline-tight)");
+    expect(directoryAction).toContain("border-radius: var(--radius-pill)");
+    expect(directoryAction).toContain("border: 1px solid var(--state-info-border)");
+    expect(directoryAction).toContain("background: var(--state-info-bg)");
+    expect(directoryAction).toContain("color: var(--state-info-text)");
+    expect(directoryActionHover).toContain("background: color-mix(in srgb, var(--state-info-bg)");
+    expect(directoryActionHover).toContain("border-color: var(--state-info-border)");
+    expect(directoryActionFocus).toContain("var(--state-focus-ring-width)");
+    expect(directoryActionFocus).toContain("var(--state-focus-ring-color)");
   });
 
   it("keeps mobile supervisor sheets aligned with the shared fullscreen page spacing and action sizing", () => {
@@ -1545,15 +2153,16 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(pill).toContain("min-height: 36px");
     expect(pill).toContain("padding: var(--sp-2) var(--sp-3)");
     expect(pill).toContain("border: 1px solid transparent");
-    expect(pill).toContain("border-radius: var(--radius-md)");
+    expect(pill).toContain("border-radius: var(--radius-pill)");
     expect(pill).toContain("background: transparent");
     expect(pill).toContain("font-size: var(--type-label-size)");
     expect(pill).toContain("font-weight: var(--type-label-weight)");
-    expect(pillHover).toContain("background: var(--bg-hover)");
-    expect(pillHover).toContain("border-color: color-mix");
-    expect(pillFocus).toContain("border-color: var(--border-focus)");
-    expect(active).toContain("background: var(--bg-active)");
-    expect(active).toContain("border-color: var(--border-focus)");
+    expect(pillHover).toContain("background: var(--state-hover-bg-subtle)");
+    expect(pillHover).toContain("border-color: var(--state-selected-border)");
+    expect(pillFocus).toContain("border-color: var(--state-focus-ring-color)");
+    expect(pillFocus).toContain("box-shadow: 0 0 0 var(--state-focus-ring-width)");
+    expect(active).toContain("background: var(--state-selected-bg)");
+    expect(active).toContain("border-color: var(--state-selected-border)");
     expect(active).not.toContain("background: var(--accent-blue)");
   });
 
@@ -1566,11 +2175,13 @@ describe("components.css theme-sensitive surfaces", () => {
     const action = getLastRuleBlockFrom(noticeStylesheet, ".action");
 
     expect(notice).toContain("margin: 0 0 var(--sp-4)");
-    expect(notice).toContain("padding: var(--sp-2) var(--sp-3)");
-    expect(notice).toContain("border-radius: var(--radius-sm)");
-    expect(notice).toContain("background: color-mix");
-    expect(warning).toContain("background: color-mix");
-    expect(error).toContain("background: color-mix");
+    expect(notice).toContain("padding: var(--inset-control-block) var(--inset-control-inline)");
+    expect(notice).toContain("border-radius: var(--radius-overlay)");
+    expect(notice).toContain("background: var(--surface-elevated-bg)");
+    expect(warning).toContain("background: var(--state-warning-bg)");
+    expect(warning).toContain("border-color: var(--state-warning-border)");
+    expect(error).toContain("background: var(--state-error-bg)");
+    expect(error).toContain("border-color: var(--state-error-border)");
     expect(title).toContain("text-transform: uppercase");
     expect(title).toContain("font-size: var(--type-kicker-size)");
     expect(message).toContain("font-size: var(--type-meta-size)");
@@ -1645,10 +2256,11 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(keycap).toContain("justify-content: center");
     expect(keycap).toContain("background: color-mix");
     expect(keycap).toContain("color: var(--text-primary)");
-    expect(keycap).toContain("border-radius: var(--radius-sm)");
+    expect(keycap).toContain("border-radius: var(--radius-control-sm)");
     expect(hover).toContain("border-color: var(--border-focus)");
     expect(hover).toContain("background: var(--bg-active)");
-    expect(focus).toContain("border-color: var(--border-focus)");
+    expect(focus).toContain("border-color: var(--state-focus-ring-color)");
+    expect(focus).toContain("box-shadow: 0 0 0 var(--state-focus-ring-width)");
   });
 
   it("keeps shortcut settings rows aligned with editor-pane list treatment instead of standalone cards", () => {
@@ -1801,22 +2413,37 @@ describe("components.css theme-sensitive surfaces", () => {
   it("keeps the desktop file tree search and selected row aligned with the polished panel chrome", () => {
     const search = getLastRuleBlock(".file-tree-shell .file-tree-search");
     const searchInput = getLastRuleBlock(".file-tree-shell .file-tree-search-input");
+    const emptyState = getLastRuleBlock(".file-tree-empty");
     const row = getLastRuleBlock(".file-tree-shell .tree-item");
     const rowSelected = getLastRuleBlock(".file-tree-shell .tree-item.selected");
-    const rowActions = getLastRuleBlock(".file-tree-shell--desktop .tree-item-actions");
+    const rowActionsBase = getLastRuleBlock(".file-tree-shell .tree-item-actions");
+    const rowActionsDesktop = getLastRuleBlock(".file-tree-shell--desktop .tree-item-actions");
 
-    expect(search).toContain("margin: 8px 12px 10px");
-    expect(search).toContain("border-radius: 8px");
+    expect(search).toContain("gap: var(--gap-cluster-md)");
+    expect(search).toContain("margin: var(--gap-cluster-md) var(--inset-control-inline)");
+    expect(search).toContain("padding-inline: var(--inset-control-inline)");
+    expect(search).toContain("min-height: var(--control-height-md)");
+    expect(search).toContain("border-radius: var(--radius-panel)");
     expect(search).toContain("background: color-mix(");
     expect(searchInput).toContain("font-size: var(--type-body-strong-size)");
     expect(searchInput).toContain("line-height: var(--type-body-strong-line-height)");
     expect(searchInput).toContain("font-weight: var(--type-body-strong-weight)");
+    expect(emptyState).toContain("padding: var(--sp-5) var(--inset-panel)");
     expect(row).toContain("min-height: 26px");
-    expect(row).toContain("border-radius: 8px");
+    expect(row).toContain("gap: var(--gap-cluster-tight)");
+    expect(row).toContain("padding:");
+    expect(row).toContain("var(--inset-row-block-compact)");
+    expect(row).toContain("var(--inset-row-inline-tight)");
+    expect(row).toContain("var(--inset-row-inline)");
+    expect(row).toContain("border-radius: var(--radius-panel)");
     expect(row).toContain("transition:");
-    expect(rowSelected).toContain("border-left: 2px solid");
-    expect(rowSelected).toContain("background: color-mix(");
-    expect(rowActions).toContain("opacity: 0");
+    expect(rowSelected).toContain(
+      "border-left: var(--state-focus-ring-width) solid var(--state-selected-border)"
+    );
+    expect(rowSelected).toContain("padding-left: var(--inset-row-inline-selected)");
+    expect(rowSelected).toContain("background: var(--state-selected-bg)");
+    expect(rowActionsBase).toContain("gap: var(--gap-cluster-2xs)");
+    expect(rowActionsDesktop).toContain("opacity: 0");
   });
 
   it("keeps the desktop git panel and command palette on tighter tool-surface chrome", () => {
@@ -1829,7 +2456,10 @@ describe("components.css theme-sensitive surfaces", () => {
     const commandPaletteDesktop = getLastRuleBlock(".command-palette--desktop");
     const commandPaletteHeader = getLastRuleBlock(".command-palette-header");
     const commandPaletteSearch = getLastRuleBlock(".command-palette-search");
+    const commandPaletteSheetSearch = getLastRuleBlock(".command-palette-sheet__search");
     const commandPaletteItem = getLastRuleBlock(".command-palette--desktop .command-palette-item");
+    const commandPaletteItemContent = getLastRuleBlock(".command-palette-item-content");
+    const commandPaletteItemShortcut = getLastRuleBlock(".command-palette-item-shortcut");
 
     expect(gitScroll).toContain("gap: 14px");
     expect(gitCommitBlock).toContain("gap: 10px");
@@ -1840,9 +2470,16 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(commandPaletteDesktop).toContain("overflow: hidden");
     expect(commandPaletteHeader).toContain("padding: var(--sp-3) var(--sp-4)");
     expect(commandPaletteSearch).toContain("padding: var(--sp-3) var(--sp-4)");
+    expect(commandPaletteSheetSearch).toContain("z-index: var(--z-inline)");
     expect(commandPaletteItem).toContain("align-items: center");
     expect(commandPaletteItem).toContain("gap: var(--sp-3)");
     expect(commandPaletteItem).toContain("padding: var(--sp-3) var(--sp-4)");
+    expect(commandPaletteItemContent).toContain("gap: var(--gap-cluster-3xs)");
+    expect(commandPaletteItemShortcut).toContain("margin-top: var(--gap-cluster-2xs)");
+    expect(commandPaletteItemShortcut).toContain(
+      "padding: var(--inset-chip-block-tight) var(--inset-chip-inline-tight)"
+    );
+    expect(commandPaletteItemShortcut).toContain("border-radius: var(--radius-pill)");
   });
 
   it("keeps session header badges on a single line by truncating the title first", () => {

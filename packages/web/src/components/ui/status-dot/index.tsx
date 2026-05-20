@@ -12,10 +12,10 @@ export interface StatusDotProps extends Omit<ComponentPropsWithoutRef<"span">, "
 }
 
 const toneColorMap: Record<StatusDotTone, string> = {
-  success: "var(--color-success)",
-  warning: "var(--color-warning)",
-  error: "var(--color-error)",
-  info: "var(--color-info)",
+  success: "var(--state-success-text)",
+  warning: "var(--state-warning-text)",
+  error: "var(--state-error-text)",
+  info: "var(--state-info-text)",
   neutral: "var(--text-tertiary)",
 };
 

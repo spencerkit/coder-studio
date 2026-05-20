@@ -156,7 +156,7 @@ a:hover {
 }
 
 :focus-visible {
-  outline: 2px solid var(--border-focus);
+  outline: var(--state-focus-ring-width) solid var(--state-focus-ring-color);
   outline-offset: 2px;
 }
 
@@ -409,7 +409,10 @@ textarea::placeholder {
   background: var(--icon-surface-success);
 }
 
-.icon-surface-warning,
+.icon-surface-warning {
+  background: var(--state-warning-bg);
+}
+
 .themed-icon--surface-warning {
   background: var(--icon-surface-warning);
 }
@@ -432,7 +435,7 @@ textarea::placeholder {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-control);
 }
 
 .themed-icon--surface-subtle,
@@ -691,7 +694,7 @@ textarea::placeholder {
   flex-direction: column;
   align-items: flex-start;
   justify-content: center;
-  gap: 2px;
+  gap: var(--gap-cluster-sm);
   padding-top: calc(var(--mobile-safe-top) + var(--sp-1));
   padding-right: calc(var(--mobile-safe-right) + var(--sp-3));
   padding-bottom: var(--sp-1);
@@ -721,35 +724,16 @@ textarea::placeholder {
   display: grid;
   place-items: center;
   padding: var(--sp-8);
-  background:
-    radial-gradient(
-      circle at top,
-      color-mix(in srgb, var(--accent-green) 10%, transparent),
-      transparent 36%
-    ),
-    radial-gradient(
-      circle at bottom right,
-      color-mix(in srgb, var(--accent-blue) 12%, transparent),
-      transparent 34%
-    ),
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--bg-page) 88%, var(--bg-surface) 12%),
-      var(--bg-page)
-    );
+  background: var(--surface-page-bg);
 }
 
 .app-loading-card {
   width: min(520px, 100%);
   padding: var(--sp-8);
   border: 1px solid var(--border);
-  border-radius: var(--radius-2xl);
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--bg-surface) 98%, white 2%),
-    color-mix(in srgb, var(--bg-surface) 84%, var(--bg-page) 16%)
-  );
-  box-shadow: var(--shadow-xl);
+  border-radius: var(--radius-overlay);
+  background: var(--surface-overlay-bg);
+  box-shadow: var(--surface-overlay-shadow);
 }
 
 .app-loading-kicker {

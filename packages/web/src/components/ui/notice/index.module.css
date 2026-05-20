@@ -2,32 +2,32 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: var(--sp-3);
+  gap: var(--form-group-gap);
   margin: 0 0 var(--sp-4);
-  padding: var(--sp-2) var(--sp-3);
+  padding: var(--inset-control-block) var(--inset-control-inline);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--bg-page) 42%, var(--bg-surface) 58%);
+  border-radius: var(--radius-overlay);
+  background: var(--surface-elevated-bg);
 }
 
 .info {
-  border-color: color-mix(in srgb, var(--color-info) 24%, transparent);
-  background: color-mix(in srgb, var(--color-info) 5%, var(--bg-surface));
+  border-color: var(--state-info-border);
+  background: var(--state-info-bg);
 }
 
 .success {
-  border-color: color-mix(in srgb, var(--color-success) 24%, transparent);
-  background: color-mix(in srgb, var(--color-success) 5%, var(--bg-surface));
+  border-color: var(--state-success-border);
+  background: var(--state-success-bg);
 }
 
 .warning {
-  border-color: color-mix(in srgb, var(--accent-amber) 28%, transparent);
-  background: color-mix(in srgb, var(--accent-amber) 6%, var(--bg-surface));
+  border-color: var(--state-warning-border);
+  background: var(--state-warning-bg);
 }
 
 .error {
-  border-color: color-mix(in srgb, var(--color-error) 28%, transparent);
-  background: color-mix(in srgb, var(--color-error) 7%, var(--bg-surface));
+  border-color: var(--state-error-border);
+  background: var(--state-error-bg);
 }
 
 .copy {
@@ -35,7 +35,7 @@
   min-width: 0;
   flex: 1;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--gap-cluster-sm);
 }
 
 .title {

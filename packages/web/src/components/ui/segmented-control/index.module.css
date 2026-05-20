@@ -4,7 +4,7 @@
 :global(.shortcuts-category-tabs) {
   display: inline-flex;
   align-items: center;
-  gap: var(--sp-1);
+  gap: var(--gap-cluster-sm);
   min-width: 0;
 }
 
@@ -20,7 +20,7 @@
 :global(.settings-provider-subnav-button),
 :global(.shortcuts-category-tab) {
   min-width: 0;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-control);
   border: 1px solid transparent;
   color: var(--text-secondary);
   font-size: var(--type-label-size);
