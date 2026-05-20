@@ -25,7 +25,9 @@ export interface SupervisorDialogState {
   sessionId: string | null;
   mode: SupervisorDialogMode;
   restoreStep?: SupervisorDialogRestoreStep;
+  returnToDetails?: boolean;
   draftObjective: string;
+  initialObjective?: string;
   draftEvaluatorProviderId: "claude" | "codex";
   draftEvaluatorModel: string;
   draftMaxSupervisionCount: string;
@@ -50,7 +52,9 @@ export const supervisorDialogAtom = atom<SupervisorDialogState>({
   sessionId: null,
   mode: "enable",
   restoreStep: "form",
+  returnToDetails: false,
   draftObjective: "",
+  initialObjective: "",
   draftEvaluatorProviderId: "claude",
   draftEvaluatorModel: "",
   draftMaxSupervisionCount: "0",

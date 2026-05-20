@@ -37,7 +37,9 @@ describe("ObjectiveDialog", () => {
     sessionId: "sess-1",
     mode: "enable" as const,
     restoreStep: "form" as const,
+    returnToDetails: false,
     draftObjective: "",
+    initialObjective: "",
     draftEvaluatorProviderId: "claude" as const,
     draftEvaluatorModel: "",
     draftMaxSupervisionCount: "0",
@@ -72,6 +74,7 @@ describe("ObjectiveDialog", () => {
       supervisorDialogAtom,
       createDialogState({
         draftObjective: "Finish the server refactor",
+        initialObjective: "",
         draftEvaluatorProviderId: "codex",
       })
     );
@@ -115,6 +118,7 @@ describe("ObjectiveDialog", () => {
       supervisorDialogAtom,
       createDialogState({
         draftObjective: "Finish the server refactor",
+        initialObjective: "",
         draftMaxSupervisionCount: "-1",
       })
     );
@@ -140,6 +144,7 @@ describe("ObjectiveDialog", () => {
       supervisorDialogAtom,
       createDialogState({
         draftObjective: "Ship phase 4B1",
+        initialObjective: "",
       })
     );
     store.set(supervisorsAtom, new Map());
@@ -168,6 +173,7 @@ describe("ObjectiveDialog", () => {
       supervisorDialogAtom,
       createDialogState({
         draftObjective: "Ship phase 4B1",
+        initialObjective: "",
       })
     );
     store.set(supervisorsAtom, new Map());
@@ -190,6 +196,7 @@ describe("ObjectiveDialog", () => {
       supervisorDialogAtom,
       createDialogState({
         draftObjective: "Ship phase 4B1",
+        initialObjective: "",
       })
     );
     store.set(supervisorsAtom, new Map());
@@ -256,6 +263,7 @@ describe("ObjectiveDialog", () => {
       createDialogState({
         mode: "enable",
         draftObjective: "Ship phase 4B1",
+        initialObjective: "",
       })
     );
     store.set(supervisorsAtom, new Map());
@@ -477,6 +485,7 @@ describe("ObjectiveDialog", () => {
         draftEvaluatorModel: "gpt-5",
         draftMaxSupervisionCount: "3",
         draftScheduledAt: "2026-05-21T10:30",
+        initialObjective: "",
       })
     );
     store.set(supervisorsAtom, new Map());
@@ -559,6 +568,90 @@ describe("ObjectiveDialog", () => {
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Restore" })).toBeDisabled();
+    });
+  });
+
+  it("disables save in edit mode until the objective changes", () => {
+    const store = createStore();
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+    store.set(
+      supervisorDialogAtom,
+      createDialogState({
+        mode: "edit",
+        draftObjective: "Finish the server refactor",
+        initialObjective: "Finish the server refactor",
+      })
+    );
+    store.set(supervisorsAtom, new Map([["sess-1", createSupervisor()]]));
+
+    render(
+      <Provider store={store}>
+        <ObjectiveDialog workspaceId="ws-1" />
+      </Provider>
+    );
+
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+  });
+
+  it("requires confirmation before saving an edited objective", async () => {
+    const user = userEvent.setup();
+    const sendCommand = vi.fn().mockResolvedValue({
+      supervisor: {
+        ...createSupervisor(),
+        objective: "Finish the follow-up refactor",
+      },
+    });
+    const store = createStore();
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(
+      supervisorDialogAtom,
+      createDialogState({
+        mode: "edit",
+        draftObjective: "Finish the server refactor",
+        initialObjective: "Finish the server refactor",
+      })
+    );
+    store.set(supervisorsAtom, new Map([["sess-1", createSupervisor()]]));
+
+    render(
+      <Provider store={store}>
+        <ObjectiveDialog workspaceId="ws-1" />
+      </Provider>
+    );
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Objective" }), {
+      target: { value: "Finish the follow-up refactor" },
+    });
+
+    const saveButton = screen.getByRole("button", { name: "Save" });
+    expect(saveButton).toBeEnabled();
+
+    await user.click(saveButton);
+
+    expect(
+      screen.getByRole("heading", { name: "Save and reset supervisor progress?" })
+    ).toBeInTheDocument();
+    expect(sendCommand).not.toHaveBeenCalledWith("supervisor.update", expect.anything(), undefined);
+
+    await user.click(screen.getAllByRole("button", { name: "Save" })[1]!);
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "supervisor.update",
+        {
+          id: "sup-1",
+          objective: "Finish the follow-up refactor",
+          evaluatorProviderId: "claude",
+          evaluatorModel: null,
+          maxSupervisionCount: 0,
+          scheduledAt: null,
+        },
+        undefined
+      );
     });
   });
 });

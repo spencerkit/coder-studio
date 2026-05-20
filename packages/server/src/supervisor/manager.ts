@@ -465,29 +465,65 @@ export class SupervisorManager {
       };
     }
 
-    const created = await this.create({
-      sessionId: req.sessionId,
-      workspaceId: req.workspaceId,
-      objective: source.objective,
-      evaluatorProviderId: req.evaluatorProviderId,
-      evaluatorModel: req.evaluatorModel,
-      maxSupervisionCount: req.maxSupervisionCount,
-      scheduledAt: req.scheduledAt,
-    });
-
     const workspace = this.requireWorkspace(req.workspaceId);
+    const existing = this.getBySession(req.sessionId);
+    const now = Date.now();
+
+    if (!existing) {
+      const created = await this.create({
+        sessionId: req.sessionId,
+        workspaceId: req.workspaceId,
+        objective: source.objective,
+        evaluatorProviderId: req.evaluatorProviderId,
+        evaluatorModel: req.evaluatorModel,
+        maxSupervisionCount: req.maxSupervisionCount,
+        scheduledAt: req.scheduledAt,
+      });
+
+      const cycleCount = await this.deps.targetStore.cloneTargetFiles(workspace.path, {
+        sourceTargetId: req.sourceTargetId,
+        targetId: created.targetId,
+        sessionId: req.sessionId,
+        workspaceId: req.workspaceId,
+        objective: source.objective,
+        createdAt: created.createdAt,
+      });
+      const updated = this.attachCycles(
+        this.deps.supervisorRepo.update(created.id, {
+          completedSupervisionCount: cycleCount,
+          updatedAt: now,
+        })
+      );
+      const enriched = await this.attachTargetState(updated, workspace.path);
+
+      await this.deps.targetStore.deleteTarget(workspace.path, req.sourceTargetId);
+      this.storeSnapshot(enriched);
+      this.broadcastState(enriched, "updated");
+      this.scheduler.refresh();
+      return enriched;
+    }
+
     const cycleCount = await this.deps.targetStore.cloneTargetFiles(workspace.path, {
       sourceTargetId: req.sourceTargetId,
-      targetId: created.targetId,
+      targetId: existing.targetId,
       sessionId: req.sessionId,
       workspaceId: req.workspaceId,
       objective: source.objective,
-      createdAt: created.createdAt,
+      createdAt: existing.createdAt,
     });
     const updated = this.attachCycles(
-      this.deps.supervisorRepo.update(created.id, {
+      this.deps.supervisorRepo.update(existing.id, {
+        objective: source.objective,
+        evaluatorProviderId: req.evaluatorProviderId,
+        evaluatorModel: req.evaluatorModel?.trim() || null,
+        maxSupervisionCount: req.maxSupervisionCount ?? existing.maxSupervisionCount,
+        scheduledAt: req.scheduledAt ?? null,
+        state: existing.state === "paused" ? "paused" : "idle",
+        stopReason: null,
         completedSupervisionCount: cycleCount,
-        updatedAt: Date.now(),
+        lastEvaluatedTurnId: null,
+        errorReason: null,
+        updatedAt: now,
       })
     );
     const enriched = await this.attachTargetState(updated, workspace.path);

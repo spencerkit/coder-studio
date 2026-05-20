@@ -272,10 +272,16 @@ describe("ObjectiveDialogContent", () => {
     expect(onDraftMaxSupervisionCountChange).toHaveBeenCalledWith("8");
   });
 
-  it("shows a restore entry on the enable form and keeps it out of edit mode", async () => {
+  it("shows a restore entry beside the objective label for both enable and edit modes", async () => {
     const user = userEvent.setup();
     const onOpenRestoreStep = vi.fn();
     const { rerender } = renderObjectiveDialogContent({ onOpenRestoreStep });
+    let objectiveGroup = screen.getByLabelText("supervisor.field.objective").closest(".form-group");
+
+    expect(objectiveGroup?.querySelector(".supervisor-objective-label-row")).not.toBeNull();
+    expect(objectiveGroup?.querySelector("button.supervisor-restore-link")).toHaveTextContent(
+      "supervisor.dialog.restore.open"
+    );
 
     await user.click(screen.getByRole("button", { name: "supervisor.dialog.restore.open" }));
 
@@ -287,9 +293,10 @@ describe("ObjectiveDialogContent", () => {
       />
     );
 
-    expect(
-      screen.queryByRole("button", { name: "supervisor.dialog.restore.open" })
-    ).not.toBeInTheDocument();
+    objectiveGroup = screen.getByLabelText("supervisor.field.objective").closest(".form-group");
+    expect(objectiveGroup?.querySelector("button.supervisor-restore-link")).toHaveTextContent(
+      "supervisor.dialog.restore.open"
+    );
   });
 
   it("renders the restore subview with recoverable targets, selection, and back navigation", async () => {
@@ -298,7 +305,7 @@ describe("ObjectiveDialogContent", () => {
     const onSelectRecoverableTarget = vi.fn();
 
     renderObjectiveDialogContent({
-      mode: "enable",
+      mode: "edit",
       restoreStep: "restore",
       recoverableTargets: [
         {
@@ -345,7 +352,7 @@ describe("ObjectiveDialogContent", () => {
     rerender(
       <ObjectiveDialogContent
         {...createObjectiveDialogContentProps({
-          mode: "enable",
+          mode: "edit",
           restoreStep: "restore",
           recoverableTargets: [],
           isRecoverableTargetsLoading: false,

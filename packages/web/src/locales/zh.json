@@ -791,15 +791,17 @@
       },
       "edit": {
         "title": "编辑 Supervisor",
-        "subtitle": "调整目标描述或切换评估方，历史评估不会被清除",
-        "confirm": "保存"
+        "subtitle": "调整目标描述，并在需要时恢复之前的记忆快照",
+        "confirm": "保存",
+        "reset_confirm_title": "确认保存并重置当前 Supervisor 进度？",
+        "reset_confirm_description": "修改目标描述后，Supervisor 会重新评估目标。当前 target 的既有 supervisor 记忆和进度会被重置。"
       },
       "restore": {
         "open": "从已有记忆恢复",
-        "hint": "复用现有 target 目录里的 supervisor 记忆，并在当前会话里创建一个新的 supervisor 继续接管。",
+        "hint": "复用现有 target 目录里的 supervisor 记忆到当前会话。",
         "title": "恢复 Supervisor 记忆",
-        "subtitle": "选择一个可恢复的记忆快照。当前会话会先创建新的 supervisor，再把所选记忆复制进来。",
-        "back": "返回目标设置",
+        "subtitle": "选择一个可恢复的记忆快照，并将其关联到当前会话的 supervisor。",
+        "back": "返回详情",
         "confirm": "恢复",
         "empty": "没有找到可恢复的 supervisor 记忆。",
         "empty_hint": "只有仍然可读的 target 目录记忆才会出现在这里。",

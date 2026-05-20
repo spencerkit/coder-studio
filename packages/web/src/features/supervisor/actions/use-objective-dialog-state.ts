@@ -8,6 +8,7 @@ import {
   supervisorDialogAtom,
   supervisorsAtom,
 } from "../atoms";
+import { useSupervisorDetails } from "./use-supervisor-details";
 
 export type ObjectiveDialogMode = "enable" | "edit";
 export type ObjectiveDialogEvaluatorProviderId = "claude" | "codex";
@@ -22,7 +23,9 @@ const CLOSED_DIALOG_STATE = {
   sessionId: null,
   mode: "enable" as const,
   restoreStep: "form" as const,
+  returnToDetails: false,
   draftObjective: "",
+  initialObjective: "",
   draftEvaluatorProviderId: "claude" as const,
   draftEvaluatorModel: "",
   draftMaxSupervisionCount: "0",
@@ -85,6 +88,7 @@ export function useObjectiveDialogState({
   const [dialog, setDialog] = useAtom(supervisorDialogAtom);
   const supervisors = useAtomValue(supervisorsAtom);
   const dispatch = useAtomValue(dispatchCommandAtom);
+  const { openDetails } = useSupervisorDetails();
   const t = useTranslation();
 
   const effectiveSessionId = sessionId ?? dialog.sessionId;
@@ -94,15 +98,15 @@ export function useObjectiveDialogState({
   const restoreStep = dialog.restoreStep ?? "form";
   const copy = {
     title:
-      mode === "enable" && restoreStep === "restore"
+      restoreStep === "restore"
         ? t("supervisor.dialog.restore.title")
         : t(`supervisor.dialog.${mode}.title`),
     subtitle:
-      mode === "enable" && restoreStep === "restore"
+      restoreStep === "restore"
         ? t("supervisor.dialog.restore.subtitle")
         : t(`supervisor.dialog.${mode}.subtitle`),
     confirm:
-      mode === "enable" && restoreStep === "restore"
+      restoreStep === "restore"
         ? t("supervisor.dialog.restore.confirm")
         : t(`supervisor.dialog.${mode}.confirm`),
   };
@@ -112,10 +116,16 @@ export function useObjectiveDialogState({
   const selectedRecoverableTargetId = dialog.selectedRecoverableTargetId ?? null;
   const recoverableTargets = dialog.recoverableTargets ?? [];
   const isRecoverableTargetsLoading = dialog.isRecoverableTargetsLoading ?? false;
+  const trimmedDraftObjective = dialog.draftObjective.trim();
+  const hasObjectiveChanged = trimmedDraftObjective !== (dialog.initialObjective?.trim() ?? "");
 
   const close = useCallback(() => {
+    const nextSessionId = dialog.returnToDetails ? dialog.sessionId : null;
     setDialog(CLOSED_DIALOG_STATE);
-  }, [setDialog]);
+    if (nextSessionId) {
+      openDetails(nextSessionId);
+    }
+  }, [dialog.returnToDetails, dialog.sessionId, openDetails, setDialog]);
 
   const updateDraft = useCallback(
     (
@@ -137,10 +147,6 @@ export function useObjectiveDialogState({
   );
 
   const openRestoreStep = useCallback(async () => {
-    if (mode !== "enable") {
-      return;
-    }
-
     setDialog((current) => ({
       ...current,
       restoreStep: "restore",
@@ -155,7 +161,7 @@ export function useObjectiveDialogState({
     );
 
     setDialog((current) => {
-      if (current.sessionId !== effectiveSessionId || current.mode !== "enable") {
+      if (current.sessionId !== effectiveSessionId) {
         return current;
       }
 
@@ -201,7 +207,7 @@ export function useObjectiveDialogState({
     const maxSupervisionCount = parseDraftMaxSupervisionCount(dialog.draftMaxSupervisionCount);
     const scheduledAt = parseDraftScheduledAt(dialog.draftScheduledAt);
 
-    if (dialog.mode === "enable" && restoreStep === "restore") {
+    if (restoreStep === "restore") {
       if (!selectedRecoverableTargetId) {
         return false;
       }
@@ -224,7 +230,7 @@ export function useObjectiveDialogState({
       return false;
     }
 
-    const objective = dialog.draftObjective.trim();
+    const objective = trimmedDraftObjective;
     if (!objective) {
       return false;
     }
@@ -288,6 +294,7 @@ export function useObjectiveDialogState({
     recoverableTargets,
     selectedRecoverableTargetId,
     isRecoverableTargetsLoading,
+    hasObjectiveChanged,
     close,
     updateDraft,
     openRestoreStep,

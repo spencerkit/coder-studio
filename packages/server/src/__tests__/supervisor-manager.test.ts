@@ -481,6 +481,72 @@ describe("SupervisorManager cycle triggers", () => {
     expect(restored.completedSupervisionCount).toBe(2);
   });
 
+  it("restores a previous target into an existing supervisor for the same session", async () => {
+    const existing = await manager.create({
+      sessionId: "sess-existing-restore",
+      workspaceId: "ws-1",
+      objective: "Current objective",
+      evaluatorProviderId: "codex",
+      maxSupervisionCount: 1,
+    });
+
+    deps.targetStore.listRecoverableTargets.mockResolvedValueOnce([
+      {
+        targetId: "tgt-restore-existing",
+        sessionId: "sess-old",
+        workspaceId: "ws-1",
+        objective: "Recovered objective",
+        status: "cancelled",
+        updatedAt: 10,
+        progressSummary: "Recovered progress",
+        cycleCount: 3,
+      },
+    ]);
+    deps.targetStore.cloneTargetFiles.mockResolvedValueOnce(3);
+
+    const restored = await (
+      manager as unknown as SupervisorManager & {
+        restore: (input: {
+          sessionId: string;
+          workspaceId: string;
+          sourceTargetId: string;
+          evaluatorProviderId: string;
+          evaluatorModel?: string;
+          maxSupervisionCount?: number;
+          scheduledAt?: number;
+        }) => Promise<Supervisor>;
+      }
+    ).restore({
+      sessionId: "sess-existing-restore",
+      workspaceId: "ws-1",
+      sourceTargetId: "tgt-restore-existing",
+      evaluatorProviderId: "codex",
+      maxSupervisionCount: 8,
+    });
+
+    expect(restored.id).toBe(existing.id);
+    expect(restored.targetId).toBe(existing.targetId);
+    expect(restored.objective).toBe("Recovered objective");
+    expect(restored.evaluatorProviderId).toBe("codex");
+    expect(restored.maxSupervisionCount).toBe(8);
+    expect(restored.completedSupervisionCount).toBe(3);
+    expect(deps.targetStore.cloneTargetFiles).toHaveBeenCalledWith(
+      process.cwd(),
+      expect.objectContaining({
+        sourceTargetId: "tgt-restore-existing",
+        targetId: existing.targetId,
+        sessionId: "sess-existing-restore",
+        workspaceId: "ws-1",
+        objective: "Recovered objective",
+      })
+    );
+    expect(deps.targetStore.deleteTarget).toHaveBeenCalledWith(
+      process.cwd(),
+      "tgt-restore-existing"
+    );
+    expect(deps.supervisorRepo.create).toHaveBeenCalledTimes(1);
+  });
+
   it("returns an in-flight cycle immediately on manual triggerEvaluation", async () => {
     const supervisor = await manager.create({
       sessionId: "sess-manual",

@@ -1,5 +1,6 @@
 import type { Supervisor, SupervisorCycle } from "@coder-studio/core";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { createStore, Provider } from "jotai";
 import { describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../../atoms/app-ui";
@@ -205,6 +206,112 @@ describe("SupervisorCard", () => {
     expect(dialogState.open).toBe(true);
     expect(dialogState.mode).toBe("edit");
     expect(screen.getByRole("heading", { name: "Edit Supervisor", level: 2 })).toBeInTheDocument();
+  });
+
+  it("returns to supervisor details when cancelling from edit mode", async () => {
+    const user = userEvent.setup();
+    const store = createStore();
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+    store.set(supervisorsAtom, new Map([["sess-1", createSupervisor()]]));
+    store.set(supervisorCyclesAtom, new Map());
+
+    render(
+      <Provider store={store}>
+        <SupervisorCard sessionId="sess-1" workspaceId="ws-1" />
+      </Provider>
+    );
+
+    await user.click(screen.getByRole("button", { name: "Supervisor Details" }));
+    await user.click(screen.getByRole("button", { name: "Edit Supervisor" }));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(
+      screen.getByRole("heading", { name: "Supervisor Details", level: 2 })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Edit Supervisor", level: 2 })
+    ).not.toBeInTheDocument();
+  });
+
+  it("returns to supervisor details after restoring from edit mode", async () => {
+    const user = userEvent.setup();
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "supervisor.listRecoverableTargets") {
+        return {
+          targets: [
+            {
+              targetId: "tgt-restore",
+              sessionId: "sess-old",
+              workspaceId: "ws-1",
+              objective: "Recovered supervisor objective",
+              status: "active",
+              updatedAt: 1_746_000_000_000,
+              progressSummary: "Recovered verification state",
+              cycleCount: 4,
+            },
+          ],
+        };
+      }
+
+      if (op === "supervisor.restore") {
+        return {
+          supervisor: {
+            ...createSupervisor(),
+            objective: "Recovered supervisor objective",
+            completedSupervisionCount: 4,
+          },
+        };
+      }
+
+      return undefined;
+    });
+    const store = createStore();
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(supervisorsAtom, new Map([["sess-1", createSupervisor()]]));
+    store.set(supervisorCyclesAtom, new Map());
+
+    render(
+      <Provider store={store}>
+        <SupervisorCard sessionId="sess-1" workspaceId="ws-1" />
+      </Provider>
+    );
+
+    await user.click(screen.getByRole("button", { name: "Supervisor Details" }));
+    await user.click(screen.getByRole("button", { name: "Edit Supervisor" }));
+    await user.click(screen.getByRole("button", { name: "Restore from Existing Memory" }));
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "supervisor.listRecoverableTargets",
+        { workspaceId: "ws-1" },
+        undefined
+      );
+    });
+
+    await user.click(screen.getByRole("radio", { name: /Recovered supervisor objective/i }));
+    await user.click(screen.getByRole("button", { name: "Restore" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "supervisor.restore",
+        expect.objectContaining({
+          sessionId: "sess-1",
+          workspaceId: "ws-1",
+          sourceTargetId: "tgt-restore",
+        }),
+        undefined
+      );
+    });
+
+    expect(
+      screen.getByRole("heading", { name: "Supervisor Details", level: 2 })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Edit Supervisor", level: 2 })
+    ).not.toBeInTheDocument();
   });
 
   it("localizes stop reasons in Chinese", () => {

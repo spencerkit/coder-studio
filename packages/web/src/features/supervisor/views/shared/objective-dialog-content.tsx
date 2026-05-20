@@ -82,7 +82,7 @@ export function ObjectiveDialogContent({
   const scheduledAtHelperId = useId();
   const introTitle = t(`supervisor.dialog.${mode}.title`);
   const introDescription = t(`supervisor.dialog.${mode}.subtitle`);
-  const isRestoreView = mode === "enable" && restoreStep === "restore";
+  const isRestoreView = restoreStep === "restore";
 
   if (isRestoreView) {
     return (
@@ -175,7 +175,12 @@ export function ObjectiveDialogContent({
       ) : null}
 
       <div className="form-group">
-        <label htmlFor="objective">{t("supervisor.field.objective")}</label>
+        <div className="supervisor-objective-label-row">
+          <label htmlFor="objective">{t("supervisor.field.objective")}</label>
+          <button type="button" className="supervisor-restore-link" onClick={onOpenRestoreStep}>
+            {t("supervisor.dialog.restore.open")}
+          </button>
+        </div>
         <Textarea
           id="objective"
           rows={5}
@@ -188,16 +193,8 @@ export function ObjectiveDialogContent({
         <span id={objectiveHelperId} className="dialog-helper">
           {t("supervisor.field.objective_helper")}
         </span>
+        <p className="supervisor-restore-entry__hint">{t("supervisor.dialog.restore.hint")}</p>
       </div>
-
-      {mode === "enable" ? (
-        <div className="supervisor-restore-entry">
-          <button type="button" className="supervisor-restore-link" onClick={onOpenRestoreStep}>
-            {t("supervisor.dialog.restore.open")}
-          </button>
-          <p className="supervisor-restore-entry__hint">{t("supervisor.dialog.restore.hint")}</p>
-        </div>
-      ) : null}
 
       <div className="form-group">
         <label id={evaluatorLabelId} htmlFor="evaluator-provider">

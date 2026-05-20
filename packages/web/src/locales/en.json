@@ -791,15 +791,17 @@
       },
       "edit": {
         "title": "Edit Supervisor",
-        "subtitle": "Adjust the objective or switch evaluators without clearing evaluation history.",
-        "confirm": "Save"
+        "subtitle": "Adjust the objective and restore a previous memory snapshot when needed.",
+        "confirm": "Save",
+        "reset_confirm_title": "Save and reset supervisor progress?",
+        "reset_confirm_description": "Changing the objective will make Supervisor re-evaluate the goal. Existing supervisor memory and progress for this target will be reset."
       },
       "restore": {
         "open": "Restore from Existing Memory",
-        "hint": "Reuse supervisor memory from an existing target directory and continue with a fresh supervisor in this session.",
+        "hint": "Reuse supervisor memory from an existing target directory for this session.",
         "title": "Restore Supervisor Memory",
-        "subtitle": "Choose a recoverable memory snapshot. A new supervisor will be created for this session, then the selected memory will be copied into it.",
-        "back": "Back to Objective",
+        "subtitle": "Choose a recoverable memory snapshot and attach it to the current session supervisor.",
+        "back": "Back to Details",
         "confirm": "Restore",
         "empty": "No recoverable supervisor memory found.",
         "empty_hint": "Only target directories with readable supervisor memory can be restored.",

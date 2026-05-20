@@ -1,6 +1,6 @@
 import { useSetAtom } from "jotai";
 import { useEffect, useState } from "react";
-import { Button, Sheet } from "../../../../components/ui";
+import { Button, ConfirmDialog, Sheet } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import {
   formatScheduledAtInput,
@@ -37,6 +37,7 @@ export function MobileSupervisorSheet({
     recoverableTargets,
     selectedRecoverableTargetId,
     isRecoverableTargetsLoading,
+    hasObjectiveChanged,
     close,
     updateDraft,
     openRestoreStep,
@@ -47,6 +48,7 @@ export function MobileSupervisorSheet({
   const [detailMode, setDetailMode] = useState<"details" | "edit" | null>(() =>
     supervisor ? "details" : null
   );
+  const [isSaveConfirmOpen, setIsSaveConfirmOpen] = useState(false);
 
   useEffect(() => {
     if (supervisor) {
@@ -66,10 +68,12 @@ export function MobileSupervisorSheet({
         sessionId,
         mode: "enable",
         restoreStep: "form",
+        returnToDetails: false,
         draftObjective:
           current.sessionId === sessionId && current.mode === "enable"
             ? current.draftObjective
             : "",
+        initialObjective: "",
         draftEvaluatorProviderId:
           current.sessionId === sessionId && current.mode === "enable"
             ? current.draftEvaluatorProviderId
@@ -109,7 +113,9 @@ export function MobileSupervisorSheet({
       sessionId,
       mode: "edit",
       restoreStep: "form",
+      returnToDetails: true,
       draftObjective: supervisor?.objective ?? "",
+      initialObjective: supervisor?.objective ?? "",
       draftEvaluatorProviderId:
         (supervisor?.evaluatorProviderId as ObjectiveDialogEvaluatorProviderId) ?? "claude",
       draftEvaluatorModel: supervisor?.evaluatorModel ?? "",
@@ -186,6 +192,11 @@ export function MobileSupervisorSheet({
       <Button
         variant="primary"
         onClick={() => {
+          if (mode === "edit" && restoreStep !== "restore") {
+            setIsSaveConfirmOpen(true);
+            return;
+          }
+
           void (async () => {
             const ok = await confirm();
             if (!ok) {
@@ -199,8 +210,12 @@ export function MobileSupervisorSheet({
         }}
         disabled={
           restoreStep === "restore"
-            ? !selectedRecoverableTargetId || isRecoverableTargetsLoading
-            : !dialog.draftObjective.trim() || !isMaxSupervisionCountValid
+            ? !selectedRecoverableTargetId ||
+              isRecoverableTargetsLoading ||
+              !isMaxSupervisionCountValid
+            : mode === "edit"
+              ? !hasObjectiveChanged || !dialog.draftObjective.trim() || !isMaxSupervisionCountValid
+              : !dialog.draftObjective.trim() || !isMaxSupervisionCountValid
         }
       >
         {copy.confirm}
@@ -228,29 +243,54 @@ export function MobileSupervisorSheet({
   }
 
   return (
-    <Sheet
-      title={copy.title}
-      kicker={t("supervisor.title")}
-      onBack={
-        supervisor && detailMode === "edit"
-          ? () => {
-              close();
-              closeDetails();
-              setDetailMode("details");
+    <>
+      <Sheet
+        title={copy.title}
+        kicker={t("supervisor.title")}
+        onBack={
+          supervisor && detailMode === "edit"
+            ? () => {
+                close();
+                closeDetails();
+                setDetailMode("details");
+              }
+            : undefined
+        }
+        onClose={() => {
+          close();
+          closeDetails();
+          setDetailMode(supervisor ? "details" : null);
+          onClose();
+        }}
+        bodyClassName="mobile-sheet__body--supervisor-detail"
+        contentClassName="mobile-supervisor-sheet mobile-supervisor-sheet--detail"
+        fullscreen
+        body={detailBody}
+        footer={detailFooter}
+      />
+
+      <ConfirmDialog
+        open={isSaveConfirmOpen}
+        onOpenChange={setIsSaveConfirmOpen}
+        title={t("supervisor.dialog.edit.reset_confirm_title")}
+        description={t("supervisor.dialog.edit.reset_confirm_description")}
+        cancelText={t("action.cancel")}
+        confirmText={t("supervisor.dialog.edit.confirm")}
+        tone="danger"
+        onConfirm={() => {
+          setIsSaveConfirmOpen(false);
+          void (async () => {
+            const ok = await confirm();
+            if (!ok) {
+              return;
             }
-          : undefined
-      }
-      onClose={() => {
-        close();
-        closeDetails();
-        setDetailMode(supervisor ? "details" : null);
-        onClose();
-      }}
-      bodyClassName="mobile-sheet__body--supervisor-detail"
-      contentClassName="mobile-supervisor-sheet mobile-supervisor-sheet--detail"
-      fullscreen
-      body={detailBody}
-      footer={detailFooter}
-    />
+
+            closeDetails();
+            setDetailMode(supervisor ? "details" : null);
+            onClose();
+          })();
+        }}
+      />
+    </>
   );
 }

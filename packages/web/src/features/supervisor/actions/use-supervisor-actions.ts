@@ -47,7 +47,9 @@ export function useSupervisorActions({ sessionId }: UseSupervisorActionsArgs) {
         sessionId,
         mode,
         restoreStep: "form",
+        returnToDetails: mode === "edit",
         draftObjective: supervisor?.objective ?? "",
+        initialObjective: supervisor?.objective ?? "",
         draftEvaluatorProviderId:
           (supervisor?.evaluatorProviderId as "claude" | "codex") ?? "claude",
         draftEvaluatorModel: supervisor?.evaluatorModel ?? "",
