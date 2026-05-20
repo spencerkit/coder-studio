@@ -54,11 +54,9 @@ describe("workspace close state cleanup", () => {
 
     const terminalRepo = new TerminalRepo({
       filePath: join(dataDir, "state", "terminals.json"),
-      shadowDb: ctx.db,
     });
     const sessionRepo = new SessionRepo({
       filePath: join(dataDir, "state", "sessions.json"),
-      shadowDb: ctx.db,
     });
 
     terminalRepo.insert({

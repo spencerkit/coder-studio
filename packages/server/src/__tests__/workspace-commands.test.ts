@@ -61,7 +61,6 @@ describe("Workspace Commands", () => {
 
     // Create context with required dependencies
     ctx = {
-      db,
       workspaceMgr,
       sessionMgr: {
         get: vi.fn(() => undefined),

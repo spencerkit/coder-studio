@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createServer, type Server } from "../server.js";
-import { closeDatabase, openDatabase, SessionRepo, TerminalRepo } from "../storage/index.js";
+import { SessionRepo, TerminalRepo } from "../storage/index.js";
 import { createTargetFiles } from "../supervisor/target-store.js";
 import { dispatch } from "../ws/dispatch.js";
 
@@ -57,11 +57,9 @@ describe("supervisor hydrate restart", () => {
 
     const terminalRepo = new TerminalRepo({
       filePath: join(dataDir, "state", "terminals.json"),
-      shadowDb: firstCtx.db,
     });
     const sessionRepo = new SessionRepo({
       filePath: join(dataDir, "state", "sessions.json"),
-      shadowDb: firstCtx.db,
     });
 
     terminalRepo.insert({
@@ -94,45 +92,6 @@ describe("supervisor hydrate restart", () => {
       title: null,
       draft: null,
     });
-    firstCtx.db
-      .prepare(
-        `INSERT INTO supervisors (
-          id,
-          session_id,
-          workspace_id,
-          state,
-          objective,
-          evaluator_provider_id,
-          evaluator_model,
-          max_supervision_count,
-          completed_supervision_count,
-          scheduled_at,
-          stop_reason,
-          last_cycle_at,
-          last_evaluated_turn_id,
-          error_reason,
-          created_at,
-          updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-      )
-      .run(
-        "sup-persisted",
-        "sess-supervisor",
-        workspaceId,
-        "idle",
-        "Recover this later",
-        "claude",
-        null,
-        0,
-        0,
-        null,
-        null,
-        null,
-        null,
-        null,
-        now,
-        now
-      );
 
     await createTargetFiles(workspaceDir, {
       targetId: "sup-persisted",
@@ -144,14 +103,6 @@ describe("supervisor hydrate restart", () => {
 
     await server.stop();
     server = undefined;
-
-    const shadowDb = openDatabase(dbPath);
-    try {
-      shadowDb.prepare("DELETE FROM sessions WHERE id = ?").run("sess-supervisor");
-      shadowDb.prepare("DELETE FROM terminals WHERE id = ?").run("term-supervisor");
-    } finally {
-      closeDatabase(shadowDb);
-    }
 
     server = await createServer({
       dataDir: dbPath,

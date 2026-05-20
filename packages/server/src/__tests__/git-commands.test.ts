@@ -66,7 +66,6 @@ describe("Git Commands", () => {
     workspaceLookup.mockImplementation((id: string) => workspaceMgr.get(id));
 
     ctx = {
-      db,
       workspaceMgr,
       sessionMgr: {},
       terminalMgr: {},

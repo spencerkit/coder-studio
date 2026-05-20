@@ -80,7 +80,6 @@ const createCommandContext = (
     terminalMgr: {},
     eventBus,
     broadcaster: {},
-    db: {},
     providerRegistry: [],
     autoFetch: {
       registerViewer: vi.fn(),

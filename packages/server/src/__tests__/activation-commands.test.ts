@@ -31,7 +31,6 @@ function createBaseContext(overrides?: {
         sendToClient: vi.fn(() => true),
         sendBinaryToClient: vi.fn(() => true),
       } as unknown as Broadcaster),
-    db: {} as never,
     providerRegistry: [],
     fencingMgr: {} as never,
     supervisorMgr: {} as never,

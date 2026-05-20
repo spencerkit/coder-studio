@@ -63,7 +63,6 @@ describe("File Commands", () => {
     workspaceId = workspace.id;
 
     ctx = {
-      db,
       workspaceMgr,
       sessionMgr: {},
       terminalMgr: {},

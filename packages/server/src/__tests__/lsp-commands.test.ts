@@ -106,7 +106,6 @@ describe("LSP commands", () => {
     });
 
     ctx = {
-      db,
       workspaceMgr,
       eventBus,
       sessionMgr: {} as never,

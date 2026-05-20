@@ -60,7 +60,6 @@ describe("Worktree Commands", () => {
     workspaceId = workspace.id;
 
     ctx = {
-      db,
       workspaceMgr,
       sessionMgr: {},
       terminalMgr: {},

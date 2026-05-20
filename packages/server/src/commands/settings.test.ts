@@ -30,7 +30,6 @@ describe("settings commands", () => {
       terminalMgr: {} as never,
       eventBus: {} as never,
       broadcaster: {} as never,
-      db,
       settingsRepo,
       providerConfigRepo,
       providerRegistry: [],

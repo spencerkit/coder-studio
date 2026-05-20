@@ -43,7 +43,6 @@ describe("session.remove command", () => {
       terminalMgr: {},
       eventBus: mockEventBus,
       broadcaster: {},
-      db: {},
       providerRegistry: [],
     } as unknown as CommandContext;
   });

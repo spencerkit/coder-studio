@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createServer, type Server } from "../server.js";
-import { closeDatabase, openDatabase, SessionRepo, TerminalRepo } from "../storage/index.js";
+import { SessionRepo, TerminalRepo } from "../storage/index.js";
 import { dispatch } from "../ws/dispatch.js";
 
 import "../commands/workspace.js";
@@ -57,11 +57,9 @@ describe("session hydrate restart", () => {
     const now = Date.now();
     const terminalRepo = new TerminalRepo({
       filePath: join(dataDir, "state", "terminals.json"),
-      shadowDb: firstCtx.db,
     });
     const sessionRepo = new SessionRepo({
       filePath: join(dataDir, "state", "sessions.json"),
-      shadowDb: firstCtx.db,
     });
 
     terminalRepo.insert({
@@ -97,14 +95,6 @@ describe("session hydrate restart", () => {
 
     await server.stop();
     server = undefined;
-
-    const shadowDb = openDatabase(dbPath);
-    try {
-      shadowDb.prepare("DELETE FROM sessions WHERE id = ?").run("sess-hydrated");
-      shadowDb.prepare("DELETE FROM terminals WHERE id = ?").run("term-hydrated");
-    } finally {
-      closeDatabase(shadowDb);
-    }
 
     server = await createServer({
       dataDir: dbPath,

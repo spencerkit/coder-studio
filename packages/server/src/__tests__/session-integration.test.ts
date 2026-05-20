@@ -199,7 +199,6 @@ describe("Session Integration", () => {
 
     // Create context
     ctx = {
-      db,
       workspaceMgr,
       sessionMgr,
       terminalMgr,

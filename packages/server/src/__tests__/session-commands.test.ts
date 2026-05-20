@@ -63,7 +63,6 @@ describe("Session Commands", () => {
 
     // Create context with required dependencies
     ctx = {
-      db,
       workspaceMgr,
       sessionMgr,
       terminalMgr: {},

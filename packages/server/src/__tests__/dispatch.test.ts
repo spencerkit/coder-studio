@@ -18,7 +18,6 @@ describe("Command Dispatch", () => {
       terminalMgr: {},
       eventBus: {},
       broadcaster: {},
-      db: {},
       autoFetch: {
         registerViewer: vi.fn(),
         unregisterViewer: vi.fn(),

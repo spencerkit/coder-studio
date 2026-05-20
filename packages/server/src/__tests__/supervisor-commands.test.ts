@@ -77,7 +77,6 @@ describe("supervisor commands", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     ctx = {
-      db: {},
       workspaceMgr: {},
       sessionMgr: {},
       terminalMgr: {},

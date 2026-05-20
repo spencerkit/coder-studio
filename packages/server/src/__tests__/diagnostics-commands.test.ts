@@ -7,7 +7,6 @@ import { describe, expect, it } from "vitest";
 import type { EventBus } from "../bus/event-bus.js";
 import type { AutoFetchRuntime } from "../git/auto-fetch.js";
 import type { SessionManager } from "../session/manager.js";
-import type { Database } from "../storage/database.js";
 import type { SupervisorManager } from "../supervisor/manager.js";
 import type { TerminalManager } from "../terminal/manager.js";
 import type { WorkspaceManager } from "../workspace/manager.js";
@@ -34,7 +33,6 @@ function createContext(overrides: Partial<CommandContext> = {}): CommandContext 
       sendToClient: () => true,
       sendBinaryToClient: () => true,
     } as unknown as Broadcaster,
-    db: {} as Database,
     providerRegistry: providerRegistry as ProviderDefinition[],
     fencingMgr: {} as FencingManager,
     supervisorMgr: {} as SupervisorManager,
