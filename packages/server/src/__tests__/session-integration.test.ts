@@ -9,7 +9,7 @@
  * 5. Test terminal input/output
  */
 
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DomainEvent, Session } from "@coder-studio/core";
@@ -19,7 +19,6 @@ import { EventBus } from "../bus/event-bus.js";
 import { ProviderInstallManager } from "../provider-runtime/install-manager.js";
 import { SessionManager } from "../session/manager.js";
 import type { SessionDatabase } from "../session/types.js";
-import { openDatabase, runMigrations } from "../storage/db.js";
 import { ProviderConfigRepo } from "../storage/repositories/provider-config-repo.js";
 import { WorkspaceRepo } from "../storage/repositories/workspace-repo.js";
 import { TerminalManager } from "../terminal/manager.js";
@@ -124,7 +123,6 @@ function createMockPtyHost(spawnCalls: Array<{ argv: string[]; options: unknown 
 }
 
 describe("Session Integration", () => {
-  let db: ReturnType<typeof openDatabase>;
   let ctx: CommandContext;
   let eventBus: EventBus;
   let workspaceMgr: WorkspaceManager;
@@ -136,12 +134,10 @@ describe("Session Integration", () => {
   let spawnCalls: Array<{ argv: string[]; options: unknown }>;
   let sessionDb: MockSessionDatabase;
   let testDir: string;
+  let stateDir: string;
+  let providerConfigRepo: ProviderConfigRepo;
 
   beforeEach(() => {
-    // Create in-memory database
-    db = openDatabase(":memory:");
-    runMigrations(db);
-
     // Create event bus
     eventBus = new EventBus();
 
@@ -170,7 +166,13 @@ describe("Session Integration", () => {
     });
 
     // Create workspace manager
-    workspaceMgr = new WorkspaceManager({ workspaceRepo: new WorkspaceRepo(db), eventBus });
+    stateDir = mkdtempSync(join(tmpdir(), "session-integration-state-"));
+    workspaceMgr = new WorkspaceManager({
+      workspaceRepo: new WorkspaceRepo({
+        filePath: join(stateDir, "workspaces.json"),
+      }),
+      eventBus,
+    });
 
     // Create test directory with .git folder
     testDir = join(tmpdir(), `coder-studio-test-${Date.now()}`);
@@ -188,13 +190,16 @@ describe("Session Integration", () => {
     };
 
     // Create session manager
+    providerConfigRepo = new ProviderConfigRepo({
+      filePath: join(stateDir, "provider-configs.json"),
+    });
     sessionMgr = new SessionManager({
       terminalMgr,
       eventBus,
       db: sessionDb,
       broadcaster: mockBroadcaster,
       providerRegistry,
-      providerConfigRepo: new ProviderConfigRepo(db),
+      providerConfigRepo,
     });
 
     // Create context
@@ -215,6 +220,7 @@ describe("Session Integration", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    rmSync(stateDir, { recursive: true, force: true });
     // Clean up test directory
     try {
       rmSync(testDir, { recursive: true, force: true });
@@ -385,10 +391,9 @@ describe("Session Integration", () => {
     });
 
     it("should use saved provider config when creating a session", async () => {
-      db.prepare("INSERT INTO provider_configs (provider_id, config) VALUES (?, ?)").run(
-        "claude",
-        '{"additionalArgs":["--verbose"]}'
-      );
+      providerConfigRepo.set("claude", {
+        additionalArgs: ["--verbose"],
+      });
 
       const openResult = await dispatch(
         {
@@ -420,10 +425,10 @@ describe("Session Integration", () => {
     });
 
     it("should ignore legacy provider cwd overrides when creating a codex session", async () => {
-      db.prepare("INSERT INTO provider_configs (provider_id, config) VALUES (?, ?)").run(
-        "codex",
-        '{"additionalArgs":["--sandbox"],"cwd":"/tmp/legacy-cwd"}'
-      );
+      providerConfigRepo.set("codex", {
+        additionalArgs: ["--sandbox"],
+        cwd: "/tmp/legacy-cwd",
+      });
 
       const openResult = await dispatch(
         {
@@ -456,10 +461,12 @@ describe("Session Integration", () => {
     });
 
     it("passes the provider-built argv and session id env through to PTY spawn", async () => {
-      db.prepare("INSERT INTO provider_configs (provider_id, config) VALUES (?, ?)").run(
-        "claude",
-        '{"additionalArgs":["--verbose"],"envVars":{"TASK3_PROVIDER_ENV":"task3-value"}}'
-      );
+      providerConfigRepo.set("claude", {
+        additionalArgs: ["--verbose"],
+        envVars: {
+          TASK3_PROVIDER_ENV: "task3-value",
+        },
+      });
 
       const openResult = await dispatch(
         {

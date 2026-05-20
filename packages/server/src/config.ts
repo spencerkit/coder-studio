@@ -3,8 +3,8 @@
  *
  * Parses CLI args and environment variables.
  *
- * Database path resolution:
- * - Development: uses OS temp directory so SQLite files stay out of the repo
+ * State anchor path resolution:
+ * - Development: uses OS temp directory so local state files stay out of the repo
  * - Production: uses ~/.coder-studio/data/coder-studio.db by default
  */
 
@@ -67,14 +67,14 @@ function resolveDefaultAppVersion(): string {
 }
 
 /**
- * Resolve the database file path.
+ * Resolve the state anchor file path.
  *
- * In development (NODE_ENV !== 'production') the DB is placed in the OS temp
+ * In development (NODE_ENV !== 'production') the anchor file is placed in the OS temp
  * directory so it never pollutes the working tree. In production the path
  * defaults to ~/.coder-studio/data/coder-studio.db and can be overridden via
  * the DATA_DIR env var.
  */
-function resolveDbPath(explicit?: string): string {
+function resolveDataPath(explicit?: string): string {
   if (explicit) return explicit;
   if (process.env.NODE_ENV !== "production") {
     return path.join(os.tmpdir(), "coder-studio-dev.db");
@@ -110,7 +110,7 @@ function resolveUploadsDir(explicit?: string): string {
 export function parseServerConfig(overrides?: Partial<ServerConfig>): ServerConfig {
   const noAuth = process.env.NO_AUTH === "true";
   const password = process.env.AUTH_PASSWORD;
-  const dataDir = resolveDbPath(overrides?.dataDir || process.env.DATA_DIR);
+  const dataDir = resolveDataPath(overrides?.dataDir || process.env.DATA_DIR);
   const uploadsDir = resolveUploadsDir(overrides?.uploadsDir || process.env.UPLOADS_DIR);
 
   // NOTE: use `??` on port so callers can pass 0 to request an
@@ -132,7 +132,7 @@ export function parseServerConfig(overrides?: Partial<ServerConfig>): ServerConf
 }
 
 /**
- * Ensure the database parent directory exists for file-backed databases.
+ * Ensure the local state parent directory exists.
  */
 export function ensureDataDir(config: ServerConfig): void {
   if (config.dataDir === ":memory:") {

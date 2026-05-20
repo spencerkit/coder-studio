@@ -5,8 +5,6 @@ import type { FastifyInstance } from "fastify";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildFastifyApp } from "../app.js";
 import { EventBus } from "../bus/event-bus.js";
-import type { Database } from "../storage/database.js";
-import { openDatabase } from "../storage/db.js";
 import { AuthLoginBlockRepo } from "../storage/repositories/auth-login-block-repo.js";
 import { AuthSessionRepo } from "../storage/repositories/auth-session-repo.js";
 import { WorkspaceRepo } from "../storage/repositories/workspace-repo.js";
@@ -19,7 +17,6 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 describe("auth login protection", () => {
   let tempDir: string;
   let dbPath: string;
-  let db: Database;
   let app: FastifyInstance;
   let webRoot: string;
 
@@ -32,7 +29,6 @@ describe("auth login protection", () => {
       join(webRoot, "index.html"),
       '<!doctype html><html><body><div id="root">shell</div></body></html>'
     );
-    db = openDatabase(dbPath);
 
     const eventBus = new EventBus();
     const fencingMgr = new FencingManager();
@@ -59,7 +55,9 @@ describe("auth login protection", () => {
       wsHub,
       webRoot,
       workspaceMgr: new WorkspaceManager({
-        workspaceRepo: new WorkspaceRepo(db),
+        workspaceRepo: new WorkspaceRepo({
+          filePath: join(tempDir, "state", "workspaces.json"),
+        }),
         eventBus,
         broadcaster: wsHub,
       }),
@@ -77,9 +75,6 @@ describe("auth login protection", () => {
   afterEach(async () => {
     if (app) {
       await app.close();
-    }
-    if (db?.isOpen) {
-      db.close();
     }
     rmSync(tempDir, { recursive: true, force: true });
   });

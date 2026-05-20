@@ -1,6 +1,5 @@
 import type { Session, SessionState } from "@coder-studio/core";
 import type { SessionUpdatePatch } from "../../session/types.js";
-import type { Database } from "../database.js";
 import { readJsonFile, writeJsonFileAtomic } from "./json-file-store.js";
 
 /**
@@ -89,10 +88,6 @@ export interface SessionRepoOptions {
   filePath: string;
 }
 
-function isDatabase(value: Database | SessionRepoOptions): value is Database {
-  return typeof (value as Database).prepare === "function";
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -164,23 +159,13 @@ function normalizeSessionFile(value: unknown): Record<string, StoredSession> {
  * Session repository for CRUD operations
  */
 export class SessionRepo {
-  private readonly db?: Database;
-  private readonly filePath?: string;
+  private readonly filePath: string;
 
-  constructor(input: Database | SessionRepoOptions) {
-    if (isDatabase(input)) {
-      this.db = input;
-      return;
-    }
-
+  constructor(input: SessionRepoOptions) {
     this.filePath = input.filePath;
   }
 
   private loadFileSessions(): Record<string, StoredSession> {
-    if (!this.filePath) {
-      return {};
-    }
-
     const parsed = readJsonFile<
       SessionFileRecord | Record<string, StoredSession> | StoredSession[]
     >(this.filePath);
@@ -192,10 +177,6 @@ export class SessionRepo {
   }
 
   private saveFileSessions(sessions: Record<string, StoredSession>): void {
-    if (!this.filePath) {
-      return;
-    }
-
     const payload: SessionFileRecord = {
       version: 1,
       sessions,
@@ -217,13 +198,6 @@ export class SessionRepo {
    * Lists all sessions for a workspace
    */
   listByWorkspace(workspaceId: string): Session[] {
-    if (this.db) {
-      const rows = this.db
-        .prepare("SELECT * FROM sessions WHERE workspace_id = ? ORDER BY started_at DESC")
-        .all(workspaceId) as unknown as SessionRow[];
-      return rows.map(rowToSession);
-    }
-
     return this.sortSessions(this.loadFileSessions()).filter(
       (session) => session.workspaceId === workspaceId
     );
@@ -233,13 +207,6 @@ export class SessionRepo {
    * Finds a session by ID
    */
   findById(id: string): Session | undefined {
-    if (this.db) {
-      const row = this.db.prepare("SELECT * FROM sessions WHERE id = ?").get(id) as
-        | SessionRow
-        | undefined;
-      return row ? rowToSession(row) : undefined;
-    }
-
     const stored = this.loadFileSessions()[id];
     if (!stored) {
       return undefined;
@@ -253,13 +220,6 @@ export class SessionRepo {
    * Finds a session by terminal ID (1:1 relationship)
    */
   findByTerminalId(terminalId: string): Session | undefined {
-    if (this.db) {
-      const row = this.db.prepare("SELECT * FROM sessions WHERE terminal_id = ?").get(terminalId) as
-        | SessionRow
-        | undefined;
-      return row ? rowToSession(row) : undefined;
-    }
-
     const stored = this.listAllStoredSessions().find(
       (session) => session.terminalId === terminalId
     );
@@ -275,15 +235,6 @@ export class SessionRepo {
    * Lists all active (non-ended) sessions for a workspace
    */
   listActiveByWorkspace(workspaceId: string): Session[] {
-    if (this.db) {
-      const rows = this.db
-        .prepare(
-          "SELECT * FROM sessions WHERE workspace_id = ? AND ended_at IS NULL ORDER BY started_at DESC"
-        )
-        .all(workspaceId) as unknown as SessionRow[];
-      return rows.map(rowToSession);
-    }
-
     return this.listByWorkspace(workspaceId).filter((session) => session.endedAt == null);
   }
 
@@ -291,28 +242,6 @@ export class SessionRepo {
    * Creates a new session
    */
   create(session: NewSession): Session {
-    if (this.db) {
-      const stmt = this.db.prepare(`
-        INSERT INTO sessions (id, workspace_id, terminal_id, provider_id, capability, state, started_at, last_active_at, completion_percent, error_reason)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `);
-
-      stmt.run(
-        session.id,
-        session.workspaceId,
-        session.terminalId,
-        session.providerId,
-        session.capability,
-        session.state,
-        session.startedAt,
-        session.lastActiveAt,
-        session.completionPercent ?? null,
-        session.errorReason ?? null
-      );
-
-      return this.findById(session.id)!;
-    }
-
     const next: StoredSession = {
       id: session.id,
       workspaceId: session.workspaceId,
@@ -337,43 +266,6 @@ export class SessionRepo {
   }
 
   insert(session: SessionRow): void {
-    if (this.db) {
-      this.db
-        .prepare(
-          `INSERT INTO sessions (
-             id,
-             workspace_id,
-             terminal_id,
-             provider_id,
-             capability,
-             state,
-             started_at,
-             ended_at,
-             last_active_at,
-             completion_percent,
-             error_reason,
-             archived,
-             title
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-        )
-        .run(
-          session.id,
-          session.workspace_id,
-          session.terminal_id,
-          session.provider_id,
-          session.capability,
-          session.state,
-          session.started_at,
-          session.ended_at,
-          session.last_active_at,
-          session.completion_percent,
-          session.error_reason,
-          session.archived,
-          session.title
-        );
-      return;
-    }
-
     const next: StoredSession = {
       ...rowToSession(session),
       ...(session.archived === 1 ? { archived: true } : {}),
@@ -385,37 +277,6 @@ export class SessionRepo {
   }
 
   update(id: string, patch: SessionUpdatePatch): void {
-    if (this.db) {
-      const keys = Object.keys(patch);
-      if (keys.length === 0) return;
-
-      const allowedCols = new Set([
-        "terminal_id",
-        "state",
-        "started_at",
-        "ended_at",
-        "completion_percent",
-        "error_reason",
-        "last_active_at",
-        "title",
-      ]);
-
-      const setClauses: string[] = [];
-      const values: unknown[] = [];
-      for (const key of keys) {
-        const col = key.replace(/([A-Z])/g, "_$1").toLowerCase();
-        if (!allowedCols.has(col)) continue;
-        setClauses.push(`${col} = ?`);
-        values.push(patch[key as keyof SessionUpdatePatch] ?? null);
-      }
-      if (setClauses.length === 0) return;
-
-      this.db
-        .prepare(`UPDATE sessions SET ${setClauses.join(", ")} WHERE id = ?`)
-        .run(...(values as Array<string | number | bigint | Uint8Array | null>), id);
-      return;
-    }
-
     const sessions = this.loadFileSessions();
     const current = sessions[id];
     if (!current) {
@@ -459,15 +320,6 @@ export class SessionRepo {
   }
 
   listHydratable(): Session[] {
-    if (this.db) {
-      const rows = this.db
-        .prepare(
-          "SELECT * FROM sessions WHERE archived = 0 AND ended_at IS NULL ORDER BY started_at DESC"
-        )
-        .all() as unknown as SessionRow[];
-      return rows.map(rowToSession);
-    }
-
     return this.listAllStoredSessions()
       .filter((session) => !session.archived && session.endedAt == null)
       .map(({ archived: _archived, ...session }) => session);
@@ -512,12 +364,6 @@ export class SessionRepo {
    * Archives a session
    */
   archive(id: string): void {
-    if (this.db) {
-      const stmt = this.db.prepare("UPDATE sessions SET archived = 1 WHERE id = ?");
-      stmt.run(id);
-      return;
-    }
-
     const sessions = this.loadFileSessions();
     const current = sessions[id];
     if (!current) {
@@ -535,12 +381,6 @@ export class SessionRepo {
    * Deletes a session by ID
    */
   delete(id: string): void {
-    if (this.db) {
-      const stmt = this.db.prepare("DELETE FROM sessions WHERE id = ?");
-      stmt.run(id);
-      return;
-    }
-
     const sessions = this.loadFileSessions();
     if (!sessions[id]) {
       return;

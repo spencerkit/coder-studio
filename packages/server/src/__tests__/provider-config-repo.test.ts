@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { closeDatabase, openDatabase, ProviderConfigRepo } from "../storage/index.js";
+import { ProviderConfigRepo } from "../storage/index.js";
 
 describe("ProviderConfigRepo", () => {
   let repo: ProviderConfigRepo;
@@ -165,26 +165,6 @@ describe("ProviderConfigRepo", () => {
       expect(Object.keys(all)).toHaveLength(2);
       expect(all["claude-cli"].defaultModel).toBe("claude-3-sonnet");
       expect(all.openai.defaultModel).toBe("gpt-4-turbo");
-    });
-  });
-
-  describe("legacy migration", () => {
-    it("does not import existing database provider configs when the file is missing", () => {
-      const db = openDatabase(join(tempDir, "legacy.db"));
-      try {
-        db.prepare("INSERT INTO provider_configs (provider_id, config) VALUES (?, ?)").run(
-          "codex",
-          '{"additionalArgs":["--full-auto"]}'
-        );
-
-        const fileRepo = new ProviderConfigRepo({
-          filePath: join(tempDir, "migrated-provider-configs.json"),
-        });
-
-        expect(fileRepo.getAll()).toEqual({});
-      } finally {
-        closeDatabase(db);
-      }
     });
   });
 });

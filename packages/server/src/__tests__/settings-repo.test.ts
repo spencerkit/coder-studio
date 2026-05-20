@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { closeDatabase, openDatabase, SettingsRepo } from "../storage/index.js";
+import { SettingsRepo } from "../storage/index.js";
 
 describe("SettingsRepo", () => {
   let repo: SettingsRepo;
@@ -151,24 +151,6 @@ describe("SettingsRepo", () => {
       expect(result?.theme).toBe("dark");
       expect(result?.notifications).toBe(true);
       expect(result?.maxHistory).toBe(100);
-    });
-  });
-
-  describe("legacy migration", () => {
-    it("does not import existing database settings when the file is missing", () => {
-      const db = openDatabase(join(tempDir, "legacy.db"));
-      try {
-        db.prepare("INSERT INTO user_settings (key, value) VALUES (?, ?)").run("theme", '"dark"');
-        db.prepare("INSERT INTO user_settings (key, value) VALUES (?, ?)").run("fontSize", "14");
-
-        const fileRepo = new SettingsRepo({
-          filePath: join(tempDir, "migrated-settings.json"),
-        });
-
-        expect(fileRepo.getAll()).toEqual({});
-      } finally {
-        closeDatabase(db);
-      }
     });
   });
 });

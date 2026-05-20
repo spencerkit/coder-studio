@@ -2,7 +2,6 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { closeDatabase, openDatabase } from "../storage/db.js";
 import { AuthLoginBlockRepo } from "../storage/repositories/auth-login-block-repo.js";
 
 describe("AuthLoginBlockRepo", () => {
@@ -60,34 +59,5 @@ describe("AuthLoginBlockRepo", () => {
     expect(repo.get("192.0.2.4")).toBeNull();
     expect(repo.listActiveBlocks(200)).toEqual([]);
     expect(repo.delete("192.0.2.4")).toBe(false);
-  });
-
-  it("does not import auth block state from the legacy database when the file is missing", () => {
-    const db = openDatabase(join(tempDir, "legacy.db"));
-    try {
-      db.prepare(
-        "INSERT INTO auth_login_blocks (ip, failed_count, first_failed_at, last_failed_at, blocked_until) VALUES (?, ?, ?, ?, ?)"
-      ).run("203.0.113.1", 2, 100, 200, 500);
-      db.prepare("INSERT INTO auth_login_failures (ip, failed_at) VALUES (?, ?)").run(
-        "203.0.113.1",
-        100
-      );
-      db.prepare("INSERT INTO auth_login_failures (ip, failed_at) VALUES (?, ?)").run(
-        "203.0.113.1",
-        200
-      );
-
-      const fileRepo = new AuthLoginBlockRepo({
-        filePath: join(tempDir, "migrated-auth-login-blocks.json"),
-      });
-
-      expect(fileRepo.get("203.0.113.1")).toBeNull();
-
-      const next = fileRepo.recordFailure("203.0.113.1", 300, 0, 3, 500);
-      expect(next.failedCount).toBe(1);
-      expect(next.blockedUntil).toBeNull();
-    } finally {
-      closeDatabase(db);
-    }
   });
 });

@@ -2,7 +2,6 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { closeDatabase, openDatabase } from "../storage/db.js";
 import { AuthSessionRepo } from "../storage/repositories/auth-session-repo.js";
 
 describe("AuthSessionRepo", () => {
@@ -39,22 +38,5 @@ describe("AuthSessionRepo", () => {
     repo.delete("token-1");
 
     expect(repo.touch("token-1", 2000)).toBe(false);
-  });
-
-  it("does not import auth sessions from the legacy database when the file is missing", () => {
-    const db = openDatabase(join(tempDir, "legacy.db"));
-    try {
-      db.prepare(
-        "INSERT INTO auth_sessions (token, created_at, last_seen_at) VALUES (?, ?, ?)"
-      ).run("legacy-token", 111, 222);
-
-      const fileRepo = new AuthSessionRepo({
-        filePath: join(tempDir, "migrated-auth-sessions.json"),
-      });
-
-      expect(fileRepo.touch("legacy-token", 333)).toBe(false);
-    } finally {
-      closeDatabase(db);
-    }
   });
 });

@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -8,7 +8,6 @@ import {
 } from "@coder-studio/core";
 import type { FastifyBaseLogger } from "fastify";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { closeDatabase, openDatabase } from "../storage/db.js";
 import type { ProviderConfigRepo } from "../storage/repositories/provider-config-repo.js";
 import { SettingsRepo } from "../storage/repositories/settings-repo.js";
 import type { SupervisorEvaluationContext } from "./context-builder.js";
@@ -472,26 +471,24 @@ describe("SupervisorEvaluator", () => {
     );
   });
 
-  it("falls back to the default timeout when the stored row is malformed JSON", async () => {
-    const db = openDatabase(":memory:");
+  it("falls back to the default timeout when the stored settings file is malformed JSON", async () => {
+    const tempDir = mkdtempSync(path.join(tmpdir(), "supervisor-evaluator-settings-"));
 
     try {
-      db.prepare("INSERT INTO user_settings (key, value) VALUES (?, ?)").run(
-        "supervisor.evaluationTimeoutSec",
-        "not-json"
-      );
+      const filePath = path.join(tempDir, "settings.json");
+      writeFileSync(filePath, "{not-json", "utf-8");
 
       const evaluator = new SupervisorEvaluator({
         providerRegistry: [createProvider("claude", continuePayload())],
         providerConfigRepo: createProviderConfigRepo(),
-        settingsRepo: new SettingsRepo(db),
+        settingsRepo: new SettingsRepo({ filePath }),
       });
 
       const result = await evaluator.evaluate(makeSupervisor("claude"), makeContext());
 
       expect(result.guidance).toBe("next step: run tests");
     } finally {
-      closeDatabase(db);
+      rmSync(tempDir, { recursive: true, force: true });
     }
   });
 

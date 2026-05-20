@@ -1,37 +1,20 @@
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Database } from "../../storage/database.js";
 import { WorkspaceRepo } from "../../storage/repositories/workspace-repo.js";
 import { WorkspaceManager } from "../../workspace/manager.js";
 
 describe("WorkspaceManager.close — onClose callback", () => {
   let rootDir: string;
-  let db: Database;
+  let stateDir: string;
 
   beforeEach(async () => {
     rootDir = await mkdtemp(join(tmpdir(), "workspace-onclose-"));
-
-    db = new DatabaseSync(":memory:");
-    db.exec("PRAGMA journal_mode = WAL");
-    db.exec("PRAGMA foreign_keys = ON");
-    db.exec(`
-      CREATE TABLE workspaces (
-        id TEXT PRIMARY KEY,
-        path TEXT NOT NULL UNIQUE,
-        target_runtime TEXT NOT NULL,
-        wsl_distro TEXT,
-        opened_at INTEGER NOT NULL,
-        last_active_at INTEGER NOT NULL,
-        ui_state TEXT
-      );
-    `);
+    stateDir = join(rootDir, ".state");
   });
 
   afterEach(async () => {
-    db.close();
     await rm(rootDir, { recursive: true, force: true });
   });
 
@@ -46,7 +29,9 @@ describe("WorkspaceManager.close — onClose callback", () => {
     };
 
     manager = new WorkspaceManager({
-      workspaceRepo: new WorkspaceRepo(db),
+      workspaceRepo: new WorkspaceRepo({
+        filePath: join(stateDir, "workspaces.json"),
+      }),
       eventBus,
       onClose,
     });
@@ -64,7 +49,9 @@ describe("WorkspaceManager.close — onClose callback", () => {
       on: () => () => {},
     };
     const manager = new WorkspaceManager({
-      workspaceRepo: new WorkspaceRepo(db),
+      workspaceRepo: new WorkspaceRepo({
+        filePath: join(stateDir, "workspaces.json"),
+      }),
       eventBus,
       onClose: async () => {
         throw new Error("cleanup failed");
@@ -96,7 +83,9 @@ describe("WorkspaceManager.close — onClose callback", () => {
     };
 
     manager = new WorkspaceManager({
-      workspaceRepo: new WorkspaceRepo(db),
+      workspaceRepo: new WorkspaceRepo({
+        filePath: join(stateDir, "workspaces.json"),
+      }),
       eventBus,
       onClose,
       teardown,

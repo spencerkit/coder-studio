@@ -2,8 +2,6 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { Database } from "../storage/database.js";
-import { closeDatabase, openDatabase } from "../storage/db.js";
 import { ProviderConfigRepo } from "../storage/repositories/provider-config-repo.js";
 import { SettingsRepo } from "../storage/repositories/settings-repo.js";
 import type { CommandContext } from "../ws/dispatch.js";
@@ -11,14 +9,12 @@ import { dispatch } from "../ws/dispatch.js";
 import "./settings.js";
 
 describe("settings commands", () => {
-  let db: Database;
   let ctx: CommandContext;
   let tempDir: string;
   let settingsRepo: SettingsRepo;
   let providerConfigRepo: ProviderConfigRepo;
 
   beforeEach(() => {
-    db = openDatabase(":memory:");
     tempDir = mkdtempSync(join(tmpdir(), "settings-command-test-"));
     settingsRepo = new SettingsRepo({ filePath: join(tempDir, "settings.json") });
     providerConfigRepo = new ProviderConfigRepo({
@@ -42,7 +38,6 @@ describe("settings commands", () => {
   });
 
   afterEach(() => {
-    closeDatabase(db);
     rmSync(tempDir, { recursive: true, force: true });
   });
 
@@ -231,11 +226,7 @@ describe("settings commands", () => {
 
     expect(result.ok).toBe(false);
     expect(result.error?.code).toBe("validation_error");
-    expect(
-      db
-        .prepare("SELECT value FROM user_settings WHERE key = ?")
-        .get("supervisor.evaluationTimeoutSec")
-    ).toBeUndefined();
+    expect(settingsRepo.get("supervisor.evaluationTimeoutSec")).toBeUndefined();
   });
 
   it("settings.update rejects retryDelaySec values below the supported minimum", async () => {

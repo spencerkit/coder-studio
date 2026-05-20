@@ -1,9 +1,12 @@
-export { type Database, withTransaction } from "./database.js";
-export { closeDatabase, openDatabase } from "./db.js";
 export {
   type AuthLoginBlockRecord,
   AuthLoginBlockRepo,
 } from "./repositories/auth-login-block-repo.js";
+export {
+  type AuthSession,
+  AuthSessionRepo,
+  type AuthSessionRepoOptions,
+} from "./repositories/auth-session-repo.js";
 export { ProviderConfigRepo } from "./repositories/provider-config-repo.js";
 export {
   type NewSession,
@@ -23,11 +26,9 @@ export {
   type NewTerminal,
   TerminalRepo,
   type TerminalRepoOptions,
-  type TerminalRow,
 } from "./repositories/terminal-repo.js";
 export {
   type NewWorkspace,
   WorkspaceRepo,
   type WorkspaceRepoOptions,
-  type WorkspaceRow,
 } from "./repositories/workspace-repo.js";

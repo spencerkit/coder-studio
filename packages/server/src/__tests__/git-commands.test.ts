@@ -1,3 +1,4 @@
+import { mkdtempSync, rmSync } from "node:fs";
 import { execFile } from "child_process";
 import { mkdir, rm, writeFile } from "fs/promises";
 import { tmpdir } from "os";
@@ -6,7 +7,6 @@ import { promisify } from "util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventBus } from "../bus/event-bus.js";
 import { AutoFetchScheduler } from "../git/auto-fetch.js";
-import { openDatabase, runMigrations } from "../storage/db.js";
 import { WorkspaceRepo } from "../storage/repositories/workspace-repo.js";
 import { WorkspaceManager } from "../workspace/manager.js";
 import type { CommandContext } from "../ws/dispatch.js";
@@ -22,11 +22,11 @@ describe("Git Commands", () => {
   let ctx: CommandContext;
   let workspaceMgr: WorkspaceManager;
   let eventBus: EventBus;
-  let db: ReturnType<typeof openDatabase>;
   let workspaceId: string;
   let recordFetchSpy: ReturnType<typeof vi.spyOn>;
   let autoFetch: AutoFetchScheduler;
   let workspaceLookup: ReturnType<typeof vi.fn>;
+  let stateDir: string;
 
   beforeEach(async () => {
     testDir = join(tmpdir(), `git-command-test-${Date.now()}`);
@@ -40,9 +40,8 @@ describe("Git Commands", () => {
     await execFileAsync("git", ["add", "."], { cwd: testDir });
     await execFileAsync("git", ["commit", "-m", "Initial commit"], { cwd: testDir });
     await writeFile(join(testDir, "sample.ts"), "export const value = 2;\n");
+    stateDir = mkdtempSync(join(tmpdir(), "git-command-state-"));
 
-    db = openDatabase(":memory:");
-    runMigrations(db);
     eventBus = new EventBus();
     vi.spyOn(eventBus, "emit");
     workspaceLookup = vi.fn();
@@ -53,7 +52,9 @@ describe("Git Commands", () => {
       runFetch: vi.fn(async () => {}),
     });
     workspaceMgr = new WorkspaceManager({
-      workspaceRepo: new WorkspaceRepo(db),
+      workspaceRepo: new WorkspaceRepo({
+        filePath: join(stateDir, "workspaces.json"),
+      }),
       eventBus,
       autoFetch,
     });
@@ -80,6 +81,7 @@ describe("Git Commands", () => {
 
   afterEach(async () => {
     autoFetch.stop();
+    rmSync(stateDir, { recursive: true, force: true });
     await rm(testDir, { recursive: true, force: true });
   });
 

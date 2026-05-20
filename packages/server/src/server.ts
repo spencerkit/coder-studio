@@ -29,7 +29,6 @@ import { createE2EProviderMockOverrides } from "./provider-runtime/e2e-provider-
 import { ProviderInstallManager } from "./provider-runtime/install-manager.js";
 import type { RuntimeStatusDeps } from "./provider-runtime/runtime-status.js";
 import { SessionManager } from "./session/manager.js";
-import { openDatabase } from "./storage/db.js";
 import { AuthLoginBlockRepo } from "./storage/repositories/auth-login-block-repo.js";
 import { AuthSessionRepo } from "./storage/repositories/auth-session-repo.js";
 import { ProviderConfigRepo } from "./storage/repositories/provider-config-repo.js";
@@ -77,7 +76,6 @@ export async function createServer(
 
   ensureDataDir(config);
 
-  const db = openDatabase(config.dataDir);
   const eventBus = new EventBus();
   const activationMgr = new ActivationManager();
   const fencingMgr = new FencingManager();
@@ -324,7 +322,6 @@ export async function createServer(
       rmSync(stateRoot, { recursive: true, force: true });
     }
     deleteRuntimeConfig();
-    db.close();
   };
 
   const actualPort = extractListenPort(app) ?? config.port;

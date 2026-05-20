@@ -4,7 +4,6 @@ import { join } from "node:path";
 import chokidar, { type FSWatcher } from "chokidar";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createServer, type Server } from "../server.js";
-import { closeDatabase, openDatabase } from "../storage/db.js";
 import { dispatch } from "../ws/dispatch.js";
 
 import "../commands/workspace.js";
@@ -83,7 +82,7 @@ describe("workspace watcher hydrate restart", () => {
     );
   });
 
-  it("restores persisted workspace watchers from file metadata even when db shadow rows were removed", async () => {
+  it("restores persisted workspace watchers from file metadata even when the data anchor file is absent", async () => {
     server = await createServer({
       dataDir: dbPath,
       host: "127.0.0.1",
@@ -107,13 +106,7 @@ describe("workspace watcher hydrate restart", () => {
     await server.stop();
     server = undefined;
     watchSpy.mockClear();
-
-    const maintenanceDb = openDatabase(dbPath);
-    try {
-      maintenanceDb.prepare("DELETE FROM workspaces").run();
-    } finally {
-      closeDatabase(maintenanceDb);
-    }
+    rmSync(dbPath, { force: true });
 
     server = await createServer({
       dataDir: dbPath,

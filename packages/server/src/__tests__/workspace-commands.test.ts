@@ -4,7 +4,6 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventBus } from "../bus/event-bus.js";
-import { openDatabase, runMigrations } from "../storage/db.js";
 import { ProviderConfigRepo } from "../storage/repositories/provider-config-repo.js";
 import { SettingsRepo } from "../storage/repositories/settings-repo.js";
 import { WorkspaceRepo } from "../storage/repositories/workspace-repo.js";
@@ -17,7 +16,6 @@ import "../commands/workspace.js";
 import "../commands/workspace-activity.js";
 
 describe("Workspace Commands", () => {
-  let db: ReturnType<typeof openDatabase>;
   let ctx: CommandContext;
   let eventBus: EventBus;
   let workspaceMgr: WorkspaceManager;
@@ -33,10 +31,6 @@ describe("Workspace Commands", () => {
   let settingsDir: string;
 
   beforeEach(() => {
-    // Create in-memory database for testing
-    db = openDatabase(":memory:");
-    runMigrations(db);
-
     // Create event bus
     eventBus = new EventBus();
     autoFetch = {
@@ -54,7 +48,9 @@ describe("Workspace Commands", () => {
 
     // Create workspace manager
     workspaceMgr = new WorkspaceManager({
-      workspaceRepo: new WorkspaceRepo(db),
+      workspaceRepo: new WorkspaceRepo({
+        filePath: join(settingsDir, "workspaces.json"),
+      }),
       eventBus,
       autoFetch,
     });
@@ -125,7 +121,9 @@ describe("Workspace Commands", () => {
         getLastFetchAt: () => undefined,
       } as never;
       workspaceMgr = new WorkspaceManager({
-        workspaceRepo: new WorkspaceRepo(db),
+        workspaceRepo: new WorkspaceRepo({
+          filePath: join(settingsDir, "workspaces.json"),
+        }),
         eventBus,
         autoFetch,
       });

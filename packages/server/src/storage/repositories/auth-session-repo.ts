@@ -1,4 +1,3 @@
-import type { Database } from "../database.js";
 import { readJsonFile, writeJsonFileAtomic } from "./json-file-store.js";
 
 export interface AuthSession {
@@ -14,10 +13,6 @@ interface AuthSessionFileRecord {
 
 export interface AuthSessionRepoOptions {
   filePath: string;
-}
-
-function isDatabase(value: Database | AuthSessionRepoOptions): value is Database {
-  return typeof (value as Database).prepare === "function";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -74,23 +69,13 @@ function normalizeSessionFile(value: unknown): Record<string, AuthSession> {
 }
 
 export class AuthSessionRepo {
-  private readonly db?: Database;
-  private readonly filePath?: string;
+  private readonly filePath: string;
 
-  constructor(input: Database | AuthSessionRepoOptions) {
-    if (isDatabase(input)) {
-      this.db = input;
-      return;
-    }
-
+  constructor(input: AuthSessionRepoOptions) {
     this.filePath = input.filePath;
   }
 
   private loadFileSessions(): Record<string, AuthSession> {
-    if (!this.filePath) {
-      return {};
-    }
-
     const parsed = readJsonFile<
       AuthSessionFileRecord | Record<string, AuthSession> | AuthSession[]
     >(this.filePath);
@@ -102,10 +87,6 @@ export class AuthSessionRepo {
   }
 
   private saveFileSessions(sessions: Record<string, AuthSession>): void {
-    if (!this.filePath) {
-      return;
-    }
-
     const payload: AuthSessionFileRecord = {
       version: 1,
       sessions,
@@ -114,21 +95,6 @@ export class AuthSessionRepo {
   }
 
   create(token: string, now: number): AuthSession {
-    if (this.db) {
-      this.db
-        .prepare(`
-      INSERT INTO auth_sessions (token, created_at, last_seen_at)
-      VALUES (?, ?, ?)
-    `)
-        .run(token, now, now);
-
-      return {
-        token,
-        createdAt: now,
-        lastSeenAt: now,
-      };
-    }
-
     const sessions = this.loadFileSessions();
     const session: AuthSession = {
       token,
@@ -141,18 +107,6 @@ export class AuthSessionRepo {
   }
 
   touch(token: string, now: number): boolean {
-    if (this.db) {
-      const result = this.db
-        .prepare(`
-      UPDATE auth_sessions
-      SET last_seen_at = ?
-      WHERE token = ?
-    `)
-        .run(now, token);
-
-      return result.changes > 0;
-    }
-
     const sessions = this.loadFileSessions();
     const existing = sessions[token];
     if (!existing) {
@@ -168,11 +122,6 @@ export class AuthSessionRepo {
   }
 
   delete(token: string): void {
-    if (this.db) {
-      this.db.prepare("DELETE FROM auth_sessions WHERE token = ?").run(token);
-      return;
-    }
-
     const sessions = this.loadFileSessions();
     if (!Object.prototype.hasOwnProperty.call(sessions, token)) {
       return;

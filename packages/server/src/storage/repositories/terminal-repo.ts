@@ -1,24 +1,5 @@
 import type { Terminal } from "@coder-studio/core";
-import type { Database } from "../database.js";
 import { readJsonFile, writeJsonFileAtomic } from "./json-file-store.js";
-
-/**
- * Database row representation for Terminal table
- */
-export interface TerminalRow {
-  id: string;
-  workspace_id: string;
-  kind: "agent" | "shell";
-  cwd: string;
-  argv: string; // JSON string
-  env: string | null; // JSON string
-  title: string | null;
-  cols: number;
-  rows: number;
-  created_at: number;
-  ended_at: number | null;
-  exit_code: number | null;
-}
 
 /**
  * Input type for creating a new terminal
@@ -43,10 +24,6 @@ interface TerminalFileRecord {
 
 export interface TerminalRepoOptions {
   filePath: string;
-}
-
-function isDatabase(value: Database | TerminalRepoOptions): value is Database {
-  return typeof (value as Database).prepare === "function";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -119,41 +96,13 @@ function normalizeTerminalFile(value: unknown): Record<string, Terminal> {
  * Terminal repository for CRUD operations
  */
 export class TerminalRepo {
-  private readonly db?: Database;
-  private readonly filePath?: string;
+  private readonly filePath: string;
 
-  constructor(input: Database | TerminalRepoOptions) {
-    if (isDatabase(input)) {
-      this.db = input;
-      return;
-    }
-
+  constructor(input: TerminalRepoOptions) {
     this.filePath = input.filePath;
   }
 
-  private rowToTerminal(row: TerminalRow): Terminal {
-    return {
-      id: row.id,
-      workspaceId: row.workspace_id,
-      kind: row.kind,
-      cwd: row.cwd,
-      argv: JSON.parse(row.argv) as string[],
-      cols: row.cols,
-      rows: row.rows,
-      alive: row.ended_at === null,
-      createdAt: row.created_at,
-      endedAt: row.ended_at ?? undefined,
-      exitCode: row.exit_code ?? undefined,
-      title: row.title ?? "",
-      env: row.env ? (JSON.parse(row.env) as Record<string, string>) : undefined,
-    };
-  }
-
   private loadFileTerminals(): Record<string, Terminal> {
-    if (!this.filePath) {
-      return {};
-    }
-
     const parsed = readJsonFile<TerminalFileRecord | Record<string, Terminal> | Terminal[]>(
       this.filePath
     );
@@ -165,10 +114,6 @@ export class TerminalRepo {
   }
 
   private saveFileTerminals(terminals: Record<string, Terminal>): void {
-    if (!this.filePath) {
-      return;
-    }
-
     const payload: TerminalFileRecord = {
       version: 1,
       terminals,
@@ -184,13 +129,6 @@ export class TerminalRepo {
    * Lists all terminals for a workspace
    */
   listByWorkspace(workspaceId: string): Terminal[] {
-    if (this.db) {
-      const rows = this.db
-        .prepare("SELECT * FROM terminals WHERE workspace_id = ? ORDER BY created_at DESC")
-        .all(workspaceId) as unknown as TerminalRow[];
-      return rows.map((row) => this.rowToTerminal(row));
-    }
-
     return this.sortTerminals(this.loadFileTerminals()).filter(
       (terminal) => terminal.workspaceId === workspaceId
     );
@@ -200,13 +138,6 @@ export class TerminalRepo {
    * Finds a terminal by ID
    */
   findById(id: string): Terminal | undefined {
-    if (this.db) {
-      const row = this.db.prepare("SELECT * FROM terminals WHERE id = ?").get(id) as
-        | TerminalRow
-        | undefined;
-      return row ? this.rowToTerminal(row) : undefined;
-    }
-
     return this.loadFileTerminals()[id];
   }
 
@@ -214,15 +145,6 @@ export class TerminalRepo {
    * Lists all active (non-ended) terminals for a workspace
    */
   listActiveByWorkspace(workspaceId: string): Terminal[] {
-    if (this.db) {
-      const rows = this.db
-        .prepare(
-          "SELECT * FROM terminals WHERE workspace_id = ? AND ended_at IS NULL ORDER BY created_at DESC"
-        )
-        .all(workspaceId) as unknown as TerminalRow[];
-      return rows.map((row) => this.rowToTerminal(row));
-    }
-
     return this.listByWorkspace(workspaceId).filter((terminal) => terminal.alive);
   }
 
@@ -230,28 +152,6 @@ export class TerminalRepo {
    * Creates a new terminal
    */
   create(terminal: NewTerminal): Terminal {
-    if (this.db) {
-      const stmt = this.db.prepare(`
-        INSERT INTO terminals (id, workspace_id, kind, cwd, argv, env, title, cols, rows, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `);
-
-      stmt.run(
-        terminal.id,
-        terminal.workspaceId,
-        terminal.kind,
-        terminal.cwd,
-        JSON.stringify(terminal.argv),
-        terminal.env ? JSON.stringify(terminal.env) : null,
-        terminal.title ?? null,
-        terminal.cols,
-        terminal.rows,
-        terminal.createdAt
-      );
-
-      return this.findById(terminal.id)!;
-    }
-
     const nextTerminal: Terminal = normalizeTerminal({
       id: terminal.id,
       workspaceId: terminal.workspaceId,
@@ -295,12 +195,6 @@ export class TerminalRepo {
    * Marks a terminal as ended
    */
   markEnded(id: string, endedAt: number, exitCode: number): void {
-    if (this.db) {
-      const stmt = this.db.prepare("UPDATE terminals SET ended_at = ?, exit_code = ? WHERE id = ?");
-      stmt.run(endedAt, exitCode, id);
-      return;
-    }
-
     const terminals = this.loadFileTerminals();
     const terminal = terminals[id];
     if (!terminal) {
@@ -320,12 +214,6 @@ export class TerminalRepo {
    * Updates terminal dimensions
    */
   updateDimensions(id: string, cols: number, rows: number): void {
-    if (this.db) {
-      const stmt = this.db.prepare("UPDATE terminals SET cols = ?, rows = ? WHERE id = ?");
-      stmt.run(cols, rows, id);
-      return;
-    }
-
     const terminals = this.loadFileTerminals();
     const terminal = terminals[id];
     if (!terminal) {
@@ -344,12 +232,6 @@ export class TerminalRepo {
    * Updates terminal title
    */
   updateTitle(id: string, title: string): void {
-    if (this.db) {
-      const stmt = this.db.prepare("UPDATE terminals SET title = ? WHERE id = ?");
-      stmt.run(title, id);
-      return;
-    }
-
     const terminals = this.loadFileTerminals();
     const terminal = terminals[id];
     if (!terminal) {
@@ -367,12 +249,6 @@ export class TerminalRepo {
    * Deletes a terminal by ID
    */
   delete(id: string): void {
-    if (this.db) {
-      const stmt = this.db.prepare("DELETE FROM terminals WHERE id = ?");
-      stmt.run(id);
-      return;
-    }
-
     const terminals = this.loadFileTerminals();
     if (!terminals[id]) {
       return;

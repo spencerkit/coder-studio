@@ -18,7 +18,7 @@ describe("node-version", () => {
 
   it("throws a clear error for unsupported Node.js versions", () => {
     expect(() => assertSupportedNodeVersion("22.4.0")).toThrow(/requires Node\.js >=24\.0\.0/);
-    expect(() => assertSupportedNodeVersion("22.4.0")).toThrow(/node:sqlite/);
+    expect(() => assertSupportedNodeVersion("22.4.0")).toThrow(/Current version: 22\.4\.0/);
   });
 
   it("does not throw for supported Node.js versions", () => {

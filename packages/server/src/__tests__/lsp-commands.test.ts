@@ -1,10 +1,10 @@
 import crypto from "node:crypto";
+import { mkdtempSync, rmSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventBus } from "../bus/event-bus.js";
-import { openDatabase, runMigrations } from "../storage/db.js";
 import { WorkspaceRepo } from "../storage/repositories/workspace-repo.js";
 import { WorkspaceManager } from "../workspace/manager.js";
 import type { CommandContext } from "../ws/dispatch.js";
@@ -95,13 +95,15 @@ class FakeLspToolInstallManager {
 
 describe("LSP commands", () => {
   let ctx: CommandContext;
+  let stateDir: string;
 
   beforeEach(() => {
-    const db = openDatabase(":memory:");
-    runMigrations(db);
+    stateDir = mkdtempSync(join(tmpdir(), "lsp-command-state-"));
     const eventBus = new EventBus();
     const workspaceMgr = new WorkspaceManager({
-      workspaceRepo: new WorkspaceRepo(db),
+      workspaceRepo: new WorkspaceRepo({
+        filePath: join(stateDir, "workspaces.json"),
+      }),
       eventBus,
     });
 
@@ -130,6 +132,10 @@ describe("LSP commands", () => {
       } as never,
       lspToolInstallMgr: new FakeLspToolInstallManager() as never,
     } as unknown as CommandContext;
+  });
+
+  afterEach(() => {
+    rmSync(stateDir, { recursive: true, force: true });
   });
 
   it("ensures a session and forwards read-only requests through the manager", async () => {

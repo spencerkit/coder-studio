@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { homedir } from "os";
 import { basename, join } from "path";
 
-const DEFAULT_DB_FILE = "coder-studio.db";
+const DEFAULT_STATE_ANCHOR_FILE = "coder-studio.db";
 
 export interface CliConfig {
   host?: string;
@@ -22,7 +22,7 @@ export function normalizeDataDir(input: string): string {
   if (basename(input).includes(".")) {
     return input;
   }
-  return join(input, DEFAULT_DB_FILE);
+  return join(input, DEFAULT_STATE_ANCHOR_FILE);
 }
 
 export function readCliConfig(): CliConfig | null {

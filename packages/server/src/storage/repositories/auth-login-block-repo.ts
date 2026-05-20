@@ -1,4 +1,3 @@
-import { type Database, withTransaction } from "../database.js";
 import { readJsonFile, writeJsonFileAtomic } from "./json-file-store.js";
 
 export interface AuthLoginBlockRecord {
@@ -9,20 +8,6 @@ export interface AuthLoginBlockRecord {
   blockedUntil: number | null;
 }
 
-interface AuthLoginBlockRow {
-  ip: string;
-  failed_count: number;
-  first_failed_at: number;
-  last_failed_at: number;
-  blocked_until: number | null;
-}
-
-interface AuthLoginFailureStatsRow {
-  failed_count: number;
-  first_failed_at: number | null;
-  last_failed_at: number | null;
-}
-
 interface AuthLoginBlockState {
   version: 1;
   blocks: Record<string, AuthLoginBlockRecord>;
@@ -31,10 +16,6 @@ interface AuthLoginBlockState {
 
 export interface AuthLoginBlockRepoOptions {
   filePath: string;
-}
-
-function isDatabase(value: Database | AuthLoginBlockRepoOptions): value is Database {
-  return typeof (value as Database).prepare === "function";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -113,36 +94,14 @@ function normalizeState(value: unknown): AuthLoginBlockState {
   };
 }
 
-const toRecord = (row: AuthLoginBlockRow): AuthLoginBlockRecord => ({
-  ip: row.ip,
-  failedCount: row.failed_count,
-  firstFailedAt: row.first_failed_at,
-  lastFailedAt: row.last_failed_at,
-  blockedUntil: row.blocked_until,
-});
-
 export class AuthLoginBlockRepo {
-  private readonly db?: Database;
-  private readonly filePath?: string;
+  private readonly filePath: string;
 
-  constructor(input: Database | AuthLoginBlockRepoOptions) {
-    if (isDatabase(input)) {
-      this.db = input;
-      return;
-    }
-
+  constructor(input: AuthLoginBlockRepoOptions) {
     this.filePath = input.filePath;
   }
 
   private loadState(): AuthLoginBlockState {
-    if (!this.filePath) {
-      return {
-        version: 1,
-        blocks: {},
-        failures: {},
-      };
-    }
-
     const parsed = readJsonFile<AuthLoginBlockState | Record<string, AuthLoginBlockRecord>>(
       this.filePath
     );
@@ -158,10 +117,6 @@ export class AuthLoginBlockRepo {
   }
 
   private saveState(state: AuthLoginBlockState): void {
-    if (!this.filePath) {
-      return;
-    }
-
     writeJsonFileAtomic(this.filePath, {
       version: 1,
       blocks: state.blocks,
@@ -170,46 +125,11 @@ export class AuthLoginBlockRepo {
   }
 
   get(ip: string): AuthLoginBlockRecord | null {
-    if (this.db) {
-      const row = this.db
-        .prepare(`
-      SELECT ip, failed_count, first_failed_at, last_failed_at, blocked_until
-      FROM auth_login_blocks
-      WHERE ip = ?
-    `)
-        .get(ip) as AuthLoginBlockRow | undefined;
-
-      return row ? toRecord(row) : null;
-    }
-
     const record = this.loadState().blocks[ip];
     return record ? { ...record } : null;
   }
 
   upsert(record: AuthLoginBlockRecord): AuthLoginBlockRecord {
-    if (this.db) {
-      this.db
-        .prepare(`
-      INSERT INTO auth_login_blocks (
-        ip, failed_count, first_failed_at, last_failed_at, blocked_until
-      ) VALUES (?, ?, ?, ?, ?)
-      ON CONFLICT(ip) DO UPDATE SET
-        failed_count = excluded.failed_count,
-        first_failed_at = excluded.first_failed_at,
-        last_failed_at = excluded.last_failed_at,
-        blocked_until = excluded.blocked_until
-    `)
-        .run(
-          record.ip,
-          record.failedCount,
-          record.firstFailedAt,
-          record.lastFailedAt,
-          record.blockedUntil
-        );
-
-      return record;
-    }
-
     const state = this.loadState();
     state.blocks[record.ip] = { ...record };
     this.saveState(state);
@@ -223,42 +143,6 @@ export class AuthLoginBlockRepo {
     failureLimit: number,
     blockDurationMs: number
   ): AuthLoginBlockRecord {
-    if (this.db) {
-      const db = this.db;
-      return withTransaction(db, () => {
-        db.prepare(`
-        DELETE FROM auth_login_failures
-        WHERE ip = ? AND failed_at < ?
-      `).run(ip, windowStart);
-
-        db.prepare(`
-        INSERT INTO auth_login_failures (ip, failed_at)
-        VALUES (?, ?)
-      `).run(ip, now);
-
-        const stats = db
-          .prepare(`
-        SELECT
-          COUNT(*) AS failed_count,
-          MIN(failed_at) AS first_failed_at,
-          MAX(failed_at) AS last_failed_at
-        FROM auth_login_failures
-        WHERE ip = ?
-      `)
-          .get(ip) as unknown as AuthLoginFailureStatsRow;
-
-        const record: AuthLoginBlockRecord = {
-          ip,
-          failedCount: stats.failed_count,
-          firstFailedAt: stats.first_failed_at ?? now,
-          lastFailedAt: stats.last_failed_at ?? now,
-          blockedUntil: stats.failed_count >= failureLimit ? now + blockDurationMs : null,
-        };
-
-        return this.upsert(record);
-      });
-    }
-
     const state = this.loadState();
     const currentFailures = (state.failures[ip] ?? []).filter(
       (failedAt) => failedAt >= windowStart
@@ -281,15 +165,6 @@ export class AuthLoginBlockRepo {
   }
 
   delete(ip: string): boolean {
-    if (this.db) {
-      const db = this.db;
-      return withTransaction(db, () => {
-        const blockResult = db.prepare("DELETE FROM auth_login_blocks WHERE ip = ?").run(ip);
-        const failureResult = db.prepare("DELETE FROM auth_login_failures WHERE ip = ?").run(ip);
-        return Number(blockResult.changes) + Number(failureResult.changes) > 0;
-      });
-    }
-
     const state = this.loadState();
     const hadBlock = Object.prototype.hasOwnProperty.call(state.blocks, ip);
     const hadFailures = Object.prototype.hasOwnProperty.call(state.failures, ip);
@@ -304,19 +179,6 @@ export class AuthLoginBlockRepo {
   }
 
   listActiveBlocks(now: number): AuthLoginBlockRecord[] {
-    if (this.db) {
-      const rows = this.db
-        .prepare(`
-      SELECT ip, failed_count, first_failed_at, last_failed_at, blocked_until
-      FROM auth_login_blocks
-      WHERE blocked_until IS NOT NULL AND blocked_until > ?
-      ORDER BY blocked_until DESC, ip ASC
-    `)
-        .all(now) as unknown as AuthLoginBlockRow[];
-
-      return rows.map(toRecord);
-    }
-
     return Object.values(this.loadState().blocks)
       .filter((record) => record.blockedUntil !== null && record.blockedUntil > now)
       .sort((left, right) => {

@@ -7,7 +7,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventBus } from "../bus/event-bus.js";
 import { SessionManager } from "../session/manager.js";
 import type { SessionDatabase } from "../session/types.js";
-import { openDatabase, runMigrations } from "../storage/db.js";
 import { ProviderConfigRepo } from "../storage/repositories/provider-config-repo.js";
 import { WorkspaceRepo } from "../storage/repositories/workspace-repo.js";
 import type { TerminalManager } from "../terminal/manager.js";
@@ -22,8 +21,8 @@ import "../commands/session.js";
 
 describe("Session Commands", () => {
   const broadcaster = { broadcast: () => {} } satisfies Broadcaster;
-  const providerConfigRepo = (db: ReturnType<typeof openDatabase>) =>
-    new ProviderConfigRepo(db) as Pick<ProviderConfigRepo, "get"> as ProviderConfigRepo;
+  const createProviderConfigRepo = (filePath: string) =>
+    new ProviderConfigRepo({ filePath }) as Pick<ProviderConfigRepo, "get"> as ProviderConfigRepo;
   const terminalMgrStub = {
     create: () => ({ id: "terminal-1" }),
     kill: async () => {},
@@ -35,30 +34,33 @@ describe("Session Commands", () => {
     delete: () => {},
   } as unknown as SessionDatabase;
 
-  let db: ReturnType<typeof openDatabase>;
   let ctx: CommandContext;
   let eventBus: EventBus;
   let workspaceMgr: WorkspaceManager;
   let sessionMgr: SessionManager;
+  let stateDir: string;
   let tempDirs: string[];
 
   beforeEach(() => {
-    // Create in-memory database for testing
-    db = openDatabase(":memory:");
-    runMigrations(db);
-
     // Create event bus
     eventBus = new EventBus();
+    stateDir = mkdtempSync(join(tmpdir(), "session-command-state-"));
+    const providerConfigRepo = createProviderConfigRepo(join(stateDir, "provider-configs.json"));
 
     // Create managers
-    workspaceMgr = new WorkspaceManager({ workspaceRepo: new WorkspaceRepo(db), eventBus });
+    workspaceMgr = new WorkspaceManager({
+      workspaceRepo: new WorkspaceRepo({
+        filePath: join(stateDir, "workspaces.json"),
+      }),
+      eventBus,
+    });
     sessionMgr = new SessionManager({
       terminalMgr: terminalMgrStub,
       eventBus,
       db: sessionDbStub,
       broadcaster,
       providerRegistry: [],
-      providerConfigRepo: providerConfigRepo(db),
+      providerConfigRepo,
     });
 
     // Create context with required dependencies
@@ -71,12 +73,13 @@ describe("Session Commands", () => {
       providerRegistry: [],
       fencingMgr: {},
       supervisorMgr: {},
-      providerConfigRepo: providerConfigRepo(db),
+      providerConfigRepo,
     } as unknown as CommandContext;
     tempDirs = [];
   });
 
   afterEach(() => {
+    rmSync(stateDir, { recursive: true, force: true });
     for (const dir of tempDirs) {
       rmSync(dir, { recursive: true, force: true });
     }
