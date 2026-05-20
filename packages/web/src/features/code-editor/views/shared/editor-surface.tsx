@@ -29,7 +29,6 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
     handleSave,
     hasUnsavedChangesOutsideDiff,
     isImageFile,
-    isTextFile,
     mode,
     openInDiffMode,
     saveError,
