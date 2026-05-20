@@ -2,6 +2,7 @@ import { FileText, Image as ImageIcon, Save, X } from "lucide-react";
 import type { FC } from "react";
 import { EmptyState, IconButton, ThemedIcon, Tooltip } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
+import { GitDiffViewer } from "../../../workspace/views/shared/git-diff-viewer";
 import { useCodeEditorActions } from "../../actions/use-code-editor-actions";
 import { ImagePreview } from "../../components/image-preview";
 import { MonacoHost } from "../../components/monaco-host";
@@ -115,13 +116,17 @@ export const CodeEditorView: FC<CodeEditorViewProps> = ({ state, chrome = "full"
   const t = useTranslation();
   const {
     activeFilePath,
+    activeDiffChange,
     activeExternalStatus,
     activeLoadError,
+    canDiff,
     currentFile,
     handleContentChange,
     handleSave,
+    hasUnsavedChangesOutsideDiff,
     isImageFile,
     isTextFile,
+    mode,
     saveError,
     workspace,
   } = state;
@@ -142,7 +147,11 @@ export const CodeEditorView: FC<CodeEditorViewProps> = ({ state, chrome = "full"
   }
 
   const dirtyIndicator =
-    isTextFile && currentFile.isDirty ? <span className="dirty-indicator">*</span> : null;
+    isTextFile && currentFile?.isDirty ? <span className="dirty-indicator">*</span> : null;
+  const showDiffView =
+    Boolean(workspace?.id) &&
+    ((mode === "diff" && canDiff && activeDiffChange?.source === "file") ||
+      activeDiffChange?.source === "commit");
   const showHeader = chrome === "full";
 
   return (
@@ -189,8 +198,17 @@ export const CodeEditorView: FC<CodeEditorViewProps> = ({ state, chrome = "full"
           </div>
         )}
 
+        {hasUnsavedChangesOutsideDiff && (
+          <div className="code-editor-error" role="alert">
+            <ThemedIcon semantic="state.warning" size={14} />
+            <span>Diff preview is based on saved file contents.</span>
+          </div>
+        )}
+
         <div className="code-editor-body">
-          {isTextFile ? (
+          {showDiffView ? (
+            <GitDiffViewer workspaceId={workspace.id} showCloseButton={false} />
+          ) : isTextFile ? (
             <MonacoHost
               workspaceId={workspace.id}
               workspaceRootPath={workspace.path}

@@ -8,6 +8,7 @@ import {
   editorModeAtomFamily,
   editorRefreshTokenAtomFamily,
   gitDiffPreviewAtomFamily,
+  gitStateAtomFamily,
   type OpenFile,
   openFilesAtomFamily,
   type WorkspaceEditorMode,
@@ -54,6 +55,7 @@ export function useCodeEditorActions() {
   const [mode, setMode] = useAtom(editorModeAtomFamily(workspaceId ?? ""));
   const editorRefreshToken = useAtomValue(editorRefreshTokenAtomFamily(workspaceId ?? ""));
   const diffPreview = useAtomValue(gitDiffPreviewAtomFamily(workspaceId ?? ""));
+  const gitState = useAtomValue(gitStateAtomFamily(workspaceId ?? ""));
 
   const currentFile: OpenFile | undefined = workspaceId
     ? openFiles[activeFilePath ?? ""]
@@ -571,16 +573,23 @@ export function useCodeEditorActions() {
   const canEdit =
     Boolean(currentFile) &&
     (currentFile?.kind === "text" || (currentFile?.kind === "image" && currentFile.isTextBacked));
-  const canDiff = Boolean(
+  const activeFileHasGitChange = Boolean(
     activeFilePath &&
-      diffPreview &&
-      diffPreview.source !== "commit" &&
-      diffPreview.path === activeFilePath
+      gitState &&
+      [...gitState.staged, ...gitState.modified, ...gitState.deleted, ...gitState.untracked].some(
+        (change) => change.path === activeFilePath
+      )
   );
-  const hasUnsavedChangesOutsideDiff = Object.values(openFiles).some(
-    (file) => file.kind === "text" && file.isDirty && file.path !== diffPreview?.path
+  const canDiff = Boolean(activeFilePath && activeFileHasGitChange);
+  const hasUnsavedChangesOutsideDiff = Boolean(
+    mode === "diff" && activeFilePath && currentFile?.kind === "text" && currentFile.isDirty
   );
-  const activeDiffChange = canDiff ? diffPreview : null;
+  const activeDiffChange =
+    diffPreview &&
+    ((diffPreview.source === "file" && diffPreview.path === activeFilePath) ||
+      diffPreview.source === "commit")
+      ? diffPreview
+      : null;
   const canSave = Boolean(isTextFile && currentFile.isDirty && !isSaving);
   const activeLoadError =
     activeFilePath && fileLoadError?.path === activeFilePath ? fileLoadError.message : null;

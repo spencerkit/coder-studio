@@ -246,7 +246,8 @@ export function useWorkspaceScreenModel() {
     setMobileFilesRoute(route);
   }, []);
 
-  const mainAreaMode: WorkspaceMainAreaMode = activeFilePath ? "editor" : "agent";
+  const mainAreaMode: WorkspaceMainAreaMode =
+    activeFilePath || diffPreview?.source === "commit" ? "editor" : "agent";
 
   return {
     activeSession,

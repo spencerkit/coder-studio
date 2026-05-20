@@ -110,7 +110,7 @@ export const activeFilePathAtomFamily = atomFamily((workspaceId: string) =>
 );
 
 export const editorModeAtomFamily = atomFamily((workspaceId: string) =>
-  atom<WorkspaceEditorMode>("edit")
+  atom<WorkspaceEditorMode>("preview")
 );
 
 /**

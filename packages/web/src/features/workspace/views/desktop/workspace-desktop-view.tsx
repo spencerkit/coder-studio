@@ -16,12 +16,10 @@ import { CodeEditorHost } from "../../../code-editor/views/shared/code-editor-ho
 import { PanelHeader } from "../../../shared/components/panel-header";
 import { TerminalPanel } from "../../../terminal-panel";
 import { TopBar } from "../../../topbar";
-import { useGitDiffViewerActions } from "../../actions/use-git-actions";
 import { useWorkspaceFullscreen } from "../../actions/use-workspace-fullscreen";
 import { useWorkspaceScreenModel } from "../../actions/use-workspace-screen-model";
-import { activeFilePathAtomFamily, sidebarCollapsedAtom } from "../../atoms";
+import { sidebarCollapsedAtom } from "../../atoms";
 import { FileTreePanel } from "../shared/file-tree-panel";
-import { GitDiffViewer } from "../shared/git-diff-viewer";
 import { GitPanel } from "../shared/git-panel";
 import { WorkspaceStatusBar } from "../shared/workspace-status-bar";
 
@@ -52,9 +50,7 @@ export const WorkspaceDesktopView: FC = () => {
     bottomPanelRef,
     workspaceId,
   } = useWorkspaceScreenModel();
-  const setActiveFilePath = useSetAtom(activeFilePathAtomFamily(workspaceId));
   const setSidebarCollapsed = useSetAtom(sidebarCollapsedAtom);
-  const { closePreview } = useGitDiffViewerActions(workspaceId);
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey)) {
@@ -97,11 +93,6 @@ export const WorkspaceDesktopView: FC = () => {
       </div>
     );
   }
-
-  const handleCloseDiff = () => {
-    closePreview();
-    setActiveFilePath(null);
-  };
 
   return (
     <div ref={fullscreenRootRef} className="workspace-page workspace-page--desktop">
@@ -199,9 +190,7 @@ export const WorkspaceDesktopView: FC = () => {
 
         <div className="workspace-main-area">
           <div className="workspace-main-stage">
-            {mainAreaMode === "diff" ? (
-              <GitDiffViewer workspaceId={workspace.id} onClose={handleCloseDiff} />
-            ) : mainAreaMode === "editor" ? (
+            {mainAreaMode === "editor" ? (
               <CodeEditorHost />
             ) : (
               <div className="agent-panes">

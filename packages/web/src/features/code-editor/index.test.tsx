@@ -1,5 +1,6 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
+import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../atoms/app-ui";
 import { wsClientAtom } from "../../atoms/connection";
@@ -11,9 +12,11 @@ import {
   editorModeAtomFamily,
   editorRefreshTokenAtomFamily,
   gitDiffPreviewAtomFamily,
+  gitStateAtomFamily,
   type OpenFile,
   openFilesAtomFamily,
 } from "../workspace/atoms";
+import { useCodeEditorActions } from "./actions/use-code-editor-actions";
 import { CodeEditorHost } from "./views/shared/code-editor-host";
 
 const viewportMocks = vi.hoisted(() => ({
@@ -112,6 +115,12 @@ function setupStore(options?: {
   }
 
   return { store, sendCommand };
+}
+
+function wrapperFor(store: ReturnType<typeof createStore>) {
+  return function Wrapper({ children }: { children: ReactNode }) {
+    return <Provider store={store}>{children}</Provider>;
+  };
 }
 
 describe("CodeEditorHost", () => {
@@ -371,7 +380,7 @@ describe("CodeEditorHost", () => {
     expect(store.get(editorModeAtomFamily("ws-1"))).toBe("edit");
   });
 
-  it("tracks unsaved changes outside diff mode and preserves diff preview as payload state", async () => {
+  it("preserves diff preview as payload state while active file mode stays independent", async () => {
     const { store } = setupStore({
       activePath: "src/dirty.ts",
       openFiles: {
@@ -405,6 +414,76 @@ describe("CodeEditorHost", () => {
       staged: false,
       source: "file",
     });
+  });
+
+  it("derives diff enablement from git status for the active file", () => {
+    const { store } = setupStore({
+      activePath: "src/app.ts",
+      openFiles: {
+        "src/app.ts": {
+          kind: "text",
+          path: "src/app.ts",
+          content: "export const app = 1;",
+          savedContent: "export const app = 1;",
+          baseHash: "hash-app",
+          isDirty: false,
+        },
+      },
+    });
+    store.set(gitStateAtomFamily("ws-1"), {
+      branch: "main",
+      ahead: 0,
+      behind: 0,
+      staged: [],
+      modified: [{ path: "src/app.ts", status: "modified" }],
+      deleted: [],
+      untracked: [],
+    });
+
+    const { result } = renderHook(() => useCodeEditorActions(), {
+      wrapper: wrapperFor(store),
+    });
+
+    expect(result.current.canDiff).toBe(true);
+    expect(result.current.activeDiffChange).toBeNull();
+  });
+
+  it("shows the unsaved diff warning only when the active file is dirty in diff mode", () => {
+    const { store } = setupStore({
+      activePath: "src/app.ts",
+      openFiles: {
+        "src/app.ts": {
+          kind: "text",
+          path: "src/app.ts",
+          content: "changed",
+          savedContent: "original",
+          baseHash: "hash-app",
+          isDirty: true,
+        },
+      },
+    });
+    store.set(editorModeAtomFamily("ws-1"), "diff");
+    store.set(gitStateAtomFamily("ws-1"), {
+      branch: "main",
+      ahead: 0,
+      behind: 0,
+      staged: [],
+      modified: [{ path: "src/app.ts", status: "modified" }],
+      deleted: [],
+      untracked: [],
+    });
+    store.set(gitDiffPreviewAtomFamily("ws-1"), {
+      path: "src/app.ts",
+      diff: "diff --git a/src/app.ts b/src/app.ts",
+      staged: false,
+      source: "file",
+    });
+
+    const { result } = renderHook(() => useCodeEditorActions(), {
+      wrapper: wrapperFor(store),
+    });
+
+    expect(result.current.hasUnsavedChangesOutsideDiff).toBe(true);
   });
 
   it("shows the save tooltip on desktop for a text buffer", async () => {

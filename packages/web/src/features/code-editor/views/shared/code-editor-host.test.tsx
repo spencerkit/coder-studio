@@ -33,22 +33,33 @@ vi.mock("../../components/image-preview", () => ({
   ImagePreview: () => <div data-testid="image-preview-mock" />,
 }));
 
+vi.mock("../../../workspace/views/shared/git-diff-viewer", () => ({
+  GitDiffViewer: () => <div data-testid="git-diff-viewer-mock" />,
+}));
+
 function createState(overrides: Partial<CodeEditorState> = {}): CodeEditorState {
   return {
     activeFilePath: null,
+    activeDiffChange: null,
     activeExternalStatus: null,
     activeLoadError: null,
     canSave: true,
+    canDiff: false,
+    canEdit: true,
+    canPreview: false,
     currentFile: undefined,
     handleClose: vi.fn(),
     handleContentChange: vi.fn(),
     handleSave: vi.fn(),
+    hasUnsavedChangesOutsideDiff: false,
     isImageFile: false,
     isSaving: false,
     isSvgTextBacked: true,
     isTextFile: true,
+    mode: "edit",
     openInDiffMode: vi.fn(),
     saveError: null,
+    setMode: vi.fn(),
     toggleSvgTextMode: vi.fn(),
     workspace: undefined,
     workspaceId: undefined,
@@ -130,5 +141,75 @@ describe("CodeEditorHeaderActions", () => {
     );
 
     expect(container.querySelector('[data-icon-semantic="state.fileDeleted"]')).toBeTruthy();
+  });
+
+  it("renders git diff viewer inside the editor surface when mode is diff", () => {
+    const state = createState({
+      workspace: {
+        id: "ws-1",
+        name: "Workspace",
+        path: "/tmp/ws-1",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+      workspaceId: "ws-1",
+      activeFilePath: "src/app.tsx",
+      mode: "diff",
+      canDiff: true,
+      activeDiffChange: {
+        path: "src/app.tsx",
+        diff: "diff --git a/src/app.tsx b/src/app.tsx",
+        source: "file",
+      },
+      currentFile: {
+        kind: "text",
+        path: "src/app.tsx",
+        content: "const app = 1;",
+        savedContent: "const app = 1;",
+        baseHash: "hash-1",
+        isDirty: false,
+      } as CodeEditorState["currentFile"],
+    });
+
+    render(<CodeEditorView state={state} />);
+
+    expect(screen.getByTestId("git-diff-viewer-mock")).toBeInTheDocument();
+    expect(screen.queryByTestId("monaco-host-mock")).not.toBeInTheDocument();
+  });
+
+  it("renders commit-history diff preview without an active file", () => {
+    const state = createState({
+      workspace: {
+        id: "ws-1",
+        name: "Workspace",
+        path: "/tmp/ws-1",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+      workspaceId: "ws-1",
+      mode: "preview",
+      activeDiffChange: {
+        path: "abc123",
+        title: "abc123 · commit subject",
+        diff: "diff --git a/src/app.tsx b/src/app.tsx",
+        source: "commit",
+      },
+    });
+
+    render(<CodeEditorView state={state} />);
+
+    expect(screen.getByTestId("git-diff-viewer-mock")).toBeInTheDocument();
   });
 });
