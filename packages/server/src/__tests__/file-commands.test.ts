@@ -10,6 +10,7 @@ import { promisify } from "util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventBus } from "../bus/event-bus.js";
 import { openDatabase, runMigrations } from "../storage/db.js";
+import { WorkspaceRepo } from "../storage/repositories/workspace-repo.js";
 import { WorkspaceManager } from "../workspace/manager.js";
 import type { CommandContext } from "../ws/dispatch.js";
 import { dispatch } from "../ws/dispatch.js";
@@ -54,7 +55,7 @@ describe("File Commands", () => {
     runMigrations(db);
     eventBus = new EventBus();
     vi.spyOn(eventBus, "emit");
-    workspaceMgr = new WorkspaceManager({ db, eventBus });
+    workspaceMgr = new WorkspaceManager({ workspaceRepo: new WorkspaceRepo(db), eventBus });
 
     const workspace = await workspaceMgr.open({
       path: testDir,

@@ -9,6 +9,7 @@ import type { Database } from "./storage/database.js";
 import { openDatabase } from "./storage/db.js";
 import { AuthLoginBlockRepo } from "./storage/repositories/auth-login-block-repo.js";
 import { AuthSessionRepo } from "./storage/repositories/auth-session-repo.js";
+import { WorkspaceRepo } from "./storage/repositories/workspace-repo.js";
 import { WorkspaceManager } from "./workspace/manager.js";
 import { FencingManager } from "./ws/fencing.js";
 import { WsHub } from "./ws/hub.js";
@@ -74,9 +75,12 @@ describe("app routing", () => {
 
     app = await buildFastifyApp({
       wsHub,
-      db,
       webRoot,
-      workspaceMgr: new WorkspaceManager({ db, eventBus, broadcaster: wsHub }),
+      workspaceMgr: new WorkspaceManager({
+        workspaceRepo: new WorkspaceRepo(db),
+        eventBus,
+        broadcaster: wsHub,
+      }),
       config,
       authSessionRepo: new AuthSessionRepo({
         filePath: join(tempDir, "state", "auth-sessions.json"),

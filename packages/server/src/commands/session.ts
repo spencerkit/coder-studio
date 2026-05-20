@@ -5,7 +5,6 @@
 import type { ProviderDefinition } from "@coder-studio/core";
 import { z } from "zod";
 import { buildProviderRuntimeStatus } from "../provider-runtime/runtime-status.js";
-import { withTransaction } from "../storage/database.js";
 import { applyPaneDisposition } from "../workspace/pane-layout.js";
 import { registerCommand } from "../ws/dispatch.js";
 
@@ -175,9 +174,7 @@ registerCommand(
       ),
     };
 
-    withTransaction(ctx.db, () => {
-      ctx.workspaceMgr.updateUiState(session.workspaceId, nextUiState);
-      ctx.sessionMgr.delete(args.sessionId);
-    });
+    ctx.workspaceMgr.updateUiState(session.workspaceId, nextUiState);
+    ctx.sessionMgr.delete(args.sessionId);
   }
 );

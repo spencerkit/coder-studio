@@ -21,6 +21,7 @@ import { SessionManager } from "../session/manager.js";
 import type { SessionDatabase } from "../session/types.js";
 import { openDatabase, runMigrations } from "../storage/db.js";
 import { ProviderConfigRepo } from "../storage/repositories/provider-config-repo.js";
+import { WorkspaceRepo } from "../storage/repositories/workspace-repo.js";
 import { TerminalManager } from "../terminal/manager.js";
 import type { Broadcaster, PtyHost, PtyProcess } from "../terminal/types.js";
 import { WorkspaceManager } from "../workspace/manager.js";
@@ -169,7 +170,7 @@ describe("Session Integration", () => {
     });
 
     // Create workspace manager
-    workspaceMgr = new WorkspaceManager({ db, eventBus });
+    workspaceMgr = new WorkspaceManager({ workspaceRepo: new WorkspaceRepo(db), eventBus });
 
     // Create test directory with .git folder
     testDir = join(tmpdir(), `coder-studio-test-${Date.now()}`);

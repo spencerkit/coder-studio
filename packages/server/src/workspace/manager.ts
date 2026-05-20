@@ -3,7 +3,6 @@
  */
 
 import type { DomainEvent, Workspace } from "@coder-studio/core";
-import type { Database } from "../storage/database.js";
 import { WorkspaceRepo } from "../storage/repositories/workspace-repo.js";
 import { WorkspaceValidator } from "./validator.js";
 
@@ -24,8 +23,7 @@ export interface AutoFetchRuntime {
 }
 
 export interface WorkspaceManagerDeps {
-  db: Database;
-  workspaceRepo?: WorkspaceRepo;
+  workspaceRepo: WorkspaceRepo;
   eventBus: EventBus;
   broadcaster?: Broadcaster;
   autoFetch?: AutoFetchRuntime;
@@ -51,7 +49,7 @@ export class WorkspaceManager {
   private readonly repo: WorkspaceRepo;
 
   constructor(private deps: WorkspaceManagerDeps) {
-    this.repo = deps.workspaceRepo ?? new WorkspaceRepo(deps.db);
+    this.repo = deps.workspaceRepo;
   }
 
   private startWatcher(workspaceId: string, rootPath: string): void {
@@ -91,7 +89,7 @@ export class WorkspaceManager {
    *
    * 1. Validates path exists and is accessible
    * 2. Checks if workspace already exists for this path
-   * 3. Persists workspace to database (or returns existing)
+   * 3. Persists workspace through the repository (or returns existing)
    * 4. Emits metadata change event
    *
    * @param req - Open workspace request
@@ -120,7 +118,7 @@ export class WorkspaceManager {
       return refreshed;
     }
 
-    // 3. Persist to DB
+    // 3. Persist through the repository
     const workspace: Workspace = {
       id: generateWorkspaceId(),
       path: req.path,
@@ -177,7 +175,7 @@ export class WorkspaceManager {
       await this.deps.teardown(workspaceId);
     }
 
-    // Delete from DB (cascade deletes terminals and sessions)
+    // Delete from the workspace repository
     this.repo.delete(workspaceId);
 
     if (this.deps.onClose) {

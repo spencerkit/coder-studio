@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { EventBus } from "../bus/event-bus.js";
 import { openDatabase, runMigrations } from "../storage/db.js";
+import { WorkspaceRepo } from "../storage/repositories/workspace-repo.js";
 import { WorkspaceManager } from "../workspace/manager.js";
 import type { CommandContext } from "../ws/dispatch.js";
 import { dispatch } from "../ws/dispatch.js";
@@ -99,7 +100,10 @@ describe("LSP commands", () => {
     const db = openDatabase(":memory:");
     runMigrations(db);
     const eventBus = new EventBus();
-    const workspaceMgr = new WorkspaceManager({ db, eventBus });
+    const workspaceMgr = new WorkspaceManager({
+      workspaceRepo: new WorkspaceRepo(db),
+      eventBus,
+    });
 
     ctx = {
       db,

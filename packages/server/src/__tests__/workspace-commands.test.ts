@@ -7,6 +7,7 @@ import { EventBus } from "../bus/event-bus.js";
 import { openDatabase, runMigrations } from "../storage/db.js";
 import { ProviderConfigRepo } from "../storage/repositories/provider-config-repo.js";
 import { SettingsRepo } from "../storage/repositories/settings-repo.js";
+import { WorkspaceRepo } from "../storage/repositories/workspace-repo.js";
 import { WorkspaceManager } from "../workspace/manager.js";
 import type { CommandContext } from "../ws/dispatch.js";
 import { dispatch } from "../ws/dispatch.js";
@@ -52,7 +53,11 @@ describe("Workspace Commands", () => {
     });
 
     // Create workspace manager
-    workspaceMgr = new WorkspaceManager({ db, eventBus, autoFetch });
+    workspaceMgr = new WorkspaceManager({
+      workspaceRepo: new WorkspaceRepo(db),
+      eventBus,
+      autoFetch,
+    });
 
     // Create context with required dependencies
     ctx = {
@@ -120,7 +125,11 @@ describe("Workspace Commands", () => {
         recordSuccess: () => {},
         getLastFetchAt: () => undefined,
       } as never;
-      workspaceMgr = new WorkspaceManager({ db, eventBus, autoFetch });
+      workspaceMgr = new WorkspaceManager({
+        workspaceRepo: new WorkspaceRepo(db),
+        eventBus,
+        autoFetch,
+      });
       ctx = {
         ...ctx,
         workspaceMgr,

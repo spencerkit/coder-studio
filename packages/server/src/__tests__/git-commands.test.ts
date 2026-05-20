@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventBus } from "../bus/event-bus.js";
 import { AutoFetchScheduler } from "../git/auto-fetch.js";
 import { openDatabase, runMigrations } from "../storage/db.js";
+import { WorkspaceRepo } from "../storage/repositories/workspace-repo.js";
 import { WorkspaceManager } from "../workspace/manager.js";
 import type { CommandContext } from "../ws/dispatch.js";
 import { dispatch } from "../ws/dispatch.js";
@@ -51,7 +52,11 @@ describe("Git Commands", () => {
       settingsRepo: { get: vi.fn(() => 180) } as never,
       runFetch: vi.fn(async () => {}),
     });
-    workspaceMgr = new WorkspaceManager({ db, eventBus, autoFetch });
+    workspaceMgr = new WorkspaceManager({
+      workspaceRepo: new WorkspaceRepo(db),
+      eventBus,
+      autoFetch,
+    });
     recordFetchSpy = vi.spyOn(workspaceMgr, "recordFetch");
 
     const workspace = await workspaceMgr.open({

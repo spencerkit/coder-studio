@@ -9,6 +9,7 @@ import { SessionManager } from "../session/manager.js";
 import type { SessionDatabase } from "../session/types.js";
 import { openDatabase, runMigrations } from "../storage/db.js";
 import { ProviderConfigRepo } from "../storage/repositories/provider-config-repo.js";
+import { WorkspaceRepo } from "../storage/repositories/workspace-repo.js";
 import type { TerminalManager } from "../terminal/manager.js";
 import { WorkspaceManager } from "../workspace/manager.js";
 import type { CommandContext } from "../ws/dispatch.js";
@@ -50,7 +51,7 @@ describe("Session Commands", () => {
     eventBus = new EventBus();
 
     // Create managers
-    workspaceMgr = new WorkspaceManager({ db, eventBus });
+    workspaceMgr = new WorkspaceManager({ workspaceRepo: new WorkspaceRepo(db), eventBus });
     sessionMgr = new SessionManager({
       terminalMgr: terminalMgrStub,
       eventBus,

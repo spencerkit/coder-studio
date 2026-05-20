@@ -161,7 +161,6 @@ export async function createServer(
   let supervisorMgr: SupervisorManager | undefined;
 
   workspaceMgr = new WorkspaceManager({
-    db,
     workspaceRepo,
     eventBus,
     broadcaster: wsHub,
@@ -199,7 +198,6 @@ export async function createServer(
 
   const app = await buildFastifyApp({
     wsHub,
-    db,
     workspaceMgr,
     webRoot: config.webRoot,
     config,
@@ -272,7 +270,6 @@ export async function createServer(
     terminalMgr,
     eventBus,
     broadcaster: wsHub,
-    db,
     settingsRepo,
     providerConfigRepo,
     providerRegistry,

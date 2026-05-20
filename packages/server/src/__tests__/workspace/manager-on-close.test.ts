@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Database } from "../../storage/database.js";
+import { WorkspaceRepo } from "../../storage/repositories/workspace-repo.js";
 import { WorkspaceManager } from "../../workspace/manager.js";
 
 describe("WorkspaceManager.close — onClose callback", () => {
@@ -44,7 +45,11 @@ describe("WorkspaceManager.close — onClose callback", () => {
       on: () => () => {},
     };
 
-    manager = new WorkspaceManager({ db, eventBus, onClose });
+    manager = new WorkspaceManager({
+      workspaceRepo: new WorkspaceRepo(db),
+      eventBus,
+      onClose,
+    });
 
     const workspace = await manager.open({ path: rootDir });
     await manager.close(workspace.id);
@@ -59,7 +64,7 @@ describe("WorkspaceManager.close — onClose callback", () => {
       on: () => () => {},
     };
     const manager = new WorkspaceManager({
-      db,
+      workspaceRepo: new WorkspaceRepo(db),
       eventBus,
       onClose: async () => {
         throw new Error("cleanup failed");
@@ -90,7 +95,12 @@ describe("WorkspaceManager.close — onClose callback", () => {
       on: () => () => {},
     };
 
-    manager = new WorkspaceManager({ db, eventBus, onClose, teardown });
+    manager = new WorkspaceManager({
+      workspaceRepo: new WorkspaceRepo(db),
+      eventBus,
+      onClose,
+      teardown,
+    });
 
     const workspace = await manager.open({ path: rootDir });
     await manager.close(workspace.id);

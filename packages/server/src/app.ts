@@ -20,7 +20,6 @@ import {
 import type { ServerConfig } from "./config.js";
 import { registerFileAssetRoutes } from "./routes/file-asset.js";
 import { registerUploadsRoute } from "./routes/uploads.js";
-import type { Database } from "./storage/database.js";
 import type { AuthLoginBlockRepo } from "./storage/repositories/auth-login-block-repo.js";
 import type { AuthSessionRepo } from "./storage/repositories/auth-session-repo.js";
 import { MAX_FILE_BYTES, MAX_FILES_PER_BATCH } from "./uploads/constants.js";
@@ -30,7 +29,6 @@ import type { WsHub } from "./ws/hub.js";
 
 interface AppDeps {
   wsHub: WsHub;
-  db: Database;
   webRoot?: string;
   workspaceMgr: WorkspaceManager;
   config: ServerConfig;
