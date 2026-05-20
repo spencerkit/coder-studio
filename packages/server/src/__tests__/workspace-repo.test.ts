@@ -288,11 +288,10 @@ describe("WorkspaceRepo", () => {
   });
 
   describe("file-backed persistence", () => {
-    it("reads workspace metadata from the file store when shadow rows are missing", () => {
+    it("reads workspace metadata directly from the file store", () => {
       const filePath = join(tempDir, "workspaces.json");
       const fileRepo = new WorkspaceRepo({
         filePath,
-        shadowDb: db,
       });
 
       fileRepo.create({
@@ -303,8 +302,6 @@ describe("WorkspaceRepo", () => {
         lastActiveAt: 2000,
         uiState: { leftPanelWidth: 250, bottomPanelHeight: 150, focusMode: false },
       });
-
-      db.prepare("DELETE FROM workspaces WHERE id = ?").run("ws-file");
 
       const restored = fileRepo.findById("ws-file");
 
@@ -327,7 +324,6 @@ describe("WorkspaceRepo", () => {
       const migratedRepo = new WorkspaceRepo({
         filePath: join(tempDir, "migrated-workspaces.json"),
         legacyDb: db,
-        shadowDb: db,
       });
 
       expect(migratedRepo.list()).toEqual([
@@ -336,6 +332,25 @@ describe("WorkspaceRepo", () => {
           path: "/path/to/legacy-workspace",
         }),
       ]);
+    });
+
+    it("does not mirror file-backed workspaces into sqlite", () => {
+      const fileRepo = new WorkspaceRepo({
+        filePath: join(tempDir, "no-shadow-workspaces.json"),
+      });
+
+      fileRepo.create({
+        id: "ws-no-shadow",
+        path: "/path/to/no-shadow-workspace",
+        targetRuntime: "native",
+        openedAt: 1000,
+        lastActiveAt: 2000,
+        uiState: { leftPanelWidth: 250, bottomPanelHeight: 150, focusMode: false },
+      });
+
+      expect(
+        db.prepare("SELECT * FROM workspaces WHERE id = ?").get("ws-no-shadow")
+      ).toBeUndefined();
     });
   });
 

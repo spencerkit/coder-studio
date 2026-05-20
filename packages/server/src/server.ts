@@ -89,12 +89,10 @@ export async function createServer(
   const terminalRepo = new TerminalRepo({
     filePath: join(stateRoot, "state", "terminals.json"),
     legacyDb: db,
-    shadowDb: db,
   });
   const sessionRepo = new SessionRepo({
     filePath: join(stateRoot, "state", "sessions.json"),
     legacyDb: db,
-    shadowDb: db,
   });
 
   const terminalMgr = new TerminalManager({
@@ -147,7 +145,6 @@ export async function createServer(
   const workspaceRepo = new WorkspaceRepo({
     filePath: join(stateRoot, "state", "workspaces.json"),
     legacyDb: db,
-    shadowDb: db,
   });
   const sessionMgr = new SessionManager({
     terminalMgr,
@@ -249,7 +246,6 @@ export async function createServer(
     targetStore,
     logger: app.log,
   });
-  terminalRepo.listByWorkspace("");
   await sessionMgr.hydrate();
   supervisorMgr.start();
 

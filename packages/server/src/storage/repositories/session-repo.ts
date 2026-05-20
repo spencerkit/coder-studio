@@ -88,7 +88,6 @@ interface SessionFileRecord {
 export interface SessionRepoOptions {
   filePath: string;
   legacyDb?: Database;
-  shadowDb?: Database;
 }
 
 function isDatabase(value: Database | SessionRepoOptions): value is Database {
@@ -169,8 +168,6 @@ export class SessionRepo {
   private readonly db?: Database;
   private readonly filePath?: string;
   private readonly legacyDb?: Database;
-  private readonly shadowDb?: Database;
-  private shadowSynced = false;
 
   constructor(input: Database | SessionRepoOptions) {
     if (isDatabase(input)) {
@@ -180,7 +177,6 @@ export class SessionRepo {
 
     this.filePath = input.filePath;
     this.legacyDb = input.legacyDb;
-    this.shadowDb = input.shadowDb;
   }
 
   private rowToStoredSession(row: SessionRow): StoredSession {
@@ -209,9 +205,7 @@ export class SessionRepo {
       SessionFileRecord | Record<string, StoredSession> | StoredSession[]
     >(this.filePath);
     if (parsed !== undefined) {
-      const sessions = normalizeSessionFile(parsed);
-      this.ensureShadowRows(sessions);
-      return sessions;
+      return normalizeSessionFile(parsed);
     }
 
     if (!this.legacyDb) {
@@ -222,7 +216,6 @@ export class SessionRepo {
     if (Object.keys(migrated).length > 0) {
       this.saveFileSessions(migrated);
     }
-    this.ensureShadowRows(migrated);
     return migrated;
   }
 
@@ -236,75 +229,6 @@ export class SessionRepo {
       sessions,
     };
     writeJsonFileAtomic(this.filePath, payload);
-  }
-
-  private ensureShadowRows(sessions: Record<string, StoredSession>): void {
-    if (!this.shadowDb || this.shadowSynced) {
-      return;
-    }
-
-    for (const session of Object.values(sessions)) {
-      this.upsertShadowRow(session);
-    }
-
-    this.shadowSynced = true;
-  }
-
-  private upsertShadowRow(session: StoredSession): void {
-    if (!this.shadowDb) {
-      return;
-    }
-
-    this.shadowDb
-      .prepare(
-        `INSERT INTO sessions (
-           id,
-           workspace_id,
-           terminal_id,
-           provider_id,
-           capability,
-           state,
-           started_at,
-           ended_at,
-           last_active_at,
-           completion_percent,
-           error_reason,
-           archived,
-           title
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(id) DO UPDATE SET
-           workspace_id = excluded.workspace_id,
-           terminal_id = excluded.terminal_id,
-           provider_id = excluded.provider_id,
-           capability = excluded.capability,
-           state = excluded.state,
-           started_at = excluded.started_at,
-           ended_at = excluded.ended_at,
-           last_active_at = excluded.last_active_at,
-           completion_percent = excluded.completion_percent,
-           error_reason = excluded.error_reason,
-           archived = excluded.archived,
-           title = excluded.title`
-      )
-      .run(
-        session.id,
-        session.workspaceId,
-        session.terminalId,
-        session.providerId,
-        session.capability,
-        session.state,
-        session.startedAt,
-        session.endedAt ?? null,
-        session.lastActiveAt,
-        session.completionPercent ?? null,
-        session.errorReason ?? null,
-        session.archived ? 1 : 0,
-        session.title ?? null
-      );
-  }
-
-  private deleteShadowRow(id: string): void {
-    this.shadowDb?.prepare("DELETE FROM sessions WHERE id = ?").run(id);
   }
 
   private sortSessions(sessions: Record<string, StoredSession>): Session[] {
@@ -435,7 +359,6 @@ export class SessionRepo {
     const sessions = this.loadFileSessions();
     sessions[next.id] = next;
     this.saveFileSessions(sessions);
-    this.upsertShadowRow(next);
 
     const { archived: _archived, ...created } = next;
     return created;
@@ -487,7 +410,6 @@ export class SessionRepo {
     const sessions = this.loadFileSessions();
     sessions[next.id] = next;
     this.saveFileSessions(sessions);
-    this.upsertShadowRow(next);
   }
 
   update(id: string, patch: SessionUpdatePatch): void {
@@ -558,7 +480,6 @@ export class SessionRepo {
 
     sessions[id] = next;
     this.saveFileSessions(sessions);
-    this.upsertShadowRow(next);
   }
 
   findByWorkspaceId(workspaceId: string): Session[] {
@@ -636,7 +557,6 @@ export class SessionRepo {
       archived: true,
     };
     this.saveFileSessions(sessions);
-    this.upsertShadowRow(sessions[id]);
   }
 
   /**
@@ -656,6 +576,5 @@ export class SessionRepo {
 
     delete sessions[id];
     this.saveFileSessions(sessions);
-    this.deleteShadowRow(id);
   }
 }

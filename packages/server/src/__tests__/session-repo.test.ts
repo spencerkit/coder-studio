@@ -368,10 +368,9 @@ describe("SessionRepo", () => {
   });
 
   describe("file-backed persistence", () => {
-    it("reads sessions from the file store when shadow rows are missing", () => {
+    it("reads sessions directly from the file store", () => {
       const fileSessionRepo = new SessionRepo({
         filePath: join(tempDir, "sessions.json"),
-        shadowDb: db,
       } as never);
 
       fileSessionRepo.insert({
@@ -390,8 +389,6 @@ describe("SessionRepo", () => {
         title: "resume me",
         draft: "draft text",
       } as never);
-
-      db.prepare("DELETE FROM sessions WHERE id = ?").run("s-file");
 
       expect(fileSessionRepo.findById("s-file")).toMatchObject({
         id: "s-file",
@@ -417,7 +414,6 @@ describe("SessionRepo", () => {
       const migratedRepo = new SessionRepo({
         filePath: join(tempDir, "migrated-sessions.json"),
         legacyDb: db,
-        shadowDb: db,
       } as never);
 
       expect(migratedRepo.findById("s-legacy")).toMatchObject({
@@ -426,6 +422,31 @@ describe("SessionRepo", () => {
         providerId: "claude-cli",
         state: "idle",
       });
+    });
+
+    it("does not mirror file-backed sessions into sqlite", () => {
+      const fileSessionRepo = new SessionRepo({
+        filePath: join(tempDir, "no-shadow-sessions.json"),
+      } as never);
+
+      fileSessionRepo.insert({
+        id: "s-no-shadow",
+        workspace_id: "ws-1",
+        terminal_id: "t-1",
+        provider_id: "claude-cli",
+        capability: "full",
+        state: "running",
+        started_at: 1000,
+        last_active_at: 1000,
+        ended_at: null,
+        completion_percent: null,
+        error_reason: null,
+        archived: 0,
+        title: null,
+        draft: null,
+      } as never);
+
+      expect(db.prepare("SELECT * FROM sessions WHERE id = ?").get("s-no-shadow")).toBeUndefined();
     });
 
     it("lists hydratable sessions from file-backed state", () => {
@@ -442,7 +463,6 @@ describe("SessionRepo", () => {
 
       const fileSessionRepo = new SessionRepo({
         filePath: join(tempDir, "hydratable-sessions.json"),
-        shadowDb: db,
       } as never);
 
       fileSessionRepo.insert({

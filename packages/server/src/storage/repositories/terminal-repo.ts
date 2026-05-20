@@ -44,7 +44,6 @@ interface TerminalFileRecord {
 export interface TerminalRepoOptions {
   filePath: string;
   legacyDb?: Database;
-  shadowDb?: Database;
 }
 
 function isDatabase(value: Database | TerminalRepoOptions): value is Database {
@@ -124,8 +123,6 @@ export class TerminalRepo {
   private readonly db?: Database;
   private readonly filePath?: string;
   private readonly legacyDb?: Database;
-  private readonly shadowDb?: Database;
-  private shadowSynced = false;
 
   constructor(input: Database | TerminalRepoOptions) {
     if (isDatabase(input)) {
@@ -135,7 +132,6 @@ export class TerminalRepo {
 
     this.filePath = input.filePath;
     this.legacyDb = input.legacyDb;
-    this.shadowDb = input.shadowDb;
   }
 
   private rowToTerminal(row: TerminalRow): Terminal {
@@ -175,9 +171,7 @@ export class TerminalRepo {
       this.filePath
     );
     if (parsed !== undefined) {
-      const terminals = normalizeTerminalFile(parsed);
-      this.ensureShadowRows(terminals);
-      return terminals;
+      return normalizeTerminalFile(parsed);
     }
 
     if (!this.legacyDb) {
@@ -188,7 +182,6 @@ export class TerminalRepo {
     if (Object.keys(migrated).length > 0) {
       this.saveFileTerminals(migrated);
     }
-    this.ensureShadowRows(migrated);
     return migrated;
   }
 
@@ -202,60 +195,6 @@ export class TerminalRepo {
       terminals,
     };
     writeJsonFileAtomic(this.filePath, payload);
-  }
-
-  private ensureShadowRows(terminals: Record<string, Terminal>): void {
-    if (!this.shadowDb || this.shadowSynced) {
-      return;
-    }
-
-    for (const terminal of Object.values(terminals)) {
-      this.upsertShadowRow(terminal);
-    }
-
-    this.shadowSynced = true;
-  }
-
-  private upsertShadowRow(terminal: Terminal): void {
-    if (!this.shadowDb) {
-      return;
-    }
-
-    this.shadowDb
-      .prepare(
-        `INSERT INTO terminals (id, workspace_id, kind, cwd, argv, env, title, cols, rows, created_at, ended_at, exit_code)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(id) DO UPDATE SET
-           workspace_id = excluded.workspace_id,
-           kind = excluded.kind,
-           cwd = excluded.cwd,
-           argv = excluded.argv,
-           env = excluded.env,
-           title = excluded.title,
-           cols = excluded.cols,
-           rows = excluded.rows,
-           created_at = excluded.created_at,
-           ended_at = excluded.ended_at,
-           exit_code = excluded.exit_code`
-      )
-      .run(
-        terminal.id,
-        terminal.workspaceId,
-        terminal.kind,
-        terminal.cwd,
-        JSON.stringify(terminal.argv),
-        terminal.env ? JSON.stringify(terminal.env) : null,
-        terminal.title || null,
-        terminal.cols,
-        terminal.rows,
-        terminal.createdAt,
-        terminal.endedAt ?? null,
-        terminal.exitCode ?? null
-      );
-  }
-
-  private deleteShadowRow(id: string): void {
-    this.shadowDb?.prepare("DELETE FROM terminals WHERE id = ?").run(id);
   }
 
   private sortTerminals(terminals: Record<string, Terminal>): Terminal[] {
@@ -351,7 +290,6 @@ export class TerminalRepo {
     const terminals = this.loadFileTerminals();
     terminals[nextTerminal.id] = nextTerminal;
     this.saveFileTerminals(terminals);
-    this.upsertShadowRow(nextTerminal);
     return nextTerminal;
   }
 
@@ -397,7 +335,6 @@ export class TerminalRepo {
       exitCode,
     };
     this.saveFileTerminals(terminals);
-    this.upsertShadowRow(terminals[id]);
   }
 
   /**
@@ -422,7 +359,6 @@ export class TerminalRepo {
       rows,
     };
     this.saveFileTerminals(terminals);
-    this.upsertShadowRow(terminals[id]);
   }
 
   /**
@@ -446,7 +382,6 @@ export class TerminalRepo {
       title,
     };
     this.saveFileTerminals(terminals);
-    this.upsertShadowRow(terminals[id]);
   }
 
   /**
@@ -466,6 +401,5 @@ export class TerminalRepo {
 
     delete terminals[id];
     this.saveFileTerminals(terminals);
-    this.deleteShadowRow(id);
   }
 }

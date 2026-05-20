@@ -266,10 +266,9 @@ describe("TerminalRepo", () => {
   });
 
   describe("file-backed persistence", () => {
-    it("reads terminal metadata from the file store when shadow rows are missing", () => {
+    it("reads terminal metadata directly from the file store", () => {
       const fileRepo = new TerminalRepo({
         filePath: join(tempDir, "terminals.json"),
-        shadowDb: db,
       } as never);
 
       fileRepo.insert({
@@ -284,8 +283,6 @@ describe("TerminalRepo", () => {
         createdAt: 1000,
         title: "bash",
       } as never);
-
-      db.prepare("DELETE FROM terminals WHERE id = ?").run("t-file");
 
       expect(fileRepo.findById("t-file")).toMatchObject({
         id: "t-file",
@@ -311,7 +308,6 @@ describe("TerminalRepo", () => {
       const migratedRepo = new TerminalRepo({
         filePath: join(tempDir, "migrated-terminals.json"),
         legacyDb: db,
-        shadowDb: db,
       } as never);
 
       expect(migratedRepo.findById("t-legacy")).toMatchObject({
@@ -322,10 +318,9 @@ describe("TerminalRepo", () => {
       });
     });
 
-    it("deletes the shadow row when deleting a file-backed terminal", () => {
+    it("does not mirror file-backed terminals into sqlite", () => {
       const fileRepo = new TerminalRepo({
         filePath: join(tempDir, "delete-terminals.json"),
-        shadowDb: db,
       } as never);
 
       fileRepo.insert({
@@ -340,9 +335,6 @@ describe("TerminalRepo", () => {
         createdAt: 1000,
       } as never);
 
-      fileRepo.delete("t-delete");
-
-      expect(fileRepo.findById("t-delete")).toBeUndefined();
       expect(db.prepare("SELECT * FROM terminals WHERE id = ?").get("t-delete")).toBeUndefined();
     });
   });

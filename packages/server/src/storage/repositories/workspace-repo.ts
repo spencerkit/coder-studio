@@ -36,7 +36,6 @@ interface WorkspaceFileRecord {
 export interface WorkspaceRepoOptions {
   filePath: string;
   legacyDb?: Database;
-  shadowDb?: Database;
 }
 
 function isDatabase(value: Database | WorkspaceRepoOptions): value is Database {
@@ -106,8 +105,6 @@ export class WorkspaceRepo {
   private readonly db?: Database;
   private readonly filePath?: string;
   private readonly legacyDb?: Database;
-  private readonly shadowDb?: Database;
-  private shadowSynced = false;
 
   constructor(input: Database | WorkspaceRepoOptions) {
     if (isDatabase(input)) {
@@ -117,7 +114,6 @@ export class WorkspaceRepo {
 
     this.filePath = input.filePath;
     this.legacyDb = input.legacyDb;
-    this.shadowDb = input.shadowDb;
   }
 
   private readAllDbWorkspaces(db: Database | undefined = this.db): Record<string, Workspace> {
@@ -139,9 +135,7 @@ export class WorkspaceRepo {
       this.filePath
     );
     if (parsed !== undefined) {
-      const workspaces = normalizeWorkspaceFile(parsed);
-      this.ensureShadowRows(workspaces);
-      return workspaces;
+      return normalizeWorkspaceFile(parsed);
     }
 
     if (!this.legacyDb) {
@@ -152,7 +146,6 @@ export class WorkspaceRepo {
     if (Object.keys(migrated).length > 0) {
       this.saveFileWorkspaces(migrated);
     }
-    this.ensureShadowRows(migrated);
     return migrated;
   }
 
@@ -166,50 +159,6 @@ export class WorkspaceRepo {
       workspaces,
     };
     writeJsonFileAtomic(this.filePath, payload);
-  }
-
-  private ensureShadowRows(workspaces: Record<string, Workspace>): void {
-    if (!this.shadowDb || this.shadowSynced) {
-      return;
-    }
-
-    for (const workspace of Object.values(workspaces)) {
-      this.upsertShadowRow(workspace);
-    }
-
-    this.shadowSynced = true;
-  }
-
-  private upsertShadowRow(workspace: Workspace): void {
-    if (!this.shadowDb) {
-      return;
-    }
-
-    this.shadowDb
-      .prepare(
-        `INSERT INTO workspaces (id, path, target_runtime, wsl_distro, opened_at, last_active_at, ui_state)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(id) DO UPDATE SET
-           path = excluded.path,
-           target_runtime = excluded.target_runtime,
-           wsl_distro = excluded.wsl_distro,
-           opened_at = excluded.opened_at,
-           last_active_at = excluded.last_active_at,
-           ui_state = excluded.ui_state`
-      )
-      .run(
-        workspace.id,
-        workspace.path,
-        workspace.targetRuntime,
-        workspace.wslDistro ?? null,
-        workspace.openedAt,
-        workspace.lastActiveAt,
-        JSON.stringify(workspace.uiState)
-      );
-  }
-
-  private deleteShadowRow(id: string): void {
-    this.shadowDb?.prepare("DELETE FROM workspaces WHERE id = ?").run(id);
   }
 
   private sortWorkspaces(workspaces: Record<string, Workspace>): Workspace[] {
@@ -301,7 +250,6 @@ export class WorkspaceRepo {
 
     next[created.id] = created;
     this.saveFileWorkspaces(next);
-    this.upsertShadowRow(created);
 
     return created;
   }
@@ -328,7 +276,6 @@ export class WorkspaceRepo {
     };
     next[id] = updated;
     this.saveFileWorkspaces(next);
-    this.upsertShadowRow(updated);
   }
 
   /**
@@ -353,7 +300,6 @@ export class WorkspaceRepo {
     };
     next[id] = updated;
     this.saveFileWorkspaces(next);
-    this.upsertShadowRow(updated);
   }
 
   /**
@@ -373,7 +319,6 @@ export class WorkspaceRepo {
 
     delete next[id];
     this.saveFileWorkspaces(next);
-    this.deleteShadowRow(id);
   }
 
   /**
