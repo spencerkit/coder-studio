@@ -47,6 +47,48 @@ export interface TerminalSnapshotBinaryResult {
   source: "headless";
 }
 
+export const RECOVERY_REASONS = [
+  "initial_mount",
+  "foreground_resume",
+  "network_online",
+  "socket_reconnected",
+  "seq_gap",
+  "continuity_lost",
+] as const;
+
+export type RecoveryReason = (typeof RECOVERY_REASONS)[number];
+
+export interface RecoveryReconcileTerminalRequest {
+  terminalId: string;
+  renderedSeq: number;
+}
+
+export interface RecoveryReconcileRequest {
+  reason: RecoveryReason;
+  terminals: RecoveryReconcileTerminalRequest[];
+}
+
+export type RecoveryReconcileDecision =
+  | { terminalId: string; action: "noop"; headSeq: number }
+  | { terminalId: string; action: "replay"; fromSeq: number; headSeq: number }
+  | { terminalId: string; action: "snapshot"; headSeq: number }
+  | { terminalId: string; action: "closed"; headSeq: number; exitCode?: number }
+  | {
+      terminalId: string;
+      action: "unrecoverable";
+      reason: "too_old_no_snapshot" | "unknown_terminal";
+    };
+
+export interface RecoveryReconcileResult {
+  terminals: RecoveryReconcileDecision[];
+}
+
+export interface TerminalContinuityLostEvent {
+  workspaceId: string;
+  terminalId: string;
+  reason: "stream_drop" | "topic_evicted";
+}
+
 export const TERMINAL_INPUT_ACTIVITIES = [
   "typing",
   "submit",

@@ -26,6 +26,8 @@ export const Topics = {
     `workspace.${workspaceId}.terminal.${terminalId}.created`,
   terminalOutput: (workspaceId: string, terminalId: string) =>
     `workspace.${workspaceId}.terminal.${terminalId}.output`,
+  terminalContinuityLost: (workspaceId: string, terminalId: string) =>
+    `workspace.${workspaceId}.terminal.${terminalId}.continuity_lost`,
   terminalExit: (workspaceId: string, terminalId: string) =>
     `workspace.${workspaceId}.terminal.${terminalId}.exit`,
   terminalsAll: (workspaceId: string) => `workspace.${workspaceId}.terminal.*`,
