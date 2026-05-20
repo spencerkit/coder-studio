@@ -4,8 +4,11 @@ import {
   cloneElement,
   type FocusEvent,
   isValidElement,
+  type KeyboardEvent,
   type MouseEvent,
   type ReactElement,
+  type PointerEvent as ReactPointerEvent,
+  useEffect,
   useId,
   useLayoutEffect,
   useMemo,
@@ -27,14 +30,56 @@ interface Position {
   readonly top: number;
 }
 
+interface TooltipOutsideEvent {
+  readonly target: EventTarget | null;
+}
+
+type TooltipOutsideSubscriber = (event: TooltipOutsideEvent) => void;
+
 type TriggerProps = {
   "aria-describedby"?: string;
   disabled?: boolean;
   onBlur?: (event: FocusEvent<HTMLElement>) => void;
   onFocus?: (event: FocusEvent<HTMLElement>) => void;
+  onKeyDown?: (event: KeyboardEvent<HTMLElement>) => void;
   onMouseEnter?: (event: MouseEvent<HTMLElement>) => void;
   onMouseLeave?: (event: MouseEvent<HTMLElement>) => void;
+  onPointerDown?: (event: ReactPointerEvent<HTMLElement>) => void;
 };
+
+const tooltipOutsideSubscribers = new Set<TooltipOutsideSubscriber>();
+let removeTooltipPointerDownListener: (() => void) | null = null;
+
+function ensureTooltipPointerDownListener() {
+  if (removeTooltipPointerDownListener || typeof document === "undefined") {
+    return;
+  }
+
+  const handlePointerDown = (event: globalThis.PointerEvent) => {
+    for (const subscriber of tooltipOutsideSubscribers) {
+      subscriber({ target: event.target });
+    }
+  };
+
+  document.addEventListener("pointerdown", handlePointerDown, true);
+  removeTooltipPointerDownListener = () => {
+    document.removeEventListener("pointerdown", handlePointerDown, true);
+    removeTooltipPointerDownListener = null;
+  };
+}
+
+function subscribeTooltipOutsidePointerDown(subscriber: TooltipOutsideSubscriber) {
+  ensureTooltipPointerDownListener();
+  tooltipOutsideSubscribers.add(subscriber);
+
+  return () => {
+    tooltipOutsideSubscribers.delete(subscriber);
+
+    if (tooltipOutsideSubscribers.size === 0) {
+      removeTooltipPointerDownListener?.();
+    }
+  };
+}
 
 function isTriggerElement(child: unknown): child is ReactElement<TriggerProps> {
   return isValidElement(child);
@@ -46,6 +91,7 @@ export function Tooltip({ children, content, disabled = false }: TooltipProps) {
   const tooltipId = useId();
   const triggerRef = useRef<HTMLElement | null>(null);
   const tooltipRef = useRef<HTMLDivElement | null>(null);
+  const pointerFocusRef = useRef(false);
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
   const [position, setPosition] = useState<Position>({ left: 0, top: 0 });
@@ -94,6 +140,27 @@ export function Tooltip({ children, content, disabled = false }: TooltipProps) {
     });
   }, [open]);
 
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    return subscribeTooltipOutsidePointerDown(({ target }) => {
+      if (!(target instanceof Node)) {
+        setHovered(false);
+        setFocused(false);
+        return;
+      }
+
+      if (triggerRef.current?.contains(target)) {
+        return;
+      }
+
+      setHovered(false);
+      setFocused(false);
+    });
+  }, [open]);
+
   const trigger = isDisabledTrigger
     ? cloneElement(child, {
         "aria-describedby": describedBy,
@@ -102,14 +169,19 @@ export function Tooltip({ children, content, disabled = false }: TooltipProps) {
         "aria-describedby": describedBy,
         onBlur: (event: FocusEvent<HTMLElement>) => {
           child.props.onBlur?.(event);
+          pointerFocusRef.current = false;
           setFocused(false);
         },
         onFocus: (event: FocusEvent<HTMLElement>) => {
           child.props.onFocus?.(event);
           if (!event.defaultPrevented && isInteractive) {
             triggerRef.current = event.currentTarget;
-            setFocused(true);
+            setFocused(!pointerFocusRef.current);
           }
+        },
+        onKeyDown: (event: KeyboardEvent<HTMLElement>) => {
+          child.props.onKeyDown?.(event);
+          pointerFocusRef.current = false;
         },
         onMouseEnter: (event: MouseEvent<HTMLElement>) => {
           child.props.onMouseEnter?.(event);
@@ -121,6 +193,12 @@ export function Tooltip({ children, content, disabled = false }: TooltipProps) {
         onMouseLeave: (event: MouseEvent<HTMLElement>) => {
           child.props.onMouseLeave?.(event);
           setHovered(false);
+        },
+        onPointerDown: (event: ReactPointerEvent<HTMLElement>) => {
+          child.props.onPointerDown?.(event);
+          if (!event.defaultPrevented) {
+            pointerFocusRef.current = true;
+          }
         },
       });
 

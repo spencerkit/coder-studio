@@ -45,6 +45,65 @@ describe("Tooltip", () => {
     expect(trigger).not.toHaveAttribute("aria-describedby");
   });
 
+  it("removes the tooltip after clicking the trigger and leaving with the pointer", () => {
+    render(
+      <Tooltip content="Quick Actions">
+        <button type="button">Trigger</button>
+      </Tooltip>
+    );
+
+    const trigger = screen.getByRole("button", { name: "Trigger" });
+
+    fireEvent.mouseEnter(trigger);
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Quick Actions");
+
+    fireEvent.pointerDown(trigger);
+    fireEvent.focus(trigger);
+    fireEvent.mouseLeave(trigger);
+
+    expect(screen.queryByRole("tooltip")).toBeNull();
+  });
+
+  it("removes the tooltip on outside pointerdown even when focus stays on the trigger", () => {
+    render(
+      <div>
+        <Tooltip content="Quick Actions">
+          <button type="button">Trigger</button>
+        </Tooltip>
+        <div data-testid="outside">Outside</div>
+      </div>
+    );
+
+    const trigger = screen.getByRole("button", { name: "Trigger" });
+    const outside = screen.getByTestId("outside");
+
+    fireEvent.mouseEnter(trigger);
+    fireEvent.pointerDown(trigger);
+    fireEvent.focus(trigger);
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Quick Actions");
+
+    fireEvent.pointerDown(outside);
+
+    expect(screen.queryByRole("tooltip")).toBeNull();
+  });
+
+  it("keeps keyboard-focused tooltips visible after pointer leave", () => {
+    render(
+      <Tooltip content="Quick Actions">
+        <button type="button">Trigger</button>
+      </Tooltip>
+    );
+
+    const trigger = screen.getByRole("button", { name: "Trigger" });
+
+    fireEvent.focus(trigger);
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Quick Actions");
+
+    fireEvent.mouseLeave(trigger);
+
+    expect(screen.getByRole("tooltip")).toBeInTheDocument();
+  });
+
   it("preserves existing trigger handlers while adding tooltip behavior", () => {
     const onFocus = vi.fn();
     const onMouseEnter = vi.fn();
