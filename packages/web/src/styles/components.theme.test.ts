@@ -960,6 +960,7 @@ describe("components.css theme-sensitive surfaces", () => {
     );
     const introTitle = getLastRuleBlock(".supervisor-dialog-intro__title");
     const introDescription = getLastRuleBlock(".supervisor-dialog-intro__description");
+    const objectiveLabelRow = getLastRuleBlock(".supervisor-objective-label-row");
     const compactInputGroup = getLastGroupedRuleBlock(
       /\.supervisor-dialog \.input,\s*\n\.supervisor-dialog \.mobile-select-trigger\s*\{([^}]*)\}/g
     );
@@ -979,6 +980,10 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(introTitle).toContain("line-height: var(--type-body-line-height)");
     expect(introDescription).toContain("font-size: var(--type-meta-size)");
     expect(introDescription).toContain("line-height: var(--type-meta-line-height)");
+    expect(objectiveLabelRow).toContain("display: flex");
+    expect(objectiveLabelRow).toContain("align-items: center");
+    expect(objectiveLabelRow).toContain("justify-content: space-between");
+    expect(objectiveLabelRow).toContain("gap: var(--sp-2)");
     expect(compactInputGroup).toContain("font-size: var(--type-label-size)");
     expect(compactInputGroup).toContain("line-height: var(--type-label-line-height)");
     expect(textarea).toContain("font-size: var(--type-code-inline-size)");
