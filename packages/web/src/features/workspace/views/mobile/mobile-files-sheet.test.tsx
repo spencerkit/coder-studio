@@ -25,18 +25,8 @@ vi.mock("../../../code-editor/views/shared/code-editor-host", () => ({
   CodeEditorHost: () => <div data-testid="code-editor-host" />,
 }));
 
-vi.mock("../shared/git-diff-viewer", () => ({
-  GitDiffViewer: () => <div data-testid="git-diff-viewer" />,
-}));
-
 vi.mock("../shared/git-panel", () => ({
   GitPanel: () => <div data-testid="git-panel" />,
-}));
-
-vi.mock("../../actions/use-git-actions", () => ({
-  useGitDiffViewerActions: () => ({
-    closePreview: vi.fn(),
-  }),
 }));
 
 describe("MobileFilesSheet", () => {
@@ -85,5 +75,20 @@ describe("MobileFilesSheet", () => {
     expect(filesTab).not.toHaveClass("panel-tab");
     expect(gitTab).toHaveClass("mobile-files-sheet__segment", "active");
     expect(gitTab).not.toHaveClass("panel-tab");
+  });
+
+  it("uses one file detail surface for preview edit and diff instead of separate editor and diff pages", () => {
+    render(
+      <Provider store={createStore()}>
+        <MobileFilesSheet
+          workspaceId="ws-test"
+          route={{ kind: "file", path: "src/app.tsx" }}
+          activeTab="files"
+        />
+      </Provider>
+    );
+
+    expect(screen.getByTestId("code-editor-host")).toBeInTheDocument();
+    expect(screen.queryByTestId("git-diff-viewer")).not.toBeInTheDocument();
   });
 });

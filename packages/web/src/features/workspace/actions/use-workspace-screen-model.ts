@@ -26,10 +26,7 @@ import { useWorkspaceLayoutActions } from "./use-workspace-layout-actions";
 export type WorkspaceSidebarTab = "files" | "git";
 export type WorkspaceMainAreaMode = "agent" | "editor";
 export type MobileWorkspaceSheetKind = "files" | "terminal" | "supervisor" | null;
-export type MobileFilesRoute =
-  | { kind: "root" }
-  | { kind: "editor"; path: string }
-  | { kind: "diff"; path: string };
+export type MobileFilesRoute = { kind: "root" } | { kind: "file"; path: string };
 
 export interface WorkspaceCreateRequest {
   id: number;

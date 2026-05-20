@@ -29,12 +29,12 @@ vi.mock("../../components/monaco-host", () => ({
   MonacoHost: () => <div data-testid="monaco-host-mock" />,
 }));
 
-vi.mock("../../components/image-preview", () => ({
-  ImagePreview: () => <div data-testid="image-preview-mock" />,
+vi.mock("../../components/monaco-diff-host", () => ({
+  MonacoDiffHost: () => <div data-testid="monaco-diff-host-mock" />,
 }));
 
-vi.mock("../../../workspace/views/shared/git-diff-viewer", () => ({
-  GitDiffViewer: () => <div data-testid="git-diff-viewer-mock" />,
+vi.mock("../../components/image-preview", () => ({
+  ImagePreview: () => <div data-testid="image-preview-mock" />,
 }));
 
 function createState(overrides: Partial<CodeEditorState> = {}): CodeEditorState {
@@ -165,6 +165,10 @@ describe("CodeEditorHeaderActions", () => {
       activeDiffChange: {
         path: "src/app.tsx",
         diff: "diff --git a/src/app.tsx b/src/app.tsx",
+        renderAs: "text",
+        status: "modified",
+        originalContent: "const app = 0;",
+        modifiedContent: "const app = 1;",
         source: "file",
       },
       currentFile: {
@@ -179,8 +183,7 @@ describe("CodeEditorHeaderActions", () => {
 
     render(<CodeEditorView state={state} />);
 
-    expect(screen.getByTestId("git-diff-viewer-mock")).toBeInTheDocument();
-    expect(screen.queryByTestId("monaco-host-mock")).not.toBeInTheDocument();
+    expect(screen.getByTestId("monaco-diff-host-mock")).toBeInTheDocument();
   });
 
   it("renders commit-history diff preview without an active file", () => {
@@ -210,6 +213,7 @@ describe("CodeEditorHeaderActions", () => {
 
     render(<CodeEditorView state={state} />);
 
-    expect(screen.getByTestId("git-diff-viewer-mock")).toBeInTheDocument();
+    expect(screen.getByText("abc123 · commit subject")).toBeInTheDocument();
+    expect(screen.getByTestId("monaco-diff-host-mock")).toBeInTheDocument();
   });
 });

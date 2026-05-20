@@ -7,6 +7,7 @@ import {
   deriveEditorModeForOpenFile,
   editorModeAtomFamily,
   editorRefreshTokenAtomFamily,
+  type GitDiffPreview,
   gitDiffPreviewAtomFamily,
   gitStateAtomFamily,
   type OpenFile,
@@ -32,6 +33,16 @@ type FileReadImagePayload = {
 };
 
 type FileReadPayload = FileReadTextPayload | FileReadImagePayload;
+
+type GitDiffPayload = {
+  diff: string;
+  renderAs: "text" | "image";
+  status: "modified" | "added" | "deleted";
+  originalContent?: string;
+  modifiedContent?: string;
+  originalRevision?: "HEAD" | "INDEX";
+  modifiedRevision?: "INDEX" | "WORKTREE";
+};
 
 export function useCodeEditorActions() {
   const workspace = useAtomValue(activeWorkspaceAtom);
@@ -542,7 +553,7 @@ export function useCodeEditorActions() {
       return false;
     }
 
-    const result = await dispatch<{ diff: string }>("git.diff", {
+    const result = await dispatch<GitDiffPayload>("git.diff", {
       workspaceId,
       path: currentFile.path,
       staged: false,
@@ -552,12 +563,23 @@ export function useCodeEditorActions() {
       return false;
     }
 
-    setDiffPreview({
+    const nextPreview: GitDiffPreview = {
       path: currentFile.path,
       diff: result.data.diff,
       staged: false,
       source: "file",
-    });
+      ...(result.data.renderAs ? { renderAs: result.data.renderAs } : {}),
+      ...(result.data.status ? { status: result.data.status } : {}),
+      ...(result.data.originalContent !== undefined
+        ? { originalContent: result.data.originalContent }
+        : {}),
+      ...(result.data.modifiedContent !== undefined
+        ? { modifiedContent: result.data.modifiedContent }
+        : {}),
+      ...(result.data.originalRevision ? { originalRevision: result.data.originalRevision } : {}),
+      ...(result.data.modifiedRevision ? { modifiedRevision: result.data.modifiedRevision } : {}),
+    };
+    setDiffPreview(nextPreview);
     setMode("diff");
     return true;
   }, [currentFile, dispatch, setDiffPreview, setMode, workspaceId]);
@@ -567,9 +589,7 @@ export function useCodeEditorActions() {
   const isSvgTextBacked =
     (isImageFile && currentFile.isTextBacked) ||
     (isTextFile && currentFile.viewingTextBackedImageAsText === true);
-  const canPreview =
-    Boolean(currentFile) &&
-    (currentFile?.kind === "image" || currentFile?.viewingTextBackedImageAsText === true);
+  const canPreview = Boolean(currentFile);
   const canEdit =
     Boolean(currentFile) &&
     (currentFile?.kind === "text" || (currentFile?.kind === "image" && currentFile.isTextBacked));
