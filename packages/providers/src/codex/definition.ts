@@ -71,7 +71,15 @@ export const codexDefinition: ProviderDefinition = {
   id: "codex",
   displayName: "Codex",
   badge: "Codex",
+  kind: "built_in",
   capability: "full",
+  capabilities: [
+    { key: "interactive_session", supported: true, label: "Interactive session" },
+    { key: "supervisor_eval", supported: true, label: "Supervisor evaluation" },
+    { key: "idle_detection", supported: true, label: "Idle detection" },
+    { key: "context_attach", supported: false, label: "Context attach" },
+    { key: "review", supported: false, label: "Review" },
+  ],
   install: codexInstallMetadata,
 
   // ===== Command construction =====

@@ -6,7 +6,7 @@
 
 **Goal:** Add a project understanding layer that summarizes Git, package manager, framework, commands, docs, and agent instruction state for the active workspace.
 
-**Architecture:** Server-side workspace inspection produces a typed `WorkspaceIntelligenceSummary`. Web UI consumes it through a command and renders a compact setup/context panel inside the workspace.
+**Architecture:** Server-side workspace inspection produces a typed `WorkspaceIntelligenceSummary`. The command stays server-facing and is reused by later agent-instruction and context flows; no dedicated workspace UI panel is kept in this phase.
 
 **Tech Stack:** TypeScript, Node filesystem APIs, Zod, Vitest, React Testing Library.
 
@@ -18,7 +18,6 @@ Includes:
 
 - Workspace inspection module.
 - `workspace.intelligence` command.
-- Summary panel in the workspace UI.
 - Detection for Git, package managers, package scripts, common frameworks, README/docs, and `AGENTS.md`.
 
 Excludes:
@@ -36,10 +35,6 @@ Excludes:
 - Create: `packages/server/src/__tests__/workspace/intelligence.test.ts`
 - Modify: `packages/server/src/commands/workspace.ts`
 - Create: `packages/server/src/__tests__/workspace-intelligence-command.test.ts`
-- Create: `packages/web/src/features/workspace-intelligence/actions/use-workspace-intelligence.ts`
-- Create: `packages/web/src/features/workspace-intelligence/components/workspace-intelligence-panel.tsx`
-- Create: `packages/web/src/features/workspace-intelligence/components/workspace-intelligence-panel.test.tsx`
-- Modify: `packages/web/src/features/workspace/views/desktop/workspace-desktop-view.tsx`
 
 ## Data Model
 
@@ -96,15 +91,14 @@ export interface WorkspaceIntelligenceSummary {
 - [ ] Detect docs via `README.md` and top-level `docs/`.
 - [ ] Detect `AGENTS.md`.
 - [ ] Register `workspace.intelligence`.
-- [ ] Add a desktop panel showing project type, commands, Git state, docs, and instruction state.
-- [ ] Keep the panel action-oriented: show recommended commands and `AGENTS.md` state instead of a passive dashboard.
+- [ ] Keep the command server-side and reuse it for later agent-instruction and context features.
 
 ## Acceptance Criteria
 
 - Opening a workspace can produce a stable typed summary.
 - Summary works for non-Git folders.
 - Summary works when `package.json` is missing.
-- UI makes clear whether `AGENTS.md` exists.
+- UI surfaces for `AGENTS.md` are deferred to the agent-instructions phase.
 - No provider-specific assumptions are required.
 
 ## Verification
@@ -112,8 +106,7 @@ export interface WorkspaceIntelligenceSummary {
 ```bash
 pnpm exec vitest run \
   packages/server/src/__tests__/workspace/intelligence.test.ts \
-  packages/server/src/__tests__/workspace-intelligence-command.test.ts \
-  packages/web/src/features/workspace-intelligence/components/workspace-intelligence-panel.test.tsx
+  packages/server/src/__tests__/workspace-intelligence-command.test.ts
 ```
 
 Expected: all tests pass.
@@ -124,4 +117,3 @@ Expected: all tests pass.
 git add packages/core packages/server packages/web/src/features/workspace-intelligence packages/web/src/features/workspace/views/desktop/workspace-desktop-view.tsx
 git commit -m "feat: add workspace intelligence summary"
 ```
-

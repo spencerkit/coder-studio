@@ -6,6 +6,7 @@ import { readdir, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { z } from "zod";
+import { inspectWorkspaceIntelligence } from "../workspace/intelligence.js";
 import { registerCommand } from "../ws/dispatch.js";
 
 function resolveBrowsePath(path: string | undefined): string {
@@ -83,6 +84,24 @@ registerCommand(
   async (args, ctx) => {
     return ctx.workspaceMgr.open({
       path: args.path,
+    });
+  }
+);
+
+registerCommand(
+  "workspace.intelligence",
+  z.object({
+    workspaceId: z.string(),
+  }),
+  async (args, ctx) => {
+    const workspace = ctx.workspaceMgr.get(args.workspaceId);
+    if (!workspace) {
+      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
+    }
+
+    return inspectWorkspaceIntelligence({
+      workspaceId: workspace.id,
+      rootPath: workspace.path,
     });
   }
 );

@@ -1,6 +1,11 @@
+import { toProviderListItem } from "@coder-studio/providers";
 import { z } from "zod";
 import { buildProviderRuntimeStatus } from "../provider-runtime/runtime-status.js";
 import { registerCommand } from "../ws/dispatch.js";
+
+registerCommand("provider.list", z.object({}), async (_args, ctx) => {
+  return ctx.providerRegistry.map((provider) => toProviderListItem(provider));
+});
 
 registerCommand("provider.runtimeStatus", z.object({}), async (_args, ctx) => {
   return buildProviderRuntimeStatus(ctx.providerRegistry, ctx.providerRuntimeDeps);

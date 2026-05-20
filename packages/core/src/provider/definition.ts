@@ -27,16 +27,43 @@ export interface SupervisorEvalCommandRequest {
   outputFile?: string;
 }
 
+export type ProviderKind = "built_in" | "preset" | "custom";
+
+export type ProviderCapabilityKey =
+  | "interactive_session"
+  | "supervisor_eval"
+  | "idle_detection"
+  | "context_attach"
+  | "review";
+
+export interface ProviderCapabilityDescriptor {
+  key: ProviderCapabilityKey;
+  supported: boolean;
+  label: string;
+}
+
+export interface ProviderListItem {
+  id: string;
+  displayName: string;
+  badge: string;
+  kind: ProviderKind;
+  capability: "full" | "limited" | "unsupported";
+  capabilities: ProviderCapabilityDescriptor[];
+  requiredCommands: string[];
+}
+
 export interface ProviderDefinition {
   // Metadata
   id: string;
   displayName: string;
   badge: string;
+  kind: ProviderKind;
   /**
    * Declarative label for UI badges and docs only.
    * Runtime behavior must read hooks/events directly.
    */
   capability: "full" | "limited" | "unsupported";
+  capabilities: ProviderCapabilityDescriptor[];
   install: ProviderInstallMetadata;
 
   // Command construction
