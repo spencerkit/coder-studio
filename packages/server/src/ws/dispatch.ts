@@ -16,6 +16,8 @@ import type { ProviderInstallManager } from "../provider-runtime/install-manager
 import type { RuntimeStatusDeps } from "../provider-runtime/runtime-status.js";
 import type { SessionManager } from "../session/manager.js";
 import type { Database } from "../storage/database.js";
+import type { ProviderConfigRepo } from "../storage/repositories/provider-config-repo.js";
+import type { SettingsRepo } from "../storage/repositories/settings-repo.js";
 import type { SupervisorManager } from "../supervisor/manager.js";
 import type { TerminalManager } from "../terminal/manager.js";
 import type { WorkspaceManager } from "../workspace/manager.js";
@@ -33,6 +35,8 @@ export interface CommandContext {
   eventBus: EventBus;
   broadcaster: Broadcaster;
   db: Database;
+  settingsRepo: SettingsRepo;
+  providerConfigRepo: ProviderConfigRepo;
   providerRegistry: ProviderDefinition[];
   fencingMgr: FencingManager;
   supervisorMgr: SupervisorManager;

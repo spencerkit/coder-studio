@@ -3,6 +3,9 @@
  *
  * Creates and assembles all server components.
  */
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import {
   deleteRuntimeConfig,
   getRuntimePath,
@@ -66,6 +69,11 @@ export async function createServer(
   configOverrides?: Partial<ServerConfig> & ServerRuntimeOptions
 ): Promise<Server> {
   const config = parseServerConfig(configOverrides);
+  const stateRoot =
+    config.dataDir === ":memory:"
+      ? mkdtempSync(join(tmpdir(), "coder-studio-state-"))
+      : dirname(config.dataDir);
+  const shouldCleanupStateRoot = config.dataDir === ":memory:";
 
   ensureDataDir(config);
 
@@ -84,7 +92,10 @@ export async function createServer(
     db: createTerminalDatabase(db),
   });
 
-  const settingsRepo = new SettingsRepo(db);
+  const settingsRepo = new SettingsRepo({
+    filePath: join(stateRoot, "state", "settings.json"),
+    legacyDb: db,
+  });
   const autoFetch = new AutoFetchScheduler({
     workspaceMgr: { get: (workspaceId) => workspaceMgr.get(workspaceId) },
     eventBus,
@@ -119,7 +130,10 @@ export async function createServer(
   });
 
   const sessionDb = createSessionDatabase(db);
-  const providerConfigRepo = new ProviderConfigRepo(db);
+  const providerConfigRepo = new ProviderConfigRepo({
+    filePath: join(stateRoot, "state", "provider-configs.json"),
+    legacyDb: db,
+  });
   const sessionMgr = new SessionManager({
     terminalMgr,
     eventBus,
@@ -228,6 +242,8 @@ export async function createServer(
     eventBus,
     broadcaster: wsHub,
     db,
+    settingsRepo,
+    providerConfigRepo,
     providerRegistry,
     fencingMgr,
     supervisorMgr,
@@ -287,6 +303,9 @@ export async function createServer(
     terminalMgr.shutdown();
     wsHub.destroy();
     eventBus.clear();
+    if (shouldCleanupStateRoot) {
+      rmSync(stateRoot, { recursive: true, force: true });
+    }
     deleteRuntimeConfig();
     db.close();
   };

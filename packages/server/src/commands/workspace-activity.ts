@@ -44,15 +44,12 @@ registerCommand("workspace.deactivate", z.object({}), async (_args, ctx, clientI
 });
 
 registerCommand("workspace.lastViewedTarget.get", z.object({}), async (_args, ctx) => {
-  const row = ctx.db
-    .prepare("SELECT value FROM user_settings WHERE key = ?")
-    .get(WORKSPACE_LAST_VIEWED_TARGET_KEY) as { value: string } | undefined;
-
-  if (!row) {
+  const value = ctx.settingsRepo.get<unknown>(WORKSPACE_LAST_VIEWED_TARGET_KEY);
+  if (value === undefined) {
     return null;
   }
 
-  return parseWorkspaceLastViewedTarget(row.value);
+  return parseWorkspaceLastViewedTarget(typeof value === "string" ? value : JSON.stringify(value));
 });
 
 registerCommand(
@@ -78,15 +75,7 @@ registerCommand(
       updatedAt: Date.now(),
     };
 
-    ctx.db
-      .prepare(
-        `
-          INSERT INTO user_settings (key, value)
-          VALUES (?, ?)
-          ON CONFLICT(key) DO UPDATE SET value = excluded.value
-        `
-      )
-      .run(WORKSPACE_LAST_VIEWED_TARGET_KEY, JSON.stringify(nextTarget));
+    ctx.settingsRepo.set(WORKSPACE_LAST_VIEWED_TARGET_KEY, nextTarget);
 
     return nextTarget;
   }

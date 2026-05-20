@@ -1,6 +1,11 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../storage/database.js";
 import { closeDatabase, openDatabase } from "../storage/db.js";
+import { ProviderConfigRepo } from "../storage/repositories/provider-config-repo.js";
+import { SettingsRepo } from "../storage/repositories/settings-repo.js";
 import type { CommandContext } from "../ws/dispatch.js";
 import { dispatch } from "../ws/dispatch.js";
 import "./settings.js";
@@ -8,9 +13,17 @@ import "./settings.js";
 describe("settings commands", () => {
   let db: Database;
   let ctx: CommandContext;
+  let tempDir: string;
+  let settingsRepo: SettingsRepo;
+  let providerConfigRepo: ProviderConfigRepo;
 
   beforeEach(() => {
     db = openDatabase(":memory:");
+    tempDir = mkdtempSync(join(tmpdir(), "settings-command-test-"));
+    settingsRepo = new SettingsRepo({ filePath: join(tempDir, "settings.json") });
+    providerConfigRepo = new ProviderConfigRepo({
+      filePath: join(tempDir, "provider-configs.json"),
+    });
     ctx = {
       workspaceMgr: {} as never,
       sessionMgr: {} as never,
@@ -18,17 +31,23 @@ describe("settings commands", () => {
       eventBus: {} as never,
       broadcaster: {} as never,
       db,
+      settingsRepo,
+      providerConfigRepo,
       providerRegistry: [],
       fencingMgr: {} as never,
       supervisorMgr: {} as never,
+      autoFetch: {} as never,
+      activationMgr: {} as never,
+      lspMgr: {} as never,
     };
   });
 
   afterEach(() => {
     closeDatabase(db);
+    rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it("settings.update persists flattened settings into user_settings", async () => {
+  it("settings.update persists flattened settings into the file-backed settings store", async () => {
     const result = await dispatch(
       {
         kind: "command",
@@ -56,40 +75,18 @@ describe("settings commands", () => {
     );
 
     expect(result.ok).toBe(true);
-    expect(
-      db.prepare("SELECT value FROM user_settings WHERE key = ?").get("defaultProviderId")
-    ).toEqual({ value: '"codex"' });
-    expect(
-      db.prepare("SELECT value FROM user_settings WHERE key = ?").get("notifications.enabled")
-    ).toEqual({ value: "true" });
-    expect(
-      db.prepare("SELECT value FROM user_settings WHERE key = ?").get("notifications.soundEnabled")
-    ).toEqual({ value: "false" });
-    expect(
-      db
-        .prepare("SELECT value FROM user_settings WHERE key = ?")
-        .get("supervisor.evaluationTimeoutSec")
-    ).toEqual({ value: "600" });
-    expect(
-      db.prepare("SELECT value FROM user_settings WHERE key = ?").get("supervisor.retryEnabled")
-    ).toEqual({ value: "true" });
-    expect(
-      db.prepare("SELECT value FROM user_settings WHERE key = ?").get("supervisor.retryMaxCount")
-    ).toEqual({ value: "3" });
-    expect(
-      db.prepare("SELECT value FROM user_settings WHERE key = ?").get("supervisor.retryDelaySec")
-    ).toEqual({ value: "10" });
-    expect(
-      db.prepare("SELECT value FROM user_settings WHERE key = ?").get("supervisor.retryOnTimeout")
-    ).toEqual({ value: "true" });
-    expect(
-      db
-        .prepare("SELECT value FROM user_settings WHERE key = ?")
-        .get("supervisor.retryOnEvaluatorError")
-    ).toEqual({ value: "false" });
+    expect(settingsRepo.get("defaultProviderId")).toBe("codex");
+    expect(settingsRepo.get("notifications.enabled")).toBe(true);
+    expect(settingsRepo.get("notifications.soundEnabled")).toBe(false);
+    expect(settingsRepo.get("supervisor.evaluationTimeoutSec")).toBe(600);
+    expect(settingsRepo.get("supervisor.retryEnabled")).toBe(true);
+    expect(settingsRepo.get("supervisor.retryMaxCount")).toBe(3);
+    expect(settingsRepo.get("supervisor.retryDelaySec")).toBe(10);
+    expect(settingsRepo.get("supervisor.retryOnTimeout")).toBe(true);
+    expect(settingsRepo.get("supervisor.retryOnEvaluatorError")).toBe(false);
   });
 
-  it("settings.update persists appearance.terminalCopyOnSelect into user_settings", async () => {
+  it("settings.update persists appearance.terminalCopyOnSelect into the file-backed settings store", async () => {
     const result = await dispatch(
       {
         kind: "command",
@@ -107,14 +104,10 @@ describe("settings commands", () => {
     );
 
     expect(result.ok).toBe(true);
-    expect(
-      db
-        .prepare("SELECT value FROM user_settings WHERE key = ?")
-        .get("appearance.terminalCopyOnSelect")
-    ).toEqual({ value: "true" });
+    expect(settingsRepo.get("appearance.terminalCopyOnSelect")).toBe(true);
   });
 
-  it("settings.update persists appearance.themeId into user_settings", async () => {
+  it("settings.update persists appearance.themeId into the file-backed settings store", async () => {
     const result = await dispatch(
       {
         kind: "command",
@@ -132,12 +125,10 @@ describe("settings commands", () => {
     );
 
     expect(result.ok).toBe(true);
-    expect(
-      db.prepare("SELECT value FROM user_settings WHERE key = ?").get("appearance.themeId")
-    ).toEqual({ value: '"graphite-light"' });
+    expect(settingsRepo.get("appearance.themeId")).toBe("graphite-light");
   });
 
-  it("settings.update persists appearance.desktopTerminalFontSize into user_settings", async () => {
+  it("settings.update persists appearance.desktopTerminalFontSize into the file-backed settings store", async () => {
     const result = await dispatch(
       {
         kind: "command",
@@ -155,14 +146,10 @@ describe("settings commands", () => {
     );
 
     expect(result.ok).toBe(true);
-    expect(
-      db
-        .prepare("SELECT value FROM user_settings WHERE key = ?")
-        .get("appearance.desktopTerminalFontSize")
-    ).toEqual({ value: "16" });
+    expect(settingsRepo.get("appearance.desktopTerminalFontSize")).toBe(16);
   });
 
-  it("settings.update persists appearance.mobileTerminalFontSize into user_settings", async () => {
+  it("settings.update persists appearance.mobileTerminalFontSize into the file-backed settings store", async () => {
     const result = await dispatch(
       {
         kind: "command",
@@ -180,11 +167,7 @@ describe("settings commands", () => {
     );
 
     expect(result.ok).toBe(true);
-    expect(
-      db
-        .prepare("SELECT value FROM user_settings WHERE key = ?")
-        .get("appearance.mobileTerminalFontSize")
-    ).toEqual({ value: "15" });
+    expect(settingsRepo.get("appearance.mobileTerminalFontSize")).toBe(15);
   });
 
   it("settings.update persists legacy appearance.theme light during themeId migration", async () => {
@@ -205,11 +188,7 @@ describe("settings commands", () => {
     );
 
     expect(result.ok).toBe(true);
-    expect(
-      db.prepare("SELECT value FROM user_settings WHERE key = ?").get("appearance.theme")
-    ).toEqual({
-      value: '"light"',
-    });
+    expect(settingsRepo.get("appearance.theme")).toBe("light");
   });
 
   it("settings.update rejects fractional supervisor timeout values", async () => {
@@ -231,11 +210,7 @@ describe("settings commands", () => {
 
     expect(result.ok).toBe(false);
     expect(result.error?.code).toBe("validation_error");
-    expect(
-      db
-        .prepare("SELECT value FROM user_settings WHERE key = ?")
-        .get("supervisor.evaluationTimeoutSec")
-    ).toBeUndefined();
+    expect(settingsRepo.get("supervisor.evaluationTimeoutSec")).toBeUndefined();
   });
 
   it("settings.update rejects supervisor timeout values above the supported maximum", async () => {
@@ -283,9 +258,7 @@ describe("settings commands", () => {
 
     expect(result.ok).toBe(false);
     expect(result.error?.code).toBe("validation_error");
-    expect(
-      db.prepare("SELECT value FROM user_settings WHERE key = ?").get("supervisor.retryDelaySec")
-    ).toBeUndefined();
+    expect(settingsRepo.get("supervisor.retryDelaySec")).toBeUndefined();
   });
 
   it("settings.update rejects desktopTerminalFontSize values below the supported minimum", async () => {
@@ -307,11 +280,7 @@ describe("settings commands", () => {
 
     expect(result.ok).toBe(false);
     expect(result.error?.code).toBe("validation_error");
-    expect(
-      db
-        .prepare("SELECT value FROM user_settings WHERE key = ?")
-        .get("appearance.desktopTerminalFontSize")
-    ).toBeUndefined();
+    expect(settingsRepo.get("appearance.desktopTerminalFontSize")).toBeUndefined();
   });
 
   it("settings.update rejects mobileTerminalFontSize values above the supported maximum", async () => {
@@ -333,11 +302,7 @@ describe("settings commands", () => {
 
     expect(result.ok).toBe(false);
     expect(result.error?.code).toBe("validation_error");
-    expect(
-      db
-        .prepare("SELECT value FROM user_settings WHERE key = ?")
-        .get("appearance.mobileTerminalFontSize")
-    ).toBeUndefined();
+    expect(settingsRepo.get("appearance.mobileTerminalFontSize")).toBeUndefined();
   });
 
   it("settings.update rejects fractional desktopTerminalFontSize values", async () => {
@@ -359,14 +324,10 @@ describe("settings commands", () => {
 
     expect(result.ok).toBe(false);
     expect(result.error?.code).toBe("validation_error");
-    expect(
-      db
-        .prepare("SELECT value FROM user_settings WHERE key = ?")
-        .get("appearance.desktopTerminalFontSize")
-    ).toBeUndefined();
+    expect(settingsRepo.get("appearance.desktopTerminalFontSize")).toBeUndefined();
   });
 
-  it("settings.update persists provider startup command arguments per provider config", async () => {
+  it("settings.update persists provider startup command arguments into the file-backed provider config store", async () => {
     const result = await dispatch(
       {
         kind: "command",
@@ -389,19 +350,19 @@ describe("settings commands", () => {
     );
 
     expect(result.ok).toBe(true);
-    expect(
-      db.prepare("SELECT config FROM provider_configs WHERE provider_id = ?").get("claude")
-    ).toEqual({ config: '{"additionalArgs":["--verbose","--debug"]}' });
-    expect(
-      db.prepare("SELECT config FROM provider_configs WHERE provider_id = ?").get("codex")
-    ).toEqual({ config: '{"additionalArgs":["-c","model_reasoning_effort=\\"low\\""]}' });
+    expect(providerConfigRepo.get("claude")).toEqual({
+      additionalArgs: ["--verbose", "--debug"],
+    });
+    expect(providerConfigRepo.get("codex")).toEqual({
+      additionalArgs: ["-c", 'model_reasoning_effort="low"'],
+    });
   });
 
   it("settings.update replaces legacy provider fields with startup args only", async () => {
-    db.prepare("INSERT INTO provider_configs (provider_id, config) VALUES (?, ?)").run(
-      "codex",
-      '{"additionalArgs":["--old"],"cwd":"/tmp/legacy"}'
-    );
+    providerConfigRepo.set("codex", {
+      additionalArgs: ["--old"],
+      cwd: "/tmp/legacy",
+    });
 
     const result = await dispatch(
       {
@@ -422,20 +383,16 @@ describe("settings commands", () => {
     );
 
     expect(result.ok).toBe(true);
-    expect(
-      db.prepare("SELECT config FROM provider_configs WHERE provider_id = ?").get("codex")
-    ).toEqual({ config: '{"additionalArgs":["--sandbox","--full-auto"]}' });
+    expect(providerConfigRepo.get("codex")).toEqual({
+      additionalArgs: ["--sandbox", "--full-auto"],
+    });
   });
 
   it("settings.get exposes provider startup arguments per provider", async () => {
-    db.prepare("INSERT INTO provider_configs (provider_id, config) VALUES (?, ?)").run(
-      "claude",
-      '{"additionalArgs":["--verbose"]}'
-    );
-    db.prepare("INSERT INTO provider_configs (provider_id, config) VALUES (?, ?)").run(
-      "codex",
-      '{"additionalArgs":["--sandbox","--full-auto"]}'
-    );
+    providerConfigRepo.set("claude", { additionalArgs: ["--verbose"] });
+    providerConfigRepo.set("codex", {
+      additionalArgs: ["--sandbox", "--full-auto"],
+    });
 
     const result = await dispatch(
       {
@@ -455,18 +412,14 @@ describe("settings commands", () => {
   });
 
   it("settings.get ignores legacy provider keys and sanitizes stored configs", async () => {
-    db.prepare("INSERT INTO user_settings (key, value) VALUES (?, ?)").run(
-      "providers.codex.additionalArgs",
-      '["--legacy-user-setting"]'
-    );
-    db.prepare("INSERT INTO provider_configs (provider_id, config) VALUES (?, ?)").run(
-      "claude",
-      '{"additionalArgs":["--verbose"],"model":"claude-opus-4-6"}'
-    );
-    db.prepare("INSERT INTO provider_configs (provider_id, config) VALUES (?, ?)").run(
-      "openai",
-      '{"additionalArgs":["--ignore-me"]}'
-    );
+    settingsRepo.set("providers.codex.additionalArgs", ["--legacy-user-setting"]);
+    providerConfigRepo.set("claude", {
+      additionalArgs: ["--verbose"],
+      model: "claude-opus-4-6",
+    });
+    providerConfigRepo.set("openai", {
+      additionalArgs: ["--ignore-me"],
+    });
 
     const result = await dispatch(
       {
@@ -485,39 +438,15 @@ describe("settings commands", () => {
     expect(result.data?.["providers.openai.additionalArgs"]).toBeUndefined();
   });
 
-  it("settings.get reads settings from user_settings", async () => {
-    db.prepare("INSERT INTO user_settings (key, value) VALUES (?, ?)").run(
-      "defaultProviderId",
-      '"codex"'
-    );
-    db.prepare("INSERT INTO user_settings (key, value) VALUES (?, ?)").run(
-      "notifications.enabled",
-      "true"
-    );
-    db.prepare("INSERT INTO user_settings (key, value) VALUES (?, ?)").run(
-      "supervisor.evaluationTimeoutSec",
-      "900"
-    );
-    db.prepare("INSERT INTO user_settings (key, value) VALUES (?, ?)").run(
-      "supervisor.retryEnabled",
-      "true"
-    );
-    db.prepare("INSERT INTO user_settings (key, value) VALUES (?, ?)").run(
-      "supervisor.retryMaxCount",
-      "4"
-    );
-    db.prepare("INSERT INTO user_settings (key, value) VALUES (?, ?)").run(
-      "supervisor.retryDelaySec",
-      "15"
-    );
-    db.prepare("INSERT INTO user_settings (key, value) VALUES (?, ?)").run(
-      "supervisor.retryOnTimeout",
-      "false"
-    );
-    db.prepare("INSERT INTO user_settings (key, value) VALUES (?, ?)").run(
-      "supervisor.retryOnEvaluatorError",
-      "true"
-    );
+  it("settings.get reads settings from the file-backed settings store", async () => {
+    settingsRepo.set("defaultProviderId", "codex");
+    settingsRepo.set("notifications.enabled", true);
+    settingsRepo.set("supervisor.evaluationTimeoutSec", 900);
+    settingsRepo.set("supervisor.retryEnabled", true);
+    settingsRepo.set("supervisor.retryMaxCount", 4);
+    settingsRepo.set("supervisor.retryDelaySec", 15);
+    settingsRepo.set("supervisor.retryOnTimeout", false);
+    settingsRepo.set("supervisor.retryOnEvaluatorError", true);
 
     const result = await dispatch(
       {
@@ -542,11 +471,8 @@ describe("settings commands", () => {
     });
   });
 
-  it("settings.get reads appearance.terminalCopyOnSelect from user_settings", async () => {
-    db.prepare("INSERT INTO user_settings (key, value) VALUES (?, ?)").run(
-      "appearance.terminalCopyOnSelect",
-      "true"
-    );
+  it("settings.get reads appearance.terminalCopyOnSelect from the file-backed settings store", async () => {
+    settingsRepo.set("appearance.terminalCopyOnSelect", true);
 
     const result = await dispatch(
       {
@@ -562,11 +488,8 @@ describe("settings commands", () => {
     expect(result.data?.["appearance.terminalCopyOnSelect"]).toBe(true);
   });
 
-  it("settings.get returns appearance.themeId from user_settings", async () => {
-    db.prepare("INSERT INTO user_settings (key, value) VALUES (?, ?)").run(
-      "appearance.themeId",
-      '"nord-dark"'
-    );
+  it("settings.get returns appearance.themeId from the file-backed settings store", async () => {
+    settingsRepo.set("appearance.themeId", "nord-dark");
 
     const result = await dispatch(
       {
@@ -584,15 +507,9 @@ describe("settings commands", () => {
     });
   });
 
-  it("settings.get returns split terminal font size settings from user_settings", async () => {
-    db.prepare("INSERT INTO user_settings (key, value) VALUES (?, ?)").run(
-      "appearance.desktopTerminalFontSize",
-      "16"
-    );
-    db.prepare("INSERT INTO user_settings (key, value) VALUES (?, ?)").run(
-      "appearance.mobileTerminalFontSize",
-      "14"
-    );
+  it("settings.get returns split terminal font size settings from the file-backed settings store", async () => {
+    settingsRepo.set("appearance.desktopTerminalFontSize", 16);
+    settingsRepo.set("appearance.mobileTerminalFontSize", 14);
 
     const result = await dispatch(
       {
@@ -612,10 +529,7 @@ describe("settings commands", () => {
   });
 
   it("settings.get normalizes invalid persisted supervisor timeout values", async () => {
-    db.prepare("INSERT INTO user_settings (key, value) VALUES (?, ?)").run(
-      "supervisor.evaluationTimeoutSec",
-      "999999"
-    );
+    settingsRepo.set("supervisor.evaluationTimeoutSec", 999999);
 
     const result = await dispatch(
       {
@@ -632,10 +546,7 @@ describe("settings commands", () => {
   });
 
   it("settings.get falls back when the persisted supervisor timeout is fractional", async () => {
-    db.prepare("INSERT INTO user_settings (key, value) VALUES (?, ?)").run(
-      "supervisor.evaluationTimeoutSec",
-      "1.9"
-    );
+    settingsRepo.set("supervisor.evaluationTimeoutSec", 1.9);
 
     const result = await dispatch(
       {

@@ -3,23 +3,18 @@ import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { Database } from "../storage/database.js";
 import { closeDatabase, openDatabase, ProviderConfigRepo } from "../storage/index.js";
 
 describe("ProviderConfigRepo", () => {
-  let db: Database;
   let repo: ProviderConfigRepo;
   let tempDir: string;
 
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), "provider-config-repo-test-"));
-    const dbPath = join(tempDir, "test.db");
-    db = openDatabase(dbPath);
-    repo = new ProviderConfigRepo(db);
+    repo = new ProviderConfigRepo({ filePath: join(tempDir, "provider-configs.json") });
   });
 
   afterEach(() => {
-    closeDatabase(db);
     rmSync(tempDir, { recursive: true, force: true });
   });
 
@@ -170,6 +165,31 @@ describe("ProviderConfigRepo", () => {
       expect(Object.keys(all)).toHaveLength(2);
       expect(all["claude-cli"].defaultModel).toBe("claude-3-sonnet");
       expect(all.openai.defaultModel).toBe("gpt-4-turbo");
+    });
+  });
+
+  describe("legacy migration", () => {
+    it("migrates existing database provider configs into the file store when the file is missing", () => {
+      const db = openDatabase(join(tempDir, "legacy.db"));
+      try {
+        db.prepare("INSERT INTO provider_configs (provider_id, config) VALUES (?, ?)").run(
+          "codex",
+          '{"additionalArgs":["--full-auto"]}'
+        );
+
+        const migratedRepo = new ProviderConfigRepo({
+          filePath: join(tempDir, "migrated-provider-configs.json"),
+          legacyDb: db,
+        });
+
+        expect(migratedRepo.getAll()).toEqual({
+          codex: {
+            additionalArgs: ["--full-auto"],
+          },
+        });
+      } finally {
+        closeDatabase(db);
+      }
     });
   });
 });
