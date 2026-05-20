@@ -399,7 +399,7 @@ describe("SessionRepo", () => {
       });
     });
 
-    it("migrates legacy database sessions into the file store when the file is missing", () => {
+    it("does not import legacy database sessions when the file is missing", () => {
       repo.create({
         id: "s-legacy",
         workspaceId: "ws-1",
@@ -411,17 +411,11 @@ describe("SessionRepo", () => {
         lastActiveAt: 1000,
       });
 
-      const migratedRepo = new SessionRepo({
+      const fileRepo = new SessionRepo({
         filePath: join(tempDir, "migrated-sessions.json"),
-        legacyDb: db,
       } as never);
 
-      expect(migratedRepo.findById("s-legacy")).toMatchObject({
-        id: "s-legacy",
-        terminalId: "t-1",
-        providerId: "claude-cli",
-        state: "idle",
-      });
+      expect(fileRepo.findById("s-legacy")).toBeUndefined();
     });
 
     it("does not mirror file-backed sessions into sqlite", () => {

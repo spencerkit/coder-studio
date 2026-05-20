@@ -155,21 +155,17 @@ describe("SettingsRepo", () => {
   });
 
   describe("legacy migration", () => {
-    it("migrates existing database settings into the file store when the file is missing", () => {
+    it("does not import existing database settings when the file is missing", () => {
       const db = openDatabase(join(tempDir, "legacy.db"));
       try {
         db.prepare("INSERT INTO user_settings (key, value) VALUES (?, ?)").run("theme", '"dark"');
         db.prepare("INSERT INTO user_settings (key, value) VALUES (?, ?)").run("fontSize", "14");
 
-        const migratedRepo = new SettingsRepo({
+        const fileRepo = new SettingsRepo({
           filePath: join(tempDir, "migrated-settings.json"),
-          legacyDb: db,
         });
 
-        expect(migratedRepo.getAll()).toEqual({
-          theme: "dark",
-          fontSize: 14,
-        });
+        expect(fileRepo.getAll()).toEqual({});
       } finally {
         closeDatabase(db);
       }

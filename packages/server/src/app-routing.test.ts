@@ -84,11 +84,9 @@ describe("app routing", () => {
       config,
       authSessionRepo: new AuthSessionRepo({
         filePath: join(tempDir, "state", "auth-sessions.json"),
-        legacyDb: db,
       }),
       authLoginBlockRepo: new AuthLoginBlockRepo({
         filePath: join(tempDir, "state", "auth-login-blocks.json"),
-        legacyDb: db,
       }),
       logger: false,
     });

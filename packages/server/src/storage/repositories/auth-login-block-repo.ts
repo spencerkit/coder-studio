@@ -31,7 +31,6 @@ interface AuthLoginBlockState {
 
 export interface AuthLoginBlockRepoOptions {
   filePath: string;
-  legacyDb?: Database;
 }
 
 function isDatabase(value: Database | AuthLoginBlockRepoOptions): value is Database {
@@ -125,7 +124,6 @@ const toRecord = (row: AuthLoginBlockRow): AuthLoginBlockRecord => ({
 export class AuthLoginBlockRepo {
   private readonly db?: Database;
   private readonly filePath?: string;
-  private readonly legacyDb?: Database;
 
   constructor(input: Database | AuthLoginBlockRepoOptions) {
     if (isDatabase(input)) {
@@ -134,43 +132,6 @@ export class AuthLoginBlockRepo {
     }
 
     this.filePath = input.filePath;
-    this.legacyDb = input.legacyDb;
-  }
-
-  private readAllDbState(db: Database): AuthLoginBlockState {
-    const blockRows = db
-      .prepare(`
-      SELECT ip, failed_count, first_failed_at, last_failed_at, blocked_until
-      FROM auth_login_blocks
-    `)
-      .all() as unknown as AuthLoginBlockRow[];
-
-    const failureRows = db
-      .prepare(`
-      SELECT ip, failed_at
-      FROM auth_login_failures
-      ORDER BY ip ASC, failed_at ASC
-    `)
-      .all() as Array<{ ip: string; failed_at: number }>;
-
-    const blocks: Record<string, AuthLoginBlockRecord> = {};
-    for (const row of blockRows) {
-      const record = toRecord(row);
-      blocks[record.ip] = record;
-    }
-
-    const failures: Record<string, number[]> = {};
-    for (const row of failureRows) {
-      const entries = failures[row.ip] ?? [];
-      entries.push(row.failed_at);
-      failures[row.ip] = entries;
-    }
-
-    return {
-      version: 1,
-      blocks,
-      failures,
-    };
   }
 
   private loadState(): AuthLoginBlockState {
@@ -189,19 +150,11 @@ export class AuthLoginBlockRepo {
       return normalizeState(parsed);
     }
 
-    if (!this.legacyDb) {
-      return {
-        version: 1,
-        blocks: {},
-        failures: {},
-      };
-    }
-
-    const migrated = this.readAllDbState(this.legacyDb);
-    if (Object.keys(migrated.blocks).length > 0 || Object.keys(migrated.failures).length > 0) {
-      this.saveState(migrated);
-    }
-    return migrated;
+    return {
+      version: 1,
+      blocks: {},
+      failures: {},
+    };
   }
 
   private saveState(state: AuthLoginBlockState): void {

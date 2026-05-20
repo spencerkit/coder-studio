@@ -8,7 +8,6 @@ interface SettingsFileRecord {
 
 export interface SettingsRepoOptions {
   filePath: string;
-  legacyDb?: Database;
 }
 
 function isDatabase(value: Database | SettingsRepoOptions): value is Database {
@@ -43,7 +42,6 @@ function normalizeSettingsFile(value: unknown): Record<string, unknown> {
 export class SettingsRepo {
   private readonly db?: Database;
   private readonly filePath?: string;
-  private readonly legacyDb?: Database;
 
   constructor(input: Database | SettingsRepoOptions) {
     if (isDatabase(input)) {
@@ -52,7 +50,6 @@ export class SettingsRepo {
     }
 
     this.filePath = input.filePath;
-    this.legacyDb = input.legacyDb;
   }
 
   private readDbValue<T = unknown>(key: string): T | undefined {
@@ -106,15 +103,7 @@ export class SettingsRepo {
       return normalizeSettingsFile(parsed);
     }
 
-    if (!this.legacyDb) {
-      return {};
-    }
-
-    const migrated = this.readAllLegacyDbValues();
-    if (Object.keys(migrated).length > 0) {
-      this.saveFileSettings(migrated);
-    }
-    return migrated;
+    return {};
   }
 
   private saveFileSettings(settings: Record<string, unknown>): void {
@@ -127,22 +116,6 @@ export class SettingsRepo {
       settings,
     };
     writeJsonFileAtomic(this.filePath, payload);
-  }
-
-  private readAllLegacyDbValues(): Record<string, unknown> {
-    const rows = this.legacyDb?.prepare("SELECT key, value FROM user_settings").all() as
-      | {
-          key: string;
-          value: string;
-        }[]
-      | undefined;
-
-    const result: Record<string, unknown> = {};
-    for (const row of rows ?? []) {
-      result[row.key] = JSON.parse(row.value);
-    }
-
-    return result;
   }
 
   /**

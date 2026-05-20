@@ -9,7 +9,6 @@ interface ProviderConfigFileRecord {
 
 export interface ProviderConfigRepoOptions {
   filePath: string;
-  legacyDb?: Database;
 }
 
 function isDatabase(value: Database | ProviderConfigRepoOptions): value is Database {
@@ -38,7 +37,6 @@ function normalizeProviderConfigFile(value: unknown): Record<string, ProviderCon
 export class ProviderConfigRepo {
   private readonly db?: Database;
   private readonly filePath?: string;
-  private readonly legacyDb?: Database;
 
   constructor(input: Database | ProviderConfigRepoOptions) {
     if (isDatabase(input)) {
@@ -47,7 +45,6 @@ export class ProviderConfigRepo {
     }
 
     this.filePath = input.filePath;
-    this.legacyDb = input.legacyDb;
   }
 
   private readAllDbConfigs(db: Database | undefined = this.db): Record<string, ProviderConfig> {
@@ -78,16 +75,7 @@ export class ProviderConfigRepo {
       return { ...normalizeProviderConfigFile(parsed) };
     }
 
-    if (!this.legacyDb) {
-      return {};
-    }
-
-    const migrated = this.readAllDbConfigs(this.legacyDb);
-    if (Object.keys(migrated).length > 0) {
-      this.saveFileConfigs(migrated);
-    }
-
-    return migrated;
+    return {};
   }
 
   private saveFileConfigs(configs: Record<string, ProviderConfig>): void {

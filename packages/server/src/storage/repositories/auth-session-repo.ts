@@ -7,12 +7,6 @@ export interface AuthSession {
   lastSeenAt: number;
 }
 
-interface AuthSessionRow {
-  token: string;
-  created_at: number;
-  last_seen_at: number;
-}
-
 interface AuthSessionFileRecord {
   version: 1;
   sessions: Record<string, AuthSession>;
@@ -20,7 +14,6 @@ interface AuthSessionFileRecord {
 
 export interface AuthSessionRepoOptions {
   filePath: string;
-  legacyDb?: Database;
 }
 
 function isDatabase(value: Database | AuthSessionRepoOptions): value is Database {
@@ -80,18 +73,9 @@ function normalizeSessionFile(value: unknown): Record<string, AuthSession> {
   return {};
 }
 
-function rowToSession(row: AuthSessionRow): AuthSession {
-  return {
-    token: row.token,
-    createdAt: row.created_at,
-    lastSeenAt: row.last_seen_at,
-  };
-}
-
 export class AuthSessionRepo {
   private readonly db?: Database;
   private readonly filePath?: string;
-  private readonly legacyDb?: Database;
 
   constructor(input: Database | AuthSessionRepoOptions) {
     if (isDatabase(input)) {
@@ -100,20 +84,6 @@ export class AuthSessionRepo {
     }
 
     this.filePath = input.filePath;
-    this.legacyDb = input.legacyDb;
-  }
-
-  private readAllDbSessions(db: Database | undefined = this.db): Record<string, AuthSession> {
-    const rows = db?.prepare("SELECT token, created_at, last_seen_at FROM auth_sessions").all() as
-      | AuthSessionRow[]
-      | undefined;
-
-    const sessions: Record<string, AuthSession> = {};
-    for (const row of rows ?? []) {
-      const session = rowToSession(row);
-      sessions[session.token] = session;
-    }
-    return sessions;
   }
 
   private loadFileSessions(): Record<string, AuthSession> {
@@ -128,15 +98,7 @@ export class AuthSessionRepo {
       return normalizeSessionFile(parsed);
     }
 
-    if (!this.legacyDb) {
-      return {};
-    }
-
-    const migrated = this.readAllDbSessions(this.legacyDb);
-    if (Object.keys(migrated).length > 0) {
-      this.saveFileSessions(migrated);
-    }
-    return migrated;
+    return {};
   }
 
   private saveFileSessions(sessions: Record<string, AuthSession>): void {

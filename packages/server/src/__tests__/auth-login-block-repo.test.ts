@@ -62,7 +62,7 @@ describe("AuthLoginBlockRepo", () => {
     expect(repo.delete("192.0.2.4")).toBe(false);
   });
 
-  it("migrates existing auth block state from the legacy database when the file is missing", () => {
+  it("does not import auth block state from the legacy database when the file is missing", () => {
     const db = openDatabase(join(tempDir, "legacy.db"));
     try {
       db.prepare(
@@ -77,22 +77,15 @@ describe("AuthLoginBlockRepo", () => {
         200
       );
 
-      const migratedRepo = new AuthLoginBlockRepo({
+      const fileRepo = new AuthLoginBlockRepo({
         filePath: join(tempDir, "migrated-auth-login-blocks.json"),
-        legacyDb: db,
       });
 
-      expect(migratedRepo.get("203.0.113.1")).toEqual({
-        ip: "203.0.113.1",
-        failedCount: 2,
-        firstFailedAt: 100,
-        lastFailedAt: 200,
-        blockedUntil: 500,
-      });
+      expect(fileRepo.get("203.0.113.1")).toBeNull();
 
-      const next = migratedRepo.recordFailure("203.0.113.1", 300, 0, 3, 500);
-      expect(next.failedCount).toBe(3);
-      expect(next.blockedUntil).toBe(800);
+      const next = fileRepo.recordFailure("203.0.113.1", 300, 0, 3, 500);
+      expect(next.failedCount).toBe(1);
+      expect(next.blockedUntil).toBeNull();
     } finally {
       closeDatabase(db);
     }

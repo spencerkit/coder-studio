@@ -88,11 +88,9 @@ export async function createServer(
 
   const terminalRepo = new TerminalRepo({
     filePath: join(stateRoot, "state", "terminals.json"),
-    legacyDb: db,
   });
   const sessionRepo = new SessionRepo({
     filePath: join(stateRoot, "state", "sessions.json"),
-    legacyDb: db,
   });
 
   const terminalMgr = new TerminalManager({
@@ -103,7 +101,6 @@ export async function createServer(
 
   const settingsRepo = new SettingsRepo({
     filePath: join(stateRoot, "state", "settings.json"),
-    legacyDb: db,
   });
   const autoFetch = new AutoFetchScheduler({
     workspaceMgr: { get: (workspaceId) => workspaceMgr.get(workspaceId) },
@@ -140,11 +137,9 @@ export async function createServer(
 
   const providerConfigRepo = new ProviderConfigRepo({
     filePath: join(stateRoot, "state", "provider-configs.json"),
-    legacyDb: db,
   });
   const workspaceRepo = new WorkspaceRepo({
     filePath: join(stateRoot, "state", "workspaces.json"),
-    legacyDb: db,
   });
   const sessionMgr = new SessionManager({
     terminalMgr,
@@ -186,11 +181,9 @@ export async function createServer(
 
   const authSessionRepo = new AuthSessionRepo({
     filePath: join(stateRoot, "state", "auth-sessions.json"),
-    legacyDb: db,
   });
   const authLoginBlockRepo = new AuthLoginBlockRepo({
     filePath: join(stateRoot, "state", "auth-login-blocks.json"),
-    legacyDb: db,
   });
 
   const app = await buildFastifyApp({

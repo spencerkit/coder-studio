@@ -87,7 +87,6 @@ interface SessionFileRecord {
 
 export interface SessionRepoOptions {
   filePath: string;
-  legacyDb?: Database;
 }
 
 function isDatabase(value: Database | SessionRepoOptions): value is Database {
@@ -167,7 +166,6 @@ function normalizeSessionFile(value: unknown): Record<string, StoredSession> {
 export class SessionRepo {
   private readonly db?: Database;
   private readonly filePath?: string;
-  private readonly legacyDb?: Database;
 
   constructor(input: Database | SessionRepoOptions) {
     if (isDatabase(input)) {
@@ -176,24 +174,6 @@ export class SessionRepo {
     }
 
     this.filePath = input.filePath;
-    this.legacyDb = input.legacyDb;
-  }
-
-  private rowToStoredSession(row: SessionRow): StoredSession {
-    return {
-      ...rowToSession(row),
-      ...(row.archived === 1 ? { archived: true } : {}),
-    };
-  }
-
-  private readAllDbSessions(db: Database | undefined = this.db): Record<string, StoredSession> {
-    const rows = db?.prepare("SELECT * FROM sessions").all() as SessionRow[] | undefined;
-    const result: Record<string, StoredSession> = {};
-    for (const row of rows ?? []) {
-      const session = this.rowToStoredSession(row);
-      result[session.id] = session;
-    }
-    return result;
   }
 
   private loadFileSessions(): Record<string, StoredSession> {
@@ -208,15 +188,7 @@ export class SessionRepo {
       return normalizeSessionFile(parsed);
     }
 
-    if (!this.legacyDb) {
-      return {};
-    }
-
-    const migrated = this.readAllDbSessions(this.legacyDb);
-    if (Object.keys(migrated).length > 0) {
-      this.saveFileSessions(migrated);
-    }
-    return migrated;
+    return {};
   }
 
   private saveFileSessions(sessions: Record<string, StoredSession>): void {

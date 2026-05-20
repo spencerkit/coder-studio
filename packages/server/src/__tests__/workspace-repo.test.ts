@@ -311,7 +311,7 @@ describe("WorkspaceRepo", () => {
       });
     });
 
-    it("migrates legacy database workspaces into the file store when the file is missing", () => {
+    it("does not import legacy database workspaces when the file is missing", () => {
       repo.create({
         id: "ws-legacy",
         path: "/path/to/legacy-workspace",
@@ -321,17 +321,11 @@ describe("WorkspaceRepo", () => {
         uiState: { leftPanelWidth: 250, bottomPanelHeight: 150, focusMode: false },
       });
 
-      const migratedRepo = new WorkspaceRepo({
+      const fileRepo = new WorkspaceRepo({
         filePath: join(tempDir, "migrated-workspaces.json"),
-        legacyDb: db,
       });
 
-      expect(migratedRepo.list()).toEqual([
-        expect.objectContaining({
-          id: "ws-legacy",
-          path: "/path/to/legacy-workspace",
-        }),
-      ]);
+      expect(fileRepo.list()).toEqual([]);
     });
 
     it("does not mirror file-backed workspaces into sqlite", () => {

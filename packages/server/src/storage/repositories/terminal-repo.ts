@@ -43,7 +43,6 @@ interface TerminalFileRecord {
 
 export interface TerminalRepoOptions {
   filePath: string;
-  legacyDb?: Database;
 }
 
 function isDatabase(value: Database | TerminalRepoOptions): value is Database {
@@ -122,7 +121,6 @@ function normalizeTerminalFile(value: unknown): Record<string, Terminal> {
 export class TerminalRepo {
   private readonly db?: Database;
   private readonly filePath?: string;
-  private readonly legacyDb?: Database;
 
   constructor(input: Database | TerminalRepoOptions) {
     if (isDatabase(input)) {
@@ -131,7 +129,6 @@ export class TerminalRepo {
     }
 
     this.filePath = input.filePath;
-    this.legacyDb = input.legacyDb;
   }
 
   private rowToTerminal(row: TerminalRow): Terminal {
@@ -152,16 +149,6 @@ export class TerminalRepo {
     };
   }
 
-  private readAllDbTerminals(db: Database | undefined = this.db): Record<string, Terminal> {
-    const rows = db?.prepare("SELECT * FROM terminals").all() as TerminalRow[] | undefined;
-    const result: Record<string, Terminal> = {};
-    for (const row of rows ?? []) {
-      const terminal = this.rowToTerminal(row);
-      result[terminal.id] = terminal;
-    }
-    return result;
-  }
-
   private loadFileTerminals(): Record<string, Terminal> {
     if (!this.filePath) {
       return {};
@@ -174,15 +161,7 @@ export class TerminalRepo {
       return normalizeTerminalFile(parsed);
     }
 
-    if (!this.legacyDb) {
-      return {};
-    }
-
-    const migrated = this.readAllDbTerminals(this.legacyDb);
-    if (Object.keys(migrated).length > 0) {
-      this.saveFileTerminals(migrated);
-    }
-    return migrated;
+    return {};
   }
 
   private saveFileTerminals(terminals: Record<string, Terminal>): void {

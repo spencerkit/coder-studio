@@ -41,19 +41,18 @@ describe("AuthSessionRepo", () => {
     expect(repo.touch("token-1", 2000)).toBe(false);
   });
 
-  it("migrates existing auth sessions from the legacy database when the file is missing", () => {
+  it("does not import auth sessions from the legacy database when the file is missing", () => {
     const db = openDatabase(join(tempDir, "legacy.db"));
     try {
       db.prepare(
         "INSERT INTO auth_sessions (token, created_at, last_seen_at) VALUES (?, ?, ?)"
       ).run("legacy-token", 111, 222);
 
-      const migratedRepo = new AuthSessionRepo({
+      const fileRepo = new AuthSessionRepo({
         filePath: join(tempDir, "migrated-auth-sessions.json"),
-        legacyDb: db,
       });
 
-      expect(migratedRepo.touch("legacy-token", 333)).toBe(true);
+      expect(fileRepo.touch("legacy-token", 333)).toBe(false);
     } finally {
       closeDatabase(db);
     }

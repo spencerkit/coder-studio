@@ -292,7 +292,7 @@ describe("TerminalRepo", () => {
       });
     });
 
-    it("migrates legacy database terminals into the file store when the file is missing", () => {
+    it("does not import legacy database terminals when the file is missing", () => {
       repo.create({
         id: "t-legacy",
         workspaceId: "ws-1",
@@ -305,17 +305,11 @@ describe("TerminalRepo", () => {
         title: "Agent",
       });
 
-      const migratedRepo = new TerminalRepo({
+      const fileRepo = new TerminalRepo({
         filePath: join(tempDir, "migrated-terminals.json"),
-        legacyDb: db,
       } as never);
 
-      expect(migratedRepo.findById("t-legacy")).toMatchObject({
-        id: "t-legacy",
-        workspaceId: "ws-1",
-        kind: "agent",
-        title: "Agent",
-      });
+      expect(fileRepo.findById("t-legacy")).toBeUndefined();
     });
 
     it("does not mirror file-backed terminals into sqlite", () => {

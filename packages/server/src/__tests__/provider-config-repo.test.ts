@@ -169,7 +169,7 @@ describe("ProviderConfigRepo", () => {
   });
 
   describe("legacy migration", () => {
-    it("migrates existing database provider configs into the file store when the file is missing", () => {
+    it("does not import existing database provider configs when the file is missing", () => {
       const db = openDatabase(join(tempDir, "legacy.db"));
       try {
         db.prepare("INSERT INTO provider_configs (provider_id, config) VALUES (?, ?)").run(
@@ -177,16 +177,11 @@ describe("ProviderConfigRepo", () => {
           '{"additionalArgs":["--full-auto"]}'
         );
 
-        const migratedRepo = new ProviderConfigRepo({
+        const fileRepo = new ProviderConfigRepo({
           filePath: join(tempDir, "migrated-provider-configs.json"),
-          legacyDb: db,
         });
 
-        expect(migratedRepo.getAll()).toEqual({
-          codex: {
-            additionalArgs: ["--full-auto"],
-          },
-        });
+        expect(fileRepo.getAll()).toEqual({});
       } finally {
         closeDatabase(db);
       }

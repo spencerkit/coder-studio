@@ -35,7 +35,6 @@ interface WorkspaceFileRecord {
 
 export interface WorkspaceRepoOptions {
   filePath: string;
-  legacyDb?: Database;
 }
 
 function isDatabase(value: Database | WorkspaceRepoOptions): value is Database {
@@ -104,7 +103,6 @@ function normalizeWorkspaceFile(value: unknown): Record<string, Workspace> {
 export class WorkspaceRepo {
   private readonly db?: Database;
   private readonly filePath?: string;
-  private readonly legacyDb?: Database;
 
   constructor(input: Database | WorkspaceRepoOptions) {
     if (isDatabase(input)) {
@@ -113,17 +111,6 @@ export class WorkspaceRepo {
     }
 
     this.filePath = input.filePath;
-    this.legacyDb = input.legacyDb;
-  }
-
-  private readAllDbWorkspaces(db: Database | undefined = this.db): Record<string, Workspace> {
-    const rows = db?.prepare("SELECT * FROM workspaces").all() as WorkspaceRow[] | undefined;
-    const result: Record<string, Workspace> = {};
-    for (const row of rows ?? []) {
-      const workspace = this.rowToWorkspace(row);
-      result[workspace.id] = workspace;
-    }
-    return result;
   }
 
   private loadFileWorkspaces(): Record<string, Workspace> {
@@ -138,15 +125,7 @@ export class WorkspaceRepo {
       return normalizeWorkspaceFile(parsed);
     }
 
-    if (!this.legacyDb) {
-      return {};
-    }
-
-    const migrated = this.readAllDbWorkspaces(this.legacyDb);
-    if (Object.keys(migrated).length > 0) {
-      this.saveFileWorkspaces(migrated);
-    }
-    return migrated;
+    return {};
   }
 
   private saveFileWorkspaces(workspaces: Record<string, Workspace>): void {
