@@ -188,8 +188,14 @@ export async function createServer(
   });
   workspaceMgr.hydrateWatchers();
 
-  const authSessionRepo = new AuthSessionRepo(db);
-  const authLoginBlockRepo = new AuthLoginBlockRepo(db);
+  const authSessionRepo = new AuthSessionRepo({
+    filePath: join(stateRoot, "state", "auth-sessions.json"),
+    legacyDb: db,
+  });
+  const authLoginBlockRepo = new AuthLoginBlockRepo({
+    filePath: join(stateRoot, "state", "auth-login-blocks.json"),
+    legacyDb: db,
+  });
 
   const app = await buildFastifyApp({
     wsHub,
