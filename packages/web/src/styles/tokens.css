@@ -25,6 +25,58 @@
   --radius-xl: 8px;
   --radius-full: 9999px;
 
+  /* ========== Foundation: Size / Density ========== */
+  --control-height-sm: 28px;
+  --control-height-md: 32px;
+  --control-height-lg: 40px;
+  --icon-button-size-sm: 28px;
+  --icon-button-size-md: 32px;
+  --icon-button-size-lg: 40px;
+  --list-row-height-sm: 32px;
+  --list-row-height-md: 36px;
+  --list-row-height-lg: 44px;
+  --toolbar-height-sm: 36px;
+  --toolbar-height-md: 40px;
+  --toolbar-height-lg: 48px;
+  --panel-header-height: 40px;
+
+  /* ========== Foundation: Spacing / Rhythm ========== */
+  --gap-stack-2xs: var(--sp-1);
+  --gap-stack-xs: var(--sp-2);
+  --gap-stack-sm: var(--sp-3);
+  --gap-stack-md: var(--sp-4);
+  --gap-stack-lg: var(--sp-6);
+  --gap-stack-xl: var(--sp-8);
+  --gap-cluster-2xs: var(--sp-1);
+  --gap-cluster-xs: var(--sp-2);
+  --gap-cluster-sm: var(--sp-3);
+  --gap-cluster-md: var(--sp-4);
+  --gap-cluster-lg: var(--sp-5);
+  --gap-cluster-xl: var(--sp-6);
+  --inset-control-sm: 0 var(--sp-2);
+  --inset-control-md: 0 var(--sp-3);
+  --inset-control-lg: 0 var(--sp-4);
+  --inset-row-sm: var(--sp-2) var(--sp-3);
+  --inset-row-md: var(--sp-3) var(--sp-4);
+  --inset-row-lg: var(--sp-4) var(--sp-5);
+  --inset-panel: var(--sp-3);
+  --inset-dialog: var(--sp-4);
+  --inset-drawer: var(--sp-4);
+  --section-gap: var(--sp-6);
+  --form-group-gap: var(--sp-4);
+
+  /* ========== Foundation: Radius Roles ========== */
+  --radius-control-sm: var(--radius-sm);
+  --radius-control-md: var(--radius-md);
+  --radius-control-lg: var(--radius-xl);
+  --radius-chip: var(--radius-full);
+  --radius-tag: var(--radius-sm);
+  --radius-pill: var(--radius-full);
+  --radius-panel: var(--radius-lg);
+  --radius-overlay: var(--radius-xl);
+  --radius-local-overlay: var(--radius-lg);
+  --radius-flush: 0px;
+
   /* ========== Typography ========== */
   --font-sans:
     "IBM Plex Sans", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC",
@@ -175,6 +227,24 @@
   --terminal-line-height: 1.6;
   --terminal-scrollback: 5000;
   --terminal-height: 200px;
+  --terminal-bg: var(--bg-terminal);
+  --terminal-border: var(--border);
+  --terminal-text: var(--text-primary);
+  --terminal-accent: var(--accent-blue);
+  --session-bg: var(--bg-panel);
+  --session-border: var(--border);
+  --session-text: var(--text-primary);
+  --session-accent: var(--accent-green);
+  --editor-bg: var(--bg-surface);
+  --editor-border: var(--border);
+  --editor-text: var(--text-primary);
+  --editor-gutter: var(--text-tertiary);
+  --diff-added-bg: color-mix(in srgb, var(--color-success) 18%, transparent);
+  --diff-added-border: color-mix(in srgb, var(--color-success) 48%, var(--border));
+  --diff-removed-bg: color-mix(in srgb, var(--color-error) 18%, transparent);
+  --diff-removed-border: color-mix(in srgb, var(--color-error) 48%, var(--border));
+  --diff-modified-bg: color-mix(in srgb, var(--color-warning) 18%, transparent);
+  --diff-modified-border: color-mix(in srgb, var(--color-warning) 48%, var(--border));
 
   /* Status Dot */
   --status-dot-size: 8px;
@@ -236,6 +306,49 @@
   --color-info: #6cb6ff;
   --bg-panel: color-mix(in srgb, var(--bg-surface) 94%, var(--bg-page));
   --bg-elevated: color-mix(in srgb, var(--bg-surface) 98%, white 2%);
+
+  /* ========== Foundation: State / Surface / Overlay ========== */
+  --state-focus-ring-color: var(--border-focus);
+  --state-focus-ring-offset: 2px;
+  --state-focus-ring-width: 2px;
+  --state-hover-bg: var(--bg-hover);
+  --state-hover-border: var(--border-light);
+  --state-hover-text: var(--text-primary);
+  --state-active-bg: var(--bg-active);
+  --state-selected-bg: color-mix(in srgb, var(--accent-blue) 20%, var(--bg-surface));
+  --state-selected-border: color-mix(in srgb, var(--accent-blue) 52%, var(--border));
+  --state-selected-text: var(--text-primary);
+  --state-disabled-bg: var(--bg-disabled);
+  --state-disabled-border: var(--border);
+  --state-disabled-text: var(--text-disabled);
+  --state-success-bg: color-mix(in srgb, var(--color-success) 18%, var(--bg-surface));
+  --state-success-border: color-mix(in srgb, var(--color-success) 48%, var(--border));
+  --state-success-text: var(--color-success);
+  --state-warning-bg: color-mix(in srgb, var(--color-warning) 18%, var(--bg-surface));
+  --state-warning-border: color-mix(in srgb, var(--color-warning) 48%, var(--border));
+  --state-warning-text: var(--color-warning);
+  --state-error-bg: color-mix(in srgb, var(--color-error) 18%, var(--bg-surface));
+  --state-error-border: color-mix(in srgb, var(--color-error) 48%, var(--border));
+  --state-error-text: var(--color-error);
+  --state-info-bg: color-mix(in srgb, var(--color-info) 18%, var(--bg-surface));
+  --state-info-border: color-mix(in srgb, var(--color-info) 48%, var(--border));
+  --state-info-text: var(--color-info);
+  --surface-canvas: var(--bg-page);
+  --surface-panel: var(--bg-panel);
+  --surface-panel-border: var(--border);
+  --surface-elevated: var(--bg-elevated);
+  --surface-elevated-border: var(--border-light);
+  --surface-input: var(--bg-input);
+  --surface-input-border: var(--border);
+  --surface-muted: var(--bg-sidebar);
+  --surface-inverse: var(--text-primary);
+  --overlay-backdrop: color-mix(in srgb, var(--bg-page) 68%, transparent);
+  --overlay-scrim: color-mix(in srgb, var(--bg-page) 82%, transparent);
+  --overlay-panel: var(--bg-elevated);
+  --overlay-panel-border: var(--border-light);
+  --overlay-local-backdrop: color-mix(in srgb, var(--bg-page) 54%, transparent);
+  --overlay-local-panel: var(--bg-panel);
+  --overlay-local-panel-border: var(--border);
 
   /* ========== Icon Tokens ========== */
   --icon-primary: var(--text-primary);
@@ -317,6 +430,49 @@
   --bg-panel: color-mix(in srgb, var(--bg-surface) 92%, var(--bg-sidebar));
   --bg-elevated: color-mix(in srgb, var(--bg-surface) 96%, white 4%);
 
+  /* ========== Foundation: State / Surface / Overlay ========== */
+  --state-focus-ring-color: var(--border-focus);
+  --state-focus-ring-offset: 2px;
+  --state-focus-ring-width: 2px;
+  --state-hover-bg: var(--bg-hover);
+  --state-hover-border: var(--border-light);
+  --state-hover-text: var(--text-primary);
+  --state-active-bg: var(--bg-active);
+  --state-selected-bg: color-mix(in srgb, var(--accent-blue) 16%, var(--bg-surface));
+  --state-selected-border: color-mix(in srgb, var(--accent-blue) 42%, var(--border));
+  --state-selected-text: var(--text-primary);
+  --state-disabled-bg: var(--bg-disabled);
+  --state-disabled-border: var(--border);
+  --state-disabled-text: var(--text-disabled);
+  --state-success-bg: color-mix(in srgb, var(--color-success) 14%, var(--bg-surface));
+  --state-success-border: color-mix(in srgb, var(--color-success) 36%, var(--border));
+  --state-success-text: var(--color-success);
+  --state-warning-bg: color-mix(in srgb, var(--color-warning) 14%, var(--bg-surface));
+  --state-warning-border: color-mix(in srgb, var(--color-warning) 36%, var(--border));
+  --state-warning-text: var(--color-warning);
+  --state-error-bg: color-mix(in srgb, var(--color-error) 14%, var(--bg-surface));
+  --state-error-border: color-mix(in srgb, var(--color-error) 36%, var(--border));
+  --state-error-text: var(--color-error);
+  --state-info-bg: color-mix(in srgb, var(--color-info) 14%, var(--bg-surface));
+  --state-info-border: color-mix(in srgb, var(--color-info) 36%, var(--border));
+  --state-info-text: var(--color-info);
+  --surface-canvas: var(--bg-page);
+  --surface-panel: var(--bg-panel);
+  --surface-panel-border: var(--border);
+  --surface-elevated: var(--bg-elevated);
+  --surface-elevated-border: var(--border-light);
+  --surface-input: var(--bg-input);
+  --surface-input-border: var(--border);
+  --surface-muted: var(--bg-sidebar);
+  --surface-inverse: var(--text-inverse);
+  --overlay-backdrop: color-mix(in srgb, #0f172a 26%, transparent);
+  --overlay-scrim: color-mix(in srgb, #0f172a 40%, transparent);
+  --overlay-panel: var(--bg-elevated);
+  --overlay-panel-border: var(--border-light);
+  --overlay-local-backdrop: color-mix(in srgb, #0f172a 18%, transparent);
+  --overlay-local-panel: var(--bg-panel);
+  --overlay-local-panel-border: var(--border);
+
   /* ========== Icon Tokens ========== */
   --icon-primary: var(--text-primary);
   --icon-secondary: var(--text-secondary);
@@ -396,6 +552,49 @@
   --color-info: #7aa2f7;
   --bg-panel: color-mix(in srgb, var(--bg-surface) 94%, var(--bg-page));
   --bg-elevated: color-mix(in srgb, var(--bg-surface) 98%, white 2%);
+
+  /* ========== Foundation: State / Surface / Overlay ========== */
+  --state-focus-ring-color: var(--border-focus);
+  --state-focus-ring-offset: 2px;
+  --state-focus-ring-width: 2px;
+  --state-hover-bg: var(--bg-hover);
+  --state-hover-border: var(--border-light);
+  --state-hover-text: var(--text-primary);
+  --state-active-bg: var(--bg-active);
+  --state-selected-bg: color-mix(in srgb, var(--accent-blue) 20%, var(--bg-surface));
+  --state-selected-border: color-mix(in srgb, var(--accent-blue) 52%, var(--border));
+  --state-selected-text: var(--text-primary);
+  --state-disabled-bg: var(--bg-disabled);
+  --state-disabled-border: var(--border);
+  --state-disabled-text: var(--text-disabled);
+  --state-success-bg: color-mix(in srgb, var(--color-success) 18%, var(--bg-surface));
+  --state-success-border: color-mix(in srgb, var(--color-success) 48%, var(--border));
+  --state-success-text: var(--color-success);
+  --state-warning-bg: color-mix(in srgb, var(--color-warning) 18%, var(--bg-surface));
+  --state-warning-border: color-mix(in srgb, var(--color-warning) 48%, var(--border));
+  --state-warning-text: var(--color-warning);
+  --state-error-bg: color-mix(in srgb, var(--color-error) 18%, var(--bg-surface));
+  --state-error-border: color-mix(in srgb, var(--color-error) 48%, var(--border));
+  --state-error-text: var(--color-error);
+  --state-info-bg: color-mix(in srgb, var(--color-info) 18%, var(--bg-surface));
+  --state-info-border: color-mix(in srgb, var(--color-info) 48%, var(--border));
+  --state-info-text: var(--color-info);
+  --surface-canvas: var(--bg-page);
+  --surface-panel: var(--bg-panel);
+  --surface-panel-border: var(--border);
+  --surface-elevated: var(--bg-elevated);
+  --surface-elevated-border: var(--border-light);
+  --surface-input: var(--bg-input);
+  --surface-input-border: var(--border);
+  --surface-muted: var(--bg-sidebar);
+  --surface-inverse: var(--text-primary);
+  --overlay-backdrop: color-mix(in srgb, var(--bg-page) 68%, transparent);
+  --overlay-scrim: color-mix(in srgb, var(--bg-page) 82%, transparent);
+  --overlay-panel: var(--bg-elevated);
+  --overlay-panel-border: var(--border-light);
+  --overlay-local-backdrop: color-mix(in srgb, var(--bg-page) 54%, transparent);
+  --overlay-local-panel: var(--bg-panel);
+  --overlay-local-panel-border: var(--border);
 
   /* ========== Icon Tokens ========== */
   --icon-primary: var(--text-primary);
@@ -477,6 +676,49 @@
   --bg-panel: color-mix(in srgb, var(--bg-surface) 92%, var(--bg-sidebar));
   --bg-elevated: color-mix(in srgb, var(--bg-surface) 96%, white 4%);
 
+  /* ========== Foundation: State / Surface / Overlay ========== */
+  --state-focus-ring-color: var(--border-focus);
+  --state-focus-ring-offset: 2px;
+  --state-focus-ring-width: 2px;
+  --state-hover-bg: var(--bg-hover);
+  --state-hover-border: var(--border-light);
+  --state-hover-text: var(--text-primary);
+  --state-active-bg: var(--bg-active);
+  --state-selected-bg: color-mix(in srgb, var(--accent-blue) 16%, var(--bg-surface));
+  --state-selected-border: color-mix(in srgb, var(--accent-blue) 42%, var(--border));
+  --state-selected-text: var(--text-primary);
+  --state-disabled-bg: var(--bg-disabled);
+  --state-disabled-border: var(--border);
+  --state-disabled-text: var(--text-disabled);
+  --state-success-bg: color-mix(in srgb, var(--color-success) 14%, var(--bg-surface));
+  --state-success-border: color-mix(in srgb, var(--color-success) 36%, var(--border));
+  --state-success-text: var(--color-success);
+  --state-warning-bg: color-mix(in srgb, var(--color-warning) 14%, var(--bg-surface));
+  --state-warning-border: color-mix(in srgb, var(--color-warning) 36%, var(--border));
+  --state-warning-text: var(--color-warning);
+  --state-error-bg: color-mix(in srgb, var(--color-error) 14%, var(--bg-surface));
+  --state-error-border: color-mix(in srgb, var(--color-error) 36%, var(--border));
+  --state-error-text: var(--color-error);
+  --state-info-bg: color-mix(in srgb, var(--color-info) 14%, var(--bg-surface));
+  --state-info-border: color-mix(in srgb, var(--color-info) 36%, var(--border));
+  --state-info-text: var(--color-info);
+  --surface-canvas: var(--bg-page);
+  --surface-panel: var(--bg-panel);
+  --surface-panel-border: var(--border);
+  --surface-elevated: var(--bg-elevated);
+  --surface-elevated-border: var(--border-light);
+  --surface-input: var(--bg-input);
+  --surface-input-border: var(--border);
+  --surface-muted: var(--bg-sidebar);
+  --surface-inverse: var(--text-inverse);
+  --overlay-backdrop: color-mix(in srgb, #0f172a 26%, transparent);
+  --overlay-scrim: color-mix(in srgb, #0f172a 40%, transparent);
+  --overlay-panel: var(--bg-elevated);
+  --overlay-panel-border: var(--border-light);
+  --overlay-local-backdrop: color-mix(in srgb, #0f172a 18%, transparent);
+  --overlay-local-panel: var(--bg-panel);
+  --overlay-local-panel-border: var(--border);
+
   /* ========== Icon Tokens ========== */
   --icon-primary: var(--text-primary);
   --icon-secondary: var(--text-secondary);
@@ -556,6 +798,49 @@
   --color-info: #88c0d0;
   --bg-panel: color-mix(in srgb, var(--bg-surface) 94%, var(--bg-page));
   --bg-elevated: color-mix(in srgb, var(--bg-surface) 98%, white 2%);
+
+  /* ========== Foundation: State / Surface / Overlay ========== */
+  --state-focus-ring-color: var(--border-focus);
+  --state-focus-ring-offset: 2px;
+  --state-focus-ring-width: 2px;
+  --state-hover-bg: var(--bg-hover);
+  --state-hover-border: var(--border-light);
+  --state-hover-text: var(--text-primary);
+  --state-active-bg: var(--bg-active);
+  --state-selected-bg: color-mix(in srgb, var(--accent-blue) 20%, var(--bg-surface));
+  --state-selected-border: color-mix(in srgb, var(--accent-blue) 52%, var(--border));
+  --state-selected-text: var(--text-primary);
+  --state-disabled-bg: var(--bg-disabled);
+  --state-disabled-border: var(--border);
+  --state-disabled-text: var(--text-disabled);
+  --state-success-bg: color-mix(in srgb, var(--color-success) 18%, var(--bg-surface));
+  --state-success-border: color-mix(in srgb, var(--color-success) 48%, var(--border));
+  --state-success-text: var(--color-success);
+  --state-warning-bg: color-mix(in srgb, var(--color-warning) 18%, var(--bg-surface));
+  --state-warning-border: color-mix(in srgb, var(--color-warning) 48%, var(--border));
+  --state-warning-text: var(--color-warning);
+  --state-error-bg: color-mix(in srgb, var(--color-error) 18%, var(--bg-surface));
+  --state-error-border: color-mix(in srgb, var(--color-error) 48%, var(--border));
+  --state-error-text: var(--color-error);
+  --state-info-bg: color-mix(in srgb, var(--color-info) 18%, var(--bg-surface));
+  --state-info-border: color-mix(in srgb, var(--color-info) 48%, var(--border));
+  --state-info-text: var(--color-info);
+  --surface-canvas: var(--bg-page);
+  --surface-panel: var(--bg-panel);
+  --surface-panel-border: var(--border);
+  --surface-elevated: var(--bg-elevated);
+  --surface-elevated-border: var(--border-light);
+  --surface-input: var(--bg-input);
+  --surface-input-border: var(--border);
+  --surface-muted: var(--bg-sidebar);
+  --surface-inverse: var(--text-primary);
+  --overlay-backdrop: color-mix(in srgb, var(--bg-page) 68%, transparent);
+  --overlay-scrim: color-mix(in srgb, var(--bg-page) 82%, transparent);
+  --overlay-panel: var(--bg-elevated);
+  --overlay-panel-border: var(--border-light);
+  --overlay-local-backdrop: color-mix(in srgb, var(--bg-page) 54%, transparent);
+  --overlay-local-panel: var(--bg-panel);
+  --overlay-local-panel-border: var(--border);
 
   /* ========== Icon Tokens ========== */
   --icon-primary: var(--text-primary);
@@ -637,6 +922,49 @@
   --bg-panel: color-mix(in srgb, var(--bg-surface) 92%, var(--bg-sidebar));
   --bg-elevated: color-mix(in srgb, var(--bg-surface) 96%, white 4%);
 
+  /* ========== Foundation: State / Surface / Overlay ========== */
+  --state-focus-ring-color: var(--border-focus);
+  --state-focus-ring-offset: 2px;
+  --state-focus-ring-width: 2px;
+  --state-hover-bg: var(--bg-hover);
+  --state-hover-border: var(--border-light);
+  --state-hover-text: var(--text-primary);
+  --state-active-bg: var(--bg-active);
+  --state-selected-bg: color-mix(in srgb, var(--accent-blue) 16%, var(--bg-surface));
+  --state-selected-border: color-mix(in srgb, var(--accent-blue) 42%, var(--border));
+  --state-selected-text: var(--text-primary);
+  --state-disabled-bg: var(--bg-disabled);
+  --state-disabled-border: var(--border);
+  --state-disabled-text: var(--text-disabled);
+  --state-success-bg: color-mix(in srgb, var(--color-success) 14%, var(--bg-surface));
+  --state-success-border: color-mix(in srgb, var(--color-success) 36%, var(--border));
+  --state-success-text: var(--color-success);
+  --state-warning-bg: color-mix(in srgb, var(--color-warning) 14%, var(--bg-surface));
+  --state-warning-border: color-mix(in srgb, var(--color-warning) 36%, var(--border));
+  --state-warning-text: var(--color-warning);
+  --state-error-bg: color-mix(in srgb, var(--color-error) 14%, var(--bg-surface));
+  --state-error-border: color-mix(in srgb, var(--color-error) 36%, var(--border));
+  --state-error-text: var(--color-error);
+  --state-info-bg: color-mix(in srgb, var(--color-info) 14%, var(--bg-surface));
+  --state-info-border: color-mix(in srgb, var(--color-info) 36%, var(--border));
+  --state-info-text: var(--color-info);
+  --surface-canvas: var(--bg-page);
+  --surface-panel: var(--bg-panel);
+  --surface-panel-border: var(--border);
+  --surface-elevated: var(--bg-elevated);
+  --surface-elevated-border: var(--border-light);
+  --surface-input: var(--bg-input);
+  --surface-input-border: var(--border);
+  --surface-muted: var(--bg-sidebar);
+  --surface-inverse: var(--text-inverse);
+  --overlay-backdrop: color-mix(in srgb, #243447 20%, transparent);
+  --overlay-scrim: color-mix(in srgb, #243447 32%, transparent);
+  --overlay-panel: var(--bg-elevated);
+  --overlay-panel-border: var(--border-light);
+  --overlay-local-backdrop: color-mix(in srgb, #243447 14%, transparent);
+  --overlay-local-panel: var(--bg-panel);
+  --overlay-local-panel-border: var(--border);
+
   /* ========== Icon Tokens ========== */
   --icon-primary: var(--text-primary);
   --icon-secondary: var(--text-secondary);
@@ -717,6 +1045,49 @@
   --bg-panel: color-mix(in srgb, var(--bg-surface) 92%, #101010);
   --bg-elevated: color-mix(in srgb, var(--bg-surface) 98%, white 2%);
 
+  /* ========== Foundation: State / Surface / Overlay ========== */
+  --state-focus-ring-color: var(--border-focus);
+  --state-focus-ring-offset: 2px;
+  --state-focus-ring-width: 2px;
+  --state-hover-bg: var(--bg-hover);
+  --state-hover-border: var(--border-light);
+  --state-hover-text: var(--text-primary);
+  --state-active-bg: var(--bg-active);
+  --state-selected-bg: color-mix(in srgb, var(--accent-blue) 24%, var(--bg-surface));
+  --state-selected-border: color-mix(in srgb, var(--accent-blue) 60%, var(--border));
+  --state-selected-text: var(--text-primary);
+  --state-disabled-bg: var(--bg-disabled);
+  --state-disabled-border: var(--border);
+  --state-disabled-text: var(--text-disabled);
+  --state-success-bg: color-mix(in srgb, var(--color-success) 24%, var(--bg-surface));
+  --state-success-border: color-mix(in srgb, var(--color-success) 56%, var(--border));
+  --state-success-text: var(--color-success);
+  --state-warning-bg: color-mix(in srgb, var(--color-warning) 24%, var(--bg-surface));
+  --state-warning-border: color-mix(in srgb, var(--color-warning) 56%, var(--border));
+  --state-warning-text: var(--color-warning);
+  --state-error-bg: color-mix(in srgb, var(--color-error) 24%, var(--bg-surface));
+  --state-error-border: color-mix(in srgb, var(--color-error) 56%, var(--border));
+  --state-error-text: var(--color-error);
+  --state-info-bg: color-mix(in srgb, var(--color-info) 24%, var(--bg-surface));
+  --state-info-border: color-mix(in srgb, var(--color-info) 56%, var(--border));
+  --state-info-text: var(--color-info);
+  --surface-canvas: var(--bg-page);
+  --surface-panel: var(--bg-panel);
+  --surface-panel-border: var(--border);
+  --surface-elevated: var(--bg-elevated);
+  --surface-elevated-border: var(--border-light);
+  --surface-input: var(--bg-input);
+  --surface-input-border: var(--border);
+  --surface-muted: var(--bg-sidebar);
+  --surface-inverse: var(--text-primary);
+  --overlay-backdrop: color-mix(in srgb, #000000 72%, transparent);
+  --overlay-scrim: color-mix(in srgb, #000000 84%, transparent);
+  --overlay-panel: var(--bg-elevated);
+  --overlay-panel-border: var(--border-light);
+  --overlay-local-backdrop: color-mix(in srgb, #000000 58%, transparent);
+  --overlay-local-panel: var(--bg-panel);
+  --overlay-local-panel-border: var(--border);
+
   /* ========== Icon Tokens ========== */
   --icon-primary: #ffffff;
   --icon-secondary: #ffff00;
@@ -796,6 +1167,49 @@
   --color-info: #0037da;
   --bg-panel: color-mix(in srgb, var(--bg-surface) 92%, #f0f0f0);
   --bg-elevated: color-mix(in srgb, var(--bg-surface) 96%, white 4%);
+
+  /* ========== Foundation: State / Surface / Overlay ========== */
+  --state-focus-ring-color: var(--border-focus);
+  --state-focus-ring-offset: 2px;
+  --state-focus-ring-width: 2px;
+  --state-hover-bg: var(--bg-hover);
+  --state-hover-border: var(--border-light);
+  --state-hover-text: var(--text-primary);
+  --state-active-bg: var(--bg-active);
+  --state-selected-bg: color-mix(in srgb, var(--accent-blue) 18%, var(--bg-surface));
+  --state-selected-border: color-mix(in srgb, var(--accent-blue) 44%, var(--border));
+  --state-selected-text: var(--text-primary);
+  --state-disabled-bg: var(--bg-disabled);
+  --state-disabled-border: var(--border-light);
+  --state-disabled-text: var(--text-disabled);
+  --state-success-bg: color-mix(in srgb, var(--color-success) 16%, var(--bg-surface));
+  --state-success-border: color-mix(in srgb, var(--color-success) 38%, var(--border));
+  --state-success-text: var(--color-success);
+  --state-warning-bg: color-mix(in srgb, var(--color-warning) 16%, var(--bg-surface));
+  --state-warning-border: color-mix(in srgb, var(--color-warning) 38%, var(--border));
+  --state-warning-text: var(--color-warning);
+  --state-error-bg: color-mix(in srgb, var(--color-error) 16%, var(--bg-surface));
+  --state-error-border: color-mix(in srgb, var(--color-error) 38%, var(--border));
+  --state-error-text: var(--color-error);
+  --state-info-bg: color-mix(in srgb, var(--color-info) 16%, var(--bg-surface));
+  --state-info-border: color-mix(in srgb, var(--color-info) 38%, var(--border));
+  --state-info-text: var(--color-info);
+  --surface-canvas: var(--bg-page);
+  --surface-panel: var(--bg-panel);
+  --surface-panel-border: var(--border);
+  --surface-elevated: var(--bg-elevated);
+  --surface-elevated-border: var(--border-light);
+  --surface-input: var(--bg-input);
+  --surface-input-border: var(--border);
+  --surface-muted: var(--bg-sidebar);
+  --surface-inverse: var(--text-inverse);
+  --overlay-backdrop: color-mix(in srgb, #000000 20%, transparent);
+  --overlay-scrim: color-mix(in srgb, #000000 30%, transparent);
+  --overlay-panel: var(--bg-elevated);
+  --overlay-panel-border: var(--border-light);
+  --overlay-local-backdrop: color-mix(in srgb, #000000 14%, transparent);
+  --overlay-local-panel: var(--bg-panel);
+  --overlay-local-panel-border: var(--border);
 
   /* ========== Icon Tokens ========== */
   --icon-primary: #000000;

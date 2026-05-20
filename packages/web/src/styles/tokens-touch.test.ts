@@ -60,6 +60,117 @@ describe("tokens.css touch tokens", () => {
     "--icon-surface-error",
   ] as const;
 
+  const sharedFoundationTokens = [
+    "--control-height-sm",
+    "--control-height-md",
+    "--control-height-lg",
+    "--icon-button-size-sm",
+    "--icon-button-size-md",
+    "--icon-button-size-lg",
+    "--list-row-height-sm",
+    "--list-row-height-md",
+    "--list-row-height-lg",
+    "--toolbar-height-sm",
+    "--toolbar-height-md",
+    "--toolbar-height-lg",
+    "--panel-header-height",
+    "--gap-stack-2xs",
+    "--gap-stack-xs",
+    "--gap-stack-sm",
+    "--gap-stack-md",
+    "--gap-stack-lg",
+    "--gap-stack-xl",
+    "--gap-cluster-2xs",
+    "--gap-cluster-xs",
+    "--gap-cluster-sm",
+    "--gap-cluster-md",
+    "--gap-cluster-lg",
+    "--gap-cluster-xl",
+    "--inset-control-sm",
+    "--inset-control-md",
+    "--inset-control-lg",
+    "--inset-row-sm",
+    "--inset-row-md",
+    "--inset-row-lg",
+    "--inset-panel",
+    "--inset-dialog",
+    "--inset-drawer",
+    "--section-gap",
+    "--form-group-gap",
+    "--radius-control-sm",
+    "--radius-control-md",
+    "--radius-control-lg",
+    "--radius-chip",
+    "--radius-tag",
+    "--radius-pill",
+    "--radius-panel",
+    "--radius-overlay",
+    "--radius-local-overlay",
+    "--radius-flush",
+    "--terminal-bg",
+    "--terminal-border",
+    "--terminal-text",
+    "--terminal-accent",
+    "--session-bg",
+    "--session-border",
+    "--session-text",
+    "--session-accent",
+    "--editor-bg",
+    "--editor-border",
+    "--editor-text",
+    "--editor-gutter",
+    "--diff-added-bg",
+    "--diff-added-border",
+    "--diff-removed-bg",
+    "--diff-removed-border",
+    "--diff-modified-bg",
+    "--diff-modified-border",
+  ] as const;
+
+  const themedFoundationTokens = [
+    "--state-focus-ring-color",
+    "--state-focus-ring-offset",
+    "--state-focus-ring-width",
+    "--state-hover-bg",
+    "--state-hover-border",
+    "--state-hover-text",
+    "--state-active-bg",
+    "--state-selected-bg",
+    "--state-selected-border",
+    "--state-selected-text",
+    "--state-disabled-bg",
+    "--state-disabled-border",
+    "--state-disabled-text",
+    "--state-success-bg",
+    "--state-success-border",
+    "--state-success-text",
+    "--state-warning-bg",
+    "--state-warning-border",
+    "--state-warning-text",
+    "--state-error-bg",
+    "--state-error-border",
+    "--state-error-text",
+    "--state-info-bg",
+    "--state-info-border",
+    "--state-info-text",
+    "--surface-canvas",
+    "--surface-panel",
+    "--surface-panel-border",
+    "--surface-elevated",
+    "--surface-elevated-border",
+    "--surface-input",
+    "--surface-input-border",
+    "--surface-muted",
+    "--surface-inverse",
+    "--overlay-backdrop",
+    "--overlay-scrim",
+    "--overlay-panel",
+    "--overlay-panel-border",
+    "--overlay-local-backdrop",
+    "--overlay-local-panel",
+    "--overlay-local-panel-border",
+  ] as const;
+
   it("defines named theme blocks for all built-in themes", () => {
     expect(stylesheet).toContain(':root,\n[data-theme="mint-dark"]');
     expect(stylesheet).toContain('[data-theme="mint-light"]');
@@ -79,6 +190,17 @@ describe("tokens.css touch tokens", () => {
     expect(root).toContain("--touch-target-large: 44px");
     expect(root).toContain("--touch-spacing-min: 8px");
     expect(root).toContain("--touch-hit-slop: 0px");
+  });
+
+  it("defines the shared foundation contract on :root without changing code font-size plumbing", () => {
+    const root = getRuleBlock(":root");
+
+    for (const token of sharedFoundationTokens) {
+      expect(getCustomProperty(root, token), `:root should define ${token}`).not.toBeNull();
+    }
+
+    expect(getCustomProperty(root, "--terminal-font-size")).toBe("11px");
+    expect(getCustomProperty(root, "--terminal-line-height")).toBe("1.6");
   });
 
   it("overrides touch tokens on narrow viewport only", () => {
@@ -207,6 +329,24 @@ describe("tokens.css touch tokens", () => {
         expect(getCustomProperty(block, token), `${theme} should define ${token}`).not.toBeNull();
       }
     }
+  });
+
+  it("defines themed state and surface foundation tokens for every built-in theme", () => {
+    for (const theme of builtInThemes) {
+      const block = getRuleBlock(`[data-theme="${theme}"]`);
+
+      for (const token of themedFoundationTokens) {
+        expect(getCustomProperty(block, token), `${theme} should define ${token}`).not.toBeNull();
+      }
+    }
+  });
+
+  it("keeps shared foundation defaults out of theme blocks", () => {
+    const mintLight = getRuleBlock('[data-theme="mint-light"]');
+
+    expect(getCustomProperty(mintLight, "--control-height-md")).toBeNull();
+    expect(getCustomProperty(mintLight, "--gap-stack-md")).toBeNull();
+    expect(getCustomProperty(mintLight, "--radius-panel")).toBeNull();
   });
 
   it("keeps light-theme icon tokens visually distinct across families", () => {
