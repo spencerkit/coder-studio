@@ -6,7 +6,9 @@
 
 **Coder Studio, made for vibe coding.**
 
-Run Claude Code and Codex in one workspace. Keep your terminal, files, Git view, and AI sessions available from any device.
+An agentic workspace for real development. Run, inspect, and supervise coding agents with terminals, files, Git, sessions, and review in one browser workspace.
+
+Built-in support today: Claude Code and Codex. Your code and runtime stay on your machine.
 
 [![npm version](https://img.shields.io/npm/v/@spencer-kit/coder-studio.svg)](https://www.npmjs.com/package/@spencer-kit/coder-studio)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -21,17 +23,17 @@ Run Claude Code and Codex in one workspace. Keep your terminal, files, Git view,
 
 [![Workspace Preview](docs/help/assets/screenshot-desktop-workspace-full.png)](docs/help/assets/screenshot-desktop-workspace-full.png)
 
-<div align="center">Preview the full workspace layout built for vibe coding, supervision, and device switching.</div>
+<div align="center">Preview the full workspace layout built for agent runs, review, supervision, and device switching.</div>
 
 ## Why It Feels Different
 
-- **One browser workspace for vibe coding** — Keep terminal, files, Git, and agent sessions in one place.
+- **One browser workspace for real agent work** — Keep terminals, files, Git, sessions, and review in one place.
 - **Built for device switching** — Start on desktop, continue on tablet, and check progress from your phone.
-- **Objective-driven multi-step orchestration** — Let Supervisor steer long-running AI tasks so you do not have to babysit every turn, reduce repetitive manual prompting, and get more consistent outcomes.
+- **Keep control local** — Your code and runtime stay on your machine.
 
 ## Why Coder Studio?
 
-Vibe coding agents are powerful, but the raw workflow is still fragmented:
+Vibe coding agents are fast, but real development still gets fragmented:
 
 - the agent runs in one terminal
 - files and diffs live in another editor
@@ -46,7 +48,7 @@ Coder Studio turns that scattered workflow into one local browser workspace.
 | Long agent tasks | Watch a terminal or come back later and reconstruct context | Keep sessions, terminal output, files, and Git changes visible in one workspace |
 | Cross-device work | Use SSH, remote desktop, or rebuild context on another machine | Reopen the same local workspace from desktop, tablet, or phone |
 | Reviewing AI changes | Jump between terminal, editor, and Git tools | Inspect files and diffs beside the agent session |
-| Multiple agents | Manage separate terminal windows and histories | Run Claude and Codex sessions side by side in one workspace |
+| Multiple agents | Manage separate terminal windows and histories | Run built-in Claude Code and Codex sessions side by side in one workspace today |
 | Local-first control | Move work into a hosted IDE or cloud VM | Keep the runtime and project files on your own machine |
 
 ## Quick Start
@@ -59,7 +61,7 @@ npm install -g @spencer-kit/coder-studio
 coder-studio open
 ```
 
-Your browser opens automatically. Select your project folder and start working with Claude Code or OpenAI Codex.
+Your browser opens automatically. Select your project folder and start working with Claude Code or OpenAI Codex today.
 
 > **No AI CLI installed yet?** You can still browse files and use the terminal. Install Claude Code or Codex later when needed.
 
@@ -81,7 +83,7 @@ Your browser opens automatically. Select your project folder and start working w
 
 ### AI-Assisted Coding
 
-- Run Claude Code and Codex sessions side by side
+- Run Claude Code and Codex sessions side by side today
 - Keep terminal, editor, Git, and supervisor state in one unified interface
 - Resume active AI work from another device without rebuilding context
 
@@ -113,11 +115,12 @@ The same workspace URL works across all devices — interface adapts automatical
 |---------|-------------|
 | **Cross-Device Workspace** | Reopen the same coding environment from desktop, tablet, or phone without rebuilding context |
 | **Supervisor Loops** | Run objective-driven evaluation and follow-up cycles for long AI tasks with less manual babysitting |
-| **Claude Code + Codex** | Use both agent CLIs inside one workspace instead of splitting your workflow across separate tools |
-| **Unified Terminal, Editor, and Git** | Keep PTY terminals, Monaco editing, diffs, and changed files in one browser UI |
+| **Built-in Agent Providers** | Use Claude Code and Codex inside one workspace today instead of splitting your workflow across separate tools |
+| **Unified Terminal, Files, and Git** | Keep PTY terminals, Monaco editing, diffs, and changed files in one browser UI |
+| **Reviewable AI Work** | Inspect changed files and diffs beside the session before trusting the result |
 | **Responsive Workspace UI** | Use layouts tuned for desktop, tablet, and mobile instead of a desktop-only interface squeezed onto small screens |
 | **Session Continuity** | Resume active sessions and keep AI work visible across device switches |
-| **Local-First Runtime** | Keep code and runtime on your machine instead of relying on a cloud IDE |
+| **Local Runtime Control** | Keep code and runtime on your machine instead of relying on a cloud IDE |
 
 ---
 
@@ -150,7 +153,7 @@ The same workspace URL works across all devices — interface adapts automatical
 
 ## 👥 Who Should Use Coder Studio
 
-- **AI Coding Power Users** — Daily Claude Code / Codex users who want better session management
+- **Developers Running Coding Agents** — Want terminals, files, Git, sessions, and review in one place
 - **Multi-Device Developers** — Switch between office, home, and mobile devices frequently
 - **Developers Running Long AI Tasks** — Want Supervisor to keep multi-step work moving without constant babysitting
 - **Privacy-Conscious Developers** — Want code to stay on local machine, not cloud IDE
