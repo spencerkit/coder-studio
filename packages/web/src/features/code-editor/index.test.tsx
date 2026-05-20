@@ -8,7 +8,9 @@ import { seedReadyWorkspaceState } from "../../test-utils/workspace-state";
 import { CommandResultError } from "../../ws/client";
 import {
   activeFilePathAtomFamily,
+  editorModeAtomFamily,
   editorRefreshTokenAtomFamily,
+  gitDiffPreviewAtomFamily,
   type OpenFile,
   openFilesAtomFamily,
 } from "../workspace/atoms";
@@ -290,6 +292,119 @@ describe("CodeEditorHost", () => {
     fireEvent.mouseEnter(saveBtn);
     fireEvent.focus(saveBtn);
     expect(screen.queryByRole("tooltip")).toBeNull();
+  });
+
+  it("defaults text files into edit mode and shows the text editor", async () => {
+    const { store } = setupStore({
+      activePath: "src/app.ts",
+      openFiles: {
+        "src/app.ts": {
+          kind: "text",
+          path: "src/app.ts",
+          content: "export const x = 1;",
+          savedContent: "export const x = 1;",
+          baseHash: "hash-text",
+          isDirty: false,
+        },
+      },
+    });
+
+    render(
+      <Provider store={store}>
+        <CodeEditorHost />
+      </Provider>
+    );
+
+    expect(screen.getByTestId("monaco-host")).toHaveTextContent("export const x = 1;");
+    expect(store.get(editorModeAtomFamily("ws-1"))).toBe("edit");
+  });
+
+  it("defaults image files into preview mode and keeps text-backed images editable as text when requested", async () => {
+    const { store } = setupStore({
+      activePath: "assets/logo.svg",
+      openFiles: {
+        "assets/logo.svg": {
+          kind: "image",
+          path: "assets/logo.svg",
+          mime: "image/svg+xml",
+          url: "/api/file?workspaceId=ws-1&path=assets%2Flogo.svg",
+          size: 42,
+          version: "v1",
+          isTextBacked: true,
+        },
+      },
+    });
+
+    render(
+      <Provider store={store}>
+        <CodeEditorHost />
+      </Provider>
+    );
+
+    expect(screen.getByTestId("image-preview")).toBeInTheDocument();
+    expect(store.get(editorModeAtomFamily("ws-1"))).toBe("preview");
+  });
+
+  it("keeps a text-backed image in edit mode when it is opened as text", async () => {
+    const { store } = setupStore({
+      activePath: "assets/logo.svg",
+      openFiles: {
+        "assets/logo.svg": {
+          kind: "text",
+          path: "assets/logo.svg",
+          content: "<svg />",
+          savedContent: "<svg />",
+          baseHash: "",
+          isDirty: false,
+          viewingTextBackedImageAsText: true,
+        },
+      },
+    });
+
+    render(
+      <Provider store={store}>
+        <CodeEditorHost />
+      </Provider>
+    );
+
+    expect(screen.getByTestId("monaco-host")).toHaveTextContent("<svg />");
+    expect(store.get(editorModeAtomFamily("ws-1"))).toBe("edit");
+  });
+
+  it("tracks unsaved changes outside diff mode and preserves diff preview as payload state", async () => {
+    const { store } = setupStore({
+      activePath: "src/dirty.ts",
+      openFiles: {
+        "src/dirty.ts": {
+          kind: "text",
+          path: "src/dirty.ts",
+          content: "changed",
+          savedContent: "original",
+          baseHash: "dirty-hash",
+          isDirty: true,
+        },
+      },
+    });
+    store.set(gitDiffPreviewAtomFamily("ws-1"), {
+      path: "src/dirty.ts",
+      diff: "diff --git a/src/dirty.ts b/src/dirty.ts",
+      staged: false,
+      source: "file",
+    });
+
+    render(
+      <Provider store={store}>
+        <CodeEditorHost />
+      </Provider>
+    );
+
+    expect(store.get(editorModeAtomFamily("ws-1"))).toBe("edit");
+    expect(store.get(gitDiffPreviewAtomFamily("ws-1"))).toEqual({
+      path: "src/dirty.ts",
+      diff: "diff --git a/src/dirty.ts b/src/dirty.ts",
+      staged: false,
+      source: "file",
+    });
   });
 
   it("shows the save tooltip on desktop for a text buffer", async () => {

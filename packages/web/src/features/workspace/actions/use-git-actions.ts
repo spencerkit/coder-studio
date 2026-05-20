@@ -5,8 +5,10 @@ import { dispatchCommandAtom } from "../../../atoms/connection";
 import { useTranslation } from "../../../lib/i18n";
 import { pushToastAtom } from "../../notifications/atoms";
 import {
+  activeFilePathAtomFamily,
   branchQuickPickAtom,
   commitMessageDraftAtomFamily,
+  editorModeAtomFamily,
   fileTreeStaleAtomFamily,
   type GitDiffPreview,
   gitBranchListAtomFamily,
@@ -430,6 +432,8 @@ export function useGitPanelActions({
   const setBranchList = useSetAtom(gitBranchListAtomFamily(workspaceId));
   const setDiffPreview = useSetAtom(gitDiffPreviewAtomFamily(workspaceId));
   const setDiffPreviewDismissed = useSetAtom(gitDiffPreviewDismissedAtomFamily(workspaceId));
+  const setActiveFilePath = useSetAtom(activeFilePathAtomFamily(workspaceId));
+  const setEditorMode = useSetAtom(editorModeAtomFamily(workspaceId));
 
   const [commitMessage, setCommitMessage] = useAtom(commitMessageDraftAtomFamily(workspaceId));
   const [isLoading, setIsLoading] = useState(false);
@@ -484,9 +488,18 @@ export function useGitPanelActions({
       };
       setDiffPreviewDismissed(false);
       updatePreview(preview);
+      setActiveFilePath(change.path);
+      setEditorMode("diff");
       return preview;
     },
-    [dispatch, setDiffPreviewDismissed, updatePreview, workspaceId]
+    [
+      dispatch,
+      setActiveFilePath,
+      setDiffPreviewDismissed,
+      setEditorMode,
+      updatePreview,
+      workspaceId,
+    ]
   );
 
   const openHistoryDiff = useCallback(

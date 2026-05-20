@@ -6,6 +6,8 @@ import { useTranslation } from "../../../lib/i18n";
 import { useOpenLocation } from "../../code-editor/actions/use-open-location";
 import {
   activeFilePathAtomFamily,
+  deriveEditorModeForPath,
+  editorModeAtomFamily,
   fileTreeAtomFamily,
   fileTreeStaleAtomFamily,
   loadedDirsAtomFamily,
@@ -107,6 +109,7 @@ export function useFileActions({
   const setFileTree = useSetAtom(fileTreeAtomFamily(workspaceId));
   const setFileTreeStale = useSetAtom(fileTreeStaleAtomFamily(workspaceId));
   const setActiveFilePath = useSetAtom(activeFilePathAtomFamily(workspaceId));
+  const setEditorMode = useSetAtom(editorModeAtomFamily(workspaceId));
   const setOpenFiles = useSetAtom(openFilesAtomFamily(workspaceId));
   const { openLocation } = useOpenLocation(workspaceId);
   const loadedDirs = useAtomValue(loadedDirsAtomFamily(workspaceId));
@@ -459,6 +462,7 @@ export function useFileActions({
 
   const handleSelectFile = useCallback(
     (path: string) => {
+      setEditorMode(deriveEditorModeForPath(path));
       void openLocation({
         workspaceId,
         path,
@@ -466,7 +470,7 @@ export function useFileActions({
       });
       onSelectFile?.(path);
     },
-    [onSelectFile, openLocation, workspaceId]
+    [onSelectFile, openLocation, setEditorMode, workspaceId]
   );
 
   return {
