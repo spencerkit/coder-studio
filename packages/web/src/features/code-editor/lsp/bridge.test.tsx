@@ -210,6 +210,34 @@ describe("createLspBridge", () => {
     });
   });
 
+  it("registers Monaco providers for tsx files on the TypeScript language", () => {
+    const bridge = createLspBridge({
+      sendCommand: vi.fn() as BridgeSendCommand,
+      subscribe: vi.fn(() => () => {}),
+    });
+
+    const registerDefinitionProvider = vi.mocked(monaco.languages.registerDefinitionProvider);
+
+    bridge.attachModel({
+      workspaceId: "ws-1",
+      workspaceRootPath: "/repo",
+      path: "src/app.tsx",
+      monacoLanguage: "typescriptreact",
+      model: createMockModel(
+        "export function App() { return <div />; }\n",
+        1,
+        monaco.Uri.file("/repo/src/app.tsx")
+      ),
+    });
+
+    expect(registerDefinitionProvider).toHaveBeenCalledWith(
+      "typescript",
+      expect.objectContaining({
+        provideDefinition: expect.any(Function),
+      })
+    );
+  });
+
   it("returns a no-op detach function for unsupported languages", () => {
     const sendCommand = vi.fn();
     const bridge = createLspBridge({

@@ -162,7 +162,7 @@ export function createLspBridge(initialTransport: Partial<LspBridgeTransport> = 
     let detached = false;
     let currentJobId: string | undefined;
     models.set(key, input);
-    providers.register(input.monacoLanguage);
+    providers.register(resolveMonacoProviderLanguageId(input.monacoLanguage));
     ensureDiagnosticsSubscription(input.workspaceId, input.workspaceRootPath);
 
     const ensureReady = async (): Promise<void> => {
@@ -364,3 +364,15 @@ export function createLspBridge(initialTransport: Partial<LspBridgeTransport> = 
 }
 
 export const globalLspBridge = createLspBridge();
+
+function resolveMonacoProviderLanguageId(languageId: string): string {
+  if (languageId === "typescriptreact") {
+    return "typescript";
+  }
+
+  if (languageId === "javascriptreact") {
+    return "javascript";
+  }
+
+  return languageId;
+}
