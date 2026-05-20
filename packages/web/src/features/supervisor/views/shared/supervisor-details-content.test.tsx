@@ -65,7 +65,6 @@ describe("SupervisorDetailsContent", () => {
         reason: "Need to finish the validation step.",
       },
     ],
-    cycles: [],
     createdAt: 1,
     updatedAt: 1,
   });

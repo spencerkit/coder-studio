@@ -73,7 +73,11 @@ function makeEvaluator(
     providerConfigRepo: createProviderConfigRepo(),
     timeoutMs: 5000,
     config: config
-      ? { guidanceMaxChars: config.guidanceMaxChars ?? 2000, guidanceDedupeWindow: 2 }
+      ? {
+          guidanceMaxChars: config.guidanceMaxChars ?? 2000,
+          maxCyclesPerSession: 100,
+          terminalLinesForEvaluation: 500,
+        }
       : undefined,
   });
 }
@@ -111,7 +115,6 @@ function makeSupervisor(evaluatorProviderId = "codex"): Supervisor {
     maxSupervisionCount: 0,
     completedSupervisionCount: 0,
     recentTargetCycles: [],
-    cycles: [],
     createdAt: 1,
     updatedAt: 1,
   };

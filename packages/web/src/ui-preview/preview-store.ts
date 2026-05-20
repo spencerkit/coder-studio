@@ -27,11 +27,7 @@ import {
 } from "../atoms/workspaces";
 import { type PaneNode, paneLayoutAtomFamily } from "../features/agent-panes/atoms/pane-layout";
 import { type Toast, toastsAtom } from "../features/notifications";
-import {
-  supervisorCyclesAtom,
-  supervisorDialogAtom,
-  supervisorsAtom,
-} from "../features/supervisor/atoms";
+import { supervisorDialogAtom, supervisorsAtom } from "../features/supervisor/atoms";
 import { terminalMetaAtomFamily } from "../features/terminal-panel/atoms";
 import {
   activeFilePathAtomFamily,
@@ -447,7 +443,6 @@ export function buildUiPreviewStore(seed: UiPreviewSeed): Store {
         }
   );
   store.set(supervisorsAtom, new Map(Object.entries(seed.supervisorBySessionId ?? {})));
-  store.set(supervisorCyclesAtom, new Map());
   store.set(wsClientAtom, {
     sendCommand: async <T>(op: string, args: unknown) => {
       const result = await dispatch<T>(op, args);

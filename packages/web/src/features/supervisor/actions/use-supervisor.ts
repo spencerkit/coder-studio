@@ -2,12 +2,7 @@ import type { Session, Supervisor } from "@coder-studio/core";
 import { useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect } from "react";
 import { dispatchCommandAtom } from "../../../atoms/connection";
-import {
-  supervisorCyclesAtom,
-  supervisorDialogAtom,
-  supervisorHydratedAtomFamily,
-  supervisorsAtom,
-} from "../atoms";
+import { supervisorDialogAtom, supervisorHydratedAtomFamily, supervisorsAtom } from "../atoms";
 import { formatScheduledAtInput } from "./use-objective-dialog-state";
 
 const EMPTY_SESSION_ID = "__supervisor-empty__";
@@ -18,7 +13,6 @@ export function useSupervisor(session: Session | null | undefined) {
   const hydrated = useAtomValue(supervisorHydratedAtomFamily(sessionId));
   const setHydrated = useSetAtom(supervisorHydratedAtomFamily(sessionId));
   const setSupervisors = useSetAtom(supervisorsAtom);
-  const setCycles = useSetAtom(supervisorCyclesAtom);
   const setDialog = useSetAtom(supervisorDialogAtom);
 
   useEffect(() => {
@@ -52,11 +46,6 @@ export function useSupervisor(session: Session | null | undefined) {
           next.set(session.id, supervisor);
           return next;
         });
-        setCycles((prev) => {
-          const next = new Map(prev);
-          next.set(supervisor.id, supervisor.cycles ?? []);
-          return next;
-        });
       } else {
         setSupervisors((prev) => {
           const next = new Map(prev);
@@ -71,7 +60,7 @@ export function useSupervisor(session: Session | null | undefined) {
     return () => {
       cancelled = true;
     };
-  }, [dispatch, hydrated, session, setCycles, setHydrated, setSupervisors]);
+  }, [dispatch, hydrated, session, setHydrated, setSupervisors]);
 
   const openDialog = useCallback(
     (mode: "enable" | "edit", supervisor?: Supervisor) => {

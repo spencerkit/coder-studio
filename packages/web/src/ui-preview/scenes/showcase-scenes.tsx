@@ -98,7 +98,6 @@ const supervisor: Supervisor = {
       reason: "Keep the strip compact and move detailed memory into an explicit disclosure.",
     },
   ],
-  cycles: [],
   createdAt: 1,
   updatedAt: 1,
 };
@@ -258,21 +257,6 @@ const readmeSupervisor: Supervisor = {
       reason: "Hero screenshot is readable. Review scene still needs clearer diff emphasis.",
     },
   ],
-  cycles: [
-    {
-      id: "cycle-readme-1",
-      supervisorId: "sup-readme-hero",
-      sessionId: "session-readme-hero",
-      status: "evaluating",
-      trigger: "manual",
-      evidenceSource: "headless_snapshot",
-      objective: "Refresh README screenshots to highlight active cross-device coding flows",
-      evaluatorProviderId: "claude",
-      progress: 66,
-      result: "Review scene readability still under evaluation",
-      createdAt: 2,
-    },
-  ],
   createdAt: 1,
   updatedAt: 4,
 };
@@ -330,22 +314,6 @@ const readmeMobileSupervisor: Supervisor = {
       result: "continue",
       reason:
         "Desktop assets are approved. Capture a mobile status-check scene that shows continuity.",
-    },
-  ],
-  cycles: [
-    {
-      id: "cycle-readme-mobile-1",
-      supervisorId: "sup-readme-mobile",
-      sessionId: "session-readme-mobile",
-      status: "completed",
-      trigger: "manual",
-      evidenceSource: "headless_snapshot",
-      objective: "Refresh README screenshots to highlight active cross-device coding flows",
-      evaluatorProviderId: "claude",
-      progress: 85,
-      result: "Desktop scenes approved. Mobile continuity shot requested.",
-      createdAt: 4,
-      completedAt: 5,
     },
   ],
   createdAt: 1,

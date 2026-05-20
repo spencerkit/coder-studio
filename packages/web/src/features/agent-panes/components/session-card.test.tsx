@@ -397,7 +397,6 @@ describe("SessionCard", () => {
             evaluatorProviderId: "claude",
             maxSupervisionCount: 0,
             completedSupervisionCount: 0,
-            cycles: [],
             createdAt: Date.now(),
             updatedAt: Date.now(),
           },

@@ -4,11 +4,11 @@ import type {
   Session,
   Supervisor,
   SupervisorCycle,
+  SupervisorCycleTargetRecord,
   SupervisorTargetMemory,
 } from "@coder-studio/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import type { SupervisorCycleUpdatePatch } from "../storage/repositories/supervisor-cycle-repo.js";
 import type {
   NewSupervisor,
   SupervisorUpdatePatch,
@@ -18,6 +18,7 @@ import { SupervisorContextBuilder } from "../supervisor/context-builder.js";
 import { type SupervisorEvaluationResult, SupervisorEvaluator } from "../supervisor/evaluator.js";
 import { SupervisorInjector } from "../supervisor/injector.js";
 import { SupervisorManager, type SupervisorManagerDeps } from "../supervisor/manager.js";
+import type { SupervisorTargetMeta } from "../supervisor/target-store.js";
 
 type TestLogger = {
   info: ReturnType<typeof vi.fn>;
@@ -110,39 +111,11 @@ function applySupervisorPatch(current: Supervisor, patch: SupervisorUpdatePatch)
   };
 }
 
-function applyCyclePatch(
-  current: SupervisorCycle,
-  patch: SupervisorCycleUpdatePatch
-): SupervisorCycle {
-  return {
-    ...current,
-    ...(patch.status !== undefined ? { status: patch.status } : {}),
-    ...(patch.progress !== undefined ? { progress: patch.progress ?? undefined } : {}),
-    ...(patch.result !== undefined ? { result: patch.result ?? undefined } : {}),
-    ...(patch.injectedGuidance !== undefined
-      ? { injectedGuidance: patch.injectedGuidance ?? undefined }
-      : {}),
-    ...(patch.errorReason !== undefined ? { errorReason: patch.errorReason ?? undefined } : {}),
-    ...(patch.completedAt !== undefined ? { completedAt: patch.completedAt ?? undefined } : {}),
-  };
-}
-
 function createManagerDeps() {
   const supervisors = new Map<string, Supervisor>();
-  const cyclesBySupervisor = new Map<string, SupervisorCycle[]>();
-  const attemptsByCycle = new Map<
-    string,
-    Array<{
-      id: string;
-      cycleId: string;
-      attemptIndex: number;
-      status: "evaluating" | "completed" | "failed" | "cancelled";
-      startedAt: number;
-      completedAt?: number;
-      errorReason?: string;
-      providerModel?: string;
-    }>
-  >();
+  const targetMetaById = new Map<string, SupervisorTargetMeta>();
+  const targetMemoryById = new Map<string, SupervisorTargetMemory>();
+  const targetCyclesById = new Map<string, SupervisorCycleTargetRecord[]>();
   const logger: TestLogger = {
     info: vi.fn(),
     warn: vi.fn(),
@@ -187,11 +160,63 @@ function createManagerDeps() {
     cwd: process.cwd(),
     env: {},
   }));
-
-  const hydrateSupervisor = (supervisor: Supervisor): Supervisor => ({
-    ...supervisor,
-    cycles: [...(cyclesBySupervisor.get(supervisor.id) ?? [])],
+  const cloneMemory = (memory: SupervisorTargetMemory): SupervisorTargetMemory => ({
+    ...memory,
+    items: memory.items.map((item) => ({
+      ...item,
+      acceptanceCriteria: [...item.acceptanceCriteria],
+    })),
   });
+  const cloneCycleRecord = (record: SupervisorCycleTargetRecord): SupervisorCycleTargetRecord => ({
+    ...record,
+    itemUpdates: record.itemUpdates?.map((item) => ({ ...item })),
+  });
+  const cloneMeta = (meta: SupervisorTargetMeta): SupervisorTargetMeta => ({ ...meta });
+  const persistedSupervisor = (supervisor: Supervisor): Supervisor => ({
+    ...supervisor,
+    currentTargetMemory: undefined,
+    recentTargetCycles: [],
+  });
+  const buildTargetMeta = (input: {
+    targetId: string;
+    sessionId: string;
+    workspaceId: string;
+    objective: string;
+    createdAt: number;
+  }): SupervisorTargetMeta => ({
+    targetId: input.targetId,
+    sessionId: input.sessionId,
+    workspaceId: input.workspaceId,
+    objective: input.objective,
+    status: "active",
+    createdAt: input.createdAt,
+    updatedAt: input.createdAt,
+    supersededBy: null,
+    completedAt: null,
+  });
+  const buildTargetMemory = (targetId: string, createdAt: number): SupervisorTargetMemory => ({
+    targetId,
+    decompositionGenerated: true,
+    decompositionMode: "stage",
+    items: [
+      {
+        id: "stage-1",
+        kind: "stage",
+        title: "Verify the fix",
+        objective: "Confirm the fix works",
+        deliverable: "A passing focused verification run",
+        acceptanceCriteria: ["Focused verification passes"],
+        status: "in_progress",
+      },
+    ],
+    activeItemId: "stage-1",
+    progressSummary: "Verification in progress",
+    lastGuidance: "Run the focused parser test.",
+    stalledCount: 0,
+    updatedAt: createdAt,
+  });
+  const getTargetCycles = (targetId: string, limit = 20): SupervisorCycleTargetRecord[] =>
+    [...(targetCyclesById.get(targetId) ?? [])].slice(-limit).reverse().map(cloneCycleRecord);
 
   const providerConfigRepo = {
     get: vi.fn((providerId: string): ProviderConfig | undefined =>
@@ -209,128 +234,139 @@ function createManagerDeps() {
         targetId: value.id,
         maxSupervisionCount: value.maxSupervisionCount ?? 0,
         completedSupervisionCount: value.completedSupervisionCount ?? 0,
-        cycles: [],
+        currentTargetMemory: undefined,
+        recentTargetCycles: [],
       };
-      supervisors.set(supervisor.id, { ...supervisor, cycles: [] });
-      return hydrateSupervisor(supervisor);
+      const next = persistedSupervisor(supervisor);
+      supervisors.set(supervisor.id, next);
+      return { ...next };
     }),
     update: vi.fn((id: string, patch: SupervisorUpdatePatch) => {
       const current = supervisors.get(id);
       if (!current) {
         throw new Error(`Supervisor not found: ${id}`);
       }
-      const next = applySupervisorPatch(current, patch);
+      const next = persistedSupervisor(applySupervisorPatch(current, patch));
       supervisors.set(id, next);
-      return hydrateSupervisor(next);
+      return { ...next };
     }),
     findById: vi.fn((id: string) => {
       const supervisor = supervisors.get(id);
-      return supervisor ? hydrateSupervisor(supervisor) : undefined;
+      return supervisor ? { ...supervisor } : undefined;
     }),
     getBySessionId: vi.fn((sessionId: string) => {
       const supervisor = [...supervisors.values()].find((value) => value.sessionId === sessionId);
-      return supervisor ? hydrateSupervisor(supervisor) : undefined;
+      return supervisor ? { ...supervisor } : undefined;
     }),
-    listAll: vi.fn(() => [...supervisors.values()].map(hydrateSupervisor)),
+    listAll: vi.fn(() => [...supervisors.values()].map((supervisor) => ({ ...supervisor }))),
     delete: vi.fn((id: string) => {
       supervisors.delete(id);
-      cyclesBySupervisor.delete(id);
-    }),
-  };
-
-  const cycleRepo = {
-    create: vi.fn((cycle: SupervisorCycle) => {
-      const next = [cycle, ...(cyclesBySupervisor.get(cycle.supervisorId) ?? [])];
-      cyclesBySupervisor.set(cycle.supervisorId, next);
-      return cycle;
-    }),
-    update: vi.fn((id: string, patch: SupervisorCycleUpdatePatch) => {
-      for (const [supervisorId, cycles] of cyclesBySupervisor.entries()) {
-        const index = cycles.findIndex((cycle) => cycle.id === id);
-        if (index === -1) {
-          continue;
-        }
-        const updated = applyCyclePatch(cycles[index]!, patch);
-        const next = [...cycles];
-        next[index] = updated;
-        cyclesBySupervisor.set(supervisorId, next);
-        return updated;
-      }
-      throw new Error(`Cycle not found: ${id}`);
-    }),
-    listRecentForSupervisor: vi.fn((supervisorId: string, _limit: number) => [
-      ...(cyclesBySupervisor.get(supervisorId) ?? []),
-    ]),
-    pruneOldest: vi.fn(),
-  };
-
-  const cycleAttemptRepo = {
-    create: vi.fn((attempt) => {
-      const next = [...(attemptsByCycle.get(attempt.cycleId) ?? []), attempt].sort(
-        (left, right) => left.attemptIndex - right.attemptIndex
-      );
-      attemptsByCycle.set(attempt.cycleId, next);
-      return attempt;
-    }),
-    update: vi.fn((id, patch) => {
-      for (const [cycleId, attempts] of attemptsByCycle.entries()) {
-        const index = attempts.findIndex((attempt) => attempt.id === id);
-        if (index === -1) {
-          continue;
-        }
-
-        const updated = {
-          ...attempts[index]!,
-          ...(patch.status !== undefined ? { status: patch.status } : {}),
-          ...(patch.completedAt !== undefined
-            ? { completedAt: patch.completedAt ?? undefined }
-            : {}),
-          ...(patch.errorReason !== undefined
-            ? { errorReason: patch.errorReason ?? undefined }
-            : {}),
-          ...(patch.providerModel !== undefined
-            ? { providerModel: patch.providerModel ?? undefined }
-            : {}),
-        };
-        const next = [...attempts];
-        next[index] = updated;
-        attemptsByCycle.set(cycleId, next);
-        return updated;
-      }
-
-      throw new Error(`Attempt not found: ${id}`);
-    }),
-    listForCycle: vi.fn((cycleId: string) => [...(attemptsByCycle.get(cycleId) ?? [])]),
-    deleteForCycle: vi.fn((cycleId: string) => {
-      attemptsByCycle.delete(cycleId);
+      targetMetaById.delete(id);
+      targetMemoryById.delete(id);
+      targetCyclesById.delete(id);
     }),
   };
   const targetStore = {
-    createTargetFiles: vi.fn(async () => {}),
-    cloneTargetFiles: vi.fn(async () => 0),
-    deleteTarget: vi.fn(async () => {}),
-    listRecoverableTargets: vi.fn(async () => []),
-    resetTargetFiles: vi.fn(async () => {}),
-    readTargetMeta: vi.fn(async (_workspacePath: string, targetId: string) => ({
-      targetId,
-      sessionId: "sess-1",
-      workspaceId: "ws-1",
-      objective: "Ship the fix",
-      status: "active",
-      createdAt: 1,
-      updatedAt: 1,
-      supersededBy: null,
-      completedAt: null,
-    })),
-    loadTargetMemory: vi.fn(async (_workspacePath: string, targetId: string) => ({
-      ...defaultTargetMemory,
-      targetId,
-    })),
-    saveTargetMeta: vi.fn(async () => {}),
-    saveTargetMemory: vi.fn(async () => {}),
-    appendTargetCycleRecord: vi.fn(async () => {}),
-    markTargetSuperseded: vi.fn(async () => {}),
-    readTargetCycleRecords: vi.fn(async () => []),
+    createTargetFiles: vi.fn(async (_workspacePath: string, input) => {
+      if (!targetMetaById.has(input.targetId)) {
+        targetMetaById.set(input.targetId, buildTargetMeta(input));
+      }
+      if (!targetMemoryById.has(input.targetId)) {
+        targetMemoryById.set(input.targetId, buildTargetMemory(input.targetId, input.createdAt));
+      }
+      if (!targetCyclesById.has(input.targetId)) {
+        targetCyclesById.set(input.targetId, []);
+      }
+    }),
+    cloneTargetFiles: vi.fn(async (_workspacePath: string, input) => {
+      const sourceMemory = targetMemoryById.get(input.sourceTargetId);
+      if (!sourceMemory) {
+        throw Object.assign(new Error(`Target ${input.sourceTargetId} not found`), {
+          code: "ENOENT",
+        });
+      }
+
+      const sourceCycles = targetCyclesById.get(input.sourceTargetId) ?? [];
+      targetMetaById.set(input.targetId, buildTargetMeta(input));
+      targetMemoryById.set(input.targetId, {
+        ...cloneMemory(sourceMemory),
+        targetId: input.targetId,
+      });
+      targetCyclesById.set(
+        input.targetId,
+        sourceCycles.map((record) => ({
+          ...cloneCycleRecord(record),
+          targetId: input.targetId,
+        }))
+      );
+      return sourceCycles.length;
+    }),
+    deleteTarget: vi.fn(async (_workspacePath: string, targetId: string) => {
+      targetMetaById.delete(targetId);
+      targetMemoryById.delete(targetId);
+      targetCyclesById.delete(targetId);
+    }),
+    listRecoverableTargets: vi.fn(async () =>
+      [...targetMetaById.values()]
+        .map((meta) => ({
+          targetId: meta.targetId,
+          sessionId: meta.sessionId,
+          workspaceId: meta.workspaceId,
+          objective: meta.objective,
+          status: meta.status,
+          updatedAt: meta.updatedAt,
+          progressSummary: targetMemoryById.get(meta.targetId)?.progressSummary,
+          cycleCount: (targetCyclesById.get(meta.targetId) ?? []).length,
+        }))
+        .sort((left, right) => right.updatedAt - left.updatedAt)
+    ),
+    resetTargetFiles: vi.fn(async (_workspacePath: string, input) => {
+      targetMetaById.set(input.targetId, buildTargetMeta(input));
+      targetMemoryById.set(input.targetId, buildTargetMemory(input.targetId, input.createdAt));
+      targetCyclesById.set(input.targetId, []);
+    }),
+    readTargetMeta: vi.fn(async (_workspacePath: string, targetId: string) => {
+      const meta = targetMetaById.get(targetId);
+      if (!meta) {
+        throw Object.assign(new Error(`Target ${targetId} not found`), { code: "ENOENT" });
+      }
+      return cloneMeta(meta);
+    }),
+    loadTargetMemory: vi.fn(async (_workspacePath: string, targetId: string) => {
+      const memory = targetMemoryById.get(targetId);
+      if (!memory) {
+        throw Object.assign(new Error(`Target ${targetId} not found`), { code: "ENOENT" });
+      }
+      return cloneMemory(memory);
+    }),
+    saveTargetMeta: vi.fn(async (_workspacePath: string, targetId: string, meta) => {
+      targetMetaById.set(targetId, cloneMeta(meta));
+    }),
+    saveTargetMemory: vi.fn(async (_workspacePath: string, targetId: string, memory) => {
+      targetMemoryById.set(targetId, cloneMemory(memory));
+    }),
+    appendTargetCycleRecord: vi.fn(async (_workspacePath: string, targetId: string, record) => {
+      const cycles = targetCyclesById.get(targetId) ?? [];
+      cycles.push(cloneCycleRecord(record));
+      targetCyclesById.set(targetId, cycles);
+    }),
+    markTargetSuperseded: vi.fn(
+      async (_workspacePath: string, targetId: string, nextTargetId: string, updatedAt: number) => {
+        const current = targetMetaById.get(targetId);
+        if (!current) {
+          throw Object.assign(new Error(`Target ${targetId} not found`), { code: "ENOENT" });
+        }
+        targetMetaById.set(targetId, {
+          ...current,
+          status: "superseded",
+          supersededBy: nextTargetId,
+          updatedAt,
+        });
+      }
+    ),
+    readTargetCycleRecords: vi.fn(async (_workspacePath: string, targetId: string, limit = 20) =>
+      getTargetCycles(targetId, limit)
+    ),
   };
 
   return {
@@ -368,9 +404,8 @@ function createManagerDeps() {
     settingsRepo,
     logger,
     supervisorRepo,
-    cycleRepo,
-    cycleAttemptRepo,
     targetStore,
+    getTargetCycles,
     codexBuildSupervisorEvalCommand,
   };
 }
@@ -562,15 +597,18 @@ describe("SupervisorManager cycle triggers", () => {
 
     await waitFor(() => {
       const current = manager.get(supervisor.id);
-      const latest = current?.cycles.find((entry) => entry.id === cycle.id);
+      const latest = current?.recentTargetCycles?.find((entry) => entry.cycleId === cycle.id);
       if (!latest || latest.status === "evaluating") {
         throw new Error("cycle still in flight");
       }
     });
 
-    const finished = manager.get(supervisor.id)?.cycles.find((entry) => entry.id === cycle.id);
-    expect(finished?.status).toBe("injected");
-    expect(finished?.result).toBe("[Supervisor] Run the focused parser test.");
+    const finished = manager
+      .get(supervisor.id)
+      ?.recentTargetCycles?.find((entry) => entry.cycleId === cycle.id);
+    expect(finished?.result).toBe("continue");
+    expect(finished?.guidance).toBe("[Supervisor] Run the focused parser test.");
+    expect(finished?.injected).toBe(true);
   });
 
   it("queues scheduler evaluations with turn_completed trigger", async () => {
@@ -584,9 +622,9 @@ describe("SupervisorManager cycle triggers", () => {
     await getManagerInternals().runEvaluation(supervisor.id);
 
     const updated = manager.get(supervisor.id);
-    expect(updated?.cycles).toHaveLength(1);
-    expect(updated?.cycles[0]?.trigger).toBe("turn_completed");
-    expect(updated?.cycles[0]?.status).toBe("injected");
+    expect(updated?.recentTargetCycles).toHaveLength(1);
+    expect(updated?.recentTargetCycles?.[0]?.result).toBe("continue");
+    expect(updated?.recentTargetCycles?.[0]?.injected).toBe(true);
   });
 
   it("runs decompose before evaluate on the first cycle when target memory is empty", async () => {
@@ -803,8 +841,10 @@ describe("SupervisorManager cycle triggers", () => {
         objective: "New objective",
       })
     );
-    const finished = manager.get(supervisor.id)?.cycles.find((entry) => entry.id === cycle.id);
-    expect(finished?.status).toBe("cancelled");
+    const finished = await waitForSupervisor(() =>
+      manager.get(supervisor.id)?.state === "idle" ? manager.get(supervisor.id) : undefined
+    );
+    expect(finished?.recentTargetCycles).toHaveLength(0);
     expect(deps.sessionMgr.sendInput).not.toHaveBeenCalled();
   });
 
@@ -851,12 +891,7 @@ describe("SupervisorManager cycle triggers", () => {
 
     await updatedPromise;
 
-    expect(deps.cycleAttemptRepo.listForCycle(cycle.id)).toMatchObject([
-      {
-        status: "cancelled",
-        errorReason: undefined,
-      },
-    ]);
+    expect(manager.get(supervisor.id)?.recentTargetCycles).toHaveLength(0);
   });
 
   it("marks supervisor_uncertain stops as cancelled instead of completed target meta", async () => {
@@ -923,9 +958,7 @@ describe("SupervisorManager cycle triggers", () => {
     });
 
     const updated = await updatedPromise;
-    const finished = manager.get(supervisor.id)?.cycles.find((entry) => entry.id === cycle.id);
-
-    expect(finished?.status).toBe("failed");
+    expect(manager.get(supervisor.id)?.recentTargetCycles).toHaveLength(0);
     expect(updated.targetId).toBe(supervisor.targetId);
     expect(updated.objective).toBe("New objective");
     expect(updated.state).toBe("idle");
@@ -1184,35 +1217,11 @@ describe("SupervisorManager cycle triggers", () => {
       });
 
     const pending = getManagerInternals().runEvaluation(supervisor.id, "turn_completed");
-    for (let index = 0; index < 20; index += 1) {
-      await Promise.resolve();
-      if (
-        deps.cycleAttemptRepo.update.mock.calls.some(
-          ([, patch]: [string, { status?: string }]) => patch.status === "failed"
-        )
-      ) {
-        break;
-      }
-    }
-
-    const retryEvent = deps.broadcaster.broadcast.mock.calls.find(([, payload]) => {
-      const cycle = (payload as { cycle?: SupervisorCycle }).cycle;
-      return cycle?.runtime?.phase === "retry_wait";
-    });
-    expect(retryEvent).toBeDefined();
-    expect((retryEvent?.[1] as { cycle?: SupervisorCycle }).cycle?.runtime).toMatchObject({
-      phase: "retry_wait",
-      currentAttemptIndex: 0,
-      attemptCount: 1,
-      maxAttempts: 3,
-      lastAttemptError: "timed out",
-    });
-
     await vi.advanceTimersByTimeAsync(1000);
     const finished = await pending;
 
     expect(finished?.status).toBe("injected");
-    expect(deps.cycleAttemptRepo.listForCycle(finished!.id)).toHaveLength(2);
+    expect(manager.get(supervisor.id)?.recentTargetCycles?.[0]?.attemptCount).toBe(2);
   });
 
   it("retries evaluator process errors when retryOnEvaluatorError is enabled", async () => {
@@ -1254,7 +1263,7 @@ describe("SupervisorManager cycle triggers", () => {
     const finished = await getManagerInternals().runEvaluation(supervisor.id, "turn_completed");
 
     expect(finished?.status).toBe("injected");
-    expect(deps.cycleAttemptRepo.listForCycle(finished!.id)).toHaveLength(2);
+    expect(manager.get(supervisor.id)?.recentTargetCycles?.[0]?.attemptCount).toBe(2);
   });
 
   it("stops before starting an extra cycle when maxSupervisionCount is reached", async () => {
@@ -1319,9 +1328,12 @@ describe("SupervisorManager cycle triggers", () => {
 
     await manager.pause(supervisor.id);
     await waitFor(() => {
+      expect(manager.get(supervisor.id)?.state).toBe("paused");
+    });
+    await waitFor(() => {
       expect(
-        manager.get(supervisor.id)?.cycles.find((entry) => entry.id === cycle.id)?.status
-      ).toBe("cancelled");
+        (managerInternals as unknown as { inFlight: Set<string> }).inFlight.has(supervisor.id)
+      ).toBe(false);
     });
 
     expect(manager.get(supervisor.id)?.completedSupervisionCount).toBe(0);
@@ -1373,7 +1385,7 @@ describe("SupervisorManager cycle triggers", () => {
     expect(first?.trigger).toBe("turn_completed");
     expect(second).toBeNull();
     expect(manager.get(supervisor.id)?.scheduledAt).toBeUndefined();
-    expect(manager.get(supervisor.id)?.cycles).toHaveLength(1);
+    expect(manager.get(supervisor.id)?.recentTargetCycles).toHaveLength(1);
     expect(evaluate).toHaveBeenCalledTimes(1);
   });
 
@@ -1398,20 +1410,20 @@ describe("SupervisorManager cycle triggers", () => {
     });
 
     await vi.advanceTimersByTimeAsync(1_000);
-    expect(manager.get(supervisor.id)?.cycles).toHaveLength(0);
+    expect(manager.get(supervisor.id)?.recentTargetCycles).toHaveLength(0);
 
     sessionState = "running";
     await vi.advanceTimersByTimeAsync(1_000);
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(manager.get(supervisor.id)?.cycles[0]?.trigger).toBe("scheduled");
-    expect(manager.get(supervisor.id)?.cycles[0]?.status).toBe("injected");
+    expect(manager.get(supervisor.id)?.recentTargetCycles?.[0]?.result).toBe("continue");
+    expect(manager.get(supervisor.id)?.recentTargetCycles?.[0]?.injected).toBe(true);
 
     expect(manager.get(supervisor.id)?.scheduledAt).toBeUndefined();
   });
 
-  it("persists duplicate-suppressed guidance as a cycle result without marking it injected", async () => {
+  it("injects repeated guidance instead of suppressing it", async () => {
     const supervisor = await manager.create({
       sessionId: "sess-dedupe",
       workspaceId: "ws-1",
@@ -1426,15 +1438,15 @@ describe("SupervisorManager cycle triggers", () => {
       guidance: "Run the focused parser test.",
     });
     vi.spyOn(managerInternals.injector, "inject").mockResolvedValueOnce({
-      injected: false,
+      injected: true,
       text: "[Supervisor] Run the focused parser test.",
     });
 
     const finished = await managerInternals.runEvaluation(supervisor.id);
 
-    expect(finished?.status).toBe("completed");
-    expect(finished?.result).toBe("Skipped duplicate: Run the focused parser test.");
-    expect(finished?.injectedGuidance).toBeUndefined();
+    expect(finished?.status).toBe("injected");
+    expect(finished?.result).toBe("[Supervisor] Run the focused parser test.");
+    expect(finished?.injectedGuidance).toBe("[Supervisor] Run the focused parser test.");
   });
 
   it("rejects manual triggerEvaluation when the session is still starting", async () => {
@@ -1454,11 +1466,11 @@ describe("SupervisorManager cycle triggers", () => {
       message: expect.stringContaining("starting up"),
     });
 
-    expect(manager.get(supervisor.id)?.cycles).toHaveLength(0);
+    expect(manager.get(supervisor.id)?.recentTargetCycles).toHaveLength(0);
     expect(deps.codexBuildSupervisorEvalCommand).not.toHaveBeenCalled();
   });
 
-  it("marks orphaned cycles as failed during hydrate", async () => {
+  it("does not try to recover orphaned cycle runtime state during hydrate", async () => {
     const supervisor = await manager.create({
       sessionId: "sess-orphan",
       workspaceId: "ws-1",
@@ -1466,24 +1478,26 @@ describe("SupervisorManager cycle triggers", () => {
       evaluatorProviderId: "codex",
     });
 
-    deps.cycleRepo.create({
-      id: "legacy-queued",
-      supervisorId: supervisor.id,
-      sessionId: "sess-orphan",
-      status: "queued",
-      trigger: "manual",
-      evidenceSource: "headless_snapshot",
-      objective: supervisor.objective,
-      evaluatorProviderId: supervisor.evaluatorProviderId,
-      createdAt: Date.now(),
+    await deps.targetStore.appendTargetCycleRecord(process.cwd(), supervisor.targetId, {
+      cycleId: "legacy-queued",
+      targetId: supervisor.targetId,
+      startedAt: Date.now(),
+      completedAt: Date.now(),
+      result: "error",
+      errorReason: "legacy queued cycle",
+      attemptCount: 1,
     });
 
     await manager.hydrate();
 
-    const recovered = deps.cycleRepo.listRecentForSupervisor(supervisor.id, 10);
-    const legacy = recovered.find((cycle) => cycle.id === "legacy-queued");
-    expect(legacy?.status).toBe("failed");
-    expect(legacy?.errorReason).toBeTruthy();
+    const recovered = manager.get(supervisor.id);
+    expect(recovered?.recentTargetCycles?.[0]).toEqual(
+      expect.objectContaining({
+        cycleId: "legacy-queued",
+        result: "error",
+        errorReason: "legacy queued cycle",
+      })
+    );
   });
 
   it("rejects supervisor creation when the session provider capability is limited", async () => {
@@ -1529,8 +1543,21 @@ describe("SupervisorManager cycle triggers", () => {
     const updated = manager.get(supervisor.id);
     expect(updated?.state).toBe("error");
     expect(updated?.errorReason).toBe("Evaluator exploded");
-    expect(updated?.cycles[0]?.status).toBe("failed");
-    expect(updated?.cycles[0]?.errorReason).toBe("Evaluator exploded");
+    expect(deps.targetStore.readTargetCycleRecords).toHaveBeenCalledWith(
+      expect.any(String),
+      supervisor.targetId,
+      20
+    );
+    expect(
+      await deps.targetStore.readTargetCycleRecords(process.cwd(), supervisor.targetId)
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          result: "error",
+          errorReason: "Evaluator exploded",
+        }),
+      ])
+    );
     expect(deps.logger.error).toHaveBeenCalledWith(
       expect.objectContaining({
         err: evaluationError,
@@ -1560,7 +1587,7 @@ describe("SupervisorManager cycle triggers", () => {
     const updated = manager.get(supervisor.id);
     expect(updated?.state).toBe("error");
     expect(updated?.errorReason).toBe("Context build exploded");
-    expect(updated?.cycles).toHaveLength(0);
+    expect(updated?.recentTargetCycles).toHaveLength(0);
     expect(deps.logger.error).toHaveBeenCalledWith(
       expect.objectContaining({
         err: contextError,
@@ -1711,9 +1738,7 @@ describe("SupervisorManager cycle triggers", () => {
 
     await manager.pause(supervisor.id);
     await waitFor(() => {
-      expect(
-        manager.get(supervisor.id)?.cycles.find((entry) => entry.id === cycle.id)?.status
-      ).toBe("cancelled");
+      expect(manager.get(supervisor.id)?.state).toBe("paused");
     });
 
     expect(manager.get(supervisor.id)?.state).toBe("paused");
@@ -1770,4 +1795,25 @@ async function waitFor(fn: () => void, { timeoutMs = 500, intervalMs = 5 } = {})
     }
   }
   throw lastError instanceof Error ? lastError : new Error("waitFor timed out");
+}
+
+async function waitForSupervisor<T>(
+  fn: () => T | undefined,
+  { timeoutMs = 500, intervalMs = 5 } = {}
+): Promise<T> {
+  const deadline = Date.now() + timeoutMs;
+  let lastError: unknown;
+  while (Date.now() < deadline) {
+    try {
+      const value = fn();
+      if (value !== undefined) {
+        return value;
+      }
+      throw new Error("waitForSupervisor timed out");
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("waitForSupervisor timed out");
 }
