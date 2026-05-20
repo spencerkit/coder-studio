@@ -821,6 +821,80 @@ describe("SupervisorEvaluator", () => {
       expect(result.guidance).toHaveLength(100);
     });
   });
+
+  describe("payload robustness", () => {
+    it("preserves backtick-fenced snippets that appear inside a string value", async () => {
+      const payload = JSON.stringify({
+        status: "continue",
+        reason: "Need to verify the change",
+        guidance: "execute ```bash\nls -la\n``` and inspect output",
+      });
+      const evaluator = makeEvaluator(codexJsonlPayload(payload), "codex");
+
+      const result = await evaluator.evaluate(makeSupervisor("codex"), makeContext());
+
+      expect(result).toMatchObject({
+        mode: "evaluate",
+        status: "continue",
+        guidance: "execute ```bash\nls -la\n``` and inspect output",
+      });
+    });
+
+    it("auto-repairs payloads where the model used literal newlines in strings", async () => {
+      const logger = createLogger();
+      const malformed =
+        '{"status":"continue","reason":"more work needed","guidance":"step 1: read foo.ts\nstep 2: run tests"}';
+      const evaluator = new SupervisorEvaluator({
+        providerRegistry: [createProvider("codex", codexJsonlPayload(malformed))],
+        providerConfigRepo: createProviderConfigRepo(),
+        timeoutMs: 5000,
+        logger,
+      });
+
+      const result = await evaluator.evaluate(makeSupervisor("codex"), makeContext());
+
+      expect(result).toMatchObject({
+        mode: "evaluate",
+        status: "continue",
+        guidance: "step 1: read foo.ts\nstep 2: run tests",
+      });
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payloadPreview: expect.any(String),
+          originalError: expect.stringMatching(
+            /(Unterminated string|Bad control character|control character)/i
+          ),
+        }),
+        expect.stringMatching(/auto-repaired/)
+      );
+    });
+
+    it("logs the payload preview and throws a retryable error when JSON is unrecoverable", async () => {
+      const logger = createLogger();
+      const garbage = '{"status":"continue","reason":"oops","this is not';
+      const evaluator = new SupervisorEvaluator({
+        providerRegistry: [createProvider("codex", codexJsonlPayload(garbage))],
+        providerConfigRepo: createProviderConfigRepo(),
+        timeoutMs: 5000,
+        logger,
+      });
+
+      await expect(
+        evaluator.evaluate(makeSupervisor("codex"), makeContext())
+      ).rejects.toMatchObject({
+        code: "supervisor_eval_failed",
+        message: expect.stringMatching(/invalid JSON/i),
+      });
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payloadPreview: expect.any(String),
+          parseError: expect.any(String),
+        }),
+        expect.stringMatching(/invalid JSON/i)
+      );
+    });
+  });
 });
 
 async function waitFor(fn: () => void, { timeoutMs = 3000, intervalMs = 20 } = {}): Promise<void> {

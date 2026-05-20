@@ -148,7 +148,12 @@ export class SupervisorEvaluator {
       throw error;
     }
 
-    return parseSupervisorEvaluationResult(payloadText, this.config.guidanceMaxChars, mode);
+    return parseSupervisorEvaluationResult(
+      payloadText,
+      this.config.guidanceMaxChars,
+      mode,
+      this.logger
+    );
   }
 }
 
@@ -430,11 +435,75 @@ function createSupervisorEvalAbortedError(): {
 }
 
 /**
- * Strip a ```json … ``` (or bare ```…```) markdown fence if present.
+ * Strip a ```json … ``` (or bare ```…```) markdown fence when it wraps the
+ * entire payload. The regex is anchored on purpose: a mid-payload fence
+ * (e.g. a ```bash``` snippet inside a `guidance` string value) must NOT be
+ * harvested, otherwise the surrounding JSON is destroyed.
  */
 function stripCodeFence(text: string): string {
-  const fenced = text.match(/```(?:json|JSON)?\s*\n?([\s\S]*?)\n?```/);
+  const trimmed = text.trim();
+  const fenced = trimmed.match(/^```(?:json|JSON)?\s*\n?([\s\S]*?)\n?```$/);
   return fenced ? fenced[1]!.trim() : text;
+}
+
+/**
+ * Re-escape literal control characters (newlines, tabs, etc.) that appear
+ * inside JSON string values. LLM evaluators occasionally emit multi-line
+ * strings without escaping the newlines, which produces
+ * `SyntaxError: Unterminated string in JSON at position X`. This pass only
+ * touches characters that appear inside a string literal; structure outside
+ * of strings is left untouched.
+ */
+function repairJsonControlChars(text: string): string {
+  let out = "";
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]!;
+    if (escaped) {
+      out += ch;
+      escaped = false;
+      continue;
+    }
+    if (ch === "\\") {
+      out += ch;
+      escaped = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      out += ch;
+      continue;
+    }
+    if (inString) {
+      if (ch === "\n") {
+        out += "\\n";
+        continue;
+      }
+      if (ch === "\r") {
+        out += "\\r";
+        continue;
+      }
+      if (ch === "\t") {
+        out += "\\t";
+        continue;
+      }
+      const code = ch.charCodeAt(0);
+      if (code < 0x20) {
+        out += `\\u${code.toString(16).padStart(4, "0")}`;
+        continue;
+      }
+    }
+    out += ch;
+  }
+  return out;
+}
+
+function createSupervisorEvalFailedError(message: string): {
+  code: "supervisor_eval_failed";
+  message: string;
+} {
+  return { code: "supervisor_eval_failed", message };
 }
 
 type CodexCompletedCandidate = {
@@ -680,19 +749,52 @@ function extractSupervisorPayload(output: string, providerId: string): string {
 function parseSupervisorEvaluationResult(
   payloadText: string,
   guidanceMaxChars: number,
-  requestedMode: "decompose" | "evaluate"
+  requestedMode: "decompose" | "evaluate",
+  logger: FastifyBaseLogger = NOOP_LOGGER
 ): SupervisorEvaluationResult {
+  const candidate = stripCodeFence(payloadText);
+
   let parsed: unknown;
+  let parsedOk = false;
+  let firstError: unknown;
   try {
-    parsed = JSON.parse(stripCodeFence(payloadText));
+    parsed = JSON.parse(candidate);
+    parsedOk = true;
   } catch (error) {
-    throw new Error(
-      `Supervisor returned invalid JSON: ${error instanceof Error ? error.message : "parse failed"}`
+    firstError = error;
+    const repaired = repairJsonControlChars(candidate);
+    if (repaired !== candidate) {
+      try {
+        parsed = JSON.parse(repaired);
+        parsedOk = true;
+        logger.warn(
+          {
+            originalError: error instanceof Error ? error.message : String(error),
+            payloadPreview: buildStdoutPreview(candidate, 2000),
+          },
+          "Supervisor returned JSON with unescaped control chars; auto-repaired"
+        );
+      } catch {
+        // fall through to the unrecoverable path below
+      }
+    }
+  }
+
+  if (!parsedOk) {
+    logger.warn(
+      {
+        parseError: firstError instanceof Error ? firstError.message : String(firstError),
+        payloadPreview: buildStdoutPreview(candidate, 2000),
+      },
+      "Supervisor returned invalid JSON"
+    );
+    throw createSupervisorEvalFailedError(
+      `Supervisor returned invalid JSON: ${firstError instanceof Error ? firstError.message : "parse failed"}`
     );
   }
 
   if (!parsed || typeof parsed !== "object") {
-    throw new Error("Supervisor returned invalid evaluation payload");
+    throw createSupervisorEvalFailedError("Supervisor returned invalid evaluation payload");
   }
 
   const record = parsed as Record<string, unknown>;
@@ -700,12 +802,14 @@ function parseSupervisorEvaluationResult(
 
   if (requestedMode === "decompose") {
     if (payloadMode !== "decompose") {
-      throw new Error("Supervisor returned invalid decompose payload");
+      throw createSupervisorEvalFailedError("Supervisor returned invalid decompose payload");
     }
 
     const decompositionMode = record.decompositionMode;
     if (decompositionMode !== "stage" && decompositionMode !== "subtarget") {
-      throw new Error("Supervisor decompose result is missing a valid decompositionMode");
+      throw createSupervisorEvalFailedError(
+        "Supervisor decompose result is missing a valid decompositionMode"
+      );
     }
 
     const items = Array.isArray(record.items)
@@ -744,7 +848,9 @@ function parseSupervisorEvaluationResult(
       : [];
 
     if (items.length === 0) {
-      throw new Error("Supervisor decompose result must include at least one valid item");
+      throw createSupervisorEvalFailedError(
+        "Supervisor decompose result must include at least one valid item"
+      );
     }
 
     return {
@@ -771,13 +877,13 @@ function parseSupervisorEvaluationResult(
     typeof reason !== "string" ||
     !reason.trim()
   ) {
-    throw new Error("Supervisor returned invalid evaluation payload");
+    throw createSupervisorEvalFailedError("Supervisor returned invalid evaluation payload");
   }
 
   if (status === "stop") {
     const stopReason = record.stopReason;
     if (stopReason !== "objective_complete" && stopReason !== "supervisor_uncertain") {
-      throw new Error("Supervisor stop result is missing a valid stopReason");
+      throw createSupervisorEvalFailedError("Supervisor stop result is missing a valid stopReason");
     }
 
     return {
