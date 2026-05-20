@@ -254,6 +254,10 @@ export class SupervisorManager {
     });
   }
 
+  setProviderRegistry(providerRegistry: ProviderDefinition[]): void {
+    this.deps.providerRegistry = providerRegistry;
+  }
+
   async hydrate(): Promise<void> {
     this.supervisors.clear();
     this.supervisorsBySession.clear();

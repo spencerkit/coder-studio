@@ -2,6 +2,8 @@
  * Session Commands
  */
 
+import { readFile } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import type { ProviderDefinition } from "@coder-studio/core";
 import { z } from "zod";
 import { buildProviderRuntimeStatus } from "../provider-runtime/runtime-status.js";
@@ -12,6 +14,25 @@ function getProviderFromRegistry(
   registry: ProviderDefinition[]
 ): ProviderDefinition | undefined {
   return registry.find((provider) => provider.id === providerId);
+}
+
+async function tryReadGitHead(workspacePath: string): Promise<string | undefined> {
+  try {
+    const gitEntryPath = join(workspacePath, ".git");
+    const gitEntry = await readFile(gitEntryPath, "utf8").catch(() => null);
+
+    let gitDir = gitEntryPath;
+    if (gitEntry && gitEntry.startsWith("gitdir:")) {
+      const relativeGitDir = gitEntry.slice("gitdir:".length).trim();
+      gitDir = resolve(workspacePath, relativeGitDir);
+    }
+
+    const head = await readFile(join(gitDir, "HEAD"), "utf8");
+    const trimmed = head.trim();
+    return trimmed.length > 0 && !trimmed.startsWith("ref:") ? trimmed : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 // session.list
@@ -59,13 +80,25 @@ registerCommand(
       };
     }
 
-    return ctx.sessionMgr.create({
+    const session = await ctx.sessionMgr.create({
       workspaceId: args.workspaceId,
       workspacePath: workspace.path,
       providerId: args.providerId,
       provider,
       draft: args.draft,
     });
+
+    ctx.sessionMetadataRepo?.upsert({
+      sessionId: session.id,
+      workspaceId: args.workspaceId,
+      providerId: args.providerId,
+      objective: args.draft?.trim() || undefined,
+      baselineGitHead: await tryReadGitHead(workspace.path),
+      baselineCapturedAt: Date.now(),
+      verificationRuns: [],
+    });
+
+    return session;
   }
 );
 

@@ -102,6 +102,47 @@ function upgradeSchemaV1ToV2(db: Database): void {
   });
 }
 
+function upgradeSchemaV2ToV3(db: Database): void {
+  withTransaction(db, () => {
+    db.exec(`
+      CREATE TABLE custom_providers (
+        id TEXT PRIMARY KEY,
+        display_name TEXT NOT NULL,
+        config TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    `);
+    db.exec("CREATE INDEX idx_custom_providers_updated_at ON custom_providers(updated_at DESC)");
+    db.exec(`
+      CREATE TABLE session_metadata (
+        session_id TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,
+        workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+        provider_id TEXT NOT NULL,
+        objective TEXT,
+        baseline_git_head TEXT,
+        baseline_captured_at INTEGER
+      )
+    `);
+    db.exec(`
+      CREATE TABLE session_verification_runs (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES session_metadata(session_id) ON DELETE CASCADE,
+        command TEXT NOT NULL,
+        status TEXT NOT NULL,
+        exit_code INTEGER,
+        summary TEXT,
+        created_at INTEGER NOT NULL
+      )
+    `);
+    db.exec(`
+      CREATE INDEX idx_session_verification_runs_session_created_at
+      ON session_verification_runs(session_id, created_at ASC)
+    `);
+    stampSchemaVersion(db, 3);
+  });
+}
+
 function assertCurrentSchema(db: Database, dbPath: string): void {
   const detection = detectSchema(db);
   if (detection.state !== "current") {
@@ -129,10 +170,22 @@ function initializeOrUpgradeSchema(db: Database, dbPath: string): void {
 
     case "v1":
       upgradeSchemaV1ToV2(db);
+      if (CURRENT_SCHEMA_VERSION > 2) {
+        upgradeSchemaV2ToV3(db);
+      }
       assertCurrentSchema(db, dbPath);
       return;
 
     case "v2":
+      if (CURRENT_SCHEMA_VERSION > 2) {
+        upgradeSchemaV2ToV3(db);
+      } else if (detection.userVersion !== CURRENT_SCHEMA_VERSION) {
+        stampCurrentSchemaVersion(db);
+      }
+      assertCurrentSchema(db, dbPath);
+      return;
+
+    case "v3":
       if (detection.userVersion !== CURRENT_SCHEMA_VERSION) {
         stampCurrentSchemaVersion(db);
       }

@@ -17,6 +17,7 @@ import { EventBus } from "./bus/event-bus.js";
 import { ensureDataDir, parseServerConfig, type ServerConfig } from "./config.js";
 import { AutoFetchScheduler } from "./git/auto-fetch.js";
 import { runCommandAsString } from "./provider-runtime/command-runner.js";
+import { buildCustomProviderDefinition } from "./provider-runtime/custom-provider.js";
 import { createE2EProviderMockOverrides } from "./provider-runtime/e2e-provider-mock.js";
 import { ProviderInstallManager } from "./provider-runtime/install-manager.js";
 import type { RuntimeStatusDeps } from "./provider-runtime/runtime-status.js";
@@ -25,7 +26,9 @@ import type { Database } from "./storage/database.js";
 import { openDatabase } from "./storage/db.js";
 import { AuthLoginBlockRepo } from "./storage/repositories/auth-login-block-repo.js";
 import { AuthSessionRepo } from "./storage/repositories/auth-session-repo.js";
+import { CustomProviderRepo } from "./storage/repositories/custom-provider-repo.js";
 import { ProviderConfigRepo } from "./storage/repositories/provider-config-repo.js";
+import { SessionMetadataRepo } from "./storage/repositories/session-metadata-repo.js";
 import { rowToSession, type SessionRow } from "./storage/repositories/session-repo.js";
 import { SettingsRepo } from "./storage/repositories/settings-repo.js";
 import { SupervisorCycleAttemptRepo } from "./storage/repositories/supervisor-cycle-attempt-repo.js";
@@ -116,12 +119,18 @@ export async function createServer(
 
   const sessionDb = createSessionDatabase(db);
   const providerConfigRepo = new ProviderConfigRepo(db);
+  const customProviderRepo = new CustomProviderRepo(db);
+  const sessionMetadataRepo = new SessionMetadataRepo(db);
+  let activeProviderRegistry = [
+    ...providerRegistry,
+    ...customProviderRepo.list().map((config) => buildCustomProviderDefinition(config)),
+  ];
   const sessionMgr = new SessionManager({
     terminalMgr,
     eventBus,
     db: sessionDb,
     broadcaster: wsHub,
-    providerRegistry,
+    providerRegistry: activeProviderRegistry,
     providerConfigRepo,
   });
 
@@ -179,7 +188,7 @@ export async function createServer(
     terminalMgr,
     workspaceMgr,
     sessionMgr,
-    providerRegistry,
+    providerRegistry: activeProviderRegistry,
     providerConfigRepo,
     settingsRepo,
     supervisorRepo,
@@ -209,7 +218,7 @@ export async function createServer(
     eventBus,
     broadcaster: wsHub,
     db,
-    providerRegistry,
+    providerRegistry: activeProviderRegistry,
     fencingMgr,
     supervisorMgr,
     autoFetch,
@@ -217,6 +226,14 @@ export async function createServer(
     providerInstallMgr,
     activationMgr,
     config,
+    customProviderRepo,
+    sessionMetadataRepo,
+    setProviderRegistry: (providers) => {
+      activeProviderRegistry = providers;
+      commandContext.providerRegistry = providers;
+      sessionMgr.setProviderRegistry(providers);
+      supervisorMgr?.setProviderRegistry(providers);
+    },
   };
 
   wsHub.setCommandContext(commandContext);

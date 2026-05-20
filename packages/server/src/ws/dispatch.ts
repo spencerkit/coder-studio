@@ -13,6 +13,8 @@ import type { ProviderInstallManager } from "../provider-runtime/install-manager
 import type { RuntimeStatusDeps } from "../provider-runtime/runtime-status.js";
 import type { SessionManager } from "../session/manager.js";
 import type { Database } from "../storage/database.js";
+import type { CustomProviderRepo } from "../storage/repositories/custom-provider-repo.js";
+import type { SessionMetadataRepo } from "../storage/repositories/session-metadata-repo.js";
 import type { SupervisorManager } from "../supervisor/manager.js";
 import type { TerminalManager } from "../terminal/manager.js";
 import type { WorkspaceManager } from "../workspace/manager.js";
@@ -38,6 +40,9 @@ export interface CommandContext {
   providerInstallMgr?: ProviderInstallManager;
   activationMgr: ActivationManager;
   config?: Pick<ServerConfig, "auth" | "host">;
+  customProviderRepo?: CustomProviderRepo;
+  sessionMetadataRepo?: SessionMetadataRepo;
+  setProviderRegistry?: (providers: ProviderDefinition[]) => void;
 }
 
 /**

@@ -1,5 +1,5 @@
 -- Current database schema baseline
-PRAGMA user_version = 2;
+PRAGMA user_version = 3;
 
 CREATE TABLE IF NOT EXISTS workspaces (
   id TEXT PRIMARY KEY,
@@ -53,6 +53,38 @@ CREATE TABLE IF NOT EXISTS provider_configs (
   provider_id TEXT PRIMARY KEY,
   config TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS custom_providers (
+  id TEXT PRIMARY KEY,
+  display_name TEXT NOT NULL,
+  config TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_custom_providers_updated_at ON custom_providers(updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS session_metadata (
+  session_id TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  provider_id TEXT NOT NULL,
+  objective TEXT,
+  baseline_git_head TEXT,
+  baseline_captured_at INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS session_verification_runs (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL REFERENCES session_metadata(session_id) ON DELETE CASCADE,
+  command TEXT NOT NULL,
+  status TEXT NOT NULL,
+  exit_code INTEGER,
+  summary TEXT,
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_session_verification_runs_session_created_at
+  ON session_verification_runs(session_id, created_at ASC);
 
 CREATE TABLE IF NOT EXISTS user_settings (
   key TEXT PRIMARY KEY,
