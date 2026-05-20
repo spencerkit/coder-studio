@@ -4,6 +4,7 @@ import { join } from "node:path";
 import chokidar, { type FSWatcher } from "chokidar";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createServer, type Server } from "../server.js";
+import { closeDatabase, openDatabase } from "../storage/db.js";
 import { dispatch } from "../ws/dispatch.js";
 
 import "../commands/workspace.js";
@@ -65,6 +66,54 @@ describe("workspace watcher hydrate restart", () => {
     await server.stop();
     server = undefined;
     watchSpy.mockClear();
+
+    server = await createServer({
+      dataDir: dbPath,
+      host: "127.0.0.1",
+      port: 0,
+    });
+
+    expect(watchSpy).toHaveBeenCalledTimes(1);
+    expect(watchSpy).toHaveBeenCalledWith(
+      workspaceDir,
+      expect.objectContaining({
+        ignoreInitial: true,
+        persistent: true,
+      })
+    );
+  });
+
+  it("restores persisted workspace watchers from file metadata even when db shadow rows were removed", async () => {
+    server = await createServer({
+      dataDir: dbPath,
+      host: "127.0.0.1",
+      port: 0,
+    });
+
+    const firstCtx = server.__test__!.commandContext;
+
+    const openResult = await dispatch(
+      {
+        kind: "command",
+        id: "workspace-open-file-backed",
+        op: "workspace.open",
+        args: { path: workspaceDir },
+      },
+      firstCtx
+    );
+
+    expect(openResult.ok).toBe(true);
+
+    await server.stop();
+    server = undefined;
+    watchSpy.mockClear();
+
+    const maintenanceDb = openDatabase(dbPath);
+    try {
+      maintenanceDb.prepare("DELETE FROM workspaces").run();
+    } finally {
+      closeDatabase(maintenanceDb);
+    }
 
     server = await createServer({
       dataDir: dbPath,

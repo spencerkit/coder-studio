@@ -287,6 +287,58 @@ describe("WorkspaceRepo", () => {
     });
   });
 
+  describe("file-backed persistence", () => {
+    it("reads workspace metadata from the file store when shadow rows are missing", () => {
+      const filePath = join(tempDir, "workspaces.json");
+      const fileRepo = new WorkspaceRepo({
+        filePath,
+        shadowDb: db,
+      });
+
+      fileRepo.create({
+        id: "ws-file",
+        path: "/path/to/file-workspace",
+        targetRuntime: "native",
+        openedAt: 1000,
+        lastActiveAt: 2000,
+        uiState: { leftPanelWidth: 250, bottomPanelHeight: 150, focusMode: false },
+      });
+
+      db.prepare("DELETE FROM workspaces WHERE id = ?").run("ws-file");
+
+      const restored = fileRepo.findById("ws-file");
+
+      expect(restored).toMatchObject({
+        id: "ws-file",
+        path: "/path/to/file-workspace",
+      });
+    });
+
+    it("migrates legacy database workspaces into the file store when the file is missing", () => {
+      repo.create({
+        id: "ws-legacy",
+        path: "/path/to/legacy-workspace",
+        targetRuntime: "native",
+        openedAt: 1000,
+        lastActiveAt: 2000,
+        uiState: { leftPanelWidth: 250, bottomPanelHeight: 150, focusMode: false },
+      });
+
+      const migratedRepo = new WorkspaceRepo({
+        filePath: join(tempDir, "migrated-workspaces.json"),
+        legacyDb: db,
+        shadowDb: db,
+      });
+
+      expect(migratedRepo.list()).toEqual([
+        expect.objectContaining({
+          id: "ws-legacy",
+          path: "/path/to/legacy-workspace",
+        }),
+      ]);
+    });
+  });
+
   describe("delete", () => {
     it("should delete a workspace by ID", () => {
       repo.create({

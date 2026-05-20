@@ -37,6 +37,7 @@ import { ProviderConfigRepo } from "./storage/repositories/provider-config-repo.
 import { rowToSession, type SessionRow } from "./storage/repositories/session-repo.js";
 import { SettingsRepo } from "./storage/repositories/settings-repo.js";
 import { SupervisorRepo } from "./storage/repositories/supervisor-repo.js";
+import { WorkspaceRepo } from "./storage/repositories/workspace-repo.js";
 import { SupervisorManager } from "./supervisor/manager.js";
 import * as targetStore from "./supervisor/target-store.js";
 import { TerminalManager } from "./terminal/manager.js";
@@ -134,6 +135,11 @@ export async function createServer(
     filePath: join(stateRoot, "state", "provider-configs.json"),
     legacyDb: db,
   });
+  const workspaceRepo = new WorkspaceRepo({
+    filePath: join(stateRoot, "state", "workspaces.json"),
+    legacyDb: db,
+    shadowDb: db,
+  });
   const sessionMgr = new SessionManager({
     terminalMgr,
     eventBus,
@@ -147,6 +153,7 @@ export async function createServer(
 
   workspaceMgr = new WorkspaceManager({
     db,
+    workspaceRepo,
     eventBus,
     broadcaster: wsHub,
     autoFetch,

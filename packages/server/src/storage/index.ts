@@ -31,5 +31,6 @@ export { type NewTerminal, TerminalRepo, type TerminalRow } from "./repositories
 export {
   type NewWorkspace,
   WorkspaceRepo,
+  type WorkspaceRepoOptions,
   type WorkspaceRow,
 } from "./repositories/workspace-repo.js";
