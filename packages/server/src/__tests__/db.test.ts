@@ -4,12 +4,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { closeDatabase, openDatabase } from "../storage/index.js";
-import {
-  CURRENT_SCHEMA_VERSION,
-  IncompatibleSchemaError,
-  V1_SCHEMA_SQL,
-  V2_SCHEMA_SQL,
-} from "../storage/schema-version.js";
+import { CURRENT_SCHEMA_VERSION, IncompatibleSchemaError } from "../storage/schema-version.js";
 
 describe("Database", () => {
   let db: DatabaseSync;
@@ -89,130 +84,15 @@ describe("Database", () => {
           "auth_sessions",
           "provider_configs",
           "sessions",
-          "supervisor_cycles",
-          "supervisors",
           "terminals",
           "user_settings",
           "workspaces",
         ])
       );
       expect(tables.map((table) => table.name)).not.toContain("_migrations");
-    });
-
-    it("should upgrade a known v1 supervisor schema to v2 when user_version is unset", () => {
-      const dbPath = join(tempDir, "v1.db");
-      const rawDb = new DatabaseSync(dbPath);
-      rawDb.exec("PRAGMA user_version = 0");
-      rawDb.exec(V1_SCHEMA_SQL);
-      rawDb.close();
-
-      db = openDatabase(dbPath);
-
-      const userVersion = db.prepare("PRAGMA user_version").get() as { user_version: number };
-      expect(userVersion.user_version).toBe(CURRENT_SCHEMA_VERSION);
-
-      const supervisorColumns = db.prepare("PRAGMA table_info(supervisors)").all() as Array<{
-        name: string;
-      }>;
-      expect(supervisorColumns.map((column) => column.name)).toEqual(
-        expect.arrayContaining([
-          "evaluator_model",
-          "max_supervision_count",
-          "completed_supervision_count",
-          "scheduled_at",
-          "stop_reason",
-        ])
-      );
-
-      const upgradedTable = db
-        .prepare(
-          "SELECT name FROM sqlite_master WHERE type='table' AND name='supervisor_cycle_attempts'"
-        )
-        .get() as { name: string } | undefined;
-      expect(upgradedTable?.name).toBe("supervisor_cycle_attempts");
-
-      const upgradedIndex = db
-        .prepare(
-          "SELECT name FROM sqlite_master WHERE type='index' AND name='idx_supervisor_cycle_attempts_cycle'"
-        )
-        .get() as { name: string } | undefined;
-      expect(upgradedIndex?.name).toBe("idx_supervisor_cycle_attempts_cycle");
-    });
-
-    it("should keep a known v2 supervisor schema current without adding target ids", () => {
-      const dbPath = join(tempDir, "v2.db");
-      const rawDb = new DatabaseSync(dbPath);
-      rawDb.exec("PRAGMA user_version = 2");
-      rawDb.exec(V2_SCHEMA_SQL);
-      rawDb.exec(`
-        INSERT INTO workspaces (id, path, target_runtime, opened_at, last_active_at, ui_state)
-        VALUES ('ws-1', '/workspace', 'native', 1, 1, '{}');
-      `);
-      rawDb.exec(`
-        INSERT INTO terminals (id, workspace_id, kind, cwd, argv, cols, rows, created_at)
-        VALUES ('term-1', 'ws-1', 'agent', '/workspace', '[]', 120, 30, 1);
-      `);
-      rawDb.exec(`
-        INSERT INTO sessions (
-          id, workspace_id, terminal_id, provider_id, capability, state, started_at, last_active_at
-        ) VALUES ('sess-1', 'ws-1', 'term-1', 'codex', 'full', 'idle', 1, 1);
-      `);
-      rawDb.exec(`
-        INSERT INTO supervisors (
-          id,
-          session_id,
-          workspace_id,
-          state,
-          objective,
-          evaluator_provider_id,
-          evaluator_model,
-          max_supervision_count,
-          completed_supervision_count,
-          scheduled_at,
-          stop_reason,
-          last_cycle_at,
-          last_evaluated_turn_id,
-          error_reason,
-          created_at,
-          updated_at
-        ) VALUES (
-          'sup-legacy',
-          'sess-1',
-          'ws-1',
-          'idle',
-          'Legacy supervisor',
-          'codex',
-          NULL,
-          0,
-          0,
-          NULL,
-          NULL,
-          NULL,
-          NULL,
-          NULL,
-          1,
-          1
-        );
-      `);
-      rawDb.close();
-
-      db = openDatabase(dbPath);
-
-      const userVersion = db.prepare("PRAGMA user_version").get() as { user_version: number };
-      expect(userVersion.user_version).toBe(CURRENT_SCHEMA_VERSION);
-
-      const supervisorColumns = db.prepare("PRAGMA table_info(supervisors)").all() as Array<{
-        name: string;
-      }>;
-      expect(supervisorColumns.map((column) => column.name)).not.toContain("target_id");
-
-      const upgradedRow = db
-        .prepare("SELECT id, objective FROM supervisors WHERE id = ?")
-        .get("sup-legacy") as { id: string; objective: string };
-      expect(upgradedRow).toEqual({
-        id: "sup-legacy",
-        objective: "Legacy supervisor",
-      });
+      expect(tables.map((table) => table.name)).not.toContain("supervisors");
+      expect(tables.map((table) => table.name)).not.toContain("supervisor_cycles");
+      expect(tables.map((table) => table.name)).not.toContain("supervisor_cycle_attempts");
     });
 
     it("should restamp user_version for an already-current schema when it is unset", () => {
@@ -265,13 +145,13 @@ describe("Database", () => {
           "provider_configs",
           "user_settings",
           "auth_sessions",
-          "supervisors",
-          "supervisor_cycles",
-          "supervisor_cycle_attempts",
           "auth_login_blocks",
           "auth_login_failures",
         ])
       );
+      expect(tableNames).not.toContain("supervisors");
+      expect(tableNames).not.toContain("supervisor_cycles");
+      expect(tableNames).not.toContain("supervisor_cycle_attempts");
     });
 
     it("should create required indexes", () => {
@@ -293,16 +173,16 @@ describe("Database", () => {
           "idx_sessions_terminal",
           "idx_sessions_id_workspace",
           "idx_auth_sessions_last_seen_at",
-          "idx_supervisors_workspace",
-          "idx_supervisors_session",
-          "idx_supervisors_id_session",
-          "idx_supervisor_cycles_supervisor",
-          "idx_supervisor_cycles_session",
-          "idx_supervisor_cycle_attempts_cycle",
           "idx_auth_login_blocks_blocked_until",
           "idx_auth_login_failures_ip_failed_at",
         ])
       );
+      expect(indexNames).not.toContain("idx_supervisors_workspace");
+      expect(indexNames).not.toContain("idx_supervisors_session");
+      expect(indexNames).not.toContain("idx_supervisors_id_session");
+      expect(indexNames).not.toContain("idx_supervisor_cycles_supervisor");
+      expect(indexNames).not.toContain("idx_supervisor_cycles_session");
+      expect(indexNames).not.toContain("idx_supervisor_cycle_attempts_cycle");
     });
 
     it("should support foreign key constraints", () => {

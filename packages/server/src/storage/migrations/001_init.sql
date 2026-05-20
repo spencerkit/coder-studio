@@ -67,62 +67,6 @@ CREATE TABLE IF NOT EXISTS auth_sessions (
 
 CREATE INDEX IF NOT EXISTS idx_auth_sessions_last_seen_at ON auth_sessions(last_seen_at);
 
-CREATE TABLE IF NOT EXISTS supervisors (
-  id TEXT PRIMARY KEY,
-  session_id TEXT NOT NULL UNIQUE,
-  workspace_id TEXT NOT NULL,
-  state TEXT NOT NULL,
-  objective TEXT NOT NULL,
-  evaluator_provider_id TEXT NOT NULL,
-  last_cycle_at INTEGER,
-  last_evaluated_turn_id TEXT,
-  error_reason TEXT,
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL, evaluator_model TEXT, max_supervision_count INTEGER NOT NULL DEFAULT 0, completed_supervision_count INTEGER NOT NULL DEFAULT 0, scheduled_at INTEGER, stop_reason TEXT,
-  FOREIGN KEY (session_id, workspace_id) REFERENCES sessions(id, workspace_id) ON DELETE CASCADE,
-  FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
-);
-
-CREATE INDEX IF NOT EXISTS idx_supervisors_workspace ON supervisors(workspace_id);
-CREATE INDEX IF NOT EXISTS idx_supervisors_session ON supervisors(session_id);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_supervisors_id_session ON supervisors(id, session_id);
-
-CREATE TABLE IF NOT EXISTS supervisor_cycles (
-  id TEXT PRIMARY KEY,
-  supervisor_id TEXT NOT NULL,
-  session_id TEXT NOT NULL,
-  status TEXT NOT NULL,
-  trigger TEXT NOT NULL,
-  evidence_source TEXT NOT NULL,
-  objective TEXT NOT NULL,
-  evaluator_provider_id TEXT NOT NULL,
-  turn_id TEXT,
-  progress INTEGER,
-  result TEXT,
-  injected_guidance TEXT,
-  error_reason TEXT,
-  created_at INTEGER NOT NULL,
-  completed_at INTEGER,
-  FOREIGN KEY (supervisor_id, session_id) REFERENCES supervisors(id, session_id) ON DELETE CASCADE,
-  FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
-);
-
-CREATE INDEX IF NOT EXISTS idx_supervisor_cycles_supervisor ON supervisor_cycles(supervisor_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_supervisor_cycles_session ON supervisor_cycles(session_id, created_at DESC);
-
-CREATE TABLE IF NOT EXISTS supervisor_cycle_attempts (
-  id TEXT PRIMARY KEY,
-  cycle_id TEXT NOT NULL REFERENCES supervisor_cycles(id) ON DELETE CASCADE,
-  attempt_index INTEGER NOT NULL,
-  status TEXT NOT NULL,
-  started_at INTEGER NOT NULL,
-  completed_at INTEGER,
-  error_reason TEXT,
-  provider_model TEXT
-);
-
-CREATE INDEX IF NOT EXISTS idx_supervisor_cycle_attempts_cycle ON supervisor_cycle_attempts(cycle_id, attempt_index);
-
 CREATE TABLE IF NOT EXISTS auth_login_blocks (
   ip TEXT PRIMARY KEY,
   failed_count INTEGER NOT NULL,

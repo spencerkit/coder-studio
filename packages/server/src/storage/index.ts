@@ -15,15 +15,6 @@ export {
 } from "./repositories/session-repo.js";
 export { SettingsRepo } from "./repositories/settings-repo.js";
 export {
-  type NewSupervisorCycleAttempt,
-  SupervisorCycleAttemptRepo,
-  type SupervisorCycleAttemptUpdatePatch,
-} from "./repositories/supervisor-cycle-attempt-repo.js";
-export {
-  SupervisorCycleRepo,
-  type SupervisorCycleUpdatePatch,
-} from "./repositories/supervisor-cycle-repo.js";
-export {
   type NewSupervisor,
   SupervisorRepo,
   type SupervisorUpdatePatch,

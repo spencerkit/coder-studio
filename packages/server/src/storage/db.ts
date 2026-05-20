@@ -6,7 +6,6 @@ import {
   detectSchema,
   IncompatibleSchemaError,
   stampCurrentSchemaVersion,
-  stampSchemaVersion,
 } from "./schema-version.js";
 
 interface IntegrityCheckRow {
@@ -74,34 +73,6 @@ function initializeSchema(db: Database): void {
   });
 }
 
-function upgradeSchemaV1ToV2(db: Database): void {
-  withTransaction(db, () => {
-    db.exec("ALTER TABLE supervisors ADD COLUMN evaluator_model TEXT");
-    db.exec("ALTER TABLE supervisors ADD COLUMN max_supervision_count INTEGER NOT NULL DEFAULT 0");
-    db.exec(
-      "ALTER TABLE supervisors ADD COLUMN completed_supervision_count INTEGER NOT NULL DEFAULT 0"
-    );
-    db.exec("ALTER TABLE supervisors ADD COLUMN scheduled_at INTEGER");
-    db.exec("ALTER TABLE supervisors ADD COLUMN stop_reason TEXT");
-    db.exec(`
-      CREATE TABLE supervisor_cycle_attempts (
-        id TEXT PRIMARY KEY,
-        cycle_id TEXT NOT NULL REFERENCES supervisor_cycles(id) ON DELETE CASCADE,
-        attempt_index INTEGER NOT NULL,
-        status TEXT NOT NULL,
-        started_at INTEGER NOT NULL,
-        completed_at INTEGER,
-        error_reason TEXT,
-        provider_model TEXT
-      )
-    `);
-    db.exec(
-      "CREATE INDEX idx_supervisor_cycle_attempts_cycle ON supervisor_cycle_attempts(cycle_id, attempt_index)"
-    );
-    stampSchemaVersion(db, 2);
-  });
-}
-
 function assertCurrentSchema(db: Database, dbPath: string): void {
   const detection = detectSchema(db);
   if (detection.state !== "current") {
@@ -121,18 +92,6 @@ function initializeOrUpgradeSchema(db: Database, dbPath: string): void {
       return;
 
     case "current":
-      if (detection.userVersion !== CURRENT_SCHEMA_VERSION) {
-        stampCurrentSchemaVersion(db);
-      }
-      assertCurrentSchema(db, dbPath);
-      return;
-
-    case "v1":
-      upgradeSchemaV1ToV2(db);
-      assertCurrentSchema(db, dbPath);
-      return;
-
-    case "v2":
       if (detection.userVersion !== CURRENT_SCHEMA_VERSION) {
         stampCurrentSchemaVersion(db);
       }
