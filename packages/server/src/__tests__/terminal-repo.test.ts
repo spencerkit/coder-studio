@@ -265,6 +265,88 @@ describe("TerminalRepo", () => {
     });
   });
 
+  describe("file-backed persistence", () => {
+    it("reads terminal metadata from the file store when shadow rows are missing", () => {
+      const fileRepo = new TerminalRepo({
+        filePath: join(tempDir, "terminals.json"),
+        shadowDb: db,
+      } as never);
+
+      fileRepo.insert({
+        id: "t-file",
+        workspaceId: "ws-1",
+        kind: "shell",
+        cwd: "/path/to/workspace",
+        argv: ["/bin/bash"],
+        cols: 120,
+        rows: 30,
+        alive: true,
+        createdAt: 1000,
+        title: "bash",
+      } as never);
+
+      db.prepare("DELETE FROM terminals WHERE id = ?").run("t-file");
+
+      expect(fileRepo.findById("t-file")).toMatchObject({
+        id: "t-file",
+        workspaceId: "ws-1",
+        kind: "shell",
+        cwd: "/path/to/workspace",
+      });
+    });
+
+    it("migrates legacy database terminals into the file store when the file is missing", () => {
+      repo.create({
+        id: "t-legacy",
+        workspaceId: "ws-1",
+        kind: "agent",
+        cwd: "/path/to/workspace",
+        argv: ["node", "agent.js"],
+        cols: 80,
+        rows: 24,
+        createdAt: 1000,
+        title: "Agent",
+      });
+
+      const migratedRepo = new TerminalRepo({
+        filePath: join(tempDir, "migrated-terminals.json"),
+        legacyDb: db,
+        shadowDb: db,
+      } as never);
+
+      expect(migratedRepo.findById("t-legacy")).toMatchObject({
+        id: "t-legacy",
+        workspaceId: "ws-1",
+        kind: "agent",
+        title: "Agent",
+      });
+    });
+
+    it("deletes the shadow row when deleting a file-backed terminal", () => {
+      const fileRepo = new TerminalRepo({
+        filePath: join(tempDir, "delete-terminals.json"),
+        shadowDb: db,
+      } as never);
+
+      fileRepo.insert({
+        id: "t-delete",
+        workspaceId: "ws-1",
+        kind: "shell",
+        cwd: "/path/to/workspace",
+        argv: ["/bin/bash"],
+        cols: 120,
+        rows: 30,
+        alive: true,
+        createdAt: 1000,
+      } as never);
+
+      fileRepo.delete("t-delete");
+
+      expect(fileRepo.findById("t-delete")).toBeUndefined();
+      expect(db.prepare("SELECT * FROM terminals WHERE id = ?").get("t-delete")).toBeUndefined();
+    });
+  });
+
   describe("delete", () => {
     it("should delete a terminal by ID", () => {
       repo.create({

@@ -3,13 +3,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createServer, type Server } from "../server.js";
-import { closeDatabase, openDatabase, SessionRepo, TerminalRepo } from "../storage/index.js";
+import { SessionRepo, TerminalRepo } from "../storage/index.js";
 import { dispatch } from "../ws/dispatch.js";
 
 import "../commands/workspace.js";
-import "../commands/session.js";
 
-describe("session hydrate restart", () => {
+describe("workspace close state cleanup", () => {
   let server: Server | undefined;
   let dataDir: string;
   let dbPath: string;
@@ -32,15 +31,14 @@ describe("session hydrate restart", () => {
     rmSync(workspaceDir, { recursive: true, force: true });
   });
 
-  it("restores persisted sessions into session.list after server restart", async () => {
+  it("removes file-backed sessions and terminals when a workspace is closed", async () => {
     server = await createServer({
       dataDir: dbPath,
       host: "127.0.0.1",
       port: 0,
     });
 
-    const firstCtx = server.__test__!.commandContext;
-
+    const ctx = server.__test__!.commandContext;
     const openResult = await dispatch(
       {
         kind: "command",
@@ -48,46 +46,45 @@ describe("session hydrate restart", () => {
         op: "workspace.open",
         args: { path: workspaceDir },
       },
-      firstCtx
+      ctx
     );
 
     expect(openResult.ok).toBe(true);
     const workspaceId = openResult.data!.id;
 
-    const now = Date.now();
     const terminalRepo = new TerminalRepo({
       filePath: join(dataDir, "state", "terminals.json"),
-      shadowDb: firstCtx.db,
+      shadowDb: ctx.db,
     });
     const sessionRepo = new SessionRepo({
       filePath: join(dataDir, "state", "sessions.json"),
-      shadowDb: firstCtx.db,
+      shadowDb: ctx.db,
     });
 
     terminalRepo.insert({
-      id: "term-hydrated",
+      id: "term-close",
       workspaceId,
       kind: "agent",
       cwd: workspaceDir,
-      argv: [],
+      argv: ["node", "agent.js"],
       cols: 120,
       rows: 30,
       alive: false,
-      createdAt: now,
-      endedAt: now,
+      createdAt: Date.now(),
+      endedAt: Date.now(),
       exitCode: 0,
-      title: "",
+      title: "Agent",
     });
     sessionRepo.insert({
-      id: "sess-hydrated",
+      id: "sess-close",
       workspace_id: workspaceId,
-      terminal_id: "term-hydrated",
+      terminal_id: "term-close",
       provider_id: "claude",
       capability: "full",
-      state: "running",
-      started_at: now,
-      ended_at: null,
-      last_active_at: now,
+      state: "ended",
+      started_at: Date.now(),
+      ended_at: Date.now(),
+      last_active_at: Date.now(),
       completion_percent: null,
       error_reason: null,
       archived: 0,
@@ -95,42 +92,19 @@ describe("session hydrate restart", () => {
       draft: null,
     });
 
-    await server.stop();
-    server = undefined;
-
-    const shadowDb = openDatabase(dbPath);
-    try {
-      shadowDb.prepare("DELETE FROM sessions WHERE id = ?").run("sess-hydrated");
-      shadowDb.prepare("DELETE FROM terminals WHERE id = ?").run("term-hydrated");
-    } finally {
-      closeDatabase(shadowDb);
-    }
-
-    server = await createServer({
-      dataDir: dbPath,
-      host: "127.0.0.1",
-      port: 0,
-    });
-
-    const secondCtx = server.__test__!.commandContext;
-    const listResult = await dispatch(
+    const closeResult = await dispatch(
       {
         kind: "command",
-        id: "session-list",
-        op: "session.list",
-        args: { workspaceId },
+        id: "workspace-close",
+        op: "workspace.close",
+        args: { id: workspaceId },
       },
-      secondCtx
+      ctx
     );
 
-    expect(listResult.ok).toBe(true);
-    expect(listResult.data).toEqual([
-      expect.objectContaining({
-        id: "sess-hydrated",
-        workspaceId,
-        terminalId: "term-hydrated",
-        state: "ended",
-      }),
-    ]);
+    expect(closeResult.ok).toBe(true);
+
+    expect(terminalRepo.listByWorkspace(workspaceId)).toEqual([]);
+    expect(sessionRepo.listByWorkspace(workspaceId)).toEqual([]);
   });
 });

@@ -29,20 +29,19 @@ import { createE2EProviderMockOverrides } from "./provider-runtime/e2e-provider-
 import { ProviderInstallManager } from "./provider-runtime/install-manager.js";
 import type { RuntimeStatusDeps } from "./provider-runtime/runtime-status.js";
 import { SessionManager } from "./session/manager.js";
-import type { Database } from "./storage/database.js";
 import { openDatabase } from "./storage/db.js";
 import { AuthLoginBlockRepo } from "./storage/repositories/auth-login-block-repo.js";
 import { AuthSessionRepo } from "./storage/repositories/auth-session-repo.js";
 import { ProviderConfigRepo } from "./storage/repositories/provider-config-repo.js";
-import { rowToSession, type SessionRow } from "./storage/repositories/session-repo.js";
+import { SessionRepo } from "./storage/repositories/session-repo.js";
 import { SettingsRepo } from "./storage/repositories/settings-repo.js";
 import { SupervisorRepo } from "./storage/repositories/supervisor-repo.js";
+import { TerminalRepo } from "./storage/repositories/terminal-repo.js";
 import { WorkspaceRepo } from "./storage/repositories/workspace-repo.js";
 import { SupervisorManager } from "./supervisor/manager.js";
 import * as targetStore from "./supervisor/target-store.js";
 import { TerminalManager } from "./terminal/manager.js";
 import { NodePtyHost } from "./terminal/pty-host.js";
-import type { TerminalDatabase } from "./terminal/types.js";
 import { deleteWorkspaceUploads, runStartupGc } from "./uploads/cleanup.js";
 import { STARTUP_GC_DELAY_MS } from "./uploads/constants.js";
 import { WorkspaceManager } from "./workspace/manager.js";
@@ -87,10 +86,21 @@ export async function createServer(
   let commandContext: CommandContext;
   let lspMgr: LspManager | null = null;
 
+  const terminalRepo = new TerminalRepo({
+    filePath: join(stateRoot, "state", "terminals.json"),
+    legacyDb: db,
+    shadowDb: db,
+  });
+  const sessionRepo = new SessionRepo({
+    filePath: join(stateRoot, "state", "sessions.json"),
+    legacyDb: db,
+    shadowDb: db,
+  });
+
   const terminalMgr = new TerminalManager({
     ptyHost: createPtyHost(),
     eventBus,
-    db: createTerminalDatabase(db),
+    db: terminalRepo,
   });
 
   const settingsRepo = new SettingsRepo({
@@ -130,7 +140,6 @@ export async function createServer(
     },
   });
 
-  const sessionDb = createSessionDatabase(db);
   const providerConfigRepo = new ProviderConfigRepo({
     filePath: join(stateRoot, "state", "provider-configs.json"),
     legacyDb: db,
@@ -143,7 +152,7 @@ export async function createServer(
   const sessionMgr = new SessionManager({
     terminalMgr,
     eventBus,
-    db: sessionDb,
+    db: sessionRepo,
     broadcaster: wsHub,
     providerRegistry,
     providerConfigRepo,
@@ -163,6 +172,14 @@ export async function createServer(
       await sessionMgr.stopForWorkspace(workspaceId);
       await terminalMgr.closeForWorkspace(workspaceId);
       sessionMgr.deleteEndedForWorkspace(workspaceId);
+
+      for (const session of sessionRepo.findByWorkspaceId(workspaceId)) {
+        sessionRepo.delete(session.id);
+      }
+
+      for (const terminal of terminalRepo.listByWorkspace(workspaceId)) {
+        terminalRepo.delete(terminal.id);
+      }
     },
     onClose: (workspaceId) =>
       deleteWorkspaceUploads(config.uploadsDir, workspaceId).catch((err) =>
@@ -228,6 +245,7 @@ export async function createServer(
     targetStore,
     logger: app.log,
   });
+  terminalRepo.listByWorkspace("");
   await sessionMgr.hydrate();
   supervisorMgr.start();
 
@@ -337,105 +355,6 @@ function extractListenPort(app: FastifyInstance): number | undefined {
 
 function createPtyHost() {
   return new NodePtyHost();
-}
-
-function createTerminalDatabase(db: Database): TerminalDatabase {
-  return {
-    insert: (terminal) => {
-      db.prepare(`
-        INSERT INTO terminals (id, workspace_id, kind, title, cwd, argv, cols, rows, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        terminal.id,
-        terminal.workspaceId,
-        terminal.kind,
-        terminal.title,
-        terminal.cwd,
-        JSON.stringify(terminal.argv),
-        terminal.cols,
-        terminal.rows,
-        terminal.createdAt
-      );
-    },
-    markEnded: (id: string, endedAt: number, exitCode: number) => {
-      db.prepare(`
-        UPDATE terminals SET ended_at = ?, exit_code = ? WHERE id = ?
-      `).run(endedAt, exitCode, id);
-    },
-  };
-}
-
-function createSessionDatabase(db: Database) {
-  return {
-    insert: (session: SessionRow) => {
-      db.prepare(`
-        INSERT INTO sessions (id, workspace_id, terminal_id, provider_id, state, capability, started_at, last_active_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        session.id,
-        session.workspace_id,
-        session.terminal_id,
-        session.provider_id,
-        session.state,
-        session.capability,
-        session.started_at,
-        session.last_active_at
-      );
-    },
-    update: (id: string, patch: Record<string, unknown>) => {
-      const keys = Object.keys(patch);
-      if (keys.length === 0) return;
-
-      const allowedCols = new Set([
-        "terminal_id",
-        "state",
-        "started_at",
-        "ended_at",
-        "completion_percent",
-        "error_reason",
-        "last_active_at",
-        "title",
-      ]);
-
-      const setClauses: string[] = [];
-      const values: unknown[] = [];
-      for (const key of keys) {
-        const col = key.replace(/([A-Z])/g, "_$1").toLowerCase();
-        if (!allowedCols.has(col)) continue;
-        setClauses.push(`${col} = ?`);
-        values.push(patch[key]);
-      }
-      if (setClauses.length === 0) return;
-
-      db.prepare(`UPDATE sessions SET ${setClauses.join(", ")} WHERE id = ?`).run(
-        ...(values as Array<string | number | bigint | Uint8Array | null>),
-        id
-      );
-    },
-    findById: (id: string) => {
-      const row = db.prepare("SELECT * FROM sessions WHERE id = ?").get(id) as
-        | SessionRow
-        | undefined;
-      return row ? rowToSession(row) : undefined;
-    },
-    findByWorkspaceId: (workspaceId: string) => {
-      const rows = db
-        .prepare("SELECT * FROM sessions WHERE workspace_id = ? ORDER BY started_at DESC")
-        .all(workspaceId) as unknown as SessionRow[];
-      return rows.map(rowToSession);
-    },
-    listHydratable: () => {
-      const rows = db
-        .prepare(
-          "SELECT * FROM sessions WHERE archived = 0 AND ended_at IS NULL ORDER BY started_at DESC"
-        )
-        .all() as unknown as SessionRow[];
-      return rows.map(rowToSession);
-    },
-    delete: (id: string) => {
-      db.prepare("DELETE FROM sessions WHERE id = ?").run(id);
-    },
-  };
 }
 
 if (isDirectExecution(import.meta.url)) {

@@ -9,6 +9,7 @@ export {
   type NewSession,
   rowToSession,
   SessionRepo,
+  type SessionRepoOptions,
   type SessionRow,
   sessionToRow,
 } from "./repositories/session-repo.js";
@@ -27,7 +28,12 @@ export {
   SupervisorRepo,
   type SupervisorUpdatePatch,
 } from "./repositories/supervisor-repo.js";
-export { type NewTerminal, TerminalRepo, type TerminalRow } from "./repositories/terminal-repo.js";
+export {
+  type NewTerminal,
+  TerminalRepo,
+  type TerminalRepoOptions,
+  type TerminalRow,
+} from "./repositories/terminal-repo.js";
 export {
   type NewWorkspace,
   WorkspaceRepo,

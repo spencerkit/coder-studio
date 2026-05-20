@@ -367,6 +367,122 @@ describe("SessionRepo", () => {
     });
   });
 
+  describe("file-backed persistence", () => {
+    it("reads sessions from the file store when shadow rows are missing", () => {
+      const fileSessionRepo = new SessionRepo({
+        filePath: join(tempDir, "sessions.json"),
+        shadowDb: db,
+      } as never);
+
+      fileSessionRepo.insert({
+        id: "s-file",
+        workspace_id: "ws-1",
+        terminal_id: "t-1",
+        provider_id: "claude-cli",
+        capability: "full",
+        state: "running",
+        started_at: 1000,
+        last_active_at: 1000,
+        ended_at: null,
+        completion_percent: null,
+        error_reason: null,
+        archived: 0,
+        title: "resume me",
+        draft: "draft text",
+      } as never);
+
+      db.prepare("DELETE FROM sessions WHERE id = ?").run("s-file");
+
+      expect(fileSessionRepo.findById("s-file")).toMatchObject({
+        id: "s-file",
+        workspaceId: "ws-1",
+        terminalId: "t-1",
+        title: "resume me",
+        draft: "draft text",
+      });
+    });
+
+    it("migrates legacy database sessions into the file store when the file is missing", () => {
+      repo.create({
+        id: "s-legacy",
+        workspaceId: "ws-1",
+        terminalId: "t-1",
+        providerId: "claude-cli",
+        state: "idle",
+        capability: "full",
+        startedAt: 1000,
+        lastActiveAt: 1000,
+      });
+
+      const migratedRepo = new SessionRepo({
+        filePath: join(tempDir, "migrated-sessions.json"),
+        legacyDb: db,
+        shadowDb: db,
+      } as never);
+
+      expect(migratedRepo.findById("s-legacy")).toMatchObject({
+        id: "s-legacy",
+        terminalId: "t-1",
+        providerId: "claude-cli",
+        state: "idle",
+      });
+    });
+
+    it("lists hydratable sessions from file-backed state", () => {
+      terminalRepo.create({
+        id: "t-2",
+        workspaceId: "ws-1",
+        kind: "agent",
+        cwd: "/path/to/workspace",
+        argv: ["node", "second.js"],
+        cols: 80,
+        rows: 24,
+        createdAt: 1001,
+      });
+
+      const fileSessionRepo = new SessionRepo({
+        filePath: join(tempDir, "hydratable-sessions.json"),
+        shadowDb: db,
+      } as never);
+
+      fileSessionRepo.insert({
+        id: "s-running",
+        workspace_id: "ws-1",
+        terminal_id: "t-1",
+        provider_id: "claude-cli",
+        capability: "full",
+        state: "running",
+        started_at: 1000,
+        last_active_at: 1000,
+        ended_at: null,
+        completion_percent: null,
+        error_reason: null,
+        archived: 0,
+        title: null,
+        draft: null,
+      } as never);
+
+      fileSessionRepo.insert({
+        id: "s-ended",
+        workspace_id: "ws-1",
+        terminal_id: "t-2",
+        provider_id: "claude-cli",
+        capability: "full",
+        state: "ended",
+        started_at: 1000,
+        last_active_at: 1000,
+        ended_at: 1001,
+        completion_percent: null,
+        error_reason: null,
+        archived: 0,
+        title: null,
+        draft: null,
+      } as never);
+
+      expect(fileSessionRepo.listHydratable().map((session) => session.id)).toEqual(["s-running"]);
+    });
+  });
+
   describe("delete", () => {
     it("should delete a session by ID", () => {
       repo.create({

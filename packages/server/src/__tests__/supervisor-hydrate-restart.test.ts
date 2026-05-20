@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createServer, type Server } from "../server.js";
+import { closeDatabase, openDatabase, SessionRepo, TerminalRepo } from "../storage/index.js";
 import { createTargetFiles } from "../supervisor/target-store.js";
 import { dispatch } from "../ws/dispatch.js";
 
@@ -54,25 +55,45 @@ describe("supervisor hydrate restart", () => {
     const workspaceId = openResult.data!.id;
     const now = Date.now();
 
-    firstCtx.db
-      .prepare(
-        "INSERT INTO terminals (id, workspace_id, kind, cwd, argv, cols, rows, created_at, ended_at, exit_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-      )
-      .run("term-supervisor", workspaceId, "agent", workspaceDir, "[]", 120, 30, now, now, 0);
-    firstCtx.db
-      .prepare(
-        "INSERT INTO sessions (id, workspace_id, terminal_id, provider_id, capability, state, started_at, last_active_at, archived) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)"
-      )
-      .run(
-        "sess-supervisor",
-        workspaceId,
-        "term-supervisor",
-        "claude",
-        "full",
-        "running",
-        now,
-        now
-      );
+    const terminalRepo = new TerminalRepo({
+      filePath: join(dataDir, "state", "terminals.json"),
+      shadowDb: firstCtx.db,
+    });
+    const sessionRepo = new SessionRepo({
+      filePath: join(dataDir, "state", "sessions.json"),
+      shadowDb: firstCtx.db,
+    });
+
+    terminalRepo.insert({
+      id: "term-supervisor",
+      workspaceId,
+      kind: "agent",
+      cwd: workspaceDir,
+      argv: [],
+      cols: 120,
+      rows: 30,
+      alive: false,
+      createdAt: now,
+      endedAt: now,
+      exitCode: 0,
+      title: "",
+    });
+    sessionRepo.insert({
+      id: "sess-supervisor",
+      workspace_id: workspaceId,
+      terminal_id: "term-supervisor",
+      provider_id: "claude",
+      capability: "full",
+      state: "running",
+      started_at: now,
+      ended_at: null,
+      last_active_at: now,
+      completion_percent: null,
+      error_reason: null,
+      archived: 0,
+      title: null,
+      draft: null,
+    });
     firstCtx.db
       .prepare(
         `INSERT INTO supervisors (
@@ -123,6 +144,14 @@ describe("supervisor hydrate restart", () => {
 
     await server.stop();
     server = undefined;
+
+    const shadowDb = openDatabase(dbPath);
+    try {
+      shadowDb.prepare("DELETE FROM sessions WHERE id = ?").run("sess-supervisor");
+      shadowDb.prepare("DELETE FROM terminals WHERE id = ?").run("term-supervisor");
+    } finally {
+      closeDatabase(shadowDb);
+    }
 
     server = await createServer({
       dataDir: dbPath,
