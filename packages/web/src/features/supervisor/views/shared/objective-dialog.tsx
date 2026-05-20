@@ -21,8 +21,23 @@ interface ObjectiveDialogProps {
 export function ObjectiveDialog({ workspaceId, sessionId }: ObjectiveDialogProps) {
   const viewport = useViewport();
   const t = useTranslation();
-  const { dialog, isVisible, mode, copy, isMaxSupervisionCountValid, close, updateDraft, confirm } =
-    useObjectiveDialogState({ workspaceId, sessionId });
+  const {
+    dialog,
+    isVisible,
+    mode,
+    restoreStep,
+    copy,
+    isMaxSupervisionCountValid,
+    recoverableTargets,
+    selectedRecoverableTargetId,
+    isRecoverableTargetsLoading,
+    close,
+    updateDraft,
+    openRestoreStep,
+    closeRestoreStep,
+    selectRecoverableTarget,
+    confirm,
+  } = useObjectiveDialogState({ workspaceId, sessionId });
 
   if (!isVisible || viewport === "mobile") {
     return null;
@@ -51,12 +66,16 @@ export function ObjectiveDialog({ workspaceId, sessionId }: ObjectiveDialogProps
       <ModalBody>
         <ObjectiveDialogContent
           mode={mode}
+          restoreStep={restoreStep}
           draftObjective={dialog.draftObjective}
           draftEvaluatorProviderId={dialog.draftEvaluatorProviderId}
           draftEvaluatorModel={dialog.draftEvaluatorModel}
           draftMaxSupervisionCount={dialog.draftMaxSupervisionCount}
           draftScheduledAt={dialog.draftScheduledAt}
           isMaxSupervisionCountValid={isMaxSupervisionCountValid}
+          recoverableTargets={recoverableTargets}
+          selectedRecoverableTargetId={selectedRecoverableTargetId}
+          isRecoverableTargetsLoading={isRecoverableTargetsLoading}
           onDraftObjectiveChange={(draftObjective) => updateDraft({ draftObjective })}
           onDraftEvaluatorProviderChange={(draftEvaluatorProviderId) =>
             updateDraft({ draftEvaluatorProviderId })
@@ -68,6 +87,11 @@ export function ObjectiveDialog({ workspaceId, sessionId }: ObjectiveDialogProps
             updateDraft({ draftMaxSupervisionCount })
           }
           onDraftScheduledAtChange={(draftScheduledAt) => updateDraft({ draftScheduledAt })}
+          onOpenRestoreStep={() => {
+            void openRestoreStep();
+          }}
+          onCloseRestoreStep={closeRestoreStep}
+          onSelectRecoverableTarget={selectRecoverableTarget}
         />
       </ModalBody>
 
@@ -78,7 +102,13 @@ export function ObjectiveDialog({ workspaceId, sessionId }: ObjectiveDialogProps
           onClick={() => {
             void confirm();
           }}
-          disabled={!dialog.draftObjective.trim() || !isMaxSupervisionCountValid}
+          disabled={
+            restoreStep === "restore"
+              ? !selectedRecoverableTargetId ||
+                isRecoverableTargetsLoading ||
+                !isMaxSupervisionCountValid
+              : !dialog.draftObjective.trim() || !isMaxSupervisionCountValid
+          }
         >
           {copy.confirm}
         </Button>

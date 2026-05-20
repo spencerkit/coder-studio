@@ -33,7 +33,7 @@ import {
 } from "./injector.js";
 import { SupervisorScheduler } from "./scheduler.js";
 import { getSupervisorRetrySettings } from "./settings.js";
-import type { SupervisorTargetMeta } from "./target-store.js";
+import type { RecoverableTargetSummary, SupervisorTargetMeta } from "./target-store.js";
 
 const NOOP_LOGGER: FastifyBaseLogger = {
   child: () => NOOP_LOGGER,
@@ -108,7 +108,10 @@ export interface SupervisorManagerDeps {
     "create" | "update" | "listForCycle" | "deleteForCycle"
   >;
   targetStore: {
+    cloneTargetFiles: typeof import("./target-store.js").cloneTargetFiles;
     createTargetFiles: typeof import("./target-store.js").createTargetFiles;
+    deleteTarget: typeof import("./target-store.js").deleteTarget;
+    listRecoverableTargets: typeof import("./target-store.js").listRecoverableTargets;
     resetTargetFiles: typeof import("./target-store.js").resetTargetFiles;
     readTargetMeta: typeof import("./target-store.js").readTargetMeta;
     loadTargetMemory: typeof import("./target-store.js").loadTargetMemory;
@@ -138,6 +141,16 @@ export interface UpdateSupervisorRequest {
   evaluatorModel?: string | null;
   maxSupervisionCount?: number;
   scheduledAt?: number | null;
+}
+
+export interface RestoreSupervisorRequest {
+  sessionId: string;
+  workspaceId: string;
+  sourceTargetId: string;
+  evaluatorProviderId: string;
+  evaluatorModel?: string;
+  maxSupervisionCount?: number;
+  scheduledAt?: number;
 }
 
 function createDeferredCompletion(): DeferredCompletion {
@@ -432,6 +445,56 @@ export class SupervisorManager {
 
     this.storeSnapshot(enriched);
     this.broadcastState(enriched, "created");
+    this.scheduler.refresh();
+    return enriched;
+  }
+
+  async listRecoverableTargets(workspaceId: string): Promise<RecoverableTargetSummary[]> {
+    const workspace = this.requireWorkspace(workspaceId);
+    return await this.deps.targetStore.listRecoverableTargets(workspace.path);
+  }
+
+  async restore(req: RestoreSupervisorRequest): Promise<Supervisor> {
+    const source = (await this.listRecoverableTargets(req.workspaceId)).find(
+      (target) => target.targetId === req.sourceTargetId
+    );
+    if (!source) {
+      throw {
+        code: "supervisor_not_found",
+        message: `Recoverable target ${req.sourceTargetId} not found`,
+      };
+    }
+
+    const created = await this.create({
+      sessionId: req.sessionId,
+      workspaceId: req.workspaceId,
+      objective: source.objective,
+      evaluatorProviderId: req.evaluatorProviderId,
+      evaluatorModel: req.evaluatorModel,
+      maxSupervisionCount: req.maxSupervisionCount,
+      scheduledAt: req.scheduledAt,
+    });
+
+    const workspace = this.requireWorkspace(req.workspaceId);
+    const cycleCount = await this.deps.targetStore.cloneTargetFiles(workspace.path, {
+      sourceTargetId: req.sourceTargetId,
+      targetId: created.targetId,
+      sessionId: req.sessionId,
+      workspaceId: req.workspaceId,
+      objective: source.objective,
+      createdAt: created.createdAt,
+    });
+    const updated = this.attachCycles(
+      this.deps.supervisorRepo.update(created.id, {
+        completedSupervisionCount: cycleCount,
+        updatedAt: Date.now(),
+      })
+    );
+    const enriched = await this.attachTargetState(updated, workspace.path);
+
+    await this.deps.targetStore.deleteTarget(workspace.path, req.sourceTargetId);
+    this.storeSnapshot(enriched);
+    this.broadcastState(enriched, "updated");
     this.scheduler.refresh();
     return enriched;
   }

@@ -307,6 +307,9 @@ function createManagerDeps() {
   };
   const targetStore = {
     createTargetFiles: vi.fn(async () => {}),
+    cloneTargetFiles: vi.fn(async () => 0),
+    deleteTarget: vi.fn(async () => {}),
+    listRecoverableTargets: vi.fn(async () => []),
     resetTargetFiles: vi.fn(async () => {}),
     readTargetMeta: vi.fn(async (_workspacePath: string, targetId: string) => ({
       targetId,
@@ -427,6 +430,55 @@ describe("SupervisorManager cycle triggers", () => {
         targetId: expect.anything(),
       })
     );
+  });
+
+  it("restores a previous target into a newly created supervisor", async () => {
+    deps.targetStore.listRecoverableTargets.mockResolvedValueOnce([
+      {
+        targetId: "tgt-restore",
+        sessionId: "sess-old",
+        workspaceId: "ws-1",
+        objective: "Restore old work",
+        status: "cancelled",
+        updatedAt: 10,
+        progressSummary: "Halfway there",
+        cycleCount: 2,
+      },
+    ]);
+    deps.targetStore.cloneTargetFiles.mockResolvedValueOnce(2);
+
+    const restored = await (
+      manager as unknown as SupervisorManager & {
+        restore: (input: {
+          sessionId: string;
+          workspaceId: string;
+          sourceTargetId: string;
+          evaluatorProviderId: string;
+          evaluatorModel?: string;
+          maxSupervisionCount?: number;
+          scheduledAt?: number;
+        }) => Promise<Supervisor>;
+      }
+    ).restore({
+      sessionId: "sess-restore",
+      workspaceId: "ws-1",
+      sourceTargetId: "tgt-restore",
+      evaluatorProviderId: "codex",
+      maxSupervisionCount: 5,
+    });
+
+    expect(deps.targetStore.cloneTargetFiles).toHaveBeenCalledWith(
+      process.cwd(),
+      expect.objectContaining({
+        sourceTargetId: "tgt-restore",
+        sessionId: "sess-restore",
+        workspaceId: "ws-1",
+        targetId: restored.targetId,
+        objective: "Restore old work",
+      })
+    );
+    expect(deps.targetStore.deleteTarget).toHaveBeenCalledWith(process.cwd(), "tgt-restore");
+    expect(restored.completedSupervisionCount).toBe(2);
   });
 
   it("returns an in-flight cycle immediately on manual triggerEvaluation", async () => {

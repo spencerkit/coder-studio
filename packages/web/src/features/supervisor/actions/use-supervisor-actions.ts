@@ -46,12 +46,16 @@ export function useSupervisorActions({ sessionId }: UseSupervisorActionsArgs) {
         open: true,
         sessionId,
         mode,
+        restoreStep: "form",
         draftObjective: supervisor?.objective ?? "",
         draftEvaluatorProviderId:
           (supervisor?.evaluatorProviderId as "claude" | "codex") ?? "claude",
         draftEvaluatorModel: supervisor?.evaluatorModel ?? "",
         draftMaxSupervisionCount: String(supervisor?.maxSupervisionCount ?? 0),
         draftScheduledAt: formatScheduledAtInput(supervisor?.scheduledAt),
+        recoverableTargets: [],
+        selectedRecoverableTargetId: null,
+        isRecoverableTargetsLoading: false,
       });
     },
     [sessionId, setDialog, supervisor]

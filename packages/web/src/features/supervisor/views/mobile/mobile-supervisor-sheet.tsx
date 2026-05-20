@@ -31,10 +31,17 @@ export function MobileSupervisorSheet({
     dialog,
     supervisor,
     mode,
+    restoreStep,
     copy,
     isMaxSupervisionCountValid,
+    recoverableTargets,
+    selectedRecoverableTargetId,
+    isRecoverableTargetsLoading,
     close,
     updateDraft,
+    openRestoreStep,
+    closeRestoreStep,
+    selectRecoverableTarget,
     confirm,
   } = useObjectiveDialogState({ workspaceId, sessionId });
   const [detailMode, setDetailMode] = useState<"details" | "edit" | null>(() =>
@@ -58,6 +65,7 @@ export function MobileSupervisorSheet({
         open: false,
         sessionId,
         mode: "enable",
+        restoreStep: "form",
         draftObjective:
           current.sessionId === sessionId && current.mode === "enable"
             ? current.draftObjective
@@ -78,6 +86,9 @@ export function MobileSupervisorSheet({
           current.sessionId === sessionId && current.mode === "enable"
             ? current.draftScheduledAt
             : "",
+        recoverableTargets: [],
+        selectedRecoverableTargetId: null,
+        isRecoverableTargetsLoading: false,
       };
     });
   }, [sessionId, setDialog, supervisor]);
@@ -97,12 +108,16 @@ export function MobileSupervisorSheet({
       open: true,
       sessionId,
       mode: "edit",
+      restoreStep: "form",
       draftObjective: supervisor?.objective ?? "",
       draftEvaluatorProviderId:
         (supervisor?.evaluatorProviderId as ObjectiveDialogEvaluatorProviderId) ?? "claude",
       draftEvaluatorModel: supervisor?.evaluatorModel ?? "",
       draftMaxSupervisionCount: String(supervisor?.maxSupervisionCount ?? 0),
       draftScheduledAt: formatScheduledAtInput(supervisor?.scheduledAt),
+      recoverableTargets: [],
+      selectedRecoverableTargetId: null,
+      isRecoverableTargetsLoading: false,
     });
     setDetailMode("edit");
   };
@@ -111,12 +126,16 @@ export function MobileSupervisorSheet({
     <div className="mobile-supervisor-sheet__detail">
       <ObjectiveDialogContent
         mode={mode}
+        restoreStep={restoreStep}
         draftObjective={dialog.draftObjective}
         draftEvaluatorProviderId={dialog.draftEvaluatorProviderId}
         draftEvaluatorModel={dialog.draftEvaluatorModel}
         draftMaxSupervisionCount={dialog.draftMaxSupervisionCount}
         draftScheduledAt={dialog.draftScheduledAt}
         isMaxSupervisionCountValid={isMaxSupervisionCountValid}
+        recoverableTargets={recoverableTargets}
+        selectedRecoverableTargetId={selectedRecoverableTargetId}
+        isRecoverableTargetsLoading={isRecoverableTargetsLoading}
         onDraftObjectiveChange={(draftObjective) => updateDraft({ draftObjective })}
         onDraftEvaluatorProviderChange={(draftEvaluatorProviderId) =>
           updateDraft({ draftEvaluatorProviderId })
@@ -126,6 +145,11 @@ export function MobileSupervisorSheet({
           updateDraft({ draftMaxSupervisionCount })
         }
         onDraftScheduledAtChange={(draftScheduledAt) => updateDraft({ draftScheduledAt })}
+        onOpenRestoreStep={() => {
+          void openRestoreStep();
+        }}
+        onCloseRestoreStep={closeRestoreStep}
+        onSelectRecoverableTarget={selectRecoverableTarget}
       />
     </div>
   );
@@ -173,7 +197,11 @@ export function MobileSupervisorSheet({
             onClose();
           })();
         }}
-        disabled={!dialog.draftObjective.trim()}
+        disabled={
+          restoreStep === "restore"
+            ? !selectedRecoverableTargetId || isRecoverableTargetsLoading
+            : !dialog.draftObjective.trim() || !isMaxSupervisionCountValid
+        }
       >
         {copy.confirm}
       </Button>

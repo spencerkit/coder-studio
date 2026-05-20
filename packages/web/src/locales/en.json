@@ -794,6 +794,18 @@
         "subtitle": "Adjust the objective or switch evaluators without clearing evaluation history.",
         "confirm": "Save"
       },
+      "restore": {
+        "open": "Restore from Existing Memory",
+        "hint": "Reuse supervisor memory from an existing target directory and continue with a fresh supervisor in this session.",
+        "title": "Restore Supervisor Memory",
+        "subtitle": "Choose a recoverable memory snapshot. A new supervisor will be created for this session, then the selected memory will be copied into it.",
+        "back": "Back to Objective",
+        "confirm": "Restore",
+        "empty": "No recoverable supervisor memory found.",
+        "empty_hint": "Only target directories with readable supervisor memory can be restored.",
+        "cycle_count": "{count} cycles",
+        "updated_at": "Updated {time}"
+      },
       "details": {
         "title": "Supervisor Details"
       }

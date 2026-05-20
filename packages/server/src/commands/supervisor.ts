@@ -33,7 +33,19 @@ const updateSupervisorSchema = z
     "at least one supervisor field is required"
   );
 const sessionIdSchema = z.object({ sessionId: z.string() });
+const workspaceIdSchema = z.object({ workspaceId: z.string() });
 const supervisorIdSchema = z.object({ id: z.string() });
+const restoreSupervisorSchema = z
+  .object({
+    sessionId: z.string(),
+    workspaceId: z.string(),
+    sourceTargetId: z.string(),
+    evaluatorProviderId: z.string(),
+    evaluatorModel: z.string().trim().min(1).max(200).optional(),
+    maxSupervisionCount: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
+    scheduledAt: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
+  })
+  .strict();
 
 // supervisor.create
 registerCommand("supervisor.create", createSupervisorSchema, async (args, ctx) => {
@@ -53,6 +65,10 @@ registerCommand("supervisor.create", createSupervisorSchema, async (args, ctx) =
 // supervisor.get
 registerCommand("supervisor.get", sessionIdSchema, async (args, ctx) => {
   return { supervisor: ctx.supervisorMgr.getBySession(args.sessionId) ?? null };
+});
+
+registerCommand("supervisor.listRecoverableTargets", workspaceIdSchema, async (args, ctx) => {
+  return { targets: await ctx.supervisorMgr.listRecoverableTargets(args.workspaceId) };
 });
 
 // supervisor.update
@@ -87,4 +103,18 @@ registerCommand("supervisor.resume", supervisorIdSchema, async (args, ctx) => {
 // supervisor.trigger
 registerCommand("supervisor.trigger", supervisorIdSchema, async (args, ctx) => {
   return { cycle: await ctx.supervisorMgr.triggerEvaluation(args.id) };
+});
+
+registerCommand("supervisor.restore", restoreSupervisorSchema, async (args, ctx) => {
+  return {
+    supervisor: await ctx.supervisorMgr.restore({
+      sessionId: args.sessionId,
+      workspaceId: args.workspaceId,
+      sourceTargetId: args.sourceTargetId,
+      evaluatorProviderId: args.evaluatorProviderId,
+      evaluatorModel: args.evaluatorModel,
+      maxSupervisionCount: args.maxSupervisionCount,
+      scheduledAt: args.scheduledAt,
+    }),
+  };
 });

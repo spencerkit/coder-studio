@@ -2,7 +2,12 @@ import { useAtom, useAtomValue } from "jotai";
 import { useCallback } from "react";
 import { dispatchCommandAtom } from "../../../atoms/connection";
 import { useTranslation } from "../../../lib/i18n";
-import { supervisorDialogAtom, supervisorsAtom } from "../atoms";
+import {
+  type RecoverableSupervisorTarget,
+  type SupervisorDialogRestoreStep,
+  supervisorDialogAtom,
+  supervisorsAtom,
+} from "../atoms";
 
 export type ObjectiveDialogMode = "enable" | "edit";
 export type ObjectiveDialogEvaluatorProviderId = "claude" | "codex";
@@ -16,11 +21,15 @@ const CLOSED_DIALOG_STATE = {
   open: false,
   sessionId: null,
   mode: "enable" as const,
+  restoreStep: "form" as const,
   draftObjective: "",
   draftEvaluatorProviderId: "claude" as const,
   draftEvaluatorModel: "",
   draftMaxSupervisionCount: "0",
   draftScheduledAt: "",
+  recoverableTargets: [] as RecoverableSupervisorTarget[],
+  selectedRecoverableTargetId: null as string | null,
+  isRecoverableTargetsLoading: false,
 };
 
 export function formatScheduledAtInput(value?: number): string {
@@ -82,14 +91,27 @@ export function useObjectiveDialogState({
   const supervisor = effectiveSessionId ? supervisors.get(effectiveSessionId) : undefined;
   const isVisible = dialog.open && (!sessionId || dialog.sessionId === sessionId);
   const mode = dialog.mode;
+  const restoreStep = dialog.restoreStep ?? "form";
   const copy = {
-    title: t(`supervisor.dialog.${mode}.title`),
-    subtitle: t(`supervisor.dialog.${mode}.subtitle`),
-    confirm: t(`supervisor.dialog.${mode}.confirm`),
+    title:
+      mode === "enable" && restoreStep === "restore"
+        ? t("supervisor.dialog.restore.title")
+        : t(`supervisor.dialog.${mode}.title`),
+    subtitle:
+      mode === "enable" && restoreStep === "restore"
+        ? t("supervisor.dialog.restore.subtitle")
+        : t(`supervisor.dialog.${mode}.subtitle`),
+    confirm:
+      mode === "enable" && restoreStep === "restore"
+        ? t("supervisor.dialog.restore.confirm")
+        : t(`supervisor.dialog.${mode}.confirm`),
   };
   const isMaxSupervisionCountValid = isValidDraftMaxSupervisionCount(
     dialog.draftMaxSupervisionCount
   );
+  const selectedRecoverableTargetId = dialog.selectedRecoverableTargetId ?? null;
+  const recoverableTargets = dialog.recoverableTargets ?? [];
+  const isRecoverableTargetsLoading = dialog.isRecoverableTargetsLoading ?? false;
 
   const close = useCallback(() => {
     setDialog(CLOSED_DIALOG_STATE);
@@ -103,6 +125,10 @@ export function useObjectiveDialogState({
         draftEvaluatorModel: string;
         draftMaxSupervisionCount: string;
         draftScheduledAt: string;
+        restoreStep: SupervisorDialogRestoreStep;
+        recoverableTargets: RecoverableSupervisorTarget[];
+        selectedRecoverableTargetId: string | null;
+        isRecoverableTargetsLoading: boolean;
       }>
     ) => {
       setDialog((current) => ({ ...current, ...patch }));
@@ -110,13 +136,60 @@ export function useObjectiveDialogState({
     [setDialog]
   );
 
-  const confirm = useCallback(async () => {
-    if (!dialog.sessionId) {
-      return false;
+  const openRestoreStep = useCallback(async () => {
+    if (mode !== "enable") {
+      return;
     }
 
-    const objective = dialog.draftObjective.trim();
-    if (!objective) {
+    setDialog((current) => ({
+      ...current,
+      restoreStep: "restore",
+      isRecoverableTargetsLoading: true,
+      recoverableTargets: [],
+      selectedRecoverableTargetId: null,
+    }));
+
+    const result = await dispatch<{ targets: RecoverableSupervisorTarget[] }>(
+      "supervisor.listRecoverableTargets",
+      { workspaceId }
+    );
+
+    setDialog((current) => {
+      if (current.sessionId !== effectiveSessionId || current.mode !== "enable") {
+        return current;
+      }
+
+      return {
+        ...current,
+        restoreStep: "restore",
+        isRecoverableTargetsLoading: false,
+        recoverableTargets: result.ok ? (result.data?.targets ?? []) : [],
+        selectedRecoverableTargetId: null,
+      };
+    });
+  }, [dispatch, effectiveSessionId, mode, setDialog, workspaceId]);
+
+  const closeRestoreStep = useCallback(() => {
+    setDialog((current) => ({
+      ...current,
+      restoreStep: "form",
+      isRecoverableTargetsLoading: false,
+      selectedRecoverableTargetId: null,
+    }));
+  }, [setDialog]);
+
+  const selectRecoverableTarget = useCallback(
+    (targetId: string) => {
+      setDialog((current) => ({
+        ...current,
+        selectedRecoverableTargetId: targetId,
+      }));
+    },
+    [setDialog]
+  );
+
+  const confirm = useCallback(async () => {
+    if (!dialog.sessionId) {
       return false;
     }
 
@@ -127,6 +200,34 @@ export function useObjectiveDialogState({
     const evaluatorModel = dialog.draftEvaluatorModel.trim();
     const maxSupervisionCount = parseDraftMaxSupervisionCount(dialog.draftMaxSupervisionCount);
     const scheduledAt = parseDraftScheduledAt(dialog.draftScheduledAt);
+
+    if (dialog.mode === "enable" && restoreStep === "restore") {
+      if (!selectedRecoverableTargetId) {
+        return false;
+      }
+
+      const result = await dispatch("supervisor.restore", {
+        sessionId: dialog.sessionId,
+        workspaceId,
+        sourceTargetId: selectedRecoverableTargetId,
+        evaluatorProviderId: dialog.draftEvaluatorProviderId,
+        evaluatorModel: evaluatorModel || undefined,
+        maxSupervisionCount,
+        scheduledAt,
+      });
+
+      if (result.ok) {
+        close();
+        return true;
+      }
+
+      return false;
+    }
+
+    const objective = dialog.draftObjective.trim();
+    if (!objective) {
+      return false;
+    }
 
     if (dialog.mode === "enable") {
       const result = await dispatch("supervisor.create", {
@@ -165,17 +266,33 @@ export function useObjectiveDialogState({
     }
 
     return false;
-  }, [close, dialog, dispatch, isMaxSupervisionCountValid, supervisor, workspaceId]);
+  }, [
+    close,
+    dialog,
+    dispatch,
+    isMaxSupervisionCountValid,
+    restoreStep,
+    selectedRecoverableTargetId,
+    supervisor,
+    workspaceId,
+  ]);
 
   return {
     dialog,
     supervisor,
     isVisible,
     mode,
+    restoreStep,
     copy,
     isMaxSupervisionCountValid,
+    recoverableTargets,
+    selectedRecoverableTargetId,
+    isRecoverableTargetsLoading,
     close,
     updateDraft,
+    openRestoreStep,
+    closeRestoreStep,
+    selectRecoverableTarget,
     confirm,
     formatScheduledAtInput,
   };

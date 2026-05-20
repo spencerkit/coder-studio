@@ -6,6 +6,35 @@ import type { Supervisor, SupervisorCycle } from "@coder-studio/core";
 import { atom } from "jotai";
 import { atomFamily } from "jotai-family";
 
+export type SupervisorDialogMode = "enable" | "edit";
+export type SupervisorDialogRestoreStep = "form" | "restore";
+
+export interface RecoverableSupervisorTarget {
+  targetId: string;
+  sessionId: string;
+  workspaceId: string;
+  objective: string;
+  status: "active" | "completed" | "cancelled" | "superseded";
+  updatedAt: number;
+  progressSummary?: string;
+  cycleCount: number;
+}
+
+export interface SupervisorDialogState {
+  open: boolean;
+  sessionId: string | null;
+  mode: SupervisorDialogMode;
+  restoreStep?: SupervisorDialogRestoreStep;
+  draftObjective: string;
+  draftEvaluatorProviderId: "claude" | "codex";
+  draftEvaluatorModel: string;
+  draftMaxSupervisionCount: string;
+  draftScheduledAt: string;
+  recoverableTargets?: RecoverableSupervisorTarget[];
+  selectedRecoverableTargetId?: string | null;
+  isRecoverableTargetsLoading?: boolean;
+}
+
 // Supervisor by session ID
 export const supervisorsAtom = atom<Map<string, Supervisor>>(new Map());
 
@@ -16,24 +45,19 @@ export const supervisorCyclesAtom = atom<Map<string, SupervisorCycle[]>>(new Map
 export const supervisorHydratedAtomFamily = atomFamily((_sessionId: string) => atom(false));
 
 // Active supervisor objective dialog
-export const supervisorDialogAtom = atom<{
-  open: boolean;
-  sessionId: string | null;
-  mode: "enable" | "edit";
-  draftObjective: string;
-  draftEvaluatorProviderId: "claude" | "codex";
-  draftEvaluatorModel: string;
-  draftMaxSupervisionCount: string;
-  draftScheduledAt: string;
-}>({
+export const supervisorDialogAtom = atom<SupervisorDialogState>({
   open: false,
   sessionId: null,
   mode: "enable",
+  restoreStep: "form",
   draftObjective: "",
   draftEvaluatorProviderId: "claude",
   draftEvaluatorModel: "",
   draftMaxSupervisionCount: "0",
   draftScheduledAt: "",
+  recoverableTargets: [],
+  selectedRecoverableTargetId: null,
+  isRecoverableTargetsLoading: false,
 });
 
 export const supervisorDetailsAtom = atom<{

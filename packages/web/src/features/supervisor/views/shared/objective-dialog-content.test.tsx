@@ -34,17 +34,24 @@ function createObjectiveDialogContentProps(
 ): ObjectiveDialogContentProps {
   return {
     mode: "enable",
+    restoreStep: "form",
     draftObjective: "Investigate regressions",
     draftEvaluatorProviderId: "claude",
     draftEvaluatorModel: "",
     draftMaxSupervisionCount: "0",
     draftScheduledAt: "",
     isMaxSupervisionCountValid: true,
+    recoverableTargets: [],
+    selectedRecoverableTargetId: null,
+    isRecoverableTargetsLoading: false,
     onDraftObjectiveChange: vi.fn(),
     onDraftEvaluatorProviderChange: vi.fn(),
     onDraftEvaluatorModelChange: vi.fn(),
     onDraftMaxSupervisionCountChange: vi.fn(),
     onDraftScheduledAtChange: vi.fn(),
+    onOpenRestoreStep: vi.fn(),
+    onCloseRestoreStep: vi.fn(),
+    onSelectRecoverableTarget: vi.fn(),
     ...overrides,
   };
 }
@@ -263,5 +270,89 @@ describe("ObjectiveDialogContent", () => {
 
     expect(onDraftEvaluatorModelChange).toHaveBeenCalledWith("gpt-5");
     expect(onDraftMaxSupervisionCountChange).toHaveBeenCalledWith("8");
+  });
+
+  it("shows a restore entry on the enable form and keeps it out of edit mode", async () => {
+    const user = userEvent.setup();
+    const onOpenRestoreStep = vi.fn();
+    const { rerender } = renderObjectiveDialogContent({ onOpenRestoreStep });
+
+    await user.click(screen.getByRole("button", { name: "supervisor.dialog.restore.open" }));
+
+    expect(onOpenRestoreStep).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <ObjectiveDialogContent
+        {...createObjectiveDialogContentProps({ mode: "edit", onOpenRestoreStep })}
+      />
+    );
+
+    expect(
+      screen.queryByRole("button", { name: "supervisor.dialog.restore.open" })
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders the restore subview with recoverable targets, selection, and back navigation", async () => {
+    const user = userEvent.setup();
+    const onCloseRestoreStep = vi.fn();
+    const onSelectRecoverableTarget = vi.fn();
+
+    renderObjectiveDialogContent({
+      mode: "enable",
+      restoreStep: "restore",
+      recoverableTargets: [
+        {
+          targetId: "tgt-restore",
+          sessionId: "sess-old",
+          workspaceId: "ws-1",
+          objective: "Recover the rollout supervisor",
+          status: "active",
+          updatedAt: 1_746_000_000_000,
+          progressSummary: "Need to finish rollout verification",
+          cycleCount: 4,
+        },
+      ],
+      selectedRecoverableTargetId: "tgt-restore",
+      onCloseRestoreStep,
+      onSelectRecoverableTarget,
+    });
+
+    expect(screen.getByText("supervisor.dialog.restore.title")).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /Recover the rollout supervisor/i })).toHaveAttribute(
+      "aria-checked",
+      "true"
+    );
+    expect(screen.getByText("Need to finish rollout verification")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("radio", { name: /Recover the rollout supervisor/i }));
+
+    expect(onSelectRecoverableTarget).toHaveBeenCalledWith("tgt-restore");
+
+    await user.click(screen.getByRole("button", { name: "supervisor.dialog.restore.back" }));
+
+    expect(onCloseRestoreStep).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders loading and empty restore states through the shared restore shell", () => {
+    const { rerender } = renderObjectiveDialogContent({
+      mode: "enable",
+      restoreStep: "restore",
+      isRecoverableTargetsLoading: true,
+    });
+
+    expect(screen.getByLabelText("common.loading")).toBeInTheDocument();
+
+    rerender(
+      <ObjectiveDialogContent
+        {...createObjectiveDialogContentProps({
+          mode: "enable",
+          restoreStep: "restore",
+          recoverableTargets: [],
+          isRecoverableTargetsLoading: false,
+        })}
+      />
+    );
+
+    expect(screen.getByText("supervisor.dialog.restore.empty")).toBeInTheDocument();
   });
 });

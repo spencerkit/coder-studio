@@ -4330,6 +4330,110 @@ body.is-resizing-panels * {
   cursor: pointer;
 }
 
+.supervisor-restore-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: calc(var(--sp-1) * -1);
+}
+
+.supervisor-restore-entry__hint,
+.supervisor-restore-card__summary,
+.supervisor-restore-card__footer {
+  margin: 0;
+  font-size: var(--type-meta-size);
+  line-height: var(--type-meta-line-height);
+  font-weight: var(--type-meta-weight);
+  color: var(--text-secondary);
+}
+
+.supervisor-restore-link {
+  appearance: none;
+  border: none;
+  padding: 0;
+  background: transparent;
+  color: var(--text-accent);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.supervisor-restore-link:hover {
+  text-decoration: underline;
+}
+
+.supervisor-restore-view {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.supervisor-restore-actions {
+  display: flex;
+  align-items: center;
+}
+
+.supervisor-restore-loading {
+  display: flex;
+  justify-content: center;
+  padding: var(--sp-4) 0;
+}
+
+.supervisor-restore-empty {
+  min-height: 168px;
+}
+
+.supervisor-restore-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.supervisor-restore-card {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.supervisor-restore-card:hover {
+  border-color: color-mix(in srgb, var(--border-strong) 72%, var(--border));
+  background: color-mix(in srgb, var(--bg-surface) 92%, var(--bg-hover));
+}
+
+.supervisor-restore-card--selected {
+  border-color: var(--icon-success);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--icon-success) 42%, transparent);
+}
+
+.supervisor-restore-card__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+
+.supervisor-restore-card__title {
+  font-size: var(--type-body-size);
+  line-height: var(--type-body-line-height);
+  font-weight: var(--font-medium);
+}
+
+.supervisor-restore-card__meta {
+  flex-shrink: 0;
+  font-size: var(--type-meta-size);
+  line-height: var(--type-meta-line-height);
+  font-weight: var(--type-meta-weight);
+  color: var(--text-secondary);
+}
+
 /* ========== Workspace Launch Modal ========== */
 .modal-overlay {
   position: fixed;

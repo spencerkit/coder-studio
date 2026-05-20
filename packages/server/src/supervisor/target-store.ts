@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type {
   SupervisorCycleTargetRecord,
@@ -21,6 +21,17 @@ export interface SupervisorTargetMeta {
   completedAt: number | null;
 }
 
+export interface RecoverableTargetSummary {
+  targetId: string;
+  sessionId: string;
+  workspaceId: string;
+  objective: string;
+  status: SupervisorTargetMeta["status"];
+  updatedAt: number;
+  progressSummary?: string;
+  cycleCount: number;
+}
+
 function targetDir(workspacePath: string, targetId: string): string {
   return join(workspacePath, ".coder-studio", "supervisor", "targets", targetId);
 }
@@ -35,6 +46,10 @@ function memoryPath(workspacePath: string, targetId: string): string {
 
 function cyclesPath(workspacePath: string, targetId: string): string {
   return join(targetDir(workspacePath, targetId), "cycles.jsonl");
+}
+
+function targetsRoot(workspacePath: string): string {
+  return join(workspacePath, ".coder-studio", "supervisor", "targets");
 }
 
 function metaFilePath(dirPath: string): string {
@@ -443,6 +458,88 @@ export async function readTargetCycleRecords(
     .map((line) => JSON.parse(line) as SupervisorCycleTargetRecord)
     .slice(-limit)
     .reverse();
+}
+
+export async function listRecoverableTargets(
+  workspacePath: string
+): Promise<RecoverableTargetSummary[]> {
+  const root = targetsRoot(workspacePath);
+  const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
+  const targets = await Promise.all(
+    entries
+      .filter((entry) => entry.isDirectory())
+      .map(async (entry) => {
+        const targetId = entry.name;
+        const [meta, memory, cycles] = await Promise.all([
+          readTargetMeta(workspacePath, targetId),
+          loadTargetMemory(workspacePath, targetId).catch(() => buildTargetMemory(targetId, 0)),
+          readTargetCycleRecords(workspacePath, targetId, Number.MAX_SAFE_INTEGER),
+        ]);
+
+        return {
+          targetId: meta.targetId,
+          sessionId: meta.sessionId,
+          workspaceId: meta.workspaceId,
+          objective: meta.objective,
+          status: meta.status,
+          updatedAt: meta.updatedAt,
+          progressSummary: memory.progressSummary,
+          cycleCount: cycles.length,
+        } satisfies RecoverableTargetSummary;
+      })
+  );
+
+  return targets.sort((left, right) => right.updatedAt - left.updatedAt);
+}
+
+export async function cloneTargetFiles(
+  workspacePath: string,
+  input: {
+    sourceTargetId: string;
+    targetId: string;
+    sessionId: string;
+    workspaceId: string;
+    objective: string;
+    createdAt: number;
+  }
+): Promise<number> {
+  const [sourceMemory, sourceCycles] = await Promise.all([
+    loadTargetMemory(workspacePath, input.sourceTargetId),
+    readTargetCycleRecords(workspacePath, input.sourceTargetId, Number.MAX_SAFE_INTEGER),
+  ]);
+
+  const nextMeta = buildTargetMeta({
+    targetId: input.targetId,
+    sessionId: input.sessionId,
+    workspaceId: input.workspaceId,
+    objective: input.objective,
+    createdAt: input.createdAt,
+  });
+  const nextMemory: SupervisorTargetMemory = {
+    ...sourceMemory,
+    targetId: input.targetId,
+  };
+  const nextCycles = sourceCycles
+    .slice()
+    .reverse()
+    .map((record) => ({
+      ...record,
+      targetId: input.targetId,
+    }));
+
+  await mkdir(targetDir(workspacePath, input.targetId), { recursive: true });
+  await saveTargetMeta(workspacePath, input.targetId, nextMeta);
+  await saveTargetMemory(workspacePath, input.targetId, nextMemory);
+  await writeFile(cyclesPath(workspacePath, input.targetId), "", "utf-8");
+  for (const cycle of nextCycles) {
+    await appendTargetCycleRecord(workspacePath, input.targetId, cycle);
+  }
+
+  return nextCycles.length;
+}
+
+export async function deleteTarget(workspacePath: string, targetId: string): Promise<void> {
+  await rm(targetDir(workspacePath, targetId), { recursive: true, force: true });
 }
 
 export async function markTargetSuperseded(

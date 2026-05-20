@@ -25,6 +25,7 @@ describe("ObjectiveDialog", () => {
       open: boolean;
       sessionId: string | null;
       mode: "enable" | "edit";
+      restoreStep: "form" | "restore";
       draftObjective: string;
       draftEvaluatorProviderId: "claude" | "codex";
       draftEvaluatorModel: string;
@@ -35,6 +36,7 @@ describe("ObjectiveDialog", () => {
     open: true,
     sessionId: "sess-1",
     mode: "enable" as const,
+    restoreStep: "form" as const,
     draftObjective: "",
     draftEvaluatorProviderId: "claude" as const,
     draftEvaluatorModel: "",
@@ -427,5 +429,136 @@ describe("ObjectiveDialog", () => {
     await user.click(within(listbox).getByRole("option", { name: "Codex" }));
 
     expect(screen.getByRole("button", { name: "Evaluator Codex" })).toBeInTheDocument();
+  });
+
+  it("loads recoverable targets and restores from the enable dialog subview", async () => {
+    const user = userEvent.setup();
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "supervisor.listRecoverableTargets") {
+        return {
+          targets: [
+            {
+              targetId: "tgt-restore",
+              sessionId: "sess-old",
+              workspaceId: "ws-1",
+              objective: "Recover the rollout supervisor",
+              status: "active",
+              updatedAt: 1_746_000_000_000,
+              progressSummary: "Need to finish rollout verification",
+              cycleCount: 4,
+            },
+          ],
+        };
+      }
+
+      if (op === "supervisor.restore") {
+        return {
+          supervisor: {
+            ...createSupervisor(),
+            id: "sup-restore",
+            targetId: "sup-restore",
+            objective: "Recover the rollout supervisor",
+            evaluatorProviderId: "codex",
+          },
+        };
+      }
+
+      return undefined;
+    });
+
+    const store = createStore();
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(
+      supervisorDialogAtom,
+      createDialogState({
+        draftEvaluatorProviderId: "codex",
+        draftEvaluatorModel: "gpt-5",
+        draftMaxSupervisionCount: "3",
+        draftScheduledAt: "2026-05-21T10:30",
+      })
+    );
+    store.set(supervisorsAtom, new Map());
+
+    render(
+      <Provider store={store}>
+        <ObjectiveDialog workspaceId="ws-1" />
+      </Provider>
+    );
+
+    await user.click(screen.getByRole("button", { name: "Restore from Existing Memory" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "supervisor.listRecoverableTargets",
+        { workspaceId: "ws-1" },
+        undefined
+      );
+    });
+
+    await user.click(screen.getByRole("radio", { name: /Recover the rollout supervisor/i }));
+    await user.click(screen.getByRole("button", { name: "Restore" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "supervisor.restore",
+        {
+          sessionId: "sess-1",
+          workspaceId: "ws-1",
+          sourceTargetId: "tgt-restore",
+          evaluatorProviderId: "codex",
+          evaluatorModel: "gpt-5",
+          maxSupervisionCount: 3,
+          scheduledAt: new Date("2026-05-21T10:30").getTime(),
+        },
+        undefined
+      );
+    });
+
+    expect(sendCommand).not.toHaveBeenCalledWith("supervisor.create", expect.anything(), undefined);
+  });
+
+  it("disables restore confirm until a recoverable target is selected", async () => {
+    const user = userEvent.setup();
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "supervisor.listRecoverableTargets") {
+        return {
+          targets: [
+            {
+              targetId: "tgt-restore",
+              sessionId: "sess-old",
+              workspaceId: "ws-1",
+              objective: "Recover the rollout supervisor",
+              status: "active",
+              updatedAt: 1_746_000_000_000,
+              progressSummary: "Need to finish rollout verification",
+              cycleCount: 4,
+            },
+          ],
+        };
+      }
+
+      return undefined;
+    });
+    const store = createStore();
+
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(supervisorDialogAtom, createDialogState());
+    store.set(supervisorsAtom, new Map());
+
+    render(
+      <Provider store={store}>
+        <ObjectiveDialog workspaceId="ws-1" />
+      </Provider>
+    );
+
+    await user.click(screen.getByRole("button", { name: "Restore from Existing Memory" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Restore" })).toBeDisabled();
+    });
   });
 });
