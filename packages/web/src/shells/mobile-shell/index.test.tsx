@@ -184,6 +184,7 @@ vi.mock("../../features/code-editor/actions/use-code-editor-actions", () => ({
       kind: "text",
       path: "src/app.tsx",
       content: "export const app = true;",
+      savedContent: "export const app = true;",
       baseHash: "hash-1",
       isDirty: true,
     },

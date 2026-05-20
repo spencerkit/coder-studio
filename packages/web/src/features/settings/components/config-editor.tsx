@@ -323,10 +323,10 @@ export function ConfigEditor({
           )}
 
           <MonacoHost
-            workspaceId={`config-editor-${configType}`}
             filePath={configPath}
             content={content}
             onContentChange={handleContentChange}
+            standalone
             visible={visible}
           />
 

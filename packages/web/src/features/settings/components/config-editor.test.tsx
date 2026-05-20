@@ -7,23 +7,29 @@ import { wsClientAtom } from "../../../atoms/connection";
 import { toastsAtom } from "../../notifications/atoms";
 import { ConfigEditor } from "./config-editor";
 
+const monacoHostMock = vi.hoisted(() => vi.fn());
+
 vi.mock("../../code-editor/components/monaco-host", () => ({
   MonacoHost: ({
     content,
     onContentChange,
+    ...props
   }: {
     content: string;
-    onContentChange: (value: string) => void;
-  }) => (
-    <div>
-      <textarea
-        aria-label="Config editor content"
-        onChange={(event) => onContentChange(event.target.value)}
-        value={content}
-      />
-      <div data-testid="monaco-host" />
-    </div>
-  ),
+    onContentChange?: (value: string) => void;
+  }) => {
+    monacoHostMock(props);
+    return (
+      <div>
+        <textarea
+          aria-label="Config editor content"
+          onChange={(event) => onContentChange(event.target.value)}
+          value={content}
+        />
+        <div data-testid="monaco-host" />
+      </div>
+    );
+  },
 }));
 
 function renderConfigEditor(options?: {
@@ -62,6 +68,27 @@ function renderConfigEditor(options?: {
 }
 
 describe("ConfigEditor", () => {
+  it("uses MonacoHost in explicit standalone syntax-only mode", async () => {
+    monacoHostMock.mockClear();
+    renderConfigEditor();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("monaco-host")).toBeInTheDocument();
+    });
+
+    expect(monacoHostMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        standalone: true,
+        filePath: "/home/spencer/.claude/settings.json",
+        visible: true,
+      })
+    );
+
+    const lastCall = monacoHostMock.mock.calls[monacoHostMock.mock.calls.length - 1]?.[0] ?? null;
+    expect(lastCall).not.toBeNull();
+    expect(lastCall).not.toHaveProperty("workspaceId");
+  });
+
   it("preserves the full config path in the header tooltip when the visible path is truncated", async () => {
     renderConfigEditor();
 

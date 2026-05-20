@@ -3,6 +3,7 @@ import { createStore, Provider } from "jotai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { wsClientAtom } from "../../../../atoms/connection";
 import { workspacesAtom } from "../../../../atoms/workspaces";
+import { pendingEditorNavigationAtomFamily } from "../../../code-editor/atoms";
 import {
   activeFilePathAtomFamily,
   expandedDirsAtomFamily,
@@ -1559,6 +1560,45 @@ describe("FileTreePanel", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("routes file-tree selection through the shared editor navigation path", async () => {
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand: vi.fn().mockResolvedValue({}) } as never);
+    store.set(
+      fileTreeAtomFamily("ws-test"),
+      new Map([
+        [
+          ".",
+          [
+            {
+              path: "src/app.tsx",
+              name: "app.tsx",
+              kind: "file",
+            },
+          ],
+        ],
+      ])
+    );
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    fireEvent.click(await screen.findByText("app.tsx"));
+
+    await waitFor(() => {
+      expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/app.tsx");
+    });
+
+    expect(store.get(pendingEditorNavigationAtomFamily("ws-test"))).toMatchObject({
+      workspaceId: "ws-test",
+      path: "src/app.tsx",
+      source: "file-tree",
+      requestId: expect.any(Number),
+    });
+  });
+
   it("keeps expanded directories populated after refreshing the file tree", async () => {
     let libReadCount = 0;
     const sendCommand = vi
@@ -1887,6 +1927,7 @@ describe("FileTreePanel", () => {
         kind: "text",
         path: "src/app.tsx",
         content: "export {}",
+        savedContent: "export {}",
         baseHash: "hash",
         isDirty: false,
       },
@@ -1894,6 +1935,7 @@ describe("FileTreePanel", () => {
         kind: "text",
         path: "src/other.ts",
         content: "export const other = true",
+        savedContent: "export const other = true",
         baseHash: "hash-2",
         isDirty: false,
       },
@@ -1935,6 +1977,7 @@ describe("FileTreePanel", () => {
         kind: "text",
         path: "src/other.ts",
         content: "export const other = true",
+        savedContent: "export const other = true",
         baseHash: "hash-2",
         isDirty: false,
       },

@@ -16,6 +16,11 @@ import { buildFastifyApp } from "./app.js";
 import { EventBus } from "./bus/event-bus.js";
 import { ensureDataDir, parseServerConfig, type ServerConfig } from "./config.js";
 import { AutoFetchScheduler } from "./git/auto-fetch.js";
+import { LspManager } from "./lsp/manager.js";
+import { LspToolInstallManager } from "./lsp-tools/install-manager.js";
+import { LspToolManager } from "./lsp-tools/manager.js";
+import { FileManifestStore } from "./lsp-tools/manifest-store.js";
+import { resolveLspToolRoot } from "./lsp-tools/tool-root.js";
 import { runCommandAsString } from "./provider-runtime/command-runner.js";
 import { createE2EProviderMockOverrides } from "./provider-runtime/e2e-provider-mock.js";
 import { ProviderInstallManager } from "./provider-runtime/install-manager.js";
@@ -73,6 +78,7 @@ export async function createServer(
   const wsHub = new WsHub({ eventBus, commandContext: null, config, fencingMgr });
   let workspaceMgr: WorkspaceManager;
   let commandContext: CommandContext;
+  let lspMgr: LspManager | null = null;
 
   const terminalMgr = new TerminalManager({
     ptyHost: createPtyHost(),
@@ -133,6 +139,7 @@ export async function createServer(
     broadcaster: wsHub,
     autoFetch,
     teardown: async (workspaceId) => {
+      await lspMgr?.disposeWorkspace(workspaceId);
       await supervisorMgr?.deleteForWorkspace(workspaceId);
       await sessionMgr.stopForWorkspace(workspaceId);
       await terminalMgr.closeForWorkspace(workspaceId);
@@ -169,6 +176,24 @@ export async function createServer(
   });
 
   wsHub.setLogger(app.log);
+
+  const lspManifestStore = new FileManifestStore(resolveLspToolRoot(config.dataDir));
+  const lspToolMgr = new LspToolManager({
+    manifestStore: lspManifestStore,
+  });
+  const lspToolInstallMgr = new LspToolInstallManager({
+    manifestStore: lspManifestStore,
+  });
+
+  lspMgr = new LspManager({
+    workspaceMgr: { get: (workspaceId) => workspaceMgr.get(workspaceId) },
+    eventBus,
+    logger: app.log,
+    requestTimeoutMs: 2000,
+    idleTtlMs: 60_000,
+    restartLimit: 2,
+    lspToolMgr,
+  });
 
   const supervisorRepo = new SupervisorRepo(db);
   const cycleRepo = new SupervisorCycleRepo(db);
@@ -217,6 +242,9 @@ export async function createServer(
     providerInstallMgr,
     activationMgr,
     config,
+    lspMgr,
+    lspToolMgr,
+    lspToolInstallMgr,
   };
 
   wsHub.setCommandContext(commandContext);
@@ -259,6 +287,7 @@ export async function createServer(
     clearTimeout(gcTimer);
     clearInterval(wsKeepaliveTimer);
     await app.close();
+    await lspMgr?.disposeAll();
     autoFetch.stop();
     supervisorMgr.stop();
     terminalMgr.shutdown();

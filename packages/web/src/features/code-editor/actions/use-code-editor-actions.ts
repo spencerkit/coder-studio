@@ -9,6 +9,7 @@ import {
   type OpenFile,
   openFilesAtomFamily,
 } from "../../workspace/atoms";
+import { monacoModelRegistry } from "../monaco/model-registry";
 
 type FileReadTextPayload = {
   kind: "text";
@@ -30,6 +31,7 @@ type FileReadPayload = FileReadTextPayload | FileReadImagePayload;
 
 export function useCodeEditorActions() {
   const workspace = useAtomValue(activeWorkspaceAtom);
+  const workspaceRootPath = workspace?.path;
   const dispatch = useAtomValue(dispatchCommandAtom);
   const setDiffPreview = useSetAtom(gitDiffPreviewAtomFamily(workspace?.id ?? ""));
 
@@ -88,12 +90,20 @@ export function useCodeEditorActions() {
             kind: "text",
             path,
             content,
+            savedContent: content,
             baseHash: "",
             isDirty: false,
             viewingTextBackedImageAsText: true,
           };
 
           setOpenFiles((prev) => ({ ...prev, [path]: newFile }));
+          if (workspaceRootPath) {
+            monacoModelRegistry.updateFromDisk({
+              workspaceRootPath,
+              path,
+              content,
+            });
+          }
           setFileLoadError((current) => (current?.path === path ? null : current));
         } catch (error) {
           const message =
@@ -111,6 +121,7 @@ export function useCodeEditorActions() {
               kind: "text",
               path,
               content: data.content,
+              savedContent: data.content,
               baseHash: data.baseHash,
               isDirty: false,
               externalState: undefined,
@@ -127,10 +138,17 @@ export function useCodeEditorActions() {
             };
 
       setOpenFiles((prev) => ({ ...prev, [path]: newFile }));
+      if (workspaceRootPath && data.kind === "text") {
+        monacoModelRegistry.updateFromDisk({
+          workspaceRootPath,
+          path,
+          content: data.content,
+        });
+      }
       setExternalStatus((current) => (current?.path === path ? null : current));
       setFileLoadError((current) => (current?.path === path ? null : current));
     },
-    [dispatch, setOpenFiles, workspaceId]
+    [dispatch, setOpenFiles, workspaceId, workspaceRootPath]
   );
 
   const loadTextBackedImageContent = useCallback(async (url: string) => {
@@ -168,6 +186,7 @@ export function useCodeEditorActions() {
           ...prev,
           [currentFile.path]: {
             ...prevFile,
+            savedContent: currentFile.content,
             baseHash: result.data!.newHash,
             isDirty: false,
             externalState: undefined,
@@ -199,7 +218,7 @@ export function useCodeEditorActions() {
           [currentFile.path]: {
             ...prevFile,
             content: newContent,
-            isDirty: newContent !== prevFile.content,
+            isDirty: newContent !== prevFile.savedContent,
           },
         };
       });
@@ -297,12 +316,20 @@ export function useCodeEditorActions() {
               kind: "text",
               path,
               content: nextData.content,
+              savedContent: nextData.content,
               baseHash: nextData.baseHash,
               isDirty: false,
               externalState: undefined,
               viewingTextBackedImageAsText: file.viewingTextBackedImageAsText,
             },
           }));
+          if (workspaceRootPath) {
+            monacoModelRegistry.updateFromDisk({
+              workspaceRootPath,
+              path,
+              content: nextData.content,
+            });
+          }
           if (activeFilePath === path) {
             setExternalStatus((current) => (current?.path === path ? null : current));
           }
@@ -442,6 +469,7 @@ export function useCodeEditorActions() {
     openFiles,
     setOpenFiles,
     workspaceId,
+    workspaceRootPath,
   ]);
 
   const handleClose = useCallback(() => {
@@ -462,10 +490,13 @@ export function useCodeEditorActions() {
         delete next[currentPath];
         return next;
       });
+      if (workspaceRootPath && currentFile?.kind === "text") {
+        monacoModelRegistry.disposeFile(workspaceRootPath, currentPath);
+      }
     }
 
     setSaveError(null);
-  }, [currentFile, setActiveFilePath, setOpenFiles, workspaceId]);
+  }, [currentFile, setActiveFilePath, setOpenFiles, workspaceId, workspaceRootPath]);
 
   const toggleSvgTextMode = useCallback(() => {
     if (!workspaceId || !currentFile) {
@@ -480,9 +511,12 @@ export function useCodeEditorActions() {
       delete next[path];
       return next;
     });
+    if (workspaceRootPath && currentFile.kind === "text") {
+      monacoModelRegistry.disposeFile(workspaceRootPath, path);
+    }
 
     void loadFile(path, wantText ? { forceText: true } : undefined);
-  }, [currentFile, loadFile, setOpenFiles, workspaceId]);
+  }, [currentFile, loadFile, setOpenFiles, workspaceId, workspaceRootPath]);
 
   const openInDiffMode = useCallback(async () => {
     if (!workspaceId || !currentFile) {
