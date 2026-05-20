@@ -268,6 +268,27 @@ export class SupervisorManager {
     });
   }
 
+  start(): void {
+    this.lifecycleUnsubscribe?.();
+    this.lifecycleUnsubscribe = this.deps.eventBus.on(
+      "session.lifecycle",
+      (event: SessionLifecycleEvent) => {
+        if (event.event !== "removed") {
+          return;
+        }
+        const supervisorId = this.supervisorsBySession.get(event.sessionId);
+        if (supervisorId) {
+          void this.delete(supervisorId).catch((error) => {
+            this.logger.warn({ err: error, supervisorId }, "Auto-delete on session removal failed");
+          });
+        }
+      }
+    );
+
+    this.scheduler.start();
+    this.scheduler.refresh();
+  }
+
   async hydrate(): Promise<void> {
     this.supervisors.clear();
     this.supervisorsBySession.clear();
@@ -314,24 +335,7 @@ export class SupervisorManager {
       this.storeSnapshot(this.attachCycles(recovered));
     }
 
-    this.lifecycleUnsubscribe?.();
-    this.lifecycleUnsubscribe = this.deps.eventBus.on(
-      "session.lifecycle",
-      (event: SessionLifecycleEvent) => {
-        if (event.event !== "removed") {
-          return;
-        }
-        const supervisorId = this.supervisorsBySession.get(event.sessionId);
-        if (supervisorId) {
-          void this.delete(supervisorId).catch((error) => {
-            this.logger.warn({ err: error, supervisorId }, "Auto-delete on session removal failed");
-          });
-        }
-      }
-    );
-
-    this.scheduler.start();
-    this.scheduler.refresh();
+    this.start();
   }
 
   stop(): void {

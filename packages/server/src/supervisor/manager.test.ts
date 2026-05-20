@@ -192,6 +192,17 @@ describe("SupervisorManager", () => {
     };
   });
 
+  it("starts runtime listeners without hydrating persisted supervisors", () => {
+    const manager = new SupervisorManager(
+      deps as unknown as ConstructorParameters<typeof SupervisorManager>[0]
+    );
+
+    manager.start();
+
+    expect(deps.supervisorRepo.listAll).not.toHaveBeenCalled();
+    expect(deps.eventBus.on).toHaveBeenCalledWith("session.lifecycle", expect.any(Function));
+  });
+
   it("recovers persisted evaluating supervisors back to idle on hydrate", async () => {
     deps.supervisorRepo.listAll.mockReturnValue([
       {

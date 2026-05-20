@@ -214,7 +214,7 @@ export async function createServer(
     logger: app.log,
   });
   await sessionMgr.hydrate();
-  await supervisorMgr.hydrate();
+  supervisorMgr.start();
 
   const providerMockOverrides = createE2EProviderMockOverrides();
   const providerRuntimeDeps: RuntimeStatusDeps = providerMockOverrides
