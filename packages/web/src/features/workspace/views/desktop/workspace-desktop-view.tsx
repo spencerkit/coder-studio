@@ -48,7 +48,6 @@ export const WorkspaceDesktopView: FC = () => {
     workspace,
     bottomPanelHeight,
     bottomPanelRef,
-    workspaceId,
   } = useWorkspaceScreenModel();
   const setSidebarCollapsed = useSetAtom(sidebarCollapsedAtom);
   useEffect(() => {
