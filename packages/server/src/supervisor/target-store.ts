@@ -1,13 +1,18 @@
 import { mkdir, mkdtemp, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type {
+  Supervisor,
   SupervisorCycleTargetRecord,
   SupervisorDecompositionMode,
+  SupervisorState,
+  SupervisorStopReason,
   SupervisorTargetMemory,
   SupervisorWorkItem,
   SupervisorWorkItemKind,
   SupervisorWorkItemStatus,
 } from "@coder-studio/core";
+
+export type PersistedSupervisor = Omit<Supervisor, "currentTargetMemory" | "recentTargetCycles">;
 
 export interface SupervisorTargetMeta {
   targetId: string;
@@ -19,6 +24,7 @@ export interface SupervisorTargetMeta {
   updatedAt: number;
   supersededBy: string | null;
   completedAt: number | null;
+  supervisor?: PersistedSupervisor;
 }
 
 export interface RecoverableTargetSummary {
@@ -118,6 +124,33 @@ function readTimestamp(value: unknown, fallback: number): number {
     return fallback;
   }
   return value;
+}
+
+function readOptionalTimestamp(value: unknown): number | undefined {
+  if (!Number.isSafeInteger(value) || typeof value !== "number") {
+    return undefined;
+  }
+  return value;
+}
+
+function readSupervisorState(value: unknown): SupervisorState | undefined {
+  return value === "inactive" ||
+    value === "idle" ||
+    value === "evaluating" ||
+    value === "injecting" ||
+    value === "paused" ||
+    value === "error" ||
+    value === "stopped"
+    ? value
+    : undefined;
+}
+
+function readSupervisorStopReason(value: unknown): SupervisorStopReason | undefined {
+  return value === "objective_complete" ||
+    value === "max_supervision_count_reached" ||
+    value === "supervisor_uncertain"
+    ? value
+    : undefined;
 }
 
 function fallbackAcceptanceCriteria(title: string): string[] {
@@ -234,6 +267,103 @@ function normalizeTargetMemory(raw: unknown, targetId: string): SupervisorTarget
   };
 }
 
+function normalizePersistedSupervisor(
+  raw: unknown,
+  fallback: Pick<
+    SupervisorTargetMeta,
+    "targetId" | "sessionId" | "workspaceId" | "objective" | "createdAt" | "updatedAt"
+  >
+): PersistedSupervisor | undefined {
+  if (!isRecord(raw)) {
+    return undefined;
+  }
+
+  const id = readNonEmptyString(raw.id) ?? fallback.targetId;
+  const sessionId = readNonEmptyString(raw.sessionId) ?? fallback.sessionId;
+  const workspaceId = readNonEmptyString(raw.workspaceId) ?? fallback.workspaceId;
+  const targetId = readNonEmptyString(raw.targetId) ?? fallback.targetId;
+  const state = readSupervisorState(raw.state);
+  const objective = readNonEmptyString(raw.objective) ?? fallback.objective;
+  const evaluatorProviderId = readNonEmptyString(raw.evaluatorProviderId);
+  const createdAt = readTimestamp(raw.createdAt, fallback.createdAt);
+  const updatedAt = readTimestamp(raw.updatedAt, fallback.updatedAt);
+
+  if (!state || !evaluatorProviderId) {
+    return undefined;
+  }
+
+  return {
+    id,
+    sessionId,
+    workspaceId,
+    targetId,
+    state,
+    objective,
+    evaluatorProviderId,
+    evaluatorModel: readNonEmptyString(raw.evaluatorModel),
+    maxSupervisionCount: readNonNegativeInteger(raw.maxSupervisionCount, 0),
+    completedSupervisionCount: readNonNegativeInteger(raw.completedSupervisionCount, 0),
+    scheduledAt: readOptionalTimestamp(raw.scheduledAt),
+    stopReason: readSupervisorStopReason(raw.stopReason),
+    lastCycleAt: readOptionalTimestamp(raw.lastCycleAt),
+    lastEvaluatedTurnId: readNonEmptyString(raw.lastEvaluatedTurnId),
+    errorReason: readNonEmptyString(raw.errorReason),
+    createdAt,
+    updatedAt,
+  };
+}
+
+function normalizeTargetMeta(raw: unknown, fallbackTargetId?: string): SupervisorTargetMeta {
+  if (!isRecord(raw)) {
+    const targetId = fallbackTargetId ?? "";
+    return {
+      targetId,
+      sessionId: "",
+      workspaceId: "",
+      objective: "",
+      status: "active",
+      createdAt: 0,
+      updatedAt: 0,
+      supersededBy: null,
+      completedAt: null,
+      supervisor: undefined,
+    };
+  }
+
+  const targetId = readNonEmptyString(raw.targetId) ?? fallbackTargetId ?? "";
+  const sessionId = readNonEmptyString(raw.sessionId) ?? "";
+  const workspaceId = readNonEmptyString(raw.workspaceId) ?? "";
+  const objective = readNonEmptyString(raw.objective) ?? "";
+  const createdAt = readTimestamp(raw.createdAt, 0);
+  const updatedAt = readTimestamp(raw.updatedAt, createdAt);
+
+  return {
+    targetId,
+    sessionId,
+    workspaceId,
+    objective,
+    status:
+      raw.status === "completed" ||
+      raw.status === "cancelled" ||
+      raw.status === "superseded" ||
+      raw.status === "active"
+        ? raw.status
+        : "active",
+    createdAt,
+    updatedAt,
+    supersededBy: readNonEmptyString(raw.supersededBy) ?? null,
+    completedAt: readOptionalTimestamp(raw.completedAt) ?? null,
+    supervisor: normalizePersistedSupervisor(raw.supervisor, {
+      targetId,
+      sessionId,
+      workspaceId,
+      objective,
+      createdAt,
+      updatedAt,
+    }),
+  };
+}
+
 async function writeJsonIfMissing(path: string, value: unknown): Promise<void> {
   try {
     await writeFile(path, JSON.stringify(value, null, 2) + "\n", {
@@ -253,6 +383,7 @@ function buildTargetMeta(input: {
   workspaceId: string;
   objective: string;
   createdAt: number;
+  supervisor?: PersistedSupervisor;
 }): SupervisorTargetMeta {
   return {
     targetId: input.targetId,
@@ -264,6 +395,7 @@ function buildTargetMeta(input: {
     updatedAt: input.createdAt,
     supersededBy: null,
     completedAt: null,
+    supervisor: input.supervisor,
   };
 }
 
@@ -289,6 +421,7 @@ async function writeResetTargetFiles(
     workspaceId: string;
     objective: string;
     createdAt: number;
+    supervisor?: PersistedSupervisor;
   }
 ): Promise<void> {
   await mkdir(dirPath, { recursive: true });
@@ -313,6 +446,7 @@ export async function createTargetFiles(
     workspaceId: string;
     objective: string;
     createdAt: number;
+    supervisor?: PersistedSupervisor;
   }
 ): Promise<void> {
   const dir = targetDir(workspacePath, input.targetId);
@@ -332,6 +466,7 @@ export async function resetTargetFiles(
     workspaceId: string;
     objective: string;
     createdAt: number;
+    supervisor?: PersistedSupervisor;
   }
 ): Promise<void> {
   const dir = targetDir(workspacePath, input.targetId);
@@ -396,9 +531,10 @@ export async function readTargetMeta(
   workspacePath: string,
   targetId: string
 ): Promise<SupervisorTargetMeta> {
-  return JSON.parse(
-    await readFile(metaPath(workspacePath, targetId), "utf-8")
-  ) as SupervisorTargetMeta;
+  return normalizeTargetMeta(
+    JSON.parse(await readFile(metaPath(workspacePath, targetId), "utf-8")),
+    targetId
+  );
 }
 
 export async function loadTargetMemory(
@@ -501,6 +637,7 @@ export async function cloneTargetFiles(
     workspaceId: string;
     objective: string;
     createdAt: number;
+    supervisor?: PersistedSupervisor;
   }
 ): Promise<number> {
   const [sourceMemory, sourceCycles] = await Promise.all([
@@ -514,6 +651,7 @@ export async function cloneTargetFiles(
     workspaceId: input.workspaceId,
     objective: input.objective,
     createdAt: input.createdAt,
+    supervisor: input.supervisor,
   });
   const nextMemory: SupervisorTargetMemory = {
     ...sourceMemory,

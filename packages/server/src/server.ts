@@ -193,7 +193,7 @@ export async function createServer(
     lspToolMgr,
   });
 
-  const supervisorRepo = new SupervisorRepo(db);
+  const supervisorRepo = new SupervisorRepo();
   supervisorMgr = new SupervisorManager({
     eventBus,
     broadcaster: wsHub,

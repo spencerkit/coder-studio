@@ -33,10 +33,49 @@ describe("target store", () => {
       workspaceId: "ws-1",
       objective: "Ship feature",
       createdAt: 1,
+      supervisor: {
+        id: "sup-1",
+        sessionId: "sess-1",
+        workspaceId: "ws-1",
+        targetId: "tgt-1",
+        state: "idle",
+        objective: "Ship feature",
+        evaluatorProviderId: "codex",
+        evaluatorModel: "gpt-test",
+        maxSupervisionCount: 3,
+        completedSupervisionCount: 1,
+        scheduledAt: 9,
+        stopReason: undefined,
+        lastCycleAt: 8,
+        lastEvaluatedTurnId: "turn-1",
+        errorReason: undefined,
+        createdAt: 1,
+        updatedAt: 2,
+      },
     });
 
+    const meta = await readTargetMeta(workspacePath, "tgt-1");
     const memory = await loadTargetMemory(workspacePath, "tgt-1");
 
+    expect(meta.supervisor).toEqual({
+      id: "sup-1",
+      sessionId: "sess-1",
+      workspaceId: "ws-1",
+      targetId: "tgt-1",
+      state: "idle",
+      objective: "Ship feature",
+      evaluatorProviderId: "codex",
+      evaluatorModel: "gpt-test",
+      maxSupervisionCount: 3,
+      completedSupervisionCount: 1,
+      scheduledAt: 9,
+      stopReason: undefined,
+      lastCycleAt: 8,
+      lastEvaluatedTurnId: "turn-1",
+      errorReason: undefined,
+      createdAt: 1,
+      updatedAt: 2,
+    });
     expect(memory).toEqual({
       targetId: "tgt-1",
       decompositionGenerated: false,
@@ -348,6 +387,25 @@ describe("target store", () => {
       workspaceId: "ws-1",
       objective: "Old objective",
       createdAt: 10,
+      supervisor: {
+        id: "sup-old",
+        sessionId: "sess-old",
+        workspaceId: "ws-1",
+        targetId: "tgt-old",
+        state: "paused",
+        objective: "Old objective",
+        evaluatorProviderId: "codex",
+        evaluatorModel: "gpt-old",
+        maxSupervisionCount: 7,
+        completedSupervisionCount: 4,
+        scheduledAt: 77,
+        stopReason: undefined,
+        lastCycleAt: 12,
+        lastEvaluatedTurnId: "turn-old",
+        errorReason: undefined,
+        createdAt: 10,
+        updatedAt: 12,
+      },
     });
 
     await saveTargetMemory(workspacePath, "tgt-old", {
@@ -391,6 +449,25 @@ describe("target store", () => {
       workspaceId: "ws-2",
       objective: "New objective",
       createdAt: 20,
+      supervisor: {
+        id: "sup-new",
+        sessionId: "sess-new",
+        workspaceId: "ws-2",
+        targetId: "tgt-new",
+        state: "idle",
+        objective: "New objective",
+        evaluatorProviderId: "claude",
+        evaluatorModel: "gpt-new",
+        maxSupervisionCount: 2,
+        completedSupervisionCount: 1,
+        scheduledAt: undefined,
+        stopReason: undefined,
+        lastCycleAt: 19,
+        lastEvaluatedTurnId: "turn-new",
+        errorReason: undefined,
+        createdAt: 20,
+        updatedAt: 21,
+      },
     });
 
     const meta = await readTargetMeta(workspacePath, "tgt-new");
@@ -407,6 +484,25 @@ describe("target store", () => {
       updatedAt: 20,
       supersededBy: null,
       completedAt: null,
+      supervisor: {
+        id: "sup-new",
+        sessionId: "sess-new",
+        workspaceId: "ws-2",
+        targetId: "tgt-new",
+        state: "idle",
+        objective: "New objective",
+        evaluatorProviderId: "claude",
+        evaluatorModel: "gpt-new",
+        maxSupervisionCount: 2,
+        completedSupervisionCount: 1,
+        scheduledAt: undefined,
+        stopReason: undefined,
+        lastCycleAt: 19,
+        lastEvaluatedTurnId: "turn-new",
+        errorReason: undefined,
+        createdAt: 20,
+        updatedAt: 21,
+      },
     });
     expect(memory.targetId).toBe("tgt-new");
     expect(memory.progressSummary).toBe("Preserve me");

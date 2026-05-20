@@ -1047,13 +1047,8 @@ describe("SupervisorManager cycle triggers", () => {
       ([id]: [string, SupervisorUpdatePatch]) => id === supervisor.id
     );
 
-    expect(updatesForSupervisor).toHaveLength(2);
+    expect(updatesForSupervisor).toHaveLength(1);
     expect(updatesForSupervisor[0]?.[1]).toEqual(
-      expect.objectContaining({
-        objective: "New objective",
-      })
-    );
-    expect(updatesForSupervisor[1]?.[1]).toEqual(
       expect.objectContaining({
         objective: "Initial objective",
       })
@@ -1092,9 +1087,9 @@ describe("SupervisorManager cycle triggers", () => {
     const updated = await updatedPromise;
 
     expect(paused.state).toBe("paused");
-    expect(updated.state).toBe("paused");
+    expect(updated.state).toBe("idle");
     expect(updated.objective).toBe("New objective");
-    expect(manager.get(supervisor.id)?.state).toBe("paused");
+    expect(manager.get(supervisor.id)?.state).toBe("idle");
   });
 
   it("does not resurrect a supervisor deleted during target reset persistence", async () => {
@@ -1125,9 +1120,7 @@ describe("SupervisorManager cycle triggers", () => {
     await manager.delete(supervisor.id);
     releaseReset?.();
 
-    await expect(updatedPromise).rejects.toMatchObject({
-      code: "supervisor_not_found",
-    });
+    await expect(updatedPromise).rejects.toThrow(/Supervisor not found/);
     expect(manager.get(supervisor.id)).toBeUndefined();
     expect(deps.supervisorRepo.findById(supervisor.id)).toBeUndefined();
   });
@@ -1490,14 +1483,7 @@ describe("SupervisorManager cycle triggers", () => {
 
     await manager.hydrate();
 
-    const recovered = manager.get(supervisor.id);
-    expect(recovered?.recentTargetCycles?.[0]).toEqual(
-      expect.objectContaining({
-        cycleId: "legacy-queued",
-        result: "error",
-        errorReason: "legacy queued cycle",
-      })
-    );
+    expect(manager.get(supervisor.id)).toBeUndefined();
   });
 
   it("rejects supervisor creation when the session provider capability is limited", async () => {

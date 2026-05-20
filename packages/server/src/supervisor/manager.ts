@@ -16,7 +16,10 @@ import type { EventBus } from "../bus/event-bus.js";
 import type { SessionManager } from "../session/manager.js";
 import type { ProviderConfigRepo } from "../storage/repositories/provider-config-repo.js";
 import type { SettingsRepo } from "../storage/repositories/settings-repo.js";
-import type { SupervisorRepo } from "../storage/repositories/supervisor-repo.js";
+import type {
+  SupervisorRepo,
+  SupervisorUpdatePatch,
+} from "../storage/repositories/supervisor-repo.js";
 import type { TerminalManager } from "../terminal/manager.js";
 import type { WorkspaceManager } from "../workspace/manager.js";
 import type { Broadcaster } from "../ws/hub.js";
@@ -30,7 +33,11 @@ import {
 } from "./injector.js";
 import { SupervisorScheduler } from "./scheduler.js";
 import { getSupervisorRetrySettings } from "./settings.js";
-import type { RecoverableTargetSummary, SupervisorTargetMeta } from "./target-store.js";
+import type {
+  PersistedSupervisor,
+  RecoverableTargetSummary,
+  SupervisorTargetMeta,
+} from "./target-store.js";
 
 const NOOP_LOGGER: FastifyBaseLogger = {
   child: () => NOOP_LOGGER,
@@ -273,27 +280,6 @@ export class SupervisorManager {
     this.supervisors.clear();
     this.supervisorsBySession.clear();
 
-    for (const supervisor of this.deps.supervisorRepo.listAll()) {
-      const hydratedWithTarget = await this.hydrateTargetState(supervisor);
-      const normalizedState =
-        hydratedWithTarget.state === "evaluating" || hydratedWithTarget.state === "injecting"
-          ? "idle"
-          : hydratedWithTarget.state;
-
-      const recovered =
-        normalizedState === hydratedWithTarget.state
-          ? hydratedWithTarget
-          : this.withCurrentTargetState(
-              this.deps.supervisorRepo.update(hydratedWithTarget.id, {
-                state: normalizedState,
-                errorReason: null,
-                updatedAt: Date.now(),
-              })
-            );
-
-      this.storeSnapshot(recovered);
-    }
-
     this.start();
   }
 
@@ -396,6 +382,7 @@ export class SupervisorManager {
         workspaceId: req.workspaceId,
         objective,
         createdAt: now,
+        supervisor: this.toPersistedSupervisor(supervisor),
       });
 
       enriched = await this.attachTargetState(supervisor, workspace.path);
@@ -448,8 +435,9 @@ export class SupervisorManager {
         workspaceId: req.workspaceId,
         objective: source.objective,
         createdAt: created.createdAt,
+        supervisor: this.toPersistedSupervisor(created),
       });
-      const updated = this.deps.supervisorRepo.update(created.id, {
+      const updated = await this.updatePersistedSupervisor(created.id, {
         completedSupervisionCount: cycleCount,
         updatedAt: now,
       });
@@ -469,20 +457,25 @@ export class SupervisorManager {
       workspaceId: req.workspaceId,
       objective: source.objective,
       createdAt: existing.createdAt,
+      supervisor: this.toPersistedSupervisor(existing),
     });
-    const updated = this.deps.supervisorRepo.update(existing.id, {
-      objective: source.objective,
-      evaluatorProviderId: req.evaluatorProviderId,
-      evaluatorModel: req.evaluatorModel?.trim() || null,
-      maxSupervisionCount: req.maxSupervisionCount ?? existing.maxSupervisionCount,
-      scheduledAt: req.scheduledAt ?? null,
-      state: existing.state === "paused" ? "paused" : "idle",
-      stopReason: null,
-      completedSupervisionCount: cycleCount,
-      lastEvaluatedTurnId: null,
-      errorReason: null,
-      updatedAt: now,
-    });
+    const updated = await this.updatePersistedSupervisor(
+      existing.id,
+      {
+        objective: source.objective,
+        evaluatorProviderId: req.evaluatorProviderId,
+        evaluatorModel: req.evaluatorModel?.trim() || null,
+        maxSupervisionCount: req.maxSupervisionCount ?? existing.maxSupervisionCount,
+        scheduledAt: req.scheduledAt ?? null,
+        state: existing.state === "paused" ? "paused" : "idle",
+        stopReason: null,
+        completedSupervisionCount: cycleCount,
+        lastEvaluatedTurnId: null,
+        errorReason: null,
+        updatedAt: now,
+      },
+      workspace.path
+    );
     const enriched = await this.attachTargetState(updated, workspace.path);
 
     await this.deps.targetStore.deleteTarget(workspace.path, req.sourceTargetId);
@@ -535,7 +528,7 @@ export class SupervisorManager {
     };
 
     const rollbackPatch = this.toSupervisorUpdatePatch(current, Date.now());
-    this.deps.supervisorRepo.update(id, nextPatch);
+    const updatedSupervisor = this.applySupervisorPatch(current, nextPatch);
 
     if (objectiveChanged) {
       try {
@@ -545,10 +538,12 @@ export class SupervisorManager {
           workspaceId: current.workspaceId,
           objective: nextObjective,
           createdAt: nextPatch.updatedAt ?? Date.now(),
+          supervisor: this.toPersistedSupervisor(updatedSupervisor),
         });
+        await this.updatePersistedSupervisor(id, nextPatch, workspace.path);
       } catch (error) {
         try {
-          this.deps.supervisorRepo.update(id, rollbackPatch);
+          await this.updatePersistedSupervisor(id, rollbackPatch, workspace.path);
         } catch (rollbackError) {
           this.logger.error(
             { err: rollbackError, supervisorId: id },
@@ -557,6 +552,8 @@ export class SupervisorManager {
         }
         throw error;
       }
+    } else {
+      await this.updatePersistedSupervisor(id, nextPatch, workspace.path);
     }
 
     const enriched = await this.hydratePersistedSupervisor(id, workspace.path);
@@ -578,7 +575,7 @@ export class SupervisorManager {
     }
 
     const updated = this.withCurrentTargetState(
-      this.deps.supervisorRepo.update(id, {
+      await this.updatePersistedSupervisor(id, {
         state: "paused",
         updatedAt: Date.now(),
       })
@@ -592,7 +589,7 @@ export class SupervisorManager {
 
   async resume(id: string): Promise<Supervisor> {
     const updated = this.withCurrentTargetState(
-      this.deps.supervisorRepo.update(id, {
+      await this.updatePersistedSupervisor(id, {
         state: "idle",
         errorReason: null,
         updatedAt: Date.now(),
@@ -730,7 +727,7 @@ export class SupervisorManager {
       supervisor.maxSupervisionCount > 0 &&
       supervisor.completedSupervisionCount >= supervisor.maxSupervisionCount
     ) {
-      const stopped = this.deps.supervisorRepo.update(id, {
+      const stopped = await this.updatePersistedSupervisor(id, {
         state: "stopped",
         stopReason: "max_supervision_count_reached",
         updatedAt: Date.now(),
@@ -801,7 +798,7 @@ export class SupervisorManager {
           supervisor.scheduledAt <= Date.now());
 
       const evaluatingSupervisor = this.withCurrentTargetState(
-        this.deps.supervisorRepo.update(supervisor.id, {
+        await this.updatePersistedSupervisor(supervisor.id, {
           state: "evaluating",
           scheduledAt: shouldConsumeScheduledAt ? null : (supervisor.scheduledAt ?? undefined),
           stopReason: null,
@@ -845,7 +842,7 @@ export class SupervisorManager {
       // the state→evaluating write). Make sure we don't leave the
       // supervisor stuck and release inFlight ourselves.
       this.releaseInFlight(id);
-      this.markSupervisorError(id, error);
+      await this.markSupervisorError(id, error);
       throw error;
     }
   }
@@ -909,7 +906,7 @@ export class SupervisorManager {
           const nextState: SupervisorState = this.pendingPauses.has(supervisorId)
             ? "paused"
             : "idle";
-          const recoveredSupervisor = this.deps.supervisorRepo.update(supervisorId, {
+          const recoveredSupervisor = await this.updatePersistedSupervisor(supervisorId, {
             state: nextState,
             stopReason: null,
             errorReason: null,
@@ -946,7 +943,7 @@ export class SupervisorManager {
         const latestState = this.supervisors.get(supervisorId)?.state;
         const nextState: SupervisorState =
           cancelled || latestState === "paused" ? "paused" : "idle";
-        const recoveredSupervisor = this.deps.supervisorRepo.update(supervisorId, {
+        const recoveredSupervisor = await this.updatePersistedSupervisor(supervisorId, {
           state: nextState,
           stopReason: null,
           errorReason: null,
@@ -1010,7 +1007,7 @@ export class SupervisorManager {
         throw error;
       }
 
-      const failedSupervisor = this.deps.supervisorRepo.update(supervisorId, {
+      const failedSupervisor = await this.updatePersistedSupervisor(supervisorId, {
         state: "error",
         stopReason: null,
         errorReason: reason,
@@ -1144,7 +1141,7 @@ export class SupervisorManager {
         }
 
         const injectingSupervisor = this.withCurrentTargetState(
-          this.deps.supervisorRepo.update(supervisor.id, {
+          await this.updatePersistedSupervisor(supervisor.id, {
             state: "injecting",
             updatedAt: Date.now(),
           })
@@ -1185,7 +1182,7 @@ export class SupervisorManager {
         await this.sleep(started.retry.retryDelayMs, signal);
 
         const evaluatingSupervisor = this.withCurrentTargetState(
-          this.deps.supervisorRepo.update(supervisor.id, {
+          await this.updatePersistedSupervisor(supervisor.id, {
             state: "evaluating",
             updatedAt: Date.now(),
           })
@@ -1276,7 +1273,7 @@ export class SupervisorManager {
     }
 
     const finishedSupervisor = this.withCurrentTargetState(
-      this.deps.supervisorRepo.update(activeCycle.supervisorId, {
+      await this.updatePersistedSupervisor(activeCycle.supervisorId, {
         state: isEvaluateStopResult(result.evaluation) ? "stopped" : "idle",
         completedSupervisionCount:
           (this.supervisors.get(activeCycle.supervisorId)?.completedSupervisionCount ?? 0) + 1,
@@ -1301,7 +1298,7 @@ export class SupervisorManager {
    * had a chance to create a cycle. Without this the supervisor can get
    * stuck in whatever state it happened to be in (usually 'evaluating').
    */
-  private markSupervisorError(id: string, error: unknown): void {
+  private async markSupervisorError(id: string, error: unknown): Promise<void> {
     logFailure(
       this.logger,
       error,
@@ -1310,7 +1307,7 @@ export class SupervisorManager {
     );
     const reason = messageOf(error, "Supervisor evaluation failed");
     try {
-      const failed = this.deps.supervisorRepo.update(id, {
+      const failed = await this.updatePersistedSupervisor(id, {
         state: "error",
         errorReason: reason,
         updatedAt: Date.now(),
@@ -1393,14 +1390,6 @@ export class SupervisorManager {
     };
   }
 
-  private async hydrateTargetState(supervisor: Supervisor): Promise<Supervisor> {
-    const workspace = this.deps.workspaceMgr.get(supervisor.workspaceId);
-    if (!workspace) {
-      return supervisor;
-    }
-    return await this.attachTargetState(supervisor, workspace.path);
-  }
-
   private async hydratePersistedSupervisor(
     supervisorId: string,
     workspacePath: string
@@ -1425,6 +1414,88 @@ export class SupervisorManager {
       currentTargetMemory: hydrated.currentTargetMemory,
       recentTargetCycles: hydrated.recentTargetCycles,
     };
+  }
+
+  private applySupervisorPatch(current: Supervisor, patch: SupervisorUpdatePatch): Supervisor {
+    return {
+      ...current,
+      ...(patch.state !== undefined ? { state: patch.state } : {}),
+      ...(patch.objective !== undefined ? { objective: patch.objective } : {}),
+      ...(patch.evaluatorProviderId !== undefined
+        ? { evaluatorProviderId: patch.evaluatorProviderId }
+        : {}),
+      ...(patch.evaluatorModel !== undefined
+        ? { evaluatorModel: patch.evaluatorModel ?? undefined }
+        : {}),
+      ...(patch.maxSupervisionCount !== undefined
+        ? { maxSupervisionCount: patch.maxSupervisionCount }
+        : {}),
+      ...(patch.completedSupervisionCount !== undefined
+        ? { completedSupervisionCount: patch.completedSupervisionCount }
+        : {}),
+      ...(patch.scheduledAt !== undefined ? { scheduledAt: patch.scheduledAt ?? undefined } : {}),
+      ...(patch.stopReason !== undefined ? { stopReason: patch.stopReason ?? undefined } : {}),
+      ...(patch.lastCycleAt !== undefined ? { lastCycleAt: patch.lastCycleAt ?? undefined } : {}),
+      ...(patch.lastEvaluatedTurnId !== undefined
+        ? { lastEvaluatedTurnId: patch.lastEvaluatedTurnId ?? undefined }
+        : {}),
+      ...(patch.errorReason !== undefined ? { errorReason: patch.errorReason ?? undefined } : {}),
+      ...(patch.updatedAt !== undefined ? { updatedAt: patch.updatedAt } : {}),
+    };
+  }
+
+  private toPersistedSupervisor(supervisor: Supervisor): PersistedSupervisor {
+    return {
+      id: supervisor.id,
+      sessionId: supervisor.sessionId,
+      workspaceId: supervisor.workspaceId,
+      targetId: supervisor.targetId,
+      state: supervisor.state,
+      objective: supervisor.objective,
+      evaluatorProviderId: supervisor.evaluatorProviderId,
+      evaluatorModel: supervisor.evaluatorModel,
+      maxSupervisionCount: supervisor.maxSupervisionCount,
+      completedSupervisionCount: supervisor.completedSupervisionCount,
+      scheduledAt: supervisor.scheduledAt,
+      stopReason: supervisor.stopReason,
+      lastCycleAt: supervisor.lastCycleAt,
+      lastEvaluatedTurnId: supervisor.lastEvaluatedTurnId,
+      errorReason: supervisor.errorReason,
+      createdAt: supervisor.createdAt,
+      updatedAt: supervisor.updatedAt,
+    };
+  }
+
+  private async persistSupervisorMeta(
+    workspacePath: string,
+    supervisor: Supervisor,
+    targetId = supervisor.targetId
+  ): Promise<void> {
+    const current = await this.deps.targetStore.readTargetMeta(workspacePath, targetId);
+    await this.deps.targetStore.saveTargetMeta(workspacePath, targetId, {
+      ...current,
+      sessionId: supervisor.sessionId,
+      workspaceId: supervisor.workspaceId,
+      objective: supervisor.objective,
+      updatedAt: Math.max(current.updatedAt, supervisor.updatedAt),
+      supervisor: this.toPersistedSupervisor(supervisor),
+    });
+  }
+
+  private async updatePersistedSupervisor(
+    id: string,
+    patch: SupervisorUpdatePatch,
+    workspacePath?: string
+  ): Promise<Supervisor> {
+    const current = this.deps.supervisorRepo.findById(id);
+    if (!current) {
+      throw new Error(`Supervisor not found: ${id}`);
+    }
+
+    const next = this.applySupervisorPatch(current, patch);
+    const resolvedWorkspacePath = workspacePath ?? this.requireWorkspace(next.workspaceId).path;
+    await this.persistSupervisorMeta(resolvedWorkspacePath, next);
+    return this.deps.supervisorRepo.update(id, patch);
   }
 
   private withCurrentTargetState(supervisor: Supervisor): Supervisor {

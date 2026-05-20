@@ -62,6 +62,7 @@ describe("SupervisorManager", () => {
   let deps: MockSupervisorManagerDeps;
 
   beforeEach(() => {
+    const supervisors = new Map<string, Record<string, unknown>>();
     deps = {
       eventBus: { on: vi.fn(() => () => {}), emit: vi.fn() },
       broadcaster: { broadcast: vi.fn() },
@@ -91,30 +92,64 @@ describe("SupervisorManager", () => {
         get: vi.fn(() => undefined),
       },
       supervisorRepo: {
-        create: vi.fn((value) => ({
-          ...value,
-          targetId: value.id,
-          recentTargetCycles: [],
-        })),
-        update: vi.fn((id, patch) => ({
-          id,
-          sessionId: "sess-1",
-          workspaceId: "ws-1",
-          targetId: id,
-          state: patch.state ?? "idle",
-          objective: patch.objective ?? "Persist supervisors",
-          evaluatorProviderId: patch.evaluatorProviderId ?? "claude",
-          maxSupervisionCount: patch.maxSupervisionCount ?? 0,
-          completedSupervisionCount: patch.completedSupervisionCount ?? 0,
-          recentTargetCycles: [],
-          createdAt: 1,
-          updatedAt: patch.updatedAt ?? 1,
-          lastEvaluatedTurnId: patch.lastEvaluatedTurnId,
-        })),
-        findById: vi.fn(() => undefined),
-        getBySessionId: vi.fn(() => undefined),
-        listAll: vi.fn(() => []),
-        delete: vi.fn(),
+        create: vi.fn((value) => {
+          const next = {
+            ...value,
+            targetId: value.id,
+            recentTargetCycles: [],
+          };
+          supervisors.set(value.id, next);
+          return next;
+        }),
+        update: vi.fn((id, patch) => {
+          const current = supervisors.get(id);
+          if (!current) {
+            throw new Error(`Supervisor not found: ${id}`);
+          }
+          const next = {
+            ...current,
+            ...(patch.state !== undefined ? { state: patch.state } : {}),
+            ...(patch.objective !== undefined ? { objective: patch.objective } : {}),
+            ...(patch.evaluatorProviderId !== undefined
+              ? { evaluatorProviderId: patch.evaluatorProviderId }
+              : {}),
+            ...(patch.evaluatorModel !== undefined
+              ? { evaluatorModel: patch.evaluatorModel ?? undefined }
+              : {}),
+            ...(patch.maxSupervisionCount !== undefined
+              ? { maxSupervisionCount: patch.maxSupervisionCount }
+              : {}),
+            ...(patch.completedSupervisionCount !== undefined
+              ? { completedSupervisionCount: patch.completedSupervisionCount }
+              : {}),
+            ...(patch.scheduledAt !== undefined
+              ? { scheduledAt: patch.scheduledAt ?? undefined }
+              : {}),
+            ...(patch.stopReason !== undefined
+              ? { stopReason: patch.stopReason ?? undefined }
+              : {}),
+            ...(patch.lastCycleAt !== undefined
+              ? { lastCycleAt: patch.lastCycleAt ?? undefined }
+              : {}),
+            ...(patch.lastEvaluatedTurnId !== undefined
+              ? { lastEvaluatedTurnId: patch.lastEvaluatedTurnId ?? undefined }
+              : {}),
+            ...(patch.errorReason !== undefined
+              ? { errorReason: patch.errorReason ?? undefined }
+              : {}),
+            ...(patch.updatedAt !== undefined ? { updatedAt: patch.updatedAt } : {}),
+          };
+          supervisors.set(id, next);
+          return next;
+        }),
+        findById: vi.fn((id) => supervisors.get(id)),
+        getBySessionId: vi.fn((sessionId) =>
+          [...supervisors.values()].find((value) => value.sessionId === sessionId)
+        ),
+        listAll: vi.fn(() => [...supervisors.values()]),
+        delete: vi.fn((id) => {
+          supervisors.delete(id);
+        }),
       },
       targetStore: {
         cloneTargetFiles: vi.fn(async () => 0),
@@ -132,6 +167,7 @@ describe("SupervisorManager", () => {
           updatedAt: 1,
           supersededBy: null,
           completedAt: null,
+          supervisor: undefined,
         })),
         loadTargetMemory: vi.fn(async () => ({
           targetId: "tgt-1",
@@ -170,80 +206,52 @@ describe("SupervisorManager", () => {
 
     manager.start();
 
-    expect(deps.supervisorRepo.listAll).not.toHaveBeenCalled();
     expect(deps.eventBus.on).toHaveBeenCalledWith("session.lifecycle", expect.any(Function));
   });
 
-  it("recovers persisted evaluating supervisors back to idle on hydrate", async () => {
-    deps.supervisorRepo.listAll.mockReturnValue([
-      {
-        id: "sup-1",
-        sessionId: "sess-1",
-        workspaceId: "ws-1",
-        targetId: "sup-1",
-        state: "evaluating",
-        objective: "Persist supervisors",
-        evaluatorProviderId: "claude",
-        maxSupervisionCount: 0,
-        completedSupervisionCount: 0,
-        recentTargetCycles: [],
-        createdAt: 1,
-        updatedAt: 1,
-      },
-    ]);
-
+  it("hydrate only starts runtime listeners and does not auto-load supervisors", async () => {
     const manager = new SupervisorManager(
       deps as unknown as ConstructorParameters<typeof SupervisorManager>[0]
     );
     await manager.hydrate();
 
-    expect(deps.supervisorRepo.update).toHaveBeenCalledWith(
-      "sup-1",
-      expect.objectContaining({ state: "idle", errorReason: null })
-    );
+    expect(manager.get("sup-1")).toBeUndefined();
+    expect(deps.eventBus.on).toHaveBeenCalledWith("session.lifecycle", expect.any(Function));
   });
 
   it("drops workspace supervisors from memory during workspace teardown", async () => {
-    deps.supervisorRepo.listAll.mockReturnValue([
-      {
-        id: "sup-1",
-        sessionId: "sess-1",
-        workspaceId: "ws-1",
-        targetId: "sup-1",
-        state: "idle",
-        objective: "Persist supervisors",
-        evaluatorProviderId: "claude",
-        maxSupervisionCount: 0,
-        completedSupervisionCount: 0,
-        recentTargetCycles: [],
-        createdAt: 1,
-        updatedAt: 1,
-      },
-      {
-        id: "sup-2",
-        sessionId: "sess-2",
-        workspaceId: "ws-2",
-        targetId: "sup-2",
-        state: "idle",
-        objective: "Leave this one alone",
-        evaluatorProviderId: "claude",
-        maxSupervisionCount: 0,
-        completedSupervisionCount: 0,
-        recentTargetCycles: [],
-        createdAt: 1,
-        updatedAt: 1,
-      },
-    ]);
-
     const manager = new SupervisorManager(
       deps as unknown as ConstructorParameters<typeof SupervisorManager>[0]
     );
-    await manager.hydrate();
+    await manager.create({
+      sessionId: "sess-1",
+      workspaceId: "ws-1",
+      objective: "Persist supervisors",
+      evaluatorProviderId: "claude",
+    });
+    vi.mocked(deps.workspaceMgr.get).mockImplementation((workspaceId: string) =>
+      workspaceId === "ws-1" ? { id: "ws-1", path: "/workspace" } : { id: "ws-2", path: "/ws-2" }
+    );
+    vi.mocked(deps.sessionMgr.get).mockImplementation((sessionId: string) => ({
+      id: sessionId,
+      terminalId: `term-${sessionId}`,
+      workspaceId: sessionId === "sess-2" ? "ws-2" : "ws-1",
+      providerId: "claude",
+      state: "running",
+      capability: "full",
+      startedAt: 1,
+      lastActiveAt: 1,
+    }));
+    await manager.create({
+      sessionId: "sess-2",
+      workspaceId: "ws-2",
+      objective: "Leave this one alone",
+      evaluatorProviderId: "claude",
+    });
 
     await manager.deleteForWorkspace("ws-1");
 
-    expect(manager.get("sup-1")).toBeUndefined();
-    expect(manager.get("sup-2")).toBeDefined();
-    expect(deps.supervisorRepo.delete).toHaveBeenCalledWith("sup-1");
+    expect(manager.getBySession("sess-1")).toBeUndefined();
+    expect(manager.getBySession("sess-2")).toBeDefined();
   });
 });
