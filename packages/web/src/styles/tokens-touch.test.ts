@@ -127,18 +127,21 @@ describe("tokens.css touch tokens", () => {
     expect(root).toContain("--inset-control-inline:");
     expect(root).toContain("--inset-control-block:");
     expect(root).toContain("--inset-row-inline:");
-    expect(root).toContain("--inset-row-inline-tight:");
-    expect(root).toContain("--inset-row-inline-selected:");
     expect(root).toContain("--inset-row-block:");
-    expect(root).toContain("--inset-row-block-compact:");
-    expect(root).toContain("--inset-row-copy-offset:");
-    expect(root).toContain("--inset-chip-block-tight:");
-    expect(root).toContain("--inset-chip-inline-tight:");
+    expect(root).toContain("--inset-chip-block:");
+    expect(root).toContain("--inset-chip-inline:");
     expect(root).toContain("--inset-panel:");
     expect(root).toContain("--inset-dialog:");
-    expect(root).toContain("--inset-drawer:");
     expect(root).toContain("--section-gap:");
     expect(root).toContain("--form-group-gap:");
+    expect(getCustomProperty(root, "--inset-control-inline")).toBe("var(--sp-3)");
+    expect(getCustomProperty(root, "--inset-control-block")).toBe("var(--sp-2)");
+    expect(getCustomProperty(root, "--inset-row-inline")).toBe("var(--sp-4)");
+    expect(getCustomProperty(root, "--inset-row-block")).toBe("var(--sp-2)");
+    expect(getCustomProperty(root, "--inset-chip-block")).toBe("var(--sp-1)");
+    expect(getCustomProperty(root, "--inset-chip-inline")).toBe("var(--sp-2)");
+    expect(getCustomProperty(root, "--inset-panel")).toBe("var(--sp-4)");
+    expect(getCustomProperty(root, "--inset-dialog")).toBe("var(--sp-6)");
 
     expect(root).toContain("--surface-page-bg:");
     expect(root).toContain("--surface-panel-bg:");

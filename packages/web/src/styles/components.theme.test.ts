@@ -1017,7 +1017,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(quickActions).toContain("width: auto");
     expect(quickActions).toContain("min-width: max-content");
     expect(quickActions).toContain("flex-shrink: 0");
-    expect(quickActions).toContain("padding: 0 var(--inset-row-inline-tight)");
+    expect(quickActions).toContain("padding: 0 var(--inset-control-block)");
     expect(quickActions).toContain("gap: var(--gap-cluster-tight)");
   });
 
@@ -1275,9 +1275,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(progress).toContain("background: var(--state-info-bg)");
     expect(header).toContain("gap: var(--gap-cluster-md)");
     expect(header).toContain("padding: var(--gap-cluster-tight) var(--inset-control-inline)");
-    expect(badge).toContain(
-      "padding: var(--inset-chip-block-tight) var(--inset-chip-inline-tight)"
-    );
+    expect(badge).toContain("padding: var(--inset-chip-block) var(--inset-chip-inline)");
     expect(badge).toContain("border-radius: var(--radius-control-sm)");
     expect(runningStatus).toContain("background: var(--state-success-bg)");
     expect(runningStatus).toContain("color: var(--state-success-text)");
@@ -1553,9 +1551,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(injectingPulse).toContain("var(--state-warning-border)");
     expect(errorPulse).toContain("background: var(--state-error-text)");
     expect(errorPulse).toContain("var(--state-error-border)");
-    expect(stateTag).toContain(
-      "padding: var(--inset-chip-block-tight) var(--inset-chip-inline-tight)"
-    );
+    expect(stateTag).toContain("padding: var(--inset-chip-block) var(--inset-chip-inline)");
     expect(stateTag).toContain("border-radius: var(--radius-control-sm)");
     expect(idleTag).toContain("background: var(--state-success-bg)");
     expect(idleTag).toContain("color: var(--state-success-text)");
@@ -1569,16 +1565,12 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(errorTag).toContain("color: var(--state-error-text)");
     expect(stoppedTag).toContain("background: var(--state-disabled-bg)");
     expect(stoppedTag).toContain("color: var(--state-disabled-text)");
-    expect(cycleCount).toContain(
-      "padding: var(--inset-chip-block-tight) var(--inset-chip-inline-tight)"
-    );
+    expect(cycleCount).toContain("padding: var(--inset-chip-block) var(--inset-chip-inline)");
     expect(cycleCount).toContain("background: var(--state-disabled-bg)");
     expect(actions).toContain("gap: var(--gap-cluster-2xs)");
     expect(dangerHover).toContain("background: var(--state-error-bg)");
     expect(dangerHover).toContain("color: var(--state-error-text)");
-    expect(providerPill).toContain(
-      "padding: var(--inset-chip-block-tight) var(--inset-chip-inline-tight)"
-    );
+    expect(providerPill).toContain("padding: var(--inset-chip-block) var(--inset-chip-inline)");
     expect(providerPill).toContain("background: var(--state-info-bg)");
     expect(providerPill).toContain("color: var(--state-info-text)");
     expect(progressMarker).toContain("border-radius: var(--radius-pill)");
@@ -1869,7 +1861,7 @@ describe("components.css theme-sensitive surfaces", () => {
       "background: color-mix(in srgb, var(--state-selected-bg) 72%, transparent)"
     );
     expect(directorySelected).toContain("background: var(--state-selected-bg)");
-    expect(directoryAction).toContain("padding: 0 var(--inset-chip-inline-tight)");
+    expect(directoryAction).toContain("padding: 0 var(--inset-chip-inline)");
     expect(directoryAction).toContain("border-radius: var(--radius-pill)");
     expect(directoryAction).toContain("border: 1px solid var(--state-info-border)");
     expect(directoryAction).toContain("background: var(--state-info-bg)");
@@ -2462,15 +2454,17 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(row).toContain("min-height: 26px");
     expect(row).toContain("gap: var(--gap-cluster-tight)");
     expect(row).toContain("padding:");
-    expect(row).toContain("var(--inset-row-block-compact)");
-    expect(row).toContain("var(--inset-row-inline-tight)");
+    expect(row).toContain("3px");
+    expect(row).toContain("var(--inset-control-block)");
     expect(row).toContain("var(--inset-row-inline)");
     expect(row).toContain("border-radius: var(--radius-panel)");
     expect(row).toContain("transition:");
     expect(rowSelected).toContain(
       "border-left: var(--state-focus-ring-width) solid var(--state-selected-border)"
     );
-    expect(rowSelected).toContain("padding-left: var(--inset-row-inline-selected)");
+    expect(rowSelected).toContain(
+      "padding-left: calc(var(--inset-row-inline) - var(--state-focus-ring-width))"
+    );
     expect(rowSelected).toContain("background: var(--state-selected-bg)");
     expect(rowActionsBase).toContain("gap: var(--gap-cluster-2xs)");
     expect(rowActionsDesktop).toContain("opacity: 0");
@@ -2507,7 +2501,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(commandPaletteItemContent).toContain("gap: var(--gap-cluster-3xs)");
     expect(commandPaletteItemShortcut).toContain("margin-top: var(--gap-cluster-2xs)");
     expect(commandPaletteItemShortcut).toContain(
-      "padding: var(--inset-chip-block-tight) var(--inset-chip-inline-tight)"
+      "padding: var(--inset-chip-block) var(--inset-chip-inline)"
     );
     expect(commandPaletteItemShortcut).toContain("border-radius: var(--radius-pill)");
   });

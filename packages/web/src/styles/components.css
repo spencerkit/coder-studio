@@ -2009,8 +2009,7 @@ body.is-resizing-panels * {
   display: flex;
   align-items: center;
   gap: var(--gap-cluster-sm);
-  padding: var(--inset-row-block-compact) var(--inset-control-inline) var(--inset-row-block-compact)
-    var(--inset-row-inline);
+  padding: 3px var(--inset-control-inline) 3px var(--inset-row-inline);
   font-size: var(--type-body-3-size);
   line-height: var(--type-body-3-line-height);
   font-weight: var(--type-body-3-weight);
@@ -2027,7 +2026,7 @@ body.is-resizing-panels * {
   background: var(--state-selected-bg);
   color: var(--text);
   border-left: var(--state-focus-ring-width) solid var(--state-selected-border);
-  padding-left: var(--inset-row-inline-selected);
+  padding-left: calc(var(--inset-row-inline) - var(--state-focus-ring-width));
 }
 
 .tree-chevron {
@@ -2077,7 +2076,7 @@ body.is-resizing-panels * {
 }
 
 .tree-empty-hint {
-  padding-left: var(--inset-row-copy-offset);
+  padding-left: 26px;
   color: var(--text-muted);
   font-size: var(--type-body-5-size);
   line-height: var(--type-body-5-line-height);
@@ -2086,7 +2085,7 @@ body.is-resizing-panels * {
 }
 
 .tree-loading {
-  padding-left: var(--inset-row-copy-offset);
+  padding-left: 26px;
   color: var(--text-muted);
   font-size: var(--type-body-5-size);
   line-height: var(--type-body-5-line-height);
@@ -2186,7 +2185,7 @@ body.is-resizing-panels * {
   font-size: var(--type-body-6-size);
   line-height: var(--type-body-6-line-height);
   font-weight: var(--type-body-6-weight);
-  padding: var(--inset-chip-block-tight) var(--inset-chip-inline-tight);
+  padding: var(--inset-chip-block) var(--inset-chip-inline);
   border-radius: var(--radius-control-sm);
   background: var(--bg-hover);
   color: var(--text-ter);
@@ -2196,7 +2195,7 @@ body.is-resizing-panels * {
   font-size: var(--type-body-6-size);
   line-height: var(--type-body-6-line-height);
   font-weight: var(--type-body-6-weight);
-  padding: var(--inset-chip-block-tight) var(--inset-chip-inline-tight);
+  padding: var(--inset-chip-block) var(--inset-chip-inline);
   border-radius: var(--radius-control-sm);
 }
 
@@ -3632,7 +3631,7 @@ body.is-resizing-panels * {
 
 /* State chip — 10px badge with state-tinted background */
 .supervisor-state-tag {
-  padding: var(--inset-chip-block-tight) var(--inset-chip-inline-tight);
+  padding: var(--inset-chip-block) var(--inset-chip-inline);
   border-radius: var(--radius-control-sm);
   font-size: var(--type-body-6-size);
   line-height: var(--type-body-6-line-height);
@@ -3685,7 +3684,7 @@ body.is-resizing-panels * {
 .supervisor-cycle-count {
   display: inline-flex;
   align-items: center;
-  padding: var(--inset-chip-block-tight) var(--inset-chip-inline-tight);
+  padding: var(--inset-chip-block) var(--inset-chip-inline);
   border-radius: var(--radius-control-sm);
   background: var(--state-disabled-bg);
   color: var(--state-disabled-text);
@@ -3777,7 +3776,7 @@ body.is-resizing-panels * {
   display: inline-flex;
   align-items: center;
   flex-shrink: 0;
-  padding: var(--inset-chip-block-tight) var(--inset-chip-inline-tight);
+  padding: var(--inset-chip-block) var(--inset-chip-inline);
   border-radius: var(--radius-control-sm);
   background: var(--state-info-bg);
   color: var(--state-info-text);
@@ -5287,7 +5286,7 @@ body.is-resizing-panels * {
 .fp-dir-action {
   margin-left: auto;
   height: 22px;
-  padding: 0 var(--inset-chip-inline-tight);
+  padding: 0 var(--inset-chip-inline);
   border: 1px solid var(--state-info-border);
   border-radius: var(--radius-pill);
   background: var(--state-info-bg);
@@ -5761,7 +5760,7 @@ textarea.input {
 
 .topbar-quick-actions {
   width: auto;
-  padding: 0 var(--inset-row-inline-tight);
+  padding: 0 var(--inset-control-block);
   gap: var(--gap-cluster-tight);
   font-size: var(--type-body-6-size);
   line-height: var(--type-body-6-line-height);
@@ -5875,7 +5874,7 @@ textarea.input {
 
 .panel-tab {
   height: 24px;
-  padding: 0 var(--inset-row-inline-tight);
+  padding: 0 var(--inset-control-block);
   border: none;
   border-radius: var(--radius-control-sm);
   font-size: var(--type-body-6-size);
@@ -7302,7 +7301,7 @@ textarea.input {
 .panel-branch {
   height: 24px;
   gap: var(--gap-cluster-tight);
-  padding: 0 var(--inset-row-inline-tight);
+  padding: 0 var(--inset-control-block);
   border: 1px solid var(--state-selected-border);
   border-radius: var(--radius-control-lg);
   background: var(--state-selected-bg);
@@ -7315,7 +7314,7 @@ textarea.input {
 
 .panel-toolbar {
   min-height: 34px;
-  padding: var(--gap-cluster-tight) var(--inset-row-inline-tight);
+  padding: var(--gap-cluster-tight) var(--inset-control-block);
   background: color-mix(in srgb, var(--surface-panel-bg) 96%, transparent);
   border-bottom-color: color-mix(in srgb, var(--border) 72%, var(--accent-blue) 28%);
 }
@@ -7340,7 +7339,7 @@ textarea.input {
 
 .tree-item {
   min-height: 26px;
-  padding-right: var(--inset-row-inline-tight);
+  padding-right: var(--inset-control-block);
   margin-right: var(--gap-cluster-tight);
   border-radius: 0 var(--radius-panel) var(--radius-panel) 0;
 }
@@ -7859,8 +7858,7 @@ textarea.input {
   min-height: 0;
   gap: var(--gap-cluster-sm);
   margin-right: 0;
-  padding: var(--inset-row-block-compact) var(--inset-control-inline) var(--inset-row-block-compact)
-    var(--inset-row-inline);
+  padding: 3px var(--inset-control-inline) 3px var(--inset-row-inline);
   border-radius: 0;
 }
 
@@ -7880,7 +7878,7 @@ textarea.input {
   background: var(--state-selected-bg);
   border-left: var(--state-focus-ring-width) solid var(--state-selected-border);
   box-shadow: none;
-  padding-left: var(--inset-row-inline-selected);
+  padding-left: calc(var(--inset-row-inline) - var(--state-focus-ring-width));
 }
 
 .tree-label {
@@ -8235,7 +8233,7 @@ textarea.input {
   width: auto;
   min-width: max-content;
   flex-shrink: 0;
-  padding: 0 var(--inset-row-inline-tight);
+  padding: 0 var(--inset-control-block);
   gap: var(--gap-cluster-tight);
 }
 
@@ -10358,7 +10356,7 @@ textarea.input {
   .command-palette-item-shortcut {
     flex-shrink: 0;
     margin-top: var(--gap-cluster-2xs);
-    padding: var(--inset-chip-block-tight) var(--inset-chip-inline-tight);
+    padding: var(--inset-chip-block) var(--inset-chip-inline);
     border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
     border-radius: var(--radius-pill);
     background: color-mix(in srgb, var(--bg-page) 76%, var(--bg-surface) 24%);
@@ -12094,8 +12092,7 @@ textarea.input {
   gap: var(--gap-cluster-tight);
   min-height: 26px;
   margin: 0 var(--gap-cluster-tight);
-  padding: var(--inset-row-block-compact) var(--inset-row-inline-tight)
-    var(--inset-row-block-compact) var(--inset-row-inline);
+  padding: 3px var(--inset-control-block) 3px var(--inset-row-inline);
   border-radius: var(--radius-panel);
   color: var(--text-secondary);
   transition:
@@ -12108,7 +12105,7 @@ textarea.input {
 }
 
 .file-tree-shell .tree-item.selected {
-  padding-left: var(--inset-row-inline-selected);
+  padding-left: calc(var(--inset-row-inline) - var(--state-focus-ring-width));
   border-left: var(--state-focus-ring-width) solid var(--state-selected-border);
   background: var(--state-selected-bg);
 }
