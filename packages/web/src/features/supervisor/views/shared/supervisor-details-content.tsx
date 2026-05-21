@@ -1,5 +1,6 @@
 import { Button, Tag } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
+import { formatProviderLabel } from "../../../notifications/format";
 import { useSupervisorActions } from "../../actions/use-supervisor-actions";
 
 interface SupervisorDetailsContentProps {
@@ -56,6 +57,12 @@ export function SupervisorDetailsContent({
               <p className="supervisor-meta-label">{t("supervisor.field.objective")}</p>
               <p className="supervisor-meta-value supervisor-meta-value--wrap">
                 {supervisor.objective}
+              </p>
+            </div>
+            <div className="supervisor-meta-item">
+              <p className="supervisor-meta-label">{t("supervisor.field.evaluator")}</p>
+              <p className="supervisor-meta-value supervisor-meta-value--strong">
+                {formatProviderLabel(supervisor.evaluatorProviderId)}
               </p>
             </div>
             <div className="supervisor-meta-item">

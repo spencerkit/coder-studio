@@ -114,13 +114,13 @@ describe("SupervisorCard", () => {
     const stripRow = document.querySelector(".supervisor-strip-row");
     const statusCluster = document.querySelector(".supervisor-status-cluster");
 
-    expect(screen.getByText("codex")).toBeInTheDocument();
     expect(screen.getByText("Cycles 3")).toBeInTheDocument();
     expect(screen.queryByText("Finish the server refactor")).not.toBeInTheDocument();
     expect(titleRow).not.toBeNull();
     expect(stripRow).not.toBeNull();
     expect(statusCluster).not.toBeNull();
-    expect(titleRow?.querySelector(".supervisor-provider-pill")).toHaveTextContent("codex");
+    expect(screen.queryByText("codex")).not.toBeInTheDocument();
+    expect(titleRow?.querySelector(".supervisor-provider-pill")).toBeNull();
     expect(stripRow?.querySelector(".supervisor-objective-row")).toBeNull();
     expect(statusCluster?.querySelector(".supervisor-state-tag")).toHaveTextContent("Idle");
     expect(statusCluster?.querySelector(".supervisor-cycle-count")).toHaveTextContent("Cycles 3");
