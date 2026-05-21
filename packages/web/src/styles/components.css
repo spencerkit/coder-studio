@@ -2510,6 +2510,10 @@ body.is-resizing-panels * {
   gap: var(--sp-6);
 }
 
+.diagnostics-summary--mobile {
+  gap: var(--sp-3);
+}
+
 .diagnostics-summary__copy {
   display: flex;
   flex-direction: column;
@@ -2553,12 +2557,27 @@ body.is-resizing-panels * {
   flex-shrink: 0;
 }
 
+.diagnostics-actions--mobile {
+  width: 100%;
+  align-items: stretch;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.diagnostics-actions__primary {
+  width: 100%;
+}
+
 .diagnostics-toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: var(--sp-2);
+}
+
+.diagnostics-toolbar--mobile {
+  justify-content: flex-start;
 }
 
 .diagnostics-loading {
@@ -11411,7 +11430,7 @@ textarea.input {
   }
 
   .diagnostics-content {
-    padding: var(--sp-4);
+    padding: var(--sp-3) var(--sp-4) var(--sp-5);
     padding-bottom: var(--sp-5);
   }
 
@@ -11432,7 +11451,34 @@ textarea.input {
 
   .diagnostics-summary {
     flex-direction: column;
-    gap: var(--sp-4);
+    gap: var(--sp-3);
+    padding: var(--sp-4);
+    border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+    border-radius: var(--radius-xl);
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--bg-surface) 96%, var(--bg-page) 4%) 0%,
+      color-mix(in srgb, var(--bg-surface) 90%, var(--accent-blue) 10%) 100%
+    );
+    box-shadow: 0 1px 0 color-mix(in srgb, var(--border) 36%, transparent);
+  }
+
+  .diagnostics-summary--mobile .diagnostics-summary__copy {
+    gap: var(--sp-2);
+  }
+
+  .diagnostics-summary--mobile .diagnostics-summary__title {
+    font-size: var(--type-heading-3-size);
+    line-height: var(--type-heading-3-line-height);
+    font-weight: var(--type-heading-3-weight);
+    text-wrap: balance;
+    white-space: normal;
+  }
+
+  .diagnostics-summary--mobile .diagnostics-summary__description {
+    max-width: none;
+    font-size: var(--type-body-4-size);
+    line-height: var(--type-body-4-line-height);
   }
 
   .diagnostics-actions {
@@ -11440,13 +11486,11 @@ textarea.input {
   }
 
   .diagnostics-toolbar {
-    align-items: stretch;
-    flex-direction: column;
+    align-items: flex-start;
   }
 
   .diagnostics-toolbar .btn {
-    width: 100%;
-    justify-content: center;
+    min-height: 32px;
   }
 
   .diagnostics-issue {

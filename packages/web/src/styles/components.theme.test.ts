@@ -1372,6 +1372,20 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(secondaryTitle).toContain("font-weight: var(--type-heading-5-weight)");
   });
 
+  it("keeps diagnostics mobile summary titles on the typography token contract", () => {
+    const diagnosticsTitle = getLastRuleBlock(".diagnostics-summary__title");
+    const diagnosticsMobileTitle = getLastRuleBlock(
+      ".diagnostics-summary--mobile .diagnostics-summary__title"
+    );
+
+    expect(diagnosticsTitle).toContain("font-size: var(--type-heading-4-size)");
+    expect(diagnosticsTitle).toContain("line-height: var(--type-heading-4-line-height)");
+    expect(diagnosticsTitle).toContain("font-weight: var(--type-heading-4-weight)");
+    expect(diagnosticsMobileTitle).toContain("font-size: var(--type-heading-3-size)");
+    expect(diagnosticsMobileTitle).toContain("line-height: var(--type-heading-3-line-height)");
+    expect(diagnosticsMobileTitle).toContain("font-weight: var(--type-heading-3-weight)");
+  });
+
   it("keeps panel headers on the approved dense container chrome contract", () => {
     const panelHeader =
       [...getRuleBlocksFrom(stylesheet, ".panel-header")]

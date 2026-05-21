@@ -1,5 +1,5 @@
 import type { DiagnosticsCheck, DiagnosticsResponse, Workspace } from "@coder-studio/core";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -241,6 +241,11 @@ describe("DiagnosticsPage", () => {
     expect(document.querySelector(".diagnostics-page--mobile")).not.toBeNull();
     expect(document.querySelector(".diagnostics-header .mobile-page-header")).not.toBeNull();
     expect(document.querySelector(".diagnostics-content--mobile")).not.toBeNull();
+    expect(document.querySelector(".diagnostics-summary--mobile")).not.toBeNull();
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Environment diagnostics" })
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open Settings" })).toBeNull();
     expect(document.querySelector(".welcome-card")).toBeNull();
   });
 
