@@ -35,6 +35,8 @@ const rawFoundationPattern =
 const exemptBaseSelectors: RegExp[] = [];
 const exemptComponentSelectors = [
   /(?:^|[\s>+~,])\.file-tree(?=[\s>+~,:]|$)/,
+  /(?:^|[\s>+~,])\.file-tree-shell(?=[\s>+~,:]|$)/,
+  /(?:^|[\s>+~,])\.tree-(?:item|empty-hint|loading)(?=[\s>+~,:]|$)/,
   /\.git-/,
   /\.terminal-/,
   /\.bottom-terminal/,
