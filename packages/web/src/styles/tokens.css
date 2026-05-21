@@ -124,7 +124,7 @@
   --overlay-backdrop-opacity: 0.48;
 
   /* ========== Foundation: Code Surface Sub-Specs ========== */
-  --terminal-panel-inset: var(--sp-2);
+  --terminal-panel-inset: 2px;
   --terminal-toolbar-gap: var(--gap-cluster-md);
   --terminal-local-overlay-radius: var(--radius-local-overlay);
   --terminal-state-running-bg: var(--state-info-bg);
