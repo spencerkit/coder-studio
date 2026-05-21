@@ -42,6 +42,16 @@ const PersonalizationOverridesSchema = z.object({
   surfaceOpacity: z.number().int().min(0).max(100).optional(),
 });
 
+const PERSONALIZATION_OVERRIDE_BRANCHES = ["desktop", "mobile"] as const;
+const PERSONALIZATION_OVERRIDE_FIELDS = [
+  "backgroundAssetId",
+  "backgroundDimness",
+  "backgroundBlur",
+  "glassEnabled",
+  "glassIntensity",
+  "surfaceOpacity",
+] as const;
+
 // Settings schema
 const SettingsSchema = z.object({
   defaultProviderId: z.string().optional(),
@@ -184,9 +194,14 @@ registerCommand(
         ? (nextSettings.providers as Record<string, unknown>)
         : undefined;
     const { providers: _providers, ...nonProviderSettings } = nextSettings;
+    const overrideKeysToDelete = resolveAppearancePersonalizationOverrideKeysToDelete(nextSettings);
 
     // Flatten settings to key-value pairs
     const flatSettings = flattenSettings(nonProviderSettings);
+
+    for (const key of overrideKeysToDelete) {
+      ctx.settingsRepo.delete(key);
+    }
 
     for (const [key, value] of Object.entries(flatSettings)) {
       ctx.settingsRepo.set(key, value);
@@ -253,6 +268,37 @@ function flattenSettings(obj: Record<string, unknown>, prefix = ""): Record<stri
   }
 
   return result;
+}
+
+function resolveAppearancePersonalizationOverrideKeysToDelete(
+  settings: Record<string, unknown>
+): string[] {
+  const appearance = settings.appearance;
+  if (!appearance || typeof appearance !== "object" || Array.isArray(appearance)) {
+    return [];
+  }
+
+  const personalization = (appearance as Record<string, unknown>).personalization;
+  if (!personalization || typeof personalization !== "object" || Array.isArray(personalization)) {
+    return [];
+  }
+
+  const keysToDelete: string[] = [];
+
+  for (const branch of PERSONALIZATION_OVERRIDE_BRANCHES) {
+    const overrides = (personalization as Record<string, unknown>)[branch];
+    if (!overrides || typeof overrides !== "object" || Array.isArray(overrides)) {
+      continue;
+    }
+
+    for (const field of PERSONALIZATION_OVERRIDE_FIELDS) {
+      if (!Object.prototype.hasOwnProperty.call(overrides, field)) {
+        keysToDelete.push(`appearance.personalization.${branch}.${field}`);
+      }
+    }
+  }
+
+  return keysToDelete;
 }
 
 // settings.readConfigFile — read Codex or Claude config file content

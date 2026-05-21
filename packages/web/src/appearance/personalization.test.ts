@@ -40,4 +40,32 @@ describe("appearance personalization", () => {
       glassEnabled: false,
     });
   });
+
+  it("collapses backgroundMode to none when the effective asset id is missing", () => {
+    const personalization = resolveAppearancePersonalizationSetting({
+      "appearance.personalization.common.backgroundMode": "image",
+    });
+
+    expect(resolveAppearancePersonalizationForViewport(personalization, "desktop")).toMatchObject({
+      backgroundMode: "none",
+      backgroundAssetId: null,
+    });
+  });
+
+  it("collapses backgroundMode to none when a device override clears the asset id", () => {
+    const personalization = resolveAppearancePersonalizationSetting({
+      "appearance.personalization.common.backgroundMode": "image",
+      "appearance.personalization.common.backgroundAssetId": "asset-common",
+      "appearance.personalization.desktop.backgroundAssetId": null,
+    });
+
+    expect(resolveAppearancePersonalizationForViewport(personalization, "desktop")).toMatchObject({
+      backgroundMode: "none",
+      backgroundAssetId: null,
+    });
+    expect(resolveAppearancePersonalizationForViewport(personalization, "mobile")).toMatchObject({
+      backgroundMode: "image",
+      backgroundAssetId: "asset-common",
+    });
+  });
 });

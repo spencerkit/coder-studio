@@ -432,6 +432,38 @@ describe("settings commands", () => {
     expect(settingsRepo.get("appearance.personalization.common.backgroundBlur")).toBeUndefined();
   });
 
+  it("settings.update clears persisted appearance.personalization device overrides when an override object is emptied", async () => {
+    settingsRepo.set("appearance.personalization.desktop.backgroundAssetId", "asset-desktop");
+    settingsRepo.set("appearance.personalization.desktop.surfaceOpacity", 88);
+    settingsRepo.set("appearance.personalization.mobile.glassEnabled", true);
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "settings-update-appearance-personalization-clear-device-overrides",
+        op: "settings.update",
+        args: {
+          settings: {
+            appearance: {
+              personalization: {
+                desktop: {},
+                mobile: {},
+              },
+            },
+          },
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(
+      settingsRepo.get("appearance.personalization.desktop.backgroundAssetId")
+    ).toBeUndefined();
+    expect(settingsRepo.get("appearance.personalization.desktop.surfaceOpacity")).toBeUndefined();
+    expect(settingsRepo.get("appearance.personalization.mobile.glassEnabled")).toBeUndefined();
+  });
+
   it("settings.update persists provider startup command arguments into the file-backed provider config store", async () => {
     const result = await dispatch(
       {

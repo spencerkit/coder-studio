@@ -230,8 +230,17 @@ export function resolveAppearancePersonalizationForViewport(
   personalization: AppearancePersonalization,
   viewport: AppearanceViewport
 ): AppearancePersonalizationCommon {
-  return {
+  const resolved = {
     ...personalization.common,
     ...personalization[viewport],
   };
+
+  if (resolved.backgroundMode === "image" && resolved.backgroundAssetId === null) {
+    return {
+      ...resolved,
+      backgroundMode: "none",
+    };
+  }
+
+  return resolved;
 }
