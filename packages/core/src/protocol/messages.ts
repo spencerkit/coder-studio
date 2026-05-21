@@ -68,10 +68,25 @@ export interface RecoveryReconcileRequest {
   terminals: RecoveryReconcileTerminalRequest[];
 }
 
+export interface RecoveryClosedTerminalState {
+  exitCode?: number;
+}
+
 export type RecoveryReconcileDecision =
   | { terminalId: string; action: "noop"; headSeq: number }
-  | { terminalId: string; action: "replay"; fromSeq: number; headSeq: number }
-  | { terminalId: string; action: "snapshot"; headSeq: number }
+  | {
+      terminalId: string;
+      action: "replay";
+      fromSeq: number;
+      headSeq: number;
+      closed?: RecoveryClosedTerminalState;
+    }
+  | {
+      terminalId: string;
+      action: "snapshot";
+      headSeq: number;
+      closed?: RecoveryClosedTerminalState;
+    }
   | { terminalId: string; action: "closed"; headSeq: number; exitCode?: number }
   | {
       terminalId: string;

@@ -18,6 +18,12 @@ import { toastsAtom } from "../../notifications/atoms";
 import { terminalMetaAtomFamily, terminalOutputAtomFamily } from "../atoms";
 import type { HydrationRequestHandle, HydrationTier } from "../hydration-coordinator";
 import { DEFAULT_TERMINAL_FONT_SIZE, terminalPreferencesAtom } from "../preferences";
+import { createRecoveryCoordinator } from "../recovery-coordinator";
+import {
+  getGlobalRecoveryCoordinator,
+  resetGlobalRecoveryCoordinator,
+  setGlobalRecoveryCoordinator,
+} from "../recovery-singleton";
 import { TERMINAL_REPLAY_TIMEOUT_MS } from "../replay-state";
 import { trimWrittenChunks, XtermHost } from "../views/shared/xterm-host";
 
@@ -320,6 +326,7 @@ vi.mock("@xterm/addon-webgl", () => ({
 describe("XtermHost", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetGlobalRecoveryCoordinator();
     window.localStorage.clear();
     viewportMocks.viewport = "desktop";
     hydrationCoordinatorMocks.autoGrant = true;
@@ -361,6 +368,7 @@ describe("XtermHost", () => {
   });
 
   afterEach(() => {
+    resetGlobalRecoveryCoordinator();
     vi.restoreAllMocks();
   });
 
@@ -1303,6 +1311,336 @@ describe("XtermHost", () => {
 
     global.requestAnimationFrame = originalRequestAnimationFrame;
     global.cancelAnimationFrame = originalCancelAnimationFrame;
+  });
+
+  it("does not trigger replay on successful foreground probe when continuity is intact", async () => {
+    const initialSnapshot = new TextEncoder().encode("init");
+    const probeConnection = vi.fn().mockResolvedValue({ ok: true });
+    const sendCommand = vi.fn(async (op: string) => {
+      if (op === "recovery.reconcile") {
+        return {
+          terminals: [{ terminalId: "term-1", action: "snapshot", headSeq: 12 }],
+        };
+      }
+
+      if (op === "terminal.snapshot") {
+        return {
+          status: "ok",
+          transport: "binary",
+          streamId: 1,
+          size: initialSnapshot.byteLength,
+          seq: 12,
+          rows: 24,
+          cols: 80,
+          source: "headless",
+          bytes: initialSnapshot,
+        };
+      }
+
+      throw new Error(`Unexpected op ${op}`);
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => "connected"),
+      probeConnection,
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    setGlobalRecoveryCoordinator(
+      createRecoveryCoordinator({
+        wsClient: {
+          getStatus: vi.fn(() => "connected"),
+          probeConnection,
+          onStatus: vi.fn(() => () => {}),
+          subscribe: vi.fn(() => () => {}),
+        } as never,
+        sendCommand: async (op, args, options) => {
+          try {
+            const data = await sendCommand(op, args, options);
+            return { ok: true, data };
+          } catch (error) {
+            return {
+              ok: false,
+              error: {
+                code: "command_error",
+                message: error instanceof Error ? error.message : String(error),
+              },
+            };
+          }
+        },
+        applyReplay: vi.fn(),
+        applySnapshot: vi.fn(),
+      })
+    );
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="term-1" workspaceId="ws-1" />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "recovery.reconcile",
+        {
+          reason: "initial_mount",
+          terminals: [{ terminalId: "term-1", renderedSeq: 0 }],
+        },
+        undefined
+      );
+    });
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "terminal.snapshot",
+        { terminalId: "term-1" },
+        { timeoutMs: TERMINAL_REPLAY_TIMEOUT_MS }
+      );
+    });
+
+    sendCommand.mockClear();
+
+    await act(async () => {
+      await getGlobalRecoveryCoordinator()?.notifyReason("foreground_resume", "term-1");
+    });
+
+    expect(sendCommand).toHaveBeenCalledWith(
+      "recovery.reconcile",
+      {
+        reason: "foreground_resume",
+        terminals: [{ terminalId: "term-1", renderedSeq: 12 }],
+      },
+      undefined
+    );
+    expect(sendCommand.mock.calls.some(([op]) => op === "terminal.replay")).toBe(false);
+  });
+
+  it("routes live seq gaps through recovery.reconcile before replay", async () => {
+    const initialSnapshot = new TextEncoder().encode("hello");
+    const missedTail = new TextEncoder().encode("missed\ntail\n");
+    const probeConnection = vi.fn().mockResolvedValue({ ok: true });
+    let eventHandler: ((topic: string, payload: unknown, seq: number) => void) | undefined;
+    let reconcileCount = 0;
+    const sendCommand = vi.fn(async (op: string) => {
+      if (op === "terminal.snapshot") {
+        return {
+          status: "ok",
+          transport: "binary",
+          streamId: 1,
+          size: initialSnapshot.byteLength,
+          seq: 100,
+          rows: 24,
+          cols: 80,
+          source: "headless",
+          bytes: initialSnapshot,
+        };
+      }
+
+      if (op === "recovery.reconcile") {
+        reconcileCount += 1;
+        if (reconcileCount === 1) {
+          return {
+            terminals: [{ terminalId: "gap-terminal", action: "snapshot", headSeq: 100 }],
+          };
+        }
+
+        return {
+          terminals: [{ terminalId: "gap-terminal", action: "replay", fromSeq: 100, headSeq: 112 }],
+        };
+      }
+
+      if (op === "terminal.replay") {
+        return {
+          status: "ok",
+          transport: "binary",
+          streamId: 2,
+          size: missedTail.byteLength,
+          seq: 112,
+          bytes: missedTail,
+        };
+      }
+
+      throw new Error(`Unexpected op ${op}`);
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe: vi.fn((_topics, handler) => {
+        eventHandler = handler;
+        return () => {
+          eventHandler = undefined;
+        };
+      }),
+      getStatus: vi.fn(() => "connected"),
+      probeConnection,
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    setGlobalRecoveryCoordinator(
+      createRecoveryCoordinator({
+        wsClient: {
+          getStatus: vi.fn(() => "connected"),
+          probeConnection,
+          onStatus: vi.fn(() => () => {}),
+          subscribe: vi.fn(() => () => {}),
+        } as never,
+        sendCommand: async (op, args, options) => {
+          try {
+            const data = await sendCommand(op, args, options);
+            return { ok: true, data };
+          } catch (error) {
+            return {
+              ok: false,
+              error: {
+                code: "command_error",
+                message: error instanceof Error ? error.message : String(error),
+              },
+            };
+          }
+        },
+        applyReplay: vi.fn(),
+        applySnapshot: vi.fn(),
+      })
+    );
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="gap-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "recovery.reconcile",
+        {
+          reason: "initial_mount",
+          terminals: [{ terminalId: "gap-terminal", renderedSeq: 0 }],
+        },
+        undefined
+      );
+    });
+    expect(sendCommand.mock.calls.some(([op]) => op === "terminal.snapshot")).toBe(true);
+    sendCommand.mockClear();
+
+    act(() => {
+      eventHandler?.(
+        Topics.terminalOutput("test-workspace", "gap-terminal"),
+        {
+          transport: "binary",
+          streamId: 9,
+          size: 4,
+          bytes: new TextEncoder().encode("tail"),
+        },
+        116
+      );
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "recovery.reconcile",
+        {
+          reason: "seq_gap",
+          terminals: [{ terminalId: "gap-terminal", renderedSeq: 100 }],
+        },
+        undefined
+      );
+    });
+    expect(sendCommand).toHaveBeenCalledWith(
+      "terminal.replay",
+      { terminalId: "gap-terminal", lastSeq: 100 },
+      { timeoutMs: TERMINAL_REPLAY_TIMEOUT_MS }
+    );
+  });
+
+  it("marks terminal closed after recovery reconcile returns closed state", async () => {
+    const sendCommand = vi.fn(async (op: string) => {
+      if (op === "recovery.reconcile") {
+        return {
+          terminals: [
+            {
+              terminalId: "closed-terminal",
+              action: "closed",
+              headSeq: 15,
+              exitCode: 3,
+            },
+          ],
+        };
+      }
+
+      throw new Error(`Unexpected op ${op}`);
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => "connected"),
+      probeConnection: vi.fn().mockResolvedValue({ ok: true }),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    const terminalMeta = {
+      id: "closed-terminal",
+      workspaceId: "test-workspace",
+      kind: "shell" as const,
+      alive: true,
+      title: "shell",
+    };
+    store.set(terminalMetaAtomFamily("closed-terminal"), terminalMeta);
+
+    setGlobalRecoveryCoordinator(
+      createRecoveryCoordinator({
+        wsClient: {
+          getStatus: vi.fn(() => "connected"),
+          probeConnection: vi.fn().mockResolvedValue({ ok: true }),
+          onStatus: vi.fn(() => () => {}),
+          subscribe: vi.fn(() => () => {}),
+        } as never,
+        sendCommand: async (op, args, options) => {
+          try {
+            const data = await sendCommand(op, args, options);
+            return { ok: true, data };
+          } catch (error) {
+            return {
+              ok: false,
+              error: {
+                code: "command_error",
+                message: error instanceof Error ? error.message : String(error),
+              },
+            };
+          }
+        },
+        applyReplay: vi.fn(),
+        applySnapshot: vi.fn(),
+      })
+    );
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="closed-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "recovery.reconcile",
+        {
+          reason: "initial_mount",
+          terminals: [{ terminalId: "closed-terminal", renderedSeq: 0 }],
+        },
+        undefined
+      );
+    });
+    expect(store.get(terminalMetaAtomFamily("closed-terminal"))).toMatchObject({
+      alive: false,
+      exitCode: 3,
+    });
   });
 
   it("creates xterm instance on mount with correct theme", async () => {
@@ -4949,13 +5287,39 @@ describe("XtermHost", () => {
     const store = createStore();
     const initialReplayChunk = new TextEncoder().encode("initial replay\n");
     const recoveredReplayChunk = new TextEncoder().encode("recovered after probe\n");
-    let recoveryHandler:
-      | ((trigger: "visibility_resume" | "network_online" | "manual_retry" | "reconnected") => void)
-      | undefined;
     let replayCount = 0;
     const sendCommand = vi
       .fn()
       .mockImplementation((op: string, args: { terminalId?: string; lastSeq?: number }) => {
+        if (op === "recovery.reconcile") {
+          if (
+            sendCommand.mock.calls.filter(([calledOp]) => calledOp === "recovery.reconcile")
+              .length === 1
+          ) {
+            return Promise.resolve({
+              terminals: [
+                {
+                  terminalId: "probe-recovery-terminal",
+                  action: "replay",
+                  fromSeq: 0,
+                  headSeq: 100,
+                },
+              ],
+            });
+          }
+
+          return Promise.resolve({
+            terminals: [
+              {
+                terminalId: "probe-recovery-terminal",
+                action: "replay",
+                fromSeq: 100,
+                headSeq: 126,
+              },
+            ],
+          });
+        }
+
         if (op !== "terminal.replay") {
           return Promise.resolve({ status: "ok" });
         }
@@ -4989,11 +5353,35 @@ describe("XtermHost", () => {
       subscribe: vi.fn(() => vi.fn()),
       getStatus: vi.fn(() => "connected"),
       onStatus: vi.fn(() => () => {}),
-      onRecovery: vi.fn((handler: typeof recoveryHandler) => {
-        recoveryHandler = handler;
-        return () => {};
-      }),
+      probeConnection: vi.fn().mockResolvedValue({ ok: true }),
     } as never);
+
+    setGlobalRecoveryCoordinator(
+      createRecoveryCoordinator({
+        wsClient: {
+          getStatus: vi.fn(() => "connected"),
+          probeConnection: vi.fn().mockResolvedValue({ ok: true }),
+          onStatus: vi.fn(() => () => {}),
+          subscribe: vi.fn(() => () => {}),
+        } as never,
+        sendCommand: async (op, args, options) => {
+          try {
+            const data = await sendCommand(op, args, options);
+            return { ok: true, data };
+          } catch (error) {
+            return {
+              ok: false,
+              error: {
+                code: "command_error",
+                message: error instanceof Error ? error.message : String(error),
+              },
+            };
+          }
+        },
+        applyReplay: vi.fn(),
+        applySnapshot: vi.fn(),
+      })
+    );
 
     render(
       <Provider store={store}>
@@ -5006,9 +5394,10 @@ describe("XtermHost", () => {
     });
 
     await act(async () => {
-      recoveryHandler?.("network_online");
-      await Promise.resolve();
-      await Promise.resolve();
+      await getGlobalRecoveryCoordinator()?.notifyReason(
+        "network_online",
+        "probe-recovery-terminal"
+      );
     });
 
     await waitFor(() => {
@@ -5146,9 +5535,6 @@ describe("XtermHost", () => {
     const initialReplayChunk = new TextEncoder().encode("initial replay\n");
     const delayedReconnectReplay = new TextEncoder().encode("delayed reconnect replay\n");
     const queuedProbeReplay = new TextEncoder().encode("queued probe recovery\n");
-    let recoveryHandler:
-      | ((trigger: "visibility_resume" | "network_online" | "manual_retry" | "reconnected") => void)
-      | undefined;
     let replayCount = 0;
     let releaseDelayedReconnectWrite: (() => void) | undefined;
 
@@ -5163,6 +5549,49 @@ describe("XtermHost", () => {
     const sendCommand = vi
       .fn()
       .mockImplementation((op: string, args: { terminalId?: string; lastSeq?: number }) => {
+        if (op === "recovery.reconcile") {
+          const reconcileCount = sendCommand.mock.calls.filter(
+            ([calledOp]) => calledOp === "recovery.reconcile"
+          ).length;
+
+          if (reconcileCount === 1) {
+            return Promise.resolve({
+              terminals: [
+                {
+                  terminalId: "queued-probe-recovery-terminal",
+                  action: "replay",
+                  fromSeq: 0,
+                  headSeq: 100,
+                },
+              ],
+            });
+          }
+
+          if (reconcileCount === 2) {
+            return Promise.resolve({
+              terminals: [
+                {
+                  terminalId: "queued-probe-recovery-terminal",
+                  action: "replay",
+                  fromSeq: 100,
+                  headSeq: 200,
+                },
+              ],
+            });
+          }
+
+          return Promise.resolve({
+            terminals: [
+              {
+                terminalId: "queued-probe-recovery-terminal",
+                action: "replay",
+                fromSeq: 200,
+                headSeq: 240,
+              },
+            ],
+          });
+        }
+
         if (op !== "terminal.replay") {
           return Promise.resolve({ status: "ok" });
         }
@@ -5211,11 +5640,35 @@ describe("XtermHost", () => {
       subscribe: vi.fn(() => vi.fn()),
       getStatus: vi.fn(() => "connected"),
       onStatus: vi.fn(() => () => {}),
-      onRecovery: vi.fn((handler: typeof recoveryHandler) => {
-        recoveryHandler = handler;
-        return () => {};
-      }),
+      probeConnection: vi.fn().mockResolvedValue({ ok: true }),
     } as never);
+
+    setGlobalRecoveryCoordinator(
+      createRecoveryCoordinator({
+        wsClient: {
+          getStatus: vi.fn(() => "connected"),
+          probeConnection: vi.fn().mockResolvedValue({ ok: true }),
+          onStatus: vi.fn(() => () => {}),
+          subscribe: vi.fn(() => () => {}),
+        } as never,
+        sendCommand: async (op, args, options) => {
+          try {
+            const data = await sendCommand(op, args, options);
+            return { ok: true, data };
+          } catch (error) {
+            return {
+              ok: false,
+              error: {
+                code: "command_error",
+                message: error instanceof Error ? error.message : String(error),
+              },
+            };
+          }
+        },
+        applyReplay: vi.fn(),
+        applySnapshot: vi.fn(),
+      })
+    );
 
     render(
       <Provider store={store}>
@@ -5228,7 +5681,10 @@ describe("XtermHost", () => {
     });
 
     await act(async () => {
-      recoveryHandler?.("network_online");
+      void getGlobalRecoveryCoordinator()?.notifyReason(
+        "network_online",
+        "queued-probe-recovery-terminal"
+      );
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -5241,8 +5697,10 @@ describe("XtermHost", () => {
     expect(typeof releaseDelayedReconnectWrite).toBe("function");
 
     await act(async () => {
-      recoveryHandler?.("visibility_resume");
-      await Promise.resolve();
+      void getGlobalRecoveryCoordinator()?.notifyReason(
+        "foreground_resume",
+        "queued-probe-recovery-terminal"
+      );
       await Promise.resolve();
     });
 
@@ -6064,6 +6522,7 @@ describe("XtermHost", () => {
     });
 
     mockTerminal.write.mockClear();
+    mockTerminal.reset.mockClear();
 
     await act(async () => {
       statusHandler?.("disconnected");

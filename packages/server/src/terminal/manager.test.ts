@@ -989,6 +989,55 @@ describe("TerminalManager", () => {
     });
   });
 
+  describe("inspectRecovery", () => {
+    it("reports head seq and replay availability for a live terminal", () => {
+      const terminal = manager.create({
+        workspaceId: "ws-1",
+        kind: "shell",
+        argv: ["/bin/bash"],
+        cwd: "/tmp",
+        cols: 80,
+        rows: 24,
+        title: "bash",
+      });
+
+      const onDataCallback = (mockPty.onData as Mock).mock.calls[0][0];
+      onDataCallback("hello");
+
+      expect(manager.inspectRecovery(terminal.id, 0)).toMatchObject({
+        status: "ok",
+        headSeq: 5,
+        replay: { kind: "available", fromSeq: 0 },
+        snapshot: { kind: "available" },
+        alive: true,
+      });
+    });
+
+    it("reports replay too old when the requested bytes are no longer recoverable", () => {
+      const terminal = manager.create({
+        workspaceId: "ws-1",
+        kind: "shell",
+        argv: ["/bin/bash"],
+        cwd: "/tmp",
+        cols: 80,
+        rows: 24,
+        title: "bash",
+      });
+
+      const onDataCallback = (mockPty.onData as Mock).mock.calls[0][0];
+      onDataCallback("abcdef");
+
+      const active = manager.get(terminal.id)!;
+      vi.spyOn(active.ringBuffer, "replayFrom").mockReturnValue({ status: "too_old" });
+
+      expect(manager.inspectRecovery(terminal.id, 0)).toMatchObject({
+        status: "ok",
+        headSeq: 6,
+        replay: { kind: "too_old" },
+      });
+    });
+  });
+
   describe("snapshot", () => {
     it("returns a binary snapshot for shell terminals", async () => {
       const terminal = manager.create({

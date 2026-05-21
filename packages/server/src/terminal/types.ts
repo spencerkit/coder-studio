@@ -34,6 +34,23 @@ export type ReplayResult =
   | { status: "too_old" }
   | { status: "unknown" };
 
+export type TerminalReplayAvailability =
+  | { kind: "available"; fromSeq: number }
+  | { kind: "too_old" };
+
+export type TerminalSnapshotAvailability = { kind: "available" } | { kind: "unavailable" };
+
+export type TerminalRecoveryInspection =
+  | {
+      status: "ok";
+      headSeq: number;
+      replay: TerminalReplayAvailability;
+      snapshot: TerminalSnapshotAvailability;
+      alive: boolean;
+      exitCode?: number;
+    }
+  | { status: "unknown" };
+
 /**
  * Error thrown when terminal is not alive
  */

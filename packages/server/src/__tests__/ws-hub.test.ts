@@ -493,6 +493,36 @@ describe("WsHub", () => {
     });
   });
 
+  it("sends terminal continuity lost over the control path to the affected client", () => {
+    const socket = createMockSocket();
+    hub.handleConnection(socket as never, createMockRequest());
+    subscribeToAllTopics(socket);
+
+    const connected = parseSentEvents(socket)[0];
+    const clientId = (connected as Extract<ServerToClient, { kind: "event" }>).data
+      .clientId as string;
+
+    eventBus.emit({
+      type: "terminal.continuity_lost",
+      workspaceId: "ws-1",
+      terminalId: "term-1",
+      clientId,
+      reason: "stream_drop",
+    });
+
+    expect(parseSentEvents(socket)).toContainEqual(
+      expect.objectContaining({
+        kind: "event",
+        topic: Topics.terminalContinuityLost("ws-1", "term-1"),
+        data: {
+          workspaceId: "ws-1",
+          terminalId: "term-1",
+          reason: "stream_drop",
+        },
+      })
+    );
+  });
+
   it("re-emits current workspace meta and session state on resync for subscribed topics", () => {
     hub.destroy();
     const workspace: Workspace = {
