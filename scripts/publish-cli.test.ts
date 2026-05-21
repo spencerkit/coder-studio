@@ -86,13 +86,12 @@ describe("publish-cli", () => {
     const dir = await mkdtemp(join(tmpdir(), "coder-studio-publish-"));
     const cliDir = join(dir, "packages", "cli");
 
-    await mkdir(join(cliDir, "dist", "esm", "migrations"), { recursive: true });
+    await mkdir(join(cliDir, "dist", "esm"), { recursive: true });
     await mkdir(join(cliDir, "dist", "web"), { recursive: true });
     await writeFile(join(cliDir, "dist", "bin.js"), "#!/usr/bin/env node\n");
     await writeFile(join(cliDir, "dist", "esm", "bin.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "esm", "index.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "esm", "server-runner.mjs"), "export {};\n");
-    await writeFile(join(cliDir, "dist", "esm", "migrations", "001_init.sql"), "-- init\n");
     await writeFile(join(cliDir, "dist", "web", "index.html"), "<!doctype html>\n");
     await writeFile(
       join(cliDir, "package.json"),
@@ -130,7 +129,7 @@ describe("publish-cli", () => {
     const dir = await mkdtemp(join(tmpdir(), "coder-studio-publish-"));
     const cliDir = join(dir, "packages", "cli");
 
-    await mkdir(join(cliDir, "dist", "esm", "migrations"), { recursive: true });
+    await mkdir(join(cliDir, "dist", "esm"), { recursive: true });
     await mkdir(join(cliDir, "dist", "web"), { recursive: true });
     await writeFile(join(cliDir, "dist", "bin.js"), "#!/usr/bin/env node\n");
     await writeFile(
@@ -139,7 +138,6 @@ describe("publish-cli", () => {
     );
     await writeFile(join(cliDir, "dist", "esm", "index.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "esm", "server-runner.mjs"), "export {};\n");
-    await writeFile(join(cliDir, "dist", "esm", "migrations", "001_init.sql"), "-- init\n");
     await writeFile(join(cliDir, "dist", "web", "index.html"), "<!doctype html>\n");
     await writeFile(
       join(cliDir, "package.json"),
@@ -172,13 +170,12 @@ describe("publish-cli", () => {
     const dir = await mkdtemp(join(tmpdir(), "coder-studio-publish-"));
     const cliDir = join(dir, "packages", "cli");
 
-    await mkdir(join(cliDir, "dist", "esm", "migrations"), { recursive: true });
+    await mkdir(join(cliDir, "dist", "esm"), { recursive: true });
     await mkdir(join(cliDir, "dist", "web"), { recursive: true });
     await writeFile(join(cliDir, "dist", "bin.js"), "#!/usr/bin/env node\n");
     await writeFile(join(cliDir, "dist", "esm", "bin.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "esm", "index.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "esm", "server-runner.mjs"), "export {};\n");
-    await writeFile(join(cliDir, "dist", "esm", "migrations", "001_init.sql"), "-- init\n");
     await writeFile(join(cliDir, "dist", "web", "index.html"), "<!doctype html>\n");
     await writeFile(
       join(cliDir, "package.json"),

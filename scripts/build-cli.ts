@@ -4,8 +4,8 @@
  */
 
 import * as esbuild from "esbuild";
-import { copyFile, rm, writeFile } from "fs/promises";
-import { join, resolve } from "path";
+import { rm, writeFile } from "fs/promises";
+import { resolve } from "path";
 import {
   CLI_DIR,
   CLI_ESM_DIR,
@@ -68,22 +68,6 @@ import('./esm/bin.mjs').catch((err) => {
 `;
   await writeFile(binPath, binContent, { mode: 0o755 });
   success(`bin.js: ${binPath}`);
-
-  // Copy migrations
-  info("Copying database migrations...");
-  const migrationsSrc = join(SERVER_DIR, "src/storage/migrations");
-  const migrationsDest = join(CLI_ESM_DIR, "migrations");
-  if (await exists(migrationsSrc)) {
-    await ensureDir(migrationsDest);
-    const { readdir } = await import("fs/promises");
-    const files = await readdir(migrationsSrc);
-    for (const file of files) {
-      await copyFile(join(migrationsSrc, file), join(migrationsDest, file));
-    }
-    success(`Migrations: ${migrationsDest}`);
-  } else {
-    error("Warning: migrations source not found, skipping");
-  }
 
   // Copy web assets
   info("Copying web assets...");
