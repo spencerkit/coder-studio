@@ -1,11 +1,17 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { createStore, Provider } from "jotai";
 import type { ComponentProps } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { localeAtom } from "../../../../atoms/app-ui";
 import { ObjectiveDialogContent } from "./objective-dialog-content";
 
+const { formatDateMock } = vi.hoisted(() => ({
+  formatDateMock: vi.fn((ts: number) => new Date(ts).toLocaleDateString()),
+}));
+
 vi.mock("../../../../lib/i18n", () => ({
-  formatDate: (ts: number) => new Date(ts).toLocaleDateString(),
+  formatDate: formatDateMock,
   useTranslation: () => (key: string) => key,
 }));
 
@@ -338,6 +344,45 @@ describe("ObjectiveDialogContent", () => {
     await user.click(screen.getByRole("button", { name: "supervisor.dialog.restore.back" }));
 
     expect(onCloseRestoreStep).toHaveBeenCalledTimes(1);
+  });
+
+  it("formats restore dates with the active locale instead of hardcoded English", () => {
+    const store = createStore();
+    store.set(localeAtom, "zh");
+
+    render(
+      <Provider store={store}>
+        <ObjectiveDialogContent
+          {...createObjectiveDialogContentProps({
+            mode: "edit",
+            restoreStep: "restore",
+            recoverableTargets: [
+              {
+                targetId: "tgt-restore",
+                sessionId: "sess-old",
+                workspaceId: "ws-1",
+                objective: "Recover the rollout supervisor",
+                status: "active",
+                updatedAt: 1_746_000_000_000,
+                progressSummary: "Need to finish rollout verification",
+                cycleCount: 4,
+              },
+            ],
+            selectedRecoverableTargetId: "tgt-restore",
+          })}
+        />
+      </Provider>
+    );
+
+    expect(formatDateMock).toHaveBeenCalledWith(
+      1_746_000_000_000,
+      "zh",
+      expect.objectContaining({
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      })
+    );
   });
 
   it("renders loading and empty restore states through the shared restore shell", () => {

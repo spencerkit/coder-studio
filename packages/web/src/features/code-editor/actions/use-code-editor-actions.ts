@@ -384,6 +384,8 @@ export function useCodeEditorActions() {
                 [path]: {
                   ...existing,
                   content,
+                  savedContent: content,
+                  baseHash: nextData.version,
                   isDirty: false,
                   externalState: undefined,
                   viewingTextBackedImageAsText: true,

@@ -73,3 +73,28 @@ export function getLspToolDefinition(serverKind: LspServerKind): LspToolDefiniti
 export function getLspCommandOverridePrefix(serverKind: LspServerKind): string {
   return `CODER_STUDIO_LSP_${serverKind.toUpperCase()}`;
 }
+
+export function getManagedPrerequisites(
+  serverKind: LspServerKind,
+  platform: NodeJS.Platform = process.platform
+): string[] {
+  if (serverKind === "python" && platform === "win32") {
+    return ["python3", "python"];
+  }
+
+  return getLspToolDefinition(serverKind).managed?.prerequisites ?? [];
+}
+
+export async function resolveManagedPythonCommand(
+  commandExists: (command: string) => Promise<boolean>,
+  platform: NodeJS.Platform = process.platform
+): Promise<string | null> {
+  const candidates = getManagedPrerequisites("python", platform);
+  for (const candidate of candidates) {
+    if (await commandExists(candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
+}

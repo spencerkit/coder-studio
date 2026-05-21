@@ -1,4 +1,6 @@
+import { useAtomValue } from "jotai";
 import { useId } from "react";
+import { localeAtom } from "../../../../atoms/app-ui";
 import {
   DateTimePicker,
   EmptyState,
@@ -74,6 +76,7 @@ export function ObjectiveDialogContent({
   onSelectRecoverableTarget,
 }: ObjectiveDialogContentProps) {
   const t = useTranslation();
+  const locale = useAtomValue(localeAtom);
   const objectiveHelperId = useId();
   const evaluatorLabelId = useId();
   const evaluatorHelperId = useId();
@@ -144,7 +147,7 @@ export function ObjectiveDialogContent({
                   ) : null}
                   <span className="supervisor-restore-card__footer">
                     {t("supervisor.dialog.restore.updated_at", {
-                      time: formatDate(target.updatedAt, "en", {
+                      time: formatDate(target.updatedAt, locale, {
                         year: "numeric",
                         month: "short",
                         day: "numeric",

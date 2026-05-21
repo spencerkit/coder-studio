@@ -648,6 +648,74 @@ describe("CodeEditorHost", () => {
     vi.unstubAllGlobals();
   });
 
+  it("treats refreshed clean SVG text bytes as the new saved baseline", async () => {
+    const fetchMock = vi
+      .fn(async () => ({
+        ok: true,
+        text: async () => "<svg>fresh from disk</svg>",
+      }))
+      .mockImplementationOnce(async () => ({
+        ok: true,
+        text: async () => "<svg>fresh from disk</svg>",
+      }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const sendCommand = vi.fn().mockResolvedValue({
+      kind: "image",
+      mime: "image/svg+xml",
+      url: "/api/file?workspaceId=ws-1&path=icon.svg",
+      size: 256,
+      isTextBacked: true,
+      version: "2",
+    });
+
+    const { store } = setupStore({
+      activePath: "icon.svg",
+      sendCommand,
+      openFiles: {
+        "icon.svg": {
+          kind: "text",
+          path: "icon.svg",
+          content: "<svg>stale</svg>",
+          savedContent: "<svg>stale</svg>",
+          baseHash: "hash-1",
+          isDirty: false,
+          viewingTextBackedImageAsText: true,
+        },
+      },
+    });
+
+    render(
+      <Provider store={store}>
+        <CodeEditorHost />
+      </Provider>
+    );
+
+    act(() => {
+      store.set(editorRefreshTokenAtomFamily("ws-1"), 1);
+    });
+
+    await waitFor(() => {
+      expect(store.get(openFilesAtomFamily("ws-1"))["icon.svg"]).toMatchObject({
+        content: "<svg>fresh from disk</svg>",
+        savedContent: "<svg>fresh from disk</svg>",
+        isDirty: false,
+      });
+    });
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Editor content" }), {
+      target: { value: "<svg>fresh from disk</svg>" },
+    });
+
+    await waitFor(() => {
+      expect(store.get(openFilesAtomFamily("ws-1"))["icon.svg"]).toMatchObject({
+        isDirty: false,
+      });
+    });
+
+    vi.unstubAllGlobals();
+  });
+
   describe("SVG edit-as-text toggle", () => {
     beforeEach(() => {
       // The toggle fetches the file bytes over HTTP to reuse them as text.

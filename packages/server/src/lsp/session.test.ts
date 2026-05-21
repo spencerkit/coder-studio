@@ -389,4 +389,43 @@ describe.sequential("LspSession", () => {
       }
     }
   });
+
+  it("drains child stderr output without breaking startup", async () => {
+    const previous = process.env.CODER_STUDIO_FAKE_LSP_STDERR_ON_INIT;
+    process.env.CODER_STUDIO_FAKE_LSP_STDERR_ON_INIT = "server boot log";
+
+    try {
+      const logger = {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      };
+      const session = new LspSession({
+        workspaceId: "ws-1",
+        workspacePath: process.cwd(),
+        spec: {
+          serverKind: "typescript",
+          command: "node",
+          args: [join(process.cwd(), "src/__tests__/fixtures/fake-lsp-server.js")],
+          rootPath: process.cwd(),
+        },
+        onDiagnostics: vi.fn(),
+        requestTimeoutMs: 2000,
+        logger,
+      });
+
+      await expect(session.start()).resolves.toMatchObject({ status: "ready" });
+      await vi.waitFor(() => {
+        expect(logger.warn).toHaveBeenCalled();
+      });
+
+      await session.stop();
+    } finally {
+      if (previous === undefined) {
+        delete process.env.CODER_STUDIO_FAKE_LSP_STDERR_ON_INIT;
+      } else {
+        process.env.CODER_STUDIO_FAKE_LSP_STDERR_ON_INIT = previous;
+      }
+    }
+  });
 });

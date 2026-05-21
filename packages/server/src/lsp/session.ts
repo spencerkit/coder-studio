@@ -173,6 +173,21 @@ export class LspSession {
       throw new Error("Failed to start LSP process stdio");
     }
 
+    child.stderr?.on("data", (chunk) => {
+      const message = chunk.toString().trim();
+      if (!message) {
+        return;
+      }
+
+      this.deps.logger.warn(
+        {
+          serverKind: this.deps.spec.serverKind,
+          stderr: message,
+        },
+        "lsp child stderr"
+      );
+    });
+
     child.once("exit", () => {
       this.handleChildTermination(child);
     });

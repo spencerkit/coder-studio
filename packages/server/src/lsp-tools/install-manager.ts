@@ -14,7 +14,11 @@ import {
   checkCommandAvailable,
 } from "../provider-runtime/command-check.js";
 import { type CommandRunner, runCommandAsString } from "../provider-runtime/command-runner.js";
-import { getLspToolDefinition } from "./definitions.js";
+import {
+  getLspToolDefinition,
+  getManagedPrerequisites,
+  resolveManagedPythonCommand,
+} from "./definitions.js";
 import { FileManifestStore } from "./manifest-store.js";
 
 const EXCERPT_LIMIT = 400;
@@ -35,6 +39,7 @@ const RUST_ANALYZER_RELEASE_TAG = "2026-05-18";
 export interface LspToolInstallManagerDeps extends CommandCheckDeps {
   manifestStore: FileManifestStore;
   commandExists?: CommandAvailabilityCheck;
+  platform?: NodeJS.Platform;
   runCommand?: CommandRunner;
 }
 
@@ -76,6 +81,7 @@ export class LspToolInstallManager {
     const definition = getLspToolDefinition(input.serverKind);
     const managed = definition.managed;
     const jobId = randomUUID();
+    const platform = this.deps.platform ?? process.platform;
 
     if (!managed || input.workspace.targetRuntime !== "native") {
       return {
@@ -107,9 +113,17 @@ export class LspToolInstallManager {
     const commandExists =
       this.deps.commandExists ?? ((command: string) => checkCommandAvailable(command, this.deps));
     const missingPrerequisites: string[] = [];
-    for (const prerequisite of managed.prerequisites) {
-      if (!(await commandExists(prerequisite))) {
-        missingPrerequisites.push(prerequisite);
+    let pythonCommand: string | null = null;
+    if (input.serverKind === "python") {
+      pythonCommand = await resolveManagedPythonCommand(commandExists, platform);
+      if (!pythonCommand) {
+        missingPrerequisites.push(...getManagedPrerequisites("python", platform));
+      }
+    } else {
+      for (const prerequisite of getManagedPrerequisites(input.serverKind, platform)) {
+        if (!(await commandExists(prerequisite))) {
+          missingPrerequisites.push(prerequisite);
+        }
       }
     }
 
@@ -146,21 +160,19 @@ export class LspToolInstallManager {
         ? join(
             installRoot,
             "venv",
-            process.platform === "win32" ? "Scripts" : "bin",
-            process.platform === "win32" ? "pylsp.exe" : "pylsp"
+            platform === "win32" ? "Scripts" : "bin",
+            platform === "win32" ? "pylsp.exe" : "pylsp"
           )
         : input.serverKind === "go"
-          ? join(installRoot, "bin", process.platform === "win32" ? "gopls.exe" : "gopls")
-          : join(
-              installRoot,
-              "bin",
-              process.platform === "win32" ? "rust-analyzer.exe" : "rust-analyzer"
-            );
+          ? join(installRoot, "bin", platform === "win32" ? "gopls.exe" : "gopls")
+          : join(installRoot, "bin", platform === "win32" ? "rust-analyzer.exe" : "rust-analyzer");
 
     const plannedSteps = this.planInstallSteps({
       serverKind: input.serverKind,
       installRoot,
       executablePath,
+      platform,
+      pythonCommand,
       version: managed.version,
     });
 
@@ -183,6 +195,7 @@ export class LspToolInstallManager {
     if (!managed) {
       return;
     }
+    const platform = this.deps.platform ?? process.platform;
 
     job.status = "running";
     this.jobs.set(job.jobId, job);
@@ -193,16 +206,17 @@ export class LspToolInstallManager {
         ? join(
             installRoot,
             "venv",
-            process.platform === "win32" ? "Scripts" : "bin",
-            process.platform === "win32" ? "pylsp.exe" : "pylsp"
+            platform === "win32" ? "Scripts" : "bin",
+            platform === "win32" ? "pylsp.exe" : "pylsp"
           )
         : serverKind === "go"
-          ? join(installRoot, "bin", process.platform === "win32" ? "gopls.exe" : "gopls")
-          : join(
-              installRoot,
-              "bin",
-              process.platform === "win32" ? "rust-analyzer.exe" : "rust-analyzer"
-            );
+          ? join(installRoot, "bin", platform === "win32" ? "gopls.exe" : "gopls")
+          : join(installRoot, "bin", platform === "win32" ? "rust-analyzer.exe" : "rust-analyzer");
+
+    const commandExists =
+      this.deps.commandExists ?? ((command: string) => checkCommandAvailable(command, this.deps));
+    const pythonCommand =
+      serverKind === "python" ? await resolveManagedPythonCommand(commandExists, platform) : null;
 
     mkdirSync(dirname(executablePath), { recursive: true });
 
@@ -217,6 +231,8 @@ export class LspToolInstallManager {
           serverKind,
           installRoot,
           executablePath,
+          platform,
+          pythonCommand,
           version: managed.version,
         }).find((candidate) => candidate.id === step.id);
 
@@ -225,9 +241,6 @@ export class LspToolInstallManager {
         }
 
         if (step.kind === "verify") {
-          const commandExists =
-            this.deps.commandExists ??
-            ((command: string) => checkCommandAvailable(command, this.deps));
           const available = await commandExists(executablePath);
           if (!available) {
             throw Object.assign(new Error(`Verification failed for ${definition.displayName}`), {
@@ -269,7 +282,7 @@ export class LspToolInstallManager {
       executablePath,
       installedAt: Date.now(),
       source: "managed",
-      platform: process.platform,
+      platform,
     });
 
     job.status = "succeeded";
@@ -282,18 +295,20 @@ export class LspToolInstallManager {
     serverKind: LspServerKind;
     installRoot: string;
     executablePath: string;
+    platform: NodeJS.Platform;
+    pythonCommand: string | null;
     version: string;
   }): InstallPlanStep[] {
     if (input.serverKind === "python") {
       const venvRoot = join(input.installRoot, "venv");
-      const binDir = join(venvRoot, process.platform === "win32" ? "Scripts" : "bin");
-      const pipPath = join(binDir, process.platform === "win32" ? "pip.exe" : "pip");
+      const binDir = join(venvRoot, input.platform === "win32" ? "Scripts" : "bin");
+      const pipPath = join(binDir, input.platform === "win32" ? "pip.exe" : "pip");
       return [
         {
           id: "create-python-venv",
           title: "Create Python virtual environment",
           kind: "install",
-          command: "python3",
+          command: input.pythonCommand ?? "python3",
           args: ["-m", "venv", venvRoot],
           cwd: input.installRoot,
         },

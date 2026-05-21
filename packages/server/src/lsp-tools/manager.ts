@@ -15,7 +15,9 @@ import {
 import {
   getLspCommandOverridePrefix,
   getLspToolDefinition,
+  getManagedPrerequisites,
   type LspToolDefinition,
+  resolveManagedPythonCommand,
 } from "./definitions.js";
 import { type FileManifestStore, type ManagedLspToolManifest } from "./manifest-store.js";
 
@@ -47,6 +49,7 @@ export type LspToolResolveResult = ResolvedLspToolCommand | MissingLspToolComman
 export interface LspToolManagerDeps extends CommandCheckDeps {
   manifestStore: FileManifestStore;
   commandExists?: CommandAvailabilityCheck;
+  platform?: NodeJS.Platform;
   resolveBundledCommand?: (serverKind: LspServerKind) => { command: string; args: string[] } | null;
 }
 
@@ -160,8 +163,24 @@ export class LspToolManager {
   }
 
   private resolveManaged(definition: LspToolDefinition): ManagedLspToolManifest | null {
+    if (!definition.managed) {
+      return null;
+    }
+
     const manifest = this.deps.manifestStore.read(definition.serverKind);
     if (!manifest) {
+      return null;
+    }
+
+    const platform = this.deps.platform ?? process.platform;
+    if (
+      manifest.serverKind !== definition.serverKind ||
+      manifest.version !== definition.managed.version ||
+      manifest.source !== "managed" ||
+      manifest.platform !== platform ||
+      typeof manifest.executablePath !== "string" ||
+      manifest.executablePath.trim().length === 0
+    ) {
       return null;
     }
 
@@ -215,11 +234,19 @@ export class LspToolManager {
     const missingPrerequisites: string[] = [];
     const managed = definition.managed;
     const autoInstallSupported = Boolean(managed) && workspace.targetRuntime === "native";
+    const platform = this.deps.platform ?? process.platform;
 
     if (managed && workspace.targetRuntime === "native") {
-      for (const prerequisite of managed.prerequisites) {
-        if (!(await commandExists(prerequisite))) {
-          missingPrerequisites.push(prerequisite);
+      if (definition.serverKind === "python") {
+        const pythonCommand = await resolveManagedPythonCommand(commandExists, platform);
+        if (!pythonCommand) {
+          missingPrerequisites.push(...getManagedPrerequisites("python", platform));
+        }
+      } else {
+        for (const prerequisite of getManagedPrerequisites(definition.serverKind, platform)) {
+          if (!(await commandExists(prerequisite))) {
+            missingPrerequisites.push(prerequisite);
+          }
         }
       }
     }
