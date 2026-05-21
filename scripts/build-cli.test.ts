@@ -22,6 +22,19 @@ describe("build-cli", () => {
     await expect(readdir(cliWebDir)).resolves.toEqual([]);
   });
 
+  it("does not recreate retired migration artifacts when preparing output directories", async () => {
+    const cliDistDir = await mkdtemp(join(tmpdir(), "coder-studio-cli-dist-"));
+    const cliEsmDir = join(cliDistDir, "esm");
+    const cliWebDir = join(cliDistDir, "web");
+
+    await mkdir(join(cliEsmDir, "migrations"), { recursive: true });
+    await writeFile(join(cliEsmDir, "migrations", "001_init.sql"), "-- stale\n");
+
+    await prepareCliOutputDirs({ cliDistDir, cliEsmDir, cliWebDir });
+
+    await expect(readdir(cliEsmDir)).resolves.toEqual([]);
+  });
+
   it("declares every bundled production dependency in the CLI package manifest", async () => {
     const pkg = JSON.parse(await readFile(join(CLI_DIR, "package.json"), "utf8")) as {
       dependencies?: Record<string, string>;
