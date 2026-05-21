@@ -13,6 +13,29 @@ export interface Broadcaster {
 }
 
 /**
+ * Minimal logger surface used by the watcher. Any object with these two
+ * methods works (FastifyBaseLogger, console, NOOP). Kept narrow on purpose
+ * so the watcher module stays runtime-agnostic.
+ */
+export interface WatcherLogger {
+  debug(obj: object, msg: string): void;
+  warn(obj: object, msg: string): void;
+}
+
+const NOOP_WATCHER_LOGGER: WatcherLogger = {
+  debug: () => {},
+  warn: () => {},
+};
+
+/**
+ * Filesystem error codes we consider transient when they bubble up from
+ * chokidar. These happen when a watched path vanishes between detection
+ * and watch setup — extremely common on Windows for `.git/index.lock`,
+ * tmp files, and editor save-swap sequences.
+ */
+const TRANSIENT_WATCH_ERROR_CODES = new Set(["EPERM", "ENOENT", "EBUSY", "EACCES"]);
+
+/**
  * Watches a workspace directory for file changes and broadcasts dirty signals.
  * Uses standard debounce (200ms) with a 1-second max wait to avoid starvation
  * during continuous file activity.
@@ -23,14 +46,17 @@ export class WorkspaceWatcher {
   private firstDirtyTime: number | null = null;
   private pendingReason: "fs_change" | "git_metadata" | null = null;
   private pendingWorktreeChanged = false;
+  private readonly logger: WatcherLogger;
   private readonly DEBOUNCE_MS = 200;
   private readonly MAX_WAIT_MS = 1_000;
 
   constructor(
     private workspaceId: string,
     rootPath: string,
-    private broadcaster?: Broadcaster
+    private broadcaster?: Broadcaster,
+    logger?: WatcherLogger
   ) {
+    this.logger = logger ?? NOOP_WATCHER_LOGGER;
     const shouldIgnore = createWatcherIgnoreFilter(rootPath);
 
     this.chokidar = chokidar.watch(rootPath, {
@@ -40,6 +66,30 @@ export class WorkspaceWatcher {
     });
 
     this.chokidar.on("all", (_eventName, changedPath) => this.markDirty(changedPath));
+    // chokidar emits an `error` event with no default action. EventEmitter
+    // turns an unhandled `error` into an uncaughtException, so we MUST
+    // listen to keep the server alive when a watched path races a
+    // git/editor process on Windows.
+    this.chokidar.on("error", (err) => this.handleWatcherError(err));
+  }
+
+  private handleWatcherError(err: unknown): void {
+    const error = err as NodeJS.ErrnoException;
+    const code = typeof error?.code === "string" ? error.code : undefined;
+    const path = typeof error?.path === "string" ? error.path : undefined;
+
+    if (code && TRANSIENT_WATCH_ERROR_CODES.has(code)) {
+      this.logger.debug(
+        { workspaceId: this.workspaceId, code, path, err: error },
+        "Workspace watcher skipped a transient filesystem error"
+      );
+      return;
+    }
+
+    this.logger.warn(
+      { workspaceId: this.workspaceId, code, path, err: error },
+      "Workspace watcher emitted an error"
+    );
   }
 
   /**

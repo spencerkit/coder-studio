@@ -93,6 +93,87 @@ describe("WorkspaceWatcher", () => {
     expect(ignored?.(join(testDir, "src/index.ts"))).toBe(false);
   });
 
+  it("ignores transient git lock files and write-heavy git internals", () => {
+    new WorkspaceWatcher("test-workspace-id", testDir, broadcaster);
+
+    const options = watchSpy.mock.calls[0]?.[1];
+    const ignored = options?.ignored;
+
+    expect(typeof ignored).toBe("function");
+    expect(ignored?.(join(testDir, ".git", "index.lock"))).toBe(true);
+    expect(ignored?.(join(testDir, ".git", "refs", "heads", "main.lock"))).toBe(true);
+    expect(ignored?.(join(testDir, ".git", "objects", "pack", "pack-abc.pack"))).toBe(true);
+    expect(ignored?.(join(testDir, ".git", "lfs", "objects", "ab", "cd"))).toBe(true);
+    expect(ignored?.(join(testDir, ".git", "logs", "HEAD"))).toBe(true);
+    expect(ignored?.(join(testDir, ".git", "hooks", "post-commit"))).toBe(true);
+    expect(ignored?.(join(testDir, ".git", "info", "exclude"))).toBe(true);
+  });
+
+  it("still watches branch and worktree metadata that the UI relies on", () => {
+    new WorkspaceWatcher("test-workspace-id", testDir, broadcaster);
+
+    const options = watchSpy.mock.calls[0]?.[1];
+    const ignored = options?.ignored;
+
+    expect(typeof ignored).toBe("function");
+    expect(ignored?.(join(testDir, ".git", "HEAD"))).toBe(false);
+    expect(ignored?.(join(testDir, ".git", "refs", "heads", "main"))).toBe(false);
+    expect(ignored?.(join(testDir, ".git", "packed-refs"))).toBe(false);
+    expect(ignored?.(join(testDir, ".git", "worktrees", "feature", "HEAD"))).toBe(false);
+    expect(ignored?.(join(testDir, ".git", "index"))).toBe(false);
+    expect(ignored?.(join(testDir, ".git", "config"))).toBe(false);
+  });
+
+  it("swallows transient EPERM errors emitted by chokidar without bubbling up", () => {
+    const logger = {
+      debug: vi.fn(),
+      warn: vi.fn(),
+    };
+
+    new WorkspaceWatcher("test-workspace-id", testDir, broadcaster, logger);
+
+    expect(typeof watcherEvents.error).toBe("function");
+
+    const eperm: NodeJS.ErrnoException = Object.assign(
+      new Error("EPERM: operation not permitted"),
+      { code: "EPERM", path: join(testDir, ".git", "index.lock") }
+    );
+    expect(() => (watcherEvents.error as unknown as (err: unknown) => void)?.(eperm)).not.toThrow();
+
+    expect(logger.debug).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: "test-workspace-id",
+        code: "EPERM",
+        path: join(testDir, ".git", "index.lock"),
+      }),
+      expect.stringMatching(/transient/i)
+    );
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it("logs unknown watcher errors at warn level", () => {
+    const logger = {
+      debug: vi.fn(),
+      warn: vi.fn(),
+    };
+
+    new WorkspaceWatcher("test-workspace-id", testDir, broadcaster, logger);
+
+    const unknownErr: NodeJS.ErrnoException = Object.assign(
+      new Error("EMFILE: too many open files"),
+      { code: "EMFILE", path: testDir }
+    );
+    (watcherEvents.error as unknown as (err: unknown) => void)?.(unknownErr);
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: "test-workspace-id",
+        code: "EMFILE",
+      }),
+      expect.stringMatching(/emitted an error/i)
+    );
+  });
+
   it("does not let .gitignore shrink watcher coverage", async () => {
     await writeFile(join(testDir, ".gitignore"), "dist/\n*.log\n");
 

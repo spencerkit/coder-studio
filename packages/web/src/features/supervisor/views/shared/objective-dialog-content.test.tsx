@@ -1,11 +1,17 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { createStore, Provider } from "jotai";
 import type { ComponentProps } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { localeAtom } from "../../../../atoms/app-ui";
 import { ObjectiveDialogContent } from "./objective-dialog-content";
 
+const { formatDateMock } = vi.hoisted(() => ({
+  formatDateMock: vi.fn((ts: number) => new Date(ts).toLocaleDateString()),
+}));
+
 vi.mock("../../../../lib/i18n", () => ({
-  formatDate: (ts: number) => new Date(ts).toLocaleDateString(),
+  formatDate: formatDateMock,
   useTranslation: () => (key: string) => key,
 }));
 
@@ -34,17 +40,24 @@ function createObjectiveDialogContentProps(
 ): ObjectiveDialogContentProps {
   return {
     mode: "enable",
+    restoreStep: "form",
     draftObjective: "Investigate regressions",
     draftEvaluatorProviderId: "claude",
     draftEvaluatorModel: "",
     draftMaxSupervisionCount: "0",
     draftScheduledAt: "",
     isMaxSupervisionCountValid: true,
+    recoverableTargets: [],
+    selectedRecoverableTargetId: null,
+    isRecoverableTargetsLoading: false,
     onDraftObjectiveChange: vi.fn(),
     onDraftEvaluatorProviderChange: vi.fn(),
     onDraftEvaluatorModelChange: vi.fn(),
     onDraftMaxSupervisionCountChange: vi.fn(),
     onDraftScheduledAtChange: vi.fn(),
+    onOpenRestoreStep: vi.fn(),
+    onCloseRestoreStep: vi.fn(),
+    onSelectRecoverableTarget: vi.fn(),
     ...overrides,
   };
 }
@@ -263,5 +276,135 @@ describe("ObjectiveDialogContent", () => {
 
     expect(onDraftEvaluatorModelChange).toHaveBeenCalledWith("gpt-5");
     expect(onDraftMaxSupervisionCountChange).toHaveBeenCalledWith("8");
+  });
+
+  it("shows a restore entry beside the objective label for both enable and edit modes", async () => {
+    const user = userEvent.setup();
+    const onOpenRestoreStep = vi.fn();
+    const { rerender } = renderObjectiveDialogContent({ onOpenRestoreStep });
+    let objectiveGroup = screen.getByLabelText("supervisor.field.objective").closest(".form-group");
+
+    expect(objectiveGroup?.querySelector(".supervisor-objective-label-row")).not.toBeNull();
+    expect(objectiveGroup?.querySelector("button.supervisor-restore-link")).toHaveTextContent(
+      "supervisor.dialog.restore.open"
+    );
+
+    await user.click(screen.getByRole("button", { name: "supervisor.dialog.restore.open" }));
+
+    expect(onOpenRestoreStep).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <ObjectiveDialogContent
+        {...createObjectiveDialogContentProps({ mode: "edit", onOpenRestoreStep })}
+      />
+    );
+
+    objectiveGroup = screen.getByLabelText("supervisor.field.objective").closest(".form-group");
+    expect(objectiveGroup?.querySelector("button.supervisor-restore-link")).toHaveTextContent(
+      "supervisor.dialog.restore.open"
+    );
+  });
+
+  it("renders the restore subview with recoverable targets, selection, and back navigation", async () => {
+    const user = userEvent.setup();
+    const onCloseRestoreStep = vi.fn();
+    const onSelectRecoverableTarget = vi.fn();
+
+    renderObjectiveDialogContent({
+      mode: "edit",
+      restoreStep: "restore",
+      recoverableTargets: [
+        {
+          targetId: "tgt-restore",
+          sessionId: "sess-old",
+          workspaceId: "ws-1",
+          objective: "Recover the rollout supervisor",
+          status: "active",
+          updatedAt: 1_746_000_000_000,
+          progressSummary: "Need to finish rollout verification",
+          cycleCount: 4,
+        },
+      ],
+      selectedRecoverableTargetId: "tgt-restore",
+      onCloseRestoreStep,
+      onSelectRecoverableTarget,
+    });
+
+    expect(screen.getByText("supervisor.dialog.restore.title")).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /Recover the rollout supervisor/i })).toHaveAttribute(
+      "aria-checked",
+      "true"
+    );
+    expect(screen.getByText("Need to finish rollout verification")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("radio", { name: /Recover the rollout supervisor/i }));
+
+    expect(onSelectRecoverableTarget).toHaveBeenCalledWith("tgt-restore");
+
+    await user.click(screen.getByRole("button", { name: "supervisor.dialog.restore.back" }));
+
+    expect(onCloseRestoreStep).toHaveBeenCalledTimes(1);
+  });
+
+  it("formats restore dates with the active locale instead of hardcoded English", () => {
+    const store = createStore();
+    store.set(localeAtom, "zh");
+
+    render(
+      <Provider store={store}>
+        <ObjectiveDialogContent
+          {...createObjectiveDialogContentProps({
+            mode: "edit",
+            restoreStep: "restore",
+            recoverableTargets: [
+              {
+                targetId: "tgt-restore",
+                sessionId: "sess-old",
+                workspaceId: "ws-1",
+                objective: "Recover the rollout supervisor",
+                status: "active",
+                updatedAt: 1_746_000_000_000,
+                progressSummary: "Need to finish rollout verification",
+                cycleCount: 4,
+              },
+            ],
+            selectedRecoverableTargetId: "tgt-restore",
+          })}
+        />
+      </Provider>
+    );
+
+    expect(formatDateMock).toHaveBeenCalledWith(
+      1_746_000_000_000,
+      "zh",
+      expect.objectContaining({
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      })
+    );
+  });
+
+  it("renders loading and empty restore states through the shared restore shell", () => {
+    const { rerender } = renderObjectiveDialogContent({
+      mode: "enable",
+      restoreStep: "restore",
+      isRecoverableTargetsLoading: true,
+    });
+
+    expect(screen.getByLabelText("common.loading")).toBeInTheDocument();
+
+    rerender(
+      <ObjectiveDialogContent
+        {...createObjectiveDialogContentProps({
+          mode: "edit",
+          restoreStep: "restore",
+          recoverableTargets: [],
+          isRecoverableTargetsLoading: false,
+        })}
+      />
+    );
+
+    expect(screen.getByText("supervisor.dialog.restore.empty")).toBeInTheDocument();
   });
 });

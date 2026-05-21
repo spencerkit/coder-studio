@@ -10,7 +10,6 @@ import type {
   GitStatus,
   Session,
   Supervisor,
-  SupervisorCycle,
   Workspace,
   WorktreeInfo,
 } from "@coder-studio/core";
@@ -42,8 +41,9 @@ import { authenticatedAtom, themeAtom } from "../atoms/app-ui";
 import type { DispatchCommand } from "../atoms/connection";
 import { activeWorkspaceIdAtom } from "../atoms/workspaces";
 import { type PaneNode, paneLayoutAtomFamily } from "../features/agent-panes/atoms/pane-layout";
+import { monacoModelRegistry } from "../features/code-editor/monaco/model-registry";
 import { useSessionNotifications } from "../features/notifications";
-import { supervisorCyclesAtom, supervisorsAtom } from "../features/supervisor/atoms";
+import { supervisorsAtom } from "../features/supervisor/atoms";
 import { terminalMetaAtomFamily } from "../features/terminal-panel/atoms";
 import {
   DESKTOP_TERMINAL_FONT_SIZE_SETTING_KEY,
@@ -159,6 +159,7 @@ function mergeRefreshHints(
 
 function resetServerProjectedState(store: Store): void {
   const workspaceIds = store.get(workspaceOrderAtom);
+  const workspaces = store.get(workspacesAtom);
   const terminalIds = Object.values(store.get(sessionsAtom))
     .map((session) => session.terminalId)
     .filter((terminalId): terminalId is string => Boolean(terminalId));
@@ -170,9 +171,12 @@ function resetServerProjectedState(store: Store): void {
   store.set(sessionsAtom, {});
   store.set(activeWorkspaceIdAtom, null);
   store.set(supervisorsAtom, new Map());
-  store.set(supervisorCyclesAtom, new Map());
 
   for (const workspaceId of workspaceIds) {
+    const workspace = workspaces[workspaceId];
+    if (workspace) {
+      monacoModelRegistry.disposeWorkspace(workspace.path);
+    }
     store.set(fileTreeAtomFamily(workspaceId), null);
     store.set(loadedDirsAtomFamily(workspaceId), new Set());
     store.set(expandedDirsAtomFamily(workspaceId), null);
@@ -267,7 +271,6 @@ export function AppProviders({ children }: AppProvidersProps) {
   const setSessions = useSetAtom(sessionsAtom);
   // Supervisor state atoms
   const setSupervisors = useSetAtom(supervisorsAtom);
-  const setSupervisorCycles = useSetAtom(supervisorCyclesAtom);
   const setTerminalPreferences = useSetAtom(terminalPreferencesAtom);
 
   // Get Jotai store for writing to atomFamily atoms
@@ -961,7 +964,6 @@ export function AppProviders({ children }: AppProvidersProps) {
     setWorkspaces,
     setSessions,
     setSupervisors,
-    setSupervisorCycles,
     store,
     authEnabled,
     authenticated,
@@ -1222,11 +1224,6 @@ export function routeEventToAtom(topic: string, payload: unknown, store: Store):
             }
             return next;
           });
-          store.set(supervisorCyclesAtom, (prev: Map<string, SupervisorCycle[]>) => {
-            const next = new Map(prev);
-            next.delete(data.supervisorId!);
-            return next;
-          });
         } else if (data.supervisor) {
           const supervisor = data.supervisor;
           store.set(supervisorsAtom, (prev: Map<string, Supervisor>) => {
@@ -1234,28 +1231,7 @@ export function routeEventToAtom(topic: string, payload: unknown, store: Store):
             next.set(supervisor.sessionId, supervisor);
             return next;
           });
-          if (Array.isArray(supervisor.cycles)) {
-            store.set(supervisorCyclesAtom, (prev: Map<string, SupervisorCycle[]>) => {
-              const next = new Map(prev);
-              next.set(supervisor.id, supervisor.cycles);
-              return next;
-            });
-          }
         }
-        return;
-      }
-
-      // workspace.{id}.session.{sessionId}.supervisor.cycle
-      if (sessionSubtopic === "supervisor.cycle") {
-        const data = payload as { cycle: SupervisorCycle; event: string };
-        const supervisorId = data.cycle.supervisorId;
-        store.set(supervisorCyclesAtom, (prev: Map<string, SupervisorCycle[]>) => {
-          const next = new Map(prev);
-          const cycles = next.get(supervisorId) ?? [];
-          const deduped = cycles.filter((cycle) => cycle.id !== data.cycle.id);
-          next.set(supervisorId, [data.cycle, ...deduped].slice(0, 20));
-          return next;
-        });
         return;
       }
     }

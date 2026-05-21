@@ -6,6 +6,7 @@
 | IconButton | 🟢 complete | `.btn` icon-only | 0 | 2026-05-09 |
 | Input | 🟢 complete | `.input` | 0 | 2026-05-09 |
 | Textarea | 🟢 complete | `.input.textarea` | 0 | 2026-05-09 |
+| DateTimePicker | 🟢 complete | new | 0 | 2026-05-21 |
 | Tag | 🟢 complete | `.badge .badge-*` | 0 | 2026-05-09 |
 | Badge | 🟢 complete | `.topbar-unread` | 0 | 2026-05-09 |
 | Pill | 🟢 complete | `.settings-pill*` | 0 | 2026-05-09 |
@@ -31,6 +32,8 @@
 | LocalOverlay | 🟢 complete | upload busy inline overlay, `paste-dialog-overlay`, `xterm-replay-overlay` | 0 | 2026-05-19 |
 
 `desktopPreviewInline` remains a review-only preview exception for UI inspection scenes and is not counted as a product overlay caller.
+
+Shared UI typography now converges on the 12-role contract (`heading-1` to `heading-6`, `body-1` to `body-6`). Legacy `type-kicker` / `type-label` / `type-meta` / `type-body*` aliases have been removed from the token layer and are no longer valid consumption targets in shared modules or feature CSS.
 
 `Input` now completes the legacy `.input` single-line text-entry migration inventory: the auth password field, the settings supervisor timeout field, the git sync auth username/password fields, the worktree manager create-form branch/path fields, the file-tree create-path modal field, and the shortcuts capture input all use the shared primitive from the public UI barrel while preserving legacy `.input` compatibility classes and caller-owned layout hooks such as `auth-input`, `settings-input-compact`, and `shortcuts-capture`.
 

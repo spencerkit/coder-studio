@@ -9,6 +9,7 @@ describe("supervisor commands", () => {
       id: "sup-1",
       sessionId: input.sessionId,
       workspaceId: input.workspaceId,
+      targetId: "sup-1",
       state: "idle",
       objective: input.objective,
       evaluatorProviderId: input.evaluatorProviderId,
@@ -16,7 +17,35 @@ describe("supervisor commands", () => {
       maxSupervisionCount: input.maxSupervisionCount ?? 0,
       completedSupervisionCount: 0,
       scheduledAt: input.scheduledAt,
-      cycles: [],
+      recentTargetCycles: [],
+      createdAt: 1,
+      updatedAt: 1,
+    })),
+    listRecoverableTargets: vi.fn(async () => [
+      {
+        targetId: "tgt-1",
+        sessionId: "sess-old",
+        workspaceId: "ws-1",
+        objective: "Restore old work",
+        status: "cancelled",
+        updatedAt: 10,
+        progressSummary: "Halfway done",
+        cycleCount: 2,
+      },
+    ]),
+    restore: vi.fn(async (input) => ({
+      id: "sup-restored",
+      sessionId: input.sessionId,
+      workspaceId: input.workspaceId,
+      targetId: "sup-restored",
+      state: "idle",
+      objective: "Restore old work",
+      evaluatorProviderId: input.evaluatorProviderId,
+      evaluatorModel: input.evaluatorModel,
+      maxSupervisionCount: input.maxSupervisionCount ?? 0,
+      completedSupervisionCount: 2,
+      scheduledAt: input.scheduledAt,
+      recentTargetCycles: [],
       createdAt: 1,
       updatedAt: 1,
     })),
@@ -25,6 +54,7 @@ describe("supervisor commands", () => {
       id,
       sessionId: "sess-1",
       workspaceId: "ws-1",
+      targetId: id,
       state: "idle",
       objective: patch.objective ?? "existing objective",
       evaluatorProviderId: patch.evaluatorProviderId ?? "claude",
@@ -32,7 +62,7 @@ describe("supervisor commands", () => {
       maxSupervisionCount: patch.maxSupervisionCount ?? 0,
       completedSupervisionCount: 0,
       scheduledAt: patch.scheduledAt ?? undefined,
-      cycles: [],
+      recentTargetCycles: [],
       createdAt: 1,
       updatedAt: 2,
     })),
@@ -47,7 +77,6 @@ describe("supervisor commands", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     ctx = {
-      db: {},
       workspaceMgr: {},
       sessionMgr: {},
       terminalMgr: {},
@@ -214,5 +243,53 @@ describe("supervisor commands", () => {
 
     expect(result.ok).toBe(false);
     expect(result.error?.code).toBe("validation_error");
+  });
+
+  it("lists recoverable targets for a workspace", async () => {
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "cmd-6",
+        op: "supervisor.listRecoverableTargets",
+        args: {
+          workspaceId: "ws-1",
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(supervisorMgr.listRecoverableTargets).toHaveBeenCalledWith("ws-1");
+  });
+
+  it("passes restore arguments through supervisor.restore", async () => {
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "cmd-7",
+        op: "supervisor.restore",
+        args: {
+          sessionId: "sess-1",
+          workspaceId: "ws-1",
+          sourceTargetId: "tgt-1",
+          evaluatorProviderId: "codex",
+          evaluatorModel: "o3",
+          maxSupervisionCount: 3,
+          scheduledAt: 1_746_950_400_000,
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(supervisorMgr.restore).toHaveBeenCalledWith({
+      sessionId: "sess-1",
+      workspaceId: "ws-1",
+      sourceTargetId: "tgt-1",
+      evaluatorProviderId: "codex",
+      evaluatorModel: "o3",
+      maxSupervisionCount: 3,
+      scheduledAt: 1_746_950_400_000,
+    });
   });
 });

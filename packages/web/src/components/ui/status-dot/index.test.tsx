@@ -16,7 +16,9 @@ describe("StatusDot", () => {
     render(<StatusDot tone="warning" size="lg" pulse data-testid="dot" />);
 
     const dot = screen.getByTestId("dot");
-    expect(dot.style.getPropertyValue("--status-dot-current-color")).toBe("var(--color-warning)");
+    expect(dot.style.getPropertyValue("--status-dot-current-color")).toBe(
+      "var(--state-warning-text)"
+    );
     expect(dot.style.getPropertyValue("--status-dot-current-size")).toBe("10px");
     expect(dot.className).toContain("pulse");
   });
@@ -32,7 +34,7 @@ describe("StatusDot", () => {
 
     const dot = screen.getByTestId("dot");
     expect(dot).toHaveClass("session-dot", "session-dot-running", "session-header-indicator");
-    expect(dot.style.getPropertyValue("--status-dot-current-color")).toBe("var(--color-info)");
+    expect(dot.style.getPropertyValue("--status-dot-current-color")).toBe("var(--state-info-text)");
   });
 
   it("preserves legacy connection compatibility classes for migrated callers", () => {
@@ -59,6 +61,6 @@ describe("StatusDot", () => {
 
     expect(dot).toHaveClass("session-dot", "session-dot-running");
     expect(dot.className).toContain("pulse");
-    expect(dot.style.getPropertyValue("--status-dot-current-color")).toBe("var(--color-info)");
+    expect(dot.style.getPropertyValue("--status-dot-current-color")).toBe("var(--state-info-text)");
   });
 });

@@ -165,7 +165,6 @@ test.describe("session and terminal interaction", () => {
       ".agent-pane",
       ".agent-progress",
       ".agent-header",
-      ".agent-terminal",
       ".session-input",
       ".agent-session-dot",
       ".agent-badge",

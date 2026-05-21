@@ -63,6 +63,19 @@ describe("target store atomic reset", () => {
       workspaceId: "ws-1",
       objective: "Old objective",
       createdAt: 1,
+      supervisor: {
+        id: "sup-1",
+        sessionId: "sess-1",
+        workspaceId: "ws-1",
+        targetId: "tgt-1",
+        state: "idle",
+        objective: "Old objective",
+        evaluatorProviderId: "codex",
+        maxSupervisionCount: 0,
+        completedSupervisionCount: 0,
+        createdAt: 1,
+        updatedAt: 1,
+      },
     });
 
     await saveTargetMemory(workspacePath, "tgt-1", {
@@ -141,6 +154,19 @@ describe("target store atomic reset", () => {
       workspaceId: "ws-1",
       objective: "Old objective",
       createdAt: 1,
+      supervisor: {
+        id: "sup-1",
+        sessionId: "sess-1",
+        workspaceId: "ws-1",
+        targetId: "tgt-1",
+        state: "idle",
+        objective: "Old objective",
+        evaluatorProviderId: "codex",
+        maxSupervisionCount: 0,
+        completedSupervisionCount: 0,
+        createdAt: 1,
+        updatedAt: 1,
+      },
     });
 
     fsState.failRmOnCalls = [1];
@@ -176,6 +202,19 @@ describe("target store atomic reset", () => {
       workspaceId: "ws-1",
       objective: "Old objective",
       createdAt: 1,
+      supervisor: {
+        id: "sup-1",
+        sessionId: "sess-1",
+        workspaceId: "ws-1",
+        targetId: "tgt-1",
+        state: "idle",
+        objective: "Old objective",
+        evaluatorProviderId: "codex",
+        maxSupervisionCount: 0,
+        completedSupervisionCount: 0,
+        createdAt: 1,
+        updatedAt: 1,
+      },
     });
 
     fsState.failRenameOnCalls = [2, 3];

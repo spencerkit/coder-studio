@@ -1,7 +1,11 @@
 import { spawn } from "node:child_process";
 import { shouldUseShellForCommand } from "@coder-studio/utils";
 
-export type CommandRunnerOptions = { windowsHide?: boolean };
+export type CommandRunnerOptions = {
+  windowsHide?: boolean;
+  cwd?: string;
+  env?: NodeJS.ProcessEnv;
+};
 
 export interface CommandRunnerResult {
   stdout: string;
@@ -21,6 +25,8 @@ export async function runCommandAsString(
 ): Promise<CommandRunnerResult> {
   return new Promise((resolve, reject) => {
     const child = spawn(file, args, {
+      cwd: options?.cwd,
+      env: options?.env,
       shell: shouldUseShellForCommand(file, process.platform),
       windowsHide: options?.windowsHide ?? true,
     });

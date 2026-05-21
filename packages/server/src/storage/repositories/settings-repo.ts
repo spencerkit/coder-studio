@@ -1,4 +1,29 @@
-import type { Database } from "../database.js";
+import { readJsonFile, writeJsonFileAtomic } from "./json-file-store.js";
+
+interface SettingsFileRecord {
+  version: 1;
+  settings: Record<string, unknown>;
+}
+
+export interface SettingsRepoOptions {
+  filePath: string;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function normalizeSettingsFile(value: unknown): Record<string, unknown> {
+  if (isRecord(value) && value.version === 1 && isRecord(value.settings)) {
+    return { ...value.settings };
+  }
+
+  if (isRecord(value)) {
+    return { ...value };
+  }
+
+  return {};
+}
 
 /**
  * Settings repository for key-value storage
@@ -10,18 +35,35 @@ import type { Database } from "../database.js";
  *   open-time fetch and manual fetch.
  */
 export class SettingsRepo {
-  constructor(private db: Database) {}
+  private readonly filePath: string;
+
+  constructor(input: SettingsRepoOptions) {
+    this.filePath = input.filePath;
+  }
+
+  private loadFileSettings(): Record<string, unknown> {
+    const parsed = readJsonFile<SettingsFileRecord | Record<string, unknown>>(this.filePath);
+    if (parsed !== undefined) {
+      return normalizeSettingsFile(parsed);
+    }
+
+    return {};
+  }
+
+  private saveFileSettings(settings: Record<string, unknown>): void {
+    const payload: SettingsFileRecord = {
+      version: 1,
+      settings,
+    };
+    writeJsonFileAtomic(this.filePath, payload);
+  }
 
   /**
    * Gets a setting value by key
    * @returns The parsed JSON value, or undefined if not found
    */
   get<T = unknown>(key: string): T | undefined {
-    const row = this.db.prepare("SELECT value FROM user_settings WHERE key = ?").get(key) as
-      | { value: string }
-      | undefined;
-
-    return row ? (JSON.parse(row.value) as T) : undefined;
+    return this.loadFileSettings()[key] as T | undefined;
   }
 
   /**
@@ -29,45 +71,34 @@ export class SettingsRepo {
    * Creates the setting if it doesn't exist, updates if it does
    */
   set<T>(key: string, value: T): void {
-    const stmt = this.db.prepare(`
-      INSERT INTO user_settings (key, value)
-      VALUES (?, ?)
-      ON CONFLICT(key) DO UPDATE SET value = excluded.value
-    `);
-
-    stmt.run(key, JSON.stringify(value));
+    const next = this.loadFileSettings();
+    next[key] = value;
+    this.saveFileSettings(next);
   }
 
   /**
    * Deletes a setting by key
    */
   delete(key: string): void {
-    const stmt = this.db.prepare("DELETE FROM user_settings WHERE key = ?");
-    stmt.run(key);
+    const next = this.loadFileSettings();
+    if (!Object.prototype.hasOwnProperty.call(next, key)) {
+      return;
+    }
+    delete next[key];
+    this.saveFileSettings(next);
   }
 
   /**
    * Lists all settings keys
    */
   listKeys(): string[] {
-    const rows = this.db.prepare("SELECT key FROM user_settings").all() as { key: string }[];
-    return rows.map((row) => row.key);
+    return Object.keys(this.loadFileSettings());
   }
 
   /**
    * Gets all settings as a key-value object
    */
   getAll(): Record<string, unknown> {
-    const rows = this.db.prepare("SELECT key, value FROM user_settings").all() as {
-      key: string;
-      value: string;
-    }[];
-
-    const result: Record<string, unknown> = {};
-    for (const row of rows) {
-      result[row.key] = JSON.parse(row.value);
-    }
-
-    return result;
+    return { ...this.loadFileSettings() };
   }
 }

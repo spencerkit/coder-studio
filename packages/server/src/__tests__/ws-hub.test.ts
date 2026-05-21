@@ -80,7 +80,6 @@ const createCommandContext = (
     terminalMgr: {},
     eventBus,
     broadcaster: {},
-    db: {},
     providerRegistry: [],
     autoFetch: {
       registerViewer: vi.fn(),
@@ -345,6 +344,32 @@ describe("WsHub", () => {
     });
 
     expect(socket.send).toHaveBeenCalledWith(expect.stringContaining("session.sess-123.state"));
+  });
+
+  it("broadcasts lsp diagnostics updates on the workspace diagnostics topic", () => {
+    const socket = createMockSocket();
+    hub.handleConnection(socket as never, createMockRequest());
+    subscribeToAllTopics(socket);
+
+    eventBus.emit({
+      type: "lsp.diagnostics.updated",
+      workspaceId: "workspace-42",
+      serverKind: "typescript",
+      path: "src/shared.ts",
+      diagnostics: [],
+    });
+
+    const sent = getLastSentEvent(socket);
+    expect(sent).toMatchObject({
+      kind: "event",
+      topic: Topics.workspaceLspDiagnostics("workspace-42"),
+      data: {
+        workspaceId: "workspace-42",
+        serverKind: "typescript",
+        path: "src/shared.ts",
+        diagnostics: [],
+      },
+    });
   });
 
   it("should translate terminal.created events to the terminal created topic and payload", () => {

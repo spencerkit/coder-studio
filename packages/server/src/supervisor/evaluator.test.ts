@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -8,7 +8,6 @@ import {
 } from "@coder-studio/core";
 import type { FastifyBaseLogger } from "fastify";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { closeDatabase, openDatabase } from "../storage/db.js";
 import type { ProviderConfigRepo } from "../storage/repositories/provider-config-repo.js";
 import { SettingsRepo } from "../storage/repositories/settings-repo.js";
 import type { SupervisorEvaluationContext } from "./context-builder.js";
@@ -21,6 +20,30 @@ function nodeEchoCommand(stdout: string) {
     cwd: process.cwd(),
     env: {},
   };
+}
+
+function nodeExitCommand(options: { stdout?: string; stderr?: string; exitCode: number }) {
+  const stdout = options.stdout ?? "";
+  const stderr = options.stderr ?? "";
+  return {
+    argv: [
+      "node",
+      "-e",
+      `process.stdout.write(${JSON.stringify(stdout)}); process.stderr.write(${JSON.stringify(stderr)}); process.exit(${options.exitCode});`,
+    ],
+    cwd: process.cwd(),
+    env: {},
+  };
+}
+
+function createCommandProvider(
+  providerId: string,
+  command: ReturnType<typeof nodeEchoCommand>
+): ProviderDefinition {
+  return {
+    id: providerId,
+    buildSupervisorEvalCommand: vi.fn(() => command),
+  } as unknown as ProviderDefinition;
 }
 
 function createProvider(
@@ -73,7 +96,11 @@ function makeEvaluator(
     providerConfigRepo: createProviderConfigRepo(),
     timeoutMs: 5000,
     config: config
-      ? { guidanceMaxChars: config.guidanceMaxChars ?? 2000, guidanceDedupeWindow: 2 }
+      ? {
+          guidanceMaxChars: config.guidanceMaxChars ?? 2000,
+          maxCyclesPerSession: 100,
+          terminalLinesForEvaluation: 500,
+        }
       : undefined,
   });
 }
@@ -111,7 +138,6 @@ function makeSupervisor(evaluatorProviderId = "codex"): Supervisor {
     maxSupervisionCount: 0,
     completedSupervisionCount: 0,
     recentTargetCycles: [],
-    cycles: [],
     createdAt: 1,
     updatedAt: 1,
   };
@@ -469,26 +495,24 @@ describe("SupervisorEvaluator", () => {
     );
   });
 
-  it("falls back to the default timeout when the stored row is malformed JSON", async () => {
-    const db = openDatabase(":memory:");
+  it("falls back to the default timeout when the stored settings file is malformed JSON", async () => {
+    const tempDir = mkdtempSync(path.join(tmpdir(), "supervisor-evaluator-settings-"));
 
     try {
-      db.prepare("INSERT INTO user_settings (key, value) VALUES (?, ?)").run(
-        "supervisor.evaluationTimeoutSec",
-        "not-json"
-      );
+      const filePath = path.join(tempDir, "settings.json");
+      writeFileSync(filePath, "{not-json", "utf-8");
 
       const evaluator = new SupervisorEvaluator({
         providerRegistry: [createProvider("claude", continuePayload())],
         providerConfigRepo: createProviderConfigRepo(),
-        settingsRepo: new SettingsRepo(db),
+        settingsRepo: new SettingsRepo({ filePath }),
       });
 
       const result = await evaluator.evaluate(makeSupervisor("claude"), makeContext());
 
       expect(result.guidance).toBe("next step: run tests");
     } finally {
-      closeDatabase(db);
+      rmSync(tempDir, { recursive: true, force: true });
     }
   });
 
@@ -819,6 +843,216 @@ describe("SupervisorEvaluator", () => {
       const result = await evaluator.evaluate(makeSupervisor(), makeContext());
 
       expect(result.guidance).toHaveLength(100);
+    });
+  });
+
+  describe("payload robustness", () => {
+    it("preserves backtick-fenced snippets that appear inside a string value", async () => {
+      const payload = JSON.stringify({
+        status: "continue",
+        reason: "Need to verify the change",
+        guidance: "execute ```bash\nls -la\n``` and inspect output",
+      });
+      const evaluator = makeEvaluator(codexJsonlPayload(payload), "codex");
+
+      const result = await evaluator.evaluate(makeSupervisor("codex"), makeContext());
+
+      expect(result).toMatchObject({
+        mode: "evaluate",
+        status: "continue",
+        guidance: "execute ```bash\nls -la\n``` and inspect output",
+      });
+    });
+
+    it("auto-repairs payloads where the model used literal newlines in strings", async () => {
+      const logger = createLogger();
+      const malformed =
+        '{"status":"continue","reason":"more work needed","guidance":"step 1: read foo.ts\nstep 2: run tests"}';
+      const evaluator = new SupervisorEvaluator({
+        providerRegistry: [createProvider("codex", codexJsonlPayload(malformed))],
+        providerConfigRepo: createProviderConfigRepo(),
+        timeoutMs: 5000,
+        logger,
+      });
+
+      const result = await evaluator.evaluate(makeSupervisor("codex"), makeContext());
+
+      expect(result).toMatchObject({
+        mode: "evaluate",
+        status: "continue",
+        guidance: "step 1: read foo.ts\nstep 2: run tests",
+      });
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payloadPreview: expect.any(String),
+          repaired: true,
+        }),
+        expect.stringMatching(/auto-recovered/)
+      );
+    });
+
+    it("extracts JSON when the model prefaces the payload with prose", async () => {
+      const logger = createLogger();
+      const prosePrefixed =
+        'Based on my analysis of the terminal output, here is the supervisor verdict:\n\n{"status":"continue","reason":"need to verify","guidance":"run the focused tests"}\n\nThat should keep the agent moving.';
+      const evaluator = new SupervisorEvaluator({
+        providerRegistry: [createProvider("codex", codexJsonlPayload(prosePrefixed))],
+        providerConfigRepo: createProviderConfigRepo(),
+        timeoutMs: 5000,
+        logger,
+      });
+
+      const result = await evaluator.evaluate(makeSupervisor("codex"), makeContext());
+
+      expect(result).toMatchObject({
+        mode: "evaluate",
+        status: "continue",
+        guidance: "run the focused tests",
+      });
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          source: "balanced-object",
+          repaired: false,
+          payloadPreview: expect.any(String),
+        }),
+        expect.stringMatching(/auto-recovered/)
+      );
+    });
+
+    it("logs the payload preview and throws a retryable error when JSON is unrecoverable", async () => {
+      const logger = createLogger();
+      const garbage = '{"status":"continue","reason":"oops","this is not';
+      const evaluator = new SupervisorEvaluator({
+        providerRegistry: [createProvider("codex", codexJsonlPayload(garbage))],
+        providerConfigRepo: createProviderConfigRepo(),
+        timeoutMs: 5000,
+        logger,
+      });
+
+      await expect(
+        evaluator.evaluate(makeSupervisor("codex"), makeContext())
+      ).rejects.toMatchObject({
+        code: "supervisor_eval_failed",
+        message: expect.stringMatching(/invalid JSON/i),
+      });
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payloadPreview: expect.any(String),
+          parseError: expect.any(String),
+        }),
+        expect.stringMatching(/invalid JSON/i)
+      );
+    });
+  });
+
+  describe("non-zero evaluator exit diagnostics", () => {
+    it("surfaces codex turn.failed messages emitted on stdout when the CLI exits non-zero", async () => {
+      const logger = createLogger();
+      const codexFailureStdout = [
+        JSON.stringify({ type: "thread.started", thread_id: "t1" }),
+        JSON.stringify({ type: "turn.started" }),
+        JSON.stringify({
+          type: "turn.failed",
+          error: { message: "rate limit exceeded for model" },
+        }),
+      ].join("\n");
+
+      const evaluator = new SupervisorEvaluator({
+        providerRegistry: [
+          createCommandProvider(
+            "codex",
+            nodeExitCommand({ stdout: codexFailureStdout, exitCode: 1 })
+          ),
+        ],
+        providerConfigRepo: createProviderConfigRepo(),
+        timeoutMs: 5000,
+        logger,
+      });
+
+      await expect(
+        evaluator.evaluate(makeSupervisor("codex"), makeContext())
+      ).rejects.toMatchObject({
+        code: "supervisor_eval_failed",
+        message: "rate limit exceeded for model",
+      });
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          exitCode: 1,
+          upstreamMessage: "rate limit exceeded for model",
+          stdoutPreview: expect.any(String),
+          stderrPreview: expect.any(String),
+          commandArgv: expect.any(Array),
+        }),
+        expect.stringMatching(/evaluator process failed/i)
+      );
+    });
+
+    it("surfaces claude is_error envelopes emitted on stdout when the CLI exits non-zero", async () => {
+      const logger = createLogger();
+      const claudeFailureStdout = JSON.stringify({
+        type: "result",
+        subtype: "error_during_execution",
+        is_error: true,
+        result: "Anthropic API: 401 invalid x-api-key",
+        session_id: "abc",
+      });
+
+      const evaluator = new SupervisorEvaluator({
+        providerRegistry: [
+          createCommandProvider(
+            "claude",
+            nodeExitCommand({ stdout: claudeFailureStdout, exitCode: 1 })
+          ),
+        ],
+        providerConfigRepo: createProviderConfigRepo(),
+        timeoutMs: 5000,
+        logger,
+      });
+
+      await expect(
+        evaluator.evaluate(makeSupervisor("claude"), makeContext())
+      ).rejects.toMatchObject({
+        code: "supervisor_eval_failed",
+        message: "Anthropic API: 401 invalid x-api-key",
+      });
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          exitCode: 1,
+          upstreamMessage: "Anthropic API: 401 invalid x-api-key",
+        }),
+        expect.stringMatching(/evaluator process failed/i)
+      );
+    });
+
+    it("logs full process context even when neither stdout nor stderr has a usable message", async () => {
+      const logger = createLogger();
+      const evaluator = new SupervisorEvaluator({
+        providerRegistry: [createCommandProvider("claude", nodeExitCommand({ exitCode: 1 }))],
+        providerConfigRepo: createProviderConfigRepo(),
+        timeoutMs: 5000,
+        logger,
+      });
+
+      await expect(
+        evaluator.evaluate(makeSupervisor("claude"), makeContext())
+      ).rejects.toMatchObject({
+        code: "supervisor_eval_failed",
+        message: expect.stringMatching(/exited with code 1/i),
+      });
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          exitCode: 1,
+          stdoutPreview: "",
+          stderrPreview: "",
+          commandArgv: expect.any(Array),
+          promptPreview: expect.any(String),
+        }),
+        expect.stringMatching(/evaluator process failed/i)
+      );
     });
   });
 });

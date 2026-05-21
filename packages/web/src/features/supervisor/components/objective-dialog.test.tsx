@@ -25,6 +25,7 @@ describe("ObjectiveDialog", () => {
       open: boolean;
       sessionId: string | null;
       mode: "enable" | "edit";
+      restoreStep: "form" | "restore";
       draftObjective: string;
       draftEvaluatorProviderId: "claude" | "codex";
       draftEvaluatorModel: string;
@@ -35,7 +36,10 @@ describe("ObjectiveDialog", () => {
     open: true,
     sessionId: "sess-1",
     mode: "enable" as const,
+    restoreStep: "form" as const,
+    returnToDetails: false,
     draftObjective: "",
+    initialObjective: "",
     draftEvaluatorProviderId: "claude" as const,
     draftEvaluatorModel: "",
     draftMaxSupervisionCount: "0",
@@ -54,7 +58,6 @@ describe("ObjectiveDialog", () => {
     maxSupervisionCount: 0,
     completedSupervisionCount: 0,
     recentTargetCycles: [],
-    cycles: [],
     createdAt: 1,
     updatedAt: 1,
   });
@@ -70,6 +73,7 @@ describe("ObjectiveDialog", () => {
       supervisorDialogAtom,
       createDialogState({
         draftObjective: "Finish the server refactor",
+        initialObjective: "",
         draftEvaluatorProviderId: "codex",
       })
     );
@@ -113,6 +117,7 @@ describe("ObjectiveDialog", () => {
       supervisorDialogAtom,
       createDialogState({
         draftObjective: "Finish the server refactor",
+        initialObjective: "",
         draftMaxSupervisionCount: "-1",
       })
     );
@@ -138,6 +143,7 @@ describe("ObjectiveDialog", () => {
       supervisorDialogAtom,
       createDialogState({
         draftObjective: "Ship phase 4B1",
+        initialObjective: "",
       })
     );
     store.set(supervisorsAtom, new Map());
@@ -166,6 +172,7 @@ describe("ObjectiveDialog", () => {
       supervisorDialogAtom,
       createDialogState({
         draftObjective: "Ship phase 4B1",
+        initialObjective: "",
       })
     );
     store.set(supervisorsAtom, new Map());
@@ -188,6 +195,7 @@ describe("ObjectiveDialog", () => {
       supervisorDialogAtom,
       createDialogState({
         draftObjective: "Ship phase 4B1",
+        initialObjective: "",
       })
     );
     store.set(supervisorsAtom, new Map());
@@ -254,6 +262,7 @@ describe("ObjectiveDialog", () => {
       createDialogState({
         mode: "enable",
         draftObjective: "Ship phase 4B1",
+        initialObjective: "",
       })
     );
     store.set(supervisorsAtom, new Map());
@@ -427,5 +436,278 @@ describe("ObjectiveDialog", () => {
     await user.click(within(listbox).getByRole("option", { name: "Codex" }));
 
     expect(screen.getByRole("button", { name: "Evaluator Codex" })).toBeInTheDocument();
+  });
+
+  it("loads recoverable targets and restores from the enable dialog subview", async () => {
+    const user = userEvent.setup();
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "supervisor.listRecoverableTargets") {
+        return {
+          targets: [
+            {
+              targetId: "tgt-restore",
+              sessionId: "sess-old",
+              workspaceId: "ws-1",
+              objective: "Recover the rollout supervisor",
+              status: "active",
+              updatedAt: 1_746_000_000_000,
+              progressSummary: "Need to finish rollout verification",
+              cycleCount: 4,
+            },
+          ],
+        };
+      }
+
+      if (op === "supervisor.restore") {
+        return {
+          supervisor: {
+            ...createSupervisor(),
+            id: "sup-restore",
+            targetId: "sup-restore",
+            objective: "Recover the rollout supervisor",
+            evaluatorProviderId: "codex",
+          },
+        };
+      }
+
+      return undefined;
+    });
+
+    const store = createStore();
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(
+      supervisorDialogAtom,
+      createDialogState({
+        draftEvaluatorProviderId: "codex",
+        draftEvaluatorModel: "gpt-5",
+        draftMaxSupervisionCount: "3",
+        draftScheduledAt: "2026-05-21T10:30",
+        initialObjective: "",
+      })
+    );
+    store.set(supervisorsAtom, new Map());
+
+    render(
+      <Provider store={store}>
+        <ObjectiveDialog workspaceId="ws-1" />
+      </Provider>
+    );
+
+    await user.click(screen.getByRole("button", { name: "Restore from Existing Memory" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "supervisor.listRecoverableTargets",
+        { workspaceId: "ws-1" },
+        undefined
+      );
+    });
+
+    await user.click(screen.getByRole("radio", { name: /Recover the rollout supervisor/i }));
+    await user.click(screen.getByRole("button", { name: "Restore" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "supervisor.restore",
+        {
+          sessionId: "sess-1",
+          workspaceId: "ws-1",
+          sourceTargetId: "tgt-restore",
+          evaluatorProviderId: "codex",
+          evaluatorModel: "gpt-5",
+          maxSupervisionCount: 3,
+          scheduledAt: new Date("2026-05-21T10:30").getTime(),
+        },
+        undefined
+      );
+    });
+
+    expect(sendCommand).not.toHaveBeenCalledWith("supervisor.create", expect.anything(), undefined);
+  });
+
+  it("disables restore confirm until a recoverable target is selected", async () => {
+    const user = userEvent.setup();
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "supervisor.listRecoverableTargets") {
+        return {
+          targets: [
+            {
+              targetId: "tgt-restore",
+              sessionId: "sess-old",
+              workspaceId: "ws-1",
+              objective: "Recover the rollout supervisor",
+              status: "active",
+              updatedAt: 1_746_000_000_000,
+              progressSummary: "Need to finish rollout verification",
+              cycleCount: 4,
+            },
+          ],
+        };
+      }
+
+      return undefined;
+    });
+    const store = createStore();
+
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(supervisorDialogAtom, createDialogState());
+    store.set(supervisorsAtom, new Map());
+
+    render(
+      <Provider store={store}>
+        <ObjectiveDialog workspaceId="ws-1" />
+      </Provider>
+    );
+
+    await user.click(screen.getByRole("button", { name: "Restore from Existing Memory" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Restore" })).toBeDisabled();
+    });
+  });
+
+  it("disables save in edit mode until the objective changes", () => {
+    const store = createStore();
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+    store.set(
+      supervisorDialogAtom,
+      createDialogState({
+        mode: "edit",
+        draftObjective: "Finish the server refactor",
+        initialObjective: "Finish the server refactor",
+      })
+    );
+    store.set(supervisorsAtom, new Map([["sess-1", createSupervisor()]]));
+
+    render(
+      <Provider store={store}>
+        <ObjectiveDialog workspaceId="ws-1" />
+      </Provider>
+    );
+
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+  });
+
+  it("requires confirmation before saving an edited objective", async () => {
+    const user = userEvent.setup();
+    const sendCommand = vi.fn().mockResolvedValue({
+      supervisor: {
+        ...createSupervisor(),
+        objective: "Finish the follow-up refactor",
+      },
+    });
+    const store = createStore();
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(
+      supervisorDialogAtom,
+      createDialogState({
+        mode: "edit",
+        draftObjective: "Finish the server refactor",
+        initialObjective: "Finish the server refactor",
+      })
+    );
+    store.set(supervisorsAtom, new Map([["sess-1", createSupervisor()]]));
+
+    render(
+      <Provider store={store}>
+        <ObjectiveDialog workspaceId="ws-1" />
+      </Provider>
+    );
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Objective" }), {
+      target: { value: "Finish the follow-up refactor" },
+    });
+
+    const saveButton = screen.getByRole("button", { name: "Save" });
+    expect(saveButton).toBeEnabled();
+
+    await user.click(saveButton);
+
+    expect(
+      screen.getByRole("heading", { name: "Save and reset supervisor progress?" })
+    ).toBeInTheDocument();
+    expect(sendCommand).not.toHaveBeenCalledWith("supervisor.update", expect.anything(), undefined);
+
+    await user.click(screen.getAllByRole("button", { name: "Save" })[1]!);
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "supervisor.update",
+        {
+          id: "sup-1",
+          objective: "Finish the follow-up refactor",
+          evaluatorProviderId: "claude",
+          evaluatorModel: null,
+          maxSupervisionCount: 0,
+          scheduledAt: null,
+        },
+        undefined
+      );
+    });
+  });
+
+  it("allows saving non-objective supervisor edits without reset confirmation", async () => {
+    const user = userEvent.setup();
+    const sendCommand = vi.fn().mockResolvedValue({
+      supervisor: {
+        ...createSupervisor(),
+        evaluatorProviderId: "codex",
+      },
+    });
+    const store = createStore();
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(
+      supervisorDialogAtom,
+      createDialogState({
+        mode: "edit",
+        draftObjective: "Finish the server refactor",
+        initialObjective: "Finish the server refactor",
+        draftEvaluatorProviderId: "claude",
+      })
+    );
+    store.set(supervisorsAtom, new Map([["sess-1", createSupervisor()]]));
+
+    render(
+      <Provider store={store}>
+        <ObjectiveDialog workspaceId="ws-1" />
+      </Provider>
+    );
+
+    await user.click(screen.getByRole("button", { name: "Evaluator Claude" }));
+    await user.click(screen.getByRole("option", { name: "Codex" }));
+
+    const saveButton = screen.getByRole("button", { name: "Save" });
+    expect(saveButton).toBeEnabled();
+
+    await user.click(saveButton);
+
+    expect(
+      screen.queryByRole("heading", { name: "Save and reset supervisor progress?" })
+    ).not.toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "supervisor.update",
+        {
+          id: "sup-1",
+          objective: "Finish the server refactor",
+          evaluatorProviderId: "codex",
+          evaluatorModel: null,
+          maxSupervisionCount: 0,
+          scheduledAt: null,
+        },
+        undefined
+      );
+    });
   });
 });

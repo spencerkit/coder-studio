@@ -7,7 +7,7 @@
   align-items: center;
   justify-content: center;
   padding: var(--sp-4);
-  background: rgba(0, 0, 0, 0.42);
+  background: var(--overlay-backdrop);
   pointer-events: none;
 }
 
@@ -20,10 +20,10 @@
 :global(.local-overlay__card) {
   width: auto;
   max-width: min(24rem, calc(100% - var(--sp-4)));
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
-  background: var(--bg-surface);
-  box-shadow: var(--shadow-xl);
+  border: 1px solid var(--surface-overlay-border);
+  border-radius: var(--radius-local-overlay);
+  background: var(--surface-overlay-bg);
+  box-shadow: var(--surface-overlay-shadow);
   pointer-events: none;
 }
 

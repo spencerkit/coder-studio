@@ -1,35 +1,34 @@
-export { type Database, withTransaction } from "./database.js";
-export { closeDatabase, openDatabase } from "./db.js";
 export {
   type AuthLoginBlockRecord,
   AuthLoginBlockRepo,
 } from "./repositories/auth-login-block-repo.js";
+export {
+  type AuthSession,
+  AuthSessionRepo,
+  type AuthSessionRepoOptions,
+} from "./repositories/auth-session-repo.js";
 export { ProviderConfigRepo } from "./repositories/provider-config-repo.js";
 export {
   type NewSession,
   rowToSession,
   SessionRepo,
+  type SessionRepoOptions,
   type SessionRow,
   sessionToRow,
 } from "./repositories/session-repo.js";
 export { SettingsRepo } from "./repositories/settings-repo.js";
 export {
-  type NewSupervisorCycleAttempt,
-  SupervisorCycleAttemptRepo,
-  type SupervisorCycleAttemptUpdatePatch,
-} from "./repositories/supervisor-cycle-attempt-repo.js";
-export {
-  SupervisorCycleRepo,
-  type SupervisorCycleUpdatePatch,
-} from "./repositories/supervisor-cycle-repo.js";
-export {
   type NewSupervisor,
   SupervisorRepo,
   type SupervisorUpdatePatch,
 } from "./repositories/supervisor-repo.js";
-export { type NewTerminal, TerminalRepo, type TerminalRow } from "./repositories/terminal-repo.js";
+export {
+  type NewTerminal,
+  TerminalRepo,
+  type TerminalRepoOptions,
+} from "./repositories/terminal-repo.js";
 export {
   type NewWorkspace,
   WorkspaceRepo,
-  type WorkspaceRow,
+  type WorkspaceRepoOptions,
 } from "./repositories/workspace-repo.js";

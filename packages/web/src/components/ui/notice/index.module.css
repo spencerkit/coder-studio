@@ -2,32 +2,33 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: var(--sp-3);
-  margin: 0 0 var(--sp-4);
-  padding: var(--sp-2) var(--sp-3);
+  gap: var(--gap-content);
+  margin: 0 0 var(--space-default);
+  padding: var(--inset-control-block) var(--inset-control-inline);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--bg-page) 42%, var(--bg-surface) 58%);
+  border-radius: var(--radius-overlay);
+  background: var(--surface-elevated-bg);
+  overflow: hidden;
 }
 
 .info {
-  border-color: color-mix(in srgb, var(--color-info) 24%, transparent);
-  background: color-mix(in srgb, var(--color-info) 5%, var(--bg-surface));
+  border-color: var(--state-info-border);
+  background: var(--state-info-bg);
 }
 
 .success {
-  border-color: color-mix(in srgb, var(--color-success) 24%, transparent);
-  background: color-mix(in srgb, var(--color-success) 5%, var(--bg-surface));
+  border-color: var(--state-success-border);
+  background: var(--state-success-bg);
 }
 
 .warning {
-  border-color: color-mix(in srgb, var(--accent-amber) 28%, transparent);
-  background: color-mix(in srgb, var(--accent-amber) 6%, var(--bg-surface));
+  border-color: var(--state-warning-border);
+  background: var(--state-warning-bg);
 }
 
 .error {
-  border-color: color-mix(in srgb, var(--color-error) 28%, transparent);
-  background: color-mix(in srgb, var(--color-error) 7%, var(--bg-surface));
+  border-color: var(--state-error-border);
+  background: var(--state-error-bg);
 }
 
 .copy {
@@ -35,22 +36,22 @@
   min-width: 0;
   flex: 1;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--gap-control);
 }
 
 .title {
-  font-size: var(--type-kicker-size);
-  line-height: var(--type-kicker-line-height);
-  font-weight: var(--type-kicker-weight);
-  letter-spacing: var(--type-kicker-letter-spacing);
+  font-size: var(--type-body-6-size);
+  line-height: var(--type-body-6-line-height);
+  font-weight: var(--type-body-6-weight);
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-primary);
 }
 
 .message {
-  font-size: var(--type-meta-size);
-  line-height: var(--type-meta-line-height);
-  font-weight: var(--type-meta-weight);
+  font-size: var(--type-body-5-size);
+  line-height: var(--type-body-5-line-height);
+  font-weight: var(--type-body-5-weight);
   color: var(--text-secondary);
   word-break: break-word;
 }

@@ -3,23 +3,18 @@ import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { Database } from "../storage/database.js";
-import { closeDatabase, openDatabase, ProviderConfigRepo } from "../storage/index.js";
+import { ProviderConfigRepo } from "../storage/index.js";
 
 describe("ProviderConfigRepo", () => {
-  let db: Database;
   let repo: ProviderConfigRepo;
   let tempDir: string;
 
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), "provider-config-repo-test-"));
-    const dbPath = join(tempDir, "test.db");
-    db = openDatabase(dbPath);
-    repo = new ProviderConfigRepo(db);
+    repo = new ProviderConfigRepo({ filePath: join(tempDir, "provider-configs.json") });
   });
 
   afterEach(() => {
-    closeDatabase(db);
     rmSync(tempDir, { recursive: true, force: true });
   });
 

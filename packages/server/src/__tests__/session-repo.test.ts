@@ -2,45 +2,18 @@ import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { Database } from "../storage/database.js";
-import {
-  closeDatabase,
-  type NewSession,
-  type NewTerminal,
-  type NewWorkspace,
-  openDatabase,
-  SessionRepo,
-  TerminalRepo,
-  WorkspaceRepo,
-} from "../storage/index.js";
+import { type NewSession, type NewTerminal, SessionRepo, TerminalRepo } from "../storage/index.js";
 
 describe("SessionRepo", () => {
-  let db: Database;
   let repo: SessionRepo;
   let terminalRepo: TerminalRepo;
-  let workspaceRepo: WorkspaceRepo;
   let tempDir: string;
-  let testWorkspace: NewWorkspace;
   let testTerminal: NewTerminal;
 
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), "session-repo-test-"));
-    const dbPath = join(tempDir, "test.db");
-    db = openDatabase(dbPath);
-    repo = new SessionRepo(db);
-    terminalRepo = new TerminalRepo(db);
-    workspaceRepo = new WorkspaceRepo(db);
-
-    // Create test workspace and terminal
-    testWorkspace = {
-      id: "ws-1",
-      path: "/path/to/workspace",
-      targetRuntime: "native",
-      openedAt: Date.now(),
-      lastActiveAt: Date.now(),
-      uiState: { leftPanelWidth: 250, bottomPanelHeight: 150, focusMode: false },
-    };
-    workspaceRepo.create(testWorkspace);
+    repo = new SessionRepo({ filePath: join(tempDir, "sessions.json") });
+    terminalRepo = new TerminalRepo({ filePath: join(tempDir, "terminals.json") });
 
     testTerminal = {
       id: "t-1",
@@ -56,7 +29,6 @@ describe("SessionRepo", () => {
   });
 
   afterEach(() => {
-    closeDatabase(db);
     rmSync(tempDir, { recursive: true, force: true });
   });
 
@@ -84,7 +56,7 @@ describe("SessionRepo", () => {
     });
 
     it("should create a session with completion percent", () => {
-      const newSession: NewSession = {
+      const result = repo.create({
         id: "s-2",
         workspaceId: "ws-1",
         terminalId: "t-1",
@@ -94,17 +66,14 @@ describe("SessionRepo", () => {
         startedAt: Date.now(),
         lastActiveAt: Date.now(),
         completionPercent: 50,
-      };
-
-      const result = repo.create(newSession);
+      });
 
       expect(result.completionPercent).toBe(50);
     });
   });
 
-  describe("listByWorkspace", () => {
-    it("should list all sessions for a workspace", () => {
-      // Create additional terminal for second session
+  describe("queries", () => {
+    beforeEach(() => {
       terminalRepo.create({
         id: "t-2",
         workspaceId: "ws-1",
@@ -137,112 +106,33 @@ describe("SessionRepo", () => {
         startedAt: 2000,
         lastActiveAt: 2000,
       });
-
-      const sessions = repo.listByWorkspace("ws-1");
-
-      expect(sessions).toHaveLength(2);
-      expect(sessions.map((s) => s.id)).toEqual(expect.arrayContaining(["s-1", "s-2"]));
     });
 
-    it("should return empty array for workspace with no sessions", () => {
-      const sessions = repo.listByWorkspace("ws-1");
-      expect(sessions).toHaveLength(0);
+    it("lists all sessions for a workspace", () => {
+      expect(repo.listByWorkspace("ws-1").map((session) => session.id)).toEqual(["s-2", "s-1"]);
     });
-  });
 
-  describe("listActiveByWorkspace", () => {
-    it("should list only active (non-ended) sessions", () => {
-      // Create additional terminal for second session
-      terminalRepo.create({
-        id: "t-2",
-        workspaceId: "ws-1",
-        kind: "agent",
-        cwd: "/path",
-        argv: [],
-        cols: 80,
-        rows: 24,
-        createdAt: Date.now(),
-      });
+    it("returns empty array for workspace with no sessions", () => {
+      expect(repo.listByWorkspace("missing")).toEqual([]);
+    });
 
-      repo.create({
-        id: "s-1",
-        workspaceId: "ws-1",
-        terminalId: "t-1",
-        providerId: "claude-cli",
-        state: "running",
-        capability: "full",
-        startedAt: Date.now(),
-        lastActiveAt: Date.now(),
-      });
+    it("finds by id", () => {
+      expect(repo.findById("s-1")?.id).toBe("s-1");
+      expect(repo.findById("missing")).toBeUndefined();
+    });
 
-      repo.create({
-        id: "s-2",
-        workspaceId: "ws-1",
-        terminalId: "t-2",
-        providerId: "claude-cli",
-        state: "ended",
-        capability: "full",
-        startedAt: Date.now(),
-        lastActiveAt: Date.now(),
-      });
+    it("finds by terminal id", () => {
+      expect(repo.findByTerminalId("t-1")?.id).toBe("s-1");
+    });
 
-      // Mark one as ended
-      repo.markEnded("s-2", Date.now());
-
-      const active = repo.listActiveByWorkspace("ws-1");
-
-      expect(active).toHaveLength(1);
-      expect(active[0].id).toBe("s-1");
+    it("lists only active sessions", () => {
+      repo.markEnded("s-2", 3000);
+      expect(repo.listActiveByWorkspace("ws-1").map((session) => session.id)).toEqual(["s-1"]);
     });
   });
 
-  describe("findById", () => {
-    it("should find a session by ID", () => {
-      repo.create({
-        id: "s-1",
-        workspaceId: "ws-1",
-        terminalId: "t-1",
-        providerId: "claude-cli",
-        state: "running",
-        capability: "full",
-        startedAt: Date.now(),
-        lastActiveAt: Date.now(),
-      });
-
-      const result = repo.findById("s-1");
-
-      expect(result).toBeDefined();
-      expect(result?.id).toBe("s-1");
-    });
-
-    it("should return undefined for non-existent session", () => {
-      const result = repo.findById("non-existent");
-      expect(result).toBeUndefined();
-    });
-  });
-
-  describe("findByTerminalId", () => {
-    it("should find a session by terminal ID", () => {
-      repo.create({
-        id: "s-1",
-        workspaceId: "ws-1",
-        terminalId: "t-1",
-        providerId: "claude-cli",
-        state: "running",
-        capability: "full",
-        startedAt: Date.now(),
-        lastActiveAt: Date.now(),
-      });
-
-      const result = repo.findByTerminalId("t-1");
-
-      expect(result).toBeDefined();
-      expect(result?.id).toBe("s-1");
-    });
-  });
-
-  describe("updateState", () => {
-    it("should update session state", () => {
+  describe("updates", () => {
+    beforeEach(() => {
       repo.create({
         id: "s-1",
         workspaceId: "ws-1",
@@ -250,120 +140,124 @@ describe("SessionRepo", () => {
         providerId: "claude-cli",
         state: "starting",
         capability: "full",
-        startedAt: Date.now(),
-        lastActiveAt: Date.now(),
-      });
-
-      repo.updateState("s-1", "running");
-
-      const result = repo.findById("s-1");
-      expect(result?.state).toBe("running");
-    });
-  });
-
-  describe("updateLastActive", () => {
-    it("should update last active timestamp", () => {
-      repo.create({
-        id: "s-1",
-        workspaceId: "ws-1",
-        terminalId: "t-1",
-        providerId: "claude-cli",
-        state: "running",
-        capability: "full",
         startedAt: 1000,
         lastActiveAt: 1000,
       });
-
-      const newTime = Date.now();
-      repo.updateLastActive("s-1", newTime);
-
-      const result = repo.findById("s-1");
-      expect(result?.lastActiveAt).toBe(newTime);
     });
-  });
 
-  describe("markEnded", () => {
-    it("should mark a session as ended", () => {
-      repo.create({
-        id: "s-1",
-        workspaceId: "ws-1",
-        terminalId: "t-1",
-        providerId: "claude-cli",
-        state: "running",
-        capability: "full",
-        startedAt: Date.now(),
-        lastActiveAt: Date.now(),
-      });
-
-      const endedAt = Date.now();
-      repo.markEnded("s-1", endedAt);
-
-      const result = repo.findById("s-1");
-      expect(result?.endedAt).toBe(endedAt);
-      expect(result?.state).toBe("ended");
+    it("updates session state", () => {
+      repo.updateState("s-1", "running");
+      expect(repo.findById("s-1")?.state).toBe("running");
     });
-  });
 
-  describe("updateCompletionPercent", () => {
-    it("should update completion percent", () => {
-      repo.create({
-        id: "s-1",
-        workspaceId: "ws-1",
-        terminalId: "t-1",
-        providerId: "claude-cli",
-        state: "running",
-        capability: "full",
-        startedAt: Date.now(),
-        lastActiveAt: Date.now(),
-        completionPercent: 30,
-      });
-
-      repo.updateCompletionPercent("s-1", 75);
-
-      const result = repo.findById("s-1");
-      expect(result?.completionPercent).toBe(75);
+    it("updates last active timestamp", () => {
+      repo.updateLastActive("s-1", 2000);
+      expect(repo.findById("s-1")?.lastActiveAt).toBe(2000);
     });
-  });
 
-  describe("setError", () => {
-    it("should set error reason", () => {
-      repo.create({
-        id: "s-1",
-        workspaceId: "ws-1",
-        terminalId: "t-1",
-        providerId: "claude-cli",
-        state: "running",
-        capability: "full",
-        startedAt: Date.now(),
-        lastActiveAt: Date.now(),
-      });
-
-      repo.setError("s-1", "API rate limit exceeded");
-
-      const result = repo.findById("s-1");
-      expect(result?.errorReason).toBe("API rate limit exceeded");
-    });
-  });
-
-  describe("archive", () => {
-    it("should archive a session", () => {
-      repo.create({
-        id: "s-1",
-        workspaceId: "ws-1",
-        terminalId: "t-1",
-        providerId: "claude-cli",
+    it("marks a session as ended", () => {
+      repo.markEnded("s-1", 3000);
+      expect(repo.findById("s-1")).toMatchObject({
+        endedAt: 3000,
         state: "ended",
+      });
+    });
+
+    it("updates completion percent", () => {
+      repo.updateCompletionPercent("s-1", 75);
+      expect(repo.findById("s-1")?.completionPercent).toBe(75);
+    });
+
+    it("sets error reason", () => {
+      repo.setError("s-1", "API rate limit exceeded");
+      expect(repo.findById("s-1")?.errorReason).toBe("API rate limit exceeded");
+    });
+
+    it("archives a session", () => {
+      repo.archive("s-1");
+      expect(repo.listHydratable()).toEqual([]);
+    });
+  });
+
+  describe("persistence", () => {
+    it("reads sessions directly from the file store", () => {
+      repo.insert({
+        id: "s-file",
+        workspace_id: "ws-1",
+        terminal_id: "t-1",
+        provider_id: "claude-cli",
         capability: "full",
-        startedAt: Date.now(),
-        lastActiveAt: Date.now(),
+        state: "running",
+        started_at: 1000,
+        last_active_at: 1000,
+        ended_at: null,
+        completion_percent: null,
+        error_reason: null,
+        archived: 0,
+        title: "resume me",
+        draft: "draft text",
       });
 
-      repo.archive("s-1");
+      const restored = new SessionRepo({
+        filePath: join(tempDir, "sessions.json"),
+      }).findById("s-file");
 
-      const row = db.prepare("SELECT archived FROM sessions WHERE id = ?").get("s-1") as {
-        archived: number;
-      };
-      expect(row.archived).toBe(1);
+      expect(restored).toMatchObject({
+        id: "s-file",
+        workspaceId: "ws-1",
+        terminalId: "t-1",
+        title: "resume me",
+        draft: "draft text",
+      });
+    });
+
+    it("lists hydratable sessions from file-backed state", () => {
+      terminalRepo.create({
+        id: "t-2",
+        workspaceId: "ws-1",
+        kind: "agent",
+        cwd: "/path/to/workspace",
+        argv: ["node", "second.js"],
+        cols: 80,
+        rows: 24,
+        createdAt: 1001,
+      });
+
+      repo.insert({
+        id: "s-running",
+        workspace_id: "ws-1",
+        terminal_id: "t-1",
+        provider_id: "claude-cli",
+        capability: "full",
+        state: "running",
+        started_at: 1000,
+        last_active_at: 1000,
+        ended_at: null,
+        completion_percent: null,
+        error_reason: null,
+        archived: 0,
+        title: null,
+        draft: null,
+      });
+
+      repo.insert({
+        id: "s-ended",
+        workspace_id: "ws-1",
+        terminal_id: "t-2",
+        provider_id: "claude-cli",
+        capability: "full",
+        state: "ended",
+        started_at: 1000,
+        last_active_at: 1000,
+        ended_at: 1001,
+        completion_percent: null,
+        error_reason: null,
+        archived: 0,
+        title: null,
+        draft: null,
+      });
+
+      expect(repo.listHydratable().map((session) => session.id)).toEqual(["s-running"]);
     });
   });
 
@@ -381,9 +275,7 @@ describe("SessionRepo", () => {
       });
 
       repo.delete("s-1");
-
-      const result = repo.findById("s-1");
-      expect(result).toBeUndefined();
+      expect(repo.findById("s-1")).toBeUndefined();
     });
   });
 });

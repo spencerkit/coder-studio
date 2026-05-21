@@ -1,5 +1,6 @@
 import type { Session, SessionState } from "@coder-studio/core";
-import type { Database } from "../database.js";
+import type { SessionUpdatePatch } from "../../session/types.js";
+import { readJsonFile, writeJsonFileAtomic } from "./json-file-store.js";
 
 /**
  * Database row representation for Session table
@@ -74,132 +75,318 @@ export interface NewSession {
   errorReason?: string;
 }
 
+interface StoredSession extends Session {
+  archived?: boolean;
+}
+
+interface SessionFileRecord {
+  version: 1;
+  sessions: Record<string, StoredSession>;
+}
+
+export interface SessionRepoOptions {
+  filePath: string;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isSession(value: unknown): value is Session {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  return (
+    typeof value.id === "string" &&
+    typeof value.workspaceId === "string" &&
+    typeof value.terminalId === "string" &&
+    typeof value.providerId === "string" &&
+    typeof value.startedAt === "number" &&
+    typeof value.lastActiveAt === "number" &&
+    (value.capability === "full" ||
+      value.capability === "limited" ||
+      value.capability === "unsupported") &&
+    typeof value.state === "string"
+  );
+}
+
+function normalizeStoredSession(session: StoredSession): StoredSession {
+  return {
+    ...session,
+    ...(session.title === undefined ? {} : { title: session.title }),
+  };
+}
+
+function normalizeSessionFile(value: unknown): Record<string, StoredSession> {
+  if (isRecord(value) && value.version === 1 && isRecord(value.sessions)) {
+    const normalized: Record<string, StoredSession> = {};
+    for (const entry of Object.values(value.sessions)) {
+      if (isSession(entry)) {
+        normalized[entry.id] = normalizeStoredSession(entry as StoredSession);
+      }
+    }
+    return normalized;
+  }
+
+  if (Array.isArray(value)) {
+    const normalized: Record<string, StoredSession> = {};
+    for (const entry of value) {
+      if (isSession(entry)) {
+        normalized[entry.id] = normalizeStoredSession(entry as StoredSession);
+      }
+    }
+    return normalized;
+  }
+
+  if (isRecord(value)) {
+    const normalized: Record<string, StoredSession> = {};
+    for (const [sessionId, entry] of Object.entries(value)) {
+      if (isSession(entry)) {
+        normalized[sessionId] = normalizeStoredSession({
+          ...(entry as StoredSession),
+          id: sessionId,
+        });
+      }
+    }
+    return normalized;
+  }
+
+  return {};
+}
+
 /**
  * Session repository for CRUD operations
  */
 export class SessionRepo {
-  constructor(private db: Database) {}
+  private readonly filePath: string;
+
+  constructor(input: SessionRepoOptions) {
+    this.filePath = input.filePath;
+  }
+
+  private loadFileSessions(): Record<string, StoredSession> {
+    const parsed = readJsonFile<
+      SessionFileRecord | Record<string, StoredSession> | StoredSession[]
+    >(this.filePath);
+    if (parsed !== undefined) {
+      return normalizeSessionFile(parsed);
+    }
+
+    return {};
+  }
+
+  private saveFileSessions(sessions: Record<string, StoredSession>): void {
+    const payload: SessionFileRecord = {
+      version: 1,
+      sessions,
+    };
+    writeJsonFileAtomic(this.filePath, payload);
+  }
+
+  private sortSessions(sessions: Record<string, StoredSession>): Session[] {
+    return Object.values(sessions)
+      .sort((a, b) => b.startedAt - a.startedAt)
+      .map(({ archived: _archived, ...session }) => session);
+  }
+
+  private listAllStoredSessions(): StoredSession[] {
+    return Object.values(this.loadFileSessions()).sort((a, b) => b.startedAt - a.startedAt);
+  }
 
   /**
    * Lists all sessions for a workspace
    */
   listByWorkspace(workspaceId: string): Session[] {
-    const rows = this.db
-      .prepare("SELECT * FROM sessions WHERE workspace_id = ? ORDER BY started_at DESC")
-      .all(workspaceId) as unknown as SessionRow[];
-    return rows.map(rowToSession);
+    return this.sortSessions(this.loadFileSessions()).filter(
+      (session) => session.workspaceId === workspaceId
+    );
   }
 
   /**
    * Finds a session by ID
    */
   findById(id: string): Session | undefined {
-    const row = this.db.prepare("SELECT * FROM sessions WHERE id = ?").get(id) as
-      | SessionRow
-      | undefined;
-    return row ? rowToSession(row) : undefined;
+    const stored = this.loadFileSessions()[id];
+    if (!stored) {
+      return undefined;
+    }
+
+    const { archived: _archived, ...session } = stored;
+    return session;
   }
 
   /**
    * Finds a session by terminal ID (1:1 relationship)
    */
   findByTerminalId(terminalId: string): Session | undefined {
-    const row = this.db.prepare("SELECT * FROM sessions WHERE terminal_id = ?").get(terminalId) as
-      | SessionRow
-      | undefined;
-    return row ? rowToSession(row) : undefined;
+    const stored = this.listAllStoredSessions().find(
+      (session) => session.terminalId === terminalId
+    );
+    if (!stored) {
+      return undefined;
+    }
+
+    const { archived: _archived, ...session } = stored;
+    return session;
   }
 
   /**
    * Lists all active (non-ended) sessions for a workspace
    */
   listActiveByWorkspace(workspaceId: string): Session[] {
-    const rows = this.db
-      .prepare(
-        "SELECT * FROM sessions WHERE workspace_id = ? AND ended_at IS NULL ORDER BY started_at DESC"
-      )
-      .all(workspaceId) as unknown as SessionRow[];
-    return rows.map(rowToSession);
+    return this.listByWorkspace(workspaceId).filter((session) => session.endedAt == null);
   }
 
   /**
    * Creates a new session
    */
   create(session: NewSession): Session {
-    const stmt = this.db.prepare(`
-      INSERT INTO sessions (id, workspace_id, terminal_id, provider_id, capability, state, started_at, last_active_at, completion_percent, error_reason)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
+    const next: StoredSession = {
+      id: session.id,
+      workspaceId: session.workspaceId,
+      terminalId: session.terminalId,
+      providerId: session.providerId,
+      state: session.state,
+      capability: session.capability,
+      startedAt: session.startedAt,
+      lastActiveAt: session.lastActiveAt,
+      ...(session.completionPercent !== undefined
+        ? { completionPercent: session.completionPercent }
+        : {}),
+      ...(session.errorReason !== undefined ? { errorReason: session.errorReason } : {}),
+    };
 
-    stmt.run(
-      session.id,
-      session.workspaceId,
-      session.terminalId,
-      session.providerId,
-      session.capability,
-      session.state,
-      session.startedAt,
-      session.lastActiveAt,
-      session.completionPercent ?? null,
-      session.errorReason ?? null
-    );
+    const sessions = this.loadFileSessions();
+    sessions[next.id] = next;
+    this.saveFileSessions(sessions);
 
-    return this.findById(session.id)!;
+    const { archived: _archived, ...created } = next;
+    return created;
+  }
+
+  insert(session: SessionRow): void {
+    const next: StoredSession = {
+      ...rowToSession(session),
+      ...(session.archived === 1 ? { archived: true } : {}),
+    };
+
+    const sessions = this.loadFileSessions();
+    sessions[next.id] = next;
+    this.saveFileSessions(sessions);
+  }
+
+  update(id: string, patch: SessionUpdatePatch): void {
+    const sessions = this.loadFileSessions();
+    const current = sessions[id];
+    if (!current) {
+      return;
+    }
+
+    const next: StoredSession = {
+      ...current,
+      ...(patch.terminalId !== undefined ? { terminalId: patch.terminalId } : {}),
+      ...(patch.state !== undefined ? { state: patch.state as SessionState } : {}),
+      ...(patch.startedAt !== undefined ? { startedAt: patch.startedAt } : {}),
+      ...(patch.endedAt !== undefined
+        ? patch.endedAt === null
+          ? { endedAt: undefined }
+          : { endedAt: patch.endedAt }
+        : {}),
+      ...(patch.completionPercent !== undefined
+        ? patch.completionPercent === null
+          ? { completionPercent: undefined }
+          : { completionPercent: patch.completionPercent }
+        : {}),
+      ...(patch.errorReason !== undefined
+        ? patch.errorReason === null
+          ? { errorReason: undefined }
+          : { errorReason: patch.errorReason }
+        : {}),
+      ...(patch.lastActiveAt !== undefined ? { lastActiveAt: patch.lastActiveAt } : {}),
+      ...(patch.title !== undefined
+        ? patch.title === null
+          ? { title: undefined }
+          : { title: patch.title }
+        : {}),
+    };
+
+    sessions[id] = next;
+    this.saveFileSessions(sessions);
+  }
+
+  findByWorkspaceId(workspaceId: string): Session[] {
+    return this.listByWorkspace(workspaceId);
+  }
+
+  listHydratable(): Session[] {
+    return this.listAllStoredSessions()
+      .filter((session) => !session.archived && session.endedAt == null)
+      .map(({ archived: _archived, ...session }) => session);
   }
 
   /**
    * Updates session state
    */
   updateState(id: string, state: SessionState): void {
-    const stmt = this.db.prepare("UPDATE sessions SET state = ? WHERE id = ?");
-    stmt.run(state, id);
+    this.update(id, { state });
   }
 
   /**
    * Updates last active timestamp
    */
   updateLastActive(id: string, lastActiveAt: number): void {
-    const stmt = this.db.prepare("UPDATE sessions SET last_active_at = ? WHERE id = ?");
-    stmt.run(lastActiveAt, id);
+    this.update(id, { lastActiveAt });
   }
 
   /**
    * Marks a session as ended
    */
   markEnded(id: string, endedAt: number): void {
-    const stmt = this.db.prepare("UPDATE sessions SET ended_at = ?, state = ? WHERE id = ?");
-    stmt.run(endedAt, "ended", id);
+    this.update(id, { endedAt, state: "ended" });
   }
 
   /**
    * Updates completion percent (for full capability sessions)
    */
   updateCompletionPercent(id: string, completionPercent: number): void {
-    const stmt = this.db.prepare("UPDATE sessions SET completion_percent = ? WHERE id = ?");
-    stmt.run(completionPercent, id);
+    this.update(id, { completionPercent });
   }
 
   /**
    * Sets error reason
    */
   setError(id: string, errorReason: string): void {
-    const stmt = this.db.prepare("UPDATE sessions SET error_reason = ? WHERE id = ?");
-    stmt.run(errorReason, id);
+    this.update(id, { errorReason });
   }
 
   /**
    * Archives a session
    */
   archive(id: string): void {
-    const stmt = this.db.prepare("UPDATE sessions SET archived = 1 WHERE id = ?");
-    stmt.run(id);
+    const sessions = this.loadFileSessions();
+    const current = sessions[id];
+    if (!current) {
+      return;
+    }
+
+    sessions[id] = {
+      ...current,
+      archived: true,
+    };
+    this.saveFileSessions(sessions);
   }
 
   /**
    * Deletes a session by ID
    */
   delete(id: string): void {
-    const stmt = this.db.prepare("DELETE FROM sessions WHERE id = ?");
-    stmt.run(id);
+    const sessions = this.loadFileSessions();
+    if (!sessions[id]) {
+      return;
+    }
+
+    delete sessions[id];
+    this.saveFileSessions(sessions);
   }
 }

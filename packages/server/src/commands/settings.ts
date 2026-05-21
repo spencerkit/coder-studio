@@ -23,7 +23,6 @@ import {
   ProviderSettingsSchema,
   sanitizeProviderLaunchConfig,
 } from "../provider-config.js";
-import { ProviderConfigRepo } from "../storage/repositories/provider-config-repo.js";
 import {
   SUPERVISOR_EVALUATION_TIMEOUT_SETTING_KEY,
   SUPERVISOR_RETRY_DELAY_SEC_SETTING_KEY,
@@ -75,31 +74,25 @@ const SettingsSchema = z.object({
       locale: z.enum(["zh", "en"]).optional(),
     })
     .optional(),
+  lsp: z
+    .object({
+      mode: z.enum(["auto", "off"]).optional(),
+    })
+    .optional(),
   providers: ProviderSettingsSchema.optional(),
 });
 
 // settings.get
 registerCommand("settings.get", z.object({}), async (_args, ctx) => {
-  const row = ctx.db.prepare("SELECT key, value FROM user_settings").all() as Array<{
-    key: string;
-    value: string;
-  }>;
-
   const settings: Record<string, unknown> = {};
-  for (const { key, value } of row) {
+  for (const [key, value] of Object.entries(ctx.settingsRepo.getAll())) {
     if (key.startsWith("providers.")) {
       continue;
     }
-
-    try {
-      settings[key] = JSON.parse(value);
-    } catch {
-      settings[key] = value;
-    }
+    settings[key] = value;
   }
 
-  const providerConfigRepo = new ProviderConfigRepo(ctx.db);
-  const providerConfigs = providerConfigRepo.getAll();
+  const providerConfigs = ctx.providerConfigRepo.getAll();
   for (const [providerId, config] of Object.entries(providerConfigs)) {
     if (!isSupportedProviderId(providerId)) {
       continue;
@@ -155,7 +148,6 @@ registerCommand(
     settings: SettingsSchema,
   }),
   async (args, ctx) => {
-    const providerConfigRepo = new ProviderConfigRepo(ctx.db);
     const nextSettings = args.settings as Record<string, unknown>;
     const providers =
       nextSettings.providers &&
@@ -168,20 +160,13 @@ registerCommand(
     // Flatten settings to key-value pairs
     const flatSettings = flattenSettings(nonProviderSettings);
 
-    // Update each setting
-    const stmt = ctx.db.prepare(`
-      INSERT INTO user_settings (key, value)
-      VALUES (?, ?)
-      ON CONFLICT(key) DO UPDATE SET value = excluded.value
-    `);
-
     for (const [key, value] of Object.entries(flatSettings)) {
-      stmt.run(key, JSON.stringify(value));
+      ctx.settingsRepo.set(key, value);
     }
 
     if (providers) {
       for (const [providerId, config] of Object.entries(providers)) {
-        providerConfigRepo.set(providerId, sanitizeProviderLaunchConfig(config));
+        ctx.providerConfigRepo.set(providerId, sanitizeProviderLaunchConfig(config));
       }
     }
 

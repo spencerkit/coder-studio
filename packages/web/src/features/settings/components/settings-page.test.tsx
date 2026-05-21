@@ -210,7 +210,20 @@ describe("SettingsPage", () => {
     renderSettingsPage(store);
 
     expect(screen.getByText("v0.3.0")).toBeInTheDocument();
-    expect(document.querySelector(".settings-footer__meta")).toBeTruthy();
+    const footerMeta = document.querySelector(".settings-footer__meta");
+    expect(footerMeta).toBeTruthy();
+    expect(within(footerMeta as HTMLElement).getByText("设置已自动保存")).toBeInTheDocument();
+    expect(within(footerMeta as HTMLElement).getByText("v0.3.0")).toBeInTheDocument();
+  });
+
+  it("explains that turning LSP off stops active language services immediately", async () => {
+    const store = createConnectedStore(vi.fn().mockResolvedValue({}));
+
+    renderSettingsPage(store);
+
+    expect(await screen.findByRole("group", { name: "LSP 运行模式" })).toHaveAccessibleDescription(
+      "控制代码智能的内存占用。关闭后会立即停止当前语言服务进程，诊断、跳转、hover 等能力将暂时不可用。"
+    );
   });
 
   it("wraps desktop settings content in the shared content surface", async () => {
@@ -1223,6 +1236,119 @@ describe("SettingsPage", () => {
       })
     ).toHaveAccessibleDescription("选择终端渲染模式");
     expect(standardRendererPill).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("hydrates lsp runtime mode from settings.get", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "lsp.mode": "off",
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "通用" }));
+
+    expect(await screen.findByRole("group", { name: "LSP 运行模式" })).toHaveAccessibleDescription(
+      "控制代码智能的内存占用。关闭后会立即停止当前语言服务进程，诊断、跳转、hover 等能力将暂时不可用。"
+    );
+    expect(screen.getByRole("button", { name: "Off" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("persists and applies lsp runtime mode before updating the local selection", async () => {
+    let resolveSettingsUpdate: ((value: { updated: string[] }) => void) | undefined;
+    const settingsUpdatePromise = new Promise<{ updated: string[] }>((resolve) => {
+      resolveSettingsUpdate = resolve;
+    });
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "lsp.mode": "auto",
+        };
+      }
+      if (op === "settings.update") {
+        return await settingsUpdatePromise;
+      }
+      if (op === "lsp.setMode") {
+        return { mode: "off" };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "通用" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Off" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            lsp: {
+              mode: "off",
+            },
+          },
+        },
+        undefined
+      );
+    });
+
+    expect(sendCommand).not.toHaveBeenCalledWith("lsp.setMode", { mode: "off" }, undefined);
+    expect(screen.getByRole("button", { name: "Auto" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Off" })).toHaveAttribute("aria-pressed", "false");
+
+    resolveSettingsUpdate?.({ updated: ["lsp.mode"] });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith("lsp.setMode", { mode: "off" }, undefined);
+    });
+
+    expect(screen.getByRole("button", { name: "Off" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Auto" })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("does not flip lsp runtime mode locally when runtime application fails", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "lsp.mode": "auto",
+        };
+      }
+      if (op === "settings.update") {
+        return { updated: ["lsp.mode"] };
+      }
+      if (op === "lsp.setMode") {
+        throw new CommandResultError("runtime_apply_failed", "runtime apply failed");
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "通用" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Off" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            lsp: {
+              mode: "off",
+            },
+          },
+        },
+        undefined
+      );
+      expect(sendCommand).toHaveBeenCalledWith("lsp.setMode", { mode: "off" }, undefined);
+    });
+
+    expect(screen.getByRole("button", { name: "Auto" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Off" })).toHaveAttribute("aria-pressed", "false");
   });
 
   it("keeps copy-on-select visible on desktop general settings", async () => {

@@ -9,7 +9,7 @@ import { join } from "path";
 import { promisify } from "util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventBus } from "../bus/event-bus.js";
-import { openDatabase, runMigrations } from "../storage/db.js";
+import { WorkspaceRepo } from "../storage/repositories/workspace-repo.js";
 import { WorkspaceManager } from "../workspace/manager.js";
 import type { CommandContext } from "../ws/dispatch.js";
 import { dispatch } from "../ws/dispatch.js";
@@ -24,7 +24,6 @@ describe("File Commands", () => {
   let ctx: CommandContext;
   let workspaceMgr: WorkspaceManager;
   let eventBus: EventBus;
-  let db: ReturnType<typeof openDatabase>;
   let workspaceId: string;
 
   beforeEach(async () => {
@@ -50,11 +49,14 @@ describe("File Commands", () => {
     await writeFile(join(testDir, "docs", "f-readme.md"), "f\n");
     await writeFile(join(testDir, "docs", "g-readme.md"), "g\n");
 
-    db = openDatabase(":memory:");
-    runMigrations(db);
     eventBus = new EventBus();
     vi.spyOn(eventBus, "emit");
-    workspaceMgr = new WorkspaceManager({ db, eventBus });
+    workspaceMgr = new WorkspaceManager({
+      workspaceRepo: new WorkspaceRepo({
+        filePath: join(testDir, ".state", "workspaces.json"),
+      }),
+      eventBus,
+    });
 
     const workspace = await workspaceMgr.open({
       path: testDir,
@@ -62,7 +64,6 @@ describe("File Commands", () => {
     workspaceId = workspace.id;
 
     ctx = {
-      db,
       workspaceMgr,
       sessionMgr: {},
       terminalMgr: {},

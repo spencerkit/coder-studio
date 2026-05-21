@@ -160,8 +160,6 @@ export function sessionTopic(workspaceId: string, sessionId: string, event: stri
       return Topics.sessionProgress(workspaceId, sessionId);
     case "supervisor.state":
       return Topics.supervisorState(workspaceId, sessionId);
-    case "supervisor.cycle":
-      return Topics.supervisorCycle(workspaceId, sessionId);
     default:
       return `workspace.${workspaceId}.session.${sessionId}.${event}`;
   }

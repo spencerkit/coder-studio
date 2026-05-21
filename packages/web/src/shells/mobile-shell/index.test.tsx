@@ -30,7 +30,6 @@ import {
 import { paneLayoutAtomFamily } from "../../features/agent-panes/atoms/pane-layout";
 import { toastsAtom } from "../../features/notifications/atoms";
 import {
-  supervisorCyclesAtom,
   supervisorDetailsAtom,
   supervisorDialogAtom,
   supervisorsAtom,
@@ -184,6 +183,7 @@ vi.mock("../../features/code-editor/actions/use-code-editor-actions", () => ({
       kind: "text",
       path: "src/app.tsx",
       content: "export const app = true;",
+      savedContent: "export const app = true;",
       baseHash: "hash-1",
       isDirty: true,
     },
@@ -430,24 +430,20 @@ function renderMobileShell({
           id: "sup-1",
           sessionId: "sess_2",
           workspaceId: "ws-1",
+          targetId: "tgt-1",
           objective: "Ship mobile phase 3",
           evaluatorProviderId: "claude",
           state: "idle",
           maxSupervisionCount: 0,
           completedSupervisionCount: 0,
-          cycles: [
+          recentTargetCycles: [
             {
-              id: "cycle-1",
-              supervisorId: "sup-1",
-              sessionId: "sess_2",
-              trigger: "manual",
-              status: "completed",
-              evidenceSource: "transcript",
-              objective: "Ship mobile phase 3",
-              evaluatorProviderId: "claude",
-              result: "cycle 1/1",
-              createdAt: Date.now() - 5_000,
+              cycleId: "cycle-1",
+              targetId: "tgt-1",
+              startedAt: Date.now() - 5_000,
               completedAt: Date.now() - 1_000,
+              result: "continue",
+              reason: "cycle 1/1",
             },
           ],
           createdAt: Date.now() - 5_000,
@@ -535,54 +531,25 @@ function renderMobileShell({
                 id: "sup-1",
                 sessionId: "sess_2",
                 workspaceId: "ws-1",
+                targetId: "tgt-1",
                 objective: "Ship mobile phase 3",
                 evaluatorProviderId: "claude",
                 state: "idle",
                 maxSupervisionCount: 0,
                 completedSupervisionCount: 0,
-                cycles: [
+                recentTargetCycles: [
                   {
-                    id: "cycle-1",
-                    supervisorId: "sup-1",
-                    sessionId: "sess_2",
-                    trigger: "manual",
-                    status: "completed",
-                    evidenceSource: "transcript",
-                    objective: "Ship mobile phase 3",
-                    evaluatorProviderId: "claude",
-                    result: "cycle 1/1",
-                    createdAt: Date.now() - 5_000,
+                    cycleId: "cycle-1",
+                    targetId: "tgt-1",
+                    startedAt: Date.now() - 5_000,
                     completedAt: Date.now() - 1_000,
+                    result: "continue",
+                    reason: "cycle 1/1",
                   },
                 ],
                 createdAt: Date.now() - 5_000,
                 updatedAt: Date.now() - 1_000,
               },
-            ],
-          ])
-        : new Map()
-    );
-    store.set(
-      supervisorCyclesAtom,
-      seedSupervisor
-        ? new Map([
-            [
-              "sup-1",
-              [
-                {
-                  id: "cycle-1",
-                  supervisorId: "sup-1",
-                  sessionId: "sess_2",
-                  trigger: "manual",
-                  status: "completed",
-                  evidenceSource: "transcript",
-                  objective: "Ship mobile phase 3",
-                  evaluatorProviderId: "claude",
-                  result: "cycle 1/1",
-                  createdAt: Date.now() - 5_000,
-                  completedAt: Date.now() - 1_000,
-                },
-              ],
             ],
           ])
         : new Map()

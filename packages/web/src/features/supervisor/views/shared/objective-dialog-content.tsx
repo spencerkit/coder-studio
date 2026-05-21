@@ -1,18 +1,23 @@
+import { useAtomValue } from "jotai";
 import { useId } from "react";
+import { localeAtom } from "../../../../atoms/app-ui";
 import {
   DateTimePicker,
+  EmptyState,
   Input,
   Select,
   type SelectOption,
+  Spinner,
   Textarea,
   ThemedIcon,
 } from "../../../../components/ui";
-import { useTranslation } from "../../../../lib/i18n";
+import { formatDate, useTranslation } from "../../../../lib/i18n";
 import {
   OBJECTIVE_DIALOG_EVALUATOR_OPTIONS,
   type ObjectiveDialogEvaluatorProviderId,
   type ObjectiveDialogMode,
 } from "../../actions/use-objective-dialog-state";
+import type { RecoverableSupervisorTarget, SupervisorDialogRestoreStep } from "../../atoms";
 
 const evaluatorOptions: ReadonlyArray<SelectOption<ObjectiveDialogEvaluatorProviderId>> =
   OBJECTIVE_DIALOG_EVALUATOR_OPTIONS.map((option) => ({
@@ -23,17 +28,24 @@ const evaluatorOptions: ReadonlyArray<SelectOption<ObjectiveDialogEvaluatorProvi
 interface ObjectiveDialogContentProps {
   mode: ObjectiveDialogMode;
   showIntro?: boolean;
+  restoreStep: SupervisorDialogRestoreStep;
   draftObjective: string;
   draftEvaluatorProviderId: ObjectiveDialogEvaluatorProviderId;
   draftEvaluatorModel: string;
   draftMaxSupervisionCount: string;
   draftScheduledAt: string;
   isMaxSupervisionCountValid: boolean;
+  recoverableTargets: RecoverableSupervisorTarget[];
+  selectedRecoverableTargetId: string | null;
+  isRecoverableTargetsLoading: boolean;
   onDraftObjectiveChange: (value: string) => void;
   onDraftEvaluatorProviderChange: (value: ObjectiveDialogEvaluatorProviderId) => void;
   onDraftEvaluatorModelChange: (value: string) => void;
   onDraftMaxSupervisionCountChange: (value: string) => void;
   onDraftScheduledAtChange: (value: string) => void;
+  onOpenRestoreStep: () => void;
+  onCloseRestoreStep: () => void;
+  onSelectRecoverableTarget: (value: string) => void;
 }
 
 export function ObjectiveDialogModeIcon({ mode }: { mode: ObjectiveDialogMode }) {
@@ -44,19 +56,27 @@ export function ObjectiveDialogModeIcon({ mode }: { mode: ObjectiveDialogMode })
 export function ObjectiveDialogContent({
   mode,
   showIntro = false,
+  restoreStep,
   draftObjective,
   draftEvaluatorProviderId,
   draftEvaluatorModel,
   draftMaxSupervisionCount,
   draftScheduledAt,
   isMaxSupervisionCountValid,
+  recoverableTargets,
+  selectedRecoverableTargetId,
+  isRecoverableTargetsLoading,
   onDraftObjectiveChange,
   onDraftEvaluatorProviderChange,
   onDraftEvaluatorModelChange,
   onDraftMaxSupervisionCountChange,
   onDraftScheduledAtChange,
+  onOpenRestoreStep,
+  onCloseRestoreStep,
+  onSelectRecoverableTarget,
 }: ObjectiveDialogContentProps) {
   const t = useTranslation();
+  const locale = useAtomValue(localeAtom);
   const objectiveHelperId = useId();
   const evaluatorLabelId = useId();
   const evaluatorHelperId = useId();
@@ -65,6 +85,83 @@ export function ObjectiveDialogContent({
   const scheduledAtHelperId = useId();
   const introTitle = t(`supervisor.dialog.${mode}.title`);
   const introDescription = t(`supervisor.dialog.${mode}.subtitle`);
+  const isRestoreView = restoreStep === "restore";
+
+  if (isRestoreView) {
+    return (
+      <div className="supervisor-restore-view">
+        <div className="supervisor-dialog-intro">
+          <div className="supervisor-dialog-intro__icon" aria-hidden="true">
+            <ObjectiveDialogModeIcon mode={mode} />
+          </div>
+          <div className="supervisor-dialog-intro__copy">
+            <p className="supervisor-dialog-intro__title">{t("supervisor.dialog.restore.title")}</p>
+            <p className="supervisor-dialog-intro__description">
+              {t("supervisor.dialog.restore.subtitle")}
+            </p>
+          </div>
+        </div>
+
+        <div className="supervisor-restore-actions">
+          <button type="button" className="supervisor-restore-link" onClick={onCloseRestoreStep}>
+            {t("supervisor.dialog.restore.back")}
+          </button>
+        </div>
+
+        {isRecoverableTargetsLoading ? (
+          <div className="supervisor-restore-loading">
+            <Spinner label={t("common.loading")} size="md" />
+          </div>
+        ) : recoverableTargets.length === 0 ? (
+          <EmptyState
+            className="supervisor-restore-empty"
+            title={t("supervisor.dialog.restore.empty")}
+            description={t("supervisor.dialog.restore.empty_hint")}
+          />
+        ) : (
+          <div className="supervisor-restore-list" role="radiogroup">
+            {recoverableTargets.map((target) => {
+              const checked = target.targetId === selectedRecoverableTargetId;
+
+              return (
+                <button
+                  key={target.targetId}
+                  type="button"
+                  role="radio"
+                  aria-checked={checked}
+                  className={`supervisor-restore-card${checked ? " supervisor-restore-card--selected" : ""}`}
+                  onClick={() => onSelectRecoverableTarget(target.targetId)}
+                >
+                  <span className="supervisor-restore-card__header">
+                    <span className="supervisor-restore-card__title">{target.objective}</span>
+                    <span className="supervisor-restore-card__meta">
+                      {t("supervisor.dialog.restore.cycle_count", {
+                        count: target.cycleCount,
+                      })}
+                    </span>
+                  </span>
+                  {target.progressSummary ? (
+                    <span className="supervisor-restore-card__summary">
+                      {target.progressSummary}
+                    </span>
+                  ) : null}
+                  <span className="supervisor-restore-card__footer">
+                    {t("supervisor.dialog.restore.updated_at", {
+                      time: formatDate(target.updatedAt, locale, {
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                      }),
+                    })}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <>
@@ -81,7 +178,12 @@ export function ObjectiveDialogContent({
       ) : null}
 
       <div className="form-group">
-        <label htmlFor="objective">{t("supervisor.field.objective")}</label>
+        <div className="supervisor-objective-label-row">
+          <label htmlFor="objective">{t("supervisor.field.objective")}</label>
+          <button type="button" className="supervisor-restore-link" onClick={onOpenRestoreStep}>
+            {t("supervisor.dialog.restore.open")}
+          </button>
+        </div>
         <Textarea
           id="objective"
           rows={5}
@@ -94,6 +196,7 @@ export function ObjectiveDialogContent({
         <span id={objectiveHelperId} className="dialog-helper">
           {t("supervisor.field.objective_helper")}
         </span>
+        <p className="supervisor-restore-entry__hint">{t("supervisor.dialog.restore.hint")}</p>
       </div>
 
       <div className="form-group">

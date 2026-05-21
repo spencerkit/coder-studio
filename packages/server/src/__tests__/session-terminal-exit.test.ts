@@ -2,10 +2,10 @@
  * Session Terminal Exit Tests
  *
  * Tests that PTY exit correctly transitions session to 'ended' state
- * and persists to database.
+ * and persists to the session store.
  */
 
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DomainEvent, Session } from "@coder-studio/core";
@@ -14,7 +14,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventBus } from "../bus/event-bus.js";
 import { SessionManager } from "../session/manager.js";
 import type { SessionDatabase } from "../session/types.js";
-import { openDatabase, runMigrations } from "../storage/db.js";
 import { ProviderConfigRepo } from "../storage/repositories/provider-config-repo.js";
 import { TerminalManager } from "../terminal/manager.js";
 import type { Broadcaster, PtyHost, PtyProcess } from "../terminal/types.js";
@@ -87,7 +86,6 @@ function createMockPtyHost(): {
 }
 
 describe("Session Terminal Exit", () => {
-  let db: ReturnType<typeof openDatabase>;
   let eventBus: EventBus;
   let sessionMgr: SessionManager;
   let terminalMgr: TerminalManager;
@@ -103,12 +101,9 @@ describe("Session Terminal Exit", () => {
     listHydratable: ReturnType<typeof vi.fn>;
   };
   let testDir: string;
+  let stateDir: string;
 
   beforeEach(() => {
-    // Create in-memory database
-    db = openDatabase(":memory:");
-    runMigrations(db);
-
     // Create event bus
     eventBus = new EventBus();
 
@@ -140,6 +135,7 @@ describe("Session Terminal Exit", () => {
     mkdirSync(testDir, { recursive: true });
     mkdirSync(join(testDir, ".git"), { recursive: true });
     writeFileSync(join(testDir, ".git", "HEAD"), "ref: refs/heads/main\n");
+    stateDir = mkdtempSync(join(tmpdir(), "session-terminal-exit-state-"));
 
     sessionDb = {
       insert: vi.fn(),
@@ -157,7 +153,9 @@ describe("Session Terminal Exit", () => {
       db: sessionDb as unknown as SessionDatabase,
       broadcaster: mockBroadcaster,
       providerRegistry,
-      providerConfigRepo: new ProviderConfigRepo(db),
+      providerConfigRepo: new ProviderConfigRepo({
+        filePath: join(stateDir, "provider-configs.json"),
+      }),
     });
 
     // SessionManager subscribes to terminal.exited via EventBus in its constructor
@@ -165,6 +163,7 @@ describe("Session Terminal Exit", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    rmSync(stateDir, { recursive: true, force: true });
     try {
       rmSync(testDir, { recursive: true, force: true });
     } catch {

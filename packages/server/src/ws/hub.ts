@@ -380,6 +380,7 @@ export class WsHub implements Broadcaster {
       "terminal.created",
       "terminal.output",
       "terminal.exited",
+      "lsp.diagnostics.updated",
     ];
 
     for (const type of eventTypes) {
@@ -462,6 +463,17 @@ export class WsHub implements Broadcaster {
         topic = Topics.terminalExit(event.workspaceId, event.terminalId);
         data = {
           code: event.exitCode,
+        };
+        break;
+
+      case "lsp.diagnostics.updated":
+        topic = Topics.workspaceLspDiagnostics(event.workspaceId);
+        data = {
+          workspaceId: event.workspaceId,
+          serverKind: event.serverKind,
+          path: event.path,
+          version: event.version,
+          diagnostics: event.diagnostics,
         };
         break;
 

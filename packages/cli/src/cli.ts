@@ -1,4 +1,4 @@
-import { existsSync, rmSync } from "fs";
+import { existsSync } from "fs";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { clearAuthBlockByIp, listAuthBlocks } from "./auth-control.js";
@@ -11,7 +11,7 @@ import { parseArgs } from "./parse-args.js";
 import { startManagedServer } from "./pm2-control.js";
 import { confirmYesNo, isInteractiveSession } from "./prompts.js";
 import { getServerStatus, type ServerStatus, stopRunningServer } from "./server-control.js";
-import { startServer, verifyLocalDatabaseCompatibility } from "./server-runner.js";
+import { prepareLocalStateStorage, startServer } from "./server-runner.js";
 import { getBrowserUrl, getListenIp, getListenUrl } from "./server-url.js";
 
 const MANAGED_SERVER_WAIT_MS = 5000;
@@ -221,60 +221,6 @@ async function startManagedServerFlow(): Promise<void> {
   });
 }
 
-interface IncompatibleSchemaErrorLike {
-  code: "db_incompatible_schema";
-  dbPath: string;
-}
-
-function parseIncompatibleSchemaError(error: unknown): IncompatibleSchemaErrorLike | null {
-  if (!error || typeof error !== "object") {
-    return null;
-  }
-
-  const candidate = error as { code?: unknown; dbPath?: unknown };
-  if (candidate.code !== "db_incompatible_schema" || typeof candidate.dbPath !== "string") {
-    return null;
-  }
-
-  return {
-    code: "db_incompatible_schema",
-    dbPath: candidate.dbPath,
-  };
-}
-
-async function handleIncompatibleSchema(error: unknown): Promise<boolean> {
-  const payload = parseIncompatibleSchemaError(error);
-  if (!payload) {
-    return false;
-  }
-
-  const approved = isInteractiveSession()
-    ? await confirmYesNo(
-        `Local database is incompatible at ${payload.dbPath}. Delete and rebuild the local database? [y/N] `
-      )
-    : false;
-
-  if (!approved) {
-    throw error;
-  }
-
-  rmSync(payload.dbPath, { force: true });
-  return true;
-}
-
-async function verifyManagedDatabaseCompatibility(): Promise<void> {
-  try {
-    verifyLocalDatabaseCompatibility();
-  } catch (error) {
-    const rebuilt = await handleIncompatibleSchema(error);
-    if (!rebuilt) {
-      throw error;
-    }
-
-    verifyLocalDatabaseCompatibility();
-  }
-}
-
 async function openManagedServerInBrowser(existingStatus?: ServerStatus | null): Promise<void> {
   const status = existingStatus ?? (await getServerStatus());
   const browserUrl = getBrowserUrl(status);
@@ -367,7 +313,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
   if (args.command === "open") {
     const startup = await prepareManagedStartup(args.restart);
     if (startup.existingStatus === null) {
-      await verifyManagedDatabaseCompatibility();
+      prepareLocalStateStorage();
       await startManagedServerFlow();
     }
 
@@ -386,15 +332,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     }
 
     console.log("Starting Coder Studio Server in foreground...");
-    try {
-      await startServer();
-    } catch (error) {
-      const rebuilt = await handleIncompatibleSchema(error);
-      if (!rebuilt) {
-        throw error;
-      }
-      await startServer();
-    }
+    await startServer();
     return;
   }
 
@@ -403,7 +341,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     return;
   }
 
-  await verifyManagedDatabaseCompatibility();
+  prepareLocalStateStorage();
   await startManagedServerFlow();
 
   console.log("Coder Studio server started in background.");

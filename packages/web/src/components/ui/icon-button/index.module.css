@@ -2,11 +2,11 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: var(--btn-height-md);
-  height: var(--btn-height-md);
+  width: var(--icon-button-size-md);
+  height: var(--icon-button-size-md);
   padding: 0;
   border: 1px solid transparent;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-control);
   font-family: var(--font-sans);
   color: var(--text-secondary);
   transition:
@@ -20,7 +20,8 @@
 .root:focus-visible {
   box-shadow:
     0 0 0 2px var(--bg-page),
-    0 0 0 4px rgba(108, 182, 255, 0.35);
+    0 0 0 calc(var(--state-focus-ring-width) * 2)
+    color-mix(in srgb, var(--state-focus-ring-color) 35%, transparent);
 }
 
 .root:hover:not(:disabled) {
@@ -49,15 +50,15 @@
 }
 
 .sm {
-  width: 24px;
-  height: 24px;
-  border-radius: var(--radius-sm);
+  width: var(--icon-button-size-sm);
+  height: var(--icon-button-size-sm);
+  border-radius: var(--radius-control-sm);
 }
 
 .lg {
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-lg);
+  width: var(--icon-button-size-lg);
+  height: var(--icon-button-size-lg);
+  border-radius: var(--radius-control-lg);
 }
 
 .icon {

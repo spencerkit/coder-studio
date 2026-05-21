@@ -1,9 +1,12 @@
-import { mkdir } from "node:fs/promises";
+import { mkdtempSync, rmSync } from "node:fs";
+import { mkdir, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventBus } from "../bus/event-bus.js";
-import { openDatabase, runMigrations } from "../storage/db.js";
+import { ProviderConfigRepo } from "../storage/repositories/provider-config-repo.js";
+import { SettingsRepo } from "../storage/repositories/settings-repo.js";
+import { WorkspaceRepo } from "../storage/repositories/workspace-repo.js";
 import { WorkspaceManager } from "../workspace/manager.js";
 import type { CommandContext } from "../ws/dispatch.js";
 import { dispatch } from "../ws/dispatch.js";
@@ -13,7 +16,6 @@ import "../commands/workspace.js";
 import "../commands/workspace-activity.js";
 
 describe("Workspace Commands", () => {
-  let db: ReturnType<typeof openDatabase>;
   let ctx: CommandContext;
   let eventBus: EventBus;
   let workspaceMgr: WorkspaceManager;
@@ -24,12 +26,11 @@ describe("Workspace Commands", () => {
     recordSuccess: ReturnType<typeof vi.fn>;
     getLastFetchAt: ReturnType<typeof vi.fn>;
   };
+  let settingsRepo: SettingsRepo;
+  let providerConfigRepo: ProviderConfigRepo;
+  let settingsDir: string;
 
   beforeEach(() => {
-    // Create in-memory database for testing
-    db = openDatabase(":memory:");
-    runMigrations(db);
-
     // Create event bus
     eventBus = new EventBus();
     autoFetch = {
@@ -39,13 +40,23 @@ describe("Workspace Commands", () => {
       recordSuccess: vi.fn(),
       getLastFetchAt: vi.fn(() => undefined),
     };
+    settingsDir = mkdtempSync(join(tmpdir(), "workspace-settings-"));
+    settingsRepo = new SettingsRepo({ filePath: join(settingsDir, "settings.json") });
+    providerConfigRepo = new ProviderConfigRepo({
+      filePath: join(settingsDir, "provider-configs.json"),
+    });
 
     // Create workspace manager
-    workspaceMgr = new WorkspaceManager({ db, eventBus, autoFetch });
+    workspaceMgr = new WorkspaceManager({
+      workspaceRepo: new WorkspaceRepo({
+        filePath: join(settingsDir, "workspaces.json"),
+      }),
+      eventBus,
+      autoFetch,
+    });
 
     // Create context with required dependencies
     ctx = {
-      db,
       workspaceMgr,
       sessionMgr: {
         get: vi.fn(() => undefined),
@@ -53,9 +64,15 @@ describe("Workspace Commands", () => {
       terminalMgr: {},
       eventBus,
       broadcaster: { broadcast: () => {} },
+      settingsRepo,
+      providerConfigRepo,
       providerRegistry: [],
       autoFetch,
     } as unknown as CommandContext;
+  });
+
+  afterEach(() => {
+    rmSync(settingsDir, { recursive: true, force: true });
   });
 
   describe("workspace.list", () => {
@@ -103,7 +120,13 @@ describe("Workspace Commands", () => {
         recordSuccess: () => {},
         getLastFetchAt: () => undefined,
       } as never;
-      workspaceMgr = new WorkspaceManager({ db, eventBus, autoFetch });
+      workspaceMgr = new WorkspaceManager({
+        workspaceRepo: new WorkspaceRepo({
+          filePath: join(settingsDir, "workspaces.json"),
+        }),
+        eventBus,
+        autoFetch,
+      });
       ctx = {
         ...ctx,
         workspaceMgr,
@@ -455,9 +478,10 @@ describe("Workspace Commands", () => {
     });
 
     it("returns null when the stored last-viewed target is malformed", async () => {
-      db.prepare("INSERT INTO user_settings (key, value) VALUES (?, ?)").run(
-        "workspace.lastViewedTarget",
-        "{not-json"
+      await writeFile(
+        join(settingsDir, "settings.json"),
+        '{\n  "version": 1,\n  "settings": {\n    "workspace.lastViewedTarget": "{not-json"\n  }\n}\n',
+        "utf-8"
       );
 
       const result = await dispatch(

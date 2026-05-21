@@ -18,13 +18,42 @@ const viewportMocks = vi.hoisted(() => ({
   value: "desktop" as "desktop" | "mobile",
 }));
 
+const { mockRegistryUpdateFromDisk, mockRegistryDisposeFile } = vi.hoisted(() => ({
+  mockRegistryUpdateFromDisk: vi.fn(),
+  mockRegistryDisposeFile: vi.fn(),
+}));
+
 vi.mock("../../components/ui/_internal/use-viewport", () => ({
   useViewport: () => viewportMocks.value,
 }));
 
+vi.mock("./monaco/model-registry", () => ({
+  monacoModelRegistry: {
+    getOrCreate: vi.fn(),
+    updateFromDisk: mockRegistryUpdateFromDisk,
+    disposeFile: mockRegistryDisposeFile,
+    disposeWorkspace: vi.fn(),
+  },
+}));
+
 // Monaco is not happy in jsdom; stub it so we only assert our own chrome.
 vi.mock("./components/monaco-host", () => ({
-  MonacoHost: ({ content }: { content: string }) => <div data-testid="monaco-host">{content}</div>,
+  MonacoHost: ({
+    content,
+    onContentChange,
+  }: {
+    content: string;
+    onContentChange?: (value: string) => void;
+  }) => (
+    <div>
+      <textarea
+        aria-label="Editor content"
+        onChange={(event) => onContentChange?.(event.target.value)}
+        value={content}
+      />
+      <div data-testid="monaco-host">{content}</div>
+    </div>
+  ),
 }));
 
 // ImagePreview mount would try to decode the <img>; in jsdom the load event
@@ -86,6 +115,8 @@ function setupStore(options?: {
 describe("CodeEditorHost", () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    mockRegistryUpdateFromDisk.mockClear();
+    mockRegistryDisposeFile.mockClear();
     viewportMocks.value = "desktop";
   });
 
@@ -138,6 +169,7 @@ describe("CodeEditorHost", () => {
           kind: "text",
           path: "src/b.ts",
           content: "cached",
+          savedContent: "cached",
           baseHash: "h",
           isDirty: false,
         },
@@ -162,6 +194,7 @@ describe("CodeEditorHost", () => {
           kind: "text",
           path: "src/c.ts",
           content: "content",
+          savedContent: "content",
           baseHash: "h",
           isDirty: false,
         },
@@ -186,6 +219,7 @@ describe("CodeEditorHost", () => {
 
     expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
     expect(store.get(openFilesAtomFamily("ws-1"))["src/c.ts"]).toBeUndefined();
+    expect(mockRegistryDisposeFile).toHaveBeenCalledWith("/tmp/ws", "src/c.ts");
   });
 
   it("can render without the editor header for mobile content-only chrome", async () => {
@@ -196,6 +230,7 @@ describe("CodeEditorHost", () => {
           kind: "text",
           path: "src/mobile.ts",
           content: "content",
+          savedContent: "content",
           baseHash: "h",
           isDirty: true,
         },
@@ -265,6 +300,7 @@ describe("CodeEditorHost", () => {
           kind: "text",
           path: "src/save.ts",
           content: "content",
+          savedContent: "content",
           baseHash: "h",
           isDirty: true,
         },
@@ -282,6 +318,46 @@ describe("CodeEditorHost", () => {
 
     fireEvent.mouseEnter(saveBtn);
     expect(screen.getByRole("tooltip")).toHaveTextContent("Save File");
+  });
+
+  it("clears dirty state when text returns to the last saved content", async () => {
+    const { store } = setupStore({ activePath: "src/revert.ts" });
+
+    render(
+      <Provider store={store}>
+        <CodeEditorHost />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("monaco-host")).toHaveTextContent("hello world");
+    });
+
+    const editor = screen.getByRole("textbox", { name: "Editor content" });
+
+    fireEvent.change(editor, {
+      target: { value: "hello world with edits" },
+    });
+
+    await waitFor(() => {
+      expect(store.get(openFilesAtomFamily("ws-1"))["src/revert.ts"]).toMatchObject({
+        content: "hello world with edits",
+        isDirty: true,
+      });
+    });
+
+    fireEvent.change(editor, {
+      target: { value: "hello world" },
+    });
+
+    await waitFor(() => {
+      expect(store.get(openFilesAtomFamily("ws-1"))["src/revert.ts"]).toMatchObject({
+        content: "hello world",
+        isDirty: false,
+      });
+    });
+
+    expect(screen.getByRole("button", { name: "Save File" })).toBeDisabled();
   });
 
   it("reloads a clean text buffer after an external refresh signal changes the file on disk", async () => {
@@ -322,6 +398,11 @@ describe("CodeEditorHost", () => {
     await waitFor(() => {
       expect(screen.getByTestId("monaco-host")).toHaveTextContent("updated on disk");
     });
+    expect(mockRegistryUpdateFromDisk).toHaveBeenCalledWith({
+      workspaceRootPath: "/tmp/ws",
+      path: "src/live.ts",
+      content: "updated on disk",
+    });
     expect(screen.queryByText(/changed on disk/i)).not.toBeInTheDocument();
   });
 
@@ -341,6 +422,7 @@ describe("CodeEditorHost", () => {
           kind: "text",
           path: "src/dirty.ts",
           content: "local edits",
+          savedContent: "from disk",
           baseHash: "hash-1",
           isDirty: true,
         },
@@ -369,6 +451,7 @@ describe("CodeEditorHost", () => {
       content: "local edits",
       baseHash: "hash-1",
     });
+    expect(mockRegistryUpdateFromDisk).not.toHaveBeenCalled();
   });
 
   it("marks an open file as deleted when an external refresh can no longer read it", async () => {
@@ -390,6 +473,7 @@ describe("CodeEditorHost", () => {
           kind: "text",
           path: "src/deleted.ts",
           content: "stale buffer",
+          savedContent: "stale buffer",
           baseHash: "hash-1",
           isDirty: false,
         },
@@ -561,6 +645,74 @@ describe("CodeEditorHost", () => {
 
     expect(screen.getByTestId("monaco-host")).toHaveTextContent("<svg>fresh from disk</svg>");
     expect(screen.queryByTestId("image-preview")).not.toBeInTheDocument();
+    vi.unstubAllGlobals();
+  });
+
+  it("treats refreshed clean SVG text bytes as the new saved baseline", async () => {
+    const fetchMock = vi
+      .fn(async () => ({
+        ok: true,
+        text: async () => "<svg>fresh from disk</svg>",
+      }))
+      .mockImplementationOnce(async () => ({
+        ok: true,
+        text: async () => "<svg>fresh from disk</svg>",
+      }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const sendCommand = vi.fn().mockResolvedValue({
+      kind: "image",
+      mime: "image/svg+xml",
+      url: "/api/file?workspaceId=ws-1&path=icon.svg",
+      size: 256,
+      isTextBacked: true,
+      version: "2",
+    });
+
+    const { store } = setupStore({
+      activePath: "icon.svg",
+      sendCommand,
+      openFiles: {
+        "icon.svg": {
+          kind: "text",
+          path: "icon.svg",
+          content: "<svg>stale</svg>",
+          savedContent: "<svg>stale</svg>",
+          baseHash: "hash-1",
+          isDirty: false,
+          viewingTextBackedImageAsText: true,
+        },
+      },
+    });
+
+    render(
+      <Provider store={store}>
+        <CodeEditorHost />
+      </Provider>
+    );
+
+    act(() => {
+      store.set(editorRefreshTokenAtomFamily("ws-1"), 1);
+    });
+
+    await waitFor(() => {
+      expect(store.get(openFilesAtomFamily("ws-1"))["icon.svg"]).toMatchObject({
+        content: "<svg>fresh from disk</svg>",
+        savedContent: "<svg>fresh from disk</svg>",
+        isDirty: false,
+      });
+    });
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Editor content" }), {
+      target: { value: "<svg>fresh from disk</svg>" },
+    });
+
+    await waitFor(() => {
+      expect(store.get(openFilesAtomFamily("ws-1"))["icon.svg"]).toMatchObject({
+        isDirty: false,
+      });
+    });
+
     vi.unstubAllGlobals();
   });
 

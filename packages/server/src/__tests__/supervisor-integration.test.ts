@@ -63,22 +63,6 @@ describe("Supervisor integration", () => {
 
     const ctx = getCommandContext();
 
-    ctx.db
-      .prepare(
-        "INSERT INTO workspaces (id, path, target_runtime, opened_at, last_active_at, ui_state) VALUES (?, ?, ?, ?, ?, ?)"
-      )
-      .run("ws-1", process.cwd(), "native", 1, 1, "{}");
-    ctx.db
-      .prepare(
-        "INSERT INTO terminals (id, workspace_id, kind, cwd, argv, cols, rows, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-      )
-      .run("term-1", "ws-1", "agent", process.cwd(), "[]", 120, 30, 1);
-    ctx.db
-      .prepare(
-        "INSERT INTO sessions (id, workspace_id, terminal_id, provider_id, capability, state, started_at, last_active_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-      )
-      .run("sess-1", "ws-1", "term-1", "claude", "full", "running", 1, 1);
-
     ctx.workspaceMgr.get = () => ({ id: "ws-1", path: process.cwd() });
     ctx.sessionMgr.get = () => createSessionRecord();
     ctx.sessionMgr.getRenderedSnapshot = async () =>
@@ -173,8 +157,8 @@ describe("Supervisor integration", () => {
 
     await waitFor(async () => {
       const current = ctx.supervisorMgr.get(created.id);
-      const latest = current?.cycles.find((entry) => entry.id === cycle.id);
-      if (!latest || latest.status === "evaluating") {
+      const latest = current?.recentTargetCycles?.find((entry) => entry.cycleId === cycle.id);
+      if (!latest || latest.result === undefined) {
         throw new Error("cycle still in flight");
       }
     });
@@ -190,15 +174,13 @@ describe("Supervisor integration", () => {
     )) as SupervisorGetResult;
 
     expect(fetched.ok).toBe(true);
-    expect(fetched.data?.supervisor?.cycles).toHaveLength(1);
-    expect(fetched.data?.supervisor?.cycles[0]?.evaluatorProviderId).toBe("claude");
-    expect(fetched.data?.supervisor?.cycles[0]?.evidenceSource).toBe("headless_snapshot");
-    expect(fetched.data?.supervisor?.cycles[0]).toEqual(
+    expect(fetched.data?.supervisor?.recentTargetCycles).toHaveLength(1);
+    expect(fetched.data?.supervisor?.recentTargetCycles?.[0]?.targetId).toBe(created.targetId);
+    expect(fetched.data?.supervisor?.recentTargetCycles?.[0]).toEqual(
       expect.objectContaining({
-        trigger: "manual",
-        status: "completed",
-        result: undefined,
-        errorReason: undefined,
+        result: "continue",
+        reason: "Keep going",
+        injected: false,
       })
     );
   });

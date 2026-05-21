@@ -9,6 +9,7 @@ export const Topics = {
   workspaceMeta: (id: string) => `workspace.${id}.meta`,
   workspaceFsDirty: (id: string) => `workspace.${id}.fs.dirty`,
   workspaceGitState: (id: string) => `workspace.${id}.git.state`,
+  workspaceLspDiagnostics: (workspaceId: string) => `workspace.${workspaceId}.lsp.diagnostics`,
   workspaceAll: (id: string) => `workspace.${id}.*`,
 
   // Session-level
@@ -35,6 +36,4 @@ export const Topics = {
   // Supervisor-level (Phase 3)
   supervisorState: (workspaceId: string, sessionId: string) =>
     `workspace.${workspaceId}.session.${sessionId}.supervisor.state`,
-  supervisorCycle: (workspaceId: string, sessionId: string) =>
-    `workspace.${workspaceId}.session.${sessionId}.supervisor.cycle`,
 } as const;

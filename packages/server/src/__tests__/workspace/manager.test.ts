@@ -2,19 +2,18 @@
  * Tests for WorkspaceManager.
  */
 
-import { DatabaseSync } from "node:sqlite";
 import type { DomainEvent } from "@coder-studio/core";
 import chokidar, { type FSWatcher } from "chokidar";
-import { mkdir, rmdir } from "fs/promises";
+import { mkdir, rm } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Database } from "../../storage/database.js";
+import { WorkspaceRepo } from "../../storage/repositories/workspace-repo.js";
 import { WorkspaceManager } from "../../workspace/manager.js";
 
 describe("WorkspaceManager", () => {
   let testDir: string;
-  let db: Database;
+  let stateDir: string;
   let manager: WorkspaceManager;
   let events: DomainEvent[];
   let eventBus: {
@@ -27,24 +26,7 @@ describe("WorkspaceManager", () => {
     // Create test directory
     testDir = join(tmpdir(), `workspace-test-${Date.now()}`);
     await mkdir(testDir);
-
-    // Create in-memory database
-    db = new DatabaseSync(":memory:");
-    db.exec("PRAGMA journal_mode = WAL");
-    db.exec("PRAGMA foreign_keys = ON");
-
-    // Create tables
-    db.exec(`
-      CREATE TABLE workspaces (
-        id TEXT PRIMARY KEY,
-        path TEXT NOT NULL UNIQUE,
-        target_runtime TEXT NOT NULL,
-        wsl_distro TEXT,
-        opened_at INTEGER NOT NULL,
-        last_active_at INTEGER NOT NULL,
-        ui_state TEXT
-      );
-    `);
+    stateDir = join(testDir, ".state");
 
     // Event bus mock
     events = [];
@@ -62,17 +44,17 @@ describe("WorkspaceManager", () => {
       close: vi.fn().mockResolvedValue(undefined),
     } as unknown as FSWatcher);
 
-    manager = new WorkspaceManager({ db, eventBus });
+    manager = new WorkspaceManager({
+      workspaceRepo: new WorkspaceRepo({
+        filePath: join(stateDir, "workspaces.json"),
+      }),
+      eventBus,
+    });
   });
 
   afterEach(async () => {
     watchSpy.mockRestore();
-    try {
-      db.close();
-      await rmdir(testDir);
-    } catch {
-      // Ignore cleanup errors
-    }
+    await rm(testDir, { recursive: true, force: true });
   });
 
   describe("open", () => {
@@ -93,7 +75,13 @@ describe("WorkspaceManager", () => {
         recordSuccess: vi.fn(),
         getLastFetchAt: vi.fn(),
       };
-      manager = new WorkspaceManager({ db, eventBus, autoFetch });
+      manager = new WorkspaceManager({
+        workspaceRepo: new WorkspaceRepo({
+          filePath: join(stateDir, "workspaces.json"),
+        }),
+        eventBus,
+        autoFetch,
+      });
 
       const workspace = await manager.open({
         path: testDir,
@@ -139,7 +127,13 @@ describe("WorkspaceManager", () => {
         recordSuccess: vi.fn(),
         getLastFetchAt: vi.fn(),
       };
-      manager = new WorkspaceManager({ db, eventBus, autoFetch });
+      manager = new WorkspaceManager({
+        workspaceRepo: new WorkspaceRepo({
+          filePath: join(stateDir, "workspaces.json"),
+        }),
+        eventBus,
+        autoFetch,
+      });
 
       const first = await manager.open({ path: testDir });
       autoFetch.triggerOpenTimeFetch.mockClear();
@@ -225,7 +219,13 @@ describe("WorkspaceManager", () => {
         recordSuccess: vi.fn(),
         getLastFetchAt: vi.fn(),
       };
-      manager = new WorkspaceManager({ db, eventBus, autoFetch });
+      manager = new WorkspaceManager({
+        workspaceRepo: new WorkspaceRepo({
+          filePath: join(stateDir, "workspaces.json"),
+        }),
+        eventBus,
+        autoFetch,
+      });
       const workspace = await manager.open({ path: testDir });
 
       manager.recordFetch(workspace.id);
@@ -238,7 +238,13 @@ describe("WorkspaceManager", () => {
     it("starts file watchers for persisted workspaces", async () => {
       const persisted = await manager.open({ path: testDir });
       const broadcaster = { broadcast: vi.fn() };
-      const restoredManager = new WorkspaceManager({ db, eventBus, broadcaster });
+      const restoredManager = new WorkspaceManager({
+        workspaceRepo: new WorkspaceRepo({
+          filePath: join(stateDir, "workspaces.json"),
+        }),
+        eventBus,
+        broadcaster,
+      });
 
       restoredManager.hydrateWatchers();
 
@@ -260,7 +266,13 @@ describe("WorkspaceManager", () => {
     it("does not create duplicate watchers when called multiple times", async () => {
       const persisted = await manager.open({ path: testDir });
       const broadcaster = { broadcast: vi.fn() };
-      const restoredManager = new WorkspaceManager({ db, eventBus, broadcaster });
+      const restoredManager = new WorkspaceManager({
+        workspaceRepo: new WorkspaceRepo({
+          filePath: join(stateDir, "workspaces.json"),
+        }),
+        eventBus,
+        broadcaster,
+      });
 
       restoredManager.hydrateWatchers();
       restoredManager.hydrateWatchers();

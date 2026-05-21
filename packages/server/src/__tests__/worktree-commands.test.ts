@@ -1,3 +1,4 @@
+import { mkdtempSync, rmSync } from "node:fs";
 import { execFile } from "child_process";
 import { mkdir, rm, writeFile } from "fs/promises";
 import { tmpdir } from "os";
@@ -5,7 +6,7 @@ import { join } from "path";
 import { promisify } from "util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { EventBus } from "../bus/event-bus.js";
-import { openDatabase, runMigrations } from "../storage/db.js";
+import { WorkspaceRepo } from "../storage/repositories/workspace-repo.js";
 import { WorkspaceManager } from "../workspace/manager.js";
 import type { CommandContext } from "../ws/dispatch.js";
 import { dispatch } from "../ws/dispatch.js";
@@ -32,8 +33,8 @@ describe("Worktree Commands", () => {
   let ctx: CommandContext;
   let workspaceMgr: WorkspaceManager;
   let eventBus: EventBus;
-  let db: ReturnType<typeof openDatabase>;
   let workspaceId: string;
+  let stateDir: string;
   let tempPaths: string[];
 
   beforeEach(async () => {
@@ -48,18 +49,21 @@ describe("Worktree Commands", () => {
 
     await initRepo(repoDir);
     await initRepo(otherRepoDir);
+    stateDir = mkdtempSync(join(tmpdir(), "worktree-command-state-"));
 
-    db = openDatabase(":memory:");
-    runMigrations(db);
     eventBus = new EventBus();
-    workspaceMgr = new WorkspaceManager({ db, eventBus });
+    workspaceMgr = new WorkspaceManager({
+      workspaceRepo: new WorkspaceRepo({
+        filePath: join(stateDir, "workspaces.json"),
+      }),
+      eventBus,
+    });
     tempPaths = [];
 
     const workspace = await workspaceMgr.open({ path: repoDir });
     workspaceId = workspace.id;
 
     ctx = {
-      db,
       workspaceMgr,
       sessionMgr: {},
       terminalMgr: {},
@@ -72,6 +76,7 @@ describe("Worktree Commands", () => {
   });
 
   afterEach(async () => {
+    rmSync(stateDir, { recursive: true, force: true });
     await rm(repoDir, { recursive: true, force: true });
     await rm(otherRepoDir, { recursive: true, force: true });
     await Promise.all(tempPaths.map((tempPath) => rm(tempPath, { recursive: true, force: true })));

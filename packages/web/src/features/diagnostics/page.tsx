@@ -6,7 +6,7 @@ import type {
   Workspace,
 } from "@coder-studio/core";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
-import { Copy, RefreshCw, Settings } from "lucide-react";
+import { Copy, RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { lastViewedTargetAtom } from "../../atoms/app-ui";
@@ -269,10 +269,6 @@ export function DiagnosticsPage() {
     intent.workspacePath,
   ]);
 
-  const handleOpenSettings = () => {
-    navigate("/settings");
-  };
-
   const handleCopyDetails = async () => {
     const payload = {
       intent,
@@ -461,6 +457,8 @@ export function DiagnosticsPage() {
 
   const contextTitle = t(`diagnostics.context.${intent.context}.title`);
   const contextDescription = t(`diagnostics.context.${intent.context}.description`);
+  const canCopyDetails =
+    typeof navigator !== "undefined" && typeof navigator.clipboard?.writeText === "function";
   const handleBack = () => {
     navigate(-1);
   };
@@ -489,17 +487,28 @@ export function DiagnosticsPage() {
       <div className={`diagnostics-body ${isMobile ? "diagnostics-body--mobile" : ""}`}>
         <main className={`diagnostics-content ${isMobile ? "diagnostics-content--mobile" : ""}`}>
           <div className="diagnostics-content-surface">
-            <section className="diagnostics-summary">
+            <section
+              className={`diagnostics-summary ${isMobile ? "diagnostics-summary--mobile" : ""}`}
+            >
               <div className="diagnostics-summary__copy">
-                <div className="diagnostics-summary__eyebrow">
-                  <ThemedIcon semantic="state.warning" size={16} />
-                  <span>{t("diagnostics.title")}</span>
-                </div>
-                <h2 className="diagnostics-summary__title">{contextTitle}</h2>
+                {!isMobile ? (
+                  <div className="diagnostics-summary__eyebrow">
+                    <ThemedIcon semantic="state.warning" size={16} />
+                    <span>{t("diagnostics.title")}</span>
+                  </div>
+                ) : null}
+                {isMobile ? (
+                  <h1 className="diagnostics-summary__title">{contextTitle}</h1>
+                ) : (
+                  <h2 className="diagnostics-summary__title">{contextTitle}</h2>
+                )}
                 <p className="diagnostics-summary__description">{contextDescription}</p>
               </div>
-              <div className="diagnostics-actions">
+              <div
+                className={`diagnostics-actions ${isMobile ? "diagnostics-actions--mobile" : ""}`}
+              >
                 <Button
+                  className={isMobile ? "diagnostics-actions__primary" : undefined}
                   leadingIcon={<RefreshCw size={16} />}
                   loading={loading}
                   disabled={!canPrimaryContinue}
@@ -522,16 +531,8 @@ export function DiagnosticsPage() {
               />
             ) : null}
 
-            <div className="diagnostics-toolbar">
-              <Button
-                leadingIcon={<Settings size={16} />}
-                onClick={handleOpenSettings}
-                size="sm"
-                variant="ghost"
-              >
-                {t("diagnostics.actions.open_settings")}
-              </Button>
-              {navigator.clipboard?.writeText ? (
+            <div className={`diagnostics-toolbar ${isMobile ? "diagnostics-toolbar--mobile" : ""}`}>
+              {canCopyDetails ? (
                 <Button
                   leadingIcon={<Copy size={16} />}
                   onClick={() => {

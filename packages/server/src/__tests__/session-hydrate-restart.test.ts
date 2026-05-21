@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createServer, type Server } from "../server.js";
+import { SessionRepo, TerminalRepo } from "../storage/index.js";
 import { dispatch } from "../ws/dispatch.js";
 
 import "../commands/workspace.js";
@@ -54,16 +55,43 @@ describe("session hydrate restart", () => {
     const workspaceId = openResult.data!.id;
 
     const now = Date.now();
-    firstCtx.db
-      .prepare(
-        "INSERT INTO terminals (id, workspace_id, kind, cwd, argv, cols, rows, created_at, ended_at, exit_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-      )
-      .run("term-hydrated", workspaceId, "agent", workspaceDir, "[]", 120, 30, now, now, 0);
-    firstCtx.db
-      .prepare(
-        "INSERT INTO sessions (id, workspace_id, terminal_id, provider_id, capability, state, started_at, last_active_at, archived) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)"
-      )
-      .run("sess-hydrated", workspaceId, "term-hydrated", "claude", "full", "running", now, now);
+    const terminalRepo = new TerminalRepo({
+      filePath: join(dataDir, "state", "terminals.json"),
+    });
+    const sessionRepo = new SessionRepo({
+      filePath: join(dataDir, "state", "sessions.json"),
+    });
+
+    terminalRepo.insert({
+      id: "term-hydrated",
+      workspaceId,
+      kind: "agent",
+      cwd: workspaceDir,
+      argv: [],
+      cols: 120,
+      rows: 30,
+      alive: false,
+      createdAt: now,
+      endedAt: now,
+      exitCode: 0,
+      title: "",
+    });
+    sessionRepo.insert({
+      id: "sess-hydrated",
+      workspace_id: workspaceId,
+      terminal_id: "term-hydrated",
+      provider_id: "claude",
+      capability: "full",
+      state: "running",
+      started_at: now,
+      ended_at: null,
+      last_active_at: now,
+      completion_percent: null,
+      error_reason: null,
+      archived: 0,
+      title: null,
+      draft: null,
+    });
 
     await server.stop();
     server = undefined;

@@ -65,7 +65,6 @@ describe("SupervisorDetailsContent", () => {
         reason: "Need to finish the validation step.",
       },
     ],
-    cycles: [],
     createdAt: 1,
     updatedAt: 1,
   });
@@ -87,6 +86,8 @@ describe("SupervisorDetailsContent", () => {
     expect(document.querySelector(".supervisor-summary-card")).not.toBeNull();
     expect(screen.getByText("Objective")).toBeInTheDocument();
     expect(screen.getByText("Reduce mobile regression bugs")).toBeInTheDocument();
+    expect(screen.getByText("Evaluator")).toBeInTheDocument();
+    expect(screen.getByText("Claude")).toBeInTheDocument();
     expect(screen.getByText("Cycles")).toBeInTheDocument();
     expect(screen.getByText("1 / 3")).toBeInTheDocument();
     expect(screen.getByText("Runtime Status")).toBeInTheDocument();

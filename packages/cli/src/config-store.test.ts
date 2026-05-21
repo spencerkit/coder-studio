@@ -56,11 +56,11 @@ describe("config-store", () => {
     expect(readCliConfig()).toEqual(config);
   });
 
-  it("normalizes a directory input into a sqlite file path", () => {
+  it("normalizes a directory input into the default state anchor path", () => {
     expect(normalizeDataDir("/tmp/cs-data")).toBe("/tmp/cs-data/coder-studio.db");
   });
 
-  it("keeps an explicit sqlite file path unchanged", () => {
+  it("keeps an explicit state anchor file path unchanged", () => {
     expect(normalizeDataDir("/tmp/cs-data/custom.db")).toBe("/tmp/cs-data/custom.db");
   });
 

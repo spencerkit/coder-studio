@@ -29,6 +29,6 @@ export function assertSupportedNodeVersion(version = process.versions.node): voi
   }
 
   throw new Error(
-    `Coder Studio requires Node.js >=${MINIMUM_NODE_VERSION} because it uses the built-in node:sqlite module. Current version: ${version}.`
+    `Coder Studio requires Node.js >=${MINIMUM_NODE_VERSION}. Current version: ${version}.`
   );
 }

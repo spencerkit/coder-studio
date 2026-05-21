@@ -7,14 +7,14 @@
   z-index: var(--z-tooltip);
   max-width: 20rem;
   padding: var(--sp-2) var(--sp-3);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--bg-surface);
+  border: 1px solid var(--surface-overlay-border);
+  border-radius: var(--radius-overlay);
+  background: var(--surface-overlay-bg);
   color: var(--text-primary);
-  box-shadow: var(--shadow-lg);
-  font-size: var(--type-meta-size);
-  line-height: var(--type-meta-line-height);
-  font-weight: var(--type-meta-weight);
+  box-shadow: var(--surface-overlay-shadow);
+  font-size: var(--type-body-5-size);
+  line-height: var(--type-body-5-line-height);
+  font-weight: var(--type-body-5-weight);
   pointer-events: none;
   white-space: nowrap;
 }

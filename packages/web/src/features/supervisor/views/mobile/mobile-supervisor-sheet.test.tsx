@@ -87,7 +87,6 @@ describe("MobileSupervisorSheet", () => {
         reason: "Need to finish the validation step.",
       },
     ],
-    cycles: [],
     createdAt: 1,
     updatedAt: 1,
   });
@@ -357,5 +356,55 @@ describe("MobileSupervisorSheet", () => {
     expect(document.querySelector(".mobile-supervisor-sheet__detail-header")).toBeNull();
     expect(document.querySelector(".mobile-supervisor-sheet__actions")).toBeNull();
     expect(screen.getByRole("heading", { name: "Edit Supervisor", level: 2 })).toBeInTheDocument();
+  });
+
+  it("saves non-objective edits from mobile without showing reset confirmation", async () => {
+    const user = userEvent.setup();
+    const sendCommand = vi.fn().mockResolvedValue({
+      supervisor: {
+        ...createSupervisor(),
+        evaluatorProviderId: "codex",
+      },
+    });
+    const store = createStore();
+
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(supervisorsAtom, new Map([["sess-1", createSupervisor()]]));
+
+    render(
+      <Provider store={store}>
+        <MobileSupervisorSheet sessionId="sess-1" workspaceId="ws-1" onClose={vi.fn()} />
+      </Provider>
+    );
+
+    await user.click(screen.getByRole("button", { name: "Edit Supervisor" }));
+    await user.click(screen.getByRole("button", { name: "Evaluator Claude" }));
+    await user.click(screen.getByRole("button", { name: "Codex" }));
+
+    const saveButton = screen.getByRole("button", { name: "Save" });
+    expect(saveButton).toBeEnabled();
+
+    await user.click(saveButton);
+
+    expect(
+      screen.queryByRole("heading", { name: "Save and reset supervisor progress?" })
+    ).not.toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "supervisor.update",
+        {
+          id: "sup-1",
+          objective: "Reduce mobile regression bugs",
+          evaluatorProviderId: "codex",
+          evaluatorModel: null,
+          maxSupervisionCount: 0,
+          scheduledAt: null,
+        },
+        undefined
+      );
+    });
   });
 });

@@ -1,10 +1,13 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   appendTargetCycleRecord,
+  cloneTargetFiles,
   createTargetFiles,
+  deleteTarget,
+  listRecoverableTargets,
   loadTargetMemory,
   readTargetCycleRecords,
   readTargetMeta,
@@ -30,10 +33,49 @@ describe("target store", () => {
       workspaceId: "ws-1",
       objective: "Ship feature",
       createdAt: 1,
+      supervisor: {
+        id: "sup-1",
+        sessionId: "sess-1",
+        workspaceId: "ws-1",
+        targetId: "tgt-1",
+        state: "idle",
+        objective: "Ship feature",
+        evaluatorProviderId: "codex",
+        evaluatorModel: "gpt-test",
+        maxSupervisionCount: 3,
+        completedSupervisionCount: 1,
+        scheduledAt: 9,
+        stopReason: undefined,
+        lastCycleAt: 8,
+        lastEvaluatedTurnId: "turn-1",
+        errorReason: undefined,
+        createdAt: 1,
+        updatedAt: 2,
+      },
     });
 
+    const meta = await readTargetMeta(workspacePath, "tgt-1");
     const memory = await loadTargetMemory(workspacePath, "tgt-1");
 
+    expect(meta.supervisor).toEqual({
+      id: "sup-1",
+      sessionId: "sess-1",
+      workspaceId: "ws-1",
+      targetId: "tgt-1",
+      state: "idle",
+      objective: "Ship feature",
+      evaluatorProviderId: "codex",
+      evaluatorModel: "gpt-test",
+      maxSupervisionCount: 3,
+      completedSupervisionCount: 1,
+      scheduledAt: 9,
+      stopReason: undefined,
+      lastCycleAt: 8,
+      lastEvaluatedTurnId: "turn-1",
+      errorReason: undefined,
+      createdAt: 1,
+      updatedAt: 2,
+    });
     expect(memory).toEqual({
       targetId: "tgt-1",
       decompositionGenerated: false,
@@ -286,6 +328,373 @@ describe("target store", () => {
       lastGuidance: "Follow the existing implementation path",
       stalledCount: 3,
       updatedAt: 42,
+    });
+  });
+
+  it("falls back to default metadata and memory when persisted JSON is corrupted", async () => {
+    await createTargetFiles(workspacePath, {
+      targetId: "tgt-corrupt",
+      sessionId: "sess-1",
+      workspaceId: "ws-1",
+      objective: "Corrupt state",
+      createdAt: 1,
+    });
+
+    const targetRoot = join(workspacePath, ".coder-studio", "supervisor", "targets", "tgt-corrupt");
+    writeFileSync(join(targetRoot, "meta.json"), "{broken", "utf8");
+    writeFileSync(join(targetRoot, "memory.json"), "{broken", "utf8");
+    writeFileSync(
+      join(targetRoot, "cycles.jsonl"),
+      '{"cycleId":"ok","targetId":"tgt-corrupt","startedAt":1,"completedAt":2,"result":"continue","attemptCount":1}\n{broken}\n',
+      "utf8"
+    );
+
+    await expect(readTargetMeta(workspacePath, "tgt-corrupt")).resolves.toEqual({
+      targetId: "tgt-corrupt",
+      sessionId: "",
+      workspaceId: "",
+      objective: "",
+      status: "active",
+      createdAt: 0,
+      updatedAt: 0,
+      supersededBy: null,
+      completedAt: null,
+      supervisor: undefined,
+    });
+
+    await expect(loadTargetMemory(workspacePath, "tgt-corrupt")).resolves.toEqual({
+      targetId: "tgt-corrupt",
+      decompositionGenerated: false,
+      decompositionMode: undefined,
+      items: [],
+      activeItemId: undefined,
+      progressSummary: undefined,
+      lastGuidance: undefined,
+      stalledCount: 0,
+      updatedAt: 0,
+    });
+
+    await expect(readTargetCycleRecords(workspacePath, "tgt-corrupt")).resolves.toEqual([
+      expect.objectContaining({
+        cycleId: "ok",
+      }),
+    ]);
+  });
+
+  it("lists recoverable targets with summary details", async () => {
+    await createTargetFiles(workspacePath, {
+      targetId: "tgt-1",
+      sessionId: "sess-1",
+      workspaceId: "ws-1",
+      objective: "Recover this target",
+      createdAt: 1,
+    });
+
+    await saveTargetMemory(workspacePath, "tgt-1", {
+      targetId: "tgt-1",
+      decompositionGenerated: true,
+      decompositionMode: "stage",
+      items: [],
+      activeItemId: undefined,
+      progressSummary: "Halfway there",
+      lastGuidance: "Keep going",
+      stalledCount: 0,
+      updatedAt: 5,
+    });
+
+    await appendTargetCycleRecord(workspacePath, "tgt-1", {
+      cycleId: "cycle-1",
+      targetId: "tgt-1",
+      startedAt: 1,
+      completedAt: 2,
+      result: "continue",
+      reason: "Needs more work",
+      guidance: "Continue",
+      injected: true,
+      attemptCount: 1,
+    });
+
+    const targets = await listRecoverableTargets(workspacePath);
+
+    expect(targets).toEqual([
+      {
+        targetId: "tgt-1",
+        sessionId: "sess-1",
+        workspaceId: "ws-1",
+        objective: "Recover this target",
+        status: "active",
+        updatedAt: 1,
+        progressSummary: "Halfway there",
+        cycleCount: 1,
+      },
+    ]);
+  });
+
+  it("does not count failed evaluation records in recoverable target cycle totals", async () => {
+    await createTargetFiles(workspacePath, {
+      targetId: "tgt-1",
+      sessionId: "sess-1",
+      workspaceId: "ws-1",
+      objective: "Recover this target",
+      createdAt: 1,
+    });
+
+    await appendTargetCycleRecord(workspacePath, "tgt-1", {
+      cycleId: "cycle-1",
+      targetId: "tgt-1",
+      startedAt: 1,
+      completedAt: 2,
+      result: "continue",
+      reason: "Needs more work",
+      guidance: "Continue",
+      injected: true,
+      attemptCount: 1,
+    });
+    await appendTargetCycleRecord(workspacePath, "tgt-1", {
+      cycleId: "cycle-2",
+      targetId: "tgt-1",
+      startedAt: 3,
+      completedAt: 4,
+      result: "error",
+      errorReason: "Evaluator exploded",
+      attemptCount: 1,
+    });
+
+    const targets = await listRecoverableTargets(workspacePath);
+
+    expect(targets[0]?.cycleCount).toBe(1);
+  });
+
+  it("ignores backup and reset staging directories when listing recoverable targets", async () => {
+    await createTargetFiles(workspacePath, {
+      targetId: "tgt-1",
+      sessionId: "sess-1",
+      workspaceId: "ws-1",
+      objective: "Recover this target",
+      createdAt: 1,
+    });
+
+    const targetsDir = join(workspacePath, ".coder-studio", "supervisor", "targets");
+    mkdirSync(join(targetsDir, "tgt-1.backup-123"), { recursive: true });
+    mkdirSync(join(targetsDir, "tgt-1.reset-456"), { recursive: true });
+    writeFileSync(
+      join(targetsDir, "tgt-1.backup-123", "meta.json"),
+      JSON.stringify({ targetId: "tgt-1.backup-123", updatedAt: 999 }),
+      "utf8"
+    );
+    writeFileSync(
+      join(targetsDir, "tgt-1.reset-456", "meta.json"),
+      JSON.stringify({ targetId: "tgt-1.reset-456", updatedAt: 998 }),
+      "utf8"
+    );
+
+    const targets = await listRecoverableTargets(workspacePath);
+
+    expect(targets).toHaveLength(1);
+    expect(targets[0]?.targetId).toBe("tgt-1");
+  });
+
+  it("clones a target into a new target id and rewrites persisted identifiers", async () => {
+    await createTargetFiles(workspacePath, {
+      targetId: "tgt-old",
+      sessionId: "sess-old",
+      workspaceId: "ws-1",
+      objective: "Old objective",
+      createdAt: 10,
+      supervisor: {
+        id: "sup-old",
+        sessionId: "sess-old",
+        workspaceId: "ws-1",
+        targetId: "tgt-old",
+        state: "paused",
+        objective: "Old objective",
+        evaluatorProviderId: "codex",
+        evaluatorModel: "gpt-old",
+        maxSupervisionCount: 7,
+        completedSupervisionCount: 4,
+        scheduledAt: 77,
+        stopReason: undefined,
+        lastCycleAt: 12,
+        lastEvaluatedTurnId: "turn-old",
+        errorReason: undefined,
+        createdAt: 10,
+        updatedAt: 12,
+      },
+    });
+
+    await saveTargetMemory(workspacePath, "tgt-old", {
+      targetId: "tgt-old",
+      decompositionGenerated: true,
+      decompositionMode: "stage",
+      items: [
+        {
+          id: "stage-1",
+          kind: "stage",
+          title: "Keep state",
+          objective: "Preserve old progress",
+          deliverable: "Old state copied",
+          acceptanceCriteria: ["State remains"],
+          status: "done",
+        },
+      ],
+      activeItemId: "stage-1",
+      progressSummary: "Preserve me",
+      lastGuidance: "Do not lose state",
+      stalledCount: 2,
+      updatedAt: 12,
+    });
+
+    await appendTargetCycleRecord(workspacePath, "tgt-old", {
+      cycleId: "cycle-1",
+      targetId: "tgt-old",
+      startedAt: 10,
+      completedAt: 11,
+      result: "continue",
+      reason: "Keep copying",
+      guidance: "Copy state",
+      injected: true,
+      attemptCount: 1,
+    });
+
+    await cloneTargetFiles(workspacePath, {
+      sourceTargetId: "tgt-old",
+      targetId: "tgt-new",
+      sessionId: "sess-new",
+      workspaceId: "ws-2",
+      objective: "New objective",
+      createdAt: 20,
+      supervisor: {
+        id: "sup-new",
+        sessionId: "sess-new",
+        workspaceId: "ws-2",
+        targetId: "tgt-new",
+        state: "idle",
+        objective: "New objective",
+        evaluatorProviderId: "claude",
+        evaluatorModel: "gpt-new",
+        maxSupervisionCount: 2,
+        completedSupervisionCount: 1,
+        scheduledAt: undefined,
+        stopReason: undefined,
+        lastCycleAt: 19,
+        lastEvaluatedTurnId: "turn-new",
+        errorReason: undefined,
+        createdAt: 20,
+        updatedAt: 21,
+      },
+    });
+
+    const meta = await readTargetMeta(workspacePath, "tgt-new");
+    const memory = await loadTargetMemory(workspacePath, "tgt-new");
+    const cycles = await readTargetCycleRecords(workspacePath, "tgt-new");
+
+    expect(meta).toEqual({
+      targetId: "tgt-new",
+      sessionId: "sess-new",
+      workspaceId: "ws-2",
+      objective: "New objective",
+      status: "active",
+      createdAt: 20,
+      updatedAt: 20,
+      supersededBy: null,
+      completedAt: null,
+      supervisor: {
+        id: "sup-new",
+        sessionId: "sess-new",
+        workspaceId: "ws-2",
+        targetId: "tgt-new",
+        state: "idle",
+        objective: "New objective",
+        evaluatorProviderId: "claude",
+        evaluatorModel: "gpt-new",
+        maxSupervisionCount: 2,
+        completedSupervisionCount: 1,
+        scheduledAt: undefined,
+        stopReason: undefined,
+        lastCycleAt: 19,
+        lastEvaluatedTurnId: "turn-new",
+        errorReason: undefined,
+        createdAt: 20,
+        updatedAt: 21,
+      },
+    });
+    expect(memory.targetId).toBe("tgt-new");
+    expect(memory.progressSummary).toBe("Preserve me");
+    expect(cycles).toEqual([
+      expect.objectContaining({
+        cycleId: "cycle-1",
+        targetId: "tgt-new",
+      }),
+    ]);
+  });
+
+  it("returns only non-error cycle records when cloning target files", async () => {
+    await createTargetFiles(workspacePath, {
+      targetId: "tgt-old",
+      sessionId: "sess-old",
+      workspaceId: "ws-1",
+      objective: "Old objective",
+      createdAt: 10,
+    });
+
+    await appendTargetCycleRecord(workspacePath, "tgt-old", {
+      cycleId: "cycle-1",
+      targetId: "tgt-old",
+      startedAt: 10,
+      completedAt: 11,
+      result: "continue",
+      reason: "Keep copying",
+      guidance: "Copy state",
+      injected: true,
+      attemptCount: 1,
+    });
+    await appendTargetCycleRecord(workspacePath, "tgt-old", {
+      cycleId: "cycle-2",
+      targetId: "tgt-old",
+      startedAt: 12,
+      completedAt: 13,
+      result: "error",
+      errorReason: "Evaluator exploded",
+      attemptCount: 1,
+    });
+
+    const cycleCount = await cloneTargetFiles(workspacePath, {
+      sourceTargetId: "tgt-old",
+      targetId: "tgt-new",
+      sessionId: "sess-new",
+      workspaceId: "ws-2",
+      objective: "New objective",
+      createdAt: 20,
+    });
+
+    expect(cycleCount).toBe(1);
+    expect(await readTargetCycleRecords(workspacePath, "tgt-new")).toEqual([
+      expect.objectContaining({
+        cycleId: "cycle-2",
+        result: "error",
+        targetId: "tgt-new",
+      }),
+      expect.objectContaining({
+        cycleId: "cycle-1",
+        result: "continue",
+        targetId: "tgt-new",
+      }),
+    ]);
+  });
+
+  it("deletes the source target after a successful restore", async () => {
+    await createTargetFiles(workspacePath, {
+      targetId: "tgt-delete",
+      sessionId: "sess-1",
+      workspaceId: "ws-1",
+      objective: "Delete me",
+      createdAt: 1,
+    });
+
+    await deleteTarget(workspacePath, "tgt-delete");
+
+    await expect(readTargetMeta(workspacePath, "tgt-delete")).rejects.toMatchObject({
+      code: "ENOENT",
     });
   });
 });

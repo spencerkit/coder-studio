@@ -50,7 +50,6 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
         <span className="supervisor-strip-eyebrow">
           <span className={`supervisor-pulse ${stateClass}`} aria-hidden="true" />
           <span className="supervisor-label">{t("supervisor.title")}</span>
-          <span className="supervisor-provider-pill">{supervisor.evaluatorProviderId}</span>
         </span>
 
         <span className="supervisor-status-cluster">

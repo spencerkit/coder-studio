@@ -1,5 +1,5 @@
 import type { Server, ServerConfig } from "@coder-studio/server";
-import { closeDatabase, openDatabase, parseServerConfig } from "@coder-studio/server";
+import { parseServerConfig } from "@coder-studio/server";
 import { mkdirSync } from "fs";
 import { dirname } from "path";
 import { fileURLToPath } from "url";
@@ -38,14 +38,11 @@ export const buildServerConfig = (): Partial<ServerConfig> => {
   return config;
 };
 
-export const verifyLocalDatabaseCompatibility = (): void => {
+export const prepareLocalStateStorage = (): void => {
   const config = parseServerConfig(buildServerConfig());
   if (config.dataDir !== ":memory:") {
     mkdirSync(dirname(config.dataDir), { recursive: true });
   }
-
-  const db = openDatabase(config.dataDir);
-  closeDatabase(db);
 };
 
 const createShutdownHandler = (server: Server) => async () => {

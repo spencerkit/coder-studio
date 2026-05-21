@@ -125,11 +125,27 @@ export class SupervisorEvaluator {
       };
     }
 
-    const stdout = await runCommand(
-      command,
-      this.deps.timeoutMs ?? getSupervisorEvaluationTimeoutMs(this.deps.settingsRepo),
-      options
-    );
+    let stdout: string;
+    try {
+      stdout = await runCommand(
+        command,
+        this.deps.timeoutMs ?? getSupervisorEvaluationTimeoutMs(this.deps.settingsRepo),
+        options
+      );
+    } catch (error) {
+      if (isEvaluatorProcessError(error)) {
+        throw diagnoseEvaluatorProcessError(
+          error,
+          provider.id,
+          this.logger,
+          supervisor,
+          context,
+          command,
+          prompt
+        );
+      }
+      throw error;
+    }
 
     let payloadText: string;
     try {
@@ -148,7 +164,12 @@ export class SupervisorEvaluator {
       throw error;
     }
 
-    return parseSupervisorEvaluationResult(payloadText, this.config.guidanceMaxChars, mode);
+    return parseSupervisorEvaluationResult(
+      payloadText,
+      this.config.guidanceMaxChars,
+      mode,
+      this.logger
+    );
   }
 }
 
@@ -398,25 +419,157 @@ async function runCommand(
       settleReject({
         code: "supervisor_eval_failed",
         message: error instanceof Error ? error.message : "Evaluator process failed to start",
-      });
+        stdout: Buffer.concat(stdout).toString("utf8"),
+        stderr: Buffer.concat(stderr).toString("utf8"),
+        exitCode: null,
+        spawnError: true,
+      } satisfies EvaluatorProcessError);
     });
     child.on("exit", (code) => {
       if (terminationError) {
         settleReject(terminationError);
         return;
       }
+      const stdoutText = Buffer.concat(stdout).toString("utf8");
+      const stderrText = Buffer.concat(stderr).toString("utf8");
       if (code !== 0) {
         settleReject({
           code: "supervisor_eval_failed",
-          message:
-            Buffer.concat(stderr).toString("utf8").trim() || `Evaluator exited with code ${code}`,
-        });
+          message: stderrText.trim() || `Evaluator exited with code ${code}`,
+          stdout: stdoutText,
+          stderr: stderrText,
+          exitCode: code,
+          spawnError: false,
+        } satisfies EvaluatorProcessError);
         return;
       }
 
-      settleResolve(Buffer.concat(stdout).toString("utf8"));
+      settleResolve(stdoutText);
     });
   });
+}
+
+interface EvaluatorProcessError {
+  code: "supervisor_eval_failed";
+  message: string;
+  stdout: string;
+  stderr: string;
+  exitCode: number | null;
+  spawnError: boolean;
+}
+
+function isEvaluatorProcessError(error: unknown): error is EvaluatorProcessError {
+  return (
+    !!error &&
+    typeof error === "object" &&
+    (error as { code?: unknown }).code === "supervisor_eval_failed" &&
+    typeof (error as { stdout?: unknown }).stdout === "string" &&
+    typeof (error as { stderr?: unknown }).stderr === "string"
+  );
+}
+
+/**
+ * When the evaluator child process exits non-zero (or fails to spawn), the
+ * `stderr` buffer is frequently empty: codex and claude both like to surface
+ * upstream API failures (rate limit, context exceeded, auth, etc.) as JSONL
+ * events on stdout instead. This helper:
+ *
+ * - Scans stdout for a more useful error message (codex `turn.failed`,
+ *   claude `is_error` envelope).
+ * - Logs a single structured warn with stdout/stderr previews, argv, and
+ *   exit code so future failures are diagnosable from server logs alone.
+ * - Returns a fresh error with `code: "supervisor_eval_failed"` so the
+ *   existing `retryOnEvaluatorError` retry path still kicks in.
+ */
+function diagnoseEvaluatorProcessError(
+  error: EvaluatorProcessError,
+  providerId: string,
+  logger: FastifyBaseLogger,
+  supervisor: Supervisor,
+  context: SupervisorEvaluationContext,
+  command: { argv: string[]; cwd?: string; env?: Record<string, string> },
+  prompt: string
+): { code: "supervisor_eval_failed"; message: string } {
+  const stdoutLines = error.stdout.trim().split(/\r?\n/).filter(Boolean);
+  const upstreamMessage = extractUpstreamErrorMessage(providerId, error.stdout, stdoutLines);
+
+  const resolvedMessage =
+    upstreamMessage ?? (error.stderr.trim() ? error.stderr.trim() : error.message);
+
+  logger.warn(
+    {
+      supervisorId: supervisor.id,
+      sessionId: supervisor.sessionId,
+      evaluatorProviderId: supervisor.evaluatorProviderId,
+      sessionProviderId: context.sessionProviderId,
+      exitCode: error.exitCode,
+      spawnError: error.spawnError,
+      upstreamMessage,
+      stderrPreview: buildStdoutPreview(error.stderr.trim(), 2000),
+      stdoutPreview: buildStdoutPreview(error.stdout.trim(), 2000),
+      commandArgv: command.argv,
+      commandCwd: command.cwd,
+      promptPreview: buildStdoutPreview(prompt, 500),
+    },
+    "Supervisor evaluator process failed"
+  );
+
+  return {
+    code: "supervisor_eval_failed",
+    message: resolvedMessage || `Evaluator exited with code ${error.exitCode ?? "unknown"}`,
+  };
+}
+
+function extractUpstreamErrorMessage(
+  providerId: string,
+  stdout: string,
+  stdoutLines: string[]
+): string | null {
+  if (!stdout.trim()) {
+    return null;
+  }
+
+  if (providerId === "codex") {
+    const scan = scanCodexStream(stdoutLines);
+    if (scan.turnFailure) {
+      return scan.turnFailure;
+    }
+  }
+
+  // Claude CLI with `--output-format json` writes the result envelope (or
+  // partial event stream) to stdout. Look at the trailing lines first since
+  // the final envelope arrives last.
+  for (let i = stdoutLines.length - 1; i >= 0; i--) {
+    const line = stdoutLines[i]!.trim();
+    if (!line.startsWith("{") && !line.startsWith("[")) {
+      continue;
+    }
+    try {
+      const parsed = JSON.parse(line);
+      if (!parsed || typeof parsed !== "object") {
+        continue;
+      }
+      const record = parsed as Record<string, unknown>;
+      if (record.is_error === true || record.subtype === "error_during_execution") {
+        const result = record.result;
+        if (typeof result === "string" && result.trim()) {
+          return result.trim();
+        }
+        const err = record.error;
+        if (err && typeof err === "object") {
+          const msg = (err as Record<string, unknown>).message;
+          if (typeof msg === "string" && msg.trim()) {
+            return msg.trim();
+          }
+        }
+        return "Evaluator reported an error in its result envelope";
+      }
+    } catch {
+      // not JSON, keep looking
+    }
+  }
+
+  return null;
 }
 
 function createSupervisorEvalAbortedError(): {
@@ -430,11 +583,221 @@ function createSupervisorEvalAbortedError(): {
 }
 
 /**
- * Strip a ```json … ``` (or bare ```…```) markdown fence if present.
+ * Strip a ```json … ``` (or bare ```…```) markdown fence when it wraps the
+ * entire payload. The regex is anchored on purpose: a mid-payload fence
+ * (e.g. a ```bash``` snippet inside a `guidance` string value) must NOT be
+ * harvested, otherwise the surrounding JSON is destroyed.
  */
 function stripCodeFence(text: string): string {
-  const fenced = text.match(/```(?:json|JSON)?\s*\n?([\s\S]*?)\n?```/);
+  const trimmed = text.trim();
+  const fenced = trimmed.match(/^```(?:json|JSON)?\s*\n?([\s\S]*?)\n?```$/);
   return fenced ? fenced[1]!.trim() : text;
+}
+
+/**
+ * Re-escape literal control characters (newlines, tabs, etc.) that appear
+ * inside JSON string values. LLM evaluators occasionally emit multi-line
+ * strings without escaping the newlines, which produces
+ * `SyntaxError: Unterminated string in JSON at position X`. This pass only
+ * touches characters that appear inside a string literal; structure outside
+ * of strings is left untouched.
+ */
+function repairJsonControlChars(text: string): string {
+  let out = "";
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]!;
+    if (escaped) {
+      out += ch;
+      escaped = false;
+      continue;
+    }
+    if (ch === "\\") {
+      out += ch;
+      escaped = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      out += ch;
+      continue;
+    }
+    if (inString) {
+      if (ch === "\n") {
+        out += "\\n";
+        continue;
+      }
+      if (ch === "\r") {
+        out += "\\r";
+        continue;
+      }
+      if (ch === "\t") {
+        out += "\\t";
+        continue;
+      }
+      const code = ch.charCodeAt(0);
+      if (code < 0x20) {
+        out += `\\u${code.toString(16).padStart(4, "0")}`;
+        continue;
+      }
+    }
+    out += ch;
+  }
+  return out;
+}
+
+function createSupervisorEvalFailedError(message: string): {
+  code: "supervisor_eval_failed";
+  message: string;
+} {
+  return { code: "supervisor_eval_failed", message };
+}
+
+/**
+ * Scan `text` for the first balanced `{ … }` block, ignoring braces that
+ * appear inside string literals. Useful when the model prefaces the JSON
+ * with prose like "Based on my analysis: {…}". Returns null when no
+ * balanced object is found.
+ */
+function extractBalancedObject(text: string): string | null {
+  const start = text.indexOf("{");
+  if (start < 0) {
+    return null;
+  }
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i]!;
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (ch === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) {
+      continue;
+    }
+    if (ch === "{") {
+      depth++;
+    } else if (ch === "}") {
+      depth--;
+      if (depth === 0) {
+        return text.slice(start, i + 1);
+      }
+    }
+  }
+  return null;
+}
+
+interface JsonCandidate {
+  text: string;
+  source: "raw" | "code-fence-wrap" | "balanced-object";
+}
+
+/**
+ * Enumerate plausible JSON candidates inside a supervisor payload, ordered
+ * from most-trusted to most-aggressive. Each entry is later passed to
+ * JSON.parse (with a control-char repair fallback) until one succeeds.
+ */
+function collectJsonCandidates(text: string): JsonCandidate[] {
+  const candidates: JsonCandidate[] = [];
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return candidates;
+  }
+
+  const seen = new Set<string>();
+  const push = (entry: JsonCandidate) => {
+    if (!entry.text || seen.has(entry.text)) {
+      return;
+    }
+    seen.add(entry.text);
+    candidates.push(entry);
+  };
+
+  push({ text: trimmed, source: "raw" });
+
+  const wholeWrap = trimmed.match(/^```(?:json|JSON)?\s*\n?([\s\S]*?)\n?```$/);
+  if (wholeWrap) {
+    push({ text: wholeWrap[1]!.trim(), source: "code-fence-wrap" });
+  }
+
+  const balanced = extractBalancedObject(trimmed);
+  if (balanced) {
+    push({ text: balanced, source: "balanced-object" });
+  }
+
+  return candidates;
+}
+
+interface SupervisorJsonParseAttempt {
+  parsed: unknown;
+  parsedOk: boolean;
+  candidate: string;
+  source: JsonCandidate["source"];
+  firstError?: unknown;
+  repaired: boolean;
+}
+
+function tryParseSupervisorJson(payloadText: string): SupervisorJsonParseAttempt {
+  const candidates = collectJsonCandidates(payloadText);
+  let firstError: unknown;
+  let firstCandidate = payloadText.trim();
+
+  for (let i = 0; i < candidates.length; i++) {
+    const candidate = candidates[i]!;
+    if (i === 0) {
+      firstCandidate = candidate.text;
+    }
+    try {
+      const parsed = JSON.parse(candidate.text);
+      return {
+        parsed,
+        parsedOk: true,
+        candidate: candidate.text,
+        source: candidate.source,
+        repaired: false,
+      };
+    } catch (error) {
+      if (firstError === undefined) {
+        firstError = error;
+      }
+    }
+
+    const repaired = repairJsonControlChars(candidate.text);
+    if (repaired !== candidate.text) {
+      try {
+        const parsed = JSON.parse(repaired);
+        return {
+          parsed,
+          parsedOk: true,
+          candidate: candidate.text,
+          source: candidate.source,
+          repaired: true,
+        };
+      } catch {
+        // continue with the next candidate
+      }
+    }
+  }
+
+  return {
+    parsed: undefined,
+    parsedOk: false,
+    candidate: firstCandidate,
+    source: "raw",
+    firstError,
+    repaired: false,
+  };
 }
 
 type CodexCompletedCandidate = {
@@ -680,19 +1043,41 @@ function extractSupervisorPayload(output: string, providerId: string): string {
 function parseSupervisorEvaluationResult(
   payloadText: string,
   guidanceMaxChars: number,
-  requestedMode: "decompose" | "evaluate"
+  requestedMode: "decompose" | "evaluate",
+  logger: FastifyBaseLogger = NOOP_LOGGER
 ): SupervisorEvaluationResult {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(stripCodeFence(payloadText));
-  } catch (error) {
-    throw new Error(
-      `Supervisor returned invalid JSON: ${error instanceof Error ? error.message : "parse failed"}`
+  const attempt = tryParseSupervisorJson(payloadText);
+
+  if (!attempt.parsedOk) {
+    logger.warn(
+      {
+        parseError:
+          attempt.firstError instanceof Error
+            ? attempt.firstError.message
+            : String(attempt.firstError),
+        payloadPreview: buildStdoutPreview(payloadText.trim(), 2000),
+      },
+      "Supervisor returned invalid JSON"
+    );
+    throw createSupervisorEvalFailedError(
+      `Supervisor returned invalid JSON: ${attempt.firstError instanceof Error ? attempt.firstError.message : "parse failed"}`
     );
   }
 
+  if (attempt.source !== "raw" || attempt.repaired) {
+    logger.warn(
+      {
+        source: attempt.source,
+        repaired: attempt.repaired,
+        payloadPreview: buildStdoutPreview(payloadText.trim(), 2000),
+      },
+      "Supervisor JSON auto-recovered before parsing"
+    );
+  }
+
+  const parsed = attempt.parsed;
   if (!parsed || typeof parsed !== "object") {
-    throw new Error("Supervisor returned invalid evaluation payload");
+    throw createSupervisorEvalFailedError("Supervisor returned invalid evaluation payload");
   }
 
   const record = parsed as Record<string, unknown>;
@@ -700,12 +1085,14 @@ function parseSupervisorEvaluationResult(
 
   if (requestedMode === "decompose") {
     if (payloadMode !== "decompose") {
-      throw new Error("Supervisor returned invalid decompose payload");
+      throw createSupervisorEvalFailedError("Supervisor returned invalid decompose payload");
     }
 
     const decompositionMode = record.decompositionMode;
     if (decompositionMode !== "stage" && decompositionMode !== "subtarget") {
-      throw new Error("Supervisor decompose result is missing a valid decompositionMode");
+      throw createSupervisorEvalFailedError(
+        "Supervisor decompose result is missing a valid decompositionMode"
+      );
     }
 
     const items = Array.isArray(record.items)
@@ -744,7 +1131,9 @@ function parseSupervisorEvaluationResult(
       : [];
 
     if (items.length === 0) {
-      throw new Error("Supervisor decompose result must include at least one valid item");
+      throw createSupervisorEvalFailedError(
+        "Supervisor decompose result must include at least one valid item"
+      );
     }
 
     return {
@@ -771,13 +1160,13 @@ function parseSupervisorEvaluationResult(
     typeof reason !== "string" ||
     !reason.trim()
   ) {
-    throw new Error("Supervisor returned invalid evaluation payload");
+    throw createSupervisorEvalFailedError("Supervisor returned invalid evaluation payload");
   }
 
   if (status === "stop") {
     const stopReason = record.stopReason;
     if (stopReason !== "objective_complete" && stopReason !== "supervisor_uncertain") {
-      throw new Error("Supervisor stop result is missing a valid stopReason");
+      throw createSupervisorEvalFailedError("Supervisor stop result is missing a valid stopReason");
     }
 
     return {

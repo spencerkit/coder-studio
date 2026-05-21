@@ -3,6 +3,7 @@ import { useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { dispatchCommandAtom } from "../../../atoms/connection";
 import { useTranslation } from "../../../lib/i18n";
+import { useOpenLocation } from "../../code-editor/actions/use-open-location";
 import {
   activeFilePathAtomFamily,
   fileTreeAtomFamily,
@@ -107,6 +108,7 @@ export function useFileActions({
   const setFileTreeStale = useSetAtom(fileTreeStaleAtomFamily(workspaceId));
   const setActiveFilePath = useSetAtom(activeFilePathAtomFamily(workspaceId));
   const setOpenFiles = useSetAtom(openFilesAtomFamily(workspaceId));
+  const { openLocation } = useOpenLocation(workspaceId);
   const loadedDirs = useAtomValue(loadedDirsAtomFamily(workspaceId));
   const setLoadedDirs = useSetAtom(loadedDirsAtomFamily(workspaceId));
 
@@ -298,9 +300,13 @@ export function useFileActions({
     closeCreateDialog();
 
     if (createDialog.mode === "file") {
-      setActiveFilePath(path);
+      void openLocation({
+        workspaceId,
+        path,
+        source: "manual",
+      });
     }
-  }, [createDialog, dispatch, workspaceId, loadFileTree, closeCreateDialog, setActiveFilePath, t]);
+  }, [createDialog, dispatch, workspaceId, loadFileTree, closeCreateDialog, openLocation, t]);
 
   const submitRenameDialog = useCallback(async () => {
     if (!renameDialog) {
@@ -453,10 +459,14 @@ export function useFileActions({
 
   const handleSelectFile = useCallback(
     (path: string) => {
-      setActiveFilePath(path);
+      void openLocation({
+        workspaceId,
+        path,
+        source: "file-tree",
+      });
       onSelectFile?.(path);
     },
-    [onSelectFile, setActiveFilePath]
+    [onSelectFile, openLocation, workspaceId]
   );
 
   return {

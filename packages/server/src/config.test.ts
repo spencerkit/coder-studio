@@ -71,7 +71,7 @@ describe("parseServerConfig", () => {
     expect(config.appVersion).toBe("9.9.9");
   });
 
-  it("uses the temp sqlite file by default outside production", () => {
+  it("uses the temp state anchor file by default outside production", () => {
     delete process.env.NODE_ENV;
     delete process.env.DATA_DIR;
 
@@ -80,7 +80,7 @@ describe("parseServerConfig", () => {
     expect(config.dataDir).toBe(join(tmpdir(), "coder-studio-dev.db"));
   });
 
-  it("uses a stable user data sqlite path by default in production", () => {
+  it("uses a stable user data state anchor path by default in production", () => {
     process.env.NODE_ENV = "production";
     delete process.env.DATA_DIR;
 

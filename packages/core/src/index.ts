@@ -2,6 +2,7 @@
 
 export * from "./domain/diagnostics";
 export * from "./domain/events";
+export * from "./domain/lsp";
 export * from "./domain/mcp";
 export * from "./domain/provider-install";
 export * from "./domain/supervisor";

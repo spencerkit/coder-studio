@@ -384,29 +384,13 @@ describe("SessionCard", () => {
     );
   });
 
-  it("hydrates supervisor state for full-capability sessions and renders the card above the terminal", async () => {
-    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
-      if (op === "supervisor.get") {
-        return {
-          supervisor: {
-            id: "sup-1",
-            sessionId: "sess_123456",
-            workspaceId: "ws-123",
-            state: "idle",
-            objective: "Keep the agent on track",
-            evaluatorProviderId: "claude",
-            maxSupervisionCount: 0,
-            completedSupervisionCount: 0,
-            cycles: [],
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-          },
-        };
-      }
-      return undefined;
+  it("does not hydrate supervisor state via supervisor.get on mount", async () => {
+    const { store, sendCommand } = createSessionStore({
+      state: "running",
+      capability: "full",
+      endedAt: undefined,
+      terminalId: "term-live",
     });
-
-    const { store } = createSessionStore({ state: "running", capability: "full" }, sendCommand);
 
     render(
       <Provider store={store}>
@@ -414,15 +398,15 @@ describe("SessionCard", () => {
       </Provider>
     );
 
-    await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith(
-        "supervisor.get",
-        { sessionId: "sess_123456" },
-        undefined
-      );
+    await act(async () => {
+      await Promise.resolve();
     });
 
-    expect(screen.getByText("Supervisor")).toBeInTheDocument();
+    expect(sendCommand).not.toHaveBeenCalledWith(
+      "supervisor.get",
+      { sessionId: "sess_123456" },
+      undefined
+    );
   });
 
   it("reacts to a pending-focus request by scrolling itself into view and pulsing, then clears the marker", async () => {

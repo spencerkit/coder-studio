@@ -20,8 +20,11 @@ const sharedUiSources = [
   "src/components/ui/segmented-control/index.module.css",
   "src/components/ui/toast/index.module.css",
   "src/components/ui/confirm-dialog/index.module.css",
+  "src/components/ui/datetime-picker/index.module.css",
 ].map((file) => [file, readFileSync(`${process.cwd()}/${file}`, "utf8")] as const);
 
+const forbiddenLegacyTypographyPattern =
+  /var\(--type-(?:kicker|label|meta|body(?!-[1-6])|body-strong|code-inline|app-title|section-title|page-title|display)(?:-[a-z-]+)?\)/;
 const forbiddenSharedPattern = /font-size:\s*(?:\d+px|clamp\(|var\(--text-)/;
 const fontSizePattern = /font-size:\s*(?:\d+px|clamp\(|var\(--text-)/;
 const iconOnlySelectors = [
@@ -39,7 +42,6 @@ const iconOnlySelectors = [
 const exemptBaseSelectors = [/^html$/];
 const exemptComponentSelectors = [
   /\.session-terminal/,
-  /\.agent-terminal/,
   /\.bottom-terminal/,
   /\.terminal-/,
   /\.mobile-terminal-/,
@@ -79,15 +81,18 @@ function getOffenderBlocks(
 }
 
 describe("typography guardrails", () => {
-  it("keeps base.css and shared UI modules off raw and legacy font sizes", () => {
+  it("keeps base.css and shared UI modules on role typography tokens", () => {
     expect(getOffenderBlocks(baseStyles, exemptBaseSelectors)).toEqual([]);
+    expect(baseStyles).not.toMatch(forbiddenLegacyTypographyPattern);
 
     for (const [file, source] of sharedUiSources) {
       expect(source, file).not.toMatch(forbiddenSharedPattern);
+      expect(source, file).not.toMatch(forbiddenLegacyTypographyPattern);
     }
   });
 
-  it("limits raw or legacy font-size values in components.css to exempt code and diagnostics surfaces", () => {
+  it("keeps components.css off legacy typography aliases and limits raw font-size escapes to exempt code and diagnostics surfaces", () => {
+    expect(componentsStyles).not.toMatch(forbiddenLegacyTypographyPattern);
     expect(componentsStyles).toMatch(fontSizePattern);
 
     const offenderBlocks = getOffenderBlocks(

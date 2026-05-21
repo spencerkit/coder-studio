@@ -54,6 +54,8 @@ describe("runCommandAsString", () => {
 
     expect(result).toEqual({ stdout: "ok\n", stderr: "warn\n" });
     expect(spawnMock).toHaveBeenCalledWith("demo", ["--version"], {
+      cwd: undefined,
+      env: undefined,
       shell: false,
       windowsHide: true,
     });
@@ -69,8 +71,31 @@ describe("runCommandAsString", () => {
     await runCommandAsString("demo", []);
 
     expect(spawnMock).toHaveBeenCalledWith("demo", [], {
+      cwd: undefined,
+      env: undefined,
       shell: false,
       windowsHide: true,
+    });
+  });
+
+  it("passes cwd and env through to spawn", async () => {
+    spawnMock.mockImplementation(() => {
+      const child = createChildProcessMock();
+      queueMicrotask(() => child.emit("close", 0));
+      return child;
+    });
+
+    await runCommandAsString("demo", ["install"], {
+      windowsHide: false,
+      cwd: "/tmp/demo",
+      env: { PATH: "/tmp/bin" } as NodeJS.ProcessEnv,
+    });
+
+    expect(spawnMock).toHaveBeenCalledWith("demo", ["install"], {
+      cwd: "/tmp/demo",
+      env: { PATH: "/tmp/bin" },
+      shell: false,
+      windowsHide: false,
     });
   });
 
@@ -87,7 +112,7 @@ describe("runCommandAsString", () => {
     expect(spawnMock).toHaveBeenCalledWith(
       "npm",
       ["install", "-g", "@openai/codex"],
-      expect.objectContaining({ shell: true, windowsHide: true })
+      expect.objectContaining({ cwd: undefined, env: undefined, shell: true, windowsHide: true })
     );
   });
 
@@ -104,7 +129,7 @@ describe("runCommandAsString", () => {
     expect(spawnMock).toHaveBeenCalledWith(
       "git",
       ["--version"],
-      expect.objectContaining({ shell: false, windowsHide: true })
+      expect.objectContaining({ cwd: undefined, env: undefined, shell: false, windowsHide: true })
     );
   });
 });

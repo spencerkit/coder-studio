@@ -260,6 +260,7 @@ export class SessionManager {
     );
 
     for (const session of endedSessions) {
+      this.deps.db.delete(session.id);
       this.sessions.delete(session.id);
       this.terminalToSession.delete(session.terminalId);
       this.cleanupDetector(session.id);

@@ -1,9 +1,5 @@
-import {
-  AuthLoginBlockRepo,
-  closeDatabase,
-  openDatabase,
-  parseServerConfig,
-} from "@coder-studio/server";
+import { dirname, join } from "node:path";
+import { AuthLoginBlockRepo, parseServerConfig } from "@coder-studio/server";
 import { readCliConfig } from "./config-store.js";
 
 export interface CliAuthBlock {
@@ -22,27 +18,21 @@ function resolveDataDir(): string {
 }
 
 export async function listAuthBlocks(now = Date.now()): Promise<CliAuthBlock[]> {
-  const db = openDatabase(resolveDataDir());
-  try {
-    const repo = new AuthLoginBlockRepo(db);
-    return repo.listActiveBlocks(now).map((record) => ({
-      ip: record.ip,
-      failedCount: record.failedCount,
-      firstFailedAt: record.firstFailedAt,
-      lastFailedAt: record.lastFailedAt,
-      blockedUntil: record.blockedUntil ?? 0,
-    }));
-  } finally {
-    closeDatabase(db);
-  }
+  const repo = new AuthLoginBlockRepo({
+    filePath: join(dirname(resolveDataDir()), "state", "auth-login-blocks.json"),
+  });
+  return repo.listActiveBlocks(now).map((record) => ({
+    ip: record.ip,
+    failedCount: record.failedCount,
+    firstFailedAt: record.firstFailedAt,
+    lastFailedAt: record.lastFailedAt,
+    blockedUntil: record.blockedUntil ?? 0,
+  }));
 }
 
 export async function clearAuthBlockByIp(ip: string): Promise<boolean> {
-  const db = openDatabase(resolveDataDir());
-  try {
-    const repo = new AuthLoginBlockRepo(db);
-    return repo.delete(ip);
-  } finally {
-    closeDatabase(db);
-  }
+  const repo = new AuthLoginBlockRepo({
+    filePath: join(dirname(resolveDataDir()), "state", "auth-login-blocks.json"),
+  });
+  return repo.delete(ip);
 }

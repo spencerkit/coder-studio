@@ -3,6 +3,9 @@
  *
  * Creates and assembles all server components.
  */
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import {
   deleteRuntimeConfig,
   getRuntimePath,
@@ -16,26 +19,28 @@ import { buildFastifyApp } from "./app.js";
 import { EventBus } from "./bus/event-bus.js";
 import { ensureDataDir, parseServerConfig, type ServerConfig } from "./config.js";
 import { AutoFetchScheduler } from "./git/auto-fetch.js";
+import { LspManager } from "./lsp/manager.js";
+import { LspToolInstallManager } from "./lsp-tools/install-manager.js";
+import { LspToolManager } from "./lsp-tools/manager.js";
+import { FileManifestStore } from "./lsp-tools/manifest-store.js";
+import { resolveLspToolRoot } from "./lsp-tools/tool-root.js";
 import { runCommandAsString } from "./provider-runtime/command-runner.js";
 import { createE2EProviderMockOverrides } from "./provider-runtime/e2e-provider-mock.js";
 import { ProviderInstallManager } from "./provider-runtime/install-manager.js";
 import type { RuntimeStatusDeps } from "./provider-runtime/runtime-status.js";
 import { SessionManager } from "./session/manager.js";
-import type { Database } from "./storage/database.js";
-import { openDatabase } from "./storage/db.js";
 import { AuthLoginBlockRepo } from "./storage/repositories/auth-login-block-repo.js";
 import { AuthSessionRepo } from "./storage/repositories/auth-session-repo.js";
 import { ProviderConfigRepo } from "./storage/repositories/provider-config-repo.js";
-import { rowToSession, type SessionRow } from "./storage/repositories/session-repo.js";
+import { SessionRepo } from "./storage/repositories/session-repo.js";
 import { SettingsRepo } from "./storage/repositories/settings-repo.js";
-import { SupervisorCycleAttemptRepo } from "./storage/repositories/supervisor-cycle-attempt-repo.js";
-import { SupervisorCycleRepo } from "./storage/repositories/supervisor-cycle-repo.js";
 import { SupervisorRepo } from "./storage/repositories/supervisor-repo.js";
+import { TerminalRepo } from "./storage/repositories/terminal-repo.js";
+import { WorkspaceRepo } from "./storage/repositories/workspace-repo.js";
 import { SupervisorManager } from "./supervisor/manager.js";
 import * as targetStore from "./supervisor/target-store.js";
 import { TerminalManager } from "./terminal/manager.js";
 import { NodePtyHost } from "./terminal/pty-host.js";
-import type { TerminalDatabase } from "./terminal/types.js";
 import { deleteWorkspaceUploads, runStartupGc } from "./uploads/cleanup.js";
 import { STARTUP_GC_DELAY_MS } from "./uploads/constants.js";
 import { WorkspaceManager } from "./workspace/manager.js";
@@ -63,24 +68,38 @@ export async function createServer(
   configOverrides?: Partial<ServerConfig> & ServerRuntimeOptions
 ): Promise<Server> {
   const config = parseServerConfig(configOverrides);
+  const stateRoot =
+    config.dataDir === ":memory:"
+      ? mkdtempSync(join(tmpdir(), "coder-studio-state-"))
+      : dirname(config.dataDir);
+  const shouldCleanupStateRoot = config.dataDir === ":memory:";
 
   ensureDataDir(config);
 
-  const db = openDatabase(config.dataDir);
   const eventBus = new EventBus();
   const activationMgr = new ActivationManager();
   const fencingMgr = new FencingManager();
   const wsHub = new WsHub({ eventBus, commandContext: null, config, fencingMgr });
   let workspaceMgr: WorkspaceManager;
   let commandContext: CommandContext;
+  let lspMgr: LspManager | null = null;
+
+  const terminalRepo = new TerminalRepo({
+    filePath: join(stateRoot, "state", "terminals.json"),
+  });
+  const sessionRepo = new SessionRepo({
+    filePath: join(stateRoot, "state", "sessions.json"),
+  });
 
   const terminalMgr = new TerminalManager({
     ptyHost: createPtyHost(),
     eventBus,
-    db: createTerminalDatabase(db),
+    db: terminalRepo,
   });
 
-  const settingsRepo = new SettingsRepo(db);
+  const settingsRepo = new SettingsRepo({
+    filePath: join(stateRoot, "state", "settings.json"),
+  });
   const autoFetch = new AutoFetchScheduler({
     workspaceMgr: { get: (workspaceId) => workspaceMgr.get(workspaceId) },
     eventBus,
@@ -114,12 +133,16 @@ export async function createServer(
     },
   });
 
-  const sessionDb = createSessionDatabase(db);
-  const providerConfigRepo = new ProviderConfigRepo(db);
+  const providerConfigRepo = new ProviderConfigRepo({
+    filePath: join(stateRoot, "state", "provider-configs.json"),
+  });
+  const workspaceRepo = new WorkspaceRepo({
+    filePath: join(stateRoot, "state", "workspaces.json"),
+  });
   const sessionMgr = new SessionManager({
     terminalMgr,
     eventBus,
-    db: sessionDb,
+    db: sessionRepo,
     broadcaster: wsHub,
     providerRegistry,
     providerConfigRepo,
@@ -128,29 +151,40 @@ export async function createServer(
   let supervisorMgr: SupervisorManager | undefined;
 
   workspaceMgr = new WorkspaceManager({
-    db,
+    workspaceRepo,
     eventBus,
     broadcaster: wsHub,
     autoFetch,
     teardown: async (workspaceId) => {
+      await lspMgr?.disposeWorkspace(workspaceId);
       await supervisorMgr?.deleteForWorkspace(workspaceId);
       await sessionMgr.stopForWorkspace(workspaceId);
       await terminalMgr.closeForWorkspace(workspaceId);
       sessionMgr.deleteEndedForWorkspace(workspaceId);
+
+      for (const session of sessionRepo.findByWorkspaceId(workspaceId)) {
+        sessionRepo.delete(session.id);
+      }
+
+      for (const terminal of terminalRepo.listByWorkspace(workspaceId)) {
+        terminalRepo.delete(terminal.id);
+      }
     },
     onClose: (workspaceId) =>
       deleteWorkspaceUploads(config.uploadsDir, workspaceId).catch((err) =>
         console.warn("[uploads] cascade cleanup failed", { wsId: workspaceId, err })
       ),
   });
-  workspaceMgr.hydrateWatchers();
 
-  const authSessionRepo = new AuthSessionRepo(db);
-  const authLoginBlockRepo = new AuthLoginBlockRepo(db);
+  const authSessionRepo = new AuthSessionRepo({
+    filePath: join(stateRoot, "state", "auth-sessions.json"),
+  });
+  const authLoginBlockRepo = new AuthLoginBlockRepo({
+    filePath: join(stateRoot, "state", "auth-login-blocks.json"),
+  });
 
   const app = await buildFastifyApp({
     wsHub,
-    db,
     workspaceMgr,
     webRoot: config.webRoot,
     config,
@@ -169,10 +203,32 @@ export async function createServer(
   });
 
   wsHub.setLogger(app.log);
+  workspaceMgr.setLogger(app.log);
+  workspaceMgr.hydrateWatchers();
 
-  const supervisorRepo = new SupervisorRepo(db);
-  const cycleRepo = new SupervisorCycleRepo(db);
-  const cycleAttemptRepo = new SupervisorCycleAttemptRepo(db);
+  const lspManifestStore = new FileManifestStore(resolveLspToolRoot(config.dataDir));
+  const lspToolMgr = new LspToolManager({
+    manifestStore: lspManifestStore,
+  });
+  const lspToolInstallMgr = new LspToolInstallManager({
+    manifestStore: lspManifestStore,
+  });
+
+  lspMgr = new LspManager({
+    workspaceMgr: { get: (workspaceId) => workspaceMgr.get(workspaceId) },
+    eventBus,
+    logger: app.log,
+    requestTimeoutMs: 2000,
+    idleTtlMs: 60_000,
+    restartLimit: 2,
+    lspToolMgr,
+  });
+  const persistedLspMode = settingsRepo.get<"auto" | "off">("lsp.mode");
+  if (persistedLspMode === "off") {
+    await lspMgr.setRuntimeMode("off");
+  }
+
+  const supervisorRepo = new SupervisorRepo();
   supervisorMgr = new SupervisorManager({
     eventBus,
     broadcaster: wsHub,
@@ -183,13 +239,11 @@ export async function createServer(
     providerConfigRepo,
     settingsRepo,
     supervisorRepo,
-    cycleRepo,
-    cycleAttemptRepo,
     targetStore,
     logger: app.log,
   });
   await sessionMgr.hydrate();
-  await supervisorMgr.hydrate();
+  supervisorMgr.start();
 
   const providerMockOverrides = createE2EProviderMockOverrides();
   const providerRuntimeDeps: RuntimeStatusDeps = providerMockOverrides
@@ -208,7 +262,8 @@ export async function createServer(
     terminalMgr,
     eventBus,
     broadcaster: wsHub,
-    db,
+    settingsRepo,
+    providerConfigRepo,
     providerRegistry,
     fencingMgr,
     supervisorMgr,
@@ -217,6 +272,9 @@ export async function createServer(
     providerInstallMgr,
     activationMgr,
     config,
+    lspMgr,
+    lspToolMgr,
+    lspToolInstallMgr,
   };
 
   wsHub.setCommandContext(commandContext);
@@ -259,13 +317,16 @@ export async function createServer(
     clearTimeout(gcTimer);
     clearInterval(wsKeepaliveTimer);
     await app.close();
+    await lspMgr?.disposeAll();
     autoFetch.stop();
     supervisorMgr.stop();
     terminalMgr.shutdown();
     wsHub.destroy();
     eventBus.clear();
+    if (shouldCleanupStateRoot) {
+      rmSync(stateRoot, { recursive: true, force: true });
+    }
     deleteRuntimeConfig();
-    db.close();
   };
 
   const actualPort = extractListenPort(app) ?? config.port;
@@ -288,105 +349,6 @@ function extractListenPort(app: FastifyInstance): number | undefined {
 
 function createPtyHost() {
   return new NodePtyHost();
-}
-
-function createTerminalDatabase(db: Database): TerminalDatabase {
-  return {
-    insert: (terminal) => {
-      db.prepare(`
-        INSERT INTO terminals (id, workspace_id, kind, title, cwd, argv, cols, rows, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        terminal.id,
-        terminal.workspaceId,
-        terminal.kind,
-        terminal.title,
-        terminal.cwd,
-        JSON.stringify(terminal.argv),
-        terminal.cols,
-        terminal.rows,
-        terminal.createdAt
-      );
-    },
-    markEnded: (id: string, endedAt: number, exitCode: number) => {
-      db.prepare(`
-        UPDATE terminals SET ended_at = ?, exit_code = ? WHERE id = ?
-      `).run(endedAt, exitCode, id);
-    },
-  };
-}
-
-function createSessionDatabase(db: Database) {
-  return {
-    insert: (session: SessionRow) => {
-      db.prepare(`
-        INSERT INTO sessions (id, workspace_id, terminal_id, provider_id, state, capability, started_at, last_active_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        session.id,
-        session.workspace_id,
-        session.terminal_id,
-        session.provider_id,
-        session.state,
-        session.capability,
-        session.started_at,
-        session.last_active_at
-      );
-    },
-    update: (id: string, patch: Record<string, unknown>) => {
-      const keys = Object.keys(patch);
-      if (keys.length === 0) return;
-
-      const allowedCols = new Set([
-        "terminal_id",
-        "state",
-        "started_at",
-        "ended_at",
-        "completion_percent",
-        "error_reason",
-        "last_active_at",
-        "title",
-      ]);
-
-      const setClauses: string[] = [];
-      const values: unknown[] = [];
-      for (const key of keys) {
-        const col = key.replace(/([A-Z])/g, "_$1").toLowerCase();
-        if (!allowedCols.has(col)) continue;
-        setClauses.push(`${col} = ?`);
-        values.push(patch[key]);
-      }
-      if (setClauses.length === 0) return;
-
-      db.prepare(`UPDATE sessions SET ${setClauses.join(", ")} WHERE id = ?`).run(
-        ...(values as Array<string | number | bigint | Uint8Array | null>),
-        id
-      );
-    },
-    findById: (id: string) => {
-      const row = db.prepare("SELECT * FROM sessions WHERE id = ?").get(id) as
-        | SessionRow
-        | undefined;
-      return row ? rowToSession(row) : undefined;
-    },
-    findByWorkspaceId: (workspaceId: string) => {
-      const rows = db
-        .prepare("SELECT * FROM sessions WHERE workspace_id = ? ORDER BY started_at DESC")
-        .all(workspaceId) as unknown as SessionRow[];
-      return rows.map(rowToSession);
-    },
-    listHydratable: () => {
-      const rows = db
-        .prepare(
-          "SELECT * FROM sessions WHERE archived = 0 AND ended_at IS NULL ORDER BY started_at DESC"
-        )
-        .all() as unknown as SessionRow[];
-      return rows.map(rowToSession);
-    },
-    delete: (id: string) => {
-      db.prepare("DELETE FROM sessions WHERE id = ?").run(id);
-    },
-  };
 }
 
 if (isDirectExecution(import.meta.url)) {

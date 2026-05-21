@@ -548,6 +548,10 @@
     },
     "terminal_renderer": "Terminal Renderer",
     "terminal_renderer_hint": "Choose terminal rendering mode",
+    "lsp_runtime_mode": "LSP Runtime Mode",
+    "lsp_runtime_mode_hint": "Control code intelligence memory usage. Turning it off immediately stops active language service processes, so diagnostics, go-to-definition, hover, and similar features become temporarily unavailable.",
+    "lsp_runtime_mode_auto": "Auto",
+    "lsp_runtime_mode_off": "Off",
     "terminal_appearance": "Terminal Appearance",
     "copy_on_select": "Copy on select",
     "copy_on_select_hint": "Automatically copy selected text to the system clipboard",
@@ -791,8 +795,22 @@
       },
       "edit": {
         "title": "Edit Supervisor",
-        "subtitle": "Adjust the objective or switch evaluators without clearing evaluation history.",
-        "confirm": "Save"
+        "subtitle": "Adjust the objective and restore a previous memory snapshot when needed.",
+        "confirm": "Save",
+        "reset_confirm_title": "Save and reset supervisor progress?",
+        "reset_confirm_description": "Changing the objective will make Supervisor re-evaluate the goal. Existing supervisor memory and progress for this target will be reset."
+      },
+      "restore": {
+        "open": "Restore from Existing Memory",
+        "hint": "Reuse supervisor memory from an existing target directory for this session.",
+        "title": "Restore Supervisor Memory",
+        "subtitle": "Choose a recoverable memory snapshot and attach it to the current session supervisor.",
+        "back": "Back to Details",
+        "confirm": "Restore",
+        "empty": "No recoverable supervisor memory found.",
+        "empty_hint": "Only target directories with readable supervisor memory can be restored.",
+        "cycle_count": "{count} cycles",
+        "updated_at": "Updated {time}"
       },
       "details": {
         "title": "Supervisor Details"
@@ -869,7 +887,6 @@
       "continue_phone": "Continue on Phone",
       "recheck": "Recheck",
       "open_diagnostics": "Open Diagnostics",
-      "open_settings": "Open Settings",
       "copy_details": "Copy error details",
       "copied": "Copied",
       "install_provider": "Install Provider"

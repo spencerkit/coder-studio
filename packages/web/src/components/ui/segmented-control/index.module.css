@@ -4,7 +4,7 @@
 :global(.shortcuts-category-tabs) {
   display: inline-flex;
   align-items: center;
-  gap: var(--sp-1);
+  gap: var(--gap-control);
   min-width: 0;
 }
 
@@ -20,12 +20,12 @@
 :global(.settings-provider-subnav-button),
 :global(.shortcuts-category-tab) {
   min-width: 0;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-control);
   border: 1px solid transparent;
   color: var(--text-secondary);
-  font-size: var(--type-label-size);
-  line-height: var(--type-label-line-height);
-  font-weight: var(--type-label-weight);
+  font-size: var(--type-body-6-size);
+  line-height: var(--type-body-6-line-height);
+  font-weight: var(--type-body-6-weight);
 }
 
 .segmentedControlOption[data-size="sm"],
@@ -59,7 +59,7 @@
 }
 
 :global(.settings-provider-tabs) {
-  margin-bottom: var(--sp-6);
+  margin-bottom: var(--space-panel);
   padding: 0;
   border: none;
   border-radius: 0;
@@ -69,7 +69,7 @@
 :global(.settings-provider-subnav) {
   display: flex;
   width: 100%;
-  margin-bottom: var(--sp-6);
+  margin-bottom: var(--space-panel);
   padding-bottom: var(--sp-3);
   border-bottom: 1px solid var(--border);
   border-radius: 0;
@@ -103,7 +103,7 @@
 }
 
 :global(.shortcuts-category-tabs) {
-  margin-bottom: var(--sp-4);
+  margin-bottom: var(--space-default);
   padding: 0;
   border: none;
   border-radius: 0;
