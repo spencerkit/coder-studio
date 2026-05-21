@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0
+
+### Minor Changes
+
+- [#48](https://github.com/spencerkit/coder-studio/pull/48) [`ca5767f`](https://github.com/spencerkit/coder-studio/commit/ca5767f6f87e409ce513e4e1933730217fc50810) Thanks [@pallyoung](https://github.com/pallyoung)! - Add configurable LSP runtime behavior with managed language server installation, and improve supervisor restore and editing flows across desktop and mobile.
+
 ## 0.3.11
 
 ### Patch Changes
