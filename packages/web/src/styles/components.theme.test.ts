@@ -654,7 +654,7 @@ describe("components.css theme-sensitive surfaces", () => {
       "background: var(--state-error-bg)"
     );
 
-    expect(modalOverlay).toContain("background: var(--surface-overlay-backdrop)");
+    expect(modalOverlay).toContain("background: var(--overlay-backdrop)");
     expect(
       getRuleBlocksFrom(modalStyles, ".card").some((block) =>
         block.includes("border: 1px solid var(--surface-overlay-border)")
@@ -676,7 +676,7 @@ describe("components.css theme-sensitive surfaces", () => {
       )
     ).toBe(true);
 
-    expect(drawerBackdrop).toContain("background: var(--surface-overlay-backdrop)");
+    expect(drawerBackdrop).toContain("background: var(--overlay-backdrop)");
     expect(
       getRuleBlocksFrom(drawerStylesheet, ".panel").some((block) =>
         block.includes("border: 1px solid var(--surface-overlay-border)")
@@ -698,7 +698,7 @@ describe("components.css theme-sensitive surfaces", () => {
       )
     ).toBe(true);
 
-    expect(localOverlay).toContain("background: var(--surface-overlay-backdrop)");
+    expect(localOverlay).toContain("background: var(--overlay-backdrop)");
     expect(localOverlayCard).toContain("border: 1px solid var(--surface-overlay-border)");
     expect(localOverlayCard).toContain("border-radius: var(--radius-local-overlay)");
     expect(localOverlayCard).toContain("background: var(--surface-overlay-bg)");
@@ -1039,6 +1039,14 @@ describe("components.css theme-sensitive surfaces", () => {
 
     expect(sectionItems).toContain("gap: var(--gap-compact)");
     expect(sheetActions).toContain("gap: var(--gap-compact)");
+  });
+
+  it("keeps mobile sheet and drawer backdrops on the shared overlay backdrop token", () => {
+    const mobileSheetBackdrop = getLastRuleBlock(".mobile-sheet-layer__backdrop");
+    const mobileDrawerBackdrop = getLastRuleBlock(".mobile-drawer-layer__backdrop");
+
+    expect(mobileSheetBackdrop).toContain("background: var(--overlay-backdrop)");
+    expect(mobileDrawerBackdrop).toContain("background: var(--overlay-backdrop)");
   });
 
   it("keeps worktree state chips and mobile tabs on shared state and layer tokens", () => {

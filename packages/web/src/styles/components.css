@@ -4457,7 +4457,7 @@ body.is-resizing-panels * {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: var(--surface-overlay-backdrop);
+  background: var(--overlay-backdrop);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -9936,7 +9936,7 @@ textarea.input {
   .mobile-drawer-layer__backdrop {
     position: absolute;
     inset: 0;
-    background: rgba(3, 8, 12, 0.62);
+    background: var(--overlay-backdrop);
     opacity: 0;
     animation: mobile-shell-backdrop-enter var(--mobile-shell-motion-enter-duration) var(--ease-out)
       forwards;

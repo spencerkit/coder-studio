@@ -7,7 +7,7 @@
   align-items: center;
   justify-content: center;
   padding: var(--sp-4);
-  background: var(--surface-overlay-backdrop);
+  background: var(--overlay-backdrop);
 }
 
 .card,

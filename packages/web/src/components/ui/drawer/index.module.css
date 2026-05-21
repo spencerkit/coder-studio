@@ -6,7 +6,7 @@
   display: flex;
   justify-content: flex-end;
   padding: var(--sp-4);
-  background: var(--surface-overlay-backdrop);
+  background: var(--overlay-backdrop);
 }
 
 .panel,
