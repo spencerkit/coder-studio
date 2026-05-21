@@ -42,7 +42,6 @@ const iconOnlySelectors = [
 const exemptBaseSelectors = [/^html$/];
 const exemptComponentSelectors = [
   /\.session-terminal/,
-  /\.agent-terminal/,
   /\.bottom-terminal/,
   /\.terminal-/,
   /\.mobile-terminal-/,

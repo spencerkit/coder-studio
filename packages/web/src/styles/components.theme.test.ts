@@ -1271,7 +1271,6 @@ describe("components.css theme-sensitive surfaces", () => {
     const idleStatus = getLastRuleBlock(".agent-status.idle");
     const headerLeft = getLastRuleBlock(".agent-header-left");
     const actions = getLastRuleBlock(".agent-actions");
-    const terminal = getLastRuleBlock(".agent-terminal");
 
     expect(progress).toContain("background: var(--state-info-bg)");
     expect(header).toContain("gap: var(--gap-cluster-md)");
@@ -1286,10 +1285,6 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(idleStatus).toContain("color: var(--state-disabled-text)");
     expect(headerLeft).toContain("gap: var(--gap-cluster-md)");
     expect(actions).toContain("gap: var(--gap-cluster-sm)");
-    expect(terminal).toContain("padding: var(--terminal-panel-inset)");
-    expect(terminal).toContain("font-size: var(--terminal-font-size)");
-    expect(terminal).toContain("line-height: var(--terminal-line-height)");
-    expect(terminal).toContain("color: var(--terminal-text)");
   });
 
   it("keeps mobile sheet bodies as flex columns so sheet content can fill the viewport", () => {

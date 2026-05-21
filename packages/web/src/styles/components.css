@@ -2242,18 +2242,6 @@ body.is-resizing-panels * {
   color: var(--pink);
 }
 
-.agent-terminal {
-  flex: 1;
-  background: var(--bg-terminal);
-  padding: var(--terminal-panel-inset);
-  font-family: var(--mono);
-  font-size: var(--terminal-font-size);
-  line-height: var(--terminal-line-height);
-  color: var(--terminal-text);
-  overflow: hidden;
-  min-height: 0;
-}
-
 .term-line {
   white-space: pre;
 }
