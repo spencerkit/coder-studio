@@ -2,8 +2,8 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: var(--form-group-gap);
-  margin: 0 0 var(--sp-4);
+  gap: var(--gap-content);
+  margin: 0 0 var(--space-default);
   padding: var(--inset-control-block) var(--inset-control-inline);
   border: 1px solid var(--border);
   border-radius: var(--radius-overlay);
@@ -36,7 +36,7 @@
   min-width: 0;
   flex: 1;
   flex-direction: column;
-  gap: var(--gap-cluster-sm);
+  gap: var(--gap-control);
 }
 
 .title {

@@ -39,16 +39,23 @@
   --panel-header-height: 40px;
 
   /* ========== Foundation: Spacing / Rhythm ========== */
-  --gap-stack-xs: var(--sp-1);
-  --gap-stack-sm: var(--sp-2);
-  --gap-stack-md: var(--sp-3);
-  --gap-stack-lg: var(--sp-4);
-  --gap-cluster-2xs: calc(var(--sp-1) / 2);
-  --gap-cluster-3xs: calc(var(--sp-1) - (var(--sp-1) / 4));
-  --gap-cluster-tight: calc(var(--sp-1) + (var(--sp-1) / 2));
-  --gap-cluster-hairline: calc(var(--sp-1) / 4);
-  --gap-cluster-sm: var(--sp-1);
-  --gap-cluster-md: var(--sp-2);
+  --gap-hairline: calc(var(--sp-1) / 4);
+  --gap-compact: calc(var(--sp-1) / 2);
+  --gap-micro: calc(var(--sp-1) - (var(--sp-1) / 4));
+  --gap-control: var(--sp-1);
+  --gap-tight: calc(var(--sp-1) + (var(--sp-1) / 2));
+  --gap-default: var(--sp-2);
+  --gap-content: var(--sp-3);
+  --gap-panel: var(--sp-4);
+  --gap-section: var(--sp-6);
+  --space-micro: var(--gap-compact);
+  --space-inline: var(--gap-control);
+  --space-tight: var(--gap-tight);
+  --space-default: var(--gap-default);
+  --space-content: var(--gap-content);
+  --space-block: var(--gap-panel);
+  --space-panel: var(--gap-section);
+  --space-section: var(--sp-8);
   --inset-control-inline: var(--sp-3);
   --inset-control-block: var(--sp-2);
   --inset-row-inline: var(--sp-4);
@@ -57,8 +64,6 @@
   --inset-chip-block: var(--sp-1);
   --inset-panel: var(--sp-4);
   --inset-dialog: var(--sp-6);
-  --section-gap: var(--sp-6);
-  --form-group-gap: var(--sp-3);
 
   /* ========== Foundation: Radius Roles ========== */
   --radius-control: var(--radius-md);
@@ -116,7 +121,7 @@
 
   /* ========== Foundation: Code Surface Sub-Specs ========== */
   --terminal-panel-inset: 2px;
-  --terminal-toolbar-gap: var(--gap-cluster-md);
+  --terminal-toolbar-gap: var(--gap-default);
   --terminal-local-overlay-radius: 2px;
   --terminal-state-running-bg: var(--state-info-bg);
   --terminal-state-running-border: var(--state-info-border);
@@ -125,8 +130,8 @@
   --terminal-state-reconnecting-border: var(--state-warning-border);
   --terminal-state-failed-bg: var(--state-error-bg);
   --terminal-state-failed-border: var(--state-error-border);
-  --session-card-gap: var(--gap-stack-md);
-  --session-row-gap: var(--gap-cluster-md);
+  --session-card-gap: var(--gap-content);
+  --session-row-gap: var(--gap-default);
   --session-state-radius: var(--radius-chip);
   --editor-pane-inset: var(--inset-panel);
   --editor-toolbar-inset: var(--inset-control-inline);
@@ -135,7 +140,7 @@
   --editor-selection-inactive-bg: color-mix(in srgb, var(--state-selected-bg) 60%, transparent);
   --editor-diagnostic-warning-bg: var(--state-warning-bg);
   --editor-diagnostic-error-bg: var(--state-error-bg);
-  --diff-section-gap: var(--section-gap);
+  --diff-section-gap: var(--gap-section);
   --diff-thread-inset: var(--inset-row-inline);
   --diff-thread-radius: var(--radius-panel);
   --diff-add-bg: var(--state-success-bg);
@@ -1313,56 +1318,56 @@
 }
 
 [data-theme="mint-dark"] {
-  --gap-stack-md: var(--sp-3);
+  --gap-content: var(--sp-3);
   --radius-overlay: var(--radius-xl);
   --state-focus-ring-color: #6cb6ff;
   --surface-overlay-bg: color-mix(in srgb, #131b22 96%, transparent);
 }
 
 [data-theme="mint-light"] {
-  --gap-stack-md: var(--sp-3);
+  --gap-content: var(--sp-3);
   --radius-overlay: var(--radius-xl);
   --state-focus-ring-color: #158f77;
   --surface-overlay-bg: color-mix(in srgb, #ffffff 96%, transparent);
 }
 
 [data-theme="graphite-dark"] {
-  --gap-stack-md: var(--sp-3);
+  --gap-content: var(--sp-3);
   --radius-overlay: var(--radius-xl);
   --state-focus-ring-color: #9bb8ff;
   --surface-overlay-bg: color-mix(in srgb, #1a1f27 96%, transparent);
 }
 
 [data-theme="graphite-light"] {
-  --gap-stack-md: var(--sp-3);
+  --gap-content: var(--sp-3);
   --radius-overlay: var(--radius-xl);
   --state-focus-ring-color: #315fdd;
   --surface-overlay-bg: color-mix(in srgb, #ffffff 96%, transparent);
 }
 
 [data-theme="nord-dark"] {
-  --gap-stack-md: var(--sp-3);
+  --gap-content: var(--sp-3);
   --radius-overlay: var(--radius-xl);
   --state-focus-ring-color: #88c0d0;
   --surface-overlay-bg: color-mix(in srgb, #2e3440 96%, transparent);
 }
 
 [data-theme="nord-light"] {
-  --gap-stack-md: var(--sp-3);
+  --gap-content: var(--sp-3);
   --radius-overlay: var(--radius-xl);
   --state-focus-ring-color: #5b7fa8;
   --surface-overlay-bg: color-mix(in srgb, #ffffff 96%, transparent);
 }
 
 [data-theme="hc-dark"] {
-  --gap-stack-md: var(--sp-3);
+  --gap-content: var(--sp-3);
   --radius-overlay: var(--radius-xl);
   --state-focus-ring-color: #ffff00;
   --surface-overlay-bg: color-mix(in srgb, #111111 96%, transparent);
 }
 
 [data-theme="hc-light"] {
-  --gap-stack-md: var(--sp-3);
+  --gap-content: var(--sp-3);
   --radius-overlay: var(--radius-xl);
   --state-focus-ring-color: #0037da;
   --surface-overlay-bg: color-mix(in srgb, #ffffff 96%, transparent);

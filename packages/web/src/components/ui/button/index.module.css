@@ -3,7 +3,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: var(--gap-cluster-md);
+  gap: var(--gap-default);
   height: var(--control-height-md);
   padding: 0 var(--inset-control-inline);
   border: 1px solid transparent;
@@ -82,7 +82,7 @@
 .sm,
 :global(.btn-sm) {
   height: var(--control-height-sm);
-  padding: 0 var(--gap-cluster-md);
+  padding: 0 var(--gap-default);
   border-radius: var(--radius-control-sm);
   font-size: var(--type-body-6-size);
   font-weight: var(--type-body-6-weight);

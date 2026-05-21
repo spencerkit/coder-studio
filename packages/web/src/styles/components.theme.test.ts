@@ -524,7 +524,7 @@ describe("components.css theme-sensitive surfaces", () => {
 
     expect(
       getRuleBlocksFrom(segmentedControlStylesheet, ":global(.shortcuts-category-tabs)").some(
-        (block) => block.includes("gap: var(--gap-cluster-sm)")
+        (block) => block.includes("gap: var(--gap-control)")
       )
     ).toBe(true);
     expect(getLastRuleBlockFrom(segmentedControlStylesheet, ".segmentedControlOption")).toContain(
@@ -625,7 +625,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(tooltip).toContain("background: var(--surface-overlay-bg)");
     expect(tooltip).toContain("box-shadow: var(--surface-overlay-shadow)");
 
-    expect(notice).toContain("gap: var(--form-group-gap)");
+    expect(notice).toContain("gap: var(--gap-content)");
     expect(notice).toContain("padding: var(--inset-control-block) var(--inset-control-inline)");
     expect(notice).toContain("border-radius: var(--radius-overlay)");
     expect(notice).toContain("background: var(--surface-elevated-bg)");
@@ -733,7 +733,7 @@ describe("components.css theme-sensitive surfaces", () => {
       "--status-dot-current-color: var(--state-info-text)"
     );
 
-    expect(emptyState).toContain("gap: var(--gap-stack-md)");
+    expect(emptyState).toContain("gap: var(--gap-content)");
     expect(emptyState).toContain("padding: var(--inset-dialog) var(--inset-panel)");
   });
 
@@ -831,7 +831,7 @@ describe("components.css theme-sensitive surfaces", () => {
 
     expect(modal).not.toContain("rgba(17, 24, 31, 0.98)");
     expect(modal).toContain("var(--bg-surface)");
-    expect(launchButton).toContain("gap: var(--gap-cluster-md)");
+    expect(launchButton).toContain("gap: var(--gap-default)");
     expect(launchButton).toContain("border-radius: var(--radius-control-lg)");
     expect(launchButtonFocus).toContain("var(--state-focus-ring-width)");
     expect(launchButtonFocus).toContain("var(--state-focus-ring-color)");
@@ -899,8 +899,8 @@ describe("components.css theme-sensitive surfaces", () => {
     const bottomTerminalShell = getLastRuleBlock(".workspace-bottom-panel > .bottom-terminal");
 
     expect(topbar).toContain("var(--bg-surface)");
-    expect(topbarTabs).toContain("gap: var(--gap-cluster-3xs)");
-    expect(topbarTab).toContain("gap: var(--gap-cluster-tight)");
+    expect(topbarTabs).toContain("gap: var(--gap-micro)");
+    expect(topbarTab).toContain("gap: var(--gap-tight)");
     expect(topbarTab).toContain(
       "padding: 0 var(--control-height-md) 0 var(--inset-control-inline)"
     );
@@ -936,10 +936,10 @@ describe("components.css theme-sensitive surfaces", () => {
     );
     expect(resolvingStrongLine).toContain("border: 1px solid var(--state-info-border)");
     expect(resolvingStrongLine).toContain("background: var(--state-info-bg)");
-    expect(sidebarTabs).toContain("gap: var(--gap-cluster-md)");
-    expect(sidebarTab).toContain("gap: var(--gap-cluster-sm)");
+    expect(sidebarTabs).toContain("gap: var(--gap-default)");
+    expect(sidebarTab).toContain("gap: var(--gap-control)");
     expect(sidebarTabActiveAfter).toContain("border-radius: var(--radius-pill)");
-    expect(sidebarActions).toContain("gap: var(--gap-cluster-sm)");
+    expect(sidebarActions).toContain("gap: var(--gap-control)");
     expect(verticalDividerRules).toContain("width: 10px");
     expect(verticalDividerRules).not.toContain("width: 8px");
     expect(verticalDividerRules).toContain("margin-left: -5px");
@@ -1018,7 +1018,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(quickActions).toContain("min-width: max-content");
     expect(quickActions).toContain("flex-shrink: 0");
     expect(quickActions).toContain("padding: 0 var(--inset-control-block)");
-    expect(quickActions).toContain("gap: var(--gap-cluster-tight)");
+    expect(quickActions).toContain("gap: var(--gap-tight)");
   });
 
   it("keeps app topbar and left panel compatibility overrides on shared foundation tokens", () => {
@@ -1026,9 +1026,7 @@ describe("components.css theme-sensitive surfaces", () => {
     const leftPanelBlocks = getRuleBlocksFrom(stylesheet, ".left-panel");
 
     expect(appTopbarBlocks.some((block) => block.includes("padding: 0 var(--sp-2)"))).toBe(true);
-    expect(appTopbarBlocks.some((block) => block.includes("gap: var(--gap-cluster-2xs)"))).toBe(
-      true
-    );
+    expect(appTopbarBlocks.some((block) => block.includes("gap: var(--gap-compact)"))).toBe(true);
     expect(leftPanelBlocks.some((block) => block.includes("background: var(--bg-sidebar)"))).toBe(
       true
     );
@@ -1039,8 +1037,8 @@ describe("components.css theme-sensitive surfaces", () => {
     const sectionItems = getLastRuleBlock(".file-context-menu__section-items");
     const sheetActions = getLastRuleBlock(".file-context-menu__sheet-actions");
 
-    expect(sectionItems).toContain("gap: var(--gap-cluster-2xs)");
-    expect(sheetActions).toContain("gap: var(--gap-cluster-2xs)");
+    expect(sectionItems).toContain("gap: var(--gap-compact)");
+    expect(sheetActions).toContain("gap: var(--gap-compact)");
   });
 
   it("keeps worktree state chips and mobile tabs on shared state and layer tokens", () => {
@@ -1082,13 +1080,13 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(editorShell).not.toContain("rgba(11, 18, 24, 0.92)");
     expect(editorHeader).toContain("var(--bg-surface)");
     expect(editorHeader).not.toContain("rgba(18, 26, 34, 0.96)");
-    expect(editorError).toContain("gap: var(--gap-cluster-tight)");
-    expect(editorError).toContain("padding: var(--gap-cluster-tight) var(--inset-control-inline)");
+    expect(editorError).toContain("gap: var(--gap-tight)");
+    expect(editorError).toContain("padding: var(--gap-tight) var(--inset-control-inline)");
     expect(editorError).toContain("background: var(--editor-diagnostic-error-bg)");
     expect(editorError).toContain("color: var(--state-error-text)");
     expect(codeLines).toContain("padding: var(--editor-pane-inset) 0");
-    expect(codeModeToggleRules).toContain("padding: var(--gap-cluster-2xs)");
-    expect(codeModeToggleRules).toContain("gap: var(--gap-cluster-2xs)");
+    expect(codeModeToggleRules).toContain("padding: var(--gap-compact)");
+    expect(codeModeToggleRules).toContain("gap: var(--gap-compact)");
     expect(codeModeToggleRules).toContain("border-radius: var(--radius-lg)");
     expect(codeModeToggleRules).toContain(
       "background: color-mix(in srgb, var(--bg-hover) 72%, var(--bg-surface) 28%)"
@@ -1136,15 +1134,13 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(xtermHost).toContain("border-radius: var(--terminal-local-overlay-radius)");
     expect(xtermReplayCard).toContain("border-radius: var(--terminal-local-overlay-radius)");
     expect(sessionProgress).toContain("background: var(--state-info-bg)");
-    expect(sessionHeader).toContain(
-      "padding: var(--gap-cluster-tight) var(--inset-control-inline)"
+    expect(sessionHeader).toContain("padding: var(--gap-tight) var(--inset-control-inline)");
+    expect(sessionHeaderLeft).toContain("gap: var(--gap-default)");
+    expect(sessionHeaderCopyBlocks.some((block) => block.includes("gap: var(--gap-compact)"))).toBe(
+      true
     );
-    expect(sessionHeaderLeft).toContain("gap: var(--gap-cluster-md)");
-    expect(
-      sessionHeaderCopyBlocks.some((block) => block.includes("gap: var(--gap-cluster-2xs)"))
-    ).toBe(true);
     expect(sessionTitleRow).toContain("gap: var(--session-row-gap)");
-    expect(sessionHeaderActions.some((block) => block.includes("gap: var(--gap-cluster-sm)"))).toBe(
+    expect(sessionHeaderActions.some((block) => block.includes("gap: var(--gap-control)"))).toBe(
       true
     );
     expect(sessionBadges).toContain("border-radius: var(--session-state-radius)");
@@ -1162,7 +1158,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(runningDot).toContain("var(--terminal-state-running-border)");
     expect(focusPulse).toContain("z-index: var(--z-inline-raised)");
     expect(gitView).toContain("padding: var(--editor-pane-inset)");
-    expect(editorHeader).toContain("padding: var(--gap-cluster-md) var(--editor-toolbar-inset)");
+    expect(editorHeader).toContain("padding: var(--gap-default) var(--editor-toolbar-inset)");
     expect(editorBody).toContain("background: var(--surface-panel-bg)");
     expect(addedLine).toContain("background: var(--diff-add-bg)");
     expect(removedLine).toContain("background: var(--diff-delete-bg)");
@@ -1251,7 +1247,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(content).toContain("max-width: 100%");
     expect(providerCard).toContain("min-width: 0");
     expect(providerBody).toContain("width: 100%");
-    expect(providerBody).toContain("gap: var(--gap-cluster-tight)");
+    expect(providerBody).toContain("gap: var(--gap-tight)");
     expect(providerArrow).toContain("flex-shrink: 0");
     expect(claudeCard).toContain("background: var(--state-warning-bg)");
     expect(claudeCard).toContain("border-color: var(--state-warning-border)");
@@ -1273,16 +1269,16 @@ describe("components.css theme-sensitive surfaces", () => {
     const actions = getLastRuleBlock(".agent-actions");
 
     expect(progress).toContain("background: var(--state-info-bg)");
-    expect(header).toContain("gap: var(--gap-cluster-md)");
-    expect(header).toContain("padding: var(--gap-cluster-tight) var(--inset-control-inline)");
+    expect(header).toContain("gap: var(--gap-default)");
+    expect(header).toContain("padding: var(--gap-tight) var(--inset-control-inline)");
     expect(badge).toContain("padding: var(--inset-chip-block) var(--inset-chip-inline)");
     expect(badge).toContain("border-radius: var(--radius-control-sm)");
     expect(runningStatus).toContain("background: var(--state-success-bg)");
     expect(runningStatus).toContain("color: var(--state-success-text)");
     expect(idleStatus).toContain("background: var(--state-disabled-bg)");
     expect(idleStatus).toContain("color: var(--state-disabled-text)");
-    expect(headerLeft).toContain("gap: var(--gap-cluster-md)");
-    expect(actions).toContain("gap: var(--gap-cluster-sm)");
+    expect(headerLeft).toContain("gap: var(--gap-default)");
+    expect(actions).toContain("gap: var(--gap-control)");
   });
 
   it("keeps mobile sheet bodies as flex columns so sheet content can fill the viewport", () => {
@@ -1347,7 +1343,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(mobilePageHeaderTitle).toContain("line-height: var(--type-heading-5-line-height)");
     expect(mobilePageHeaderTitle).toContain("font-weight: var(--type-heading-5-weight)");
     expect(mobilePageHeaderBack).toContain("min-height: var(--control-height-sm)");
-    expect(mobilePageHeaderBack).toContain("gap: var(--gap-cluster-tight)");
+    expect(mobilePageHeaderBack).toContain("gap: var(--gap-tight)");
     expect(mobilePageHeaderBack).toContain("font-family: var(--font-mono)");
     expect(headerLeading).toContain("flex: 1");
     expect(backButton).toContain("background: transparent");
@@ -1365,7 +1361,7 @@ describe("components.css theme-sensitive surfaces", () => {
     const secondaryTitle = getLastRuleBlock(".page-header--secondary .page-header__title");
 
     expect(baseTitle).toContain("font-weight: var(--type-heading-5-weight)");
-    expect(copy).toContain("gap: var(--gap-cluster-2xs)");
+    expect(copy).toContain("gap: var(--gap-compact)");
     expect(primaryHeader).toContain("min-height: 56px");
     expect(secondaryHeader).toContain("min-height: 48px");
     expect(primaryTitle).toContain("font-size: var(--type-heading-4-size)");
@@ -1399,30 +1395,28 @@ describe("components.css theme-sensitive surfaces", () => {
 
     expect(panelHeader).toContain("min-height: var(--panel-header-height)");
     expect(panelHeader).toContain("gap: var(--sp-3)");
-    expect(panelHeader).toContain("padding: var(--gap-cluster-tight) var(--inset-control-inline)");
+    expect(panelHeader).toContain("padding: var(--gap-tight) var(--inset-control-inline)");
     expect(panelHeader).toContain("border-bottom: 1px solid var(--border)");
     expect(leading).toContain("flex: 1");
     expect(copy).toContain("min-width: 0");
-    expect(copy).toContain("gap: var(--gap-cluster-2xs)");
+    expect(copy).toContain("gap: var(--gap-compact)");
     expect(title).toContain("font-size: var(--type-heading-5-size)");
     expect(title).toContain("line-height: var(--type-heading-5-line-height)");
     expect(title).toContain("font-weight: var(--type-heading-5-weight)");
     expect(meta).toContain("display: flex");
     expect(actions).toContain("margin-left: auto");
     expect(actions).toContain("flex-shrink: 0");
-    expect(branch).toContain("margin-bottom: var(--gap-cluster-md)");
-    expect(branch).toContain("padding: var(--gap-cluster-2xs) var(--sp-2)");
+    expect(branch).toContain("margin-bottom: var(--space-default)");
+    expect(branch).toContain("padding: var(--gap-compact) var(--sp-2)");
     expect(branch).toContain("border-radius: var(--radius-control-sm)");
     expect(branch).toContain("background: var(--state-hover-bg-subtle)");
-    expect(branchButton).toContain("gap: var(--gap-cluster-sm)");
-    expect(tabs).toContain("gap: var(--gap-cluster-sm)");
-    expect(tab).toContain("padding: var(--gap-cluster-2xs) var(--sp-2)");
+    expect(branchButton).toContain("gap: var(--gap-control)");
+    expect(tabs).toContain("gap: var(--gap-control)");
+    expect(tab).toContain("padding: var(--gap-compact) var(--sp-2)");
     expect(tab).toContain("border-radius: var(--radius-control-sm)");
-    expect(toolbar).toContain(
-      "min-height: calc(var(--control-height-sm) + var(--gap-cluster-tight))"
-    );
-    expect(toolbar).toContain("padding: var(--gap-cluster-tight) var(--inset-control-inline)");
-    expect(tabsRow).toContain("gap: var(--gap-cluster-md)");
+    expect(toolbar).toContain("min-height: calc(var(--control-height-sm) + var(--gap-tight))");
+    expect(toolbar).toContain("padding: var(--gap-tight) var(--inset-control-inline)");
+    expect(tabsRow).toContain("gap: var(--gap-default)");
     expect(mobilePanelHeader).toContain("min-height: 44px");
     expect(hasRuleBlock(".session-header .panel-header__title")).toBe(false);
     expect(hasRuleBlock(".mobile-shell__agent-stage .session-header .panel-header__actions")).toBe(
@@ -1477,7 +1471,7 @@ describe("components.css theme-sensitive surfaces", () => {
     const textarea = getLastRuleBlock(".supervisor-dialog .textarea");
 
     expect(modalBody).toContain("gap: var(--sp-3)");
-    expect(formGroup).toContain("gap: var(--gap-cluster-tight)");
+    expect(formGroup).toContain("gap: var(--gap-tight)");
     expect(intro).toContain("display: flex");
     expect(intro).toContain("padding: var(--sp-3)");
     expect(intro).toContain("border: 1px solid color-mix(in srgb, var(--border) 90%, transparent)");
@@ -1567,7 +1561,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(stoppedTag).toContain("color: var(--state-disabled-text)");
     expect(cycleCount).toContain("padding: var(--inset-chip-block) var(--inset-chip-inline)");
     expect(cycleCount).toContain("background: var(--state-disabled-bg)");
-    expect(actions).toContain("gap: var(--gap-cluster-2xs)");
+    expect(actions).toContain("gap: var(--gap-compact)");
     expect(dangerHover).toContain("background: var(--state-error-bg)");
     expect(dangerHover).toContain("color: var(--state-error-text)");
     expect(providerPill).toContain("padding: var(--inset-chip-block) var(--inset-chip-inline)");
@@ -1586,8 +1580,8 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(errorTrigger).toContain("color: var(--state-error-text)");
     expect(inProgressTrigger).toContain("background: var(--state-warning-bg)");
     expect(inProgressTrigger).toContain("color: var(--state-warning-text)");
-    expect(restoreEntry).toContain("gap: var(--gap-cluster-sm)");
-    expect(restoreCard).toContain("gap: var(--gap-cluster-tight)");
+    expect(restoreEntry).toContain("gap: var(--gap-control)");
+    expect(restoreCard).toContain("gap: var(--gap-tight)");
   });
 
   it("does not allow page or modal wrappers to override approved header typography tokens", () => {
@@ -1766,7 +1760,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(mobileItem).toContain("min-height: 60px");
     expect(mobileItem).toContain("padding: var(--sp-3) var(--sp-4)");
     expect(mobileItem).toContain("border: none");
-    expect(mobileItemCopy).toContain("gap: var(--gap-cluster-2xs)");
+    expect(mobileItemCopy).toContain("gap: var(--gap-compact)");
     expect(mobileItem).not.toContain("linear-gradient(");
     expect(mobileItemIcon).toContain("color: var(--icon-secondary)");
     expect(mobileItemArrow).toContain("color: var(--text-tertiary)");
@@ -2113,7 +2107,7 @@ describe("components.css theme-sensitive surfaces", () => {
     const commandPreview = getLastRuleBlock(".settings-command-preview");
     const settingsFooter = getLastRuleBlock(".settings-footer");
 
-    expect(settingsGroup).toContain("margin-bottom: var(--sp-8)");
+    expect(settingsGroup).toContain("margin-bottom: var(--space-section)");
     expect(settingsGroupTitle).toContain("font-size: var(--type-body-3-size)");
     expect(settingsGroupTitle).toContain("text-transform: uppercase");
     expect(settingsGroupTitle).toContain("letter-spacing:");
@@ -2143,13 +2137,13 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(settingsLink).toContain("display: inline-flex");
     expect(settingsLink).toContain("font-weight: var(--font-medium)");
     expect(providerTabs).toContain("gap: var(--sp-1)");
-    expect(providerTabs).toContain("margin-bottom: var(--sp-4)");
+    expect(providerTabs).toContain("margin-bottom: var(--space-default)");
     expect(providerTab).toContain("background: transparent");
     expect(providerTab).toContain("border: 1px solid transparent");
     expect(providerTabActive).toContain("background: var(--bg-active)");
     expect(providerTabActive).toContain("border-color: var(--border-focus)");
     expect(providerSubnav).toContain("gap: var(--sp-1)");
-    expect(providerSubnav).toContain("margin-bottom: var(--sp-4)");
+    expect(providerSubnav).toContain("margin-bottom: var(--space-default)");
     expect(providerSubnavButtonActive).toContain("background: var(--bg-active)");
     expect(providerSubnavButtonActive).toContain("border-color: var(--border-focus)");
     expect(providerMobileEntryBase).toContain("padding: var(--sp-3) 0");
@@ -2195,7 +2189,7 @@ describe("components.css theme-sensitive surfaces", () => {
     const message = getLastRuleBlockFrom(noticeStylesheet, ".message");
     const action = getLastRuleBlockFrom(noticeStylesheet, ".action");
 
-    expect(notice).toContain("margin: 0 0 var(--sp-4)");
+    expect(notice).toContain("margin: 0 0 var(--space-default)");
     expect(notice).toContain("padding: var(--inset-control-block) var(--inset-control-inline)");
     expect(notice).toContain("border-radius: var(--radius-overlay)");
     expect(notice).toContain("background: var(--surface-elevated-bg)");
@@ -2355,7 +2349,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(providerConfigStack).toContain("display: flex");
     expect(providerConfigStack).toContain("min-height: 0");
     expect(providerContentFill).toContain("flex-direction: column");
-    expect(configCardBase).toContain("margin-top: var(--sp-4)");
+    expect(configCardBase).toContain("margin-top: var(--space-default)");
     expect(configCardBase).toContain("border-radius: var(--radius-md)");
     expect(configCardBase).toContain("box-shadow: none");
     expect(configCardBase).not.toContain("var(--radius-lg)");
@@ -2395,7 +2389,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(configField).toContain("display: flex");
     expect(configField).toContain("flex-direction: column");
     expect(configField).toContain("gap: var(--sp-2)");
-    expect(configField).toContain("margin-bottom: var(--sp-4)");
+    expect(configField).toContain("margin-bottom: var(--space-default)");
     expect(configLabel).toContain("font-size: var(--type-body-6-size)");
     expect(configLabel).toContain("text-transform: uppercase");
     expect(configLabel).toContain("letter-spacing:");
@@ -2441,8 +2435,8 @@ describe("components.css theme-sensitive surfaces", () => {
     const rowActionsBase = getLastRuleBlock(".file-tree-shell .tree-item-actions");
     const rowActionsDesktop = getLastRuleBlock(".file-tree-shell--desktop .tree-item-actions");
 
-    expect(search).toContain("gap: var(--gap-cluster-md)");
-    expect(search).toContain("margin: var(--gap-cluster-md) var(--inset-control-inline)");
+    expect(search).toContain("gap: var(--gap-default)");
+    expect(search).toContain("margin: var(--space-default) var(--inset-control-inline)");
     expect(search).toContain("padding-inline: var(--inset-control-inline)");
     expect(search).toContain("min-height: var(--control-height-md)");
     expect(search).toContain("border-radius: var(--radius-panel)");
@@ -2452,7 +2446,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(searchInput).toContain("font-weight: var(--type-body-3-weight)");
     expect(emptyState).toContain("padding: var(--sp-5) var(--inset-panel)");
     expect(row).toContain("min-height: 26px");
-    expect(row).toContain("gap: var(--gap-cluster-tight)");
+    expect(row).toContain("gap: var(--gap-tight)");
     expect(row).toContain("padding:");
     expect(row).toContain("3px");
     expect(row).toContain("var(--inset-control-block)");
@@ -2466,7 +2460,7 @@ describe("components.css theme-sensitive surfaces", () => {
       "padding-left: calc(var(--inset-row-inline) - var(--state-focus-ring-width))"
     );
     expect(rowSelected).toContain("background: var(--state-selected-bg)");
-    expect(rowActionsBase).toContain("gap: var(--gap-cluster-2xs)");
+    expect(rowActionsBase).toContain("gap: var(--gap-compact)");
     expect(rowActionsDesktop).toContain("opacity: 0");
   });
 
@@ -2498,8 +2492,8 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(commandPaletteItem).toContain("align-items: center");
     expect(commandPaletteItem).toContain("gap: var(--sp-3)");
     expect(commandPaletteItem).toContain("padding: var(--sp-3) var(--sp-4)");
-    expect(commandPaletteItemContent).toContain("gap: var(--gap-cluster-3xs)");
-    expect(commandPaletteItemShortcut).toContain("margin-top: var(--gap-cluster-2xs)");
+    expect(commandPaletteItemContent).toContain("gap: var(--gap-micro)");
+    expect(commandPaletteItemShortcut).toContain("margin-top: var(--space-micro)");
     expect(commandPaletteItemShortcut).toContain(
       "padding: var(--inset-chip-block) var(--inset-chip-inline)"
     );

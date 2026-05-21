@@ -71,7 +71,7 @@
   min-width: 0;
   flex: 1;
   flex-direction: column;
-  gap: var(--gap-cluster-sm);
+  gap: var(--gap-control);
 }
 
 :global(.dialog-header__icon) {

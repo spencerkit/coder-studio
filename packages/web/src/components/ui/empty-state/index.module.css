@@ -3,7 +3,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--gap-stack-md);
+  gap: var(--gap-content);
   width: 100%;
   min-height: 100%;
   padding: var(--inset-dialog) var(--inset-panel);

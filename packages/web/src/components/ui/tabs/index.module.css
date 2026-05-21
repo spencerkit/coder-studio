@@ -11,7 +11,7 @@
 }
 
 .tabList[data-orientation="horizontal"] {
-  gap: var(--gap-cluster-sm);
+  gap: var(--gap-control);
   overflow-x: auto;
   overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
@@ -27,7 +27,7 @@
 }
 
 :global(.panel-tabs) {
-  gap: var(--gap-cluster-sm);
+  gap: var(--gap-control);
 }
 
 :global(.worktree-tabs) {
@@ -45,7 +45,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: var(--gap-cluster-sm);
+  gap: var(--gap-control);
   font-family: inherit;
   line-height: 1;
   margin: 0;

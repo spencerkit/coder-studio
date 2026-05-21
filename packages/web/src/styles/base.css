@@ -694,7 +694,7 @@ textarea::placeholder {
   flex-direction: column;
   align-items: flex-start;
   justify-content: center;
-  gap: var(--gap-cluster-sm);
+  gap: var(--gap-control);
   padding-top: calc(var(--mobile-safe-top) + var(--sp-1));
   padding-right: calc(var(--mobile-safe-right) + var(--sp-3));
   padding-bottom: var(--sp-1);

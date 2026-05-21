@@ -114,16 +114,22 @@ describe("tokens.css touch tokens", () => {
     expect(root).toContain("--state-error-bg:");
     expect(root).toContain("--state-info-bg:");
 
-    expect(root).toContain("--gap-stack-xs:");
-    expect(root).toContain("--gap-stack-sm:");
-    expect(root).toContain("--gap-stack-md:");
-    expect(root).toContain("--gap-stack-lg:");
-    expect(root).toContain("--gap-cluster-2xs:");
-    expect(root).toContain("--gap-cluster-3xs:");
-    expect(root).toContain("--gap-cluster-tight:");
-    expect(root).toContain("--gap-cluster-hairline:");
-    expect(root).toContain("--gap-cluster-sm:");
-    expect(root).toContain("--gap-cluster-md:");
+    expect(root).toContain("--gap-hairline:");
+    expect(root).toContain("--gap-micro:");
+    expect(root).toContain("--gap-compact:");
+    expect(root).toContain("--gap-tight:");
+    expect(root).toContain("--gap-control:");
+    expect(root).toContain("--gap-default:");
+    expect(root).toContain("--gap-content:");
+    expect(root).toContain("--gap-panel:");
+    expect(root).toContain("--gap-section:");
+    expect(root).toContain("--space-micro:");
+    expect(root).toContain("--space-inline:");
+    expect(root).toContain("--space-default:");
+    expect(root).toContain("--space-content:");
+    expect(root).toContain("--space-block:");
+    expect(root).toContain("--space-panel:");
+    expect(root).toContain("--space-section:");
     expect(root).toContain("--inset-control-inline:");
     expect(root).toContain("--inset-control-block:");
     expect(root).toContain("--inset-row-inline:");
@@ -132,8 +138,6 @@ describe("tokens.css touch tokens", () => {
     expect(root).toContain("--inset-chip-inline:");
     expect(root).toContain("--inset-panel:");
     expect(root).toContain("--inset-dialog:");
-    expect(root).toContain("--section-gap:");
-    expect(root).toContain("--form-group-gap:");
     expect(getCustomProperty(root, "--inset-control-inline")).toBe("var(--sp-3)");
     expect(getCustomProperty(root, "--inset-control-block")).toBe("var(--sp-2)");
     expect(getCustomProperty(root, "--inset-row-inline")).toBe("var(--sp-4)");
@@ -390,8 +394,8 @@ describe("tokens.css touch tokens", () => {
     expect(getCustomProperty(mintDark, "--radius-overlay")).toBe(
       getCustomProperty(graphiteLight, "--radius-overlay")
     );
-    expect(getCustomProperty(mintDark, "--gap-stack-md")).toBe(
-      getCustomProperty(graphiteLight, "--gap-stack-md")
+    expect(getCustomProperty(mintDark, "--gap-content")).toBe(
+      getCustomProperty(graphiteLight, "--gap-content")
     );
   });
 

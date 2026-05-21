@@ -32,7 +32,7 @@
 
 .sm {
   min-width: 64px;
-  padding: var(--gap-cluster-sm) var(--gap-cluster-md);
+  padding: var(--gap-control) var(--gap-default);
 }
 
 .interactive {
