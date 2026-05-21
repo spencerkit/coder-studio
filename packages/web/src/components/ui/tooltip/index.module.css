@@ -12,9 +12,9 @@
   background: var(--surface-overlay-bg);
   color: var(--text-primary);
   box-shadow: var(--surface-overlay-shadow);
-  font-size: var(--type-meta-size);
-  line-height: var(--type-meta-line-height);
-  font-weight: var(--type-meta-weight);
+  font-size: var(--type-body-5-size);
+  line-height: var(--type-body-5-line-height);
+  font-weight: var(--type-body-5-weight);
   pointer-events: none;
   white-space: nowrap;
 }

@@ -10,7 +10,7 @@
   background: var(--accent-blue);
   color: var(--bg-page);
   font-family: var(--font-sans);
-  font-size: var(--type-kicker-size);
-  line-height: var(--type-kicker-line-height);
-  font-weight: var(--type-kicker-weight);
+  font-size: var(--type-body-6-size);
+  line-height: var(--type-body-6-line-height);
+  font-weight: var(--type-body-6-weight);
 }

@@ -6,9 +6,9 @@
   border-radius: var(--radius-control);
   color: var(--text-primary);
   font-family: var(--font-sans);
-  font-size: var(--type-body-strong-size);
-  font-weight: var(--type-body-strong-weight);
-  line-height: var(--type-body-strong-line-height);
+  font-size: var(--type-body-3-size);
+  font-weight: var(--type-body-3-weight);
+  line-height: var(--type-body-3-line-height);
   outline: none;
   transition:
     border-color var(--duration-normal) var(--ease-out),

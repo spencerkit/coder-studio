@@ -35,8 +35,9 @@
 }
 
 .title {
-  font-size: var(--text-sm);
-  font-weight: var(--font-semibold);
+  font-size: var(--type-heading-6-size);
+  line-height: var(--type-heading-6-line-height);
+  font-weight: var(--type-heading-6-weight);
   color: var(--text-primary);
 }
 
@@ -54,7 +55,9 @@
   border: 1px dashed var(--border);
   border-radius: var(--radius-md);
   color: var(--text-tertiary);
-  font-size: var(--text-xs);
+  font-size: var(--type-body-6-size);
+  line-height: var(--type-body-6-line-height);
+  font-weight: var(--type-body-6-weight);
 }
 
 .time {
@@ -64,7 +67,9 @@
   border: 1px dashed var(--border);
   border-radius: var(--radius-md);
   color: var(--text-tertiary);
-  font-size: var(--text-xs);
+  font-size: var(--type-body-6-size);
+  line-height: var(--type-body-6-line-height);
+  font-weight: var(--type-body-6-weight);
 }
 
 .actions {
@@ -84,8 +89,9 @@
   border-radius: var(--radius-md);
   background: var(--bg-surface);
   color: var(--text-primary);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
+  font-size: var(--type-body-3-size);
+  line-height: var(--type-body-3-line-height);
+  font-weight: var(--type-body-3-weight);
   cursor: pointer;
   transition:
     background var(--duration-fast) var(--ease-out),
@@ -129,8 +135,9 @@
 }
 
 .calendarTitle {
-  font-size: var(--text-sm);
-  font-weight: var(--font-semibold);
+  font-size: var(--type-heading-6-size);
+  line-height: var(--type-heading-6-line-height);
+  font-weight: var(--type-heading-6-weight);
   color: var(--text-primary);
 }
 
@@ -165,8 +172,9 @@
 
 .calendarWeekday {
   text-align: center;
-  font-size: var(--text-xs);
-  font-weight: var(--font-medium);
+  font-size: var(--type-body-6-size);
+  line-height: var(--type-body-6-line-height);
+  font-weight: var(--type-body-6-weight);
   color: var(--text-tertiary);
 }
 
@@ -184,7 +192,9 @@
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
-  font-size: var(--text-sm);
+  font-size: var(--type-body-3-size);
+  line-height: var(--type-body-3-line-height);
+  font-weight: var(--type-body-3-weight);
   color: var(--text-primary);
   cursor: pointer;
   transition:
@@ -235,14 +245,17 @@
 }
 
 .timeLabel {
-  font-size: var(--text-xs);
+  font-size: var(--type-body-6-size);
+  line-height: var(--type-body-6-line-height);
+  font-weight: var(--type-body-6-weight);
   color: var(--text-secondary);
 }
 
 .timeSeparator {
   padding-bottom: var(--sp-1);
-  font-size: var(--text-lg);
-  font-weight: var(--font-semibold);
+  font-size: var(--type-body-3-size);
+  line-height: var(--type-body-3-line-height);
+  font-weight: var(--type-body-3-weight);
   color: var(--text-secondary);
 }
 

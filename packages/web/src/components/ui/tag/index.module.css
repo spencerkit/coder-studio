@@ -6,10 +6,10 @@
   height: 20px;
   padding: 0 var(--sp-2);
   font-family: var(--font-sans);
-  font-size: var(--type-kicker-size);
-  line-height: var(--type-kicker-line-height);
-  font-weight: var(--type-kicker-weight);
-  letter-spacing: var(--type-kicker-letter-spacing);
+  font-size: var(--type-body-6-size);
+  line-height: var(--type-body-6-line-height);
+  font-weight: var(--type-body-6-weight);
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 

@@ -77,6 +77,10 @@ const inputStyles = readFileSync(
   `${process.cwd()}/src/components/ui/input/index.module.css`,
   "utf8"
 );
+const datetimePickerStyles = readFileSync(
+  `${process.cwd()}/src/components/ui/datetime-picker/index.module.css`,
+  "utf8"
+);
 const textareaStyles = readFileSync(
   `${process.cwd()}/src/components/ui/textarea/index.module.css`,
   "utf8"
@@ -364,76 +368,100 @@ describe("components.css theme-sensitive surfaces", () => {
 
   it("maps text-entry and navigation primitives onto semantic typography tokens", async () => {
     expect(getLastRuleBlockFrom(buttonStyles, ".btn")).toContain(
-      "font-size: var(--type-body-strong-size)"
+      "font-size: var(--type-body-3-size)"
     );
-    expect(getLastRuleBlockFrom(buttonStyles, ".btn")).toContain("font-weight: var(--font-medium)");
     expect(getLastRuleBlockFrom(buttonStyles, ".btn")).toContain(
-      "line-height: var(--type-body-strong-line-height)"
+      "font-weight: var(--type-body-3-weight)"
+    );
+    expect(getLastRuleBlockFrom(buttonStyles, ".btn")).toContain(
+      "line-height: var(--type-body-3-line-height)"
     );
     expect(getLastRuleBlockFrom(buttonStyles, ".sm")).toContain(
-      "font-size: var(--type-label-size)"
+      "font-size: var(--type-body-6-size)"
     );
-    expect(getLastRuleBlockFrom(buttonStyles, ".sm")).toContain("font-weight: var(--font-medium)");
+    expect(getLastRuleBlockFrom(buttonStyles, ".sm")).toContain(
+      "font-weight: var(--type-body-6-weight)"
+    );
     expect(getLastRuleBlockFrom(buttonStyles, ".lg")).not.toContain("font-size:");
 
     expect(getLastRuleBlockFrom(inputStyles, ".input")).toContain(
-      "font-size: var(--type-body-strong-size)"
+      "font-size: var(--type-body-3-size)"
     );
     expect(getLastRuleBlockFrom(inputStyles, ".input")).toContain(
-      "font-weight: var(--type-body-strong-weight)"
+      "font-weight: var(--type-body-3-weight)"
     );
-    expect(getLastRuleBlockFrom(inputStyles, ".sm")).toContain("font-size: var(--type-label-size)");
     expect(getLastRuleBlockFrom(inputStyles, ".sm")).toContain(
-      "font-weight: var(--type-label-weight)"
+      "font-size: var(--type-body-6-size)"
+    );
+    expect(getLastRuleBlockFrom(inputStyles, ".sm")).toContain(
+      "font-weight: var(--type-body-6-weight)"
     );
     expect(getLastRuleBlockFrom(inputStyles, ".lg")).not.toContain("font-size:");
 
     expect(getLastRuleBlockFrom(textareaStyles, ".input")).toContain(
-      "font-size: var(--type-body-strong-size)"
+      "font-size: var(--type-body-3-size)"
     );
     expect(getLastRuleBlockFrom(textareaStyles, ".input")).toContain(
-      "font-weight: var(--type-body-strong-weight)"
+      "font-weight: var(--type-body-3-weight)"
     );
     expect(getLastRuleBlockFrom(textareaStyles, ".lg")).not.toContain("font-size:");
 
     expect(getLastRuleBlockFrom(tabsStyles, ":global(.panel-tab)")).toContain(
-      "font-size: var(--type-label-size)"
+      "font-size: var(--type-body-6-size)"
     );
     expect(getLastRuleBlockFrom(tabsStyles, ":global(.panel-tab)")).toContain(
-      "font-weight: var(--type-label-weight)"
+      "font-weight: var(--type-body-6-weight)"
     );
     expect(getLastRuleBlockFrom(tabsStyles, ":global(.panel-tab)")).toContain(
-      "line-height: var(--type-label-line-height)"
+      "line-height: var(--type-body-6-line-height)"
     );
     expect(getLastRuleBlockFrom(tabsStyles, ":global(.worktree-tab)")).toContain(
-      "font-size: var(--type-label-size)"
+      "font-size: var(--type-body-6-size)"
     );
     expect(getLastRuleBlockFrom(tabsStyles, ":global(.worktree-tab)")).toContain(
-      "font-weight: var(--type-label-weight)"
+      "font-weight: var(--type-body-6-weight)"
+    );
+    expect(getLastRuleBlockFrom(datetimePickerStyles, ".action")).toContain(
+      "font-size: var(--type-body-3-size)"
+    );
+    expect(getLastRuleBlockFrom(datetimePickerStyles, ".action")).toContain(
+      "font-weight: var(--type-body-3-weight)"
+    );
+    expect(getLastRuleBlockFrom(datetimePickerStyles, ".calendarTitle")).toContain(
+      "font-size: var(--type-heading-6-size)"
+    );
+    expect(getLastRuleBlockFrom(datetimePickerStyles, ".calendarWeekday")).toContain(
+      "font-size: var(--type-body-6-size)"
+    );
+    expect(getLastRuleBlockFrom(datetimePickerStyles, ".calendarDay")).toContain(
+      "font-size: var(--type-body-3-size)"
     );
 
     const runtimeStylesheet = await buildRuntimeStylesheet();
 
     expect(getLastRuleBlockFrom(runtimeStylesheet, ".btn")).toContain(
-      "font-size:var(--type-body-strong-size)"
+      "font-size:var(--type-body-3-size)"
     );
     expect(getLastRuleBlockFrom(runtimeStylesheet, ".btn")).toContain(
-      "font-weight:var(--font-medium)"
+      "font-weight:var(--type-body-3-weight)"
     );
     expect(getLastRuleBlockFrom(runtimeStylesheet, ".btn-sm")).toContain(
-      "font-size:var(--type-label-size)"
+      "font-size:var(--type-body-6-size)"
+    );
+    expect(getLastRuleBlockFrom(runtimeStylesheet, ".btn-sm")).toContain(
+      "font-weight:var(--type-body-6-weight)"
     );
     expect(getLastRuleBlockFrom(runtimeStylesheet, ".panel-tab")).toContain(
-      "font-size:var(--type-label-size)"
+      "font-size:var(--type-body-6-size)"
     );
     expect(getLastRuleBlockFrom(runtimeStylesheet, ".panel-tab")).toContain(
-      "font-weight:var(--type-label-weight)"
+      "font-weight:var(--type-body-6-weight)"
     );
     expect(getLastRuleBlockFrom(runtimeStylesheet, ".worktree-tab")).toContain(
-      "font-size:var(--type-label-size)"
+      "font-size:var(--type-body-6-size)"
     );
     expect(getLastRuleBlockFrom(runtimeStylesheet, ".worktree-tab")).toContain(
-      "font-weight:var(--type-label-weight)"
+      "font-weight:var(--type-body-6-weight)"
     );
   });
 
@@ -529,45 +557,45 @@ describe("components.css theme-sensitive surfaces", () => {
   it("maps display and status primitives onto semantic typography roles", () => {
     expect(
       getRuleBlocksFrom(tagStyles, ":where(.tag)").some((block) =>
-        block.includes("font-size: var(--type-kicker-size)")
+        block.includes("font-size: var(--type-body-6-size)")
       )
     ).toBe(true);
     expect(
       getRuleBlocksFrom(tagStyles, ":where(.tag)").some((block) =>
-        block.includes("letter-spacing: var(--type-kicker-letter-spacing)")
+        block.includes("letter-spacing: 0.08em")
       )
     ).toBe(true);
     expect(getLastRuleBlockFrom(tagStyles, ".sm")).not.toContain("font-size:");
 
     expect(getLastRuleBlockFrom(badgeStyles, ":where(.badge)")).toContain(
-      "font-size: var(--type-kicker-size)"
+      "font-size: var(--type-body-6-size)"
     );
     expect(getLastRuleBlockFrom(badgeStyles, ":where(.badge)")).toContain(
-      "font-weight: var(--type-kicker-weight)"
+      "font-weight: var(--type-body-6-weight)"
     );
     expect(getLastRuleBlockFrom(pillStylesheet, ".pill")).toContain(
-      "font-size: var(--type-label-size)"
+      "font-size: var(--type-body-6-size)"
     );
     expect(getLastRuleBlockFrom(pillStylesheet, ".pill")).toContain(
-      "font-weight: var(--type-label-weight)"
+      "font-weight: var(--type-body-6-weight)"
     );
     expect(getLastRuleBlockFrom(tooltipStyles, ".tooltip")).toContain(
-      "font-size: var(--type-meta-size)"
+      "font-size: var(--type-body-5-size)"
     );
     expect(getLastRuleBlockFrom(noticeStylesheet, ".title")).toContain(
-      "font-size: var(--type-kicker-size)"
+      "font-size: var(--type-body-6-size)"
     );
     expect(getLastRuleBlockFrom(noticeStylesheet, ".message")).toContain(
-      "font-size: var(--type-meta-size)"
+      "font-size: var(--type-body-5-size)"
     );
     expect(getLastRuleBlockFrom(modalStyles, ".title")).toContain(
-      "font-size: var(--type-section-title-size)"
+      "font-size: var(--type-heading-4-size)"
     );
     expect(getLastRuleBlockFrom(emptyStateStyles, ".title")).toContain(
-      "font-size: var(--type-app-title-size)"
+      "font-size: var(--type-heading-5-size)"
     );
     expect(getLastRuleBlockFrom(emptyStateStyles, ".description")).toContain(
-      "font-size: var(--type-body-size)"
+      "font-size: var(--type-body-3-size)"
     );
   });
 
@@ -719,9 +747,9 @@ describe("components.css theme-sensitive surfaces", () => {
   it("keeps supervisor detail section titles on the denser body-strong scale", () => {
     const supervisorDetailTitle = getLastRuleBlock(".supervisor-details-section-title");
 
-    expect(supervisorDetailTitle).toContain("font-size: var(--type-body-strong-size)");
-    expect(supervisorDetailTitle).toContain("line-height: var(--type-body-strong-line-height)");
-    expect(supervisorDetailTitle).toContain("font-weight: var(--type-body-strong-weight)");
+    expect(supervisorDetailTitle).toContain("font-size: var(--type-body-3-size)");
+    expect(supervisorDetailTitle).toContain("line-height: var(--type-body-3-line-height)");
+    expect(supervisorDetailTitle).toContain("font-weight: var(--type-body-3-weight)");
   });
 
   it("keeps supervisor details on a flatter single-surface hierarchy", () => {
@@ -733,7 +761,7 @@ describe("components.css theme-sensitive surfaces", () => {
     const reasoningItem = getLastRuleBlock(".supervisor-meta-item--reasoning");
     const errorText = getLastRuleBlock(".supervisor-error");
 
-    expect(editButton).toContain("font-size: var(--type-label-size)");
+    expect(editButton).toContain("font-size: var(--type-body-6-size)");
     expect(editButton).toContain("border-color: transparent");
     expect(detailsSurface).not.toContain("border:");
     expect(summaryCard).toContain("border: none");
@@ -1322,9 +1350,9 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(pageHeader).toContain("width: 100%");
     expect(mobilePageHeader).toContain("min-height: 44px");
     expect(mobilePageHeaderLeading).toContain("gap: 8px");
-    expect(mobilePageHeaderTitle).toContain("font-size: var(--type-app-title-size)");
-    expect(mobilePageHeaderTitle).toContain("line-height: var(--type-app-title-line-height)");
-    expect(mobilePageHeaderTitle).toContain("font-weight: var(--type-app-title-weight)");
+    expect(mobilePageHeaderTitle).toContain("font-size: var(--type-heading-5-size)");
+    expect(mobilePageHeaderTitle).toContain("line-height: var(--type-heading-5-line-height)");
+    expect(mobilePageHeaderTitle).toContain("font-weight: var(--type-heading-5-weight)");
     expect(mobilePageHeaderBack).toContain("min-height: var(--control-height-sm)");
     expect(mobilePageHeaderBack).toContain("gap: var(--gap-cluster-tight)");
     expect(mobilePageHeaderBack).toContain("font-family: var(--font-mono)");
@@ -1343,16 +1371,16 @@ describe("components.css theme-sensitive surfaces", () => {
     const primaryTitle = getLastRuleBlock(".page-header--primary .page-header__title");
     const secondaryTitle = getLastRuleBlock(".page-header--secondary .page-header__title");
 
-    expect(baseTitle).toContain("font-weight: var(--type-app-title-weight)");
+    expect(baseTitle).toContain("font-weight: var(--type-heading-5-weight)");
     expect(copy).toContain("gap: var(--gap-cluster-2xs)");
     expect(primaryHeader).toContain("min-height: 56px");
     expect(secondaryHeader).toContain("min-height: 48px");
-    expect(primaryTitle).toContain("font-size: var(--type-section-title-size)");
-    expect(primaryTitle).toContain("line-height: var(--type-section-title-line-height)");
-    expect(primaryTitle).toContain("font-weight: var(--type-section-title-weight)");
-    expect(secondaryTitle).toContain("font-size: var(--type-app-title-size)");
-    expect(secondaryTitle).toContain("line-height: var(--type-app-title-line-height)");
-    expect(secondaryTitle).toContain("font-weight: var(--type-app-title-weight)");
+    expect(primaryTitle).toContain("font-size: var(--type-heading-4-size)");
+    expect(primaryTitle).toContain("line-height: var(--type-heading-4-line-height)");
+    expect(primaryTitle).toContain("font-weight: var(--type-heading-4-weight)");
+    expect(secondaryTitle).toContain("font-size: var(--type-heading-5-size)");
+    expect(secondaryTitle).toContain("line-height: var(--type-heading-5-line-height)");
+    expect(secondaryTitle).toContain("font-weight: var(--type-heading-5-weight)");
   });
 
   it("keeps panel headers on the approved dense container chrome contract", () => {
@@ -1383,9 +1411,9 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(leading).toContain("flex: 1");
     expect(copy).toContain("min-width: 0");
     expect(copy).toContain("gap: var(--gap-cluster-2xs)");
-    expect(title).toContain("font-size: var(--type-app-title-size)");
-    expect(title).toContain("line-height: var(--type-app-title-line-height)");
-    expect(title).toContain("font-weight: var(--type-app-title-weight)");
+    expect(title).toContain("font-size: var(--type-heading-5-size)");
+    expect(title).toContain("line-height: var(--type-heading-5-line-height)");
+    expect(title).toContain("font-weight: var(--type-heading-5-weight)");
     expect(meta).toContain("display: flex");
     expect(actions).toContain("margin-left: auto");
     expect(actions).toContain("flex-shrink: 0");
@@ -1424,12 +1452,12 @@ describe("components.css theme-sensitive surfaces", () => {
     const dialogIcon = getLastRuleBlock(".supervisor-dialog-header-icon");
     const editTone = getLastRuleBlock(".supervisor-dialog--edit .supervisor-dialog-header-icon");
 
-    expect(modalTitle).toContain("font-size: var(--type-section-title-size)");
-    expect(modalTitle).toContain("line-height: var(--type-section-title-line-height)");
-    expect(modalTitle).toContain("font-weight: var(--type-section-title-weight)");
-    expect(dialogDescription).toContain("font-size: var(--type-meta-size)");
-    expect(dialogDescription).toContain("line-height: var(--type-meta-line-height)");
-    expect(dialogDescription).toContain("font-weight: var(--type-meta-weight)");
+    expect(modalTitle).toContain("font-size: var(--type-heading-4-size)");
+    expect(modalTitle).toContain("line-height: var(--type-heading-4-line-height)");
+    expect(modalTitle).toContain("font-weight: var(--type-heading-4-weight)");
+    expect(dialogDescription).toContain("font-size: var(--type-body-5-size)");
+    expect(dialogDescription).toContain("line-height: var(--type-body-5-line-height)");
+    expect(dialogDescription).toContain("font-weight: var(--type-body-5-weight)");
     expect(dialogHeader).toContain("align-items: flex-start");
     expect(dialogIcon).toContain("width: 28px");
     expect(dialogIcon).toContain("height: 28px");
@@ -1465,17 +1493,17 @@ describe("components.css theme-sensitive surfaces", () => {
     );
     expect(introEditTone).toContain("var(--icon-surface-info)");
     expect(introEditTone).toContain("var(--icon-info)");
-    expect(introTitle).toContain("font-size: var(--type-body-size)");
-    expect(introTitle).toContain("line-height: var(--type-body-line-height)");
-    expect(introDescription).toContain("font-size: var(--type-meta-size)");
-    expect(introDescription).toContain("line-height: var(--type-meta-line-height)");
+    expect(introTitle).toContain("font-size: var(--type-body-3-size)");
+    expect(introTitle).toContain("line-height: var(--type-body-3-line-height)");
+    expect(introDescription).toContain("font-size: var(--type-body-5-size)");
+    expect(introDescription).toContain("line-height: var(--type-body-5-line-height)");
     expect(objectiveLabelRow).toContain("display: flex");
     expect(objectiveLabelRow).toContain("align-items: center");
     expect(objectiveLabelRow).toContain("justify-content: space-between");
     expect(objectiveLabelRow).toContain("gap: var(--sp-2)");
-    expect(compactInputGroup).toContain("font-size: var(--type-label-size)");
-    expect(compactInputGroup).toContain("line-height: var(--type-label-line-height)");
-    expect(textarea).toContain("font-size: var(--type-code-inline-size)");
+    expect(compactInputGroup).toContain("font-size: var(--type-body-6-size)");
+    expect(compactInputGroup).toContain("line-height: var(--type-body-6-line-height)");
+    expect(textarea).toContain("font-size: var(--type-body-5-size)");
     expect(textarea).toContain("min-height: 104px");
     expect(textarea).toContain("color: var(--text-secondary)");
   });
@@ -1827,7 +1855,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(launchActionRail).toContain("background: color-mix(");
     expect(launchActionButton).toContain("min-height: 44px");
     expect(launchActionButton).toContain("border-radius: var(--radius-md)");
-    expect(launchActionButton).toContain("font-size: var(--type-body-strong-size)");
+    expect(launchActionButton).toContain("font-size: var(--type-body-3-size)");
     expect(launchActionButton).toContain("box-shadow: none");
   });
 
@@ -1874,9 +1902,9 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(hasRuleBlock(".mobile-supervisor-sheet--root")).toBe(false);
     expect(supervisorDetail).toContain("padding: var(--sp-3)");
     expect(supervisorDetail).toContain("padding-bottom: var(--sp-4)");
-    expect(supervisorDetailInputs).toContain("font-size: var(--type-label-size)");
-    expect(supervisorDetailInputs).toContain("line-height: var(--type-label-line-height)");
-    expect(supervisorDetailInputs).toContain("font-weight: var(--type-label-weight)");
+    expect(supervisorDetailInputs).toContain("font-size: var(--type-body-6-size)");
+    expect(supervisorDetailInputs).toContain("line-height: var(--type-body-6-line-height)");
+    expect(supervisorDetailInputs).toContain("font-weight: var(--type-body-6-weight)");
     expect(supervisorDetail).not.toContain("border: 1px solid");
     expect(supervisorDetail).not.toContain("border-radius:");
     expect(supervisorDetail).not.toContain("box-shadow:");
@@ -1944,11 +1972,11 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(dockItem).toContain("min-height: 36px");
     expect(dockItem).toContain("height: 36px");
     expect(dockItem).toContain("padding: 1px var(--sp-2) 0");
-    expect(dockLabel).toContain("font-size: var(--type-kicker-size)");
+    expect(dockLabel).toContain("font-size: var(--type-body-6-size)");
     expect(statusBar).toContain("padding-bottom: calc(var(--mobile-safe-bottom) + var(--sp-1))");
     expect(statusBar).toContain("border-top: 1px solid");
     expect(statusStrip).toContain("min-height: 28px");
-    expect(statusStrip).toContain("font-size: var(--type-kicker-size)");
+    expect(statusStrip).toContain("font-size: var(--type-body-6-size)");
     expect(statusStrip).toContain(
       "padding: 0 calc(var(--mobile-safe-right) + var(--sp-4)) 0 calc(var(--mobile-safe-left) + var(--sp-4))"
     );
@@ -1962,7 +1990,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(emptyState).toContain("width: 100%");
     expect(emptyState).toContain("text-align: left");
     expect(emptyState).toContain("gap: var(--sp-3)");
-    expect(emptyTitle).toContain("font-size: var(--type-app-title-size)");
+    expect(emptyTitle).toContain("font-size: var(--type-heading-5-size)");
     expect(placeholderCopy).toContain("gap: var(--sp-2)");
     expect(emptyCta).toContain("min-height: 38px");
     expect(emptyCta).toContain("width: auto");
@@ -2018,7 +2046,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(mobileFilesSegmented).not.toContain("linear-gradient(");
     expect(mobileFilesSegmented).toContain("box-shadow: none");
     expect(mobileFilesSegment).toContain("padding: 0");
-    expect(mobileFilesSegment).toContain("font-weight: var(--type-label-weight)");
+    expect(mobileFilesSegment).toContain("font-weight: var(--type-body-6-weight)");
     expect(mobileFilesSegmentActive).toContain("background: transparent");
     expect(mobileFilesSegmentIndicator).toContain("height: 1.5px");
     expect(mobileFilesTabAction).toContain("border: none");
@@ -2094,7 +2122,7 @@ describe("components.css theme-sensitive surfaces", () => {
     const settingsFooter = getLastRuleBlock(".settings-footer");
 
     expect(settingsGroup).toContain("margin-bottom: var(--sp-8)");
-    expect(settingsGroupTitle).toContain("font-size: var(--type-kicker-size)");
+    expect(settingsGroupTitle).toContain("font-size: var(--type-body-6-size)");
     expect(settingsGroupTitle).toContain("text-transform: uppercase");
     expect(settingsGroupTitle).toContain("letter-spacing:");
     expect(settingsGroupDesc).toContain("max-width:");
@@ -2118,7 +2146,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(settingsInfoValueMobile).toContain("align-items: flex-start");
     expect(settingsInfoValueMobile).toContain("min-width: 0");
     expect(settingsInfoValueMobile).toContain("max-width: 100%");
-    expect(settingsStatusHint).toContain("line-height: var(--type-meta-line-height)");
+    expect(settingsStatusHint).toContain("line-height: var(--type-body-5-line-height)");
     expect(settingsLink).toContain("display: inline-flex");
     expect(settingsLink).toContain("font-weight: var(--font-medium)");
     expect(providerTabs).toContain("gap: var(--sp-1)");
@@ -2155,8 +2183,8 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(pill).toContain("border: 1px solid transparent");
     expect(pill).toContain("border-radius: var(--radius-pill)");
     expect(pill).toContain("background: transparent");
-    expect(pill).toContain("font-size: var(--type-label-size)");
-    expect(pill).toContain("font-weight: var(--type-label-weight)");
+    expect(pill).toContain("font-size: var(--type-body-6-size)");
+    expect(pill).toContain("font-weight: var(--type-body-6-weight)");
     expect(pillHover).toContain("background: var(--state-hover-bg-subtle)");
     expect(pillHover).toContain("border-color: var(--state-selected-border)");
     expect(pillFocus).toContain("border-color: var(--state-focus-ring-color)");
@@ -2183,8 +2211,8 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(error).toContain("background: var(--state-error-bg)");
     expect(error).toContain("border-color: var(--state-error-border)");
     expect(title).toContain("text-transform: uppercase");
-    expect(title).toContain("font-size: var(--type-kicker-size)");
-    expect(message).toContain("font-size: var(--type-meta-size)");
+    expect(title).toContain("font-size: var(--type-body-6-size)");
+    expect(message).toContain("font-size: var(--type-body-5-size)");
     expect(action).toContain("align-self: flex-start");
   });
 
@@ -2374,13 +2402,13 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(configField).toContain("flex-direction: column");
     expect(configField).toContain("gap: var(--sp-2)");
     expect(configField).toContain("margin-bottom: var(--sp-4)");
-    expect(configLabel).toContain("font-size: var(--type-kicker-size)");
+    expect(configLabel).toContain("font-size: var(--type-body-6-size)");
     expect(configLabel).toContain("text-transform: uppercase");
     expect(configLabel).toContain("letter-spacing:");
     expect(configLabel).toContain("margin-bottom: 0");
     expect(argsInput).toContain("background: color-mix");
     expect(argsInput).toContain("border-color: var(--border)");
-    expect(argsInput).toContain("font-family: var(--type-code-inline-family)");
+    expect(argsInput).toContain("font-family: var(--font-mono)");
     expect(commandPreview).toContain("min-height:");
     expect(commandPreview).toContain("white-space: pre-wrap");
     expect(commandPreview).toContain("border-radius: var(--radius-sm)");
@@ -2391,7 +2419,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(providerMobileEntryBase).toContain("padding: var(--sp-3) 0");
     expect(providerMobileEntryMobile).toContain("padding-left: var(--sp-4)");
     expect(providerMobileEntryMobile).toContain("padding-right: var(--sp-4)");
-    expect(providerMobileEntryMeta).toContain("font-family: var(--type-code-inline-family)");
+    expect(providerMobileEntryMeta).toContain("font-family: var(--font-mono)");
   });
 
   it("keeps git panel sections stretched to the parent width with a full-width toggle hit area", () => {
@@ -2425,9 +2453,9 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(search).toContain("min-height: var(--control-height-md)");
     expect(search).toContain("border-radius: var(--radius-panel)");
     expect(search).toContain("background: color-mix(");
-    expect(searchInput).toContain("font-size: var(--type-body-strong-size)");
-    expect(searchInput).toContain("line-height: var(--type-body-strong-line-height)");
-    expect(searchInput).toContain("font-weight: var(--type-body-strong-weight)");
+    expect(searchInput).toContain("font-size: var(--type-body-3-size)");
+    expect(searchInput).toContain("line-height: var(--type-body-3-line-height)");
+    expect(searchInput).toContain("font-weight: var(--type-body-3-weight)");
     expect(emptyState).toContain("padding: var(--sp-5) var(--inset-panel)");
     expect(row).toContain("min-height: 26px");
     expect(row).toContain("gap: var(--gap-cluster-tight)");
@@ -2540,9 +2568,9 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(supervisorBadge).not.toContain("width: max-content");
     expect(supervisorBadge).toContain("border-radius: 4px");
     expect(supervisorBadge).not.toContain("border-radius: var(--radius-lg)");
-    expect(supervisorLabel).toContain("font-size: var(--type-kicker-size)");
-    expect(supervisorLabel).toContain("line-height: var(--type-kicker-line-height)");
-    expect(supervisorLabel).toContain("font-weight: var(--type-kicker-weight)");
+    expect(supervisorLabel).toContain("font-size: var(--type-body-6-size)");
+    expect(supervisorLabel).toContain("line-height: var(--type-body-6-line-height)");
+    expect(supervisorLabel).toContain("font-weight: var(--type-body-6-weight)");
   });
 
   it("keeps running session header emphasis theme-safe and motion-aware", () => {
@@ -2611,7 +2639,7 @@ describe("components.css theme-sensitive surfaces", () => {
     const mobileBadgeLabel = getLastRuleBlock(".mobile-supervisor-badge__label");
 
     expect(desktopButton).toContain("justify-content: center");
-    expect(desktopButton).toContain("line-height: var(--type-label-line-height)");
+    expect(desktopButton).toContain("line-height: var(--type-body-6-line-height)");
     expect(desktopButtonIcon).toContain("display: inline-flex");
     expect(desktopButtonIconSvg).toContain("display: block");
     expect(desktopButtonLabel).toContain("display: inline-flex");
@@ -2624,7 +2652,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(mobileBadgeIconSvg).toContain("display: block");
     expect(mobileBadgeLabel).toContain("display: inline-flex");
     expect(mobileBadgeLabel).toContain("align-items: center");
-    expect(mobileBadgeLabel).toContain("line-height: var(--type-label-line-height)");
+    expect(mobileBadgeLabel).toContain("line-height: var(--type-body-6-line-height)");
   });
 
   it("keeps the mobile terminal keybar flow-positioned and token-driven", () => {

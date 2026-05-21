@@ -39,18 +39,18 @@
 }
 
 .title {
-  font-size: var(--type-kicker-size);
-  line-height: var(--type-kicker-line-height);
-  font-weight: var(--type-kicker-weight);
-  letter-spacing: var(--type-kicker-letter-spacing);
+  font-size: var(--type-body-6-size);
+  line-height: var(--type-body-6-line-height);
+  font-weight: var(--type-body-6-weight);
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-primary);
 }
 
 .message {
-  font-size: var(--type-meta-size);
-  line-height: var(--type-meta-line-height);
-  font-weight: var(--type-meta-weight);
+  font-size: var(--type-body-5-size);
+  line-height: var(--type-body-5-line-height);
+  font-weight: var(--type-body-5-weight);
   color: var(--text-secondary);
   word-break: break-word;
 }

@@ -19,18 +19,18 @@
 
 .title {
   color: var(--text-primary);
-  font-size: var(--type-app-title-size);
-  line-height: var(--type-app-title-line-height);
-  font-weight: var(--type-app-title-weight);
+  font-size: var(--type-heading-5-size);
+  line-height: var(--type-heading-5-line-height);
+  font-weight: var(--type-heading-5-weight);
 }
 
 .description {
   width: min(100%, 30rem);
   max-width: 30rem;
   color: var(--text-secondary);
-  font-size: var(--type-body-size);
-  line-height: var(--type-body-line-height);
-  font-weight: var(--type-body-weight);
+  font-size: var(--type-body-3-size);
+  line-height: var(--type-body-3-line-height);
+  font-weight: var(--type-body-3-weight);
 }
 
 .action {

@@ -88,9 +88,9 @@
 
 :global(.dialog-header__description) {
   margin: 0;
-  font-size: var(--type-meta-size);
-  line-height: var(--type-meta-line-height);
-  font-weight: var(--type-meta-weight);
+  font-size: var(--type-body-5-size);
+  line-height: var(--type-body-5-line-height);
+  font-weight: var(--type-body-5-weight);
   color: var(--text-tertiary);
 }
 
@@ -100,9 +100,9 @@
   align-items: center;
   gap: var(--sp-2);
   margin: 0;
-  font-size: var(--type-section-title-size);
-  line-height: var(--type-section-title-line-height);
-  font-weight: var(--type-section-title-weight);
+  font-size: var(--type-heading-4-size);
+  line-height: var(--type-heading-4-line-height);
+  font-weight: var(--type-heading-4-weight);
   color: var(--text-primary);
 }
 

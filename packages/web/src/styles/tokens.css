@@ -174,48 +174,43 @@
   --text-2xl: 18px;
   --text-3xl: 20px;
 
-  --type-kicker-size: var(--font-size-100);
-  --type-kicker-line-height: 1.2;
-  --type-kicker-weight: var(--font-normal);
-  --type-kicker-letter-spacing: 0.08em;
+  --type-heading-1-size: 28px;
+  --type-heading-1-line-height: 1.1;
+  --type-heading-1-weight: var(--font-semibold);
+  --type-heading-2-size: 24px;
+  --type-heading-2-line-height: 1.15;
+  --type-heading-2-weight: var(--font-semibold);
+  --type-heading-3-size: 20px;
+  --type-heading-3-line-height: 1.2;
+  --type-heading-3-weight: var(--font-semibold);
+  --type-heading-4-size: 18px;
+  --type-heading-4-line-height: 1.25;
+  --type-heading-4-weight: var(--font-normal);
+  --type-heading-5-size: 16px;
+  --type-heading-5-line-height: 1.3;
+  --type-heading-5-weight: var(--font-normal);
+  --type-heading-6-size: 14px;
+  --type-heading-6-line-height: 1.35;
+  --type-heading-6-weight: var(--font-normal);
 
-  --type-label-size: var(--font-size-200);
-  --type-label-line-height: 1.35;
-  --type-label-weight: var(--font-normal);
-
-  --type-meta-size: var(--font-size-200);
-  --type-meta-line-height: 1.45;
-  --type-meta-weight: var(--font-normal);
-
-  --type-body-size: var(--font-size-300);
-  --type-body-line-height: 1.5;
-  --type-body-weight: var(--font-normal);
-
-  --type-body-strong-size: var(--font-size-300);
-  --type-body-strong-line-height: 1.45;
-  --type-body-strong-weight: var(--font-normal);
-
-  --type-code-inline-size: var(--font-size-200);
-  --type-code-inline-line-height: 1.4;
-  --type-code-inline-weight: var(--font-normal);
-  --type-code-inline-family: var(--font-mono);
-
-  --type-app-title-size: var(--font-size-400);
-  --type-app-title-line-height: 1.25;
-  --type-app-title-weight: var(--font-semibold);
-
-  --type-section-title-size: var(--font-size-500);
-  --type-section-title-line-height: 1.2;
-  --type-section-title-weight: var(--font-semibold);
-
-  --type-page-title-size: var(--font-size-600);
-  --type-page-title-line-height: 1.1;
-  --type-page-title-weight: var(--font-semibold);
-
-  --type-display-size: var(--font-size-700);
-  --type-display-line-height: 1.05;
-  --type-display-weight: var(--font-semibold);
-  --type-display-letter-spacing: -0.03em;
+  --type-body-1-size: 18px;
+  --type-body-1-line-height: 1.6;
+  --type-body-1-weight: var(--font-normal);
+  --type-body-2-size: 16px;
+  --type-body-2-line-height: 1.6;
+  --type-body-2-weight: var(--font-normal);
+  --type-body-3-size: 14px;
+  --type-body-3-line-height: 1.6;
+  --type-body-3-weight: var(--font-normal);
+  --type-body-4-size: 13px;
+  --type-body-4-line-height: 1.5;
+  --type-body-4-weight: var(--font-normal);
+  --type-body-5-size: 12px;
+  --type-body-5-line-height: 1.45;
+  --type-body-5-weight: var(--font-normal);
+  --type-body-6-size: 11px;
+  --type-body-6-line-height: 1.4;
+  --type-body-6-weight: var(--font-normal);
 
   /* Line Heights */
   --leading-tight: 1.25;
@@ -1385,15 +1380,6 @@
 /* ========== Mobile / Touch Override (Phase 0) ========== */
 @media (max-width: 899px) {
   :root {
-    --font-size-100: 12px;
-    --font-size-200: 13px;
-    --font-size-300: 14px;
-    --font-size-400: 17px;
-    --font-size-500: 20px;
-    --font-size-600: 28px;
-    --font-size-700: 36px;
-    --type-body-line-height: 1.55;
-    --type-body-strong-line-height: 1.5;
     --touch-target-min: 44px;
     --touch-target-comfortable: 48px;
     --touch-target-large: 56px;
