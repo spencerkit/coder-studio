@@ -29,6 +29,7 @@ import { createE2EProviderMockOverrides } from "./provider-runtime/e2e-provider-
 import { ProviderInstallManager } from "./provider-runtime/install-manager.js";
 import type { RuntimeStatusDeps } from "./provider-runtime/runtime-status.js";
 import { SessionManager } from "./session/manager.js";
+import { AppearanceAssetRepo } from "./storage/repositories/appearance-asset-repo.js";
 import { AuthLoginBlockRepo } from "./storage/repositories/auth-login-block-repo.js";
 import { AuthSessionRepo } from "./storage/repositories/auth-session-repo.js";
 import { ProviderConfigRepo } from "./storage/repositories/provider-config-repo.js";
@@ -182,6 +183,9 @@ export async function createServer(
   const authLoginBlockRepo = new AuthLoginBlockRepo({
     filePath: join(stateRoot, "state", "auth-login-blocks.json"),
   });
+  const appearanceAssetRepo = new AppearanceAssetRepo({
+    filePath: join(stateRoot, "state", "appearance-assets.json"),
+  });
 
   const app = await buildFastifyApp({
     wsHub,
@@ -190,6 +194,7 @@ export async function createServer(
     config,
     authSessionRepo,
     authLoginBlockRepo,
+    appearanceAssetRepo,
     logger: {
       level: "info",
       transport: {
