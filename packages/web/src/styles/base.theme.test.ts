@@ -34,8 +34,10 @@ describe("base.css theme-sensitive shells", () => {
     const shell = getRuleBlock(".app-loading-shell");
     const card = getRuleBlock(".app-loading-card");
 
-    expect(shell).toContain("background: var(--surface-page-bg)");
-    expect(card).toContain("background: var(--surface-overlay-bg)");
+    expect(shell).toContain("var(--surface-page-bg)");
+    expect(shell).toContain("backdrop-filter: var(--app-surface-backdrop-filter, none)");
+    expect(card).toContain("var(--surface-overlay-bg)");
+    expect(card).toContain("backdrop-filter: var(--app-surface-backdrop-filter, none)");
     expect(card).toContain("box-shadow: var(--surface-overlay-shadow)");
     expect(card).toContain("border-radius: var(--radius-overlay)");
   });
@@ -64,14 +66,30 @@ describe("base.css theme-sensitive shells", () => {
     expect(getRuleBlock(":focus-visible")).toContain(
       "outline: var(--state-focus-ring-width) solid var(--state-focus-ring-color)"
     );
-    expect(getRuleBlock(".app-loading-shell")).toContain("background: var(--surface-page-bg)");
-    expect(getRuleBlock(".app-loading-card")).toContain("background: var(--surface-overlay-bg)");
+    expect(getRuleBlock(".app-loading-shell")).toContain("var(--surface-page-bg)");
+    expect(getRuleBlock(".app-loading-card")).toContain("var(--surface-overlay-bg)");
     expect(getRuleBlock(".app-loading-card")).toContain(
       "box-shadow: var(--surface-overlay-shadow)"
     );
     expect(getRuleBlock(".app-loading-card")).toContain("border-radius: var(--radius-overlay)");
     expect(getRuleBlock(".icon-chip")).toContain("border-radius: var(--radius-control)");
     expect(getRuleBlock(".icon-surface-warning")).toContain("background: var(--state-warning-bg)");
+  });
+
+  it("defines app-shell background variables and appearance-aware loading shell hooks", () => {
+    const app = getRuleBlock(".app");
+    const appBefore = getRuleBlock(".app::before");
+    const appAfter = getRuleBlock(".app::after");
+    const loadingShell = getRuleBlock(".app-loading-shell");
+
+    expect(app).toContain("background: var(--surface-page-bg)");
+    expect(app).toContain("isolation: isolate");
+    expect(appBefore).toContain("background-image: var(--app-bg-image, none)");
+    expect(appBefore).toContain("background-size: var(--app-bg-fit, cover)");
+    expect(appBefore).toContain("filter: blur(var(--app-bg-blur, 0px))");
+    expect(appAfter).toContain("var(--app-bg-dim, 0)");
+    expect(loadingShell).toContain("var(--app-surface-opacity, 0.96)");
+    expect(loadingShell).toContain("backdrop-filter: var(--app-surface-backdrop-filter, none)");
   });
 });
 

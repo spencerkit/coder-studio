@@ -7,7 +7,7 @@ import {
   activationReasonAtom,
   activationStatusAtom,
 } from "../atoms/activation";
-import { authenticatedAtom, themeAtom } from "../atoms/app-ui";
+import { appearancePersonalizationAtom, authenticatedAtom, themeAtom } from "../atoms/app-ui";
 import { authEnabledAtom, connectionStatusAtom } from "../atoms/connection";
 import { sessionsAtom } from "../atoms/sessions";
 import {
@@ -1254,6 +1254,156 @@ describe("AppProviders lifecycle recovery", () => {
       expect(document.documentElement.getAttribute("data-theme")).toBe("graphite-dark");
       expect(store.get(themeAtom)).toBe("graphite-dark");
       expect(localStorage.getItem("ui.themeId")).toBe(JSON.stringify("graphite-dark"));
+    });
+  });
+
+  it("hydrates appearance.personalization from settings.get into the in-memory atom", async () => {
+    const store = createStore();
+    setVisibilityState("visible");
+
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "appearance.personalization.version": 1,
+          "appearance.personalization.common.backgroundMode": "image",
+          "appearance.personalization.common.backgroundAssetId": "asset-common",
+          "appearance.personalization.common.backgroundFit": "contain",
+          "appearance.personalization.common.backgroundDimness": 36,
+          "appearance.personalization.common.backgroundBlur": 6,
+          "appearance.personalization.common.glassEnabled": false,
+          "appearance.personalization.common.glassIntensity": 20,
+          "appearance.personalization.common.surfaceOpacity": 90,
+          "appearance.personalization.desktop.glassEnabled": true,
+        };
+      }
+
+      return undefined;
+    });
+    wsState.client!.sendCommand = sendCommand;
+
+    renderProviders(store);
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
+
+    act(() => {
+      wsState.client?.statusHandler?.("connected");
+    });
+
+    await vi.waitFor(() => {
+      expect(store.get(appearancePersonalizationAtom)).toMatchObject({
+        version: 1,
+        common: expect.objectContaining({
+          backgroundMode: "image",
+          backgroundAssetId: "asset-common",
+          backgroundFit: "contain",
+          backgroundDimness: 36,
+          backgroundBlur: 6,
+          glassEnabled: false,
+          glassIntensity: 20,
+          surfaceOpacity: 90,
+        }),
+        desktop: {
+          glassEnabled: true,
+        },
+      });
+    });
+  });
+
+  it("applies effective desktop personalization as document CSS variables", async () => {
+    const store = createStore();
+    setVisibilityState("visible");
+
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "appearance.personalization.version": 1,
+          "appearance.personalization.common.backgroundMode": "image",
+          "appearance.personalization.common.backgroundAssetId": "asset-common",
+          "appearance.personalization.common.backgroundFit": "cover",
+          "appearance.personalization.common.backgroundDimness": 36,
+          "appearance.personalization.common.backgroundBlur": 8,
+          "appearance.personalization.common.glassEnabled": false,
+          "appearance.personalization.common.glassIntensity": 18,
+          "appearance.personalization.common.surfaceOpacity": 88,
+          "appearance.personalization.desktop.backgroundAssetId": "asset-desktop",
+          "appearance.personalization.desktop.glassEnabled": true,
+          "appearance.personalization.desktop.glassIntensity": 30,
+        };
+      }
+
+      return undefined;
+    });
+    wsState.client!.sendCommand = sendCommand;
+
+    renderProviders(store);
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
+
+    act(() => {
+      wsState.client?.statusHandler?.("connected");
+    });
+
+    await vi.waitFor(() => {
+      expect(document.documentElement.style.getPropertyValue("--app-bg-image")).toBe(
+        "url(/api/appearance-assets/asset-desktop)"
+      );
+      expect(document.documentElement.style.getPropertyValue("--app-bg-fit")).toBe("cover");
+      expect(document.documentElement.style.getPropertyValue("--app-bg-dim")).toBe("0.36");
+      expect(document.documentElement.style.getPropertyValue("--app-bg-blur")).toBe("8px");
+      expect(document.documentElement.style.getPropertyValue("--app-surface-opacity")).toBe("0.88");
+      expect(document.documentElement.style.getPropertyValue("--app-surface-backdrop-filter")).toBe(
+        "blur(30px)"
+      );
+      expect(document.documentElement.getAttribute("data-appearance-glass")).toBe("on");
+    });
+  });
+
+  it("weakens personalization when the active theme is high contrast", async () => {
+    const store = createStore();
+    setVisibilityState("visible");
+
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "appearance.themeId": "hc-dark",
+          "appearance.personalization.version": 1,
+          "appearance.personalization.common.backgroundMode": "image",
+          "appearance.personalization.common.backgroundAssetId": "asset-common",
+          "appearance.personalization.common.backgroundFit": "cover",
+          "appearance.personalization.common.backgroundDimness": 20,
+          "appearance.personalization.common.backgroundBlur": 18,
+          "appearance.personalization.common.glassEnabled": true,
+          "appearance.personalization.common.glassIntensity": 28,
+          "appearance.personalization.common.surfaceOpacity": 72,
+        };
+      }
+
+      return undefined;
+    });
+    wsState.client!.sendCommand = sendCommand;
+
+    renderProviders(store);
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
+
+    act(() => {
+      wsState.client?.statusHandler?.("connected");
+    });
+
+    await vi.waitFor(() => {
+      expect(store.get(themeAtom)).toBe("hc-dark");
+      expect(document.documentElement.style.getPropertyValue("--app-bg-blur")).toBe("0px");
+      expect(document.documentElement.style.getPropertyValue("--app-surface-opacity")).toBe("1");
+      expect(document.documentElement.style.getPropertyValue("--app-surface-backdrop-filter")).toBe(
+        "none"
+      );
+      expect(document.documentElement.getAttribute("data-appearance-glass")).toBe("off");
     });
   });
 
