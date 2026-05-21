@@ -216,6 +216,16 @@ describe("SettingsPage", () => {
     expect(within(footerMeta as HTMLElement).getByText("v0.3.0")).toBeInTheDocument();
   });
 
+  it("explains that turning LSP off stops active language services immediately", async () => {
+    const store = createConnectedStore(vi.fn().mockResolvedValue({}));
+
+    renderSettingsPage(store);
+
+    expect(await screen.findByRole("group", { name: "LSP 运行模式" })).toHaveAccessibleDescription(
+      "控制代码智能的内存占用。关闭后会立即停止当前语言服务进程，诊断、跳转、hover 等能力将暂时不可用。"
+    );
+  });
+
   it("wraps desktop settings content in the shared content surface", async () => {
     const store = createConnectedStore(vi.fn().mockResolvedValue({}));
 
@@ -1243,7 +1253,7 @@ describe("SettingsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "通用" }));
 
     expect(await screen.findByRole("group", { name: "LSP 运行模式" })).toHaveAccessibleDescription(
-      "控制代码智能的内存占用。"
+      "控制代码智能的内存占用。关闭后会立即停止当前语言服务进程，诊断、跳转、hover 等能力将暂时不可用。"
     );
     expect(screen.getByRole("button", { name: "Off" })).toHaveAttribute("aria-pressed", "true");
   });

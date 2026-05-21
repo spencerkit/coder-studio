@@ -549,7 +549,7 @@
     "terminal_renderer": "终端渲染器",
     "terminal_renderer_hint": "选择终端渲染模式",
     "lsp_runtime_mode": "LSP 运行模式",
-    "lsp_runtime_mode_hint": "控制代码智能的内存占用。",
+    "lsp_runtime_mode_hint": "控制代码智能的内存占用。关闭后会立即停止当前语言服务进程，诊断、跳转、hover 等能力将暂时不可用。",
     "lsp_runtime_mode_auto": "Auto",
     "lsp_runtime_mode_off": "Off",
     "terminal_appearance": "终端外观",

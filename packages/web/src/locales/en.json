@@ -549,7 +549,7 @@
     "terminal_renderer": "Terminal Renderer",
     "terminal_renderer_hint": "Choose terminal rendering mode",
     "lsp_runtime_mode": "LSP Runtime Mode",
-    "lsp_runtime_mode_hint": "Control code intelligence memory usage.",
+    "lsp_runtime_mode_hint": "Control code intelligence memory usage. Turning it off immediately stops active language service processes, so diagnostics, go-to-definition, hover, and similar features become temporarily unavailable.",
     "lsp_runtime_mode_auto": "Auto",
     "lsp_runtime_mode_off": "Off",
     "terminal_appearance": "Terminal Appearance",
