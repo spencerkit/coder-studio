@@ -413,6 +413,10 @@ function buildTargetMemory(targetId: string, createdAt: number): SupervisorTarge
   };
 }
 
+function countsTowardCycleTotal(record: SupervisorCycleTargetRecord): boolean {
+  return record.result !== "error";
+}
+
 async function writeResetTargetFiles(
   dirPath: string,
   input: {
@@ -620,7 +624,7 @@ export async function listRecoverableTargets(
           status: meta.status,
           updatedAt: meta.updatedAt,
           progressSummary: memory.progressSummary,
-          cycleCount: cycles.length,
+          cycleCount: cycles.filter(countsTowardCycleTotal).length,
         } satisfies RecoverableTargetSummary;
       })
   );
@@ -673,7 +677,7 @@ export async function cloneTargetFiles(
     await appendTargetCycleRecord(workspacePath, input.targetId, cycle);
   }
 
-  return nextCycles.length;
+  return nextCycles.filter(countsTowardCycleTotal).length;
 }
 
 export async function deleteTarget(workspacePath: string, targetId: string): Promise<void> {

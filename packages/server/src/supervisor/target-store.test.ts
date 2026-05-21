@@ -380,6 +380,41 @@ describe("target store", () => {
     ]);
   });
 
+  it("does not count failed evaluation records in recoverable target cycle totals", async () => {
+    await createTargetFiles(workspacePath, {
+      targetId: "tgt-1",
+      sessionId: "sess-1",
+      workspaceId: "ws-1",
+      objective: "Recover this target",
+      createdAt: 1,
+    });
+
+    await appendTargetCycleRecord(workspacePath, "tgt-1", {
+      cycleId: "cycle-1",
+      targetId: "tgt-1",
+      startedAt: 1,
+      completedAt: 2,
+      result: "continue",
+      reason: "Needs more work",
+      guidance: "Continue",
+      injected: true,
+      attemptCount: 1,
+    });
+    await appendTargetCycleRecord(workspacePath, "tgt-1", {
+      cycleId: "cycle-2",
+      targetId: "tgt-1",
+      startedAt: 3,
+      completedAt: 4,
+      result: "error",
+      errorReason: "Evaluator exploded",
+      attemptCount: 1,
+    });
+
+    const targets = await listRecoverableTargets(workspacePath);
+
+    expect(targets[0]?.cycleCount).toBe(1);
+  });
+
   it("clones a target into a new target id and rewrites persisted identifiers", async () => {
     await createTargetFiles(workspacePath, {
       targetId: "tgt-old",
@@ -509,6 +544,60 @@ describe("target store", () => {
     expect(cycles).toEqual([
       expect.objectContaining({
         cycleId: "cycle-1",
+        targetId: "tgt-new",
+      }),
+    ]);
+  });
+
+  it("returns only non-error cycle records when cloning target files", async () => {
+    await createTargetFiles(workspacePath, {
+      targetId: "tgt-old",
+      sessionId: "sess-old",
+      workspaceId: "ws-1",
+      objective: "Old objective",
+      createdAt: 10,
+    });
+
+    await appendTargetCycleRecord(workspacePath, "tgt-old", {
+      cycleId: "cycle-1",
+      targetId: "tgt-old",
+      startedAt: 10,
+      completedAt: 11,
+      result: "continue",
+      reason: "Keep copying",
+      guidance: "Copy state",
+      injected: true,
+      attemptCount: 1,
+    });
+    await appendTargetCycleRecord(workspacePath, "tgt-old", {
+      cycleId: "cycle-2",
+      targetId: "tgt-old",
+      startedAt: 12,
+      completedAt: 13,
+      result: "error",
+      errorReason: "Evaluator exploded",
+      attemptCount: 1,
+    });
+
+    const cycleCount = await cloneTargetFiles(workspacePath, {
+      sourceTargetId: "tgt-old",
+      targetId: "tgt-new",
+      sessionId: "sess-new",
+      workspaceId: "ws-2",
+      objective: "New objective",
+      createdAt: 20,
+    });
+
+    expect(cycleCount).toBe(1);
+    expect(await readTargetCycleRecords(workspacePath, "tgt-new")).toEqual([
+      expect.objectContaining({
+        cycleId: "cycle-2",
+        result: "error",
+        targetId: "tgt-new",
+      }),
+      expect.objectContaining({
+        cycleId: "cycle-1",
+        result: "continue",
         targetId: "tgt-new",
       }),
     ]);
