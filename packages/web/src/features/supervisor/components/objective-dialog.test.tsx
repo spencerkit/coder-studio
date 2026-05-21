@@ -653,4 +653,61 @@ describe("ObjectiveDialog", () => {
       );
     });
   });
+
+  it("allows saving non-objective supervisor edits without reset confirmation", async () => {
+    const user = userEvent.setup();
+    const sendCommand = vi.fn().mockResolvedValue({
+      supervisor: {
+        ...createSupervisor(),
+        evaluatorProviderId: "codex",
+      },
+    });
+    const store = createStore();
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(
+      supervisorDialogAtom,
+      createDialogState({
+        mode: "edit",
+        draftObjective: "Finish the server refactor",
+        initialObjective: "Finish the server refactor",
+        draftEvaluatorProviderId: "claude",
+      })
+    );
+    store.set(supervisorsAtom, new Map([["sess-1", createSupervisor()]]));
+
+    render(
+      <Provider store={store}>
+        <ObjectiveDialog workspaceId="ws-1" />
+      </Provider>
+    );
+
+    await user.click(screen.getByRole("button", { name: "Evaluator Claude" }));
+    await user.click(screen.getByRole("option", { name: "Codex" }));
+
+    const saveButton = screen.getByRole("button", { name: "Save" });
+    expect(saveButton).toBeEnabled();
+
+    await user.click(saveButton);
+
+    expect(
+      screen.queryByRole("heading", { name: "Save and reset supervisor progress?" })
+    ).not.toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "supervisor.update",
+        {
+          id: "sup-1",
+          objective: "Finish the server refactor",
+          evaluatorProviderId: "codex",
+          evaluatorModel: null,
+          maxSupervisionCount: 0,
+          scheduledAt: null,
+        },
+        undefined
+      );
+    });
+  });
 });
