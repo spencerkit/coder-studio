@@ -1749,6 +1749,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(settingsSidebar).toContain("padding: var(--sp-4)");
     expect(settingsSidebar).toContain("width: 240px");
     expect(settingsContent).toContain("display: flex");
+    expect(settingsContent).toContain("align-items: flex-start");
     expect(settingsContent).toContain("justify-content: center");
     expect(settingsContent).toContain("padding: var(--sp-6)");
     expect(settingsContent).toContain("background: var(--bg-page)");
