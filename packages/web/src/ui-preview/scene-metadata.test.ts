@@ -1,10 +1,8 @@
-// @vitest-environment node
-import { readFileSync } from "node:fs";
+// @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 import { THEME_IDS } from "../theme";
 import { UI_PREVIEW_SCENE_METADATA } from "./scene-metadata";
-
-const source = readFileSync(`${process.cwd()}/src/ui-preview/scene-metadata.ts`, "utf8");
+import { createPageScenes } from "./scenes/page-scenes";
 
 describe("ui preview scene metadata", () => {
   it("registers icon-focused scenes for theme review", () => {
@@ -48,7 +46,12 @@ describe("ui preview scene metadata", () => {
   });
 
   it("enumerates concrete theme ids instead of dark/light buckets", () => {
-    expect(source).not.toContain('themeIdsForKinds("dark", "light")');
+    expect(
+      UI_PREVIEW_SCENE_METADATA.every(
+        (scene) =>
+          scene.themes.length > 0 && scene.themes.every((theme) => THEME_IDS.includes(theme))
+      )
+    ).toBe(true);
   });
 
   it("limits the light-theme review scene to desktop light themes", () => {
@@ -78,5 +81,60 @@ describe("ui preview scene metadata", () => {
     expect(heroScene?.capture?.selector).toBe(".workspace-page");
     expect(reviewScene?.capture?.selector).toBe(".workspace-page");
     expect(mobileScene?.capture?.selector).toBe("[data-testid='mobile-shell']");
+  });
+
+  it("registers appearance review coverage for both route-backed settings and workspace shells", () => {
+    const ids = UI_PREVIEW_SCENE_METADATA.map((scene) => scene.id);
+    const appearanceScene = UI_PREVIEW_SCENE_METADATA.find(
+      (scene) => scene.id === "settings-appearance"
+    );
+    const desktopWorkspaceScene = UI_PREVIEW_SCENE_METADATA.find(
+      (scene) => scene.id === "workspace-desktop"
+    );
+    const mobileWorkspaceScene = UI_PREVIEW_SCENE_METADATA.find(
+      (scene) => scene.id === "workspace-mobile"
+    );
+    const pageScenes = createPageScenes();
+    const settingsAppearancePageScene = pageScenes.find(
+      (scene) => scene.id === "settings-appearance"
+    );
+    const workspaceDesktopPageScene = pageScenes.find((scene) => scene.id === "workspace-desktop");
+    const workspaceMobilePageScene = pageScenes.find((scene) => scene.id === "workspace-mobile");
+    const seedContext = {
+      theme: THEME_IDS[0],
+      locale: "en" as const,
+      device: "desktop" as const,
+    };
+    const settingsSeed = settingsAppearancePageScene?.seed(seedContext);
+    const workspaceDesktopSeed = workspaceDesktopPageScene?.seed(seedContext);
+    const workspaceMobileSeed = workspaceMobilePageScene?.seed({
+      ...seedContext,
+      device: "mobile",
+    });
+
+    expect(ids).toEqual(
+      expect.arrayContaining(["settings-appearance", "workspace-desktop", "workspace-mobile"])
+    );
+    expect(appearanceScene?.source).toBe("real-route");
+    expect(appearanceScene?.capture?.settingsSection).toBe("appearance");
+    expect(appearanceScene?.description.toLowerCase()).toContain("appearance");
+    expect(desktopWorkspaceScene?.source).toBe("real-route");
+    expect(desktopWorkspaceScene?.description.toLowerCase()).toContain("appearance");
+    expect(mobileWorkspaceScene?.source).toBe("real-route");
+    expect(mobileWorkspaceScene?.description.toLowerCase()).toContain("appearance");
+    expect(settingsSeed?.commands?.settingsGet).toMatchObject({
+      "appearance.personalization.version": 1,
+      "appearance.personalization.common.backgroundMode": "image",
+      "appearance.personalization.common.backgroundAssetId": "preview-background",
+      "appearance.personalization.common.glassEnabled": true,
+    });
+    expect(workspaceDesktopSeed?.commands?.settingsGet).toMatchObject({
+      "appearance.personalization.version": 1,
+      "appearance.personalization.desktop.surfaceOpacity": 88,
+    });
+    expect(workspaceMobileSeed?.commands?.settingsGet).toMatchObject({
+      "appearance.personalization.version": 1,
+      "appearance.personalization.mobile.surfaceOpacity": 96,
+    });
   });
 });
