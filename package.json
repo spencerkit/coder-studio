@@ -12,6 +12,7 @@
     "changeset:validate": "tsx scripts/validate-changesets.ts",
     "version-packages": "changeset version",
     "publish:cli": "tsx scripts/publish-cli.ts",
+    "publish:wiki": "tsx scripts/publish-wiki.ts",
     "ci:lint": "pnpm exec biome check --diagnostic-level=error --max-diagnostics=none .",
     "ci:test:scripts": "pnpm exec vitest run --config scripts/vitest.config.ts scripts/publish-cli.test.ts scripts/build-cli.test.ts scripts/validate-changesets.test.ts scripts/husky-pre-commit.test.ts --environment node",
     "ci:test:workspace": "pnpm -r --filter './packages/**' --if-present run test",
