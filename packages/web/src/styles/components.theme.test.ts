@@ -1803,6 +1803,7 @@ describe("components.css theme-sensitive surfaces", () => {
     const mobileSettingsFooterPage = getLastRuleBlock(
       ".settings-page--mobile > .settings-footer"
     ).replace(/\s+/g, " ");
+    const settingsFooterMeta = getLastRuleBlock(".settings-footer__meta");
 
     expect(mobileSettingsPage).toContain("min-height: 100dvh");
     expect(mobileSettingsPage).toContain("height: 100dvh");
@@ -1817,6 +1818,8 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(mobileSettingsHeaderBack).toContain("min-height: 32px");
     expect(mobileSettingsHeaderBack).toContain("gap: var(--sp-1)");
     expect(mobileSettingsBody).toContain("background: var(--bg-page)");
+    expect(settingsFooterMeta).toContain("justify-content: space-between");
+    expect(settingsFooterMeta).toContain("width: 100%");
     expect(mobilePageBack).toContain("background: transparent");
     expect(mobilePageBack).toContain("box-shadow: none");
     expect(mobilePageBack).not.toContain("border-radius: 999px");
@@ -2208,6 +2211,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(notice).toContain("padding: var(--inset-control-block) var(--inset-control-inline)");
     expect(notice).toContain("border-radius: var(--radius-overlay)");
     expect(notice).toContain("background: var(--surface-elevated-bg)");
+    expect(notice).toContain("overflow: hidden");
     expect(warning).toContain("background: var(--state-warning-bg)");
     expect(warning).toContain("border-color: var(--state-warning-border)");
     expect(error).toContain("background: var(--state-error-bg)");

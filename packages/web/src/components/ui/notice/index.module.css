@@ -8,6 +8,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-overlay);
   background: var(--surface-elevated-bg);
+  overflow: hidden;
 }
 
 .info {

@@ -210,7 +210,10 @@ describe("SettingsPage", () => {
     renderSettingsPage(store);
 
     expect(screen.getByText("v0.3.0")).toBeInTheDocument();
-    expect(document.querySelector(".settings-footer__meta")).toBeTruthy();
+    const footerMeta = document.querySelector(".settings-footer__meta");
+    expect(footerMeta).toBeTruthy();
+    expect(within(footerMeta as HTMLElement).getByText("设置已自动保存")).toBeInTheDocument();
+    expect(within(footerMeta as HTMLElement).getByText("v0.3.0")).toBeInTheDocument();
   });
 
   it("wraps desktop settings content in the shared content surface", async () => {
