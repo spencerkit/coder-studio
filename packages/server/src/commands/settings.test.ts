@@ -164,6 +164,49 @@ describe("settings commands", () => {
     expect(settingsRepo.get("appearance.mobileTerminalFontSize")).toBe(15);
   });
 
+  it("settings.update persists lsp.mode into the file-backed settings store", async () => {
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "settings-update-lsp-mode",
+        op: "settings.update",
+        args: {
+          settings: {
+            lsp: {
+              mode: "off",
+            },
+          },
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(settingsRepo.get("lsp.mode")).toBe("off");
+  });
+
+  it("settings.update rejects invalid lsp.mode values", async () => {
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "settings-update-lsp-mode-invalid",
+        op: "settings.update",
+        args: {
+          settings: {
+            lsp: {
+              mode: "on",
+            },
+          },
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("validation_error");
+    expect(settingsRepo.get("lsp.mode")).toBeUndefined();
+  });
+
   it("settings.update persists legacy appearance.theme light during themeId migration", async () => {
     const result = await dispatch(
       {
@@ -515,6 +558,25 @@ describe("settings commands", () => {
     expect(result.data).toMatchObject({
       "appearance.desktopTerminalFontSize": 16,
       "appearance.mobileTerminalFontSize": 14,
+    });
+  });
+
+  it("settings.get returns the persisted lsp.mode value", async () => {
+    settingsRepo.set("lsp.mode", "auto");
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "settings-get-lsp-mode",
+        op: "settings.get",
+        args: {},
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.data).toMatchObject({
+      "lsp.mode": "auto",
     });
   });
 

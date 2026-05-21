@@ -210,6 +210,36 @@ describe("createLspBridge", () => {
     });
   });
 
+  it("does not open a document when ensureSession returns disabled", async () => {
+    const sendCommand = vi.fn().mockResolvedValueOnce({
+      kind: "disabled",
+      mode: "off",
+      message: "LSP is disabled by runtime mode",
+    });
+
+    const bridge = createLspBridge({
+      sendCommand: sendCommand as BridgeSendCommand,
+      subscribe: vi.fn(() => () => {}),
+    });
+
+    bridge.attachModel({
+      workspaceId: "ws-1",
+      workspaceRootPath: "/repo",
+      path: "e2e/fixtures/lsp-workspace/shared.ts",
+      monacoLanguage: "typescript",
+      model: createMockModel("export const sharedValue = 1;\n"),
+    });
+
+    await vi.waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith("lsp.ensureSession", {
+        workspaceId: "ws-1",
+        path: "e2e/fixtures/lsp-workspace/shared.ts",
+      });
+    });
+
+    expect(sendCommand).not.toHaveBeenCalledWith("lsp.openDocument", expect.anything());
+  });
+
   it("registers Monaco providers for tsx files on the TypeScript language", () => {
     const bridge = createLspBridge({
       sendCommand: vi.fn() as BridgeSendCommand,

@@ -22,6 +22,7 @@ import { getThemeById } from "../../../theme";
 import { useOpenLocation } from "../actions/use-open-location";
 import { type PendingEditorNavigation, pendingEditorNavigationAtomFamily } from "../atoms";
 import { globalLspBridge, type LspBridgeState } from "../lsp/bridge";
+import { lspRuntimeModeAtom } from "../lsp/runtime-mode";
 import { monacoModelRegistry } from "../monaco/model-registry";
 import { fromWorkspaceFileUri } from "../monaco/uri";
 import { LspStatusNotice } from "./lsp-status-notice";
@@ -113,6 +114,7 @@ export const MonacoHost: FC<MonacoHostProps> = ({
   onSave,
 }) => {
   const uiTheme = useAtomValue(themeAtom);
+  const lspRuntimeMode = useAtomValue(lspRuntimeModeAtom);
   const pendingNavigation = useAtomValue(pendingEditorNavigationAtomFamily(workspaceId ?? ""));
   const setPendingNavigation = useSetAtom(pendingEditorNavigationAtomFamily(workspaceId ?? ""));
   const dispatchCommand = useAtomValue(dispatchCommandAtom);
@@ -231,6 +233,20 @@ export const MonacoHost: FC<MonacoHostProps> = ({
   }, [editorTheme]);
 
   useEffect(() => {
+    if (lspRuntimeMode === "off") {
+      setLspState({
+        kind: "disabled",
+        mode: "off",
+        message: "LSP is disabled by runtime mode",
+      });
+      setInstalling(false);
+      return;
+    }
+
+    setLspState({ kind: "unsupported_language" });
+  }, [filePath, lspRuntimeMode]);
+
+  useEffect(() => {
     globalLspBridge.configure({
       sendCommand: async <T,>(op: string, args: unknown) => {
         const result = await dispatchCommand(op, args);
@@ -267,7 +283,13 @@ export const MonacoHost: FC<MonacoHostProps> = ({
 
   useEffect(() => {
     const model = editorRef.current?.getModel();
-    if (!model || !isWorkspaceBacked || !workspaceId || !workspaceRootPath) {
+    if (
+      !model ||
+      !isWorkspaceBacked ||
+      !workspaceId ||
+      !workspaceRootPath ||
+      lspRuntimeMode !== "auto"
+    ) {
       return;
     }
 
@@ -287,9 +309,13 @@ export const MonacoHost: FC<MonacoHostProps> = ({
       lspHandleRef.current = null;
       handle();
     };
-  }, [filePath, isWorkspaceBacked, lspLanguage, workspaceId, workspaceRootPath]);
+  }, [filePath, isWorkspaceBacked, lspLanguage, lspRuntimeMode, workspaceId, workspaceRootPath]);
 
   const showLspNotice = isWorkspaceBacked && workspaceId && isNoticeLspState(lspState);
+  const showInstallAction =
+    lspState.kind === "tool_missing" &&
+    lspState.autoInstallSupported &&
+    lspState.missingPrerequisites.length === 0;
 
   const handleInstall = async () => {
     if (!lspHandleRef.current) {
@@ -364,11 +390,7 @@ export const MonacoHost: FC<MonacoHostProps> = ({
       {showLspNotice ? (
         <LspStatusNotice
           state={lspState}
-          onInstall={
-            lspState.autoInstallSupported && lspState.missingPrerequisites.length === 0
-              ? handleInstall
-              : undefined
-          }
+          onInstall={showInstallAction ? handleInstall : undefined}
           onRetry={handleRetry}
           installing={installing}
         />

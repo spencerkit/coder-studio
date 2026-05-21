@@ -4,6 +4,7 @@ import type {
   LspEnsureSessionResult,
   LspHoverResult,
   LspLocation,
+  LspRuntimeMode,
   LspSessionSummary,
   Workspace,
 } from "@coder-studio/core";
@@ -44,6 +45,7 @@ interface SessionLookupResult {
 
 export class LspManager {
   private readonly sessions = new Map<string, ManagedSessionEntry>();
+  private runtimeMode: LspRuntimeMode = "auto";
 
   constructor(
     private readonly deps: {
@@ -62,10 +64,37 @@ export class LspManager {
     }
   ) {}
 
+  async setRuntimeMode(mode: LspRuntimeMode): Promise<void> {
+    this.runtimeMode = mode;
+    if (mode === "off") {
+      await this.disposeAll();
+    }
+  }
+
+  getRuntimeMode(): LspRuntimeMode {
+    return this.runtimeMode;
+  }
+
+  private isRuntimeOff(): boolean {
+    return this.runtimeMode === "off";
+  }
+
+  private getDisabledResult(): Extract<LspEnsureSessionResult, { kind: "disabled" }> {
+    return {
+      kind: "disabled",
+      mode: "off",
+      message: "LSP is disabled by runtime mode",
+    };
+  }
+
   async ensureSession(input: {
     workspaceId: string;
     path: string;
   }): Promise<LspEnsureSessionResult> {
+    if (this.isRuntimeOff()) {
+      return this.getDisabledResult();
+    }
+
     const workspace = this.deps.workspaceMgr.get(input.workspaceId);
     if (!workspace) {
       throw new Error(`Workspace not found: ${input.workspaceId}`);
@@ -80,6 +109,9 @@ export class LspManager {
       workspace,
       serverKind,
     });
+    if (this.isRuntimeOff()) {
+      return this.getDisabledResult();
+    }
     if (resolution.kind !== "ready") {
       return {
         kind: "tool_missing",
@@ -106,6 +138,12 @@ export class LspManager {
     if (existing) {
       try {
         const summary = await existing.session.start();
+        if (this.isRuntimeOff()) {
+          if (this.sessions.get(key)?.session === existing.session) {
+            await this.disposeKey(key).catch(() => {});
+          }
+          return this.getDisabledResult();
+        }
         this.bumpActivity(key);
         return {
           kind: "ready",
@@ -145,6 +183,12 @@ export class LspManager {
 
     try {
       const summary = await session.start();
+      if (this.isRuntimeOff()) {
+        if (this.sessions.get(key)?.session === session) {
+          await this.disposeKey(key).catch(() => {});
+        }
+        return this.getDisabledResult();
+      }
       this.bumpActivity(key);
       return {
         kind: "ready",
@@ -173,6 +217,9 @@ export class LspManager {
     languageId: string;
     text: string;
   }): Promise<number | null> {
+    if (this.runtimeMode === "off") {
+      return null;
+    }
     const session = await this.getSessionForPath(input.workspaceId, input.path);
     return session ? await session.openDocument(input) : null;
   }
@@ -182,6 +229,9 @@ export class LspManager {
     path: string;
     text: string;
   }): Promise<number | null> {
+    if (this.runtimeMode === "off") {
+      return null;
+    }
     const session = await this.getSessionForPath(input.workspaceId, input.path);
     return session ? await session.changeDocument(input.path, input.text) : null;
   }
@@ -202,6 +252,9 @@ export class LspManager {
     line: number;
     column: number;
   }): Promise<LspLocation[] | null> {
+    if (this.runtimeMode === "off") {
+      return null;
+    }
     const session = await this.getSessionForPath(input.workspaceId, input.path);
     return session ? await session.definition(input) : null;
   }
@@ -212,6 +265,9 @@ export class LspManager {
     line: number;
     column: number;
   }): Promise<LspLocation[] | null> {
+    if (this.runtimeMode === "off") {
+      return null;
+    }
     const session = await this.getSessionForPath(input.workspaceId, input.path);
     return session ? await session.references(input) : null;
   }
@@ -222,6 +278,9 @@ export class LspManager {
     line: number;
     column: number;
   }): Promise<LspLocation[] | null> {
+    if (this.runtimeMode === "off") {
+      return null;
+    }
     const session = await this.getSessionForPath(input.workspaceId, input.path);
     return session ? await session.declaration(input) : null;
   }
@@ -232,16 +291,25 @@ export class LspManager {
     line: number;
     column: number;
   }): Promise<LspLocation[] | null> {
+    if (this.runtimeMode === "off") {
+      return null;
+    }
     const session = await this.getSessionForPath(input.workspaceId, input.path);
     return session ? await session.typeDefinition(input) : null;
   }
 
   async hover(input: { workspaceId: string; path: string; line: number; column: number }) {
+    if (this.runtimeMode === "off") {
+      return null;
+    }
     const session = await this.getSessionForPath(input.workspaceId, input.path);
     return session ? await session.hover(input) : null;
   }
 
   async documentSymbols(input: { workspaceId: string; path: string }) {
+    if (this.runtimeMode === "off") {
+      return null;
+    }
     const session = await this.getSessionForPath(input.workspaceId, input.path);
     return session ? await session.documentSymbols(input) : null;
   }

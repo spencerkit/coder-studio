@@ -223,6 +223,10 @@ export async function createServer(
     restartLimit: 2,
     lspToolMgr,
   });
+  const persistedLspMode = settingsRepo.get<"auto" | "off">("lsp.mode");
+  if (persistedLspMode === "off") {
+    await lspMgr.setRuntimeMode("off");
+  }
 
   const supervisorRepo = new SupervisorRepo();
   supervisorMgr = new SupervisorManager({

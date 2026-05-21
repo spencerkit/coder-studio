@@ -41,6 +41,16 @@ export function LspStatusNotice({
   onRetry,
   installing = false,
 }: LspStatusNoticeProps) {
+  if (state.kind === "disabled") {
+    return (
+      <Notice
+        tone="info"
+        title="Language server disabled"
+        message="LSP is turned off in Settings to reduce memory usage."
+      />
+    );
+  }
+
   const activeStep = state.installJob?.steps.find(
     (step) => step.id === state.installJob?.currentStepId
   );

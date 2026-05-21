@@ -1228,6 +1228,119 @@ describe("SettingsPage", () => {
     expect(standardRendererPill).toHaveAttribute("aria-pressed", "true");
   });
 
+  it("hydrates lsp runtime mode from settings.get", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "lsp.mode": "off",
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "通用" }));
+
+    expect(await screen.findByRole("group", { name: "LSP 运行模式" })).toHaveAccessibleDescription(
+      "控制代码智能的内存占用。"
+    );
+    expect(screen.getByRole("button", { name: "Off" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("persists and applies lsp runtime mode before updating the local selection", async () => {
+    let resolveSettingsUpdate: ((value: { updated: string[] }) => void) | undefined;
+    const settingsUpdatePromise = new Promise<{ updated: string[] }>((resolve) => {
+      resolveSettingsUpdate = resolve;
+    });
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "lsp.mode": "auto",
+        };
+      }
+      if (op === "settings.update") {
+        return await settingsUpdatePromise;
+      }
+      if (op === "lsp.setMode") {
+        return { mode: "off" };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "通用" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Off" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            lsp: {
+              mode: "off",
+            },
+          },
+        },
+        undefined
+      );
+    });
+
+    expect(sendCommand).not.toHaveBeenCalledWith("lsp.setMode", { mode: "off" }, undefined);
+    expect(screen.getByRole("button", { name: "Auto" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Off" })).toHaveAttribute("aria-pressed", "false");
+
+    resolveSettingsUpdate?.({ updated: ["lsp.mode"] });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith("lsp.setMode", { mode: "off" }, undefined);
+    });
+
+    expect(screen.getByRole("button", { name: "Off" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Auto" })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("does not flip lsp runtime mode locally when runtime application fails", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "lsp.mode": "auto",
+        };
+      }
+      if (op === "settings.update") {
+        return { updated: ["lsp.mode"] };
+      }
+      if (op === "lsp.setMode") {
+        throw new CommandResultError("runtime_apply_failed", "runtime apply failed");
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "通用" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Off" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            lsp: {
+              mode: "off",
+            },
+          },
+        },
+        undefined
+      );
+      expect(sendCommand).toHaveBeenCalledWith("lsp.setMode", { mode: "off" }, undefined);
+    });
+
+    expect(screen.getByRole("button", { name: "Auto" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Off" })).toHaveAttribute("aria-pressed", "false");
+  });
+
   it("keeps copy-on-select visible on desktop general settings", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "settings.get") {

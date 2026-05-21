@@ -68,4 +68,26 @@ describe("LspStatusNotice", () => {
     expect(screen.queryByRole("button", { name: "Install" })).toBeNull();
     expect(screen.getByText("Missing prerequisites: go")).toBeInTheDocument();
   });
+
+  it("renders a disabled notice without install or retry actions", () => {
+    render(
+      <LspStatusNotice
+        state={{
+          kind: "disabled",
+          mode: "off",
+          message: "LSP is turned off in Settings to reduce memory usage.",
+        }}
+        onInstall={vi.fn()}
+        onRetry={vi.fn()}
+        installing={false}
+      />
+    );
+
+    expect(screen.getByText("Language server disabled")).toBeInTheDocument();
+    expect(
+      screen.getByText("LSP is turned off in Settings to reduce memory usage.")
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Install" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+  });
 });

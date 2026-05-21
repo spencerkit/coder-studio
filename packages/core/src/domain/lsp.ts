@@ -1,5 +1,6 @@
 export type LspServerKind = "typescript" | "python" | "go" | "rust";
 export type LspToolSource = "override" | "managed" | "bundled" | "system";
+export type LspRuntimeMode = "auto" | "off";
 
 export interface LspRange {
   startLine: number;
@@ -108,6 +109,11 @@ export interface LspToolInstallJobSnapshot {
 
 export type LspEnsureSessionResult =
   | { kind: "unsupported_language" }
+  | {
+      kind: "disabled";
+      mode: "off";
+      message: string;
+    }
   | {
       kind: "ready";
       summary: LspSessionSummary;

@@ -12,6 +12,17 @@ registerCommand(
 );
 
 registerCommand(
+  "lsp.setMode",
+  z.object({
+    mode: z.enum(["auto", "off"]),
+  }),
+  async (args, ctx) => {
+    await ctx.lspMgr.setRuntimeMode(args.mode);
+    return { mode: ctx.lspMgr.getRuntimeMode() };
+  }
+);
+
+registerCommand(
   "lsp.runtimeStatus",
   z.object({
     workspaceId: z.string(),

@@ -6,6 +6,7 @@ import { wsClientAtom } from "../../../atoms/connection";
 import { getThemeById } from "../../../theme";
 import { activeFilePathAtomFamily } from "../../workspace/atoms";
 import { pendingEditorNavigationAtomFamily } from "../atoms";
+import { lspRuntimeModeAtom } from "../lsp/runtime-mode";
 import { MonacoHost } from "./monaco-host";
 
 const {
@@ -30,6 +31,7 @@ const {
   mockSetTypeScriptCompilerOptions,
   mockSetTypeScriptDiagnosticsOptions,
   mockSetTypeScriptEagerModelSync,
+  mockDetachLspBridgeModel,
   modelState,
   modelChangeListenerState,
   openHandlerState,
@@ -141,8 +143,9 @@ const {
   const mockSetTypeScriptEagerModelSync = vi.fn();
   const mockSetJavaScriptEagerModelSync = vi.fn();
   const mockConfigureLspBridge = vi.fn();
+  const mockDetachLspBridgeModel = vi.fn();
   const mockAttachLspBridgeModel = vi.fn((_input, onStateChange?: (state: unknown) => void) => {
-    const handle = Object.assign(vi.fn(), {
+    const handle = Object.assign(mockDetachLspBridgeModel, {
       install: vi.fn(async () => {}),
       retry: vi.fn(async () => {}),
     });
@@ -174,6 +177,7 @@ const {
     mockSetTypeScriptCompilerOptions,
     mockSetTypeScriptDiagnosticsOptions,
     mockSetTypeScriptEagerModelSync,
+    mockDetachLspBridgeModel,
     modelState,
     modelChangeListenerState,
     openHandlerState,
@@ -280,6 +284,7 @@ describe("MonacoHost", () => {
     mockEditorInstance.setValue.mockClear();
     mockConfigureLspBridge.mockClear();
     mockAttachLspBridgeModel.mockClear();
+    mockDetachLspBridgeModel.mockClear();
     modelState.current = null;
     modelChangeListenerState.current = null;
     openHandlerState.current = null;
@@ -515,6 +520,65 @@ describe("MonacoHost", () => {
         },
         expect.any(Function)
       );
+    });
+  });
+
+  it("does not attach the lsp bridge when runtime mode is off", async () => {
+    const store = createStore();
+    store.set(lspRuntimeModeAtom, "off");
+
+    render(
+      <Provider store={store}>
+        <MonacoHost
+          workspaceId="ws-test"
+          workspaceRootPath="/repo"
+          filePath="src/example.ts"
+          content="export const a = 1;"
+        />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(mockSetModel).toHaveBeenCalledWith(workspaceModelA);
+    });
+
+    expect(mockAttachLspBridgeModel).not.toHaveBeenCalled();
+  });
+
+  it("detaches the existing lsp bridge handle when runtime mode switches off", async () => {
+    const store = createStore();
+    const { rerender } = render(
+      <Provider store={store}>
+        <MonacoHost
+          workspaceId="ws-test"
+          workspaceRootPath="/repo"
+          filePath="src/example.ts"
+          content="export const a = 1;"
+        />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(mockAttachLspBridgeModel).toHaveBeenCalledTimes(1);
+    });
+
+    await act(async () => {
+      store.set(lspRuntimeModeAtom, "off");
+    });
+
+    rerender(
+      <Provider store={store}>
+        <MonacoHost
+          workspaceId="ws-test"
+          workspaceRootPath="/repo"
+          filePath="src/example.ts"
+          content="export const a = 1;"
+        />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(mockDetachLspBridgeModel).toHaveBeenCalledTimes(1);
     });
   });
 

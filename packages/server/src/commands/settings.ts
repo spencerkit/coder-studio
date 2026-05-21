@@ -74,6 +74,11 @@ const SettingsSchema = z.object({
       locale: z.enum(["zh", "en"]).optional(),
     })
     .optional(),
+  lsp: z
+    .object({
+      mode: z.enum(["auto", "off"]).optional(),
+    })
+    .optional(),
   providers: ProviderSettingsSchema.optional(),
 });
 

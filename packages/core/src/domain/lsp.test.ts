@@ -7,6 +7,7 @@ import type {
   LspEnsureSessionResult,
   LspHoverResult,
   LspLocation,
+  LspRuntimeMode,
   LspSessionSummary,
   LspToolInstallFailure,
   LspToolInstallJobSnapshot,
@@ -77,6 +78,8 @@ describe("LSP shared surface", () => {
       status: "unsupported" | "starting" | "ready" | "degraded" | "stopped";
       capabilities: {
         definition: boolean;
+        declaration: boolean;
+        typeDefinition: boolean;
         references: boolean;
         hover: boolean;
         documentSymbols: boolean;
@@ -142,8 +145,15 @@ describe("LSP shared surface", () => {
       failure?: LspToolInstallFailure;
     }>();
 
+    expectTypeOf<LspRuntimeMode>().toEqualTypeOf<"auto" | "off">();
+
     expectTypeOf<LspEnsureSessionResult>().toEqualTypeOf<
       | { kind: "unsupported_language" }
+      | {
+          kind: "disabled";
+          mode: "off";
+          message: string;
+        }
       | {
           kind: "ready";
           summary: LspSessionSummary;

@@ -14,6 +14,16 @@ import "../commands/workspace.js";
 import "../commands/lsp.js";
 
 class FakeLspManager {
+  mode: "auto" | "off" = "auto";
+
+  async setRuntimeMode(mode: "auto" | "off") {
+    this.mode = mode;
+  }
+
+  getRuntimeMode() {
+    return this.mode;
+  }
+
   async ensureSession() {
     return {
       kind: "ready" as const,
@@ -264,5 +274,20 @@ describe("LSP commands", () => {
       jobId: "job-1",
       status: "running",
     });
+  });
+
+  it("applies lsp runtime mode through lsp.setMode", async () => {
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: crypto.randomUUID(),
+        op: "lsp.setMode",
+        args: { mode: "off" },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.data).toEqual({ mode: "off" });
   });
 });

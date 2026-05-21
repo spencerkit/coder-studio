@@ -11,6 +11,7 @@ import {
   DEFAULT_SUPERVISOR_RETRY_MAX_COUNT,
   DEFAULT_SUPERVISOR_RETRY_ON_EVALUATOR_ERROR,
   DEFAULT_SUPERVISOR_RETRY_ON_TIMEOUT,
+  type LspRuntimeMode,
   MAX_SUPERVISOR_EVALUATION_TIMEOUT_SEC,
   MAX_SUPERVISOR_RETRY_DELAY_SEC,
   MAX_SUPERVISOR_RETRY_MAX_COUNT,
@@ -36,6 +37,7 @@ import { Button, Input, Notice, Pill, Select, Switch, ThemedIcon } from "../../.
 import { useViewport } from "../../../hooks/use-viewport";
 import { useTranslation } from "../../../lib/i18n";
 import { getThemeById, resolveStoredThemeId, THEMES } from "../../../theme";
+import { lspRuntimeModeAtom } from "../../code-editor/lsp/runtime-mode";
 import { buildDiagnosticsPath } from "../../diagnostics";
 import { notificationPreferencesAtom } from "../../notifications/atoms";
 import { MobilePageHeader } from "../../shared/components/mobile-page-header";
@@ -239,6 +241,7 @@ export function SettingsPage() {
   const [supervisorRetryOnEvaluatorError, setSupervisorRetryOnEvaluatorError] = useState(
     DEFAULT_SUPERVISOR_RETRY_ON_EVALUATOR_ERROR
   );
+  const [lspRuntimeMode, setLspRuntimeMode] = useState<LspRuntimeMode>("auto");
   const [terminalRenderer, setTerminalRendererState] = useState<"standard" | "compatibility">(
     "standard"
   );
@@ -253,11 +256,13 @@ export function SettingsPage() {
   const terminalPreferences = useAtomValue(terminalPreferencesAtom);
   const setNotificationPreferences = useSetAtom(notificationPreferencesAtom);
   const setTerminalPreferences = useSetAtom(terminalPreferencesAtom);
+  const setHydratedLspRuntimeMode = useSetAtom(lspRuntimeModeAtom);
   const store = useStore();
   const settingsLoadFailedUnknownRef = useRef(settingsLoadFailedUnknown);
   const appearanceSelectionVersionRef = useRef({
     theme: 0,
     locale: 0,
+    lspRuntimeMode: 0,
     terminalRenderer: 0,
     terminalCopyOnSelect: 0,
     desktopTerminalFontSize: 0,
@@ -324,6 +329,18 @@ export function SettingsPage() {
       }
       if (typeof settings["notifications.soundEnabled"] === "boolean") {
         setSoundEnabled(settings["notifications.soundEnabled"]);
+      }
+      if (
+        appearanceSelectionVersionRef.current.lspRuntimeMode ===
+        appearanceSelectionVersionAtRequestStart.lspRuntimeMode
+      ) {
+        if (settings["lsp.mode"] === "auto" || settings["lsp.mode"] === "off") {
+          setLspRuntimeMode(settings["lsp.mode"]);
+          setHydratedLspRuntimeMode(settings["lsp.mode"]);
+        } else {
+          setLspRuntimeMode("auto");
+          setHydratedLspRuntimeMode("auto");
+        }
       }
       setSupervisorEvaluationTimeoutSec(
         resolveSupervisorEvaluationTimeoutSec(settings["supervisor.evaluationTimeoutSec"])
@@ -435,6 +452,7 @@ export function SettingsPage() {
     dispatch,
     setLocaleState,
     setNotificationPreferences,
+    setHydratedLspRuntimeMode,
     setTerminalPreferences,
     setTheme,
     settingsRefreshKey,
@@ -474,6 +492,33 @@ export function SettingsPage() {
     syncTerminalPreferences({
       mobileFontSize: value,
     });
+  };
+
+  const handleLspRuntimeModeSelection = async (nextMode: LspRuntimeMode) => {
+    if (nextMode === lspRuntimeMode) {
+      return;
+    }
+
+    appearanceSelectionVersionRef.current.lspRuntimeMode += 1;
+
+    const persistResult = await dispatch("settings.update", {
+      settings: {
+        lsp: {
+          mode: nextMode,
+        },
+      },
+    });
+    if (!persistResult.ok) {
+      return;
+    }
+
+    const runtimeResult = await dispatch("lsp.setMode", { mode: nextMode });
+    if (!runtimeResult.ok) {
+      return;
+    }
+
+    setLspRuntimeMode(nextMode);
+    setHydratedLspRuntimeMode(nextMode);
   };
 
   useEffect(() => {
@@ -524,6 +569,8 @@ export function SettingsPage() {
             setSupervisorRetryOnTimeout={setSupervisorRetryOnTimeout}
             supervisorRetryOnEvaluatorError={supervisorRetryOnEvaluatorError}
             setSupervisorRetryOnEvaluatorError={setSupervisorRetryOnEvaluatorError}
+            lspRuntimeMode={lspRuntimeMode}
+            onLspRuntimeModeSelect={handleLspRuntimeModeSelection}
             terminalRenderer={terminalRenderer}
             setTerminalRenderer={handleTerminalRendererSelection}
             terminalCopyOnSelect={terminalPreferences.copyOnSelect}
@@ -721,6 +768,8 @@ interface GeneralSettingsProps {
   setSupervisorRetryOnTimeout: (value: boolean) => void;
   supervisorRetryOnEvaluatorError: boolean;
   setSupervisorRetryOnEvaluatorError: (value: boolean) => void;
+  lspRuntimeMode: LspRuntimeMode;
+  onLspRuntimeModeSelect: (value: LspRuntimeMode) => Promise<void>;
   terminalRenderer: "standard" | "compatibility";
   setTerminalRenderer: (value: "standard" | "compatibility") => void;
   terminalCopyOnSelect: boolean;
@@ -809,6 +858,8 @@ function GeneralSettings({
   setSupervisorRetryOnTimeout,
   supervisorRetryOnEvaluatorError,
   setSupervisorRetryOnEvaluatorError,
+  lspRuntimeMode,
+  onLspRuntimeModeSelect,
   terminalRenderer,
   setTerminalRenderer,
   terminalCopyOnSelect,
@@ -823,6 +874,8 @@ function GeneralSettings({
   const soundDescId = useId();
   const terminalRendererTitleId = useId();
   const terminalRendererDescId = useId();
+  const lspRuntimeModeTitleId = useId();
+  const lspRuntimeModeDescId = useId();
   const copyOnSelectLabelId = useId();
   const copyOnSelectDescId = useId();
   const dispatch = useAtomValue(dispatchCommandAtom);
@@ -1115,6 +1168,41 @@ function GeneralSettings({
               </>
             )}
           </span>
+        </div>
+      </div>
+
+      <div className="settings-group">
+        <h3 className="settings-group-title" id={lspRuntimeModeTitleId}>
+          {t("settings.lsp_runtime_mode")}
+        </h3>
+        <p className="settings-group-desc" id={lspRuntimeModeDescId}>
+          {t("settings.lsp_runtime_mode_hint")}
+        </p>
+
+        <div
+          aria-describedby={lspRuntimeModeDescId}
+          aria-labelledby={lspRuntimeModeTitleId}
+          className="settings-pills"
+          role="group"
+        >
+          <Pill
+            leadingIcon={lspRuntimeMode === "auto" ? <Check size={12} /> : undefined}
+            onClick={() => {
+              void onLspRuntimeModeSelect("auto");
+            }}
+            active={lspRuntimeMode === "auto"}
+          >
+            {t("settings.lsp_runtime_mode_auto")}
+          </Pill>
+          <Pill
+            leadingIcon={lspRuntimeMode === "off" ? <Check size={12} /> : undefined}
+            onClick={() => {
+              void onLspRuntimeModeSelect("off");
+            }}
+            active={lspRuntimeMode === "off"}
+          >
+            {t("settings.lsp_runtime_mode_off")}
+          </Pill>
         </div>
       </div>
 
