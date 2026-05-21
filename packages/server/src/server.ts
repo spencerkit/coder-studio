@@ -175,7 +175,6 @@ export async function createServer(
         console.warn("[uploads] cascade cleanup failed", { wsId: workspaceId, err })
       ),
   });
-  workspaceMgr.hydrateWatchers();
 
   const authSessionRepo = new AuthSessionRepo({
     filePath: join(stateRoot, "state", "auth-sessions.json"),
@@ -204,6 +203,8 @@ export async function createServer(
   });
 
   wsHub.setLogger(app.log);
+  workspaceMgr.setLogger(app.log);
+  workspaceMgr.hydrateWatchers();
 
   const lspManifestStore = new FileManifestStore(resolveLspToolRoot(config.dataDir));
   const lspToolMgr = new LspToolManager({

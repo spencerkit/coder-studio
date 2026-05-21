@@ -11,6 +11,13 @@ const DEFAULT_WATCHER_IGNORED_PATTERNS: RegExp[] = [
   /\.DS_Store/,
   /Thumbs\.db/,
   /(^|\/)\.playwright-mcp(\/|$)/,
+  // Git internals that are transient or churn-heavy. We KEEP HEAD, refs/,
+  // worktrees/, packed-refs, index, and config so branch/worktree state can
+  // still be observed; this list only removes paths that either (a) cause
+  // EPERM/ENOENT races on Windows (`.lock` files) or (b) have no UI value
+  // and are write-heavy (`objects/`, `lfs/`, `logs/`, `hooks/`, `info/`).
+  /(^|\/)\.git\/(objects|lfs|logs|hooks|info)(\/|$)/,
+  /(^|\/)\.git\/(.*\/)?[^/]+\.lock$/,
 ];
 
 function normalizePath(path: string): string {

@@ -3,6 +3,7 @@
  */
 
 import type { DomainEvent, Workspace } from "@coder-studio/core";
+import type { WatcherLogger } from "../fs/watcher.js";
 import { WorkspaceRepo } from "../storage/repositories/workspace-repo.js";
 import { WorkspaceValidator } from "./validator.js";
 
@@ -29,6 +30,7 @@ export interface WorkspaceManagerDeps {
   autoFetch?: AutoFetchRuntime;
   teardown?: (workspaceId: string) => void | Promise<void>;
   onClose?: (workspaceId: string) => void | Promise<void>;
+  logger?: WatcherLogger;
 }
 
 /**
@@ -47,9 +49,21 @@ export class WorkspaceManager {
   private validator = new WorkspaceValidator();
   private watchers = new Map<string, WorkspaceWatcher>();
   private readonly repo: WorkspaceRepo;
+  private logger: WatcherLogger | undefined;
 
   constructor(private deps: WorkspaceManagerDeps) {
     this.repo = deps.workspaceRepo;
+    this.logger = deps.logger;
+  }
+
+  /**
+   * Late-binds a logger after construction. Mirrors the pattern used by
+   * `WSHub.setLogger`, so the manager can be created before Fastify's
+   * `app.log` is available and still log watcher events with the proper
+   * runtime logger.
+   */
+  setLogger(logger: WatcherLogger): void {
+    this.logger = logger;
   }
 
   private startWatcher(workspaceId: string, rootPath: string): void {
@@ -59,7 +73,7 @@ export class WorkspaceManager {
 
     this.watchers.set(
       workspaceId,
-      new WorkspaceWatcher(workspaceId, rootPath, this.deps.broadcaster)
+      new WorkspaceWatcher(workspaceId, rootPath, this.deps.broadcaster, this.logger)
     );
   }
 
