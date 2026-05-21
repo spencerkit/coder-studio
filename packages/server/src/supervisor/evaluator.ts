@@ -506,6 +506,152 @@ function createSupervisorEvalFailedError(message: string): {
   return { code: "supervisor_eval_failed", message };
 }
 
+/**
+ * Scan `text` for the first balanced `{ … }` block, ignoring braces that
+ * appear inside string literals. Useful when the model prefaces the JSON
+ * with prose like "Based on my analysis: {…}". Returns null when no
+ * balanced object is found.
+ */
+function extractBalancedObject(text: string): string | null {
+  const start = text.indexOf("{");
+  if (start < 0) {
+    return null;
+  }
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i]!;
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (ch === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) {
+      continue;
+    }
+    if (ch === "{") {
+      depth++;
+    } else if (ch === "}") {
+      depth--;
+      if (depth === 0) {
+        return text.slice(start, i + 1);
+      }
+    }
+  }
+  return null;
+}
+
+interface JsonCandidate {
+  text: string;
+  source: "raw" | "code-fence-wrap" | "balanced-object";
+}
+
+/**
+ * Enumerate plausible JSON candidates inside a supervisor payload, ordered
+ * from most-trusted to most-aggressive. Each entry is later passed to
+ * JSON.parse (with a control-char repair fallback) until one succeeds.
+ */
+function collectJsonCandidates(text: string): JsonCandidate[] {
+  const candidates: JsonCandidate[] = [];
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return candidates;
+  }
+
+  const seen = new Set<string>();
+  const push = (entry: JsonCandidate) => {
+    if (!entry.text || seen.has(entry.text)) {
+      return;
+    }
+    seen.add(entry.text);
+    candidates.push(entry);
+  };
+
+  push({ text: trimmed, source: "raw" });
+
+  const wholeWrap = trimmed.match(/^```(?:json|JSON)?\s*\n?([\s\S]*?)\n?```$/);
+  if (wholeWrap) {
+    push({ text: wholeWrap[1]!.trim(), source: "code-fence-wrap" });
+  }
+
+  const balanced = extractBalancedObject(trimmed);
+  if (balanced) {
+    push({ text: balanced, source: "balanced-object" });
+  }
+
+  return candidates;
+}
+
+interface SupervisorJsonParseAttempt {
+  parsed: unknown;
+  parsedOk: boolean;
+  candidate: string;
+  source: JsonCandidate["source"];
+  firstError?: unknown;
+  repaired: boolean;
+}
+
+function tryParseSupervisorJson(payloadText: string): SupervisorJsonParseAttempt {
+  const candidates = collectJsonCandidates(payloadText);
+  let firstError: unknown;
+  let firstCandidate = payloadText.trim();
+
+  for (let i = 0; i < candidates.length; i++) {
+    const candidate = candidates[i]!;
+    if (i === 0) {
+      firstCandidate = candidate.text;
+    }
+    try {
+      const parsed = JSON.parse(candidate.text);
+      return {
+        parsed,
+        parsedOk: true,
+        candidate: candidate.text,
+        source: candidate.source,
+        repaired: false,
+      };
+    } catch (error) {
+      if (firstError === undefined) {
+        firstError = error;
+      }
+    }
+
+    const repaired = repairJsonControlChars(candidate.text);
+    if (repaired !== candidate.text) {
+      try {
+        const parsed = JSON.parse(repaired);
+        return {
+          parsed,
+          parsedOk: true,
+          candidate: candidate.text,
+          source: candidate.source,
+          repaired: true,
+        };
+      } catch {
+        // continue with the next candidate
+      }
+    }
+  }
+
+  return {
+    parsed: undefined,
+    parsedOk: false,
+    candidate: firstCandidate,
+    source: "raw",
+    firstError,
+    repaired: false,
+  };
+}
+
 type CodexCompletedCandidate = {
   sourceType: "agent_message" | "assistant_message" | "command_execution" | "reasoning";
   content: string;
@@ -752,47 +898,36 @@ function parseSupervisorEvaluationResult(
   requestedMode: "decompose" | "evaluate",
   logger: FastifyBaseLogger = NOOP_LOGGER
 ): SupervisorEvaluationResult {
-  const candidate = stripCodeFence(payloadText);
+  const attempt = tryParseSupervisorJson(payloadText);
 
-  let parsed: unknown;
-  let parsedOk = false;
-  let firstError: unknown;
-  try {
-    parsed = JSON.parse(candidate);
-    parsedOk = true;
-  } catch (error) {
-    firstError = error;
-    const repaired = repairJsonControlChars(candidate);
-    if (repaired !== candidate) {
-      try {
-        parsed = JSON.parse(repaired);
-        parsedOk = true;
-        logger.warn(
-          {
-            originalError: error instanceof Error ? error.message : String(error),
-            payloadPreview: buildStdoutPreview(candidate, 2000),
-          },
-          "Supervisor returned JSON with unescaped control chars; auto-repaired"
-        );
-      } catch {
-        // fall through to the unrecoverable path below
-      }
-    }
-  }
-
-  if (!parsedOk) {
+  if (!attempt.parsedOk) {
     logger.warn(
       {
-        parseError: firstError instanceof Error ? firstError.message : String(firstError),
-        payloadPreview: buildStdoutPreview(candidate, 2000),
+        parseError:
+          attempt.firstError instanceof Error
+            ? attempt.firstError.message
+            : String(attempt.firstError),
+        payloadPreview: buildStdoutPreview(payloadText.trim(), 2000),
       },
       "Supervisor returned invalid JSON"
     );
     throw createSupervisorEvalFailedError(
-      `Supervisor returned invalid JSON: ${firstError instanceof Error ? firstError.message : "parse failed"}`
+      `Supervisor returned invalid JSON: ${attempt.firstError instanceof Error ? attempt.firstError.message : "parse failed"}`
     );
   }
 
+  if (attempt.source !== "raw" || attempt.repaired) {
+    logger.warn(
+      {
+        source: attempt.source,
+        repaired: attempt.repaired,
+        payloadPreview: buildStdoutPreview(payloadText.trim(), 2000),
+      },
+      "Supervisor JSON auto-recovered before parsing"
+    );
+  }
+
+  const parsed = attempt.parsed;
   if (!parsed || typeof parsed !== "object") {
     throw createSupervisorEvalFailedError("Supervisor returned invalid evaluation payload");
   }

@@ -861,11 +861,37 @@ describe("SupervisorEvaluator", () => {
       expect(logger.warn).toHaveBeenCalledWith(
         expect.objectContaining({
           payloadPreview: expect.any(String),
-          originalError: expect.stringMatching(
-            /(Unterminated string|Bad control character|control character)/i
-          ),
+          repaired: true,
         }),
-        expect.stringMatching(/auto-repaired/)
+        expect.stringMatching(/auto-recovered/)
+      );
+    });
+
+    it("extracts JSON when the model prefaces the payload with prose", async () => {
+      const logger = createLogger();
+      const prosePrefixed =
+        'Based on my analysis of the terminal output, here is the supervisor verdict:\n\n{"status":"continue","reason":"need to verify","guidance":"run the focused tests"}\n\nThat should keep the agent moving.';
+      const evaluator = new SupervisorEvaluator({
+        providerRegistry: [createProvider("codex", codexJsonlPayload(prosePrefixed))],
+        providerConfigRepo: createProviderConfigRepo(),
+        timeoutMs: 5000,
+        logger,
+      });
+
+      const result = await evaluator.evaluate(makeSupervisor("codex"), makeContext());
+
+      expect(result).toMatchObject({
+        mode: "evaluate",
+        status: "continue",
+        guidance: "run the focused tests",
+      });
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          source: "balanced-object",
+          repaired: false,
+          payloadPreview: expect.any(String),
+        }),
+        expect.stringMatching(/auto-recovered/)
       );
     });
 
