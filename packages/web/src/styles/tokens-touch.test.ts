@@ -170,6 +170,7 @@ describe("tokens.css touch tokens", () => {
     expect(getCustomProperty(root, "--terminal-panel-inset")).toBe("2px");
     expect(root).toContain("--terminal-toolbar-gap:");
     expect(root).toContain("--terminal-local-overlay-radius:");
+    expect(getCustomProperty(root, "--terminal-local-overlay-radius")).toBe("2px");
     expect(root).toContain("--terminal-state-running-bg:");
     expect(root).toContain("--terminal-state-running-border:");
     expect(root).toContain("--terminal-state-running-text:");

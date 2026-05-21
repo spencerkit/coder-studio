@@ -126,7 +126,7 @@
   /* ========== Foundation: Code Surface Sub-Specs ========== */
   --terminal-panel-inset: 2px;
   --terminal-toolbar-gap: var(--gap-cluster-md);
-  --terminal-local-overlay-radius: var(--radius-local-overlay);
+  --terminal-local-overlay-radius: 2px;
   --terminal-state-running-bg: var(--state-info-bg);
   --terminal-state-running-border: var(--state-info-border);
   --terminal-state-running-text: var(--state-info-text);
