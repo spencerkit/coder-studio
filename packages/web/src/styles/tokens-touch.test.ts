@@ -165,6 +165,11 @@ describe("tokens.css touch tokens", () => {
     expect(root).toContain("--radius-overlay:");
     expect(root).toContain("--radius-local-overlay:");
     expect(root).toContain("--radius-flush:");
+    expect(getCustomProperty(root, "--radius-sm")).toBe("2px");
+    expect(getCustomProperty(root, "--radius-md")).toBe("4px");
+    expect(getCustomProperty(root, "--radius-lg")).toBe("6px");
+    expect(getCustomProperty(root, "--radius-xl")).toBe("8px");
+    expect(getCustomProperty(root, "--radius-full")).toBe("9999px");
 
     expect(root).toContain("--terminal-panel-inset:");
     expect(getCustomProperty(root, "--terminal-panel-inset")).toBe("2px");
