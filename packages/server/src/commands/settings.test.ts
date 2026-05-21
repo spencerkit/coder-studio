@@ -446,6 +446,17 @@ describe("settings commands", () => {
           settings: {
             appearance: {
               personalization: {
+                version: 1,
+                common: {
+                  backgroundMode: "none",
+                  backgroundAssetId: null,
+                  backgroundFit: "cover",
+                  backgroundDimness: 24,
+                  backgroundBlur: 0,
+                  glassEnabled: false,
+                  glassIntensity: 24,
+                  surfaceOpacity: 96,
+                },
                 desktop: {},
                 mobile: {},
               },
@@ -462,6 +473,37 @@ describe("settings commands", () => {
     ).toBeUndefined();
     expect(settingsRepo.get("appearance.personalization.desktop.surfaceOpacity")).toBeUndefined();
     expect(settingsRepo.get("appearance.personalization.mobile.glassEnabled")).toBeUndefined();
+  });
+
+  it("settings.update preserves persisted appearance.personalization sibling override keys during partial updates", async () => {
+    settingsRepo.set("appearance.personalization.desktop.backgroundAssetId", "asset-desktop");
+    settingsRepo.set("appearance.personalization.desktop.surfaceOpacity", 88);
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "settings-update-appearance-personalization-partial-device-overrides",
+        op: "settings.update",
+        args: {
+          settings: {
+            appearance: {
+              personalization: {
+                desktop: {
+                  surfaceOpacity: 72,
+                },
+              },
+            },
+          },
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(settingsRepo.get("appearance.personalization.desktop.backgroundAssetId")).toBe(
+      "asset-desktop"
+    );
+    expect(settingsRepo.get("appearance.personalization.desktop.surfaceOpacity")).toBe(72);
   });
 
   it("settings.update persists provider startup command arguments into the file-backed provider config store", async () => {

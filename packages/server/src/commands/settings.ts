@@ -283,6 +283,10 @@ function resolveAppearancePersonalizationOverrideKeysToDelete(
     return [];
   }
 
+  if (!isFullAppearancePersonalizationSnapshot(personalization)) {
+    return [];
+  }
+
   const keysToDelete: string[] = [];
 
   for (const branch of PERSONALIZATION_OVERRIDE_BRANCHES) {
@@ -299,6 +303,17 @@ function resolveAppearancePersonalizationOverrideKeysToDelete(
   }
 
   return keysToDelete;
+}
+
+function isFullAppearancePersonalizationSnapshot(
+  personalization: Record<string, unknown>
+): boolean {
+  return (
+    Object.prototype.hasOwnProperty.call(personalization, "version") &&
+    Object.prototype.hasOwnProperty.call(personalization, "common") &&
+    Object.prototype.hasOwnProperty.call(personalization, "desktop") &&
+    Object.prototype.hasOwnProperty.call(personalization, "mobile")
+  );
 }
 
 // settings.readConfigFile — read Codex or Claude config file content
