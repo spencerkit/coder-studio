@@ -33,6 +33,15 @@ import {
 } from "../supervisor/settings.js";
 import { registerCommand } from "../ws/dispatch.js";
 
+const PersonalizationOverridesSchema = z.object({
+  backgroundAssetId: z.string().min(1).nullable().optional(),
+  backgroundDimness: z.number().int().min(0).max(100).optional(),
+  backgroundBlur: z.number().int().min(0).max(40).optional(),
+  glassEnabled: z.boolean().optional(),
+  glassIntensity: z.number().int().min(0).max(100).optional(),
+  surfaceOpacity: z.number().int().min(0).max(100).optional(),
+});
+
 // Settings schema
 const SettingsSchema = z.object({
   defaultProviderId: z.string().optional(),
@@ -72,6 +81,25 @@ const SettingsSchema = z.object({
       desktopTerminalFontSize: z.number().int().min(10).max(18).optional(),
       mobileTerminalFontSize: z.number().int().min(10).max(18).optional(),
       locale: z.enum(["zh", "en"]).optional(),
+      personalization: z
+        .object({
+          version: z.literal(1).optional(),
+          common: z
+            .object({
+              backgroundMode: z.enum(["none", "image"]).optional(),
+              backgroundAssetId: z.string().min(1).nullable().optional(),
+              backgroundFit: z.enum(["cover", "contain"]).optional(),
+              backgroundDimness: z.number().int().min(0).max(100).optional(),
+              backgroundBlur: z.number().int().min(0).max(40).optional(),
+              glassEnabled: z.boolean().optional(),
+              glassIntensity: z.number().int().min(0).max(100).optional(),
+              surfaceOpacity: z.number().int().min(0).max(100).optional(),
+            })
+            .optional(),
+          desktop: PersonalizationOverridesSchema.optional(),
+          mobile: PersonalizationOverridesSchema.optional(),
+        })
+        .optional(),
     })
     .optional(),
   lsp: z
