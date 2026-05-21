@@ -2098,6 +2098,7 @@ describe("components.css theme-sensitive surfaces", () => {
     const settingsGroup = getLastRuleBlock(".settings-group");
     const settingsGroupTitle = getLastRuleBlock(".settings-group-title");
     const settingsGroupDesc = getLastRuleBlock(".settings-group-desc");
+    const settingsMobileGroupTitle = getLastRuleBlock(".settings-mobile-group__title");
     const settingsPillsBase = getRuleBlocksFrom(stylesheet, ".settings-pills")[0];
     const settingsPillsMobile = getLastRuleBlock(".settings-pills");
     const settingsToggleRow = getLastRuleBlock(".settings-toggle-row");
@@ -2122,10 +2123,11 @@ describe("components.css theme-sensitive surfaces", () => {
     const settingsFooter = getLastRuleBlock(".settings-footer");
 
     expect(settingsGroup).toContain("margin-bottom: var(--sp-8)");
-    expect(settingsGroupTitle).toContain("font-size: var(--type-body-6-size)");
+    expect(settingsGroupTitle).toContain("font-size: var(--type-body-3-size)");
     expect(settingsGroupTitle).toContain("text-transform: uppercase");
     expect(settingsGroupTitle).toContain("letter-spacing:");
     expect(settingsGroupDesc).toContain("max-width:");
+    expect(settingsMobileGroupTitle).toContain("font-size: var(--type-body-3-size)");
     expect(settingsPillsBase).toContain("gap: var(--sp-1)");
     expect(settingsPillsBase).toContain("padding-bottom: var(--sp-1)");
     expect(settingsPillsMobile).toContain("gap: var(--sp-2)");

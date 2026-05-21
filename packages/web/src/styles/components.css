@@ -878,9 +878,9 @@
 }
 
 .settings-group-title {
-  font-size: var(--type-body-6-size);
-  line-height: var(--type-body-6-line-height);
-  font-weight: var(--type-body-6-weight);
+  font-size: var(--type-body-3-size);
+  line-height: var(--type-body-3-line-height);
+  font-weight: var(--type-body-3-weight);
   margin-bottom: var(--sp-2);
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -11574,9 +11574,9 @@ textarea.input {
     margin: 0;
     padding: 0 var(--sp-1);
     color: var(--text-secondary);
-    font-size: var(--type-body-6-size);
-    line-height: var(--type-body-6-line-height);
-    font-weight: var(--type-body-6-weight);
+    font-size: var(--type-body-3-size);
+    line-height: var(--type-body-3-line-height);
+    font-weight: var(--type-body-3-weight);
     letter-spacing: 0.08em;
     text-transform: uppercase;
   }
