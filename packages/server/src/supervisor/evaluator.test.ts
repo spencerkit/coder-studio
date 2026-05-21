@@ -22,6 +22,30 @@ function nodeEchoCommand(stdout: string) {
   };
 }
 
+function nodeExitCommand(options: { stdout?: string; stderr?: string; exitCode: number }) {
+  const stdout = options.stdout ?? "";
+  const stderr = options.stderr ?? "";
+  return {
+    argv: [
+      "node",
+      "-e",
+      `process.stdout.write(${JSON.stringify(stdout)}); process.stderr.write(${JSON.stringify(stderr)}); process.exit(${options.exitCode});`,
+    ],
+    cwd: process.cwd(),
+    env: {},
+  };
+}
+
+function createCommandProvider(
+  providerId: string,
+  command: ReturnType<typeof nodeEchoCommand>
+): ProviderDefinition {
+  return {
+    id: providerId,
+    buildSupervisorEvalCommand: vi.fn(() => command),
+  } as unknown as ProviderDefinition;
+}
+
 function createProvider(
   providerId: string,
   stdout: string,
@@ -918,6 +942,116 @@ describe("SupervisorEvaluator", () => {
           parseError: expect.any(String),
         }),
         expect.stringMatching(/invalid JSON/i)
+      );
+    });
+  });
+
+  describe("non-zero evaluator exit diagnostics", () => {
+    it("surfaces codex turn.failed messages emitted on stdout when the CLI exits non-zero", async () => {
+      const logger = createLogger();
+      const codexFailureStdout = [
+        JSON.stringify({ type: "thread.started", thread_id: "t1" }),
+        JSON.stringify({ type: "turn.started" }),
+        JSON.stringify({
+          type: "turn.failed",
+          error: { message: "rate limit exceeded for model" },
+        }),
+      ].join("\n");
+
+      const evaluator = new SupervisorEvaluator({
+        providerRegistry: [
+          createCommandProvider(
+            "codex",
+            nodeExitCommand({ stdout: codexFailureStdout, exitCode: 1 })
+          ),
+        ],
+        providerConfigRepo: createProviderConfigRepo(),
+        timeoutMs: 5000,
+        logger,
+      });
+
+      await expect(
+        evaluator.evaluate(makeSupervisor("codex"), makeContext())
+      ).rejects.toMatchObject({
+        code: "supervisor_eval_failed",
+        message: "rate limit exceeded for model",
+      });
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          exitCode: 1,
+          upstreamMessage: "rate limit exceeded for model",
+          stdoutPreview: expect.any(String),
+          stderrPreview: expect.any(String),
+          commandArgv: expect.any(Array),
+        }),
+        expect.stringMatching(/evaluator process failed/i)
+      );
+    });
+
+    it("surfaces claude is_error envelopes emitted on stdout when the CLI exits non-zero", async () => {
+      const logger = createLogger();
+      const claudeFailureStdout = JSON.stringify({
+        type: "result",
+        subtype: "error_during_execution",
+        is_error: true,
+        result: "Anthropic API: 401 invalid x-api-key",
+        session_id: "abc",
+      });
+
+      const evaluator = new SupervisorEvaluator({
+        providerRegistry: [
+          createCommandProvider(
+            "claude",
+            nodeExitCommand({ stdout: claudeFailureStdout, exitCode: 1 })
+          ),
+        ],
+        providerConfigRepo: createProviderConfigRepo(),
+        timeoutMs: 5000,
+        logger,
+      });
+
+      await expect(
+        evaluator.evaluate(makeSupervisor("claude"), makeContext())
+      ).rejects.toMatchObject({
+        code: "supervisor_eval_failed",
+        message: "Anthropic API: 401 invalid x-api-key",
+      });
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          exitCode: 1,
+          upstreamMessage: "Anthropic API: 401 invalid x-api-key",
+        }),
+        expect.stringMatching(/evaluator process failed/i)
+      );
+    });
+
+    it("logs full process context even when neither stdout nor stderr has a usable message", async () => {
+      const logger = createLogger();
+      const evaluator = new SupervisorEvaluator({
+        providerRegistry: [createCommandProvider("claude", nodeExitCommand({ exitCode: 1 }))],
+        providerConfigRepo: createProviderConfigRepo(),
+        timeoutMs: 5000,
+        logger,
+      });
+
+      await expect(
+        evaluator.evaluate(makeSupervisor("claude"), makeContext())
+      ).rejects.toMatchObject({
+        code: "supervisor_eval_failed",
+        message: expect.stringMatching(/exited with code 1/i),
+      });
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          exitCode: 1,
+          stdoutPreview: "",
+          stderrPreview: "",
+          commandArgv: expect.any(Array),
+          promptPreview: expect.any(String),
+        }),
+        expect.stringMatching(/evaluator process failed/i)
       );
     });
   });

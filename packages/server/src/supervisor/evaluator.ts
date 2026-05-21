@@ -125,11 +125,27 @@ export class SupervisorEvaluator {
       };
     }
 
-    const stdout = await runCommand(
-      command,
-      this.deps.timeoutMs ?? getSupervisorEvaluationTimeoutMs(this.deps.settingsRepo),
-      options
-    );
+    let stdout: string;
+    try {
+      stdout = await runCommand(
+        command,
+        this.deps.timeoutMs ?? getSupervisorEvaluationTimeoutMs(this.deps.settingsRepo),
+        options
+      );
+    } catch (error) {
+      if (isEvaluatorProcessError(error)) {
+        throw diagnoseEvaluatorProcessError(
+          error,
+          provider.id,
+          this.logger,
+          supervisor,
+          context,
+          command,
+          prompt
+        );
+      }
+      throw error;
+    }
 
     let payloadText: string;
     try {
@@ -403,25 +419,157 @@ async function runCommand(
       settleReject({
         code: "supervisor_eval_failed",
         message: error instanceof Error ? error.message : "Evaluator process failed to start",
-      });
+        stdout: Buffer.concat(stdout).toString("utf8"),
+        stderr: Buffer.concat(stderr).toString("utf8"),
+        exitCode: null,
+        spawnError: true,
+      } satisfies EvaluatorProcessError);
     });
     child.on("exit", (code) => {
       if (terminationError) {
         settleReject(terminationError);
         return;
       }
+      const stdoutText = Buffer.concat(stdout).toString("utf8");
+      const stderrText = Buffer.concat(stderr).toString("utf8");
       if (code !== 0) {
         settleReject({
           code: "supervisor_eval_failed",
-          message:
-            Buffer.concat(stderr).toString("utf8").trim() || `Evaluator exited with code ${code}`,
-        });
+          message: stderrText.trim() || `Evaluator exited with code ${code}`,
+          stdout: stdoutText,
+          stderr: stderrText,
+          exitCode: code,
+          spawnError: false,
+        } satisfies EvaluatorProcessError);
         return;
       }
 
-      settleResolve(Buffer.concat(stdout).toString("utf8"));
+      settleResolve(stdoutText);
     });
   });
+}
+
+interface EvaluatorProcessError {
+  code: "supervisor_eval_failed";
+  message: string;
+  stdout: string;
+  stderr: string;
+  exitCode: number | null;
+  spawnError: boolean;
+}
+
+function isEvaluatorProcessError(error: unknown): error is EvaluatorProcessError {
+  return (
+    !!error &&
+    typeof error === "object" &&
+    (error as { code?: unknown }).code === "supervisor_eval_failed" &&
+    typeof (error as { stdout?: unknown }).stdout === "string" &&
+    typeof (error as { stderr?: unknown }).stderr === "string"
+  );
+}
+
+/**
+ * When the evaluator child process exits non-zero (or fails to spawn), the
+ * `stderr` buffer is frequently empty: codex and claude both like to surface
+ * upstream API failures (rate limit, context exceeded, auth, etc.) as JSONL
+ * events on stdout instead. This helper:
+ *
+ * - Scans stdout for a more useful error message (codex `turn.failed`,
+ *   claude `is_error` envelope).
+ * - Logs a single structured warn with stdout/stderr previews, argv, and
+ *   exit code so future failures are diagnosable from server logs alone.
+ * - Returns a fresh error with `code: "supervisor_eval_failed"` so the
+ *   existing `retryOnEvaluatorError` retry path still kicks in.
+ */
+function diagnoseEvaluatorProcessError(
+  error: EvaluatorProcessError,
+  providerId: string,
+  logger: FastifyBaseLogger,
+  supervisor: Supervisor,
+  context: SupervisorEvaluationContext,
+  command: { argv: string[]; cwd?: string; env?: Record<string, string> },
+  prompt: string
+): { code: "supervisor_eval_failed"; message: string } {
+  const stdoutLines = error.stdout.trim().split(/\r?\n/).filter(Boolean);
+  const upstreamMessage = extractUpstreamErrorMessage(providerId, error.stdout, stdoutLines);
+
+  const resolvedMessage =
+    upstreamMessage ?? (error.stderr.trim() ? error.stderr.trim() : error.message);
+
+  logger.warn(
+    {
+      supervisorId: supervisor.id,
+      sessionId: supervisor.sessionId,
+      evaluatorProviderId: supervisor.evaluatorProviderId,
+      sessionProviderId: context.sessionProviderId,
+      exitCode: error.exitCode,
+      spawnError: error.spawnError,
+      upstreamMessage,
+      stderrPreview: buildStdoutPreview(error.stderr.trim(), 2000),
+      stdoutPreview: buildStdoutPreview(error.stdout.trim(), 2000),
+      commandArgv: command.argv,
+      commandCwd: command.cwd,
+      promptPreview: buildStdoutPreview(prompt, 500),
+    },
+    "Supervisor evaluator process failed"
+  );
+
+  return {
+    code: "supervisor_eval_failed",
+    message: resolvedMessage || `Evaluator exited with code ${error.exitCode ?? "unknown"}`,
+  };
+}
+
+function extractUpstreamErrorMessage(
+  providerId: string,
+  stdout: string,
+  stdoutLines: string[]
+): string | null {
+  if (!stdout.trim()) {
+    return null;
+  }
+
+  if (providerId === "codex") {
+    const scan = scanCodexStream(stdoutLines);
+    if (scan.turnFailure) {
+      return scan.turnFailure;
+    }
+  }
+
+  // Claude CLI with `--output-format json` writes the result envelope (or
+  // partial event stream) to stdout. Look at the trailing lines first since
+  // the final envelope arrives last.
+  for (let i = stdoutLines.length - 1; i >= 0; i--) {
+    const line = stdoutLines[i]!.trim();
+    if (!line.startsWith("{") && !line.startsWith("[")) {
+      continue;
+    }
+    try {
+      const parsed = JSON.parse(line);
+      if (!parsed || typeof parsed !== "object") {
+        continue;
+      }
+      const record = parsed as Record<string, unknown>;
+      if (record.is_error === true || record.subtype === "error_during_execution") {
+        const result = record.result;
+        if (typeof result === "string" && result.trim()) {
+          return result.trim();
+        }
+        const err = record.error;
+        if (err && typeof err === "object") {
+          const msg = (err as Record<string, unknown>).message;
+          if (typeof msg === "string" && msg.trim()) {
+            return msg.trim();
+          }
+        }
+        return "Evaluator reported an error in its result envelope";
+      }
+    } catch {
+      // not JSON, keep looking
+    }
+  }
+
+  return null;
 }
 
 function createSupervisorEvalAbortedError(): {
