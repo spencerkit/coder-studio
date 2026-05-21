@@ -182,18 +182,25 @@ export function resolveAppearancePersonalizationSetting(
       settings[`${APPEARANCE_PERSONALIZATION_PREFIX}.desktop.${field}`]
     );
     if (desktopValue !== undefined) {
-      if (field === "backgroundAssetId") {
-        desktop.backgroundAssetId = desktopValue;
-      } else if (field === "backgroundDimness") {
-        desktop.backgroundDimness = desktopValue;
-      } else if (field === "backgroundBlur") {
-        desktop.backgroundBlur = desktopValue;
-      } else if (field === "glassEnabled") {
-        desktop.glassEnabled = desktopValue;
-      } else if (field === "glassIntensity") {
-        desktop.glassIntensity = desktopValue;
-      } else if (field === "surfaceOpacity") {
-        desktop.surfaceOpacity = desktopValue;
+      switch (field) {
+        case "backgroundAssetId":
+          desktop.backgroundAssetId = desktopValue as string | null;
+          break;
+        case "backgroundDimness":
+          desktop.backgroundDimness = desktopValue as number;
+          break;
+        case "backgroundBlur":
+          desktop.backgroundBlur = desktopValue as number;
+          break;
+        case "glassEnabled":
+          desktop.glassEnabled = desktopValue as boolean;
+          break;
+        case "glassIntensity":
+          desktop.glassIntensity = desktopValue as number;
+          break;
+        case "surfaceOpacity":
+          desktop.surfaceOpacity = desktopValue as number;
+          break;
       }
     }
 
@@ -202,18 +209,25 @@ export function resolveAppearancePersonalizationSetting(
       settings[`${APPEARANCE_PERSONALIZATION_PREFIX}.mobile.${field}`]
     );
     if (mobileValue !== undefined) {
-      if (field === "backgroundAssetId") {
-        mobile.backgroundAssetId = mobileValue;
-      } else if (field === "backgroundDimness") {
-        mobile.backgroundDimness = mobileValue;
-      } else if (field === "backgroundBlur") {
-        mobile.backgroundBlur = mobileValue;
-      } else if (field === "glassEnabled") {
-        mobile.glassEnabled = mobileValue;
-      } else if (field === "glassIntensity") {
-        mobile.glassIntensity = mobileValue;
-      } else if (field === "surfaceOpacity") {
-        mobile.surfaceOpacity = mobileValue;
+      switch (field) {
+        case "backgroundAssetId":
+          mobile.backgroundAssetId = mobileValue as string | null;
+          break;
+        case "backgroundDimness":
+          mobile.backgroundDimness = mobileValue as number;
+          break;
+        case "backgroundBlur":
+          mobile.backgroundBlur = mobileValue as number;
+          break;
+        case "glassEnabled":
+          mobile.glassEnabled = mobileValue as boolean;
+          break;
+        case "glassIntensity":
+          mobile.glassIntensity = mobileValue as number;
+          break;
+        case "surfaceOpacity":
+          mobile.surfaceOpacity = mobileValue as number;
+          break;
       }
     }
   }

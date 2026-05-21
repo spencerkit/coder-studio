@@ -53,10 +53,8 @@ import { useSessionNotifications } from "../features/notifications";
 import { supervisorsAtom } from "../features/supervisor/atoms";
 import { terminalMetaAtomFamily } from "../features/terminal-panel/atoms";
 import {
-  DESKTOP_TERMINAL_FONT_SIZE_SETTING_KEY,
   hasExplicitTerminalFontSizeSetting,
   hasLegacyTerminalFontSizeSetting,
-  MOBILE_TERMINAL_FONT_SIZE_SETTING_KEY,
   resolveTerminalCopyOnSelectSetting,
   resolveTerminalFontSizeSetting,
   terminalPreferencesAtom,

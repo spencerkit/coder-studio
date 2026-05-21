@@ -26,7 +26,16 @@ import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import { Check, ChevronRight } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { localeAtom, themeAtom } from "../../../atoms/app-ui";
+import {
+  type AppearanceBackgroundFit,
+  type AppearanceBackgroundMode,
+  type AppearancePersonalization,
+  type AppearancePersonalizationOverrides,
+  deleteAppearanceAsset,
+  resolveAppearancePersonalizationSetting,
+  uploadAppearanceAsset,
+} from "../../../appearance";
+import { appearancePersonalizationAtom, localeAtom, themeAtom } from "../../../atoms/app-ui";
 import {
   connectionStatusAtom,
   dispatchCommandAtom,
@@ -74,9 +83,21 @@ type SettingsNavigationState =
     };
 
 type SettingsContentLayoutMode = "default" | "fill-height";
+type AppearanceAssetScope = "common" | "desktop" | "mobile";
+type AppearanceOverrideTarget = Exclude<AppearanceAssetScope, "common">;
 
 const DEFAULT_SETTINGS_SECTION: SettingsSection = SETTINGS_SECTIONS[0].id;
 const TERMINAL_FONT_SIZE_SAVE_THROTTLE_MS = 500;
+const PERSONALIZATION_OVERRIDE_FIELDS = [
+  "backgroundAssetId",
+  "backgroundDimness",
+  "backgroundBlur",
+  "glassEnabled",
+  "glassIntensity",
+  "surfaceOpacity",
+] as const;
+
+type PersonalizationOverrideField = (typeof PERSONALIZATION_OVERRIDE_FIELDS)[number];
 
 function isStandaloneWebApp(): boolean {
   if (typeof window === "undefined") {
@@ -252,6 +273,7 @@ export function SettingsPage() {
   const [settingsLoadError, setSettingsLoadError] = useState<string | null>(null);
   const [settingsRefreshKey, setSettingsRefreshKey] = useState(0);
   const [locale, setLocaleState] = useAtom(localeAtom);
+  const [personalization, setPersonalization] = useAtom(appearancePersonalizationAtom);
   const [theme, setTheme] = useAtom(themeAtom);
   const terminalPreferences = useAtomValue(terminalPreferencesAtom);
   const setNotificationPreferences = useSetAtom(notificationPreferencesAtom);
@@ -261,6 +283,7 @@ export function SettingsPage() {
   const settingsLoadFailedUnknownRef = useRef(settingsLoadFailedUnknown);
   const appearanceSelectionVersionRef = useRef({
     theme: 0,
+    personalization: 0,
     locale: 0,
     lspRuntimeMode: 0,
     terminalRenderer: 0,
@@ -423,6 +446,12 @@ export function SettingsPage() {
           setLocaleState(settings["appearance.locale"]);
         }
       }
+      if (
+        appearanceSelectionVersionRef.current.personalization ===
+        appearanceSelectionVersionAtRequestStart.personalization
+      ) {
+        setPersonalization(resolveAppearancePersonalizationSetting(settings));
+      }
       const hasServerThemeSetting =
         Object.prototype.hasOwnProperty.call(settings, "appearance.themeId") ||
         Object.prototype.hasOwnProperty.call(settings, "appearance.theme");
@@ -452,6 +481,7 @@ export function SettingsPage() {
     dispatch,
     setLocaleState,
     setNotificationPreferences,
+    setPersonalization,
     setHydratedLspRuntimeMode,
     setTerminalPreferences,
     setTheme,
@@ -467,6 +497,28 @@ export function SettingsPage() {
   const handleThemeSelection = (value: string) => {
     appearanceSelectionVersionRef.current.theme += 1;
     setTheme(value);
+  };
+
+  const saveAppearancePersonalization = async (next: AppearancePersonalization) => {
+    const previous = personalization;
+    appearanceSelectionVersionRef.current.personalization += 1;
+    setPersonalization(next);
+
+    const result = await dispatch("settings.update", {
+      settings: {
+        appearance: {
+          personalization: next,
+        },
+      },
+    });
+
+    if (!result.ok) {
+      setPersonalization(previous);
+      setSettingsLoadError(result.error?.message ?? settingsLoadFailedUnknownRef.current);
+      return false;
+    }
+
+    return true;
   };
 
   const handleTerminalRendererSelection = (value: "standard" | "compatibility") => {
@@ -584,9 +636,11 @@ export function SettingsPage() {
             desktopTerminalFontSize={getTerminalFontSizePreference(terminalPreferences, "desktop")}
             mobileTerminalFontSize={getTerminalFontSizePreference(terminalPreferences, "mobile")}
             locale={locale}
+            personalization={personalization}
             setDesktopTerminalFontSize={handleDesktopTerminalFontSizeSelection}
             setLocale={handleLocaleSelection}
             setMobileTerminalFontSize={handleMobileTerminalFontSizeSelection}
+            savePersonalization={saveAppearancePersonalization}
             theme={theme}
             setTheme={handleThemeSelection}
           />
@@ -839,6 +893,37 @@ function parseTerminalFontSizeInput(value: string): number | null {
   }
 
   return parsed;
+}
+
+function parseBoundedInteger(value: string, min: number, max: number): number | null {
+  const trimmed = value.trim();
+  if (!/^\d+$/.test(trimmed)) {
+    return null;
+  }
+
+  const parsed = Number(trimmed);
+  if (!Number.isSafeInteger(parsed) || parsed < min || parsed > max) {
+    return null;
+  }
+
+  return parsed;
+}
+
+function clearPersonalizationOverrides(
+  overrides: AppearancePersonalizationOverrides
+): AppearancePersonalizationOverrides {
+  const next: AppearancePersonalizationOverrides = {};
+
+  for (const field of PERSONALIZATION_OVERRIDE_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(overrides, field)) {
+      const value = overrides[field];
+      if (value !== undefined) {
+        next[field] = value;
+      }
+    }
+  }
+
+  return next;
 }
 
 function GeneralSettings({
@@ -1479,9 +1564,11 @@ interface AppearanceSettingsProps {
   desktopTerminalFontSize: number;
   locale: string;
   mobileTerminalFontSize: number;
+  personalization: AppearancePersonalization;
   setDesktopTerminalFontSize: (value: number) => void;
   setLocale: (value: "zh" | "en") => void;
   setMobileTerminalFontSize: (value: number) => void;
+  savePersonalization: (value: AppearancePersonalization) => Promise<boolean>;
   theme: string;
   setTheme: (value: string) => void;
 }
@@ -1490,9 +1577,11 @@ function AppearanceSettings({
   desktopTerminalFontSize,
   locale,
   mobileTerminalFontSize,
+  personalization,
   setDesktopTerminalFontSize,
   setLocale,
   setMobileTerminalFontSize,
+  savePersonalization,
   theme,
   setTheme,
 }: AppearanceSettingsProps) {
@@ -1506,6 +1595,17 @@ function AppearanceSettings({
   const desktopTerminalFontSizeDescId = useId();
   const mobileTerminalFontSizeLabelId = useId();
   const mobileTerminalFontSizeDescId = useId();
+  const backgroundFileInputId = useId();
+  const commonGlassLabelId = useId();
+  const commonGlassDescId = useId();
+  const desktopOverrideLabelId = useId();
+  const desktopOverrideDescId = useId();
+  const desktopGlassLabelId = useId();
+  const desktopGlassDescId = useId();
+  const mobileOverrideLabelId = useId();
+  const mobileOverrideDescId = useId();
+  const mobileGlassLabelId = useId();
+  const mobileGlassDescId = useId();
   const dispatch = useAtomValue(dispatchCommandAtom);
   const currentThemeId = resolveStoredThemeId(theme);
   const themeOptions = THEMES.map((registeredTheme) => ({
@@ -1524,6 +1624,36 @@ function AppearanceSettings({
   const [mobileTerminalFontSizeError, setMobileTerminalFontSizeError] = useState<string | null>(
     null
   );
+  const [assetActionError, setAssetActionError] = useState<string | null>(null);
+  const [backgroundDimnessDraft, setBackgroundDimnessDraft] = useState(
+    String(personalization.common.backgroundDimness)
+  );
+  const [backgroundBlurDraft, setBackgroundBlurDraft] = useState(
+    String(personalization.common.backgroundBlur)
+  );
+  const [glassIntensityDraft, setGlassIntensityDraft] = useState(
+    String(personalization.common.glassIntensity)
+  );
+  const [surfaceOpacityDraft, setSurfaceOpacityDraft] = useState(
+    String(personalization.common.surfaceOpacity)
+  );
+  const [backgroundDimnessError, setBackgroundDimnessError] = useState<string | null>(null);
+  const [backgroundBlurError, setBackgroundBlurError] = useState<string | null>(null);
+  const [glassIntensityError, setGlassIntensityError] = useState<string | null>(null);
+  const [surfaceOpacityError, setSurfaceOpacityError] = useState<string | null>(null);
+  const [desktopSurfaceOpacityDraft, setDesktopSurfaceOpacityDraft] = useState(
+    personalization.desktop.surfaceOpacity === undefined
+      ? String(personalization.common.surfaceOpacity)
+      : String(personalization.desktop.surfaceOpacity)
+  );
+  const [mobileSurfaceOpacityDraft, setMobileSurfaceOpacityDraft] = useState(
+    personalization.mobile.surfaceOpacity === undefined
+      ? String(personalization.common.surfaceOpacity)
+      : String(personalization.mobile.surfaceOpacity)
+  );
+  const [desktopSurfaceOpacityError, setDesktopSurfaceOpacityError] = useState<string | null>(null);
+  const [mobileSurfaceOpacityError, setMobileSurfaceOpacityError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const lastTerminalFontSizeCommitAtRef = useRef<
     Record<"desktopTerminalFontSize" | "mobileTerminalFontSize", number>
   >({
@@ -1551,6 +1681,19 @@ function AppearanceSettings({
     setMobileTerminalFontSizeError(null);
   }, [mobileTerminalFontSize]);
 
+  useEffect(() => {
+    setBackgroundDimnessDraft(String(personalization.common.backgroundDimness));
+    setBackgroundBlurDraft(String(personalization.common.backgroundBlur));
+    setGlassIntensityDraft(String(personalization.common.glassIntensity));
+    setSurfaceOpacityDraft(String(personalization.common.surfaceOpacity));
+    setDesktopSurfaceOpacityDraft(
+      String(personalization.desktop.surfaceOpacity ?? personalization.common.surfaceOpacity)
+    );
+    setMobileSurfaceOpacityDraft(
+      String(personalization.mobile.surfaceOpacity ?? personalization.common.surfaceOpacity)
+    );
+  }, [personalization]);
+
   const handleThemeChange = (nextThemeId: string) => {
     const resolvedTheme = getThemeById(nextThemeId);
     if (resolvedTheme.id === currentThemeId) {
@@ -1561,6 +1704,246 @@ function AppearanceSettings({
     document.documentElement.setAttribute("data-theme", resolvedTheme.documentThemeAttr);
     void saveSettings({ appearance: { themeId: resolvedTheme.id } });
   };
+
+  const updateCommon = <K extends keyof AppearancePersonalization["common"]>(
+    key: K,
+    value: AppearancePersonalization["common"][K]
+  ) => {
+    return {
+      ...personalization,
+      common: {
+        ...personalization.common,
+        [key]: value,
+      },
+    };
+  };
+
+  const buildCommonForBackgroundMode = (mode: AppearanceBackgroundMode) => {
+    if (mode === "image") {
+      return personalization.common;
+    }
+
+    return {
+      ...personalization.common,
+      backgroundAssetId: null,
+    };
+  };
+
+  const updateOverride = (
+    target: AppearanceOverrideTarget,
+    key: PersonalizationOverrideField,
+    value: string | number | boolean | null | undefined
+  ) => {
+    const nextOverrides = {
+      ...personalization[target],
+      [key]: value,
+    };
+
+    if (value === undefined) {
+      delete nextOverrides[key];
+    }
+
+    return {
+      ...personalization,
+      [target]: clearPersonalizationOverrides(nextOverrides),
+    };
+  };
+
+  const isOverrideEnabled = (target: AppearanceOverrideTarget) =>
+    Object.keys(personalization[target]).length > 0;
+
+  const toggleOverride = (target: AppearanceOverrideTarget, enabled: boolean) => {
+    if (enabled) {
+      return {
+        ...personalization,
+        [target]: clearPersonalizationOverrides({
+          ...personalization[target],
+          surfaceOpacity:
+            personalization[target].surfaceOpacity ?? personalization.common.surfaceOpacity,
+        }),
+      };
+    }
+
+    return {
+      ...personalization,
+      [target]: {},
+    };
+  };
+
+  const saveNextPersonalization = async (next: AppearancePersonalization) => {
+    setAssetActionError(null);
+    const saved = await savePersonalization(next);
+    return saved;
+  };
+
+  const commitBoundedCommonField = async (
+    draft: string,
+    currentValue: number,
+    min: number,
+    max: number,
+    setDraft: (value: string) => void,
+    setError: (value: string | null) => void,
+    key: "backgroundDimness" | "backgroundBlur" | "glassIntensity" | "surfaceOpacity"
+  ) => {
+    const parsed = parseBoundedInteger(draft, min, max);
+    if (parsed === null) {
+      setDraft(String(currentValue));
+      setError(
+        t("settings.terminal_font_size_validation_error", {
+          min,
+          max,
+        })
+      );
+      return;
+    }
+
+    if (parsed === currentValue) {
+      setDraft(String(parsed));
+      setError(null);
+      return;
+    }
+
+    const saved = await saveNextPersonalization(updateCommon(key, parsed));
+    if (!saved) {
+      setDraft(String(currentValue));
+      setError(t("settings.config_files.save_failed"));
+      return;
+    }
+
+    setDraft(String(parsed));
+    setError(null);
+  };
+
+  const commitBoundedOverrideField = async (
+    target: AppearanceOverrideTarget,
+    draft: string,
+    fallbackValue: number,
+    min: number,
+    max: number,
+    setDraft: (value: string) => void,
+    setError: (value: string | null) => void,
+    key: "backgroundDimness" | "backgroundBlur" | "glassIntensity" | "surfaceOpacity"
+  ) => {
+    const parsed = parseBoundedInteger(draft, min, max);
+    if (parsed === null) {
+      setDraft(String(fallbackValue));
+      setError(
+        t("settings.terminal_font_size_validation_error", {
+          min,
+          max,
+        })
+      );
+      return;
+    }
+
+    const saved = await saveNextPersonalization(updateOverride(target, key, parsed));
+    if (!saved) {
+      setDraft(String(fallbackValue));
+      setError(t("settings.config_files.save_failed"));
+      return;
+    }
+
+    setDraft(String(parsed));
+    setError(null);
+  };
+
+  const handleBackgroundFileSelection = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+    target: AppearanceAssetScope
+  ) => {
+    const [file] = Array.from(event.target.files ?? []);
+    event.target.value = "";
+    if (!file) {
+      return;
+    }
+
+    try {
+      const uploaded = await uploadAppearanceAsset(file);
+      if (target === "common") {
+        const saved = await saveNextPersonalization(
+          updateCommon("backgroundAssetId", uploaded.assetId)
+        );
+        if (!saved) {
+          setAssetActionError(t("settings.config_files.save_failed"));
+        }
+      } else {
+        const saved = await saveNextPersonalization(
+          updateOverride(target, "backgroundAssetId", uploaded.assetId)
+        );
+        if (!saved) {
+          setAssetActionError(t("settings.config_files.save_failed"));
+        }
+      }
+    } catch {
+      setAssetActionError(t("settings.appearance_asset_upload_failed"));
+    }
+  };
+
+  const openFilePicker = (target: AppearanceAssetScope) => {
+    if (fileInputRef.current) {
+      fileInputRef.current.dataset.scope = target;
+      fileInputRef.current.click();
+    }
+  };
+
+  const removeBackgroundAsset = async (target: AppearanceAssetScope) => {
+    const currentAssetId =
+      target === "common"
+        ? personalization.common.backgroundAssetId
+        : personalization[target].backgroundAssetId;
+
+    if (!currentAssetId) {
+      return;
+    }
+
+    try {
+      await deleteAppearanceAsset(currentAssetId);
+      if (target === "common") {
+        const saved = await saveNextPersonalization(updateCommon("backgroundAssetId", null));
+        if (!saved) {
+          setAssetActionError(t("settings.config_files.save_failed"));
+        }
+      } else {
+        const saved = await saveNextPersonalization(
+          updateOverride(target, "backgroundAssetId", null)
+        );
+        if (!saved) {
+          setAssetActionError(t("settings.config_files.save_failed"));
+        }
+      }
+    } catch {
+      setAssetActionError(t("settings.appearance_asset_delete_failed"));
+    }
+  };
+
+  const renderAssetButtons = (target: AppearanceAssetScope, hasAsset: boolean) => (
+    <div className="settings-appearance-actions">
+      <Button
+        aria-label={
+          hasAsset
+            ? t("settings.appearance_background_replace")
+            : t("settings.appearance_background_upload")
+        }
+        size="sm"
+        variant="secondary"
+        onClick={() => openFilePicker(target)}
+      >
+        {hasAsset
+          ? t("settings.appearance_background_replace")
+          : t("settings.appearance_background_upload")}
+      </Button>
+      {hasAsset ? (
+        <Button
+          aria-label={t("settings.appearance_background_remove")}
+          size="sm"
+          variant="ghost"
+          onClick={() => void removeBackgroundAsset(target)}
+        >
+          {t("settings.appearance_background_remove")}
+        </Button>
+      ) : null}
+    </div>
+  );
 
   const commitTerminalFontSize = async (
     draft: string,
@@ -1618,6 +2001,498 @@ function AppearanceSettings({
 
   return (
     <div className="settings-section">
+      <input
+        ref={fileInputRef}
+        id={backgroundFileInputId}
+        accept="image/png,image/jpeg,image/webp"
+        className="settings-appearance-file-input"
+        type="file"
+        onChange={(event) => {
+          const scope =
+            (event.currentTarget.dataset.scope as AppearanceAssetScope | undefined) ?? "common";
+          void handleBackgroundFileSelection(event, scope);
+        }}
+      />
+
+      <div className="settings-group">
+        <h3 className="settings-group-title">{t("settings.appearance_background_material")}</h3>
+        <p className="settings-group-desc">{t("settings.appearance_background_material_hint")}</p>
+
+        <div className="settings-config-field settings-config-field--inline">
+          <label className="settings-config-label" htmlFor="appearance-background-mode">
+            {t("settings.appearance_background_mode")}
+          </label>
+          <div className="settings-config-control">
+            <Select
+              desktopMode="listbox"
+              id="appearance-background-mode"
+              aria-label={t("settings.appearance_background_mode")}
+              className="settings-input-compact"
+              mobileSheetTitle={t("settings.appearance_background_mode")}
+              options={[
+                {
+                  value: "none",
+                  label: t("settings.appearance_background_mode_off"),
+                },
+                {
+                  value: "image",
+                  label: t("settings.appearance_background_mode_image"),
+                },
+              ]}
+              value={personalization.common.backgroundMode}
+              onValueChange={(value) => {
+                const nextMode = value as AppearanceBackgroundMode;
+                const next = {
+                  ...personalization,
+                  common: buildCommonForBackgroundMode(nextMode),
+                };
+                next.common.backgroundMode = nextMode;
+                void saveNextPersonalization(next);
+              }}
+            />
+          </div>
+        </div>
+
+        {personalization.common.backgroundMode === "image" ? (
+          <div className="settings-toggle-row settings-toggle-row--action">
+            <div className="settings-toggle-info">
+              <span className="settings-toggle-label">
+                {t("settings.appearance_background_upload")}
+              </span>
+              <span className="settings-toggle-desc">
+                {personalization.common.backgroundAssetId
+                  ? personalization.common.backgroundAssetId
+                  : t("settings.appearance_uses_shared_value")}
+              </span>
+            </div>
+            {renderAssetButtons("common", Boolean(personalization.common.backgroundAssetId))}
+          </div>
+        ) : null}
+
+        <div className="settings-config-field settings-config-field--inline">
+          <label className="settings-config-label" htmlFor="appearance-background-fit">
+            {t("settings.appearance_background_fit")}
+          </label>
+          <div className="settings-config-control">
+            <Select
+              desktopMode="listbox"
+              id="appearance-background-fit"
+              aria-label={t("settings.appearance_background_fit")}
+              className="settings-input-compact"
+              mobileSheetTitle={t("settings.appearance_background_fit")}
+              options={[
+                {
+                  value: "cover",
+                  label: t("settings.appearance_background_fit_cover"),
+                },
+                {
+                  value: "contain",
+                  label: t("settings.appearance_background_fit_contain"),
+                },
+              ]}
+              value={personalization.common.backgroundFit}
+              onValueChange={(value) => {
+                void saveNextPersonalization(
+                  updateCommon("backgroundFit", value as AppearanceBackgroundFit)
+                );
+              }}
+            />
+          </div>
+        </div>
+
+        <div className="settings-toggle-row">
+          <div className="settings-toggle-info">
+            <span className="settings-toggle-label" id={commonGlassLabelId}>
+              {t("settings.appearance_glass_enabled")}
+            </span>
+            <span className="settings-toggle-desc" id={commonGlassDescId}>
+              {t("settings.appearance_uses_shared_value")}
+            </span>
+          </div>
+          <Switch
+            aria-describedby={commonGlassDescId}
+            aria-labelledby={commonGlassLabelId}
+            checked={personalization.common.glassEnabled}
+            className="settings-toggle"
+            onCheckedChange={(nextValue) => {
+              void saveNextPersonalization(updateCommon("glassEnabled", nextValue));
+            }}
+          />
+        </div>
+
+        <div className="settings-config-field settings-config-field--inline">
+          <label className="settings-config-label" htmlFor="appearance-background-dimness">
+            {t("settings.appearance_background_dimness")}
+          </label>
+          <div className="settings-config-control">
+            <Input
+              id="appearance-background-dimness"
+              className="settings-input-compact"
+              inputMode="numeric"
+              invalid={Boolean(backgroundDimnessError)}
+              max={100}
+              min={0}
+              step={1}
+              type="number"
+              value={backgroundDimnessDraft}
+              onBlur={() => {
+                void commitBoundedCommonField(
+                  backgroundDimnessDraft,
+                  personalization.common.backgroundDimness,
+                  0,
+                  100,
+                  setBackgroundDimnessDraft,
+                  setBackgroundDimnessError,
+                  "backgroundDimness"
+                );
+              }}
+              onChange={(event) => {
+                setBackgroundDimnessDraft(event.target.value);
+                setBackgroundDimnessError(null);
+              }}
+            />
+          </div>
+          {backgroundDimnessError ? (
+            <span className="form-error" role="alert">
+              {backgroundDimnessError}
+            </span>
+          ) : null}
+        </div>
+
+        <div className="settings-config-field settings-config-field--inline">
+          <label className="settings-config-label" htmlFor="appearance-background-blur">
+            {t("settings.appearance_background_blur")}
+          </label>
+          <div className="settings-config-control">
+            <Input
+              id="appearance-background-blur"
+              className="settings-input-compact"
+              inputMode="numeric"
+              invalid={Boolean(backgroundBlurError)}
+              max={40}
+              min={0}
+              step={1}
+              type="number"
+              value={backgroundBlurDraft}
+              onBlur={() => {
+                void commitBoundedCommonField(
+                  backgroundBlurDraft,
+                  personalization.common.backgroundBlur,
+                  0,
+                  40,
+                  setBackgroundBlurDraft,
+                  setBackgroundBlurError,
+                  "backgroundBlur"
+                );
+              }}
+              onChange={(event) => {
+                setBackgroundBlurDraft(event.target.value);
+                setBackgroundBlurError(null);
+              }}
+            />
+          </div>
+          {backgroundBlurError ? (
+            <span className="form-error" role="alert">
+              {backgroundBlurError}
+            </span>
+          ) : null}
+        </div>
+
+        <div className="settings-config-field settings-config-field--inline">
+          <label className="settings-config-label" htmlFor="appearance-glass-intensity">
+            {t("settings.appearance_glass_intensity")}
+          </label>
+          <div className="settings-config-control">
+            <Input
+              id="appearance-glass-intensity"
+              className="settings-input-compact"
+              inputMode="numeric"
+              invalid={Boolean(glassIntensityError)}
+              max={100}
+              min={0}
+              step={1}
+              type="number"
+              value={glassIntensityDraft}
+              onBlur={() => {
+                void commitBoundedCommonField(
+                  glassIntensityDraft,
+                  personalization.common.glassIntensity,
+                  0,
+                  100,
+                  setGlassIntensityDraft,
+                  setGlassIntensityError,
+                  "glassIntensity"
+                );
+              }}
+              onChange={(event) => {
+                setGlassIntensityDraft(event.target.value);
+                setGlassIntensityError(null);
+              }}
+            />
+          </div>
+          {glassIntensityError ? (
+            <span className="form-error" role="alert">
+              {glassIntensityError}
+            </span>
+          ) : null}
+        </div>
+
+        <div className="settings-config-field settings-config-field--inline">
+          <label className="settings-config-label" htmlFor="appearance-surface-opacity">
+            {t("settings.appearance_surface_opacity")}
+          </label>
+          <div className="settings-config-control">
+            <Input
+              id="appearance-surface-opacity"
+              className="settings-input-compact"
+              inputMode="numeric"
+              invalid={Boolean(surfaceOpacityError)}
+              max={100}
+              min={0}
+              step={1}
+              type="number"
+              value={surfaceOpacityDraft}
+              onBlur={() => {
+                void commitBoundedCommonField(
+                  surfaceOpacityDraft,
+                  personalization.common.surfaceOpacity,
+                  0,
+                  100,
+                  setSurfaceOpacityDraft,
+                  setSurfaceOpacityError,
+                  "surfaceOpacity"
+                );
+              }}
+              onChange={(event) => {
+                setSurfaceOpacityDraft(event.target.value);
+                setSurfaceOpacityError(null);
+              }}
+            />
+          </div>
+          {surfaceOpacityError ? (
+            <span className="form-error" role="alert">
+              {surfaceOpacityError}
+            </span>
+          ) : null}
+        </div>
+
+        <div className="settings-toggle-row">
+          <div className="settings-toggle-info">
+            <span className="settings-toggle-label" id={desktopOverrideLabelId}>
+              {t("settings.appearance_override_desktop")}
+            </span>
+            <span className="settings-toggle-desc" id={desktopOverrideDescId}>
+              {isOverrideEnabled("desktop")
+                ? t("settings.appearance_override_enabled")
+                : t("settings.appearance_uses_shared_value")}
+            </span>
+          </div>
+          <Switch
+            aria-describedby={desktopOverrideDescId}
+            aria-labelledby={desktopOverrideLabelId}
+            checked={isOverrideEnabled("desktop")}
+            className="settings-toggle"
+            onCheckedChange={(nextValue) => {
+              void saveNextPersonalization(toggleOverride("desktop", nextValue));
+            }}
+          />
+        </div>
+
+        {isOverrideEnabled("desktop") ? (
+          <div className="settings-appearance-override-group">
+            {personalization.common.backgroundMode === "image" ? (
+              <div className="settings-toggle-row settings-toggle-row--action">
+                <div className="settings-toggle-info">
+                  <span className="settings-toggle-label">
+                    {t("settings.appearance_override_desktop")}
+                  </span>
+                  <span className="settings-toggle-desc">
+                    {personalization.desktop.backgroundAssetId ??
+                      t("settings.appearance_uses_shared_value")}
+                  </span>
+                </div>
+                {renderAssetButtons(
+                  "desktop",
+                  Object.prototype.hasOwnProperty.call(personalization.desktop, "backgroundAssetId")
+                )}
+              </div>
+            ) : null}
+            <div className="settings-toggle-row">
+              <div className="settings-toggle-info">
+                <span className="settings-toggle-label" id={desktopGlassLabelId}>
+                  {t("settings.appearance_glass_enabled")}
+                </span>
+                <span className="settings-toggle-desc" id={desktopGlassDescId}>
+                  {t("settings.appearance_override_desktop")}
+                </span>
+              </div>
+              <Switch
+                aria-describedby={desktopGlassDescId}
+                aria-labelledby={desktopGlassLabelId}
+                checked={
+                  personalization.desktop.glassEnabled ?? personalization.common.glassEnabled
+                }
+                className="settings-toggle"
+                onCheckedChange={(nextValue) => {
+                  void saveNextPersonalization(
+                    updateOverride("desktop", "glassEnabled", nextValue)
+                  );
+                }}
+              />
+            </div>
+            <div className="settings-config-field settings-config-field--inline">
+              <label className="settings-config-label" htmlFor="appearance-desktop-surface-opacity">
+                {t("settings.appearance_surface_opacity")}
+              </label>
+              <div className="settings-config-control">
+                <Input
+                  id="appearance-desktop-surface-opacity"
+                  className="settings-input-compact"
+                  inputMode="numeric"
+                  invalid={Boolean(desktopSurfaceOpacityError)}
+                  max={100}
+                  min={0}
+                  step={1}
+                  type="number"
+                  value={desktopSurfaceOpacityDraft}
+                  onBlur={() => {
+                    void commitBoundedOverrideField(
+                      "desktop",
+                      desktopSurfaceOpacityDraft,
+                      personalization.desktop.surfaceOpacity ??
+                        personalization.common.surfaceOpacity,
+                      0,
+                      100,
+                      setDesktopSurfaceOpacityDraft,
+                      setDesktopSurfaceOpacityError,
+                      "surfaceOpacity"
+                    );
+                  }}
+                  onChange={(event) => {
+                    setDesktopSurfaceOpacityDraft(event.target.value);
+                    setDesktopSurfaceOpacityError(null);
+                  }}
+                />
+              </div>
+              {desktopSurfaceOpacityError ? (
+                <span className="form-error" role="alert">
+                  {desktopSurfaceOpacityError}
+                </span>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+
+        <div className="settings-toggle-row">
+          <div className="settings-toggle-info">
+            <span className="settings-toggle-label" id={mobileOverrideLabelId}>
+              {t("settings.appearance_override_mobile")}
+            </span>
+            <span className="settings-toggle-desc" id={mobileOverrideDescId}>
+              {isOverrideEnabled("mobile")
+                ? t("settings.appearance_override_enabled")
+                : t("settings.appearance_uses_shared_value")}
+            </span>
+          </div>
+          <Switch
+            aria-describedby={mobileOverrideDescId}
+            aria-labelledby={mobileOverrideLabelId}
+            checked={isOverrideEnabled("mobile")}
+            className="settings-toggle"
+            onCheckedChange={(nextValue) => {
+              void saveNextPersonalization(toggleOverride("mobile", nextValue));
+            }}
+          />
+        </div>
+
+        {isOverrideEnabled("mobile") ? (
+          <div className="settings-appearance-override-group">
+            {personalization.common.backgroundMode === "image" ? (
+              <div className="settings-toggle-row settings-toggle-row--action">
+                <div className="settings-toggle-info">
+                  <span className="settings-toggle-label">
+                    {t("settings.appearance_override_mobile")}
+                  </span>
+                  <span className="settings-toggle-desc">
+                    {personalization.mobile.backgroundAssetId ??
+                      t("settings.appearance_uses_shared_value")}
+                  </span>
+                </div>
+                {renderAssetButtons(
+                  "mobile",
+                  Object.prototype.hasOwnProperty.call(personalization.mobile, "backgroundAssetId")
+                )}
+              </div>
+            ) : null}
+            <div className="settings-toggle-row">
+              <div className="settings-toggle-info">
+                <span className="settings-toggle-label" id={mobileGlassLabelId}>
+                  {t("settings.appearance_glass_enabled")}
+                </span>
+                <span className="settings-toggle-desc" id={mobileGlassDescId}>
+                  {t("settings.appearance_override_mobile")}
+                </span>
+              </div>
+              <Switch
+                aria-describedby={mobileGlassDescId}
+                aria-labelledby={mobileGlassLabelId}
+                checked={personalization.mobile.glassEnabled ?? personalization.common.glassEnabled}
+                className="settings-toggle"
+                onCheckedChange={(nextValue) => {
+                  void saveNextPersonalization(updateOverride("mobile", "glassEnabled", nextValue));
+                }}
+              />
+            </div>
+            <div className="settings-config-field settings-config-field--inline">
+              <label className="settings-config-label" htmlFor="appearance-mobile-surface-opacity">
+                {t("settings.appearance_surface_opacity")}
+              </label>
+              <div className="settings-config-control">
+                <Input
+                  id="appearance-mobile-surface-opacity"
+                  className="settings-input-compact"
+                  inputMode="numeric"
+                  invalid={Boolean(mobileSurfaceOpacityError)}
+                  max={100}
+                  min={0}
+                  step={1}
+                  type="number"
+                  value={mobileSurfaceOpacityDraft}
+                  onBlur={() => {
+                    void commitBoundedOverrideField(
+                      "mobile",
+                      mobileSurfaceOpacityDraft,
+                      personalization.mobile.surfaceOpacity ??
+                        personalization.common.surfaceOpacity,
+                      0,
+                      100,
+                      setMobileSurfaceOpacityDraft,
+                      setMobileSurfaceOpacityError,
+                      "surfaceOpacity"
+                    );
+                  }}
+                  onChange={(event) => {
+                    setMobileSurfaceOpacityDraft(event.target.value);
+                    setMobileSurfaceOpacityError(null);
+                  }}
+                />
+              </div>
+              {mobileSurfaceOpacityError ? (
+                <span className="form-error" role="alert">
+                  {mobileSurfaceOpacityError}
+                </span>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+
+        {assetActionError ? (
+          <span className="form-error" role="alert">
+            {assetActionError}
+          </span>
+        ) : null}
+      </div>
+
       <div className="settings-group">
         <h3 className="settings-group-title">{t("settings.terminal_appearance")}</h3>
         <p className="settings-group-desc">{t("settings.terminal_font_size_hint")}</p>
