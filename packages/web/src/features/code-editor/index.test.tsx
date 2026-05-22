@@ -356,6 +356,32 @@ describe("CodeEditorHost", () => {
     });
   });
 
+  it("defaults markdown files into preview mode after load", async () => {
+    const { store } = setupStore({
+      activePath: "README.md",
+      openFiles: {
+        "README.md": {
+          kind: "text",
+          path: "README.md",
+          content: "# Docs",
+          savedContent: "# Docs",
+          baseHash: "markdown-hash",
+          isDirty: false,
+        },
+      },
+    });
+
+    render(
+      <Provider store={store}>
+        <CodeEditorHost />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(store.get(editorModeAtomFamily("ws-1"))).toBe("preview");
+    });
+  });
+
   it("defaults image files into preview mode and keeps text-backed images editable as text when requested", async () => {
     const { store } = setupStore({
       activePath: "assets/logo.svg",
