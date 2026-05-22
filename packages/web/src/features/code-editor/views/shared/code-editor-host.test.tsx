@@ -56,6 +56,13 @@ function createState(overrides: Partial<CodeEditorState> = {}): CodeEditorState 
     isSaving: false,
     isSvgTextBacked: true,
     isTextFile: true,
+    documentPreview: {
+      iframeSrc: null,
+      isBootstrapping: false,
+      isSyncing: false,
+      error: null,
+      retry: vi.fn(),
+    },
     mode: "edit",
     openInDiffMode: vi.fn(),
     saveError: null,
