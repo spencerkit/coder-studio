@@ -9965,7 +9965,7 @@ textarea.input {
   .mobile-drawer-layer {
     position: fixed;
     inset: 0;
-    z-index: var(--z-modal);
+    z-index: var(--z-sheet);
   }
 
   .mobile-sheet-layer__backdrop,

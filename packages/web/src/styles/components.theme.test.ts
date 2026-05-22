@@ -802,6 +802,10 @@ describe("components.css theme-sensitive surfaces", () => {
   });
 
   it("keeps shared overlay families on semantic z-index tokens", () => {
+    const modalStyles = readFileSync(
+      `${process.cwd()}/src/components/ui/modal/index.module.css`,
+      "utf8"
+    );
     const drawerStyles = readFileSync(
       `${process.cwd()}/src/components/ui/drawer/index.module.css`,
       "utf8"
@@ -815,6 +819,7 @@ describe("components.css theme-sensitive surfaces", () => {
       "utf8"
     );
 
+    expect(modalStyles).toContain("var(--z-modal-backdrop)");
     expect(drawerStyles).toContain("var(--z-drawer-backdrop)");
     expect(drawerStyles).toContain("var(--z-drawer)");
     expect(workbenchStyles).toContain("var(--z-workbench-backdrop)");
@@ -1067,6 +1072,16 @@ describe("components.css theme-sensitive surfaces", () => {
 
     expect(mobileSheetBackdrop).toContain("background: var(--overlay-backdrop)");
     expect(mobileDrawerBackdrop).toContain("background: var(--overlay-backdrop)");
+  });
+
+  it("keeps mobile sheets below shared modal dialogs so confirmation overlays remain visible", () => {
+    const mobileSheetLayer = getLastRuleBlock(".mobile-sheet-layer");
+    const mobileDrawerLayer = getLastRuleBlock(".mobile-drawer-layer");
+    const modalOverlay = getLastRuleBlockFrom(modalStylesheet, ":global(.modal-overlay)");
+
+    expect(mobileSheetLayer).toContain("z-index: var(--z-sheet)");
+    expect(mobileDrawerLayer).toContain("z-index: var(--z-sheet)");
+    expect(modalOverlay).toContain("z-index: var(--z-modal-backdrop)");
   });
 
   it("keeps worktree state chips and mobile tabs on shared state and layer tokens", () => {
