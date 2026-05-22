@@ -8186,11 +8186,14 @@ textarea.input {
 }
 
 .topbar-tab {
+  position: relative;
   height: 29px;
   gap: var(--gap-tight);
   justify-content: flex-start;
   padding: 0 var(--control-height-md) 0 var(--inset-control-inline);
   border-radius: 7px;
+  overflow: hidden;
+  isolation: isolate;
 }
 
 .topbar-tab.active {
@@ -8198,23 +8201,46 @@ textarea.input {
   border-color: color-mix(in srgb, var(--border-light) 72%, var(--accent-blue) 28%);
 }
 
-.workspace-session-mini-map {
+.topbar-tab-content {
   position: relative;
+  z-index: 1;
   display: inline-flex;
-  width: 20px;
-  height: 12px;
+  align-items: center;
+  gap: var(--gap-tight);
+  min-width: 0;
+  max-width: 100%;
+  padding: 0 var(--sp-1);
+  border-radius: var(--radius-chip);
+  background: color-mix(in srgb, var(--overlay-scrim) 82%, transparent);
+}
+
+.topbar-tab-name {
+  position: relative;
+  z-index: 1;
+}
+
+.topbar-unread {
+  position: relative;
+  z-index: 1;
   flex: 0 0 auto;
-  margin-left: var(--sp-2);
+}
+
+.workspace-session-mini-map {
+  position: absolute;
+  inset: 0;
+  display: block;
+  border-radius: inherit;
+  overflow: hidden;
+  pointer-events: none;
 }
 
 .workspace-session-mini-map__cell {
   position: absolute;
   left: var(--workspace-session-map-cell-x);
   top: var(--workspace-session-map-cell-y);
-  width: 4px;
-  height: 4px;
-  border-radius: 1px;
-  transform: translate(-50%, -50%);
+  width: var(--workspace-session-map-cell-width);
+  height: var(--workspace-session-map-cell-height);
+  border: 1px solid color-mix(in srgb, var(--border-light) 28%, transparent);
   background: var(--workspace-session-map-empty);
 }
 

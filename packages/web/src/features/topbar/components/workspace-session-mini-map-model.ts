@@ -8,6 +8,8 @@ export interface WorkspaceSessionMiniMapCell {
   readonly state: WorkspaceSessionMiniMapState;
   readonly x: number;
   readonly y: number;
+  readonly width: number;
+  readonly height: number;
 }
 
 interface PaneBounds {
@@ -41,8 +43,10 @@ function collectCells(
         paneId: node.id,
         sessionId: node.sessionId ?? null,
         state: resolveCellState(node.sessionId ? sessionsById[node.sessionId] : undefined),
-        x: bounds.x + bounds.width / 2,
-        y: bounds.y + bounds.height / 2,
+        x: bounds.x,
+        y: bounds.y,
+        width: bounds.width,
+        height: bounds.height,
       },
     ];
   }
@@ -52,22 +56,19 @@ function collectCells(
     return collectCells({ ...node, type: "leaf", children: undefined }, sessionsById, bounds);
   }
 
-  const ratio =
-    typeof node.ratio === "number" && node.ratio > 0 && node.ratio < 1 ? node.ratio : 0.5;
-
   if (node.direction === "vertical") {
     return [
       ...collectCells(firstChild, sessionsById, {
         x: bounds.x,
         y: bounds.y,
         width: bounds.width,
-        height: bounds.height * ratio,
+        height: bounds.height * 0.5,
       }),
       ...collectCells(secondChild, sessionsById, {
         x: bounds.x,
-        y: bounds.y + bounds.height * ratio,
+        y: bounds.y + bounds.height * 0.5,
         width: bounds.width,
-        height: bounds.height * (1 - ratio),
+        height: bounds.height * 0.5,
       }),
     ];
   }
@@ -76,13 +77,13 @@ function collectCells(
     ...collectCells(firstChild, sessionsById, {
       x: bounds.x,
       y: bounds.y,
-      width: bounds.width * ratio,
+      width: bounds.width * 0.5,
       height: bounds.height,
     }),
     ...collectCells(secondChild, sessionsById, {
-      x: bounds.x + bounds.width * ratio,
+      x: bounds.x + bounds.width * 0.5,
       y: bounds.y,
-      width: bounds.width * (1 - ratio),
+      width: bounds.width * 0.5,
       height: bounds.height,
     }),
   ];

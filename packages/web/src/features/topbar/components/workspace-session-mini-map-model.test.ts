@@ -19,7 +19,7 @@ function createSession(id: string, state: Session["state"], workspaceId = "ws-1"
 }
 
 describe("workspace-session-mini-map-model", () => {
-  it("projects a single running leaf into the center of the mini map", () => {
+  it("projects a single running leaf into a full-tab region", () => {
     const layout: WorkspacePaneNode = { id: "root", type: "leaf", sessionId: "sess-1" };
     const cells = buildWorkspaceSessionMiniMapCells(layout, {
       "sess-1": createSession("sess-1", "running"),
@@ -30,23 +30,27 @@ describe("workspace-session-mini-map-model", () => {
         paneId: "root",
         sessionId: "sess-1",
         state: "running",
-        x: 0.5,
-        y: 0.5,
+        x: 0,
+        y: 0,
+        width: 1,
+        height: 1,
       }),
     ]);
   });
 
-  it("keeps horizontal and vertical pane relationships while defaulting missing ratios to 0.5", () => {
+  it("keeps pane relationships while splitting every branch equally", () => {
     const layout = {
       id: "root",
       type: "split",
       direction: "horizontal",
+      ratio: 0.8,
       children: [
         { id: "left", type: "leaf", sessionId: "sess-1" },
         {
           id: "right-split",
           type: "split",
           direction: "vertical",
+          ratio: 0.1,
           children: [
             { id: "top-right", type: "leaf", sessionId: "sess-2" },
             { id: "bottom-right", type: "leaf" },
@@ -61,9 +65,30 @@ describe("workspace-session-mini-map-model", () => {
     });
 
     expect(cells).toEqual([
-      expect.objectContaining({ paneId: "left", state: "idle", x: 0.25, y: 0.5 }),
-      expect.objectContaining({ paneId: "top-right", state: "starting", x: 0.75, y: 0.25 }),
-      expect.objectContaining({ paneId: "bottom-right", state: "empty", x: 0.75, y: 0.75 }),
+      expect.objectContaining({
+        paneId: "left",
+        state: "idle",
+        x: 0,
+        y: 0,
+        width: 0.5,
+        height: 1,
+      }),
+      expect.objectContaining({
+        paneId: "top-right",
+        state: "starting",
+        x: 0.5,
+        y: 0,
+        width: 0.5,
+        height: 0.5,
+      }),
+      expect.objectContaining({
+        paneId: "bottom-right",
+        state: "empty",
+        x: 0.5,
+        y: 0.5,
+        width: 0.5,
+        height: 0.5,
+      }),
     ]);
   });
 
@@ -95,8 +120,10 @@ describe("workspace-session-mini-map-model", () => {
         paneId: "root",
         sessionId: null,
         state: "empty",
-        x: 0.5,
-        y: 0.5,
+        x: 0,
+        y: 0,
+        width: 1,
+        height: 1,
       }),
     ]);
   });

@@ -917,8 +917,15 @@ describe("components.css theme-sensitive surfaces", () => {
     );
     expect(activeTab).toContain("var(--bg-active)");
     expect(activeTab).not.toContain("rgba(45, 63, 79, 0.92)");
-    expect(miniMap).toContain("margin-left: var(--sp-2)");
+    expect(topbarTab).toContain("position: relative");
+    expect(topbarTab).toContain("overflow: hidden");
+    expect(miniMap).toContain("position: absolute");
+    expect(miniMap).toContain("inset: 0");
     expect(miniMapCell).toContain("background: var(--workspace-session-map-empty)");
+    expect(miniMapCell).toContain("left: var(--workspace-session-map-cell-x)");
+    expect(miniMapCell).toContain("top: var(--workspace-session-map-cell-y)");
+    expect(miniMapCell).toContain("width: var(--workspace-session-map-cell-width)");
+    expect(miniMapCell).toContain("height: var(--workspace-session-map-cell-height)");
     expect(miniMapRunning).toContain("background: var(--workspace-session-map-running)");
     expect(miniMapStarting).toContain("background: var(--workspace-session-map-starting)");
     expect(miniMapIdle).toContain("background: var(--workspace-session-map-idle)");

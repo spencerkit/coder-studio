@@ -348,8 +348,11 @@ describe("WorkspaceTab", () => {
     });
 
     const { container } = renderWorkspaceTab(store, workspace, { isActive: true, value: "ws-2" });
+    const tab = screen.getByRole("tab", { name: "two" });
 
     expect(container.querySelector(".topbar-dot")).toBeNull();
+    expect(container.querySelector(".workspace-session-mini-map")).toBe(tab.firstElementChild);
+    expect(container.querySelector(".topbar-tab-content")).not.toBeNull();
     expect(container.querySelectorAll(".workspace-session-mini-map__cell")).toHaveLength(2);
     expect(container.querySelector(".workspace-session-mini-map__cell--running")).not.toBeNull();
     expect(container.querySelector(".workspace-session-mini-map__cell--empty")).not.toBeNull();
