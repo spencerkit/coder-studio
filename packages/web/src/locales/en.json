@@ -560,8 +560,13 @@
       "confirm_update_title": "Confirm Update",
       "confirm_update_message": "Updating installs a new version and restarts the service. Running terminals, agent sessions, or supervisor tasks may be interrupted.",
       "confirm_update_activity": "{terminals} terminals, {sessions} sessions, and {supervisors} supervisor tasks are still active.",
-      "toast_update_available_title": "Update Available",
-      "toast_update_available_body": "Version {version} is available in Settings > About."
+      "footer_update_available": "New version detected {version}",
+      "footer_installing": "Updating...",
+      "footer_restarting": "Restarting service...",
+      "footer_failed": "Update failed",
+      "footer_manual_required": "Manual action required",
+      "footer_view_details": "View details",
+      "footer_succeeded": "Updated to {version}"
     },
     "help_diagnostics": "Help & Diagnostics",
     "autosave_hint": "Settings saved automatically",

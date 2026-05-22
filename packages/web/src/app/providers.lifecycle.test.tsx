@@ -336,7 +336,7 @@ describe("AppProviders lifecycle recovery", () => {
     expect(topics).toEqual(expect.arrayContaining(["update.*"]));
   });
 
-  it("shows a localized toast when an update becomes available after connect", async () => {
+  it("hydrates update state without emitting a toast when an update becomes available after connect", async () => {
     const updateState: UpdateStateView = {
       version: 1,
       currentVersion: "0.4.0",
@@ -387,14 +387,10 @@ describe("AppProviders lifecycle recovery", () => {
     });
 
     await vi.waitFor(() => {
-      expect(store.get(toastsAtom)).toHaveLength(1);
+      expect(store.get(updateStateAtom)).toEqual(updateState);
     });
 
-    expect(store.get(toastsAtom)[0]).toMatchObject({
-      kind: "info",
-      title: "发现新版本",
-      body: "版本 0.5.0 已可用，可前往 设置 > 关于 更新。",
-    });
+    expect(store.get(toastsAtom)).toEqual([]);
   });
 
   it("sends workspace.deactivate when the page becomes hidden", async () => {

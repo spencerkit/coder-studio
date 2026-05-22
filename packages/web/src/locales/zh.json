@@ -560,8 +560,13 @@
       "confirm_update_title": "确认更新",
       "confirm_update_message": "更新会安装新版本并重启服务，当前运行中的终端、Agent 会话或 Supervisor 任务可能被中断。",
       "confirm_update_activity": "检测到 {terminals} 个终端、{sessions} 个会话、{supervisors} 个 Supervisor 任务仍在运行。",
-      "toast_update_available_title": "发现新版本",
-      "toast_update_available_body": "版本 {version} 已可用，可前往 设置 > 关于 更新。"
+      "footer_update_available": "检测到新版本 {version}",
+      "footer_installing": "更新中...",
+      "footer_restarting": "正在重启服务...",
+      "footer_failed": "更新失败",
+      "footer_manual_required": "需要手动处理",
+      "footer_view_details": "查看详情",
+      "footer_succeeded": "已更新到 {version}"
     },
     "help_diagnostics": "帮助与诊断",
     "autosave_hint": "设置已自动保存",

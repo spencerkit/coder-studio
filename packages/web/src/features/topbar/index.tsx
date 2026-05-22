@@ -10,17 +10,8 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { commandPaletteOpenAtom } from "../../atoms/app-ui";
 import { orderedWorkspacesAtom, resolvedActiveWorkspaceIdAtom } from "../../atoms/workspaces";
-import {
-  Badge,
-  EmptyState,
-  IconButton,
-  TabList,
-  Tabs,
-  ThemedIcon,
-  Tooltip,
-} from "../../components/ui";
+import { EmptyState, IconButton, TabList, Tabs, ThemedIcon, Tooltip } from "../../components/ui";
 import { useTranslation } from "../../lib/i18n";
-import { updateMarkerVisibleAtom } from "../updates/atoms";
 import { useSelectWorkspaceTarget } from "../workspace/actions/use-select-workspace-target";
 import type { WorkspaceFullscreenController } from "../workspace/actions/use-workspace-fullscreen";
 import { sidebarCollapsedAtom, terminalPanelVisibleAtom } from "../workspace/atoms";
@@ -65,7 +56,6 @@ export const TopBar: FC<TopBarProps> = ({ fullscreenController }) => {
   const [terminalPanelVisible, setTerminalPanelVisible] = useAtom(terminalPanelVisibleAtom);
   const [sidebarCollapsed, setSidebarCollapsed] = useAtom(sidebarCollapsedAtom);
   const [workspaceLaunchOpen, setWorkspaceLaunchOpen] = useState(false);
-  const updateMarkerVisible = useAtomValue(updateMarkerVisibleAtom);
 
   return (
     <header className="app-topbar">
@@ -143,12 +133,7 @@ export const TopBar: FC<TopBarProps> = ({ fullscreenController }) => {
             aria-label={t("settings.title")}
             className="topbar-btn"
             data-testid="settings-open"
-            icon={
-              <>
-                <ThemedIcon semantic="nav.settings" size={14} />
-                {updateMarkerVisible ? <Badge count={1} max={9} /> : null}
-              </>
-            }
+            icon={<ThemedIcon semantic="nav.settings" size={14} />}
             onClick={() => navigate("/settings")}
           />
         </Tooltip>

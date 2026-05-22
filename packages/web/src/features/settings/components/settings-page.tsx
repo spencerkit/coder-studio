@@ -28,7 +28,7 @@ import {
 import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import { Check, ChevronRight } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { localeAtom, themeAtom } from "../../../atoms/app-ui";
 import {
   connectionStatusAtom,
@@ -208,6 +208,7 @@ function resolveMobileSettingsGroups(
 export function SettingsPage() {
   const t = useTranslation();
   const settingsLoadFailedUnknown = t("settings.load_failed_unknown");
+  const location = useLocation();
   const navigate = useNavigate();
   const viewport = useViewport();
   const isMobile = viewport === "mobile";
@@ -216,11 +217,22 @@ export function SettingsPage() {
   const serverInfo = useAtomValue(serverInfoAtom);
   const resolvedActiveWorkspaceId = useAtomValue(resolvedActiveWorkspaceIdAtom);
   const activeWorkspaceId = resolvedActiveWorkspaceId;
-  const [navigationState, setNavigationState] = useState<SettingsNavigationState>(() =>
-    isMobile
+  const initialRequestedSection = (() => {
+    const section = new URLSearchParams(location.search).get("section");
+    return SETTINGS_SECTIONS.some((item) => item.id === section)
+      ? (section as SettingsSection)
+      : null;
+  })();
+  const initialRequestedSectionRef = useRef<SettingsSection | null>(initialRequestedSection);
+  const [navigationState, setNavigationState] = useState<SettingsNavigationState>(() => {
+    if (initialRequestedSection) {
+      return { kind: "detail", section: initialRequestedSection };
+    }
+
+    return isMobile
       ? { kind: "root", lastSection: DEFAULT_SETTINGS_SECTION }
-      : { kind: "detail", section: DEFAULT_SETTINGS_SECTION }
-  );
+      : { kind: "detail", section: DEFAULT_SETTINGS_SECTION };
+  });
 
   // Provider settings state (would come from server in real implementation)
   const [providers] = useState<ProviderInfo[]>([
@@ -312,6 +324,14 @@ export function SettingsPage() {
   useEffect(() => {
     setNavigationState((state) => {
       if (isMobile) {
+        if (
+          initialRequestedSectionRef.current &&
+          state.kind === "detail" &&
+          state.section === initialRequestedSectionRef.current
+        ) {
+          initialRequestedSectionRef.current = null;
+          return state;
+        }
         return state.kind === "root" ? state : { kind: "root", lastSection: state.section };
       }
 

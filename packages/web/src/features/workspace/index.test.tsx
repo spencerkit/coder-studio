@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { connectionStatusAtom, wsClientAtom } from "../../atoms/connection";
 import { activeWorkspaceIdAtom, workspaceOrderAtom, workspacesAtom } from "../../atoms/workspaces";
 import { seedReadyWorkspaceState } from "../../test-utils/workspace-state";
+import { updateStateAtom } from "../updates/atoms";
 import {
   activeFilePathAtomFamily,
   bottomPanelHeightAtom,
@@ -84,6 +85,23 @@ describe("WorkspacePage", () => {
     const store = createStore();
     store.set(connectionStatusAtom, "connected");
     store.set(wsClientAtom, { sendCommand } as never);
+    store.set(updateStateAtom, {
+      version: 1,
+      currentVersion: "0.4.0",
+      latestVersion: "0.5.0",
+      availability: "update_available",
+      updateStatus: "idle",
+      lastCheckedAt: 123,
+      targetVersion: null,
+      startedAt: null,
+      finishedAt: null,
+      requiresManualStep: false,
+      manualCommand: null,
+      errorSummary: null,
+      supported: true,
+      installKind: "global_npm",
+      unsupportedReason: null,
+    });
     seedReadyWorkspaceState(store, {
       "ws-test": {
         id: "ws-test",
@@ -124,13 +142,13 @@ describe("WorkspacePage", () => {
     expect(document.querySelector(".workspace-page.workspace-page--desktop")).toBeTruthy();
     expect(document.querySelector(".workspace-main-stage")).toBeTruthy();
     expect(document.querySelector(".workspace-main-area > .workspace-main-stage")).toBeTruthy();
+    expect(document.querySelector(".workspace-status-bar__left")).not.toBeNull();
+    expect(document.querySelector(".workspace-status-bar__right")).not.toBeNull();
     expect(
-      document.querySelector(".workspace-status-bar .git-panel-status-strip__branch-text")
+      document.querySelector(".workspace-status-bar__left .git-panel-status-strip__branch-text")
     ).toHaveTextContent("feature/refactor-ts");
     expect(document.querySelector(".workspace-page > .workspace-status-bar")).not.toBeNull();
-    expect(document.querySelector(".workspace-status-bar .git-panel-status-strip")).toHaveClass(
-      "git-panel-status-strip--start"
-    );
+    expect(document.querySelector(".workspace-status-bar__right")).toHaveTextContent("v0.5.0");
     expect(document.querySelector(".workspace-sidebar-panel__tab-count")).toBeNull();
   });
 

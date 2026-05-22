@@ -81,10 +81,13 @@ function createDeferred<T>() {
   return { promise, resolve, reject };
 }
 
-function renderSettingsPage(store = createConnectedStore(vi.fn().mockResolvedValue({}))) {
+function renderSettingsPage(
+  store = createConnectedStore(vi.fn().mockResolvedValue({})),
+  { initialEntry = "/settings" }: { initialEntry?: string } = {}
+) {
   return render(
     <Provider store={store}>
-      <MemoryRouter initialEntries={["/settings"]}>
+      <MemoryRouter initialEntries={[initialEntry]}>
         <SettingsPage />
       </MemoryRouter>
     </Provider>
@@ -393,6 +396,24 @@ describe("SettingsPage", () => {
         undefined
       );
     });
+  });
+
+  it("opens the About section on load when section=about is present", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "updates.autoCheckEnabled": true,
+          "updates.checkIntervalSec": 21600,
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store, { initialEntry: "/settings?section=about" });
+
+    expect(await screen.findByTestId("about-settings")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "关于" })).toBeInTheDocument();
   });
 
   it("does not let late settings hydration overwrite a local update preference change", async () => {

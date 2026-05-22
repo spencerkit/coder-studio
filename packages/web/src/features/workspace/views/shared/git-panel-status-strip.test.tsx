@@ -139,14 +139,13 @@ describe("GitPanelStatusStrip", () => {
     });
   });
 
-  it("uses start alignment for desktop footer status strips when requested", () => {
+  it("renders its branch trigger and status meta inside the left grouping", () => {
     const store = createStore();
     store.set(localeAtom, "en");
 
     const { container } = render(
       <Provider store={store}>
         <GitPanelStatusStrip
-          align="start"
           workspaceId="ws-1"
           gitState={{
             branch: "develop",
@@ -162,10 +161,10 @@ describe("GitPanelStatusStrip", () => {
       </Provider>
     );
 
-    expect(container.querySelector(".git-panel-status-strip")).toHaveClass(
-      "git-panel-status-strip",
-      "git-panel-status-strip--start"
-    );
+    const left = container.querySelector(".git-panel-status-strip__left");
+    expect(left).not.toBeNull();
+    expect(left?.querySelector(".git-panel-status-strip__branch")).not.toBeNull();
+    expect(left?.querySelector(".git-panel-status-strip__meta")).not.toBeNull();
   });
 
   it("renders the branch semantic icon in the status strip trigger", () => {

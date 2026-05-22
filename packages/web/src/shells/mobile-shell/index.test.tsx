@@ -34,6 +34,7 @@ import {
   supervisorDialogAtom,
   supervisorsAtom,
 } from "../../features/supervisor/atoms";
+import { updateStateAtom } from "../../features/updates/atoms";
 import {
   branchQuickPickAtom,
   gitDiffPreviewAtomFamily,
@@ -228,10 +229,17 @@ vi.mock("../../features/terminal-panel", () => ({
   TerminalPanel: () => <div data-testid="mobile-terminal-panel">TerminalPanel</div>,
 }));
 
-vi.mock("../../features/notifications", () => ({
-  useSessionNotifications: () => {},
-  ToastContainer: () => null,
-}));
+vi.mock("../../features/notifications", async () => {
+  const actual = await vi.importActual<typeof import("../../features/notifications")>(
+    "../../features/notifications"
+  );
+
+  return {
+    ...actual,
+    useSessionNotifications: () => {},
+    ToastContainer: () => null,
+  };
+});
 
 function createSession(
   partial: Partial<Session> & Pick<Session, "id" | "terminalId" | "providerId">
@@ -675,11 +683,33 @@ describe("MobileShell Phase 2 workspace", () => {
       return undefined;
     });
 
-    renderMobileShell({ initialEntry: "/workspace", sendCommand });
+    const { store } = renderMobileShell({ initialEntry: "/workspace", sendCommand });
+
+    act(() => {
+      store.set(updateStateAtom, {
+        version: 1,
+        currentVersion: "0.4.0",
+        latestVersion: "0.5.0",
+        availability: "update_available",
+        updateStatus: "idle",
+        lastCheckedAt: 123,
+        targetVersion: null,
+        startedAt: null,
+        finishedAt: null,
+        requiresManualStep: false,
+        manualCommand: null,
+        errorSummary: null,
+        supported: true,
+        installKind: "global_npm",
+        unsupportedReason: null,
+      });
+    });
 
     await waitFor(() => {
       expect(
-        document.querySelector(".mobile-shell__bottom-stack .git-panel-status-strip__branch-text")
+        document.querySelector(
+          ".mobile-shell__bottom-stack .workspace-status-bar__left .git-panel-status-strip__branch-text"
+        )
       ).toHaveTextContent("feature/mobile-footer");
     });
 
@@ -687,8 +717,13 @@ describe("MobileShell Phase 2 workspace", () => {
       document.querySelector(".mobile-shell__bottom-stack .workspace-status-bar")
     ).not.toBeNull();
     expect(
-      document.querySelector(".mobile-shell__bottom-stack .git-panel-status-strip__branch-text")
+      document.querySelector(
+        ".mobile-shell__bottom-stack .workspace-status-bar__left .git-panel-status-strip__branch-text"
+      )
     ).toHaveTextContent("feature/mobile-footer");
+    expect(
+      document.querySelector(".mobile-shell__bottom-stack .workspace-status-bar__right")
+    ).toHaveTextContent("v0.5.0");
     expect(document.querySelector(".mobile-shell__bottom-stack")?.lastElementChild).toHaveClass(
       "workspace-status-bar"
     );
