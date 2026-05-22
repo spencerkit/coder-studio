@@ -143,7 +143,7 @@ coder-studio open
 | [常用工作流](docs/help/workflows.md) | 任务式教程 |
 | [故障排除](docs/help/troubleshooting.md) | 常见问题和修复 |
 | [CLI 参考](docs/help/cli.md) | 命令行选项 |
-| [GitHub Wiki 源文件](docs/wiki/README.md) | 产品定位、安全说明和工作流 Wiki 页面 |
+| [GitHub Wiki 源文件](docs/wiki/README.md) | Wiki 源页面与发布流程 |
 | [AI Coding 术语](docs/wiki/AI-Coding-Terms.md) | Vibe coding、agentic harness、eval harness，以及 Coder Studio 的定位 |
 
 ---

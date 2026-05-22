@@ -1,22 +1,25 @@
 # GitHub Wiki Source
 
-This directory contains source pages for the GitHub Wiki. Keep these files in the main repository so documentation changes can be reviewed with code changes.
+This directory is the source of truth for the GitHub Wiki. Keep these files in the main repository so documentation changes can be reviewed with code changes.
 
-## Suggested Sync Flow
-
-GitHub Wikis are separate git repositories. To publish these pages:
+## Publish
 
 ```bash
-git clone git@github.com:spencerkit/coder-studio.wiki.git /tmp/coder-studio.wiki
-rsync -av --delete docs/wiki/ /tmp/coder-studio.wiki/
-cd /tmp/coder-studio.wiki
-git status
-git add .
-git commit -m "docs: update wiki"
-git push
+pnpm publish:wiki
+pnpm publish:wiki -- --push
 ```
 
-Review the diff before pushing, especially when using `--delete`.
+Default behavior is a dry run. Real publication requires `--push`.
+
+## Authentication
+
+- default: existing git https credentials
+- optional: `GITHUB_TOKEN`
+- optional override: `--remote git@github.com:spencerkit/coder-studio.wiki.git`
+
+## First-Time Setup
+
+GitHub only creates `<repo>.wiki.git` after the repository Wiki is initialized on GitHub. If clone fails with repository not found, open the GitHub Wiki once and create the initial wiki before retrying.
 
 ## Page Map
 
