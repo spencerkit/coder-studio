@@ -19,6 +19,7 @@ import type { ProviderConfigRepo } from "../storage/repositories/provider-config
 import type { SettingsRepo } from "../storage/repositories/settings-repo.js";
 import type { SupervisorManager } from "../supervisor/manager.js";
 import type { TerminalManager } from "../terminal/manager.js";
+import type { UpdateService } from "../update/update-service.js";
 import type { WorkspaceManager } from "../workspace/manager.js";
 import type { ActivationManager } from "./activation.js";
 import type { FencingManager } from "./fencing.js";
@@ -46,6 +47,7 @@ export interface CommandContext {
   lspMgr: LspManager;
   lspToolMgr?: LspToolManager;
   lspToolInstallMgr?: LspToolInstallManager;
+  updateService?: UpdateService;
 }
 
 /**

@@ -98,14 +98,21 @@
 
 高级设置键 `git.autofetchPeriodSec` 控制活动工作区的周期性远程 fetch，默认值是 `180` 秒；设为 `0` 会关闭周期性 fetch，但不会影响打开工作区时的自动 fetch，也不会影响手动点击 **Fetch**。
 
-当前设置页还没有这个高级键的图形化入口。如需手动调整，可以直接写入本地运行时数据库的 `user_settings` 表。默认数据库通常位于 `~/.coder-studio/data/coder-studio.db`；如果你通过 `coder-studio config --data-dir ...` 改过数据目录，请使用你自己的数据库路径。
+当前设置页还没有这个高级键的图形化入口。如需手动调整，可以直接编辑本地状态目录里的 `settings.json`。默认路径通常是 `~/.coder-studio/data/state/settings.json`；如果你通过 `coder-studio config --state-dir ...` 改过状态目录，请使用你自己的路径。
 
 ```bash
-sqlite3 ~/.coder-studio/data/coder-studio.db "
-INSERT INTO user_settings (key, value)
-VALUES ('git.autofetchPeriodSec', '60')
-ON CONFLICT(key) DO UPDATE SET value = excluded.value;
-"
+node -e '
+const fs = require("node:fs");
+const path = require("node:path");
+const file = path.join(process.env.HOME, ".coder-studio", "data", "state", "settings.json");
+const doc = fs.existsSync(file)
+  ? JSON.parse(fs.readFileSync(file, "utf8"))
+  : { version: 1, settings: {} };
+doc.version = 1;
+doc.settings = { ...(doc.settings || {}), "git.autofetchPeriodSec": 60 };
+fs.mkdirSync(path.dirname(file), { recursive: true });
+fs.writeFileSync(file, JSON.stringify(doc, null, 2) + "\n");
+'
 ```
 
 ### 查看变更内容

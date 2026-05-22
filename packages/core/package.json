@@ -9,6 +9,10 @@
       "types": "./src/index.ts",
       "default": "./src/index.ts"
     },
+    "./state-paths": {
+      "types": "./src/state-paths.ts",
+      "default": "./src/state-paths.ts"
+    },
     "./runtime": {
       "types": "./src/runtime.ts",
       "default": "./src/runtime.ts"
@@ -19,6 +23,7 @@
     "types": "./dist/index.d.ts",
     "exports": {
       ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
+      "./state-paths": { "types": "./dist/state-paths.d.ts", "import": "./dist/state-paths.js" },
       "./runtime": { "types": "./dist/runtime.d.ts", "import": "./dist/runtime.js" }
     }
   },

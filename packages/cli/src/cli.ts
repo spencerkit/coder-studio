@@ -71,7 +71,7 @@ COMMANDS:
   server   Alias for serve
   open     Start the server if needed and open Coder Studio in a browser
   auth     Manage auth login blocks in local server storage
-  config   Persist CLI host/port/data-dir/password settings
+  config   Persist CLI host/port/state-dir/password settings
   stop     Stop the managed Coder Studio server
   status   Show the managed server status
   logs     Show the managed server logs
@@ -81,7 +81,7 @@ COMMANDS:
 OPTIONS:
   --host <string>          Save server host for future runs
   --port, -p <number>      Save server port for future runs
-  --data-dir, -d <path>    Save data directory for future runs
+  --state-dir, --data-dir, -d <path>  Save state directory for future runs
   --password <string>      Save auth password for future runs
   --restart                Restart an already running managed server for serve/open
   --help                   Show help
@@ -119,7 +119,7 @@ BEHAVIOR:
 OPTIONS:
   --host <string>          Save server host for future runs
   --port, -p <number>      Save server port for future runs
-  --data-dir, -d <path>    Save data directory for future runs
+  --state-dir, --data-dir, -d <path>  Save state directory for future runs
   --password <string>      Save auth password for future runs
   --help                   Show config help
 
@@ -127,7 +127,7 @@ EXAMPLES:
   coder-studio config
   coder-studio config --host 0.0.0.0
   coder-studio config --port 8080
-  coder-studio config --data-dir /tmp/cs-data
+  coder-studio config --state-dir /tmp/cs-data
   coder-studio config --password sekrit
   coder-studio config --host 0.0.0.0 --port 8080
 `);
@@ -246,7 +246,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     if (
       args.host === undefined &&
       args.port === undefined &&
-      args.dataDir === undefined &&
+      args.stateDir === undefined &&
       args.password === undefined
     ) {
       console.log(formatConfig(readCliConfig()));
@@ -259,11 +259,11 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       ...(savedConfig?.port !== undefined && savedConfig.port > 0
         ? { port: savedConfig.port }
         : {}),
-      ...(savedConfig?.dataDir !== undefined ? { dataDir: savedConfig.dataDir } : {}),
+      ...(savedConfig?.stateDir !== undefined ? { stateDir: savedConfig.stateDir } : {}),
       ...(savedConfig?.password !== undefined ? { password: savedConfig.password } : {}),
       ...(args.host !== undefined ? { host: args.host } : {}),
       ...(args.port !== undefined ? { port: args.port } : {}),
-      ...(args.dataDir !== undefined ? { dataDir: args.dataDir } : {}),
+      ...(args.stateDir !== undefined ? { stateDir: args.stateDir } : {}),
       ...(args.password !== undefined ? { password: args.password } : {}),
     };
     writeCliConfig(nextConfig);

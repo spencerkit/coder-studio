@@ -1,11 +1,11 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   type CliConfig,
   getCliConfigPath,
-  normalizeDataDir,
+  normalizeLegacyDataDir,
   readCliConfig,
   writeCliConfig,
 } from "./config-store.js";
@@ -43,43 +43,86 @@ describe("config-store", () => {
     expect(readCliConfig()).toBeNull();
   });
 
-  it("writes and reads host port data-dir and password config", () => {
-    const config: CliConfig = {
+  it("writes and reads host port state-dir and password config", () => {
+    const config = {
       host: "0.0.0.0",
       port: 4186,
-      dataDir: "/tmp/cs-data/coder-studio.db",
+      stateDir: "/tmp/cs-data",
       password: "sekrit",
     };
 
-    writeCliConfig(config);
+    writeCliConfig(config as CliConfig);
 
     expect(readCliConfig()).toEqual(config);
   });
 
-  it("normalizes a directory input into the default state anchor path", () => {
-    expect(normalizeDataDir("/tmp/cs-data")).toBe("/tmp/cs-data/coder-studio.db");
+  it("keeps a directory input as the state directory", () => {
+    expect(normalizeLegacyDataDir("/tmp/cs-data")).toBe("/tmp/cs-data");
   });
 
-  it("keeps an explicit state anchor file path unchanged", () => {
-    expect(normalizeDataDir("/tmp/cs-data/custom.db")).toBe("/tmp/cs-data/custom.db");
+  it("normalizes a legacy sqlite file path to its parent state directory", () => {
+    expect(normalizeLegacyDataDir("/tmp/cs-data/custom.sqlite")).toBe("/tmp/cs-data");
+  });
+
+  it("preserves a saved stateDir that ends with .db", () => {
+    writeCliConfig({
+      stateDir: "/tmp/modern-state/custom-dir.db",
+    } as CliConfig);
+
+    expect(readCliConfig()).toEqual({
+      stateDir: "/tmp/modern-state/custom-dir.db",
+    });
+  });
+
+  it("preserves an in-memory saved stateDir", () => {
+    writeCliConfig({
+      stateDir: ":memory:",
+    } as CliConfig);
+
+    expect(readCliConfig()).toEqual({
+      stateDir: ":memory:",
+    });
+  });
+
+  it("reads legacy dataDir config as stateDir", () => {
+    writeCliConfig({
+      host: "127.0.0.1",
+      port: 4186,
+      stateDir: "/tmp/modern-state",
+      password: "sekrit",
+    } as CliConfig);
+
+    const configPath = getCliConfigPath();
+    const stored = JSON.parse(readFileSync(configPath, "utf-8")) as Record<string, unknown>;
+    stored.dataDir = "/tmp/legacy-state/legacy-state.sqlite";
+    delete stored.stateDir;
+
+    writeFileSync(configPath, JSON.stringify(stored, null, 2), "utf-8");
+
+    expect(readCliConfig()).toEqual({
+      host: "127.0.0.1",
+      port: 4186,
+      stateDir: "/tmp/legacy-state",
+      password: "sekrit",
+    });
   });
 
   it("does not persist ephemeral port zero in config", () => {
     writeCliConfig({
       host: "127.0.0.1",
       port: 0,
-      dataDir: "/tmp/cs-data/coder-studio.db",
+      stateDir: "/tmp/cs-data",
       password: "sekrit",
-    });
+    } as CliConfig);
 
     expect(JSON.parse(readFileSync(getCliConfigPath(), "utf-8"))).toEqual({
       host: "127.0.0.1",
-      dataDir: "/tmp/cs-data/coder-studio.db",
+      stateDir: "/tmp/cs-data",
       password: "sekrit",
     });
     expect(readCliConfig()).toEqual({
       host: "127.0.0.1",
-      dataDir: "/tmp/cs-data/coder-studio.db",
+      stateDir: "/tmp/cs-data",
       password: "sekrit",
     });
   });

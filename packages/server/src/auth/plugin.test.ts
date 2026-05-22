@@ -16,13 +16,13 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 describe("auth login protection", () => {
   let tempDir: string;
-  let dbPath: string;
+  let stateDir: string;
   let app: FastifyInstance;
   let webRoot: string;
 
   beforeEach(async () => {
     tempDir = mkdtempSync(join(tmpdir(), "coder-studio-auth-"));
-    dbPath = join(tempDir, "auth.db");
+    stateDir = join(tempDir, "state-root");
     webRoot = join(tempDir, "web");
     mkdirSync(join(webRoot, "assets"), { recursive: true });
     writeFileSync(
@@ -35,7 +35,7 @@ describe("auth login protection", () => {
     const config = {
       host: "127.0.0.1",
       port: 0,
-      dataDir: dbPath,
+      stateDir,
       uploadsDir: join(tempDir, "uploads"),
       logLevel: "info" as const,
       webRoot,

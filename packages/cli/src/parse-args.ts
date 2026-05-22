@@ -11,7 +11,7 @@ type CliCommand =
 type AuthCommand = "ban-list" | "unblock";
 
 export const RUNTIME_CONFIG_ERROR =
-  "Host, port, data-dir, password, and auth settings must be configured via the config command";
+  "Host, port, state-dir, password, and auth settings must be configured via the config command";
 
 export interface CliArgs {
   foreground?: boolean;
@@ -23,7 +23,7 @@ export interface CliArgs {
   configHelp?: boolean;
   port?: number;
   host?: string;
-  dataDir?: string;
+  stateDir?: string;
   password?: string;
   noAuth?: boolean;
   ip?: string;
@@ -37,7 +37,7 @@ function clearConfigArgs(args: CliArgs): void {
   delete args.configHelp;
   delete args.port;
   delete args.host;
-  delete args.dataDir;
+  delete args.stateDir;
   delete args.password;
   delete args.noAuth;
 }
@@ -217,10 +217,11 @@ export function parseArgs(argv: string[]): CliArgs {
         i += 1;
         break;
 
+      case "--state-dir":
       case "--data-dir":
       case "-d":
         ensureConfigContext(args, arg);
-        args.dataDir = readOptionValue(argv, i + 1, "data-dir");
+        args.stateDir = readOptionValue(argv, i + 1, "state-dir");
         i += 1;
         break;
 

@@ -8,19 +8,19 @@ describe("auth-control", () => {
   const originalHome = process.env.HOME;
   const originalUserProfile = process.env.USERPROFILE;
   let testHomeDir: string;
-  let dataPath: string;
+  let legacyStateFilePath: string;
   let authBlocksPath: string;
 
   beforeEach(() => {
     testHomeDir = mkdtempSync(join(tmpdir(), "cs-auth-control-home-"));
     process.env.HOME = testHomeDir;
     process.env.USERPROFILE = testHomeDir;
-    dataPath = join(testHomeDir, "auth-control.db");
+    legacyStateFilePath = join(testHomeDir, "legacy-state.sqlite");
     authBlocksPath = join(testHomeDir, "state", "auth-login-blocks.json");
     mkdirSync(join(testHomeDir, ".coder-studio"), { recursive: true });
     writeFileSync(
       join(testHomeDir, ".coder-studio", "config.json"),
-      JSON.stringify({ dataDir: dataPath }, null, 2),
+      JSON.stringify({ dataDir: legacyStateFilePath }, null, 2),
       "utf-8"
     );
   });

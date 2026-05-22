@@ -1,6 +1,6 @@
 # Runtime Directory Structure
 
-Coder Studio uses a runtime directory for storing runtime configuration and local data.
+Coder Studio uses a runtime directory for storing runtime configuration and local state.
 
 ## Default Location
 
@@ -13,8 +13,7 @@ Coder Studio uses a runtime directory for storing runtime configuration and loca
 ```
 ~/.coder-studio/
 ├── runtime.json          # Runtime configuration (port, token)
-├── data/                 # SQLite database and user data
-│   └── coder-studio.db   # Main database
+├── data/                 # Persistent state JSON files and local app state
 └── logs/                 # Server logs (Phase 2+)
 ```
 

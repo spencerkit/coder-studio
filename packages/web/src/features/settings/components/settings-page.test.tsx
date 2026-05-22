@@ -71,6 +71,16 @@ function createConnectedStore(
   return store;
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 function renderSettingsPage(store = createConnectedStore(vi.fn().mockResolvedValue({}))) {
   return render(
     <Provider store={store}>
@@ -262,6 +272,9 @@ describe("SettingsPage", () => {
       desktopView.container.querySelector('[data-icon-semantic="nav.settings.shortcuts"]')
     ).toBeTruthy();
     expect(
+      desktopView.container.querySelector('[data-icon-semantic="nav.settings.about"]')
+    ).toBeTruthy();
+    expect(
       desktopView.container.querySelector('[data-icon-semantic="nav.settings.diagnostics"]')
     ).toBeNull();
 
@@ -288,6 +301,9 @@ describe("SettingsPage", () => {
     ).toBeTruthy();
     expect(
       mobileView.container.querySelector('[data-icon-semantic="nav.settings.shortcuts"]')
+    ).toBeTruthy();
+    expect(
+      mobileView.container.querySelector('[data-icon-semantic="nav.settings.about"]')
     ).toBeTruthy();
     expect(
       mobileView.container.querySelector('[data-icon-semantic="nav.settings.diagnostics"]')
@@ -340,10 +356,88 @@ describe("SettingsPage", () => {
     const buttons = within(mobileRoot).getAllByRole("button");
     const labels = buttons.map((button) => button.getAttribute("aria-label")).filter(Boolean);
 
-    expect(labels).toEqual(expect.arrayContaining(["通用", "Agents", "外观", "快捷键"]));
+    expect(labels).toEqual(expect.arrayContaining(["通用", "Agents", "外观", "快捷键", "关于"]));
     expect(labels.indexOf("通用")).toBeLessThan(labels.indexOf("Agents"));
     expect(labels.indexOf("Agents")).toBeLessThan(labels.indexOf("外观"));
     expect(labels.indexOf("外观")).toBeLessThan(labels.indexOf("快捷键"));
+    expect(labels.indexOf("快捷键")).toBeLessThan(labels.indexOf("关于"));
+  });
+
+  it("renders the About section and saves update preferences through settings.update", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "updates.autoCheckEnabled": true,
+          "updates.checkIntervalSec": 21600,
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+
+    fireEvent.click(await screen.findByRole("button", { name: "关于" }));
+    fireEvent.click(screen.getByRole("button", { name: "已启用" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            updates: {
+              autoCheckEnabled: false,
+            },
+          },
+        },
+        undefined
+      );
+    });
+  });
+
+  it("does not let late settings hydration overwrite a local update preference change", async () => {
+    const settingsGetDeferred = createDeferred<Record<string, unknown>>();
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return settingsGetDeferred.promise;
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+
+    fireEvent.click(await screen.findByRole("button", { name: "关于" }));
+    fireEvent.click(screen.getByRole("button", { name: "已启用" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            updates: {
+              autoCheckEnabled: false,
+            },
+          },
+        },
+        undefined
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "已禁用" })).toBeInTheDocument();
+    });
+
+    settingsGetDeferred.resolve({
+      "updates.autoCheckEnabled": true,
+      "updates.checkIntervalSec": 21600,
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith("settings.get", {}, undefined);
+    });
+
+    expect(screen.getByRole("button", { name: "已禁用" })).toBeInTheDocument();
   });
 
   it("localizes the new mobile settings homepage section headings", async () => {

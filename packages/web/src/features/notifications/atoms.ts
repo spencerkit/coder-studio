@@ -41,13 +41,13 @@ export interface Toast {
 export const toastsAtom = atom<Toast[]>([]);
 
 /** Push a toast */
-export const pushToastAtom = atom(null, (get, set, toast: Omit<Toast, "id" | "createdAt">) => {
+export const pushToastAtom = atom(null, (_get, set, toast: Omit<Toast, "id" | "createdAt">) => {
   const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   const entry: Toast = { ...toast, id, createdAt: Date.now() };
   set(toastsAtom, (prev) => [...prev.slice(-4), entry]);
 });
 
 /** Dismiss a toast by id */
-export const dismissToastAtom = atom(null, (get, set, id: string) => {
+export const dismissToastAtom = atom(null, (_get, set, id: string) => {
   set(toastsAtom, (prev) => prev.filter((t) => t.id !== id));
 });

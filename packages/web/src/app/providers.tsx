@@ -10,6 +10,7 @@ import type {
   GitStatus,
   Session,
   Supervisor,
+  UpdateStateView,
   Workspace,
   WorktreeInfo,
 } from "@coder-studio/core";
@@ -43,17 +44,17 @@ import { activeWorkspaceIdAtom } from "../atoms/workspaces";
 import { type PaneNode, paneLayoutAtomFamily } from "../features/agent-panes/atoms/pane-layout";
 import { monacoModelRegistry } from "../features/code-editor/monaco/model-registry";
 import { useSessionNotifications } from "../features/notifications";
+import { pushToastAtom } from "../features/notifications/atoms";
 import { supervisorsAtom } from "../features/supervisor/atoms";
 import { terminalMetaAtomFamily } from "../features/terminal-panel/atoms";
 import {
-  DESKTOP_TERMINAL_FONT_SIZE_SETTING_KEY,
   hasExplicitTerminalFontSizeSetting,
   hasLegacyTerminalFontSizeSetting,
-  MOBILE_TERMINAL_FONT_SIZE_SETTING_KEY,
   resolveTerminalCopyOnSelectSetting,
   resolveTerminalFontSizeSetting,
   terminalPreferencesAtom,
 } from "../features/terminal-panel/preferences";
+import { updateStateAtom } from "../features/updates/atoms";
 import {
   editorRefreshTokenAtomFamily,
   expandedDirsAtomFamily,
@@ -65,6 +66,7 @@ import {
   worktreeListAtomFamily,
 } from "../features/workspace/atoms";
 import { useActivation } from "../hooks/use-activation";
+import { useTranslation } from "../lib/i18n";
 import { getThemeById, resolveStoredThemeId } from "../theme";
 import type { ConnectionStatus, EventListener } from "../ws";
 import { resolveWsUrl, WsClient } from "../ws";
@@ -251,6 +253,7 @@ interface AppProvidersProps {
 }
 
 export function AppProviders({ children }: AppProvidersProps) {
+  const t = useTranslation();
   const [, setWsClient] = useAtom(wsClientAtom);
   const [theme, setTheme] = useAtom(themeAtom);
   const authEnabled = useAtomValue(authEnabledAtom);
@@ -272,6 +275,8 @@ export function AppProviders({ children }: AppProvidersProps) {
   // Supervisor state atoms
   const setSupervisors = useSetAtom(supervisorsAtom);
   const setTerminalPreferences = useSetAtom(terminalPreferencesAtom);
+  const setUpdateState = useSetAtom(updateStateAtom);
+  const pushToast = useSetAtom(pushToastAtom);
 
   // Get Jotai store for writing to atomFamily atoms
   const store = useStore();
@@ -296,6 +301,7 @@ export function AppProviders({ children }: AppProvidersProps) {
     theme: 0,
   });
   const preferPersistedThemeOnFirstHydrationRef = useRef(false);
+  const announcedUpdateVersionRef = useRef<string | null>(null);
 
   // Keep dispatchRef in sync
   useEffect(() => {
@@ -427,6 +433,62 @@ export function AppProviders({ children }: AppProvidersProps) {
       unsubscribeTerminalPreferences();
     };
   }, [connectionStatus, dispatch, setTerminalPreferences, store]);
+
+  useEffect(() => {
+    if (connectionStatus !== "connected") {
+      return;
+    }
+
+    let cancelled = false;
+
+    const hydrateUpdateState = async () => {
+      const result = await dispatch<UpdateStateView>("updates.getState", {});
+      if (cancelled || !result.ok || !result.data) {
+        return;
+      }
+      if (
+        result.data.availability === "update_available" &&
+        typeof result.data.latestVersion === "string"
+      ) {
+        announcedUpdateVersionRef.current = result.data.latestVersion;
+      } else {
+        announcedUpdateVersionRef.current = null;
+      }
+      setUpdateState(result.data);
+    };
+
+    void hydrateUpdateState();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [connectionStatus, dispatch, setUpdateState]);
+
+  useEffect(() => {
+    return store.sub(updateStateAtom, () => {
+      const nextState = store.get(updateStateAtom);
+      if (!nextState) {
+        announcedUpdateVersionRef.current = null;
+        return;
+      }
+      if (nextState.availability !== "update_available" || !nextState.latestVersion) {
+        announcedUpdateVersionRef.current = null;
+        return;
+      }
+      if (announcedUpdateVersionRef.current === nextState.latestVersion) {
+        return;
+      }
+
+      announcedUpdateVersionRef.current = nextState.latestVersion;
+      pushToast({
+        kind: "info",
+        title: t("settings.about.toast_update_available_title"),
+        body: t("settings.about.toast_update_available_body", {
+          version: nextState.latestVersion,
+        }),
+      });
+    });
+  }, [pushToast, store, t]);
 
   useEffect(() => {
     activeWorkspaceIdRef.current = activeWorkspaceId;
@@ -851,6 +913,7 @@ export function AppProviders({ children }: AppProvidersProps) {
     const topics = [
       "connection.*", // Connection-level events
       "activation.*",
+      "update.*",
       "workspace.*", // All workspace events (glob pattern)
     ];
 
@@ -1109,6 +1172,11 @@ export function routeEventToAtom(topic: string, payload: unknown, store: Store):
     if (data.status === "error" && data.message) {
       store.set(connectionErrorAtom, data.message);
     }
+    return;
+  }
+
+  if (topic === "update.state.changed") {
+    store.set(updateStateAtom, payload as UpdateStateView);
     return;
   }
 

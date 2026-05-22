@@ -1,4 +1,4 @@
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { AuthLoginBlockRepo, parseServerConfig } from "@coder-studio/server";
 import { readCliConfig } from "./config-store.js";
 
@@ -10,16 +10,16 @@ export interface CliAuthBlock {
   blockedUntil: number;
 }
 
-function resolveDataDir(): string {
+function resolveStateDir(): string {
   const savedConfig = readCliConfig();
   return parseServerConfig({
-    ...(savedConfig?.dataDir !== undefined ? { dataDir: savedConfig.dataDir } : {}),
-  }).dataDir;
+    ...(savedConfig?.stateDir !== undefined ? { stateDir: savedConfig.stateDir } : {}),
+  }).stateDir;
 }
 
 export async function listAuthBlocks(now = Date.now()): Promise<CliAuthBlock[]> {
   const repo = new AuthLoginBlockRepo({
-    filePath: join(dirname(resolveDataDir()), "state", "auth-login-blocks.json"),
+    filePath: join(resolveStateDir(), "state", "auth-login-blocks.json"),
   });
   return repo.listActiveBlocks(now).map((record) => ({
     ip: record.ip,
@@ -32,7 +32,7 @@ export async function listAuthBlocks(now = Date.now()): Promise<CliAuthBlock[]> 
 
 export async function clearAuthBlockByIp(ip: string): Promise<boolean> {
   const repo = new AuthLoginBlockRepo({
-    filePath: join(dirname(resolveDataDir()), "state", "auth-login-blocks.json"),
+    filePath: join(resolveStateDir(), "state", "auth-login-blocks.json"),
   });
   return repo.delete(ip);
 }

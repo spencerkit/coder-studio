@@ -238,6 +238,10 @@ export class SessionManager {
       .map((s) => s.toDTO());
   }
 
+  getAll(): Session[] {
+    return Array.from(this.sessions.values()).map((session) => session.toDTO());
+  }
+
   async stopForWorkspace(workspaceId: string): Promise<void> {
     const sessions = Array.from(this.sessions.values()).filter(
       (session) => session.workspaceId === workspaceId
