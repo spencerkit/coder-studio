@@ -1,4 +1,6 @@
 import type { FastifyInstance } from "fastify";
+import { z } from "zod";
+import { renderMarkdownDocument } from "../preview/render-markdown.js";
 import { loadPreviewResource } from "../preview/resource-loader.js";
 import { PreviewSessionStore } from "../preview/session-store.js";
 
@@ -19,6 +21,30 @@ interface PreviewSessionUpdateBody {
 
 type WorkspaceLookup = { path: string } | null | undefined;
 
+function getPreviewContentSecurityPolicy(): string {
+  return "default-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'none'; base-uri 'none'; form-action 'none'";
+}
+
+function encodePathSegments(path: string): string {
+  return path
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+}
+
+const previewSessionCreateSchema = z.object({
+  workspaceId: z.string().min(1),
+  entryPath: z.string().min(1),
+  kind: z.enum(["markdown", "html"]),
+  content: z.string(),
+  allowScripts: z.boolean().optional(),
+});
+
+const previewSessionUpdateSchema = z.object({
+  content: z.string().optional(),
+  allowScripts: z.boolean().optional(),
+});
+
 export function registerPreviewRoutes(
   app: FastifyInstance,
   deps: {
@@ -27,7 +53,12 @@ export function registerPreviewRoutes(
   }
 ): void {
   app.post("/api/preview/session", async (request, reply) => {
-    const body = request.body as PreviewSessionBody;
+    const parsed = previewSessionCreateSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: "invalid_preview_payload" });
+    }
+
+    const body = parsed.data as PreviewSessionBody;
     const workspace = deps.workspaceMgr.get(body.workspaceId);
     if (!workspace) {
       return reply.status(404).send({ error: "workspace_not_found" });
@@ -36,7 +67,7 @@ export function registerPreviewRoutes(
     const session = deps.previewSessions.create(body);
     return reply.send({
       id: session.id,
-      previewUrl: `/api/preview/session/${session.id}/${encodeURI(session.entryPath)}`,
+      previewUrl: `/api/preview/session/${session.id}/${encodePathSegments(session.entryPath)}`,
       revision: session.revision,
     });
   });
@@ -53,7 +84,12 @@ export function registerPreviewRoutes(
 
   app.put("/api/preview/session/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
-    const session = deps.previewSessions.update(id, request.body as PreviewSessionUpdateBody);
+    const parsed = previewSessionUpdateSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: "invalid_preview_payload" });
+    }
+
+    const session = deps.previewSessions.update(id, parsed.data as PreviewSessionUpdateBody);
     if (!session) {
       return reply.status(404).send({ error: "preview_session_not_found" });
     }
@@ -80,18 +116,42 @@ export function registerPreviewRoutes(
     }
 
     if ((rawPath ?? "") === session.entryPath) {
-      return reply
+      const html =
+        session.kind === "markdown"
+          ? renderMarkdownDocument({
+              markdown: session.content,
+              title: session.entryPath,
+            })
+          : session.content;
+      const contentSecurityPolicy = getPreviewContentSecurityPolicy();
+
+      const response = reply
         .header("Content-Type", "text/html; charset=utf-8")
         .header("Cache-Control", "no-store")
-        .send(session.content);
+        .header("X-Preview-Allow-Scripts", String(session.allowScripts));
+
+      if (contentSecurityPolicy) {
+        response.header("Content-Security-Policy", contentSecurityPolicy);
+      }
+
+      return response.send(html);
     }
 
-    const resource = await loadPreviewResource(workspace.path, rawPath);
-    return reply
-      .header("Content-Type", resource.mime)
-      .header("Content-Length", String(resource.size))
-      .header("Cache-Control", "no-store")
-      .header("X-Content-Type-Options", "nosniff")
-      .send(resource.bytes);
+    try {
+      const resource = await loadPreviewResource(workspace.path, rawPath);
+
+      return reply
+        .header("Content-Type", resource.mime)
+        .header("Content-Length", String(resource.size))
+        .header("Cache-Control", "no-store")
+        .header("X-Content-Type-Options", "nosniff")
+        .send(resource.bytes);
+    } catch (error) {
+      const code = (error as { code?: string })?.code ?? (error as Error).message;
+      if (code === "path_escape") {
+        return reply.status(400).send({ error: "path_escape" });
+      }
+      return reply.status(404).send({ error: "not_found" });
+    }
   });
 }
