@@ -70,7 +70,7 @@ coder-studio config
 # 修改配置
 coder-studio config --host 0.0.0.0
 coder-studio config --port 8080
-coder-studio config --data-dir /path/to/data
+coder-studio config --state-dir /path/to/data
 coder-studio config --password mypassword
 ```
 

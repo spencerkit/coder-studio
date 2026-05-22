@@ -1,4 +1,4 @@
-import type { Supervisor } from "@coder-studio/core";
+import type { Supervisor, UpdateStateView } from "@coder-studio/core";
 import { createStore } from "jotai";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { isWriterAtom, serverInfoAtom, sessionsAtom } from "../atoms";
@@ -12,6 +12,7 @@ import {
 import { paneLayoutAtomFamily } from "../features/agent-panes/atoms/pane-layout";
 import { supervisorsAtom } from "../features/supervisor/atoms";
 import { terminalMetaAtomFamily } from "../features/terminal-panel/atoms";
+import { updateStateAtom } from "../features/updates/atoms";
 import { fileTreeStaleAtomFamily } from "../features/workspace/atoms";
 import { resetAppProvidersSingletonsForTests, routeEventToAtom } from "./providers";
 
@@ -73,6 +74,32 @@ describe("routeEventToAtom", () => {
       authEnabled: false,
     });
     expect(store.get(isWriterAtom)).toBe(true);
+  });
+
+  it("stores update state from update.state.changed events", () => {
+    const store = createStore();
+
+    const state: UpdateStateView = {
+      version: 1,
+      currentVersion: "0.4.0",
+      latestVersion: "0.5.0",
+      availability: "update_available",
+      updateStatus: "idle",
+      lastCheckedAt: 123,
+      targetVersion: null,
+      startedAt: null,
+      finishedAt: null,
+      requiresManualStep: false,
+      manualCommand: null,
+      errorSummary: null,
+      supported: true,
+      installKind: "global_npm",
+      unsupportedReason: null,
+    };
+
+    routeEventToAtom("update.state.changed", state, store);
+
+    expect(store.get(updateStateAtom)).toEqual(state);
   });
 
   it("appends brand-new workspace meta events to workspace order without reordering existing entries", () => {

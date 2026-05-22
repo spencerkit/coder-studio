@@ -14,14 +14,14 @@ import { WsHub } from "./ws/hub.js";
 
 describe("app routing", () => {
   let tempDir: string;
-  let dbPath: string;
+  let stateDir: string;
   let app: FastifyInstance;
   let webRoot: string;
 
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), "coder-studio-app-"));
     webRoot = join(tempDir, "web");
-    dbPath = join(tempDir, "app.db");
+    stateDir = join(tempDir, "state-root");
 
     mkdirSync(join(webRoot, "assets"), { recursive: true });
     writeFileSync(
@@ -48,7 +48,7 @@ describe("app routing", () => {
     const config = {
       host: "127.0.0.1",
       port: 0,
-      dataDir: dbPath,
+      stateDir,
       uploadsDir: join(tempDir, "uploads"),
       logLevel: "info" as const,
       webRoot,

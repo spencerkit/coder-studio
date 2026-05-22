@@ -1,19 +1,19 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { closeDatabase, openDatabase } from "../../packages/server/src/storage/db.ts";
+import { join } from "node:path";
+import { WorkspaceRepo } from "../../packages/server/src/storage/index.ts";
 
 const WORKSPACE_ID = "ws-branch-switcher";
 
-const [, , dbPath, workspacesRoot] = process.argv;
+const [, , stateDir, workspacesRoot] = process.argv;
 
-if (!dbPath || !workspacesRoot) {
-  throw new Error("Usage: tsx seed-git-branch-switching-db.ts <db-path> <workspaces-root>");
+if (!stateDir || !workspacesRoot) {
+  throw new Error("Usage: tsx seed-git-branch-switching-db.ts <state-dir> <workspaces-root>");
 }
 
-mkdirSync(dirname(dbPath), { recursive: true });
+mkdirSync(stateDir, { recursive: true });
 mkdirSync(workspacesRoot, { recursive: true });
-rmSync(dbPath, { force: true });
+rmSync(join(stateDir, "state"), { recursive: true, force: true });
 
 const runGit = (args: string[], cwd: string) => {
   execFileSync("git", args, {
@@ -43,38 +43,29 @@ const createWorkspaceDir = (dirName: string): string => {
   return workspacePath;
 };
 
-const db = openDatabase(dbPath);
+const workspaceRepo = new WorkspaceRepo({
+  filePath: join(stateDir, "state", "workspaces.json"),
+});
 const now = Date.now();
+const workspacePath = createWorkspaceDir("branch-switcher-workspace");
 
-try {
-  const workspacePath = createWorkspaceDir("branch-switcher-workspace");
+workspaceRepo.create({
+  id: WORKSPACE_ID,
+  path: workspacePath,
+  targetRuntime: "native",
+  openedAt: now - 10_000,
+  lastActiveAt: now,
+  uiState: {
+    leftPanelWidth: 280,
+    bottomPanelHeight: 200,
+    focusMode: false,
+  },
+});
 
-  const insertWorkspace = db.prepare(
-    `INSERT INTO workspaces (id, path, target_runtime, wsl_distro, opened_at, last_active_at, ui_state)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
-  );
-
-  insertWorkspace.run(
-    WORKSPACE_ID,
+console.log(
+  JSON.stringify({
+    stateDir,
+    workspaceId: WORKSPACE_ID,
     workspacePath,
-    "native",
-    null,
-    now - 10_000,
-    now,
-    JSON.stringify({
-      leftPanelWidth: 280,
-      bottomPanelHeight: 200,
-      focusMode: false,
-    })
-  );
-
-  console.log(
-    JSON.stringify({
-      dbPath,
-      workspaceId: WORKSPACE_ID,
-      workspacePath,
-    })
-  );
-} finally {
-  closeDatabase(db);
-}
+  })
+);

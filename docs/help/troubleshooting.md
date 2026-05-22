@@ -87,8 +87,8 @@
 ### 配置文件
 
 - CLI 配置：`~/.coder-studio/config.json`
-- 数据目录：`~/.coder-studio/`（含 SQLite 数据库）
-- 可以通过 `coder-studio config --data-dir /new/path` 修改数据目录
+- 状态目录：`~/.coder-studio/data/`
+- 可以通过 `coder-studio config --state-dir /new/path` 修改状态目录
 
 ## 提交问题前建议提供哪些信息
 

@@ -67,7 +67,7 @@ describe("server runtime config", () => {
 
   it("writes runtime config on startup and clears it on stop", async () => {
     server = await createRuntimeServer({
-      dataDir: join(testHomeDir, "server.db"),
+      stateDir: join(testHomeDir, "server-state"),
       host: "127.0.0.1",
       port: 0,
       writeRuntimeConfig: true,

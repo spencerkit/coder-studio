@@ -27,6 +27,7 @@ export {
   TerminalRepo,
   type TerminalRepoOptions,
 } from "./repositories/terminal-repo.js";
+export { UpdateStateRepo } from "./repositories/update-state-repo.js";
 export {
   type NewWorkspace,
   WorkspaceRepo,

@@ -328,7 +328,7 @@ git commit -m "feat: add supervisor schema v2 upgrade"
 ```ts
 it("prompts to delete and rebuild when foreground startup sees an incompatible schema", async () => {
   startServer.mockRejectedValueOnce(
-    new Error('{"code":"db_incompatible_schema","dbPath":"/tmp/coder-studio.db","message":"schema mismatch"}')
+    new Error('{"code":"db_incompatible_schema","dbPath":"/tmp/legacy-state.sqlite","message":"schema mismatch"}')
   );
   confirmYesNo.mockResolvedValue(true);
 

@@ -1173,7 +1173,7 @@ test.describe('workspace route history', () => {
     sandboxDir = mkdtempSync(join(tmpdir(), 'coder-studio-workspace-history-'));
     firstWorkspaceDir = join(sandboxDir, 'history-first');
     secondWorkspaceDir = join(sandboxDir, 'history-second');
-    dbPath = join(sandboxDir, 'coder-studio.db');
+    dbPath = join(sandboxDir, 'legacy-state.sqlite');
     runtimeDir = join(sandboxDir, 'runtime');
 
     mkdirSync(join(firstWorkspaceDir, '.git'), { recursive: true });

@@ -1,9 +1,10 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ProviderConfigRepo } from "../storage/repositories/provider-config-repo.js";
 import { SettingsRepo } from "../storage/repositories/settings-repo.js";
+import type { UpdateService } from "../update/update-service.js";
 import type { CommandContext } from "../ws/dispatch.js";
 import { dispatch } from "../ws/dispatch.js";
 import "./settings.js";
@@ -13,6 +14,7 @@ describe("settings commands", () => {
   let tempDir: string;
   let settingsRepo: SettingsRepo;
   let providerConfigRepo: ProviderConfigRepo;
+  let updateService: Pick<UpdateService, "reloadScheduleFromSettings">;
 
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), "settings-command-test-"));
@@ -20,6 +22,9 @@ describe("settings commands", () => {
     providerConfigRepo = new ProviderConfigRepo({
       filePath: join(tempDir, "provider-configs.json"),
     });
+    updateService = {
+      reloadScheduleFromSettings: vi.fn(),
+    } as Pick<UpdateService, "reloadScheduleFromSettings">;
     ctx = {
       workspaceMgr: {} as never,
       sessionMgr: {} as never,
@@ -34,6 +39,7 @@ describe("settings commands", () => {
       autoFetch: {} as never,
       activationMgr: {} as never,
       lspMgr: {} as never,
+      updateService: updateService as UpdateService,
     };
   });
 
@@ -205,6 +211,53 @@ describe("settings commands", () => {
     expect(result.ok).toBe(false);
     expect(result.error?.code).toBe("validation_error");
     expect(settingsRepo.get("lsp.mode")).toBeUndefined();
+  });
+
+  it("settings.update persists update auto-check preferences", async () => {
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "settings-update-updates",
+        op: "settings.update",
+        args: {
+          settings: {
+            updates: {
+              autoCheckEnabled: false,
+              checkIntervalSec: 21600,
+            },
+          },
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(settingsRepo.get("updates.autoCheckEnabled")).toBe(false);
+    expect(settingsRepo.get("updates.checkIntervalSec")).toBe(21600);
+    expect(updateService.reloadScheduleFromSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it("settings.update rejects unsupported update check intervals", async () => {
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "settings-update-updates-invalid",
+        op: "settings.update",
+        args: {
+          settings: {
+            updates: {
+              checkIntervalSec: 999,
+            },
+          },
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("validation_error");
+    expect(settingsRepo.get("updates.checkIntervalSec")).toBeUndefined();
+    expect(updateService.reloadScheduleFromSettings).not.toHaveBeenCalled();
   });
 
   it("settings.update persists legacy appearance.theme light during themeId migration", async () => {

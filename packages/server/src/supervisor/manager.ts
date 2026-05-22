@@ -645,6 +645,16 @@ export class SupervisorManager {
     return started.cycle;
   }
 
+  countActive(): number {
+    let count = 0;
+    for (const supervisor of this.supervisors.values()) {
+      if (supervisor.state === "evaluating" || supervisor.state === "injecting") {
+        count += 1;
+      }
+    }
+    return count;
+  }
+
   /**
    * Run a supervisor evaluation synchronously end-to-end. Used for the
    * auto trigger path (scheduler) and for tests that want to observe the
