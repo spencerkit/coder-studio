@@ -1272,10 +1272,18 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(stylesheet).not.toContain(".mobile-terminal-copy-mode");
   });
 
-  it("keeps code editor header actions docked to the right edge", () => {
-    expect(stylesheet).toMatch(
-      /\.code-mode-toggle\s*\{[^}]*display:\s*inline-flex;[^}]*margin-left:\s*auto;[^}]*flex-shrink:\s*0;[^}]*\}/
-    );
+  it("keeps the unified editor toolbar docked to the right without an outline", () => {
+    const toolbar = getLastRuleBlock(".editor-surface__toolbar");
+    const toolbarButtons = getLastRuleBlock(".editor-surface__toolbar .code-mode-btn");
+    const activeToolbarButtons = getLastRuleBlock(".editor-surface__toolbar .code-mode-btn.active");
+
+    expect(toolbar).toContain("display: inline-flex");
+    expect(toolbar).toContain("justify-content: flex-end");
+    expect(toolbar).toContain("margin-left: auto");
+    expect(toolbar).not.toContain("border: 1px");
+    expect(toolbarButtons).toContain("border: none");
+    expect(toolbarButtons).toContain("box-shadow: none");
+    expect(activeToolbarButtons).toContain("box-shadow: none");
   });
 
   it("scopes disabled provider card styling to the draft launcher", () => {

@@ -374,6 +374,44 @@ describe("MonacoHost", () => {
     });
   });
 
+  it("does not recreate the editor when readOnly changes", async () => {
+    const store = createStore();
+    const { rerender } = render(
+      <Provider store={store}>
+        <MonacoHost
+          workspaceId="ws-test"
+          workspaceRootPath="/repo"
+          filePath="src/example.ts"
+          content="export const a = 1;"
+          readOnly={false}
+        />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(mockCreateEditor).toHaveBeenCalledTimes(1);
+      expect(mockSetModel).toHaveBeenCalledWith(workspaceModelA);
+      expect(mockEditorInstance.updateOptions).toHaveBeenCalledWith({ readOnly: false });
+    });
+
+    rerender(
+      <Provider store={store}>
+        <MonacoHost
+          workspaceId="ws-test"
+          workspaceRootPath="/repo"
+          filePath="src/example.ts"
+          content="export const a = 1;"
+          readOnly
+        />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(mockCreateEditor).toHaveBeenCalledTimes(1);
+      expect(mockEditorInstance.updateOptions).toHaveBeenCalledWith({ readOnly: true });
+    });
+  });
+
   it("updates the editor theme when the ui theme changes", async () => {
     const store = createStore();
 

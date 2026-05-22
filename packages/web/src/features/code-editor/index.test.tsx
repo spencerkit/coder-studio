@@ -328,6 +328,34 @@ describe("CodeEditorHost", () => {
     expect(store.get(editorModeAtomFamily("ws-1"))).toBe("edit");
   });
 
+  it("keeps text files in preview mode after the user switches from edit to preview", async () => {
+    const { store } = setupStore({
+      activePath: "src/preview.ts",
+      openFiles: {
+        "src/preview.ts": {
+          kind: "text",
+          path: "src/preview.ts",
+          content: "export const preview = true;",
+          savedContent: "export const preview = true;",
+          baseHash: "preview-hash",
+          isDirty: false,
+        },
+      },
+    });
+
+    render(
+      <Provider store={store}>
+        <CodeEditorHost />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+
+    await waitFor(() => {
+      expect(store.get(editorModeAtomFamily("ws-1"))).toBe("preview");
+    });
+  });
+
   it("defaults image files into preview mode and keeps text-backed images editable as text when requested", async () => {
     const { store } = setupStore({
       activePath: "assets/logo.svg",
@@ -927,7 +955,7 @@ describe("CodeEditorHost", () => {
       vi.unstubAllGlobals();
     });
 
-    it("switches a text-backed image into text mode when the toggle is clicked", async () => {
+    it("switches a text-backed image into text mode when edit is clicked", async () => {
       // Server still routes SVG through the image branch on every read; the
       // force-text escape hatch is what the client uses to then pull the
       // bytes as text.
@@ -970,24 +998,69 @@ describe("CodeEditorHost", () => {
       // Initially renders as image preview.
       expect(screen.getByTestId("image-preview")).toBeInTheDocument();
 
-      const toggleBtn = screen.getByRole("button", { name: "Edit as text" });
-      expect(toggleBtn).not.toHaveAttribute("title");
-
-      fireEvent.mouseEnter(toggleBtn);
-      expect(screen.getByRole("tooltip")).toHaveTextContent("Edit as text");
-
-      fireEvent.click(toggleBtn);
+      const editButton = screen.getByRole("button", { name: "Edit" });
+      fireEvent.click(editButton);
 
       // After the fetch resolves we should be viewing it in Monaco with the
-      // raw SVG source, and the toggle label flips to the image direction.
+      // raw SVG source, and preview becomes the way back to the rendered asset.
       await waitFor(() => {
         expect(screen.getByTestId("monaco-host")).toHaveTextContent("<svg");
       });
       expect(screen.queryByTestId("image-preview")).not.toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Preview as image" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Preview" })).toBeInTheDocument();
     });
 
-    it("does not show the toggle for non-text-backed images like PNG", async () => {
+    it("switches a text-backed image back to rendered preview when preview is clicked", async () => {
+      const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+        if (op === "file.read") {
+          return {
+            kind: "image",
+            mime: "image/svg+xml",
+            url: "/api/file?workspaceId=ws-1&path=icon.svg",
+            size: 200,
+            isTextBacked: true,
+            version: "1",
+          };
+        }
+        return null;
+      });
+
+      const { store } = setupStore({
+        activePath: "icon.svg",
+        sendCommand,
+        openFiles: {
+          "icon.svg": {
+            kind: "image",
+            path: "icon.svg",
+            mime: "image/svg+xml",
+            url: "/api/file?workspaceId=ws-1&path=icon.svg",
+            size: 200,
+            isTextBacked: true,
+            version: "1",
+          },
+        },
+      });
+
+      render(
+        <Provider store={store}>
+          <CodeEditorHost />
+        </Provider>
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId("monaco-host")).toHaveTextContent("<svg");
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId("image-preview")).toBeInTheDocument();
+      });
+    });
+
+    it("keeps unified preview and edit actions for non-text-backed images like PNG", async () => {
       const { store } = setupStore({
         activePath: "logo.png",
         openFiles: {
@@ -1010,8 +1083,8 @@ describe("CodeEditorHost", () => {
       );
 
       expect(screen.getByTestId("image-preview")).toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: "Edit as text" })).not.toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: "Preview as image" })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Preview" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
     });
   });
 });

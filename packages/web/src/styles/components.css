@@ -6863,17 +6863,34 @@ textarea.input {
   justify-content: space-between;
 }
 
-.editor-surface__mode-group {
-  display: flex;
+.editor-surface__toolbar {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 6px;
   margin-left: auto;
+  padding: 4px;
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--bg-hover) 72%, var(--bg-surface) 28%);
+}
+
+.editor-surface__toolbar .code-mode-btn {
+  border: none;
+  box-shadow: none;
+}
+
+.editor-surface__toolbar .code-mode-btn.active {
+  box-shadow: none;
 }
 
 .editor-surface__mode-btn.active {
   background: color-mix(in srgb, var(--accent-blue) 22%, transparent);
-  border-color: color-mix(in srgb, var(--accent-blue) 36%, var(--border));
   color: var(--text-primary);
+}
+
+.editor-surface__action-btn {
+  flex-shrink: 0;
 }
 
 .image-diff-preview {

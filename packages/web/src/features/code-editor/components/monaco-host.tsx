@@ -198,7 +198,7 @@ export const MonacoHost: FC<MonacoHostProps> = ({
       standaloneModelRef.current?.dispose();
       standaloneModelRef.current = null;
     };
-  }, [editorTheme, readOnly]);
+  }, []);
 
   useEffect(() => {
     const editor = editorRef.current;

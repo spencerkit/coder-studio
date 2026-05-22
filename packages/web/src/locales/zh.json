@@ -62,7 +62,7 @@
     "create_session": "创建会话",
     "stop_session": "停止会话",
     "resume_session": "恢复会话",
-    "save_file": "保存文件",
+    "save_file": "保存",
     "save_all": "保存全部",
     "save": "保存",
     "discard_changes": "放弃更改",

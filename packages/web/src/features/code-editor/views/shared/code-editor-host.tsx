@@ -24,6 +24,107 @@ interface CodeEditorHeaderActionsProps {
   variant?: CodeEditorHeaderActionVariant;
 }
 
+interface CodeEditorDesktopHeaderActionsProps {
+  state: CodeEditorState;
+}
+
+export const CodeEditorDesktopHeaderActions: FC<CodeEditorDesktopHeaderActionsProps> = ({
+  state,
+}) => {
+  const t = useTranslation();
+  const {
+    canDiff,
+    canEdit,
+    canPreview,
+    canSave,
+    handleClose,
+    handleSave,
+    isImageFile,
+    isSvgTextBacked,
+    isSaving,
+    mode,
+    openInDiffMode,
+    setMode,
+    toggleSvgTextMode,
+  } = state;
+  const saveLabel = isSaving ? t("code_editor.saving") : t("action.save_file");
+  const handlePreviewMode = () => {
+    if (isSvgTextBacked && !isImageFile) {
+      toggleSvgTextMode();
+      return;
+    }
+    setMode("preview");
+  };
+  const handleEditMode = () => {
+    if (isSvgTextBacked && isImageFile) {
+      toggleSvgTextMode();
+      return;
+    }
+    setMode("edit");
+  };
+
+  return (
+    <div className="editor-surface__toolbar" role="toolbar" aria-label="Editor actions">
+      {canDiff ? (
+        <button
+          type="button"
+          className={`code-mode-btn editor-surface__mode-btn${mode === "diff" ? " active" : ""}`}
+          onClick={() => void openInDiffMode()}
+          aria-pressed={mode === "diff"}
+          aria-label={t("code_editor.mode_diff")}
+        >
+          <span>{t("code_editor.mode_diff")}</span>
+        </button>
+      ) : null}
+      {canPreview ? (
+        <button
+          type="button"
+          className={`code-mode-btn editor-surface__mode-btn${mode === "preview" ? " active" : ""}`}
+          onClick={handlePreviewMode}
+          aria-pressed={mode === "preview"}
+          aria-label={t("code_editor.mode_preview")}
+        >
+          {isImageFile ? <ImageIcon size={12} /> : <FileText size={12} />}
+          <span>{t("code_editor.mode_preview")}</span>
+        </button>
+      ) : null}
+      {canEdit ? (
+        <button
+          type="button"
+          className={`code-mode-btn editor-surface__mode-btn${mode === "edit" ? " active" : ""}`}
+          onClick={handleEditMode}
+          aria-pressed={mode === "edit"}
+          aria-label={t("code_editor.mode_edit")}
+        >
+          <FileText size={12} />
+          <span>{t("code_editor.mode_edit")}</span>
+        </button>
+      ) : null}
+      <Tooltip content={saveLabel} disabled={!canSave}>
+        <button
+          type="button"
+          className="code-mode-btn editor-surface__action-btn"
+          onClick={handleSave}
+          disabled={!canSave}
+          aria-label={saveLabel}
+        >
+          <Save size={12} />
+          <span>{saveLabel}</span>
+        </button>
+      </Tooltip>
+      <Tooltip content={t("action.close")}>
+        <IconButton
+          aria-label={t("action.close")}
+          className="code-mode-btn editor-surface__action-btn"
+          icon={<X size={12} />}
+          onClick={handleClose}
+          size="sm"
+        />
+      </Tooltip>
+    </div>
+  );
+};
+
 export const CodeEditorHeaderActions: FC<CodeEditorHeaderActionsProps> = ({
   state,
   variant = "full",
@@ -44,68 +145,31 @@ export const CodeEditorHeaderActions: FC<CodeEditorHeaderActionsProps> = ({
     : t("code_editor.preview_as_image");
   const toggleModeLabel = isImageFile ? t("code_editor.mode_text") : t("code_editor.mode_image");
 
-  if (variant === "mobile") {
-    return (
-      <div className="mobile-sheet__header-actions">
-        {isSvgTextBacked ? (
-          <Tooltip content={toggleModeTitle}>
-            <IconButton
-              aria-label={toggleModeTitle}
-              className="mobile-sheet__action mobile-sheet__action--icon"
-              icon={isImageFile ? <FileText size={16} /> : <ImageIcon size={16} />}
-              onClick={toggleSvgTextMode}
-            />
-          </Tooltip>
-        ) : null}
-        <button
-          type="button"
-          className="mobile-sheet__action"
-          onClick={handleSave}
-          disabled={!canSave}
-          aria-label={saveLabel}
-        >
-          {saveLabel}
-        </button>
-      </div>
-    );
+  if (variant !== "mobile") {
+    return <CodeEditorDesktopHeaderActions state={state} />;
   }
 
   return (
-    <div className="code-mode-toggle">
-      {isSvgTextBacked && (
+    <div className="mobile-sheet__header-actions">
+      {isSvgTextBacked ? (
         <Tooltip content={toggleModeTitle}>
-          <button
-            type="button"
-            className="code-mode-btn"
-            onClick={toggleSvgTextMode}
+          <IconButton
             aria-label={toggleModeTitle}
-          >
-            {isImageFile ? <FileText size={12} /> : <ImageIcon size={12} />}
-            <span>{toggleModeLabel}</span>
-          </button>
+            className="mobile-sheet__action mobile-sheet__action--icon"
+            icon={isImageFile ? <FileText size={16} /> : <ImageIcon size={16} />}
+            onClick={toggleSvgTextMode}
+          />
         </Tooltip>
-      )}
-      <Tooltip content={saveLabel} disabled={!canSave}>
-        <button
-          type="button"
-          className="code-mode-btn"
-          onClick={handleSave}
-          disabled={!canSave}
-          aria-label={saveLabel}
-        >
-          <Save size={12} />
-          <span>{saveLabel}</span>
-        </button>
-      </Tooltip>
-      <Tooltip content={t("action.close")}>
-        <IconButton
-          aria-label={t("action.close")}
-          className="code-mode-btn"
-          icon={<X size={12} />}
-          onClick={handleClose}
-          size="sm"
-        />
-      </Tooltip>
+      ) : null}
+      <button
+        type="button"
+        className="mobile-sheet__action"
+        onClick={handleSave}
+        disabled={!canSave}
+        aria-label={saveLabel}
+      >
+        {saveLabel}
+      </button>
     </div>
   );
 };

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { type CodeEditorState } from "./code-editor-host";
 import { EditorSurface } from "./editor-surface";
@@ -103,12 +103,12 @@ describe("EditorSurface", () => {
     expect(screen.getByRole("button", { name: "Diff" })).toBeInTheDocument();
   });
 
-  it("disables Diff when the active file has no git changes", () => {
+  it("hides Diff when the active file has no git changes", () => {
     const state = createState({ canDiff: false });
 
     render(<EditorSurface state={state} />);
 
-    expect(screen.getByRole("button", { name: "Diff" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Diff" })).not.toBeInTheDocument();
   });
 
   it("renders Monaco in read-only mode for preview and editable mode for edit", () => {
@@ -183,5 +183,19 @@ describe("EditorSurface", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Diff" }));
     expect(state.openInDiffMode).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders desktop header actions in the fixed order and left-aligned group", () => {
+    const state = createState({ canSave: true });
+    const { container } = render(<EditorSurface state={state} />);
+
+    const toolbar = container.querySelector(".editor-surface__toolbar");
+    expect(toolbar).toBeTruthy();
+
+    const buttonLabels = within(toolbar as HTMLElement)
+      .getAllByRole("button")
+      .map((button) => button.getAttribute("aria-label") ?? button.textContent ?? "");
+
+    expect(buttonLabels).toEqual(["Diff", "预览", "编辑", "Save File", "Close"]);
   });
 });

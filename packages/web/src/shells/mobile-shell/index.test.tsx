@@ -218,8 +218,8 @@ vi.mock("../../features/code-editor/views/shared/code-editor-host", () => ({
     </div>
   ),
   CodeEditorHeaderActions: () => (
-    <button type="button" aria-label="保存文件" onClick={mockMobileEditorHandleSave}>
-      保存文件
+    <button type="button" aria-label="保存" onClick={mockMobileEditorHandleSave}>
+      保存
     </button>
   ),
 }));
@@ -3096,7 +3096,7 @@ describe("MobileShell Phase 2 workspace", () => {
     expect(screen.getByTestId("mobile-code-editor")).toHaveAttribute("data-chrome", "content-only");
     expect(screen.getAllByRole("button", { name: /back|返回/i })).toHaveLength(1);
     expect(screen.queryByRole("button", { name: "Close current sheet" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /save file|保存文件/i }));
+    await user.click(screen.getByRole("button", { name: /save file|保存/i }));
     expect(mockMobileEditorHandleSave).toHaveBeenCalledTimes(1);
 
     await user.click(screen.getByRole("button", { name: /back|返回/i }));

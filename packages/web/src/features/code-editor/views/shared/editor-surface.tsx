@@ -7,7 +7,7 @@ import { ImagePreview } from "../../components/image-preview";
 import { MonacoDiffHost } from "../../components/monaco-diff-host";
 import { MonacoHost } from "../../components/monaco-host";
 import type { CodeEditorChrome, CodeEditorState } from "./code-editor-host";
-import { CodeEditorHeaderActions } from "./code-editor-host";
+import { CodeEditorDesktopHeaderActions } from "./code-editor-host";
 
 interface EditorSurfaceProps {
   state: CodeEditorState;
@@ -22,8 +22,6 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
     activeExternalStatus,
     activeLoadError,
     canDiff,
-    canEdit,
-    canPreview,
     currentFile,
     handleContentChange,
     handleSave,
@@ -32,7 +30,6 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
     mode,
     openInDiffMode,
     saveError,
-    setMode,
     workspace,
   } = state;
 
@@ -83,40 +80,21 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
                 titleText
               )}
             </span>
-            <div className="editor-surface__mode-group" role="tablist" aria-label="Editor modes">
-              {canPreview ? (
+            {isCommitPreview ? (
+              <div className="editor-surface__toolbar" role="toolbar" aria-label="Editor actions">
                 <button
                   type="button"
-                  className={`code-mode-btn editor-surface__mode-btn${mode === "preview" ? " active" : ""}`}
-                  onClick={() => setMode("preview")}
-                  aria-pressed={mode === "preview"}
+                  className={`code-mode-btn editor-surface__mode-btn${mode === "diff" ? " active" : ""}`}
+                  onClick={() => void openInDiffMode()}
+                  aria-pressed={mode === "diff"}
+                  aria-label={t("code_editor.mode_diff")}
                 >
-                  {isImageFile ? <ImageIcon size={12} /> : <FileText size={12} />}
-                  <span>{t("code_editor.mode_preview")}</span>
+                  <span>{t("code_editor.mode_diff")}</span>
                 </button>
-              ) : null}
-              {canEdit ? (
-                <button
-                  type="button"
-                  className={`code-mode-btn editor-surface__mode-btn${mode === "edit" ? " active" : ""}`}
-                  onClick={() => setMode("edit")}
-                  aria-pressed={mode === "edit"}
-                >
-                  <FileText size={12} />
-                  <span>{t("code_editor.mode_edit")}</span>
-                </button>
-              ) : null}
-              <button
-                type="button"
-                className={`code-mode-btn editor-surface__mode-btn${mode === "diff" ? " active" : ""}`}
-                onClick={() => void openInDiffMode()}
-                aria-pressed={mode === "diff"}
-                disabled={!canDiff && !isCommitPreview}
-              >
-                <span>{t("code_editor.mode_diff")}</span>
-              </button>
-            </div>
-            <CodeEditorHeaderActions state={state} />
+              </div>
+            ) : (
+              <CodeEditorDesktopHeaderActions state={state} />
+            )}
           </div>
         ) : null}
 

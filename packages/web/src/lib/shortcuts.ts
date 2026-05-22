@@ -70,7 +70,7 @@ export const DEFAULT_SHORTCUTS: ShortcutDefinition[] = [
   // Editor
   {
     id: "editor.save",
-    name: "保存文件",
+    name: "保存",
     description: "保存当前编辑的文件",
     defaultBinding: "Mod+S",
     category: "editor",

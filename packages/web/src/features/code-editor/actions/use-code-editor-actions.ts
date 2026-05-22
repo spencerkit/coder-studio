@@ -1,5 +1,5 @@
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { dispatchCommandAtom } from "../../../atoms/connection";
 import { activeWorkspaceAtom } from "../../../atoms/workspaces";
 import {
@@ -67,21 +67,30 @@ export function useCodeEditorActions() {
   const editorRefreshToken = useAtomValue(editorRefreshTokenAtomFamily(workspaceId ?? ""));
   const diffPreview = useAtomValue(gitDiffPreviewAtomFamily(workspaceId ?? ""));
   const gitState = useAtomValue(gitStateAtomFamily(workspaceId ?? ""));
+  const lastSeededModePathRef = useRef<string | null>(null);
 
   const currentFile: OpenFile | undefined = workspaceId
     ? openFiles[activeFilePath ?? ""]
     : undefined;
 
   useEffect(() => {
-    if (!workspaceId || !activeFilePath || !currentFile) {
+    if (!activeFilePath) {
+      lastSeededModePathRef.current = null;
       return;
     }
 
-    const nextMode = mode === "diff" ? mode : deriveEditorModeForOpenFile(currentFile);
+    if (!workspaceId || !currentFile || lastSeededModePathRef.current === activeFilePath) {
+      return;
+    }
+
+    lastSeededModePathRef.current = activeFilePath;
+    const shouldPreserveDiffMode =
+      mode === "diff" && diffPreview?.source === "file" && diffPreview.path === activeFilePath;
+    const nextMode = shouldPreserveDiffMode ? "diff" : deriveEditorModeForOpenFile(currentFile);
     if (nextMode !== mode) {
       setMode(nextMode);
     }
-  }, [activeFilePath, currentFile, mode, setMode, workspaceId]);
+  }, [activeFilePath, currentFile, diffPreview, mode, setMode, workspaceId]);
 
   const loadFile = useCallback(
     async (path: string, options?: { forceText?: boolean }) => {
@@ -537,6 +546,7 @@ export function useCodeEditorActions() {
 
     const path = currentFile.path;
     const wantText = currentFile.kind === "image";
+    setMode(wantText ? "edit" : "preview");
 
     setOpenFiles((prev) => {
       const next = { ...prev };
@@ -548,7 +558,7 @@ export function useCodeEditorActions() {
     }
 
     void loadFile(path, wantText ? { forceText: true } : undefined);
-  }, [currentFile, loadFile, setOpenFiles, workspaceId, workspaceRootPath]);
+  }, [currentFile, loadFile, setMode, setOpenFiles, workspaceId, workspaceRootPath]);
 
   const openInDiffMode = useCallback(async () => {
     if (!workspaceId || !currentFile) {
