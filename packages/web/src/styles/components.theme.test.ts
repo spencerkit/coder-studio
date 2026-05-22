@@ -2034,13 +2034,12 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(dockItem).toContain("height: 36px");
     expect(dockItem).toContain("padding: 1px var(--sp-2) 0");
     expect(dockLabel).toContain("font-size: var(--type-body-6-size)");
-    expect(statusBar).toContain("padding-bottom: calc(var(--mobile-safe-bottom) + var(--sp-1))");
+    expect(statusBar).toContain(
+      "padding: 0 calc(var(--mobile-safe-right) + var(--sp-4)) calc(var(--mobile-safe-bottom) + var(--sp-1)) calc(var(--mobile-safe-left) + var(--sp-4))"
+    );
     expect(statusBar).toContain("border-top: 1px solid");
     expect(statusStrip).toContain("min-height: 28px");
     expect(statusStrip).toContain("font-size: var(--type-body-6-size)");
-    expect(statusStrip).toContain(
-      "padding: 0 calc(var(--mobile-safe-right) + var(--sp-4)) 0 calc(var(--mobile-safe-left) + var(--sp-4))"
-    );
     expect(emptyPane).toContain("position: relative");
     expect(emptyPane).toContain("width: min(100%, 320px)");
     expect(emptyPane).toContain("align-self: flex-start");

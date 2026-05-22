@@ -12224,7 +12224,7 @@ textarea.input {
   align-items: center;
   justify-content: flex-end;
   min-width: 0;
-  gap: 6px;
+  gap: var(--gap-tight);
   white-space: nowrap;
 }
 
