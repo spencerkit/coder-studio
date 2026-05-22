@@ -69,6 +69,10 @@ const buttonStyles = readFileSync(
   `${process.cwd()}/src/components/ui/button/index.module.css`,
   "utf8"
 );
+const iconButtonStyles = readFileSync(
+  `${process.cwd()}/src/components/ui/icon-button/index.module.css`,
+  "utf8"
+);
 const popoverStyles = readFileSync(
   `${process.cwd()}/src/components/ui/popover/index.module.css`,
   "utf8"
@@ -476,10 +480,6 @@ describe("components.css theme-sensitive surfaces", () => {
       "padding: 0 var(--inset-control-inline)"
     );
 
-    const iconButtonStyles = readFileSync(
-      `${process.cwd()}/src/components/ui/icon-button/index.module.css`,
-      "utf8"
-    );
     expect(getLastRuleBlockFrom(iconButtonStyles, ".root")).toContain(
       "width: var(--icon-button-size-md)"
     );
@@ -488,6 +488,12 @@ describe("components.css theme-sensitive surfaces", () => {
     );
     expect(getLastRuleBlockFrom(iconButtonStyles, ".root")).toContain(
       "border-radius: var(--radius-control)"
+    );
+    expect(getLastRuleBlockFrom(iconButtonStyles, ".root:focus-visible")).toContain(
+      "box-shadow: none"
+    );
+    expect(getLastRuleBlockFrom(iconButtonStyles, ".root:focus-visible")).toContain(
+      "outline: none"
     );
 
     expect(getLastRuleBlockFrom(inputStyles, ".input")).toContain(

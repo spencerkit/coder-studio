@@ -381,7 +381,7 @@ describe("SettingsPage", () => {
     renderSettingsPage(store);
 
     fireEvent.click(await screen.findByRole("button", { name: "关于" }));
-    fireEvent.click(screen.getByRole("button", { name: "已启用" }));
+    fireEvent.click(screen.getByRole("switch", { name: "自动检查更新" }));
 
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith(
@@ -429,7 +429,7 @@ describe("SettingsPage", () => {
     renderSettingsPage(store);
 
     fireEvent.click(await screen.findByRole("button", { name: "关于" }));
-    fireEvent.click(screen.getByRole("button", { name: "已启用" }));
+    fireEvent.click(screen.getByRole("switch", { name: "自动检查更新" }));
 
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith(
@@ -446,7 +446,10 @@ describe("SettingsPage", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "已禁用" })).toBeInTheDocument();
+      expect(screen.getByRole("switch", { name: "自动检查更新" })).toHaveAttribute(
+        "aria-checked",
+        "false"
+      );
     });
 
     settingsGetDeferred.resolve({
@@ -458,7 +461,10 @@ describe("SettingsPage", () => {
       expect(sendCommand).toHaveBeenCalledWith("settings.get", {}, undefined);
     });
 
-    expect(screen.getByRole("button", { name: "已禁用" })).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "自动检查更新" })).toHaveAttribute(
+      "aria-checked",
+      "false"
+    );
   });
 
   it("localizes the new mobile settings homepage section headings", async () => {

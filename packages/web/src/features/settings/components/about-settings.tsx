@@ -1,8 +1,15 @@
 import type { UpdatePrepareInstallResponse, UpdateStateView } from "@coder-studio/core";
 import { useAtomValue, useSetAtom } from "jotai";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { dispatchCommandAtom, serverInfoAtom } from "../../../atoms/connection";
-import { Button, ConfirmDialog, Notice, StatusDot } from "../../../components/ui";
+import {
+  Button,
+  ConfirmDialog,
+  Notice,
+  SegmentedControl,
+  StatusDot,
+  Switch,
+} from "../../../components/ui";
 import { useTranslation } from "../../../lib/i18n";
 import { pushToastAtom } from "../../notifications";
 import { updatePrepareInstallAtom, updateStateAtom } from "../../updates/atoms";
@@ -66,6 +73,9 @@ export function AboutSettings({
   const pushToast = useSetAtom(pushToastAtom);
   const [confirmState, setConfirmState] = useState<UpdatePrepareInstallResponse | null>(null);
   const [loading, setLoading] = useState<null | "check" | "prepare" | "install">(null);
+  const autoCheckLabelId = useId();
+  const autoCheckDescId = useId();
+  const checkIntervalLabelId = useId();
 
   const statusLabel = useMemo(() => {
     if (!updateState) {
@@ -104,6 +114,16 @@ export function AboutSettings({
         return t("settings.about.availability_check_failed");
     }
   }, [t, updateState]);
+
+  const intervalOptions = useMemo(
+    () =>
+      UPDATE_INTERVALS.map((value) => ({
+        disabled: !autoCheckEnabled,
+        label: t(`settings.about.interval_${value}`),
+        value: String(value),
+      })),
+    [autoCheckEnabled, t]
+  );
 
   const handleCheck = async () => {
     setLoading("check");
@@ -231,7 +251,7 @@ export function AboutSettings({
           />
         ) : null}
 
-        <div className="settings-actions-row">
+        <div className="settings-actions-row settings-actions-row--end">
           <Button
             onClick={() => {
               void handleCheck();
@@ -265,38 +285,35 @@ export function AboutSettings({
       </div>
 
       <div className="settings-group">
-        <h3 className="settings-group-title">{t("settings.about.auto_check_group")}</h3>
-        <p className="settings-group-desc">{t("settings.about.auto_check_group_hint")}</p>
-
         <div className="settings-toggle-row">
           <div className="settings-toggle-info">
-            <span className="settings-toggle-label">{t("settings.about.auto_check_enabled")}</span>
-            <span className="settings-toggle-desc">
+            <span className="settings-toggle-label" id={autoCheckLabelId}>
+              {t("settings.about.auto_check_enabled")}
+            </span>
+            <span className="settings-toggle-desc" id={autoCheckDescId}>
               {t("settings.about.auto_check_enabled_hint")}
             </span>
           </div>
-          <Button
-            variant={autoCheckEnabled ? "secondary" : "ghost"}
-            onClick={() => onAutoCheckEnabledChange(!autoCheckEnabled)}
-          >
-            {autoCheckEnabled ? t("common.enabled") : t("common.disabled")}
-          </Button>
+          <Switch
+            aria-describedby={autoCheckDescId}
+            aria-labelledby={autoCheckLabelId}
+            checked={autoCheckEnabled}
+            className="settings-toggle"
+            onCheckedChange={onAutoCheckEnabledChange}
+          />
         </div>
 
         <div className="settings-info-row">
-          <span className="settings-info-label">{t("settings.about.check_interval")}</span>
-          <div className="settings-actions-row">
-            {UPDATE_INTERVALS.map((value) => (
-              <Button
-                key={value}
-                variant={checkIntervalSec === value ? "secondary" : "ghost"}
-                onClick={() => onCheckIntervalChange(value)}
-                disabled={!autoCheckEnabled}
-              >
-                {t(`settings.about.interval_${value}`)}
-              </Button>
-            ))}
-          </div>
+          <span className="settings-info-label" id={checkIntervalLabelId}>
+            {t("settings.about.check_interval")}
+          </span>
+          <SegmentedControl
+            aria-labelledby={checkIntervalLabelId}
+            onChange={(nextValue) => onCheckIntervalChange(Number(nextValue))}
+            options={intervalOptions}
+            size="sm"
+            value={String(checkIntervalSec)}
+          />
         </div>
       </div>
 

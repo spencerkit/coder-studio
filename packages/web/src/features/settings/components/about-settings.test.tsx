@@ -82,6 +82,15 @@ describe("AboutSettings", () => {
     expect(screen.getByText("v0.5.0")).toBeInTheDocument();
   });
 
+  it("does not render the auto-check section title or description copy", () => {
+    renderAboutSettings();
+
+    expect(screen.queryByRole("heading", { name: "自动检查" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("配置后台轮询 npm 的节奏。相关偏好会持久化到设置文件。")
+    ).not.toBeInTheDocument();
+  });
+
   it("checks for updates and stores a toast when a newer version is returned", async () => {
     const dispatch = vi.fn().mockResolvedValue({
       version: 1,
@@ -168,10 +177,26 @@ describe("AboutSettings", () => {
       onCheckIntervalChange,
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "已启用" }));
-    fireEvent.click(screen.getByRole("button", { name: "12 小时" }));
+    fireEvent.click(screen.getByRole("switch", { name: "自动检查更新" }));
+    fireEvent.click(screen.getByRole("tab", { name: "12 小时" }));
 
     expect(onAutoCheckEnabledChange).toHaveBeenCalledWith(false);
     expect(onCheckIntervalChange).toHaveBeenCalledWith(43200);
+  });
+
+  it("disables the interval control when auto-check is off", () => {
+    renderAboutSettings({
+      autoCheckEnabled: false,
+    });
+
+    expect(screen.getByRole("switch", { name: "自动检查更新" })).toHaveAttribute(
+      "aria-checked",
+      "false"
+    );
+    expect(screen.getByRole("tablist", { name: "检查间隔" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "1 小时" })).toBeDisabled();
+    expect(screen.getByRole("tab", { name: "6 小时" })).toBeDisabled();
+    expect(screen.getByRole("tab", { name: "12 小时" })).toBeDisabled();
+    expect(screen.getByRole("tab", { name: "24 小时" })).toBeDisabled();
   });
 });

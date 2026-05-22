@@ -17,11 +17,10 @@
     transform var(--duration-fast) var(--ease-out);
 }
 
-.root:focus-visible {
-  box-shadow:
-    0 0 0 2px var(--bg-page),
-    0 0 0 calc(var(--state-focus-ring-width) * 2)
-    color-mix(in srgb, var(--state-focus-ring-color) 35%, transparent);
+.root:focus-visible,
+.root.root:focus-visible {
+  box-shadow: none;
+  outline: none;
 }
 
 .root:hover:not(:disabled) {

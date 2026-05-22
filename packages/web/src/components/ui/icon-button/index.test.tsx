@@ -70,4 +70,10 @@ describe("IconButton", () => {
     await user.click(screen.getByRole("button", { name: "Refresh" }));
     expect(onClick).toHaveBeenCalledTimes(1);
   });
+
+  it("does not add a focus ring shadow", () => {
+    render(<IconButton aria-label="Focus test" icon={<span>F</span>} />);
+
+    expect(screen.getByRole("button", { name: "Focus test" })).not.toHaveClass("focus-visible");
+  });
 });
