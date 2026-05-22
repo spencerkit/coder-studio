@@ -40,6 +40,12 @@ export const gitStateAtomFamily = atomFamily((_workspaceId: string) =>
 export interface GitDiffPreview {
   path: string;
   diff: string;
+  renderAs?: "text" | "image";
+  status?: "modified" | "added" | "deleted";
+  originalContent?: string;
+  modifiedContent?: string;
+  originalRevision?: "HEAD" | "INDEX";
+  modifiedRevision?: "INDEX" | "WORKTREE";
   staged?: boolean;
   source?: "file" | "commit";
   title?: string;

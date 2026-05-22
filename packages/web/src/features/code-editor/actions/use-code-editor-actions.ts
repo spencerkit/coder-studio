@@ -4,10 +4,15 @@ import { dispatchCommandAtom } from "../../../atoms/connection";
 import { activeWorkspaceAtom } from "../../../atoms/workspaces";
 import {
   activeFilePathAtomFamily,
+  deriveEditorModeForOpenFile,
+  editorModeAtomFamily,
   editorRefreshTokenAtomFamily,
+  type GitDiffPreview,
   gitDiffPreviewAtomFamily,
+  gitStateAtomFamily,
   type OpenFile,
   openFilesAtomFamily,
+  type WorkspaceEditorMode,
 } from "../../workspace/atoms";
 import { monacoModelRegistry } from "../monaco/model-registry";
 
@@ -29,6 +34,16 @@ type FileReadImagePayload = {
 
 type FileReadPayload = FileReadTextPayload | FileReadImagePayload;
 
+type GitDiffPayload = {
+  diff: string;
+  renderAs: "text" | "image";
+  status: "modified" | "added" | "deleted";
+  originalContent?: string;
+  modifiedContent?: string;
+  originalRevision?: "HEAD" | "INDEX";
+  modifiedRevision?: "INDEX" | "WORKTREE";
+};
+
 export function useCodeEditorActions() {
   const workspace = useAtomValue(activeWorkspaceAtom);
   const workspaceRootPath = workspace?.path;
@@ -48,11 +63,25 @@ export function useCodeEditorActions() {
   const workspaceId = workspace?.id;
   const [activeFilePath, setActiveFilePath] = useAtom(activeFilePathAtomFamily(workspaceId ?? ""));
   const [openFiles, setOpenFiles] = useAtom(openFilesAtomFamily(workspaceId ?? ""));
+  const [mode, setMode] = useAtom(editorModeAtomFamily(workspaceId ?? ""));
   const editorRefreshToken = useAtomValue(editorRefreshTokenAtomFamily(workspaceId ?? ""));
+  const diffPreview = useAtomValue(gitDiffPreviewAtomFamily(workspaceId ?? ""));
+  const gitState = useAtomValue(gitStateAtomFamily(workspaceId ?? ""));
 
   const currentFile: OpenFile | undefined = workspaceId
     ? openFiles[activeFilePath ?? ""]
     : undefined;
+
+  useEffect(() => {
+    if (!workspaceId || !activeFilePath || !currentFile) {
+      return;
+    }
+
+    const nextMode = mode === "diff" ? mode : deriveEditorModeForOpenFile(currentFile);
+    if (nextMode !== mode) {
+      setMode(nextMode);
+    }
+  }, [activeFilePath, currentFile, mode, setMode, workspaceId]);
 
   const loadFile = useCallback(
     async (path: string, options?: { forceText?: boolean }) => {
@@ -498,7 +527,8 @@ export function useCodeEditorActions() {
     }
 
     setSaveError(null);
-  }, [currentFile, setActiveFilePath, setOpenFiles, workspaceId, workspaceRootPath]);
+    setMode("edit");
+  }, [currentFile, setActiveFilePath, setMode, setOpenFiles, workspaceId, workspaceRootPath]);
 
   const toggleSvgTextMode = useCallback(() => {
     if (!workspaceId || !currentFile) {
@@ -525,7 +555,7 @@ export function useCodeEditorActions() {
       return false;
     }
 
-    const result = await dispatch<{ diff: string }>("git.diff", {
+    const result = await dispatch<GitDiffPayload>("git.diff", {
       workspaceId,
       path: currentFile.path,
       staged: false,
@@ -535,19 +565,53 @@ export function useCodeEditorActions() {
       return false;
     }
 
-    setDiffPreview({
+    const nextPreview: GitDiffPreview = {
       path: currentFile.path,
       diff: result.data.diff,
       staged: false,
-    });
+      source: "file",
+      ...(result.data.renderAs ? { renderAs: result.data.renderAs } : {}),
+      ...(result.data.status ? { status: result.data.status } : {}),
+      ...(result.data.originalContent !== undefined
+        ? { originalContent: result.data.originalContent }
+        : {}),
+      ...(result.data.modifiedContent !== undefined
+        ? { modifiedContent: result.data.modifiedContent }
+        : {}),
+      ...(result.data.originalRevision ? { originalRevision: result.data.originalRevision } : {}),
+      ...(result.data.modifiedRevision ? { modifiedRevision: result.data.modifiedRevision } : {}),
+    };
+    setDiffPreview(nextPreview);
+    setMode("diff");
     return true;
-  }, [currentFile, dispatch, setDiffPreview, workspaceId]);
+  }, [currentFile, dispatch, setDiffPreview, setMode, workspaceId]);
 
   const isTextFile = currentFile?.kind === "text";
   const isImageFile = currentFile?.kind === "image";
   const isSvgTextBacked =
     (isImageFile && currentFile.isTextBacked) ||
     (isTextFile && currentFile.viewingTextBackedImageAsText === true);
+  const canPreview = Boolean(currentFile);
+  const canEdit =
+    Boolean(currentFile) &&
+    (currentFile?.kind === "text" || (currentFile?.kind === "image" && currentFile.isTextBacked));
+  const activeFileHasGitChange = Boolean(
+    activeFilePath &&
+      gitState &&
+      [...gitState.staged, ...gitState.modified, ...gitState.deleted, ...gitState.untracked].some(
+        (change) => change.path === activeFilePath
+      )
+  );
+  const canDiff = Boolean(activeFilePath && activeFileHasGitChange);
+  const hasUnsavedChangesOutsideDiff = Boolean(
+    mode === "diff" && activeFilePath && currentFile?.kind === "text" && currentFile.isDirty
+  );
+  const activeDiffChange =
+    diffPreview &&
+    ((diffPreview.source === "file" && diffPreview.path === activeFilePath) ||
+      diffPreview.source === "commit")
+      ? diffPreview
+      : null;
   const canSave = Boolean(isTextFile && currentFile.isDirty && !isSaving);
   const activeLoadError =
     activeFilePath && fileLoadError?.path === activeFilePath ? fileLoadError.message : null;
@@ -556,19 +620,28 @@ export function useCodeEditorActions() {
 
   return {
     activeFilePath,
+    activeDiffChange,
     activeExternalStatus,
     activeLoadError,
     canSave,
+    canDiff,
+    canEdit,
+    canPreview,
     currentFile,
     handleClose,
     handleContentChange,
     handleSave,
+    hasUnsavedChangesOutsideDiff,
     isImageFile,
     isSaving,
     isSvgTextBacked,
     isTextFile,
+    mode,
     openInDiffMode,
     saveError,
+    setMode: (nextMode: WorkspaceEditorMode) => {
+      setMode(nextMode);
+    },
     toggleSvgTextMode,
     workspace,
     workspaceId,

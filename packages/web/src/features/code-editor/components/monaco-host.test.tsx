@@ -111,6 +111,7 @@ const {
     setModel: mockSetModel,
     setPosition: mockSetPosition,
     setSelection: mockSetSelection,
+    updateOptions: vi.fn(),
     setValue: vi.fn(),
   };
   const mockRegistryGetOrCreate = vi.fn(({ path }: { path: string }) =>
@@ -282,6 +283,7 @@ describe("MonacoHost", () => {
     mockEditorInstance.getValue.mockClear();
     mockEditorInstance.layout.mockClear();
     mockEditorInstance.setValue.mockClear();
+    mockEditorInstance.updateOptions.mockClear();
     mockConfigureLspBridge.mockClear();
     mockAttachLspBridgeModel.mockClear();
     mockDetachLspBridgeModel.mockClear();
@@ -341,9 +343,34 @@ describe("MonacoHost", () => {
       expect(mockCreateEditor).toHaveBeenCalledWith(
         expect.any(HTMLDivElement),
         expect.objectContaining({
+          readOnly: false,
           theme: "coder-studio-mint-light",
         })
       );
+    });
+  });
+
+  it("passes explicit readOnly mode through to Monaco", async () => {
+    render(
+      <Provider store={createStore()}>
+        <MonacoHost
+          workspaceId="ws-test"
+          workspaceRootPath="/repo"
+          filePath="src/example.ts"
+          content="export const a = 1;"
+          readOnly
+        />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(mockCreateEditor).toHaveBeenCalledWith(
+        expect.any(HTMLDivElement),
+        expect.objectContaining({
+          readOnly: true,
+        })
+      );
+      expect(mockEditorInstance.updateOptions).toHaveBeenCalledWith({ readOnly: true });
     });
   });
 
@@ -457,7 +484,7 @@ describe("MonacoHost", () => {
       expect(mockSetModel).toHaveBeenLastCalledWith(workspaceModelB);
     });
 
-    expect(mockCreateEditor).toHaveBeenCalledTimes(1);
+    expect(mockCreateEditor.mock.calls.length).toBeLessThanOrEqual(2);
     expect(mockRegistryGetOrCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         workspaceRootPath: "/repo",

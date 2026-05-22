@@ -91,6 +91,7 @@ interface MonacoHostProps {
   content: string;
   visible?: boolean;
   standalone?: boolean;
+  readOnly?: boolean;
   onContentChange?: (content: string) => void;
   onSave?: () => void | Promise<void>;
 }
@@ -110,6 +111,7 @@ export const MonacoHost: FC<MonacoHostProps> = ({
   content,
   visible = true,
   standalone = false,
+  readOnly = false,
   onContentChange,
   onSave,
 }) => {
@@ -175,6 +177,7 @@ export const MonacoHost: FC<MonacoHostProps> = ({
       fontSize: 13,
       fontFamily: "JetBrains Mono, monospace",
       minimap: { enabled: false },
+      readOnly,
       scrollBeyondLastLine: false,
       padding: { top: 12, bottom: 12 },
       automaticLayout: true,
@@ -195,7 +198,7 @@ export const MonacoHost: FC<MonacoHostProps> = ({
       standaloneModelRef.current?.dispose();
       standaloneModelRef.current = null;
     };
-  }, []);
+  }, [editorTheme, readOnly]);
 
   useEffect(() => {
     const editor = editorRef.current;
@@ -245,6 +248,10 @@ export const MonacoHost: FC<MonacoHostProps> = ({
 
     setLspState({ kind: "unsupported_language" });
   }, [filePath, lspRuntimeMode]);
+
+  useEffect(() => {
+    editorRef.current?.updateOptions({ readOnly });
+  }, [readOnly]);
 
   useEffect(() => {
     globalLspBridge.configure({

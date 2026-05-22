@@ -1,10 +1,9 @@
 import { FileText, Image as ImageIcon, Save, X } from "lucide-react";
 import type { FC } from "react";
-import { EmptyState, IconButton, ThemedIcon, Tooltip } from "../../../../components/ui";
+import { IconButton, Tooltip } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { useCodeEditorActions } from "../../actions/use-code-editor-actions";
-import { ImagePreview } from "../../components/image-preview";
-import { MonacoHost } from "../../components/monaco-host";
+import { EditorSurface } from "./editor-surface";
 
 export type CodeEditorChrome = "full" | "content-only";
 export type CodeEditorHeaderActionVariant = "full" | "mobile";
@@ -112,124 +111,7 @@ export const CodeEditorHeaderActions: FC<CodeEditorHeaderActionsProps> = ({
 };
 
 export const CodeEditorView: FC<CodeEditorViewProps> = ({ state, chrome = "full" }) => {
-  const t = useTranslation();
-  const {
-    activeFilePath,
-    activeExternalStatus,
-    activeLoadError,
-    currentFile,
-    handleContentChange,
-    handleSave,
-    isImageFile,
-    isTextFile,
-    saveError,
-    workspace,
-  } = state;
-
-  if (!workspace) {
-    return (
-      <div className="workspace-git-view">
-        <div className="code-editor workspace-git-editor">
-          <div className="code-editor-body">
-            <EmptyState
-              className="git-diff-empty"
-              title={<p className="git-diff-empty-title">{t("workspace.no_workspace")}</p>}
-            />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const dirtyIndicator =
-    isTextFile && currentFile.isDirty ? <span className="dirty-indicator">*</span> : null;
-  const showHeader = chrome === "full";
-
-  return (
-    <div className="workspace-git-view">
-      <div className="code-editor workspace-git-editor">
-        {showHeader ? (
-          <div className="code-editor-header">
-            <span className="code-file-path">
-              {currentFile ? (
-                <>
-                  {currentFile.path}
-                  {dirtyIndicator}
-                </>
-              ) : activeFilePath ? (
-                activeFilePath
-              ) : (
-                t("file.title")
-              )}
-            </span>
-            <CodeEditorHeaderActions state={state} />
-          </div>
-        ) : null}
-
-        {saveError && (
-          <div className="code-editor-error" role="alert">
-            <ThemedIcon semantic="state.error" size={14} />
-            <span>{saveError}</span>
-          </div>
-        )}
-
-        {activeExternalStatus && (
-          <div className="code-editor-error" role="alert">
-            <ThemedIcon
-              semantic={
-                activeExternalStatus === "deleted" ? "state.fileDeleted" : "state.fileModified"
-              }
-              size={14}
-            />
-            <span>
-              {activeExternalStatus === "deleted"
-                ? t("code_editor.deleted_on_disk")
-                : t("code_editor.modified_on_disk")}
-            </span>
-          </div>
-        )}
-
-        <div className="code-editor-body">
-          {isTextFile ? (
-            <MonacoHost
-              workspaceId={workspace.id}
-              workspaceRootPath={workspace.path}
-              filePath={currentFile.path}
-              content={currentFile.content}
-              onContentChange={handleContentChange}
-              onSave={handleSave}
-            />
-          ) : isImageFile ? (
-            <ImagePreview
-              url={currentFile.url}
-              version={currentFile.version}
-              mime={currentFile.mime}
-              sizeBytes={currentFile.size}
-              alt={currentFile.path}
-            />
-          ) : activeLoadError ? (
-            <EmptyState
-              className="git-diff-empty"
-              description={<p className="git-diff-empty-body">{activeLoadError}</p>}
-              role="alert"
-              title={<p className="git-diff-empty-title">{t("code_editor.open_failed_title")}</p>}
-            />
-          ) : activeFilePath ? (
-            <EmptyState
-              className="git-diff-empty"
-              title={<p className="git-diff-empty-title">{t("status.connecting")}…</p>}
-            />
-          ) : (
-            <EmptyState
-              className="git-diff-empty"
-              description={<p className="git-diff-empty-body">{t("code_editor.empty_hint")}</p>}
-              title={<p className="git-diff-empty-title">{t("file.title")}</p>}
-            />
-          )}
-        </div>
-      </div>
-    </div>
-  );
+  return <EditorSurface state={state} chrome={chrome} />;
 };
 
 export const CodeEditorHost: FC<CodeEditorHostProps> = ({ chrome = "full", editorState }) => {

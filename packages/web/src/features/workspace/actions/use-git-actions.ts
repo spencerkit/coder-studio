@@ -5,8 +5,10 @@ import { dispatchCommandAtom } from "../../../atoms/connection";
 import { useTranslation } from "../../../lib/i18n";
 import { pushToastAtom } from "../../notifications/atoms";
 import {
+  activeFilePathAtomFamily,
   branchQuickPickAtom,
   commitMessageDraftAtomFamily,
+  editorModeAtomFamily,
   fileTreeStaleAtomFamily,
   type GitDiffPreview,
   gitBranchListAtomFamily,
@@ -15,6 +17,16 @@ import {
   gitFetchAtomFamily,
   gitStateAtomFamily,
 } from "../atoms";
+
+type GitDiffCommandPayload = {
+  diff: string;
+  renderAs?: "text" | "image";
+  status?: "modified" | "added" | "deleted";
+  originalContent?: string;
+  modifiedContent?: string;
+  originalRevision?: "HEAD" | "INDEX";
+  modifiedRevision?: "INDEX" | "WORKTREE";
+};
 
 export type GitChangeType = "staged" | "modified" | "untracked" | "deleted";
 
@@ -430,6 +442,8 @@ export function useGitPanelActions({
   const setBranchList = useSetAtom(gitBranchListAtomFamily(workspaceId));
   const setDiffPreview = useSetAtom(gitDiffPreviewAtomFamily(workspaceId));
   const setDiffPreviewDismissed = useSetAtom(gitDiffPreviewDismissedAtomFamily(workspaceId));
+  const setActiveFilePath = useSetAtom(activeFilePathAtomFamily(workspaceId));
+  const setEditorMode = useSetAtom(editorModeAtomFamily(workspaceId));
 
   const [commitMessage, setCommitMessage] = useAtom(commitMessageDraftAtomFamily(workspaceId));
   const [isLoading, setIsLoading] = useState(false);
@@ -465,7 +479,7 @@ export function useGitPanelActions({
 
   const requestDiff = useCallback(
     async (change: GitFileChange, type: GitChangeType): Promise<GitDiffPreview | null> => {
-      const result = await dispatch<{ diff: string }>("git.diff", {
+      const result = await dispatch<GitDiffCommandPayload>("git.diff", {
         workspaceId,
         path: change.path,
         staged: type === "staged",
@@ -481,12 +495,31 @@ export function useGitPanelActions({
         diff: result.data.diff,
         staged: type === "staged",
         source: "file" as const,
+        ...(result.data.renderAs ? { renderAs: result.data.renderAs } : {}),
+        ...(result.data.status ? { status: result.data.status } : {}),
+        ...(result.data.originalContent !== undefined
+          ? { originalContent: result.data.originalContent }
+          : {}),
+        ...(result.data.modifiedContent !== undefined
+          ? { modifiedContent: result.data.modifiedContent }
+          : {}),
+        ...(result.data.originalRevision ? { originalRevision: result.data.originalRevision } : {}),
+        ...(result.data.modifiedRevision ? { modifiedRevision: result.data.modifiedRevision } : {}),
       };
       setDiffPreviewDismissed(false);
       updatePreview(preview);
+      setActiveFilePath(change.path);
+      setEditorMode("diff");
       return preview;
     },
-    [dispatch, setDiffPreviewDismissed, updatePreview, workspaceId]
+    [
+      dispatch,
+      setActiveFilePath,
+      setDiffPreviewDismissed,
+      setEditorMode,
+      updatePreview,
+      workspaceId,
+    ]
   );
 
   const openHistoryDiff = useCallback(

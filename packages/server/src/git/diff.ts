@@ -2,10 +2,22 @@
  * Git diff operations.
  */
 
-import { mkdtemp, rm } from "fs/promises";
+import { mkdtemp, readFile, rm } from "fs/promises";
 import os from "os";
 import path from "path";
+import { resolveSafe } from "../fs/file-io.js";
+import { getImageTypeInfo } from "../fs/image.js";
 import { GitError, runGit } from "./cli.js";
+
+export interface FileDiffResult {
+  diff: string;
+  renderAs: "text" | "image";
+  status: "modified" | "added" | "deleted";
+  originalContent?: string;
+  modifiedContent?: string;
+  originalRevision?: "HEAD" | "INDEX";
+  modifiedRevision?: "INDEX" | "WORKTREE";
+}
 
 async function isTrackedPath(cwd: string, filePath: string): Promise<boolean> {
   try {
@@ -50,6 +62,94 @@ async function getUntrackedFileDiff(cwd: string, filePath: string): Promise<stri
   }
 }
 
+async function pathExists(cwd: string, filePath: string): Promise<boolean> {
+  try {
+    await readFile(resolveSafe(cwd, filePath));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function readTextAtRevision(
+  cwd: string,
+  revision: "HEAD" | "INDEX" | "WORKTREE",
+  filePath: string
+) {
+  if (revision === "WORKTREE") {
+    return readFile(resolveSafe(cwd, filePath), "utf-8");
+  }
+
+  try {
+    const gitSpec = revision === "INDEX" ? `:${filePath}` : `${revision}:${filePath}`;
+    const result = await runGit(cwd, ["show", gitSpec]);
+    return result.stdout;
+  } catch {
+    return "";
+  }
+}
+
+async function deriveFileDiffStatus(
+  cwd: string,
+  filePath: string,
+  staged: boolean
+): Promise<"modified" | "added" | "deleted"> {
+  const tracked = await isTrackedPath(cwd, filePath);
+  const existsOnDisk = await pathExists(cwd, filePath);
+
+  if (!staged && !tracked) {
+    return "added";
+  }
+
+  if (staged) {
+    try {
+      await runGit(cwd, ["cat-file", "-e", `HEAD:${filePath}`]);
+      return existsOnDisk ? "modified" : "deleted";
+    } catch {
+      return "added";
+    }
+  }
+
+  return existsOnDisk ? "modified" : "deleted";
+}
+
+async function buildTextDiffResult(
+  cwd: string,
+  filePath: string,
+  staged: boolean,
+  diff: string
+): Promise<FileDiffResult> {
+  const status = await deriveFileDiffStatus(cwd, filePath, staged);
+
+  if (status === "added") {
+    return {
+      diff,
+      renderAs: "text",
+      status,
+      originalContent: "",
+      modifiedContent: await readTextAtRevision(cwd, staged ? "INDEX" : "WORKTREE", filePath),
+    };
+  }
+
+  if (status === "deleted") {
+    return {
+      diff,
+      renderAs: "text",
+      status,
+      originalContent: await readTextAtRevision(cwd, staged ? "HEAD" : "INDEX", filePath),
+      modifiedContent: "",
+    };
+  }
+
+  return {
+    diff,
+    renderAs: "text",
+    status,
+    originalContent: await readTextAtRevision(cwd, staged ? "HEAD" : "INDEX", filePath),
+    modifiedContent: await readTextAtRevision(cwd, staged ? "INDEX" : "WORKTREE", filePath),
+  };
+}
+
 /**
  * Gets diff for a specific file.
  *
@@ -58,14 +158,41 @@ async function getUntrackedFileDiff(cwd: string, filePath: string): Promise<stri
  * @param staged - Whether to show staged diff
  * @returns Diff output
  */
-export async function getFileDiff(cwd: string, path: string, staged = false): Promise<string> {
+export async function getFileDiff(
+  cwd: string,
+  path: string,
+  staged = false
+): Promise<FileDiffResult> {
+  const imageType = getImageTypeInfo(path);
+
   if (!staged && !(await isTrackedPath(cwd, path))) {
-    return getUntrackedFileDiff(cwd, path);
+    const diff = await getUntrackedFileDiff(cwd, path);
+    if (imageType) {
+      return {
+        diff,
+        renderAs: "image",
+        status: "added",
+        originalRevision: "HEAD",
+        modifiedRevision: "WORKTREE",
+      };
+    }
+
+    return buildTextDiffResult(cwd, path, staged, diff);
   }
 
   const args = staged ? ["diff", "--staged", "--", path] : ["diff", "--", path];
   const result = await runGit(cwd, args);
-  return result.stdout;
+  if (imageType && /Binary files .* differ/.test(result.stdout)) {
+    return {
+      diff: result.stdout,
+      renderAs: "image",
+      status: await deriveFileDiffStatus(cwd, path, staged),
+      originalRevision: staged ? "HEAD" : "INDEX",
+      modifiedRevision: staged ? "INDEX" : "WORKTREE",
+    };
+  }
+
+  return buildTextDiffResult(cwd, path, staged, result.stdout);
 }
 
 /**
