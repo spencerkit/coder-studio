@@ -15,7 +15,10 @@ import { formatWorkspaceLabel } from "../../notifications/format";
 import { useSelectWorkspaceTarget } from "../../workspace/actions/use-select-workspace-target";
 import { useWorkspaceCloseAction } from "../../workspace/actions/use-workspace-close-action";
 import { WorkspaceSessionMiniMap } from "./workspace-session-mini-map";
-import { buildWorkspaceSessionMiniMapCells } from "./workspace-session-mini-map-model";
+import {
+  buildWorkspaceSessionMiniMapCells,
+  measureWorkspaceSessionMiniMapColumns,
+} from "./workspace-session-mini-map-model";
 
 interface WorkspaceTabProps {
   workspace: Workspace;
@@ -26,7 +29,7 @@ interface WorkspaceTabProps {
  * Workspace Tab
  *
  * PRD §5.1.2:
- *   - Status dot (green = running, gray-blue = idle, with pulse animation)
+ *   - Session mini map (one cell per pane, status-coded)
  *   - Tab text (truncated)
  *   - Unread badge (conditional, count display)
  *   - Close button (visible on hover)
@@ -39,6 +42,7 @@ export const WorkspaceTab: FC<WorkspaceTabProps> = ({ workspace, isActive }) => 
   const displayName = formatWorkspaceLabel(workspace) || workspace.id;
   const sessionsById = Object.fromEntries(sessions.map((session) => [session.id, session]));
   const miniMapCells = buildWorkspaceSessionMiniMapCells(paneLayout, sessionsById);
+  const miniMapColumns = measureWorkspaceSessionMiniMapColumns(paneLayout);
 
   const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
@@ -58,11 +62,11 @@ export const WorkspaceTab: FC<WorkspaceTabProps> = ({ workspace, isActive }) => 
   return (
     <div className={`topbar-tab-shell ${isActive ? "active" : ""}`} role="presentation">
       <Tab className="topbar-tab" onClick={handleClick} value={workspace.id}>
-        <WorkspaceSessionMiniMap cells={miniMapCells} />
         <span className="topbar-tab-content">
           <Tooltip content={workspace.path || workspace.id}>
             <span className="topbar-tab-name">{displayName}</span>
           </Tooltip>
+          <WorkspaceSessionMiniMap cells={miniMapCells} columns={miniMapColumns} />
           <Badge count={workspace.unreadCount ?? 0} max={9} />
         </span>
       </Tab>

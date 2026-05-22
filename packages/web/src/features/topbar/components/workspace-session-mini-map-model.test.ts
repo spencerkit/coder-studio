@@ -2,6 +2,7 @@ import type { Session, WorkspacePaneNode } from "@coder-studio/core";
 import { describe, expect, it } from "vitest";
 import {
   buildWorkspaceSessionMiniMapCells,
+  measureWorkspaceSessionMiniMapColumns,
   type WorkspaceSessionMiniMapCell,
 } from "./workspace-session-mini-map-model";
 
@@ -38,7 +39,7 @@ describe("workspace-session-mini-map-model", () => {
     ]);
   });
 
-  it("keeps pane relationships while splitting every branch equally", () => {
+  it("keeps pane relationships while giving each horizontal column the same width", () => {
     const layout = {
       id: "root",
       type: "split",
@@ -90,6 +91,66 @@ describe("workspace-session-mini-map-model", () => {
         height: 0.5,
       }),
     ]);
+  });
+
+  it("expands horizontally when nested splits add more columns", () => {
+    const layout: WorkspacePaneNode = {
+      id: "root",
+      type: "split",
+      direction: "horizontal",
+      children: [
+        { id: "left", type: "leaf", sessionId: "sess-1" },
+        {
+          id: "right",
+          type: "split",
+          direction: "horizontal",
+          children: [
+            { id: "center", type: "leaf", sessionId: "sess-2" },
+            { id: "right", type: "leaf", sessionId: "sess-3" },
+          ],
+        },
+      ],
+    };
+
+    const cells = buildWorkspaceSessionMiniMapCells(layout, {
+      "sess-1": createSession("sess-1", "idle"),
+      "sess-2": createSession("sess-2", "running"),
+      "sess-3": createSession("sess-3", "starting"),
+    });
+
+    expect(cells[0]).toEqual(expect.objectContaining({ paneId: "left" }));
+    expect(cells[0]?.x).toBeCloseTo(0);
+    expect(cells[0]?.width).toBeCloseTo(1 / 3);
+    expect(cells[1]).toEqual(expect.objectContaining({ paneId: "center" }));
+    expect(cells[1]?.x).toBeCloseTo(1 / 3);
+    expect(cells[1]?.width).toBeCloseTo(1 / 3);
+    expect(cells[2]).toEqual(expect.objectContaining({ paneId: "right" }));
+    expect(cells[2]?.x).toBeCloseTo(2 / 3);
+    expect(cells[2]?.width).toBeCloseTo(1 / 3);
+    expect(measureWorkspaceSessionMiniMapColumns(layout)).toBe(3);
+  });
+
+  it("measures horizontal leaf columns so the mini map can grow in width", () => {
+    const layout: WorkspacePaneNode = {
+      id: "root",
+      type: "split",
+      direction: "horizontal",
+      children: [
+        { id: "left", type: "leaf" },
+        {
+          id: "right",
+          type: "split",
+          direction: "vertical",
+          children: [
+            { id: "top-right", type: "leaf" },
+            { id: "bottom-right", type: "leaf" },
+          ],
+        },
+      ],
+    };
+
+    expect(measureWorkspaceSessionMiniMapColumns(layout)).toBe(2);
+    expect(measureWorkspaceSessionMiniMapColumns(undefined)).toBe(1);
   });
 
   it("treats draft, ended, and missing sessions as empty panes", () => {

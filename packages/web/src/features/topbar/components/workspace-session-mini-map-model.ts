@@ -32,6 +32,12 @@ export function buildWorkspaceSessionMiniMapCells(
   return collectCells(root, sessionsById, { x: 0, y: 0, width: 1, height: 1 });
 }
 
+export function measureWorkspaceSessionMiniMapColumns(
+  layout: WorkspacePaneNodeLike | null | undefined
+): number {
+  return countColumns(layout ?? { id: "root", type: "leaf" });
+}
+
 function collectCells(
   node: WorkspacePaneNodeLike,
   sessionsById: Record<string, Session>,
@@ -56,6 +62,28 @@ function collectCells(
     return collectCells({ ...node, type: "leaf", children: undefined }, sessionsById, bounds);
   }
 
+  if (node.direction === "horizontal") {
+    const firstColumns = countColumns(firstChild);
+    const secondColumns = countColumns(secondChild);
+    const totalColumns = firstColumns + secondColumns;
+    const firstWidth = bounds.width * (firstColumns / totalColumns);
+
+    return [
+      ...collectCells(firstChild, sessionsById, {
+        x: bounds.x,
+        y: bounds.y,
+        width: firstWidth,
+        height: bounds.height,
+      }),
+      ...collectCells(secondChild, sessionsById, {
+        x: bounds.x + firstWidth,
+        y: bounds.y,
+        width: bounds.width - firstWidth,
+        height: bounds.height,
+      }),
+    ];
+  }
+
   if (node.direction === "vertical") {
     return [
       ...collectCells(firstChild, sessionsById, {
@@ -73,20 +101,7 @@ function collectCells(
     ];
   }
 
-  return [
-    ...collectCells(firstChild, sessionsById, {
-      x: bounds.x,
-      y: bounds.y,
-      width: bounds.width * 0.5,
-      height: bounds.height,
-    }),
-    ...collectCells(secondChild, sessionsById, {
-      x: bounds.x + bounds.width * 0.5,
-      y: bounds.y,
-      width: bounds.width * 0.5,
-      height: bounds.height,
-    }),
-  ];
+  return collectCells({ ...node, direction: "horizontal" }, sessionsById, bounds);
 }
 
 function resolveCellState(session: Session | undefined): WorkspaceSessionMiniMapState {
@@ -100,4 +115,21 @@ function resolveCellState(session: Session | undefined): WorkspaceSessionMiniMap
     default:
       return "empty";
   }
+}
+
+function countColumns(node: WorkspacePaneNodeLike): number {
+  if (node.type !== "split" || !node.children?.length) {
+    return 1;
+  }
+
+  const [firstChild, secondChild] = node.children;
+  if (!firstChild || !secondChild) {
+    return 1;
+  }
+
+  if (node.direction === "vertical") {
+    return Math.max(countColumns(firstChild), countColumns(secondChild));
+  }
+
+  return countColumns(firstChild) + countColumns(secondChild);
 }

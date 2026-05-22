@@ -849,13 +849,11 @@ describe("components.css theme-sensitive surfaces", () => {
     const topbar = getLastRuleBlock(".app-topbar");
     const topbarTabs = getLastRuleBlock(".topbar-tabs");
     const topbarTab = getLastRuleBlock(".topbar-tab");
+    const topbarTabContent = getLastRuleBlock(".topbar-tab-content");
     const activeTab = getLastRuleBlock(".topbar-tab.active");
     const miniMap = getLastRuleBlock(".workspace-session-mini-map");
-    const miniMapCell = getLastRuleBlock(".workspace-session-mini-map__cell");
-    const miniMapRunning = getLastRuleBlock(".workspace-session-mini-map__cell--running");
-    const miniMapStarting = getLastRuleBlock(".workspace-session-mini-map__cell--starting");
-    const miniMapIdle = getLastRuleBlock(".workspace-session-mini-map__cell--idle");
-    const miniMapEmpty = getLastRuleBlock(".workspace-session-mini-map__cell--empty");
+    const miniMapViewport = getLastRuleBlock(".workspace-session-mini-map__viewport");
+    const miniMapColumn = getLastRuleBlock(".workspace-session-mini-map__column");
     const workspaceResizer = getLastRuleBlock(".workspace-resizer");
     const emptyCard = getLastRuleBlock(".workspace-empty-inner");
     const resolvingCard = getLastRuleBlock(".workspace-resolving-card");
@@ -915,21 +913,27 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(topbarTab).toContain(
       "padding: 0 var(--control-height-md) 0 var(--inset-control-inline)"
     );
+    expect(topbarTabContent).toContain("gap: var(--gap-tight)");
+    expect(topbarTabContent).toContain("background: transparent");
+    expect(topbarTabContent).toContain("box-shadow: none");
     expect(activeTab).toContain("var(--bg-active)");
     expect(activeTab).not.toContain("rgba(45, 63, 79, 0.92)");
     expect(topbarTab).toContain("position: relative");
     expect(topbarTab).toContain("overflow: hidden");
-    expect(miniMap).toContain("position: absolute");
-    expect(miniMap).toContain("inset: 0");
-    expect(miniMapCell).toContain("background: var(--workspace-session-map-empty)");
-    expect(miniMapCell).toContain("left: var(--workspace-session-map-cell-x)");
-    expect(miniMapCell).toContain("top: var(--workspace-session-map-cell-y)");
-    expect(miniMapCell).toContain("width: var(--workspace-session-map-cell-width)");
-    expect(miniMapCell).toContain("height: var(--workspace-session-map-cell-height)");
-    expect(miniMapRunning).toContain("background: var(--workspace-session-map-running)");
-    expect(miniMapStarting).toContain("background: var(--workspace-session-map-starting)");
-    expect(miniMapIdle).toContain("background: var(--workspace-session-map-idle)");
-    expect(miniMapEmpty).toContain("background: var(--workspace-session-map-empty)");
+    expect(miniMap).toContain("position: relative");
+    expect(miniMap).toContain("width: calc(");
+    expect(miniMap).toContain("var(--workspace-session-map-columns, 1) *");
+    expect(miniMap).toContain("var(--gap-compact)");
+    expect(miniMap).toContain("height: var(--sp-3)");
+    expect(miniMapViewport).toContain("display: inline-flex");
+    expect(miniMapViewport).toContain("gap: var(--gap-compact)");
+    expect(miniMapViewport).toContain("height: 100%");
+    expect(miniMapColumn).toContain("flex: 0 0 var(--sp-1)");
+    expect(miniMapColumn).toContain("height: 100%");
+    expect(miniMapColumn).toContain("border-radius: var(--radius-full)");
+    expect(miniMapColumn).toContain("background: var(");
+    expect(miniMapColumn).toContain("--workspace-session-map-column-fill");
+    expect(miniMapColumn).toContain("var(--workspace-session-map-empty) 100%");
     expect(tokensStylesheet).toContain(
       "--workspace-session-map-running: var(--state-success-text)"
     );

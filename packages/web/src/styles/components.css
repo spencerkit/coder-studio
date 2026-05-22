@@ -8316,14 +8316,21 @@ textarea.input {
   gap: var(--gap-tight);
   min-width: 0;
   max-width: 100%;
-  padding: 0 var(--sp-1);
-  border-radius: var(--radius-chip);
-  background: color-mix(in srgb, var(--overlay-scrim) 82%, transparent);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .topbar-tab-name {
   position: relative;
   z-index: 1;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .topbar-unread {
@@ -8333,38 +8340,44 @@ textarea.input {
 }
 
 .workspace-session-mini-map {
-  position: absolute;
-  inset: 0;
-  display: block;
-  border-radius: inherit;
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  width: calc(
+    var(--workspace-session-map-columns, 1) *
+    var(--sp-1) +
+    (var(--workspace-session-map-columns, 1) - 1) *
+    var(--gap-compact)
+  );
+  height: var(--sp-3);
+  border-radius: 0;
   overflow: hidden;
   pointer-events: none;
+  background: transparent;
 }
 
-.workspace-session-mini-map__cell {
-  position: absolute;
-  left: var(--workspace-session-map-cell-x);
-  top: var(--workspace-session-map-cell-y);
-  width: var(--workspace-session-map-cell-width);
-  height: var(--workspace-session-map-cell-height);
-  border: 1px solid color-mix(in srgb, var(--border-light) 28%, transparent);
-  background: var(--workspace-session-map-empty);
+.workspace-session-mini-map__viewport {
+  display: inline-flex;
+  align-items: stretch;
+  gap: var(--gap-compact);
+  height: 100%;
 }
 
-.workspace-session-mini-map__cell--running {
-  background: var(--workspace-session-map-running);
-}
-
-.workspace-session-mini-map__cell--starting {
-  background: var(--workspace-session-map-starting);
-}
-
-.workspace-session-mini-map__cell--idle {
-  background: var(--workspace-session-map-idle);
-}
-
-.workspace-session-mini-map__cell--empty {
-  background: var(--workspace-session-map-empty);
+.workspace-session-mini-map__column {
+  display: block;
+  flex: 0 0 var(--sp-1);
+  width: var(--sp-1);
+  height: 100%;
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: var(
+    --workspace-session-map-column-fill,
+    linear-gradient(
+      180deg,
+      var(--workspace-session-map-empty) 0%,
+      var(--workspace-session-map-empty) 100%
+    )
+  );
 }
 
 .topbar-dot {

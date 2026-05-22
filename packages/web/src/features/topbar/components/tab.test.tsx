@@ -348,14 +348,18 @@ describe("WorkspaceTab", () => {
     });
 
     const { container } = renderWorkspaceTab(store, workspace, { isActive: true, value: "ws-2" });
-    const tab = screen.getByRole("tab", { name: "two" });
+    const content = container.querySelector(".topbar-tab-content");
+    const miniMap = container.querySelector(".workspace-session-mini-map");
 
     expect(container.querySelector(".topbar-dot")).toBeNull();
-    expect(container.querySelector(".workspace-session-mini-map")).toBe(tab.firstElementChild);
-    expect(container.querySelector(".topbar-tab-content")).not.toBeNull();
-    expect(container.querySelectorAll(".workspace-session-mini-map__cell")).toHaveLength(2);
-    expect(container.querySelector(".workspace-session-mini-map__cell--running")).not.toBeNull();
-    expect(container.querySelector(".workspace-session-mini-map__cell--empty")).not.toBeNull();
+    expect(miniMap).not.toBeNull();
+    expect(content).not.toBeNull();
+    expect(content).toContainElement(miniMap as HTMLElement);
+    const columns = container.querySelectorAll(".workspace-session-mini-map__column");
+
+    expect(columns).toHaveLength(2);
+    expect(columns[0]?.getAttribute("style")).toContain("var(--workspace-session-map-running)");
+    expect(columns[1]?.getAttribute("style")).toContain("var(--workspace-session-map-empty)");
   });
 
   it("hydrates inactive workspace sessions once and renders ended panes as empty cells", async () => {
@@ -415,11 +419,18 @@ describe("WorkspaceTab", () => {
     expect(container.querySelector(".topbar-dot")).toBeNull();
 
     await waitFor(() => {
-      expect(container.querySelectorAll(".workspace-session-mini-map__cell")).toHaveLength(2);
+      expect(container.querySelectorAll(".workspace-session-mini-map__column")).toHaveLength(1);
     });
 
-    expect(container.querySelector(".workspace-session-mini-map__cell--starting")).not.toBeNull();
-    expect(container.querySelector(".workspace-session-mini-map__cell--empty")).not.toBeNull();
+    expect(container.querySelector(".topbar-tab-content")).toContainElement(
+      container.querySelector(".workspace-session-mini-map") as HTMLElement
+    );
+    const firstColumnStyle = container
+      .querySelector(".workspace-session-mini-map__column")
+      ?.getAttribute("style");
+
+    expect(firstColumnStyle).toContain("var(--workspace-session-map-starting)");
+    expect(firstColumnStyle).toContain("var(--workspace-session-map-empty)");
     expect(store.get(paneLayoutAtomFamily("ws-3"))).toEqual(
       expect.objectContaining({
         id: "persisted-root",
