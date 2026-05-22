@@ -316,6 +316,16 @@
   /* Status Dot */
   --status-dot-size: 8px;
 
+  /* Workspace Tab Session Mini Map */
+  --workspace-session-map-running: var(--state-success-text);
+  --workspace-session-map-starting: var(--state-warning-text);
+  --workspace-session-map-idle: color-mix(
+    in srgb,
+    var(--text-tertiary) 90%,
+    var(--accent-blue) 10%
+  );
+  --workspace-session-map-empty: color-mix(in srgb, var(--text-tertiary) 56%, var(--bg-panel) 44%);
+
   /* Progress Bar */
   --progress-height: 4px;
 
