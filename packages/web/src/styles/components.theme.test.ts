@@ -1818,10 +1818,19 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(settingsNavItem).toContain("min-height: 40px");
     expect(settingsNavItem).toContain("border: 1px solid transparent");
     expect(settingsNavItem).toContain("border-radius: var(--radius-md)");
+    expect(settingsNavItem).toContain("align-items: center");
+    expect(settingsNavItem).toContain("gap: var(--sp-3)");
+    expect(settingsNavItem).toContain("display: flex");
     expect(settingsNavItemHover).toContain("background: var(--bg-hover)");
     expect(settingsNavItemActive).toContain("background: var(--bg-active)");
     expect(settingsNavItemActive).toContain("border-color: color-mix");
     expect(settingsNavItemActive).toContain("var(--accent-blue)");
+    expect(getLastRuleBlock(".settings-nav-icon")).toContain("display: inline-flex");
+    expect(getLastRuleBlock(".settings-nav-icon")).toContain("line-height: 0");
+    expect(getLastRuleBlock(".settings-nav-label")).toContain("display: block");
+    expect(getLastRuleBlock(".settings-nav-label")).toContain("min-width: 0");
+    expect(getLastRuleBlock(".settings-nav-arrow")).toContain("display: block");
+    expect(getLastRuleBlock(".settings-nav-arrow")).toContain("line-height: 0");
     expect(mobileContent).toContain("padding: 0");
     expect(mobileRootContent).toContain("padding-left: var(--sp-3)");
     expect(mobileRootContent).toContain("padding-right: var(--sp-3)");
@@ -2833,6 +2842,22 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(controlMobile).toContain("justify-content: flex-start");
     expect(compactInputBase).toContain("text-align: right");
     expect(compactInputMobile).toContain("text-align: left");
+  });
+
+  it("keeps the About update action row right-aligned with explicit spacing", () => {
+    const actionRowBase = getLastRuleBlock(".settings-actions-row");
+    const actionRow = getLastRuleBlock(".settings-actions-row--end");
+
+    expect(actionRowBase).toContain("display: flex");
+    expect(actionRowBase).toContain("align-items: center");
+    expect(actionRowBase).toContain("flex-wrap: wrap");
+    expect(actionRow).toContain("justify-content: flex-end");
+    expect(actionRow).toContain("gap: var(--sp-3)");
+    expect(actionRow).toContain("margin-top: var(--sp-3)");
+  });
+
+  it("does not add a dedicated About interval alignment wrapper", () => {
+    expect(hasRuleBlock(".settings-about-interval-control-wrap")).toBe(false);
   });
 
   it("removes the unused legacy provider card chrome from settings styles", () => {

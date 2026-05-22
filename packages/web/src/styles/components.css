@@ -807,18 +807,27 @@
 }
 
 .settings-nav-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
+  line-height: 0;
   color: var(--icon-secondary);
 }
 
 .settings-nav-label {
   flex: 1;
+  min-width: 0;
+  display: block;
   font-size: var(--type-body-3-size);
   line-height: var(--type-body-3-line-height);
   font-weight: var(--type-body-3-weight);
 }
 
 .settings-nav-arrow {
+  display: block;
+  flex-shrink: 0;
+  line-height: 0;
   color: var(--text-tertiary);
 }
 
@@ -1059,6 +1068,19 @@
 
 .settings-link:hover {
   text-decoration: underline;
+}
+
+.settings-actions-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+.settings-actions-row--end {
+  justify-content: flex-end;
+  gap: var(--sp-3);
+  margin-top: var(--sp-3);
 }
 
 .settings-provider-tabs {
@@ -12225,6 +12247,9 @@ textarea.input {
   justify-content: flex-end;
   min-width: 0;
   gap: var(--gap-tight);
+  font-size: var(--type-body-6-size);
+  line-height: var(--type-body-6-line-height);
+  font-weight: var(--type-body-6-weight);
   white-space: nowrap;
 }
 
