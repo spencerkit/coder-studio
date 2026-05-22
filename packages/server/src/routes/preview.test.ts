@@ -151,4 +151,26 @@ describe("/api/preview/session", () => {
 
     expect(assetRes.statusCode).toBe(404);
   });
+
+  it("rejects encoded relative asset path escapes", async () => {
+    const createRes = await app.inject({
+      method: "POST",
+      url: "/api/preview/session",
+      payload: {
+        workspaceId: "ws-1",
+        entryPath: "examples/demo/index.html",
+        kind: "html",
+        content: "<h1>demo</h1>",
+      },
+    });
+
+    const { id } = createRes.json();
+    const assetRes = await app.inject({
+      method: "GET",
+      url: `/api/preview/session/${id}/..%5C..%5C..%5Csecret.css`,
+    });
+
+    expect(assetRes.statusCode).toBe(400);
+    expect(assetRes.json()).toEqual({ error: "path_escape" });
+  });
 });

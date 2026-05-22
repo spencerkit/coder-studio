@@ -1,7 +1,8 @@
+import { posix } from "node:path";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { renderMarkdownDocument } from "../preview/render-markdown.js";
-import { loadPreviewResource } from "../preview/resource-loader.js";
+import { loadPreviewResource, resolvePreviewResourcePath } from "../preview/resource-loader.js";
 import { PreviewSessionStore } from "../preview/session-store.js";
 
 type PreviewKind = "markdown" | "html";
@@ -30,6 +31,12 @@ function encodePathSegments(path: string): string {
     .split("/")
     .map((segment) => encodeURIComponent(segment))
     .join("/");
+}
+
+function resolvePreviewAssetWorkspacePath(entryPath: string, rawPath: string): string {
+  const normalizedRawPath = rawPath.replaceAll("\\", "/");
+  const relativeAssetPath = posix.relative(posix.dirname(entryPath), normalizedRawPath);
+  return resolvePreviewResourcePath(entryPath, relativeAssetPath);
 }
 
 const previewSessionCreateSchema = z.object({
@@ -138,7 +145,8 @@ export function registerPreviewRoutes(
     }
 
     try {
-      const resource = await loadPreviewResource(workspace.path, rawPath);
+      const resourcePath = resolvePreviewAssetWorkspacePath(session.entryPath, rawPath);
+      const resource = await loadPreviewResource(workspace.path, resourcePath);
 
       return reply
         .header("Content-Type", resource.mime)
