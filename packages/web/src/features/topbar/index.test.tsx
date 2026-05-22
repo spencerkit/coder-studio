@@ -331,7 +331,7 @@ describe("TopBar", () => {
     expect(screen.getByRole("button", { name: "Enter Fullscreen" })).toBeInTheDocument();
   });
 
-  it("shows an update marker on the settings entry when an update is available", () => {
+  it("keeps the settings entry plain when an update is available", () => {
     const store = createStore();
     store.set(localeAtom, "en");
     store.set(workspacesLoadStateAtom, "ready");
@@ -359,7 +359,7 @@ describe("TopBar", () => {
       </Provider>
     );
 
-    const settingsEntry = screen.getByTestId("settings-open").parentElement;
-    expect(settingsEntry?.querySelector(".topbar-unread")).toBeTruthy();
+    const settingsButton = screen.getByTestId("settings-open");
+    expect(settingsButton.querySelector(".topbar-unread")).toBeNull();
   });
 });

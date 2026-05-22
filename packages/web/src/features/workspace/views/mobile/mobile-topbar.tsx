@@ -1,10 +1,8 @@
 import type { Workspace } from "@coder-studio/core";
-import { useAtomValue } from "jotai";
 import { Menu } from "lucide-react";
-import { Badge, IconButton, ThemedIcon } from "../../../../components/ui";
+import { IconButton, ThemedIcon } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { formatWorkspaceLabel } from "../../../notifications/format";
-import { updateMarkerVisibleAtom } from "../../../updates/atoms";
 import type { WorkspaceFullscreenController } from "../../actions/use-workspace-fullscreen";
 import { WorkspaceFullscreenButton } from "../../components/workspace-fullscreen-button";
 
@@ -24,7 +22,6 @@ export function MobileTopBar({
   onToggleDrawer,
 }: MobileTopBarProps) {
   const t = useTranslation();
-  const updateMarkerVisible = useAtomValue(updateMarkerVisibleAtom);
   const workspaceLabel =
     formatWorkspaceLabel(activeWorkspace) || t("mobile.workspace_drawer.select_title");
 
@@ -49,12 +46,7 @@ export function MobileTopBar({
         <IconButton
           aria-label={t("mobile.topbar.open_settings")}
           className="mobile-topbar__icon-button"
-          icon={
-            <>
-              <ThemedIcon semantic="nav.settings" size={18} />
-              {updateMarkerVisible ? <Badge count={1} max={9} /> : null}
-            </>
-          }
+          icon={<ThemedIcon semantic="nav.settings" size={18} />}
           onClick={onOpenSettings}
         />
         <WorkspaceFullscreenButton

@@ -44,7 +44,6 @@ import { activeWorkspaceIdAtom } from "../atoms/workspaces";
 import { type PaneNode, paneLayoutAtomFamily } from "../features/agent-panes/atoms/pane-layout";
 import { monacoModelRegistry } from "../features/code-editor/monaco/model-registry";
 import { useSessionNotifications } from "../features/notifications";
-import { pushToastAtom } from "../features/notifications/atoms";
 import { supervisorsAtom } from "../features/supervisor/atoms";
 import { terminalMetaAtomFamily } from "../features/terminal-panel/atoms";
 import {
@@ -276,7 +275,6 @@ export function AppProviders({ children }: AppProvidersProps) {
   const setSupervisors = useSetAtom(supervisorsAtom);
   const setTerminalPreferences = useSetAtom(terminalPreferencesAtom);
   const setUpdateState = useSetAtom(updateStateAtom);
-  const pushToast = useSetAtom(pushToastAtom);
 
   // Get Jotai store for writing to atomFamily atoms
   const store = useStore();
@@ -301,7 +299,6 @@ export function AppProviders({ children }: AppProvidersProps) {
     theme: 0,
   });
   const preferPersistedThemeOnFirstHydrationRef = useRef(false);
-  const announcedUpdateVersionRef = useRef<string | null>(null);
 
   // Keep dispatchRef in sync
   useEffect(() => {
@@ -446,14 +443,6 @@ export function AppProviders({ children }: AppProvidersProps) {
       if (cancelled || !result.ok || !result.data) {
         return;
       }
-      if (
-        result.data.availability === "update_available" &&
-        typeof result.data.latestVersion === "string"
-      ) {
-        announcedUpdateVersionRef.current = result.data.latestVersion;
-      } else {
-        announcedUpdateVersionRef.current = null;
-      }
       setUpdateState(result.data);
     };
 
@@ -463,32 +452,6 @@ export function AppProviders({ children }: AppProvidersProps) {
       cancelled = true;
     };
   }, [connectionStatus, dispatch, setUpdateState]);
-
-  useEffect(() => {
-    return store.sub(updateStateAtom, () => {
-      const nextState = store.get(updateStateAtom);
-      if (!nextState) {
-        announcedUpdateVersionRef.current = null;
-        return;
-      }
-      if (nextState.availability !== "update_available" || !nextState.latestVersion) {
-        announcedUpdateVersionRef.current = null;
-        return;
-      }
-      if (announcedUpdateVersionRef.current === nextState.latestVersion) {
-        return;
-      }
-
-      announcedUpdateVersionRef.current = nextState.latestVersion;
-      pushToast({
-        kind: "info",
-        title: t("settings.about.toast_update_available_title"),
-        body: t("settings.about.toast_update_available_body", {
-          version: nextState.latestVersion,
-        }),
-      });
-    });
-  }, [pushToast, store, t]);
 
   useEffect(() => {
     activeWorkspaceIdRef.current = activeWorkspaceId;

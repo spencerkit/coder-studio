@@ -1,4 +1,11 @@
-import type { FileNode, GitStatus, Supervisor, Workspace, WorktreeInfo } from "@coder-studio/core";
+import type {
+  FileNode,
+  GitStatus,
+  Supervisor,
+  UpdateStateView,
+  Workspace,
+  WorktreeInfo,
+} from "@coder-studio/core";
 import { type CSSProperties, type ReactNode, useState } from "react";
 import { ConfirmDialog, EmptyState, Notice, Sheet, ThemedIcon } from "../../components/ui";
 import { SessionCard } from "../../features/agent-panes/views/shared/session-card";
@@ -126,6 +133,24 @@ const worktreeTree: FileNode[] = [
   { name: "packages", path: "packages", kind: "dir" },
   { name: "e2e-ui", path: "e2e-ui", kind: "dir" },
 ];
+
+const footerUpdateRailPreviewState: UpdateStateView = {
+  version: 1,
+  currentVersion: "0.4.0",
+  latestVersion: "0.5.0",
+  availability: "update_available",
+  updateStatus: "idle",
+  lastCheckedAt: 1715731200000,
+  targetVersion: null,
+  startedAt: null,
+  finishedAt: null,
+  requiresManualStep: false,
+  manualCommand: null,
+  errorSummary: null,
+  supported: true,
+  installKind: "global_npm",
+  unsupportedReason: null,
+};
 
 const fileTreeRoot: FileNode[] = [
   { name: "packages", path: "packages", kind: "dir" },
@@ -847,6 +872,61 @@ export function createShowcaseScenes(): UiPreviewSceneDefinition[] {
         ],
       }),
       render: () => <ToastContainer />,
+    }),
+    scene("footer-update-rail-review", {
+      router: () => ({ initialEntries: ["/workspace"], path: "/workspace" }),
+      seed: (context) => ({
+        ...context,
+        workspaces: [workspace],
+        activeWorkspaceId: workspace.id,
+        gitStateByWorkspaceId: {
+          [workspace.id]: readmeDesktopGitStatus,
+        },
+        updateState: footerUpdateRailPreviewState,
+      }),
+      render: (context) =>
+        context.device === "mobile" ? (
+          <div
+            className="footer-update-rail-review mobile-shell mobile-shell--stacked mobile-shell--motion-reduced"
+            data-testid="mobile-shell"
+          >
+            <MobileTopBar
+              activeWorkspace={workspace}
+              drawerOpen={false}
+              onOpenSettings={() => {}}
+              onToggleDrawer={() => {}}
+            />
+            <main className="mobile-shell__viewport">
+              <div className="mobile-shell__content" style={{ paddingBottom: "144px" }} />
+            </main>
+            <div
+              className="mobile-shell__bottom-stack"
+              data-testid="mobile-bottom-stack"
+              style={{ "--mobile-keyboard-inset": "0px" } as CSSProperties}
+            >
+              <div className="mobile-dock-shell">
+                <MobileDock activeItem="agent" onSelectItem={() => {}} />
+              </div>
+              <WorkspaceStatusBar workspaceId={workspace.id} gitState={readmeDesktopGitStatus} />
+            </div>
+          </div>
+        ) : (
+          <div className="footer-update-rail-review">
+            <div className="workspace-page workspace-page--desktop">
+              <TopBar />
+              <div className="workspace-body">
+                <div className="workspace-main-area">
+                  <div className="workspace-main-stage" />
+                </div>
+              </div>
+              <WorkspaceStatusBar
+                align="start"
+                workspaceId={workspace.id}
+                gitState={readmeDesktopGitStatus}
+              />
+            </div>
+          </div>
+        ),
     }),
     scene("workspace-icon-review", {
       router: () => ({ initialEntries: ["/workspace"], path: "/workspace" }),
