@@ -845,6 +845,12 @@ describe("components.css theme-sensitive surfaces", () => {
     const topbarTabs = getLastRuleBlock(".topbar-tabs");
     const topbarTab = getLastRuleBlock(".topbar-tab");
     const activeTab = getLastRuleBlock(".topbar-tab.active");
+    const miniMap = getLastRuleBlock(".workspace-session-mini-map");
+    const miniMapCell = getLastRuleBlock(".workspace-session-mini-map__cell");
+    const miniMapRunning = getLastRuleBlock(".workspace-session-mini-map__cell--running");
+    const miniMapStarting = getLastRuleBlock(".workspace-session-mini-map__cell--starting");
+    const miniMapIdle = getLastRuleBlock(".workspace-session-mini-map__cell--idle");
+    const miniMapEmpty = getLastRuleBlock(".workspace-session-mini-map__cell--empty");
     const workspaceResizer = getLastRuleBlock(".workspace-resizer");
     const emptyCard = getLastRuleBlock(".workspace-empty-inner");
     const resolvingCard = getLastRuleBlock(".workspace-resolving-card");
@@ -906,6 +912,20 @@ describe("components.css theme-sensitive surfaces", () => {
     );
     expect(activeTab).toContain("var(--bg-active)");
     expect(activeTab).not.toContain("rgba(45, 63, 79, 0.92)");
+    expect(miniMap).toContain("margin-left: var(--sp-2)");
+    expect(miniMapCell).toContain("background: var(--workspace-session-map-empty)");
+    expect(miniMapRunning).toContain("background: var(--workspace-session-map-running)");
+    expect(miniMapStarting).toContain("background: var(--workspace-session-map-starting)");
+    expect(miniMapIdle).toContain("background: var(--workspace-session-map-idle)");
+    expect(miniMapEmpty).toContain("background: var(--workspace-session-map-empty)");
+    expect(tokensStylesheet).toContain(
+      "--workspace-session-map-running: var(--state-success-text)"
+    );
+    expect(tokensStylesheet).toContain(
+      "--workspace-session-map-starting: var(--state-warning-text)"
+    );
+    expect(tokensStylesheet).toContain("--workspace-session-map-idle: color-mix(");
+    expect(tokensStylesheet).toContain("--workspace-session-map-empty: color-mix(");
     expect(workspaceResizer).toContain("z-index: var(--z-inline)");
     expect(emptyCard).toContain("var(--bg-surface)");
     expect(resolvingCard).toContain("var(--bg-surface)");

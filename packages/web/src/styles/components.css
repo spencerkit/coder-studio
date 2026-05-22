@@ -8198,6 +8198,42 @@ textarea.input {
   border-color: color-mix(in srgb, var(--border-light) 72%, var(--accent-blue) 28%);
 }
 
+.workspace-session-mini-map {
+  position: relative;
+  display: inline-flex;
+  width: 20px;
+  height: 12px;
+  flex: 0 0 auto;
+  margin-left: var(--sp-2);
+}
+
+.workspace-session-mini-map__cell {
+  position: absolute;
+  left: var(--workspace-session-map-cell-x);
+  top: var(--workspace-session-map-cell-y);
+  width: 4px;
+  height: 4px;
+  border-radius: 1px;
+  transform: translate(-50%, -50%);
+  background: var(--workspace-session-map-empty);
+}
+
+.workspace-session-mini-map__cell--running {
+  background: var(--workspace-session-map-running);
+}
+
+.workspace-session-mini-map__cell--starting {
+  background: var(--workspace-session-map-starting);
+}
+
+.workspace-session-mini-map__cell--idle {
+  background: var(--workspace-session-map-idle);
+}
+
+.workspace-session-mini-map__cell--empty {
+  background: var(--workspace-session-map-empty);
+}
+
 .topbar-dot {
   width: 8px;
   height: 8px;
