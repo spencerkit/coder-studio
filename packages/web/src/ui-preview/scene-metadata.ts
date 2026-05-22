@@ -240,6 +240,18 @@ export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
     capture: { selector: ".footer-update-rail-review" },
   },
   {
+    id: "footer-update-rail-confirm-review",
+    title: "Footer Update Rail Confirm Review",
+    category: "modal",
+    source: "showcase",
+    description:
+      "Workspace footer review with the confirmation dialog opened after clicking Update Now.",
+    devices: ["desktop", "mobile"],
+    themes: allThemeIds(),
+    locales: ["zh", "en"],
+    capture: { selector: ".modal-overlay" },
+  },
+  {
     id: "workspace-icon-review",
     title: "Workspace Icon Review",
     category: "page",

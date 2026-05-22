@@ -28,6 +28,7 @@ import { GitPanel } from "../../features/workspace/views/shared/git-panel";
 import { WorkspaceLaunchModal } from "../../features/workspace/views/shared/workspace-launch-modal";
 import { WorkspaceStatusBar } from "../../features/workspace/views/shared/workspace-status-bar";
 import { WorktreeManagerSurface } from "../../features/workspace/views/shared/worktree-manager-surface";
+import { useTranslation } from "../../lib/i18n";
 import type { UiPreviewSceneDefinition } from "../catalog";
 import { getUiPreviewSceneMetadata } from "../scene-metadata";
 
@@ -789,6 +790,88 @@ function scene(
   };
 }
 
+function FooterUpdateRailPreviewShell({
+  device,
+  className,
+}: {
+  device: "desktop" | "mobile";
+  className: string;
+}) {
+  return device === "mobile" ? (
+    <div
+      className={`${className} mobile-shell mobile-shell--stacked mobile-shell--motion-reduced`}
+      data-testid="mobile-shell"
+    >
+      <MobileTopBar
+        activeWorkspace={workspace}
+        drawerOpen={false}
+        onOpenSettings={() => {}}
+        onToggleDrawer={() => {}}
+      />
+      <main className="mobile-shell__viewport">
+        <div className="mobile-shell__content" style={{ paddingBottom: "144px" }} />
+      </main>
+      <div
+        className="mobile-shell__bottom-stack"
+        data-testid="mobile-bottom-stack"
+        style={{ "--mobile-keyboard-inset": "0px" } as CSSProperties}
+      >
+        <div className="mobile-dock-shell">
+          <MobileDock activeItem="agent" onSelectItem={() => {}} />
+        </div>
+        <WorkspaceStatusBar workspaceId={workspace.id} gitState={readmeDesktopGitStatus} />
+      </div>
+    </div>
+  ) : (
+    <div className={className}>
+      <div className="workspace-page workspace-page--desktop">
+        <TopBar />
+        <div className="workspace-body">
+          <div className="workspace-main-area">
+            <div className="workspace-main-stage" />
+          </div>
+        </div>
+        <WorkspaceStatusBar
+          align="start"
+          workspaceId={workspace.id}
+          gitState={readmeDesktopGitStatus}
+        />
+      </div>
+    </div>
+  );
+}
+
+function FooterUpdateRailConfirmPreview({ device }: { device: "desktop" | "mobile" }) {
+  const t = useTranslation();
+
+  return (
+    <>
+      <FooterUpdateRailPreviewShell className="footer-update-rail-confirm-review" device={device} />
+      <ConfirmDialog
+        open
+        onOpenChange={() => {}}
+        title={t("settings.about.confirm_update_title")}
+        description={
+          <div className="settings-dialog-copy">
+            <p>{t("settings.about.confirm_update_message")}</p>
+            <p>
+              {t("settings.about.confirm_update_activity", {
+                terminals: 1,
+                sessions: 2,
+                supervisors: 3,
+              })}
+            </p>
+          </div>
+        }
+        cancelText={t("action.cancel")}
+        confirmText={t("settings.about.update_now")}
+        tone="danger"
+        onConfirm={() => {}}
+      />
+    </>
+  );
+}
+
 export function createShowcaseScenes(): UiPreviewSceneDefinition[] {
   return [
     scene("workspace-launch-modal", {
@@ -884,49 +967,25 @@ export function createShowcaseScenes(): UiPreviewSceneDefinition[] {
         },
         updateState: footerUpdateRailPreviewState,
       }),
-      render: (context) =>
-        context.device === "mobile" ? (
-          <div
-            className="footer-update-rail-review mobile-shell mobile-shell--stacked mobile-shell--motion-reduced"
-            data-testid="mobile-shell"
-          >
-            <MobileTopBar
-              activeWorkspace={workspace}
-              drawerOpen={false}
-              onOpenSettings={() => {}}
-              onToggleDrawer={() => {}}
-            />
-            <main className="mobile-shell__viewport">
-              <div className="mobile-shell__content" style={{ paddingBottom: "144px" }} />
-            </main>
-            <div
-              className="mobile-shell__bottom-stack"
-              data-testid="mobile-bottom-stack"
-              style={{ "--mobile-keyboard-inset": "0px" } as CSSProperties}
-            >
-              <div className="mobile-dock-shell">
-                <MobileDock activeItem="agent" onSelectItem={() => {}} />
-              </div>
-              <WorkspaceStatusBar workspaceId={workspace.id} gitState={readmeDesktopGitStatus} />
-            </div>
-          </div>
-        ) : (
-          <div className="footer-update-rail-review">
-            <div className="workspace-page workspace-page--desktop">
-              <TopBar />
-              <div className="workspace-body">
-                <div className="workspace-main-area">
-                  <div className="workspace-main-stage" />
-                </div>
-              </div>
-              <WorkspaceStatusBar
-                align="start"
-                workspaceId={workspace.id}
-                gitState={readmeDesktopGitStatus}
-              />
-            </div>
-          </div>
-        ),
+      render: (context) => (
+        <FooterUpdateRailPreviewShell
+          className="footer-update-rail-review"
+          device={context.device}
+        />
+      ),
+    }),
+    scene("footer-update-rail-confirm-review", {
+      router: () => ({ initialEntries: ["/workspace"], path: "/workspace" }),
+      seed: (context) => ({
+        ...context,
+        workspaces: [workspace],
+        activeWorkspaceId: workspace.id,
+        gitStateByWorkspaceId: {
+          [workspace.id]: readmeDesktopGitStatus,
+        },
+        updateState: footerUpdateRailPreviewState,
+      }),
+      render: (context) => <FooterUpdateRailConfirmPreview device={context.device} />,
     }),
     scene("workspace-icon-review", {
       router: () => ({ initialEntries: ["/workspace"], path: "/workspace" }),
