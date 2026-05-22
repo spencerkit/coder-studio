@@ -1,3 +1,7 @@
+import { mkdirSync, mkdtempSync, symlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 import { DocumentStore } from "./document-store.js";
 
@@ -54,6 +58,21 @@ describe("DocumentStore", () => {
     expect(store.fromUri("file:///c:/Repo/src/main.tsx")).toBe("src/main.tsx");
     expect(store.fromUri("file:///C:/Repo/node_modules/pkg/index.d.ts")).toBe(
       "node_modules/pkg/index.d.ts"
+    );
+  });
+
+  it("maps POSIX file URIs back to workspace-relative paths when the workspace path is a symlink alias", () => {
+    const realRoot = mkdtempSync(join(tmpdir(), "document-store-real-"));
+    const aliasParent = mkdtempSync(join(tmpdir(), "document-store-alias-"));
+    const aliasRoot = join(aliasParent, "workspace");
+
+    mkdirSync(join(realRoot, "src"));
+    symlinkSync(realRoot, aliasRoot, "dir");
+
+    const store = new DocumentStore(aliasRoot);
+
+    expect(store.fromUri(pathToFileURL(join(realRoot, "src/main.ts")).toString())).toBe(
+      "src/main.ts"
     );
   });
 });

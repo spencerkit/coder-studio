@@ -1,3 +1,4 @@
+import { realpathSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -12,8 +13,11 @@ interface DocumentRecord {
 
 export class DocumentStore {
   private readonly docs = new Map<string, DocumentRecord>();
+  private readonly workspaceRoots: Array<{ kind: "win32" | "posix"; value: string }>;
 
-  constructor(private readonly workspacePath: string) {}
+  constructor(private readonly workspacePath: string) {
+    this.workspaceRoots = resolveWorkspaceRoots(workspacePath);
+  }
 
   open(input: { path: string; languageId: string; text: string }): DocumentRecord {
     const record: DocumentRecord = {
@@ -70,20 +74,27 @@ export class DocumentStore {
       return null;
     }
 
-    const workspaceInfo = normalizeFileSystemPath(this.workspacePath);
     const absoluteInfo = normalizeFileSystemPath(absolutePath);
-    if (workspaceInfo.kind !== absoluteInfo.kind) {
-      return null;
+    for (const workspaceInfo of this.workspaceRoots) {
+      if (workspaceInfo.kind !== absoluteInfo.kind) {
+        continue;
+      }
+
+      const pathApi = workspaceInfo.kind === "win32" ? path.win32 : path.posix;
+      const relativePath = pathApi.relative(workspaceInfo.value, absoluteInfo.value);
+
+      if (
+        relativePath.startsWith("..") ||
+        pathApi.isAbsolute(relativePath) ||
+        relativePath === ""
+      ) {
+        continue;
+      }
+
+      return relativePath.replace(/\\/g, "/");
     }
 
-    const pathApi = workspaceInfo.kind === "win32" ? path.win32 : path.posix;
-    const relativePath = pathApi.relative(workspaceInfo.value, absoluteInfo.value);
-
-    if (relativePath.startsWith("..") || pathApi.isAbsolute(relativePath) || relativePath === "") {
-      return null;
-    }
-
-    return relativePath.replace(/\\/g, "/");
+    return null;
   }
 
   private getOrThrow(filePath: string): DocumentRecord {
@@ -115,4 +126,29 @@ function normalizeFileSystemPath(input: string): { kind: "win32" | "posix"; valu
     kind: "posix",
     value: path.posix.normalize(normalized),
   };
+}
+
+function resolveWorkspaceRoots(
+  workspacePath: string
+): Array<{ kind: "win32" | "posix"; value: string }> {
+  const normalized = new Map<string, { kind: "win32" | "posix"; value: string }>();
+
+  for (const candidate of [workspacePath, resolveRealPath(workspacePath)]) {
+    if (!candidate) {
+      continue;
+    }
+
+    const info = normalizeFileSystemPath(candidate);
+    normalized.set(`${info.kind}:${info.value}`, info);
+  }
+
+  return Array.from(normalized.values());
+}
+
+function resolveRealPath(workspacePath: string): string | null {
+  try {
+    return realpathSync.native(workspacePath);
+  } catch {
+    return null;
+  }
 }
