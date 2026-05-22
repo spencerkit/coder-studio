@@ -41,6 +41,24 @@ describe("PreviewSessionStore", () => {
     expect(store.delete("missing")).toBe(false);
   });
 
+  it("does not expose live internal records", () => {
+    const store = new PreviewSessionStore();
+    const created = store.create({
+      workspaceId: "ws-1",
+      entryPath: "README.md",
+      kind: "markdown",
+      content: "# hi",
+    });
+
+    created.content = "# mutated outside";
+    created.revision = 99;
+
+    expect(store.get(created.id)).toMatchObject({
+      content: "# hi",
+      revision: 1,
+    });
+  });
+
   it("cleans up expired sessions", () => {
     const store = new PreviewSessionStore();
     const created = store.create({

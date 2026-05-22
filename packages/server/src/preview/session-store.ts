@@ -26,6 +26,10 @@ export interface UpdatePreviewSessionInput {
   allowScripts?: boolean;
 }
 
+function cloneRecord(record: PreviewSessionRecord): PreviewSessionRecord {
+  return { ...record };
+}
+
 export class PreviewSessionStore {
   #sessions = new Map<string, PreviewSessionRecord>();
 
@@ -41,12 +45,13 @@ export class PreviewSessionStore {
       allowScripts: input.allowScripts ?? false,
     };
 
-    this.#sessions.set(record.id, record);
-    return record;
+    this.#sessions.set(record.id, cloneRecord(record));
+    return cloneRecord(record);
   }
 
   get(id: string): PreviewSessionRecord | null {
-    return this.#sessions.get(id) ?? null;
+    const record = this.#sessions.get(id);
+    return record ? cloneRecord(record) : null;
   }
 
   update(id: string, patch: UpdatePreviewSessionInput): PreviewSessionRecord | null {
@@ -63,8 +68,8 @@ export class PreviewSessionStore {
       updatedAt: Date.now(),
     };
 
-    this.#sessions.set(id, next);
-    return next;
+    this.#sessions.set(id, cloneRecord(next));
+    return cloneRecord(next);
   }
 
   delete(id: string): boolean {
