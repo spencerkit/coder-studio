@@ -206,6 +206,54 @@ describe("CodeEditorHost", () => {
     expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
   });
 
+  it("ignores a late file.read success after the unloaded path is explicitly closed", async () => {
+    let resolveRead:
+      | ((value: { kind: "text"; content: string; baseHash: string; encoding: "utf-8" }) => void)
+      | null = null;
+    const sendCommand = vi.fn().mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveRead = resolve;
+        })
+    );
+    const { store } = setupStore({ activePath: "src/pending.ts", sendCommand });
+
+    render(
+      <Provider store={store}>
+        <CodeEditorHost />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "file.read",
+        {
+          workspaceId: "ws-1",
+          path: "src/pending.ts",
+        },
+        undefined
+      );
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+
+    expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
+
+    await act(async () => {
+      resolveRead?.({
+        kind: "text",
+        content: "late content",
+        baseHash: "late-hash",
+        encoding: "utf-8",
+      });
+    });
+
+    await waitFor(() => {
+      expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
+      expect(store.get(openFilesAtomFamily("ws-1"))["src/pending.ts"]).toBeUndefined();
+    });
+  });
+
   it("does not re-fetch a file that is already open", async () => {
     const { store, sendCommand } = setupStore({
       activePath: "src/b.ts",

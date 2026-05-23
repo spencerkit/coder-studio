@@ -71,6 +71,9 @@ export function useCodeEditorActions() {
   const diffPreview = useAtomValue(gitDiffPreviewAtomFamily(workspaceId ?? ""));
   const gitState = useAtomValue(gitStateAtomFamily(workspaceId ?? ""));
   const lastSeededModePathRef = useRef<string | null>(null);
+  const nextLoadRequestIdRef = useRef(0);
+  const pendingLoadRequestIdsRef = useRef<Record<string, number>>({});
+  const cancelledLoadRequestIdsRef = useRef<Record<string, number>>({});
   const { closePath } = useOpenEditorsActions(workspaceId ?? "", {
     workspaceRootPath,
   });
@@ -98,17 +101,39 @@ export function useCodeEditorActions() {
     }
   }, [activeFilePath, currentFile, diffPreview, mode, setMode, workspaceId]);
 
+  const shouldIgnoreLoadResult = useCallback((path: string, requestId: number) => {
+    if (pendingLoadRequestIdsRef.current[path] !== requestId) {
+      return true;
+    }
+
+    if (cancelledLoadRequestIdsRef.current[path] === requestId) {
+      delete pendingLoadRequestIdsRef.current[path];
+      delete cancelledLoadRequestIdsRef.current[path];
+      return true;
+    }
+
+    delete pendingLoadRequestIdsRef.current[path];
+    return false;
+  }, []);
+
   const loadFile = useCallback(
     async (path: string, options?: { forceText?: boolean }) => {
       if (!workspaceId) {
         return;
       }
 
+      const requestId = nextLoadRequestIdRef.current + 1;
+      nextLoadRequestIdRef.current = requestId;
+      pendingLoadRequestIdsRef.current[path] = requestId;
       setFileLoadError((current) => (current?.path === path ? null : current));
       const result = await dispatch<FileReadPayload>("file.read", {
         workspaceId,
         path,
       });
+
+      if (shouldIgnoreLoadResult(path, requestId)) {
+        return;
+      }
 
       if (!result.ok || !result.data) {
         const message = result.error?.message ?? "Failed to open file";
@@ -130,6 +155,11 @@ export function useCodeEditorActions() {
           }
 
           const content = await response.text();
+          if (cancelledLoadRequestIdsRef.current[path] === requestId) {
+            delete cancelledLoadRequestIdsRef.current[path];
+            return;
+          }
+
           const newFile: OpenFile = {
             kind: "text",
             path,
@@ -192,7 +222,7 @@ export function useCodeEditorActions() {
       setExternalStatus((current) => (current?.path === path ? null : current));
       setFileLoadError((current) => (current?.path === path ? null : current));
     },
-    [dispatch, setOpenFiles, workspaceId, workspaceRootPath]
+    [dispatch, setOpenFiles, shouldIgnoreLoadResult, workspaceId, workspaceRootPath]
   );
 
   const loadTextBackedImageContent = useCallback(async (url: string) => {
@@ -276,6 +306,10 @@ export function useCodeEditorActions() {
     }
 
     if (openFiles[activeFilePath]) {
+      return;
+    }
+
+    if (pendingLoadRequestIdsRef.current[activeFilePath] !== undefined) {
       return;
     }
 
@@ -522,6 +556,10 @@ export function useCodeEditorActions() {
     if (currentFile?.path) {
       closePath(currentFile.path);
     } else if (activeFilePath) {
+      const pendingRequestId = pendingLoadRequestIdsRef.current[activeFilePath];
+      if (pendingRequestId !== undefined) {
+        cancelledLoadRequestIdsRef.current[activeFilePath] = pendingRequestId;
+      }
       setActiveFilePath(null);
       setMode("edit");
     }
