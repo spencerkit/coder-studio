@@ -1,7 +1,8 @@
 import type { SearchContentMatch, SearchContentResult } from "@coder-studio/core";
 import { useAtomValue } from "jotai";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import type { FC, ReactNode } from "react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { dispatchCommandAtom } from "../../../../atoms/connection";
 import { Button } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
@@ -25,15 +26,21 @@ function renderPreview(match: SearchContentMatch): ReactNode {
   );
 }
 
+function buildExpandedFileMap(results: SearchContentResult): Record<string, boolean> {
+  return Object.fromEntries(results.files.map((file) => [file.path, true]));
+}
+
 export const SearchPanel: FC<SearchPanelProps> = ({ workspaceId }) => {
   const t = useTranslation();
   const dispatch = useAtomValue(dispatchCommandAtom);
   const { openLocation } = useOpenLocation(workspaceId);
   const inputRef = useRef<HTMLInputElement>(null);
   const dispatchRef = useRef(dispatch);
+  const groupIdPrefix = useId();
   const [query, setQuery] = useState("");
   const [retryNonce, setRetryNonce] = useState(0);
   const [results, setResults] = useState<SearchContentResult | null>(null);
+  const [expandedFiles, setExpandedFiles] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
 
@@ -49,6 +56,7 @@ export const SearchPanel: FC<SearchPanelProps> = ({ workspaceId }) => {
     const trimmed = query.trim();
     if (!trimmed) {
       setResults(null);
+      setExpandedFiles({});
       setLoading(false);
       setError(false);
       return;
@@ -73,15 +81,18 @@ export const SearchPanel: FC<SearchPanelProps> = ({ workspaceId }) => {
 
           if (!result.ok || !result.data) {
             setResults(null);
+            setExpandedFiles({});
             setError(true);
             return;
           }
 
           setResults(result.data);
+          setExpandedFiles(buildExpandedFileMap(result.data));
         })
         .catch(() => {
           if (!cancelled) {
             setResults(null);
+            setExpandedFiles({});
             setError(true);
           }
         })
@@ -150,41 +161,66 @@ export const SearchPanel: FC<SearchPanelProps> = ({ workspaceId }) => {
         ) : !results || results.files.length === 0 ? (
           <p className="workspace-search-panel__state">{t("workspace.search.no_results")}</p>
         ) : (
-          results.files.map((file) => (
-            <section key={file.path} className="workspace-search-panel__group">
-              <div className="workspace-search-panel__group-header">
-                <strong>{file.name}</strong>
-                <span>{file.path}</span>
-                <span>
-                  {t("workspace.search.file_match_count", {
-                    count: file.matchCount,
-                    suffix: file.hasMoreMatches ? "+" : "",
-                  })}
-                </span>
-              </div>
+          results.files.map((file, index) => {
+            const matchesId = `${groupIdPrefix}-group-${index}`;
+            const isExpanded = expandedFiles[file.path] ?? true;
 
-              {file.matches.map((match) => (
+            return (
+              <section key={file.path} className="workspace-search-panel__group">
                 <button
-                  key={`${file.path}:${match.line}:${match.column}`}
                   type="button"
-                  className="workspace-search-panel__match"
+                  className="workspace-search-panel__group-header"
                   onClick={() =>
-                    void openLocation({
-                      workspaceId,
-                      path: file.path,
-                      line: match.line,
-                      column: match.column,
-                      endColumn: match.endColumn,
-                      source: "search",
-                    })
+                    setExpandedFiles((current) => ({
+                      ...current,
+                      [file.path]: !(current[file.path] ?? true),
+                    }))
                   }
+                  aria-expanded={isExpanded}
+                  aria-controls={matchesId}
                 >
-                  <span className="workspace-search-panel__line">{match.line}</span>
-                  <span className="workspace-search-panel__preview">{renderPreview(match)}</span>
+                  <span className="workspace-search-panel__group-chevron" aria-hidden="true">
+                    {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                  </span>
+                  <strong>{file.name}</strong>
+                  <span>{file.path}</span>
+                  <span>
+                    {t("workspace.search.file_match_count", {
+                      count: file.matchCount,
+                      suffix: file.hasMoreMatches ? "+" : "",
+                    })}
+                  </span>
                 </button>
-              ))}
-            </section>
-          ))
+
+                <div id={matchesId} hidden={!isExpanded}>
+                  {isExpanded
+                    ? file.matches.map((match) => (
+                        <button
+                          key={`${file.path}:${match.line}:${match.column}`}
+                          type="button"
+                          className="workspace-search-panel__match"
+                          onClick={() =>
+                            void openLocation({
+                              workspaceId,
+                              path: file.path,
+                              line: match.line,
+                              column: match.column,
+                              endColumn: match.endColumn,
+                              source: "search",
+                            })
+                          }
+                        >
+                          <span className="workspace-search-panel__line">{match.line}</span>
+                          <span className="workspace-search-panel__preview">
+                            {renderPreview(match)}
+                          </span>
+                        </button>
+                      ))
+                    : null}
+                </div>
+              </section>
+            );
+          })
         )}
       </div>
     </div>

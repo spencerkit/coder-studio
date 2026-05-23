@@ -10,6 +10,31 @@ import { activeFilePathAtomFamily } from "../../atoms/files";
 import { SearchPanel } from "./search-panel";
 
 describe("SearchPanel", () => {
+  const singleMatchCountPattern = /1.*(?:matches|条匹配)/i;
+
+  function renderSearchPanel(sendCommand: ReturnType<typeof vi.fn>) {
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <SearchPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    return { store };
+  }
+
+  async function searchFor(query: string) {
+    fireEvent.change(screen.getByRole("searchbox", { name: /Search|搜索/i }), {
+      target: { value: query },
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(250);
+    });
+  }
+
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -51,22 +76,9 @@ describe("SearchPanel", () => {
       hasMoreFiles: true,
       truncatedMatchFileCount: 1,
     } satisfies SearchContentResult);
-    const store = createStore();
-    store.set(wsClientAtom, { sendCommand } as never);
+    renderSearchPanel(sendCommand);
 
-    render(
-      <Provider store={store}>
-        <SearchPanel workspaceId="ws-test" />
-      </Provider>
-    );
-
-    fireEvent.change(screen.getByRole("searchbox", { name: /Search|搜索/i }), {
-      target: { value: "needle" },
-    });
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(250);
-    });
+    await searchFor("needle");
 
     expect(sendCommand).toHaveBeenCalledWith(
       "file.searchContent",
@@ -83,6 +95,183 @@ describe("SearchPanel", () => {
     expect(screen.getByText("src/app.tsx")).toBeInTheDocument();
     expect(screen.getAllByText("needleValue")[0]?.tagName).toBe("MARK");
     expect(screen.getByText(/Results limited|结果已截断/i)).toBeInTheDocument();
+  });
+
+  it("expands file groups by default after results load", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({
+      files: [
+        {
+          path: "src/app.tsx",
+          name: "app.tsx",
+          matchCount: 1,
+          hasMoreMatches: false,
+          matches: [
+            {
+              line: 12,
+              column: 5,
+              endColumn: 11,
+              preview: "const needle = true;",
+              previewColumnStart: 7,
+              previewColumnEnd: 13,
+            },
+          ],
+        },
+      ],
+      totalMatchCount: 1,
+      hasMoreFiles: false,
+      truncatedMatchFileCount: 0,
+    } satisfies SearchContentResult);
+
+    renderSearchPanel(sendCommand);
+
+    await searchFor("needle");
+
+    const groupHeader = screen.getByRole("button", {
+      name: new RegExp(`app\\.tsx.*src/app\\.tsx.*${singleMatchCountPattern.source}`, "i"),
+    });
+
+    expect(groupHeader).toHaveAttribute("aria-expanded", "true");
+    expect(groupHeader).toHaveAttribute("aria-controls");
+    expect(screen.getByRole("button", { name: /12.*needle/i })).toBeInTheDocument();
+  });
+
+  it("collapses and re-expands file matches when the group header is clicked", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({
+      files: [
+        {
+          path: "src/app.tsx",
+          name: "app.tsx",
+          matchCount: 1,
+          hasMoreMatches: false,
+          matches: [
+            {
+              line: 12,
+              column: 5,
+              endColumn: 11,
+              preview: "const needle = true;",
+              previewColumnStart: 7,
+              previewColumnEnd: 13,
+            },
+          ],
+        },
+      ],
+      totalMatchCount: 1,
+      hasMoreFiles: false,
+      truncatedMatchFileCount: 0,
+    } satisfies SearchContentResult);
+
+    renderSearchPanel(sendCommand);
+
+    await searchFor("needle");
+
+    const groupHeader = screen.getByRole("button", {
+      name: new RegExp(`app\\.tsx.*src/app\\.tsx.*${singleMatchCountPattern.source}`, "i"),
+    });
+
+    fireEvent.click(groupHeader);
+
+    expect(groupHeader).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("button", { name: /12.*needle/i })).not.toBeInTheDocument();
+
+    fireEvent.click(groupHeader);
+
+    expect(groupHeader).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: /12.*needle/i })).toBeInTheDocument();
+  });
+
+  it("resets returned file groups to expanded on a new successful query", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (_op: string, args: { query: string }) => {
+      if (args.query === "needle") {
+        return {
+          files: [
+            {
+              path: "src/app.tsx",
+              name: "app.tsx",
+              matchCount: 1,
+              hasMoreMatches: false,
+              matches: [
+                {
+                  line: 12,
+                  column: 5,
+                  endColumn: 11,
+                  preview: "const needle = true;",
+                  previewColumnStart: 7,
+                  previewColumnEnd: 13,
+                },
+              ],
+            },
+          ],
+          totalMatchCount: 1,
+          hasMoreFiles: false,
+          truncatedMatchFileCount: 0,
+        } satisfies SearchContentResult;
+      }
+
+      return {
+        files: [
+          {
+            path: "src/app.tsx",
+            name: "app.tsx",
+            matchCount: 1,
+            hasMoreMatches: false,
+            matches: [
+              {
+                line: 21,
+                column: 3,
+                endColumn: 9,
+                preview: "startThread(worker);",
+                previewColumnStart: 6,
+                previewColumnEnd: 12,
+              },
+            ],
+          },
+          {
+            path: "src/worker.ts",
+            name: "worker.ts",
+            matchCount: 1,
+            hasMoreMatches: false,
+            matches: [
+              {
+                line: 4,
+                column: 10,
+                endColumn: 16,
+                preview: "threadPool.run(job);",
+                previewColumnStart: 1,
+                previewColumnEnd: 7,
+              },
+            ],
+          },
+        ],
+        totalMatchCount: 2,
+        hasMoreFiles: false,
+        truncatedMatchFileCount: 0,
+      } satisfies SearchContentResult;
+    });
+
+    renderSearchPanel(sendCommand);
+
+    await searchFor("needle");
+
+    const firstHeader = screen.getByRole("button", {
+      name: new RegExp(`app\\.tsx.*src/app\\.tsx.*${singleMatchCountPattern.source}`, "i"),
+    });
+
+    fireEvent.click(firstHeader);
+    expect(firstHeader).toHaveAttribute("aria-expanded", "false");
+
+    await searchFor("thread");
+
+    const appHeader = screen.getByRole("button", {
+      name: new RegExp(`app\\.tsx.*src/app\\.tsx.*${singleMatchCountPattern.source}`, "i"),
+    });
+    const workerHeader = screen.getByRole("button", {
+      name: new RegExp(`worker\\.ts.*src/worker\\.ts.*${singleMatchCountPattern.source}`, "i"),
+    });
+
+    expect(appHeader).toHaveAttribute("aria-expanded", "true");
+    expect(workerHeader).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: /21.*startThread/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /4.*threadPool/i })).toBeInTheDocument();
   });
 
   it("opens the file at the selected match location", async () => {
@@ -109,22 +298,9 @@ describe("SearchPanel", () => {
       hasMoreFiles: false,
       truncatedMatchFileCount: 0,
     } satisfies SearchContentResult);
-    const store = createStore();
-    store.set(wsClientAtom, { sendCommand } as never);
+    const { store } = renderSearchPanel(sendCommand);
 
-    render(
-      <Provider store={store}>
-        <SearchPanel workspaceId="ws-test" />
-      </Provider>
-    );
-
-    fireEvent.change(screen.getByRole("searchbox", { name: /Search|搜索/i }), {
-      target: { value: "needle" },
-    });
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(250);
-    });
+    await searchFor("needle");
 
     fireEvent.click(screen.getByRole("button", { name: /12.*needle/i }));
 
@@ -140,22 +316,9 @@ describe("SearchPanel", () => {
 
   it("shows retry when the search command fails", async () => {
     const sendCommand = vi.fn().mockRejectedValue(new Error("boom"));
-    const store = createStore();
-    store.set(wsClientAtom, { sendCommand } as never);
+    renderSearchPanel(sendCommand);
 
-    render(
-      <Provider store={store}>
-        <SearchPanel workspaceId="ws-test" />
-      </Provider>
-    );
-
-    fireEvent.change(screen.getByRole("searchbox", { name: /Search|搜索/i }), {
-      target: { value: "needle" },
-    });
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(250);
-    });
+    await searchFor("needle");
 
     expect(screen.getByRole("button", { name: /Retry|重试/i })).toBeInTheDocument();
   });
