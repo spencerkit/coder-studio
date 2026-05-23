@@ -229,7 +229,9 @@ export class NodePtyHost implements PtyHost {
         ptyProcess.onData(callback);
       },
       onExit: (callback) => {
-        ptyProcess.onExit(({ exitCode }: { exitCode: number }) => callback({ exitCode }));
+        ptyProcess.onExit(({ exitCode, signal }: { exitCode: number; signal?: number }) =>
+          callback({ exitCode, signal, reason: "exit" })
+        );
       },
       write: (data) => {
         if (Buffer.isBuffer(data)) {

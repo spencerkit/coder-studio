@@ -12,7 +12,7 @@ registerCommand(
   z.object({
     dependencyId: z.enum(SYSTEM_DEPENDENCY_IDS),
   }),
-  async (args, ctx) => {
+  async (args, ctx, clientId) => {
     if (!ctx.systemDependencyInstallMgr) {
       throw {
         code: "system_dependency_install_unavailable",
@@ -20,7 +20,7 @@ registerCommand(
       };
     }
 
-    return ctx.systemDependencyInstallMgr.start(args.dependencyId);
+    return ctx.systemDependencyInstallMgr.start(args.dependencyId, clientId);
   }
 );
 
@@ -29,7 +29,7 @@ registerCommand(
   z.object({
     jobId: z.string(),
   }),
-  async (args, ctx): Promise<SystemDependencyInstallJobSnapshot> => {
+  async (args, ctx, clientId): Promise<SystemDependencyInstallJobSnapshot> => {
     if (!ctx.systemDependencyInstallMgr) {
       throw {
         code: "system_dependency_install_unavailable",
@@ -37,7 +37,7 @@ registerCommand(
       };
     }
 
-    const job = ctx.systemDependencyInstallMgr.get(args.jobId);
+    const job = ctx.systemDependencyInstallMgr.get(args.jobId, clientId);
     if (!job) {
       throw {
         code: "system_dependency_install_job_not_found",
@@ -55,7 +55,7 @@ registerCommand(
     jobId: z.string(),
     text: z.string(),
   }),
-  async (args, ctx) => {
+  async (args, ctx, clientId) => {
     if (!ctx.systemDependencyInstallMgr) {
       throw {
         code: "system_dependency_install_unavailable",
@@ -63,7 +63,7 @@ registerCommand(
       };
     }
 
-    return ctx.systemDependencyInstallMgr.submitInput(args.jobId, args.text);
+    return ctx.systemDependencyInstallMgr.submitInput(args.jobId, clientId, args.text);
   }
 );
 
@@ -72,7 +72,7 @@ registerCommand(
   z.object({
     jobId: z.string(),
   }),
-  async (args, ctx) => {
+  async (args, ctx, clientId) => {
     if (!ctx.systemDependencyInstallMgr) {
       throw {
         code: "system_dependency_install_unavailable",
@@ -80,6 +80,6 @@ registerCommand(
       };
     }
 
-    return ctx.systemDependencyInstallMgr.cancel(args.jobId);
+    return ctx.systemDependencyInstallMgr.cancel(args.jobId, clientId);
   }
 );

@@ -20,54 +20,90 @@ const EXCERPT_LIMIT = 400;
 interface InstallSession {
   process: PtyProcess;
   seq: number;
+  ownerClientId?: string;
 }
 
 export interface SystemDependencyInstallManagerDeps extends RuntimeStatusDeps {
   ptyHost: PtyHost;
-  broadcaster: Pick<Broadcaster, "broadcast">;
+  broadcaster: Pick<Broadcaster, "sendToClient">;
+}
+
+interface InFlightStart {
+  ownerClientId?: string;
+  promise: Promise<SystemDependencyInstallJobSnapshot>;
+}
+
+interface PtyExitEvent {
+  exitCode: number;
+  signal?: number;
+  reason?: "exit" | "pty_disconnected";
 }
 
 export class SystemDependencyInstallManager {
   private readonly jobs = new Map<string, SystemDependencyInstallJobSnapshot>();
+  private readonly jobOwnerClientIds = new Map<string, string>();
   private readonly activeJobIdsByDependencyId = new Map<SystemDependencyId, string>();
-  private readonly inFlightStartsByDependencyId = new Map<
-    SystemDependencyId,
-    Promise<SystemDependencyInstallJobSnapshot>
-  >();
+  private readonly inFlightStartsByDependencyId = new Map<SystemDependencyId, InFlightStart>();
   private readonly sessions = new Map<string, InstallSession>();
 
   constructor(private readonly deps: SystemDependencyInstallManagerDeps) {}
 
-  async start(dependencyId: SystemDependencyId): Promise<SystemDependencyInstallJobSnapshot> {
+  async start(
+    dependencyId: SystemDependencyId,
+    ownerClientId?: string
+  ): Promise<SystemDependencyInstallJobSnapshot> {
     const activeJob = this.getActiveJob(dependencyId);
     if (activeJob) {
+      if (!this.canAccessJob(activeJob.jobId, ownerClientId)) {
+        throw {
+          code: "system_dependency_install_in_progress",
+          message: `Install already in progress for ${dependencyId}`,
+        };
+      }
       return cloneJobSnapshot(activeJob);
     }
 
     const inFlightStart = this.inFlightStartsByDependencyId.get(dependencyId);
     if (inFlightStart) {
-      return cloneJobSnapshot(await inFlightStart);
+      if (!this.matchesOwner(inFlightStart.ownerClientId, ownerClientId)) {
+        throw {
+          code: "system_dependency_install_in_progress",
+          message: `Install already in progress for ${dependencyId}`,
+        };
+      }
+      return cloneJobSnapshot(await inFlightStart.promise);
     }
 
-    const startPromise = this.prepareAndStart(dependencyId);
-    this.inFlightStartsByDependencyId.set(dependencyId, startPromise);
+    const startPromise = this.prepareAndStart(dependencyId, ownerClientId);
+    this.inFlightStartsByDependencyId.set(dependencyId, {
+      ownerClientId,
+      promise: startPromise,
+    });
 
     try {
       return cloneJobSnapshot(await startPromise);
     } finally {
-      if (this.inFlightStartsByDependencyId.get(dependencyId) === startPromise) {
+      if (this.inFlightStartsByDependencyId.get(dependencyId)?.promise === startPromise) {
         this.inFlightStartsByDependencyId.delete(dependencyId);
       }
     }
   }
 
-  get(jobId: string): SystemDependencyInstallJobSnapshot | undefined {
+  get(jobId: string, ownerClientId?: string): SystemDependencyInstallJobSnapshot | undefined {
+    if (!this.canAccessJob(jobId, ownerClientId)) {
+      return undefined;
+    }
+
     const job = this.jobs.get(jobId);
     return job ? cloneJobSnapshot(job) : undefined;
   }
 
-  async submitInput(jobId: string, text: string): Promise<SystemDependencyInstallJobSnapshot> {
-    const job = this.jobs.get(jobId);
+  async submitInput(
+    jobId: string,
+    ownerClientId: string | undefined,
+    text: string
+  ): Promise<SystemDependencyInstallJobSnapshot> {
+    const job = this.getOwnedJob(jobId, ownerClientId);
     const session = this.sessions.get(jobId);
     if (!job || !session) {
       throw {
@@ -83,8 +119,8 @@ export class SystemDependencyInstallManager {
     return cloneJobSnapshot(job);
   }
 
-  async cancel(jobId: string): Promise<SystemDependencyInstallJobSnapshot> {
-    const job = this.jobs.get(jobId);
+  async cancel(jobId: string, ownerClientId?: string): Promise<SystemDependencyInstallJobSnapshot> {
+    const job = this.getOwnedJob(jobId, ownerClientId);
     if (!job) {
       throw {
         code: "system_dependency_install_job_not_found",
@@ -145,7 +181,8 @@ export class SystemDependencyInstallManager {
   }
 
   private async prepareAndStart(
-    dependencyId: SystemDependencyId
+    dependencyId: SystemDependencyId,
+    ownerClientId?: string
   ): Promise<SystemDependencyInstallJobSnapshot> {
     const runtime = await buildSystemDependencyRuntimeStatus(this.deps);
     const entry = runtime.dependencies[dependencyId];
@@ -159,7 +196,7 @@ export class SystemDependencyInstallManager {
         steps: [],
         interaction: { kind: "none", echo: false },
       };
-      this.jobs.set(readyJob.jobId, readyJob);
+      this.storeJob(readyJob, ownerClientId);
       return readyJob;
     }
 
@@ -171,11 +208,11 @@ export class SystemDependencyInstallManager {
           : "unsupported_package_manager",
         entry.packageManager
       );
-      this.jobs.set(failedJob.jobId, failedJob);
+      this.storeJob(failedJob, ownerClientId);
       return failedJob;
     }
 
-    return this.spawnInstallJob(dependencyId, entry.packageManager);
+    return this.spawnInstallJob(dependencyId, entry.packageManager, ownerClientId);
   }
 
   private createUnsupportedJob(
@@ -220,7 +257,8 @@ export class SystemDependencyInstallManager {
 
   private spawnInstallJob(
     dependencyId: SystemDependencyId,
-    packageManager: SystemDependencyPackageManager
+    packageManager: SystemDependencyPackageManager,
+    ownerClientId?: string
   ): SystemDependencyInstallJobSnapshot {
     const shellCommand = getInstallShellCommand(packageManager, dependencyId);
     const env = getPtyEnv();
@@ -262,15 +300,15 @@ export class SystemDependencyInstallManager {
         interaction: { kind: "none", echo: false },
       };
 
-      this.jobs.set(job.jobId, job);
+      this.storeJob(job, ownerClientId);
       this.activeJobIdsByDependencyId.set(dependencyId, job.jobId);
-      this.sessions.set(job.jobId, { process: ptyProcess, seq: 0 });
+      this.sessions.set(job.jobId, { process: ptyProcess, seq: 0, ownerClientId });
 
       ptyProcess.onData((chunk) => {
         this.handleOutput(job.jobId, chunk);
       });
-      ptyProcess.onExit(({ exitCode }) => {
-        void this.handleExit(job.jobId, exitCode);
+      ptyProcess.onExit((event) => {
+        void this.handleExit(job.jobId, event as PtyExitEvent);
       });
 
       return job;
@@ -310,7 +348,7 @@ export class SystemDependencyInstallManager {
           stderrExcerpt: excerpt(details.stderr || details.message),
         },
       };
-      this.jobs.set(failedJob.jobId, failedJob);
+      this.storeJob(failedJob, ownerClientId);
       return failedJob;
     }
   }
@@ -323,11 +361,19 @@ export class SystemDependencyInstallManager {
     }
 
     session.seq += 1;
-    this.deps.broadcaster.broadcast(Topics.systemDependencyInstallOutput(jobId), {
-      jobId,
-      chunk,
-      seq: session.seq,
-    });
+    if (session.ownerClientId) {
+      this.deps.broadcaster.sendToClient(session.ownerClientId, {
+        kind: "event",
+        topic: Topics.systemDependencyInstallOutput(jobId),
+        seq: session.seq,
+        timestamp: Date.now(),
+        data: {
+          jobId,
+          chunk,
+          seq: session.seq,
+        },
+      });
+    }
 
     const interaction = detectSystemDependencyInteraction(chunk);
     if (interaction.kind !== "none") {
@@ -341,11 +387,12 @@ export class SystemDependencyInstallManager {
     }
   }
 
-  private async handleExit(jobId: string, exitCode: number): Promise<void> {
+  private async handleExit(jobId: string, event: PtyExitEvent): Promise<void> {
     const job = this.jobs.get(jobId);
     if (!job) {
       return;
     }
+    const exitCode = event.exitCode;
 
     const installStep = job.steps[0];
     if (installStep && installStep.finishedAt === undefined) {
@@ -367,7 +414,7 @@ export class SystemDependencyInstallManager {
       job.status = "failed";
       job.interaction = { kind: "none", echo: false };
       job.failure = this.createFailure(job, {
-        code: "command_failed",
+        code: this.classifyFailureCode(job, event),
         message: `Install failed for ${job.dependencyId}`,
         exitCode,
       });
@@ -407,6 +454,45 @@ export class SystemDependencyInstallManager {
     this.activeJobIdsByDependencyId.delete(job.dependencyId);
   }
 
+  private storeJob(
+    job: SystemDependencyInstallJobSnapshot,
+    ownerClientId?: string
+  ): SystemDependencyInstallJobSnapshot {
+    this.jobs.set(job.jobId, job);
+    if (ownerClientId) {
+      this.jobOwnerClientIds.set(job.jobId, ownerClientId);
+    }
+    return job;
+  }
+
+  private getOwnedJob(
+    jobId: string,
+    ownerClientId?: string
+  ): SystemDependencyInstallJobSnapshot | undefined {
+    if (!this.canAccessJob(jobId, ownerClientId)) {
+      return undefined;
+    }
+
+    return this.jobs.get(jobId);
+  }
+
+  private canAccessJob(jobId: string, ownerClientId?: string): boolean {
+    const owner = this.jobOwnerClientIds.get(jobId);
+    if (!owner) {
+      return true;
+    }
+
+    return owner === ownerClientId;
+  }
+
+  private matchesOwner(ownerA?: string, ownerB?: string): boolean {
+    if (!ownerA && !ownerB) {
+      return true;
+    }
+
+    return ownerA === ownerB;
+  }
+
   private getCurrentStep(
     job: SystemDependencyInstallJobSnapshot
   ): SystemDependencyInstallStepSnapshot | undefined {
@@ -440,6 +526,37 @@ export class SystemDependencyInstallManager {
       stdoutExcerpt: step?.stdoutExcerpt,
       stderrExcerpt: step?.stderrExcerpt,
     };
+  }
+
+  private classifyFailureCode(
+    job: SystemDependencyInstallJobSnapshot,
+    event: PtyExitEvent
+  ): SystemDependencyInstallFailure["code"] {
+    if (event.reason === "pty_disconnected" || event.signal !== undefined) {
+      return "pty_disconnected";
+    }
+
+    const step = this.getCurrentStep(job);
+    const haystack = `${step?.stdoutExcerpt ?? ""}\n${step?.stderrExcerpt ?? ""}`.toLowerCase();
+
+    if (
+      haystack.includes("permission denied") ||
+      haystack.includes("eacces") ||
+      haystack.includes("eperm") ||
+      haystack.includes("incorrect password")
+    ) {
+      return "permission_denied";
+    }
+
+    if (
+      haystack.includes("not found") ||
+      haystack.includes("is not recognized") ||
+      haystack.includes("enoent")
+    ) {
+      return "command_not_found";
+    }
+
+    return "command_failed";
   }
 }
 

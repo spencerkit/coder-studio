@@ -18,6 +18,12 @@ export function SystemDependencyInstallPanel(props: {
     props.job.interaction.kind === "confirm"
       ? (props.job.interaction.promptExcerpt ?? t("system_deps.install.submit_input"))
       : t("system_deps.install.password_label");
+  const currentStep = props.job.steps.find((step) => step.id === props.job.currentStepId);
+  const failureCodeLabel = props.job.failure
+    ? t(`system_deps.install.failure.${props.job.failure.code}`)
+    : null;
+  const failureDetails =
+    props.job.failure?.stderrExcerpt ?? props.job.failure?.stdoutExcerpt ?? undefined;
 
   return (
     <div className="diagnostics-install-panel">
@@ -27,6 +33,39 @@ export function SystemDependencyInstallPanel(props: {
         </span>
         <span>{t(`system_deps.install.status.${props.job.status}`)}</span>
       </div>
+
+      {currentStep ? (
+        <div className="diagnostics-install-panel__meta">
+          <span>
+            {t("system_deps.install.current_step")}: {t(currentStep.titleKey)}
+          </span>
+        </div>
+      ) : null}
+
+      {props.job.failure ? (
+        <div className="diagnostics-install-panel__meta">
+          <span>
+            {t("system_deps.install.failure_reason")}:{" "}
+            {failureCodeLabel === `system_deps.install.failure.${props.job.failure.code}`
+              ? props.job.failure.message
+              : failureCodeLabel}
+          </span>
+        </div>
+      ) : null}
+
+      {props.job.failure?.message ? (
+        <div className="diagnostics-install-panel__meta">
+          <span>{props.job.failure.message}</span>
+        </div>
+      ) : null}
+
+      {failureDetails ? (
+        <div className="diagnostics-install-panel__meta">
+          <span>
+            {t("system_deps.install.failure_details")}: {failureDetails}
+          </span>
+        </div>
+      ) : null}
 
       <pre className="diagnostics-install-panel__log">{props.output}</pre>
 

@@ -645,7 +645,11 @@ export function DiagnosticsPage() {
                           check.autoInstallSupported ? (
                             <Button
                               onClick={() => {
-                                void installer.start(check.dependencyId);
+                                const dependencyId = check.dependencyId;
+                                if (!dependencyId) {
+                                  return;
+                                }
+                                void installer.start(dependencyId);
                               }}
                               size="sm"
                               variant="primary"

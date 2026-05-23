@@ -100,4 +100,119 @@ describe("system deps commands", () => {
     expect(missingJob.ok).toBe(false);
     expect(missingJob.error?.code).toBe("system_dependency_install_job_not_found");
   });
+
+  it("binds install lifecycle commands to the owner client", async () => {
+    const start = vi.fn(async (_dependencyId: string, ownerClientId: string) => ({
+      jobId: "job-1",
+      dependencyId: "git",
+      status: "queued",
+      steps: [],
+      interaction: { kind: "none", echo: false },
+      ownerClientId,
+    }));
+    const get = vi.fn((jobId: string, ownerClientId: string) => {
+      if (jobId === "job-1" && ownerClientId === "client-a") {
+        return {
+          jobId,
+          dependencyId: "git",
+          status: "running",
+          steps: [],
+          interaction: { kind: "none", echo: false },
+        };
+      }
+      return undefined;
+    });
+    const submitInput = vi.fn(async (jobId: string, ownerClientId: string, text: string) => ({
+      jobId,
+      dependencyId: "git",
+      status: "running",
+      steps: [],
+      interaction: { kind: "none", echo: false },
+      ownerClientId,
+      submittedText: text,
+    }));
+    const cancel = vi.fn(async (jobId: string, ownerClientId: string) => ({
+      jobId,
+      dependencyId: "git",
+      status: "cancelled",
+      steps: [],
+      interaction: { kind: "none", echo: false },
+      ownerClientId,
+    }));
+
+    const context = createContext({
+      systemDependencyInstallMgr: {
+        start,
+        get,
+        submitInput,
+        cancel,
+      } as never,
+    });
+
+    const started = await dispatch(
+      {
+        kind: "command",
+        id: "sysdeps-start-owner",
+        op: "systemDeps.install.start",
+        args: { dependencyId: "git" },
+      },
+      context,
+      "client-a"
+    );
+
+    expect(started.ok).toBe(true);
+    expect(start).toHaveBeenCalledWith("git", "client-a");
+
+    const ownerGet = await dispatch(
+      {
+        kind: "command",
+        id: "sysdeps-get-owner",
+        op: "systemDeps.install.get",
+        args: { jobId: "job-1" },
+      },
+      context,
+      "client-a"
+    );
+    expect(ownerGet.ok).toBe(true);
+    expect(get).toHaveBeenCalledWith("job-1", "client-a");
+
+    const forbiddenGet = await dispatch(
+      {
+        kind: "command",
+        id: "sysdeps-get-forbidden",
+        op: "systemDeps.install.get",
+        args: { jobId: "job-1" },
+      },
+      context,
+      "client-b"
+    );
+    expect(forbiddenGet.ok).toBe(false);
+    expect(forbiddenGet.error?.code).toBe("system_dependency_install_job_not_found");
+
+    const ownerInput = await dispatch(
+      {
+        kind: "command",
+        id: "sysdeps-input-owner",
+        op: "systemDeps.install.input",
+        args: { jobId: "job-1", text: "hunter2\n" },
+      },
+      context,
+      "client-a"
+    );
+    expect(ownerInput.ok).toBe(true);
+    expect(submitInput).toHaveBeenCalledWith("job-1", "client-a", "hunter2\n");
+
+    const ownerCancel = await dispatch(
+      {
+        kind: "command",
+        id: "sysdeps-cancel-owner",
+        op: "systemDeps.install.cancel",
+        args: { jobId: "job-1" },
+      },
+      context,
+      "client-a"
+    );
+    expect(ownerCancel.ok).toBe(true);
+    expect(cancel).toHaveBeenCalledWith("job-1", "client-a");
+  });
 });

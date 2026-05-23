@@ -30,6 +30,9 @@ export function useSystemDependencyInstaller(onSucceeded: () => Promise<void>) {
     }, 50);
   };
 
+  const isActiveJobStatus = (status: SystemDependencyInstallJobSnapshot["status"]) =>
+    status === "queued" || status === "running" || status === "waiting_input";
+
   const poll = async (jobId: string) => {
     const result = await dispatch<SystemDependencyInstallJobSnapshot>("systemDeps.install.get", {
       jobId,
@@ -41,7 +44,7 @@ export function useSystemDependencyInstaller(onSucceeded: () => Promise<void>) {
 
     setJob(result.data);
 
-    if (result.data.status === "queued" || result.data.status === "running") {
+    if (isActiveJobStatus(result.data.status)) {
       schedulePoll(jobId);
       return;
     }
@@ -87,7 +90,7 @@ export function useSystemDependencyInstaller(onSucceeded: () => Promise<void>) {
 
     setJob(result.data);
 
-    if (result.data.status === "queued" || result.data.status === "running") {
+    if (isActiveJobStatus(result.data.status)) {
       schedulePoll(result.data.jobId);
       return;
     }
@@ -116,7 +119,7 @@ export function useSystemDependencyInstaller(onSucceeded: () => Promise<void>) {
     }
 
     setJob(result.data);
-    if (result.data.status === "queued" || result.data.status === "running") {
+    if (isActiveJobStatus(result.data.status)) {
       schedulePoll(result.data.jobId);
       return;
     }

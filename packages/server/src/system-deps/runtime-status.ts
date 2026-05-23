@@ -83,40 +83,25 @@ async function buildDependencyEntry(
   };
 }
 
-async function buildDependencyMap(
-  ids: readonly [],
-  buildEntry: (dependencyId: never) => Promise<SystemDependencyRuntimeEntry>
-): Promise<Record<never, never>>;
-async function buildDependencyMap<
-  const T extends readonly [SystemDependencyId, ...SystemDependencyId[]],
->(
-  ids: T,
-  buildEntry: (dependencyId: T[number]) => Promise<SystemDependencyRuntimeEntry>
-): Promise<{ [K in T[number]]: SystemDependencyRuntimeEntry }>;
-async function buildDependencyMap(
-  ids: readonly SystemDependencyId[],
-  buildEntry: (dependencyId: SystemDependencyId) => Promise<SystemDependencyRuntimeEntry>
-): Promise<Record<string, SystemDependencyRuntimeEntry>> {
-  if (ids.length === 0) {
-    return {};
-  }
-
-  const [head, ...tail] = ids;
-  return {
-    [head]: await buildEntry(head),
-    ...(await buildDependencyMap(tail, buildEntry)),
-  };
-}
-
 export async function buildSystemDependencyRuntimeStatus(
   deps: RuntimeStatusDeps = {}
 ): Promise<SystemDependencyRuntimeStatusResponse> {
   const platform = deps.platform ?? process.platform;
   const commandExists = getCommandExists(deps);
   const packageManager = await detectPackageManager(platform, commandExists);
-  const dependencies = await buildDependencyMap(SYSTEM_DEPENDENCY_IDS, (dependencyId) =>
-    buildDependencyEntry(dependencyId, deps, platform, commandExists, packageManager)
+  const dependencyEntries = await Promise.all(
+    SYSTEM_DEPENDENCY_IDS.map(
+      async (dependencyId) =>
+        [
+          dependencyId,
+          await buildDependencyEntry(dependencyId, deps, platform, commandExists, packageManager),
+        ] as const
+    )
   );
+  const dependencies = Object.fromEntries(dependencyEntries) as Record<
+    SystemDependencyId,
+    SystemDependencyRuntimeEntry
+  >;
 
   return { dependencies };
 }
