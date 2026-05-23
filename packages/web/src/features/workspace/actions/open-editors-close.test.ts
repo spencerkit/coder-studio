@@ -18,10 +18,11 @@ describe("orderOpenEditorPaths", () => {
     expect(
       orderOpenEditorPaths({
         "src/z.ts": createFile("src/z.ts"),
+        "src/A.ts": createFile("src/A.ts"),
         "README.md": createFile("README.md"),
         "src/a.ts": createFile("src/a.ts"),
       })
-    ).toEqual(["README.md", "src/a.ts", "src/z.ts"]);
+    ).toEqual(["README.md", "src/A.ts", "src/a.ts", "src/z.ts"]);
   });
 });
 

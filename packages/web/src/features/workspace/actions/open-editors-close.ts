@@ -1,7 +1,7 @@
 import type { OpenFile } from "../atoms";
 
 export function orderOpenEditorPaths(openFiles: Record<string, OpenFile>): string[] {
-  return Object.keys(openFiles).sort((left, right) => left.localeCompare(right));
+  return Object.keys(openFiles).sort();
 }
 
 interface ResolveOpenEditorsCloseInput {
