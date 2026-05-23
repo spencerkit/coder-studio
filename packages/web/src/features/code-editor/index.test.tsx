@@ -139,6 +139,16 @@ function wrapperFor(store: ReturnType<typeof createStore>) {
   };
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 describe("CodeEditorHost", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -251,6 +261,90 @@ describe("CodeEditorHost", () => {
     await waitFor(() => {
       expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
       expect(store.get(openFilesAtomFamily("ws-1"))["src/pending.ts"]).toBeUndefined();
+    });
+  });
+
+  it("reopens the same path with a fresh load after closing an older pending load", async () => {
+    const firstRead = createDeferred<{
+      kind: "text";
+      content: string;
+      baseHash: string;
+      encoding: "utf-8";
+    }>();
+    const secondRead = createDeferred<{
+      kind: "text";
+      content: string;
+      baseHash: string;
+      encoding: "utf-8";
+    }>();
+    const sendCommand = vi
+      .fn()
+      .mockImplementationOnce(() => firstRead.promise)
+      .mockImplementationOnce(() => secondRead.promise);
+    const { store } = setupStore({ activePath: "src/foo.ts", sendCommand });
+
+    render(
+      <Provider store={store}>
+        <CodeEditorHost />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenNthCalledWith(
+        1,
+        "file.read",
+        {
+          workspaceId: "ws-1",
+          path: "src/foo.ts",
+        },
+        undefined
+      );
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
+
+    act(() => {
+      store.set(activeFilePathAtomFamily("ws-1"), "src/foo.ts");
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenNthCalledWith(
+        2,
+        "file.read",
+        {
+          workspaceId: "ws-1",
+          path: "src/foo.ts",
+        },
+        undefined
+      );
+    });
+
+    await act(async () => {
+      firstRead.resolve({
+        kind: "text",
+        content: "stale content",
+        baseHash: "stale-hash",
+        encoding: "utf-8",
+      });
+    });
+
+    await act(async () => {
+      secondRead.resolve({
+        kind: "text",
+        content: "fresh content",
+        baseHash: "fresh-hash",
+        encoding: "utf-8",
+      });
+    });
+
+    await waitFor(() => {
+      expect(store.get(activeFilePathAtomFamily("ws-1"))).toBe("src/foo.ts");
+      expect(store.get(openFilesAtomFamily("ws-1"))["src/foo.ts"]).toMatchObject({
+        content: "fresh content",
+        savedContent: "fresh content",
+        baseHash: "fresh-hash",
+      });
     });
   });
 
@@ -1282,6 +1376,76 @@ describe("CodeEditorHost", () => {
       expect(screen.getByTestId("image-preview")).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Preview" })).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
+    });
+
+    it("does not reopen a text-backed image as text when closed during the fetch stage", async () => {
+      const fetchDeferred = createDeferred<{
+        ok: true;
+        text: () => Promise<string>;
+      }>();
+      const fetchMock = vi.fn(() => fetchDeferred.promise);
+      vi.stubGlobal("fetch", fetchMock);
+
+      const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+        if (op === "file.read") {
+          return {
+            kind: "image",
+            mime: "image/svg+xml",
+            url: "/api/file?workspaceId=ws-1&path=icon.svg",
+            size: 200,
+            isTextBacked: true,
+            version: "1",
+          };
+        }
+        return null;
+      });
+
+      const { store } = setupStore({
+        activePath: "icon.svg",
+        sendCommand,
+        openFiles: {
+          "icon.svg": {
+            kind: "image",
+            path: "icon.svg",
+            mime: "image/svg+xml",
+            url: "/api/file?workspaceId=ws-1&path=icon.svg",
+            size: 200,
+            isTextBacked: true,
+            version: "1",
+          },
+        },
+      });
+
+      render(
+        <Provider store={store}>
+          <CodeEditorHost />
+        </Provider>
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+
+      await waitFor(() => {
+        expect(fetchMock).toHaveBeenCalledWith("/api/file?workspaceId=ws-1&path=icon.svg", {
+          credentials: "include",
+        });
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: "Close" }));
+
+      expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
+      expect(store.get(openFilesAtomFamily("ws-1"))["icon.svg"]).toBeUndefined();
+
+      await act(async () => {
+        fetchDeferred.resolve({
+          ok: true,
+          text: async () => '<svg xmlns="http://www.w3.org/2000/svg"/>',
+        });
+      });
+
+      await waitFor(() => {
+        expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
+        expect(store.get(openFilesAtomFamily("ws-1"))["icon.svg"]).toBeUndefined();
+      });
     });
   });
 });

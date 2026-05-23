@@ -102,18 +102,21 @@ export function useCodeEditorActions() {
   }, [activeFilePath, currentFile, diffPreview, mode, setMode, workspaceId]);
 
   const shouldIgnoreLoadResult = useCallback((path: string, requestId: number) => {
-    if (pendingLoadRequestIdsRef.current[path] !== requestId) {
-      return true;
-    }
-
     if (cancelledLoadRequestIdsRef.current[path] === requestId) {
-      delete pendingLoadRequestIdsRef.current[path];
       delete cancelledLoadRequestIdsRef.current[path];
       return true;
     }
 
-    delete pendingLoadRequestIdsRef.current[path];
-    return false;
+    return pendingLoadRequestIdsRef.current[path] !== requestId;
+  }, []);
+
+  const finishLoadRequest = useCallback((path: string, requestId: number) => {
+    if (pendingLoadRequestIdsRef.current[path] === requestId) {
+      delete pendingLoadRequestIdsRef.current[path];
+    }
+    if (cancelledLoadRequestIdsRef.current[path] === requestId) {
+      delete cancelledLoadRequestIdsRef.current[path];
+    }
   }, []);
 
   const loadFile = useCallback(
@@ -136,6 +139,7 @@ export function useCodeEditorActions() {
       }
 
       if (!result.ok || !result.data) {
+        finishLoadRequest(path, requestId);
         const message = result.error?.message ?? "Failed to open file";
         console.error("Failed to open file:", message);
         setFileLoadError({ path, message });
@@ -147,7 +151,12 @@ export function useCodeEditorActions() {
       if (options?.forceText && data.kind === "image" && data.isTextBacked) {
         try {
           const response = await fetch(data.url, { credentials: "include" });
+          if (shouldIgnoreLoadResult(path, requestId)) {
+            return;
+          }
+
           if (!response.ok) {
+            finishLoadRequest(path, requestId);
             const message = `Failed to fetch text-backed image bytes: ${response.status}`;
             console.error(message);
             setFileLoadError({ path, message });
@@ -155,8 +164,7 @@ export function useCodeEditorActions() {
           }
 
           const content = await response.text();
-          if (cancelledLoadRequestIdsRef.current[path] === requestId) {
-            delete cancelledLoadRequestIdsRef.current[path];
+          if (shouldIgnoreLoadResult(path, requestId)) {
             return;
           }
 
@@ -170,6 +178,7 @@ export function useCodeEditorActions() {
             viewingTextBackedImageAsText: true,
           };
 
+          finishLoadRequest(path, requestId);
           setOpenFiles((prev) => ({ ...prev, [path]: newFile }));
           if (workspaceRootPath) {
             monacoModelRegistry.updateFromDisk({
@@ -180,6 +189,7 @@ export function useCodeEditorActions() {
           }
           setFileLoadError((current) => (current?.path === path ? null : current));
         } catch (error) {
+          finishLoadRequest(path, requestId);
           const message =
             error instanceof Error ? error.message : "Failed to fetch text-backed image bytes";
           console.error("Failed to fetch text-backed image bytes:", error);
@@ -211,6 +221,7 @@ export function useCodeEditorActions() {
               externalState: undefined,
             };
 
+      finishLoadRequest(path, requestId);
       setOpenFiles((prev) => ({ ...prev, [path]: newFile }));
       if (workspaceRootPath && data.kind === "text") {
         monacoModelRegistry.updateFromDisk({
@@ -222,7 +233,14 @@ export function useCodeEditorActions() {
       setExternalStatus((current) => (current?.path === path ? null : current));
       setFileLoadError((current) => (current?.path === path ? null : current));
     },
-    [dispatch, setOpenFiles, shouldIgnoreLoadResult, workspaceId, workspaceRootPath]
+    [
+      dispatch,
+      finishLoadRequest,
+      setOpenFiles,
+      shouldIgnoreLoadResult,
+      workspaceId,
+      workspaceRootPath,
+    ]
   );
 
   const loadTextBackedImageContent = useCallback(async (url: string) => {
@@ -559,6 +577,7 @@ export function useCodeEditorActions() {
       const pendingRequestId = pendingLoadRequestIdsRef.current[activeFilePath];
       if (pendingRequestId !== undefined) {
         cancelledLoadRequestIdsRef.current[activeFilePath] = pendingRequestId;
+        delete pendingLoadRequestIdsRef.current[activeFilePath];
       }
       setActiveFilePath(null);
       setMode("edit");
