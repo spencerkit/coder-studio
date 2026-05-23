@@ -13174,12 +13174,13 @@ textarea.input {
 .mobile-shell__bottom-stack > .workspace-status-bar {
   width: 100%;
   align-self: stretch;
+  flex-wrap: wrap;
+  gap: 0;
   border: none;
   border-top: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
   border-radius: 0;
   background: transparent;
-  padding: 0 calc(var(--mobile-safe-right) + var(--sp-4))
-    calc(var(--mobile-safe-bottom) + var(--sp-1)) calc(var(--mobile-safe-left) + var(--sp-4));
+  padding: 0 0 calc(var(--mobile-safe-bottom) + var(--sp-1));
   box-shadow: none;
 }
 
@@ -13232,6 +13233,7 @@ textarea.input {
 }
 
 .mobile-shell__bottom-stack .git-panel-status-strip {
+  width: 100%;
   gap: 8px;
   min-height: 28px;
   font-size: var(--type-body-6-size);
@@ -13241,15 +13243,29 @@ textarea.input {
 
 .mobile-shell__bottom-stack .workspace-status-bar__left {
   flex: 1 1 auto;
+  padding: 0 calc(var(--mobile-safe-right) + var(--sp-4)) 0
+    calc(var(--mobile-safe-left) + var(--sp-4));
 }
 
 .mobile-shell__bottom-stack .workspace-status-bar__right {
-  flex: 0 1 auto;
-  max-width: 46%;
+  flex: 0 0 100%;
+  width: 100%;
+  max-width: none;
+  justify-content: flex-end;
+  margin-left: 0;
+  padding: 0 calc(var(--mobile-safe-right) + var(--sp-4)) 0
+    calc(var(--mobile-safe-left) + var(--sp-4));
+  border-top: 1px solid color-mix(in srgb, var(--border) 68%, transparent);
+}
+
+.mobile-shell__bottom-stack .workspace-status-bar__right:empty {
+  display: none;
 }
 
 .mobile-shell__bottom-stack .git-panel-status-strip__left {
+  width: 100%;
   gap: 4px;
+  justify-content: space-between;
 }
 
 .mobile-shell__bottom-stack .git-panel-status-strip__branch,
@@ -13257,8 +13273,20 @@ textarea.input {
   gap: 4px;
 }
 
+.mobile-shell__bottom-stack .git-panel-status-strip__meta {
+  margin-left: auto;
+  justify-content: flex-end;
+}
+
 .mobile-shell__bottom-stack .footer-update-rail {
+  width: 100%;
+  flex-wrap: wrap;
   gap: 4px;
+  justify-content: flex-end;
+}
+
+.mobile-shell__bottom-stack .footer-update-rail__text {
+  white-space: normal;
 }
 
 .mobile-shell__bottom-stack .git-panel-status-strip__branch .themed-icon svg,

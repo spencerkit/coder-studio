@@ -357,6 +357,11 @@ describe("UI preview catalog", () => {
     expect(await screen.findByText("New version detected v0.5.0")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /update now/i })).toBeInTheDocument();
     expect(document.querySelector(".footer-update-rail-review.mobile-shell")).toBeTruthy();
+    expect(
+      document.querySelector(
+        ".mobile-shell__bottom-stack .workspace-status-bar__right .footer-update-rail"
+      )
+    ).toBeTruthy();
   });
 
   it("renders the footer update confirm review scene with the post-click confirmation dialog", async () => {

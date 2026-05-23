@@ -2016,6 +2016,28 @@ describe("components.css theme-sensitive surfaces", () => {
     const statusStrip = getLastRuleBlock(
       ".mobile-shell__bottom-stack .git-panel-status-strip"
     ).replace(/\s+/g, " ");
+    const statusLeft = getLastRuleBlock(
+      ".mobile-shell__bottom-stack .workspace-status-bar__left"
+    ).replace(/\s+/g, " ");
+    const statusStripLeft = getLastRuleBlock(
+      ".mobile-shell__bottom-stack .git-panel-status-strip__left"
+    ).replace(/\s+/g, " ");
+    const statusMeta = getLastRuleBlock(
+      ".mobile-shell__bottom-stack .git-panel-status-strip__meta"
+    ).replace(/\s+/g, " ");
+    const statusRight = getLastRuleBlock(
+      ".mobile-shell__bottom-stack .workspace-status-bar__right"
+    ).replace(/\s+/g, " ");
+    const statusRightEmpty = getLastRuleBlock(
+      ".mobile-shell__bottom-stack .workspace-status-bar__right:empty"
+    ).replace(/\s+/g, " ");
+    const updateRail = getLastRuleBlock(".mobile-shell__bottom-stack .footer-update-rail").replace(
+      /\s+/g,
+      " "
+    );
+    const updateRailText = getLastRuleBlock(
+      ".mobile-shell__bottom-stack .footer-update-rail__text"
+    ).replace(/\s+/g, " ");
     const emptyPane = getLastRuleBlock(".mobile-shell__empty-content");
     const emptyState = getLastRuleBlock(".mobile-shell__empty-state");
     const emptyTitle = getLastRuleBlock(".mobile-shell__empty-title");
@@ -2049,12 +2071,34 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(dockItem).toContain("height: 36px");
     expect(dockItem).toContain("padding: 1px var(--sp-2) 0");
     expect(dockLabel).toContain("font-size: var(--type-body-6-size)");
-    expect(statusBar).toContain(
-      "padding: 0 calc(var(--mobile-safe-right) + var(--sp-4)) calc(var(--mobile-safe-bottom) + var(--sp-1)) calc(var(--mobile-safe-left) + var(--sp-4))"
-    );
+    expect(statusBar).toContain("padding: 0 0 calc(var(--mobile-safe-bottom) + var(--sp-1))");
     expect(statusBar).toContain("border-top: 1px solid");
+    expect(statusBar).toContain("flex-wrap: wrap");
+    expect(statusBar).toContain("gap: 0");
     expect(statusStrip).toContain("min-height: 28px");
+    expect(statusStrip).toContain("width: 100%");
     expect(statusStrip).toContain("font-size: var(--type-body-6-size)");
+    expect(statusLeft).toContain(
+      "padding: 0 calc(var(--mobile-safe-right) + var(--sp-4)) 0 calc(var(--mobile-safe-left) + var(--sp-4))"
+    );
+    expect(statusStripLeft).toContain("width: 100%");
+    expect(statusStripLeft).toContain("justify-content: space-between");
+    expect(statusMeta).toContain("margin-left: auto");
+    expect(statusMeta).toContain("justify-content: flex-end");
+    expect(statusRight).toContain("flex: 0 0 100%");
+    expect(statusRight).toContain("width: 100%");
+    expect(statusRight).toContain("max-width: none");
+    expect(statusRight).toContain("justify-content: flex-end");
+    expect(statusRight).toContain("margin-left: 0");
+    expect(statusRight).toContain(
+      "padding: 0 calc(var(--mobile-safe-right) + var(--sp-4)) 0 calc(var(--mobile-safe-left) + var(--sp-4))"
+    );
+    expect(statusRight).toContain("border-top: 1px solid");
+    expect(statusRightEmpty).toContain("display: none");
+    expect(updateRail).toContain("width: 100%");
+    expect(updateRail).toContain("flex-wrap: wrap");
+    expect(updateRail).toContain("justify-content: flex-end");
+    expect(updateRailText).toContain("white-space: normal");
     expect(emptyPane).toContain("position: relative");
     expect(emptyPane).toContain("width: min(100%, 320px)");
     expect(emptyPane).toContain("align-self: flex-start");
