@@ -265,6 +265,39 @@ const waitForManagedServerDeletion = async (pm2: Pm2Module, waitMs: number): Pro
   throw new Error(`Timed out waiting for the managed server to stop after ${waitMs}ms.`);
 };
 
+const isMissingProcessError = (error: unknown): boolean =>
+  Boolean(
+    error &&
+      typeof error === "object" &&
+      "code" in error &&
+      (error as NodeJS.ErrnoException).code === "ESRCH"
+  );
+
+const waitForProcessExit = async (pid: number, waitMs: number): Promise<void> => {
+  const deadline = Date.now() + waitMs;
+
+  while (Date.now() <= deadline) {
+    try {
+      process.kill(pid, 0);
+    } catch (error) {
+      if (isMissingProcessError(error)) {
+        return;
+      }
+
+      throw error;
+    }
+
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) {
+      break;
+    }
+
+    await sleep(Math.min(STARTUP_POLL_INTERVAL_MS, remainingMs));
+  }
+
+  throw new Error(`Timed out waiting for the managed server pid ${pid} to exit after ${waitMs}ms.`);
+};
+
 const deleteManagedServerInSession = async (
   pm2: Pm2Module,
   {
@@ -277,19 +310,27 @@ const deleteManagedServerInSession = async (
   if (processes.length === 0) {
     return false;
   }
+  const previousPid = processes[0]?.pid;
+  const deadline = Date.now() + PM2_DELETE_WAIT_MS;
 
   try {
     await removeManagedServer(pm2);
   } catch (error) {
     if (ignoreMissing && isMissingManagedServerError(error)) {
-      await waitForManagedServerDeletion(pm2, PM2_DELETE_WAIT_MS);
+      await waitForManagedServerDeletion(pm2, Math.max(0, deadline - Date.now()));
+      if (typeof previousPid === "number" && previousPid > 0) {
+        await waitForProcessExit(previousPid, Math.max(0, deadline - Date.now()));
+      }
       return false;
     }
 
     throw error;
   }
 
-  await waitForManagedServerDeletion(pm2, PM2_DELETE_WAIT_MS);
+  await waitForManagedServerDeletion(pm2, Math.max(0, deadline - Date.now()));
+  if (typeof previousPid === "number" && previousPid > 0) {
+    await waitForProcessExit(previousPid, Math.max(0, deadline - Date.now()));
+  }
   return true;
 };
 
