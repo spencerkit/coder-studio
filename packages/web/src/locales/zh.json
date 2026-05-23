@@ -164,7 +164,7 @@
     },
     "quick_jump": {
       "title": "快速跳转",
-      "placeholder": "按文件名或路径搜索文件",
+      "placeholder": "输入文件名或路径",
       "no_results": "未找到匹配文件。",
       "failed": "文件搜索失败，请重试。"
     },

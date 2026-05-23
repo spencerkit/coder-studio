@@ -164,7 +164,7 @@
     },
     "quick_jump": {
       "title": "Quick Jump",
-      "placeholder": "Search files by name or path",
+      "placeholder": "Type a filename or path",
       "no_results": "No matching files found.",
       "failed": "File search failed. Try again."
     },

@@ -84,6 +84,9 @@ describe("MobileExplorerPanel", () => {
       "workspace-open-editors__item--active"
     );
     expect(screen.getByRole("searchbox", { name: /Quick Jump|快速跳转/i })).toBeInTheDocument();
+    expect(
+      screen.getByPlaceholderText(/Type a filename or path|输入文件名或路径/i)
+    ).toBeInTheDocument();
     expect(screen.queryByRole("searchbox", { name: /Search Files|搜索文件/i })).toBeNull();
     expect(fileTreePanelSpy).toHaveBeenCalledWith(
       expect.objectContaining({

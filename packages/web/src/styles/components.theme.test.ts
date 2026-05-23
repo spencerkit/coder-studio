@@ -2146,11 +2146,16 @@ describe("components.css theme-sensitive surfaces", () => {
     const mobileFilesGitSurface = getLastRuleBlock(".mobile-sheet--files .git-panel--mobile");
     const mobileFilesSegmented = getLastRuleBlock(".mobile-files-sheet__segmented");
     const mobileFilesSegment = getLastRuleBlock(".mobile-files-sheet__segment");
+    const mobileFilesSegmentIcon = getLastRuleBlock(".mobile-files-sheet__segment-icon");
     const mobileFilesSegmentActive = getLastRuleBlock(".mobile-files-sheet__segment.active");
     const mobileFilesSegmentIndicator = getLastRuleBlock(
       ".mobile-files-sheet__segment.active::after"
     );
     const mobileFilesTabAction = getLastRuleBlock(".mobile-files-sheet__tab-action");
+    const mobileExplorerPanel = getLastRuleBlock(".mobile-explorer-panel");
+    const mobileQuickJumpSearch = getLastRuleBlock(".workspace-quick-jump__search");
+    const mobileQuickJumpItem = getLastRuleBlock(".workspace-quick-jump__item");
+    const mobileSearchPanel = getLastRuleBlock(".workspace-search-panel--mobile");
     const mobileFileSearch = getLastRuleBlock(
       ".mobile-sheet--files .file-tree-shell--mobile .file-tree-search"
     );
@@ -2183,13 +2188,21 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(mobileFilesSegmented).toContain("border-radius: 0");
     expect(mobileFilesSegmented).not.toContain("linear-gradient(");
     expect(mobileFilesSegmented).toContain("box-shadow: none");
+    expect(mobileExplorerPanel).toContain("display: flex");
+    expect(mobileExplorerPanel).toContain("flex-direction: column");
     expect(mobileFilesSegment).toContain("padding: 0");
+    expect(mobileFilesSegment).toContain("justify-content: center");
+    expect(mobileFilesSegment).toContain("min-width: 32px");
     expect(mobileFilesSegment).toContain("font-weight: var(--type-body-6-weight)");
+    expect(mobileFilesSegmentIcon).toContain("display: block");
     expect(mobileFilesSegmentActive).toContain("background: transparent");
     expect(mobileFilesSegmentIndicator).toContain("height: 1.5px");
     expect(mobileFilesTabAction).toContain("border: none");
     expect(mobileFilesTabAction).toContain("border-radius: 6px");
     expect(mobileFilesTabAction).toContain("background: transparent");
+    expect(mobileQuickJumpSearch).toContain("border: 1px solid");
+    expect(mobileQuickJumpItem).toContain("grid-template-columns: minmax(0, 1fr)");
+    expect(mobileSearchPanel).toContain("background: transparent");
     expect(mobileFilesSurface).toContain(
       "border: 1px solid color-mix(in srgb, var(--border) 80%, transparent)"
     );

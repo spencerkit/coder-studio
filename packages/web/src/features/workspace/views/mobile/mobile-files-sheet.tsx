@@ -79,21 +79,27 @@ export function MobileFilesSheet({
               className="mobile-files-sheet__segment"
               value="explorer"
             >
-              <FolderTree size={16} aria-hidden="true" />
+              <span className="mobile-files-sheet__segment-icon" aria-hidden="true">
+                <FolderTree size={16} aria-hidden="true" />
+              </span>
             </Tab>
             <Tab
               aria-label={t("workspace.sidebar.search")}
               className="mobile-files-sheet__segment"
               value="search"
             >
-              <Search size={16} aria-hidden="true" />
+              <span className="mobile-files-sheet__segment-icon" aria-hidden="true">
+                <Search size={16} aria-hidden="true" />
+              </span>
             </Tab>
             <Tab
               aria-label={t("workspace.sidebar.source_control")}
               className="mobile-files-sheet__segment"
               value="source-control"
             >
-              <GitBranch size={16} aria-hidden="true" />
+              <span className="mobile-files-sheet__segment-icon" aria-hidden="true">
+                <GitBranch size={16} aria-hidden="true" />
+              </span>
             </Tab>
           </TabList>
         </Tabs>
