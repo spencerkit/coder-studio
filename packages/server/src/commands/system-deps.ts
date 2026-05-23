@@ -1,7 +1,21 @@
 import { SYSTEM_DEPENDENCY_IDS, type SystemDependencyInstallJobSnapshot } from "@coder-studio/core";
 import { z } from "zod";
 import { buildSystemDependencyRuntimeStatus } from "../system-deps/runtime-status.js";
+import type { CommandContext } from "../ws/dispatch.js";
 import { registerCommand } from "../ws/dispatch.js";
+
+function resolveInstallOwnerId(ctx: CommandContext, clientId?: string): string | undefined {
+  if (!clientId) {
+    return undefined;
+  }
+
+  const activeLease = ctx.activationMgr?.getLease?.();
+  if (activeLease?.wsClientId === clientId) {
+    return activeLease.clientInstanceId;
+  }
+
+  return clientId;
+}
 
 registerCommand("systemDeps.runtimeStatus", z.object({}), async (_args, ctx) => {
   return buildSystemDependencyRuntimeStatus(ctx.providerRuntimeDeps);
@@ -20,7 +34,8 @@ registerCommand(
       };
     }
 
-    return ctx.systemDependencyInstallMgr.start(args.dependencyId, clientId);
+    const ownerId = resolveInstallOwnerId(ctx, clientId);
+    return ctx.systemDependencyInstallMgr.start(args.dependencyId, ownerId, clientId);
   }
 );
 
@@ -37,7 +52,8 @@ registerCommand(
       };
     }
 
-    const job = ctx.systemDependencyInstallMgr.get(args.jobId, clientId);
+    const ownerId = resolveInstallOwnerId(ctx, clientId);
+    const job = ctx.systemDependencyInstallMgr.get(args.jobId, ownerId, clientId);
     if (!job) {
       throw {
         code: "system_dependency_install_job_not_found",
@@ -63,7 +79,8 @@ registerCommand(
       };
     }
 
-    return ctx.systemDependencyInstallMgr.submitInput(args.jobId, clientId, args.text);
+    const ownerId = resolveInstallOwnerId(ctx, clientId);
+    return ctx.systemDependencyInstallMgr.submitInput(args.jobId, ownerId, args.text, clientId);
   }
 );
 
@@ -80,6 +97,7 @@ registerCommand(
       };
     }
 
-    return ctx.systemDependencyInstallMgr.cancel(args.jobId, clientId);
+    const ownerId = resolveInstallOwnerId(ctx, clientId);
+    return ctx.systemDependencyInstallMgr.cancel(args.jobId, ownerId, clientId);
   }
 );

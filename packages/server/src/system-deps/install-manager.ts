@@ -20,7 +20,7 @@ const EXCERPT_LIMIT = 400;
 interface InstallSession {
   process: PtyProcess;
   seq: number;
-  ownerClientId?: string;
+  routeClientId?: string;
 }
 
 export interface SystemDependencyInstallManagerDeps extends RuntimeStatusDeps {
@@ -29,7 +29,7 @@ export interface SystemDependencyInstallManagerDeps extends RuntimeStatusDeps {
 }
 
 interface InFlightStart {
-  ownerClientId?: string;
+  ownerId?: string;
   promise: Promise<SystemDependencyInstallJobSnapshot>;
 }
 
@@ -41,7 +41,7 @@ interface PtyExitEvent {
 
 export class SystemDependencyInstallManager {
   private readonly jobs = new Map<string, SystemDependencyInstallJobSnapshot>();
-  private readonly jobOwnerClientIds = new Map<string, string>();
+  private readonly jobOwnerIds = new Map<string, string>();
   private readonly activeJobIdsByDependencyId = new Map<SystemDependencyId, string>();
   private readonly inFlightStartsByDependencyId = new Map<SystemDependencyId, InFlightStart>();
   private readonly sessions = new Map<string, InstallSession>();
@@ -50,33 +50,37 @@ export class SystemDependencyInstallManager {
 
   async start(
     dependencyId: SystemDependencyId,
-    ownerClientId?: string
+    ownerId?: string,
+    routeClientId?: string
   ): Promise<SystemDependencyInstallJobSnapshot> {
     const activeJob = this.getActiveJob(dependencyId);
     if (activeJob) {
-      if (!this.canAccessJob(activeJob.jobId, ownerClientId)) {
+      if (!this.canAccessJob(activeJob.jobId, ownerId)) {
         throw {
           code: "system_dependency_install_in_progress",
           message: `Install already in progress for ${dependencyId}`,
         };
       }
+      this.rebindSessionRouteClient(activeJob.jobId, routeClientId);
       return cloneJobSnapshot(activeJob);
     }
 
     const inFlightStart = this.inFlightStartsByDependencyId.get(dependencyId);
     if (inFlightStart) {
-      if (!this.matchesOwner(inFlightStart.ownerClientId, ownerClientId)) {
+      if (!this.matchesOwner(inFlightStart.ownerId, ownerId)) {
         throw {
           code: "system_dependency_install_in_progress",
           message: `Install already in progress for ${dependencyId}`,
         };
       }
-      return cloneJobSnapshot(await inFlightStart.promise);
+      const job = await inFlightStart.promise;
+      this.rebindSessionRouteClient(job.jobId, routeClientId);
+      return cloneJobSnapshot(job);
     }
 
-    const startPromise = this.prepareAndStart(dependencyId, ownerClientId);
+    const startPromise = this.prepareAndStart(dependencyId, ownerId, routeClientId);
     this.inFlightStartsByDependencyId.set(dependencyId, {
-      ownerClientId,
+      ownerId,
       promise: startPromise,
     });
 
@@ -89,21 +93,27 @@ export class SystemDependencyInstallManager {
     }
   }
 
-  get(jobId: string, ownerClientId?: string): SystemDependencyInstallJobSnapshot | undefined {
-    if (!this.canAccessJob(jobId, ownerClientId)) {
+  get(
+    jobId: string,
+    ownerId?: string,
+    routeClientId?: string
+  ): SystemDependencyInstallJobSnapshot | undefined {
+    if (!this.canAccessJob(jobId, ownerId)) {
       return undefined;
     }
 
+    this.rebindSessionRouteClient(jobId, routeClientId);
     const job = this.jobs.get(jobId);
     return job ? cloneJobSnapshot(job) : undefined;
   }
 
   async submitInput(
     jobId: string,
-    ownerClientId: string | undefined,
-    text: string
+    ownerId: string | undefined,
+    text: string,
+    routeClientId?: string
   ): Promise<SystemDependencyInstallJobSnapshot> {
-    const job = this.getOwnedJob(jobId, ownerClientId);
+    const job = this.getOwnedJob(jobId, ownerId);
     const session = this.sessions.get(jobId);
     if (!job || !session) {
       throw {
@@ -112,6 +122,7 @@ export class SystemDependencyInstallManager {
       };
     }
 
+    this.rebindSessionRouteClient(jobId, routeClientId);
     job.status = "running";
     job.interaction = { kind: "none", echo: false };
     session.process.write(text);
@@ -119,8 +130,12 @@ export class SystemDependencyInstallManager {
     return cloneJobSnapshot(job);
   }
 
-  async cancel(jobId: string, ownerClientId?: string): Promise<SystemDependencyInstallJobSnapshot> {
-    const job = this.getOwnedJob(jobId, ownerClientId);
+  async cancel(
+    jobId: string,
+    ownerId?: string,
+    routeClientId?: string
+  ): Promise<SystemDependencyInstallJobSnapshot> {
+    const job = this.getOwnedJob(jobId, ownerId);
     if (!job) {
       throw {
         code: "system_dependency_install_job_not_found",
@@ -132,6 +147,7 @@ export class SystemDependencyInstallManager {
       return cloneJobSnapshot(job);
     }
 
+    this.rebindSessionRouteClient(jobId, routeClientId);
     const session = this.sessions.get(jobId);
     const installStep = this.getCurrentStep(job);
     if (installStep) {
@@ -182,7 +198,8 @@ export class SystemDependencyInstallManager {
 
   private async prepareAndStart(
     dependencyId: SystemDependencyId,
-    ownerClientId?: string
+    ownerId?: string,
+    routeClientId?: string
   ): Promise<SystemDependencyInstallJobSnapshot> {
     const runtime = await buildSystemDependencyRuntimeStatus(this.deps);
     const entry = runtime.dependencies[dependencyId];
@@ -196,7 +213,7 @@ export class SystemDependencyInstallManager {
         steps: [],
         interaction: { kind: "none", echo: false },
       };
-      this.storeJob(readyJob, ownerClientId);
+      this.storeJob(readyJob, ownerId);
       return readyJob;
     }
 
@@ -208,11 +225,11 @@ export class SystemDependencyInstallManager {
           : "unsupported_package_manager",
         entry.packageManager
       );
-      this.storeJob(failedJob, ownerClientId);
+      this.storeJob(failedJob, ownerId);
       return failedJob;
     }
 
-    return this.spawnInstallJob(dependencyId, entry.packageManager, ownerClientId);
+    return this.spawnInstallJob(dependencyId, entry.packageManager, ownerId, routeClientId);
   }
 
   private createUnsupportedJob(
@@ -258,7 +275,8 @@ export class SystemDependencyInstallManager {
   private spawnInstallJob(
     dependencyId: SystemDependencyId,
     packageManager: SystemDependencyPackageManager,
-    ownerClientId?: string
+    ownerId?: string,
+    routeClientId?: string
   ): SystemDependencyInstallJobSnapshot {
     const shellCommand = getInstallShellCommand(packageManager, dependencyId);
     const env = getPtyEnv();
@@ -300,9 +318,9 @@ export class SystemDependencyInstallManager {
         interaction: { kind: "none", echo: false },
       };
 
-      this.storeJob(job, ownerClientId);
+      this.storeJob(job, ownerId);
       this.activeJobIdsByDependencyId.set(dependencyId, job.jobId);
-      this.sessions.set(job.jobId, { process: ptyProcess, seq: 0, ownerClientId });
+      this.sessions.set(job.jobId, { process: ptyProcess, seq: 0, routeClientId });
 
       ptyProcess.onData((chunk) => {
         this.handleOutput(job.jobId, chunk);
@@ -348,7 +366,7 @@ export class SystemDependencyInstallManager {
           stderrExcerpt: excerpt(details.stderr || details.message),
         },
       };
-      this.storeJob(failedJob, ownerClientId);
+      this.storeJob(failedJob, ownerId);
       return failedJob;
     }
   }
@@ -361,8 +379,8 @@ export class SystemDependencyInstallManager {
     }
 
     session.seq += 1;
-    if (session.ownerClientId) {
-      this.deps.broadcaster.sendToClient(session.ownerClientId, {
+    if (session.routeClientId) {
+      this.deps.broadcaster.sendToClient(session.routeClientId, {
         kind: "event",
         topic: Topics.systemDependencyInstallOutput(jobId),
         seq: session.seq,
@@ -431,6 +449,12 @@ export class SystemDependencyInstallManager {
 
     const runtime = await buildSystemDependencyRuntimeStatus(this.deps);
     const entry = runtime.dependencies[job.dependencyId];
+    const latestJob = this.jobs.get(jobId);
+
+    if (!latestJob || latestJob.status === "cancelled") {
+      this.activeJobIdsByDependencyId.delete(job.dependencyId);
+      return;
+    }
 
     if (verifyStep) {
       verifyStep.finishedAt = Date.now();
@@ -456,33 +480,33 @@ export class SystemDependencyInstallManager {
 
   private storeJob(
     job: SystemDependencyInstallJobSnapshot,
-    ownerClientId?: string
+    ownerId?: string
   ): SystemDependencyInstallJobSnapshot {
     this.jobs.set(job.jobId, job);
-    if (ownerClientId) {
-      this.jobOwnerClientIds.set(job.jobId, ownerClientId);
+    if (ownerId) {
+      this.jobOwnerIds.set(job.jobId, ownerId);
     }
     return job;
   }
 
   private getOwnedJob(
     jobId: string,
-    ownerClientId?: string
+    ownerId?: string
   ): SystemDependencyInstallJobSnapshot | undefined {
-    if (!this.canAccessJob(jobId, ownerClientId)) {
+    if (!this.canAccessJob(jobId, ownerId)) {
       return undefined;
     }
 
     return this.jobs.get(jobId);
   }
 
-  private canAccessJob(jobId: string, ownerClientId?: string): boolean {
-    const owner = this.jobOwnerClientIds.get(jobId);
+  private canAccessJob(jobId: string, ownerId?: string): boolean {
+    const owner = this.jobOwnerIds.get(jobId);
     if (!owner) {
       return true;
     }
 
-    return owner === ownerClientId;
+    return owner === ownerId;
   }
 
   private matchesOwner(ownerA?: string, ownerB?: string): boolean {
@@ -491,6 +515,17 @@ export class SystemDependencyInstallManager {
     }
 
     return ownerA === ownerB;
+  }
+
+  private rebindSessionRouteClient(jobId: string, routeClientId?: string): void {
+    if (!routeClientId) {
+      return;
+    }
+
+    const session = this.sessions.get(jobId);
+    if (session) {
+      session.routeClientId = routeClientId;
+    }
   }
 
   private getCurrentStep(
@@ -532,7 +567,7 @@ export class SystemDependencyInstallManager {
     job: SystemDependencyInstallJobSnapshot,
     event: PtyExitEvent
   ): SystemDependencyInstallFailure["code"] {
-    if (event.reason === "pty_disconnected" || event.signal !== undefined) {
+    if (event.reason === "pty_disconnected") {
       return "pty_disconnected";
     }
 

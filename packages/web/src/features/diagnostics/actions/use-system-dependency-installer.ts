@@ -14,6 +14,9 @@ export function useSystemDependencyInstaller(onSucceeded: () => Promise<void>) {
   const [job, setJob] = useState<SystemDependencyInstallJobSnapshot | null>(null);
   const [output, setOutput] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [pendingDependencyId, setPendingDependencyId] = useState<SystemDependencyId | null>(null);
+  const jobRef = useRef<SystemDependencyInstallJobSnapshot | null>(null);
+  const pendingDependencyIdRef = useRef<SystemDependencyId | null>(null);
   const pollTimerRef = useRef<number | null>(null);
 
   const clearPollTimer = () => {
@@ -33,16 +36,32 @@ export function useSystemDependencyInstaller(onSucceeded: () => Promise<void>) {
   const isActiveJobStatus = (status: SystemDependencyInstallJobSnapshot["status"]) =>
     status === "queued" || status === "running" || status === "waiting_input";
 
+  const setCurrentJob = (nextJob: SystemDependencyInstallJobSnapshot | null) => {
+    jobRef.current = nextJob;
+    setJob(nextJob);
+  };
+
+  const setPendingDependency = (dependencyId: SystemDependencyId | null) => {
+    pendingDependencyIdRef.current = dependencyId;
+    setPendingDependencyId(dependencyId);
+  };
+
+  const isInstallingDependency = (dependencyId: SystemDependencyId) =>
+    pendingDependencyIdRef.current === dependencyId ||
+    (jobRef.current?.dependencyId === dependencyId && isActiveJobStatus(jobRef.current.status));
+
   const poll = async (jobId: string) => {
     const result = await dispatch<SystemDependencyInstallJobSnapshot>("systemDeps.install.get", {
       jobId,
     });
 
     if (!result.ok || !result.data) {
+      setPendingDependency(null);
       return;
     }
 
-    setJob(result.data);
+    setPendingDependency(null);
+    setCurrentJob(result.data);
 
     if (isActiveJobStatus(result.data.status)) {
       schedulePoll(jobId);
@@ -52,7 +71,7 @@ export function useSystemDependencyInstaller(onSucceeded: () => Promise<void>) {
     if (result.data.status === "succeeded") {
       clearPollTimer();
       await onSucceeded();
-      setJob(null);
+      setCurrentJob(null);
       setOutput("");
     }
   };
@@ -78,17 +97,27 @@ export function useSystemDependencyInstaller(onSucceeded: () => Promise<void>) {
   }, [job, wsClient]);
 
   const start = async (dependencyId: SystemDependencyId) => {
+    if (isInstallingDependency(dependencyId)) {
+      if (jobRef.current) {
+        schedulePoll(jobRef.current.jobId);
+      }
+      return;
+    }
+
     clearPollTimer();
+    setPendingDependency(dependencyId);
     setOutput("");
 
     const result = await dispatch<SystemDependencyInstallJobSnapshot>("systemDeps.install.start", {
       dependencyId,
     });
     if (!result.ok || !result.data) {
+      setPendingDependency(null);
       return;
     }
 
-    setJob(result.data);
+    setPendingDependency(null);
+    setCurrentJob(result.data);
 
     if (isActiveJobStatus(result.data.status)) {
       schedulePoll(result.data.jobId);
@@ -97,28 +126,31 @@ export function useSystemDependencyInstaller(onSucceeded: () => Promise<void>) {
 
     if (result.data.status === "succeeded") {
       await onSucceeded();
-      setJob(null);
+      setCurrentJob(null);
       setOutput("");
     }
   };
 
   const submitInput = async (text: string) => {
-    if (!job) {
+    const currentJob = jobRef.current;
+    if (!currentJob) {
       return;
     }
 
     setSubmitting(true);
     const result = await dispatch<SystemDependencyInstallJobSnapshot>("systemDeps.install.input", {
-      jobId: job.jobId,
+      jobId: currentJob.jobId,
       text,
     });
     setSubmitting(false);
 
     if (!result.ok || !result.data) {
+      setPendingDependency(null);
       return;
     }
 
-    setJob(result.data);
+    setPendingDependency(null);
+    setCurrentJob(result.data);
     if (isActiveJobStatus(result.data.status)) {
       schedulePoll(result.data.jobId);
       return;
@@ -126,24 +158,26 @@ export function useSystemDependencyInstaller(onSucceeded: () => Promise<void>) {
 
     if (result.data.status === "succeeded") {
       await onSucceeded();
-      setJob(null);
+      setCurrentJob(null);
       setOutput("");
     }
   };
 
   const cancel = async () => {
-    if (!job) {
+    const currentJob = jobRef.current;
+    if (!currentJob) {
       return;
     }
 
     clearPollTimer();
+    setPendingDependency(null);
     const result = await dispatch<SystemDependencyInstallJobSnapshot>("systemDeps.install.cancel", {
-      jobId: job.jobId,
+      jobId: currentJob.jobId,
     });
     if (result.ok && result.data) {
-      setJob(result.data);
+      setCurrentJob(result.data);
     }
   };
 
-  return { job, output, submitting, start, submitInput, cancel };
+  return { job, output, submitting, start, submitInput, cancel, isInstallingDependency };
 }

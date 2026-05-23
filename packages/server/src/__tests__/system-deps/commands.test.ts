@@ -102,16 +102,22 @@ describe("system deps commands", () => {
   });
 
   it("binds install lifecycle commands to the owner client", async () => {
-    const start = vi.fn(async (_dependencyId: string, ownerClientId: string) => ({
+    let activeWsClientId = "client-a";
+    const start = vi.fn(async (_dependencyId: string, ownerId: string, routeClientId: string) => ({
       jobId: "job-1",
       dependencyId: "git",
       status: "queued",
       steps: [],
       interaction: { kind: "none", echo: false },
-      ownerClientId,
+      ownerId,
+      routeClientId,
     }));
-    const get = vi.fn((jobId: string, ownerClientId: string) => {
-      if (jobId === "job-1" && ownerClientId === "client-a") {
+    const get = vi.fn((jobId: string, ownerId: string, routeClientId: string) => {
+      if (
+        jobId === "job-1" &&
+        ownerId === "tab-a" &&
+        (routeClientId === "client-a" || routeClientId === "client-a-reconnected")
+      ) {
         return {
           jobId,
           dependencyId: "git",
@@ -122,25 +128,35 @@ describe("system deps commands", () => {
       }
       return undefined;
     });
-    const submitInput = vi.fn(async (jobId: string, ownerClientId: string, text: string) => ({
-      jobId,
-      dependencyId: "git",
-      status: "running",
-      steps: [],
-      interaction: { kind: "none", echo: false },
-      ownerClientId,
-      submittedText: text,
-    }));
-    const cancel = vi.fn(async (jobId: string, ownerClientId: string) => ({
+    const submitInput = vi.fn(
+      async (jobId: string, ownerId: string, text: string, routeClientId: string) => ({
+        jobId,
+        dependencyId: "git",
+        status: "running",
+        steps: [],
+        interaction: { kind: "none", echo: false },
+        ownerId,
+        routeClientId,
+        submittedText: text,
+      })
+    );
+    const cancel = vi.fn(async (jobId: string, ownerId: string, routeClientId: string) => ({
       jobId,
       dependencyId: "git",
       status: "cancelled",
       steps: [],
       interaction: { kind: "none", echo: false },
-      ownerClientId,
+      ownerId,
+      routeClientId,
     }));
 
     const context = createContext({
+      activationMgr: {
+        getLease: vi.fn(() => ({
+          clientInstanceId: "tab-a",
+          wsClientId: activeWsClientId,
+        })),
+      } as never,
       systemDependencyInstallMgr: {
         start,
         get,
@@ -161,7 +177,7 @@ describe("system deps commands", () => {
     );
 
     expect(started.ok).toBe(true);
-    expect(start).toHaveBeenCalledWith("git", "client-a");
+    expect(start).toHaveBeenCalledWith("git", "tab-a", "client-a");
 
     const ownerGet = await dispatch(
       {
@@ -174,7 +190,21 @@ describe("system deps commands", () => {
       "client-a"
     );
     expect(ownerGet.ok).toBe(true);
-    expect(get).toHaveBeenCalledWith("job-1", "client-a");
+    expect(get).toHaveBeenCalledWith("job-1", "tab-a", "client-a");
+
+    activeWsClientId = "client-a-reconnected";
+    const reconnectedGet = await dispatch(
+      {
+        kind: "command",
+        id: "sysdeps-get-owner-reconnected",
+        op: "systemDeps.install.get",
+        args: { jobId: "job-1" },
+      },
+      context,
+      "client-a-reconnected"
+    );
+    expect(reconnectedGet.ok).toBe(true);
+    expect(get).toHaveBeenCalledWith("job-1", "tab-a", "client-a-reconnected");
 
     const forbiddenGet = await dispatch(
       {
@@ -197,10 +227,10 @@ describe("system deps commands", () => {
         args: { jobId: "job-1", text: "hunter2\n" },
       },
       context,
-      "client-a"
+      "client-a-reconnected"
     );
     expect(ownerInput.ok).toBe(true);
-    expect(submitInput).toHaveBeenCalledWith("job-1", "client-a", "hunter2\n");
+    expect(submitInput).toHaveBeenCalledWith("job-1", "tab-a", "hunter2\n", "client-a-reconnected");
 
     const ownerCancel = await dispatch(
       {
@@ -210,9 +240,9 @@ describe("system deps commands", () => {
         args: { jobId: "job-1" },
       },
       context,
-      "client-a"
+      "client-a-reconnected"
     );
     expect(ownerCancel.ok).toBe(true);
-    expect(cancel).toHaveBeenCalledWith("job-1", "client-a");
+    expect(cancel).toHaveBeenCalledWith("job-1", "tab-a", "client-a-reconnected");
   });
 });

@@ -550,6 +550,73 @@ describe("DiagnosticsPage", () => {
     expect(screen.getByText(/sudo: 3 incorrect password attempts/)).toBeInTheDocument();
   });
 
+  it("disables the install action while an install is already active", async () => {
+    let startCalls = 0;
+    const sendCommand = vi.fn(async (op: string, args?: Record<string, unknown>) => {
+      if (op === "diagnostics.get") {
+        return createResponse({ context: "manual_check", canContinue: false }, [
+          {
+            id: "git-missing",
+            code: "git_missing",
+            status: "needs_attention",
+            dependencyId: "git",
+            autoInstallSupported: true,
+            installReadiness: "ready",
+            manualGuideKeys: ["system_deps.install.git.manual"],
+            docUrl: "https://git-scm.com/downloads",
+          },
+        ] as DiagnosticsCheck[]);
+      }
+
+      if (op === "systemDeps.install.start") {
+        startCalls += 1;
+        expect(args).toEqual({ dependencyId: "git" });
+        return {
+          jobId: "job-active",
+          dependencyId: "git",
+          status: "waiting_input",
+          packageManager: "apt-get",
+          currentStepId: "install-git",
+          steps: [],
+          interaction: {
+            kind: "sudo_password",
+            promptExcerpt: "[sudo] password for spencer:",
+            echo: false,
+          },
+        };
+      }
+
+      if (op === "systemDeps.install.get") {
+        return {
+          jobId: "job-active",
+          dependencyId: "git",
+          status: "waiting_input",
+          packageManager: "apt-get",
+          currentStepId: "install-git",
+          steps: [],
+          interaction: {
+            kind: "sudo_password",
+            promptExcerpt: "[sudo] password for spencer:",
+            echo: false,
+          },
+        };
+      }
+
+      throw new Error(`Unexpected op: ${op}`);
+    });
+
+    renderDiagnostics("/diagnostics?context=manual_check", sendCommand);
+
+    const installButton = await screen.findByRole("button", { name: "Install Git" });
+    expect(installButton).toBeEnabled();
+
+    fireEvent.click(installButton);
+
+    expect(await screen.findByText("Package manager: apt-get")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Install Git" })).toBeDisabled();
+    expect(startCalls).toBe(1);
+  });
+
   it("shows the current step and structured failure details for failed installs", async () => {
     const sendCommand = vi.fn(async (op: string, args?: Record<string, unknown>) => {
       if (op === "diagnostics.get") {

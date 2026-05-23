@@ -46,8 +46,18 @@ function createFakePtyHost() {
   };
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((innerResolve, innerReject) => {
+    resolve = innerResolve;
+    reject = innerReject;
+  });
+  return { promise, resolve, reject };
+}
+
 describe("SystemDependencyInstallManager", () => {
-  it("reuses the active job for the owner, sends output only to the owner, waits for password input, and verifies success", async () => {
+  it("reuses the active job for the owner, rebinds output after reconnect, waits for password input, and verifies success", async () => {
     const pty = createFakePtyHost();
     const sendToClient = vi.fn(() => true);
     let gitInstalled = false;
@@ -69,22 +79,24 @@ describe("SystemDependencyInstallManager", () => {
       }),
     });
 
-    const first = await manager.start("git", "client-a");
-    const second = await manager.start("git", "client-a");
+    const first = await manager.start("git", "tab-a", "client-a");
+    const second = await manager.start("git", "tab-a", "client-a");
 
     expect(second.jobId).toBe(first.jobId);
-    await expect(manager.start("git", "client-b")).rejects.toMatchObject({
+    await expect(manager.start("git", "tab-b", "client-b")).rejects.toMatchObject({
       code: "system_dependency_install_in_progress",
     });
 
     pty.emitData("[sudo] password for spencer:");
 
     await vi.waitFor(() => {
-      expect(manager.get(first.jobId, "client-a")?.status).toBe("waiting_input");
+      expect(manager.get(first.jobId, "tab-a", "client-a")?.status).toBe("waiting_input");
     });
-    expect(manager.get(first.jobId, "client-b")).toBeUndefined();
+    expect(manager.get(first.jobId, "tab-b", "client-b")).toBeUndefined();
 
-    await manager.submitInput(first.jobId, "client-a", "hunter2\n");
+    expect(manager.get(first.jobId, "tab-a", "client-a-reconnected")?.status).toBe("waiting_input");
+
+    await manager.submitInput(first.jobId, "tab-a", "hunter2\n", "client-a-reconnected");
     expect(pty.writes.at(-1)).toBe("hunter2\n");
 
     gitInstalled = true;
@@ -92,11 +104,11 @@ describe("SystemDependencyInstallManager", () => {
     pty.emitExit({ exitCode: 0 });
 
     await vi.waitFor(() => {
-      expect(manager.get(first.jobId, "client-a")?.status).toBe("succeeded");
+      expect(manager.get(first.jobId, "tab-a", "client-a-reconnected")?.status).toBe("succeeded");
     });
 
     expect(sendToClient).toHaveBeenCalledWith(
-      "client-a",
+      "client-a-reconnected",
       expect.objectContaining({
         kind: "event",
         topic: Topics.systemDependencyInstallOutput(first.jobId),
@@ -117,12 +129,50 @@ describe("SystemDependencyInstallManager", () => {
       }),
     });
 
-    const job = await manager.start("git", "client-a");
-    await manager.cancel(job.jobId, "client-a");
+    const job = await manager.start("git", "tab-a", "client-a");
+    await manager.cancel(job.jobId, "tab-a", "client-a");
 
-    expect(manager.get(job.jobId, "client-a")).toMatchObject({
+    expect(manager.get(job.jobId, "tab-a", "client-a")).toMatchObject({
       status: "cancelled",
       failure: { code: "user_cancelled" },
+    });
+  });
+
+  it("keeps a cancelled job cancelled if the user aborts during verification", async () => {
+    const pty = createFakePtyHost();
+    const verifyDeferred = createDeferred<{ stdout: string; stderr: string }>();
+    let gitInstalled = false;
+    const manager = new SystemDependencyInstallManager({
+      platform: "linux",
+      ptyHost: pty.host,
+      broadcaster: { sendToClient: vi.fn(() => true) } as never,
+      commandExists: vi.fn(
+        async (command: string) => command === "apt-get" || (gitInstalled && command === "git")
+      ),
+      runCommand: vi.fn(async (file: string) => {
+        if (file === "git") {
+          return verifyDeferred.promise;
+        }
+        throw Object.assign(new Error("missing"), { exitCode: 127, stdout: "", stderr: "" });
+      }),
+    });
+
+    const job = await manager.start("git", "tab-a", "client-a");
+    gitInstalled = true;
+    pty.emitExit({ exitCode: 0 });
+
+    await vi.waitFor(() => {
+      expect(manager.get(job.jobId, "tab-a", "client-a")?.currentStepId).toBe("verify-git");
+    });
+
+    await manager.cancel(job.jobId, "tab-a", "client-a");
+    verifyDeferred.resolve({ stdout: "git version 2.49.0\n", stderr: "" });
+
+    await vi.waitFor(() => {
+      expect(manager.get(job.jobId, "tab-a", "client-a")).toMatchObject({
+        status: "cancelled",
+        failure: { code: "user_cancelled" },
+      });
     });
   });
 
@@ -138,14 +188,14 @@ describe("SystemDependencyInstallManager", () => {
       }),
     });
 
-    const job = await manager.start("git", "client-a");
+    const job = await manager.start("git", "tab-a", "client-a");
     pty.emitData(
       "E: Could not open lock file /var/lib/dpkg/lock-frontend - open (13: Permission denied)\n"
     );
     pty.emitExit({ exitCode: 100 });
 
     await vi.waitFor(() => {
-      expect(manager.get(job.jobId, "client-a")).toMatchObject({
+      expect(manager.get(job.jobId, "tab-a", "client-a")).toMatchObject({
         status: "failed",
         failure: { code: "permission_denied" },
       });
@@ -164,13 +214,36 @@ describe("SystemDependencyInstallManager", () => {
       }),
     });
 
-    const job = await manager.start("git", "client-a");
+    const job = await manager.start("git", "tab-a", "client-a");
     pty.emitExit({ exitCode: 1, reason: "pty_disconnected" });
 
     await vi.waitFor(() => {
-      expect(manager.get(job.jobId, "client-a")).toMatchObject({
+      expect(manager.get(job.jobId, "tab-a", "client-a")).toMatchObject({
         status: "failed",
         failure: { code: "pty_disconnected" },
+      });
+    });
+  });
+
+  it("does not misclassify signal exits as pty disconnects", async () => {
+    const pty = createFakePtyHost();
+    const manager = new SystemDependencyInstallManager({
+      platform: "linux",
+      ptyHost: pty.host,
+      broadcaster: { sendToClient: vi.fn(() => true) } as never,
+      commandExists: vi.fn(async (command: string) => command === "apt-get"),
+      runCommand: vi.fn(async () => {
+        throw Object.assign(new Error("missing"), { exitCode: 127, stdout: "", stderr: "" });
+      }),
+    });
+
+    const job = await manager.start("git", "tab-a", "client-a");
+    pty.emitExit({ exitCode: 143, signal: 15 });
+
+    await vi.waitFor(() => {
+      expect(manager.get(job.jobId, "tab-a", "client-a")).toMatchObject({
+        status: "failed",
+        failure: { code: "command_failed" },
       });
     });
   });
@@ -192,14 +265,14 @@ describe("SystemDependencyInstallManager", () => {
       }),
     });
 
-    const first = await manager.start("git", "client-a");
+    const first = await manager.start("git", "tab-a", "client-a");
     firstPty.emitExit({ exitCode: 1 });
 
     await vi.waitFor(() => {
-      expect(manager.get(first.jobId, "client-a")?.status).toBe("failed");
+      expect(manager.get(first.jobId, "tab-a", "client-a")?.status).toBe("failed");
     });
 
-    const retried = await manager.start("git", "client-a");
+    const retried = await manager.start("git", "tab-a", "client-a");
     expect(retried.jobId).not.toBe(first.jobId);
     expect(spawn).toHaveBeenCalledTimes(2);
   });
