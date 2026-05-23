@@ -213,10 +213,18 @@ describe("CodeEditorHost", () => {
     expect(sendCommand).not.toHaveBeenCalled();
   });
 
-  it("clears the active file when the close button is clicked", async () => {
+  it("closing the active editor from the header switches to the next sorted open file", async () => {
     const { store } = setupStore({
       activePath: "src/c.ts",
       openFiles: {
+        "src/a.ts": {
+          kind: "text",
+          path: "src/a.ts",
+          content: "alpha",
+          savedContent: "alpha",
+          baseHash: "a",
+          isDirty: false,
+        },
         "src/c.ts": {
           kind: "text",
           path: "src/c.ts",
@@ -225,7 +233,22 @@ describe("CodeEditorHost", () => {
           baseHash: "h",
           isDirty: false,
         },
+        "src/d.ts": {
+          kind: "text",
+          path: "src/d.ts",
+          content: "delta",
+          savedContent: "delta",
+          baseHash: "d",
+          isDirty: false,
+        },
       },
+    });
+    store.set(editorModeAtomFamily("ws-1"), "diff");
+    store.set(gitDiffPreviewAtomFamily("ws-1"), {
+      path: "src/unrelated.ts",
+      diff: "diff --git a/src/unrelated.ts b/src/unrelated.ts",
+      staged: false,
+      source: "file",
     });
 
     render(
@@ -244,9 +267,53 @@ describe("CodeEditorHost", () => {
 
     fireEvent.click(closeBtn);
 
-    expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
+    expect(store.get(activeFilePathAtomFamily("ws-1"))).toBe("src/d.ts");
     expect(store.get(openFilesAtomFamily("ws-1"))["src/c.ts"]).toBeUndefined();
+    expect(store.get(editorModeAtomFamily("ws-1"))).toBe("edit");
+    expect(store.get(gitDiffPreviewAtomFamily("ws-1"))).toEqual({
+      path: "src/unrelated.ts",
+      diff: "diff --git a/src/unrelated.ts b/src/unrelated.ts",
+      staged: false,
+      source: "file",
+    });
     expect(mockRegistryDisposeFile).toHaveBeenCalledWith("/tmp/ws", "src/c.ts");
+  });
+
+  it("closing the final remaining file from the header exits to the empty editor state", async () => {
+    const { store } = setupStore({
+      activePath: "src/final.ts",
+      openFiles: {
+        "src/final.ts": {
+          kind: "text",
+          path: "src/final.ts",
+          content: "final",
+          savedContent: "final",
+          baseHash: "final-hash",
+          isDirty: false,
+        },
+      },
+    });
+    store.set(editorModeAtomFamily("ws-1"), "diff");
+    store.set(gitDiffPreviewAtomFamily("ws-1"), {
+      path: "src/final.ts",
+      diff: "diff --git a/src/final.ts b/src/final.ts",
+      staged: false,
+      source: "file",
+    });
+
+    render(
+      <Provider store={store}>
+        <CodeEditorHost />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+
+    expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
+    expect(store.get(openFilesAtomFamily("ws-1"))).toEqual({});
+    expect(store.get(editorModeAtomFamily("ws-1"))).toBe("edit");
+    expect(store.get(gitDiffPreviewAtomFamily("ws-1"))).toBeNull();
+    expect(mockRegistryDisposeFile).toHaveBeenCalledWith("/tmp/ws", "src/final.ts");
   });
 
   it("can render without the editor header for mobile content-only chrome", async () => {

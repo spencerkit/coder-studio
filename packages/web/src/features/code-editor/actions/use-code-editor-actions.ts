@@ -2,6 +2,7 @@ import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { dispatchCommandAtom } from "../../../atoms/connection";
 import { activeWorkspaceAtom } from "../../../atoms/workspaces";
+import { useOpenEditorsActions } from "../../workspace/actions/use-open-editors-actions";
 import {
   activeFilePathAtomFamily,
   deriveDocumentPreviewKind,
@@ -70,6 +71,9 @@ export function useCodeEditorActions() {
   const diffPreview = useAtomValue(gitDiffPreviewAtomFamily(workspaceId ?? ""));
   const gitState = useAtomValue(gitStateAtomFamily(workspaceId ?? ""));
   const lastSeededModePathRef = useRef<string | null>(null);
+  const { closePath } = useOpenEditorsActions(workspaceId ?? "", {
+    workspaceRootPath,
+  });
 
   const currentFile: OpenFile | undefined = workspaceId
     ? openFiles[activeFilePath ?? ""]
@@ -515,31 +519,12 @@ export function useCodeEditorActions() {
   ]);
 
   const handleClose = useCallback(() => {
-    if (!workspaceId) {
-      return;
-    }
-
-    const currentPath = currentFile?.path;
-    setActiveFilePath(null);
-
-    if (currentPath) {
-      setOpenFiles((prev) => {
-        if (!(currentPath in prev)) {
-          return prev;
-        }
-
-        const next = { ...prev };
-        delete next[currentPath];
-        return next;
-      });
-      if (workspaceRootPath && currentFile?.kind === "text") {
-        monacoModelRegistry.disposeFile(workspaceRootPath, currentPath);
-      }
+    if (currentFile?.path) {
+      closePath(currentFile.path);
     }
 
     setSaveError(null);
-    setMode("edit");
-  }, [currentFile, setActiveFilePath, setMode, setOpenFiles, workspaceId, workspaceRootPath]);
+  }, [closePath, currentFile]);
 
   const toggleSvgTextMode = useCallback(() => {
     if (!workspaceId || !currentFile) {
