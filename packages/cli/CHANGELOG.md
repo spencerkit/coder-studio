@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.1
+
+### Patch Changes
+
+- [#52](https://github.com/spencerkit/coder-studio/pull/52) [`7a9ae25`](https://github.com/spencerkit/coder-studio/commit/7a9ae25841511d8056231add1d37a8e2bae7ca1d) Thanks [@pallyoung](https://github.com/pallyoung)! - Release the CI pipeline repair by removing unused server symbols that broke the
+  Windows package build and by adding the standalone server build to `ci:build`.
+
 ## 0.4.0
 
 ### Minor Changes
