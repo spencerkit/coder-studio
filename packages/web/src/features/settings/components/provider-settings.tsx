@@ -2,11 +2,12 @@ import type { ProviderRuntimeStatusEntry, ProviderRuntimeStatusResponse } from "
 import { useAtomValue } from "jotai";
 import { type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { connectionStatusAtom, dispatchCommandAtom } from "../../../atoms/connection";
+import { connectionStatusAtom } from "../../../atoms/connection";
 import { Button, Notice, SegmentedControl, Textarea } from "../../../components/ui";
 import { useTranslation } from "../../../lib/i18n";
 import { buildDiagnosticsPath } from "../../diagnostics";
 import { ConfigEditor, type ConfigType } from "./config-editor";
+import { useSessionGateDispatch } from "./use-session-gate-dispatch";
 
 export interface ProviderInfo {
   id: "claude" | "codex";
@@ -48,7 +49,7 @@ export function ProviderSettings({
 }: ProviderSettingsProps) {
   const t = useTranslation();
   const navigate = useNavigate();
-  const dispatch = useAtomValue(dispatchCommandAtom);
+  const dispatch = useSessionGateDispatch();
   const connectionStatus = useAtomValue(connectionStatusAtom);
   const commandPreviewTitle = t("settings.provider.command_preview_title");
   const commandPreviewHint = t("settings.provider.command_preview_hint");
@@ -170,7 +171,7 @@ export function ProviderSettings({
 
     const loadRuntimeStatus = async () => {
       const result = await dispatch<ProviderRuntimeStatusResponse>("provider.runtimeStatus", {});
-      if (cancelled || !result.ok || !result.data) {
+      if (cancelled || result === null || !result.ok || !result.data) {
         return;
       }
       const providersData = result.data.providers ?? {};
@@ -212,7 +213,7 @@ export function ProviderSettings({
         config: { additionalArgs },
       });
 
-      if (cancelled) {
+      if (cancelled || result === null) {
         return;
       }
 
