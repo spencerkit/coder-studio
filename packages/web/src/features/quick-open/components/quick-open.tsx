@@ -206,8 +206,12 @@ export function QuickOpen() {
                   setOpen(false);
                 }}
               >
-                <span className="quick-open__name">{file.name}</span>
-                <span className="quick-open__path">{file.path}</span>
+                <span className="quick-open__primary">
+                  <span className="quick-open__name">{file.name}</span>
+                </span>
+                <span className="quick-open__secondary">
+                  <span className="quick-open__path">{file.path}</span>
+                </span>
               </button>
             ))
           )}

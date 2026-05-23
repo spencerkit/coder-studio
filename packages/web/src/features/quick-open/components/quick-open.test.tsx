@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { quickOpenOpenAtom } from "../../../atoms/app-ui";
@@ -44,7 +44,7 @@ describe("QuickOpen", () => {
     vi.useRealTimers();
   });
 
-  it("opens on Ctrl/Cmd+P and queries file.search for the active workspace", async () => {
+  it("opens on Ctrl/Cmd+P, queries file.search, and renders file name with path", async () => {
     const sendCommand = vi.fn().mockResolvedValue({
       files: [{ path: "src/app.tsx", name: "app.tsx", kind: "file" }],
     });
@@ -77,12 +77,19 @@ describe("QuickOpen", () => {
       undefined
     );
 
-    expect(screen.getByText("app.tsx")).toBeInTheDocument();
+    const result = screen.getByRole("button", { name: /app\.tsx/i });
+    expect(within(result).getByText("app.tsx")).toHaveClass("quick-open__name");
+    expect(within(result).getByText("src/app.tsx")).toHaveClass("quick-open__path");
+    expect(result.querySelector(".quick-open__primary")).not.toBeNull();
+    expect(result.querySelector(".quick-open__secondary")).not.toBeNull();
   });
 
-  it("opens the selected file and closes after Enter", async () => {
+  it("moves the active row with keyboard and opens the selected file on Enter", async () => {
     const sendCommand = vi.fn().mockResolvedValue({
-      files: [{ path: "src/app.tsx", name: "app.tsx", kind: "file" }],
+      files: [
+        { path: "src/app.tsx", name: "app.tsx", kind: "file" },
+        { path: "src/routes.ts", name: "routes.ts", kind: "file" },
+      ],
     });
     const store = createStore();
     store.set(wsClientAtom, { sendCommand } as never);
@@ -103,12 +110,25 @@ describe("QuickOpen", () => {
       await vi.advanceTimersByTimeAsync(150);
     });
 
-    expect(screen.getByText("app.tsx")).toBeInTheDocument();
-    fireEvent.keyDown(screen.getByRole("textbox", { name: /Go to File|跳转到文件/i }), {
+    const input = screen.getByRole("textbox", { name: /Go to File|跳转到文件/i });
+    const firstResult = screen.getByRole("button", { name: /app\.tsx/i });
+    const secondResult = screen.getByRole("button", { name: /routes\.ts/i });
+
+    expect(firstResult).toHaveClass("quick-open__item--active");
+    expect(secondResult).not.toHaveClass("quick-open__item--active");
+
+    fireEvent.keyDown(input, {
+      key: "ArrowDown",
+    });
+
+    expect(firstResult).not.toHaveClass("quick-open__item--active");
+    expect(secondResult).toHaveClass("quick-open__item--active");
+
+    fireEvent.keyDown(input, {
       key: "Enter",
     });
 
-    expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/app.tsx");
+    expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/routes.ts");
     expect(store.get(quickOpenOpenAtom)).toBe(false);
   });
 });
