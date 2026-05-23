@@ -21,6 +21,12 @@ describe("Tag", () => {
     expect(screen.getByText("Draft")).toHaveClass("badge");
   });
 
+  it("preserves the shared badge compatibility class for non-wrapping status chips", () => {
+    render(<Tag color="blue">In progress</Tag>);
+
+    expect(screen.getByText("In progress")).toHaveClass("badge");
+  });
+
   it("can disable uppercase text transform", () => {
     render(
       <>

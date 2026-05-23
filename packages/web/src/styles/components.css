@@ -4036,6 +4036,10 @@ body.is-resizing-panels * {
   gap: var(--sp-1);
 }
 
+.supervisor-details-surface--progress {
+  container-type: inline-size;
+}
+
 .supervisor-progress-item {
   display: flex;
   align-items: stretch;
@@ -4138,6 +4142,13 @@ body.is-resizing-panels * {
   font-size: var(--type-body-3-size);
   line-height: var(--type-body-3-line-height);
   color: var(--text-secondary);
+}
+
+@container (max-width: 30rem) {
+  .supervisor-progress-item__header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
 
 @media (max-width: 640px) {

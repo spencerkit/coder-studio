@@ -782,6 +782,17 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(errorText).not.toContain("border-left:");
   });
 
+  it("collapses supervisor progress headers based on container width, not only viewport width", () => {
+    const progressSurface = getLastRuleBlock(".supervisor-details-surface--progress");
+    const progressContainerBlock = getLastGroupedRuleBlock(
+      /@container\s*\(max-width:\s*30rem\)\s*\{([\s\S]*?\.supervisor-progress-item__header\s*\{[\s\S]*?\})[\s\S]*?\}/g
+    );
+
+    expect(progressSurface).toContain("container-type: inline-size");
+    expect(progressContainerBlock).toContain("flex-direction: column");
+    expect(progressContainerBlock).toContain("align-items: flex-start");
+  });
+
   it("exposes global mobile safe-area tokens so standalone mobile views keep their padding", () => {
     expect(tokensStylesheet).toContain("--mobile-safe-top: env(safe-area-inset-top, 0px);");
     expect(tokensStylesheet).toContain("--mobile-safe-right: env(safe-area-inset-right, 0px);");
