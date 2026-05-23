@@ -1,8 +1,9 @@
 import type { SearchContentMatch, SearchContentResult } from "@coder-studio/core";
-import { useAtomValue } from "jotai";
+import { atom, useAtom, useAtomValue } from "jotai";
+import { atomFamily } from "jotai-family";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import type { FC, ReactNode } from "react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef } from "react";
 import { dispatchCommandAtom } from "../../../../atoms/connection";
 import { Button } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
@@ -12,6 +13,30 @@ import { PanelHeader } from "../../../shared/components/panel-header";
 interface SearchPanelProps {
   workspaceId: string;
 }
+
+interface SearchPanelState {
+  query: string;
+  retryNonce: number;
+  resolvedQuery: string;
+  resolvedRetryNonce: number;
+  results: SearchContentResult | null;
+  expandedFiles: Record<string, boolean>;
+  loading: boolean;
+  error: boolean;
+}
+
+const searchPanelStateAtomFamily = atomFamily((workspaceId: string) =>
+  atom<SearchPanelState>({
+    query: "",
+    retryNonce: 0,
+    resolvedQuery: "",
+    resolvedRetryNonce: 0,
+    results: null,
+    expandedFiles: {},
+    loading: false,
+    error: false,
+  })
+);
 
 function renderPreview(match: SearchContentMatch): ReactNode {
   const start = Math.max(0, match.previewColumnStart - 1);
@@ -37,16 +62,21 @@ export const SearchPanel: FC<SearchPanelProps> = ({ workspaceId }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const dispatchRef = useRef(dispatch);
   const groupIdPrefix = useId();
-  const [query, setQuery] = useState("");
-  const [retryNonce, setRetryNonce] = useState(0);
-  const [results, setResults] = useState<SearchContentResult | null>(null);
-  const [expandedFiles, setExpandedFiles] = useState<Record<string, boolean>>({});
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(false);
+  const [state, setState] = useAtom(searchPanelStateAtomFamily(workspaceId));
+  const {
+    error,
+    expandedFiles,
+    loading,
+    query,
+    resolvedQuery,
+    resolvedRetryNonce,
+    results,
+    retryNonce,
+  } = state;
 
   useEffect(() => {
     inputRef.current?.focus();
-  }, []);
+  }, [workspaceId]);
 
   useEffect(() => {
     dispatchRef.current = dispatch;
@@ -55,16 +85,36 @@ export const SearchPanel: FC<SearchPanelProps> = ({ workspaceId }) => {
   useEffect(() => {
     const trimmed = query.trim();
     if (!trimmed) {
-      setResults(null);
-      setExpandedFiles({});
-      setLoading(false);
-      setError(false);
+      setState((current) =>
+        current.results !== null ||
+        current.resolvedQuery ||
+        Object.keys(current.expandedFiles).length > 0 ||
+        current.loading ||
+        current.error
+          ? {
+              ...current,
+              resolvedQuery: "",
+              resolvedRetryNonce: current.retryNonce,
+              results: null,
+              expandedFiles: {},
+              loading: false,
+              error: false,
+            }
+          : current
+      );
+      return;
+    }
+
+    if (results && !error && resolvedQuery === trimmed && resolvedRetryNonce === retryNonce) {
       return;
     }
 
     let cancelled = false;
-    setLoading(true);
-    setError(false);
+    setState((current) => ({
+      ...current,
+      loading: true,
+      error: false,
+    }));
 
     const timeout = window.setTimeout(() => {
       void dispatchRef
@@ -80,25 +130,39 @@ export const SearchPanel: FC<SearchPanelProps> = ({ workspaceId }) => {
           }
 
           if (!result.ok || !result.data) {
-            setResults(null);
-            setExpandedFiles({});
-            setError(true);
+            setState((current) => ({
+              ...current,
+              results: null,
+              expandedFiles: {},
+              error: true,
+            }));
             return;
           }
 
-          setResults(result.data);
-          setExpandedFiles(buildExpandedFileMap(result.data));
+          setState((current) => ({
+            ...current,
+            resolvedQuery: trimmed,
+            resolvedRetryNonce: retryNonce,
+            results: result.data,
+            expandedFiles: buildExpandedFileMap(result.data),
+          }));
         })
         .catch(() => {
           if (!cancelled) {
-            setResults(null);
-            setExpandedFiles({});
-            setError(true);
+            setState((current) => ({
+              ...current,
+              results: null,
+              expandedFiles: {},
+              error: true,
+            }));
           }
         })
         .finally(() => {
           if (!cancelled) {
-            setLoading(false);
+            setState((current) => ({
+              ...current,
+              loading: false,
+            }));
           }
         });
     }, 250);
@@ -107,7 +171,7 @@ export const SearchPanel: FC<SearchPanelProps> = ({ workspaceId }) => {
       cancelled = true;
       window.clearTimeout(timeout);
     };
-  }, [query, retryNonce, workspaceId]);
+  }, [query, retryNonce, setState, workspaceId]);
 
   return (
     <div className="workspace-sidebar-view workspace-search-panel">
@@ -120,7 +184,12 @@ export const SearchPanel: FC<SearchPanelProps> = ({ workspaceId }) => {
           aria-label={t("workspace.sidebar.search")}
           className="workspace-search-panel__input"
           value={query}
-          onChange={(event) => setQuery(event.target.value)}
+          onChange={(event) =>
+            setState((current) => ({
+              ...current,
+              query: event.target.value,
+            }))
+          }
           placeholder={t("workspace.search.placeholder")}
         />
 
@@ -132,7 +201,7 @@ export const SearchPanel: FC<SearchPanelProps> = ({ workspaceId }) => {
                   count: results?.totalMatchCount ?? 0,
                   files: results?.files.length ?? 0,
                 })
-              : t("workspace.search.empty")}
+              : null}
         </div>
 
         {results && (results.hasMoreFiles || results.truncatedMatchFileCount > 0) ? (
@@ -149,7 +218,12 @@ export const SearchPanel: FC<SearchPanelProps> = ({ workspaceId }) => {
             <Button
               size="sm"
               variant="secondary"
-              onClick={() => setRetryNonce((value) => value + 1)}
+              onClick={() =>
+                setState((current) => ({
+                  ...current,
+                  retryNonce: current.retryNonce + 1,
+                }))
+              }
             >
               {t("workspace.search.retry")}
             </Button>
@@ -171,9 +245,12 @@ export const SearchPanel: FC<SearchPanelProps> = ({ workspaceId }) => {
                   type="button"
                   className="workspace-search-panel__group-header"
                   onClick={() =>
-                    setExpandedFiles((current) => ({
+                    setState((current) => ({
                       ...current,
-                      [file.path]: !(current[file.path] ?? true),
+                      expandedFiles: {
+                        ...current.expandedFiles,
+                        [file.path]: !(current.expandedFiles[file.path] ?? true),
+                      },
                     }))
                   }
                   aria-expanded={isExpanded}

@@ -3,7 +3,11 @@ import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { useCallback } from "react";
 import { dispatchCommandAtom } from "../../../atoms/connection";
 import { workspacesAtom } from "../../../atoms/workspaces";
-import { bottomPanelHeightAtom, focusModeAtom, leftPanelWidthAtom } from "../atoms";
+import {
+  bottomPanelHeightAtomFamily,
+  focusModeAtomFamily,
+  leftPanelWidthAtomFamily,
+} from "../atoms";
 
 function isWorkspace(value: unknown): value is Workspace {
   if (!value || typeof value !== "object") {
@@ -37,9 +41,9 @@ export function useWorkspaceUiStatePersistence(workspaceId: string) {
 
       const nextUiState: Workspace["uiState"] = {
         ...workspace.uiState,
-        leftPanelWidth: store.get(leftPanelWidthAtom),
-        bottomPanelHeight: store.get(bottomPanelHeightAtom),
-        focusMode: store.get(focusModeAtom),
+        leftPanelWidth: store.get(leftPanelWidthAtomFamily(workspaceId)),
+        bottomPanelHeight: store.get(bottomPanelHeightAtomFamily(workspaceId)),
+        focusMode: store.get(focusModeAtomFamily(workspaceId)),
         ...patch,
       };
 

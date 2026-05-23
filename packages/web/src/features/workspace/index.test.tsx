@@ -529,6 +529,263 @@ describe("WorkspacePage", () => {
     expect(await screen.findByRole("searchbox", { name: /Search|搜索/i })).toBeInTheDocument();
   });
 
+  it("keeps sidebar view and terminal visibility isolated per workspace tab instance", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return {
+          branch: "main",
+          ahead: 0,
+          behind: 0,
+          staged: [],
+          modified: [],
+          deleted: [],
+          untracked: [],
+        };
+      }
+
+      return [];
+    });
+
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedReadyWorkspaceState(store, {
+      "ws-a": {
+        id: "ws-a",
+        path: "/workspace-a",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+      "ws-b": {
+        id: "ws-b",
+        path: "/workspace-b",
+        targetRuntime: "native",
+        openedAt: 2,
+        lastActiveAt: 2,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+    store.set(activeWorkspaceIdAtom, "ws-a");
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/workspace"]}>
+          <Routes>
+            <Route path="/workspace" element={<WorkspaceDesktopView />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>
+    );
+
+    await screen.findByTestId("file-tree-panel");
+
+    fireEvent.click(screen.getByRole("button", { name: /Search|搜索/i }));
+    expect(await screen.findByRole("searchbox", { name: /Search|搜索/i })).toBeInTheDocument();
+
+    act(() => {
+      store.set(terminalPanelVisibleAtom, false);
+    });
+
+    expect(screen.queryByTestId("terminal-panel")).toBeNull();
+
+    act(() => {
+      store.set(activeWorkspaceIdAtom, "ws-b");
+    });
+
+    await screen.findByTestId("file-tree-panel");
+    expect(screen.queryByRole("searchbox", { name: /Search|搜索/i })).toBeNull();
+    expect(screen.getByTestId("terminal-panel")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Source Control|源代码管理/i }));
+    expect(screen.getByTestId("git-panel")).toBeInTheDocument();
+
+    act(() => {
+      store.set(activeWorkspaceIdAtom, "ws-a");
+    });
+
+    expect(await screen.findByRole("searchbox", { name: /Search|搜索/i })).toBeInTheDocument();
+    expect(screen.queryByTestId("terminal-panel")).toBeNull();
+
+    act(() => {
+      store.set(activeWorkspaceIdAtom, "ws-b");
+    });
+
+    expect(await screen.findByTestId("git-panel")).toBeInTheDocument();
+    expect(screen.getByTestId("terminal-panel")).toBeInTheDocument();
+  });
+
+  it("restores content search query and results per workspace tab instance", async () => {
+    vi.useFakeTimers();
+
+    const sendCommand = vi
+      .fn()
+      .mockImplementation(async (op: string, args?: { workspaceId?: string; query?: string }) => {
+        if (op === "git.status") {
+          return {
+            branch: "main",
+            ahead: 0,
+            behind: 0,
+            staged: [],
+            modified: [],
+            deleted: [],
+            untracked: [],
+          };
+        }
+
+        if (op === "file.searchContent") {
+          if (args?.workspaceId === "ws-a" && args.query === "alpha") {
+            return {
+              files: [
+                {
+                  path: "src/alpha.tsx",
+                  name: "alpha.tsx",
+                  matchCount: 1,
+                  hasMoreMatches: false,
+                  matches: [
+                    {
+                      line: 3,
+                      column: 7,
+                      endColumn: 12,
+                      preview: "const alpha = true;",
+                      previewColumnStart: 7,
+                      previewColumnEnd: 12,
+                    },
+                  ],
+                },
+              ],
+              totalMatchCount: 1,
+              hasMoreFiles: false,
+              truncatedMatchFileCount: 0,
+            };
+          }
+
+          if (args?.workspaceId === "ws-b" && args.query === "beta") {
+            return {
+              files: [
+                {
+                  path: "src/beta.tsx",
+                  name: "beta.tsx",
+                  matchCount: 1,
+                  hasMoreMatches: false,
+                  matches: [
+                    {
+                      line: 4,
+                      column: 7,
+                      endColumn: 11,
+                      preview: "const beta = true;",
+                      previewColumnStart: 7,
+                      previewColumnEnd: 11,
+                    },
+                  ],
+                },
+              ],
+              totalMatchCount: 1,
+              hasMoreFiles: false,
+              truncatedMatchFileCount: 0,
+            };
+          }
+
+          return {
+            files: [],
+            totalMatchCount: 0,
+            hasMoreFiles: false,
+            truncatedMatchFileCount: 0,
+          };
+        }
+
+        return [];
+      });
+
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedReadyWorkspaceState(store, {
+      "ws-a": {
+        id: "ws-a",
+        path: "/workspace-a",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+      "ws-b": {
+        id: "ws-b",
+        path: "/workspace-b",
+        targetRuntime: "native",
+        openedAt: 2,
+        lastActiveAt: 2,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+    store.set(activeWorkspaceIdAtom, "ws-a");
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/workspace"]}>
+          <Routes>
+            <Route path="/workspace" element={<WorkspaceDesktopView />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Search|搜索/i }));
+    const alphaInput = screen.getByRole("searchbox", { name: /Search|搜索/i });
+    fireEvent.change(alphaInput, { target: { value: "alpha" } });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(250);
+    });
+
+    expect(screen.getByDisplayValue("alpha")).toBeInTheDocument();
+    expect(screen.getByText("alpha.tsx")).toBeInTheDocument();
+
+    act(() => {
+      store.set(activeWorkspaceIdAtom, "ws-b");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Search|搜索/i }));
+    const betaInput = screen.getByRole("searchbox", { name: /Search|搜索/i });
+    expect(betaInput).toHaveValue("");
+
+    fireEvent.change(betaInput, { target: { value: "beta" } });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(250);
+    });
+
+    expect(screen.getByDisplayValue("beta")).toBeInTheDocument();
+    expect(screen.getByText("beta.tsx")).toBeInTheDocument();
+
+    act(() => {
+      store.set(activeWorkspaceIdAtom, "ws-a");
+    });
+
+    expect(screen.getByRole("searchbox", { name: /Search|搜索/i })).toHaveValue("alpha");
+    expect(screen.getByText("alpha.tsx")).toBeInTheDocument();
+    expect(screen.queryByText("beta.tsx")).toBeNull();
+
+    vi.useRealTimers();
+  });
+
   it("falls back to Explorer when the persisted desktop sidebar view is invalid", async () => {
     window.localStorage.setItem("ui.desktopSidebarView", JSON.stringify("legacy"));
 

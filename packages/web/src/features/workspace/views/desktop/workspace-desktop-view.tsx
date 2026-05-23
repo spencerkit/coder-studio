@@ -1,5 +1,6 @@
-import { useSetAtom } from "jotai";
+import { useAtomValue, useSetAtom } from "jotai";
 import { type FC, useEffect, useRef } from "react";
+import { activeWorkspaceAtom } from "../../../../atoms/workspaces";
 import { EmptyState } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { AgentPanes } from "../../../agent-panes";
@@ -29,7 +30,7 @@ function isEditableTarget(target: EventTarget | null): boolean {
   return ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
 }
 
-export const WorkspaceDesktopView: FC = () => {
+const WorkspaceDesktopScene: FC = () => {
   const fullscreenRootRef = useRef<HTMLDivElement>(null);
   const fullscreenController = useWorkspaceFullscreen(fullscreenRootRef);
   const t = useTranslation();
@@ -94,21 +95,6 @@ export const WorkspaceDesktopView: FC = () => {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [setDesktopSidebarView, setSidebarCollapsed]);
-
-  if (!workspace) {
-    return (
-      <div className="workspace-page workspace-page-empty">
-        <div className="workspace-empty-content">
-          <div className="workspace-empty-inner">
-            <EmptyState
-              style={{ minHeight: "auto", padding: 0 }}
-              title={<p>{t("workspace.no_workspace")}</p>}
-            />
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div ref={fullscreenRootRef} className="workspace-page workspace-page--desktop">
@@ -206,6 +192,28 @@ export const WorkspaceDesktopView: FC = () => {
       />
     </div>
   );
+};
+
+export const WorkspaceDesktopView: FC = () => {
+  const workspace = useAtomValue(activeWorkspaceAtom);
+  const t = useTranslation();
+
+  if (!workspace) {
+    return (
+      <div className="workspace-page workspace-page-empty">
+        <div className="workspace-empty-content">
+          <div className="workspace-empty-inner">
+            <EmptyState
+              style={{ minHeight: "auto", padding: 0 }}
+              title={<p>{t("workspace.no_workspace")}</p>}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return <WorkspaceDesktopScene key={workspace.id} />;
 };
 
 export { WorkspaceDesktopView as WorkspacePage };

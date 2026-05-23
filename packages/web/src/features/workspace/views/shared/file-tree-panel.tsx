@@ -1,8 +1,9 @@
 import type { FileNode } from "@coder-studio/core";
-import { useAtomValue, useSetAtom } from "jotai";
+import { atom, useAtom, useAtomValue, useSetAtom } from "jotai";
+import { atomFamily } from "jotai-family";
 import { ChevronDown, ChevronRight, X } from "lucide-react";
 import type { FC, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { workspaceByIdAtomFamily } from "../../../../atoms/workspaces";
 import {
   Button,
@@ -107,6 +108,36 @@ interface FileTreePanelProps {
   showSearch?: boolean;
 }
 
+interface FileTreePanelState {
+  searchValue: string;
+  resolvedQuery: string;
+  searchResults: FileNode[];
+  searchLoading: boolean;
+  contextTargetPath: string | null;
+}
+
+function createInitialFileTreePanelState(): FileTreePanelState {
+  return {
+    searchValue: "",
+    resolvedQuery: "",
+    searchResults: [],
+    searchLoading: false,
+    contextTargetPath: null,
+  };
+}
+
+function getFileTreePanelStateKey(
+  workspaceId: string,
+  variant: "desktop" | "mobile",
+  showSearch: boolean
+): string {
+  return `${workspaceId}::${variant}::${showSearch ? "search" : "plain"}`;
+}
+
+const fileTreePanelStateAtomFamily = atomFamily((_stateKey: string) =>
+  atom<FileTreePanelState>(createInitialFileTreePanelState())
+);
+
 function normalizeExpandedDirs(paths: Iterable<string>): string[] {
   return [...new Set([...paths].map(normalizeDirPath).filter(Boolean))]
     .sort((a, b) => a.localeCompare(b))
@@ -124,6 +155,9 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
   variant = "desktop",
   showSearch = true,
 }) => {
+  const [panelState, setPanelState] = useAtom(
+    fileTreePanelStateAtomFamily(getFileTreePanelStateKey(workspaceId, variant, showSearch))
+  );
   const t = useTranslation();
   const workspace = useAtomValue(workspaceByIdAtomFamily(workspaceId));
   const expandedDirs = useAtomValue(expandedDirsAtomFamily(workspaceId));
@@ -159,15 +193,13 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
     onCreateRequestConsumed,
     onSelectFile,
   });
-  const [searchValue, setSearchValue] = useState("");
+  const { contextTargetPath, resolvedQuery, searchLoading, searchResults, searchValue } =
+    panelState;
   const searchQuery = searchValue.trim();
   const treeNodes = useMemo(
     () => (fileTree ? sortNodes(buildNestedTree(fileTree)) : []),
     [fileTree]
   );
-  const [searchResults, setSearchResults] = useState<FileNode[]>([]);
-  const [searchLoading, setSearchLoading] = useState(false);
-  const [contextTargetPath, setContextTargetPath] = useState<string | null>(null);
   const searchRequestIdRef = useRef(0);
   const {
     contextTarget,
@@ -226,14 +258,30 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
     let cancelled = false;
 
     if (!hasSearch) {
-      setSearchResults([]);
-      setSearchLoading(false);
+      setPanelState((current) =>
+        current.searchResults.length > 0 || current.resolvedQuery || current.searchLoading
+          ? {
+              ...current,
+              resolvedQuery: "",
+              searchResults: [],
+              searchLoading: false,
+            }
+          : current
+      );
+      searchRequestIdRef.current += 1;
       return () => {
         cancelled = true;
       };
     }
 
-    setSearchLoading(true);
+    if (resolvedQuery === searchQuery && !searchLoading) {
+      return;
+    }
+
+    setPanelState((current) => ({
+      ...current,
+      searchLoading: true,
+    }));
     const requestId = ++searchRequestIdRef.current;
 
     const timeout = setTimeout(() => {
@@ -244,8 +292,12 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
           return;
         }
 
-        setSearchResults(result);
-        setSearchLoading(false);
+        setPanelState((current) => ({
+          ...current,
+          resolvedQuery: searchQuery,
+          searchResults: result,
+          searchLoading: false,
+        }));
       })();
     }, 150);
 
@@ -253,7 +305,7 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
       cancelled = true;
       clearTimeout(timeout);
     };
-  }, [hasSearch, loadSearchResults, searchQuery]);
+  }, [hasSearch, loadSearchResults, resolvedQuery, searchLoading, searchQuery, setPanelState]);
 
   useEffect(() => {
     onVisibleCountChange?.(visibleFileCount, searchLoading || isLoading);
@@ -272,13 +324,27 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
       return;
     }
 
-    setContextTargetPath(contextTarget.node.path);
-  }, [contextTarget]);
+    setPanelState((current) =>
+      current.contextTargetPath === contextTarget.node.path
+        ? current
+        : {
+            ...current,
+            contextTargetPath: contextTarget.node.path,
+          }
+    );
+  }, [contextTarget, setPanelState]);
 
   const closeContextMenu = useCallback(() => {
-    setContextTargetPath(null);
+    setPanelState((current) =>
+      current.contextTargetPath === null
+        ? current
+        : {
+            ...current,
+            contextTargetPath: null,
+          }
+    );
     closeMenu();
-  }, [closeMenu]);
+  }, [closeMenu, setPanelState]);
 
   const openRowContextMenu = useCallback(
     (
@@ -290,14 +356,17 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
         handleSelectFile(node.path);
       }
 
-      setContextTargetPath(node.path);
+      setPanelState((current) => ({
+        ...current,
+        contextTargetPath: node.path,
+      }));
       openDesktopMenu(event, {
         node,
         surface,
         triggerElement: event.currentTarget,
       });
     },
-    [handleSelectFile, openDesktopMenu]
+    [handleSelectFile, openDesktopMenu, setPanelState]
   );
 
   const beginRowLongPress = useCallback(
@@ -334,7 +403,12 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
               className="file-tree-search-input"
               type="search"
               value={searchValue}
-              onChange={(event) => setSearchValue(event.target.value)}
+              onChange={(event) =>
+                setPanelState((current) => ({
+                  ...current,
+                  searchValue: event.target.value,
+                }))
+              }
               placeholder={t("action.search_files")}
               aria-label={t("action.search_files")}
             />

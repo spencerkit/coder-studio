@@ -44,6 +44,16 @@ describe("SearchPanel", () => {
     vi.restoreAllMocks();
   });
 
+  it("shows the empty hint only once before a query is entered", () => {
+    const sendCommand = vi.fn();
+    renderSearchPanel(sendCommand);
+
+    expect(
+      screen.getAllByText(/Type to search across file contents|输入关键词以搜索文件内容/i)
+    ).toHaveLength(1);
+    expect(sendCommand).not.toHaveBeenCalled();
+  });
+
   it("debounces content queries, renders grouped results, and highlights matches", async () => {
     const sendCommand = vi.fn().mockResolvedValue({
       files: [
