@@ -110,7 +110,7 @@ export function QuickJumpSection({ workspaceId, onSelectFile }: QuickJumpSection
                 key={file.path}
                 type="button"
                 className="workspace-quick-jump__item"
-                aria-label={`${file.name} ${file.path}`}
+                aria-label={file.path}
                 onClick={() => {
                   setEditorMode(deriveEditorModeForPath(file.path));
                   void openLocation({

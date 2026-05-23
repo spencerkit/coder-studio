@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { wsClientAtom } from "../../../../atoms/connection";
@@ -110,7 +110,14 @@ describe("MobileExplorerPanel", () => {
       undefined
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /^README\.md README\.md$/i }));
+    fireEvent.click(
+      within(screen.getByText(/Quick Jump|快速跳转/i).closest("section") as HTMLElement).getByRole(
+        "button",
+        {
+          name: /README\.md/i,
+        }
+      )
+    );
 
     expect(onSelectFile).toHaveBeenCalledWith("README.md");
   });
