@@ -162,6 +162,12 @@
       "open_editors": "打开的编辑器",
       "workspace": "工作区"
     },
+    "quick_jump": {
+      "title": "快速跳转",
+      "placeholder": "按文件名或路径搜索文件",
+      "no_results": "未找到匹配文件。",
+      "failed": "文件搜索失败，请重试。"
+    },
     "search": {
       "empty": "输入关键词以搜索文件内容。",
       "placeholder": "搜索文件内容",

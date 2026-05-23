@@ -162,6 +162,12 @@
       "open_editors": "Open Editors",
       "workspace": "Workspace"
     },
+    "quick_jump": {
+      "title": "Quick Jump",
+      "placeholder": "Search files by name or path",
+      "no_results": "No matching files found.",
+      "failed": "File search failed. Try again."
+    },
     "search": {
       "empty": "Type to search across file contents.",
       "placeholder": "Search across file contents",
