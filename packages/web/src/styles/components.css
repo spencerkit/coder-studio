@@ -2816,6 +2816,63 @@ body.is-resizing-panels * {
   gap: var(--sp-2);
 }
 
+.diagnostics-install-panel {
+  display: grid;
+  gap: var(--sp-3);
+  margin-top: var(--sp-3);
+  padding: var(--sp-3);
+  border-color: var(--border-default);
+  border: 1px solid var(--border-default, var(--border));
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+}
+
+.diagnostics-install-panel__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-4);
+  color: var(--text-secondary);
+  font-size: var(--type-body-6-size);
+  line-height: var(--type-body-6-line-height);
+  font-weight: var(--type-body-6-weight);
+}
+
+.diagnostics-install-panel__log {
+  min-height: 120px;
+  max-height: 220px;
+  overflow: auto;
+  margin: 0;
+  padding: var(--sp-3);
+  border: 1px solid var(--border-subtle, var(--border));
+  border-radius: var(--radius-md);
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.diagnostics-install-panel__prompt {
+  display: grid;
+  gap: var(--sp-2);
+}
+
+.diagnostics-install-panel__label {
+  color: var(--text-secondary);
+  font-size: var(--type-body-6-size);
+  line-height: var(--type-body-6-line-height);
+  font-weight: var(--type-body-6-weight);
+}
+
+.diagnostics-install-panel__input {
+  width: 100%;
+}
+
+.diagnostics-install-panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
 .welcome-divider {
   width: 48px;
   height: 1px;

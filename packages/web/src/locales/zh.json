@@ -1092,6 +1092,31 @@
       }
     }
   },
+  "system_deps": {
+    "install": {
+      "install_git": "安装 Git",
+      "install_node": "安装 Node.js",
+      "package_manager": "包管理器",
+      "password_label": "管理员密码",
+      "submit_password": "提交密码",
+      "submit_input": "提交",
+      "cancel": "取消安装",
+      "status": {
+        "queued": "等待中",
+        "running": "安装中",
+        "waiting_input": "等待输入密码",
+        "succeeded": "安装完成",
+        "failed": "安装失败",
+        "cancelled": "安装已取消"
+      },
+      "git": {
+        "manual": "如果当前机器不支持自动安装，请手动安装 Git。"
+      },
+      "node": {
+        "manual": "如果当前机器不支持自动安装，请手动安装 Node.js。"
+      }
+    }
+  },
   "not_found": {
     "kicker": "路由不存在",
     "title": "页面不存在",

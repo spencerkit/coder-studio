@@ -281,6 +281,146 @@ describe("DiagnosticsPage", () => {
     expect(screen.getByText("Current version: v24.1.0")).toBeInTheDocument();
   });
 
+  it("installs a missing git dependency inline, accepts a sudo password, and rechecks on success", async () => {
+    let diagnosticsCallCount = 0;
+    let subscriptionHandler: ((topic: string, payload: unknown) => void) | undefined;
+    const sendCommand = vi.fn(async (op: string, args?: Record<string, unknown>) => {
+      if (op === "diagnostics.get" || op === "diagnostics.recheck") {
+        diagnosticsCallCount += 1;
+        if (diagnosticsCallCount === 1) {
+          return createResponse({ context: "manual_check", canContinue: false }, [
+            {
+              id: "git-missing",
+              code: "git_missing",
+              status: "needs_attention",
+              dependencyId: "git",
+              autoInstallSupported: true,
+              installReadiness: "ready",
+              manualGuideKeys: ["system_deps.install.git.manual"],
+              docUrl: "https://git-scm.com/downloads",
+            },
+          ] as DiagnosticsCheck[]);
+        }
+
+        return createResponse({ context: "manual_check", canContinue: true }, [
+          {
+            id: "git-ready",
+            code: "git_ready",
+            status: "ready",
+            dependencyId: "git",
+            version: "git version 2.49.0",
+          },
+        ] as DiagnosticsCheck[]);
+      }
+
+      if (op === "systemDeps.install.start") {
+        expect(args).toEqual({ dependencyId: "git" });
+        return {
+          jobId: "job-1",
+          dependencyId: "git",
+          status: "waiting_input",
+          packageManager: "apt-get",
+          currentStepId: "install-git",
+          steps: [],
+          interaction: {
+            kind: "sudo_password",
+            promptExcerpt: "[sudo] password for spencer:",
+            echo: false,
+          },
+        };
+      }
+
+      if (op === "systemDeps.install.input") {
+        expect(args).toEqual({ jobId: "job-1", text: "hunter2\n" });
+        return {
+          jobId: "job-1",
+          dependencyId: "git",
+          status: "running",
+          packageManager: "apt-get",
+          currentStepId: "install-git",
+          steps: [],
+          interaction: { kind: "none", echo: false },
+        };
+      }
+
+      if (op === "systemDeps.install.get") {
+        return {
+          jobId: "job-1",
+          dependencyId: "git",
+          status: "succeeded",
+          packageManager: "apt-get",
+          currentStepId: "verify-git",
+          steps: [],
+          interaction: { kind: "none", echo: false },
+        };
+      }
+
+      throw new Error(`Unexpected op: ${op}`);
+    });
+
+    const store = createStoreWithClient(sendCommand);
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe: vi.fn((_topics: string[], handler: (topic: string, payload: unknown) => void) => {
+        subscriptionHandler = handler;
+        return () => {
+          subscriptionHandler = undefined;
+        };
+      }),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/diagnostics?context=manual_check"]}>
+          <Routes>
+            <Route path="/diagnostics" element={<DiagnosticsPage />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>
+    );
+
+    expect(await screen.findByText("Git is missing")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Install Git" }));
+    expect(await screen.findByText("Package manager: apt-get")).toBeInTheDocument();
+    expect(screen.getByLabelText("Administrator password")).toHaveAttribute("type", "password");
+
+    act(() => {
+      subscriptionHandler?.("systemDeps.install.job-1.output", {
+        jobId: "job-1",
+        chunk: "downloading git\n",
+        seq: 1,
+      });
+    });
+
+    expect(await screen.findByText("downloading git")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Administrator password"), {
+      target: { value: "hunter2" },
+    });
+    fireEvent.submit(screen.getByTestId("system-dependency-password-form"));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "systemDeps.install.get",
+        { jobId: "job-1" },
+        undefined
+      );
+    });
+
+    expect(sendCommand).toHaveBeenCalledWith(
+      "diagnostics.recheck",
+      {
+        context: "manual_check",
+        workspaceId: undefined,
+        workspacePath: undefined,
+        providerId: undefined,
+      },
+      undefined
+    );
+    expect(await screen.findByText("Git is ready")).toBeInTheDocument();
+  });
+
   it("opens the workspace and updates workspace state when retrying workspace continuation", async () => {
     const workspace = createWorkspace("ws-1", "/repo");
     const sendCommand = vi.fn(async (op: string, args?: Record<string, unknown>) => {
@@ -346,6 +486,45 @@ describe("DiagnosticsPage", () => {
       },
       undefined
     );
+  });
+
+  it("shows missing git on workspace open without disabling the retry action", async () => {
+    const workspace = createWorkspace("ws-1", "/repo");
+    const sendCommand = vi.fn(async (op: string, args?: Record<string, unknown>) => {
+      if (op === "diagnostics.get") {
+        return createResponse({ context: "workspace_open", canContinue: true }, [
+          {
+            id: "workspace-ready",
+            code: "workspace_path_ready",
+            status: "ready",
+            workspacePath: "/repo",
+          },
+          {
+            id: "git-missing",
+            code: "git_missing",
+            status: "needs_attention",
+            dependencyId: "git",
+            autoInstallSupported: true,
+            installReadiness: "ready",
+          },
+        ] as DiagnosticsCheck[]);
+      }
+
+      if (op === "workspace.open") {
+        return workspace;
+      }
+
+      if (op === "workspace.lastViewedTarget.set") {
+        return { workspaceId: "ws-1", updatedAt: 1 };
+      }
+
+      throw new Error(`Unexpected op: ${op}`);
+    });
+
+    renderDiagnostics("/diagnostics?context=workspace_open&workspacePath=%2Frepo", sendCommand);
+
+    expect(await screen.findByText("Git is missing")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry Opening Workspace" })).toBeEnabled();
   });
 
   it("shows session-start diagnostics as an environment report with docs and recheck actions", async () => {

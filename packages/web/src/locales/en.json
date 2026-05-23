@@ -1092,6 +1092,31 @@
       }
     }
   },
+  "system_deps": {
+    "install": {
+      "install_git": "Install Git",
+      "install_node": "Install Node.js",
+      "package_manager": "Package manager",
+      "password_label": "Administrator password",
+      "submit_password": "Submit password",
+      "submit_input": "Submit",
+      "cancel": "Cancel install",
+      "status": {
+        "queued": "Queued",
+        "running": "Installing",
+        "waiting_input": "Waiting for password",
+        "succeeded": "Installed",
+        "failed": "Install failed",
+        "cancelled": "Install cancelled"
+      },
+      "git": {
+        "manual": "Install Git manually if automatic install is not available for this machine."
+      },
+      "node": {
+        "manual": "Install Node.js manually if automatic install is not available for this machine."
+      }
+    }
+  },
   "not_found": {
     "kicker": "ROUTE NOT FOUND",
     "title": "Page not found",
