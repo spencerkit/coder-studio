@@ -1,6 +1,5 @@
 import { execFile } from "child_process";
 import { promisify } from "util";
-import { resolveSafe } from "../fs/file-io.js";
 import { getImageTypeInfo } from "../fs/image.js";
 import { GitError } from "./cli.js";
 

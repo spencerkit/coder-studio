@@ -180,7 +180,7 @@ export class UpdateService {
     };
   }
 
-  async checkForUpdates(options: { manual: boolean }): Promise<UpdateStateView> {
+  async checkForUpdates(_options: { manual: boolean }): Promise<UpdateStateView> {
     const current = this.deps.updateStateRepo.get();
     if (current.updateStatus === "installing" || current.updateStatus === "restarting") {
       throw createBusyError("Update installation is already in progress");

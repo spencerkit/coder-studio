@@ -22,7 +22,6 @@ import {
   ensureStateDir,
   parseServerConfig,
   resolveConfiguredStateDir,
-  type ServerConfig,
   type ServerConfigInput,
 } from "./config.js";
 import { AutoFetchScheduler } from "./git/auto-fetch.js";
