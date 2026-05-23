@@ -893,9 +893,10 @@ describe("components.css theme-sensitive surfaces", () => {
     const statusBar = getLastRuleBlock(".workspace-status-bar");
     const agentPanes = getLastRuleBlock(".workspace-main-stage > .agent-panes");
     const bottomPanel = getLastRuleBlock(".workspace-bottom-panel");
-    const sidebarTabs = getLastRuleBlock(".workspace-sidebar-panel__tabs");
-    const sidebarTab = getLastRuleBlock(".workspace-sidebar-panel__tab");
-    const sidebarTabActiveAfter = getLastRuleBlock(".workspace-sidebar-panel__tab.active::after");
+    const activityBar = getLastRuleBlock(".workspace-activity-bar");
+    const activityBarButton = getLastRuleBlock(".workspace-activity-bar__button");
+    const activityBarButtonHover = getLastRuleBlock(".workspace-activity-bar__button:hover");
+    const activityBarButtonActive = getLastRuleBlock(".workspace-activity-bar__button--active");
     const sidebarActions = getLastRuleBlock(".workspace-sidebar-panel__actions");
     const verticalDividerRules = getRuleBlocksFrom(stylesheet, ".split-divider-v").join("\n");
     const horizontalDividerRules = getRuleBlocksFrom(stylesheet, ".split-divider-h").join("\n");
@@ -989,9 +990,16 @@ describe("components.css theme-sensitive surfaces", () => {
     );
     expect(resolvingStrongLine).toContain("border: 1px solid var(--state-info-border)");
     expect(resolvingStrongLine).toContain("background: var(--state-info-bg)");
-    expect(sidebarTabs).toContain("gap: var(--gap-default)");
-    expect(sidebarTab).toContain("gap: var(--gap-control)");
-    expect(sidebarTabActiveAfter).toContain("border-radius: var(--radius-pill)");
+    expect(activityBar).toContain("border-right: 1px solid var(--border)");
+    expect(activityBar).toContain(
+      "background: color-mix(in srgb, var(--bg-panel) 88%, var(--bg-page))"
+    );
+    expect(activityBarButton).toContain("border-radius: var(--radius-lg)");
+    expect(activityBarButton).toContain("background: transparent");
+    expect(activityBarButtonHover).toContain("background: var(--bg-hover)");
+    expect(activityBarButtonActive).toContain(
+      "background: color-mix(in srgb, var(--accent-blue) 14%, transparent)"
+    );
     expect(sidebarActions).toContain("gap: var(--gap-control)");
     expect(verticalDividerRules).toContain("width: 10px");
     expect(verticalDividerRules).not.toContain("width: 8px");

@@ -10,10 +10,24 @@ import { TopBar } from "../../../topbar";
 import { useWorkspaceFullscreen } from "../../actions/use-workspace-fullscreen";
 import { useWorkspaceScreenModel } from "../../actions/use-workspace-screen-model";
 import { sidebarCollapsedAtom } from "../../atoms";
+import { sanitizeDesktopSidebarView } from "../../atoms/layout";
 import { ExplorerPanel } from "../shared/explorer-panel";
 import { GitPanel } from "../shared/git-panel";
+import { SearchPanel } from "../shared/search-panel";
 import { WorkspaceActivityBar } from "../shared/workspace-activity-bar";
 import { WorkspaceStatusBar } from "../shared/workspace-status-bar";
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  if (target.isContentEditable || target.closest('[contenteditable="true"]')) {
+    return true;
+  }
+
+  return ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
+}
 
 export const WorkspaceDesktopView: FC = () => {
   const fullscreenRootRef = useRef<HTMLDivElement>(null);
@@ -41,8 +55,14 @@ export const WorkspaceDesktopView: FC = () => {
     bottomPanelRef,
   } = useWorkspaceScreenModel();
   const setSidebarCollapsed = useSetAtom(sidebarCollapsedAtom);
+  const activeSidebarView = sanitizeDesktopSidebarView(desktopSidebarView);
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || isEditableTarget(event.target)) {
+        return;
+      }
+
       if (!(event.metaKey || event.ctrlKey)) {
         return;
       }
@@ -104,12 +124,12 @@ export const WorkspaceDesktopView: FC = () => {
             >
               <div className="nav-panel workspace-sidebar-panel">
                 <WorkspaceActivityBar
-                  activeView={desktopSidebarView}
+                  activeView={activeSidebarView}
                   onSelectView={setDesktopSidebarView}
                 />
 
                 <div className="workspace-sidebar-panel__content">
-                  {desktopSidebarView === "explorer" ? (
+                  {activeSidebarView === "explorer" ? (
                     <ExplorerPanel
                       workspaceId={workspace.id}
                       createRequest={createRequest}
@@ -119,19 +139,11 @@ export const WorkspaceDesktopView: FC = () => {
                     />
                   ) : null}
 
-                  {desktopSidebarView === "search" ? (
-                    <div className="workspace-sidebar-view">
-                      <PanelHeader title={t("workspace.sidebar.search")} />
-                      <div className="workspace-sidebar-panel__body">
-                        <EmptyState
-                          style={{ minHeight: "auto", padding: "var(--sp-5)" }}
-                          title={<p>{t("workspace.search.empty")}</p>}
-                        />
-                      </div>
-                    </div>
+                  {activeSidebarView === "search" ? (
+                    <SearchPanel workspaceId={workspace.id} />
                   ) : null}
 
-                  {desktopSidebarView === "source-control" ? (
+                  {activeSidebarView === "source-control" ? (
                     <div className="workspace-sidebar-view">
                       <PanelHeader title={t("workspace.sidebar.source_control")} />
                       <div className="workspace-sidebar-panel__body">

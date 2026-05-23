@@ -73,6 +73,11 @@ export const authenticatedAtom = atom<boolean>(false);
 export const commandPaletteOpenAtom = atom<boolean>(false);
 
 /**
+ * Quick Open overlay state
+ */
+export const quickOpenOpenAtom = atom<boolean>(false);
+
+/**
  * Pending session-focus request.
  *
  * Set when something outside the workspace UI wants to bring a specific

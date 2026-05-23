@@ -82,6 +82,7 @@ export const ExplorerPanel: FC<ExplorerPanelProps> = ({
                 className={`workspace-open-editors__item ${
                   activeFilePath === path ? "workspace-open-editors__item--active" : ""
                 }`}
+                title={path}
                 onClick={() =>
                   void openLocation({
                     workspaceId,

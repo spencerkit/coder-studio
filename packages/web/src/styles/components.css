@@ -12430,7 +12430,7 @@ textarea.input {
 .workspace-open-editors {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--gap-micro);
 }
 
 .workspace-open-editors__item {
