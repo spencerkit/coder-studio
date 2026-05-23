@@ -404,6 +404,17 @@ describe("diagnostics commands", () => {
       createContext({
         providerRuntimeDeps: {
           commandExists: async () => true,
+          runCommand: async (file: string) => {
+            if (file === "git") {
+              return { stdout: "git version 2.49.0\n", stderr: "" };
+            }
+
+            if (file === "node") {
+              return { stdout: "v24.1.0\n", stderr: "" };
+            }
+
+            throw new Error(`Unexpected command: ${file}`);
+          },
         },
         config: {
           host: "192.168.1.10",
@@ -429,6 +440,70 @@ describe("diagnostics commands", () => {
         expect.objectContaining({
           code: "server_auth_ready",
           status: "ready",
+        }),
+      ])
+    );
+  });
+
+  it("uses git and nodejs checks instead of workspace checks in manual diagnostics and includes versions when available", async () => {
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "diag-manual-runtime-versions",
+        op: "diagnostics.get",
+        args: {
+          context: "manual_check",
+          workspaceId: "ws-1",
+        },
+      },
+      createContext({
+        providerRuntimeDeps: {
+          commandExists: async () => true,
+          runCommand: async (file: string) => {
+            if (file === "git") {
+              return { stdout: "git version 2.49.0\n", stderr: "" };
+            }
+
+            if (file === "node") {
+              return { stdout: "v24.1.0\n", stderr: "" };
+            }
+
+            throw new Error(`Unexpected command: ${file}`);
+          },
+        },
+        config: {
+          host: "192.168.1.10",
+          auth: {
+            enabled: true,
+            password: "secret",
+          },
+        },
+      })
+    );
+
+    expect(result.ok).toBe(true);
+    const checks = (result.data as { checks: Array<{ code: string; version?: string }> }).checks;
+
+    expect(checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "git_ready",
+          version: expect.any(String),
+        }),
+        expect.objectContaining({
+          code: "nodejs_ready",
+          version: expect.any(String),
+        }),
+      ])
+    );
+
+    expect(checks).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "session_workspace_ready",
+        }),
+        expect.objectContaining({
+          code: "workspace_path_ready",
         }),
       ])
     );

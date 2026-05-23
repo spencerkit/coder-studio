@@ -959,7 +959,8 @@
       "workspace": "Workspace",
       "provider": "Provider",
       "missing_commands": "Missing commands",
-      "missing_prerequisites": "Missing prerequisites"
+      "missing_prerequisites": "Missing prerequisites",
+      "current_version": "Current version"
     },
     "context": {
       "workspace_open": {
@@ -1003,6 +1004,22 @@
       "session_workspace_missing": {
         "title": "Workspace is missing",
         "description": "Select or reopen the workspace before starting a session."
+      },
+      "git_ready": {
+        "title": "Git is ready",
+        "description": "Git is installed and available in the current environment."
+      },
+      "git_missing": {
+        "title": "Git is missing",
+        "description": "Install Git before relying on workspace repository features."
+      },
+      "nodejs_ready": {
+        "title": "Node.js is ready",
+        "description": "Node.js is installed and available in the current environment."
+      },
+      "nodejs_missing": {
+        "title": "Node.js is missing",
+        "description": "Install Node.js before running local JavaScript and package tasks."
       },
       "provider_runtime_ready": {
         "title": "{provider} is ready",

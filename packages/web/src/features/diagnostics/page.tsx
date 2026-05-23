@@ -119,6 +119,26 @@ function buildCheckCopy(
         title: t("diagnostics.checks.session_workspace_missing.title"),
         description: t("diagnostics.checks.session_workspace_missing.description"),
       };
+    case "git_ready":
+      return {
+        title: t("diagnostics.checks.git_ready.title"),
+        description: t("diagnostics.checks.git_ready.description"),
+      };
+    case "git_missing":
+      return {
+        title: t("diagnostics.checks.git_missing.title"),
+        description: t("diagnostics.checks.git_missing.description"),
+      };
+    case "nodejs_ready":
+      return {
+        title: t("diagnostics.checks.nodejs_ready.title"),
+        description: t("diagnostics.checks.nodejs_ready.description"),
+      };
+    case "nodejs_missing":
+      return {
+        title: t("diagnostics.checks.nodejs_missing.title"),
+        description: t("diagnostics.checks.nodejs_missing.description"),
+      };
     case "provider_runtime_ready":
       return {
         title: t("diagnostics.checks.provider_runtime_ready.title", { provider }),
@@ -599,6 +619,11 @@ export function DiagnosticsPage() {
                             <span>
                               {t("diagnostics.details.missing_prerequisites")}:{" "}
                               {formatList(check.missingPrerequisites)}
+                            </span>
+                          ) : null}
+                          {check.version ? (
+                            <span>
+                              {t("diagnostics.details.current_version")}: {check.version}
                             </span>
                           ) : null}
                         </div>

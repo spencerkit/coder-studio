@@ -959,7 +959,8 @@
       "workspace": "工作区",
       "provider": "Provider",
       "missing_commands": "缺失命令",
-      "missing_prerequisites": "缺失前置依赖"
+      "missing_prerequisites": "缺失前置依赖",
+      "current_version": "当前版本"
     },
     "context": {
       "workspace_open": {
@@ -1003,6 +1004,22 @@
       "session_workspace_missing": {
         "title": "工作区缺失",
         "description": "先选择或重新打开工作区，再启动会话。"
+      },
+      "git_ready": {
+        "title": "Git 已就绪",
+        "description": "当前环境已安装 Git，且可以正常使用。"
+      },
+      "git_missing": {
+        "title": "Git 缺失",
+        "description": "使用工作区仓库相关能力前，需要先安装 Git。"
+      },
+      "nodejs_ready": {
+        "title": "Node.js 已就绪",
+        "description": "当前环境已安装 Node.js，且可以正常使用。"
+      },
+      "nodejs_missing": {
+        "title": "Node.js 缺失",
+        "description": "运行本地 JavaScript 和包管理任务前，需要先安装 Node.js。"
       },
       "provider_runtime_ready": {
         "title": "{provider} 已就绪",

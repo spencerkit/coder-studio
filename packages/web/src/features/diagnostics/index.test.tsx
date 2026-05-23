@@ -249,6 +249,38 @@ describe("DiagnosticsPage", () => {
     expect(document.querySelector(".welcome-card")).toBeNull();
   });
 
+  it("shows git and nodejs diagnostics with current versions on manual check", async () => {
+    const sendCommand = vi.fn().mockResolvedValue(
+      createResponse(
+        {
+          context: "manual_check",
+          canContinue: true,
+        },
+        [
+          {
+            id: "git-ready",
+            code: "git_ready",
+            status: "ready",
+            version: "git version 2.49.0",
+          },
+          {
+            id: "nodejs-ready",
+            code: "nodejs_ready",
+            status: "ready",
+            version: "v24.1.0",
+          },
+        ] as DiagnosticsCheck[]
+      )
+    );
+
+    renderDiagnostics("/diagnostics?context=manual_check", sendCommand);
+
+    expect(await screen.findByText("Git is ready")).toBeInTheDocument();
+    expect(screen.getByText("Node.js is ready")).toBeInTheDocument();
+    expect(screen.getByText("Current version: git version 2.49.0")).toBeInTheDocument();
+    expect(screen.getByText("Current version: v24.1.0")).toBeInTheDocument();
+  });
+
   it("opens the workspace and updates workspace state when retrying workspace continuation", async () => {
     const workspace = createWorkspace("ws-1", "/repo");
     const sendCommand = vi.fn(async (op: string, args?: Record<string, unknown>) => {
