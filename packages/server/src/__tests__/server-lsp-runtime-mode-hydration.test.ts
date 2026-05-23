@@ -7,12 +7,10 @@ import { SettingsRepo } from "../storage/index.js";
 
 describe("server lsp runtime mode hydration", () => {
   let server: Server | undefined;
-  let dataDir: string;
-  let dbPath: string;
+  let stateDir: string;
 
   beforeEach(() => {
-    dataDir = mkdtempSync(join(tmpdir(), "coder-studio-data-"));
-    dbPath = join(dataDir, "coder-studio.db");
+    stateDir = mkdtempSync(join(tmpdir(), "coder-studio-state-"));
   });
 
   afterEach(async () => {
@@ -20,17 +18,17 @@ describe("server lsp runtime mode hydration", () => {
       await server.stop();
       server = undefined;
     }
-    rmSync(dataDir, { recursive: true, force: true });
+    rmSync(stateDir, { recursive: true, force: true });
   });
 
   it("hydrates persisted lsp.mode into the lsp manager on startup", async () => {
     const settingsRepo = new SettingsRepo({
-      filePath: join(dataDir, "state", "settings.json"),
+      filePath: join(stateDir, "state", "settings.json"),
     });
     settingsRepo.set("lsp.mode", "off");
 
     server = await createServer({
-      dataDir: dbPath,
+      stateDir,
       host: "127.0.0.1",
       port: 0,
     });

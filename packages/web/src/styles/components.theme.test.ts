@@ -69,6 +69,10 @@ const buttonStyles = readFileSync(
   `${process.cwd()}/src/components/ui/button/index.module.css`,
   "utf8"
 );
+const iconButtonStyles = readFileSync(
+  `${process.cwd()}/src/components/ui/icon-button/index.module.css`,
+  "utf8"
+);
 const popoverStyles = readFileSync(
   `${process.cwd()}/src/components/ui/popover/index.module.css`,
   "utf8"
@@ -476,10 +480,6 @@ describe("components.css theme-sensitive surfaces", () => {
       "padding: 0 var(--inset-control-inline)"
     );
 
-    const iconButtonStyles = readFileSync(
-      `${process.cwd()}/src/components/ui/icon-button/index.module.css`,
-      "utf8"
-    );
     expect(getLastRuleBlockFrom(iconButtonStyles, ".root")).toContain(
       "width: var(--icon-button-size-md)"
     );
@@ -488,6 +488,12 @@ describe("components.css theme-sensitive surfaces", () => {
     );
     expect(getLastRuleBlockFrom(iconButtonStyles, ".root")).toContain(
       "border-radius: var(--radius-control)"
+    );
+    expect(getLastRuleBlockFrom(iconButtonStyles, ".root:focus-visible")).toContain(
+      "box-shadow: none"
+    );
+    expect(getLastRuleBlockFrom(iconButtonStyles, ".root:focus-visible")).toContain(
+      "outline: none"
     );
 
     expect(getLastRuleBlockFrom(inputStyles, ".input")).toContain(
@@ -802,6 +808,10 @@ describe("components.css theme-sensitive surfaces", () => {
   });
 
   it("keeps shared overlay families on semantic z-index tokens", () => {
+    const modalStyles = readFileSync(
+      `${process.cwd()}/src/components/ui/modal/index.module.css`,
+      "utf8"
+    );
     const drawerStyles = readFileSync(
       `${process.cwd()}/src/components/ui/drawer/index.module.css`,
       "utf8"
@@ -815,6 +825,7 @@ describe("components.css theme-sensitive surfaces", () => {
       "utf8"
     );
 
+    expect(modalStyles).toContain("var(--z-modal-backdrop)");
     expect(drawerStyles).toContain("var(--z-drawer-backdrop)");
     expect(drawerStyles).toContain("var(--z-drawer)");
     expect(workbenchStyles).toContain("var(--z-workbench-backdrop)");
@@ -844,7 +855,11 @@ describe("components.css theme-sensitive surfaces", () => {
     const topbar = getLastRuleBlock(".app-topbar");
     const topbarTabs = getLastRuleBlock(".topbar-tabs");
     const topbarTab = getLastRuleBlock(".topbar-tab");
+    const topbarTabContent = getLastRuleBlock(".topbar-tab-content");
     const activeTab = getLastRuleBlock(".topbar-tab.active");
+    const miniMap = getLastRuleBlock(".workspace-session-mini-map");
+    const miniMapViewport = getLastRuleBlock(".workspace-session-mini-map__viewport");
+    const miniMapColumn = getLastRuleBlock(".workspace-session-mini-map__column");
     const workspaceResizer = getLastRuleBlock(".workspace-resizer");
     const emptyCard = getLastRuleBlock(".workspace-empty-inner");
     const resolvingCard = getLastRuleBlock(".workspace-resolving-card");
@@ -904,8 +919,35 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(topbarTab).toContain(
       "padding: 0 var(--control-height-md) 0 var(--inset-control-inline)"
     );
+    expect(topbarTabContent).toContain("gap: var(--gap-tight)");
+    expect(topbarTabContent).toContain("background: transparent");
+    expect(topbarTabContent).toContain("box-shadow: none");
     expect(activeTab).toContain("var(--bg-active)");
     expect(activeTab).not.toContain("rgba(45, 63, 79, 0.92)");
+    expect(topbarTab).toContain("position: relative");
+    expect(topbarTab).toContain("overflow: hidden");
+    expect(miniMap).toContain("position: relative");
+    expect(miniMap).toContain("width: calc(");
+    expect(miniMap).toContain("var(--workspace-session-map-columns, 1) *");
+    expect(miniMap).toContain("var(--gap-compact)");
+    expect(miniMap).toContain("height: var(--sp-3)");
+    expect(miniMapViewport).toContain("display: inline-flex");
+    expect(miniMapViewport).toContain("gap: var(--gap-compact)");
+    expect(miniMapViewport).toContain("height: 100%");
+    expect(miniMapColumn).toContain("flex: 0 0 var(--sp-1)");
+    expect(miniMapColumn).toContain("height: 100%");
+    expect(miniMapColumn).toContain("border-radius: var(--radius-full)");
+    expect(miniMapColumn).toContain("background: var(");
+    expect(miniMapColumn).toContain("--workspace-session-map-column-fill");
+    expect(miniMapColumn).toContain("var(--workspace-session-map-empty) 100%");
+    expect(tokensStylesheet).toContain(
+      "--workspace-session-map-running: var(--state-success-text)"
+    );
+    expect(tokensStylesheet).toContain(
+      "--workspace-session-map-starting: var(--state-warning-text)"
+    );
+    expect(tokensStylesheet).toContain("--workspace-session-map-idle: color-mix(");
+    expect(tokensStylesheet).toContain("--workspace-session-map-empty: color-mix(");
     expect(workspaceResizer).toContain("z-index: var(--z-inline)");
     expect(emptyCard).toContain("var(--bg-surface)");
     expect(resolvingCard).toContain("var(--bg-surface)");
@@ -1047,6 +1089,16 @@ describe("components.css theme-sensitive surfaces", () => {
 
     expect(mobileSheetBackdrop).toContain("background: var(--overlay-backdrop)");
     expect(mobileDrawerBackdrop).toContain("background: var(--overlay-backdrop)");
+  });
+
+  it("keeps mobile sheets below shared modal dialogs so confirmation overlays remain visible", () => {
+    const mobileSheetLayer = getLastRuleBlock(".mobile-sheet-layer");
+    const mobileDrawerLayer = getLastRuleBlock(".mobile-drawer-layer");
+    const modalOverlay = getLastRuleBlockFrom(modalStylesheet, ":global(.modal-overlay)");
+
+    expect(mobileSheetLayer).toContain("z-index: var(--z-sheet)");
+    expect(mobileDrawerLayer).toContain("z-index: var(--z-sheet)");
+    expect(modalOverlay).toContain("z-index: var(--z-modal-backdrop)");
   });
 
   it("keeps worktree state chips and mobile tabs on shared state and layer tokens", () => {
@@ -1230,10 +1282,18 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(stylesheet).not.toContain(".mobile-terminal-copy-mode");
   });
 
-  it("keeps code editor header actions docked to the right edge", () => {
-    expect(stylesheet).toMatch(
-      /\.code-mode-toggle\s*\{[^}]*display:\s*inline-flex;[^}]*margin-left:\s*auto;[^}]*flex-shrink:\s*0;[^}]*\}/
-    );
+  it("keeps the unified editor toolbar docked to the right without an outline", () => {
+    const toolbar = getLastRuleBlock(".editor-surface__toolbar");
+    const toolbarButtons = getLastRuleBlock(".editor-surface__toolbar .code-mode-btn");
+    const activeToolbarButtons = getLastRuleBlock(".editor-surface__toolbar .code-mode-btn.active");
+
+    expect(toolbar).toContain("display: inline-flex");
+    expect(toolbar).toContain("justify-content: flex-end");
+    expect(toolbar).toContain("margin-left: auto");
+    expect(toolbar).not.toContain("border: 1px");
+    expect(toolbarButtons).toContain("border: none");
+    expect(toolbarButtons).toContain("box-shadow: none");
+    expect(activeToolbarButtons).toContain("box-shadow: none");
   });
 
   it("scopes disabled provider card styling to the draft launcher", () => {
@@ -1764,10 +1824,19 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(settingsNavItem).toContain("min-height: 40px");
     expect(settingsNavItem).toContain("border: 1px solid transparent");
     expect(settingsNavItem).toContain("border-radius: var(--radius-md)");
+    expect(settingsNavItem).toContain("align-items: center");
+    expect(settingsNavItem).toContain("gap: var(--sp-3)");
+    expect(settingsNavItem).toContain("display: flex");
     expect(settingsNavItemHover).toContain("background: var(--bg-hover)");
     expect(settingsNavItemActive).toContain("background: var(--bg-active)");
     expect(settingsNavItemActive).toContain("border-color: color-mix");
     expect(settingsNavItemActive).toContain("var(--accent-blue)");
+    expect(getLastRuleBlock(".settings-nav-icon")).toContain("display: inline-flex");
+    expect(getLastRuleBlock(".settings-nav-icon")).toContain("line-height: 0");
+    expect(getLastRuleBlock(".settings-nav-label")).toContain("display: block");
+    expect(getLastRuleBlock(".settings-nav-label")).toContain("min-width: 0");
+    expect(getLastRuleBlock(".settings-nav-arrow")).toContain("display: block");
+    expect(getLastRuleBlock(".settings-nav-arrow")).toContain("line-height: 0");
     expect(mobileContent).toContain("padding: 0");
     expect(mobileRootContent).toContain("padding-left: var(--sp-3)");
     expect(mobileRootContent).toContain("padding-right: var(--sp-3)");
@@ -1947,6 +2016,28 @@ describe("components.css theme-sensitive surfaces", () => {
     const statusStrip = getLastRuleBlock(
       ".mobile-shell__bottom-stack .git-panel-status-strip"
     ).replace(/\s+/g, " ");
+    const statusLeft = getLastRuleBlock(
+      ".mobile-shell__bottom-stack .workspace-status-bar__left"
+    ).replace(/\s+/g, " ");
+    const statusStripLeft = getLastRuleBlock(
+      ".mobile-shell__bottom-stack .git-panel-status-strip__left"
+    ).replace(/\s+/g, " ");
+    const statusMeta = getLastRuleBlock(
+      ".mobile-shell__bottom-stack .git-panel-status-strip__meta"
+    ).replace(/\s+/g, " ");
+    const statusRight = getLastRuleBlock(
+      ".mobile-shell__bottom-stack .workspace-status-bar__right"
+    ).replace(/\s+/g, " ");
+    const statusRightEmpty = getLastRuleBlock(
+      ".mobile-shell__bottom-stack .workspace-status-bar__right:empty"
+    ).replace(/\s+/g, " ");
+    const updateRail = getLastRuleBlock(".mobile-shell__bottom-stack .footer-update-rail").replace(
+      /\s+/g,
+      " "
+    );
+    const updateRailText = getLastRuleBlock(
+      ".mobile-shell__bottom-stack .footer-update-rail__text"
+    ).replace(/\s+/g, " ");
     const emptyPane = getLastRuleBlock(".mobile-shell__empty-content");
     const emptyState = getLastRuleBlock(".mobile-shell__empty-state");
     const emptyTitle = getLastRuleBlock(".mobile-shell__empty-title");
@@ -1980,13 +2071,34 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(dockItem).toContain("height: 36px");
     expect(dockItem).toContain("padding: 1px var(--sp-2) 0");
     expect(dockLabel).toContain("font-size: var(--type-body-6-size)");
-    expect(statusBar).toContain("padding-bottom: calc(var(--mobile-safe-bottom) + var(--sp-1))");
+    expect(statusBar).toContain("padding: 0 0 calc(var(--mobile-safe-bottom) + var(--sp-1))");
     expect(statusBar).toContain("border-top: 1px solid");
+    expect(statusBar).toContain("flex-wrap: wrap");
+    expect(statusBar).toContain("gap: 0");
     expect(statusStrip).toContain("min-height: 28px");
+    expect(statusStrip).toContain("width: 100%");
     expect(statusStrip).toContain("font-size: var(--type-body-6-size)");
-    expect(statusStrip).toContain(
+    expect(statusLeft).toContain(
       "padding: 0 calc(var(--mobile-safe-right) + var(--sp-4)) 0 calc(var(--mobile-safe-left) + var(--sp-4))"
     );
+    expect(statusStripLeft).toContain("width: 100%");
+    expect(statusStripLeft).toContain("justify-content: space-between");
+    expect(statusMeta).toContain("margin-left: auto");
+    expect(statusMeta).toContain("justify-content: flex-end");
+    expect(statusRight).toContain("flex: 0 0 100%");
+    expect(statusRight).toContain("width: 100%");
+    expect(statusRight).toContain("max-width: none");
+    expect(statusRight).toContain("justify-content: flex-end");
+    expect(statusRight).toContain("margin-left: 0");
+    expect(statusRight).toContain(
+      "padding: 0 calc(var(--mobile-safe-right) + var(--sp-4)) 0 calc(var(--mobile-safe-left) + var(--sp-4))"
+    );
+    expect(statusRight).toContain("border-top: 1px solid");
+    expect(statusRightEmpty).toContain("display: none");
+    expect(updateRail).toContain("width: 100%");
+    expect(updateRail).toContain("flex-wrap: wrap");
+    expect(updateRail).toContain("justify-content: flex-end");
+    expect(updateRailText).toContain("white-space: normal");
     expect(emptyPane).toContain("position: relative");
     expect(emptyPane).toContain("width: min(100%, 320px)");
     expect(emptyPane).toContain("align-self: flex-start");
@@ -2780,6 +2892,22 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(controlMobile).toContain("justify-content: flex-start");
     expect(compactInputBase).toContain("text-align: right");
     expect(compactInputMobile).toContain("text-align: left");
+  });
+
+  it("keeps the About update action row right-aligned with explicit spacing", () => {
+    const actionRowBase = getLastRuleBlock(".settings-actions-row");
+    const actionRow = getLastRuleBlock(".settings-actions-row--end");
+
+    expect(actionRowBase).toContain("display: flex");
+    expect(actionRowBase).toContain("align-items: center");
+    expect(actionRowBase).toContain("flex-wrap: wrap");
+    expect(actionRow).toContain("justify-content: flex-end");
+    expect(actionRow).toContain("gap: var(--sp-3)");
+    expect(actionRow).toContain("margin-top: var(--sp-3)");
+  });
+
+  it("does not add a dedicated About interval alignment wrapper", () => {
+    expect(hasRuleBlock(".settings-about-interval-control-wrap")).toBe(false);
   });
 
   it("removes the unused legacy provider card chrome from settings styles", () => {

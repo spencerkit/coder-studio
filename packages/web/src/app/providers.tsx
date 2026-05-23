@@ -10,6 +10,7 @@ import type {
   GitStatus,
   Session,
   Supervisor,
+  UpdateStateView,
   Workspace,
   WorktreeInfo,
 } from "@coder-studio/core";
@@ -46,14 +47,13 @@ import { useSessionNotifications } from "../features/notifications";
 import { supervisorsAtom } from "../features/supervisor/atoms";
 import { terminalMetaAtomFamily } from "../features/terminal-panel/atoms";
 import {
-  DESKTOP_TERMINAL_FONT_SIZE_SETTING_KEY,
   hasExplicitTerminalFontSizeSetting,
   hasLegacyTerminalFontSizeSetting,
-  MOBILE_TERMINAL_FONT_SIZE_SETTING_KEY,
   resolveTerminalCopyOnSelectSetting,
   resolveTerminalFontSizeSetting,
   terminalPreferencesAtom,
 } from "../features/terminal-panel/preferences";
+import { updateStateAtom } from "../features/updates/atoms";
 import {
   editorRefreshTokenAtomFamily,
   expandedDirsAtomFamily,
@@ -65,6 +65,7 @@ import {
   worktreeListAtomFamily,
 } from "../features/workspace/atoms";
 import { useActivation } from "../hooks/use-activation";
+import { useTranslation } from "../lib/i18n";
 import { getThemeById, resolveStoredThemeId } from "../theme";
 import type { ConnectionStatus, EventListener } from "../ws";
 import { resolveWsUrl, WsClient } from "../ws";
@@ -251,6 +252,7 @@ interface AppProvidersProps {
 }
 
 export function AppProviders({ children }: AppProvidersProps) {
+  const t = useTranslation();
   const [, setWsClient] = useAtom(wsClientAtom);
   const [theme, setTheme] = useAtom(themeAtom);
   const authEnabled = useAtomValue(authEnabledAtom);
@@ -272,6 +274,7 @@ export function AppProviders({ children }: AppProvidersProps) {
   // Supervisor state atoms
   const setSupervisors = useSetAtom(supervisorsAtom);
   const setTerminalPreferences = useSetAtom(terminalPreferencesAtom);
+  const setUpdateState = useSetAtom(updateStateAtom);
 
   // Get Jotai store for writing to atomFamily atoms
   const store = useStore();
@@ -427,6 +430,28 @@ export function AppProviders({ children }: AppProvidersProps) {
       unsubscribeTerminalPreferences();
     };
   }, [connectionStatus, dispatch, setTerminalPreferences, store]);
+
+  useEffect(() => {
+    if (connectionStatus !== "connected") {
+      return;
+    }
+
+    let cancelled = false;
+
+    const hydrateUpdateState = async () => {
+      const result = await dispatch<UpdateStateView>("updates.getState", {});
+      if (cancelled || !result.ok || !result.data) {
+        return;
+      }
+      setUpdateState(result.data);
+    };
+
+    void hydrateUpdateState();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [connectionStatus, dispatch, setUpdateState]);
 
   useEffect(() => {
     activeWorkspaceIdRef.current = activeWorkspaceId;
@@ -851,6 +876,7 @@ export function AppProviders({ children }: AppProvidersProps) {
     const topics = [
       "connection.*", // Connection-level events
       "activation.*",
+      "update.*",
       "workspace.*", // All workspace events (glob pattern)
     ];
 
@@ -1109,6 +1135,11 @@ export function routeEventToAtom(topic: string, payload: unknown, store: Store):
     if (data.status === "error" && data.message) {
       store.set(connectionErrorAtom, data.message);
     }
+    return;
+  }
+
+  if (topic === "update.state.changed") {
+    store.set(updateStateAtom, payload as UpdateStateView);
     return;
   }
 

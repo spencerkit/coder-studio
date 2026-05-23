@@ -8,6 +8,7 @@ export * from "./domain/provider-install";
 export * from "./domain/supervisor";
 // Domain
 export * from "./domain/types";
+export * from "./domain/update";
 export * from "./protocol/messages";
 export * from "./protocol/topics";
 

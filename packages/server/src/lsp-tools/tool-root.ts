@@ -1,8 +1,8 @@
 import { mkdirSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 
-export function resolveLspToolRoot(dataDir: string): string {
-  const root = join(dirname(dataDir), "lsp-tools");
+export function resolveLspToolRoot(stateDir: string): string {
+  const root = join(stateDir, "lsp-tools");
   mkdirSync(root, { recursive: true });
   return root;
 }

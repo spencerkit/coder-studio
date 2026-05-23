@@ -6,10 +6,8 @@ import {
   type CodeEditorState,
 } from "../../../code-editor/views/shared/code-editor-host";
 import type { CreateRequest } from "../../actions/use-file-actions";
-import { useGitDiffViewerActions } from "../../actions/use-git-actions";
 import type { MobileFilesRoute } from "../../actions/use-workspace-screen-model";
 import { FileTreePanel } from "../shared/file-tree-panel";
-import { GitDiffViewer } from "../shared/git-diff-viewer";
 import { GitPanel } from "../shared/git-panel";
 
 interface MobileFilesSheetProps {
@@ -44,36 +42,18 @@ export function MobileFilesSheet({
   editorState,
 }: MobileFilesSheetProps) {
   const t = useTranslation();
-  const { closePreview } = useGitDiffViewerActions(workspaceId);
-
-  const handlePreviewChange = (preview: { path: string }) => {
-    onRouteChange?.({ kind: "diff", path: preview.path });
+  const handlePreviewOpen = () => {
+    const path = editorState?.activeFilePath;
+    if (path) {
+      onRouteChange?.({ kind: "file", path });
+    }
   };
 
-  const handleCloseDiff = () => {
-    closePreview();
-    onCloseSheet?.();
-  };
-
-  if (route.kind === "editor") {
+  if (route.kind === "file") {
     return (
       <div className="mobile-files-sheet">
         <div className="mobile-files-sheet__detail">
           <CodeEditorHost chrome="content-only" editorState={editorState} />
-        </div>
-      </div>
-    );
-  }
-
-  if (route.kind === "diff") {
-    return (
-      <div className="mobile-files-sheet">
-        <div className="mobile-files-sheet__detail">
-          <GitDiffViewer
-            workspaceId={workspaceId}
-            onClose={handleCloseDiff}
-            showCloseButton={false}
-          />
         </div>
       </div>
     );
@@ -136,16 +116,12 @@ export function MobileFilesSheet({
             workspaceId={workspaceId}
             createRequest={createRequest}
             onCreateRequestConsumed={onCreateRequestConsumed}
-            onSelectFile={(path) => onRouteChange?.({ kind: "editor", path })}
+            onSelectFile={(path) => onRouteChange?.({ kind: "file", path })}
             collapseVersion={collapseVersion}
             variant="mobile"
           />
         ) : (
-          <GitPanel
-            workspaceId={workspaceId}
-            onPreviewOpen={handlePreviewChange}
-            variant="mobile"
-          />
+          <GitPanel workspaceId={workspaceId} onPreviewOpen={handlePreviewOpen} variant="mobile" />
         )}
       </div>
     </div>

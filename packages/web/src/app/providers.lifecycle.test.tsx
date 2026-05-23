@@ -1,4 +1,4 @@
-import type { Workspace } from "@coder-studio/core";
+import type { UpdateStateView, Workspace } from "@coder-studio/core";
 import { act, render } from "@testing-library/react";
 import { createStore, Provider, useAtomValue } from "jotai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -16,7 +16,9 @@ import {
   workspacesAtom,
   workspacesLoadStateAtom,
 } from "../atoms/workspaces";
+import { toastsAtom } from "../features/notifications/atoms";
 import { terminalPreferencesAtom } from "../features/terminal-panel/preferences";
+import { updateStateAtom } from "../features/updates/atoms";
 import {
   expandedDirsAtomFamily,
   fileTreeAtomFamily,
@@ -80,6 +82,11 @@ function renderProviders(store = createStore()) {
 
 function TerminalPreferencesProbe() {
   useAtomValue(terminalPreferencesAtom);
+  return null;
+}
+
+function UpdateStateProbe() {
+  useAtomValue(updateStateAtom);
   return null;
 }
 
@@ -261,6 +268,129 @@ describe("AppProviders lifecycle recovery", () => {
         workspaceId: "ws-1",
       });
     });
+  });
+
+  it("hydrates update state after the websocket connects", async () => {
+    const updateState: UpdateStateView = {
+      version: 1,
+      currentVersion: "0.4.0",
+      latestVersion: "0.5.0",
+      availability: "update_available",
+      updateStatus: "idle",
+      lastCheckedAt: 123,
+      targetVersion: null,
+      startedAt: null,
+      finishedAt: null,
+      requiresManualStep: false,
+      manualCommand: null,
+      errorSummary: null,
+      supported: true,
+      installKind: "global_npm",
+      unsupportedReason: null,
+    };
+    wsState.client!.sendCommand = createWsSendCommandMock(async (op) => {
+      if (op === "updates.getState") {
+        return updateState;
+      }
+      return undefined;
+    });
+    const store = createStore();
+    setVisibilityState("visible");
+
+    await act(async () => {
+      render(
+        <Provider store={store}>
+          <AppProviders>
+            <UpdateStateProbe />
+          </AppProviders>
+        </Provider>
+      );
+    });
+
+    act(() => {
+      wsState.client?.statusHandler?.("connected");
+    });
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.sendCommand).toHaveBeenCalledWith("updates.getState", {}, undefined);
+    });
+
+    await vi.waitFor(() => {
+      expect(store.get(updateStateAtom)).toEqual(updateState);
+    });
+  });
+
+  it("subscribes to update topics so update events stream without a reconnect", async () => {
+    const store = createStore();
+    setVisibilityState("visible");
+
+    renderProviders(store);
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+      expect(wsState.client?.subscribe).toHaveBeenCalled();
+    });
+
+    const topics = wsState.client?.subscribe.mock.calls.at(-1)?.[0];
+
+    expect(topics).toEqual(expect.arrayContaining(["update.*"]));
+  });
+
+  it("hydrates update state without emitting a toast when an update becomes available after connect", async () => {
+    const updateState: UpdateStateView = {
+      version: 1,
+      currentVersion: "0.4.0",
+      latestVersion: "0.5.0",
+      availability: "update_available",
+      updateStatus: "idle",
+      lastCheckedAt: 123,
+      targetVersion: null,
+      startedAt: null,
+      finishedAt: null,
+      requiresManualStep: false,
+      manualCommand: null,
+      errorSummary: null,
+      supported: true,
+      installKind: "global_npm",
+      unsupportedReason: null,
+    };
+    wsState.client!.sendCommand = createWsSendCommandMock(async (op) => {
+      if (op === "updates.getState") {
+        return {
+          ...updateState,
+          latestVersion: null,
+          availability: "unknown" as const,
+          lastCheckedAt: null,
+        };
+      }
+      return undefined;
+    });
+    const store = createStore();
+    setVisibilityState("visible");
+
+    renderProviders(store);
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
+
+    act(() => {
+      wsState.client?.statusHandler?.("connected");
+    });
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.sendCommand).toHaveBeenCalledWith("updates.getState", {}, undefined);
+    });
+
+    act(() => {
+      wsState.client?.eventHandler?.("update.state.changed", updateState, 1);
+    });
+
+    await vi.waitFor(() => {
+      expect(store.get(updateStateAtom)).toEqual(updateState);
+    });
+
+    expect(store.get(toastsAtom)).toEqual([]);
   });
 
   it("sends workspace.deactivate when the page becomes hidden", async () => {

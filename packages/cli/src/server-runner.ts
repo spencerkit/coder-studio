@@ -1,22 +1,23 @@
-import type { Server, ServerConfig } from "@coder-studio/server";
+import type { Server, ServerConfigInput } from "@coder-studio/server";
 import { parseServerConfig } from "@coder-studio/server";
 import { mkdirSync } from "fs";
-import { dirname } from "path";
 import { fileURLToPath } from "url";
 import { readCliConfig } from "./config-store.js";
 import { getStaticAssetsDir, hasWebAssets } from "./embed.js";
 import { assertSupportedNodeVersion } from "./node-version.js";
 import { getCliVersion } from "./package-manifest.js";
+import { getUpdateRuntimeInfo } from "./update-runtime.js";
 
 const MISSING_WEB_ASSETS_WARNING = "Warning: Web assets not found. Frontend will not be available.";
 
-export const buildServerConfig = (): Partial<ServerConfig> => {
+export const buildServerConfig = (): ServerConfigInput => {
   const savedConfig = readCliConfig();
-  const config: Partial<ServerConfig> = {
+  const config: ServerConfigInput = {
     appVersion: getCliVersion(import.meta.url),
+    update: getUpdateRuntimeInfo(import.meta.url),
     ...(savedConfig?.host !== undefined ? { host: savedConfig.host } : {}),
     ...(savedConfig?.port !== undefined && savedConfig.port > 0 ? { port: savedConfig.port } : {}),
-    ...(savedConfig?.dataDir !== undefined ? { dataDir: savedConfig.dataDir } : {}),
+    ...(savedConfig?.stateDir !== undefined ? { stateDir: savedConfig.stateDir } : {}),
     ...(savedConfig?.password !== undefined
       ? {
           auth: {
@@ -40,8 +41,8 @@ export const buildServerConfig = (): Partial<ServerConfig> => {
 
 export const prepareLocalStateStorage = (): void => {
   const config = parseServerConfig(buildServerConfig());
-  if (config.dataDir !== ":memory:") {
-    mkdirSync(dirname(config.dataDir), { recursive: true });
+  if (config.stateDir !== ":memory:") {
+    mkdirSync(config.stateDir, { recursive: true });
   }
 };
 

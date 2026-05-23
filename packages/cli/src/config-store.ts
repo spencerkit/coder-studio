@@ -1,13 +1,12 @@
+import { normalizeLegacyStateDir, normalizeStateDir } from "@coder-studio/core/state-paths";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { homedir } from "os";
-import { basename, join } from "path";
-
-const DEFAULT_STATE_ANCHOR_FILE = "coder-studio.db";
+import { join } from "path";
 
 export interface CliConfig {
   host?: string;
   port?: number;
-  dataDir?: string;
+  stateDir?: string;
   password?: string;
 }
 
@@ -15,14 +14,8 @@ export function getCliConfigPath(): string {
   return join(homedir(), ".coder-studio", "config.json");
 }
 
-export function normalizeDataDir(input: string): string {
-  if (input.endsWith(".db")) {
-    return input;
-  }
-  if (basename(input).includes(".")) {
-    return input;
-  }
-  return join(input, DEFAULT_STATE_ANCHOR_FILE);
+export function normalizeLegacyDataDir(input: string): string {
+  return normalizeLegacyStateDir(input);
 }
 
 export function readCliConfig(): CliConfig | null {
@@ -32,16 +25,33 @@ export function readCliConfig(): CliConfig | null {
   }
 
   try {
-    const parsed = JSON.parse(readFileSync(path, "utf-8")) as CliConfig;
+    const parsed = JSON.parse(readFileSync(path, "utf-8")) as {
+      host?: unknown;
+      port?: unknown;
+      stateDir?: unknown;
+      dataDir?: unknown;
+      password?: unknown;
+    };
     if (
       (parsed.host !== undefined && typeof parsed.host !== "string") ||
       (parsed.port !== undefined && typeof parsed.port !== "number") ||
+      (parsed.stateDir !== undefined && typeof parsed.stateDir !== "string") ||
       (parsed.dataDir !== undefined && typeof parsed.dataDir !== "string") ||
       (parsed.password !== undefined && typeof parsed.password !== "string")
     ) {
       return null;
     }
-    return parsed;
+
+    return {
+      ...(parsed.host !== undefined ? { host: parsed.host } : {}),
+      ...(parsed.port !== undefined ? { port: parsed.port } : {}),
+      ...(parsed.stateDir !== undefined
+        ? { stateDir: normalizeStateDir(parsed.stateDir) }
+        : parsed.dataDir !== undefined
+          ? { stateDir: normalizeLegacyDataDir(parsed.dataDir) }
+          : {}),
+      ...(parsed.password !== undefined ? { password: parsed.password } : {}),
+    };
   } catch {
     return null;
   }
@@ -53,7 +63,7 @@ export function writeCliConfig(config: CliConfig): void {
   const normalizedConfig: CliConfig = {
     ...(config.host !== undefined ? { host: config.host } : {}),
     ...(config.port !== undefined && config.port > 0 ? { port: config.port } : {}),
-    ...(config.dataDir !== undefined ? { dataDir: normalizeDataDir(config.dataDir) } : {}),
+    ...(config.stateDir !== undefined ? { stateDir: normalizeStateDir(config.stateDir) } : {}),
     ...(config.password !== undefined ? { password: config.password } : {}),
   };
   if (!existsSync(dir)) {

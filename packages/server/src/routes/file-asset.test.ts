@@ -57,6 +57,32 @@ describe("/api/file", () => {
     expect(res.rawPayload.equals(PNG_BYTES)).toBe(true);
   });
 
+  it("streams an image from HEAD when revision is provided", async () => {
+    const execFileAsync = (await import("util")).promisify(
+      (await import("child_process")).execFile
+    );
+    await execFileAsync("git", ["init"], { cwd: testDir });
+    await execFileAsync("git", ["config", "user.name", "Test"], { cwd: testDir });
+    await execFileAsync("git", ["config", "user.email", "test@example.com"], { cwd: testDir });
+    await writeFile(join(testDir, "pixel.png"), PNG_BYTES);
+    await execFileAsync("git", ["add", "."], { cwd: testDir });
+    await execFileAsync("git", ["commit", "-m", "Add pixel"], { cwd: testDir });
+
+    const nextBytes = Buffer.from(PNG_BYTES);
+    nextBytes[nextBytes.length - 1] ^= 0x01;
+    await writeFile(join(testDir, "pixel.png"), nextBytes);
+    app = await buildApp(testDir);
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/file?workspaceId=ws-1&path=pixel.png&revision=HEAD",
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["content-type"]).toBe("image/png");
+    expect(res.rawPayload.equals(PNG_BYTES)).toBe(true);
+  });
+
   it("returns 400 when workspaceId or path is missing", async () => {
     app = await buildApp(testDir);
 
@@ -103,6 +129,18 @@ describe("/api/file", () => {
 
     expect(res.statusCode).toBe(400);
     expect(res.json()).toMatchObject({ error: "path_escape" });
+  });
+
+  it("rejects invalid revision selectors for the image asset route", async () => {
+    app = await buildApp(testDir);
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/file?workspaceId=ws-1&path=pixel.png&revision=HEAD~1",
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toMatchObject({ error: "invalid_revision" });
   });
 
   it("rejects symlinked image paths that resolve outside the workspace root", async () => {

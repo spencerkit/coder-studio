@@ -34,7 +34,7 @@ type SupervisorGetResult = Result & {
 };
 
 const TEST_SERVER_CONFIG: Partial<ServerConfig> = {
-  dataDir: ":memory:",
+  stateDir: ":memory:",
   host: "127.0.0.1",
   port: 0,
 };

@@ -10,13 +10,11 @@ import "../commands/workspace.js";
 
 describe("workspace close state cleanup", () => {
   let server: Server | undefined;
-  let dataDir: string;
-  let dbPath: string;
+  let stateDir: string;
   let workspaceDir: string;
 
   beforeEach(() => {
-    dataDir = mkdtempSync(join(tmpdir(), "coder-studio-data-"));
-    dbPath = join(dataDir, "coder-studio.db");
+    stateDir = mkdtempSync(join(tmpdir(), "coder-studio-state-"));
     workspaceDir = mkdtempSync(join(tmpdir(), "coder-studio-workspace-"));
     mkdirSync(join(workspaceDir, ".git"), { recursive: true });
     writeFileSync(join(workspaceDir, ".git", "HEAD"), "ref: refs/heads/main\n");
@@ -27,13 +25,13 @@ describe("workspace close state cleanup", () => {
       await server.stop();
       server = undefined;
     }
-    rmSync(dataDir, { recursive: true, force: true });
+    rmSync(stateDir, { recursive: true, force: true });
     rmSync(workspaceDir, { recursive: true, force: true });
   });
 
   it("removes file-backed sessions and terminals when a workspace is closed", async () => {
     server = await createServer({
-      dataDir: dbPath,
+      stateDir,
       host: "127.0.0.1",
       port: 0,
     });
@@ -53,10 +51,10 @@ describe("workspace close state cleanup", () => {
     const workspaceId = openResult.data!.id;
 
     const terminalRepo = new TerminalRepo({
-      filePath: join(dataDir, "state", "terminals.json"),
+      filePath: join(stateDir, "state", "terminals.json"),
     });
     const sessionRepo = new SessionRepo({
-      filePath: join(dataDir, "state", "sessions.json"),
+      filePath: join(stateDir, "state", "sessions.json"),
     });
 
     terminalRepo.insert({

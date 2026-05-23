@@ -71,22 +71,90 @@ describe("parseServerConfig", () => {
     expect(config.appVersion).toBe("9.9.9");
   });
 
-  it("uses the temp state anchor file by default outside production", () => {
-    delete process.env.NODE_ENV;
-    delete process.env.DATA_DIR;
-
+  it("provides unsupported update runtime defaults", () => {
     const config = parseServerConfig();
 
-    expect(config.dataDir).toBe(join(tmpdir(), "coder-studio-dev.db"));
+    expect(config.update).toEqual({
+      supported: false,
+      installKind: "unsupported",
+      packageName: "@spencer-kit/coder-studio",
+      cliCommand: "coder-studio",
+      workerEntryPath: undefined,
+      npmCommand: "npm",
+      restartArgs: ["serve", "--restart"],
+      installArgsPrefix: ["install", "-g"],
+      unsupportedReason: "In-app update is only supported for global npm installs",
+    });
   });
 
-  it("uses a stable user data state anchor path by default in production", () => {
+  it("uses the temp state directory by default outside production", () => {
+    delete process.env.NODE_ENV;
+    delete process.env.DATA_DIR;
+    delete process.env.STATE_DIR;
+
+    const config = parseServerConfig();
+
+    expect((config as { stateDir?: string }).stateDir).toBe(join(tmpdir(), "coder-studio-dev"));
+  });
+
+  it("uses a stable user state directory by default in production", () => {
     process.env.NODE_ENV = "production";
+    delete process.env.DATA_DIR;
+    delete process.env.STATE_DIR;
+
+    const config = parseServerConfig();
+
+    expect((config as { stateDir?: string }).stateDir).toBe(
+      join(homedir(), ".coder-studio", "data")
+    );
+  });
+
+  it("prefers STATE_DIR over legacy DATA_DIR", () => {
+    process.env.STATE_DIR = "/tmp/state-root";
+    process.env.DATA_DIR = "/tmp/legacy-state/legacy-state.sqlite";
+
+    const config = parseServerConfig();
+
+    expect((config as { stateDir?: string }).stateDir).toBe("/tmp/state-root");
+  });
+
+  it("preserves an explicit STATE_DIR that ends with .db", () => {
+    process.env.STATE_DIR = "/tmp/state-root.db";
+    process.env.DATA_DIR = "/tmp/legacy-state/legacy-state.sqlite";
+
+    const config = parseServerConfig();
+
+    expect((config as { stateDir?: string }).stateDir).toBe("/tmp/state-root.db");
+  });
+
+  it("preserves an explicit in-memory STATE_DIR", () => {
+    process.env.STATE_DIR = ":memory:";
     delete process.env.DATA_DIR;
 
     const config = parseServerConfig();
 
-    expect(config.dataDir).toBe(join(homedir(), ".coder-studio", "data", "coder-studio.db"));
+    expect((config as { stateDir?: string }).stateDir).toBe(":memory:");
+  });
+
+  it("normalizes legacy DATA_DIR file paths to the parent state directory", () => {
+    delete process.env.STATE_DIR;
+    process.env.DATA_DIR = "/tmp/legacy-state/legacy-state.sqlite";
+
+    const config = parseServerConfig();
+
+    expect((config as { stateDir?: string }).stateDir).toBe("/tmp/legacy-state");
+  });
+
+  it("normalizes legacy dataDir overrides to the parent state directory", () => {
+    const config = parseServerConfig({ dataDir: "/tmp/legacy-override/custom.sqlite" });
+
+    expect((config as { stateDir?: string }).stateDir).toBe("/tmp/legacy-override");
+  });
+
+  it("preserves explicit stateDir overrides that end with .db", () => {
+    const config = parseServerConfig({ stateDir: "/tmp/modern-state/custom-dir.db" });
+
+    expect((config as { stateDir?: string }).stateDir).toBe("/tmp/modern-state/custom-dir.db");
   });
 
   it("uses tmpdir/coder-studio-dev/uploads in development", () => {

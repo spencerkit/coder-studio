@@ -32,6 +32,7 @@ export const Topics = {
 
   // Notification
   notificationToast: "notification.toast",
+  updateStateChanged: "update.state.changed",
 
   // Supervisor-level (Phase 3)
   supervisorState: (workspaceId: string, sessionId: string) =>

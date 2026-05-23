@@ -24,12 +24,9 @@ import {
 import { useWorkspaceLayoutActions } from "./use-workspace-layout-actions";
 
 export type WorkspaceSidebarTab = "files" | "git";
-export type WorkspaceMainAreaMode = "agent" | "editor" | "diff";
+export type WorkspaceMainAreaMode = "agent" | "editor";
 export type MobileWorkspaceSheetKind = "files" | "terminal" | "supervisor" | null;
-export type MobileFilesRoute =
-  | { kind: "root" }
-  | { kind: "editor"; path: string }
-  | { kind: "diff"; path: string };
+export type MobileFilesRoute = { kind: "root" } | { kind: "file"; path: string };
 
 export interface WorkspaceCreateRequest {
   id: number;
@@ -247,7 +244,7 @@ export function useWorkspaceScreenModel() {
   }, []);
 
   const mainAreaMode: WorkspaceMainAreaMode =
-    sidebarTab === "git" && diffPreview ? "diff" : activeFilePath ? "editor" : "agent";
+    activeFilePath || diffPreview?.source === "commit" ? "editor" : "agent";
 
   return {
     activeSession,

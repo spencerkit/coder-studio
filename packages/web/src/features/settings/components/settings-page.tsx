@@ -5,6 +5,7 @@
  */
 
 import {
+  createDefaultUpdateSettings,
   DEFAULT_SUPERVISOR_EVALUATION_TIMEOUT_SEC,
   DEFAULT_SUPERVISOR_RETRY_DELAY_SEC,
   DEFAULT_SUPERVISOR_RETRY_ENABLED,
@@ -21,11 +22,13 @@ import {
   resolveSupervisorRetryMaxCount,
   resolveSupervisorRetryOnEvaluatorError,
   resolveSupervisorRetryOnTimeout,
+  resolveUpdateAutoCheckEnabled,
+  resolveUpdateCheckIntervalSec,
 } from "@coder-studio/core";
 import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import { Check, ChevronRight } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { localeAtom, themeAtom } from "../../../atoms/app-ui";
 import {
   connectionStatusAtom,
@@ -52,6 +55,7 @@ import {
   resolveTerminalFontSizeSetting,
   terminalPreferencesAtom,
 } from "../../terminal-panel/preferences";
+import { AboutSettings } from "./about-settings";
 import { type ProviderInfo, ProviderSettings } from "./provider-settings";
 import { resolveSettingsExitTargetFromBrowserHistory } from "./settings-navigation";
 import {
@@ -146,6 +150,8 @@ function getMobileSectionHintKey(section: SettingsSection) {
       return "settings.theme.hint";
     case "shortcuts":
       return "settings.shortcuts.hint";
+    case "about":
+      return "settings.about.description";
   }
 }
 
@@ -156,7 +162,7 @@ const MOBILE_SETTINGS_GROUPS = [
   },
   {
     titleKey: "settings.mobile_groups.interface_interaction",
-    sections: ["appearance", "shortcuts"],
+    sections: ["appearance", "shortcuts", "about"],
   },
 ] as const satisfies readonly {
   titleKey: string;
@@ -202,6 +208,7 @@ function resolveMobileSettingsGroups(
 export function SettingsPage() {
   const t = useTranslation();
   const settingsLoadFailedUnknown = t("settings.load_failed_unknown");
+  const location = useLocation();
   const navigate = useNavigate();
   const viewport = useViewport();
   const isMobile = viewport === "mobile";
@@ -210,11 +217,22 @@ export function SettingsPage() {
   const serverInfo = useAtomValue(serverInfoAtom);
   const resolvedActiveWorkspaceId = useAtomValue(resolvedActiveWorkspaceIdAtom);
   const activeWorkspaceId = resolvedActiveWorkspaceId;
-  const [navigationState, setNavigationState] = useState<SettingsNavigationState>(() =>
-    isMobile
+  const initialRequestedSection = (() => {
+    const section = new URLSearchParams(location.search).get("section");
+    return SETTINGS_SECTIONS.some((item) => item.id === section)
+      ? (section as SettingsSection)
+      : null;
+  })();
+  const initialRequestedSectionRef = useRef<SettingsSection | null>(initialRequestedSection);
+  const [navigationState, setNavigationState] = useState<SettingsNavigationState>(() => {
+    if (initialRequestedSection) {
+      return { kind: "detail", section: initialRequestedSection };
+    }
+
+    return isMobile
       ? { kind: "root", lastSection: DEFAULT_SETTINGS_SECTION }
-      : { kind: "detail", section: DEFAULT_SETTINGS_SECTION }
-  );
+      : { kind: "detail", section: DEFAULT_SETTINGS_SECTION };
+  });
 
   // Provider settings state (would come from server in real implementation)
   const [providers] = useState<ProviderInfo[]>([
@@ -248,6 +266,13 @@ export function SettingsPage() {
   const [providerAdditionalArgsById, setProviderAdditionalArgsById] = useState<
     Record<string, string>
   >({});
+  const defaultUpdateSettings = createDefaultUpdateSettings();
+  const [updateAutoCheckEnabled, setUpdateAutoCheckEnabled] = useState(
+    defaultUpdateSettings.autoCheckEnabled
+  );
+  const [updateCheckIntervalSec, setUpdateCheckIntervalSec] = useState(
+    defaultUpdateSettings.checkIntervalSec
+  );
   const [contentLayoutMode, setContentLayoutMode] = useState<SettingsContentLayoutMode>("default");
   const [settingsLoadError, setSettingsLoadError] = useState<string | null>(null);
   const [settingsRefreshKey, setSettingsRefreshKey] = useState(0);
@@ -267,6 +292,10 @@ export function SettingsPage() {
     terminalCopyOnSelect: 0,
     desktopTerminalFontSize: 0,
     mobileTerminalFontSize: 0,
+  });
+  const updateSelectionVersionRef = useRef({
+    autoCheckEnabled: 0,
+    checkIntervalSec: 0,
   });
   const detailSection =
     navigationState.kind === "detail" ? navigationState.section : navigationState.lastSection;
@@ -295,6 +324,14 @@ export function SettingsPage() {
   useEffect(() => {
     setNavigationState((state) => {
       if (isMobile) {
+        if (
+          initialRequestedSectionRef.current &&
+          state.kind === "detail" &&
+          state.section === initialRequestedSectionRef.current
+        ) {
+          initialRequestedSectionRef.current = null;
+          return state;
+        }
         return state.kind === "root" ? state : { kind: "root", lastSection: state.section };
       }
 
@@ -313,6 +350,9 @@ export function SettingsPage() {
       const appearanceSelectionVersionAtRequestStart = {
         ...appearanceSelectionVersionRef.current,
       };
+      const updateSelectionVersionAtRequestStart = {
+        ...updateSelectionVersionRef.current,
+      };
       const result = await dispatch<Record<string, unknown>>("settings.get", {});
       if (!result.ok || !result.data) {
         if (!cancelled) {
@@ -329,6 +369,22 @@ export function SettingsPage() {
       }
       if (typeof settings["notifications.soundEnabled"] === "boolean") {
         setSoundEnabled(settings["notifications.soundEnabled"]);
+      }
+      if (
+        updateSelectionVersionRef.current.autoCheckEnabled ===
+        updateSelectionVersionAtRequestStart.autoCheckEnabled
+      ) {
+        setUpdateAutoCheckEnabled(
+          resolveUpdateAutoCheckEnabled(settings["updates.autoCheckEnabled"])
+        );
+      }
+      if (
+        updateSelectionVersionRef.current.checkIntervalSec ===
+        updateSelectionVersionAtRequestStart.checkIntervalSec
+      ) {
+        setUpdateCheckIntervalSec(
+          resolveUpdateCheckIntervalSec(settings["updates.checkIntervalSec"])
+        );
       }
       if (
         appearanceSelectionVersionRef.current.lspRuntimeMode ===
@@ -521,6 +577,39 @@ export function SettingsPage() {
     setHydratedLspRuntimeMode(nextMode);
   };
 
+  const saveUpdateSettings = async (updates: {
+    autoCheckEnabled?: boolean;
+    checkIntervalSec?: number;
+  }) => {
+    return await dispatch("settings.update", {
+      settings: {
+        updates,
+      },
+    });
+  };
+
+  const handleUpdateAutoCheckChange = async (value: boolean) => {
+    updateSelectionVersionRef.current.autoCheckEnabled += 1;
+    setUpdateAutoCheckEnabled(value);
+    const result = await saveUpdateSettings({ autoCheckEnabled: value });
+    if (!result.ok) {
+      setUpdateAutoCheckEnabled((current) => !value);
+    }
+  };
+
+  const handleUpdateIntervalChange = async (value: number) => {
+    if (value === updateCheckIntervalSec) {
+      return;
+    }
+    const previous = updateCheckIntervalSec;
+    updateSelectionVersionRef.current.checkIntervalSec += 1;
+    setUpdateCheckIntervalSec(value);
+    const result = await saveUpdateSettings({ checkIntervalSec: value });
+    if (!result.ok) {
+      setUpdateCheckIntervalSec(previous);
+    }
+  };
+
   useEffect(() => {
     if (detailSection !== "providers") {
       setContentLayoutMode("default");
@@ -604,6 +693,16 @@ export function SettingsPage() {
         );
       case "shortcuts":
         return <ShortcutsSettings />;
+      case "about":
+        return (
+          <AboutSettings
+            autoCheckEnabled={updateAutoCheckEnabled}
+            checkIntervalSec={updateCheckIntervalSec}
+            onAutoCheckEnabledChange={handleUpdateAutoCheckChange}
+            onCheckIntervalChange={handleUpdateIntervalChange}
+            locale={locale}
+          />
+        );
       default:
         return null;
     }

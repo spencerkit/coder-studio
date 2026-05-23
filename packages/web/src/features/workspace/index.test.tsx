@@ -5,11 +5,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { connectionStatusAtom, wsClientAtom } from "../../atoms/connection";
 import { activeWorkspaceIdAtom, workspaceOrderAtom, workspacesAtom } from "../../atoms/workspaces";
 import { seedReadyWorkspaceState } from "../../test-utils/workspace-state";
+import { updateStateAtom } from "../updates/atoms";
 import {
+  activeFilePathAtomFamily,
   bottomPanelHeightAtom,
   branchQuickPickAtom,
+  editorModeAtomFamily,
   gitDiffPreviewAtomFamily,
   leftPanelWidthAtom,
+  openFilesAtomFamily,
   terminalPanelVisibleAtom,
 } from "./atoms";
 import { WorkspaceDesktopView } from "./views/desktop/workspace-desktop-view";
@@ -81,6 +85,23 @@ describe("WorkspacePage", () => {
     const store = createStore();
     store.set(connectionStatusAtom, "connected");
     store.set(wsClientAtom, { sendCommand } as never);
+    store.set(updateStateAtom, {
+      version: 1,
+      currentVersion: "0.4.0",
+      latestVersion: "0.5.0",
+      availability: "update_available",
+      updateStatus: "idle",
+      lastCheckedAt: 123,
+      targetVersion: null,
+      startedAt: null,
+      finishedAt: null,
+      requiresManualStep: false,
+      manualCommand: null,
+      errorSummary: null,
+      supported: true,
+      installKind: "global_npm",
+      unsupportedReason: null,
+    });
     seedReadyWorkspaceState(store, {
       "ws-test": {
         id: "ws-test",
@@ -121,13 +142,13 @@ describe("WorkspacePage", () => {
     expect(document.querySelector(".workspace-page.workspace-page--desktop")).toBeTruthy();
     expect(document.querySelector(".workspace-main-stage")).toBeTruthy();
     expect(document.querySelector(".workspace-main-area > .workspace-main-stage")).toBeTruthy();
+    expect(document.querySelector(".workspace-status-bar__left")).not.toBeNull();
+    expect(document.querySelector(".workspace-status-bar__right")).not.toBeNull();
     expect(
-      document.querySelector(".workspace-status-bar .git-panel-status-strip__branch-text")
+      document.querySelector(".workspace-status-bar__left .git-panel-status-strip__branch-text")
     ).toHaveTextContent("feature/refactor-ts");
     expect(document.querySelector(".workspace-page > .workspace-status-bar")).not.toBeNull();
-    expect(document.querySelector(".workspace-status-bar .git-panel-status-strip")).toHaveClass(
-      "git-panel-status-strip--start"
-    );
+    expect(document.querySelector(".workspace-status-bar__right")).toHaveTextContent("v0.5.0");
     expect(document.querySelector(".workspace-sidebar-panel__tab-count")).toBeNull();
   });
 
@@ -584,7 +605,7 @@ describe("WorkspacePage", () => {
     expect(screen.queryByTestId("terminal-panel")).not.toBeInTheDocument();
   });
 
-  it("returns to the session content when closing the git diff viewer", async () => {
+  it("keeps the session content visible when git diff preview state changes", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "git.status") {
         return {
@@ -629,8 +650,6 @@ describe("WorkspacePage", () => {
       </Provider>
     );
 
-    fireEvent.click(await screen.findByRole("tab", { name: "Git" }));
-
     act(() => {
       store.set(gitDiffPreviewAtomFamily("ws-test"), {
         path: "src/app.tsx",
@@ -639,13 +658,196 @@ describe("WorkspacePage", () => {
       });
     });
 
-    const closeButton = await screen.findByRole("button", { name: "关闭" });
-    fireEvent.click(closeButton);
-
-    await waitFor(() => {
-      expect(screen.getByTestId("agent-panes")).toBeInTheDocument();
+    expect(screen.getByTestId("agent-panes")).toBeInTheDocument();
+    expect(screen.queryByTestId("git-diff-viewer")).not.toBeInTheDocument();
+    expect(store.get(gitDiffPreviewAtomFamily("ws-test"))).toEqual({
+      path: "src/app.tsx",
+      diff: "diff --git a/src/app.tsx b/src/app.tsx",
+      staged: false,
     });
-    expect(store.get(gitDiffPreviewAtomFamily("ws-test"))).toBeNull();
+  });
+
+  it("keeps the desktop main area on the editor for active-file diff mode", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return {
+          branch: "main",
+          ahead: 0,
+          behind: 0,
+          staged: [],
+          modified: [{ path: "src/app.tsx", status: "modified" }],
+          deleted: [],
+          untracked: [],
+        };
+      }
+
+      return [];
+    });
+
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedReadyWorkspaceState(store, {
+      "ws-test": {
+        id: "ws-test",
+        path: "/home/spencer/workspace/coder-studio",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+    store.set(activeFilePathAtomFamily("ws-test"), "src/app.tsx");
+    store.set(editorModeAtomFamily("ws-test"), "diff");
+    store.set(openFilesAtomFamily("ws-test"), {
+      "src/app.tsx": {
+        kind: "text",
+        path: "src/app.tsx",
+        content: "const app = 1;",
+        savedContent: "const app = 1;",
+        baseHash: "hash-app",
+        isDirty: false,
+      },
+    });
+    store.set(gitDiffPreviewAtomFamily("ws-test"), {
+      path: "src/app.tsx",
+      diff: "diff --git a/src/app.tsx b/src/app.tsx",
+      staged: false,
+      source: "file",
+    });
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/workspace"]}>
+          <Routes>
+            <Route path="/workspace" element={<WorkspaceDesktopView />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>
+    );
+
+    await screen.findByTestId("code-editor-host");
+    expect(screen.queryByTestId("git-diff-viewer")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("agent-panes")).not.toBeInTheDocument();
+  });
+
+  it("does not switch to a dedicated diff page when git preview payload state changes", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return {
+          branch: "main",
+          ahead: 0,
+          behind: 0,
+          staged: [],
+          modified: [{ path: "src/app.tsx", status: "modified" }],
+          deleted: [],
+          untracked: [],
+        };
+      }
+
+      return [];
+    });
+
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedReadyWorkspaceState(store, {
+      "ws-test": {
+        id: "ws-test",
+        path: "/home/spencer/workspace/coder-studio",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/workspace"]}>
+          <Routes>
+            <Route path="/workspace" element={<WorkspaceDesktopView />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>
+    );
+
+    await screen.findByTestId("agent-panes");
+
+    act(() => {
+      store.set(gitDiffPreviewAtomFamily("ws-test"), {
+        path: "src/app.tsx",
+        diff: "diff --git a/src/app.tsx b/src/app.tsx",
+        staged: false,
+        source: "file",
+      });
+    });
+
+    expect(screen.getByTestId("agent-panes")).toBeInTheDocument();
+    expect(screen.queryByTestId("git-diff-viewer")).not.toBeInTheDocument();
+  });
+
+  it("keeps commit-history diff previews reachable on desktop without an active file", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return {
+          branch: "main",
+          ahead: 0,
+          behind: 0,
+          staged: [],
+          modified: [],
+          deleted: [],
+          untracked: [],
+        };
+      }
+
+      return [];
+    });
+
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedReadyWorkspaceState(store, {
+      "ws-test": {
+        id: "ws-test",
+        path: "/home/spencer/workspace/coder-studio",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+    store.set(gitDiffPreviewAtomFamily("ws-test"), {
+      path: "abc123",
+      title: "abc123 · commit subject",
+      diff: "diff --git a/src/app.tsx b/src/app.tsx",
+      source: "commit",
+    });
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/workspace"]}>
+          <Routes>
+            <Route path="/workspace" element={<WorkspaceDesktopView />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>
+    );
+
+    await screen.findByTestId("code-editor-host");
+    expect(screen.queryByTestId("agent-panes")).not.toBeInTheDocument();
   });
 
   it("keeps the resized desktop file panel width after dragging the left separator", async () => {

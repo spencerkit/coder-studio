@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "fs";
 
 interface CliPackageManifest {
+  name?: string;
   version?: string;
 }
 
@@ -25,4 +26,8 @@ export function getCliPackageManifest(importMetaUrl: string): CliPackageManifest
 
 export function getCliVersion(importMetaUrl: string): string {
   return getCliPackageManifest(importMetaUrl).version ?? "0.0.0";
+}
+
+export function getCliPackageName(importMetaUrl: string): string {
+  return getCliPackageManifest(importMetaUrl).name ?? "@spencer-kit/coder-studio";
 }

@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace the fake desktop workspace tab status dot with a real pane-aware session mini map that shows one solid square per pane, uses theme-backed colors for `running / starting / idle / empty`, and stays accurate for both active and inactive workspaces.
+**Goal:** Replace the fake desktop workspace tab status dot with a real pane-aware session mini map that shows one solid square per pane, uses theme-backed colors for `running / starting / idle / empty`, and keeps workspace tabs aligned with the existing session bootstrap flow.
 
-**Architecture:** Add a pure topbar mini-map model that projects pane trees into square positions, then layer a presentational component on top of it. Wire `WorkspaceTab` to the runtime pane layout for the active workspace, fall back to persisted `workspace.uiState.paneLayout` for inactive workspaces, and add a lightweight topbar-side `session.list` hydration pass so non-active tabs can still show real state.
+**Architecture:** Add a pure topbar mini-map model that projects pane trees into square positions, then layer a presentational component on top of it. Wire `WorkspaceTab` to the existing `useWorkspaceSessions(workspace, { disabled: isActive })` bootstrap path so active tabs use the live runtime pane layout already in memory while inactive tabs hydrate sessions and repaired layouts without introducing a second `session.list` implementation.
 
 **Tech Stack:** React 19, Jotai, TypeScript, Vitest, Testing Library, global CSS tokens in `packages/web/src/styles/tokens.css`, shared component styling in `packages/web/src/styles/components.css`
 
@@ -24,26 +24,17 @@
 - Create: `packages/web/src/features/topbar/components/workspace-session-mini-map.test.tsx`
   Responsibility: Verify square count, per-cell state classes, and decorative-only semantics.
 
-- Create: `packages/web/src/features/topbar/use-topbar-workspace-session-hydration.ts`
-  Responsibility: Fetch `session.list` snapshots for workspace tabs that do not yet have session data in memory.
-
 - Modify: `packages/web/src/features/topbar/components/tab.tsx`
-  Responsibility: Remove the fake status dot, choose the correct pane layout source, and render the real mini map after the workspace name.
+  Responsibility: Remove the fake status dot, reuse `useWorkspaceSessions` for inactive bootstrap, and render the real mini map after the workspace name.
 
 - Modify: `packages/web/src/features/topbar/components/tab.test.tsx`
-  Responsibility: Cover active/inactive layout sources, fake-dot removal, and tab-level mini-map rendering.
-
-- Modify: `packages/web/src/features/topbar/index.tsx`
-  Responsibility: Call the topbar hydration hook with the ordered workspace list.
-
-- Modify: `packages/web/src/features/topbar/index.test.tsx`
-  Responsibility: Cover hydration timing, one-shot workspace requests, and session-store updates.
+  Responsibility: Cover active/inactive layout sources, fake-dot removal, inactive one-shot bootstrap, and tab-level mini-map rendering.
 
 - Modify: `packages/web/src/styles/tokens.css`
   Responsibility: Define theme-backed mini-map color tokens.
 
 - Modify: `packages/web/src/styles/components.css`
-  Responsibility: Add tab mini-map layout and cell styling rules.
+  Responsibility: Add tab mini-map layout and cell styling rules in the final active topbar override block so duplicate historical selectors do not shadow them.
 
 ---
 
@@ -463,8 +454,9 @@ git commit -m "feat: add workspace tab session mini-map component"
 - [ ] **Step 1: Extend `WorkspaceTab` tests to cover the real indicator**
 
 ```tsx
-import { paneLayoutAtomFamily } from "../../agent-panes/atoms/pane-layout";
+import { connectionStatusAtom, wsClientAtom } from "../../../atoms/connection";
 import { sessionsAtom } from "../../../atoms/sessions";
+import { paneLayoutAtomFamily } from "../../agent-panes/atoms/pane-layout";
 
 it("renders the runtime pane layout for the active workspace instead of the stale persisted layout", () => {
   const workspace = {
@@ -508,7 +500,7 @@ it("renders the runtime pane layout for the active workspace instead of the stal
   expect(container.querySelector(".workspace-session-mini-map__cell--empty")).not.toBeNull();
 });
 
-it("uses persisted workspace uiState for inactive workspaces", () => {
+it("bootstraps inactive workspaces once through session.list and repairs ended panes to empty", async () => {
   const workspace = {
     ...createWorkspace("ws-3", "/tmp/three"),
     uiState: {
@@ -526,37 +518,62 @@ it("uses persisted workspace uiState for inactive workspaces", () => {
       },
     },
   };
+  const sendCommand = vi.fn(async (op: string, args?: { workspaceId: string }) => {
+    if (op !== "session.list") {
+      return undefined;
+    }
+
+    expect(args).toEqual({ workspaceId: "ws-3" });
+    return [
+      {
+        id: "sess-starting",
+        workspaceId: "ws-3",
+        terminalId: "term-2",
+        providerId: "codex",
+        state: "starting",
+        capability: "full",
+        startedAt: 1,
+        lastActiveAt: 1,
+      },
+      {
+        id: "sess-ended",
+        workspaceId: "ws-3",
+        terminalId: "term-3",
+        providerId: "codex",
+        state: "ended",
+        capability: "full",
+        startedAt: 1,
+        lastActiveAt: 1,
+        endedAt: 2,
+      },
+    ];
+  });
   const store = createStore();
   store.set(localeAtom, "en");
-  store.set(sessionsAtom, {
-    "sess-starting": {
-      id: "sess-starting",
-      workspaceId: "ws-3",
-      terminalId: "term-2",
-      providerId: "codex",
-      state: "starting",
-      capability: "full",
-      startedAt: 1,
-      lastActiveAt: 1,
-    },
-    "sess-ended": {
-      id: "sess-ended",
-      workspaceId: "ws-3",
-      terminalId: "term-3",
-      providerId: "codex",
-      state: "ended",
-      capability: "full",
-      startedAt: 1,
-      lastActiveAt: 1,
-      endedAt: 2,
-    },
-  });
+  store.set(connectionStatusAtom, "connected");
+  store.set(wsClientAtom, { sendCommand } as never);
 
-  const { container } = renderWorkspaceTab(store, workspace, { isActive: false, value: "ws-1" });
+  const { container, rerender } = renderWorkspaceTab(store, workspace, { isActive: false, value: "ws-1" });
+
+  await waitFor(() => {
+    expect(sendCommand).toHaveBeenCalledWith("session.list", { workspaceId: "ws-3" }, undefined);
+  });
 
   expect(container.querySelectorAll(".workspace-session-mini-map__cell")).toHaveLength(2);
   expect(container.querySelector(".workspace-session-mini-map__cell--starting")).not.toBeNull();
   expect(container.querySelector(".workspace-session-mini-map__cell--empty")).not.toBeNull();
+
+  rerender(
+    <Provider store={store}>
+      <Tabs aria-label="Workspaces" onValueChange={vi.fn()} value="ws-1">
+        <TabList className="topbar-tablist">
+          <WorkspaceTab workspace={workspace} isActive={false} />
+        </TabList>
+      </Tabs>
+    </Provider>
+  );
+
+  expect(sendCommand.mock.calls.filter(([op]) => op === "session.list")).toHaveLength(1);
 });
 ```
 
@@ -568,23 +585,21 @@ Run:
 pnpm --filter @coder-studio/web exec vitest run src/features/topbar/components/tab.test.tsx
 ```
 
-Expected: FAIL because `WorkspaceTab` still renders `.topbar-dot` and does not render `.workspace-session-mini-map__cell`.
+Expected: FAIL because `WorkspaceTab` still renders `.topbar-dot` and does not bootstrap inactive workspace sessions.
 
 - [ ] **Step 3: Implement the tab integration**
 
 ```tsx
-import { useAtomValue } from "jotai";
-import { sessionsByWorkspaceAtomFamily } from "../../../atoms/sessions";
-import { paneLayoutAtomFamily } from "../../agent-panes/atoms/pane-layout";
+import { useWorkspaceSessions } from "../../agent-panes/actions/use-workspace-sessions";
 import { buildWorkspaceSessionMiniMapCells } from "./workspace-session-mini-map-model";
 import { WorkspaceSessionMiniMap } from "./workspace-session-mini-map";
 
 export const WorkspaceTab: FC<WorkspaceTabProps> = ({ workspace, isActive }) => {
-  const runtimePaneLayout = useAtomValue(paneLayoutAtomFamily(workspace.id));
-  const workspaceSessions = useAtomValue(sessionsByWorkspaceAtomFamily(workspace.id));
-  const sessionsById = Object.fromEntries(workspaceSessions.map((session) => [session.id, session]));
-  const layoutSource = isActive ? runtimePaneLayout : workspace.uiState.paneLayout;
-  const miniMapCells = buildWorkspaceSessionMiniMapCells(layoutSource, sessionsById);
+  const { paneLayout, sessions } = useWorkspaceSessions(workspace, { disabled: isActive });
+  const miniMapCells = buildWorkspaceSessionMiniMapCells(
+    paneLayout,
+    Object.fromEntries(sessions.map((session) => [session.id, session]))
+  );
 
   return (
     <div className={`topbar-tab-shell ${isActive ? "active" : ""}`} role="presentation">
@@ -624,199 +639,114 @@ git add packages/web/src/features/topbar/components/tab.tsx packages/web/src/fea
 git commit -m "feat: show real session mini-map in workspace tabs"
 ```
 
-### Task 4: Hydrate Session State for Non-Active Workspace Tabs
+### Task 4: Fold the Mini-Map Styles into the Final Topbar Override Block
 
 **Files:**
-- Create: `packages/web/src/features/topbar/use-topbar-workspace-session-hydration.ts`
-- Modify: `packages/web/src/features/topbar/index.tsx`
-- Modify: `packages/web/src/features/topbar/index.test.tsx`
+- Modify: `packages/web/src/styles/components.css`
+- Modify: `packages/web/src/styles/components.theme.test.ts`
 
-- [ ] **Step 1: Add failing topbar hydration tests**
+- [ ] **Step 1: Add failing style-token assertions**
 
-```tsx
-import { connectionStatusAtom, wsClientAtom } from "../../atoms/connection";
-import { sessionsAtom } from "../../atoms/sessions";
+```ts
+it("keeps workspace mini-map cells on shared state tokens in the final topbar override block", () => {
+  const miniMap = getLastRuleBlock(".workspace-session-mini-map");
+  const miniMapCell = getLastRuleBlock(".workspace-session-mini-map__cell");
+  const runningCell = getLastRuleBlock(".workspace-session-mini-map__cell--running");
+  const startingCell = getLastRuleBlock(".workspace-session-mini-map__cell--starting");
+  const idleCell = getLastRuleBlock(".workspace-session-mini-map__cell--idle");
+  const emptyCell = getLastRuleBlock(".workspace-session-mini-map__cell--empty");
 
-it("does not request session snapshots until the websocket is connected", () => {
-  const store = createStore();
-  const sendCommand = vi.fn();
-
-  store.set(localeAtom, "en");
-  store.set(wsClientAtom, { sendCommand } as never);
-  store.set(workspacesAtom, { "ws-a": createWorkspace("ws-a", "/tmp/a") });
-  store.set(workspaceOrderAtom, ["ws-a"]);
-  store.set(workspacesLoadStateAtom, "ready");
-  store.set(connectionStatusAtom, "connecting");
-
-  render(
-    <Provider store={store}>
-      <TopBar />
-    </Provider>
-  );
-
-  expect(sendCommand).not.toHaveBeenCalledWith("session.list", expect.anything(), undefined);
-});
-
-it("hydrates each workspace once and stores the returned sessions", async () => {
-  const store = createStore();
-  const sendCommand = vi.fn(async (op: string, args: { workspaceId: string }) => {
-    if (op !== "session.list") return undefined;
-    if (args.workspaceId === "ws-a") return [];
-    return [
-      {
-        id: "sess-b",
-        workspaceId: "ws-b",
-        terminalId: "term-b",
-        providerId: "codex",
-        state: "idle",
-        capability: "full",
-        startedAt: 1,
-        lastActiveAt: 1,
-      },
-    ];
-  });
-
-  store.set(localeAtom, "en");
-  store.set(wsClientAtom, { sendCommand } as never);
-  store.set(workspacesAtom, {
-    "ws-a": createWorkspace("ws-a", "/tmp/a"),
-    "ws-b": createWorkspace("ws-b", "/tmp/b"),
-  });
-  store.set(workspaceOrderAtom, ["ws-a", "ws-b"]);
-  store.set(workspacesLoadStateAtom, "ready");
-  store.set(connectionStatusAtom, "connected");
-
-  const { rerender } = render(
-    <Provider store={store}>
-      <TopBar />
-    </Provider>
-  );
-
-  await waitFor(() => {
-    expect(sendCommand).toHaveBeenCalledWith("session.list", { workspaceId: "ws-a" }, undefined);
-    expect(sendCommand).toHaveBeenCalledWith("session.list", { workspaceId: "ws-b" }, undefined);
-  });
-
-  expect(store.get(sessionsAtom)["sess-b"]?.state).toBe("idle");
-
-  rerender(
-    <Provider store={store}>
-      <TopBar />
-    </Provider>
-  );
-
-  expect(sendCommand.mock.calls.filter(([op]) => op === "session.list")).toHaveLength(2);
+  expect(miniMap).toContain("margin-left: var(--sp-2)");
+  expect(miniMapCell).toContain("background: var(--workspace-session-map-empty)");
+  expect(runningCell).toContain("background: var(--workspace-session-map-running)");
+  expect(startingCell).toContain("background: var(--workspace-session-map-starting)");
+  expect(idleCell).toContain("background: var(--workspace-session-map-idle)");
+  expect(emptyCell).toContain("background: var(--workspace-session-map-empty)");
 });
 ```
 
-- [ ] **Step 2: Run the topbar integration tests and verify they fail**
+- [ ] **Step 2: Run the style theme tests and verify they fail**
 
 Run:
 
 ```bash
-pnpm --filter @coder-studio/web exec vitest run src/features/topbar/index.test.tsx
+pnpm --filter @coder-studio/web exec vitest run src/styles/components.theme.test.ts
 ```
 
-Expected: FAIL because `TopBar` does not request `session.list` at all.
+Expected: FAIL because the mini-map selectors do not yet exist in the final topbar override block.
 
-- [ ] **Step 3: Implement lightweight topbar-side session hydration**
+- [ ] **Step 3: Add the mini-map rules to the final topbar override block**
 
-```ts
-import type { Session, Workspace } from "@coder-studio/core";
-import { useAtomValue, useSetAtom } from "jotai";
-import { useEffect, useRef } from "react";
-import { connectionStatusAtom, dispatchCommandAtom } from "../../atoms/connection";
-import { sessionsAtom } from "../../atoms/sessions";
+```css
+.workspace-session-mini-map {
+  position: relative;
+  display: inline-flex;
+  width: 20px;
+  height: 12px;
+  flex: 0 0 auto;
+  margin-left: var(--sp-2);
+}
 
-export function useTopbarWorkspaceSessionHydration(workspaces: Workspace[]) {
-  const connectionStatus = useAtomValue(connectionStatusAtom);
-  const dispatch = useAtomValue(dispatchCommandAtom);
-  const setSessions = useSetAtom(sessionsAtom);
-  const hydratedWorkspaceIdsRef = useRef(new Set<string>());
-  const inFlightWorkspaceIdsRef = useRef(new Set<string>());
+.workspace-session-mini-map__cell {
+  position: absolute;
+  left: var(--workspace-session-map-cell-x);
+  top: var(--workspace-session-map-cell-y);
+  width: 4px;
+  height: 4px;
+  border-radius: 1px;
+  transform: translate(-50%, -50%);
+  background: var(--workspace-session-map-empty);
+}
 
-  useEffect(() => {
-    if (connectionStatus !== "connected") {
-      return;
-    }
+.workspace-session-mini-map__cell--running {
+  background: var(--workspace-session-map-running);
+}
 
-    for (const workspace of workspaces) {
-      if (
-        hydratedWorkspaceIdsRef.current.has(workspace.id) ||
-        inFlightWorkspaceIdsRef.current.has(workspace.id)
-      ) {
-        continue;
-      }
+.workspace-session-mini-map__cell--starting {
+  background: var(--workspace-session-map-starting);
+}
 
-      inFlightWorkspaceIdsRef.current.add(workspace.id);
+.workspace-session-mini-map__cell--idle {
+  background: var(--workspace-session-map-idle);
+}
 
-      void dispatch<Session[]>("session.list", { workspaceId: workspace.id })
-        .then((result) => {
-          if (!result.ok || !result.data) {
-            return;
-          }
-
-          hydratedWorkspaceIdsRef.current.add(workspace.id);
-          setSessions((previous) => {
-            const next = Object.fromEntries(
-              Object.entries(previous).filter(([, session]) => session.workspaceId !== workspace.id)
-            );
-            for (const session of result.data) {
-              next[session.id] = session;
-            }
-            return next;
-          });
-        })
-        .finally(() => {
-          inFlightWorkspaceIdsRef.current.delete(workspace.id);
-        });
-    }
-  }, [connectionStatus, dispatch, setSessions, workspaces]);
+.workspace-session-mini-map__cell--empty {
+  background: var(--workspace-session-map-empty);
 }
 ```
 
-```tsx
-// packages/web/src/features/topbar/index.tsx
-import { useTopbarWorkspaceSessionHydration } from "./use-topbar-workspace-session-hydration";
-
-export const TopBar: FC<TopBarProps> = ({ fullscreenController }) => {
-  const workspaceList = useAtomValue(orderedWorkspacesAtom);
-  useTopbarWorkspaceSessionHydration(workspaceList);
-  // ...existing render
-};
-```
-
-- [ ] **Step 4: Run the topbar integration tests and verify they pass**
+- [ ] **Step 4: Run the component, tab, and style theme tests and verify they pass**
 
 Run:
 
 ```bash
-pnpm --filter @coder-studio/web exec vitest run src/features/topbar/index.test.tsx
+pnpm --filter @coder-studio/web exec vitest run src/features/topbar/components/workspace-session-mini-map-model.test.ts src/features/topbar/components/workspace-session-mini-map.test.tsx src/features/topbar/components/tab.test.tsx src/styles/components.theme.test.ts
 ```
 
-Expected: PASS, including the new hydration timing and one-shot request coverage.
+Expected: PASS for the mini-map model, mini-map component, `WorkspaceTab`, and shared style theme assertions.
 
-- [ ] **Step 5: Commit the topbar hydration flow**
+- [ ] **Step 5: Commit the style integration**
 
 ```bash
-git add packages/web/src/features/topbar/use-topbar-workspace-session-hydration.ts packages/web/src/features/topbar/index.tsx packages/web/src/features/topbar/index.test.tsx
-git commit -m "feat: hydrate workspace tab session states"
+git add packages/web/src/styles/components.css packages/web/src/styles/components.theme.test.ts
+git commit -m "test: cover workspace tab mini-map theme tokens"
 ```
 
 ### Task 5: Final Verification and Cleanup
 
 **Files:**
 - Verify only: `packages/web/src/features/topbar/components/*`
-- Verify only: `packages/web/src/features/topbar/index.tsx`
+- Verify only: `packages/web/src/features/agent-panes/actions/use-workspace-sessions.ts`
 - Verify only: `packages/web/src/styles/components.css`
 - Verify only: `packages/web/src/styles/tokens.css`
+- Verify only: `packages/web/src/styles/components.theme.test.ts`
 
 - [ ] **Step 1: Run the focused topbar test suite**
 
 Run:
 
 ```bash
-pnpm --filter @coder-studio/web exec vitest run src/features/topbar/components/workspace-session-mini-map-model.test.ts src/features/topbar/components/workspace-session-mini-map.test.tsx src/features/topbar/components/tab.test.tsx src/features/topbar/index.test.tsx
+pnpm --filter @coder-studio/web exec vitest run src/features/topbar/components/workspace-session-mini-map-model.test.ts src/features/topbar/components/workspace-session-mini-map.test.tsx src/features/topbar/components/tab.test.tsx src/styles/components.theme.test.ts
 ```
 
 Expected: PASS for all focused topbar suites with no failing assertions.
@@ -836,7 +766,7 @@ Expected: PASS with no TypeScript errors.
 Run:
 
 ```bash
-pnpm exec biome check packages/web/src/features/topbar/components/workspace-session-mini-map-model.ts packages/web/src/features/topbar/components/workspace-session-mini-map-model.test.ts packages/web/src/features/topbar/components/workspace-session-mini-map.tsx packages/web/src/features/topbar/components/workspace-session-mini-map.test.tsx packages/web/src/features/topbar/components/tab.tsx packages/web/src/features/topbar/components/tab.test.tsx packages/web/src/features/topbar/use-topbar-workspace-session-hydration.ts packages/web/src/features/topbar/index.tsx packages/web/src/features/topbar/index.test.tsx packages/web/src/styles/components.css packages/web/src/styles/tokens.css
+pnpm exec biome check packages/web/src/features/topbar/components/workspace-session-mini-map-model.ts packages/web/src/features/topbar/components/workspace-session-mini-map-model.test.ts packages/web/src/features/topbar/components/workspace-session-mini-map.tsx packages/web/src/features/topbar/components/workspace-session-mini-map.test.tsx packages/web/src/features/topbar/components/tab.tsx packages/web/src/features/topbar/components/tab.test.tsx packages/web/src/styles/components.css packages/web/src/styles/tokens.css packages/web/src/styles/components.theme.test.ts
 ```
 
 Expected: PASS with no diagnostics.
@@ -846,15 +776,15 @@ Expected: PASS with no diagnostics.
 Run:
 
 ```bash
-git diff -- packages/web/src/features/topbar packages/web/src/styles/components.css packages/web/src/styles/tokens.css
+git diff -- packages/web/src/features/topbar/components/tab.tsx packages/web/src/features/topbar/components/tab.test.tsx packages/web/src/styles/components.css packages/web/src/styles/tokens.css packages/web/src/styles/components.theme.test.ts
 ```
 
-Expected: The diff only shows the fake-dot removal, mini-map rendering, theme tokens, and topbar hydration changes described in the spec.
+Expected: The diff only shows the fake-dot removal, mini-map rendering, theme tokens, `WorkspaceTab` bootstrap wiring, and the final-block style assertions described in the spec.
 
 - [ ] **Step 5: Commit any verification fixups and the finished feature**
 
 ```bash
-git add packages/web/src/features/topbar packages/web/src/styles/components.css packages/web/src/styles/tokens.css
+git add packages/web/src/features/topbar/components/tab.tsx packages/web/src/features/topbar/components/tab.test.tsx packages/web/src/styles/components.css packages/web/src/styles/tokens.css packages/web/src/styles/components.theme.test.ts
 git commit -m "feat: replace fake workspace tab dot with real session indicator"
 ```
 
@@ -867,10 +797,11 @@ git commit -m "feat: replace fake workspace tab dot with real session indicator"
 - Fake dot removal: Task 3
 - Real pane-aware mini map after workspace name: Tasks 2 and 3
 - One solid square per pane including empty panes: Tasks 1 and 2
-- Theme-backed `running / starting / idle / empty` colors: Task 2
+- Theme-backed `running / starting / idle / empty` colors: Tasks 2 and 4
 - Active workspace runtime layout vs inactive persisted layout: Task 3
-- Non-active workspace session hydration: Task 4
+- Non-active workspace session bootstrap through existing `session.list` flow: Task 3
 - No tooltip / no interaction / no animation: Task 2 plus Task 3 assertions
+- Final-block style placement so later topbar overrides do not shadow the mini map: Task 4
 - Focused test coverage and verification: Task 5
 
 No uncovered spec requirement remains.
@@ -885,6 +816,6 @@ No uncovered spec requirement remains.
 
 - Mini-map cell states are consistently named `running / starting / idle / empty`.
 - The pure builder is consistently named `buildWorkspaceSessionMiniMapCells`.
-- The hydration hook is consistently named `useTopbarWorkspaceSessionHydration`.
+- `WorkspaceTab` consistently reuses `useWorkspaceSessions(workspace, { disabled: isActive })` for inactive bootstrap.
 
 No type or naming mismatch remains between tasks.

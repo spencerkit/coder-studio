@@ -15,7 +15,7 @@ const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..", ".."
 const WEB_ROOT = join(REPO_ROOT, "packages", "web");
 
 let sandboxDir: string;
-let dbPath: string;
+let stateDir: string;
 let runtimeDir: string;
 let workspacesRoot: string;
 let backendProcess: ChildProcess | undefined;
@@ -69,7 +69,7 @@ const waitForHttp = async (url: string, timeoutMs = 30000): Promise<void> => {
 test.describe("git branch switching acceptance", () => {
   test.beforeAll(async () => {
     sandboxDir = mkdtempSync(join(tmpdir(), "coder-studio-branch-switcher-e2e-"));
-    dbPath = join(sandboxDir, "coder-studio.db");
+    stateDir = join(sandboxDir, "state");
     runtimeDir = join(sandboxDir, "runtime");
     workspacesRoot = join(sandboxDir, "workspaces");
 
@@ -78,7 +78,7 @@ test.describe("git branch switching acceptance", () => {
 
     const seed = spawn(
       "pnpm",
-      ["exec", "tsx", "e2e/fixtures/seed-git-branch-switching-db.ts", dbPath, workspacesRoot],
+      ["exec", "tsx", "e2e/fixtures/seed-git-branch-switching-db.ts", stateDir, workspacesRoot],
       {
         cwd: REPO_ROOT,
         env: process.env,
@@ -106,7 +106,7 @@ test.describe("git branch switching acceptance", () => {
       env: {
         HOST,
         PORT: String(SERVER_PORT),
-        DATA_DIR: dbPath,
+        STATE_DIR: stateDir,
         RUNTIME_DIR: runtimeDir,
         NO_AUTH: "true",
       },

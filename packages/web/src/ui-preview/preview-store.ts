@@ -5,6 +5,7 @@ import type {
   GitStatus,
   Session,
   Supervisor,
+  UpdateStateView,
   Workspace,
   WorktreeInfo,
 } from "@coder-studio/core";
@@ -29,6 +30,7 @@ import { type PaneNode, paneLayoutAtomFamily } from "../features/agent-panes/ato
 import { type Toast, toastsAtom } from "../features/notifications";
 import { supervisorDialogAtom, supervisorsAtom } from "../features/supervisor/atoms";
 import { terminalMetaAtomFamily } from "../features/terminal-panel/atoms";
+import { updateStateAtom } from "../features/updates/atoms";
 import {
   activeFilePathAtomFamily,
   branchQuickPickAtom,
@@ -134,6 +136,7 @@ export interface UiPreviewSeed {
     draftMaxSupervisionCount?: string;
     draftScheduledAt?: string;
   };
+  updateState?: UpdateStateView | null;
   commands?: UiPreviewCommands;
 }
 
@@ -422,6 +425,7 @@ export function buildUiPreviewStore(seed: UiPreviewSeed): Store {
   store.set(branchQuickPickAtom, seed.branchQuickPick ?? { visible: false, inputValue: "" });
   store.set(terminalPanelVisibleAtom, seed.terminalPanelVisible ?? true);
   store.set(toastsAtom, seed.toasts ?? []);
+  store.set(updateStateAtom, seed.updateState ?? null);
   store.set(
     supervisorDialogAtom,
     seed.supervisorDialog

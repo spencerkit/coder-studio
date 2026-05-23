@@ -1,6 +1,10 @@
+import { existsSync, mkdtempSync, rmSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 import { fileURLToPath } from "url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { getCliVersion } from "./package-manifest.js";
+import { getUpdateRuntimeInfo } from "./update-runtime.js";
 
 const { createServer, parseServerConfig, readCliConfig, hasWebAssets, getStaticAssetsDir } =
   vi.hoisted(() => ({
@@ -45,6 +49,7 @@ describe("server-runner", () => {
 
     expect(buildServerConfig()).toMatchObject({
       appVersion: getCliVersion(import.meta.url),
+      update: getUpdateRuntimeInfo(import.meta.url),
       webRoot: "/tmp/web",
     });
   });
@@ -53,7 +58,7 @@ describe("server-runner", () => {
     readCliConfig.mockReturnValue({
       host: "127.0.0.1",
       port: 0,
-      dataDir: "/tmp/cs-data/coder-studio.db",
+      stateDir: "/tmp/cs-data",
       password: "sekrit",
     });
     hasWebAssets.mockReturnValue(true);
@@ -61,8 +66,9 @@ describe("server-runner", () => {
 
     expect(buildServerConfig()).toEqual({
       appVersion: getCliVersion(import.meta.url),
+      update: getUpdateRuntimeInfo(import.meta.url),
       host: "127.0.0.1",
-      dataDir: "/tmp/cs-data/coder-studio.db",
+      stateDir: "/tmp/cs-data",
       auth: {
         enabled: true,
         password: "sekrit",
@@ -89,6 +95,7 @@ describe("server-runner", () => {
 
     expect(createServer).toHaveBeenCalledWith({
       appVersion: getCliVersion(import.meta.url),
+      update: getUpdateRuntimeInfo(import.meta.url),
       host: "127.0.0.1",
       port: 4173,
       webRoot: "/tmp/web",
@@ -107,21 +114,45 @@ describe("server-runner", () => {
 
   it("prepares local state storage using the resolved server config", () => {
     readCliConfig.mockReturnValue({
-      dataDir: "/tmp/cs-data/coder-studio.db",
+      stateDir: "/tmp/cs-data",
     });
     hasWebAssets.mockReturnValue(true);
     getStaticAssetsDir.mockReturnValue("/tmp/web");
     parseServerConfig.mockReturnValue({
-      dataDir: "/tmp/cs-data/coder-studio.db",
+      stateDir: "/tmp/cs-data",
     });
 
     prepareLocalStateStorage();
 
     expect(parseServerConfig).toHaveBeenCalledWith({
       appVersion: getCliVersion(import.meta.url),
-      dataDir: "/tmp/cs-data/coder-studio.db",
+      update: getUpdateRuntimeInfo(import.meta.url),
+      stateDir: "/tmp/cs-data",
       webRoot: "/tmp/web",
     });
+  });
+
+  it("does not create on-disk state for an in-memory stateDir", () => {
+    readCliConfig.mockReturnValue({
+      stateDir: ":memory:",
+    });
+    hasWebAssets.mockReturnValue(true);
+    getStaticAssetsDir.mockReturnValue("/tmp/web");
+    parseServerConfig.mockReturnValue({
+      stateDir: ":memory:",
+    });
+    const originalCwd = process.cwd();
+    const testCwd = mkdtempSync(join(tmpdir(), "cs-server-runner-memory-"));
+
+    try {
+      process.chdir(testCwd);
+      prepareLocalStateStorage();
+
+      expect(existsSync(join(testCwd, ":memory:"))).toBe(false);
+    } finally {
+      process.chdir(originalCwd);
+      rmSync(testCwd, { recursive: true, force: true });
+    }
   });
 
   it("starts the server when executed as the entrypoint", async () => {

@@ -10,6 +10,7 @@ import {
   workspacesAtom,
   workspacesLoadStateAtom,
 } from "../../atoms/workspaces";
+import { updateStateAtom } from "../updates/atoms";
 import { sidebarCollapsedAtom, terminalPanelVisibleAtom } from "../workspace/atoms";
 import { TopBar } from "./index";
 
@@ -328,5 +329,37 @@ describe("TopBar", () => {
     );
 
     expect(screen.getByRole("button", { name: "Enter Fullscreen" })).toBeInTheDocument();
+  });
+
+  it("keeps the settings entry plain when an update is available", () => {
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(workspacesLoadStateAtom, "ready");
+    store.set(updateStateAtom, {
+      version: 1,
+      currentVersion: "0.4.0",
+      latestVersion: "0.5.0",
+      availability: "update_available",
+      updateStatus: "idle",
+      lastCheckedAt: 1,
+      targetVersion: null,
+      startedAt: null,
+      finishedAt: null,
+      requiresManualStep: false,
+      manualCommand: null,
+      errorSummary: null,
+      supported: true,
+      installKind: "global_npm",
+      unsupportedReason: null,
+    });
+
+    render(
+      <Provider store={store}>
+        <TopBar />
+      </Provider>
+    );
+
+    const settingsButton = screen.getByTestId("settings-open");
+    expect(settingsButton.querySelector(".topbar-unread")).toBeNull();
   });
 });

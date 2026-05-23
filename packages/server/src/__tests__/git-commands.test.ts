@@ -16,6 +16,12 @@ import "../commands/workspace.js";
 import "../commands/git.js";
 
 const execFileAsync = promisify(execFile);
+const PNG_BYTES = Buffer.from(
+  "89504E470D0A1A0A0000000D4948445200000001000000010806000000" +
+    "1F15C4890000000A49444154789C63000100000005000157CFC4A30000" +
+    "0000049454E44AE426082",
+  "hex"
+);
 
 describe("Git Commands", () => {
   let testDir: string;
@@ -103,6 +109,10 @@ describe("Git Commands", () => {
     expect(result.data).toEqual(
       expect.objectContaining({
         diff: expect.stringContaining("-export const value = 1;"),
+        renderAs: "text",
+        status: "modified",
+        originalContent: "export const value = 1;\n",
+        modifiedContent: "export const value = 2;\n",
       })
     );
     expect((result.data as { diff: string }).diff).toContain("+export const value = 2;");
@@ -128,6 +138,10 @@ describe("Git Commands", () => {
     expect(result.data).toEqual(
       expect.objectContaining({
         diff: expect.stringContaining("diff --git a/scratch.txt b/scratch.txt"),
+        renderAs: "text",
+        status: "added",
+        originalContent: "",
+        modifiedContent: "temporary\nnotes\n",
       })
     );
     expect((result.data as { diff: string }).diff).toContain("new file mode 100644");
@@ -135,6 +149,40 @@ describe("Git Commands", () => {
     expect((result.data as { diff: string }).diff).toContain("+++ b/scratch.txt");
     expect((result.data as { diff: string }).diff).toContain("+temporary");
     expect((result.data as { diff: string }).diff).toContain("+notes");
+  });
+
+  it("returns image diff metadata when a png file has binary changes", async () => {
+    await writeFile(join(testDir, "pixel.png"), PNG_BYTES);
+    await execFileAsync("git", ["add", "."], { cwd: testDir });
+    await execFileAsync("git", ["commit", "-m", "Add pixel"], { cwd: testDir });
+
+    const nextBytes = Buffer.from(PNG_BYTES);
+    nextBytes[nextBytes.length - 1] ^= 0x01;
+    await writeFile(join(testDir, "pixel.png"), nextBytes);
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "git-diff-image",
+        op: "git.diff",
+        args: {
+          workspaceId,
+          path: "pixel.png",
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.data).toEqual(
+      expect.objectContaining({
+        renderAs: "image",
+        status: "modified",
+        originalRevision: "INDEX",
+        modifiedRevision: "WORKTREE",
+        diff: expect.stringContaining("Binary files"),
+      })
+    );
   });
 
   it("returns recent commit history for git.log", async () => {

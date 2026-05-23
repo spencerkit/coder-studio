@@ -10,14 +10,12 @@ import "../commands/workspace.js";
 
 describe("workspace watcher hydrate restart", () => {
   let server: Server | undefined;
-  let dataDir: string;
-  let dbPath: string;
+  let stateDir: string;
   let workspaceDir: string;
   let watchSpy: ReturnType<typeof vi.spyOn<typeof chokidar, "watch">>;
 
   beforeEach(() => {
-    dataDir = mkdtempSync(join(tmpdir(), "coder-studio-data-"));
-    dbPath = join(dataDir, "coder-studio.db");
+    stateDir = mkdtempSync(join(tmpdir(), "coder-studio-state-"));
     workspaceDir = mkdtempSync(join(tmpdir(), "coder-studio-workspace-"));
     mkdirSync(join(workspaceDir, ".git"), { recursive: true });
     writeFileSync(join(workspaceDir, ".git", "HEAD"), "ref: refs/heads/main\n");
@@ -36,13 +34,13 @@ describe("workspace watcher hydrate restart", () => {
       server = undefined;
     }
     watchSpy.mockRestore();
-    rmSync(dataDir, { recursive: true, force: true });
+    rmSync(stateDir, { recursive: true, force: true });
     rmSync(workspaceDir, { recursive: true, force: true });
   });
 
   it("restores persisted workspace watchers after server restart", async () => {
     server = await createServer({
-      dataDir: dbPath,
+      stateDir,
       host: "127.0.0.1",
       port: 0,
     });
@@ -67,7 +65,7 @@ describe("workspace watcher hydrate restart", () => {
     watchSpy.mockClear();
 
     server = await createServer({
-      dataDir: dbPath,
+      stateDir,
       host: "127.0.0.1",
       port: 0,
     });
@@ -82,9 +80,9 @@ describe("workspace watcher hydrate restart", () => {
     );
   });
 
-  it("restores persisted workspace watchers from file metadata even when the data anchor file is absent", async () => {
+  it("restores persisted workspace watchers from state metadata even when no legacy db path exists", async () => {
     server = await createServer({
-      dataDir: dbPath,
+      stateDir,
       host: "127.0.0.1",
       port: 0,
     });
@@ -106,10 +104,9 @@ describe("workspace watcher hydrate restart", () => {
     await server.stop();
     server = undefined;
     watchSpy.mockClear();
-    rmSync(dbPath, { force: true });
 
     server = await createServer({
-      dataDir: dbPath,
+      stateDir,
       host: "127.0.0.1",
       port: 0,
     });
