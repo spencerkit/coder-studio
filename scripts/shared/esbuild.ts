@@ -74,6 +74,7 @@ export async function createCliBuildOptions(format: "esm" | "cjs"): Promise<Buil
     alias: {
       "@coder-studio/server": resolve(SERVER_DIR, "src/index.ts"),
       "@coder-studio/core/runtime": resolve(CORE_DIR, "src/runtime.ts"),
+      "@coder-studio/core/state-paths": resolve(CORE_DIR, "src/state-paths.ts"),
       "@coder-studio/core": resolve(CORE_DIR, "src/index.ts"),
       "@coder-studio/providers": resolve(PROVIDERS_DIR, "src/index.ts"),
       "@coder-studio/utils": resolve(UTILS_DIR, "src/index.ts"),

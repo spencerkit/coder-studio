@@ -6890,9 +6890,9 @@ textarea.input {
   align-items: center;
   justify-content: flex-end;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--gap-tight);
   margin-left: auto;
-  padding: 4px;
+  padding: var(--sp-1);
   border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--bg-hover) 72%, var(--bg-surface) 28%);
 }
@@ -6924,12 +6924,14 @@ textarea.input {
 
 .image-diff-preview__meta {
   display: flex;
-  gap: 12px;
+  gap: var(--sp-3);
   align-items: center;
-  padding: 10px 14px;
+  padding: calc(var(--sp-2) + var(--gap-compact)) calc(var(--sp-3) + var(--gap-compact));
   border-bottom: 1px solid var(--border);
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: var(--type-body-6-size);
+  line-height: var(--type-body-6-line-height);
+  font-weight: var(--type-body-6-weight);
   font-family: var(--font-mono);
 }
 
@@ -6952,11 +6954,11 @@ textarea.input {
 }
 
 .image-diff-preview__pane-header {
-  padding: 8px 14px;
+  padding: var(--sp-2) calc(var(--sp-3) + var(--gap-compact));
   color: var(--text-secondary);
-  font-size: var(--type-meta-size);
-  line-height: var(--type-meta-line-height);
-  font-weight: var(--type-meta-weight);
+  font-size: var(--type-body-6-size);
+  line-height: var(--type-body-6-line-height);
+  font-weight: var(--type-body-6-weight);
 }
 
 .image-diff-preview__canvas {
@@ -6965,9 +6967,9 @@ textarea.input {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px;
+  padding: var(--sp-4);
   overflow: auto;
-  background-color: rgba(0, 0, 0, 0.18);
+  background-color: color-mix(in srgb, var(--bg-terminal) 90%, var(--bg-page) 10%);
   background-image:
     linear-gradient(45deg, rgba(255, 255, 255, 0.04) 25%, transparent 25%),
     linear-gradient(-45deg, rgba(255, 255, 255, 0.04) 25%, transparent 25%),
@@ -6985,7 +6987,7 @@ textarea.input {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--shadow-md);
 }
 
 .code-file-path {
@@ -8332,7 +8334,7 @@ textarea.input {
 
 .topbar-tab-content {
   position: relative;
-  z-index: 1;
+  z-index: var(--z-inline);
   display: inline-flex;
   align-items: center;
   gap: var(--gap-tight);
@@ -8347,7 +8349,7 @@ textarea.input {
 
 .topbar-tab-name {
   position: relative;
-  z-index: 1;
+  z-index: var(--z-inline);
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
@@ -8357,7 +8359,7 @@ textarea.input {
 
 .topbar-unread {
   position: relative;
-  z-index: 1;
+  z-index: var(--z-inline);
   flex: 0 0 auto;
 }
 

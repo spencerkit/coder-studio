@@ -1,9 +1,9 @@
 import { mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { prepareCliOutputDirs } from "./build-cli.js";
-import { CLI_DIR, getProductionDeps } from "./shared/index.js";
+import { CLI_DIR, CORE_DIR, createCliBuildOptions, getProductionDeps } from "./shared/index.js";
 
 describe("build-cli", () => {
   it("removes stale CLI dist files before recreating output directories", async () => {
@@ -44,5 +44,14 @@ describe("build-cli", () => {
     const productionDeps = await getProductionDeps();
 
     expect(productionDeps.filter((dep) => !declaredDeps.has(dep))).toEqual([]);
+  });
+
+  it("maps core subpath exports to source files for the CLI bundle", async () => {
+    const buildOptions = await createCliBuildOptions("esm");
+
+    expect(buildOptions.alias).toMatchObject({
+      "@coder-studio/core/runtime": resolve(CORE_DIR, "src/runtime.ts"),
+      "@coder-studio/core/state-paths": resolve(CORE_DIR, "src/state-paths.ts"),
+    });
   });
 });
