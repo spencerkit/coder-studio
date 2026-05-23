@@ -185,35 +185,35 @@ export function QuickOpen() {
           ) : results.length === 0 ? (
             <p className="quick-open__state">{t("quick_open.no_results")}</p>
           ) : (
-            results.map((file, index) => (
-              <button
-                key={file.path}
-                type="button"
-                className={`quick-open__item${
-                  index === selectedIndex ? " quick-open__item--active" : ""
-                }`}
-                onMouseEnter={() => setSelectedIndex(index)}
-                onClick={() => {
-                  if (!workspaceId) {
-                    return;
-                  }
+            <div role="listbox" aria-label={t("quick_open.title")}>
+              {results.map((file, index) => (
+                <button
+                  key={file.path}
+                  type="button"
+                  role="option"
+                  aria-selected={index === selectedIndex}
+                  className={`quick-open__item${
+                    index === selectedIndex ? " quick-open__item--active" : ""
+                  }`}
+                  onMouseEnter={() => setSelectedIndex(index)}
+                  onClick={() => {
+                    if (!workspaceId) {
+                      return;
+                    }
 
-                  void openLocation({
-                    workspaceId,
-                    path: file.path,
-                    source: "manual",
-                  });
-                  setOpen(false);
-                }}
-              >
-                <span className="quick-open__primary">
-                  <span className="quick-open__name">{file.name}</span>
-                </span>
-                <span className="quick-open__secondary">
-                  <span className="quick-open__path">{file.path}</span>
-                </span>
-              </button>
-            ))
+                    void openLocation({
+                      workspaceId,
+                      path: file.path,
+                      source: "manual",
+                    });
+                    setOpen(false);
+                  }}
+                >
+                  <span className="quick-open__primary">{file.name}</span>
+                  <span className="quick-open__secondary">{file.path}</span>
+                </button>
+              ))}
+            </div>
           )}
         </div>
       </div>

@@ -77,11 +77,9 @@ describe("QuickOpen", () => {
       undefined
     );
 
-    const result = screen.getByRole("button", { name: /app\.tsx/i });
-    expect(within(result).getByText("app.tsx")).toHaveClass("quick-open__name");
-    expect(within(result).getByText("src/app.tsx")).toHaveClass("quick-open__path");
-    expect(result.querySelector(".quick-open__primary")).not.toBeNull();
-    expect(result.querySelector(".quick-open__secondary")).not.toBeNull();
+    const result = screen.getByRole("option", { name: /app\.tsx/i });
+    expect(within(result).getByText("app.tsx")).toHaveClass("quick-open__primary");
+    expect(within(result).getByText("src/app.tsx")).toHaveClass("quick-open__secondary");
   });
 
   it("moves the active row with keyboard and opens the selected file on Enter", async () => {
@@ -111,18 +109,18 @@ describe("QuickOpen", () => {
     });
 
     const input = screen.getByRole("textbox", { name: /Go to File|跳转到文件/i });
-    const firstResult = screen.getByRole("button", { name: /app\.tsx/i });
-    const secondResult = screen.getByRole("button", { name: /routes\.ts/i });
+    const firstResult = screen.getByRole("option", { name: /app\.tsx/i });
+    const secondResult = screen.getByRole("option", { name: /routes\.ts/i });
 
-    expect(firstResult).toHaveClass("quick-open__item--active");
-    expect(secondResult).not.toHaveClass("quick-open__item--active");
+    expect(firstResult).toHaveAttribute("aria-selected", "true");
+    expect(secondResult).toHaveAttribute("aria-selected", "false");
 
     fireEvent.keyDown(input, {
       key: "ArrowDown",
     });
 
-    expect(firstResult).not.toHaveClass("quick-open__item--active");
-    expect(secondResult).toHaveClass("quick-open__item--active");
+    expect(firstResult).toHaveAttribute("aria-selected", "false");
+    expect(secondResult).toHaveAttribute("aria-selected", "true");
 
     fireEvent.keyDown(input, {
       key: "Enter",

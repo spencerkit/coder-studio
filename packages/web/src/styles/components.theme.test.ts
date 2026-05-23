@@ -2617,6 +2617,57 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(rowActionsDesktop).toContain("opacity: 0");
   });
 
+  it("keeps workspace search and quick open on compact editor-search chrome", () => {
+    const searchControls = getLastRuleBlock(".workspace-search-panel__controls");
+    const searchInput = getLastRuleBlock(".workspace-search-panel__input");
+    const searchGroupHeader = getLastRuleBlock(".workspace-search-panel__group-header");
+    const searchGroupPath = getLastRuleBlock(".workspace-search-panel__group-path");
+    const searchMatch = getLastRuleBlock(".workspace-search-panel__match");
+    const searchLine = getLastRuleBlock(".workspace-search-panel__line");
+    const quickOpen = getLastRuleBlock(".quick-open");
+    const quickOpenSearch = getLastRuleBlock(".quick-open__search");
+    const quickOpenItem = getLastRuleBlock(".quick-open__item");
+    const quickOpenItemActive = getLastRuleBlock(".quick-open__item--active");
+    const quickOpenItemSelected = getLastRuleBlock('.quick-open__item[aria-selected="true"]');
+    const quickOpenPrimary = getLastRuleBlock(".quick-open__primary");
+    const quickOpenSecondary = getLastRuleBlock(".quick-open__secondary");
+    const quickOpenSelectedSecondary = getLastRuleBlock(
+      '.quick-open__item[aria-selected="true"] .quick-open__secondary'
+    );
+
+    expect(searchControls).toContain("border-bottom: 1px solid color-mix(");
+    expect(searchControls).toContain("background: color-mix(");
+    expect(searchInput).toContain("min-height: 34px");
+    expect(searchInput).toContain("border-radius: 4px");
+    expect(searchInput).toContain("box-shadow: none");
+    expect(searchGroupHeader).toContain("grid-template-columns: 14px minmax(0, 1fr) auto");
+    expect(searchGroupHeader).toContain("box-shadow: inset 0 -1px 0 color-mix(");
+    expect(searchGroupPath).toContain("font-family: var(--font-mono)");
+    expect(searchGroupPath).toContain("font-size: var(--type-body-6-size)");
+    expect(searchMatch).toContain("grid-template-columns: 40px minmax(0, 1fr)");
+    expect(searchLine).toContain("text-align: right");
+
+    expect(quickOpen).toContain("border: 1px solid var(--surface-overlay-border)");
+    expect(quickOpen).toContain("border-radius: var(--radius-overlay)");
+    expect(quickOpen).toContain("background: var(--surface-overlay-bg)");
+    expect(quickOpenSearch).toContain("border-bottom: 1px solid color-mix(");
+    expect(quickOpenSearch).toContain("background: color-mix(");
+    expect(quickOpenItem).toContain("gap: 2px");
+    expect(quickOpenItem).toContain("box-shadow: inset 0 -1px 0 color-mix(");
+    expect(quickOpenItemActive).toContain(
+      "background: color-mix(in srgb, var(--accent-blue) 12%, var(--bg-panel))"
+    );
+    expect(quickOpenItemSelected).toContain(
+      "background: color-mix(in srgb, var(--accent-blue) 12%, var(--bg-panel))"
+    );
+    expect(quickOpenPrimary).toContain("font-size: var(--type-body-3-size)");
+    expect(quickOpenSecondary).toContain("font-size: var(--type-body-5-size)");
+    expect(quickOpenSecondary).toContain("color: var(--text-secondary)");
+    expect(quickOpenSelectedSecondary).toContain(
+      "color: color-mix(in srgb, var(--accent-blue) 52%, var(--text-secondary))"
+    );
+  });
+
   it("keeps the desktop git panel and command palette on tighter tool-surface chrome", () => {
     const gitScroll = getLastRuleBlock(".git-panel-scroll");
     const gitCommitBlock = getLastRuleBlock(".git-commit-block");

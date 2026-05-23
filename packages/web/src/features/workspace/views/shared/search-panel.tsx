@@ -182,9 +182,11 @@ export const SearchPanel: FC<SearchPanelProps> = ({ workspaceId }) => {
                   <span className="workspace-search-panel__group-chevron" aria-hidden="true">
                     {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                   </span>
-                  <strong>{file.name}</strong>
-                  <span>{file.path}</span>
-                  <span>
+                  <span className="workspace-search-panel__group-copy">
+                    <strong className="workspace-search-panel__group-name">{file.name}</strong>
+                    <span className="workspace-search-panel__group-path">{file.path}</span>
+                  </span>
+                  <span className="workspace-search-panel__group-count">
                     {t("workspace.search.file_match_count", {
                       count: file.matchCount,
                       suffix: file.hasMoreMatches ? "+" : "",
@@ -192,7 +194,11 @@ export const SearchPanel: FC<SearchPanelProps> = ({ workspaceId }) => {
                   </span>
                 </button>
 
-                <div id={matchesId} hidden={!isExpanded}>
+                <div
+                  id={matchesId}
+                  hidden={!isExpanded}
+                  className="workspace-search-panel__matches"
+                >
                   {isExpanded
                     ? file.matches.map((match) => (
                         <button

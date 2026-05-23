@@ -274,6 +274,60 @@ describe("SearchPanel", () => {
     expect(screen.getByRole("button", { name: /4.*threadPool/i })).toBeInTheDocument();
   });
 
+  it("clears collapsed group state when the query is cleared", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({
+      files: [
+        {
+          path: "src/app.tsx",
+          name: "app.tsx",
+          matchCount: 1,
+          hasMoreMatches: false,
+          matches: [
+            {
+              line: 12,
+              column: 5,
+              endColumn: 11,
+              preview: "const needle = true;",
+              previewColumnStart: 7,
+              previewColumnEnd: 13,
+            },
+          ],
+        },
+      ],
+      totalMatchCount: 1,
+      hasMoreFiles: false,
+      truncatedMatchFileCount: 0,
+    } satisfies SearchContentResult);
+
+    renderSearchPanel(sendCommand);
+
+    await searchFor("needle");
+
+    const groupHeader = screen.getByRole("button", {
+      name: new RegExp(`app\\.tsx.*src/app\\.tsx.*${singleMatchCountPattern.source}`, "i"),
+    });
+
+    fireEvent.click(groupHeader);
+    expect(groupHeader).toHaveAttribute("aria-expanded", "false");
+
+    await searchFor("");
+
+    expect(
+      screen.queryByRole("button", {
+        name: new RegExp(`app\\.tsx.*src/app\\.tsx.*${singleMatchCountPattern.source}`, "i"),
+      })
+    ).not.toBeInTheDocument();
+
+    await searchFor("needle");
+
+    const nextHeader = screen.getByRole("button", {
+      name: new RegExp(`app\\.tsx.*src/app\\.tsx.*${singleMatchCountPattern.source}`, "i"),
+    });
+
+    expect(nextHeader).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: /12.*needle/i })).toBeInTheDocument();
+  });
+
   it("opens the file at the selected match location", async () => {
     const sendCommand = vi.fn().mockResolvedValue({
       files: [
@@ -321,5 +375,82 @@ describe("SearchPanel", () => {
     await searchFor("needle");
 
     expect(screen.getByRole("button", { name: /Retry|重试/i })).toBeInTheDocument();
+  });
+
+  it("re-expands file groups after a failed search is retried successfully", async () => {
+    const sendCommand = vi
+      .fn()
+      .mockResolvedValueOnce({
+        files: [
+          {
+            path: "src/app.tsx",
+            name: "app.tsx",
+            matchCount: 1,
+            hasMoreMatches: false,
+            matches: [
+              {
+                line: 12,
+                column: 5,
+                endColumn: 11,
+                preview: "const needle = true;",
+                previewColumnStart: 7,
+                previewColumnEnd: 13,
+              },
+            ],
+          },
+        ],
+        totalMatchCount: 1,
+        hasMoreFiles: false,
+        truncatedMatchFileCount: 0,
+      } satisfies SearchContentResult)
+      .mockRejectedValueOnce(new Error("boom"))
+      .mockResolvedValueOnce({
+        files: [
+          {
+            path: "src/thread.ts",
+            name: "thread.ts",
+            matchCount: 1,
+            hasMoreMatches: false,
+            matches: [
+              {
+                line: 4,
+                column: 10,
+                endColumn: 16,
+                preview: "threadPool.run(job);",
+                previewColumnStart: 1,
+                previewColumnEnd: 7,
+              },
+            ],
+          },
+        ],
+        totalMatchCount: 1,
+        hasMoreFiles: false,
+        truncatedMatchFileCount: 0,
+      } satisfies SearchContentResult);
+
+    renderSearchPanel(sendCommand);
+
+    await searchFor("needle");
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: new RegExp(`app\\.tsx.*src/app\\.tsx.*${singleMatchCountPattern.source}`, "i"),
+      })
+    );
+
+    await searchFor("thread");
+
+    fireEvent.click(screen.getByRole("button", { name: /Retry|重试/i }));
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(250);
+    });
+
+    const retryHeader = screen.getByRole("button", {
+      name: new RegExp(`thread\\.ts.*src/thread\\.ts.*${singleMatchCountPattern.source}`, "i"),
+    });
+
+    expect(retryHeader).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: /4.*threadPool/i })).toBeInTheDocument();
   });
 });
