@@ -1,3 +1,5 @@
+import type { SystemDependencyId } from "./system-dependency-install";
+
 export type DiagnosticsContext =
   | "workspace_open"
   | "session_start"
@@ -41,8 +43,13 @@ export interface DiagnosticsCheck {
   workspaceId?: string;
   workspacePath?: string;
   providerId?: string;
+  dependencyId?: SystemDependencyId;
   autoInstallSupported?: boolean;
-  installReadiness?: "ready" | "missing_prerequisite" | "unsupported_platform";
+  installReadiness?:
+    | "ready"
+    | "missing_prerequisite"
+    | "unsupported_platform"
+    | "unsupported_package_manager";
   missingCommands?: string[];
   missingPrerequisites?: string[];
   manualGuideKeys?: string[];

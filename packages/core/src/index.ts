@@ -6,6 +6,7 @@ export * from "./domain/lsp";
 export * from "./domain/mcp";
 export * from "./domain/provider-install";
 export * from "./domain/supervisor";
+export * from "./domain/system-dependency-install";
 // Domain
 export * from "./domain/types";
 export * from "./domain/update";
