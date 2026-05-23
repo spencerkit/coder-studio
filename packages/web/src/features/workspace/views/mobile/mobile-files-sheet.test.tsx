@@ -9,9 +9,9 @@ vi.mock("../../../../lib/i18n", () => ({
   useTranslation: () => (key: string) => {
     const translations: Record<string, string> = {
       "mobile.files.tabs": "Files tabs",
-      "file.title": "Files",
-      "label.git": "Git",
-      "action.search_files": "Search files",
+      "workspace.sidebar.explorer": "Explorer",
+      "workspace.sidebar.search": "Search",
+      "workspace.sidebar.source_control": "Source Control",
       "file.new_file": "New File",
       "file.new_folder": "New Folder",
       "file.collapse_all": "Collapse All",
@@ -26,11 +26,13 @@ vi.mock("../../../code-editor/views/shared/code-editor-host", () => ({
   CodeEditorHost: () => <div data-testid="code-editor-host" />,
 }));
 
-vi.mock("../shared/file-tree-panel", () => ({
-  FileTreePanel: () => (
-    <div data-testid="file-tree-panel">
-      <input aria-label="Search files" role="searchbox" />
-    </div>
+vi.mock("./mobile-explorer-panel", () => ({
+  MobileExplorerPanel: () => <div data-testid="mobile-explorer-panel" />,
+}));
+
+vi.mock("../shared/search-panel", () => ({
+  SearchPanel: ({ variant }: { variant?: string }) => (
+    <div data-testid="search-panel" data-variant={variant} />
   ),
 }));
 
@@ -58,47 +60,32 @@ describe("MobileFilesSheet", () => {
     vi.restoreAllMocks();
   });
 
-  it("renders file actions in the tab row instead of a separate dock", async () => {
-    const sendCommand = vi.fn().mockResolvedValue({
-      path: "/workspace",
-      children: [],
-    });
-
-    const store = createStore();
-    store.set(wsClientAtom, { sendCommand } as never);
-
-    render(
-      <Provider store={store}>
-        <MobileFilesSheet workspaceId="ws-test" route={{ kind: "root" }} activeTab="files" />
-      </Provider>
-    );
-
-    const newFileButton = await screen.findByRole("button", { name: "New File" });
-    const searchInput = await screen.findByRole("searchbox", { name: "Search files" });
-
-    expect(document.querySelector(".mobile-files-sheet__dock")).toBeNull();
-    expect(document.querySelector(".file-tree-mobile-actions")).toBeNull();
-    expect(newFileButton.closest(".mobile-files-sheet__tab-actions")).not.toBeNull();
-    expect(
-      newFileButton.compareDocumentPosition(searchInput) & Node.DOCUMENT_POSITION_FOLLOWING
-    ).toBeTruthy();
-    expect(searchInput).toBeInTheDocument();
-  });
-
-  it("uses the mobile segmented tab styling without legacy panel-tab classes", () => {
+  it("renders three icon tabs and keeps explorer actions scoped to the explorer view", () => {
     render(
       <Provider store={createStore()}>
-        <MobileFilesSheet workspaceId="ws-test" route={{ kind: "root" }} activeTab="git" />
+        <MobileFilesSheet workspaceId="ws-test" route={{ kind: "root" }} activeView="explorer" />
       </Provider>
     );
 
-    const filesTab = screen.getByRole("tab", { name: "Files" });
-    const gitTab = screen.getByRole("tab", { name: "Git" });
+    expect(screen.getByRole("tab", { name: "Explorer" })).toHaveClass(
+      "mobile-files-sheet__segment",
+      "active"
+    );
+    expect(screen.getByRole("tab", { name: "Search" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Source Control" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "New File" })).toBeInTheDocument();
+    expect(screen.getByTestId("mobile-explorer-panel")).toBeInTheDocument();
+  });
 
-    expect(filesTab).toHaveClass("mobile-files-sheet__segment");
-    expect(filesTab).not.toHaveClass("panel-tab");
-    expect(gitTab).toHaveClass("mobile-files-sheet__segment", "active");
-    expect(gitTab).not.toHaveClass("panel-tab");
+  it("renders the mobile search panel without explorer actions when Search is active", () => {
+    render(
+      <Provider store={createStore()}>
+        <MobileFilesSheet workspaceId="ws-test" route={{ kind: "root" }} activeView="search" />
+      </Provider>
+    );
+
+    expect(screen.queryByRole("button", { name: "New File" })).toBeNull();
+    expect(screen.getByTestId("search-panel")).toHaveAttribute("data-variant", "mobile");
   });
 
   it("uses one file detail surface for preview edit and diff instead of separate editor and diff pages", () => {
@@ -107,7 +94,7 @@ describe("MobileFilesSheet", () => {
         <MobileFilesSheet
           workspaceId="ws-test"
           route={{ kind: "detail", path: "src/app.tsx" }}
-          activeTab="files"
+          activeView="explorer"
         />
       </Provider>
     );
@@ -124,7 +111,7 @@ describe("MobileFilesSheet", () => {
         <MobileFilesSheet
           workspaceId="ws-test"
           route={{ kind: "root" }}
-          activeTab="git"
+          activeView="source-control"
           onRouteChange={handleRouteChange}
         />
       </Provider>
