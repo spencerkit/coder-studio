@@ -368,6 +368,49 @@ describe("SearchPanel", () => {
     });
   });
 
+  it("renders a mobile variant without the desktop header and still opens the selected match", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({
+      files: [
+        {
+          path: "src/app.tsx",
+          name: "app.tsx",
+          matchCount: 1,
+          hasMoreMatches: false,
+          matches: [
+            {
+              line: 12,
+              column: 5,
+              endColumn: 11,
+              preview: "const needle = true;",
+              previewColumnStart: 7,
+              previewColumnEnd: 13,
+            },
+          ],
+        },
+      ],
+      totalMatchCount: 1,
+      hasMoreFiles: false,
+      truncatedMatchFileCount: 0,
+    } satisfies SearchContentResult);
+    const onSelectFile = vi.fn();
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <SearchPanel workspaceId="ws-test" variant="mobile" onSelectFile={onSelectFile} />
+      </Provider>
+    );
+
+    expect(screen.queryByRole("heading", { name: /Search|搜索/i })).toBeNull();
+
+    await searchFor("needle");
+    fireEvent.click(screen.getByRole("button", { name: /12.*needle/i }));
+
+    expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/app.tsx");
+    expect(onSelectFile).toHaveBeenCalledWith("src/app.tsx");
+  });
+
   it("shows retry when the search command fails", async () => {
     const sendCommand = vi.fn().mockRejectedValue(new Error("boom"));
     renderSearchPanel(sendCommand);

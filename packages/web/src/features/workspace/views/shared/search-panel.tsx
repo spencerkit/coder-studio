@@ -1,5 +1,5 @@
 import type { SearchContentMatch, SearchContentResult } from "@coder-studio/core";
-import { useAtomValue } from "jotai";
+import { useAtomValue, useSetAtom } from "jotai";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import type { FC, ReactNode } from "react";
 import { useEffect, useId, useRef, useState } from "react";
@@ -8,9 +8,12 @@ import { Button } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { useOpenLocation } from "../../../code-editor/actions/use-open-location";
 import { PanelHeader } from "../../../shared/components/panel-header";
+import { deriveEditorModeForPath, editorModeAtomFamily } from "../../atoms";
 
 interface SearchPanelProps {
   workspaceId: string;
+  variant?: "desktop" | "mobile";
+  onSelectFile?: (path: string) => void;
 }
 
 function renderPreview(match: SearchContentMatch): ReactNode {
@@ -30,10 +33,15 @@ function buildExpandedFileMap(results: SearchContentResult): Record<string, bool
   return Object.fromEntries(results.files.map((file) => [file.path, true]));
 }
 
-export const SearchPanel: FC<SearchPanelProps> = ({ workspaceId }) => {
+export const SearchPanel: FC<SearchPanelProps> = ({
+  workspaceId,
+  variant = "desktop",
+  onSelectFile,
+}) => {
   const t = useTranslation();
   const dispatch = useAtomValue(dispatchCommandAtom);
   const { openLocation } = useOpenLocation(workspaceId);
+  const setEditorMode = useSetAtom(editorModeAtomFamily(workspaceId));
   const inputRef = useRef<HTMLInputElement>(null);
   const dispatchRef = useRef(dispatch);
   const groupIdPrefix = useId();
@@ -109,9 +117,24 @@ export const SearchPanel: FC<SearchPanelProps> = ({ workspaceId }) => {
     };
   }, [query, retryNonce, workspaceId]);
 
+  const openMatch = (path: string, line: number, column: number, endColumn: number) => {
+    setEditorMode(deriveEditorModeForPath(path));
+    void openLocation({
+      workspaceId,
+      path,
+      line,
+      column,
+      endColumn,
+      source: "search",
+    });
+    onSelectFile?.(path);
+  };
+
   return (
-    <div className="workspace-sidebar-view workspace-search-panel">
-      <PanelHeader title={t("workspace.sidebar.search")} />
+    <div
+      className={`workspace-sidebar-view workspace-search-panel workspace-search-panel--${variant}`}
+    >
+      {variant === "desktop" ? <PanelHeader title={t("workspace.sidebar.search")} /> : null}
 
       <div className="workspace-search-panel__controls">
         <input
@@ -206,14 +229,7 @@ export const SearchPanel: FC<SearchPanelProps> = ({ workspaceId }) => {
                           type="button"
                           className="workspace-search-panel__match"
                           onClick={() =>
-                            void openLocation({
-                              workspaceId,
-                              path: file.path,
-                              line: match.line,
-                              column: match.column,
-                              endColumn: match.endColumn,
-                              source: "search",
-                            })
+                            openMatch(file.path, match.line, match.column, match.endColumn)
                           }
                         >
                           <span className="workspace-search-panel__line">{match.line}</span>
