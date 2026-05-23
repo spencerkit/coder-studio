@@ -1,0 +1,124 @@
+import { describe, expect, it } from "vitest";
+import type { OpenFile } from "../atoms";
+import { orderOpenEditorPaths, resolveOpenEditorsClose } from "./open-editors-close";
+
+function createFile(path: string): OpenFile {
+  return {
+    kind: "text",
+    path,
+    content: "",
+    savedContent: "",
+    baseHash: `hash:${path}`,
+    isDirty: false,
+  };
+}
+
+describe("orderOpenEditorPaths", () => {
+  it("sorts open editor paths lexicographically", () => {
+    expect(
+      orderOpenEditorPaths({
+        "src/z.ts": createFile("src/z.ts"),
+        "README.md": createFile("README.md"),
+        "src/a.ts": createFile("src/a.ts"),
+      })
+    ).toEqual(["README.md", "src/a.ts", "src/z.ts"]);
+  });
+});
+
+describe("resolveOpenEditorsClose", () => {
+  it("closing a non-active editor keeps the active file", () => {
+    expect(
+      resolveOpenEditorsClose({
+        openFiles: {
+          "src/a.ts": createFile("src/a.ts"),
+          "src/b.ts": createFile("src/b.ts"),
+          "src/c.ts": createFile("src/c.ts"),
+        },
+        activeFilePath: "src/b.ts",
+        pathToClose: "src/a.ts",
+      })
+    ).toEqual({
+      openFiles: {
+        "src/b.ts": createFile("src/b.ts"),
+        "src/c.ts": createFile("src/c.ts"),
+      },
+      activeFilePath: "src/b.ts",
+      shouldExitEditor: false,
+    });
+  });
+
+  it("closing the active file selects the next editor when available later in sorted order", () => {
+    expect(
+      resolveOpenEditorsClose({
+        openFiles: {
+          "src/b.ts": createFile("src/b.ts"),
+          "src/c.ts": createFile("src/c.ts"),
+          "src/a.ts": createFile("src/a.ts"),
+        },
+        activeFilePath: "src/b.ts",
+        pathToClose: "src/b.ts",
+      })
+    ).toEqual({
+      openFiles: {
+        "src/c.ts": createFile("src/c.ts"),
+        "src/a.ts": createFile("src/a.ts"),
+      },
+      activeFilePath: "src/c.ts",
+      shouldExitEditor: false,
+    });
+  });
+
+  it("closing the active last item selects the previous editor", () => {
+    expect(
+      resolveOpenEditorsClose({
+        openFiles: {
+          "src/b.ts": createFile("src/b.ts"),
+          "src/c.ts": createFile("src/c.ts"),
+          "src/a.ts": createFile("src/a.ts"),
+        },
+        activeFilePath: "src/c.ts",
+        pathToClose: "src/c.ts",
+      })
+    ).toEqual({
+      openFiles: {
+        "src/b.ts": createFile("src/b.ts"),
+        "src/a.ts": createFile("src/a.ts"),
+      },
+      activeFilePath: "src/b.ts",
+      shouldExitEditor: false,
+    });
+  });
+
+  it("closing the final remaining file signals editor exit", () => {
+    expect(
+      resolveOpenEditorsClose({
+        openFiles: {
+          "src/a.ts": createFile("src/a.ts"),
+        },
+        activeFilePath: "src/a.ts",
+        pathToClose: "src/a.ts",
+      })
+    ).toEqual({
+      openFiles: {},
+      activeFilePath: null,
+      shouldExitEditor: true,
+    });
+  });
+
+  it("closeAll clears all open files and signals editor exit", () => {
+    expect(
+      resolveOpenEditorsClose({
+        openFiles: {
+          "src/a.ts": createFile("src/a.ts"),
+          "src/b.ts": createFile("src/b.ts"),
+        },
+        activeFilePath: "src/b.ts",
+        closeAll: true,
+      })
+    ).toEqual({
+      openFiles: {},
+      activeFilePath: null,
+      shouldExitEditor: true,
+    });
+  });
+});
