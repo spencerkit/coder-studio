@@ -23,8 +23,8 @@ export function MobileExplorerPanel({
 
   return (
     <div className="mobile-explorer-panel">
-      <OpenEditorsSection workspaceId={workspaceId} onSelectFile={routeToDetail} />
       <QuickJumpSection workspaceId={workspaceId} onSelectFile={routeToDetail} />
+      <OpenEditorsSection workspaceId={workspaceId} onSelectFile={routeToDetail} />
       <section className="workspace-sidebar-section workspace-sidebar-section--fill">
         <h2 className="workspace-sidebar-section__title">{t("workspace.sidebar.workspace")}</h2>
         <FileTreePanel

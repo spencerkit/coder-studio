@@ -36,6 +36,8 @@ describe("File Commands", () => {
 
     await writeFile(join(testDir, "README.md"), "readme\n");
     await writeFile(join(testDir, "src.ts"), "export const src = true;\n");
+    await mkdir(join(testDir, "src"));
+    await writeFile(join(testDir, "src", "guide.md"), "guide\n");
     await mkdir(join(testDir, "docs"));
     await writeFile(join(testDir, "docs", "src-note.md"), "note\n");
     await writeFile(join(testDir, "docs", "readme-copy.md"), "copy\n");
@@ -101,7 +103,7 @@ describe("File Commands", () => {
     expect(files.some((item) => item.path === "src.ts")).toBe(false);
   });
 
-  it("matches by filename only and ignores directory names", async () => {
+  it("matches directory paths while keeping filename hits ahead of path-only matches", async () => {
     const result = await dispatch(
       {
         kind: "command",
@@ -109,7 +111,8 @@ describe("File Commands", () => {
         op: "file.search",
         args: {
           workspaceId,
-          query: "docs",
+          query: "src",
+          limit: 10,
         },
       },
       ctx
@@ -117,7 +120,27 @@ describe("File Commands", () => {
 
     expect(result.ok).toBe(true);
     const files = (result.data as { files: Array<{ path: string }> }).files;
-    expect(files).toHaveLength(0);
+    expect(files[0]?.path).toBe("src.ts");
+    expect(files.some((item) => item.path === "src/guide.md")).toBe(true);
+
+    const directoryResult = await dispatch(
+      {
+        kind: "command",
+        id: "file-search-2-path",
+        op: "file.search",
+        args: {
+          workspaceId,
+          query: "docs",
+          limit: 10,
+        },
+      },
+      ctx
+    );
+
+    expect(directoryResult.ok).toBe(true);
+    const directoryFiles = (directoryResult.data as { files: Array<{ path: string }> }).files;
+    expect(directoryFiles.length).toBeGreaterThan(0);
+    expect(directoryFiles.every((item) => item.path.startsWith("docs/"))).toBe(true);
   });
 
   it("keeps .gitignore filtering for search results", async () => {

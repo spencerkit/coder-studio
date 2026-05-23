@@ -27,7 +27,7 @@ describe("MobileExplorerPanel", () => {
     fileTreePanelSpy.mockReset();
   });
 
-  it("renders open editors, quick jump, and a file tree without the embedded tree search", async () => {
+  it("renders quick jump above open editors and a file tree without the embedded tree search", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string, args: { query?: string }) => {
       if (op === "file.search") {
         return {
@@ -78,6 +78,11 @@ describe("MobileExplorerPanel", () => {
         />
       </Provider>
     );
+
+    const headings = screen.getAllByRole("heading", { level: 2 });
+    expect(headings[0]).toHaveTextContent(/Quick Jump|快速跳转/i);
+    expect(headings[1]).toHaveTextContent(/Open Editors|打开的编辑器/i);
+    expect(headings[2]).toHaveTextContent(/Workspace|工作区/i);
 
     expect(screen.getByRole("button", { name: "README.md" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "src/mobile-files-sheet.tsx" })).toHaveClass(
