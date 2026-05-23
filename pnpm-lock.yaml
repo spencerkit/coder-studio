@@ -95,6 +95,12 @@ importers:
       ignore:
         specifier: ^7.0.5
         version: 7.0.5
+      markdown-it:
+        specifier: ^14.1.0
+        version: 14.1.1
+      mime-types:
+        specifier: ^2.1.35
+        version: 2.1.35
       node-pty:
         specifier: ^1.1.0
         version: 1.1.0
@@ -204,9 +210,6 @@ importers:
       '@fastify/websocket':
         specifier: ^11.2.0
         version: 11.2.0
-      '@types/mime-types':
-        specifier: ^2.1.4
-        version: 2.1.4
       '@xterm/addon-serialize':
         specifier: ^0.14.0
         version: 0.14.0
@@ -256,6 +259,9 @@ importers:
         specifier: ^4.4.2
         version: 4.4.3
     devDependencies:
+      '@types/mime-types':
+        specifier: ^2.1.4
+        version: 2.1.4
       '@types/node':
         specifier: ^25.6.0
         version: 25.6.0

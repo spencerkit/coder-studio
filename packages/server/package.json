@@ -39,7 +39,6 @@
     "@fastify/websocket": "^11.2.0",
     "@xterm/addon-serialize": "^0.14.0",
     "@xterm/headless": "^6.0.0",
-    "@types/mime-types": "^2.1.4",
     "chokidar": "^5.0.0",
     "fastify": "^5.8.5",
     "ignore": "^7.0.0",
@@ -56,6 +55,7 @@
     "zod": "^4.4.2"
   },
   "devDependencies": {
+    "@types/mime-types": "^2.1.4",
     "@types/node": "^25.6.0",
     "@types/ws": "^8.18.1",
     "form-data": "^4.0.5",
