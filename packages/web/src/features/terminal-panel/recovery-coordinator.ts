@@ -20,6 +20,10 @@ interface RegisteredTerminal {
   getRenderedSeq: () => number;
   setUiMode: (mode: RecoveryUiMode) => void;
   markClosed?: (state: RecoveryClosedTerminalState) => Promise<void> | void;
+  completeRecovery?: (
+    headSeq: number,
+    closed?: RecoveryClosedTerminalState
+  ) => Promise<void> | void;
   applyReplay?: (payload: TerminalReplayPayload) => Promise<void> | void;
   applySnapshot?: (payload: TerminalSnapshotPayload) => Promise<void> | void;
 }
@@ -306,12 +310,19 @@ export function createRecoveryCoordinator(deps: RecoveryCoordinatorDeps): Recove
     }
 
     if (decision.action === "noop") {
+      if (terminal.completeRecovery) {
+        await terminal.completeRecovery(decision.headSeq);
+      }
       terminal.setUiMode("silent");
       return;
     }
 
     if (decision.action === "closed") {
-      await applyClosedState(terminal, { exitCode: decision.exitCode });
+      if (terminal.completeRecovery) {
+        await terminal.completeRecovery(decision.headSeq, { exitCode: decision.exitCode });
+      } else {
+        await applyClosedState(terminal, { exitCode: decision.exitCode });
+      }
       terminal.setUiMode("silent");
       return;
     }
