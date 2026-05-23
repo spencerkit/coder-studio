@@ -53,6 +53,15 @@ import {
   resolveTerminalFontSizeSetting,
   terminalPreferencesAtom,
 } from "../features/terminal-panel/preferences";
+import {
+  createRecoveryCoordinator,
+  createRecoveryDispatchCommand,
+} from "../features/terminal-panel/recovery-coordinator";
+import {
+  getGlobalRecoveryCoordinator,
+  resetGlobalRecoveryCoordinator,
+  setGlobalRecoveryCoordinator,
+} from "../features/terminal-panel/recovery-singleton";
 import { updateStateAtom } from "../features/updates/atoms";
 import {
   editorRefreshTokenAtomFamily,
@@ -143,6 +152,11 @@ export function resetAppProvidersSingletonsForTests() {
     pendingDisconnectTimer = null;
   }
   globalWsClient = null;
+  resetGlobalRecoveryCoordinator();
+}
+
+function reportRecoveryCoordinatorError(context: string, error: unknown) {
+  console.error(`[RecoveryCoordinator] ${context} failed:`, error);
 }
 
 function mergeRefreshHints(
@@ -569,6 +583,7 @@ export function AppProviders({ children }: AppProvidersProps) {
         globalWsClient.disconnect("auth_required");
         globalWsClient = null;
       }
+      resetGlobalRecoveryCoordinator();
 
       wsClientRef.current = null;
       setWsClient(null);
@@ -709,7 +724,11 @@ export function AppProviders({ children }: AppProvidersProps) {
       }
 
       lastForegroundRecoveryAtRef.current = now;
-      wsClientRef.current?.recoverConnection("visibility_resume");
+      void getGlobalRecoveryCoordinator()
+        ?.notifyReason("foreground_resume")
+        .catch((error) => {
+          reportRecoveryCoordinatorError("foreground_resume", error);
+        });
     };
 
     const handleVisibilityChange = () => {
@@ -735,7 +754,11 @@ export function AppProviders({ children }: AppProvidersProps) {
         return;
       }
 
-      wsClientRef.current?.recoverConnection("network_online");
+      void getGlobalRecoveryCoordinator()
+        ?.notifyReason("network_online")
+        .catch((error) => {
+          reportRecoveryCoordinatorError("network_online", error);
+        });
     };
 
     const refreshBranchState = (workspaceId: string) => {
@@ -897,6 +920,19 @@ export function AppProviders({ children }: AppProvidersProps) {
       const unsubscribeStatus = globalWsClient.onStatus(handleStatusChange);
       const unsubscribeEvents = globalWsClient.subscribe(topics, handleEvent);
 
+      if (!getGlobalRecoveryCoordinator()) {
+        setGlobalRecoveryCoordinator(
+          createRecoveryCoordinator({
+            wsClient: globalWsClient,
+            sendCommand: createRecoveryDispatchCommand((op, args, options) =>
+              globalWsClient!.sendCommand(op, args, options)
+            ),
+            applyReplay: async () => {},
+            applySnapshot: async () => {},
+          })
+        );
+      }
+
       if (status === "disconnected" || status === "reconnecting") {
         globalWsClient.recoverConnection("manual_retry");
       }
@@ -926,6 +962,7 @@ export function AppProviders({ children }: AppProvidersProps) {
               globalWsClient.disconnect("app_unmount");
               globalWsClient = null;
             }
+            resetGlobalRecoveryCoordinator();
             pendingDisconnectTimer = null;
           }, 50);
         }
@@ -935,6 +972,16 @@ export function AppProviders({ children }: AppProvidersProps) {
     // Create new WebSocket client singleton
     const client = new WsClient(resolveWsUrl());
     globalWsClient = client;
+    setGlobalRecoveryCoordinator(
+      createRecoveryCoordinator({
+        wsClient: client,
+        sendCommand: createRecoveryDispatchCommand((op, args, options) =>
+          client.sendCommand(op, args, options)
+        ),
+        applyReplay: async () => {},
+        applySnapshot: async () => {},
+      })
+    );
     wsClientRef.current = client;
     setWsClient(client);
 
@@ -975,6 +1022,7 @@ export function AppProviders({ children }: AppProvidersProps) {
           globalWsClient.disconnect("app_unmount");
           globalWsClient = null;
         }
+        resetGlobalRecoveryCoordinator();
         pendingDisconnectTimer = null;
       }, 50);
     };

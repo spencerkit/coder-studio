@@ -1,5 +1,12 @@
 export const TERMINAL_REPLAY_TIMEOUT_MS = 120_000;
 
+export type RecoveryUiMode =
+  | "silent"
+  | "checking"
+  | "non_blocking_recovering"
+  | "blocking_rebuild"
+  | "error";
+
 export type TerminalReplayUiState =
   | { kind: "loading" }
   | { kind: "ready" }
