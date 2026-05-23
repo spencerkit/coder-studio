@@ -582,6 +582,65 @@ describe("SupervisorManager cycle triggers", () => {
     expect(deps.supervisorRepo.create).toHaveBeenCalledTimes(1);
   });
 
+  it("rejects restore when the source target matches the existing supervisor target", async () => {
+    const existing = await manager.create({
+      sessionId: "sess-existing-self-restore",
+      workspaceId: "ws-1",
+      objective: "Current objective",
+      evaluatorProviderId: "codex",
+      maxSupervisionCount: 1,
+    });
+
+    deps.targetStore.listRecoverableTargets.mockResolvedValueOnce([
+      {
+        targetId: existing.targetId,
+        sessionId: "sess-existing-self-restore",
+        workspaceId: "ws-1",
+        objective: "Current objective",
+        status: "active",
+        updatedAt: 10,
+        progressSummary: "Current target should not restore into itself",
+        cycleCount: 3,
+      },
+    ]);
+
+    await expect(
+      (
+        manager as unknown as SupervisorManager & {
+          restore: (input: {
+            sessionId: string;
+            workspaceId: string;
+            sourceTargetId: string;
+            evaluatorProviderId: string;
+            evaluatorModel?: string;
+            maxSupervisionCount?: number;
+            scheduledAt?: number;
+          }) => Promise<Supervisor>;
+        }
+      ).restore({
+        sessionId: "sess-existing-self-restore",
+        workspaceId: "ws-1",
+        sourceTargetId: existing.targetId,
+        evaluatorProviderId: "codex",
+        maxSupervisionCount: 8,
+      })
+    ).rejects.toMatchObject({
+      code: "supervisor_restore_same_target",
+    });
+
+    expect(deps.targetStore.cloneTargetFiles).not.toHaveBeenCalledWith(
+      process.cwd(),
+      expect.objectContaining({
+        sourceTargetId: existing.targetId,
+        targetId: existing.targetId,
+      })
+    );
+    expect(deps.targetStore.deleteTarget).not.toHaveBeenCalledWith(
+      process.cwd(),
+      existing.targetId
+    );
+  });
+
   it("returns an in-flight cycle immediately on manual triggerEvaluation", async () => {
     const supervisor = await manager.create({
       sessionId: "sess-manual",

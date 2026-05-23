@@ -3,13 +3,14 @@ import { createStore, Provider } from "jotai";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { lastViewedTargetAtom, pendingFocusSessionAtom } from "../../../atoms/app-ui";
-import { wsClientAtom } from "../../../atoms/connection";
+import { connectionStatusAtom, wsClientAtom } from "../../../atoms/connection";
 import { sessionsAtom } from "../../../atoms/sessions";
 import {
   activeWorkspaceIdAtom,
   workspacesAtom,
   workspacesLoadStateAtom,
 } from "../../../atoms/workspaces";
+import { supervisorsAtom } from "../../supervisor/atoms";
 import { SessionCard } from "../views/shared/session-card";
 
 const mockXtermHost = vi.fn((props: Record<string, unknown>) => (
@@ -384,15 +385,61 @@ describe("SessionCard", () => {
     );
   });
 
-  it("does not hydrate supervisor state via supervisor.get on mount", async () => {
+  it("hydrates supervisor state via supervisor.get once after the session becomes connected", async () => {
     const { store, sendCommand } = createSessionStore({
       state: "running",
       capability: "full",
       endedAt: undefined,
       terminalId: "term-live",
     });
+    sendCommand.mockResolvedValue({
+      supervisor: {
+        id: "sup-1",
+        sessionId: "sess_123456",
+        workspaceId: "ws-123",
+        targetId: "tgt-1",
+        state: "idle",
+        objective: "Keep the rollout healthy",
+        evaluatorProviderId: "claude",
+        maxSupervisionCount: 0,
+        completedSupervisionCount: 0,
+        recentTargetCycles: [],
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    });
 
-    render(
+    const { rerender } = render(
+      <Provider store={store}>
+        <SessionCard sessionId="sess_123456" />
+      </Provider>
+    );
+
+    expect(sendCommand).not.toHaveBeenCalledWith(
+      "supervisor.get",
+      { sessionId: "sess_123456" },
+      undefined
+    );
+
+    act(() => {
+      store.set(connectionStatusAtom, "connected");
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "supervisor.get",
+        { sessionId: "sess_123456" },
+        undefined
+      );
+    });
+
+    expect(store.get(supervisorsAtom).get("sess_123456")).toMatchObject({
+      id: "sup-1",
+      targetId: "tgt-1",
+      objective: "Keep the rollout healthy",
+    });
+
+    rerender(
       <Provider store={store}>
         <SessionCard sessionId="sess_123456" />
       </Provider>
@@ -402,11 +449,45 @@ describe("SessionCard", () => {
       await Promise.resolve();
     });
 
-    expect(sendCommand).not.toHaveBeenCalledWith(
-      "supervisor.get",
-      { sessionId: "sess_123456" },
-      undefined
+    expect(
+      sendCommand.mock.calls.filter(([op]) => op === "supervisor.get" && Boolean(op))
+    ).toHaveLength(1);
+  });
+
+  it("re-hydrates supervisor state after a reconnect cycle", async () => {
+    const { store, sendCommand } = createSessionStore({
+      state: "running",
+      capability: "full",
+      endedAt: undefined,
+      terminalId: "term-live",
+    });
+    sendCommand.mockResolvedValue({ supervisor: null });
+
+    render(
+      <Provider store={store}>
+        <SessionCard sessionId="sess_123456" />
+      </Provider>
     );
+
+    act(() => {
+      store.set(connectionStatusAtom, "connected");
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledTimes(1);
+    });
+
+    act(() => {
+      store.set(connectionStatusAtom, "reconnecting");
+    });
+
+    act(() => {
+      store.set(connectionStatusAtom, "connected");
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledTimes(2);
+    });
   });
 
   it("reacts to a pending-focus request by scrolling itself into view and pulsing, then clears the marker", async () => {
