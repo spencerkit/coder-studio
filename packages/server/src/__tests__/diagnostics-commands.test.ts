@@ -19,6 +19,8 @@ import "../commands/diagnostics.js";
 import "../commands/workspace.js";
 
 function createContext(overrides: Partial<CommandContext> = {}): CommandContext {
+  const { providerRuntimeDeps, ...restOverrides } = overrides;
+
   return {
     workspaceMgr: {
       get: (workspaceId: string) =>
@@ -44,8 +46,18 @@ function createContext(overrides: Partial<CommandContext> = {}): CommandContext 
     },
     providerRuntimeDeps: {
       commandExists: async () => true,
+      runCommand: async (file: string) => {
+        if (file === "git") {
+          return { stdout: "git version 0.0-test\n", stderr: "" };
+        }
+        if (file === "node") {
+          return { stdout: "v0.0.0-test\n", stderr: "" };
+        }
+        throw new Error(`unexpected command: ${file}`);
+      },
+      ...providerRuntimeDeps,
     },
-    ...overrides,
+    ...restOverrides,
   };
 }
 
@@ -71,6 +83,16 @@ describe("diagnostics commands", () => {
     });
     expect((result.data as { checks: Array<{ code: string; status: string }> }).checks).toEqual(
       expect.arrayContaining([
+        expect.objectContaining({
+          code: "git_ready",
+          status: "ready",
+          version: "git version 0.0-test",
+        }),
+        expect.objectContaining({
+          code: "nodejs_ready",
+          status: "ready",
+          version: "v0.0.0-test",
+        }),
         expect.objectContaining({
           code: "provider_runtime_ready",
           status: "ready",
@@ -122,6 +144,60 @@ describe("diagnostics commands", () => {
         }),
       ])
     );
+  });
+
+  it("blocks session start when node is missing but keeps workspace-open non-blocking", async () => {
+    const workspaceDir = await mkdtemp(join(tmpdir(), "diagnostics-base-runtime-"));
+    const nodeMissingContext = createContext({
+      workspaceMgr: {
+        get: (workspaceId: string) =>
+          workspaceId === "ws-1" ? { id: "ws-1", path: workspaceDir } : undefined,
+        list: () => [],
+      } as unknown as WorkspaceManager,
+      providerRuntimeDeps: {
+        commandExists: async (command: string) =>
+          command === "brew" || command === "claude" || command === "git",
+        runCommand: async (file: string) => {
+          if (file === "git") {
+            return { stdout: "git version 2.49.0\n", stderr: "" };
+          }
+          if (file === "node") {
+            throw Object.assign(new Error("missing node"), { exitCode: 127 });
+          }
+          return { stdout: "", stderr: "" };
+        },
+        platform: "darwin",
+      },
+    });
+
+    const sessionResult = await dispatch(
+      {
+        kind: "command",
+        id: "diag-session-node-missing",
+        op: "diagnostics.get",
+        args: { context: "session_start", workspaceId: "ws-1", providerId: "claude" },
+      },
+      nodeMissingContext
+    );
+
+    expect(sessionResult.ok).toBe(true);
+    expect(sessionResult.data).toMatchObject({ context: "session_start", canContinue: false });
+    expect((sessionResult.data as { checks: Array<{ code: string }> }).checks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: "nodejs_missing" })])
+    );
+
+    const workspaceResult = await dispatch(
+      {
+        kind: "command",
+        id: "diag-workspace-node-missing",
+        op: "diagnostics.get",
+        args: { context: "workspace_open", workspacePath: workspaceDir },
+      },
+      nodeMissingContext
+    );
+
+    expect(workspaceResult.ok).toBe(true);
+    expect(workspaceResult.data).toMatchObject({ context: "workspace_open", canContinue: true });
   });
 
   it("returns workspace_path_not_found when the selected workspace path no longer exists", async () => {

@@ -6,8 +6,8 @@ import type {
   ProviderRuntimeStatusEntry,
 } from "@coder-studio/core";
 import { z } from "zod";
-import { runCommandAsString } from "../provider-runtime/command-runner.js";
 import { buildProviderRuntimeStatus } from "../provider-runtime/runtime-status.js";
+import { buildSystemDependencyRuntimeStatus } from "../system-deps/runtime-status.js";
 import { validatePath } from "../workspace/validator.js";
 import { type CommandContext, registerCommand } from "../ws/dispatch.js";
 
@@ -281,45 +281,38 @@ function buildMobileHostCheck(ctx: CommandContext): {
   };
 }
 
-async function readCommandVersion(
-  command: string,
-  args: string[],
-  ctx: CommandContext
-): Promise<string | null> {
-  const runner = ctx.providerRuntimeDeps?.runCommand ?? runCommandAsString;
-
-  try {
-    const { stdout } = await runner(command, args, { windowsHide: true });
-    const version = stdout.trim();
-    return version.length > 0 ? version : null;
-  } catch {
-    return null;
-  }
-}
-
 async function buildBaseRuntimeChecks(
   ctx: CommandContext
 ): Promise<{ canContinue: boolean; checks: DiagnosticsCheck[] }> {
-  const gitVersion = await readCommandVersion("git", ["--version"], ctx);
-  const nodeVersion = await readCommandVersion("node", ["--version"], ctx);
-  const checks: DiagnosticsCheck[] = [
-    {
-      id: "runtime:git",
-      code: gitVersion ? "git_ready" : "git_missing",
-      status: gitVersion ? "ready" : "needs_attention",
-      version: gitVersion ?? undefined,
-    },
-    {
-      id: "runtime:nodejs",
-      code: nodeVersion ? "nodejs_ready" : "nodejs_missing",
-      status: nodeVersion ? "ready" : "needs_attention",
-      version: nodeVersion ?? undefined,
-    },
-  ];
-
+  const runtime = await buildSystemDependencyRuntimeStatus(ctx.providerRuntimeDeps);
+  const git = runtime.dependencies.git;
+  const node = runtime.dependencies.node;
   return {
-    canContinue: Boolean(gitVersion && nodeVersion),
-    checks,
+    canContinue: git.available && node.available,
+    checks: [
+      {
+        id: "runtime:git",
+        code: git.available ? "git_ready" : "git_missing",
+        status: git.available ? "ready" : "needs_attention",
+        dependencyId: "git",
+        autoInstallSupported: git.autoInstallSupported,
+        installReadiness: git.installReadiness,
+        manualGuideKeys: git.manualGuideKeys,
+        docUrl: git.docUrl,
+        version: git.version,
+      },
+      {
+        id: "runtime:nodejs",
+        code: node.available ? "nodejs_ready" : "nodejs_missing",
+        status: node.available ? "ready" : "needs_attention",
+        dependencyId: "node",
+        autoInstallSupported: node.autoInstallSupported,
+        installReadiness: node.installReadiness,
+        manualGuideKeys: node.manualGuideKeys,
+        docUrl: node.docUrl,
+        version: node.version,
+      },
+    ],
   };
 }
 
@@ -328,16 +321,20 @@ async function buildSessionStartDiagnostics(
   ctx: CommandContext
 ): Promise<DiagnosticsResponse> {
   const workspaceSelection = await buildWorkspaceSelectionChecks(args, ctx);
+  const baseRuntime = await buildBaseRuntimeChecks(ctx);
   const providerChecks = await buildAllProviderChecks(ctx, args.providerId);
   const mobileHost = buildMobileHostCheck(ctx);
   const checks: DiagnosticsCheck[] = [
     ...workspaceSelection.checks,
+    ...baseRuntime.checks,
     ...providerChecks.checks,
     buildServerAuthCheck(ctx),
     mobileHost.check,
   ];
   const canContinue =
-    workspaceSelection.canContinue && providerChecks.canContinueForPreferredProvider;
+    workspaceSelection.canContinue &&
+    baseRuntime.canContinue &&
+    providerChecks.canContinueForPreferredProvider;
 
   return {
     context: "session_start",
@@ -434,6 +431,7 @@ async function buildDiagnostics(
   switch (args.context as DiagnosticsContext) {
     case "workspace_open": {
       const workspaceSelection = await buildWorkspaceSelectionChecks(args, ctx);
+      const baseRuntime = await buildBaseRuntimeChecks(ctx);
       const providerChecks = await buildAllProviderChecks(ctx, args.providerId);
       const mobileHost = buildMobileHostCheck(ctx);
       return {
@@ -441,6 +439,7 @@ async function buildDiagnostics(
         canContinue: workspaceSelection.canContinue,
         checks: [
           ...workspaceSelection.checks,
+          ...baseRuntime.checks,
           ...providerChecks.checks,
           buildServerAuthCheck(ctx),
           mobileHost.check,
