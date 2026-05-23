@@ -534,20 +534,26 @@ describe("SupervisorEvaluator", () => {
     ).rejects.toThrow();
 
     const prompt = (logger.warn.mock.calls[0]?.[0] as { prompt?: string } | undefined)?.prompt;
-    expect(prompt).toContain("You are an autonomous supervisor for a target-scoped software task.");
+    expect(prompt).toContain(
+      "You are an autonomous planner-supervisor for this target-scoped software task."
+    );
+    expect(prompt).toContain(
+      "Your purpose is to drive the work from objective to high-quality delivery with minimal babysitting."
+    );
+    expect(prompt).toContain(
+      'Do not optimize for merely reaching "done"; optimize for a result that is correct, verified, coherent, and not obviously low-quality or rushed.'
+    );
     expect(prompt).toContain("Return JSON only.");
     expect(prompt).toContain("No prose before or after the JSON.");
+    expect(prompt).toContain("Act as an autonomous execution supervisor.");
     expect(prompt).toContain(
-      'Prefer "continue" over "stop" whenever the objective is not yet verified complete and there is a concrete next action.'
+      "Your job is to keep the agent moving toward the objective, maintain delivery quality, detect low-yield paths early, and redirect work when needed."
     );
     expect(prompt).toContain(
-      "Do not ask the user to decide, clarify, or choose among implementation options."
+      "Do not passively observe progress; actively steer it toward successful, high-quality completion."
     );
     expect(prompt).toContain(
-      "Do not treat the agent's claims, summaries, or self-reports as sufficient evidence of completion."
-    );
-    expect(prompt).toContain(
-      "If the agent asks a question or presents multiple options, choose the most conservative reasonable option yourself and direct the next action."
+      "Drive execution through the supervised agent rather than by independently performing the work yourself."
     );
     expect(prompt).toContain("Use the target memory as the current supervision state.");
     expect(prompt).toContain("Identify which decomposition item is currently active.");
@@ -564,16 +570,18 @@ describe("SupervisorEvaluator", () => {
       "Advance to the next item only after the current item's deliverable or acceptanceCriteria are supported by observable evidence."
     );
     expect(prompt).toContain(
-      "If the agent appears stuck or repeated the same action, give a different concrete next action."
-    );
-    expect(prompt).toContain("Do not stop only because the agent says the work is complete");
-    expect(prompt).toContain('Guidance requirements for "continue":');
-    expect(prompt).toContain(
-      "Be specific enough for the supervised agent to act without asking the user."
+      "If the current path is low-yield, brittle, repetitive, or producing low-quality output, redirect early."
     );
     expect(prompt).toContain(
-      "If the agent asked a question, answer it directly in the guidance and continue with a concrete next action."
+      "Maintain commitment to the objective, not blind commitment to the current tactic."
     );
+    expect(prompt).toContain("Delivery quality bar:");
+    expect(prompt).toContain("Do not accept shallow, brittle, or obviously rushed solutions.");
+    expect(prompt).toContain(
+      "If a solution technically works but is low-quality, incomplete, poorly verified, or obviously a shortcut, treat the milestone as not yet complete."
+    );
+    expect(prompt).toContain("Completion standard:");
+    expect(prompt).toContain("Optimize for finished, verified, and defensible delivery.");
     expect(prompt).toContain("Use itemUpdates to reflect evidence-backed status changes only.");
     expect(prompt).toContain(
       "If evidence is missing or ambiguous, prefer verification over further implementation."
@@ -590,7 +598,7 @@ describe("SupervisorEvaluator", () => {
     expect(prompt).toContain('"stop"');
   });
 
-  it("builds a decompose prompt that forbids questions and requires autonomous decisions", async () => {
+  it("builds a decompose prompt that emphasizes execution planning and delivery quality", async () => {
     const logger = createLogger();
     const evaluator = new SupervisorEvaluator({
       providerRegistry: [createProvider("codex", "")],
@@ -620,15 +628,31 @@ describe("SupervisorEvaluator", () => {
 
     const prompt = (logger.warn.mock.calls[0]?.[0] as { prompt?: string } | undefined)?.prompt;
     expect(prompt).toContain("Return JSON only.");
+    expect(prompt).toContain(
+      "You are an autonomous planner-supervisor for this target-scoped software task."
+    );
+    expect(prompt).toContain(
+      "Your purpose is to drive the work from objective to high-quality delivery with minimal babysitting."
+    );
+    expect(prompt).toContain("Create an execution plan, not just a task list.");
+    expect(prompt).toContain(
+      "Break the objective into the smallest reasonable set of milestones that maximize clarity, reduce uncertainty, and preserve steady forward progress."
+    );
+    expect(prompt).toContain(
+      "Order milestones by dependency, risk reduction, and delivery leverage."
+    );
+    expect(prompt).toContain(
+      "Build the plan so it can recover from failed attempts: prefer decompositions that allow narrowing scope, isolating failures, checking assumptions, and restoring a working baseline when needed."
+    );
+    expect(prompt).toContain(
+      "Include quality and verification checkpoints where they materially improve the final result."
+    );
+    expect(prompt).toContain("Do not decompose in a way that encourages superficial completion.");
     expect(prompt).toContain("Do not ask the user any questions.");
     expect(prompt).toContain("Do not ask for clarification, confirmation, or approval.");
     expect(prompt).toContain("Do not propose options for the user to choose from.");
-    expect(prompt).toContain(
-      "If information is incomplete, make the most conservative reasonable assumptions and decide the decomposition yourself."
-    );
-    expect(prompt).toContain(
-      "Your job is to return the best useful decomposition now, not to begin a discussion or planning workflow."
-    );
+    expect(prompt).toContain("Planning boundary:");
+    expect(prompt).toContain("Do not hard-code unnecessary implementation detail too early.");
     expect(prompt).toContain("No prose before or after the JSON.");
   });
 
