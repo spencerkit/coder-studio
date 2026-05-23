@@ -7,57 +7,60 @@ export function orderOpenEditorPaths(openFiles: Record<string, OpenFile>): strin
 interface ResolveOpenEditorsCloseInput {
   openFiles: Record<string, OpenFile>;
   activeFilePath: string | null;
-  pathToClose?: string;
+  targetPath?: string;
   closeAll?: boolean;
 }
 
 interface ResolveOpenEditorsCloseResult {
-  openFiles: Record<string, OpenFile>;
-  activeFilePath: string | null;
+  orderedPaths: string[];
+  removedPaths: string[];
+  nextActiveFilePath: string | null;
   shouldExitEditor: boolean;
 }
 
 export function resolveOpenEditorsClose(
   input: ResolveOpenEditorsCloseInput
 ): ResolveOpenEditorsCloseResult {
-  const { openFiles, activeFilePath, pathToClose, closeAll = false } = input;
+  const { openFiles, activeFilePath, targetPath, closeAll = false } = input;
+  const orderedPaths = orderOpenEditorPaths(openFiles);
 
   if (closeAll) {
     return {
-      openFiles: {},
-      activeFilePath: null,
+      orderedPaths,
+      removedPaths: orderedPaths,
+      nextActiveFilePath: null,
       shouldExitEditor: true,
     };
   }
 
-  if (!pathToClose || !(pathToClose in openFiles)) {
+  if (!targetPath || !(targetPath in openFiles)) {
     return {
-      openFiles,
-      activeFilePath,
+      orderedPaths,
+      removedPaths: [],
+      nextActiveFilePath: activeFilePath,
       shouldExitEditor: false,
     };
   }
 
-  const orderedPaths = orderOpenEditorPaths(openFiles);
-  const closingIndex = orderedPaths.indexOf(pathToClose);
-  const nextOpenFiles = { ...openFiles };
-  delete nextOpenFiles[pathToClose];
-
-  if (activeFilePath !== pathToClose) {
+  if (activeFilePath !== targetPath) {
     return {
-      openFiles: nextOpenFiles,
-      activeFilePath,
+      orderedPaths,
+      removedPaths: [targetPath],
+      nextActiveFilePath: activeFilePath,
       shouldExitEditor: false,
     };
   }
 
-  const remainingPaths = orderOpenEditorPaths(nextOpenFiles);
+  const closingIndex = orderedPaths.indexOf(targetPath);
+  const remainingPaths = orderedPaths.filter((path) => path !== targetPath);
+
   const nextActiveFilePath =
     remainingPaths[closingIndex] ?? remainingPaths[closingIndex - 1] ?? null;
 
   return {
-    openFiles: nextOpenFiles,
-    activeFilePath: nextActiveFilePath,
+    orderedPaths,
+    removedPaths: [targetPath],
+    nextActiveFilePath,
     shouldExitEditor: nextActiveFilePath === null,
   };
 }

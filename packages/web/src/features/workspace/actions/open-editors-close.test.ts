@@ -35,14 +35,12 @@ describe("resolveOpenEditorsClose", () => {
           "src/c.ts": createFile("src/c.ts"),
         },
         activeFilePath: "src/b.ts",
-        pathToClose: "src/a.ts",
+        targetPath: "src/a.ts",
       })
     ).toEqual({
-      openFiles: {
-        "src/b.ts": createFile("src/b.ts"),
-        "src/c.ts": createFile("src/c.ts"),
-      },
-      activeFilePath: "src/b.ts",
+      orderedPaths: ["src/a.ts", "src/b.ts", "src/c.ts"],
+      removedPaths: ["src/a.ts"],
+      nextActiveFilePath: "src/b.ts",
       shouldExitEditor: false,
     });
   });
@@ -56,14 +54,12 @@ describe("resolveOpenEditorsClose", () => {
           "src/a.ts": createFile("src/a.ts"),
         },
         activeFilePath: "src/b.ts",
-        pathToClose: "src/b.ts",
+        targetPath: "src/b.ts",
       })
     ).toEqual({
-      openFiles: {
-        "src/c.ts": createFile("src/c.ts"),
-        "src/a.ts": createFile("src/a.ts"),
-      },
-      activeFilePath: "src/c.ts",
+      orderedPaths: ["src/a.ts", "src/b.ts", "src/c.ts"],
+      removedPaths: ["src/b.ts"],
+      nextActiveFilePath: "src/c.ts",
       shouldExitEditor: false,
     });
   });
@@ -77,14 +73,12 @@ describe("resolveOpenEditorsClose", () => {
           "src/a.ts": createFile("src/a.ts"),
         },
         activeFilePath: "src/c.ts",
-        pathToClose: "src/c.ts",
+        targetPath: "src/c.ts",
       })
     ).toEqual({
-      openFiles: {
-        "src/b.ts": createFile("src/b.ts"),
-        "src/a.ts": createFile("src/a.ts"),
-      },
-      activeFilePath: "src/b.ts",
+      orderedPaths: ["src/a.ts", "src/b.ts", "src/c.ts"],
+      removedPaths: ["src/c.ts"],
+      nextActiveFilePath: "src/b.ts",
       shouldExitEditor: false,
     });
   });
@@ -96,11 +90,12 @@ describe("resolveOpenEditorsClose", () => {
           "src/a.ts": createFile("src/a.ts"),
         },
         activeFilePath: "src/a.ts",
-        pathToClose: "src/a.ts",
+        targetPath: "src/a.ts",
       })
     ).toEqual({
-      openFiles: {},
-      activeFilePath: null,
+      orderedPaths: ["src/a.ts"],
+      removedPaths: ["src/a.ts"],
+      nextActiveFilePath: null,
       shouldExitEditor: true,
     });
   });
@@ -116,8 +111,9 @@ describe("resolveOpenEditorsClose", () => {
         closeAll: true,
       })
     ).toEqual({
-      openFiles: {},
-      activeFilePath: null,
+      orderedPaths: ["src/a.ts", "src/b.ts"],
+      removedPaths: ["src/a.ts", "src/b.ts"],
+      nextActiveFilePath: null,
       shouldExitEditor: true,
     });
   });
