@@ -81,6 +81,10 @@ const uploadHookMocks = vi.hoisted(() => ({
   handleFiles: vi.fn().mockResolvedValue(undefined),
 }));
 
+const baseRequestAnimationFrame = global.requestAnimationFrame;
+const baseCancelAnimationFrame = global.cancelAnimationFrame;
+const baseResizeObserver = global.ResizeObserver;
+
 const clipboardHelperMocks = vi.hoisted(() => ({
   copyTextWithFallback: vi.fn(),
 }));
@@ -371,6 +375,10 @@ describe("XtermHost", () => {
 
   afterEach(() => {
     resetGlobalRecoveryCoordinator();
+    vi.useRealTimers();
+    global.requestAnimationFrame = baseRequestAnimationFrame;
+    global.cancelAnimationFrame = baseCancelAnimationFrame;
+    global.ResizeObserver = baseResizeObserver;
     vi.restoreAllMocks();
   });
 
@@ -913,19 +921,20 @@ describe("XtermHost", () => {
     );
   });
 
-  it("shows a restoring overlay while the initial replay is in flight", async () => {
+  it("shows a restoring overlay only after the initial recovery exceeds the grace delay", async () => {
     const store = createStore();
     const sendCommand = vi.fn().mockImplementation((op: string) => {
-      if (op === "terminal.replay") {
+      if (op === "terminal.snapshot") {
         return new Promise(() => {});
       }
 
-      return Promise.resolve({ ok: true, data: { status: "ok" } });
+      return Promise.resolve({ status: "ok" });
     });
     const subscribe = vi.fn(() => vi.fn());
     const rafCallbacks: FrameRequestCallback[] = [];
     const originalRequestAnimationFrame = global.requestAnimationFrame;
     const originalCancelAnimationFrame = global.cancelAnimationFrame;
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
 
     mockTerminal.cols = 132;
     mockTerminal.rows = 36;
@@ -958,7 +967,19 @@ describe("XtermHost", () => {
       await Promise.resolve();
     });
 
-    expect(await screen.findByText("正在恢复终端内容…")).toBeInTheDocument();
+    expect(screen.queryByText("正在恢复终端内容…")).not.toBeInTheDocument();
+
+    await act(async () => {
+      vi.advanceTimersByTime(1199);
+    });
+
+    expect(screen.queryByText("正在恢复终端内容…")).not.toBeInTheDocument();
+
+    await act(async () => {
+      vi.advanceTimersByTime(1);
+    });
+
+    expect(screen.getByText("正在恢复终端内容…")).toBeInTheDocument();
     expect(
       screen.getByText(
         "恢复期间暂时无法使用当前终端；请耐心等待，历史内容恢复完成后再继续。内容较多时可能需要更久。"
@@ -969,6 +990,85 @@ describe("XtermHost", () => {
 
     global.requestAnimationFrame = originalRequestAnimationFrame;
     global.cancelAnimationFrame = originalCancelAnimationFrame;
+    vi.useRealTimers();
+  });
+
+  it("does not show a restoring overlay when recovery finishes within the grace delay", async () => {
+    const store = createStore();
+    const snapshotBytes = new TextEncoder().encode("hello");
+    const sendCommand = vi.fn().mockImplementation((op: string) => {
+      if (op === "terminal.snapshot") {
+        return new Promise((resolve) => {
+          setTimeout(() => {
+            resolve({
+              status: "ok",
+              transport: "binary",
+              streamId: 7,
+              size: 5,
+              seq: 5,
+              rows: 24,
+              cols: 80,
+              bytes: snapshotBytes,
+            });
+          }, 800);
+        });
+      }
+
+      return Promise.resolve({ status: "ok" });
+    });
+    const subscribe = vi.fn(() => vi.fn());
+    const rafCallbacks: FrameRequestCallback[] = [];
+    const originalRequestAnimationFrame = global.requestAnimationFrame;
+    const originalCancelAnimationFrame = global.cancelAnimationFrame;
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+
+    mockTerminal.cols = 132;
+    mockTerminal.rows = 36;
+
+    global.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      rafCallbacks.push(callback);
+      return rafCallbacks.length;
+    }) as typeof requestAnimationFrame;
+    global.cancelAnimationFrame = vi.fn() as typeof cancelAnimationFrame;
+
+    store.set(localeAtom, "zh");
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe,
+      getStatus: vi.fn(() => "connected"),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="fast-recovery-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await act(async () => {
+      const callback = rafCallbacks.shift();
+      callback?.(16);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(screen.queryByText("正在恢复终端内容…")).not.toBeInTheDocument();
+
+    await act(async () => {
+      vi.advanceTimersByTime(800);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expectTerminalWriteData(snapshotBytes);
+    expect(screen.queryByText("正在恢复终端内容…")).not.toBeInTheDocument();
+    expect(document.querySelector(".xterm-replay-overlay")).toBeFalsy();
+
+    global.requestAnimationFrame = originalRequestAnimationFrame;
+    global.cancelAnimationFrame = originalCancelAnimationFrame;
+    vi.useRealTimers();
   });
 
   it("queues desktop hydration before creating xterm and shows queue placeholder copy", async () => {
@@ -1188,7 +1288,7 @@ describe("XtermHost", () => {
     });
 
     expect(hydrationCoordinatorMocks.request).not.toHaveBeenCalled();
-    expect(await screen.findByText("Restoring terminal output...")).toBeInTheDocument();
+    expect(screen.queryByText("Restoring terminal output...")).not.toBeInTheDocument();
     expect(sendCommand).toHaveBeenCalledWith(
       "terminal.replay",
       {

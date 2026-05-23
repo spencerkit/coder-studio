@@ -71,6 +71,7 @@ const MOBILE_COPY_MODE_LONG_PRESS_MS = 500;
 const MOBILE_COPY_MODE_MOVE_TOLERANCE_PX = 10;
 const TERMINAL_FOCUS_REPORTING_BYTES = new Set(["\x1b[I", "\x1b[O"]);
 const TERMINAL_COPY_ON_SELECT_ERROR_THROTTLE_MS = 3_000;
+const TERMINAL_RECOVERY_LOADING_OVERLAY_DELAY_MS = 1_200;
 
 interface TerminalInputDraftState {
   nextDraft: string;
@@ -481,6 +482,7 @@ export function XtermHost({
   });
 
   const [replayUiState, setReplayUiState] = useState<TerminalReplayUiState>({ kind: "loading" });
+  const [loadingOverlayVisible, setLoadingOverlayVisible] = useState(false);
   const activeRecoveryUiModeRef = useRef<RecoveryUiMode>("blocking_rebuild");
   const [hydrationState, setHydrationState] = useState<
     { kind: "idle" } | { kind: "queued"; queuePosition: number } | { kind: "granted" }
@@ -606,6 +608,22 @@ export function XtermHost({
       terminalRef.current.options.theme = getThemeById(uiTheme).terminalTheme;
     }
   }, [uiTheme]);
+
+  useEffect(() => {
+    if (replayUiState.kind !== "loading") {
+      setLoadingOverlayVisible(false);
+      return;
+    }
+
+    setLoadingOverlayVisible(false);
+    const timeoutId = setTimeout(() => {
+      setLoadingOverlayVisible(true);
+    }, TERMINAL_RECOVERY_LOADING_OVERLAY_DELAY_MS);
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [replayUiState]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -2294,7 +2312,8 @@ export function XtermHost({
   const shouldBlockTerminal =
     replayUiState.kind === "loading" && activeRecoveryUiModeRef.current === "blocking_rebuild";
   const showReplayOverlay =
-    replayUiState.kind !== "ready" &&
+    (replayUiState.kind === "degraded" ||
+      (replayUiState.kind === "loading" && loadingOverlayVisible)) &&
     (viewport === "mobile" ||
       hydrationState.kind === "granted" ||
       activeRecoveryUiModeRef.current === "non_blocking_recovering");
