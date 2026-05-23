@@ -279,7 +279,43 @@ describe("RecoveryCoordinator", () => {
     await coordinator.notifyReason("seq_gap", "term-1");
 
     expect(markClosed).toHaveBeenCalledWith({ exitCode: 7 });
-    expect(setUiMode).toHaveBeenCalledWith("silent");
+    expect(setUiMode).toHaveBeenCalledWith("closed");
+  });
+
+  it("surfaces directly closed terminals as closed UI state", async () => {
+    const setUiMode = vi.fn();
+    const markClosed = vi.fn();
+    const sendCommand = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      data: {
+        terminals: [{ terminalId: "term-1", action: "closed", headSeq: 30, exitCode: 9 }],
+      },
+    });
+
+    const coordinator = createRecoveryCoordinator({
+      wsClient: {
+        getStatus: vi.fn(() => "connected"),
+        probeConnection: vi.fn().mockResolvedValue({ ok: true }),
+        onStatus: vi.fn(() => () => {}),
+        subscribe: vi.fn(() => () => {}),
+      } as never,
+      sendCommand,
+      applyReplay: vi.fn(),
+      applySnapshot: vi.fn(),
+    });
+
+    coordinator.registerTerminal({
+      terminalId: "term-1",
+      workspaceId: "ws-1",
+      getRenderedSeq: () => 20,
+      setUiMode,
+      markClosed,
+    });
+
+    await coordinator.notifyReason("initial_mount", "term-1");
+
+    expect(markClosed).toHaveBeenCalledWith({ exitCode: 9 });
+    expect(setUiMode).toHaveBeenCalledWith("closed");
   });
 
   it("executes snapshot as blocking rebuild", async () => {
@@ -345,5 +381,104 @@ describe("RecoveryCoordinator", () => {
         seq: 30,
       })
     );
+  });
+
+  it("surfaces closed UI after snapshot recovery completes a closed session", async () => {
+    const setUiMode = vi.fn();
+    const markClosed = vi.fn();
+    const applySnapshot = vi.fn();
+    const sendCommand = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        data: {
+          terminals: [
+            {
+              terminalId: "term-1",
+              action: "snapshot",
+              headSeq: 30,
+              closed: { exitCode: 5 },
+            },
+          ],
+        },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        data: {
+          status: "ok",
+          transport: "binary",
+          streamId: 1,
+          size: 3,
+          seq: 30,
+          rows: 24,
+          cols: 80,
+          source: "headless",
+          bytes: new Uint8Array([1, 2, 3]),
+        },
+      });
+
+    const coordinator = createRecoveryCoordinator({
+      wsClient: {
+        getStatus: vi.fn(() => "connected"),
+        probeConnection: vi.fn().mockResolvedValue({ ok: true }),
+        onStatus: vi.fn(() => () => {}),
+        subscribe: vi.fn(() => () => {}),
+      } as never,
+      sendCommand,
+      applyReplay: vi.fn(),
+      applySnapshot,
+    });
+
+    coordinator.registerTerminal({
+      terminalId: "term-1",
+      workspaceId: "ws-1",
+      getRenderedSeq: () => 0,
+      setUiMode,
+      markClosed,
+    });
+
+    await coordinator.notifyReason("initial_mount", "term-1");
+
+    expect(markClosed).toHaveBeenCalledWith({ exitCode: 5 });
+    expect(setUiMode).toHaveBeenCalledWith("closed");
+  });
+
+  it("passes through unrecoverable reasons so terminals can render scenario-specific recovery UI", async () => {
+    const setUiMode = vi.fn();
+    const sendCommand = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      data: {
+        terminals: [
+          {
+            terminalId: "term-1",
+            action: "unrecoverable",
+            reason: "too_old_no_snapshot",
+          },
+        ],
+      },
+    });
+
+    const coordinator = createRecoveryCoordinator({
+      wsClient: {
+        getStatus: vi.fn(() => "connected"),
+        probeConnection: vi.fn().mockResolvedValue({ ok: true }),
+        onStatus: vi.fn(() => () => {}),
+        subscribe: vi.fn(() => () => {}),
+      } as never,
+      sendCommand,
+      applyReplay: vi.fn(),
+      applySnapshot: vi.fn(),
+    });
+
+    coordinator.registerTerminal({
+      terminalId: "term-1",
+      workspaceId: "ws-1",
+      getRenderedSeq: () => 20,
+      setUiMode,
+    });
+
+    await coordinator.notifyReason("seq_gap", "term-1");
+
+    expect(setUiMode).toHaveBeenCalledWith("error", { reason: "too_old_no_snapshot" });
   });
 });
