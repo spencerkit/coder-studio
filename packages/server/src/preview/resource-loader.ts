@@ -1,18 +1,14 @@
 import { readFile, realpath, stat } from "node:fs/promises";
-import { isAbsolute, posix, relative } from "node:path";
+import { posix } from "node:path";
 import mime from "mime-types";
 import { resolveSafe } from "../fs/file-io.js";
+import { isPathInsideRoot } from "../fs/path-safety.js";
 
 export interface PreviewResource {
   bytes: Buffer;
   mime: string;
   size: number;
   workspaceRelativePath: string;
-}
-
-function isPathInsideRoot(rootPath: string, targetPath: string): boolean {
-  const rel = relative(rootPath, targetPath);
-  return rel !== ".." && !rel.startsWith(`..${"/"}`) && !isAbsolute(rel);
 }
 
 export function resolvePreviewResourcePath(entryPath: string, requestedPath: string): string {

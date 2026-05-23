@@ -61,6 +61,22 @@ vi.mock("./components/monaco-host", () => ({
   ),
 }));
 
+vi.mock("./components/monaco-diff-host", () => ({
+  MonacoDiffHost: ({
+    originalContent,
+    modifiedContent,
+  }: {
+    originalContent: string;
+    modifiedContent: string;
+  }) => (
+    <div
+      data-testid="monaco-diff-host"
+      data-original={originalContent}
+      data-modified={modifiedContent}
+    />
+  ),
+}));
+
 // ImagePreview mount would try to decode the <img>; in jsdom the load event
 // never fires for data: URLs, so we stub it to assert routing only.
 vi.mock("./components/image-preview", () => ({
@@ -468,6 +484,28 @@ describe("CodeEditorHost", () => {
       staged: false,
       source: "file",
     });
+  });
+
+  it("renders commit diff preview in the mobile content-only editor surface without an active file", () => {
+    const { store } = setupStore();
+    store.set(gitDiffPreviewAtomFamily("ws-1"), {
+      path: "abc123",
+      title: "abc123 · commit subject",
+      diff: "diff --git a/src/app.tsx b/src/app.tsx",
+      source: "commit",
+    });
+
+    render(
+      <Provider store={store}>
+        <CodeEditorHost chrome="content-only" />
+      </Provider>
+    );
+
+    expect(screen.getByTestId("monaco-diff-host")).toHaveAttribute(
+      "data-modified",
+      "diff --git a/src/app.tsx b/src/app.tsx"
+    );
+    expect(screen.queryByRole("button", { name: "Close" })).not.toBeInTheDocument();
   });
 
   it("derives diff enablement from git status for the active file", () => {
