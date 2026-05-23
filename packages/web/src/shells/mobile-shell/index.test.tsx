@@ -44,9 +44,16 @@ import { seedReadyWorkspaceState } from "../../test-utils/workspace-state";
 import { CommandResultError } from "../../ws/client";
 import { MobileShell } from "./index";
 
-const { mockMobileEditorHandleSave, mockMobileEditorToggleSvgTextMode } = vi.hoisted(() => ({
+const {
+  mockMobileEditorHandleSave,
+  mockMobileEditorToggleSvgTextMode,
+  mockMobileEditorOpenInDiffMode,
+  mockMobileEditorSetMode,
+} = vi.hoisted(() => ({
   mockMobileEditorHandleSave: vi.fn(),
   mockMobileEditorToggleSvgTextMode: vi.fn(),
+  mockMobileEditorOpenInDiffMode: vi.fn(),
+  mockMobileEditorSetMode: vi.fn(),
 }));
 
 vi.mock("../../features/welcome", () => ({
@@ -147,20 +154,42 @@ vi.mock("../../features/workspace/views/shared/git-panel", () => ({
   GitPanel: ({
     onPreviewOpen,
   }: {
-    onPreviewOpen?: (preview: { path: string; diff: string; staged: boolean }) => void;
+    onPreviewOpen?: (preview: {
+      path: string;
+      diff: string;
+      staged?: boolean;
+      source?: "file" | "commit";
+      title?: string;
+    }) => void;
   }) => (
-    <button
-      type="button"
-      onClick={() =>
-        onPreviewOpen?.({
-          path: "src/app.tsx",
-          diff: "diff --git a/src/app.tsx b/src/app.tsx",
-          staged: false,
-        })
-      }
-    >
-      mock-git-panel
-    </button>
+    <div>
+      <button
+        type="button"
+        onClick={() =>
+          onPreviewOpen?.({
+            path: "src/app.tsx",
+            diff: "diff --git a/src/app.tsx b/src/app.tsx",
+            staged: false,
+            source: "file",
+          })
+        }
+      >
+        mock-git-panel
+      </button>
+      <button
+        type="button"
+        onClick={() =>
+          onPreviewOpen?.({
+            path: "abc123",
+            title: "abc123 · commit subject",
+            diff: "diff --git a/src/app.tsx b/src/app.tsx",
+            source: "commit",
+          })
+        }
+      >
+        mock-git-history
+      </button>
+    </div>
   ),
 }));
 
@@ -191,9 +220,9 @@ vi.mock("../../features/code-editor/actions/use-code-editor-actions", () => ({
     isSvgTextBacked: false,
     isTextFile: true,
     mode: "edit",
-    openInDiffMode: vi.fn(),
+    openInDiffMode: mockMobileEditorOpenInDiffMode,
     saveError: null,
-    setMode: vi.fn(),
+    setMode: mockMobileEditorSetMode,
     toggleSvgTextMode: mockMobileEditorToggleSvgTextMode,
     workspace: {
       id: "ws-1",
@@ -219,9 +248,20 @@ vi.mock("../../features/code-editor/views/shared/code-editor-host", () => ({
     </div>
   ),
   CodeEditorHeaderActions: () => (
-    <button type="button" aria-label="保存" onClick={mockMobileEditorHandleSave}>
-      保存
-    </button>
+    <div>
+      <button type="button" aria-label="Diff" onClick={mockMobileEditorOpenInDiffMode}>
+        Diff
+      </button>
+      <button type="button" aria-label="预览" onClick={() => mockMobileEditorSetMode("preview")}>
+        预览
+      </button>
+      <button type="button" aria-label="编辑" onClick={() => mockMobileEditorSetMode("edit")}>
+        编辑
+      </button>
+      <button type="button" aria-label="保存" onClick={mockMobileEditorHandleSave}>
+        保存
+      </button>
+    </div>
   ),
 }));
 
@@ -3148,6 +3188,35 @@ describe("MobileShell Phase 2 workspace", () => {
     await user.click(screen.getByRole("button", { name: "mock-git-panel" }));
 
     expect(screen.getByTestId("mobile-code-editor")).toBeInTheDocument();
+  });
+
+  it("navigates commit-history diff previews into the same unified detail view", async () => {
+    const user = userEvent.setup();
+    renderMobileShell();
+
+    await user.click(screen.getByRole("button", { name: "Open Files sheet" }));
+    await user.click(screen.getByRole("tab", { name: "Git" }));
+    await user.click(screen.getByRole("button", { name: "mock-git-history" }));
+
+    expect(screen.getByTestId("mobile-code-editor")).toBeInTheDocument();
+    expect(screen.getByText("abc123 · commit subject")).toBeInTheDocument();
+  });
+
+  it("shows mobile diff preview and edit mode actions in the unified detail header", async () => {
+    const user = userEvent.setup();
+    renderMobileShell();
+
+    await user.click(screen.getByRole("button", { name: "Open Files sheet" }));
+    await user.click(screen.getByRole("button", { name: "mock-file-tree" }));
+
+    await user.click(screen.getByRole("button", { name: "Diff" }));
+    expect(mockMobileEditorOpenInDiffMode).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByRole("button", { name: "预览" }));
+    expect(mockMobileEditorSetMode).toHaveBeenCalledWith("preview");
+
+    await user.click(screen.getByRole("button", { name: "编辑" }));
+    expect(mockMobileEditorSetMode).toHaveBeenCalledWith("edit");
   });
 
   it("shows file actions in the tab row only on the files tab", async () => {

@@ -1,7 +1,8 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { wsClientAtom } from "../../../../atoms/connection";
+import type { GitDiffPreview } from "../../atoms";
 import { MobileFilesSheet } from "./mobile-files-sheet";
 
 vi.mock("../../../../lib/i18n", () => ({
@@ -25,8 +26,31 @@ vi.mock("../../../code-editor/views/shared/code-editor-host", () => ({
   CodeEditorHost: () => <div data-testid="code-editor-host" />,
 }));
 
+vi.mock("../shared/file-tree-panel", () => ({
+  FileTreePanel: () => (
+    <div data-testid="file-tree-panel">
+      <input aria-label="Search files" role="searchbox" />
+    </div>
+  ),
+}));
+
 vi.mock("../shared/git-panel", () => ({
-  GitPanel: () => <div data-testid="git-panel" />,
+  GitPanel: ({ onPreviewOpen }: { onPreviewOpen?: (preview: GitDiffPreview) => void }) => (
+    <button
+      type="button"
+      data-testid="git-panel"
+      onClick={() =>
+        onPreviewOpen?.({
+          path: "abc123",
+          title: "abc123 · commit subject",
+          diff: "diff --git a/src/app.tsx b/src/app.tsx",
+          source: "commit",
+        })
+      }
+    >
+      git-panel
+    </button>
+  ),
 }));
 
 describe("MobileFilesSheet", () => {
@@ -82,7 +106,7 @@ describe("MobileFilesSheet", () => {
       <Provider store={createStore()}>
         <MobileFilesSheet
           workspaceId="ws-test"
-          route={{ kind: "file", path: "src/app.tsx" }}
+          route={{ kind: "detail", path: "src/app.tsx" }}
           activeTab="files"
         />
       </Provider>
@@ -90,5 +114,28 @@ describe("MobileFilesSheet", () => {
 
     expect(screen.getByTestId("code-editor-host")).toBeInTheDocument();
     expect(screen.queryByTestId("git-diff-viewer")).not.toBeInTheDocument();
+  });
+
+  it("navigates into the unified detail surface for commit-history diff previews too", () => {
+    const handleRouteChange = vi.fn();
+
+    render(
+      <Provider store={createStore()}>
+        <MobileFilesSheet
+          workspaceId="ws-test"
+          route={{ kind: "root" }}
+          activeTab="git"
+          onRouteChange={handleRouteChange}
+        />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "git-panel" }));
+
+    expect(handleRouteChange).toHaveBeenCalledWith({
+      kind: "detail",
+      path: "abc123",
+      title: "abc123 · commit subject",
+    });
   });
 });

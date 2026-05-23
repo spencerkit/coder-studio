@@ -1685,6 +1685,15 @@
   color: var(--text-secondary);
 }
 
+.xterm-replay-overlay__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--sp-2);
+  width: 100%;
+  margin-top: var(--sp-1);
+}
+
 /* xterm.js overrides for Aurora Mint theme */
 .xterm-host .xterm-viewport {
   overflow-y: auto;
@@ -10888,6 +10897,11 @@ textarea.input {
 
   .mobile-sheet__action:hover {
     background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .mobile-sheet__action--mode.active {
+    background: color-mix(in srgb, var(--accent-blue) 22%, transparent);
     color: var(--text-primary);
   }
 

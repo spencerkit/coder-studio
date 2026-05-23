@@ -130,7 +130,20 @@ export const CodeEditorHeaderActions: FC<CodeEditorHeaderActionsProps> = ({
   variant = "full",
 }) => {
   const t = useTranslation();
-  const { canSave, handleSave, isImageFile, isSaving, isSvgTextBacked, toggleSvgTextMode } = state;
+  const {
+    canDiff,
+    canEdit,
+    canPreview,
+    canSave,
+    handleSave,
+    isImageFile,
+    isSaving,
+    isSvgTextBacked,
+    mode,
+    openInDiffMode,
+    setMode,
+    toggleSvgTextMode,
+  } = state;
   const saveLabel = isSaving ? t("code_editor.saving") : t("action.save_file");
   const toggleModeTitle = isImageFile
     ? t("code_editor.edit_as_text")
@@ -140,8 +153,57 @@ export const CodeEditorHeaderActions: FC<CodeEditorHeaderActionsProps> = ({
     return <CodeEditorDesktopHeaderActions state={state} />;
   }
 
+  const handlePreviewMode = () => {
+    if (isSvgTextBacked && !isImageFile) {
+      toggleSvgTextMode();
+      return;
+    }
+    setMode("preview");
+  };
+
+  const handleEditMode = () => {
+    if (isSvgTextBacked && isImageFile) {
+      toggleSvgTextMode();
+      return;
+    }
+    setMode("edit");
+  };
+
   return (
     <div className="mobile-sheet__header-actions">
+      {canDiff ? (
+        <button
+          type="button"
+          className={`mobile-sheet__action mobile-sheet__action--mode${mode === "diff" ? " active" : ""}`}
+          onClick={() => void openInDiffMode()}
+          aria-pressed={mode === "diff"}
+          aria-label={t("code_editor.mode_diff")}
+        >
+          {t("code_editor.mode_diff")}
+        </button>
+      ) : null}
+      {canPreview ? (
+        <button
+          type="button"
+          className={`mobile-sheet__action mobile-sheet__action--mode${mode === "preview" ? " active" : ""}`}
+          onClick={handlePreviewMode}
+          aria-pressed={mode === "preview"}
+          aria-label={t("code_editor.mode_preview")}
+        >
+          {t("code_editor.mode_preview")}
+        </button>
+      ) : null}
+      {canEdit ? (
+        <button
+          type="button"
+          className={`mobile-sheet__action mobile-sheet__action--mode${mode === "edit" ? " active" : ""}`}
+          onClick={handleEditMode}
+          aria-pressed={mode === "edit"}
+          aria-label={t("code_editor.mode_edit")}
+        >
+          {t("code_editor.mode_edit")}
+        </button>
+      ) : null}
       {isSvgTextBacked ? (
         <Tooltip content={toggleModeTitle}>
           <IconButton
