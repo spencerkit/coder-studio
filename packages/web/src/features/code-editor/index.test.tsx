@@ -188,6 +188,24 @@ describe("CodeEditorHost", () => {
     expect(screen.queryByText(/connecting/i)).not.toBeInTheDocument();
   });
 
+  it("closes the editor from the header when file.read fails before a buffer opens", async () => {
+    const sendCommand = vi.fn().mockRejectedValue(new Error("File not found"));
+    const { store } = setupStore({ activePath: "src/missing.ts", sendCommand });
+
+    render(
+      <Provider store={store}>
+        <CodeEditorHost />
+      </Provider>
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("File not found");
+    expect(store.get(activeFilePathAtomFamily("ws-1"))).toBe("src/missing.ts");
+
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+
+    expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
+  });
+
   it("does not re-fetch a file that is already open", async () => {
     const { store, sendCommand } = setupStore({
       activePath: "src/b.ts",

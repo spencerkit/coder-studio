@@ -64,7 +64,7 @@ export function useCodeEditorActions() {
   } | null>(null);
 
   const workspaceId = workspace?.id;
-  const [activeFilePath] = useAtom(activeFilePathAtomFamily(workspaceId ?? ""));
+  const [activeFilePath, setActiveFilePath] = useAtom(activeFilePathAtomFamily(workspaceId ?? ""));
   const [openFiles, setOpenFiles] = useAtom(openFilesAtomFamily(workspaceId ?? ""));
   const [mode, setMode] = useAtom(editorModeAtomFamily(workspaceId ?? ""));
   const editorRefreshToken = useAtomValue(editorRefreshTokenAtomFamily(workspaceId ?? ""));
@@ -521,10 +521,13 @@ export function useCodeEditorActions() {
   const handleClose = useCallback(() => {
     if (currentFile?.path) {
       closePath(currentFile.path);
+    } else if (activeFilePath) {
+      setActiveFilePath(null);
+      setMode("edit");
     }
 
     setSaveError(null);
-  }, [closePath, currentFile]);
+  }, [activeFilePath, closePath, currentFile, setActiveFilePath, setMode]);
 
   const toggleSvgTextMode = useCallback(() => {
     if (!workspaceId || !currentFile) {
