@@ -2,6 +2,7 @@
  * File IO operations with conflict detection.
  */
 
+import * as path from "node:path";
 import { createHash } from "crypto";
 import {
   readFile as fsReadFile,
@@ -11,8 +12,8 @@ import {
   rm,
   stat,
 } from "fs/promises";
-import { dirname, isAbsolute, relative, resolve } from "path";
 import { getImageTypeInfo } from "./image.js";
+import { isPathInsideRoot } from "./path-safety.js";
 
 export interface FileReadTextResult {
   kind: "text";
@@ -59,7 +60,7 @@ export async function createFile(rootPath: string, relPath: string): Promise<voi
     throw { code: "already_exists", message: "File already exists" };
   }
 
-  await mkdir(dirname(abs), { recursive: true });
+  await mkdir(path.dirname(abs), { recursive: true });
   await fsWriteFile(abs, "", "utf-8");
 }
 
@@ -94,8 +95,8 @@ export async function renameEntry(
   const toAbs = resolveSafe(rootPath, toPath);
   const source = await statSafe(fromAbs);
   const target = await statSafe(toAbs);
-  const fromParent = dirname(fromAbs);
-  const toParent = dirname(toAbs);
+  const fromParent = path.dirname(fromAbs);
+  const toParent = path.dirname(toAbs);
 
   if (!source) {
     throw { code: "not_found", message: "Source not found" };
@@ -123,13 +124,16 @@ export async function renameEntry(
  * @param relPath - Relative path within workspace
  * @returns Absolute path safely resolved within workspace
  */
-export function resolveSafe(root: string, relPath: string): string {
-  const absRoot = resolve(root);
-  const abs = resolve(absRoot, relPath);
+export function resolveSafe(
+  root: string,
+  relPath: string,
+  pathApi: Pick<typeof path, "isAbsolute" | "relative" | "resolve" | "sep"> = path
+): string {
+  const absRoot = pathApi.resolve(root);
+  const abs = pathApi.resolve(absRoot, relPath);
 
   // Prevent path escape: resolved path must stay inside the workspace root.
-  const rel = relative(absRoot, abs);
-  if (rel === ".." || rel.startsWith(`..${"/"}`) || isAbsolute(rel)) {
+  if (!isPathInsideRoot(absRoot, abs, pathApi)) {
     throw { code: "path_escape", message: "Path escapes workspace root" };
   }
 
@@ -220,7 +224,7 @@ export async function writeFile(
   }
 
   // Ensure parent directory exists
-  await mkdir(dirname(abs), { recursive: true });
+  await mkdir(path.dirname(abs), { recursive: true });
 
   // Write new content
   await fsWriteFile(abs, content, "utf-8");

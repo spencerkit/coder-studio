@@ -1685,6 +1685,20 @@
   color: var(--text-secondary);
 }
 
+.xterm-replay-overlay__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--sp-2);
+  width: 100%;
+  margin-top: var(--sp-1);
+}
+
+.xterm-replay-overlay__action-btn {
+  flex: 1 1 0;
+  min-width: 120px;
+}
+
 /* xterm.js overrides for Aurora Mint theme */
 .xterm-host .xterm-viewport {
   overflow-y: auto;
@@ -4036,6 +4050,10 @@ body.is-resizing-panels * {
   gap: var(--sp-1);
 }
 
+.supervisor-details-surface--progress {
+  container-type: inline-size;
+}
+
 .supervisor-progress-item {
   display: flex;
   align-items: stretch;
@@ -4138,6 +4156,13 @@ body.is-resizing-panels * {
   font-size: var(--type-body-3-size);
   line-height: var(--type-body-3-line-height);
   color: var(--text-secondary);
+}
+
+@container (max-width: 30rem) {
+  .supervisor-progress-item__header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
 
 @media (max-width: 640px) {
@@ -6814,7 +6839,8 @@ textarea.input {
 /* Monaco and ImagePreview each handle their own scrolling; override the
  * body overflow in those cases so we don't get a double scrollbar. */
 .workspace-git-editor .code-editor-body:has(> .monaco-host),
-.workspace-git-editor .code-editor-body:has(> .image-preview) {
+.workspace-git-editor .code-editor-body:has(> .image-preview),
+.workspace-git-editor .code-editor-body:has(> .document-preview) {
   overflow: hidden;
 }
 
@@ -6879,6 +6905,26 @@ textarea.input {
 .image-preview-type {
   color: var(--text-secondary);
   font-weight: var(--font-medium);
+}
+
+.document-preview {
+  display: flex;
+  min-height: 100%;
+  background: var(--bg-page);
+}
+
+.document-preview-frame {
+  flex: 1;
+  width: 100%;
+  border: 0;
+  background: var(--bg-surface);
+}
+
+.document-preview--loading {
+  display: grid;
+  place-items: center;
+  min-height: 240px;
+  color: var(--text-secondary);
 }
 
 .editor-surface__header {
@@ -10856,6 +10902,11 @@ textarea.input {
 
   .mobile-sheet__action:hover {
     background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .mobile-sheet__action--mode.active {
+    background: color-mix(in srgb, var(--accent-blue) 22%, transparent);
     color: var(--text-primary);
   }
 

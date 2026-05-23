@@ -7,6 +7,7 @@ import {
 } from "../../../code-editor/views/shared/code-editor-host";
 import type { CreateRequest } from "../../actions/use-file-actions";
 import type { MobileFilesRoute } from "../../actions/use-workspace-screen-model";
+import type { GitDiffPreview } from "../../atoms";
 import { FileTreePanel } from "../shared/file-tree-panel";
 import { GitPanel } from "../shared/git-panel";
 
@@ -42,14 +43,15 @@ export function MobileFilesSheet({
   editorState,
 }: MobileFilesSheetProps) {
   const t = useTranslation();
-  const handlePreviewOpen = () => {
-    const path = editorState?.activeFilePath;
-    if (path) {
-      onRouteChange?.({ kind: "file", path });
-    }
+  const handlePreviewOpen = (preview: GitDiffPreview) => {
+    onRouteChange?.({
+      kind: "detail",
+      ...(preview.path ? { path: preview.path } : {}),
+      ...(preview.title ? { title: preview.title } : {}),
+    });
   };
 
-  if (route.kind === "file") {
+  if (route.kind === "detail") {
     return (
       <div className="mobile-files-sheet">
         <div className="mobile-files-sheet__detail">
@@ -116,7 +118,7 @@ export function MobileFilesSheet({
             workspaceId={workspaceId}
             createRequest={createRequest}
             onCreateRequestConsumed={onCreateRequestConsumed}
-            onSelectFile={(path) => onRouteChange?.({ kind: "file", path })}
+            onSelectFile={(path) => onRouteChange?.({ kind: "detail", path })}
             collapseVersion={collapseVersion}
             variant="mobile"
           />

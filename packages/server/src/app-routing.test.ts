@@ -223,6 +223,21 @@ describe("app routing", () => {
     expect(response.body).not.toContain("<!doctype html>");
   });
 
+  it("does not fall back to index.html for preview routes", async () => {
+    const instance = await createApp();
+
+    const response = await instance.inject({
+      method: "GET",
+      url: "/api/preview/session/missing/docs/guide/index.html",
+      headers: {
+        accept: "text/html",
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.body).not.toContain("<!doctype html>");
+  });
+
   it("treats root static files as public even when auth is enabled", async () => {
     const instance = await createApp(true);
 

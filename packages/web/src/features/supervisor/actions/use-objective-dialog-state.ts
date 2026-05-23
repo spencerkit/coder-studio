@@ -180,15 +180,19 @@ export function useObjectiveDialogState({
         return current;
       }
 
+      const filteredTargets = (result.ok ? (result.data?.targets ?? []) : []).filter((target) => {
+        return target.targetId !== supervisor?.targetId;
+      });
+
       return {
         ...current,
         restoreStep: "restore",
         isRecoverableTargetsLoading: false,
-        recoverableTargets: result.ok ? (result.data?.targets ?? []) : [],
+        recoverableTargets: filteredTargets,
         selectedRecoverableTargetId: null,
       };
     });
-  }, [dispatch, effectiveSessionId, mode, setDialog, workspaceId]);
+  }, [dispatch, effectiveSessionId, setDialog, supervisor?.targetId, workspaceId]);
 
   const closeRestoreStep = useCallback(() => {
     setDialog((current) => ({

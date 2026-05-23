@@ -5,6 +5,12 @@ import { CodeEditorHeaderActions, type CodeEditorState, CodeEditorView } from ".
 vi.mock("../../../../lib/i18n", () => ({
   useTranslation: () => (key: string) => {
     switch (key) {
+      case "code_editor.mode_diff":
+        return "Diff";
+      case "code_editor.mode_preview":
+        return "Preview";
+      case "code_editor.mode_edit":
+        return "Edit";
       case "code_editor.edit_as_text":
         return "Edit as text";
       case "code_editor.preview_as_image":
@@ -56,6 +62,13 @@ function createState(overrides: Partial<CodeEditorState> = {}): CodeEditorState 
     isSaving: false,
     isSvgTextBacked: true,
     isTextFile: true,
+    documentPreview: {
+      iframeSrc: null,
+      isBootstrapping: false,
+      isSyncing: false,
+      error: null,
+      retry: vi.fn(),
+    },
     mode: "edit",
     openInDiffMode: vi.fn(),
     saveError: null,
@@ -84,6 +97,26 @@ describe("CodeEditorHeaderActions", () => {
 
     fireEvent.click(toggleButton);
     expect(state.toggleSvgTextMode).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders mobile mode switches for diff preview and edit alongside save", () => {
+    const state = createState({
+      canDiff: true,
+      canPreview: true,
+      canEdit: true,
+      isSvgTextBacked: false,
+    });
+
+    render(<CodeEditorHeaderActions state={state} variant="mobile" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Diff" }));
+    expect(state.openInDiffMode).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    expect(state.setMode).toHaveBeenCalledWith("preview");
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    expect(state.setMode).toHaveBeenCalledWith("edit");
   });
 
   it("uses shared IconButton compatibility classes for the desktop close action", () => {

@@ -1,7 +1,8 @@
-import { FileText, Image as ImageIcon } from "lucide-react";
 import type { FC } from "react";
 import { EmptyState, ThemedIcon } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
+import { deriveDocumentPreviewKind } from "../../../workspace/atoms";
+import { DocumentPreview } from "../../components/document-preview";
 import { ImageDiffPreview } from "../../components/image-diff-preview";
 import { ImagePreview } from "../../components/image-preview";
 import { MonacoDiffHost } from "../../components/monaco-diff-host";
@@ -21,12 +22,11 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
     activeDiffChange,
     activeExternalStatus,
     activeLoadError,
-    canDiff,
     currentFile,
+    documentPreview,
     handleContentChange,
     handleSave,
     hasUnsavedChangesOutsideDiff,
-    isImageFile,
     mode,
     openInDiffMode,
     saveError,
@@ -61,6 +61,10 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
     (activeDiffChange?.renderAs === "text" || activeDiffChange?.source === "commit");
   const canRenderImageDiff =
     mode === "diff" && Boolean(activeDiffChange) && activeDiffChange?.renderAs === "image";
+  const shouldRenderDocumentPreview =
+    mode === "preview" &&
+    currentTextFile !== null &&
+    deriveDocumentPreviewKind(currentTextFile.path) !== null;
   const titleText = currentFile
     ? currentFile.path
     : (activeDiffChange?.title ?? activeFilePath ?? t("file.title"));
@@ -154,6 +158,14 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
                       ? `${currentImageFile.url}&revision=${activeDiffChange.modifiedRevision}`
                       : currentImageFile.url
               }
+            />
+          ) : shouldRenderDocumentPreview && currentTextFile ? (
+            <DocumentPreview
+              src={documentPreview.iframeSrc}
+              title={currentTextFile.path}
+              isLoading={documentPreview.isBootstrapping}
+              error={documentPreview.error}
+              onRetry={documentPreview.retry}
             />
           ) : currentTextFile ? (
             <MonacoHost

@@ -92,7 +92,22 @@ export class WsHub implements Broadcaster {
    * Handle a new WebSocket connection
    */
   handleConnection(socket: WebSocket, req: FastifyRequest): void {
-    const client = new WsClient(socket, uuidv4(), this.deps.logger);
+    const client = new WsClient(socket, uuidv4(), this.deps.logger, {
+      onTerminalContinuityLost: ({ clientId, topic, reason }) => {
+        const match = topic.match(/^workspace\.([^.]+)\.terminal\.([^.]+)\.output$/);
+        if (!match) {
+          return;
+        }
+
+        this.deps.eventBus.emit({
+          type: "terminal.continuity_lost",
+          workspaceId: match[1]!,
+          terminalId: match[2]!,
+          clientId,
+          reason,
+        });
+      },
+    });
     this.clients.set(client.id, client);
     this.clientRequests.set(client.id, req);
 
@@ -378,6 +393,7 @@ export class WsHub implements Broadcaster {
       "git.state.changed",
       "fs.dirty",
       "terminal.created",
+      "terminal.continuity_lost",
       "terminal.output",
       "terminal.exited",
       "lsp.diagnostics.updated",
@@ -458,6 +474,22 @@ export class WsHub implements Broadcaster {
           workspaceId: event.workspaceId,
         };
         break;
+
+      case "terminal.continuity_lost":
+        topic = Topics.terminalContinuityLost(event.workspaceId, event.terminalId);
+        data = {
+          workspaceId: event.workspaceId,
+          terminalId: event.terminalId,
+          reason: event.reason,
+        };
+        this.sendToClient(event.clientId, {
+          kind: "event",
+          topic,
+          seq: 0,
+          timestamp: Date.now(),
+          data,
+        });
+        return;
 
       case "terminal.exited":
         topic = Topics.terminalExit(event.workspaceId, event.terminalId);

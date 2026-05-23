@@ -303,8 +303,9 @@
       "loading_body": "恢复期间暂时无法使用当前终端；请耐心等待，历史内容恢复完成后再继续。内容较多时可能需要更久。",
       "failed_title": "历史内容恢复失败",
       "failed_body": "新输出仍会继续显示；如果需要完整历史，再手动刷新页面。",
-      "closed_title": "该会话已被关闭",
-      "closed_body": "请重新开启新会话。",
+      "closed_title": "当前会话已结束",
+      "closed_body": "是否重新打开一个新会话继续。",
+      "closed_body_with_provider": "是否重新打开一个 {provider} 会话继续。",
       "truncated_title": "历史内容不完整",
       "truncated_body": "较早的终端输出已被回放缓冲区淘汰，后续输出仍会继续显示。"
     }
@@ -349,6 +350,9 @@
     "saving": "保存中...",
     "edit_as_text": "以文本编辑",
     "preview_as_image": "以图像预览",
+    "preview_loading": "正在加载预览...",
+    "preview_unavailable": "预览不可用",
+    "preview_retry": "重试",
     "mode_text": "文本",
     "mode_image": "图像",
     "mode_preview": "预览",
@@ -955,7 +959,8 @@
       "workspace": "工作区",
       "provider": "Provider",
       "missing_commands": "缺失命令",
-      "missing_prerequisites": "缺失前置依赖"
+      "missing_prerequisites": "缺失前置依赖",
+      "current_version": "当前版本"
     },
     "context": {
       "workspace_open": {
@@ -999,6 +1004,22 @@
       "session_workspace_missing": {
         "title": "工作区缺失",
         "description": "先选择或重新打开工作区，再启动会话。"
+      },
+      "git_ready": {
+        "title": "Git 已就绪",
+        "description": "当前环境已安装 Git，且可以正常使用。"
+      },
+      "git_missing": {
+        "title": "Git 缺失",
+        "description": "使用工作区仓库相关能力前，需要先安装 Git。"
+      },
+      "nodejs_ready": {
+        "title": "Node.js 已就绪",
+        "description": "当前环境已安装 Node.js，且可以正常使用。"
+      },
+      "nodejs_missing": {
+        "title": "Node.js 缺失",
+        "description": "运行本地 JavaScript 和包管理任务前，需要先安装 Node.js。"
       },
       "provider_runtime_ready": {
         "title": "{provider} 已就绪",

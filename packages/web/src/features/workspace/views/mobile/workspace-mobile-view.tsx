@@ -235,7 +235,7 @@ export function WorkspaceMobileView() {
     supervisorDialog.sessionId,
   ]);
 
-  const filesSheetKicker = mobileFilesRoute.kind === "file" ? t("file.title") : null;
+  const filesSheetKicker = mobileFilesRoute.kind === "detail" ? t("file.title") : null;
 
   const handleMobileCreateRequest = (mode: "file" | "folder") => {
     setMobileFileCreateRequest((previous) => ({
@@ -246,7 +246,7 @@ export function WorkspaceMobileView() {
   };
 
   const filesSheetHeaderAction =
-    mobileFilesRoute.kind === "file" ? (
+    mobileFilesRoute.kind === "detail" ? (
       <CodeEditorHeaderActions state={mobileEditorState} variant="mobile" />
     ) : null;
 
@@ -254,8 +254,10 @@ export function WorkspaceMobileView() {
     mobileSheet === "files"
       ? {
           title:
-            mobileFilesRoute.kind === "file"
-              ? (mobileFilesRoute.path.split("/").pop() ?? t("mobile.files.editor_fallback"))
+            mobileFilesRoute.kind === "detail"
+              ? (mobileFilesRoute.title ??
+                mobileFilesRoute.path?.split("/").pop() ??
+                t("mobile.files.editor_fallback"))
               : mobileFilesTab === "files"
                 ? t("file.title")
                 : t("label.git"),

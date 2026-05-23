@@ -18,7 +18,9 @@ import {
   registerAuthStatusRoute,
 } from "./auth/index.js";
 import type { ServerConfig } from "./config.js";
+import { PreviewSessionStore } from "./preview/session-store.js";
 import { registerFileAssetRoutes } from "./routes/file-asset.js";
+import { registerPreviewRoutes } from "./routes/preview.js";
 import { registerUploadsRoute } from "./routes/uploads.js";
 import type { AuthLoginBlockRepo } from "./storage/repositories/auth-login-block-repo.js";
 import type { AuthSessionRepo } from "./storage/repositories/auth-session-repo.js";
@@ -140,6 +142,12 @@ export async function buildFastifyApp(deps: AppDeps): Promise<FastifyInstance> {
   // only needs its own path-safety and allowlist checks.
   registerFileAssetRoutes(app, {
     workspaceMgr: deps.workspaceMgr,
+  });
+
+  const previewSessions = new PreviewSessionStore();
+  registerPreviewRoutes(app, {
+    workspaceMgr: deps.workspaceMgr,
+    previewSessions,
   });
 
   registerUploadsRoute(app, {

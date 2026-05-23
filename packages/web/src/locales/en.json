@@ -303,8 +303,9 @@
       "loading_body": "This terminal is unavailable while history is being restored. Please wait until recovery finishes before continuing. Larger histories may take longer to restore.",
       "failed_title": "Terminal history could not be restored",
       "failed_body": "New output will keep streaming. Refresh manually only if you need the missing history.",
-      "closed_title": "This session has been closed",
-      "closed_body": "Start a new session to continue.",
+      "closed_title": "This session has ended",
+      "closed_body": "Reopen a new session to continue?",
+      "closed_body_with_provider": "Reopen a {provider} session to continue?",
       "truncated_title": "Terminal history is partial",
       "truncated_body": "Older output has already fallen out of the replay buffer, but new output will continue to stream."
     }
@@ -349,6 +350,9 @@
     "saving": "Saving...",
     "edit_as_text": "Edit as text",
     "preview_as_image": "Preview as image",
+    "preview_loading": "Loading preview...",
+    "preview_unavailable": "Preview unavailable",
+    "preview_retry": "Retry",
     "mode_text": "Text",
     "mode_image": "Image",
     "mode_preview": "Preview",
@@ -955,7 +959,8 @@
       "workspace": "Workspace",
       "provider": "Provider",
       "missing_commands": "Missing commands",
-      "missing_prerequisites": "Missing prerequisites"
+      "missing_prerequisites": "Missing prerequisites",
+      "current_version": "Current version"
     },
     "context": {
       "workspace_open": {
@@ -999,6 +1004,22 @@
       "session_workspace_missing": {
         "title": "Workspace is missing",
         "description": "Select or reopen the workspace before starting a session."
+      },
+      "git_ready": {
+        "title": "Git is ready",
+        "description": "Git is installed and available in the current environment."
+      },
+      "git_missing": {
+        "title": "Git is missing",
+        "description": "Install Git before relying on workspace repository features."
+      },
+      "nodejs_ready": {
+        "title": "Node.js is ready",
+        "description": "Node.js is installed and available in the current environment."
+      },
+      "nodejs_missing": {
+        "title": "Node.js is missing",
+        "description": "Install Node.js before running local JavaScript and package tasks."
       },
       "provider_runtime_ready": {
         "title": "{provider} is ready",

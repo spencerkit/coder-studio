@@ -527,6 +527,68 @@ describe("ObjectiveDialog", () => {
     expect(sendCommand).not.toHaveBeenCalledWith("supervisor.create", expect.anything(), undefined);
   });
 
+  it("hides the current supervisor target from the restore list", async () => {
+    const user = userEvent.setup();
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "supervisor.listRecoverableTargets") {
+        return {
+          targets: [
+            {
+              targetId: "tgt-1",
+              sessionId: "sess-1",
+              workspaceId: "ws-1",
+              objective: "Current active supervisor",
+              status: "active",
+              updatedAt: 1_746_000_000_000,
+              progressSummary: "Should not be restorable into itself",
+              cycleCount: 4,
+            },
+            {
+              targetId: "tgt-restore",
+              sessionId: "sess-old",
+              workspaceId: "ws-1",
+              objective: "Recover the rollout supervisor",
+              status: "cancelled",
+              updatedAt: 1_746_000_000_100,
+              progressSummary: "Can safely restore from here",
+              cycleCount: 2,
+            },
+          ],
+        };
+      }
+
+      return undefined;
+    });
+    const store = createStore();
+
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(supervisorDialogAtom, createDialogState({ mode: "edit" }));
+    store.set(supervisorsAtom, new Map([["sess-1", createSupervisor()]]));
+
+    render(
+      <Provider store={store}>
+        <ObjectiveDialog workspaceId="ws-1" />
+      </Provider>
+    );
+
+    await user.click(screen.getByRole("button", { name: "Restore from Existing Memory" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "supervisor.listRecoverableTargets",
+        { workspaceId: "ws-1" },
+        undefined
+      );
+    });
+
+    expect(screen.queryByRole("radio", { name: /Current active supervisor/i })).toBeNull();
+    expect(
+      screen.getByRole("radio", { name: /Recover the rollout supervisor/i })
+    ).toBeInTheDocument();
+  });
+
   it("disables restore confirm until a recoverable target is selected", async () => {
     const user = userEvent.setup();
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
