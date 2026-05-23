@@ -64,7 +64,7 @@ export function useCodeEditorActions() {
   } | null>(null);
 
   const workspaceId = workspace?.id;
-  const [activeFilePath, setActiveFilePath] = useAtom(activeFilePathAtomFamily(workspaceId ?? ""));
+  const [activeFilePath] = useAtom(activeFilePathAtomFamily(workspaceId ?? ""));
   const [openFiles, setOpenFiles] = useAtom(openFilesAtomFamily(workspaceId ?? ""));
   const [mode, setMode] = useAtom(editorModeAtomFamily(workspaceId ?? ""));
   const editorRefreshToken = useAtomValue(editorRefreshTokenAtomFamily(workspaceId ?? ""));
