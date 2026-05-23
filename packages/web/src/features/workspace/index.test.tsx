@@ -203,7 +203,7 @@ describe("WorkspacePage", () => {
     expect(document.querySelector('[data-icon-semantic="file.action.newFolder"]')).toBeTruthy();
     expect(screen.queryByRole("button", { name: /refresh|刷新/i })).toBeNull();
 
-    fireEvent.click(screen.getByRole("tab", { name: "Git" }));
+    fireEvent.click(screen.getByRole("button", { name: /Source Control|源代码管理/i }));
 
     expect(screen.getByTestId("git-panel")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^new file$|^新建文件$/i })).toBeNull();
@@ -274,11 +274,11 @@ describe("WorkspacePage", () => {
     expect(branchButton?.querySelector('[data-icon-semantic="git.footer.branch"]')).toBeTruthy();
     fireEvent.click(branchButton as HTMLElement);
 
-    const gitTab = screen.getByRole("tab", { name: "Git" });
-    expect(screen.getByRole("tablist", { name: "Workspace sections" })).toBeInTheDocument();
-    expect(gitTab).toHaveAttribute("aria-selected", "true");
-    expect(gitTab).toHaveClass("workspace-sidebar-panel__tab", "active");
-    expect(gitTab).not.toHaveClass("panel-tab");
+    const sourceControlButton = screen.getByRole("button", { name: /Source Control|源代码管理/i });
+    expect(
+      screen.getByRole("navigation", { name: /Workspace activity bar|工作区活动栏/i })
+    ).toBeInTheDocument();
+    expect(sourceControlButton).toHaveAttribute("aria-pressed", "true");
     expect(
       await screen.findByPlaceholderText("Search branches or create new branch...")
     ).toBeInTheDocument();
@@ -289,7 +289,7 @@ describe("WorkspacePage", () => {
     });
   });
 
-  it("uses workspace sidebar-specific tab styling without legacy panel-tab classes", async () => {
+  it("uses workspace activity bar styling without legacy tab chrome", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "git.status") {
         return {
@@ -334,15 +334,141 @@ describe("WorkspacePage", () => {
       </Provider>
     );
 
-    await screen.findByTestId("file-tree-panel");
+    await screen.findByRole("button", { name: /Explorer|资源管理器/i });
 
-    const filesTab = screen.getByRole("tab", { name: /Files|文件/i });
-    const gitTab = screen.getByRole("tab", { name: "Git" });
+    expect(document.querySelector(".workspace-activity-bar")).toBeTruthy();
+    expect(document.querySelector(".workspace-sidebar-panel__tabs")).toBeNull();
+    expect(document.querySelector(".workspace-sidebar-panel__tab")).toBeNull();
+  });
 
-    expect(filesTab).toHaveClass("workspace-sidebar-panel__tab", "active");
-    expect(filesTab).not.toHaveClass("panel-tab");
-    expect(gitTab).toHaveClass("workspace-sidebar-panel__tab");
-    expect(gitTab).not.toHaveClass("panel-tab");
+  it("renders an explorer-first activity bar and removes the desktop tree search box", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return {
+          branch: "main",
+          ahead: 0,
+          behind: 0,
+          staged: [],
+          modified: [],
+          deleted: [],
+          untracked: [],
+        };
+      }
+
+      return [];
+    });
+
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedReadyWorkspaceState(store, {
+      "ws-test": {
+        id: "ws-test",
+        path: "/home/spencer/workspace/coder-studio",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+    store.set(openFilesAtomFamily("ws-test"), {
+      "README.md": {
+        kind: "text",
+        path: "README.md",
+        content: "# README",
+        savedContent: "# README",
+        baseHash: "hash-readme",
+        isDirty: false,
+      },
+      "src/app.tsx": {
+        kind: "text",
+        path: "src/app.tsx",
+        content: "export const app = true;",
+        savedContent: "export const app = true;",
+        baseHash: "hash-app",
+        isDirty: false,
+      },
+    });
+    store.set(activeFilePathAtomFamily("ws-test"), "src/app.tsx");
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/workspace"]}>
+          <Routes>
+            <Route path="/workspace" element={<WorkspaceDesktopView />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>
+    );
+
+    await screen.findByText(/Open Editors|打开的编辑器/i);
+
+    const explorerButton = screen.getByRole("button", { name: /Explorer|资源管理器/i });
+    expect(explorerButton).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "README.md" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "src/app.tsx" })).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Search files|搜索文件/i)).toBeNull();
+    expect(document.querySelector(".workspace-activity-bar")).toBeTruthy();
+  });
+
+  it("switches desktop sidebar views from the activity bar", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return {
+          branch: "main",
+          ahead: 0,
+          behind: 0,
+          staged: [],
+          modified: [],
+          deleted: [],
+          untracked: [],
+        };
+      }
+
+      return [];
+    });
+
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedReadyWorkspaceState(store, {
+      "ws-test": {
+        id: "ws-test",
+        path: "/home/spencer/workspace/coder-studio",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/workspace"]}>
+          <Routes>
+            <Route path="/workspace" element={<WorkspaceDesktopView />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Search|搜索/i }));
+    await waitFor(() => {
+      expect(
+        document.querySelector(".workspace-sidebar-view .panel-header__title")
+      ).toHaveTextContent(/Search|搜索/i);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Source Control|源代码管理/i }));
+    expect(screen.getByTestId("git-panel")).toBeInTheDocument();
   });
 
   it("does not render a duplicate worktree entry button in the desktop git header", async () => {

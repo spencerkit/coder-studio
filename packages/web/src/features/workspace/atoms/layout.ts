@@ -6,6 +6,8 @@
 
 import { atomWithStorage } from "jotai/utils";
 
+export type DesktopSidebarView = "explorer" | "search" | "source-control";
+
 /**
  * Focus mode toggle (hides left/bottom panels)
  * Persisted: ui.focusMode
@@ -28,6 +30,15 @@ export const bottomPanelHeightAtom = atomWithStorage("ui.bottomPanelHeight", 200
  * Sidebar collapsed state
  */
 export const sidebarCollapsedAtom = atomWithStorage("ui.sidebarCollapsed", false);
+
+/**
+ * Desktop sidebar active view
+ * Persisted: ui.desktopSidebarView
+ */
+export const desktopSidebarViewAtom = atomWithStorage<DesktopSidebarView>(
+  "ui.desktopSidebarView",
+  "explorer"
+);
 
 /**
  * Terminal panel visible state

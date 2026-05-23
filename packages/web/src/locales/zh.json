@@ -154,6 +154,17 @@
     "loading_description": "正在准备工作区列表并恢复上次活跃的会话。",
     "load_failed_title": "工作区加载失败",
     "load_failed_description": "获取工作区列表失败",
+    "sidebar": {
+      "label": "工作区活动栏",
+      "explorer": "资源管理器",
+      "search": "搜索",
+      "source_control": "源代码管理",
+      "open_editors": "打开的编辑器",
+      "workspace": "工作区"
+    },
+    "search": {
+      "empty": "搜索功能即将显示在这里。"
+    },
     "launch": {
       "kicker": "启动工作区",
       "title": "打开工作区",

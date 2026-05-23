@@ -154,6 +154,17 @@
     "loading_description": "Preparing your workspace list and restoring the last active session.",
     "load_failed_title": "Failed to load workspaces",
     "load_failed_description": "Failed to fetch workspace list",
+    "sidebar": {
+      "label": "Workspace activity bar",
+      "explorer": "Explorer",
+      "search": "Search",
+      "source_control": "Source Control",
+      "open_editors": "Open Editors",
+      "workspace": "Workspace"
+    },
+    "search": {
+      "empty": "Search will appear here soon."
+    },
     "launch": {
       "kicker": "START WORKSPACE",
       "title": "Open Workspace",

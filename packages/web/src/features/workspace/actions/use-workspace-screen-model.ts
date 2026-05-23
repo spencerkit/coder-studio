@@ -15,6 +15,7 @@ import { collectSessionIds } from "../../agent-panes/pane-layout-tree";
 import {
   activeFilePathAtomFamily,
   branchQuickPickAtom,
+  desktopSidebarViewAtom,
   focusModeAtom,
   gitDiffPreviewAtomFamily,
   gitStateAtomFamily,
@@ -23,7 +24,6 @@ import {
 } from "../atoms";
 import { useWorkspaceLayoutActions } from "./use-workspace-layout-actions";
 
-export type WorkspaceSidebarTab = "files" | "git";
 export type WorkspaceMainAreaMode = "agent" | "editor";
 export type MobileWorkspaceSheetKind = "files" | "terminal" | "supervisor" | null;
 export type MobileFilesRoute =
@@ -52,6 +52,7 @@ export function useWorkspaceScreenModel() {
   const focusMode = useAtomValue(focusModeAtom);
   const terminalPanelVisible = useAtomValue(terminalPanelVisibleAtom);
   const sidebarCollapsed = useAtomValue(sidebarCollapsedAtom);
+  const desktopSidebarView = useAtomValue(desktopSidebarViewAtom);
   const { sessions, paneLayout } = useWorkspaceSessions(workspace);
   const dispatch = useAtomValue(dispatchCommandAtom);
   const setBranchQuickPick = useSetAtom(branchQuickPickAtom);
@@ -60,7 +61,6 @@ export function useWorkspaceScreenModel() {
   const paneActions = usePaneActions(workspaceId);
   const sessionActions = useSessionActions();
 
-  const [sidebarTab, setSidebarTab] = useState<WorkspaceSidebarTab>("files");
   const [createRequest, setCreateRequest] = useState<WorkspaceCreateRequest | null>(null);
   const [panelRefreshToken, setPanelRefreshToken] = useState(0);
   const [mobileSheet, setMobileSheet] = useState<MobileWorkspaceSheetKind>(null);
@@ -112,13 +112,13 @@ export function useWorkspaceScreenModel() {
       return;
     }
 
-    setSidebarTab("git");
+    store.set(desktopSidebarViewAtom, "source-control");
     setBranchQuickPick({
       visible: true,
       workspaceId: workspace.id,
       inputValue: "",
     });
-  }, [setBranchQuickPick, workspace]);
+  }, [setBranchQuickPick, store, workspace]);
 
   const handleOpenFileCreate = useCallback(() => {
     setCreateRequest((previous) => ({
@@ -280,9 +280,10 @@ export function useWorkspaceScreenModel() {
     restoreMobileSession,
     selectMobileSession,
     sessions,
-    setSidebarTab,
+    desktopSidebarView,
+    setDesktopSidebarView: (view: typeof desktopSidebarView) =>
+      store.set(desktopSidebarViewAtom, view),
     sidebarCollapsed,
-    sidebarTab,
     closeMobileSheet,
     terminalPanelVisible,
     updateMobileFilesRoute,
