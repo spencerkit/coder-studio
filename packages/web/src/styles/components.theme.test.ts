@@ -2633,6 +2633,7 @@ describe("components.css theme-sensitive surfaces", () => {
   it("keeps workspace search and quick open on compact editor-search chrome", () => {
     const searchControls = getLastRuleBlock(".workspace-search-panel__controls");
     const searchInput = getLastRuleBlock(".workspace-search-panel__input");
+    const openEditorsItem = getLastRuleBlock(".workspace-open-editors__item");
     const searchGroupHeader = getLastRuleBlock(".workspace-search-panel__group-header");
     const searchGroupPath = getLastRuleBlock(".workspace-search-panel__group-path");
     const searchMatch = getLastRuleBlock(".workspace-search-panel__match");
@@ -2653,6 +2654,9 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(searchInput).toContain("min-height: 34px");
     expect(searchInput).toContain("border-radius: 4px");
     expect(searchInput).toContain("box-shadow: none");
+    expect(openEditorsItem).toContain("overflow: hidden");
+    expect(openEditorsItem).toContain("text-overflow: ellipsis");
+    expect(openEditorsItem).toContain("white-space: nowrap");
     expect(searchGroupHeader).toContain("grid-template-columns: 14px minmax(0, 1fr) auto");
     expect(searchGroupHeader).toContain("box-shadow: inset 0 -1px 0 color-mix(");
     expect(searchGroupPath).toContain("font-family: var(--font-mono)");

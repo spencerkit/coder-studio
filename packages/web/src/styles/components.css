@@ -12556,14 +12556,19 @@ textarea.input {
 }
 
 .workspace-open-editors__item {
+  display: block;
   width: 100%;
+  min-width: 0;
   min-height: 28px;
   padding: 0 var(--sp-2);
   border: none;
   border-radius: var(--radius-md);
   background: transparent;
+  overflow: hidden;
   color: var(--text-secondary);
   text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .workspace-open-editors__item:hover {
