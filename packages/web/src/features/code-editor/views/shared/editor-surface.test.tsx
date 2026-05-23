@@ -43,6 +43,12 @@ vi.mock("../../components/image-preview", () => ({
   ImagePreview: () => <div data-testid="image-preview" />,
 }));
 
+vi.mock("../../components/document-preview", () => ({
+  DocumentPreview: ({ src }: { src: string | null }) => (
+    <div data-testid="document-preview" data-src={src ?? ""} />
+  ),
+}));
+
 function createState(overrides: Partial<CodeEditorState> = {}): CodeEditorState {
   return {
     activeFilePath: "src/app.ts",
@@ -69,6 +75,13 @@ function createState(overrides: Partial<CodeEditorState> = {}): CodeEditorState 
     isSaving: false,
     isSvgTextBacked: false,
     isTextFile: true,
+    documentPreview: {
+      iframeSrc: null,
+      isBootstrapping: false,
+      isSyncing: false,
+      error: null,
+      retry: vi.fn(),
+    },
     mode: "edit",
     openInDiffMode: vi.fn(),
     saveError: null,
@@ -120,6 +133,34 @@ describe("EditorSurface", () => {
     rerender(<EditorSurface state={createState({ mode: "edit" })} />);
 
     expect(screen.getByTestId("monaco-host")).toHaveAttribute("data-read-only", "false");
+  });
+
+  it("renders document preview for markdown files in preview mode", () => {
+    const state = createState({
+      mode: "preview",
+      currentFile: {
+        kind: "text",
+        path: "README.md",
+        content: "# Docs",
+        savedContent: "# Docs",
+        baseHash: "hash-1",
+        isDirty: false,
+      },
+      documentPreview: {
+        iframeSrc: "/api/preview/session/session-1/README.md?rev=1",
+        isBootstrapping: false,
+        isSyncing: false,
+        error: null,
+        retry: vi.fn(),
+      },
+    });
+
+    render(<EditorSurface state={state} />);
+
+    expect(screen.getByTestId("document-preview")).toHaveAttribute(
+      "data-src",
+      "/api/preview/session/session-1/README.md?rev=1"
+    );
   });
 
   it("renders Monaco diff when diff kind is text", () => {

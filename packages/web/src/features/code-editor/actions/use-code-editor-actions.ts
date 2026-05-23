@@ -4,6 +4,7 @@ import { dispatchCommandAtom } from "../../../atoms/connection";
 import { activeWorkspaceAtom } from "../../../atoms/workspaces";
 import {
   activeFilePathAtomFamily,
+  deriveDocumentPreviewKind,
   deriveEditorModeForOpenFile,
   editorModeAtomFamily,
   editorRefreshTokenAtomFamily,
@@ -15,6 +16,7 @@ import {
   type WorkspaceEditorMode,
 } from "../../workspace/atoms";
 import { monacoModelRegistry } from "../monaco/model-registry";
+import { usePreviewSession } from "./use-preview-session";
 
 type FileReadTextPayload = {
   kind: "text";
@@ -627,6 +629,15 @@ export function useCodeEditorActions() {
     activeFilePath && fileLoadError?.path === activeFilePath ? fileLoadError.message : null;
   const activeExternalStatus =
     activeFilePath && externalStatus?.path === activeFilePath ? externalStatus.status : null;
+  const documentPreviewKind =
+    currentFile?.kind === "text" ? deriveDocumentPreviewKind(currentFile.path) : null;
+  const documentPreview = usePreviewSession({
+    enabled: mode === "preview" && Boolean(documentPreviewKind),
+    workspaceId,
+    filePath: currentFile?.kind === "text" ? currentFile.path : null,
+    content: currentFile?.kind === "text" ? currentFile.content : undefined,
+    kind: documentPreviewKind,
+  });
 
   return {
     activeFilePath,
@@ -638,6 +649,7 @@ export function useCodeEditorActions() {
     canEdit,
     canPreview,
     currentFile,
+    documentPreview,
     handleClose,
     handleContentChange,
     handleSave,

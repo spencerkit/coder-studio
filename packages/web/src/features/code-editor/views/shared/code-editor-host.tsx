@@ -130,20 +130,11 @@ export const CodeEditorHeaderActions: FC<CodeEditorHeaderActionsProps> = ({
   variant = "full",
 }) => {
   const t = useTranslation();
-  const {
-    canSave,
-    handleClose,
-    handleSave,
-    isImageFile,
-    isSaving,
-    isSvgTextBacked,
-    toggleSvgTextMode,
-  } = state;
+  const { canSave, handleSave, isImageFile, isSaving, isSvgTextBacked, toggleSvgTextMode } = state;
   const saveLabel = isSaving ? t("code_editor.saving") : t("action.save_file");
   const toggleModeTitle = isImageFile
     ? t("code_editor.edit_as_text")
     : t("code_editor.preview_as_image");
-  const toggleModeLabel = isImageFile ? t("code_editor.mode_text") : t("code_editor.mode_image");
 
   if (variant !== "mobile") {
     return <CodeEditorDesktopHeaderActions state={state} />;
