@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.3
+
+### Patch Changes
+
+- [#56](https://github.com/spencerkit/coder-studio/pull/56) [`5b93d9d`](https://github.com/spencerkit/coder-studio/commit/5b93d9d994c6d33f738fa0657c3d37e7cd93a157) Thanks [@pallyoung](https://github.com/pallyoung)! - Fix terminal recovery so session output no longer stalls after noop reconcile
+  decisions or gets cleared when queued live chunks flush after snapshot
+  hydration.
+
 ## 0.4.2
 
 ### Patch Changes
