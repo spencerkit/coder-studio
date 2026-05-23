@@ -2012,6 +2012,21 @@ describe("FileTreePanel", () => {
     expect(document.querySelector(".tree-item-actions")).toBeNull();
   });
 
+  it("omits the desktop filename search input when showSearch is false", () => {
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+    store.set(fileTreeAtomFamily("ws-test"), new Map([[".", []]]));
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" variant="desktop" showSearch={false} />
+      </Provider>
+    );
+
+    expect(screen.queryByLabelText("action.search_files")).toBeNull();
+    expect(document.querySelector(".file-tree-search")).toBeNull();
+  });
+
   it("opens the mobile action sheet on long press but not on ordinary tap", async () => {
     const sendCommand = vi.fn().mockResolvedValue({ ok: true });
     const store = createStore();

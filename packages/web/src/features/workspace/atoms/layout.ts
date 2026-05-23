@@ -4,7 +4,32 @@
  * Persisted UI state owned by the workspace feature.
  */
 
-import { atomWithStorage } from "jotai/utils";
+import { atomWithStorage, createJSONStorage } from "jotai/utils";
+
+export type DesktopSidebarView = "explorer" | "search" | "source-control";
+const DEFAULT_DESKTOP_SIDEBAR_VIEW: DesktopSidebarView = "explorer";
+const DESKTOP_SIDEBAR_VIEW_VALUES = new Set<DesktopSidebarView>([
+  "explorer",
+  "search",
+  "source-control",
+]);
+
+export function sanitizeDesktopSidebarView(value: unknown): DesktopSidebarView {
+  return typeof value === "string" && DESKTOP_SIDEBAR_VIEW_VALUES.has(value as DesktopSidebarView)
+    ? (value as DesktopSidebarView)
+    : DEFAULT_DESKTOP_SIDEBAR_VIEW;
+}
+
+const baseDesktopSidebarStorage = createJSONStorage<DesktopSidebarView>(() => window.localStorage);
+const desktopSidebarStorage = {
+  ...baseDesktopSidebarStorage,
+  getItem: (_key: string, initialValue: DesktopSidebarView) =>
+    sanitizeDesktopSidebarView(
+      baseDesktopSidebarStorage.getItem("ui.desktopSidebarView", initialValue)
+    ),
+  setItem: (key: string, value: DesktopSidebarView) =>
+    baseDesktopSidebarStorage.setItem(key, sanitizeDesktopSidebarView(value)),
+};
 
 /**
  * Focus mode toggle (hides left/bottom panels)
@@ -28,6 +53,19 @@ export const bottomPanelHeightAtom = atomWithStorage("ui.bottomPanelHeight", 200
  * Sidebar collapsed state
  */
 export const sidebarCollapsedAtom = atomWithStorage("ui.sidebarCollapsed", false);
+
+/**
+ * Desktop sidebar active view
+ * Persisted: ui.desktopSidebarView
+ */
+export const desktopSidebarViewAtom = atomWithStorage<DesktopSidebarView>(
+  "ui.desktopSidebarView",
+  DEFAULT_DESKTOP_SIDEBAR_VIEW,
+  desktopSidebarStorage,
+  {
+    getOnInit: true,
+  }
+);
 
 /**
  * Terminal panel visible state

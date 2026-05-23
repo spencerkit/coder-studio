@@ -142,6 +142,51 @@ describe("File Commands", () => {
     expect(files).toHaveLength(0);
   });
 
+  it("dispatches file.searchContent and returns grouped content matches", async () => {
+    await writeFile(join(testDir, "alpha.ts"), "const hit = 'match';\nconst second = 'match';\n");
+    await writeFile(join(testDir, "notes.md"), "match in docs\n");
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "file-search-content-1",
+        op: "file.searchContent",
+        args: {
+          workspaceId,
+          query: "match",
+          maxFiles: 1,
+          maxMatchesPerFile: 1,
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.data).toMatchObject({
+      totalMatchCount: 3,
+      hasMoreFiles: true,
+      truncatedMatchFileCount: 1,
+      files: [
+        {
+          path: "alpha.ts",
+          name: "alpha.ts",
+          matchCount: 2,
+          hasMoreMatches: true,
+          matches: [
+            {
+              line: 1,
+              column: 14,
+              endColumn: 19,
+              preview: "const hit = 'match';",
+              previewColumnStart: 14,
+              previewColumnEnd: 19,
+            },
+          ],
+        },
+      ],
+    });
+  });
+
   it("shows dotfiles and node_modules in file.readTree while still hiding .git", async () => {
     await writeFile(join(testDir, ".gitignore"), "*.log\nnode_modules/\n");
     await writeFile(join(testDir, ".env"), "secret\n");

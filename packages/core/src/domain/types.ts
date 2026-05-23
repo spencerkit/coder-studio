@@ -151,6 +151,30 @@ export interface FileNode {
   mtime?: number;
 }
 
+export interface SearchContentMatch {
+  line: number;
+  column: number;
+  endColumn: number;
+  preview: string;
+  previewColumnStart: number;
+  previewColumnEnd: number;
+}
+
+export interface SearchContentFileResult {
+  path: string;
+  name: string;
+  matchCount: number;
+  hasMoreMatches: boolean;
+  matches: SearchContentMatch[];
+}
+
+export interface SearchContentResult {
+  files: SearchContentFileResult[];
+  totalMatchCount: number;
+  hasMoreFiles: boolean;
+  truncatedMatchFileCount: number;
+}
+
 export interface Settings {
   defaultProviderId: string;
   notifications: {

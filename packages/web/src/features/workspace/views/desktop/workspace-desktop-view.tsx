@@ -1,15 +1,6 @@
 import { useSetAtom } from "jotai";
-import { ChevronsUp } from "lucide-react";
-import { type FC, useEffect, useRef, useState } from "react";
-import {
-  EmptyState,
-  IconButton,
-  Tab,
-  TabList,
-  Tabs,
-  ThemedIcon,
-  Tooltip,
-} from "../../../../components/ui";
+import { type FC, useEffect, useRef } from "react";
+import { EmptyState } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { AgentPanes } from "../../../agent-panes";
 import { CodeEditorHost } from "../../../code-editor/views/shared/code-editor-host";
@@ -19,17 +10,32 @@ import { TopBar } from "../../../topbar";
 import { useWorkspaceFullscreen } from "../../actions/use-workspace-fullscreen";
 import { useWorkspaceScreenModel } from "../../actions/use-workspace-screen-model";
 import { sidebarCollapsedAtom } from "../../atoms";
-import { FileTreePanel } from "../shared/file-tree-panel";
+import { sanitizeDesktopSidebarView } from "../../atoms/layout";
+import { ExplorerPanel } from "../shared/explorer-panel";
 import { GitPanel } from "../shared/git-panel";
+import { SearchPanel } from "../shared/search-panel";
+import { WorkspaceActivityBar } from "../shared/workspace-activity-bar";
 import { WorkspaceStatusBar } from "../shared/workspace-status-bar";
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  if (target.isContentEditable || target.closest('[contenteditable="true"]')) {
+    return true;
+  }
+
+  return ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
+}
 
 export const WorkspaceDesktopView: FC = () => {
   const fullscreenRootRef = useRef<HTMLDivElement>(null);
   const fullscreenController = useWorkspaceFullscreen(fullscreenRootRef);
-  const [fileTreeCollapseVersion, setFileTreeCollapseVersion] = useState(0);
   const t = useTranslation();
   const {
     createRequest,
+    desktopSidebarView,
     focusMode,
     gitState,
     handleBottomMouseDown,
@@ -41,17 +47,22 @@ export const WorkspaceDesktopView: FC = () => {
     leftPanelWidth,
     leftPanelRef,
     mainAreaMode,
-    setSidebarTab,
+    setDesktopSidebarView,
     sidebarCollapsed,
-    sidebarTab,
     terminalPanelVisible,
     workspace,
     bottomPanelHeight,
     bottomPanelRef,
   } = useWorkspaceScreenModel();
   const setSidebarCollapsed = useSetAtom(sidebarCollapsedAtom);
+  const activeSidebarView = sanitizeDesktopSidebarView(desktopSidebarView);
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || isEditableTarget(event.target)) {
+        return;
+      }
+
       if (!(event.metaKey || event.ctrlKey)) {
         return;
       }
@@ -64,19 +75,25 @@ export const WorkspaceDesktopView: FC = () => {
 
       if (event.key === "1") {
         event.preventDefault();
-        setSidebarTab("files");
+        setDesktopSidebarView("explorer");
         return;
       }
 
       if (event.key === "2") {
         event.preventDefault();
-        setSidebarTab("git");
+        setDesktopSidebarView("search");
+        return;
+      }
+
+      if (event.key === "3") {
+        event.preventDefault();
+        setDesktopSidebarView("source-control");
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [setSidebarCollapsed, setSidebarTab]);
+  }, [setDesktopSidebarView, setSidebarCollapsed]);
 
   if (!workspace) {
     return (
@@ -106,73 +123,34 @@ export const WorkspaceDesktopView: FC = () => {
               style={{ width: `${leftPanelWidth}px` }}
             >
               <div className="nav-panel workspace-sidebar-panel">
-                <PanelHeader
-                  title={t("workspace.title")}
-                  meta={
-                    <Tabs
-                      aria-label="Workspace sections"
-                      onValueChange={setSidebarTab}
-                      value={sidebarTab}
-                    >
-                      <TabList className="workspace-sidebar-panel__tabs">
-                        <Tab className="workspace-sidebar-panel__tab" value="files">
-                          <span>{t("file.title")}</span>
-                        </Tab>
-                        <Tab className="workspace-sidebar-panel__tab" value="git">
-                          <span>{t("label.git")}</span>
-                        </Tab>
-                      </TabList>
-                    </Tabs>
-                  }
-                  actions={
-                    <div className="workspace-sidebar-panel__actions">
-                      {sidebarTab === "files" ? (
-                        <>
-                          <Tooltip content={t("file.new_file")}>
-                            <IconButton
-                              className="panel-toolbar-btn"
-                              aria-label={t("file.new_file")}
-                              icon={<ThemedIcon semantic="file.action.new" size={14} />}
-                              onClick={handleOpenFileCreate}
-                              size="sm"
-                            />
-                          </Tooltip>
-                          <Tooltip content={t("file.new_folder")}>
-                            <IconButton
-                              className="panel-toolbar-btn"
-                              aria-label={t("file.new_folder")}
-                              icon={<ThemedIcon semantic="file.action.newFolder" size={14} />}
-                              onClick={handleOpenFolderCreate}
-                              size="sm"
-                            />
-                          </Tooltip>
-                          <Tooltip content={t("file.collapse_all")}>
-                            <IconButton
-                              className="panel-toolbar-btn"
-                              aria-label={t("file.collapse_all")}
-                              icon={<ChevronsUp size={14} />}
-                              onClick={() => setFileTreeCollapseVersion((value) => value + 1)}
-                              size="sm"
-                            />
-                          </Tooltip>
-                        </>
-                      ) : null}
-                    </div>
-                  }
+                <WorkspaceActivityBar
+                  activeView={activeSidebarView}
+                  onSelectView={setDesktopSidebarView}
                 />
 
-                <div className="workspace-sidebar-panel__body">
-                  {sidebarTab === "files" ? (
-                    <FileTreePanel
+                <div className="workspace-sidebar-panel__content">
+                  {activeSidebarView === "explorer" ? (
+                    <ExplorerPanel
                       workspaceId={workspace.id}
                       createRequest={createRequest}
                       onCreateRequestConsumed={handleConsumeCreateRequest}
-                      collapseVersion={fileTreeCollapseVersion}
-                      variant="desktop"
+                      onOpenFileCreate={handleOpenFileCreate}
+                      onOpenFolderCreate={handleOpenFolderCreate}
                     />
-                  ) : (
-                    <GitPanel workspaceId={workspace.id} variant="desktop" />
-                  )}
+                  ) : null}
+
+                  {activeSidebarView === "search" ? (
+                    <SearchPanel workspaceId={workspace.id} />
+                  ) : null}
+
+                  {activeSidebarView === "source-control" ? (
+                    <div className="workspace-sidebar-view">
+                      <PanelHeader title={t("workspace.sidebar.source_control")} />
+                      <div className="workspace-sidebar-panel__body">
+                        <GitPanel workspaceId={workspace.id} variant="desktop" />
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             </aside>

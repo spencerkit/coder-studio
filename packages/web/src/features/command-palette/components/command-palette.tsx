@@ -8,7 +8,7 @@ import type { Workspace } from "@coder-studio/core";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { commandPaletteOpenAtom } from "../../../atoms/app-ui";
+import { commandPaletteOpenAtom, quickOpenOpenAtom } from "../../../atoms/app-ui";
 import {
   activeWorkspaceIdAtom,
   orderedWorkspacesAtom,
@@ -71,6 +71,7 @@ export function CommandPalette() {
   const [bottomPanelHeight, setBottomPanelHeight] = useAtom(bottomPanelHeightAtom);
   const activeWorkspaceId = useAtomValue(resolvedActiveWorkspaceIdAtom);
   const setActiveWorkspaceId = useSetAtom(activeWorkspaceIdAtom);
+  const setQuickOpenOpen = useSetAtom(quickOpenOpenAtom);
   const selectWorkspaceTarget = useSelectWorkspaceTarget();
   const workspaces = useAtomValue(orderedWorkspacesAtom);
 
@@ -97,6 +98,7 @@ export function CommandPalette() {
     locationPathname: location.pathname,
     navigate,
     t,
+    setQuickOpenOpen,
     setShowWorkspaceLaunch: (nextValue) => {
       if (nextValue) {
         setIsOpen(false);
@@ -295,6 +297,7 @@ function buildCommands(context: {
   locationPathname: string;
   navigate: (path: string) => void;
   t: (key: string) => string;
+  setQuickOpenOpen: (value: boolean) => void;
   setShowWorkspaceLaunch: (v: boolean) => void;
 }): Command[] {
   const {
@@ -314,6 +317,7 @@ function buildCommands(context: {
     locationPathname,
     navigate,
     t,
+    setQuickOpenOpen,
     setShowWorkspaceLaunch,
   } = context;
 
@@ -346,6 +350,17 @@ function buildCommands(context: {
 
   if (shellKind === "desktop") {
     commands.push(
+      ...(activeWorkspaceId
+        ? [
+            {
+              id: "go-to-file",
+              label: t("quick_open.command_label"),
+              description: t("quick_open.command_description"),
+              shortcut: "Ctrl+P",
+              action: () => setQuickOpenOpen(true),
+            } satisfies Command,
+          ]
+        : []),
       {
         id: "toggle-focus-mode",
         label: t("tooltip.focus_mode"),

@@ -154,6 +154,24 @@
     "loading_description": "正在准备工作区列表并恢复上次活跃的会话。",
     "load_failed_title": "工作区加载失败",
     "load_failed_description": "获取工作区列表失败",
+    "sidebar": {
+      "label": "工作区活动栏",
+      "explorer": "资源管理器",
+      "search": "搜索",
+      "source_control": "源代码管理",
+      "open_editors": "打开的编辑器",
+      "workspace": "工作区"
+    },
+    "search": {
+      "empty": "输入关键词以搜索文件内容。",
+      "placeholder": "搜索文件内容",
+      "results_count": "在 {files} 个文件中找到 {count} 条结果",
+      "no_results": "未找到内容匹配。",
+      "truncated": "结果已截断，以保持搜索响应速度。",
+      "file_match_count": "{count}{suffix} 条匹配",
+      "failed": "搜索失败，请重试。",
+      "retry": "重试"
+    },
     "launch": {
       "kicker": "启动工作区",
       "title": "打开工作区",
@@ -180,6 +198,15 @@
       "missing_node": "未找到 Node.js",
       "missing_provider": "未找到 {provider} CLI"
     }
+  },
+  "quick_open": {
+    "title": "跳转到文件",
+    "placeholder": "输入文件名或路径",
+    "empty": "输入内容以按文件名或路径搜索。",
+    "no_results": "未找到匹配文件。",
+    "failed": "文件搜索失败，请重试。",
+    "command_label": "跳转到文件...",
+    "command_description": "在当前工作区中快速打开文件"
   },
   "mobile": {
     "dock": {

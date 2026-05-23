@@ -104,6 +104,7 @@ interface FileTreePanelProps {
   onVisibleCountChange?: (count: number, loading: boolean) => void;
   collapseVersion?: number;
   variant?: "desktop" | "mobile";
+  showSearch?: boolean;
 }
 
 function normalizeExpandedDirs(paths: Iterable<string>): string[] {
@@ -121,6 +122,7 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
   onVisibleCountChange,
   collapseVersion = 0,
   variant = "desktop",
+  showSearch = true,
 }) => {
   const t = useTranslation();
   const workspace = useAtomValue(workspaceByIdAtomFamily(workspaceId));
@@ -316,26 +318,28 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
   return (
     <>
       <div className={`file-tree-shell file-tree-shell--${variant}`}>
-        <label
-          className={`file-tree-search ${variant === "desktop" ? "file-tree-search--desktop" : ""}`}
-          htmlFor={`file-tree-search-${workspaceId}`}
-        >
-          <ThemedIcon
-            semantic="file.action.search"
-            size={14}
-            className="file-tree-search-icon"
-            aria-hidden="true"
-          />
-          <input
-            id={`file-tree-search-${workspaceId}`}
-            className="file-tree-search-input"
-            type="search"
-            value={searchValue}
-            onChange={(event) => setSearchValue(event.target.value)}
-            placeholder={t("action.search_files")}
-            aria-label={t("action.search_files")}
-          />
-        </label>
+        {showSearch ? (
+          <label
+            className={`file-tree-search ${variant === "desktop" ? "file-tree-search--desktop" : ""}`}
+            htmlFor={`file-tree-search-${workspaceId}`}
+          >
+            <ThemedIcon
+              semantic="file.action.search"
+              size={14}
+              className="file-tree-search-icon"
+              aria-hidden="true"
+            />
+            <input
+              id={`file-tree-search-${workspaceId}`}
+              className="file-tree-search-input"
+              type="search"
+              value={searchValue}
+              onChange={(event) => setSearchValue(event.target.value)}
+              placeholder={t("action.search_files")}
+              aria-label={t("action.search_files")}
+            />
+          </label>
+        ) : null}
 
         <div className="file-tree">
           {hasSearch ? (

@@ -154,6 +154,24 @@
     "loading_description": "Preparing your workspace list and restoring the last active session.",
     "load_failed_title": "Failed to load workspaces",
     "load_failed_description": "Failed to fetch workspace list",
+    "sidebar": {
+      "label": "Workspace activity bar",
+      "explorer": "Explorer",
+      "search": "Search",
+      "source_control": "Source Control",
+      "open_editors": "Open Editors",
+      "workspace": "Workspace"
+    },
+    "search": {
+      "empty": "Type to search across file contents.",
+      "placeholder": "Search across file contents",
+      "results_count": "{count} results in {files} files",
+      "no_results": "No content matches found.",
+      "truncated": "Results limited to keep search responsive.",
+      "file_match_count": "{count}{suffix} matches",
+      "failed": "Search failed. Try again.",
+      "retry": "Retry"
+    },
     "launch": {
       "kicker": "START WORKSPACE",
       "title": "Open Workspace",
@@ -180,6 +198,15 @@
       "missing_node": "Node.js not found",
       "missing_provider": "{provider} CLI not found"
     }
+  },
+  "quick_open": {
+    "title": "Go to File",
+    "placeholder": "Type a filename or path",
+    "empty": "Type to search by filename or path.",
+    "no_results": "No matching files found.",
+    "failed": "File search failed. Try again.",
+    "command_label": "Go to File...",
+    "command_description": "Quickly open a file in the current workspace"
   },
   "mobile": {
     "dock": {
