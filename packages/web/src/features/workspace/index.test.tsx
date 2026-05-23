@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { connectionStatusAtom, wsClientAtom } from "../../atoms/connection";
 import { activeWorkspaceIdAtom, workspaceOrderAtom, workspacesAtom } from "../../atoms/workspaces";
@@ -952,7 +952,7 @@ describe("WorkspacePage", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("writes the displayed workspace id on mount and clears it on unmount", async () => {
+  it("writes the displayed workspace id on mount and preserves it on unmount", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "git.status") {
         return {
@@ -1003,7 +1003,103 @@ describe("WorkspacePage", () => {
 
     unmount();
 
-    expect(store.get(activeWorkspaceIdAtom)).toBeNull();
+    expect(store.get(activeWorkspaceIdAtom)).toBe("ws-test");
+  });
+
+  it("preserves the active workspace when leaving /workspace and returning later", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return {
+          branch: "main",
+          ahead: 0,
+          behind: 0,
+          staged: [],
+          modified: [],
+          deleted: [],
+          untracked: [],
+        };
+      }
+
+      return [];
+    });
+
+    function SettingsTestPage() {
+      const navigate = useNavigate();
+
+      return (
+        <button type="button" onClick={() => navigate("/workspace")}>
+          返回工作区
+        </button>
+      );
+    }
+
+    function WorkspaceRouteControls() {
+      const navigate = useNavigate();
+
+      return (
+        <>
+          <button type="button" onClick={() => navigate("/settings")}>
+            打开设置
+          </button>
+          <WorkspaceDesktopView />
+        </>
+      );
+    }
+
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedReadyWorkspaceState(store, {
+      "ws-a": {
+        id: "ws-a",
+        path: "/workspace-a",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+      "ws-b": {
+        id: "ws-b",
+        path: "/workspace-b",
+        targetRuntime: "native",
+        openedAt: 2,
+        lastActiveAt: 2,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+    store.set(activeWorkspaceIdAtom, "ws-b");
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/workspace"]}>
+          <Routes>
+            <Route path="/workspace" element={<WorkspaceRouteControls />} />
+            <Route path="/settings" element={<SettingsTestPage />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>
+    );
+
+    await screen.findByTestId("file-tree-panel");
+    expect(store.get(activeWorkspaceIdAtom)).toBe("ws-b");
+
+    fireEvent.click(screen.getByRole("button", { name: "打开设置" }));
+
+    await screen.findByRole("button", { name: "返回工作区" });
+    expect(store.get(activeWorkspaceIdAtom)).toBe("ws-b");
+
+    fireEvent.click(screen.getByRole("button", { name: "返回工作区" }));
+
+    await screen.findByTestId("file-tree-panel");
+    expect(store.get(activeWorkspaceIdAtom)).toBe("ws-b");
   });
 
   it("shows the empty state when rendered without an active workspace", async () => {

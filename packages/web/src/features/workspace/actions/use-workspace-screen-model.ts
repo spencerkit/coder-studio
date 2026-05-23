@@ -103,10 +103,6 @@ export function useWorkspaceScreenModel() {
     }
 
     setActiveWorkspaceId(workspace.id);
-
-    return () => {
-      setActiveWorkspaceId((current) => (current === workspace.id ? null : current));
-    };
   }, [setActiveWorkspaceId, workspace]);
 
   useEffect(() => {
