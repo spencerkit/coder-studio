@@ -303,8 +303,9 @@
       "loading_body": "恢复期间暂时无法使用当前终端；请耐心等待，历史内容恢复完成后再继续。内容较多时可能需要更久。",
       "failed_title": "历史内容恢复失败",
       "failed_body": "新输出仍会继续显示；如果需要完整历史，再手动刷新页面。",
-      "closed_title": "该会话已被关闭",
-      "closed_body": "请重新开启新会话。",
+      "closed_title": "当前会话已结束",
+      "closed_body": "是否重新打开一个新会话继续。",
+      "closed_body_with_provider": "是否重新打开一个 {provider} 会话继续。",
       "truncated_title": "历史内容不完整",
       "truncated_body": "较早的终端输出已被回放缓冲区淘汰，后续输出仍会继续显示。"
     }

@@ -1296,10 +1296,80 @@ describe("XtermHost", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText("该会话已被关闭")).toBeInTheDocument();
+      expect(screen.getByText("当前会话已结束")).toBeInTheDocument();
     });
-    expect(screen.getByText("请重新开启新会话。")).toBeInTheDocument();
+    expect(screen.getByText("是否重新打开一个新会话继续。")).toBeInTheDocument();
     expect(screen.queryByText("正在恢复终端内容…")).not.toBeInTheDocument();
+
+    global.requestAnimationFrame = originalRequestAnimationFrame;
+    global.cancelAnimationFrame = originalCancelAnimationFrame;
+  });
+
+  it("shows provider-specific recovery actions for closed agent sessions", async () => {
+    const store = createStore();
+    const onContinue = vi.fn();
+    const onClose = vi.fn();
+    const sendCommand = vi.fn().mockImplementation((op: string) => {
+      if (op === "terminal.replay") {
+        return Promise.resolve({ status: "unknown" });
+      }
+
+      return Promise.resolve({ ok: true, data: { status: "ok" } });
+    });
+    const subscribe = vi.fn(() => vi.fn());
+    const rafCallbacks: FrameRequestCallback[] = [];
+    const originalRequestAnimationFrame = global.requestAnimationFrame;
+    const originalCancelAnimationFrame = global.cancelAnimationFrame;
+
+    mockTerminal.cols = 132;
+    mockTerminal.rows = 36;
+
+    global.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      rafCallbacks.push(callback);
+      return rafCallbacks.length;
+    }) as typeof requestAnimationFrame;
+    global.cancelAnimationFrame = vi.fn() as typeof cancelAnimationFrame;
+
+    store.set(localeAtom, "zh");
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe,
+      getStatus: vi.fn(() => "connected"),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost
+          terminalId="closed-agent-terminal"
+          workspaceId="test-workspace"
+          readOnly
+          terminalKind="agent"
+          closedSessionProviderLabel="Codex"
+          onClosedSessionContinue={onContinue}
+          onClosedSessionClose={onClose}
+        />
+      </Provider>
+    );
+
+    await act(async () => {
+      const callback = rafCallbacks.shift();
+      callback?.(16);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("当前会话已结束")).toBeInTheDocument();
+    });
+    expect(screen.getByText("是否重新打开一个 Codex 会话继续。")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "确认" }));
+    fireEvent.click(screen.getByRole("button", { name: "关闭" }));
+
+    expect(onContinue).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(1);
 
     global.requestAnimationFrame = originalRequestAnimationFrame;
     global.cancelAnimationFrame = originalCancelAnimationFrame;

@@ -9,6 +9,7 @@ import {
   closeDraftPaneById,
   closePaneBySessionId,
   removePaneBySessionId,
+  replaceSessionInPane,
   splitPaneByPaneId,
   splitPaneBySessionId,
 } from "../pane-layout-tree";
@@ -82,6 +83,13 @@ export function usePaneActions(workspaceId: string) {
     [applyLayout]
   );
 
+  const replaceSession = useCallback(
+    (previousSessionId: string, nextSessionId: string) => {
+      applyLayout((current) => replaceSessionInPane(current, previousSessionId, nextSessionId));
+    },
+    [applyLayout]
+  );
+
   const appendSession = useCallback(
     (
       sessionId: string,
@@ -101,6 +109,7 @@ export function usePaneActions(workspaceId: string) {
     closeDraftPane,
     closeSessionPane,
     removeSessionPane,
+    replaceSession,
     replaceWithSession,
     splitDraftPane,
     splitSessionPane,

@@ -22,7 +22,7 @@ import {
 } from "react";
 import { themeAtom } from "../../../../atoms/app-ui";
 import { dispatchCommandAtom, wsClientAtom } from "../../../../atoms/connection";
-import { LocalOverlay } from "../../../../components/ui";
+import { Button, LocalOverlay } from "../../../../components/ui";
 import { useViewport } from "../../../../hooks/use-viewport";
 import { copyTextWithFallback } from "../../../../lib/clipboard";
 import { useTranslation } from "../../../../lib/i18n";
@@ -329,6 +329,14 @@ interface XtermHostProps {
   terminalKind?: "agent" | "shell";
   /** Container element ref for sizing */
   containerRef?: React.RefObject<HTMLDivElement>;
+  /** Closed session CTA label */
+  closedSessionContinueLabel?: string;
+  /** Closed session provider label for fallback copy */
+  closedSessionProviderLabel?: string;
+  /** Continue with same provider from a closed session */
+  onClosedSessionContinue?: () => void;
+  /** Close the current closed-session pane */
+  onClosedSessionClose?: () => void;
 }
 
 interface ReplayPayload {
@@ -373,6 +381,10 @@ interface SnapshotCommandResult {
  * 3. Unmount: dispose Terminal, unsubscribe from events
  */
 export function XtermHost({
+  closedSessionContinueLabel,
+  closedSessionProviderLabel,
+  onClosedSessionClose,
+  onClosedSessionContinue,
   terminalId,
   workspaceId,
   readOnly = false,
@@ -2201,11 +2213,17 @@ export function XtermHost({
   let replayTitle = "";
   let replayBody = "";
   let replayClassName = "xterm-replay-overlay";
+  const showClosedSessionActions =
+    replayUiState.kind === "degraded" &&
+    replayUiState.reason === "closed" &&
+    terminalKind === "agent" &&
+    Boolean(onClosedSessionContinue) &&
+    Boolean(onClosedSessionClose);
 
   if (replayUiState.kind === "loading") {
     replayTitle = t("terminal.replay.loading_title");
     replayBody = t("terminal.replay.loading_body");
-  } else {
+  } else if (replayUiState.kind === "degraded") {
     replayClassName += " xterm-replay-overlay--degraded";
     replayTitle =
       replayUiState.reason === "truncated"
@@ -2217,7 +2235,11 @@ export function XtermHost({
       replayUiState.reason === "truncated"
         ? t("terminal.replay.truncated_body")
         : replayUiState.reason === "closed"
-          ? t("terminal.replay.closed_body")
+          ? closedSessionProviderLabel
+            ? t("terminal.replay.closed_body_with_provider", {
+                provider: closedSessionProviderLabel,
+              })
+            : t("terminal.replay.closed_body")
           : t("terminal.replay.failed_body");
   }
 
@@ -2325,8 +2347,8 @@ export function XtermHost({
       {showReplayOverlay ? (
         <LocalOverlay
           className={replayClassName}
-          interactive={false}
-          mode="status"
+          interactive={showClosedSessionActions}
+          mode={showClosedSessionActions ? "dialog" : "status"}
           open
           surfaceClassName="xterm-replay-overlay__card"
         >
@@ -2335,6 +2357,28 @@ export function XtermHost({
           ) : null}
           <div className="xterm-replay-overlay__title">{replayTitle}</div>
           {replayBody ? <div className="xterm-replay-overlay__body">{replayBody}</div> : null}
+          {showClosedSessionActions ? (
+            <div className="xterm-replay-overlay__actions">
+              <Button
+                className="xterm-replay-overlay__action-btn"
+                onClick={() => {
+                  onClosedSessionContinue?.();
+                }}
+                variant="primary"
+              >
+                {closedSessionContinueLabel ?? t("action.confirm")}
+              </Button>
+              <Button
+                className="xterm-replay-overlay__action-btn"
+                onClick={() => {
+                  onClosedSessionClose?.();
+                }}
+                variant="secondary"
+              >
+                {t("action.close")}
+              </Button>
+            </div>
+          ) : null}
         </LocalOverlay>
       ) : null}
     </div>

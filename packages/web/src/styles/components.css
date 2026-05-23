@@ -1694,6 +1694,11 @@
   margin-top: var(--sp-1);
 }
 
+.xterm-replay-overlay__action-btn {
+  flex: 1 1 0;
+  min-width: 120px;
+}
+
 /* xterm.js overrides for Aurora Mint theme */
 .xterm-host .xterm-viewport {
   overflow-y: auto;

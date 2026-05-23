@@ -5,13 +5,14 @@
  * status indicators, and control buttons.
  */
 
-import type { SessionState } from "@coder-studio/core";
+import type { Session, SessionState } from "@coder-studio/core";
 import { useAtomValue, useSetAtom } from "jotai";
 import { FlipHorizontal, FlipVertical, X } from "lucide-react";
 import type { FC, ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { pendingFocusSessionAtom } from "../../../../atoms/app-ui";
-import { sessionByIdAtomFamily } from "../../../../atoms/sessions";
+import { dispatchCommandAtom } from "../../../../atoms/connection";
+import { sessionByIdAtomFamily, sessionsAtom } from "../../../../atoms/sessions";
 import { workspaceByIdAtomFamily } from "../../../../atoms/workspaces";
 import { IconButton, StatusDot, Tag, Tooltip } from "../../../../components/ui";
 import { PanelHeader } from "../../../shared/components/panel-header";
@@ -20,6 +21,8 @@ import { SupervisorCard } from "../../../supervisor/views/shared/supervisor-card
 import { XtermHost } from "../../../terminal-panel/views/shared/xterm-host";
 import { usePersistWorkspaceLastViewedTarget } from "../../../workspace/actions/use-persist-workspace-last-viewed-target";
 import { useWorkspaceUiStatePersistence } from "../../../workspace/actions/use-workspace-ui-state-persistence";
+import { usePaneActions } from "../../actions/use-pane-actions";
+import { useSessionActions } from "../../actions/use-session-actions";
 
 type SessionCardAction = () => void | Promise<void>;
 
@@ -52,6 +55,8 @@ export const SessionCard: FC<SessionCardProps> = ({
   onSplitVertical,
 }) => {
   const session = useAtomValue(sessionByIdAtomFamily(sessionId));
+  const dispatch = useAtomValue(dispatchCommandAtom);
+  const setSessions = useSetAtom(sessionsAtom);
   const workspace = useAtomValue(
     workspaceByIdAtomFamily(session?.workspaceId ?? "__workspace_empty__")
   );
@@ -61,6 +66,8 @@ export const SessionCard: FC<SessionCardProps> = ({
   const cardRef = useRef<HTMLDivElement | null>(null);
   const [highlight, setHighlight] = useState(false);
   useSupervisor(session);
+  const paneActions = usePaneActions(session?.workspaceId ?? "__workspace_empty__");
+  const sessionActions = useSessionActions();
   const { persistUiState } = useWorkspaceUiStatePersistence(
     session?.workspaceId ?? "__workspace_empty__"
   );
@@ -90,6 +97,42 @@ export const SessionCard: FC<SessionCardProps> = ({
   const terminalReadOnly = terminalReadOnlyOverride ?? !isSessionInteractive(session.state);
   const isActiveSession = workspace?.uiState.activeSessionId === session.id;
   const isRunning = session.state === "running";
+  const handleClosedSessionContinue = async () => {
+    const createResult = await dispatch<Session>("session.create", {
+      workspaceId: session.workspaceId,
+      providerId: session.providerId,
+    });
+    if (!createResult.ok || !createResult.data) {
+      return;
+    }
+
+    const nextSession = createResult.data;
+    setSessions((prev) => ({
+      ...prev,
+      [nextSession.id]: nextSession,
+    }));
+    paneActions.replaceSession(session.id, nextSession.id);
+    void persistLastViewedTarget({
+      workspaceId: session.workspaceId,
+      sessionId: nextSession.id,
+    });
+    void persistUiState({ activeSessionId: nextSession.id });
+    const removeResult = await dispatch<void>("session.remove", { sessionId: session.id });
+    if (!removeResult.ok) {
+      console.error("Failed to remove closed session after relaunch:", removeResult.error?.message);
+    }
+  };
+
+  const handleClosedSessionClose = async () => {
+    if (onClose) {
+      await onClose();
+      return;
+    }
+
+    paneActions.closeSessionPane(session.id);
+    await sessionActions.closeSession(session.id, "draft");
+  };
+
   const handleCardClick = (event: React.MouseEvent<HTMLDivElement>) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) {
@@ -197,6 +240,13 @@ export const SessionCard: FC<SessionCardProps> = ({
 
       <div className="session-terminal">
         <XtermHost
+          closedSessionProviderLabel={providerLabel}
+          onClosedSessionClose={() => {
+            void handleClosedSessionClose();
+          }}
+          onClosedSessionContinue={() => {
+            void handleClosedSessionContinue();
+          }}
           terminalId={session.terminalId}
           workspaceId={session.workspaceId}
           readOnly={terminalReadOnly}

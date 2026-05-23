@@ -129,6 +129,42 @@ export function assignSessionToPane(node: PaneNode, paneId: string, sessionId: s
   };
 }
 
+export function replaceSessionInPane(
+  node: PaneNode,
+  previousSessionId: string,
+  nextSessionId: string
+): PaneNode {
+  if (node.type === "leaf") {
+    if (node.sessionId !== previousSessionId) {
+      return node;
+    }
+
+    return {
+      ...node,
+      sessionId: nextSessionId,
+    };
+  }
+
+  const children = node.children ?? [];
+  let changed = false;
+  const nextChildren = children.map((child) => {
+    const nextChild = replaceSessionInPane(child, previousSessionId, nextSessionId);
+    if (nextChild !== child) {
+      changed = true;
+    }
+    return nextChild;
+  });
+
+  if (!changed) {
+    return node;
+  }
+
+  return {
+    ...node,
+    children: nextChildren,
+  };
+}
+
 export function closePaneBySessionId(node: PaneNode, sessionId: string): PaneNode {
   // Handle draft pane closure: __draft__<paneId>
   if (sessionId.startsWith("__draft__")) {

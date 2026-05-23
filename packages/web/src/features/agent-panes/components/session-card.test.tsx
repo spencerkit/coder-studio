@@ -11,6 +11,7 @@ import {
   workspacesLoadStateAtom,
 } from "../../../atoms/workspaces";
 import { supervisorsAtom } from "../../supervisor/atoms";
+import { paneLayoutAtomFamily } from "../atoms/pane-layout";
 import { SessionCard } from "../views/shared/session-card";
 
 const mockXtermHost = vi.fn((props: Record<string, unknown>) => (
@@ -88,12 +89,119 @@ describe("SessionCard", () => {
     expect(mockXtermHost).toHaveBeenCalled();
     expect(mockXtermHost.mock.calls[0]?.[0]).toEqual(
       expect.objectContaining({
+        closedSessionProviderLabel: "Codex",
         terminalId: "term-ended",
         workspaceId: "ws-123",
         readOnly: true,
         terminalKind: "agent",
+        onClosedSessionClose: expect.any(Function),
+        onClosedSessionContinue: expect.any(Function),
       })
     );
+  });
+
+  it("continues an ended session by relaunching the same provider in place", async () => {
+    const nextSession = {
+      id: "sess_654321",
+      workspaceId: "ws-123",
+      terminalId: "term-new",
+      providerId: "codex",
+      state: "starting",
+      capability: "full",
+      startedAt: Date.now(),
+      lastActiveAt: Date.now(),
+    };
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args: unknown) => {
+      if (op === "session.create") {
+        return nextSession;
+      }
+
+      if (op === "workspace.lastViewedTarget.set") {
+        return {
+          workspaceId: "ws-123",
+          sessionId: "sess_654321",
+          updatedAt: 42,
+        };
+      }
+
+      if (op === "workspace.uiState.set") {
+        const { uiState } = args as {
+          workspaceId: string;
+          uiState: Record<string, unknown>;
+        };
+        return {
+          id: "ws-123",
+          path: "/tmp/ws-123",
+          targetRuntime: "native",
+          uiState,
+        };
+      }
+
+      return undefined;
+    });
+    const { store } = createSessionStore({}, sendCommand);
+    store.set(paneLayoutAtomFamily("ws-123"), {
+      id: "root",
+      type: "leaf",
+      sessionId: "sess_123456",
+    });
+
+    render(
+      <Provider store={store}>
+        <SessionCard sessionId="sess_123456" />
+      </Provider>
+    );
+
+    const props = getLastXtermHostProps() as {
+      onClosedSessionContinue?: () => void;
+    };
+
+    act(() => {
+      props.onClosedSessionContinue?.();
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "session.create",
+        {
+          workspaceId: "ws-123",
+          providerId: "codex",
+        },
+        undefined
+      );
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "session.remove",
+        { sessionId: "sess_123456" },
+        undefined
+      );
+    });
+
+    expect(store.get(sessionsAtom)).toMatchObject({
+      sess_654321: nextSession,
+    });
+    expect(store.get(paneLayoutAtomFamily("ws-123"))).toEqual({
+      id: "root",
+      type: "leaf",
+      sessionId: "sess_654321",
+    });
+    expect(store.get(lastViewedTargetAtom)).toMatchObject({
+      workspaceId: "ws-123",
+      sessionId: "sess_654321",
+    });
+    expect(store.get(workspacesAtom)["ws-123"]?.uiState).toEqual(
+      expect.objectContaining({
+        activeSessionId: "sess_654321",
+        paneLayout: {
+          id: "root",
+          type: "leaf",
+          sessionId: "sess_654321",
+        },
+      })
+    );
+    expect(sendCommand).not.toHaveBeenCalledWith("session.close", expect.anything(), undefined);
   });
 
   it("renders interactive sessions without the extra command input", () => {
