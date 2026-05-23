@@ -1284,7 +1284,7 @@ export function createShowcaseScenes(): UiPreviewSceneDefinition[] {
       }),
       render: () => (
         <Sheet
-          title="Files"
+          title="Explorer"
           kicker="Workspace"
           fullscreen
           bodyClassName="mobile-sheet__body--flush mobile-sheet__body--fullscreen"
@@ -1294,7 +1294,7 @@ export function createShowcaseScenes(): UiPreviewSceneDefinition[] {
             <MobileFilesSheet
               workspaceId={workspace.id}
               route={{ kind: "root" }}
-              activeTab="files"
+              activeView="explorer"
             />
           }
         />

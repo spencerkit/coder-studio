@@ -1,14 +1,12 @@
-import { useAtomValue } from "jotai";
 import { ChevronsUp } from "lucide-react";
 import type { FC } from "react";
 import { useState } from "react";
 import { IconButton, ThemedIcon, Tooltip } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
-import { useOpenLocation } from "../../../code-editor/actions/use-open-location";
 import { PanelHeader } from "../../../shared/components/panel-header";
 import type { WorkspaceCreateRequest } from "../../actions/use-workspace-screen-model";
-import { activeFilePathAtomFamily, openFilesAtomFamily } from "../../atoms";
 import { FileTreePanel } from "./file-tree-panel";
+import { OpenEditorsSection } from "./open-editors-section";
 
 interface ExplorerPanelProps {
   workspaceId: string;
@@ -26,11 +24,7 @@ export const ExplorerPanel: FC<ExplorerPanelProps> = ({
   onOpenFolderCreate,
 }) => {
   const t = useTranslation();
-  const { openLocation } = useOpenLocation(workspaceId);
-  const openFiles = useAtomValue(openFilesAtomFamily(workspaceId));
-  const activeFilePath = useAtomValue(activeFilePathAtomFamily(workspaceId));
   const [collapseVersion, setCollapseVersion] = useState(0);
-  const openEditorPaths = Object.keys(openFiles).sort((left, right) => left.localeCompare(right));
 
   return (
     <div className="workspace-sidebar-view">
@@ -70,32 +64,7 @@ export const ExplorerPanel: FC<ExplorerPanelProps> = ({
       />
 
       <div className="workspace-sidebar-panel__body workspace-sidebar-panel__body--stacked">
-        <section className="workspace-sidebar-section">
-          <h2 className="workspace-sidebar-section__title">
-            {t("workspace.sidebar.open_editors")}
-          </h2>
-          <div className="workspace-open-editors">
-            {openEditorPaths.map((path) => (
-              <button
-                key={path}
-                type="button"
-                className={`workspace-open-editors__item ${
-                  activeFilePath === path ? "workspace-open-editors__item--active" : ""
-                }`}
-                title={path}
-                onClick={() =>
-                  void openLocation({
-                    workspaceId,
-                    path,
-                    source: "manual",
-                  })
-                }
-              >
-                {path}
-              </button>
-            ))}
-          </div>
-        </section>
+        <OpenEditorsSection workspaceId={workspaceId} />
 
         <section className="workspace-sidebar-section workspace-sidebar-section--fill">
           <h2 className="workspace-sidebar-section__title">{t("workspace.sidebar.workspace")}</h2>

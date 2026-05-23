@@ -27,6 +27,7 @@ import { useWorkspaceLayoutActions } from "./use-workspace-layout-actions";
 
 export type WorkspaceMainAreaMode = "agent" | "editor";
 export type MobileWorkspaceSheetKind = "files" | "terminal" | "supervisor" | null;
+export type MobileWorkspaceSidebarView = "explorer" | "search" | "source-control";
 export type MobileFilesRoute =
   | { kind: "root" }
   | {
