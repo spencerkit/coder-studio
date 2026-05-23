@@ -96,4 +96,64 @@ describe("update-worker", () => {
     expect(state.manualCommand).toBe("coder-studio serve --restart");
     expect(state.errorSummary).toContain("restart failed");
   });
+
+  it("sanitizes pm2 and runtime override env before invoking install and restart commands", async () => {
+    const env = createEnv();
+    const runCommand = vi.fn(async () => {});
+    const originalEnv = {
+      PM2_HOME: process.env.PM2_HOME,
+      PM2_PROGRAMMATIC: process.env.PM2_PROGRAMMATIC,
+      PM2_JSON_PROCESSING: process.env.PM2_JSON_PROCESSING,
+      PM2_INTERACTOR_PROCESSING: process.env.PM2_INTERACTOR_PROCESSING,
+      NODE_APP_INSTANCE: process.env.NODE_APP_INSTANCE,
+      NODE_CHANNEL_FD: process.env.NODE_CHANNEL_FD,
+      NODE_CHANNEL_SERIALIZATION_MODE: process.env.NODE_CHANNEL_SERIALIZATION_MODE,
+      CODER_STUDIO_RUNTIME_JSON_PATH: process.env.CODER_STUDIO_RUNTIME_JSON_PATH,
+      CODER_STUDIO_SESSION_ID: process.env.CODER_STUDIO_SESSION_ID,
+      CODER_STUDIO_UPDATE_STATE_PATH: process.env.CODER_STUDIO_UPDATE_STATE_PATH,
+      pm_id: process.env.pm_id,
+    };
+
+    process.env.PM2_HOME = "/tmp/custom-pm2-home";
+    process.env.PM2_PROGRAMMATIC = "true";
+    process.env.PM2_JSON_PROCESSING = "true";
+    process.env.PM2_INTERACTOR_PROCESSING = "true";
+    process.env.NODE_APP_INSTANCE = "0";
+    process.env.NODE_CHANNEL_FD = "3";
+    process.env.NODE_CHANNEL_SERIALIZATION_MODE = "json";
+    process.env.CODER_STUDIO_RUNTIME_JSON_PATH = "/tmp/runtime.json";
+    process.env.CODER_STUDIO_SESSION_ID = "sess_test";
+    process.env.CODER_STUDIO_UPDATE_STATE_PATH = "/tmp/update-state.json";
+    process.env.pm_id = "0";
+
+    try {
+      await runUpdateWorker(env, {
+        runCommand,
+        now: () => 1000,
+      });
+    } finally {
+      for (const [key, value] of Object.entries(originalEnv)) {
+        if (value === undefined) {
+          delete process.env[key];
+        } else {
+          process.env[key] = value;
+        }
+      }
+    }
+
+    for (const call of runCommand.mock.calls) {
+      const options = call[2] as { env?: NodeJS.ProcessEnv };
+      expect(options.env?.PM2_HOME).toBe("/tmp/custom-pm2-home");
+      expect(options.env?.PM2_PROGRAMMATIC).toBeUndefined();
+      expect(options.env?.PM2_JSON_PROCESSING).toBeUndefined();
+      expect(options.env?.PM2_INTERACTOR_PROCESSING).toBeUndefined();
+      expect(options.env?.NODE_APP_INSTANCE).toBeUndefined();
+      expect(options.env?.NODE_CHANNEL_FD).toBeUndefined();
+      expect(options.env?.NODE_CHANNEL_SERIALIZATION_MODE).toBeUndefined();
+      expect(options.env?.CODER_STUDIO_RUNTIME_JSON_PATH).toBeUndefined();
+      expect(options.env?.CODER_STUDIO_SESSION_ID).toBeUndefined();
+      expect(options.env?.CODER_STUDIO_UPDATE_STATE_PATH).toBeUndefined();
+      expect(options.env?.pm_id).toBeUndefined();
+    }
+  });
 });

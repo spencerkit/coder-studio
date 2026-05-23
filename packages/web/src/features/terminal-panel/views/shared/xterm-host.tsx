@@ -8,7 +8,11 @@
  * - Aurora Mint theme that follows the current UI mode
  */
 
-import { type TerminalInputActivity, Topics } from "@coder-studio/core";
+import {
+  type RecoveryClosedTerminalState,
+  type TerminalInputActivity,
+  Topics,
+} from "@coder-studio/core";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
@@ -431,6 +435,9 @@ export function XtermHost({
   const applySnapshotPayloadRef = useRef<((payload: SnapshotPayload) => Promise<void>) | null>(
     null
   );
+  const completeHistoricalRecoveryRef = useRef<
+    ((coveredSeq: number, closed?: RecoveryClosedTerminalState) => Promise<void>) | null
+  >(null);
   const coldStartStateRef = useRef<"idle" | "in-flight" | "done">("idle");
   const activeHistoricalRecoveryModeRef = useRef<"initial" | "reconnect" | null>(null);
   const latestRenderedSeqRef = useRef(0);
@@ -1215,6 +1222,9 @@ export function XtermHost({
       markClosed: ({ exitCode }) => {
         markTerminalClosed(exitCode);
       },
+      completeRecovery: async (headSeq, closed) => {
+        await completeHistoricalRecoveryRef.current?.(headSeq, closed);
+      },
       applyReplay: async (payload) => {
         await applyReplayPayloadRef.current?.(payload);
       },
@@ -1558,7 +1568,6 @@ export function XtermHost({
           kind: "pending" as const,
           bytes: entry.bytes,
           seq: entry.seq,
-          resetTerminalBeforeWrite: !firstBatch,
         }));
 
         await writeHistoricalBatch(pendingWrites);
@@ -1567,6 +1576,22 @@ export function XtermHost({
 
       finalizeHistoricalRecovery(activeHistoricalRecoveryModeRef.current);
     };
+
+    const completeHistoricalRecovery = async (
+      coveredSeq: number,
+      closed?: RecoveryClosedTerminalState
+    ) => {
+      if (!mountedRef.current || !terminalRef.current) {
+        return;
+      }
+
+      releaseHydration();
+      await flushHistoricalRecovery({ coveredSeq });
+      if (closed) {
+        markTerminalClosed(closed.exitCode);
+      }
+    };
+    completeHistoricalRecoveryRef.current = completeHistoricalRecovery;
 
     const failHistoricalRecovery = async (error: unknown) => {
       console.error("Failed to recover terminal output:", error);
@@ -1934,6 +1959,7 @@ export function XtermHost({
       disposed = true;
       applyReplayPayloadRef.current = null;
       applySnapshotPayloadRef.current = null;
+      completeHistoricalRecoveryRef.current = null;
       if (replayWriteGenerationRef.current === replayWriteGeneration) {
         replayWriteGenerationRef.current += 1;
         replayWriteDepthRef.current = 0;

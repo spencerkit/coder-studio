@@ -281,6 +281,7 @@ const mockTerminal = {
   write: vi.fn(),
   writeln: vi.fn(),
   scrollLines: vi.fn(),
+  reset: vi.fn(),
   dispose: vi.fn(),
   focus: vi.fn(),
   loadAddon: vi.fn(),
@@ -352,6 +353,7 @@ describe("XtermHost", () => {
       callback?.();
     });
     mockTerminal.writeln.mockImplementation(() => {});
+    mockTerminal.reset.mockImplementation(() => {});
     mockTerminal.scrollLines.mockImplementation((amount: number) => {
       const nextViewportY = mockTerminal.buffer.active.viewportY + amount;
       mockTerminal.buffer.active.viewportY = Math.max(
@@ -1627,8 +1629,108 @@ describe("XtermHost", () => {
     );
   });
 
+  it("renders live output immediately after an initial noop recovery decision", async () => {
+    let eventHandler: ((topic: string, payload: unknown, seq: number) => void) | undefined;
+    const liveChunk = new TextEncoder().encode("hello");
+    const sendCommand = vi.fn(async (op: string) => {
+      if (op === "terminal.resize") {
+        return { status: "ok" };
+      }
+
+      if (op === "recovery.reconcile") {
+        return {
+          terminals: [{ terminalId: "noop-terminal", action: "noop", headSeq: 0 }],
+        };
+      }
+
+      throw new Error(`Unexpected op ${op}`);
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe: vi.fn((_topics, handler) => {
+        eventHandler = handler;
+        return () => {
+          eventHandler = undefined;
+        };
+      }),
+      getStatus: vi.fn(() => "connected"),
+      probeConnection: vi.fn().mockResolvedValue({ ok: true }),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    setGlobalRecoveryCoordinator(
+      createRecoveryCoordinator({
+        wsClient: {
+          getStatus: vi.fn(() => "connected"),
+          probeConnection: vi.fn().mockResolvedValue({ ok: true }),
+          onStatus: vi.fn(() => () => {}),
+          subscribe: vi.fn(() => () => {}),
+        } as never,
+        sendCommand: async (op, args, options) => {
+          try {
+            const data = await sendCommand(op, args, options);
+            return { ok: true, data };
+          } catch (error) {
+            return {
+              ok: false,
+              error: {
+                code: "command_error",
+                message: error instanceof Error ? error.message : String(error),
+              },
+            };
+          }
+        },
+        applyReplay: vi.fn(),
+        applySnapshot: vi.fn(),
+      })
+    );
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="noop-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "recovery.reconcile",
+        {
+          reason: "initial_mount",
+          terminals: [{ terminalId: "noop-terminal", renderedSeq: 0 }],
+        },
+        undefined
+      );
+    });
+
+    mockTerminal.write.mockClear();
+
+    act(() => {
+      eventHandler?.(
+        Topics.terminalOutput("test-workspace", "noop-terminal"),
+        {
+          transport: "binary",
+          streamId: 11,
+          size: liveChunk.byteLength,
+          bytes: liveChunk,
+        },
+        liveChunk.byteLength
+      );
+    });
+
+    await waitFor(() => {
+      expectTerminalWriteData(liveChunk);
+    });
+  });
+
   it("marks terminal closed after recovery reconcile returns closed state", async () => {
     const sendCommand = vi.fn(async (op: string) => {
+      if (op === "terminal.resize") {
+        return { status: "ok" };
+      }
+
       if (op === "recovery.reconcile") {
         return {
           terminals: [
@@ -4250,6 +4352,110 @@ describe("XtermHost", () => {
         undefined
       );
     });
+
+    global.requestAnimationFrame = originalRequestAnimationFrame;
+    global.cancelAnimationFrame = originalCancelAnimationFrame;
+  });
+
+  it("does not reset the terminal for every pending live chunk flushed after snapshot hydration", async () => {
+    const store = createStore();
+    const snapshotChunk = new TextEncoder().encode("snapshot\n");
+    const queuedLiveChunkA = new TextEncoder().encode("queued a\n");
+    const queuedLiveChunkB = new TextEncoder().encode("queued b\n");
+    const sendCommand = vi.fn().mockImplementation((op: string) => {
+      if (op === "terminal.snapshot") {
+        return Promise.resolve({
+          status: "ok",
+          transport: "binary",
+          streamId: 905,
+          size: snapshotChunk.byteLength,
+          seq: 100,
+          cols: 132,
+          rows: 36,
+          source: "headless",
+          bytes: snapshotChunk,
+        } satisfies TerminalSnapshotPayload);
+      }
+
+      return Promise.resolve({ status: "ok" });
+    });
+    let subscriptionHandler: ((topic: string, payload: unknown, seq: number) => void) | undefined;
+    const subscribe = vi.fn((topics: string[], handler: typeof subscriptionHandler) => {
+      subscriptionHandler = handler;
+      return vi.fn();
+    });
+    const rafCallbacks: FrameRequestCallback[] = [];
+    const originalRequestAnimationFrame = global.requestAnimationFrame;
+    const originalCancelAnimationFrame = global.cancelAnimationFrame;
+
+    mockTerminal.cols = 132;
+    mockTerminal.rows = 36;
+
+    global.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      rafCallbacks.push(callback);
+      return rafCallbacks.length;
+    }) as typeof requestAnimationFrame;
+    global.cancelAnimationFrame = vi.fn() as typeof cancelAnimationFrame;
+
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe,
+      getStatus: vi.fn(() => "connected"),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost
+          terminalId="snapshot-multi-flush-terminal"
+          workspaceId="test-workspace"
+          terminalKind="agent"
+        />
+      </Provider>
+    );
+
+    await act(async () => {
+      subscriptionHandler?.(
+        Topics.terminalOutput("test-workspace", "snapshot-multi-flush-terminal"),
+        {
+          transport: "binary",
+          streamId: 906,
+          size: queuedLiveChunkA.byteLength,
+          bytes: queuedLiveChunkA,
+        },
+        100 + queuedLiveChunkA.byteLength
+      );
+      subscriptionHandler?.(
+        Topics.terminalOutput("test-workspace", "snapshot-multi-flush-terminal"),
+        {
+          transport: "binary",
+          streamId: 907,
+          size: queuedLiveChunkB.byteLength,
+          bytes: queuedLiveChunkB,
+        },
+        100 + queuedLiveChunkA.byteLength + queuedLiveChunkB.byteLength
+      );
+      await Promise.resolve();
+    });
+
+    expect(mockTerminal.write).not.toHaveBeenCalled();
+
+    await act(async () => {
+      const callback = rafCallbacks.shift();
+      callback?.(16);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(mockTerminal.write.mock.calls.map(([written]) => written)).toEqual([
+        snapshotChunk,
+        queuedLiveChunkA,
+        queuedLiveChunkB,
+      ]);
+    });
+    expect(mockTerminal.reset).toHaveBeenCalledTimes(1);
 
     global.requestAnimationFrame = originalRequestAnimationFrame;
     global.cancelAnimationFrame = originalCancelAnimationFrame;

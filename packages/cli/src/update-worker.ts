@@ -97,15 +97,47 @@ function buildManualCommand(input: WorkerEnv): string {
   ].join("\n");
 }
 
+const INTERNAL_ENV_KEYS = new Set([
+  "CODER_STUDIO_RUNTIME_JSON_PATH",
+  "CODER_STUDIO_SESSION_ID",
+  "NODE_APP_INSTANCE",
+  "NODE_CHANNEL_FD",
+  "NODE_CHANNEL_SERIALIZATION_MODE",
+  "PM2_INTERACTOR_PROCESSING",
+  "PM2_JSON_PROCESSING",
+  "PM2_PROGRAMMATIC",
+]);
+
+function buildChildProcessEnv(env = process.env): NodeJS.ProcessEnv {
+  const nextEnv: NodeJS.ProcessEnv = { ...env };
+
+  for (const key of Object.keys(nextEnv)) {
+    if (INTERNAL_ENV_KEYS.has(key)) {
+      delete nextEnv[key];
+      continue;
+    }
+
+    if (key.startsWith("CODER_STUDIO_UPDATE_") || key.startsWith("pm_")) {
+      delete nextEnv[key];
+    }
+  }
+
+  return nextEnv;
+}
+
 function runCommand(
   command: string,
   args: string[],
-  options?: { stdio?: "ignore" | "pipe"; logStream?: NodeJS.WritableStream }
+  options?: {
+    stdio?: "ignore" | "pipe";
+    logStream?: NodeJS.WritableStream;
+    env?: NodeJS.ProcessEnv;
+  }
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       stdio: options?.stdio === "ignore" ? "ignore" : "pipe",
-      env: process.env,
+      env: options?.env ?? process.env,
     });
 
     if (options?.logStream && child.stdout) {
@@ -137,12 +169,13 @@ export async function runUpdateWorker(
   await mkdir(dirname(input.logFilePath), { recursive: true });
   const logStream = createWriteStream(input.logFilePath, { flags: "a" });
   const execute = deps?.runCommand ?? runCommand;
+  const childEnv = buildChildProcessEnv(process.env);
 
   try {
     await execute(
       input.npmCommand,
       [...input.installArgsPrefix, `${input.packageName}@${input.targetVersion}`],
-      { logStream }
+      { logStream, env: childEnv }
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -183,7 +216,7 @@ export async function runUpdateWorker(
   });
 
   try {
-    await execute(input.cliCommand, input.restartArgs, { logStream });
+    await execute(input.cliCommand, input.restartArgs, { logStream, env: childEnv });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await writeState(input.stateFilePath, {
