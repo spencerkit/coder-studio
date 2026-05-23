@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.2
+
+### Patch Changes
+
+- [#54](https://github.com/spencerkit/coder-studio/pull/54) [`911fc5f`](https://github.com/spencerkit/coder-studio/commit/911fc5f706c186db7809564937550e009c44b190) Thanks [@pallyoung](https://github.com/pallyoung)! - Refine diagnostics and review workflows by surfacing installed Git and Node.js
+  versions, keeping mobile and desktop commit diff previews consistent, and
+  hardening Windows path safety plus server CI builds.
+
 ## 0.4.1
 
 ### Patch Changes
