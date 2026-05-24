@@ -424,7 +424,7 @@ export function WorktreeManagerSurface({
               <Button size="sm" variant="primary" onClick={openCreate}>
                 {t("worktree.new")}
               </Button>
-            ) : (
+            ) : createOnlyMode ? null : (
               <Button
                 size="sm"
                 variant="ghost"
@@ -460,7 +460,7 @@ export function WorktreeManagerSurface({
             <Button size="sm" variant="primary" onClick={openCreate}>
               {t("worktree.new")}
             </Button>
-          ) : (
+          ) : createOnlyMode ? null : (
             <Button
               size="sm"
               variant="ghost"

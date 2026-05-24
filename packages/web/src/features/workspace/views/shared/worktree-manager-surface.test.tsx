@@ -291,6 +291,16 @@ describe("WorktreeManagerSurface", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("does not show a back button in create-only mode", () => {
+    render(
+      <Provider store={buildManagerStore(vi.fn(), worktrees, "/repo/main")}>
+        <WorktreeManagerSurface workspaceId="ws-1" openView="create" onClose={vi.fn()} />
+      </Provider>
+    );
+
+    expect(screen.queryByRole("button", { name: "Back" })).toBeNull();
+  });
+
   it("renders the create form fields with shared input compatibility classes", () => {
     render(
       <Provider store={buildManagerStore(vi.fn(), worktrees, "/repo/main")}>
