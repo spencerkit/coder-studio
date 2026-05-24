@@ -250,7 +250,7 @@ describe("SessionManager session-level API", () => {
     expect(lifecycleEvents).toEqual([]);
   });
 
-  it("promotes an idle session back to running when PTY emits real output", async () => {
+  it("keeps an idle session idle when PTY emits output without a submit", async () => {
     vi.useFakeTimers();
     provider = {
       ...provider,
@@ -283,13 +283,13 @@ describe("SessionManager session-level API", () => {
     expect(sessionMgr.get(session.id)?.state).toBe("idle");
 
     onData?.("assistant working\n");
-    expect(sessionMgr.get(session.id)?.state).toBe("running");
+    expect(sessionMgr.get(session.id)?.state).toBe("idle");
 
     vi.advanceTimersByTime(3000);
     expect(sessionMgr.get(session.id)?.state).toBe("idle");
   });
 
-  it("ignores recent input echo while promoting real PTY output back to running", async () => {
+  it("keeps an idle session idle even when recent typing echo is followed by PTY output", async () => {
     vi.useFakeTimers();
     provider = {
       ...provider,
@@ -328,13 +328,13 @@ describe("SessionManager session-level API", () => {
     expect(sessionMgr.get(session.id)?.state).toBe("idle");
 
     onData?.("assistant working\n");
-    expect(sessionMgr.get(session.id)?.state).toBe("running");
+    expect(sessionMgr.get(session.id)?.state).toBe("idle");
 
     vi.advanceTimersByTime(3000);
     expect(sessionMgr.get(session.id)?.state).toBe("idle");
   });
 
-  it("restores running when PTY output contains remaining text beyond a recent typing echo", async () => {
+  it("keeps an idle session idle when PTY output extends beyond a recent typing echo", async () => {
     vi.useFakeTimers();
     provider = {
       ...provider,
@@ -373,10 +373,10 @@ describe("SessionManager session-level API", () => {
     expect(sessionMgr.get(session.id)?.state).toBe("idle");
 
     onData?.("enerating...\n");
-    expect(sessionMgr.get(session.id)?.state).toBe("running");
+    expect(sessionMgr.get(session.id)?.state).toBe("idle");
   });
 
-  it("restores running when a single PTY chunk mixes typing echo with real output", async () => {
+  it("keeps an idle session idle when a PTY chunk mixes typing echo with output", async () => {
     vi.useFakeTimers();
     provider = {
       ...provider,
@@ -412,7 +412,7 @@ describe("SessionManager session-level API", () => {
     expect(sessionMgr.get(session.id)?.state).toBe("idle");
 
     onData?.("gassistant working\n");
-    expect(sessionMgr.get(session.id)?.state).toBe("running");
+    expect(sessionMgr.get(session.id)?.state).toBe("idle");
 
     vi.advanceTimersByTime(3000);
     expect(sessionMgr.get(session.id)?.state).toBe("idle");
@@ -463,7 +463,7 @@ describe("SessionManager session-level API", () => {
     expect(sessionMgr.get(session.id)?.state).toBe("idle");
   });
 
-  it("restores running when real output follows a typing repaint sequence within the aggregation window", async () => {
+  it("keeps an idle session idle when PTY output follows a typing repaint sequence", async () => {
     vi.useFakeTimers();
     provider = {
       ...provider,
@@ -505,7 +505,7 @@ describe("SessionManager session-level API", () => {
     expect(sessionMgr.get(session.id)?.state).toBe("idle");
 
     onData?.("\nassistant working\n");
-    expect(sessionMgr.get(session.id)?.state).toBe("running");
+    expect(sessionMgr.get(session.id)?.state).toBe("idle");
   });
 
   it("does not restore running for a pure control-triggered line repaint", async () => {
@@ -547,7 +547,7 @@ describe("SessionManager session-level API", () => {
     expect(sessionMgr.get(session.id)?.state).toBe("idle");
   });
 
-  it("restores running when real output arrives after recent control input has aged out", async () => {
+  it("keeps an idle session idle when PTY output arrives after recent control input has aged out", async () => {
     vi.useFakeTimers();
     provider = {
       ...provider,
@@ -584,7 +584,7 @@ describe("SessionManager session-level API", () => {
 
     vi.advanceTimersByTime(250);
     onData?.("assistant working\n");
-    expect(sessionMgr.get(session.id)?.state).toBe("running");
+    expect(sessionMgr.get(session.id)?.state).toBe("idle");
   });
 
   it("emits turn_completed only after an armed submit returns to idle", async () => {

@@ -883,7 +883,7 @@ describe("Session Integration", () => {
       expect(sessionMgr.get(sessionId)?.state).toBe("running");
     });
 
-    it("ignores typing echo but restores running when real PTY output follows", async () => {
+    it("ignores typing echo and keeps the session idle when PTY output follows without a submit", async () => {
       vi.advanceTimersByTime(3050);
       expect(sessionMgr.get(sessionId)?.state).toBe("idle");
 
@@ -907,10 +907,10 @@ describe("Session Integration", () => {
       expect(sessionMgr.get(sessionId)?.state).toBe("idle");
 
       triggerDataForProcessIndex(0, "assistant working\n");
-      expect(sessionMgr.get(sessionId)?.state).toBe("running");
+      expect(sessionMgr.get(sessionId)?.state).toBe("idle");
     });
 
-    it("restores running when a recovered PTY stream mixes typing echo with real output", async () => {
+    it("keeps the session idle when a recovered PTY stream mixes typing echo with output", async () => {
       vi.advanceTimersByTime(3050);
       expect(sessionMgr.get(sessionId)?.state).toBe("idle");
 
@@ -931,7 +931,7 @@ describe("Session Integration", () => {
       expect(typingResult.ok).toBe(true);
 
       triggerDataForProcessIndex(0, "gassistant working\n");
-      expect(sessionMgr.get(sessionId)?.state).toBe("running");
+      expect(sessionMgr.get(sessionId)?.state).toBe("idle");
     });
   });
 

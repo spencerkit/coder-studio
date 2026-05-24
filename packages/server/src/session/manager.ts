@@ -938,9 +938,6 @@ export class SessionManager {
     if (outputAssessment.countsAsTurnOutput) {
       session.sawOutputSinceTurnStart = true;
     }
-    if (outputAssessment.shouldResumeRunning && session.state === "idle") {
-      this.transitionSessionToRunning(session);
-    }
   }
 
   private schedulePendingResumeAggregation(session: ActiveSession, chunk: Buffer): void {
@@ -1083,9 +1080,6 @@ export class SessionManager {
       }
       if (outputAssessment.countsAsTurnOutput) {
         activeSession.sawOutputSinceTurnStart = true;
-      }
-      if (outputAssessment.shouldResumeRunning && activeSession.state === "idle") {
-        this.transitionSessionToRunning(activeSession);
       }
 
       detector.feed(event.chunk);
