@@ -177,6 +177,35 @@ describe("ShortcutsSettings", () => {
     expect(screen.getByText("⌘+P")).toBeInTheDocument();
   });
 
+  it("does not duplicate Mod when macOS captures Meta+Ctrl+letter", async () => {
+    vi.spyOn(window.navigator, "platform", "get").mockReturnValue("MacIntel");
+
+    const sendCommand = vi.fn().mockResolvedValue({});
+    const { store } = renderShortcutsSettings(sendCommand);
+
+    fireEvent.click(screen.getByText("⌘+K"));
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "命令面板" }), {
+      key: "p",
+      metaKey: true,
+      ctrlKey: true,
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: { shortcuts: { "command-palette.toggle": "Mod+P" } },
+        },
+        undefined
+      );
+    });
+
+    expect(store.get(customShortcutsAtom)).toMatchObject({
+      "command-palette.toggle": "Mod+P",
+    });
+    expect(screen.getByText("⌘+P")).toBeInTheDocument();
+  });
+
   it("preserves explicit Ctrl for macOS arrow captures only", async () => {
     vi.spyOn(window.navigator, "platform", "get").mockReturnValue("MacIntel");
 
