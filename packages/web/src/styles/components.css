@@ -771,7 +771,7 @@
   flex-direction: column;
   min-height: 100vh;
   height: 100vh;
-  background: var(--bg-page);
+  background: transparent;
 }
 
 .page-header {
@@ -880,21 +880,31 @@
 
 .settings-header {
   padding: var(--sp-1) var(--sp-4);
-  background: var(--bg-surface);
-  border-bottom: 1px solid var(--border);
+  background: color-mix(
+    in srgb,
+    var(--surface-overlay-bg) calc(var(--app-surface-opacity, 0.96) * 100%),
+    transparent
+  );
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
+  backdrop-filter: var(--app-surface-backdrop-filter, none);
 }
 .settings-body {
   display: flex;
   flex: 1;
   min-height: 0;
   align-items: stretch;
-  background: var(--bg-page);
+  background: transparent;
 }
 
 .settings-sidebar {
   width: 240px;
-  background: var(--bg-panel);
-  border-right: 1px solid var(--border);
+  background: color-mix(
+    in srgb,
+    var(--surface-overlay-bg) calc(var(--app-surface-opacity, 0.88) * 100%),
+    transparent
+  );
+  border-right: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  backdrop-filter: var(--app-surface-backdrop-filter, none);
   padding: var(--sp-4);
 }
 

@@ -1884,14 +1884,19 @@ describe("components.css theme-sensitive surfaces", () => {
 
     expect(settingsPage).toContain("display: flex");
     expect(settingsPage).toContain("min-height: 100vh");
-    expect(settingsPage).toContain("background: var(--bg-page)");
-    expect(baseSettingsHeader).toContain("background: var(--bg-surface)");
-    expect(baseSettingsHeader).toContain("border-bottom: 1px solid var(--border)");
+    expect(settingsPage).toContain("background: transparent");
+    expect(baseSettingsHeader).toContain("var(--surface-overlay-bg)");
+    expect(baseSettingsHeader).toContain("var(--app-surface-opacity, 0.96)");
+    expect(baseSettingsHeader).toContain(
+      "backdrop-filter: var(--app-surface-backdrop-filter, none)"
+    );
     expect(baseSettingsHeader).toContain("padding: var(--sp-1) var(--sp-4)");
     expect(desktopSettingsHeader).toContain("min-height: 48px");
     expect(settingsBody).toContain("align-items: stretch");
-    expect(settingsBody).toContain("background: var(--bg-page)");
-    expect(settingsSidebar).toContain("background: var(--bg-panel)");
+    expect(settingsBody).toContain("background: transparent");
+    expect(settingsSidebar).toContain("var(--surface-overlay-bg)");
+    expect(settingsSidebar).toContain("var(--app-surface-opacity, 0.88)");
+    expect(settingsSidebar).toContain("backdrop-filter: var(--app-surface-backdrop-filter, none)");
     expect(settingsSidebar).toContain("padding: var(--sp-4)");
     expect(settingsSidebar).toContain("width: 240px");
     expect(settingsContent).toContain("display: flex");

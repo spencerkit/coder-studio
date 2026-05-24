@@ -561,26 +561,20 @@ export function AppProviders({ children }: AppProvidersProps) {
         return;
       }
 
-      if (
-        appearanceSelectionVersionRef.current.theme !==
-        appearanceSelectionVersionAtRequestStart.theme
-      ) {
-        return;
-      }
-
+      const settings = result.data;
+      const shouldHydrateTheme =
+        appearanceSelectionVersionRef.current.theme ===
+        appearanceSelectionVersionAtRequestStart.theme;
       if (preferPersistedThemeOnFirstHydrationRef.current) {
         preferPersistedThemeOnFirstHydrationRef.current = false;
-        return;
+      } else if (shouldHydrateTheme) {
+        const resolvedThemeId = resolveStoredThemeId(
+          settings["appearance.themeId"] ??
+            settings["appearance.theme"] ??
+            readStoredThemePreference()
+        );
+        setTheme(resolvedThemeId);
       }
-
-      const settings = result.data;
-      const resolvedThemeId = resolveStoredThemeId(
-        settings["appearance.themeId"] ??
-          settings["appearance.theme"] ??
-          readStoredThemePreference()
-      );
-
-      setTheme(resolvedThemeId);
 
       if (
         appearanceSelectionVersionRef.current.personalization ===

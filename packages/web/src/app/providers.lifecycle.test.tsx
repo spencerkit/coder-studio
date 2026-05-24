@@ -1888,6 +1888,73 @@ describe("AppProviders lifecycle recovery", () => {
     expect(localStorage.getItem("ui.themeId")).toBe(JSON.stringify("graphite-dark"));
   });
 
+  it("still hydrates appearance personalization when a persisted local theme is preserved", async () => {
+    const store = createStore();
+    setVisibilityState("visible");
+    localStorage.setItem("ui.themeId", JSON.stringify("graphite-dark"));
+
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "appearance.themeId": "nord-light",
+          "appearance.personalization.version": 1,
+          "appearance.personalization.common.backgroundMode": "image",
+          "appearance.personalization.common.backgroundAssetId": "asset-common",
+          "appearance.personalization.common.backgroundFit": "cover",
+          "appearance.personalization.common.backgroundDimness": 36,
+          "appearance.personalization.common.backgroundBlur": 8,
+          "appearance.personalization.common.glassEnabled": true,
+          "appearance.personalization.common.glassIntensity": 30,
+          "appearance.personalization.common.surfaceOpacity": 88,
+        };
+      }
+
+      return undefined;
+    });
+    wsState.client!.sendCommand = sendCommand;
+
+    renderProviders(store);
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
+
+    await vi.waitFor(() => {
+      expect(document.documentElement.getAttribute("data-theme")).toBe("graphite-dark");
+      expect(store.get(themeAtom)).toBe("graphite-dark");
+    });
+
+    act(() => {
+      wsState.client?.statusHandler?.("connected");
+    });
+
+    await vi.waitFor(() => {
+      expect(store.get(appearancePersonalizationAtom)).toMatchObject({
+        version: 1,
+        common: expect.objectContaining({
+          backgroundMode: "image",
+          backgroundAssetId: "asset-common",
+          backgroundFit: "cover",
+          backgroundDimness: 36,
+          backgroundBlur: 8,
+          glassEnabled: true,
+          glassIntensity: 30,
+          surfaceOpacity: 88,
+        }),
+      });
+      expect(document.documentElement.style.getPropertyValue("--app-bg-image")).toBe(
+        "url(/api/appearance-assets/asset-common)"
+      );
+      expect(document.documentElement.style.getPropertyValue("--app-surface-backdrop-filter")).toBe(
+        "blur(30px)"
+      );
+      expect(document.documentElement.getAttribute("data-appearance-glass")).toBe("on");
+    });
+
+    expect(document.documentElement.getAttribute("data-theme")).toBe("graphite-dark");
+    expect(store.get(themeAtom)).toBe("graphite-dark");
+  });
+
   it("preserves a newer local terminal copy-on-select update when startup hydration resolves later", async () => {
     const store = createStore();
     setVisibilityState("visible");
