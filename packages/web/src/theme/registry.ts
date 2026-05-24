@@ -5,7 +5,15 @@ import {
   registerIconThemes,
 } from "./icon-theme";
 
-export type ThemeFamily = "mint" | "graphite" | "nord" | "hc";
+export type ThemeFamily =
+  | "mint"
+  | "graphite"
+  | "nord"
+  | "hc"
+  | "spring"
+  | "summer"
+  | "autumn"
+  | "winter";
 export type ThemeKind = "dark" | "light";
 
 export interface TerminalThemeDefinition {
@@ -106,6 +114,106 @@ const mintLightTerminal: TerminalThemeDefinition = {
   brightMagenta: "#8250df",
   brightCyan: "#14877d",
   brightWhite: "#1f2328",
+};
+
+const springLightTerminal: TerminalThemeDefinition = {
+  background: "#fff7f8",
+  foreground: "#35252b",
+  cursor: "#c84b6a",
+  cursorAccent: "#fff7f8",
+  selectionBackground: "#f3d9e2",
+  selectionForeground: "#35252b",
+  black: "#3d2a31",
+  red: "#c84b6a",
+  green: "#2f7a57",
+  yellow: "#c68a2b",
+  blue: "#8b6fcf",
+  magenta: "#b85c9b",
+  cyan: "#4e9f93",
+  white: "#8d6d76",
+  brightBlack: "#a3848d",
+  brightRed: "#d95f7e",
+  brightGreen: "#3e8d67",
+  brightYellow: "#d39a46",
+  brightBlue: "#9b80d9",
+  brightMagenta: "#c971a8",
+  brightCyan: "#62afa5",
+  brightWhite: "#35252b",
+};
+
+const summerDarkTerminal: TerminalThemeDefinition = {
+  background: "#111917",
+  foreground: "#dbe7df",
+  cursor: "#4db57a",
+  cursorAccent: "#111917",
+  selectionBackground: "#1d3328",
+  selectionForeground: "#edf5ef",
+  black: "#1d2522",
+  red: "#d96c6c",
+  green: "#4db57a",
+  yellow: "#c8a55a",
+  blue: "#5fa38f",
+  magenta: "#8d7ccf",
+  cyan: "#56b39c",
+  white: "#c3d2c7",
+  brightBlack: "#55665e",
+  brightRed: "#e58383",
+  brightGreen: "#68c58d",
+  brightYellow: "#d6b772",
+  brightBlue: "#78b5a3",
+  brightMagenta: "#a08fda",
+  brightCyan: "#71c3af",
+  brightWhite: "#edf5ef",
+};
+
+const autumnLightTerminal: TerminalThemeDefinition = {
+  background: "#fdf8ef",
+  foreground: "#3f3125",
+  cursor: "#b7791f",
+  cursorAccent: "#fdf8ef",
+  selectionBackground: "#f0dfbf",
+  selectionForeground: "#3f3125",
+  black: "#4a3828",
+  red: "#b85c38",
+  green: "#7b8558",
+  yellow: "#b7791f",
+  blue: "#8c6b49",
+  magenta: "#9a5f80",
+  cyan: "#7c8b74",
+  white: "#8a7766",
+  brightBlack: "#ab9988",
+  brightRed: "#c96d47",
+  brightGreen: "#8d9668",
+  brightYellow: "#cb8f36",
+  brightBlue: "#a07f5d",
+  brightMagenta: "#ad7393",
+  brightCyan: "#8f9d87",
+  brightWhite: "#3f3125",
+};
+
+const winterDarkTerminal: TerminalThemeDefinition = {
+  background: "#0f141b",
+  foreground: "#d8e1ec",
+  cursor: "#8aa4c8",
+  cursorAccent: "#0f141b",
+  selectionBackground: "#1e2b3a",
+  selectionForeground: "#eef4fb",
+  black: "#1a222d",
+  red: "#c47a86",
+  green: "#7ea6a1",
+  yellow: "#c0ab73",
+  blue: "#8aa4c8",
+  magenta: "#9a8cc0",
+  cyan: "#7fb3c8",
+  white: "#c5d0dd",
+  brightBlack: "#5c6a79",
+  brightRed: "#d18d98",
+  brightGreen: "#90b7b1",
+  brightYellow: "#ceb987",
+  brightBlue: "#9bb4d6",
+  brightMagenta: "#ac9dd0",
+  brightCyan: "#92c1d3",
+  brightWhite: "#eef4fb",
 };
 
 const THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
@@ -776,6 +884,748 @@ const THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
         "editorLineNumber.foreground": "#5c5c5c",
         "editorCursor.foreground": "#0037da",
         "editor.selectionBackground": "#add6ff",
+      },
+    },
+  },
+  {
+    id: "spring-light",
+    family: "spring",
+    kind: "light",
+    labelKey: "settings.theme.spring_light",
+    pairedThemeId: "spring-dark",
+    isHighContrast: false,
+    documentThemeAttr: "spring-light",
+    terminalTheme: springLightTerminal,
+    iconTheme: createIconTheme({
+      "agent.provider.codex": {
+        ...BASE_ICON_THEME.icons["agent.provider.codex"],
+        tone: "accent",
+      },
+      "mobile.dock.agent": {
+        ...BASE_ICON_THEME.icons["mobile.dock.agent"],
+        tone: "accent",
+      },
+      "mobile.dock.files": {
+        ...BASE_ICON_THEME.icons["mobile.dock.files"],
+        tone: "secondary",
+      },
+      "mobile.dock.terminal": {
+        ...BASE_ICON_THEME.icons["mobile.dock.terminal"],
+        tone: "secondary",
+      },
+      "terminal.action.new": {
+        ...BASE_ICON_THEME.icons["terminal.action.new"],
+        tone: "accent",
+      },
+      "git.branch": {
+        ...BASE_ICON_THEME.icons["git.branch"],
+        tone: "accent",
+      },
+      "git.action.diff": {
+        ...BASE_ICON_THEME.icons["git.action.diff"],
+        tone: "accent",
+      },
+      "git.action.push": {
+        ...BASE_ICON_THEME.icons["git.action.push"],
+        tone: "accent",
+      },
+      "git.action.pull": {
+        ...BASE_ICON_THEME.icons["git.action.pull"],
+        tone: "accent",
+      },
+      "git.action.refresh": {
+        ...BASE_ICON_THEME.icons["git.action.refresh"],
+        tone: "accent",
+      },
+      "git.commit": {
+        ...BASE_ICON_THEME.icons["git.commit"],
+        tone: "accent",
+      },
+      "state.info": {
+        ...BASE_ICON_THEME.icons["state.info"],
+        tone: "accent",
+        surface: "subtle",
+      },
+      "state.welcome.terminal": {
+        ...BASE_ICON_THEME.icons["state.welcome.terminal"],
+        tone: "accent",
+        surface: "accent",
+      },
+      "state.welcome.workspace": {
+        ...BASE_ICON_THEME.icons["state.welcome.workspace"],
+        tone: "accent",
+        surface: "accent",
+      },
+      "state.welcome.git": {
+        ...BASE_ICON_THEME.icons["state.welcome.git"],
+        tone: "accent",
+        surface: "accent",
+      },
+      "state.welcome.lightning": {
+        ...BASE_ICON_THEME.icons["state.welcome.lightning"],
+        tone: "accent",
+        surface: "accent",
+      },
+    }),
+    monaco: {
+      base: "vs",
+      inherit: true,
+      rules: [
+        { token: "comment", foreground: "a3848d" },
+        { token: "string", foreground: "2f7a57" },
+        { token: "keyword", foreground: "c84b6a" },
+      ],
+      colors: {
+        "editor.background": "#fff7f8",
+        "editor.foreground": "#35252b",
+        "editorLineNumber.foreground": "#a3848d",
+        "editorCursor.foreground": "#c84b6a",
+        "editor.selectionBackground": "#f3d9e2",
+      },
+    },
+  },
+  {
+    id: "spring-dark",
+    family: "spring",
+    kind: "dark",
+    labelKey: "settings.theme.spring_dark",
+    pairedThemeId: "spring-light",
+    isHighContrast: false,
+    documentThemeAttr: "spring-dark",
+    terminalTheme: {
+      background: "#1a1116",
+      foreground: "#f0e1e7",
+      cursor: "#d95f7e",
+      cursorAccent: "#1a1116",
+      selectionBackground: "#3b1f2a",
+      selectionForeground: "#fff1f5",
+      black: "#271920",
+      red: "#d95f7e",
+      green: "#4ca773",
+      yellow: "#d5a054",
+      blue: "#a78ce8",
+      magenta: "#cf7eb3",
+      cyan: "#5db6ab",
+      white: "#dbc7cf",
+      brightBlack: "#6c505a",
+      brightRed: "#ea7592",
+      brightGreen: "#63b988",
+      brightYellow: "#e2b16a",
+      brightBlue: "#b69bf1",
+      brightMagenta: "#dd90c0",
+      brightCyan: "#75c5bb",
+      brightWhite: "#fff1f5",
+    },
+    iconTheme: createIconTheme({
+      "agent.provider.codex": {
+        ...BASE_ICON_THEME.icons["agent.provider.codex"],
+        tone: "accent",
+      },
+      "mobile.dock.agent": {
+        ...BASE_ICON_THEME.icons["mobile.dock.agent"],
+        tone: "accent",
+      },
+      "terminal.action.new": {
+        ...BASE_ICON_THEME.icons["terminal.action.new"],
+        tone: "accent",
+      },
+      "git.branch": {
+        ...BASE_ICON_THEME.icons["git.branch"],
+        tone: "accent",
+      },
+      "git.action.diff": {
+        ...BASE_ICON_THEME.icons["git.action.diff"],
+        tone: "accent",
+      },
+      "git.action.push": {
+        ...BASE_ICON_THEME.icons["git.action.push"],
+        tone: "accent",
+      },
+      "git.action.pull": {
+        ...BASE_ICON_THEME.icons["git.action.pull"],
+        tone: "accent",
+      },
+      "git.action.refresh": {
+        ...BASE_ICON_THEME.icons["git.action.refresh"],
+        tone: "accent",
+      },
+      "git.commit": {
+        ...BASE_ICON_THEME.icons["git.commit"],
+        tone: "accent",
+      },
+      "state.info": {
+        ...BASE_ICON_THEME.icons["state.info"],
+        tone: "accent",
+        surface: "subtle",
+      },
+    }),
+    monaco: {
+      base: "vs-dark",
+      inherit: true,
+      rules: [
+        { token: "comment", foreground: "8f6f7b" },
+        { token: "string", foreground: "63b988" },
+        { token: "keyword", foreground: "d95f7e" },
+      ],
+      colors: {
+        "editor.background": "#1a1116",
+        "editor.foreground": "#f0e1e7",
+        "editorLineNumber.foreground": "#6c505a",
+        "editorCursor.foreground": "#d95f7e",
+        "editor.selectionBackground": "#3b1f2a",
+      },
+    },
+  },
+  {
+    id: "summer-light",
+    family: "summer",
+    kind: "light",
+    labelKey: "settings.theme.summer_light",
+    pairedThemeId: "summer-dark",
+    isHighContrast: false,
+    documentThemeAttr: "summer-light",
+    terminalTheme: {
+      background: "#f6fbf7",
+      foreground: "#23312a",
+      cursor: "#2f9560",
+      cursorAccent: "#f6fbf7",
+      selectionBackground: "#d7eadc",
+      selectionForeground: "#23312a",
+      black: "#23312a",
+      red: "#c15f5f",
+      green: "#2f9560",
+      yellow: "#a6853c",
+      blue: "#4f8f79",
+      magenta: "#7e73b2",
+      cyan: "#3d9181",
+      white: "#66786f",
+      brightBlack: "#8d9d95",
+      brightRed: "#d37272",
+      brightGreen: "#44a871",
+      brightYellow: "#bb9852",
+      brightBlue: "#63a08b",
+      brightMagenta: "#9085c4",
+      brightCyan: "#53a193",
+      brightWhite: "#23312a",
+    },
+    iconTheme: createIconTheme({
+      "agent.provider.codex": {
+        ...BASE_ICON_THEME.icons["agent.provider.codex"],
+        tone: "accent",
+      },
+      "mobile.dock.agent": {
+        ...BASE_ICON_THEME.icons["mobile.dock.agent"],
+        tone: "accent",
+      },
+      "mobile.dock.files": {
+        ...BASE_ICON_THEME.icons["mobile.dock.files"],
+        tone: "secondary",
+      },
+      "mobile.dock.terminal": {
+        ...BASE_ICON_THEME.icons["mobile.dock.terminal"],
+        tone: "secondary",
+      },
+      "terminal.action.new": {
+        ...BASE_ICON_THEME.icons["terminal.action.new"],
+        tone: "accent",
+      },
+      "git.branch": {
+        ...BASE_ICON_THEME.icons["git.branch"],
+        tone: "accent",
+      },
+      "git.action.diff": {
+        ...BASE_ICON_THEME.icons["git.action.diff"],
+        tone: "accent",
+      },
+      "git.action.push": {
+        ...BASE_ICON_THEME.icons["git.action.push"],
+        tone: "accent",
+      },
+      "git.action.pull": {
+        ...BASE_ICON_THEME.icons["git.action.pull"],
+        tone: "accent",
+      },
+      "git.action.refresh": {
+        ...BASE_ICON_THEME.icons["git.action.refresh"],
+        tone: "accent",
+      },
+      "git.commit": {
+        ...BASE_ICON_THEME.icons["git.commit"],
+        tone: "accent",
+      },
+      "state.info": {
+        ...BASE_ICON_THEME.icons["state.info"],
+        tone: "accent",
+        surface: "subtle",
+      },
+    }),
+    monaco: {
+      base: "vs",
+      inherit: true,
+      rules: [
+        { token: "comment", foreground: "8d9d95" },
+        { token: "string", foreground: "3f8457" },
+        { token: "keyword", foreground: "2f9560" },
+      ],
+      colors: {
+        "editor.background": "#f6fbf7",
+        "editor.foreground": "#23312a",
+        "editorLineNumber.foreground": "#8d9d95",
+        "editorCursor.foreground": "#2f9560",
+        "editor.selectionBackground": "#d7eadc",
+      },
+    },
+  },
+  {
+    id: "summer-dark",
+    family: "summer",
+    kind: "dark",
+    labelKey: "settings.theme.summer_dark",
+    pairedThemeId: "summer-light",
+    isHighContrast: false,
+    documentThemeAttr: "summer-dark",
+    terminalTheme: summerDarkTerminal,
+    iconTheme: createIconTheme({
+      "agent.provider.codex": {
+        ...BASE_ICON_THEME.icons["agent.provider.codex"],
+        tone: "accent",
+      },
+      "mobile.dock.agent": {
+        ...BASE_ICON_THEME.icons["mobile.dock.agent"],
+        tone: "accent",
+      },
+      "mobile.dock.files": {
+        ...BASE_ICON_THEME.icons["mobile.dock.files"],
+        tone: "secondary",
+      },
+      "mobile.dock.terminal": {
+        ...BASE_ICON_THEME.icons["mobile.dock.terminal"],
+        tone: "secondary",
+      },
+      "terminal.action.new": {
+        ...BASE_ICON_THEME.icons["terminal.action.new"],
+        tone: "accent",
+      },
+      "git.branch": {
+        ...BASE_ICON_THEME.icons["git.branch"],
+        tone: "accent",
+      },
+      "git.action.diff": {
+        ...BASE_ICON_THEME.icons["git.action.diff"],
+        tone: "accent",
+      },
+      "git.action.push": {
+        ...BASE_ICON_THEME.icons["git.action.push"],
+        tone: "accent",
+      },
+      "git.action.pull": {
+        ...BASE_ICON_THEME.icons["git.action.pull"],
+        tone: "accent",
+      },
+      "git.action.refresh": {
+        ...BASE_ICON_THEME.icons["git.action.refresh"],
+        tone: "accent",
+      },
+      "git.commit": {
+        ...BASE_ICON_THEME.icons["git.commit"],
+        tone: "accent",
+      },
+      "state.info": {
+        ...BASE_ICON_THEME.icons["state.info"],
+        tone: "accent",
+        surface: "subtle",
+      },
+    }),
+    monaco: {
+      base: "vs-dark",
+      inherit: true,
+      rules: [
+        { token: "comment", foreground: "55665e" },
+        { token: "string", foreground: "8acb6f" },
+        { token: "keyword", foreground: "4db57a" },
+      ],
+      colors: {
+        "editor.background": "#111917",
+        "editor.foreground": "#dbe7df",
+        "editorLineNumber.foreground": "#55665e",
+        "editorCursor.foreground": "#4db57a",
+        "editor.selectionBackground": "#1d3328",
+      },
+    },
+  },
+  {
+    id: "autumn-light",
+    family: "autumn",
+    kind: "light",
+    labelKey: "settings.theme.autumn_light",
+    pairedThemeId: "autumn-dark",
+    isHighContrast: false,
+    documentThemeAttr: "autumn-light",
+    terminalTheme: autumnLightTerminal,
+    iconTheme: createIconTheme({
+      "agent.provider.codex": {
+        ...BASE_ICON_THEME.icons["agent.provider.codex"],
+        tone: "accent",
+      },
+      "mobile.dock.agent": {
+        ...BASE_ICON_THEME.icons["mobile.dock.agent"],
+        tone: "accent",
+      },
+      "mobile.dock.files": {
+        ...BASE_ICON_THEME.icons["mobile.dock.files"],
+        tone: "secondary",
+      },
+      "mobile.dock.terminal": {
+        ...BASE_ICON_THEME.icons["mobile.dock.terminal"],
+        tone: "secondary",
+      },
+      "terminal.action.new": {
+        ...BASE_ICON_THEME.icons["terminal.action.new"],
+        tone: "accent",
+      },
+      "git.branch": {
+        ...BASE_ICON_THEME.icons["git.branch"],
+        tone: "accent",
+      },
+      "git.action.diff": {
+        ...BASE_ICON_THEME.icons["git.action.diff"],
+        tone: "accent",
+      },
+      "git.action.push": {
+        ...BASE_ICON_THEME.icons["git.action.push"],
+        tone: "accent",
+      },
+      "git.action.pull": {
+        ...BASE_ICON_THEME.icons["git.action.pull"],
+        tone: "accent",
+      },
+      "git.action.refresh": {
+        ...BASE_ICON_THEME.icons["git.action.refresh"],
+        tone: "accent",
+      },
+      "git.commit": {
+        ...BASE_ICON_THEME.icons["git.commit"],
+        tone: "accent",
+      },
+      "state.info": {
+        ...BASE_ICON_THEME.icons["state.info"],
+        tone: "accent",
+        surface: "subtle",
+      },
+    }),
+    monaco: {
+      base: "vs",
+      inherit: true,
+      rules: [
+        { token: "comment", foreground: "ab9988" },
+        { token: "string", foreground: "8a5a44" },
+        { token: "keyword", foreground: "b7791f" },
+      ],
+      colors: {
+        "editor.background": "#fdf8ef",
+        "editor.foreground": "#3f3125",
+        "editorLineNumber.foreground": "#ab9988",
+        "editorCursor.foreground": "#b7791f",
+        "editor.selectionBackground": "#f0dfbf",
+      },
+    },
+  },
+  {
+    id: "autumn-dark",
+    family: "autumn",
+    kind: "dark",
+    labelKey: "settings.theme.autumn_dark",
+    pairedThemeId: "autumn-light",
+    isHighContrast: false,
+    documentThemeAttr: "autumn-dark",
+    terminalTheme: {
+      background: "#17120f",
+      foreground: "#eadfce",
+      cursor: "#c08a3c",
+      cursorAccent: "#17120f",
+      selectionBackground: "#34261b",
+      selectionForeground: "#fff6ea",
+      black: "#231b16",
+      red: "#c86d4b",
+      green: "#8a8f62",
+      yellow: "#c08a3c",
+      blue: "#9b7c57",
+      magenta: "#a26e90",
+      cyan: "#87947f",
+      white: "#cebea9",
+      brightBlack: "#665545",
+      brightRed: "#d9815f",
+      brightGreen: "#9ca171",
+      brightYellow: "#d1a055",
+      brightBlue: "#ae906b",
+      brightMagenta: "#b681a1",
+      brightCyan: "#99a68f",
+      brightWhite: "#fff6ea",
+    },
+    iconTheme: createIconTheme({
+      "agent.provider.codex": {
+        ...BASE_ICON_THEME.icons["agent.provider.codex"],
+        tone: "accent",
+      },
+      "mobile.dock.agent": {
+        ...BASE_ICON_THEME.icons["mobile.dock.agent"],
+        tone: "accent",
+      },
+      "terminal.action.new": {
+        ...BASE_ICON_THEME.icons["terminal.action.new"],
+        tone: "accent",
+      },
+      "git.branch": {
+        ...BASE_ICON_THEME.icons["git.branch"],
+        tone: "accent",
+      },
+      "git.action.diff": {
+        ...BASE_ICON_THEME.icons["git.action.diff"],
+        tone: "accent",
+      },
+      "git.action.push": {
+        ...BASE_ICON_THEME.icons["git.action.push"],
+        tone: "accent",
+      },
+      "git.action.pull": {
+        ...BASE_ICON_THEME.icons["git.action.pull"],
+        tone: "accent",
+      },
+      "git.action.refresh": {
+        ...BASE_ICON_THEME.icons["git.action.refresh"],
+        tone: "accent",
+      },
+      "git.commit": {
+        ...BASE_ICON_THEME.icons["git.commit"],
+        tone: "accent",
+      },
+      "state.info": {
+        ...BASE_ICON_THEME.icons["state.info"],
+        tone: "accent",
+        surface: "subtle",
+      },
+    }),
+    monaco: {
+      base: "vs-dark",
+      inherit: true,
+      rules: [
+        { token: "comment", foreground: "665545" },
+        { token: "string", foreground: "9ca171" },
+        { token: "keyword", foreground: "c08a3c" },
+      ],
+      colors: {
+        "editor.background": "#17120f",
+        "editor.foreground": "#eadfce",
+        "editorLineNumber.foreground": "#665545",
+        "editorCursor.foreground": "#c08a3c",
+        "editor.selectionBackground": "#34261b",
+      },
+    },
+  },
+  {
+    id: "winter-light",
+    family: "winter",
+    kind: "light",
+    labelKey: "settings.theme.winter_light",
+    pairedThemeId: "winter-dark",
+    isHighContrast: false,
+    documentThemeAttr: "winter-light",
+    terminalTheme: {
+      background: "#f5f8fc",
+      foreground: "#273241",
+      cursor: "#6f89ad",
+      cursorAccent: "#f5f8fc",
+      selectionBackground: "#dbe4ef",
+      selectionForeground: "#273241",
+      black: "#273241",
+      red: "#b96f7a",
+      green: "#668a8a",
+      yellow: "#a6925d",
+      blue: "#6f89ad",
+      magenta: "#8d7fa8",
+      cyan: "#6f9ab0",
+      white: "#6d7c8d",
+      brightBlack: "#95a3b3",
+      brightRed: "#c7828c",
+      brightGreen: "#7a9d9d",
+      brightYellow: "#b5a46f",
+      brightBlue: "#829cbc",
+      brightMagenta: "#9c90b5",
+      brightCyan: "#82abbe",
+      brightWhite: "#273241",
+    },
+    iconTheme: createIconTheme({
+      "agent.provider.codex": {
+        ...BASE_ICON_THEME.icons["agent.provider.codex"],
+        tone: "accent",
+      },
+      "mobile.dock.agent": {
+        ...BASE_ICON_THEME.icons["mobile.dock.agent"],
+        tone: "info",
+      },
+      "mobile.dock.files": {
+        ...BASE_ICON_THEME.icons["mobile.dock.files"],
+        tone: "secondary",
+      },
+      "mobile.dock.terminal": {
+        ...BASE_ICON_THEME.icons["mobile.dock.terminal"],
+        tone: "secondary",
+      },
+      "terminal.action.new": {
+        ...BASE_ICON_THEME.icons["terminal.action.new"],
+        tone: "info",
+      },
+      "git.branch": {
+        ...BASE_ICON_THEME.icons["git.branch"],
+        tone: "info",
+      },
+      "git.action.diff": {
+        ...BASE_ICON_THEME.icons["git.action.diff"],
+        tone: "info",
+      },
+      "git.action.push": {
+        ...BASE_ICON_THEME.icons["git.action.push"],
+        tone: "info",
+      },
+      "git.action.pull": {
+        ...BASE_ICON_THEME.icons["git.action.pull"],
+        tone: "info",
+      },
+      "git.action.refresh": {
+        ...BASE_ICON_THEME.icons["git.action.refresh"],
+        tone: "info",
+      },
+      "git.commit": {
+        ...BASE_ICON_THEME.icons["git.commit"],
+        tone: "info",
+      },
+      "state.welcome.terminal": {
+        ...BASE_ICON_THEME.icons["state.welcome.terminal"],
+        tone: "info",
+        surface: "info",
+      },
+      "state.welcome.workspace": {
+        ...BASE_ICON_THEME.icons["state.welcome.workspace"],
+        tone: "info",
+        surface: "info",
+      },
+      "state.welcome.git": {
+        ...BASE_ICON_THEME.icons["state.welcome.git"],
+        tone: "info",
+        surface: "info",
+      },
+      "state.welcome.lightning": {
+        ...BASE_ICON_THEME.icons["state.welcome.lightning"],
+        tone: "info",
+        surface: "info",
+      },
+    }),
+    monaco: {
+      base: "vs",
+      inherit: true,
+      rules: [
+        { token: "comment", foreground: "95a3b3" },
+        { token: "string", foreground: "6f9ab0" },
+        { token: "keyword", foreground: "6f89ad" },
+      ],
+      colors: {
+        "editor.background": "#f5f8fc",
+        "editor.foreground": "#273241",
+        "editorLineNumber.foreground": "#95a3b3",
+        "editorCursor.foreground": "#6f89ad",
+        "editor.selectionBackground": "#dbe4ef",
+      },
+    },
+  },
+  {
+    id: "winter-dark",
+    family: "winter",
+    kind: "dark",
+    labelKey: "settings.theme.winter_dark",
+    pairedThemeId: "winter-light",
+    isHighContrast: false,
+    documentThemeAttr: "winter-dark",
+    terminalTheme: winterDarkTerminal,
+    iconTheme: createIconTheme({
+      "agent.provider.codex": {
+        ...BASE_ICON_THEME.icons["agent.provider.codex"],
+        tone: "accent",
+      },
+      "mobile.dock.agent": {
+        ...BASE_ICON_THEME.icons["mobile.dock.agent"],
+        tone: "info",
+      },
+      "mobile.dock.files": {
+        ...BASE_ICON_THEME.icons["mobile.dock.files"],
+        tone: "secondary",
+      },
+      "mobile.dock.terminal": {
+        ...BASE_ICON_THEME.icons["mobile.dock.terminal"],
+        tone: "secondary",
+      },
+      "terminal.action.new": {
+        ...BASE_ICON_THEME.icons["terminal.action.new"],
+        tone: "info",
+      },
+      "git.branch": {
+        ...BASE_ICON_THEME.icons["git.branch"],
+        tone: "info",
+      },
+      "git.action.diff": {
+        ...BASE_ICON_THEME.icons["git.action.diff"],
+        tone: "info",
+      },
+      "git.action.push": {
+        ...BASE_ICON_THEME.icons["git.action.push"],
+        tone: "info",
+      },
+      "git.action.pull": {
+        ...BASE_ICON_THEME.icons["git.action.pull"],
+        tone: "info",
+      },
+      "git.action.refresh": {
+        ...BASE_ICON_THEME.icons["git.action.refresh"],
+        tone: "info",
+      },
+      "git.commit": {
+        ...BASE_ICON_THEME.icons["git.commit"],
+        tone: "info",
+      },
+      "state.welcome.terminal": {
+        ...BASE_ICON_THEME.icons["state.welcome.terminal"],
+        tone: "info",
+        surface: "info",
+      },
+      "state.welcome.workspace": {
+        ...BASE_ICON_THEME.icons["state.welcome.workspace"],
+        tone: "info",
+        surface: "info",
+      },
+      "state.welcome.git": {
+        ...BASE_ICON_THEME.icons["state.welcome.git"],
+        tone: "info",
+        surface: "info",
+      },
+      "state.welcome.lightning": {
+        ...BASE_ICON_THEME.icons["state.welcome.lightning"],
+        tone: "info",
+        surface: "info",
+      },
+    }),
+    monaco: {
+      base: "vs-dark",
+      inherit: true,
+      rules: [
+        { token: "comment", foreground: "5c6a79" },
+        { token: "string", foreground: "9bb8d3" },
+        { token: "keyword", foreground: "8aa4c8" },
+      ],
+      colors: {
+        "editor.background": "#0f141b",
+        "editor.foreground": "#d8e1ec",
+        "editorLineNumber.foreground": "#5c6a79",
+        "editorCursor.foreground": "#8aa4c8",
+        "editor.selectionBackground": "#1e2b3a",
       },
     },
   },

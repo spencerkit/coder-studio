@@ -14,8 +14,8 @@ function getTranslationValue(messages: Record<string, unknown>, key: string): un
 }
 
 describe("theme registry", () => {
-  it("contains the first-phase theme ids", () => {
-    expect(THEMES).toHaveLength(8);
+  it("contains the built-in theme ids", () => {
+    expect(THEMES).toHaveLength(16);
     expect(THEME_IDS).toEqual(
       expect.arrayContaining([
         "mint-dark",
@@ -26,6 +26,14 @@ describe("theme registry", () => {
         "nord-light",
         "hc-dark",
         "hc-light",
+        "spring-light",
+        "spring-dark",
+        "summer-light",
+        "summer-dark",
+        "autumn-light",
+        "autumn-dark",
+        "winter-light",
+        "winter-dark",
       ])
     );
   });
@@ -75,6 +83,10 @@ describe("theme registry", () => {
       graphite: ["dark", "light"],
       nord: ["dark", "light"],
       hc: ["dark", "light"],
+      spring: ["light", "dark"],
+      summer: ["light", "dark"],
+      autumn: ["light", "dark"],
+      winter: ["light", "dark"],
     });
   });
 
@@ -176,6 +188,97 @@ describe("theme registry", () => {
       expect.arrayContaining([
         expect.objectContaining({ token: "string", foreground: "5d7a66" }),
         expect.objectContaining({ token: "keyword", foreground: "5b7fa8" }),
+      ])
+    );
+  });
+
+  it("defines distinct seasonal palettes aligned with the approved design", () => {
+    const springLight = THEMES.find((theme) => theme.id === "spring-light");
+    const summerDark = THEMES.find((theme) => theme.id === "summer-dark");
+    const autumnLight = THEMES.find((theme) => theme.id === "autumn-light");
+    const winterDark = THEMES.find((theme) => theme.id === "winter-dark");
+
+    expect(springLight?.terminalTheme).toEqual(
+      expect.objectContaining({
+        background: "#fff7f8",
+        cursor: "#c84b6a",
+        selectionBackground: "#f3d9e2",
+      })
+    );
+    expect(springLight?.monaco.colors).toEqual(
+      expect.objectContaining({
+        "editor.background": "#fff7f8",
+        "editorCursor.foreground": "#c84b6a",
+        "editor.selectionBackground": "#f3d9e2",
+      })
+    );
+    expect(springLight?.monaco.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ token: "string", foreground: "2f7a57" }),
+        expect.objectContaining({ token: "keyword", foreground: "c84b6a" }),
+      ])
+    );
+
+    expect(summerDark?.terminalTheme).toEqual(
+      expect.objectContaining({
+        background: "#111917",
+        cursor: "#4db57a",
+        selectionBackground: "#1d3328",
+      })
+    );
+    expect(summerDark?.monaco.colors).toEqual(
+      expect.objectContaining({
+        "editor.background": "#111917",
+        "editorCursor.foreground": "#4db57a",
+        "editor.selectionBackground": "#1d3328",
+      })
+    );
+    expect(summerDark?.monaco.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ token: "string", foreground: "8acb6f" }),
+        expect.objectContaining({ token: "keyword", foreground: "4db57a" }),
+      ])
+    );
+
+    expect(autumnLight?.terminalTheme).toEqual(
+      expect.objectContaining({
+        background: "#fdf8ef",
+        cursor: "#b7791f",
+        selectionBackground: "#f0dfbf",
+      })
+    );
+    expect(autumnLight?.monaco.colors).toEqual(
+      expect.objectContaining({
+        "editor.background": "#fdf8ef",
+        "editorCursor.foreground": "#b7791f",
+        "editor.selectionBackground": "#f0dfbf",
+      })
+    );
+    expect(autumnLight?.monaco.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ token: "string", foreground: "8a5a44" }),
+        expect.objectContaining({ token: "keyword", foreground: "b7791f" }),
+      ])
+    );
+
+    expect(winterDark?.terminalTheme).toEqual(
+      expect.objectContaining({
+        background: "#0f141b",
+        cursor: "#8aa4c8",
+        selectionBackground: "#1e2b3a",
+      })
+    );
+    expect(winterDark?.monaco.colors).toEqual(
+      expect.objectContaining({
+        "editor.background": "#0f141b",
+        "editorCursor.foreground": "#8aa4c8",
+        "editor.selectionBackground": "#1e2b3a",
+      })
+    );
+    expect(winterDark?.monaco.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ token: "string", foreground: "9bb8d3" }),
+        expect.objectContaining({ token: "keyword", foreground: "8aa4c8" }),
       ])
     );
   });
