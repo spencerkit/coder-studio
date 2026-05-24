@@ -2171,6 +2171,48 @@ describe("FileTreePanel", () => {
     expect(values.get("text/plain")).toBe("src/app.tsx");
   });
 
+  it("keeps desktop draggable file rows clickable for shared editor navigation", async () => {
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand: vi.fn().mockResolvedValue({}) } as never);
+    store.set(
+      fileTreeAtomFamily("ws-test"),
+      new Map([
+        [
+          ".",
+          [
+            {
+              path: "src/app.tsx",
+              name: "app.tsx",
+              kind: "file",
+            },
+          ],
+        ],
+      ])
+    );
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" variant="desktop" showSearch={false} />
+      </Provider>
+    );
+
+    const row = screen.getByText("app.tsx").closest(".tree-item");
+    expect(row).toHaveAttribute("draggable", "true");
+
+    fireEvent.click(row!);
+
+    await waitFor(() => {
+      expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/app.tsx");
+    });
+
+    expect(store.get(pendingEditorNavigationAtomFamily("ws-test"))).toMatchObject({
+      workspaceId: "ws-test",
+      path: "src/app.tsx",
+      source: "file-tree",
+      requestId: expect.any(Number),
+    });
+  });
+
   it("keeps mobile tree rows non-draggable", () => {
     const store = createStore();
     store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
