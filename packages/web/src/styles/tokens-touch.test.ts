@@ -60,6 +60,14 @@ describe("tokens.css touch tokens", () => {
     "nord-light",
     "hc-dark",
     "hc-light",
+    "spring-dark",
+    "spring-light",
+    "summer-dark",
+    "summer-light",
+    "autumn-dark",
+    "autumn-light",
+    "winter-dark",
+    "winter-light",
   ] as const;
 
   const requiredIconTokens = [
@@ -208,6 +216,14 @@ describe("tokens.css touch tokens", () => {
     expect(stylesheet).toContain('[data-theme="nord-light"]');
     expect(stylesheet).toContain('[data-theme="hc-dark"]');
     expect(stylesheet).toContain('[data-theme="hc-light"]');
+    expect(stylesheet).toContain('[data-theme="spring-dark"]');
+    expect(stylesheet).toContain('[data-theme="spring-light"]');
+    expect(stylesheet).toContain('[data-theme="summer-dark"]');
+    expect(stylesheet).toContain('[data-theme="summer-light"]');
+    expect(stylesheet).toContain('[data-theme="autumn-dark"]');
+    expect(stylesheet).toContain('[data-theme="autumn-light"]');
+    expect(stylesheet).toContain('[data-theme="winter-dark"]');
+    expect(stylesheet).toContain('[data-theme="winter-light"]');
   });
 
   it("defines desktop-default touch target tokens on :root", () => {

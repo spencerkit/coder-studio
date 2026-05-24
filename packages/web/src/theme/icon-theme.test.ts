@@ -2,17 +2,37 @@ import { describe, expect, it } from "vitest";
 import { getIconPresentation, ICON_SEMANTICS } from "./index";
 
 describe("theme icon resolver", () => {
+  const builtInThemes = [
+    "mint-dark",
+    "mint-light",
+    "graphite-dark",
+    "graphite-light",
+    "nord-dark",
+    "nord-light",
+    "hc-dark",
+    "hc-light",
+    "spring-dark",
+    "spring-light",
+    "summer-dark",
+    "summer-light",
+    "autumn-dark",
+    "autumn-light",
+    "winter-dark",
+    "winter-light",
+  ] as const;
+  const seasonalThemes = [
+    "spring-dark",
+    "spring-light",
+    "summer-dark",
+    "summer-light",
+    "autumn-dark",
+    "autumn-light",
+    "winter-dark",
+    "winter-light",
+  ] as const;
+
   it("resolves the base semantic set for every built-in theme", () => {
-    for (const themeId of [
-      "mint-dark",
-      "mint-light",
-      "graphite-dark",
-      "graphite-light",
-      "nord-dark",
-      "nord-light",
-      "hc-dark",
-      "hc-light",
-    ]) {
+    for (const themeId of builtInThemes) {
       for (const semantic of ICON_SEMANTICS) {
         expect(getIconPresentation(themeId, semantic)).toEqual(
           expect.objectContaining({
@@ -51,16 +71,7 @@ describe("theme icon resolver", () => {
   });
 
   it("gives footer git status semantics a stable visual hierarchy", () => {
-    for (const themeId of [
-      "mint-dark",
-      "mint-light",
-      "graphite-dark",
-      "graphite-light",
-      "nord-dark",
-      "nord-light",
-      "hc-dark",
-      "hc-light",
-    ] as const) {
+    for (const themeId of builtInThemes) {
       expect(getIconPresentation(themeId, "git.footer.branch")).toEqual(
         expect.objectContaining({ tone: "current" })
       );
@@ -100,16 +111,7 @@ describe("theme icon resolver", () => {
   });
 
   it("keeps settings navigation icons aligned within each built-in theme", () => {
-    for (const themeId of [
-      "mint-dark",
-      "mint-light",
-      "graphite-dark",
-      "graphite-light",
-      "nord-dark",
-      "nord-light",
-      "hc-dark",
-      "hc-light",
-    ] as const) {
+    for (const themeId of builtInThemes) {
       const tones = new Set([
         getIconPresentation(themeId, "nav.settings.general").tone,
         getIconPresentation(themeId, "nav.settings.providers").tone,
@@ -119,6 +121,113 @@ describe("theme icon resolver", () => {
       ]);
 
       expect(tones.size).toBe(1);
+    }
+  });
+
+  it("applies the approved seasonal icon hierarchy without retheming semantic status icons", () => {
+    for (const themeId of ["spring-dark", "spring-light"] as const) {
+      expect(getIconPresentation(themeId, "mobile.dock.agent")).toEqual(
+        expect.objectContaining({ tone: "accent" })
+      );
+      expect(getIconPresentation(themeId, "terminal.action.new")).toEqual(
+        expect.objectContaining({ tone: "accent" })
+      );
+      expect(getIconPresentation(themeId, "git.branch")).toEqual(
+        expect.objectContaining({ tone: "accent" })
+      );
+    }
+    expect(getIconPresentation("spring-light", "mobile.dock.files")).toEqual(
+      expect.objectContaining({ tone: "secondary" })
+    );
+    expect(getIconPresentation("spring-light", "mobile.dock.terminal")).toEqual(
+      expect.objectContaining({ tone: "secondary" })
+    );
+    expect(getIconPresentation("spring-dark", "mobile.dock.files")).toEqual(
+      expect.objectContaining({ tone: "current" })
+    );
+    expect(getIconPresentation("spring-dark", "mobile.dock.terminal")).toEqual(
+      expect.objectContaining({ tone: "current" })
+    );
+
+    for (const themeId of ["summer-dark", "summer-light"] as const) {
+      expect(getIconPresentation(themeId, "mobile.dock.agent")).toEqual(
+        expect.objectContaining({ tone: "accent" })
+      );
+      expect(getIconPresentation(themeId, "terminal.action.new")).toEqual(
+        expect.objectContaining({ tone: "accent" })
+      );
+      expect(getIconPresentation(themeId, "git.branch")).toEqual(
+        expect.objectContaining({ tone: "accent" })
+      );
+    }
+    expect(getIconPresentation("summer-light", "mobile.dock.files")).toEqual(
+      expect.objectContaining({ tone: "secondary" })
+    );
+    expect(getIconPresentation("summer-light", "mobile.dock.terminal")).toEqual(
+      expect.objectContaining({ tone: "secondary" })
+    );
+    expect(getIconPresentation("summer-dark", "mobile.dock.files")).toEqual(
+      expect.objectContaining({ tone: "secondary" })
+    );
+    expect(getIconPresentation("summer-dark", "mobile.dock.terminal")).toEqual(
+      expect.objectContaining({ tone: "secondary" })
+    );
+
+    for (const themeId of ["autumn-dark", "autumn-light"] as const) {
+      expect(getIconPresentation(themeId, "mobile.dock.agent")).toEqual(
+        expect.objectContaining({ tone: "accent" })
+      );
+      expect(getIconPresentation(themeId, "terminal.action.new")).toEqual(
+        expect.objectContaining({ tone: "accent" })
+      );
+      expect(getIconPresentation(themeId, "git.branch")).toEqual(
+        expect.objectContaining({ tone: "accent" })
+      );
+    }
+    expect(getIconPresentation("autumn-light", "mobile.dock.files")).toEqual(
+      expect.objectContaining({ tone: "secondary" })
+    );
+    expect(getIconPresentation("autumn-light", "mobile.dock.terminal")).toEqual(
+      expect.objectContaining({ tone: "secondary" })
+    );
+    expect(getIconPresentation("autumn-dark", "mobile.dock.files")).toEqual(
+      expect.objectContaining({ tone: "current" })
+    );
+    expect(getIconPresentation("autumn-dark", "mobile.dock.terminal")).toEqual(
+      expect.objectContaining({ tone: "current" })
+    );
+
+    for (const themeId of ["winter-dark", "winter-light"] as const) {
+      expect(getIconPresentation(themeId, "mobile.dock.agent")).toEqual(
+        expect.objectContaining({ tone: "info" })
+      );
+      expect(getIconPresentation(themeId, "mobile.dock.files")).toEqual(
+        expect.objectContaining({ tone: "secondary" })
+      );
+      expect(getIconPresentation(themeId, "mobile.dock.terminal")).toEqual(
+        expect.objectContaining({ tone: "secondary" })
+      );
+      expect(getIconPresentation(themeId, "terminal.action.new")).toEqual(
+        expect.objectContaining({ tone: "info" })
+      );
+      expect(getIconPresentation(themeId, "git.branch")).toEqual(
+        expect.objectContaining({ tone: "info" })
+      );
+    }
+
+    for (const themeId of seasonalThemes) {
+      expect(getIconPresentation(themeId, "state.error")).toEqual(
+        expect.objectContaining({ tone: "error" })
+      );
+      expect(getIconPresentation(themeId, "state.warning")).toEqual(
+        expect.objectContaining({ tone: "warning" })
+      );
+      expect(getIconPresentation(themeId, "state.success")).toEqual(
+        expect.objectContaining({ tone: "success" })
+      );
+      expect(getIconPresentation(themeId, "state.info")).toEqual(
+        expect.objectContaining({ tone: "info", surface: "info" })
+      );
     }
   });
 
