@@ -9,6 +9,7 @@ import { PanelHeader } from "../../../shared/components/panel-header";
 import { TerminalPanel } from "../../../terminal-panel";
 import { TopBar } from "../../../topbar";
 import { useWorkspaceFullscreen } from "../../actions/use-workspace-fullscreen";
+import { useWorkspaceNavigationShortcuts } from "../../actions/use-workspace-navigation-shortcuts";
 import { useWorkspaceScreenModel } from "../../actions/use-workspace-screen-model";
 import { sidebarCollapsedAtom } from "../../atoms";
 import { sanitizeDesktopSidebarView } from "../../atoms/layout";
@@ -57,6 +58,8 @@ const WorkspaceDesktopScene: FC = () => {
   } = useWorkspaceScreenModel();
   const setSidebarCollapsed = useSetAtom(sidebarCollapsedAtom);
   const activeSidebarView = sanitizeDesktopSidebarView(desktopSidebarView);
+
+  useWorkspaceNavigationShortcuts(workspace.id);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {

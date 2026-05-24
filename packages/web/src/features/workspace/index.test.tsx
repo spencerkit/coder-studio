@@ -2,9 +2,11 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { createStore, Provider } from "jotai";
 import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { lastViewedTargetAtom } from "../../atoms/app-ui";
 import { connectionStatusAtom, wsClientAtom } from "../../atoms/connection";
 import { activeWorkspaceIdAtom, workspaceOrderAtom, workspacesAtom } from "../../atoms/workspaces";
 import { seedReadyWorkspaceState } from "../../test-utils/workspace-state";
+import { paneLayoutAtomFamily } from "../agent-panes/atoms/pane-layout";
 import { updateStateAtom } from "../updates/atoms";
 import {
   activeFilePathAtomFamily,
@@ -469,6 +471,106 @@ describe("WorkspacePage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Source Control|源代码管理/i }));
     expect(screen.getByTestId("git-panel")).toBeInTheDocument();
+  });
+
+  it("mounts desktop workspace navigation shortcuts and switches workspaces on Ctrl+Shift+ArrowRight", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string, payload: unknown) => {
+      if (op === "git.status") {
+        return {
+          branch: "main",
+          ahead: 0,
+          behind: 0,
+          staged: [],
+          modified: [],
+          deleted: [],
+          untracked: [],
+        };
+      }
+
+      if (op === "session.list") {
+        return [];
+      }
+
+      if (op === "workspace.lastViewedTarget.set") {
+        const target = payload as { workspaceId: string; sessionId?: string };
+        return {
+          workspaceId: target.workspaceId,
+          sessionId: target.sessionId,
+          updatedAt: 10,
+        };
+      }
+
+      return [];
+    });
+
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedReadyWorkspaceState(store, {
+      "ws-a": {
+        id: "ws-a",
+        path: "/workspace-a",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+          activeSessionId: "sess-a",
+        },
+      },
+      "ws-b": {
+        id: "ws-b",
+        path: "/workspace-b",
+        targetRuntime: "native",
+        openedAt: 2,
+        lastActiveAt: 2,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+          activeSessionId: "sess-b",
+        },
+      },
+    });
+    store.set(activeWorkspaceIdAtom, "ws-a");
+    store.set(paneLayoutAtomFamily("ws-a"), {
+      id: "root",
+      type: "leaf",
+      sessionId: "sess-a",
+    });
+    store.set(paneLayoutAtomFamily("ws-b"), {
+      id: "root",
+      type: "leaf",
+      sessionId: "sess-b",
+    });
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/workspace"]}>
+          <Routes>
+            <Route path="/workspace" element={<WorkspaceDesktopView />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>
+    );
+
+    await screen.findByTestId("file-tree-panel");
+
+    fireEvent.keyDown(window, {
+      key: "ArrowRight",
+      ctrlKey: true,
+      shiftKey: true,
+    });
+
+    await waitFor(() => {
+      expect(store.get(activeWorkspaceIdAtom)).toBe("ws-b");
+    });
+
+    expect(store.get(lastViewedTargetAtom)).toMatchObject({
+      workspaceId: "ws-b",
+    });
   });
 
   it("renders the content search input when the Search activity item is active", async () => {
