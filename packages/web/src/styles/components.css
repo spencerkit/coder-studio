@@ -14424,7 +14424,7 @@ body.is-dragging-pane .session-action-btn-drag {
 .pane-drop-overlay {
   position: absolute;
   inset: 0;
-  z-index: 3;
+  z-index: var(--z-inline-raised);
   pointer-events: none;
   border: 1px dashed color-mix(in srgb, var(--state-info-text) 55%, transparent);
   border-radius: inherit;
@@ -14467,13 +14467,14 @@ body.is-dragging-pane .session-action-btn-drag {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  padding: 4px 8px;
+  padding: var(--sp-1) var(--sp-2);
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--bg-elevated) 92%, transparent);
   color: var(--text-primary);
-  font-size: 11px;
-  line-height: 1;
+  font-size: var(--type-body-6-size);
+  line-height: var(--type-body-6-line-height);
+  font-weight: var(--type-body-6-weight);
 }
 
 .workspace-sidebar-panel__content,
