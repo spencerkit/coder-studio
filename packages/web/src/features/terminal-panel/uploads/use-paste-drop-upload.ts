@@ -129,7 +129,9 @@ export function usePasteDropUpload(opts: Options): PasteDropUploadActions {
         return;
       }
 
-      await runSequence(async () => text);
+      await runSequence(async () => text, {
+        trackBusy: false,
+      });
     },
     [runSequence]
   );

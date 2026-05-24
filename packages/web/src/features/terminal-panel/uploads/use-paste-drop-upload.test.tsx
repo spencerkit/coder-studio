@@ -263,6 +263,49 @@ describe("usePasteDropUpload", () => {
     expect(sendInput).toHaveBeenCalledWith("ls -la");
   });
 
+  it("keeps plain text insertion out of upload busy handling while pending", async () => {
+    const store = createStore();
+    const clipboardRead = vi.fn().mockResolvedValue([]);
+    const clipboardReadText = vi.fn().mockResolvedValue("ls -la");
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        read: clipboardRead,
+        readText: clipboardReadText,
+      } satisfies Pick<Clipboard, "readText"> & { read: () => Promise<ClipboardItem[]> },
+    });
+    let resolveSend: (() => void) | undefined;
+    sendInput.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveSend = resolve;
+        })
+    );
+
+    const { result } = renderHook(
+      () =>
+        usePasteDropUpload({
+          containerRef: { current: container },
+          workspaceId: "ws-1",
+          sendTextToTerminal: sendInput,
+          enabled: true,
+        }),
+      { wrapper: makeWrapper(store) }
+    );
+
+    const pastePromise = result.current.handleClipboardPaste();
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(result.current.busy).toBe(false);
+
+    await act(async () => {
+      resolveSend?.();
+      await pastePromise;
+    });
+  });
+
   it("uploads files passed directly to the explicit file handler", async () => {
     const store = createStore();
     const { result } = renderHook(
