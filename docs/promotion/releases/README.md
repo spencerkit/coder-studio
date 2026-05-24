@@ -18,6 +18,10 @@ Add a release narrative when a version is published to GitHub and npm, especiall
 
 ## Current releases
 
+- [v0.4.4](v0.4.4.md)
+- [v0.4.3](v0.4.3.md)
+- [v0.4.2](v0.4.2.md)
+- [v0.4.1](v0.4.1.md)
 - [v0.4.0](v0.4.0.md)
 - [v0.3.6](v0.3.6.md)
 - [v0.3.5](v0.3.5.md)
