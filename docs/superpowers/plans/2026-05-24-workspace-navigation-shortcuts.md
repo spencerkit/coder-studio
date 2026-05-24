@@ -4,7 +4,7 @@
 
 **Goal:** Add desktop keyboard shortcuts for spatial session navigation with `Ctrl+Arrow` and workspace tab navigation with `Ctrl+Shift+ArrowLeft/ArrowRight`.
 
-**Architecture:** Extend the existing shortcut registry so the new bindings are first-class and visible in settings. Add a desktop workspace navigation hook that resolves configured bindings, uses a pure pane-neighbor helper to find adjacent session targets from the server-backed pane layout tree, and reuses existing workspace/session persistence actions for state updates.
+**Architecture:** Extend the existing shortcut registry so the new session bindings are first-class and visible in settings while rebinding the existing workspace-tab actions to directional `Ctrl+Shift+Arrow` defaults. Add a desktop workspace navigation hook that resolves configured bindings, uses a pure pane-neighbor helper to find adjacent session targets from the server-backed pane layout tree, and reuses existing workspace/session persistence actions for state updates.
 
 **Tech Stack:** React 19, Jotai, Vitest, Testing Library, shared shortcut settings UI, existing workspace/session persistence hooks, and the server-backed agent pane layout tree.
 
@@ -23,7 +23,9 @@
 
 **Modify:**
 - `packages/web/src/lib/shortcuts.ts` — register new shortcut actions and support explicit `Ctrl` plus arrow-key parsing/formatting/matching
+- `packages/web/src/features/settings/components/shortcuts-settings.tsx` — preserve explicit `Ctrl+Arrow*` bindings when recording workspace navigation shortcuts
 - `packages/web/src/features/settings/components/shortcuts-settings.test.tsx` — ensure the new bindings appear in settings and render with expected text
+- `packages/web/src/features/workspace/index.test.tsx` — cover the desktop view mounting path for workspace navigation shortcuts
 - `packages/web/src/features/workspace/views/desktop/workspace-desktop-view.tsx` — mount the navigation shortcut hook alongside existing desktop workspace listeners
 
 **Existing files reused without structural changes:**
@@ -46,6 +48,7 @@
 **Files:**
 - Create: `packages/web/src/lib/shortcuts.test.ts`
 - Modify: `packages/web/src/lib/shortcuts.ts`
+- Modify: `packages/web/src/features/settings/components/shortcuts-settings.tsx`
 - Modify: `packages/web/src/features/settings/components/shortcuts-settings.test.tsx`
 
 - [ ] **Step 1: Write the failing shortcut utility tests**
@@ -83,6 +86,21 @@ describe("shortcuts", () => {
     ).toBe(false);
   });
 
+  it("does not match extra modifiers against a narrower binding", () => {
+    expect(
+      matchesShortcut(
+        new KeyboardEvent("keydown", { key: "ArrowRight", ctrlKey: true, shiftKey: true }),
+        "Ctrl+ArrowRight"
+      )
+    ).toBe(false);
+    expect(
+      matchesShortcut(
+        new KeyboardEvent("keydown", { key: "ArrowRight", ctrlKey: true, shiftKey: true }),
+        "Ctrl+Shift+ArrowRight"
+      )
+    ).toBe(true);
+  });
+
   it("formats arrow bindings for display", () => {
     vi.stubGlobal("navigator", { platform: "Linux x86_64" });
     expect(formatShortcut("Ctrl+Shift+ArrowRight")).toBe("Ctrl+⇧+→");
@@ -94,7 +112,7 @@ describe("shortcuts", () => {
       expect.arrayContaining([
         expect.objectContaining({ id: "session.navigate.left", defaultBinding: "Ctrl+ArrowLeft" }),
         expect.objectContaining({
-          id: "workspace.navigate.next",
+          id: "workspace.next",
           defaultBinding: "Ctrl+Shift+ArrowRight",
         }),
       ])
@@ -103,19 +121,47 @@ describe("shortcuts", () => {
 });
 ```
 
-- [ ] **Step 2: Write the failing settings rendering test**
+- [ ] **Step 2: Write the failing settings tests**
 
-Add this case to `packages/web/src/features/settings/components/shortcuts-settings.test.tsx`:
+Add these cases to `packages/web/src/features/settings/components/shortcuts-settings.test.tsx`:
 
 ```ts
 it("renders the new workspace navigation shortcuts in the settings list", async () => {
   renderShortcutsSettings();
 
   expect(await screen.findByText("命令面板")).toBeInTheDocument();
-  expect(screen.getByText("切换到左侧会话")).toBeInTheDocument();
-  expect(screen.getByText("切换到右侧工作区")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("tab", { name: "工作区" }));
+
+  expect(await screen.findByText("切换到左侧会话")).toBeInTheDocument();
+  expect(screen.getByText("下一个工作区")).toBeInTheDocument();
   expect(screen.getByText("Ctrl+←")).toBeInTheDocument();
   expect(screen.getByText("Ctrl+⇧+→")).toBeInTheDocument();
+});
+
+it("captures explicit ctrl arrow bindings for workspace shortcuts", async () => {
+  const sendCommand = vi.fn().mockResolvedValue({});
+  const { store } = renderShortcutsSettings(sendCommand);
+
+  fireEvent.click(screen.getByRole("tab", { name: "工作区" }));
+  fireEvent.click(await screen.findByText("Ctrl+←"));
+  fireEvent.keyDown(screen.getByRole("textbox", { name: "切换到左侧会话" }), {
+    key: "ArrowDown",
+    ctrlKey: true,
+  });
+
+  await waitFor(() => {
+    expect(sendCommand).toHaveBeenCalledWith(
+      "settings.update",
+      {
+        settings: { shortcuts: { "session.navigate.left": "Ctrl+ArrowDown" } },
+      },
+      undefined
+    );
+  });
+
+  expect(store.get(customShortcutsAtom)).toMatchObject({
+    "session.navigate.left": "Ctrl+ArrowDown",
+  });
 });
 ```
 
@@ -130,7 +176,7 @@ pnpm --filter @coder-studio/web exec vitest run \
 ```
 
 Expected:
-- FAIL because `shortcuts.ts` does not yet define the navigation actions or format arrow keys
+- FAIL because `shortcuts.ts` does not yet define the navigation actions, `matchesShortcut` still accepts extra modifiers, and `shortcuts-settings.tsx` does not yet preserve explicit `Ctrl+Arrow*` captures
 
 - [ ] **Step 4: Implement the minimal shortcut registry changes**
 
@@ -168,15 +214,15 @@ Update `packages/web/src/lib/shortcuts.ts` so it:
   category: "workspace",
 },
 {
-  id: "workspace.navigate.previous",
-  name: "切换到左侧工作区",
+  id: "workspace.previous",
+  name: "上一个工作区",
   description: "切换到上一个工作区标签",
   defaultBinding: "Ctrl+Shift+ArrowLeft",
   category: "workspace",
 },
 {
-  id: "workspace.navigate.next",
-  name: "切换到右侧工作区",
+  id: "workspace.next",
+  name: "下一个工作区",
   description: "切换到下一个工作区标签",
   defaultBinding: "Ctrl+Shift+ArrowRight",
   category: "workspace",
@@ -193,22 +239,40 @@ const formatted = binding
   .replace("ArrowDown", "↓");
 ```
 
-- supports explicit modifier matching in `matchesShortcut`:
+- tightens `matchesShortcut` so it requires an exact modifier set:
 
 ```ts
 const ctrlPressed = event.ctrlKey;
 const metaPressed = event.metaKey;
+const expectedCtrl = modifiers.includes("Ctrl") || (!isMac && modifiers.includes("Mod"));
+const expectedMeta = modifiers.includes("Meta") || (isMac && modifiers.includes("Mod"));
+const expectedShift = modifiers.includes("Shift");
+const expectedAlt = modifiers.includes("Alt");
 
-for (const modifier of modifiers) {
-  if (modifier === "Mod" && !(isMac ? metaPressed : ctrlPressed)) return false;
-  if (modifier === "Ctrl" && !ctrlPressed) return false;
-  if (modifier === "Meta" && !metaPressed) return false;
-  if (modifier === "Shift" && !shiftPressed) return false;
-  if (modifier === "Alt" && !altPressed) return false;
-}
+if (ctrlPressed !== expectedCtrl) return false;
+if (metaPressed !== expectedMeta) return false;
+if (shiftPressed !== expectedShift) return false;
+if (altPressed !== expectedAlt) return false;
 ```
 
 - keeps `parseShortcut` unchanged except for preserving arrow-key names as the `key`
+
+- updates `packages/web/src/features/settings/components/shortcuts-settings.tsx` so shortcut capture stores `Ctrl+Arrow*` for explicit arrow-navigation bindings while keeping legacy `Mod+letter` capture behavior for the existing shortcuts:
+
+```ts
+const isArrowKey = event.key.startsWith("Arrow");
+
+if (isMac) {
+  if (event.metaKey) {
+    parts.push("Mod");
+  }
+  if (event.ctrlKey) {
+    parts.push("Ctrl");
+  }
+} else if (event.ctrlKey) {
+  parts.push(isArrowKey ? "Ctrl" : "Mod");
+}
+```
 
 - [ ] **Step 5: Run the targeted tests to verify they pass**
 
@@ -231,6 +295,7 @@ Run:
 git add \
   packages/web/src/lib/shortcuts.ts \
   packages/web/src/lib/shortcuts.test.ts \
+  packages/web/src/features/settings/components/shortcuts-settings.tsx \
   packages/web/src/features/settings/components/shortcuts-settings.test.tsx
 git commit -m "feat: register workspace navigation shortcuts"
 ```
@@ -512,6 +577,7 @@ git commit -m "feat: add spatial pane navigation helper"
 **Files:**
 - Create: `packages/web/src/features/workspace/actions/use-workspace-navigation-shortcuts.ts`
 - Create: `packages/web/src/features/workspace/actions/use-workspace-navigation-shortcuts.test.tsx`
+- Modify: `packages/web/src/features/workspace/index.test.tsx`
 - Modify: `packages/web/src/features/workspace/views/desktop/workspace-desktop-view.tsx`
 
 - [ ] **Step 1: Write the failing hook tests**
@@ -527,6 +593,7 @@ import { wsClientAtom } from "../../../atoms/connection";
 import { activeWorkspaceIdAtom, workspaceOrderAtom, workspacesAtom } from "../../../atoms/workspaces";
 import { lastViewedTargetAtom } from "../../../atoms/app-ui";
 import { paneLayoutAtomFamily } from "../../agent-panes/atoms/pane-layout";
+import { seedReadyWorkspaceState } from "../../../test-utils/workspace-state";
 import { useWorkspaceNavigationShortcuts } from "./use-workspace-navigation-shortcuts";
 
 function Harness() {
@@ -556,8 +623,7 @@ describe("useWorkspaceNavigationShortcuts", () => {
     store.set(wsClientAtom, { sendCommand, subscribe: vi.fn(() => () => {}) } as never);
     store.set(customShortcutsAtom, {});
     store.set(activeWorkspaceIdAtom, "ws-1");
-    store.set(workspaceOrderAtom, ["ws-1", "ws-2"]);
-    store.set(workspacesAtom, {
+    seedReadyWorkspaceState(store, {
       "ws-1": {
         id: "ws-1",
         path: "/tmp/one",
@@ -575,6 +641,7 @@ describe("useWorkspaceNavigationShortcuts", () => {
         uiState: { leftPanelWidth: 280, bottomPanelHeight: 200, focusMode: false },
       },
     });
+    store.set(workspaceOrderAtom, ["ws-1", "ws-2"]);
     store.set(paneLayoutAtomFamily("ws-1"), {
       id: "root",
       type: "split",
@@ -600,16 +667,21 @@ describe("useWorkspaceNavigationShortcuts", () => {
         sessionId: "sess_2",
       });
     });
+    expect(store.get(workspacesAtom)["ws-1"]?.uiState.activeSessionId).toBe("sess_2");
   });
 
-  it("switches to the next workspace on ctrl shift right", async () => {
-    const sendCommand = vi.fn().mockResolvedValue({ workspaceId: "ws-2", updatedAt: 10 });
+  it("switches to the next workspace on ctrl shift right without matching session navigation", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args: unknown) => {
+      if (op === "workspace.lastViewedTarget.set") {
+        return { ...(args as object), updatedAt: 10 };
+      }
+      return {};
+    });
     const store = createStore();
     store.set(wsClientAtom, { sendCommand, subscribe: vi.fn(() => () => {}) } as never);
     store.set(customShortcutsAtom, {});
     store.set(activeWorkspaceIdAtom, "ws-1");
-    store.set(workspaceOrderAtom, ["ws-1", "ws-2"]);
-    store.set(workspacesAtom, {
+    seedReadyWorkspaceState(store, {
       "ws-1": {
         id: "ws-1",
         path: "/tmp/one",
@@ -627,6 +699,7 @@ describe("useWorkspaceNavigationShortcuts", () => {
         uiState: { leftPanelWidth: 280, bottomPanelHeight: 200, focusMode: false },
       },
     });
+    store.set(workspaceOrderAtom, ["ws-1", "ws-2"]);
     store.set(paneLayoutAtomFamily("ws-1"), { id: "root", type: "leaf", sessionId: "sess_1" });
 
     render(
@@ -640,6 +713,12 @@ describe("useWorkspaceNavigationShortcuts", () => {
     await waitFor(() => {
       expect(store.get(activeWorkspaceIdAtom)).toBe("ws-2");
     });
+    await waitFor(() => {
+      expect(store.get(lastViewedTargetAtom)).toMatchObject({
+        workspaceId: "ws-2",
+      });
+    });
+    expect(store.get(workspacesAtom)["ws-1"]?.uiState.activeSessionId).toBeUndefined();
   });
 });
 ```
@@ -650,11 +729,30 @@ Add this case to `packages/web/src/features/workspace/index.test.tsx`:
 
 ```ts
 it("uses workspace navigation shortcuts to switch the active workspace", async () => {
-  const sendCommand = vi.fn().mockResolvedValue({ workspaceId: "ws-b", updatedAt: 10 });
+  const sendCommand = vi.fn().mockImplementation(async (op: string, args: unknown) => {
+    if (op === "git.status") {
+      return {
+        branch: "main",
+        ahead: 0,
+        behind: 0,
+        staged: [],
+        modified: [],
+        deleted: [],
+        untracked: [],
+      };
+    }
+    if (op === "session.list") {
+      return [];
+    }
+    if (op === "workspace.lastViewedTarget.set") {
+      return { ...(args as object), updatedAt: 10 };
+    }
+    return {};
+  });
   const store = createStore();
   store.set(connectionStatusAtom, "connected");
   store.set(wsClientAtom, { sendCommand, subscribe: vi.fn(() => () => {}) } as never);
-  store.set(workspacesAtom, {
+  seedReadyWorkspaceState(store, {
     "ws-a": {
       id: "ws-a",
       path: "/tmp/a",
@@ -690,6 +788,11 @@ it("uses workspace navigation shortcuts to switch the active workspace", async (
   await waitFor(() => {
     expect(store.get(activeWorkspaceIdAtom)).toBe("ws-b");
   });
+  await waitFor(() => {
+    expect(store.get(lastViewedTargetAtom)).toMatchObject({
+      workspaceId: "ws-b",
+    });
+  });
 });
 ```
 
@@ -705,6 +808,7 @@ pnpm --filter @coder-studio/web exec vitest run \
 
 Expected:
 - FAIL because the navigation hook is not implemented or mounted yet
+- FAIL because the navigation hook is not implemented or mounted yet and the desktop view does not attach it
 
 - [ ] **Step 4: Implement the desktop navigation hook**
 
@@ -743,6 +847,31 @@ export function useWorkspaceNavigationShortcuts(workspaceId: string) {
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) {
+        return;
+      }
+
+      const currentIndex = workspaceOrder.indexOf(workspaceId);
+      const previousBinding = getEffectiveBinding("workspace.previous", customBindings);
+      const nextBinding = getEffectiveBinding("workspace.next", customBindings);
+
+      if (previousBinding && matchesShortcut(event, previousBinding) && currentIndex > 0) {
+        event.preventDefault();
+        void selectWorkspaceTarget(workspaceOrder[currentIndex - 1]!);
+        return;
+      }
+
+      if (nextBinding && matchesShortcut(event, nextBinding) && currentIndex >= 0) {
+        const nextWorkspaceId = workspaceOrder[currentIndex + 1];
+        if (!nextWorkspaceId) {
+          event.preventDefault();
+          return;
+        }
+        event.preventDefault();
+        void selectWorkspaceTarget(nextWorkspaceId);
+        return;
+      }
+
       for (const [shortcutId, direction] of Object.entries(SESSION_DIRECTION_BY_SHORTCUT)) {
         const binding = getEffectiveBinding(shortcutId, customBindings);
         if (!binding || !matchesShortcut(event, binding)) {
@@ -764,26 +893,6 @@ export function useWorkspaceNavigationShortcuts(workspaceId: string) {
         void persistLastViewedTarget({ workspaceId, sessionId: nextSessionId });
         void persistUiState({ activeSessionId: nextSessionId });
         return;
-      }
-
-      const previousBinding = getEffectiveBinding("workspace.navigate.previous", customBindings);
-      const nextBinding = getEffectiveBinding("workspace.navigate.next", customBindings);
-      const currentIndex = workspaceOrder.indexOf(workspaceId);
-
-      if (previousBinding && matchesShortcut(event, previousBinding) && currentIndex > 0) {
-        event.preventDefault();
-        void selectWorkspaceTarget(workspaceOrder[currentIndex - 1]!);
-        return;
-      }
-
-      if (nextBinding && matchesShortcut(event, nextBinding) && currentIndex >= 0) {
-        const nextWorkspaceId = workspaceOrder[currentIndex + 1];
-        if (!nextWorkspaceId) {
-          event.preventDefault();
-          return;
-        }
-        event.preventDefault();
-        void selectWorkspaceTarget(nextWorkspaceId);
       }
     };
 
@@ -875,22 +984,11 @@ Confirm the run shows:
 - workspace navigation shortcut hook passing
 - desktop workspace integration passing
 
-- [ ] **Step 3: Commit the plan artifact**
-
-Run:
-
-```bash
-git add docs/superpowers/plans/2026-05-24-workspace-navigation-shortcuts.md
-git commit -m "docs: add workspace navigation shortcuts implementation plan"
-```
-
----
-
 ## Self-Review
 
 ### Spec coverage
 
-- shortcut registry and settings visibility: covered in Task 1
+- shortcut registry and settings visibility, including explicit `Ctrl+Arrow*` capture: covered in Task 1
 - spatial session navigation based on pane geometry: covered in Task 2
 - desktop workspace runtime shortcut handling: covered in Task 3
 - session state persistence and workspace switching semantics: covered in Task 3
@@ -904,4 +1002,4 @@ The plan avoids `TODO`, `TBD`, and “write tests for the above” style placeho
 
 - `findAdjacentSessionId(layout, activeSessionId, direction)` is introduced in Task 2 and consumed with the same signature in Task 3
 - `useWorkspaceNavigationShortcuts(workspaceId)` is defined in Task 3 and mounted with the same single-argument signature in `workspace-desktop-view.tsx`
-- shortcut IDs used in tests and runtime match the IDs introduced in Task 1
+- workspace-tab runtime bindings continue to use the existing `workspace.previous` and `workspace.next` IDs while the new directional session bindings use the `session.navigate.*` IDs introduced in Task 1
