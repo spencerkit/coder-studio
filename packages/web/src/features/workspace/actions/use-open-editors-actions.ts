@@ -1,4 +1,4 @@
-import { useAtom, useAtomValue } from "jotai";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback } from "react";
 import { workspaceByIdAtomFamily } from "../../../atoms/workspaces";
 import {
@@ -12,6 +12,7 @@ import {
   editorModeAtomFamily,
   type GitDiffPreview,
   gitDiffPreviewAtomFamily,
+  gitDiffPreviewDismissedAtomFamily,
   openFilesAtomFamily,
 } from "../atoms";
 import { resolveOpenEditorsClose } from "./open-editors-close";
@@ -46,7 +47,8 @@ export function useOpenEditorsActions(workspaceId: string, options?: UseOpenEdit
   const workspaceRootPath = options?.workspaceRootPath ?? workspace?.path;
   const [activeFilePath, setActiveFilePath] = useAtom(activeFilePathAtomFamily(workspaceId));
   const [openFiles, setOpenFiles] = useAtom(openFilesAtomFamily(workspaceId));
-  const [, setDiffPreview] = useAtom(gitDiffPreviewAtomFamily(workspaceId));
+  const [diffPreview, setDiffPreview] = useAtom(gitDiffPreviewAtomFamily(workspaceId));
+  const setDiffPreviewDismissed = useSetAtom(gitDiffPreviewDismissedAtomFamily(workspaceId));
   const [, setEditorMode] = useAtom(editorModeAtomFamily(workspaceId));
 
   const closePath = useCallback(
@@ -89,6 +91,13 @@ export function useOpenEditorsActions(workspaceId: string, options?: UseOpenEdit
         setEditorMode("edit");
       }
 
+      const shouldDismissPreview =
+        diffPreview?.source === "file" &&
+        shouldClearDiffPreview(diffPreview, resolution.removedPaths, resolution.shouldExitEditor);
+      if (shouldDismissPreview) {
+        setDiffPreviewDismissed(true);
+      }
+
       setDiffPreview((current) =>
         shouldClearDiffPreview(current, resolution.removedPaths, resolution.shouldExitEditor)
           ? null
@@ -97,9 +106,11 @@ export function useOpenEditorsActions(workspaceId: string, options?: UseOpenEdit
     },
     [
       activeFilePath,
+      diffPreview,
       openFiles,
       setActiveFilePath,
       setDiffPreview,
+      setDiffPreviewDismissed,
       setEditorMode,
       setOpenFiles,
       workspaceId,
@@ -137,6 +148,14 @@ export function useOpenEditorsActions(workspaceId: string, options?: UseOpenEdit
 
     setActiveFilePath(null);
     setEditorMode("edit");
+    const shouldDismissPreview =
+      diffPreview?.source === "file" &&
+      shouldClearDiffPreview(diffPreview, resolution.removedPaths, resolution.shouldExitEditor, {
+        preserveCommitPreviewOnExit: true,
+      });
+    if (shouldDismissPreview) {
+      setDiffPreviewDismissed(true);
+    }
     setDiffPreview((current) =>
       shouldClearDiffPreview(current, resolution.removedPaths, resolution.shouldExitEditor, {
         preserveCommitPreviewOnExit: true,
@@ -146,9 +165,11 @@ export function useOpenEditorsActions(workspaceId: string, options?: UseOpenEdit
     );
   }, [
     activeFilePath,
+    diffPreview,
     openFiles,
     setActiveFilePath,
     setDiffPreview,
+    setDiffPreviewDismissed,
     setEditorMode,
     setOpenFiles,
     workspaceId,

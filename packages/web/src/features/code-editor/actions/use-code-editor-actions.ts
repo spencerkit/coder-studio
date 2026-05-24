@@ -11,6 +11,7 @@ import {
   editorRefreshTokenAtomFamily,
   type GitDiffPreview,
   gitDiffPreviewAtomFamily,
+  gitDiffPreviewDismissedAtomFamily,
   gitStateAtomFamily,
   type OpenFile,
   openFilesAtomFamily,
@@ -59,6 +60,9 @@ export function useCodeEditorActions() {
   const workspaceRootPath = workspace?.path;
   const dispatch = useAtomValue(dispatchCommandAtom);
   const setDiffPreview = useSetAtom(gitDiffPreviewAtomFamily(workspace?.id ?? ""));
+  const setDiffPreviewDismissed = useSetAtom(
+    gitDiffPreviewDismissedAtomFamily(workspace?.id ?? "")
+  );
 
   const [savingPaths, setSavingPaths] = useState<Set<string>>(() => new Set());
   const [saveError, setSaveError] = useState<{ path: string; message: string } | null>(null);
@@ -697,10 +701,11 @@ export function useCodeEditorActions() {
       ...(result.data.originalRevision ? { originalRevision: result.data.originalRevision } : {}),
       ...(result.data.modifiedRevision ? { modifiedRevision: result.data.modifiedRevision } : {}),
     };
+    setDiffPreviewDismissed(false);
     setDiffPreview(nextPreview);
     setMode("diff");
     return true;
-  }, [currentFile, dispatch, setDiffPreview, setMode, workspaceId]);
+  }, [currentFile, dispatch, setDiffPreview, setDiffPreviewDismissed, setMode, workspaceId]);
 
   const isTextFile = currentFile?.kind === "text";
   const isImageFile = currentFile?.kind === "image";

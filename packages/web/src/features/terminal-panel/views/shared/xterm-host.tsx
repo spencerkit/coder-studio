@@ -448,6 +448,7 @@ export function XtermHost({
   const showUnrecoverableHistoryRef = useRef<(() => Promise<void>) | null>(null);
   const showUnavailableTerminalRef = useRef<(() => Promise<void>) | null>(null);
   const retryHistoricalRecoveryRef = useRef<(() => void) | null>(null);
+  const manualRecoveryRetryAttemptedRef = useRef(false);
   const coldStartStateRef = useRef<"idle" | "in-flight" | "done">("idle");
   const activeHistoricalRecoveryModeRef = useRef<"initial" | "reconnect" | null>(null);
   const latestRenderedSeqRef = useRef(0);
@@ -1671,7 +1672,12 @@ export function XtermHost({
       }
 
       activeRecoveryUiModeRef.current = "error";
-      setReplayUiState({ kind: "retryable_failure", reason: classifyReplayFailure(error) });
+      const reason = classifyReplayFailure(error);
+      setReplayUiState(
+        manualRecoveryRetryAttemptedRef.current
+          ? { kind: "failed", reason }
+          : { kind: "retryable_failure", reason }
+      );
       releaseHydration();
       await flushHistoricalRecovery();
     };
@@ -1713,6 +1719,7 @@ export function XtermHost({
       coldStartStateRef.current = "in-flight";
       activeHistoricalRecoveryModeRef.current = "reconnect";
       activeRecoveryUiModeRef.current = "silent";
+      manualRecoveryRetryAttemptedRef.current = false;
       setReplayUiState({ kind: "ready" });
       releaseHydration();
       await flushHistoricalRecovery({
@@ -1731,6 +1738,7 @@ export function XtermHost({
       coldStartStateRef.current = "in-flight";
       activeHistoricalRecoveryModeRef.current = "initial";
       activeRecoveryUiModeRef.current = "silent";
+      manualRecoveryRetryAttemptedRef.current = false;
       setReplayUiState({ kind: "ready" });
       releaseHydration();
       await flushHistoricalRecovery({
@@ -2424,6 +2432,7 @@ export function XtermHost({
   }, []);
 
   const handleRetryRecovery = useCallback(() => {
+    manualRecoveryRetryAttemptedRef.current = true;
     setReplayUiState({ kind: "loading" });
 
     if (recoveryCoordinator) {
@@ -2459,6 +2468,7 @@ export function XtermHost({
     canShowRecoverySurface;
   const showInlineRecoveryNotice =
     replayUiState.kind === "retryable_failure" ||
+    replayUiState.kind === "failed" ||
     replayUiState.kind === "unrecoverable_history" ||
     replayUiState.kind === "truncated";
 
@@ -2508,6 +2518,9 @@ export function XtermHost({
         {t("terminal.replay.retry_action")}
       </Button>
     );
+  } else if (replayUiState.kind === "failed") {
+    noticeTitle = t("terminal.replay.failed_title");
+    noticeBody = t("terminal.replay.failed_body");
   } else if (replayUiState.kind === "unrecoverable_history") {
     noticeTitle = t("terminal.replay.unrecoverable_title");
     noticeBody = t("terminal.replay.unrecoverable_body");

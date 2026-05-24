@@ -1032,7 +1032,7 @@ describe("GitPanel", () => {
     expect(dispatchEventSpy).not.toHaveBeenCalled();
   });
 
-  it("auto-selects the first change from hydrated state without emitting a workspace diff event", async () => {
+  it("does not auto-select the first change from hydrated state", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string, args: unknown) => {
       if (op === "git.diff") {
         return {
@@ -1069,23 +1069,17 @@ describe("GitPanel", () => {
     );
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith(
-        "git.diff",
-        {
-          workspaceId: "ws-test",
-          path: "src/auth/AuthGate.tsx",
-          staged: true,
-        },
-        undefined
-      );
+      expect(screen.getByText("AuthGate.tsx")).toBeInTheDocument();
     });
 
-    expect(store.get(gitDiffPreviewAtomFamily("ws-test"))).toEqual({
-      path: "src/auth/AuthGate.tsx",
-      diff: expect.stringContaining("diff --git a/src/auth/AuthGate.tsx b/src/auth/AuthGate.tsx"),
-      staged: true,
-      source: "file",
-    });
+    expect(sendCommand).not.toHaveBeenCalledWith(
+      "git.diff",
+      expect.objectContaining({
+        workspaceId: "ws-test",
+      })
+    );
+    expect(store.get(gitDiffPreviewAtomFamily("ws-test"))).toBeNull();
+    expect(document.querySelector(".git-row.active")).toBeNull();
     expect(dispatchEventSpy).not.toHaveBeenCalled();
   });
 

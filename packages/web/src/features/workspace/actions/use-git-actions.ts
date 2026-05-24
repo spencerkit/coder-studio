@@ -647,21 +647,18 @@ export function useGitPanelActions({
         return;
       }
 
-      const nextPreviewTarget =
-        (diffPreview ? getChangeByPath(result.data, diffPreview.path) : null) ??
-        getFirstChange(result.data);
+      if (!diffPreview) {
+        return;
+      }
 
-      if (!nextPreviewTarget) {
+      const currentPreviewTarget = getChangeByPath(result.data, diffPreview.path);
+      if (!currentPreviewTarget) {
         updatePreview(null);
         return;
       }
 
-      if (
-        !diffPreview ||
-        diffPreview.path !== nextPreviewTarget.change.path ||
-        Boolean(diffPreview.staged) !== (nextPreviewTarget.type === "staged")
-      ) {
-        await requestDiff(nextPreviewTarget.change, nextPreviewTarget.type);
+      if (Boolean(diffPreview.staged) !== (currentPreviewTarget.type === "staged")) {
+        await requestDiff(currentPreviewTarget.change, currentPreviewTarget.type);
       }
     } finally {
       isLoadingRef.current = false;
@@ -711,20 +708,19 @@ export function useGitPanelActions({
       return;
     }
 
-    if (diffPreview) {
-      const currentChange = getChangeByPath(gitState, diffPreview.path);
-      if (currentChange && Boolean(diffPreview.staged) === (currentChange.type === "staged")) {
-        return;
-      }
+    if (!diffPreview) {
+      return;
     }
 
-    const firstChange = getFirstChange(gitState);
-    if (!firstChange) {
+    const currentChange = getChangeByPath(gitState, diffPreview.path);
+    if (!currentChange) {
       updatePreview(null);
       return;
     }
 
-    void requestDiff(firstChange.change, firstChange.type);
+    if (Boolean(diffPreview.staged) !== (currentChange.type === "staged")) {
+      void requestDiff(currentChange.change, currentChange.type);
+    }
   }, [diffPreview, diffPreviewDismissed, gitState, requestDiff, updatePreview]);
 
   useEffect(() => {
