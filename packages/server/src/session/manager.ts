@@ -67,6 +67,148 @@ const NOOP_SESSION_LOGGER: SessionLogger = {
 type TerminalExitedEvent = Extract<DomainEvent, { type: "terminal.exited" }>;
 type TerminalOutputEvent = Extract<DomainEvent, { type: "terminal.output" }>;
 
+const RECENT_INPUT_ECHO_WINDOW_MS = 3_000;
+const RECENT_INPUT_ECHO_MAX_EVENTS = 12;
+const RECENT_INPUT_ECHO_MAX_BYTES = 8_192;
+const RECENT_OPAQUE_INPUT_ECHO_WINDOW_MS = 200;
+const RESUME_OUTPUT_AGGREGATION_WINDOW_MS = 75;
+const RESUME_OUTPUT_AGGREGATION_MAX_BYTES = 4_096;
+const TERMINAL_ESCAPE_SEQUENCE_PATTERN =
+  /^\x1b(?:\[[0-9;?<>]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|P[\s\S]*?\x1b\\|[@-_])/;
+
+interface RecentInputEcho {
+  at: number;
+  activity: TerminalInputActivity;
+  byteLength: number;
+  opaque: boolean;
+  remainingVisibleText: string;
+}
+
+interface TerminalOutputAssessment {
+  shouldResumeRunning: boolean;
+  countsAsTurnOutput: boolean;
+  shouldAggregateForResume: boolean;
+}
+
+interface PendingResumeAggregation {
+  startedAt: number;
+  chunks: Buffer[];
+  byteLength: number;
+  timer: NodeJS.Timeout | null;
+}
+
+function readTerminalEscapeSequence(text: string, start: number): string | null {
+  const match = text.slice(start).match(TERMINAL_ESCAPE_SEQUENCE_PATTERN);
+  return match?.[0] ?? null;
+}
+
+function classifyRecentInputEcho(
+  bytes: Buffer
+): Pick<RecentInputEcho, "opaque" | "remainingVisibleText"> {
+  const text = bytes.toString("utf8");
+  let opaque = false;
+  let remainingVisibleText = "";
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index]!;
+
+    if (char === "\x1b") {
+      const escape = readTerminalEscapeSequence(text, index);
+      if (escape) {
+        opaque = true;
+        index += escape.length - 1;
+        continue;
+      }
+    }
+
+    if (char === "\r" || char === "\n" || char === "\t") {
+      opaque = true;
+      continue;
+    }
+
+    if (char === "\u007f" || char === "\b") {
+      opaque = true;
+      continue;
+    }
+
+    if (char < " ") {
+      opaque = true;
+      continue;
+    }
+
+    remainingVisibleText += char;
+  }
+
+  return { opaque, remainingVisibleText };
+}
+
+function extractVisibleTerminalText(bytes: Buffer): string {
+  const text = bytes.toString("utf8");
+  let visibleText = "";
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index]!;
+
+    if (char === "\x1b") {
+      const escape = readTerminalEscapeSequence(text, index);
+      if (escape) {
+        index += escape.length - 1;
+        continue;
+      }
+      continue;
+    }
+
+    if (char === "\u007f" || char === "\b") {
+      visibleText = visibleText.slice(0, -1);
+      continue;
+    }
+
+    if (char === "\r" || char === "\n") {
+      visibleText += "\n";
+      continue;
+    }
+
+    if (char === "\t") {
+      visibleText += "\t";
+      continue;
+    }
+
+    if (char < " ") {
+      continue;
+    }
+
+    visibleText += char;
+  }
+
+  return visibleText;
+}
+
+function commonPrefixLength(left: string, right: string): number {
+  const maxLength = Math.min(left.length, right.length);
+  let index = 0;
+
+  while (index < maxLength && left[index] === right[index]) {
+    index += 1;
+  }
+
+  return index;
+}
+
+function chunkHasLineRepaintControl(text: string): boolean {
+  return (
+    text.includes("\r") || /\x1b\[[0-9;?]*K/.test(text) || /\x1b\[[0-9;?]*[ABCDGHF]/.test(text)
+  );
+}
+
+function visibleOutputHasMultipleLines(visibleOutput: string): boolean {
+  return (
+    visibleOutput
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0).length > 1
+  );
+}
+
 export class SessionManager {
   private sessions = new Map<string, ActiveSession>();
   private terminalToSession = new Map<string, string>();
@@ -300,6 +442,9 @@ export class SessionManager {
     text: string | undefined,
     options: { armTurnCompletion: boolean }
   ): void {
+    const completedSynchronously =
+      !options.armTurnCompletion && session.state === "idle" && !session.awaitingTurnCompletion;
+
     if (activity === "control" || activity === "typing") {
       return;
     }
@@ -309,16 +454,10 @@ export class SessionManager {
         session.awaitingTurnCompletion = true;
         session.sawOutputSinceTurnStart = false;
       }
-      const prev = session.state;
-      if (session.state !== "running") {
-        session.state = "running";
-        session.lastActiveAt = Date.now();
-        this.deps.db.update(session.id, {
-          state: "running",
-          lastActiveAt: session.lastActiveAt,
-        });
-        this.emitStateChanged(session, prev, "running");
+      if (completedSynchronously) {
+        return;
       }
+      this.transitionSessionToRunning(session);
       return;
     }
 
@@ -338,23 +477,15 @@ export class SessionManager {
     // here, but we still want to record the first instruction as the title.
     const titleChanged = this.maybeAssignTitle(session, submittedText);
 
-    const prev = session.state;
     const shouldResume = session.state === "idle" || session.state === "starting";
 
-    if (shouldResume) {
-      session.state = "running";
-      session.lastActiveAt = Date.now();
-
-      this.deps.db.update(session.id, {
-        state: "running",
-        lastActiveAt: session.lastActiveAt,
-      });
-
-      this.emitStateChanged(session, prev, "running");
+    if (shouldResume && !completedSynchronously) {
+      this.transitionSessionToRunning(session);
     } else if (titleChanged) {
       // State stayed the same, but the DTO changed (title added) and the UI
       // subscribes via state.changed broadcasts — fire a no-op transition so
       // the fresh DTO is pushed to clients.
+      const prev = session.state;
       this.emitStateChanged(session, prev, session.state);
     }
   }
@@ -378,10 +509,12 @@ export class SessionManager {
         ? (submittedText ?? bytes.toString("utf-8"))
         : undefined;
     const rollbackArm = this.armTurnCompletionBeforeWrite(session, activity);
+    const rollbackRecentInput = this.recordRecentInputBeforeWrite(session, bytes, activity);
 
     try {
       this.deps.terminalMgr.write(session.terminalId, bytes);
     } catch (error) {
+      rollbackRecentInput?.();
       rollbackArm?.();
       throw error;
     }
@@ -455,6 +588,23 @@ export class SessionManager {
     session.title = title;
     this.deps.db.update(session.id, { title });
     return true;
+  }
+
+  private transitionSessionToRunning(session: ActiveSession): void {
+    if (session.state === "running") {
+      return;
+    }
+
+    const prev = session.state;
+    session.state = "running";
+    session.lastActiveAt = Date.now();
+
+    this.deps.db.update(session.id, {
+      state: "running",
+      lastActiveAt: session.lastActiveAt,
+    });
+
+    this.emitStateChanged(session, prev, "running");
   }
 
   /**
@@ -540,6 +690,299 @@ export class SessionManager {
     };
   }
 
+  private recordRecentInputBeforeWrite(
+    session: ActiveSession,
+    bytes: Buffer,
+    activity: TerminalInputActivity
+  ): (() => void) | null {
+    if (activity === "system") {
+      return null;
+    }
+
+    const { opaque, remainingVisibleText } = classifyRecentInputEcho(bytes);
+    if (!opaque && remainingVisibleText.length === 0) {
+      return null;
+    }
+
+    const recentInput: RecentInputEcho = {
+      at: Date.now(),
+      activity,
+      byteLength: bytes.byteLength,
+      opaque,
+      remainingVisibleText,
+    };
+
+    session.recentInputEchoes.push(recentInput);
+    this.pruneRecentInputEchoes(session, recentInput.at);
+
+    return () => {
+      const index = session.recentInputEchoes.indexOf(recentInput);
+      if (index !== -1) {
+        session.recentInputEchoes.splice(index, 1);
+      }
+    };
+  }
+
+  private pruneRecentInputEchoes(session: ActiveSession, now: number = Date.now()): void {
+    session.recentInputEchoes = session.recentInputEchoes.filter(
+      (entry) =>
+        now - entry.at <= RECENT_INPUT_ECHO_WINDOW_MS &&
+        (entry.opaque || entry.remainingVisibleText.length > 0)
+    );
+
+    let totalBytes = session.recentInputEchoes.reduce((sum, entry) => sum + entry.byteLength, 0);
+    while (
+      session.recentInputEchoes.length > RECENT_INPUT_ECHO_MAX_EVENTS ||
+      totalBytes > RECENT_INPUT_ECHO_MAX_BYTES
+    ) {
+      const removed = session.recentInputEchoes.shift();
+      if (!removed) {
+        break;
+      }
+      totalBytes -= removed.byteLength;
+    }
+  }
+
+  private clearRecentInputEchoes(session: ActiveSession): void {
+    session.recentInputEchoes = [];
+  }
+
+  private clearPendingResumeAggregation(session: ActiveSession): void {
+    if (session.pendingResumeAggregation?.timer) {
+      clearTimeout(session.pendingResumeAggregation.timer);
+    }
+    session.pendingResumeAggregation = null;
+  }
+
+  private consumeRecentLiteralEcho(
+    session: ActiveSession,
+    visibleOutput: string
+  ): { matchedLiteralEcho: boolean; leftoverVisibleOutput: string } {
+    let offset = 0;
+    let matchedLiteralEcho = false;
+
+    for (const entry of session.recentInputEchoes) {
+      if (offset >= visibleOutput.length) {
+        break;
+      }
+
+      if (entry.remainingVisibleText.length === 0) {
+        continue;
+      }
+
+      const currentVisibleText = entry.remainingVisibleText;
+      const matchLength = commonPrefixLength(visibleOutput.slice(offset), currentVisibleText);
+      if (matchLength === 0) {
+        break;
+      }
+
+      entry.remainingVisibleText = currentVisibleText.slice(matchLength);
+      offset += matchLength;
+      matchedLiteralEcho = true;
+
+      if (matchLength < currentVisibleText.length) {
+        break;
+      }
+    }
+
+    return {
+      matchedLiteralEcho,
+      leftoverVisibleOutput: visibleOutput.slice(offset),
+    };
+  }
+
+  private hasRecentNonSubmitInput(session: ActiveSession, now: number): boolean {
+    return session.recentInputEchoes.some(
+      (entry) =>
+        entry.activity !== "submit" &&
+        entry.activity !== "internal_submit" &&
+        now - entry.at <= RECENT_OPAQUE_INPUT_ECHO_WINDOW_MS
+    );
+  }
+
+  private hasRecentOpaqueNonSubmitInput(session: ActiveSession, now: number): boolean {
+    return session.recentInputEchoes.some(
+      (entry) =>
+        entry.opaque &&
+        entry.activity !== "submit" &&
+        entry.activity !== "internal_submit" &&
+        now - entry.at <= RECENT_OPAQUE_INPUT_ECHO_WINDOW_MS
+    );
+  }
+
+  private hasRecentControlInput(session: ActiveSession, now: number): boolean {
+    return session.recentInputEchoes.some(
+      (entry) =>
+        entry.activity === "control" && now - entry.at <= RECENT_OPAQUE_INPUT_ECHO_WINDOW_MS
+    );
+  }
+
+  private getRecentVisibleInputText(session: ActiveSession): string {
+    return session.recentInputEchoes
+      .filter((entry) => entry.activity !== "submit" && entry.activity !== "internal_submit")
+      .map((entry) => entry.remainingVisibleText)
+      .join("");
+  }
+
+  private isLikelyPureInputRepaint(
+    session: ActiveSession,
+    chunk: Buffer,
+    visibleOutput: string,
+    now: number
+  ): boolean {
+    if (!this.hasRecentNonSubmitInput(session, now)) {
+      return false;
+    }
+
+    if (!visibleOutput.trim()) {
+      return true;
+    }
+
+    const chunkText = chunk.toString("utf8");
+    if (chunkText.includes("\n")) {
+      return false;
+    }
+
+    if (visibleOutputHasMultipleLines(visibleOutput)) {
+      return false;
+    }
+
+    if (!chunkHasLineRepaintControl(chunkText)) {
+      return false;
+    }
+
+    if (this.hasRecentOpaqueNonSubmitInput(session, now)) {
+      return true;
+    }
+
+    const recentVisibleInputText = this.getRecentVisibleInputText(session);
+    const trimmedVisibleOutput = visibleOutput.trim();
+    if (!recentVisibleInputText || !trimmedVisibleOutput) {
+      return false;
+    }
+
+    return (
+      recentVisibleInputText === trimmedVisibleOutput ||
+      recentVisibleInputText.startsWith(trimmedVisibleOutput) ||
+      trimmedVisibleOutput.endsWith(recentVisibleInputText)
+    );
+  }
+
+  private assessTerminalOutput(session: ActiveSession, chunk: Buffer): TerminalOutputAssessment {
+    const now = Date.now();
+    this.pruneRecentInputEchoes(session, now);
+
+    if (session.recentInputEchoes.length === 0) {
+      const hasVisibleText = extractVisibleTerminalText(chunk).trim().length > 0;
+      return {
+        shouldResumeRunning: hasVisibleText,
+        countsAsTurnOutput: hasVisibleText,
+        shouldAggregateForResume: false,
+      };
+    }
+
+    const visibleOutput = extractVisibleTerminalText(chunk);
+    const { matchedLiteralEcho, leftoverVisibleOutput } = this.consumeRecentLiteralEcho(
+      session,
+      visibleOutput
+    );
+    const hasRecentNonSubmitInput = this.hasRecentNonSubmitInput(session, now);
+    const hasRecentControlInput = this.hasRecentControlInput(session, now);
+
+    this.pruneRecentInputEchoes(session, now);
+
+    const trimmedLeftoverVisibleOutput = leftoverVisibleOutput.trim();
+    const trimmedVisibleOutput = visibleOutput.trim();
+    const suppressImmediateResumeAfterControl = hasRecentControlInput && !matchedLiteralEcho;
+    const chunkText = chunk.toString("utf8");
+    const shouldAggregateForResume =
+      session.state === "idle" &&
+      hasRecentNonSubmitInput &&
+      !matchedLiteralEcho &&
+      trimmedVisibleOutput.length > 0 &&
+      chunkHasLineRepaintControl(chunkText) &&
+      !visibleOutputHasMultipleLines(visibleOutput);
+
+    const shouldResumeRunning = suppressImmediateResumeAfterControl
+      ? false
+      : trimmedLeftoverVisibleOutput.length > 0
+        ? !this.isLikelyPureInputRepaint(session, chunk, leftoverVisibleOutput, now)
+        : !matchedLiteralEcho &&
+          trimmedVisibleOutput.length > 0 &&
+          !this.isLikelyPureInputRepaint(session, chunk, visibleOutput, now);
+
+    const countsAsTurnOutput =
+      !suppressImmediateResumeAfterControl &&
+      (trimmedLeftoverVisibleOutput.length > 0
+        ? !this.isLikelyPureInputRepaint(session, chunk, leftoverVisibleOutput, now)
+        : !matchedLiteralEcho &&
+          trimmedVisibleOutput.length > 0 &&
+          !this.isLikelyPureInputRepaint(session, chunk, visibleOutput, now));
+
+    return {
+      shouldResumeRunning,
+      countsAsTurnOutput,
+      shouldAggregateForResume,
+    };
+  }
+
+  private flushPendingResumeAggregation(session: ActiveSession): void {
+    const pending = session.pendingResumeAggregation;
+    if (!pending) {
+      return;
+    }
+
+    this.clearPendingResumeAggregation(session);
+    if (session.state !== "idle") {
+      return;
+    }
+
+    const combinedChunk = Buffer.concat(pending.chunks, pending.byteLength);
+    const outputAssessment = this.assessTerminalOutput(session, combinedChunk);
+    if (outputAssessment.countsAsTurnOutput) {
+      session.sawOutputSinceTurnStart = true;
+    }
+    if (outputAssessment.shouldResumeRunning && session.state === "idle") {
+      this.transitionSessionToRunning(session);
+    }
+  }
+
+  private schedulePendingResumeAggregation(session: ActiveSession, chunk: Buffer): void {
+    const pending = session.pendingResumeAggregation;
+    if (!pending) {
+      const nextPending: PendingResumeAggregation = {
+        startedAt: Date.now(),
+        chunks: [chunk],
+        byteLength: chunk.byteLength,
+        timer: null,
+      };
+      nextPending.timer = setTimeout(() => {
+        const activeSession = this.sessions.get(session.id);
+        if (!activeSession) {
+          return;
+        }
+        this.flushPendingResumeAggregation(activeSession);
+      }, RESUME_OUTPUT_AGGREGATION_WINDOW_MS);
+      session.pendingResumeAggregation = nextPending;
+      return;
+    }
+
+    pending.chunks.push(chunk);
+    pending.byteLength += chunk.byteLength;
+
+    const combinedChunk = Buffer.concat(pending.chunks, pending.byteLength);
+    const visibleOutput = extractVisibleTerminalText(combinedChunk);
+    const combinedText = combinedChunk.toString("utf8");
+    const shouldFlushNow =
+      pending.byteLength >= RESUME_OUTPUT_AGGREGATION_MAX_BYTES ||
+      combinedText.includes("\n") ||
+      visibleOutputHasMultipleLines(visibleOutput);
+
+    if (shouldFlushNow) {
+      this.flushPendingResumeAggregation(session);
+    }
+  }
+
   private flushPendingPtyIdle(session: ActiveSession): void {
     const ptyState = this.comparators.get(session.id)?.snapshot().ptyState;
     if (ptyState !== "idle") {
@@ -550,6 +993,7 @@ export class SessionManager {
   }
 
   private transitionSessionToIdle(activeSession: ActiveSession): void {
+    this.clearPendingResumeAggregation(activeSession);
     const prev = activeSession.state;
     if (prev !== "running" && prev !== "starting") {
       return;
@@ -621,8 +1065,31 @@ export class SessionManager {
       }
 
       const activeSession = this.sessions.get(session.id);
-      if (activeSession?.awaitingTurnCompletion) {
+      if (!activeSession) {
+        return;
+      }
+
+      if (activeSession.pendingResumeAggregation && activeSession.state !== "idle") {
+        this.clearPendingResumeAggregation(activeSession);
+      }
+
+      if (activeSession.pendingResumeAggregation) {
+        this.schedulePendingResumeAggregation(activeSession, event.chunk);
+        detector.feed(event.chunk);
+        return;
+      }
+
+      const outputAssessment = this.assessTerminalOutput(activeSession, event.chunk);
+      if (outputAssessment.shouldAggregateForResume) {
+        this.schedulePendingResumeAggregation(activeSession, event.chunk);
+        detector.feed(event.chunk);
+        return;
+      }
+      if (outputAssessment.countsAsTurnOutput) {
         activeSession.sawOutputSinceTurnStart = true;
+      }
+      if (outputAssessment.shouldResumeRunning && activeSession.state === "idle") {
+        this.transitionSessionToRunning(activeSession);
       }
 
       detector.feed(event.chunk);
@@ -642,6 +1109,7 @@ export class SessionManager {
   }
 
   private finishSession(session: ActiveSession, exitCode: number | undefined): void {
+    this.clearPendingResumeAggregation(session);
     const prev = session.state;
     session.state = "ended";
     session.endedAt = Date.now();
@@ -679,6 +1147,8 @@ class ActiveSession {
   latestSubmittedUserInput?: string;
   awaitingTurnCompletion = false;
   sawOutputSinceTurnStart = false;
+  recentInputEchoes: RecentInputEcho[] = [];
+  pendingResumeAggregation: PendingResumeAggregation | null = null;
 
   constructor(data: {
     id: string;
