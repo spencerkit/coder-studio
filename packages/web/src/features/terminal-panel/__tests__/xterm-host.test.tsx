@@ -278,10 +278,12 @@ const mockTerminal = {
   open: vi.fn(),
   onData: vi.fn(() => vi.fn()), // Return dispose function
   onResize: vi.fn(() => vi.fn()),
+  onRender: vi.fn(() => vi.fn()),
   onSelectionChange: vi.fn(() => vi.fn()),
   attachCustomKeyEventHandler: vi.fn(),
   hasSelection: vi.fn(() => false),
   getSelection: vi.fn(() => ""),
+  input: vi.fn(),
   write: vi.fn(),
   writeln: vi.fn(),
   scrollLines: vi.fn(),
@@ -296,6 +298,9 @@ const mockTerminal = {
       baseY: 0,
       getLine: vi.fn((row: number) => mockBufferLines.get(row)),
     },
+  },
+  parser: {
+    registerOscHandler: vi.fn(() => ({ dispose: vi.fn() })),
   },
   options: {},
 };
@@ -356,6 +361,8 @@ describe("XtermHost", () => {
     mockTerminal.write.mockImplementation((_data: Uint8Array | string, callback?: () => void) => {
       callback?.();
     });
+    mockTerminal.onRender.mockImplementation(() => vi.fn());
+    mockTerminal.input.mockImplementation(() => {});
     mockTerminal.writeln.mockImplementation(() => {});
     mockTerminal.reset.mockImplementation(() => {});
     mockTerminal.scrollLines.mockImplementation((amount: number) => {
@@ -1204,7 +1211,7 @@ describe("XtermHost", () => {
       expect.objectContaining({
         theme: expect.objectContaining({
           ...getThemeById("mint-light").terminalTheme,
-          background: "transparent",
+          background: "#00000000",
         }),
       })
     );
@@ -2703,9 +2710,10 @@ describe("XtermHost", () => {
 
     expect(Terminal).toHaveBeenCalledWith(
       expect.objectContaining({
+        allowTransparency: true,
         theme: expect.objectContaining({
           ...getThemeById("mint-dark").terminalTheme,
-          background: "transparent",
+          background: "#00000000",
         }),
       })
     );
@@ -2724,9 +2732,10 @@ describe("XtermHost", () => {
 
     expect(Terminal).toHaveBeenCalledWith(
       expect.objectContaining({
+        allowTransparency: true,
         theme: expect.objectContaining({
           ...getThemeById("mint-light").terminalTheme,
-          background: "transparent",
+          background: "#00000000",
         }),
       })
     );
@@ -2761,7 +2770,7 @@ describe("XtermHost", () => {
       expect.objectContaining({
         theme: expect.objectContaining({
           ...getThemeById("mint-dark").terminalTheme,
-          background: "transparent",
+          background: "#00000000",
         }),
       })
     );
@@ -2786,7 +2795,7 @@ describe("XtermHost", () => {
         expect.objectContaining({
           theme: expect.objectContaining({
             ...getThemeById("graphite-light").terminalTheme,
-            background: "transparent",
+            background: "#00000000",
           }),
         })
       );
@@ -2827,11 +2836,131 @@ describe("XtermHost", () => {
         expect.objectContaining({
           theme: expect.objectContaining({
             ...getThemeById("graphite-light").terminalTheme,
-            background: "transparent",
+            background: "#00000000",
           }),
         })
       );
     });
+  });
+
+  it("reports semantic terminal colors for OSC 10/11 queries while keeping the rendered background transparent", async () => {
+    const store = createStore();
+    const sendTerminalInput = vi.fn().mockResolvedValue(undefined);
+    store.set(themeAtom, "mint-light");
+    store.set(wsClientAtom, {
+      sendTerminalInput,
+      sendCommand: vi.fn().mockResolvedValue({ status: "ok" }),
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => "connected"),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="osc-query-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    const fgHandlerCall = mockTerminal.parser.registerOscHandler.mock.calls.find(
+      ([ident]) => ident === 10
+    );
+    const bgHandlerCall = mockTerminal.parser.registerOscHandler.mock.calls.find(
+      ([ident]) => ident === 11
+    );
+
+    expect(fgHandlerCall).toBeTruthy();
+    expect(bgHandlerCall).toBeTruthy();
+
+    const fgHandler = fgHandlerCall?.[1] as
+      | ((data: string) => boolean | Promise<boolean>)
+      | undefined;
+    const bgHandler = bgHandlerCall?.[1] as
+      | ((data: string) => boolean | Promise<boolean>)
+      | undefined;
+
+    await act(async () => {
+      expect(await fgHandler?.("?")).toBe(true);
+      expect(await bgHandler?.("?")).toBe(true);
+    });
+
+    await waitFor(() => {
+      expect(sendTerminalInput).toHaveBeenNthCalledWith(
+        1,
+        "osc-query-terminal",
+        textEncoder.encode("\u001b]10;rgb:1f1f/2323/2828\u001b\\"),
+        "system",
+        undefined
+      );
+      expect(sendTerminalInput).toHaveBeenNthCalledWith(
+        2,
+        "osc-query-terminal",
+        textEncoder.encode("\u001b]11;rgb:fcfc/ffff/fdfd\u001b\\"),
+        "system",
+        undefined
+      );
+    });
+
+    expect(mockTerminal.options).toEqual(
+      expect.objectContaining({
+        theme: expect.objectContaining({
+          ...getThemeById("mint-light").terminalTheme,
+          background: "#00000000",
+        }),
+      })
+    );
+  });
+
+  it("normalizes rendered ANSI cell backgrounds to the active surface opacity", async () => {
+    const store = createStore();
+    store.set(themeAtom, "mint-light");
+    store.set(appearancePersonalizationAtom, {
+      version: 1,
+      common: {
+        backgroundMode: "image",
+        backgroundAssetId: "asset-terminal-material-alpha",
+        backgroundFit: "cover",
+        backgroundDimness: 18,
+        backgroundBlur: 4,
+        glassEnabled: true,
+        glassIntensity: 28,
+        surfaceOpacity: 52,
+      },
+      desktop: {},
+      mobile: {},
+    });
+
+    let renderListener: ((viewport: { start: number; end: number }) => void) | undefined;
+    mockTerminal.onRender.mockImplementationOnce((listener) => {
+      renderListener = listener;
+      return vi.fn();
+    });
+
+    const { container } = render(
+      <Provider store={store}>
+        <XtermHost terminalId="terminal-material-alpha" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    const host = container.querySelector(".xterm-host") as HTMLDivElement | null;
+    expect(host).toBeTruthy();
+    expect(renderListener).toBeTypeOf("function");
+
+    const rowsElement = document.createElement("div");
+    rowsElement.className = "xterm-rows";
+    const row = document.createElement("div");
+    const cell = document.createElement("span");
+    cell.textContent = "你好";
+    cell.style.backgroundColor = "rgb(55, 55, 55)";
+    cell.style.color = "rgb(255, 255, 255)";
+    row.appendChild(cell);
+    rowsElement.appendChild(row);
+    host!.appendChild(rowsElement);
+
+    await act(async () => {
+      renderListener?.({ start: 0, end: 0 });
+    });
+
+    expect(cell.style.backgroundColor).toBe("rgba(55, 55, 55, 0.52)");
   });
 
   it("uses the high-contrast dark terminal palette for hc-dark", async () => {
@@ -2849,7 +2978,7 @@ describe("XtermHost", () => {
       expect.objectContaining({
         theme: expect.objectContaining({
           ...getThemeById("hc-dark").terminalTheme,
-          background: "transparent",
+          background: "#00000000",
         }),
       })
     );

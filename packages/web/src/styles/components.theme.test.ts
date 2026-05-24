@@ -1338,6 +1338,7 @@ describe("components.css theme-sensitive surfaces", () => {
     const xtermReplayCard = getLastRuleBlock(".xterm-replay-overlay__card");
     const sessionProgress = getLastRuleBlock(".session-progress");
     const sessionHeader = getLastRuleBlock(".session-header");
+    const supervisorCard = getLastRuleBlock(".supervisor-card");
     const sessionHeaderLeft = getLastRuleBlock(".session-header-left");
     const sessionHeaderCopyBlocks = getRuleBlocksFrom(stylesheet, ".session-header-copy");
     const sessionTitleRow = getLastRuleBlock(".session-title-row");
@@ -1362,6 +1363,8 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(xtermReplayCard).toContain("border-radius: var(--terminal-local-overlay-radius)");
     expect(sessionProgress).toContain("background: var(--state-info-bg)");
     expect(sessionHeader).toContain("padding: var(--gap-tight) var(--inset-control-inline)");
+    expect(supervisorCard).toContain("background: var(--ws-session-header-bg)");
+    expect(supervisorCard).toContain("backdrop-filter: var(--ws-backdrop-filter)");
     expect(sessionHeaderLeft).toContain("gap: var(--gap-default)");
     expect(sessionHeaderCopyBlocks.some((block) => block.includes("gap: var(--gap-compact)"))).toBe(
       true
