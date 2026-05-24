@@ -867,7 +867,18 @@ describe("DiagnosticsPage", () => {
       throw new Error(`Unexpected op: ${op}`);
     });
 
-    renderDiagnostics("/diagnostics?context=manual_check", sendCommand);
+    const store = createStoreWithClient(sendCommand);
+    store.set(activationStatusAtom, "active");
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/diagnostics?context=manual_check"]}>
+          <Routes>
+            <Route path="/diagnostics" element={<DiagnosticsPage />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>
+    );
 
     expect(await screen.findByText("Git is missing")).toBeInTheDocument();
     vi.useFakeTimers();
