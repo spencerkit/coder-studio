@@ -131,6 +131,66 @@ describe("pane-layout-tree", () => {
     });
   });
 
+  it("returns the original tree when swap source pane is a draft leaf", () => {
+    const layout: PaneNode = {
+      id: "root",
+      type: "split",
+      direction: "horizontal",
+      ratio: 0.5,
+      children: [
+        { id: "left", type: "leaf" },
+        { id: "right", type: "leaf", sessionId: "sess_2" },
+      ],
+    };
+
+    expect(swapPaneSessionsByPaneId(layout, "left", "right")).toBe(layout);
+  });
+
+  it("returns the original tree when swap target pane is a draft leaf", () => {
+    const layout: PaneNode = {
+      id: "root",
+      type: "split",
+      direction: "horizontal",
+      ratio: 0.5,
+      children: [
+        { id: "left", type: "leaf", sessionId: "sess_1" },
+        { id: "right", type: "leaf" },
+      ],
+    };
+
+    expect(swapPaneSessionsByPaneId(layout, "left", "right")).toBe(layout);
+  });
+
+  it("returns the original tree when swap source pane is missing", () => {
+    const layout: PaneNode = {
+      id: "root",
+      type: "split",
+      direction: "horizontal",
+      ratio: 0.5,
+      children: [
+        { id: "left", type: "leaf", sessionId: "sess_1" },
+        { id: "right", type: "leaf", sessionId: "sess_2" },
+      ],
+    };
+
+    expect(swapPaneSessionsByPaneId(layout, "missing", "right")).toBe(layout);
+  });
+
+  it("returns the original tree when swap target pane is missing", () => {
+    const layout: PaneNode = {
+      id: "root",
+      type: "split",
+      direction: "horizontal",
+      ratio: 0.5,
+      children: [
+        { id: "left", type: "leaf", sessionId: "sess_1" },
+        { id: "right", type: "leaf", sessionId: "sess_2" },
+      ],
+    };
+
+    expect(swapPaneSessionsByPaneId(layout, "left", "missing")).toBe(layout);
+  });
+
   it("moves a session into a draft leaf and collapses the old source branch", () => {
     const layout: PaneNode = {
       id: "root",
@@ -164,6 +224,66 @@ describe("pane-layout-tree", () => {
     });
   });
 
+  it("returns the original tree when move source pane is missing", () => {
+    const layout: PaneNode = {
+      id: "root",
+      type: "split",
+      direction: "horizontal",
+      ratio: 0.5,
+      children: [
+        { id: "left", type: "leaf", sessionId: "sess_1" },
+        { id: "right", type: "leaf" },
+      ],
+    };
+
+    expect(moveSessionToDraftPane(layout, "missing", "right")).toBe(layout);
+  });
+
+  it("returns the original tree when move target pane is missing", () => {
+    const layout: PaneNode = {
+      id: "root",
+      type: "split",
+      direction: "horizontal",
+      ratio: 0.5,
+      children: [
+        { id: "left", type: "leaf", sessionId: "sess_1" },
+        { id: "right", type: "leaf" },
+      ],
+    };
+
+    expect(moveSessionToDraftPane(layout, "left", "missing")).toBe(layout);
+  });
+
+  it("returns the original tree when move target pane is a session leaf", () => {
+    const layout: PaneNode = {
+      id: "root",
+      type: "split",
+      direction: "horizontal",
+      ratio: 0.5,
+      children: [
+        { id: "left", type: "leaf", sessionId: "sess_1" },
+        { id: "right", type: "leaf", sessionId: "sess_2" },
+      ],
+    };
+
+    expect(moveSessionToDraftPane(layout, "left", "right")).toBe(layout);
+  });
+
+  it("returns the original tree when move source pane is a draft leaf", () => {
+    const layout: PaneNode = {
+      id: "root",
+      type: "split",
+      direction: "horizontal",
+      ratio: 0.5,
+      children: [
+        { id: "left", type: "leaf" },
+        { id: "right", type: "leaf" },
+      ],
+    };
+
+    expect(moveSessionToDraftPane(layout, "left", "right")).toBe(layout);
+  });
+
   it("wraps the target leaf with a horizontal split on left insert", () => {
     const nowSpy = vi.spyOn(Date, "now").mockReturnValue(1700000000000);
 
@@ -192,6 +312,78 @@ describe("pane-layout-tree", () => {
     } finally {
       nowSpy.mockRestore();
     }
+  });
+
+  it("wraps the target leaf with a horizontal split on right insert", () => {
+    const layout: PaneNode = {
+      id: "root",
+      type: "split",
+      direction: "horizontal",
+      ratio: 0.5,
+      children: [
+        { id: "left", type: "leaf", sessionId: "sess_1" },
+        { id: "right", type: "leaf", sessionId: "sess_2" },
+      ],
+    };
+
+    expect(insertPaneAtEdge(layout, "left", "right", "right")).toEqual({
+      id: expect.stringMatching(/^split-right-right-/),
+      type: "split",
+      direction: "horizontal",
+      ratio: 0.5,
+      children: [
+        { id: "right", type: "leaf", sessionId: "sess_2" },
+        { id: "left", type: "leaf", sessionId: "sess_1" },
+      ],
+    });
+  });
+
+  it("wraps the target leaf with a vertical split on top insert", () => {
+    const layout: PaneNode = {
+      id: "root",
+      type: "split",
+      direction: "horizontal",
+      ratio: 0.5,
+      children: [
+        { id: "left", type: "leaf", sessionId: "sess_1" },
+        { id: "right", type: "leaf", sessionId: "sess_2" },
+      ],
+    };
+
+    expect(insertPaneAtEdge(layout, "left", "right", "top")).toEqual({
+      id: expect.stringMatching(/^split-right-top-/),
+      type: "split",
+      direction: "vertical",
+      ratio: 0.5,
+      children: [
+        { id: "left", type: "leaf", sessionId: "sess_1" },
+        { id: "right", type: "leaf", sessionId: "sess_2" },
+      ],
+    });
+  });
+
+  it("wraps the target leaf with a vertical split on bottom insert", () => {
+    const layout: PaneNode = {
+      id: "root",
+      type: "split",
+      direction: "horizontal",
+      ratio: 0.5,
+      children: [
+        { id: "left", type: "leaf", sessionId: "sess_1" },
+        { id: "right", type: "leaf", sessionId: "sess_2" },
+      ],
+    };
+
+    expect(insertPaneAtEdge(layout, "left", "right", "bottom")).toEqual({
+      id: expect.stringMatching(/^split-right-bottom-/),
+      type: "split",
+      direction: "vertical",
+      ratio: 0.5,
+      children: [
+        { id: "right", type: "leaf", sessionId: "sess_2" },
+        { id: "left", type: "leaf", sessionId: "sess_1" },
+      ],
+    });
   });
 
   it("returns the original tree when attempting to drag onto the same pane", () => {
