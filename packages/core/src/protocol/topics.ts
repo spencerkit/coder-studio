@@ -34,6 +34,7 @@ export const Topics = {
 
   // Notification
   notificationToast: "notification.toast",
+  monitoringSnapshotUpdated: "monitoring.snapshot.updated",
   updateStateChanged: "update.state.changed",
 
   // Supervisor-level (Phase 3)

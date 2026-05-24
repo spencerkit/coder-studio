@@ -346,6 +346,14 @@ function buildCommands(context: {
         navigate("/settings");
       },
     },
+    {
+      id: "open-monitoring",
+      label: t("monitoring.command_label"),
+      description: t("monitoring.command_description"),
+      action: () => {
+        navigate("/monitoring");
+      },
+    },
   ];
 
   if (shellKind === "desktop") {

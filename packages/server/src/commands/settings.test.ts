@@ -237,6 +237,39 @@ describe("settings commands", () => {
     expect(updateService.reloadScheduleFromSettings).toHaveBeenCalledTimes(1);
   });
 
+  it("settings.update persists monitoring settings and reloads the monitoring service", async () => {
+    const monitoringService = {
+      reloadFromSettings: vi.fn(),
+    };
+    ctx.monitoringService = monitoringService as never;
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "settings-update-monitoring",
+        op: "settings.update",
+        args: {
+          settings: {
+            monitoring: {
+              enabled: true,
+              hostMetricsEnabled: true,
+              runtimeSummaryEnabled: true,
+              workspaceAttributionEnabled: true,
+              subprocessDrilldownEnabled: false,
+              sampleIntervalMs: 5000,
+            },
+          },
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(settingsRepo.get("monitoring.enabled")).toBe(true);
+    expect(settingsRepo.get("monitoring.sampleIntervalMs")).toBe(5000);
+    expect(monitoringService.reloadFromSettings).toHaveBeenCalledTimes(1);
+  });
+
   it("settings.update rejects unsupported update check intervals", async () => {
     const result = await dispatch(
       {

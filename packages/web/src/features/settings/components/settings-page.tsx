@@ -5,6 +5,7 @@
  */
 
 import {
+  createDefaultMonitoringSettings,
   createDefaultUpdateSettings,
   DEFAULT_SUPERVISOR_EVALUATION_TIMEOUT_SEC,
   DEFAULT_SUPERVISOR_RETRY_DELAY_SEC,
@@ -12,10 +13,13 @@ import {
   DEFAULT_SUPERVISOR_RETRY_MAX_COUNT,
   DEFAULT_SUPERVISOR_RETRY_ON_EVALUATOR_ERROR,
   DEFAULT_SUPERVISOR_RETRY_ON_TIMEOUT,
+  deriveMonitoringMode,
   type LspRuntimeMode,
   MAX_SUPERVISOR_EVALUATION_TIMEOUT_SEC,
   MAX_SUPERVISOR_RETRY_DELAY_SEC,
   MAX_SUPERVISOR_RETRY_MAX_COUNT,
+  type MonitoringSettings,
+  resolveMonitoringSettings,
   resolveSupervisorEvaluationTimeoutSec,
   resolveSupervisorRetryDelaySec,
   resolveSupervisorRetryEnabled,
@@ -52,6 +56,7 @@ import {
   terminalPreferencesAtom,
 } from "../../terminal-panel/preferences";
 import { AboutSettings } from "./about-settings";
+import { MonitoringSettingsCard } from "./monitoring-settings-card";
 import { type ProviderInfo, ProviderSettings } from "./provider-settings";
 import { resolveSettingsExitTargetFromBrowserHistory } from "./settings-navigation";
 import {
@@ -263,6 +268,9 @@ export function SettingsPage() {
   const [providerAdditionalArgsById, setProviderAdditionalArgsById] = useState<
     Record<string, string>
   >({});
+  const [monitoringSettings, setMonitoringSettings] = useState<MonitoringSettings>(
+    createDefaultMonitoringSettings()
+  );
   const defaultUpdateSettings = createDefaultUpdateSettings();
   const [updateAutoCheckEnabled, setUpdateAutoCheckEnabled] = useState(
     defaultUpdateSettings.autoCheckEnabled
@@ -371,6 +379,7 @@ export function SettingsPage() {
       if (typeof settings["notifications.soundEnabled"] === "boolean") {
         setSoundEnabled(settings["notifications.soundEnabled"]);
       }
+      setMonitoringSettings(resolveMonitoringSettings(settings));
       if (
         updateSelectionVersionRef.current.autoCheckEnabled ===
         updateSelectionVersionAtRequestStart.autoCheckEnabled
@@ -589,6 +598,28 @@ export function SettingsPage() {
     });
   };
 
+  const saveMonitoringSettings = async (next: MonitoringSettings) => {
+    const previous = monitoringSettings;
+    setMonitoringSettings(next);
+
+    const result = await dispatch("settings.update", {
+      settings: {
+        monitoring: {
+          enabled: next.enabled,
+          hostMetricsEnabled: next.hostMetricsEnabled,
+          runtimeSummaryEnabled: next.runtimeSummaryEnabled,
+          workspaceAttributionEnabled: next.workspaceAttributionEnabled,
+          subprocessDrilldownEnabled: next.subprocessDrilldownEnabled,
+          sampleIntervalMs: next.sampleIntervalMs,
+        },
+      },
+    });
+
+    if (result === null || !result.ok) {
+      setMonitoringSettings(previous);
+    }
+  };
+
   const handleUpdateAutoCheckChange = async (value: boolean) => {
     updateSelectionVersionRef.current.autoCheckEnabled += 1;
     setUpdateAutoCheckEnabled(value);
@@ -672,6 +703,8 @@ export function SettingsPage() {
             terminalCopyOnSelect={terminalPreferences.copyOnSelect}
             setTerminalCopyOnSelect={handleTerminalCopyOnSelectSelection}
             activeWorkspaceId={activeWorkspaceId}
+            monitoringSettings={monitoringSettings}
+            onMonitoringSettingsChange={saveMonitoringSettings}
           />
         );
       case "appearance":
@@ -881,6 +914,8 @@ interface GeneralSettingsProps {
   terminalCopyOnSelect: boolean;
   setTerminalCopyOnSelect: (value: boolean) => void;
   activeWorkspaceId: string | null;
+  monitoringSettings: MonitoringSettings;
+  onMonitoringSettingsChange: (value: MonitoringSettings) => Promise<void>;
 }
 
 function parseSupervisorTimeoutInput(value: string): number | null {
@@ -971,6 +1006,8 @@ function GeneralSettings({
   terminalCopyOnSelect,
   setTerminalCopyOnSelect,
   activeWorkspaceId,
+  monitoringSettings,
+  onMonitoringSettingsChange,
 }: GeneralSettingsProps) {
   const t = useTranslation();
   const navigate = useNavigate();
@@ -1176,6 +1213,15 @@ function GeneralSettings({
 
   return (
     <div className="settings-section">
+      <div className="settings-group">
+        <MonitoringSettingsCard
+          mode={deriveMonitoringMode(monitoringSettings)}
+          onChange={onMonitoringSettingsChange}
+          onOpenMonitoring={() => navigate("/monitoring")}
+          settings={monitoringSettings}
+        />
+      </div>
+
       <div className="settings-group">
         <h3 className="settings-group-title">{t("settings.notifications")}</h3>
         <p className="settings-group-desc">{t("settings.notifications_channel_hint")}</p>

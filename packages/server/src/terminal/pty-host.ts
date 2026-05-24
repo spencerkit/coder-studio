@@ -225,6 +225,7 @@ export class NodePtyHost implements PtyHost {
     });
 
     return {
+      pid: ptyProcess.pid,
       onData: (callback) => {
         ptyProcess.onData(callback);
       },

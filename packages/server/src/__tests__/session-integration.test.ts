@@ -72,6 +72,7 @@ function createMockPtyHost(spawnCalls: Array<{ argv: string[]; options: unknown 
         };
 
         const pty: PtyProcess = {
+          pid: 43210,
           onData: (callback) => {
             const term = terminals.get(id);
             if (term) term.onDataCallbacks.push(callback);

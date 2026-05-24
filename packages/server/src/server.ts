@@ -30,6 +30,10 @@ import { LspToolInstallManager } from "./lsp-tools/install-manager.js";
 import { LspToolManager } from "./lsp-tools/manager.js";
 import { FileManifestStore } from "./lsp-tools/manifest-store.js";
 import { resolveLspToolRoot } from "./lsp-tools/tool-root.js";
+import { HostCollector } from "./monitoring/host-collector.js";
+import { ManagedProcessRegistry } from "./monitoring/managed-process-registry.js";
+import { createProcessTableCollector } from "./monitoring/process-table/index.js";
+import { MonitoringService } from "./monitoring/service.js";
 import { runCommandAsString } from "./provider-runtime/command-runner.js";
 import { createE2EProviderMockOverrides } from "./provider-runtime/e2e-provider-mock.js";
 import { ProviderInstallManager } from "./provider-runtime/install-manager.js";
@@ -91,6 +95,9 @@ export async function createServer(
   let workspaceMgr: WorkspaceManager;
   let commandContext: CommandContext;
   let lspMgr: LspManager | null = null;
+  const managedProcessRegistry = new ManagedProcessRegistry({
+    now: () => Date.now(),
+  });
 
   const terminalRepo = new TerminalRepo({
     filePath: join(stateRoot, "state", "terminals.json"),
@@ -162,6 +169,7 @@ export async function createServer(
 
   let supervisorMgr: SupervisorManager | undefined;
   let updateService: UpdateService | undefined;
+  let monitoringService: MonitoringService | undefined;
 
   workspaceMgr = new WorkspaceManager({
     workspaceRepo,
@@ -287,6 +295,16 @@ export async function createServer(
   });
   updateService.start();
 
+  monitoringService = new MonitoringService({
+    broadcaster: wsHub,
+    settingsRepo,
+    registry: managedProcessRegistry,
+    sessionMgr,
+    terminalMgr,
+    hostCollector: new HostCollector(),
+    processCollector: createProcessTableCollector(),
+  });
+
   commandContext = {
     workspaceMgr,
     sessionMgr,
@@ -307,9 +325,11 @@ export async function createServer(
     lspToolMgr,
     lspToolInstallMgr,
     updateService,
+    monitoringService,
   };
 
   wsHub.setCommandContext(commandContext);
+  monitoringService.start();
 
   await app.listen({
     host: config.host,
@@ -352,6 +372,7 @@ export async function createServer(
     await lspMgr?.disposeAll();
     autoFetch.stop();
     supervisorMgr.stop();
+    monitoringService?.stop();
     updateService?.stop();
     terminalMgr.shutdown();
     wsHub.destroy();

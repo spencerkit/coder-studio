@@ -75,6 +75,10 @@ vi.mock("../../features/diagnostics", async () => {
   };
 });
 
+vi.mock("../../features/monitoring", () => ({
+  MonitoringPage: () => <div>MonitoringPage</div>,
+}));
+
 vi.mock("../../features/command-palette", () => ({
   CommandPalette: () => null,
 }));
@@ -1135,6 +1139,26 @@ describe("MobileShell Phase 2 workspace", () => {
 
     expect(screen.getByText("DiagnosticsPage")).toBeInTheDocument();
     expect(screen.getByTestId("location-display")).toHaveTextContent("/diagnostics");
+    expect(screen.queryByText("正在连接工作区...")).not.toBeInTheDocument();
+  });
+
+  it("renders MonitoringPage on mobile /monitoring while auth status is still unknown", () => {
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(authEnabledAtom, null);
+    store.set(authenticatedAtom, false);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/monitoring"]}>
+          <LocationProbe />
+          <MobileShell />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    expect(screen.getByText("MonitoringPage")).toBeInTheDocument();
+    expect(screen.getByTestId("location-display")).toHaveTextContent("/monitoring");
     expect(screen.queryByText("正在连接工作区...")).not.toBeInTheDocument();
   });
 
