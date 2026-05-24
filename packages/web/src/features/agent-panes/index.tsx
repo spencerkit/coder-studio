@@ -10,6 +10,7 @@ import type { FC } from "react";
 import { activeWorkspaceAtom } from "../../atoms/workspaces";
 import { EmptyState } from "../../components/ui";
 import { useTranslation } from "../../lib/i18n";
+import type { PaneDropIntent } from "./actions/pane-drag-types";
 import { usePaneActions } from "./actions/use-pane-actions";
 import { useSessionActions } from "./actions/use-session-actions";
 import { useWorkspaceSessions } from "./actions/use-workspace-sessions";
@@ -52,6 +53,20 @@ export const AgentPanes: FC<AgentPanesProps> = ({ hydrateSessions = true }) => {
     (hasLayoutSessions ||
       (paneLayout.type === "leaf" && !paneLayout.sessionId && paneLayout.id === "root"));
 
+  const handlePaneDrop = (intent: PaneDropIntent) => {
+    if (intent.placement === "center") {
+      if (intent.targetType === "draft") {
+        paneActions.moveSessionToDraft(intent.sourcePaneId, intent.targetPaneId);
+        return;
+      }
+
+      paneActions.swapPaneSessions(intent.sourcePaneId, intent.targetPaneId);
+      return;
+    }
+
+    paneActions.insertSessionPaneAtEdge(intent.sourcePaneId, intent.targetPaneId, intent.placement);
+  };
+
   if (!workspace) {
     return (
       <div className="agent-panes-empty">
@@ -83,6 +98,7 @@ export const AgentPanes: FC<AgentPanesProps> = ({ hydrateSessions = true }) => {
         onSplitSession={paneActions.splitSessionPane}
         onCloseDraftPane={paneActions.closeDraftPane}
         onAssignSession={paneActions.assignSession}
+        onPaneDrop={handlePaneDrop}
         onReplaceWithSession={paneActions.replaceWithSession}
         onCloseSessionCommand={sessionActions.closeSession}
       />
@@ -100,6 +116,7 @@ interface PaneNodeRendererProps {
     sessionId: string,
     paneDisposition?: "draft" | "remove"
   ) => Promise<boolean | void>;
+  onPaneDrop: (intent: PaneDropIntent) => void;
   onReplaceWithSession: (sessionId: string) => void;
   onSplitDraftPane: (paneId: string, direction: "horizontal" | "vertical") => void;
   onSplitSession: (sessionId: string, direction: "horizontal" | "vertical") => void;
@@ -115,6 +132,7 @@ const PaneNodeRenderer: FC<PaneNodeRendererProps> = ({
   onCloseDraftPane,
   onCloseSession,
   onCloseSessionCommand,
+  onPaneDrop,
   onReplaceWithSession,
   onSplitDraftPane,
   onSplitSession,
@@ -124,6 +142,13 @@ const PaneNodeRenderer: FC<PaneNodeRendererProps> = ({
     if (node.sessionId) {
       return (
         <SessionCard
+          {...({
+            paneId: node.id,
+            onPaneDrop,
+          } satisfies {
+            paneId: string;
+            onPaneDrop: (intent: PaneDropIntent) => void;
+          })}
           sessionId={node.sessionId}
           onClose={async () => {
             onCloseSession(node.sessionId!);
@@ -140,6 +165,11 @@ const PaneNodeRenderer: FC<PaneNodeRendererProps> = ({
           paneId={node.id}
           onAssignSession={onAssignSession}
           onClosePane={onCloseDraftPane}
+          {...({
+            onPaneDrop,
+          } satisfies {
+            onPaneDrop: (intent: PaneDropIntent) => void;
+          })}
           onReplaceWithSession={onReplaceWithSession}
           onSplitPane={onSplitDraftPane}
         />
@@ -166,6 +196,7 @@ const PaneNodeRenderer: FC<PaneNodeRendererProps> = ({
           onCloseDraftPane={onCloseDraftPane}
           onCloseSession={onCloseSession}
           onCloseSessionCommand={onCloseSessionCommand}
+          onPaneDrop={onPaneDrop}
           onReplaceWithSession={onReplaceWithSession}
           onSplitDraftPane={onSplitDraftPane}
           onSplitSession={onSplitSession}

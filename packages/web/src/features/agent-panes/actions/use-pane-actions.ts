@@ -9,11 +9,15 @@ import {
   assignSessionToPane,
   closeDraftPaneById,
   closePaneBySessionId,
+  insertPaneAtEdge,
+  moveSessionToDraftPane,
   removePaneBySessionId,
   replaceSessionInPane,
   splitPaneByPaneId,
   splitPaneBySessionId,
+  swapPaneSessionsByPaneId,
 } from "../pane-layout-tree";
+import type { PaneDropPlacement } from "./pane-drag-types";
 
 export function usePaneActions(workspaceId: string) {
   const setPaneLayout = useSetAtom(paneLayoutAtomFamily(workspaceId));
@@ -111,6 +115,31 @@ export function usePaneActions(workspaceId: string) {
     [applyLayout]
   );
 
+  const swapPaneSessions = useCallback(
+    (sourcePaneId: string, targetPaneId: string) => {
+      applyLayout((current) => swapPaneSessionsByPaneId(current, sourcePaneId, targetPaneId));
+    },
+    [applyLayout]
+  );
+
+  const moveSessionToDraft = useCallback(
+    (sourcePaneId: string, targetPaneId: string) => {
+      applyLayout((current) => moveSessionToDraftPane(current, sourcePaneId, targetPaneId));
+    },
+    [applyLayout]
+  );
+
+  const insertSessionPaneAtEdge = useCallback(
+    (
+      sourcePaneId: string,
+      targetPaneId: string,
+      placement: Exclude<PaneDropPlacement, "center">
+    ) => {
+      applyLayout((current) => insertPaneAtEdge(current, sourcePaneId, targetPaneId, placement));
+    },
+    [applyLayout]
+  );
+
   return {
     appendSession,
     appendSessionToMobileColumn,
@@ -122,5 +151,8 @@ export function usePaneActions(workspaceId: string) {
     replaceWithSession,
     splitDraftPane,
     splitSessionPane,
+    swapPaneSessions,
+    moveSessionToDraft,
+    insertSessionPaneAtEdge,
   };
 }
