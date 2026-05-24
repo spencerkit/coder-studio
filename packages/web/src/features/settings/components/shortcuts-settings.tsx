@@ -49,8 +49,14 @@ export function ShortcutsSettings() {
       // Build binding string
       const parts: string[] = [];
       const isMac = navigator.platform.includes("Mac");
+      const isArrowKey = event.key.startsWith("Arrow");
 
-      if (isMac ? event.metaKey : event.ctrlKey) {
+      if (isMac && event.metaKey) {
+        parts.push("Mod");
+      }
+      if (event.ctrlKey && (isMac || isArrowKey)) {
+        parts.push("Ctrl");
+      } else if (!isMac && event.ctrlKey) {
         parts.push("Mod");
       }
       if (event.shiftKey) {

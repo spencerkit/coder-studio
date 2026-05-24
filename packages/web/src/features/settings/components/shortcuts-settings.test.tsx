@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { wsClientAtom } from "../../../atoms/connection";
@@ -31,6 +31,7 @@ function renderShortcutsSettings(
 describe("ShortcutsSettings", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.spyOn(window.navigator, "platform", "get").mockReturnValue("Win32");
   });
 
   afterEach(() => {
@@ -104,5 +105,46 @@ describe("ShortcutsSettings", () => {
       "command-palette.toggle": "Mod+Shift+K",
     });
     expect(screen.getByText("Ctrl+⇧+K")).toBeInTheDocument();
+  });
+
+  it("shows workspace navigation shortcuts in the 工作区 tab", async () => {
+    renderShortcutsSettings();
+
+    fireEvent.click(screen.getByRole("tab", { name: "工作区" }));
+
+    expect(await screen.findByText("切换到左侧会话")).toBeInTheDocument();
+    expect(screen.getByText("下一个工作区")).toBeInTheDocument();
+    expect(screen.getByText("Ctrl+←")).toBeInTheDocument();
+    expect(screen.getByText("Ctrl+⇧+→")).toBeInTheDocument();
+  });
+
+  it("captures Ctrl+ArrowDown for session.navigate.left and persists it", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({});
+    const { store } = renderShortcutsSettings(sendCommand);
+
+    fireEvent.click(screen.getByRole("tab", { name: "工作区" }));
+    fireEvent.click(await screen.findByText("Ctrl+←"));
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "切换到左侧会话" }), {
+      key: "ArrowDown",
+      ctrlKey: true,
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: { shortcuts: { "session.navigate.left": "Ctrl+ArrowDown" } },
+        },
+        undefined
+      );
+    });
+
+    expect(store.get(customShortcutsAtom)).toMatchObject({
+      "session.navigate.left": "Ctrl+ArrowDown",
+    });
+
+    const shortcutRow = screen.getByText("切换到左侧会话").closest(".shortcuts-item");
+    expect(shortcutRow).not.toBeNull();
+    expect(within(shortcutRow as HTMLElement).getByText("Ctrl+↓")).toBeInTheDocument();
   });
 });
