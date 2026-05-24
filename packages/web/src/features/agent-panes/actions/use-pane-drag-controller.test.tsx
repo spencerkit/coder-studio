@@ -98,6 +98,18 @@ describe("usePaneDragController", () => {
     expect(onDrop).not.toHaveBeenCalled();
   });
 
+  it("does not start dragging when disabled", () => {
+    const { result } = renderHook(() => usePaneDragController({ onDrop: vi.fn(), enabled: false }));
+
+    act(() => {
+      result.current.startDrag({ paneId: "source-pane" });
+    });
+
+    expect(document.body).not.toHaveClass("is-dragging-pane");
+    expect(result.current.state.isDragging).toBe(false);
+    expect(result.current.state.source).toBeNull();
+  });
+
   it("attaches pointer listeners while dragging and removes listeners and body class on unmount", () => {
     const addEventListenerSpy = vi.spyOn(window, "addEventListener");
     const removeEventListenerSpy = vi.spyOn(window, "removeEventListener");
@@ -118,5 +130,32 @@ describe("usePaneDragController", () => {
     expect(document.body).not.toHaveClass("is-dragging-pane");
     expect(removeEventListenerSpy).toHaveBeenCalledWith("pointermove", expect.any(Function));
     expect(removeEventListenerSpy).toHaveBeenCalledWith("pointerup", expect.any(Function));
+  });
+
+  it("cleans up drag state, body class, and listeners when pointercancel interrupts a drag", () => {
+    const addEventListenerSpy = vi.spyOn(window, "addEventListener");
+    const removeEventListenerSpy = vi.spyOn(window, "removeEventListener");
+    const { result } = renderHook(() => usePaneDragController({ onDrop: vi.fn() }));
+
+    act(() => {
+      result.current.startDrag({ paneId: "source-pane" });
+      result.current.handlePointerMove({ clientX: 180, clientY: 220 } as PointerEvent);
+    });
+
+    expect(document.body).toHaveClass("is-dragging-pane");
+    expect(result.current.state.isDragging).toBe(true);
+    expect(result.current.state.previewPosition).toEqual({ x: 180, y: 220 });
+    expect(addEventListenerSpy).toHaveBeenCalledWith("pointercancel", expect.any(Function));
+
+    act(() => {
+      window.dispatchEvent(new Event("pointercancel"));
+    });
+
+    expect(document.body).not.toHaveClass("is-dragging-pane");
+    expect(result.current.state.isDragging).toBe(false);
+    expect(result.current.state.hoverTargetPaneId).toBeNull();
+    expect(result.current.state.hoverPlacement).toBeNull();
+    expect(result.current.state.previewPosition).toEqual({ x: 0, y: 0 });
+    expect(removeEventListenerSpy).toHaveBeenCalledWith("pointercancel", expect.any(Function));
   });
 });

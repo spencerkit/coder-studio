@@ -33,6 +33,7 @@ export interface PaneDragState {
 }
 
 interface UsePaneDragControllerOptions {
+  enabled?: boolean;
   onDrop: (intent: PaneDropIntent) => void;
 }
 
@@ -95,7 +96,7 @@ function resolvePlacement(
   return "center";
 }
 
-export function usePaneDragController({ onDrop }: UsePaneDragControllerOptions) {
+export function usePaneDragController({ enabled = true, onDrop }: UsePaneDragControllerOptions) {
   const paneRegistry = useRef(new Map<string, RegisteredPane>());
   const [state, setState] = useState<PaneDragState>(() => createIdleState());
   const onDropRef = useRef(onDrop);
@@ -122,6 +123,10 @@ export function usePaneDragController({ onDrop }: UsePaneDragControllerOptions) 
 
   const startDrag = useCallback(
     (source: PaneDragSourceSnapshot) => {
+      if (!enabled) {
+        return;
+      }
+
       document.body.classList.add("is-dragging-pane");
       setDragState({
         isDragging: true,
@@ -133,7 +138,7 @@ export function usePaneDragController({ onDrop }: UsePaneDragControllerOptions) 
         previewY: 0,
       });
     },
-    [setDragState]
+    [enabled, setDragState]
   );
 
   const clearDrag = useCallback(() => {
@@ -210,6 +215,10 @@ export function usePaneDragController({ onDrop }: UsePaneDragControllerOptions) 
     clearDrag();
   }, [clearDrag]);
 
+  const handlePointerCancel = useCallback(() => {
+    clearDrag();
+  }, [clearDrag]);
+
   useEffect(() => {
     if (!state.isDragging) {
       return;
@@ -217,12 +226,14 @@ export function usePaneDragController({ onDrop }: UsePaneDragControllerOptions) 
 
     window.addEventListener("pointermove", handlePointerMove);
     window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("pointercancel", handlePointerCancel);
 
     return () => {
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerCancel);
     };
-  }, [handlePointerMove, handlePointerUp, state.isDragging]);
+  }, [handlePointerCancel, handlePointerMove, handlePointerUp, state.isDragging]);
 
   useEffect(() => {
     return () => {
@@ -232,6 +243,7 @@ export function usePaneDragController({ onDrop }: UsePaneDragControllerOptions) 
 
   return {
     clearDrag,
+    handlePointerCancel,
     handlePointerMove,
     handlePointerUp,
     registerPane,

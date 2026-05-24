@@ -15,6 +15,7 @@ import { dispatchCommandAtom } from "../../../../atoms/connection";
 import { sessionByIdAtomFamily, sessionsAtom } from "../../../../atoms/sessions";
 import { workspaceByIdAtomFamily } from "../../../../atoms/workspaces";
 import { IconButton, StatusDot, Tag, Tooltip } from "../../../../components/ui";
+import { useViewport } from "../../../../components/ui/_internal/use-viewport";
 import { PanelHeader } from "../../../shared/components/panel-header";
 import { useSupervisor } from "../../../supervisor/actions/use-supervisor";
 import { SupervisorCard } from "../../../supervisor/views/shared/supervisor-card";
@@ -78,6 +79,7 @@ export const SessionCard: FC<SessionCardProps> = ({
   );
   const pendingFocus = useAtomValue(pendingFocusSessionAtom);
   const setPendingFocus = useSetAtom(pendingFocusSessionAtom);
+  const viewport = useViewport();
 
   const cardRef = useRef<HTMLDivElement | null>(null);
   const [highlight, setHighlight] = useState(false);
@@ -112,6 +114,7 @@ export const SessionCard: FC<SessionCardProps> = ({
   const sessionStateLabel = formatSessionStateLabel(session.state);
   const terminalReadOnly = terminalReadOnlyOverride ?? !isSessionInteractive(session.state);
   const isActiveSession = workspace?.uiState.activeSessionId === session.id;
+  const supportsPaneDrag = viewport === "desktop";
   const isRunning = session.state === "running";
   const dragOverlayPlacement = dragState?.isActiveDropTarget ? dragState.hoverPlacement : null;
   const handleClosedSessionContinue = async () => {
@@ -221,29 +224,31 @@ export const SessionCard: FC<SessionCardProps> = ({
 
               {showHeaderActions ? (
                 <div className="session-header-actions">
-                  <Tooltip content="Drag pane">
-                    <IconButton
-                      aria-label="Drag pane"
-                      className="session-action-btn session-action-btn-drag"
-                      icon={<GripVertical size={13} />}
-                      onPointerDown={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
+                  {supportsPaneDrag ? (
+                    <Tooltip content="Drag pane">
+                      <IconButton
+                        aria-label="Drag pane"
+                        className="session-action-btn session-action-btn-drag"
+                        icon={<GripVertical size={13} />}
+                        onPointerDown={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
 
-                        if (!paneId) {
-                          return;
-                        }
+                          if (!paneId) {
+                            return;
+                          }
 
-                        onPaneDragStart?.({
-                          paneId,
-                          sessionId: session.id,
-                          title: sessionTitle,
-                          providerLabel,
-                        });
-                      }}
-                      size="sm"
-                    />
-                  </Tooltip>
+                          onPaneDragStart?.({
+                            paneId,
+                            sessionId: session.id,
+                            title: sessionTitle,
+                            providerLabel,
+                          });
+                        }}
+                        size="sm"
+                      />
+                    </Tooltip>
+                  ) : null}
                   <Tooltip content="Split horizontal">
                     <IconButton
                       aria-label="Split horizontal"

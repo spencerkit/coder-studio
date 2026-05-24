@@ -9,6 +9,7 @@ import { useAtomValue } from "jotai";
 import { type FC, useCallback, useEffect, useRef } from "react";
 import { activeWorkspaceAtom } from "../../atoms/workspaces";
 import { EmptyState } from "../../components/ui";
+import { useViewport } from "../../components/ui/_internal/use-viewport";
 import { useTranslation } from "../../lib/i18n";
 import type { PaneDropIntent } from "./actions/pane-drag-types";
 import { usePaneActions } from "./actions/use-pane-actions";
@@ -42,6 +43,7 @@ const emptyStateTitleStyle = {
 
 export const AgentPanes: FC<AgentPanesProps> = ({ hydrateSessions = true }) => {
   const t = useTranslation();
+  const viewport = useViewport();
   const workspace = useAtomValue(activeWorkspaceAtom);
   const { workspaceId, sessions, paneLayout } = useWorkspaceSessions(workspace, {
     disabled: !hydrateSessions,
@@ -71,7 +73,10 @@ export const AgentPanes: FC<AgentPanesProps> = ({ hydrateSessions = true }) => {
     },
     [insertSessionPaneAtEdge, moveSessionToDraft, swapPaneSessions]
   );
-  const dragController = usePaneDragController({ onDrop: handlePaneDrop });
+  const dragController = usePaneDragController({
+    enabled: viewport === "desktop",
+    onDrop: handlePaneDrop,
+  });
 
   if (!workspace) {
     return (

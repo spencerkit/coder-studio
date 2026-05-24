@@ -14,6 +14,14 @@ import { supervisorsAtom } from "../../supervisor/atoms";
 import { paneLayoutAtomFamily } from "../atoms/pane-layout";
 import { SessionCard } from "../views/shared/session-card";
 
+const viewportMock = vi.hoisted(() => ({
+  value: "desktop" as "desktop" | "mobile",
+}));
+
+vi.mock("../../../components/ui/_internal/use-viewport", () => ({
+  useViewport: () => viewportMock.value,
+}));
+
 const mockXtermHost = vi.fn((props: Record<string, unknown>) => (
   <div data-testid="mock-xterm-host" data-readonly={String(props.readOnly)} />
 ));
@@ -75,6 +83,7 @@ function createSessionStore(
 describe("SessionCard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    viewportMock.value = "desktop";
   });
 
   it("renders ended sessions with a read-only terminal host", () => {
@@ -229,7 +238,7 @@ describe("SessionCard", () => {
     );
   });
 
-  it("renders a pane drag handle button in the header actions", () => {
+  it("renders a pane drag handle button in the header actions on desktop", () => {
     const { store } = createSessionStore({
       terminalId: "term-live",
       state: "running",
@@ -243,6 +252,23 @@ describe("SessionCard", () => {
     );
 
     expect(screen.getByRole("button", { name: "Drag pane" })).toBeInTheDocument();
+  });
+
+  it("does not render a pane drag handle button on mobile", () => {
+    viewportMock.value = "mobile";
+    const { store } = createSessionStore({
+      terminalId: "term-live",
+      state: "running",
+      endedAt: undefined,
+    });
+
+    render(
+      <Provider store={store}>
+        <SessionCard paneId="pane-1" sessionId="sess_123456" onPaneDragStart={vi.fn()} />
+      </Provider>
+    );
+
+    expect(screen.queryByRole("button", { name: "Drag pane" })).not.toBeInTheDocument();
   });
 
   it("starts pane drag only from the drag handle", () => {
