@@ -605,14 +605,6 @@ describe("CodeEditorHost", () => {
     const { store } = setupStore({
       activePath: "src/c.ts",
       openFiles: {
-        "src/a.ts": {
-          kind: "text",
-          path: "src/a.ts",
-          content: "alpha",
-          savedContent: "alpha",
-          baseHash: "hash-a",
-          isDirty: false,
-        },
         "src/b.ts": {
           kind: "text",
           path: "src/b.ts",
@@ -627,6 +619,14 @@ describe("CodeEditorHost", () => {
           content: "gamma",
           savedContent: "gamma",
           baseHash: "hash-c",
+          isDirty: false,
+        },
+        "src/a.ts": {
+          kind: "text",
+          path: "src/a.ts",
+          content: "alpha",
+          savedContent: "alpha",
+          baseHash: "hash-a",
           isDirty: false,
         },
       },

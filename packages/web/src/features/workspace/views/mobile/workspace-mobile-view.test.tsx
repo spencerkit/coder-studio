@@ -1,19 +1,19 @@
 // @vitest-environment jsdom
 
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { connectionStatusAtom, wsClientAtom } from "../../../../atoms/connection";
 import { activeWorkspaceIdAtom } from "../../../../atoms/workspaces";
 import { seedReadyWorkspaceState } from "../../../../test-utils/workspace-state";
-import { useOpenEditorsActions } from "../../actions/use-open-editors-actions";
 import {
   activeFilePathAtomFamily,
   gitDiffPreviewAtomFamily,
   type OpenFile,
   openFilesAtomFamily,
 } from "../../atoms";
+import { OpenEditorsSection } from "../shared/open-editors-section";
 import { WorkspaceMobileView } from "./workspace-mobile-view";
 
 vi.mock("../../../../lib/i18n", () => ({
@@ -34,13 +34,25 @@ vi.mock("../../../../lib/i18n", () => ({
       "mobile.empty.start_session": "Start session",
       "mobile.files.editor_fallback": "Editor",
       "mobile.sheet.dismiss": "Dismiss sheet",
+      "action.close_all": "Close all",
       "workspace.sidebar.explorer": "Explorer",
+      "workspace.sidebar.open_editors": "Open Editors",
+      "workspace.open_editors.collapse_label": "Collapse Open Editors",
+      "workspace.open_editors.expand_label": "Expand Open Editors",
       "workspace.sidebar.search": "Search",
       "workspace.sidebar.source_control": "Source Control",
     };
 
     if (key === "mobile.sheet.region") {
       return `Sheet ${params?.title ?? ""}`.trim();
+    }
+
+    if (key === "workspace.open_editors.title_with_count") {
+      return `${params?.title ?? "Open Editors"} (${params?.count ?? "0"})`;
+    }
+
+    if (key === "workspace.open_editors.close_path") {
+      return `Close ${params?.path ?? ""}`.trim();
     }
 
     return translations[key] ?? key;
@@ -124,10 +136,8 @@ vi.mock("./mobile-files-sheet", () => ({
     onRouteChange?: (
       route: { kind: "root" } | { kind: "detail"; path?: string; title?: string }
     ) => void;
-  }) => {
-    const { closeAll } = useOpenEditorsActions(workspaceId);
-
-    return route.kind === "root" ? (
+  }) =>
+    route.kind === "root" ? (
       <div data-testid="mobile-files-sheet-root">
         <button
           type="button"
@@ -153,19 +163,11 @@ vi.mock("./mobile-files-sheet", () => ({
         >
           Open commit preview
         </button>
-        <button type="button" onClick={() => closeAll()}>
-          Close all
-        </button>
+        <OpenEditorsSection workspaceId={workspaceId} />
       </div>
     ) : (
-      <div data-testid="mobile-files-sheet-detail">
-        <div>{route.title ?? route.path}</div>
-        <button type="button" onClick={() => closeAll()}>
-          Close all
-        </button>
-      </div>
-    );
-  },
+      <div data-testid="mobile-files-sheet-detail">{route.title ?? route.path}</div>
+    ),
 }));
 
 vi.mock("./mobile-topbar", () => ({
@@ -389,15 +391,16 @@ describe("WorkspaceMobileView", () => {
       ).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Close all" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    const openEditorsSection = screen
+      .getByRole("heading", { level: 2, name: "Open Editors (1)" })
+      .closest("section") as HTMLElement;
+    fireEvent.click(within(openEditorsSection).getByRole("button", { name: "Close all" }));
 
     await waitFor(() => {
       expect(store.get(openFilesAtomFamily("ws-test"))).toEqual({});
       expect(store.get(activeFilePathAtomFamily("ws-test"))).toBeNull();
       expect(store.get(gitDiffPreviewAtomFamily("ws-test"))).toEqual(diffPreview);
-      expect(
-        screen.getByRole("heading", { level: 2, name: "abc123 · commit subject" })
-      ).toBeInTheDocument();
     });
   });
 });
