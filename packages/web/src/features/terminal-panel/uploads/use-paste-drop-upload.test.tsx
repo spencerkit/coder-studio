@@ -306,6 +306,49 @@ describe("usePasteDropUpload", () => {
     });
   });
 
+  it("surfaces plain text send failures as paste errors, not upload errors", async () => {
+    const store = createStore();
+    const clipboardRead = vi.fn().mockResolvedValue([]);
+    const clipboardReadText = vi.fn().mockResolvedValue("ls -la");
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        read: clipboardRead,
+        readText: clipboardReadText,
+      } satisfies Pick<Clipboard, "readText"> & { read: () => Promise<ClipboardItem[]> },
+    });
+    sendInput.mockRejectedValueOnce(new Error("terminal write failed"));
+
+    const { result } = renderHook(
+      () =>
+        usePasteDropUpload({
+          containerRef: { current: container },
+          workspaceId: "ws-1",
+          sendTextToTerminal: sendInput,
+          enabled: true,
+        }),
+      { wrapper: makeWrapper(store) }
+    );
+
+    await act(async () => {
+      await expect(result.current.handleClipboardPaste()).rejects.toThrow("terminal write failed");
+      await flushAsyncWork();
+    });
+
+    expect(store.get(toastsAtom)).toContainEqual(
+      expect.objectContaining({
+        kind: "error",
+        title: "Paste failed",
+      })
+    );
+    expect(store.get(toastsAtom)).not.toContainEqual(
+      expect.objectContaining({
+        kind: "error",
+        title: "Upload failed",
+      })
+    );
+  });
+
   it("uploads files passed directly to the explicit file handler", async () => {
     const store = createStore();
     const { result } = renderHook(

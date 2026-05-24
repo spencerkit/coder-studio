@@ -131,6 +131,9 @@ export function usePasteDropUpload(opts: Options): PasteDropUploadActions {
 
       await runSequence(async () => text, {
         trackBusy: false,
+        onError: (error) => {
+          throw error;
+        },
       });
     },
     [runSequence]
