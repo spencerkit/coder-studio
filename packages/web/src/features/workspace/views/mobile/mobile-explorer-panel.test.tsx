@@ -9,6 +9,43 @@ import { MobileExplorerPanel } from "./mobile-explorer-panel";
 
 const fileTreePanelSpy = vi.fn();
 
+vi.mock("../../../../lib/i18n", () => ({
+  useTranslation: () => (key: string, params?: Record<string, string | number>) => {
+    const translations: Record<string, string> = {
+      "workspace.quick_jump.title": "Quick Jump",
+      "workspace.quick_jump.placeholder": "Type a filename or path",
+      "workspace.quick_jump.no_results": "No results",
+      "workspace.quick_jump.failed": "Search failed",
+      "workspace.sidebar.workspace": "Workspace",
+      "workspace.sidebar.open_editors": "Open Editors",
+      "file.new_file": "New File",
+      "file.new_folder": "New Folder",
+      "file.collapse_all": "Collapse All",
+      "action.close": "Close",
+      "action.close_all": "Close all",
+      "common.loading": "Loading",
+    };
+
+    if (key === "workspace.open_editors.title_with_count") {
+      return `${params?.title ?? "Open Editors"} (${params?.count ?? 0})`;
+    }
+
+    if (key === "workspace.open_editors.expand_label") {
+      return "Expand Open Editors";
+    }
+
+    if (key === "workspace.open_editors.collapse_label") {
+      return "Collapse Open Editors";
+    }
+
+    if (key === "workspace.open_editors.close_path") {
+      return `Close ${params?.path ?? ""}`.trim();
+    }
+
+    return translations[key] ?? key;
+  },
+}));
+
 vi.mock("../shared/file-tree-panel", () => ({
   FileTreePanel: (props: unknown) => {
     fileTreePanelSpy(props);
@@ -197,5 +234,47 @@ describe("MobileExplorerPanel", () => {
     expect(heading).toHaveTextContent(/(Open Editors|打开的编辑器)\s*\(1\)/i);
     expect(Object.keys(store.get(openFilesAtomFamily("ws-test")))).toEqual(["src/beta.tsx"]);
     expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/beta.tsx");
+  });
+
+  it("renders workspace actions inside the Workspace section and wires mobile callbacks", () => {
+    const onOpenFileCreate = vi.fn();
+    const onOpenFolderCreate = vi.fn();
+    const onCollapseAll = vi.fn();
+    const store = createStore();
+    store.set(fileTreeAtomFamily("ws-test"), new Map([[".", []]]));
+    store.set(openFilesAtomFamily("ws-test"), {});
+
+    render(
+      <Provider store={store}>
+        <MobileExplorerPanel
+          workspaceId="ws-test"
+          routeToDetail={vi.fn()}
+          collapseVersion={3}
+          onOpenFileCreate={onOpenFileCreate}
+          onOpenFolderCreate={onOpenFolderCreate}
+          onCollapseAll={onCollapseAll}
+        />
+      </Provider>
+    );
+
+    expect(fileTreePanelSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        collapseVersion: 3,
+        showSearch: false,
+        variant: "mobile",
+      })
+    );
+
+    const workspaceSection = screen
+      .getByRole("heading", { level: 2, name: "Workspace" })
+      .closest("section") as HTMLElement;
+
+    fireEvent.click(within(workspaceSection).getByRole("button", { name: "New File" }));
+    fireEvent.click(within(workspaceSection).getByRole("button", { name: "New Folder" }));
+    fireEvent.click(within(workspaceSection).getByRole("button", { name: "Collapse All" }));
+
+    expect(onOpenFileCreate).toHaveBeenCalledTimes(1);
+    expect(onOpenFolderCreate).toHaveBeenCalledTimes(1);
+    expect(onCollapseAll).toHaveBeenCalledTimes(1);
   });
 });

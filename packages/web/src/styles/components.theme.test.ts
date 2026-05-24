@@ -2151,7 +2151,8 @@ describe("components.css theme-sensitive surfaces", () => {
     const mobileFilesSegmentIndicator = getLastRuleBlock(
       ".mobile-files-sheet__segment.active::after"
     );
-    const mobileFilesTabAction = getLastRuleBlock(".mobile-files-sheet__tab-action");
+    const workspaceSectionHeader = getLastRuleBlock(".workspace-sidebar-section__header");
+    const workspaceSectionActions = getLastRuleBlock(".workspace-sidebar-section__actions");
     const mobileExplorerPanel = getLastRuleBlock(".mobile-explorer-panel");
     const mobileQuickJumpSearch = getLastRuleBlock(".workspace-quick-jump__search");
     const mobileQuickJumpItem = getLastRuleBlock(".workspace-quick-jump__item");
@@ -2197,9 +2198,9 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(mobileFilesSegmentIcon).toContain("display: block");
     expect(mobileFilesSegmentActive).toContain("background: transparent");
     expect(mobileFilesSegmentIndicator).toContain("height: 1.5px");
-    expect(mobileFilesTabAction).toContain("border: none");
-    expect(mobileFilesTabAction).toContain("border-radius: 6px");
-    expect(mobileFilesTabAction).toContain("background: transparent");
+    expect(workspaceSectionHeader).toContain("justify-content: space-between");
+    expect(workspaceSectionHeader).toContain("margin-bottom: var(--sp-2)");
+    expect(workspaceSectionActions).toContain("margin-left: auto");
     expect(mobileQuickJumpSearch).toContain("border: 1px solid");
     expect(mobileQuickJumpItem).toContain("grid-template-columns: minmax(0, 1fr)");
     expect(mobileSearchPanel).toContain("background: transparent");
@@ -2632,6 +2633,7 @@ describe("components.css theme-sensitive surfaces", () => {
 
   it("keeps workspace search and quick open on compact editor-search chrome", () => {
     const openEditorsHeader = getLastRuleBlock(".workspace-open-editors__header");
+    const openEditorsHeaderMain = getLastRuleBlock(".workspace-open-editors__header-main");
     const openEditorsTitle = getLastRuleBlock(".workspace-open-editors__title");
     const openEditorsTitleText = getLastRuleBlock(".workspace-open-editors__title-text");
     const openEditorsCloseAll = getLastRuleBlock(".workspace-open-editors__close-all");
@@ -2655,11 +2657,14 @@ describe("components.css theme-sensitive surfaces", () => {
       '.quick-open__item[aria-selected="true"] .quick-open__secondary'
     );
 
-    expect(openEditorsHeader).toContain("grid-template-columns: auto minmax(0, 1fr) auto");
-    expect(openEditorsTitle).toContain("justify-content: center");
+    expect(openEditorsHeader).toContain("display: flex");
+    expect(openEditorsHeaderMain).toContain("flex: 1 1 auto");
+    expect(openEditorsHeaderMain).toContain("min-width: 0");
+    expect(openEditorsTitle).toContain("justify-content: flex-start");
     expect(openEditorsTitle).toContain("min-width: 0");
     expect(openEditorsTitleText).toContain("text-overflow: ellipsis");
     expect(openEditorsTitleText).toContain("white-space: nowrap");
+    expect(openEditorsCloseAll).toContain("margin-left: auto");
     expect(openEditorsCloseAll).toContain("background: transparent");
     expect(openEditorsCloseAll).toContain("color: var(--text-secondary)");
     expect(openEditorsRow).toContain("grid-template-columns: minmax(0, 1fr) auto");
@@ -2685,7 +2690,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(quickOpen).toContain("background: var(--surface-overlay-bg)");
     expect(quickOpenSearch).toContain("border-bottom: 1px solid color-mix(");
     expect(quickOpenSearch).toContain("background: color-mix(");
-    expect(quickOpenItem).toContain("gap: 2px");
+    expect(quickOpenItem).toContain("gap: var(--gap-compact)");
     expect(quickOpenItem).toContain("box-shadow: inset 0 -1px 0 color-mix(");
     expect(quickOpenItemActive).toContain(
       "background: color-mix(in srgb, var(--accent-blue) 12%, var(--bg-panel))"

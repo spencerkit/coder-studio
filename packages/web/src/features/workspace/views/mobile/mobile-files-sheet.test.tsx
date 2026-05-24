@@ -5,6 +5,8 @@ import { wsClientAtom } from "../../../../atoms/connection";
 import type { GitDiffPreview } from "../../atoms";
 import { MobileFilesSheet } from "./mobile-files-sheet";
 
+const mobileExplorerPanelSpy = vi.fn();
+
 vi.mock("../../../../lib/i18n", () => ({
   useTranslation: () => (key: string) => {
     const translations: Record<string, string> = {
@@ -27,7 +29,10 @@ vi.mock("../../../code-editor/views/shared/code-editor-host", () => ({
 }));
 
 vi.mock("./mobile-explorer-panel", () => ({
-  MobileExplorerPanel: () => <div data-testid="mobile-explorer-panel" />,
+  MobileExplorerPanel: (props: unknown) => {
+    mobileExplorerPanelSpy(props);
+    return <div data-testid="mobile-explorer-panel" />;
+  },
 }));
 
 vi.mock("../shared/search-panel", () => ({
@@ -58,9 +63,10 @@ vi.mock("../shared/git-panel", () => ({
 describe("MobileFilesSheet", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    mobileExplorerPanelSpy.mockReset();
   });
 
-  it("renders three icon tabs and keeps explorer actions scoped to the explorer view", () => {
+  it("renders three icon tabs and keeps explorer actions inside the explorer content", () => {
     render(
       <Provider store={createStore()}>
         <MobileFilesSheet workspaceId="ws-test" route={{ kind: "root" }} activeView="explorer" />
@@ -73,7 +79,7 @@ describe("MobileFilesSheet", () => {
     );
     expect(screen.getByRole("tab", { name: "Search" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Source Control" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "New File" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "New File" })).toBeNull();
     expect(screen.getByTestId("mobile-explorer-panel")).toBeInTheDocument();
   });
 
@@ -86,6 +92,36 @@ describe("MobileFilesSheet", () => {
 
     expect(screen.queryByRole("button", { name: "New File" })).toBeNull();
     expect(screen.getByTestId("search-panel")).toHaveAttribute("data-variant", "mobile");
+  });
+
+  it("passes workspace action callbacks through to the explorer content", () => {
+    const onCreateFile = vi.fn();
+    const onCreateFolder = vi.fn();
+    const onCollapseAll = vi.fn();
+
+    render(
+      <Provider store={createStore()}>
+        <MobileFilesSheet
+          workspaceId="ws-test"
+          route={{ kind: "root" }}
+          activeView="explorer"
+          collapseVersion={7}
+          onCreateFile={onCreateFile}
+          onCreateFolder={onCreateFolder}
+          onCollapseAll={onCollapseAll}
+        />
+      </Provider>
+    );
+
+    expect(mobileExplorerPanelSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        collapseVersion: 7,
+        onCollapseAll,
+        onOpenFileCreate: onCreateFile,
+        onOpenFolderCreate: onCreateFolder,
+        workspaceId: "ws-test",
+      })
+    );
   });
 
   it("uses one file detail surface for preview edit and diff instead of separate editor and diff pages", () => {

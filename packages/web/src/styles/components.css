@@ -203,7 +203,7 @@
   display: flex;
   align-items: center;
   gap: var(--gap-default);
-  padding: 10px var(--sp-4);
+  padding: calc(var(--sp-3) - var(--gap-compact)) var(--sp-4);
   border-bottom: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
   background: color-mix(in srgb, var(--bg-surface) 66%, transparent);
 }
@@ -250,9 +250,10 @@
 .quick-open__item {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 2px;
+  gap: var(--gap-compact);
   width: 100%;
-  padding: 9px var(--sp-4) 10px;
+  padding: calc(var(--sp-2) + var(--gap-hairline)) var(--sp-4)
+    calc(var(--sp-3) - var(--gap-compact));
   border: none;
   background: transparent;
   color: var(--text-primary);
@@ -12539,8 +12540,20 @@ textarea.input {
   padding-bottom: var(--sp-3);
 }
 
+.workspace-sidebar-section__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+}
+
+.workspace-sidebar-section__actions {
+  margin-left: auto;
+}
+
 .workspace-sidebar-section__title {
-  margin: 0 0 var(--sp-2);
+  margin: 0;
   color: var(--text-tertiary);
   font-size: var(--type-body-6-size);
   line-height: var(--type-body-6-line-height);
@@ -12556,11 +12569,18 @@ textarea.input {
 }
 
 .workspace-open-editors__header {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  display: flex;
   align-items: center;
   gap: var(--gap-compact);
   margin-bottom: var(--sp-2);
+}
+
+.workspace-open-editors__header-main {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--gap-compact);
+  flex: 1 1 auto;
 }
 
 .workspace-open-editors__toggle {
@@ -12570,7 +12590,7 @@ textarea.input {
 .workspace-open-editors__title {
   display: inline-flex;
   align-items: baseline;
-  justify-content: center;
+  justify-content: flex-start;
   gap: var(--gap-compact);
   margin: 0;
   min-width: 0;
@@ -12589,6 +12609,7 @@ textarea.input {
 }
 
 .workspace-open-editors__close-all {
+  margin-left: auto;
   min-height: 28px;
   padding: 0;
   border: none;
@@ -12661,9 +12682,9 @@ textarea.input {
   align-items: center;
   gap: var(--gap-default);
   min-height: 34px;
-  padding: 0 10px;
+  padding: 0 calc(var(--sp-3) - var(--gap-compact));
   border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
-  border-radius: 6px;
+  border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--bg-surface) 92%, var(--bg-page));
 }
 
@@ -12700,10 +12721,10 @@ textarea.input {
 .workspace-quick-jump__item {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 2px;
+  gap: var(--gap-compact);
   width: 100%;
   min-height: 40px;
-  padding: 8px 0;
+  padding: var(--sp-2) 0;
   border: none;
   background: transparent;
   color: inherit;
@@ -12901,8 +12922,8 @@ textarea.input {
 .workspace-search-panel__controls {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 6px var(--sp-3) 8px;
+  gap: var(--sp-1);
+  padding: calc(var(--sp-2) - var(--gap-compact)) var(--sp-3) var(--sp-2);
   border-bottom: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
   background: color-mix(in srgb, var(--bg-panel) 82%, transparent);
 }
@@ -12982,7 +13003,8 @@ textarea.input {
   align-items: start;
   gap: 0 var(--sp-2);
   width: 100%;
-  padding: 7px var(--sp-3) 6px 10px;
+  padding: calc(var(--sp-2) - var(--gap-hairline)) var(--sp-3) var(--gap-tight)
+    calc(var(--sp-3) - var(--gap-compact));
   border: none;
   background: transparent;
   color: var(--text-secondary);
@@ -13018,7 +13040,7 @@ textarea.input {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--gap-compact);
 }
 
 .workspace-search-panel__group-name {
@@ -13046,7 +13068,7 @@ textarea.input {
 
 .workspace-search-panel__group-count {
   align-self: start;
-  padding-top: 1px;
+  padding-top: var(--gap-hairline);
   color: var(--text-tertiary);
   font-family: var(--font-mono);
   font-size: var(--type-body-6-size);
@@ -13066,7 +13088,7 @@ textarea.input {
   align-items: baseline;
   gap: var(--sp-2);
   width: 100%;
-  padding: 4px var(--sp-3) 4px 34px;
+  padding: var(--sp-1) var(--sp-3) var(--sp-1) calc(var(--control-height-md) + var(--gap-compact));
   border: none;
   background: transparent;
   color: var(--text-primary);
@@ -13781,35 +13803,6 @@ textarea.input {
   height: 1.5px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--accent-blue) 90%, white 10%);
-}
-
-.mobile-files-sheet__tab-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
-  margin-left: auto;
-}
-
-.mobile-files-sheet__tab-action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-tertiary);
-  transition:
-    background-color var(--duration-fast) var(--ease-out),
-    color var(--duration-fast) var(--ease-out);
-}
-
-.mobile-files-sheet__tab-action:hover {
-  background: color-mix(in srgb, var(--bg-hover) 82%, var(--accent-blue) 10%);
-  color: var(--text-primary);
 }
 
 .mobile-files-sheet__content,

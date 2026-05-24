@@ -64,20 +64,22 @@ export function OpenEditorsSection({ workspaceId, onSelectFile, title }: OpenEdi
   return (
     <section className="workspace-sidebar-section">
       <div className="workspace-open-editors__header">
-        <Tooltip content={toggleLabel}>
-          <IconButton
-            aria-label={toggleLabel}
-            aria-expanded={canExpand ? isExpanded : undefined}
-            className="workspace-open-editors__toggle"
-            disabled={!canExpand}
-            icon={isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-            size="sm"
-            onClick={() => setCollapsed((value) => !value)}
-          />
-        </Tooltip>
-        <h2 className="workspace-sidebar-section__title workspace-open-editors__title">
-          <span className="workspace-open-editors__title-text">{headingLabel}</span>
-        </h2>
+        <div className="workspace-open-editors__header-main">
+          <Tooltip content={toggleLabel}>
+            <IconButton
+              aria-label={toggleLabel}
+              aria-expanded={canExpand ? isExpanded : undefined}
+              className="workspace-open-editors__toggle"
+              disabled={!canExpand}
+              icon={isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              size="sm"
+              onClick={() => setCollapsed((value) => !value)}
+            />
+          </Tooltip>
+          <h2 className="workspace-sidebar-section__title workspace-open-editors__title">
+            <span className="workspace-open-editors__title-text">{headingLabel}</span>
+          </h2>
+        </div>
         <button
           type="button"
           className="workspace-open-editors__close-all"

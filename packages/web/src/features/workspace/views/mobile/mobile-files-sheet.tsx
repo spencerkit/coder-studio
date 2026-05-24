@@ -1,5 +1,5 @@
-import { ChevronsUp, FolderTree, GitBranch, Search } from "lucide-react";
-import { IconButton, Tab, TabList, Tabs, ThemedIcon, Tooltip } from "../../../../components/ui";
+import { FolderTree, GitBranch, Search } from "lucide-react";
+import { Tab, TabList, Tabs } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import {
   CodeEditorHost,
@@ -27,7 +27,6 @@ interface MobileFilesSheetProps {
   onCollapseAll?: () => void;
   onRouteChange?: (route: MobileFilesRoute) => void;
   onTabChange?: (view: MobileWorkspaceSidebarView) => void;
-  onCloseSheet?: () => void;
   editorState?: CodeEditorState;
 }
 
@@ -43,7 +42,6 @@ export function MobileFilesSheet({
   onCollapseAll,
   onRouteChange,
   onTabChange,
-  onCloseSheet,
   editorState,
 }: MobileFilesSheetProps) {
   const t = useTranslation();
@@ -103,38 +101,6 @@ export function MobileFilesSheet({
             </Tab>
           </TabList>
         </Tabs>
-
-        {activeView === "explorer" ? (
-          <div className="mobile-files-sheet__tab-actions">
-            <Tooltip content={t("file.new_file")}>
-              <IconButton
-                className="mobile-files-sheet__tab-action"
-                aria-label={t("file.new_file")}
-                icon={<ThemedIcon semantic="file.action.new" size={14} />}
-                onClick={onCreateFile}
-                size="sm"
-              />
-            </Tooltip>
-            <Tooltip content={t("file.new_folder")}>
-              <IconButton
-                className="mobile-files-sheet__tab-action"
-                aria-label={t("file.new_folder")}
-                icon={<ThemedIcon semantic="file.action.newFolder" size={14} />}
-                onClick={onCreateFolder}
-                size="sm"
-              />
-            </Tooltip>
-            <Tooltip content={t("file.collapse_all")}>
-              <IconButton
-                className="mobile-files-sheet__tab-action"
-                aria-label={t("file.collapse_all")}
-                icon={<ChevronsUp size={14} />}
-                onClick={onCollapseAll}
-                size="sm"
-              />
-            </Tooltip>
-          </div>
-        ) : null}
       </div>
 
       <div className="mobile-files-sheet__content">
@@ -143,6 +109,9 @@ export function MobileFilesSheet({
             workspaceId={workspaceId}
             createRequest={createRequest}
             onCreateRequestConsumed={onCreateRequestConsumed}
+            onOpenFileCreate={onCreateFile}
+            onOpenFolderCreate={onCreateFolder}
+            onCollapseAll={onCollapseAll}
             routeToDetail={(path) => onRouteChange?.({ kind: "detail", path })}
             collapseVersion={collapseVersion}
           />

@@ -776,12 +776,12 @@ describe("MobileShell Phase 2 workspace", () => {
     await user.click(screen.getByRole("button", { name: "Open Files sheet" }));
 
     expect(screen.getByRole("tablist", { name: "Files sheet tabs" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Files" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Explorer" })).toHaveAttribute("aria-selected", "true");
     expect(screen.queryByRole("button", { name: "Close current sheet" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /back|返回/i }));
 
-    expect(screen.queryByRole("tab", { name: "Files" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Explorer" })).not.toBeInTheDocument();
   });
 
   it("shows the current branch name in the shared workspace footer", async () => {
@@ -3085,7 +3085,7 @@ describe("MobileShell Phase 2 workspace", () => {
 
     await user.click(screen.getByRole("button", { name: "打开文件面板" }));
 
-    expect(screen.getByRole("region", { name: "文件面板" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "资源管理器面板" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "关闭当前面板" })).toBeInTheDocument();
   });
 
@@ -3161,10 +3161,10 @@ describe("MobileShell Phase 2 workspace", () => {
     renderMobileShell();
 
     await user.click(screen.getByRole("button", { name: "Open Files sheet" }));
-    expect(screen.getByRole("region", { name: "Files sheet" })).toHaveClass(
+    expect(screen.getByRole("region", { name: "Explorer sheet" })).toHaveClass(
       "mobile-sheet--fullscreen"
     );
-    expect(screen.getByRole("tab", { name: "Files" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^new file$|^新建文件$/i })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "mock-file-tree" }));
     expect(screen.getByTestId("mobile-code-editor")).toBeInTheDocument();
@@ -3183,8 +3183,11 @@ describe("MobileShell Phase 2 workspace", () => {
     renderMobileShell();
 
     await user.click(screen.getByRole("button", { name: "Open Files sheet" }));
-    await user.click(screen.getByRole("tab", { name: "Git" }));
-    expect(screen.getByRole("tab", { name: "Git" })).toHaveAttribute("aria-selected", "true");
+    await user.click(screen.getByRole("tab", { name: /Source Control|源代码管理/i }));
+    expect(screen.getByRole("tab", { name: /Source Control|源代码管理/i })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
     await user.click(screen.getByRole("button", { name: "mock-git-panel" }));
 
     expect(screen.getByTestId("mobile-code-editor")).toBeInTheDocument();
@@ -3195,11 +3198,11 @@ describe("MobileShell Phase 2 workspace", () => {
     renderMobileShell();
 
     await user.click(screen.getByRole("button", { name: "Open Files sheet" }));
-    await user.click(screen.getByRole("tab", { name: "Git" }));
+    await user.click(screen.getByRole("tab", { name: /Source Control|源代码管理/i }));
     await user.click(screen.getByRole("button", { name: "mock-git-history" }));
 
     expect(screen.getByTestId("mobile-code-editor")).toBeInTheDocument();
-    expect(screen.getByText("abc123 · commit subject")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /back|返回/i })).toBeInTheDocument();
   });
 
   it("shows mobile diff preview and edit mode actions in the unified detail header", async () => {
@@ -3219,15 +3222,20 @@ describe("MobileShell Phase 2 workspace", () => {
     expect(mockMobileEditorSetMode).toHaveBeenCalledWith("edit");
   });
 
-  it("shows file actions in the tab row only on the files tab", async () => {
+  it("shows file actions inside the workspace section only on the explorer tab", async () => {
     const user = userEvent.setup();
     renderMobileShell();
 
     await user.click(screen.getByRole("button", { name: "Open Files sheet" }));
-    expect(screen.getByRole("button", { name: /^new file$|^新建文件$/i })).toBeInTheDocument();
+    const workspaceSection = screen
+      .getByRole("heading", { level: 2, name: /workspace|工作区/i })
+      .closest("section") as HTMLElement;
+    expect(
+      within(workspaceSection).getByRole("button", { name: /^new file$|^新建文件$/i })
+    ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /refresh|刷新/i })).toBeNull();
 
-    await user.click(screen.getByRole("tab", { name: "Git" }));
+    await user.click(screen.getByRole("tab", { name: /Source Control|源代码管理/i }));
 
     expect(screen.queryByRole("button", { name: /^new file$|^新建文件$/i })).toBeNull();
   });
@@ -3237,8 +3245,11 @@ describe("MobileShell Phase 2 workspace", () => {
     renderMobileShell();
 
     await user.click(screen.getByRole("button", { name: "Open Files sheet" }));
-    await user.click(screen.getByRole("tab", { name: "Git" }));
-    expect(screen.getByRole("tab", { name: "Git" })).toHaveAttribute("aria-selected", "true");
+    await user.click(screen.getByRole("tab", { name: /Source Control|源代码管理/i }));
+    expect(screen.getByRole("tab", { name: /Source Control|源代码管理/i })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
     await user.click(screen.getByRole("button", { name: "mock-git-panel" }));
 
     expect(screen.getByTestId("mobile-code-editor")).toBeInTheDocument();
@@ -3256,8 +3267,11 @@ describe("MobileShell Phase 2 workspace", () => {
     const { store } = renderMobileShell();
 
     await user.click(screen.getByRole("button", { name: "Open Files sheet" }));
-    await user.click(screen.getByRole("tab", { name: "Git" }));
-    expect(screen.getByRole("tab", { name: "Git" })).toHaveAttribute("aria-selected", "true");
+    await user.click(screen.getByRole("tab", { name: /Source Control|源代码管理/i }));
+    expect(screen.getByRole("tab", { name: /Source Control|源代码管理/i })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
 
     store.set(gitDiffPreviewAtomFamily("ws-1"), {
       path: "src/app.tsx",
