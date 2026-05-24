@@ -98,6 +98,7 @@ function resolvePlacement(
 export function usePaneDragController({ onDrop }: UsePaneDragControllerOptions) {
   const paneRegistry = useRef(new Map<string, RegisteredPane>());
   const [state, setState] = useState<PaneDragState>(() => createIdleState());
+  const onDropRef = useRef(onDrop);
   const stateRef = useRef(state);
 
   const setDragState = useCallback(
@@ -139,6 +140,10 @@ export function usePaneDragController({ onDrop }: UsePaneDragControllerOptions) 
     document.body.classList.remove("is-dragging-pane");
     setDragState(createIdleState());
   }, [setDragState]);
+
+  useEffect(() => {
+    onDropRef.current = onDrop;
+  }, [onDrop]);
 
   const handlePointerMove = useCallback(
     (event: PointerEvent) => {
@@ -193,7 +198,7 @@ export function usePaneDragController({ onDrop }: UsePaneDragControllerOptions) 
       const target = paneRegistry.current.get(current.hoverTargetPaneId);
 
       if (target) {
-        onDrop({
+        onDropRef.current({
           sourcePaneId: current.source.paneId,
           targetPaneId: current.hoverTargetPaneId,
           placement: current.hoverPlacement,
@@ -203,7 +208,7 @@ export function usePaneDragController({ onDrop }: UsePaneDragControllerOptions) 
     }
 
     clearDrag();
-  }, [clearDrag, onDrop]);
+  }, [clearDrag]);
 
   useEffect(() => {
     if (!state.isDragging) {

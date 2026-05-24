@@ -6,7 +6,7 @@
  */
 
 import { useAtomValue } from "jotai";
-import type { FC } from "react";
+import { type FC, useCallback, useEffect, useRef } from "react";
 import { activeWorkspaceAtom } from "../../atoms/workspaces";
 import { EmptyState } from "../../components/ui";
 import { useTranslation } from "../../lib/i18n";
@@ -48,25 +48,29 @@ export const AgentPanes: FC<AgentPanesProps> = ({ hydrateSessions = true }) => {
   });
   const paneActions = usePaneActions(workspaceId);
   const sessionActions = useSessionActions();
+  const { insertSessionPaneAtEdge, moveSessionToDraft, swapPaneSessions } = paneActions;
   const hasLayoutSessions = collectSessionIds(paneLayout).length > 0;
   const shouldShowStandaloneDraftLauncher =
     sessions.length === 0 &&
     (hasLayoutSessions ||
       (paneLayout.type === "leaf" && !paneLayout.sessionId && paneLayout.id === "root"));
 
-  const handlePaneDrop = (intent: PaneDropIntent) => {
-    if (intent.placement === "center") {
-      if (intent.targetType === "draft") {
-        paneActions.moveSessionToDraft(intent.sourcePaneId, intent.targetPaneId);
+  const handlePaneDrop = useCallback(
+    (intent: PaneDropIntent) => {
+      if (intent.placement === "center") {
+        if (intent.targetType === "draft") {
+          moveSessionToDraft(intent.sourcePaneId, intent.targetPaneId);
+          return;
+        }
+
+        swapPaneSessions(intent.sourcePaneId, intent.targetPaneId);
         return;
       }
 
-      paneActions.swapPaneSessions(intent.sourcePaneId, intent.targetPaneId);
-      return;
-    }
-
-    paneActions.insertSessionPaneAtEdge(intent.sourcePaneId, intent.targetPaneId, intent.placement);
-  };
+      insertSessionPaneAtEdge(intent.sourcePaneId, intent.targetPaneId, intent.placement);
+    },
+    [insertSessionPaneAtEdge, moveSessionToDraft, swapPaneSessions]
+  );
   const dragController = usePaneDragController({ onDrop: handlePaneDrop });
 
   if (!workspace) {
@@ -126,6 +130,11 @@ interface PaneNodeRendererProps {
   onSplitSession: (sessionId: string, direction: "horizontal" | "vertical") => void;
 }
 
+type PaneLeafNode = PaneNode & {
+  type: "leaf";
+  sessionId?: string;
+};
+
 interface PaneLeafDragState {
   isDragging: boolean;
   isActiveDropTarget: boolean;
@@ -145,6 +154,110 @@ function getPaneLeafDragState(
   };
 }
 
+interface PaneLeafProps {
+  dragController: ReturnType<typeof usePaneDragController>;
+  node: PaneLeafNode;
+  workspaceId: string;
+  onAssignSession: (paneId: string, sessionId: string) => void;
+  onCloseDraftPane: (paneId: string) => void;
+  onCloseSession: (sessionId: string) => void;
+  onCloseSessionCommand: (
+    sessionId: string,
+    paneDisposition?: "draft" | "remove"
+  ) => Promise<boolean | void>;
+  onPaneDrop: (intent: PaneDropIntent) => void;
+  onReplaceWithSession: (sessionId: string) => void;
+  onSplitDraftPane: (paneId: string, direction: "horizontal" | "vertical") => void;
+  onSplitSession: (sessionId: string, direction: "horizontal" | "vertical") => void;
+}
+
+const PaneLeaf: FC<PaneLeafProps> = ({
+  dragController,
+  node,
+  workspaceId,
+  onAssignSession,
+  onCloseDraftPane,
+  onCloseSession,
+  onCloseSessionCommand,
+  onPaneDrop,
+  onReplaceWithSession,
+  onSplitDraftPane,
+  onSplitSession,
+}) => {
+  const leafRef = useRef<HTMLDivElement | null>(null);
+  const dragState = getPaneLeafDragState(dragController.state, node.id);
+
+  useEffect(() => {
+    const element = leafRef.current;
+
+    if (!element) {
+      return;
+    }
+
+    dragController.registerPane(node.id, {
+      type: node.sessionId ? "session" : "draft",
+      element,
+    });
+
+    return () => {
+      dragController.registerPane(node.id, null);
+    };
+  }, [dragController, node.id, node.sessionId]);
+
+  if (node.sessionId) {
+    return (
+      <div
+        ref={leafRef}
+        className="agent-pane-leaf"
+        data-pane-id={node.id}
+        data-pane-dragging={dragState.isDragging ? "true" : undefined}
+        data-pane-drop-target={dragState.isActiveDropTarget ? "true" : undefined}
+        data-pane-hover-placement={dragState.hoverPlacement ?? undefined}
+      >
+        <SessionCard
+          dragState={dragState}
+          paneId={node.id}
+          onPaneDragStart={dragController.startDrag}
+          onPaneDrop={onPaneDrop}
+          sessionId={node.sessionId}
+          onClose={async () => {
+            onCloseSession(node.sessionId);
+            await onCloseSessionCommand(node.sessionId, "draft");
+          }}
+          onSplitHorizontal={() => onSplitSession(node.sessionId!, "horizontal")}
+          onSplitVertical={() => onSplitSession(node.sessionId!, "vertical")}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div
+      ref={leafRef}
+      className="agent-pane-leaf"
+      data-pane-id={node.id}
+      data-pane-dragging={dragState.isDragging ? "true" : undefined}
+      data-pane-drop-target={dragState.isActiveDropTarget ? "true" : undefined}
+      data-pane-hover-placement={dragState.hoverPlacement ?? undefined}
+    >
+      <DraftLauncher
+        dragState={{
+          isDragging: dragState.isDragging,
+          isActiveDropTarget: dragState.isActiveDropTarget,
+          hoverPlacement: dragState.hoverPlacement === "center" ? "center" : null,
+        }}
+        workspaceId={workspaceId}
+        paneId={node.id}
+        onAssignSession={onAssignSession}
+        onClosePane={onCloseDraftPane}
+        onPaneDrop={onPaneDrop}
+        onReplaceWithSession={onReplaceWithSession}
+        onSplitPane={onSplitDraftPane}
+      />
+    </div>
+  );
+};
+
 /**
  * Recursively render pane tree
  */
@@ -162,54 +275,21 @@ const PaneNodeRenderer: FC<PaneNodeRendererProps> = ({
   onSplitSession,
 }) => {
   if (node.type === "leaf") {
-    const leafDragState = getPaneLeafDragState(dragController.state, node.id);
-
-    // Render session card or draft launcher
-    if (node.sessionId) {
-      return (
-        <div
-          className="agent-pane-leaf"
-          data-pane-id={node.id}
-          data-pane-dragging={leafDragState.isDragging ? "true" : undefined}
-          data-pane-drop-target={leafDragState.isActiveDropTarget ? "true" : undefined}
-          data-pane-hover-placement={leafDragState.hoverPlacement ?? undefined}
-          style={{ display: "flex", flex: 1, minHeight: 0, minWidth: 0 }}
-        >
-          <SessionCard
-            paneId={node.id}
-            onPaneDrop={onPaneDrop}
-            sessionId={node.sessionId}
-            onClose={async () => {
-              onCloseSession(node.sessionId!);
-              await onCloseSessionCommand(node.sessionId!, "draft");
-            }}
-            onSplitHorizontal={() => onSplitSession(node.sessionId!, "horizontal")}
-            onSplitVertical={() => onSplitSession(node.sessionId!, "vertical")}
-          />
-        </div>
-      );
-    } else {
-      return (
-        <div
-          className="agent-pane-leaf"
-          data-pane-id={node.id}
-          data-pane-dragging={leafDragState.isDragging ? "true" : undefined}
-          data-pane-drop-target={leafDragState.isActiveDropTarget ? "true" : undefined}
-          data-pane-hover-placement={leafDragState.hoverPlacement ?? undefined}
-          style={{ display: "flex", flex: 1, minHeight: 0, minWidth: 0 }}
-        >
-          <DraftLauncher
-            workspaceId={workspaceId}
-            paneId={node.id}
-            onAssignSession={onAssignSession}
-            onClosePane={onCloseDraftPane}
-            onPaneDrop={onPaneDrop}
-            onReplaceWithSession={onReplaceWithSession}
-            onSplitPane={onSplitDraftPane}
-          />
-        </div>
-      );
-    }
+    return (
+      <PaneLeaf
+        dragController={dragController}
+        node={node}
+        workspaceId={workspaceId}
+        onAssignSession={onAssignSession}
+        onCloseDraftPane={onCloseDraftPane}
+        onCloseSession={onCloseSession}
+        onCloseSessionCommand={onCloseSessionCommand}
+        onPaneDrop={onPaneDrop}
+        onReplaceWithSession={onReplaceWithSession}
+        onSplitDraftPane={onSplitDraftPane}
+        onSplitSession={onSplitSession}
+      />
+    );
   }
 
   // Render split container

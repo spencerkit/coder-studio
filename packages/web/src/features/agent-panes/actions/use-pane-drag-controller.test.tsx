@@ -97,4 +97,26 @@ describe("usePaneDragController", () => {
 
     expect(onDrop).not.toHaveBeenCalled();
   });
+
+  it("attaches pointer listeners while dragging and removes listeners and body class on unmount", () => {
+    const addEventListenerSpy = vi.spyOn(window, "addEventListener");
+    const removeEventListenerSpy = vi.spyOn(window, "removeEventListener");
+    const { result, unmount } = renderHook(() => usePaneDragController({ onDrop: vi.fn() }));
+
+    act(() => {
+      result.current.startDrag({ paneId: "source-pane" });
+    });
+
+    expect(document.body).toHaveClass("is-dragging-pane");
+    expect(addEventListenerSpy).toHaveBeenCalledWith("pointermove", expect.any(Function));
+    expect(addEventListenerSpy).toHaveBeenCalledWith("pointerup", expect.any(Function));
+
+    act(() => {
+      unmount();
+    });
+
+    expect(document.body).not.toHaveClass("is-dragging-pane");
+    expect(removeEventListenerSpy).toHaveBeenCalledWith("pointermove", expect.any(Function));
+    expect(removeEventListenerSpy).toHaveBeenCalledWith("pointerup", expect.any(Function));
+  });
 });

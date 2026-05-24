@@ -8,10 +8,17 @@ import { sessionsAtom } from "../../atoms/sessions";
 import { activeWorkspaceIdAtom, workspacesLoadStateAtom } from "../../atoms/workspaces";
 import { seedReadyWorkspaceState } from "../../test-utils/workspace-state";
 import type { PaneDropIntent } from "./actions/pane-drag-types";
+import type { PaneDragSourceSnapshot } from "./actions/use-pane-drag-controller";
 import { LEGACY_PANE_LAYOUT_STORAGE_KEY_PREFIX, paneLayoutAtomFamily } from "./atoms/pane-layout";
 import { AgentPanes } from "./index";
 
 type MockSessionCardProps = {
+  dragState?: {
+    isActiveDropTarget: boolean;
+    isDragging: boolean;
+    hoverPlacement: PaneDropIntent["placement"] | null;
+  };
+  onPaneDragStart?: (source: PaneDragSourceSnapshot) => void;
   paneId?: string;
   sessionId: string;
   onSplitHorizontal?: () => void;
@@ -24,13 +31,35 @@ const mockSessionCard = vi.fn(
   ({
     paneId,
     sessionId,
+    dragState,
+    onPaneDragStart,
     onSplitHorizontal,
     onSplitVertical,
     onClose,
     onPaneDrop,
   }: MockSessionCardProps) => (
-    <div data-testid="session-card">
+    <div
+      data-testid="session-card"
+      data-dragging={dragState?.isDragging ? "true" : undefined}
+      data-drop-target={dragState?.isActiveDropTarget ? "true" : undefined}
+      data-hover-placement={dragState?.hoverPlacement ?? undefined}
+    >
       <span>{sessionId}</span>
+      {paneId && onPaneDragStart ? (
+        <button
+          type="button"
+          onPointerDown={() =>
+            onPaneDragStart({
+              paneId,
+              providerLabel: sessionId === "sess_1" ? "Claude" : "Codex",
+              sessionId,
+              title: sessionId,
+            })
+          }
+        >
+          drag-{sessionId}
+        </button>
+      ) : null}
       <button type="button" onClick={onSplitHorizontal}>
         split-{sessionId}
       </button>
@@ -79,6 +108,11 @@ vi.mock("./views/shared/session-card", () => ({
 }));
 
 type MockDraftLauncherProps = {
+  dragState?: {
+    isActiveDropTarget: boolean;
+    isDragging: boolean;
+    hoverPlacement: "center" | null;
+  };
   workspaceId: string;
   paneId?: string;
   onAssignSession?: (paneId: string, sessionId: string) => void;
@@ -95,9 +129,14 @@ vi.mock("./views/shared/draft-launcher", async () => {
 
   return {
     ...actual,
-    DraftLauncher: ({ paneId, onPaneDrop, ...props }: MockDraftLauncherProps) => (
-      <div data-testid={paneId ? `draft-launcher-${paneId}` : "draft-launcher-standalone"}>
-        <actual.DraftLauncher {...props} paneId={paneId} />
+    DraftLauncher: ({ paneId, onPaneDrop, dragState, ...props }: MockDraftLauncherProps) => (
+      <div
+        data-testid={paneId ? `draft-launcher-${paneId}` : "draft-launcher-standalone"}
+        data-dragging={dragState?.isDragging ? "true" : undefined}
+        data-drop-target={dragState?.isActiveDropTarget ? "true" : undefined}
+        data-hover-placement={dragState?.hoverPlacement ?? undefined}
+      >
+        <actual.DraftLauncher {...props} dragState={dragState} paneId={paneId} />
         {paneId && onPaneDrop ? (
           <button
             type="button"
@@ -217,6 +256,32 @@ function createAgentPaneStore(
   );
 
   return { store, sendCommand, sessions };
+}
+
+function setPaneRect(
+  paneId: string,
+  rect: { left: number; top: number; width: number; height: number }
+) {
+  const element = document.querySelector(`[data-pane-id="${paneId}"]`);
+
+  if (!(element instanceof HTMLElement)) {
+    throw new Error(`Missing pane wrapper for ${paneId}`);
+  }
+
+  const domRect = {
+    x: rect.left,
+    y: rect.top,
+    left: rect.left,
+    top: rect.top,
+    width: rect.width,
+    height: rect.height,
+    right: rect.left + rect.width,
+    bottom: rect.top + rect.height,
+    toJSON: () => rect,
+  } as DOMRect;
+
+  element.getBoundingClientRect = vi.fn(() => domRect);
+  return element;
 }
 
 describe("AgentPanes", () => {
@@ -666,6 +731,103 @@ describe("AgentPanes", () => {
       }),
       undefined
     );
+  });
+
+  it("registers pane leaf wrappers and swaps sessions through pointer drag", async () => {
+    const sendCommand = vi.fn(async (op: string, args?: Record<string, unknown>) => {
+      if (op === "session.list") {
+        return [
+          {
+            id: "sess_1",
+            workspaceId: "ws-1",
+            terminalId: "term-1",
+            providerId: "claude",
+            state: "running",
+            capability: "full",
+            startedAt: Date.now() - 10_000,
+            lastActiveAt: Date.now() - 1_000,
+          },
+          {
+            id: "sess_2",
+            workspaceId: "ws-1",
+            terminalId: "term-2",
+            providerId: "codex",
+            state: "idle",
+            capability: "full",
+            startedAt: Date.now() - 8_000,
+            lastActiveAt: Date.now() - 500,
+          },
+        ];
+      }
+
+      if (op === "workspace.uiState.set") {
+        return {
+          id: "ws-1",
+          name: "repo",
+          path: "/tmp/repo",
+          targetRuntime: "native",
+          openedAt: 1,
+          lastActiveAt: 1,
+          uiState: args?.uiState,
+        };
+      }
+
+      return undefined;
+    });
+    const { store } = createAgentPaneStore(
+      {
+        id: "root",
+        type: "split",
+        direction: "horizontal",
+        ratio: 0.5,
+        children: [
+          { id: "left", type: "leaf", sessionId: "sess_1" },
+          { id: "right", type: "leaf", sessionId: "sess_2" },
+        ],
+      },
+      sendCommand,
+      "connected"
+    );
+
+    render(
+      <Provider store={store}>
+        <AgentPanes />
+      </Provider>
+    );
+
+    const leftPane = setPaneRect("left", { left: 0, top: 0, width: 220, height: 180 });
+    const rightPane = setPaneRect("right", { left: 260, top: 0, width: 220, height: 180 });
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: "drag-sess_1" }));
+
+    await waitFor(() => {
+      expect(document.body).toHaveClass("is-dragging-pane");
+    });
+
+    fireEvent.pointerMove(window, { clientX: 370, clientY: 90 });
+
+    await waitFor(() => {
+      expect(leftPane).toHaveAttribute("data-pane-dragging", "true");
+      expect(rightPane).toHaveAttribute("data-pane-drop-target", "true");
+      expect(rightPane).toHaveAttribute("data-pane-hover-placement", "center");
+    });
+
+    fireEvent.pointerUp(window, { clientX: 370, clientY: 90 });
+
+    await waitFor(() => {
+      expect(store.get(paneLayoutAtomFamily("ws-1"))).toEqual({
+        id: "root",
+        type: "split",
+        direction: "horizontal",
+        ratio: 0.5,
+        children: [
+          { id: "left", type: "leaf", sessionId: "sess_2" },
+          { id: "right", type: "leaf", sessionId: "sess_1" },
+        ],
+      });
+    });
+
+    expect(document.body).not.toHaveClass("is-dragging-pane");
   });
 
   it("keeps the remaining draft pane visible after closing the last session pane", async () => {
