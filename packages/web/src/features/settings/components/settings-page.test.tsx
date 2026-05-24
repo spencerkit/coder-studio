@@ -2842,9 +2842,22 @@ describe("SettingsPage", () => {
       "aria-selected",
       "true"
     );
+    expect(within(listbox).getByRole("option", { name: "Core Themes" })).toHaveAttribute(
+      "aria-disabled",
+      "true"
+    );
+    expect(within(listbox).getByRole("option", { name: "Seasonal Themes" })).toHaveAttribute(
+      "aria-disabled",
+      "true"
+    );
     expect(within(listbox).getByRole("option", { name: "Graphite Dark" })).toBeInTheDocument();
     expect(within(listbox).getByRole("option", { name: "Graphite Light" })).toBeInTheDocument();
     expect(within(listbox).getByRole("option", { name: "Nord Light" })).toBeInTheDocument();
+    expect(within(listbox).getByRole("option", { name: "Spring Light" })).toBeInTheDocument();
+    expect(within(listbox).getByRole("option", { name: "Spring Dark" })).toBeInTheDocument();
+    expect(within(listbox).getByRole("option", { name: "Summer Light" })).toBeInTheDocument();
+    expect(within(listbox).getByRole("option", { name: "Autumn Dark" })).toBeInTheDocument();
+    expect(within(listbox).getByRole("option", { name: "Winter Dark" })).toBeInTheDocument();
 
     fireEvent.click(within(listbox).getByRole("option", { name: "Graphite Dark" }));
 
@@ -2886,6 +2899,25 @@ describe("SettingsPage", () => {
 
     expect(document.documentElement).toHaveAttribute("data-theme", "graphite-light");
     expect(screen.getByRole("button", { name: "Theme Graphite Light" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Theme Graphite Light" }));
+
+    const seasonalListbox = await screen.findByRole("listbox", { name: "Theme" });
+    fireEvent.click(within(seasonalListbox).getByRole("option", { name: "Winter Dark" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            appearance: {
+              themeId: "winter-dark",
+            },
+          },
+        },
+        undefined
+      );
+    });
   });
 
   it("hydrates the single theme picker from settings.get themeId", async () => {

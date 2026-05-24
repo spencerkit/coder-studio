@@ -94,6 +94,28 @@ type SettingsContentLayoutMode = "default" | "fill-height";
 type AppearanceAssetScope = "common" | "desktop" | "mobile";
 type AppearanceOverrideTarget = Exclude<AppearanceAssetScope, "common">;
 
+const CORE_THEME_IDS = [
+  "mint-dark",
+  "mint-light",
+  "graphite-dark",
+  "graphite-light",
+  "nord-dark",
+  "nord-light",
+  "hc-dark",
+  "hc-light",
+] as const;
+
+const SEASONAL_THEME_IDS = [
+  "spring-light",
+  "spring-dark",
+  "summer-light",
+  "summer-dark",
+  "autumn-light",
+  "autumn-dark",
+  "winter-light",
+  "winter-dark",
+] as const;
+
 const DEFAULT_SETTINGS_SECTION: SettingsSection = SETTINGS_SECTIONS[0].id;
 const TERMINAL_FONT_SIZE_SAVE_THROTTLE_MS = 500;
 const PERSONALIZATION_OVERRIDE_FIELDS = [
@@ -1839,10 +1861,35 @@ function AppearanceSettings({
   const mobileGlassDescId = useId();
   const dispatch = useSessionGateDispatch();
   const currentThemeId = resolveStoredThemeId(theme);
-  const themeOptions = THEMES.map((registeredTheme) => ({
-    value: registeredTheme.id,
-    label: t(registeredTheme.labelKey),
-  }));
+  const themeDefinitionsById = new Map(
+    THEMES.map((registeredTheme) => [registeredTheme.id, registeredTheme])
+  );
+  const themeOptions = [
+    {
+      value: "__group_core",
+      label: t("settings.theme.group_core"),
+      disabled: true,
+    },
+    ...CORE_THEME_IDS.map((themeId) => {
+      const registeredTheme = themeDefinitionsById.get(themeId)!;
+      return {
+        value: registeredTheme.id,
+        label: t(registeredTheme.labelKey),
+      };
+    }),
+    {
+      value: "__group_seasonal",
+      label: t("settings.theme.group_seasonal"),
+      disabled: true,
+    },
+    ...SEASONAL_THEME_IDS.map((themeId) => {
+      const registeredTheme = themeDefinitionsById.get(themeId)!;
+      return {
+        value: registeredTheme.id,
+        label: t(registeredTheme.labelKey),
+      };
+    }),
+  ];
   const [desktopTerminalFontSizeDraft, setDesktopTerminalFontSizeDraft] = useState(
     String(desktopTerminalFontSize)
   );
