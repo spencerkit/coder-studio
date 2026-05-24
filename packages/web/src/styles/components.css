@@ -13441,21 +13441,31 @@ textarea.input {
 .git-worktree-row {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
   min-height: 28px;
+  color: var(--text-secondary);
+}
+
+.git-worktree-row__main {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 10px;
   padding: 6px 10px;
   border: 1px solid transparent;
   border-radius: 8px;
   background: transparent;
-  color: var(--text-secondary);
+  color: inherit;
   text-align: left;
 }
 
-.git-worktree-row:hover {
+.git-worktree-row__main:hover {
   background: color-mix(in srgb, var(--bg-hover) 90%, transparent);
 }
 
-.git-worktree-row.active {
+.git-worktree-row.active .git-worktree-row__main {
   border-color: color-mix(in srgb, var(--accent-blue) 24%, transparent);
   background: color-mix(in srgb, var(--accent-blue) 10%, transparent);
 }
@@ -13476,16 +13486,10 @@ textarea.input {
   background: color-mix(in srgb, var(--accent-amber) 88%, white 12%);
 }
 
-.git-worktree-row__copy {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  flex-direction: column;
-  gap: 2px;
-}
-
 .git-worktree-row__name,
 .git-history-row__title {
+  min-width: 0;
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -13495,16 +13499,26 @@ textarea.input {
   font-weight: var(--type-body-3-weight);
 }
 
-.git-worktree-row__meta,
+.git-worktree-row__tail {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.git-worktree-row__status,
 .git-history-row__meta {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-tertiary);
-  font-family: var(--font-mono);
   font-size: var(--type-body-5-size);
   line-height: var(--type-body-5-line-height);
   font-weight: var(--type-body-5-weight);
+}
+
+.git-history-row__meta {
+  font-family: var(--font-mono);
 }
 
 .git-worktree-row__chip {
@@ -13513,6 +13527,10 @@ textarea.input {
   font-size: var(--type-body-6-size);
   line-height: var(--type-body-6-line-height);
   font-weight: var(--type-body-6-weight);
+}
+
+.git-worktree-row__delete {
+  flex-shrink: 0;
 }
 
 .git-commit-block {
@@ -13921,6 +13939,7 @@ textarea.input {
 }
 
 .git-panel--mobile .git-worktree-row,
+.git-panel--mobile .git-worktree-row__main,
 .git-panel--mobile .git-row {
   min-height: 40px;
 }

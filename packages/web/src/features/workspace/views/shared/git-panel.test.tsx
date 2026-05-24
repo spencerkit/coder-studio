@@ -48,6 +48,23 @@ describe("GitPanel", () => {
     },
   ];
 
+  const compactListWorktrees = [
+    {
+      name: "develop",
+      path: "/home/spencer/workspace/coder-studio",
+      branch: "refs/heads/develop",
+      commit: "abc1234",
+      status: "dirty" as const,
+    },
+    {
+      name: "performance-monitoring",
+      path: "/home/spencer/workspace/coder-studio-performance-monitoring",
+      branch: "refs/heads/feat/performance-monitoring",
+      commit: "def5678",
+      status: "dirty" as const,
+    },
+  ];
+
   const historyEntries = [
     {
       sha: "98db173000000000000000000000000000000000",
@@ -426,12 +443,206 @@ describe("GitPanel", () => {
 
     const worktreeToggle = (await screen.findByText("Worktrees")).closest("button");
     const newWorktreeButton = screen.getByRole("button", { name: "New" });
+    const manageWorktreeButton = screen.getByRole("button", { name: "Manage" });
 
     expect(worktreeToggle).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByText("pr/123-fix-auth")).toBeNull();
+    expect(manageWorktreeButton).toBeInTheDocument();
     expect(
       newWorktreeButton.querySelector('[data-icon-semantic="worktree.action.new"]')
     ).toBeTruthy();
+  });
+
+  it("keeps the compact worktree list to a single row without branch refs", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return status;
+      }
+
+      if (op === "git.branches") {
+        return { current: "develop", branches: [] };
+      }
+
+      if (op === "worktree.list") {
+        return {
+          worktrees: compactListWorktrees,
+        };
+      }
+
+      if (op === "git.log") {
+        return { entries: [] };
+      }
+
+      return {};
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedWorkspaceStore(store);
+
+    render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Worktrees2" }));
+
+    const removableRow = screen
+      .getByRole("button", { name: "Remove performance-monitoring" })
+      .closest(".git-worktree-row");
+
+    expect(removableRow).not.toBeNull();
+    expect(removableRow?.querySelector(".git-worktree-row__name")).toHaveTextContent(
+      "performance-monitoring"
+    );
+    expect(removableRow?.querySelector(".git-worktree-row__status")).toHaveTextContent(
+      "Has changes"
+    );
+    expect(screen.queryByText("refs/heads/develop")).toBeNull();
+    expect(screen.queryByText("refs/heads/feat/performance-monitoring")).toBeNull();
+    expect(screen.queryByText("feat/performance-monitoring")).toBeNull();
+  });
+
+  it("opens the full worktree manager list view from the Git panel manage action", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return status;
+      }
+
+      if (op === "git.branches") {
+        return { current: "feature/ai-agent", branches: [] };
+      }
+
+      if (op === "worktree.list") {
+        return { worktrees };
+      }
+
+      if (op === "git.log") {
+        return { entries: [] };
+      }
+
+      return {};
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedWorkspaceStore(store);
+
+    render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Manage" }));
+
+    expect(await screen.findByRole("dialog", { name: "Worktrees" })).toBeInTheDocument();
+    expect(screen.getByText("pr/123-fix-auth")).toBeInTheDocument();
+  });
+
+  it("shows inline delete only for removable worktrees in the compact list", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return status;
+      }
+
+      if (op === "git.branches") {
+        return { current: "develop", branches: [] };
+      }
+
+      if (op === "worktree.list") {
+        return {
+          worktrees: compactListWorktrees,
+        };
+      }
+
+      if (op === "git.log") {
+        return { entries: [] };
+      }
+
+      return {};
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedWorkspaceStore(store);
+
+    render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Worktrees2" }));
+
+    expect(screen.queryByRole("button", { name: "Remove develop" })).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Remove performance-monitoring" })
+    ).toBeInTheDocument();
+  });
+
+  it("removes a dirty compact-list worktree through the existing worktree.remove flow", async () => {
+    let worktreeListCalls = 0;
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return status;
+      }
+
+      if (op === "git.branches") {
+        return { current: "develop", branches: [] };
+      }
+
+      if (op === "worktree.list") {
+        worktreeListCalls += 1;
+        return {
+          worktrees:
+            worktreeListCalls === 1 ? compactListWorktrees : compactListWorktrees.slice(0, 1),
+        };
+      }
+
+      if (op === "worktree.remove") {
+        return {};
+      }
+
+      if (op === "git.log") {
+        return { entries: [] };
+      }
+
+      return {};
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedWorkspaceStore(store);
+
+    render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Worktrees2" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove performance-monitoring" }));
+    expect(screen.getByRole("dialog", { name: "Delete" })).toBeInTheDocument();
+    expect(screen.getByText("Force remove dirty worktree?")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Force Remove" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "worktree.remove",
+        {
+          workspaceId: "ws-test",
+          worktreePath: "/home/spencer/workspace/coder-studio-performance-monitoring",
+          force: true,
+        },
+        undefined
+      );
+    });
   });
 
   it("does not render the legacy header worktree button", async () => {
@@ -546,8 +757,12 @@ describe("GitPanel", () => {
     const worktreeToggle = await screen.findByRole("button", { name: "Worktrees0" });
     fireEvent.click(worktreeToggle);
 
-    await screen.findByText("feature/ai-agent");
-    fireEvent.click(screen.getByRole("button", { name: /feature\/ai-agent/i }));
+    const worktreeButtons = await screen.findAllByRole("button", { name: /feature\/ai-agent/i });
+    fireEvent.click(
+      worktreeButtons.find((button) =>
+        button.classList.contains("git-worktree-row__main")
+      ) as HTMLButtonElement
+    );
 
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith(

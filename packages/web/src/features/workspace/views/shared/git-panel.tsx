@@ -1,7 +1,7 @@
 import type { GitCommitSummary, GitFileChange, WorktreeInfo } from "@coder-studio/core";
 import { atom, useAtom, useAtomValue } from "jotai";
 import { atomFamily } from "jotai-family";
-import { ChevronDown, Minus, Plus, RotateCcw } from "lucide-react";
+import { ChevronDown, Minus, Plus, RotateCcw, Trash2 } from "lucide-react";
 import type { FC, MouseEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef } from "react";
 import { localeAtom } from "../../../../atoms/app-ui";
@@ -60,6 +60,7 @@ interface GitPanelProps {
 }
 
 interface GitPanelState {
+  pendingWorktreeDeletePath: string | null;
   worktreeSurfaceView: "list" | "create" | null;
   worktreesExpanded: boolean;
   historyExpanded: boolean;
@@ -80,6 +81,7 @@ function createInitialCollapsedGroups(isMobile: boolean): Record<string, boolean
 
 function createInitialGitPanelState(isMobile: boolean): GitPanelState {
   return {
+    pendingWorktreeDeletePath: null,
     worktreeSurfaceView: null,
     worktreesExpanded: false,
     historyExpanded: false,
@@ -133,10 +135,20 @@ export const GitPanel: FC<GitPanelProps> = ({
     onPreviewOpen,
     initialHistoryLimit: 20,
   });
-  const { currentWorktree, hasWorkspace, list, loadWorktrees, openWorktree } =
+  const { currentWorktree, hasWorkspace, list, loadWorktrees, openWorktree, removeWorktreeByPath } =
     useWorktreeManagementActions(workspaceId);
   const worktreeAutoLoadAttemptedRef = useRef(false);
-  const { collapsedGroups, historyExpanded, worktreeSurfaceView, worktreesExpanded } = panelState;
+  const {
+    collapsedGroups,
+    historyExpanded,
+    pendingWorktreeDeletePath,
+    worktreeSurfaceView,
+    worktreesExpanded,
+  } = panelState;
+  const pendingWorktreeDelete = useMemo(
+    () => list.items.find((item) => item.path === pendingWorktreeDeletePath) ?? null,
+    [list.items, pendingWorktreeDeletePath]
+  );
 
   useEffect(() => {
     worktreeAutoLoadAttemptedRef.current = false;
@@ -169,6 +181,13 @@ export const GitPanel: FC<GitPanelProps> = ({
     }
 
     await openWorktree(worktree.path);
+  };
+
+  const closePendingWorktreeDelete = () => {
+    setPanelState((current) => ({
+      ...current,
+      pendingWorktreeDeletePath: null,
+    }));
   };
 
   return (
@@ -226,19 +245,33 @@ export const GitPanel: FC<GitPanelProps> = ({
                   <ChevronDown size={14} />
                 </span>
               </button>
-              <button
-                type="button"
-                className="git-panel-section-link"
-                onClick={() =>
-                  setPanelState((current) => ({
-                    ...current,
-                    worktreeSurfaceView: "create",
-                  }))
-                }
-              >
-                <ThemedIcon semantic="worktree.action.new" size={12} />
-                <span>{t("worktree.new")}</span>
-              </button>
+              <div className="git-panel-section-actions">
+                <button
+                  type="button"
+                  className="git-panel-section-link"
+                  onClick={() =>
+                    setPanelState((current) => ({
+                      ...current,
+                      worktreeSurfaceView: "list",
+                    }))
+                  }
+                >
+                  <span>{t("worktree.manage")}</span>
+                </button>
+                <button
+                  type="button"
+                  className="git-panel-section-link"
+                  onClick={() =>
+                    setPanelState((current) => ({
+                      ...current,
+                      worktreeSurfaceView: "create",
+                    }))
+                  }
+                >
+                  <ThemedIcon semantic="worktree.action.new" size={12} />
+                  <span>{t("worktree.new")}</span>
+                </button>
+              </div>
             </div>
 
             {worktreesExpanded ? (
@@ -261,33 +294,57 @@ export const GitPanel: FC<GitPanelProps> = ({
                 ) : list.items.length === 0 ? (
                   <GitPanelEmptyState title={t("worktree.list_empty")} />
                 ) : (
-                  list.items.map((worktree) => (
-                    <button
-                      key={worktree.path}
-                      type="button"
-                      className={`git-worktree-row ${
-                        currentWorktree?.path === worktree.path ? "active" : ""
-                      }`}
-                      onClick={() => void handleWorktreeOpen(worktree)}
-                    >
-                      <span
-                        className={`git-worktree-row__dot git-worktree-row__dot-${worktree.status}`}
-                        aria-hidden="true"
-                      />
-                      <span className="git-worktree-row__copy">
-                        <span className="git-worktree-row__name">{worktree.name}</span>
-                        <span className="git-worktree-row__meta">
-                          {worktree.branch} ·{" "}
-                          {worktree.status === "clean"
-                            ? t("worktree.clean")
-                            : t("worktree.dirty_status")}
-                        </span>
-                      </span>
-                      {currentWorktree?.path === worktree.path ? (
-                        <span className="git-worktree-row__chip">{t("worktree.current")}</span>
-                      ) : null}
-                    </button>
-                  ))
+                  list.items.map((worktree, index) => {
+                    const isCurrent = currentWorktree?.path === worktree.path;
+                    const isPrimary = index === 0;
+                    const isRemovable = !isCurrent && !isPrimary;
+
+                    return (
+                      <div
+                        key={worktree.path}
+                        className={`git-worktree-row ${isCurrent ? "active" : ""}`}
+                      >
+                        <button
+                          type="button"
+                          className="git-worktree-row__main"
+                          onClick={() => void handleWorktreeOpen(worktree)}
+                        >
+                          <span
+                            className={`git-worktree-row__dot git-worktree-row__dot-${worktree.status}`}
+                            aria-hidden="true"
+                          />
+                          <span className="git-worktree-row__name">{worktree.name}</span>
+                          <span className="git-worktree-row__tail">
+                            <span className="git-worktree-row__status">
+                              {worktree.status === "clean"
+                                ? t("worktree.clean")
+                                : t("worktree.dirty_status")}
+                            </span>
+                            {isCurrent ? (
+                              <span className="git-worktree-row__chip">
+                                {t("worktree.current")}
+                              </span>
+                            ) : null}
+                          </span>
+                        </button>
+                        {isRemovable ? (
+                          <IconButton
+                            aria-label={t("worktree.remove_row_label", { name: worktree.name })}
+                            className="git-worktree-row__delete"
+                            icon={<Trash2 size={12} />}
+                            onClick={() =>
+                              setPanelState((current) => ({
+                                ...current,
+                                pendingWorktreeDeletePath: worktree.path,
+                              }))
+                            }
+                            size="sm"
+                            variant="ghost"
+                          />
+                        ) : null}
+                      </div>
+                    );
+                  })
                 )}
               </div>
             ) : null}
@@ -387,10 +444,51 @@ export const GitPanel: FC<GitPanelProps> = ({
         onClose={() =>
           setPanelState((current) => ({
             ...current,
+            pendingWorktreeDeletePath: null,
             worktreeSurfaceView: null,
           }))
         }
       />
+
+      {pendingWorktreeDelete ? (
+        <ConfirmDialog
+          open
+          title={t("common.delete")}
+          description={
+            <>
+              <p>
+                {pendingWorktreeDelete.status === "dirty"
+                  ? t("worktree.remove_force_confirm")
+                  : t("worktree.remove_confirm")}
+              </p>
+              <code className="worktree-manager__confirm-path">{pendingWorktreeDelete.path}</code>
+            </>
+          }
+          cancelText={t("action.cancel")}
+          closeLabel={t("action.close")}
+          confirmText={
+            pendingWorktreeDelete.status === "dirty"
+              ? t("worktree.force_remove")
+              : t("common.delete")
+          }
+          onOpenChange={(open) => {
+            if (!open) {
+              closePendingWorktreeDelete();
+            }
+          }}
+          onConfirm={() => {
+            void removeWorktreeByPath(
+              pendingWorktreeDelete.path,
+              pendingWorktreeDelete.status === "dirty"
+            ).then((result) => {
+              if (result.ok) {
+                closePendingWorktreeDelete();
+              }
+            });
+          }}
+          tone="danger"
+        />
+      ) : null}
 
       <GitDiscardConfirmModal
         discard={pendingDiscard}
