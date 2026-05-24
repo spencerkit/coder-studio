@@ -136,4 +136,55 @@ describe("pane-navigation", () => {
 
     expect(findAdjacentSessionId(layout, "sess-active", "right")).toBe("sess-top-right");
   });
+
+  it("prefers the nearest edge before perpendicular center distance", () => {
+    const layout: PaneNode = {
+      id: "root",
+      type: "split",
+      direction: "horizontal",
+      ratio: 0.25,
+      children: [
+        {
+          id: "left-stack",
+          type: "split",
+          direction: "vertical",
+          ratio: 0.5,
+          children: [
+            { id: "active", type: "leaf", sessionId: "sess-active" },
+            { id: "bottom-left", type: "leaf", sessionId: "sess-bottom-left" },
+          ],
+        },
+        {
+          id: "right-region",
+          type: "split",
+          direction: "horizontal",
+          ratio: 1 / 3,
+          children: [
+            {
+              id: "near-column",
+              type: "split",
+              direction: "vertical",
+              ratio: 0.9,
+              children: [
+                { id: "near-right", type: "leaf", sessionId: "sess-near-right" },
+                { id: "bottom-middle", type: "leaf", sessionId: "sess-bottom-middle" },
+              ],
+            },
+            {
+              id: "far-column",
+              type: "split",
+              direction: "vertical",
+              ratio: 0.6,
+              children: [
+                { id: "far-right", type: "leaf", sessionId: "sess-far-right" },
+                { id: "bottom-right", type: "leaf", sessionId: "sess-bottom-right" },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(findAdjacentSessionId(layout, "sess-active", "right")).toBe("sess-near-right");
+  });
 });
