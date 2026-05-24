@@ -20,6 +20,7 @@ import {
   editorModeAtomFamily,
   editorRefreshTokenAtomFamily,
   gitDiffPreviewAtomFamily,
+  gitDiffPreviewDismissedAtomFamily,
   gitStateAtomFamily,
   type OpenFile,
   openFilesAtomFamily,
@@ -1412,6 +1413,59 @@ describe("CodeEditorHost", () => {
     });
 
     expect(result.current.hasUnsavedChangesOutsideDiff).toBe(true);
+  });
+
+  it("marks file diff preview dismissed when closing the active diff editor", async () => {
+    const { store } = setupStore({
+      activePath: "src/app.ts",
+      openFiles: {
+        "src/app.ts": {
+          kind: "text",
+          path: "src/app.ts",
+          content: "export const app = 2;",
+          savedContent: "export const app = 1;",
+          baseHash: "hash-app",
+          isDirty: true,
+        },
+      },
+    });
+    store.set(editorModeAtomFamily("ws-1"), "diff");
+    store.set(gitStateAtomFamily("ws-1"), {
+      branch: "main",
+      ahead: 0,
+      behind: 0,
+      staged: [],
+      modified: [{ path: "src/app.ts", status: "modified" }],
+      deleted: [],
+      untracked: [],
+    });
+    store.set(gitDiffPreviewAtomFamily("ws-1"), {
+      path: "src/app.ts",
+      diff: "diff --git a/src/app.ts b/src/app.ts",
+      staged: false,
+      source: "file",
+      renderAs: "text",
+      originalContent: "export const app = 1;",
+      modifiedContent: "export const app = 2;",
+    });
+
+    render(
+      <Provider store={store}>
+        <CodeEditorHost />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("monaco-diff-host")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+
+    await waitFor(() => {
+      expect(store.get(gitDiffPreviewAtomFamily("ws-1"))).toBeNull();
+      expect(store.get(gitDiffPreviewDismissedAtomFamily("ws-1"))).toBe(true);
+      expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
+    });
   });
 
   it("shows the save tooltip on desktop for a text buffer", async () => {
