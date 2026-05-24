@@ -13,6 +13,7 @@ export {
 } from "./icon-theme";
 export {
   type AppThemeDefinition,
+  createWorkspaceMonacoTheme,
   type MonacoThemeDefinition,
   type TerminalThemeDefinition,
   THEME_IDS,

@@ -5,6 +5,7 @@ import type { PaneNode } from "../atoms/pane-layout";
 import { paneLayoutAtomFamily } from "../atoms/pane-layout";
 import {
   appendSessionToLayout,
+  appendSessionToWidestColumn,
   assignSessionToPane,
   closeDraftPaneById,
   closePaneBySessionId,
@@ -103,8 +104,16 @@ export function usePaneActions(workspaceId: string) {
     [applyLayout]
   );
 
+  const appendSessionToMobileColumn = useCallback(
+    (sessionId: string) => {
+      applyLayout((current) => appendSessionToWidestColumn(current, sessionId));
+    },
+    [applyLayout]
+  );
+
   return {
     appendSession,
+    appendSessionToMobileColumn,
     assignSession,
     closeDraftPane,
     closeSessionPane,

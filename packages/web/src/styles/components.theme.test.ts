@@ -884,9 +884,12 @@ describe("components.css theme-sensitive surfaces", () => {
     const sessionTerminal = getLastRuleBlock(".session-terminal");
     const sessionCard = getLastRuleBlock(".session-card");
     const activeSessionCard = getLastRuleBlock(".session-card.session-card--active");
-    const activeSessionHeader = getLastRuleBlock(
+    const activeSessionHeader = getRuleBlocksFrom(
+      stylesheet,
       ".session-card.session-card--active > .panel-header"
-    );
+    )
+      .slice(-2)
+      .join("\n");
     const activeSessionTitle = getLastRuleBlock(
       ".session-card.session-card--active > .panel-header .panel-header__title"
     );
@@ -894,6 +897,9 @@ describe("components.css theme-sensitive surfaces", () => {
     const agentPanes = getLastRuleBlock(".workspace-main-stage > .agent-panes");
     const bottomPanel = getLastRuleBlock(".workspace-bottom-panel");
     const activityBar = getLastRuleBlock(".workspace-activity-bar");
+    const workspaceSidebarContent = getLastRuleBlock(".workspace-sidebar-panel__content");
+    const workspaceSidebarView = getLastRuleBlock(".workspace-sidebar-view");
+    const workspaceSidebarBody = getLastRuleBlock(".workspace-sidebar-panel__body");
     const activityBarButton = getLastRuleBlock(".workspace-activity-bar__button");
     const activityBarButtonHover = getLastRuleBlock(".workspace-activity-bar__button:hover");
     const activityBarButtonActive = getLastRuleBlock(".workspace-activity-bar__button--active");
@@ -924,8 +930,13 @@ describe("components.css theme-sensitive surfaces", () => {
       ".workspace-bottom-panel > .bottom-terminal"
     ).join("\n");
     const bottomTerminalShell = getLastRuleBlock(".workspace-bottom-panel > .bottom-terminal");
+    const bottomTerminalContent = getLastRuleBlock(".bottom-terminal-content");
+    const bottomTerminalXterm = getLastRuleBlock(".bottom-terminal-xterm");
+    const bottomTerminalEmpty = getLastRuleBlock(".bottom-terminal-empty");
 
-    expect(topbar).toContain("var(--bg-surface)");
+    expect(topbar).toContain("var(--surface-overlay-bg)");
+    expect(topbar).toContain("var(--app-surface-opacity, 0.96)");
+    expect(topbar).toContain("backdrop-filter: var(--app-surface-backdrop-filter, none)");
     expect(topbarTabs).toContain("gap: var(--gap-micro)");
     expect(topbarTab).toContain("gap: var(--gap-tight)");
     expect(topbarTab).toContain(
@@ -961,9 +972,12 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(tokensStylesheet).toContain("--workspace-session-map-idle: color-mix(");
     expect(tokensStylesheet).toContain("--workspace-session-map-empty: color-mix(");
     expect(workspaceResizer).toContain("z-index: var(--z-inline)");
-    expect(emptyCard).toContain("var(--bg-surface)");
-    expect(resolvingCard).toContain("var(--bg-surface)");
-    expect(workspaceGitEditor).toContain("var(--bg-terminal)");
+    expect(emptyCard).toContain("var(--ws-editor-toolbar-bg)");
+    expect(emptyCard).toContain("var(--ws-editor-shell-bg)");
+    expect(resolvingCard).toContain("var(--ws-editor-toolbar-bg)");
+    expect(resolvingCard).toContain("var(--ws-editor-shell-bg)");
+    expect(workspaceGitEditor).toContain("background: var(--ws-editor-shell-bg)");
+    expect(workspaceGitEditor).toContain("backdrop-filter: var(--ws-backdrop-filter)");
     expect(mainStage).toContain("flex: 1");
     expect(mainStage).toContain("min-height: 0");
     expect(mainStage).toContain("min-width: 0");
@@ -972,15 +986,19 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(agentPanes).toContain("flex: 1");
     expect(agentPanes).toContain("min-height: 0");
     expect(agentPanes).toContain("padding: 0");
-    expect(sessionTerminal).toContain("var(--bg-terminal)");
-    expect(sessionTerminal).not.toContain("rgba(11, 18, 24, 0.98)");
+    expect(sessionTerminal).toContain("background: transparent");
+    expect(sessionTerminal).not.toContain("var(--bg-terminal)");
     expect(sessionCard).toContain("border: none");
     expect(sessionCard).not.toContain("border: 1px solid var(--border)");
-    expect(activeSessionCard).toContain("background: var(--bg-active)");
-    expect(activeSessionCard).toContain("box-shadow: inset 0 0 0 1px var(--border-focus)");
-    expect(activeSessionHeader).toContain(
-      "background: color-mix(in srgb, var(--bg-active) 88%, var(--bg-page) 12%)"
-    );
+    expect(sessionCard).toContain("background: var(--ws-session-bg)");
+    expect(sessionCard).toContain("backdrop-filter: var(--ws-backdrop-filter)");
+    expect(activeSessionCard).toContain("background: var(--ws-session-active-bg)");
+    expect(activeSessionCard).not.toContain("background: var(--bg-active)");
+    expect(activeSessionCard).toContain("box-shadow: inset 0 0 0 1px");
+    expect(activeSessionCard).toContain("var(--border-focus) 84%");
+    expect(activeSessionHeader).toContain("background: var(--ws-session-header-bg)");
+    expect(activeSessionHeader).toContain("backdrop-filter: var(--ws-backdrop-filter)");
+    expect(activeSessionHeader).not.toContain("var(--bg-active) 88%");
     expect(activeSessionTitle).toContain("color: var(--text-primary)");
     expect(resolvingConsoleStatus).toContain("background: var(--state-success-text)");
     expect(resolvingConsoleStatus).toContain("border-radius: var(--radius-chip)");
@@ -991,9 +1009,12 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(resolvingStrongLine).toContain("border: 1px solid var(--state-info-border)");
     expect(resolvingStrongLine).toContain("background: var(--state-info-bg)");
     expect(activityBar).toContain("border-right: 1px solid var(--border)");
-    expect(activityBar).toContain(
-      "background: color-mix(in srgb, var(--bg-panel) 88%, var(--bg-page))"
-    );
+    expect(activityBar).toContain("background: var(--ws-activitybar-bg)");
+    expect(activityBar).toContain("backdrop-filter: var(--ws-backdrop-filter)");
+    expect(activityBar).not.toContain("var(--bg-panel) 88%");
+    expect(workspaceSidebarContent).toContain("background: transparent");
+    expect(workspaceSidebarView).toContain("background: transparent");
+    expect(workspaceSidebarBody).toContain("background: transparent");
     expect(activityBarButton).toContain("border-radius: var(--radius-lg)");
     expect(activityBarButton).toContain("background: transparent");
     expect(activityBarButtonHover).toContain("background: var(--bg-hover)");
@@ -1030,11 +1051,14 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(bottomPanel).toContain("padding: 0");
     expect(bottomPanel).not.toContain("padding: 0 0 14px");
     expect(bottomPanel).not.toContain("padding: 0 14px 14px");
-    expect(bottomTerminalShellRules).toContain("var(--bg-terminal)");
-    expect(bottomTerminalShellRules).not.toContain("rgba(17, 24, 31, 0.96)");
+    expect(bottomTerminalShellRules).toContain("background: var(--ws-terminal-shell-bg)");
+    expect(bottomTerminalShellRules).toContain("backdrop-filter: var(--ws-backdrop-filter)");
     expect(bottomTerminalShell).toContain("border: none");
     expect(bottomTerminalShellRules).toContain("border-radius: 0");
     expect(bottomTerminalShellRules).not.toContain("border-radius: 14px");
+    expect(bottomTerminalContent).toContain("background: transparent");
+    expect(bottomTerminalXterm).toContain("background: transparent");
+    expect(bottomTerminalEmpty).toContain("background: transparent");
     expect(statusBar).toContain(
       "border-top: 1px solid color-mix(in srgb, var(--border) 62%, transparent)"
     );
@@ -1132,6 +1156,128 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(mobileTabs).toContain("z-index: var(--z-inline)");
   });
 
+  it("routes settings and workspace shared surfaces through appearance-aware background tokens", () => {
+    const settingsContent = getLastRuleBlock(".settings-content");
+    const settingsSurface = getRuleBlocksFrom(stylesheet, ".settings-content-surface").find(
+      (block) => block.includes("var(--surface-overlay-bg)")
+    );
+    const appTopbar = getLastRuleBlock(".app-topbar");
+    const workspacePage = getLastRuleBlock(".workspace-page");
+    const workspaceBody = getLastRuleBlock(".workspace-body");
+    const workspaceMainArea = getLastRuleBlock(".workspace-main-area");
+    const workspaceMainStage = getLastRuleBlock(".workspace-main-stage");
+    const agentPanes = getLastRuleBlock(".agent-panes");
+    const agentPane = getLastRuleBlock(".agent-pane");
+    const agentPanesStage = getLastRuleBlock(".workspace-main-stage > .agent-panes");
+    const paneLayout = getLastRuleBlock(".pane-layout");
+    const paneLayoutChild = getLastRuleBlock(".pane-layout-child");
+    const leftPanel = getLastRuleBlock(".left-panel");
+    const workspaceSidebarPanel = getLastRuleBlock(".workspace-sidebar-panel");
+    const workspaceActivityBar = getLastRuleBlock(".workspace-activity-bar");
+    const workspaceStatusBar = getLastRuleBlock(".workspace-status-bar");
+    const workspaceSidebarContent = getLastRuleBlock(".workspace-sidebar-panel__content");
+    const workspaceSidebarView = getLastRuleBlock(".workspace-sidebar-view");
+    const workspaceSidebarBody = getLastRuleBlock(".workspace-sidebar-panel__body");
+    const sessionCard = getLastRuleBlock(".session-card");
+    const activeSessionCard = getLastRuleBlock(".session-card.session-card--active");
+    const activeSessionHeader = getRuleBlocksFrom(
+      stylesheet,
+      ".session-card.session-card--active > .panel-header"
+    )
+      .slice(-2)
+      .join("\n");
+    const sessionTerminal = getLastRuleBlock(".session-terminal");
+    const workspaceEmptyInner = getLastRuleBlock(".workspace-empty-inner");
+    const workspaceResolvingCard = getLastRuleBlock(".workspace-resolving-card");
+    const bottomTerminal = getLastRuleBlock(".workspace-bottom-panel > .bottom-terminal");
+    const bottomTerminalContent = getLastRuleBlock(".bottom-terminal-content");
+    const bottomTerminalXterm = getLastRuleBlock(".bottom-terminal-xterm");
+    const bottomTerminalEmpty = getLastRuleBlock(".bottom-terminal-empty");
+    const xtermScreen = getLastRuleBlock(".xterm-host .xterm-screen");
+    const terminalToolbar = getLastRuleBlock(".terminal-toolbar");
+    const bottomTerminalTabs = getLastRuleBlock(".bottom-terminal-tabs");
+    const mobileShell = getLastGroupedRuleBlock(/\.mobile-shell\s*\{([^}]*)\}/g);
+    const mobileTopbar = getLastRuleBlock(".mobile-topbar");
+    const mobileBottomStack = getLastRuleBlock(".mobile-shell__bottom-stack");
+
+    expect(settingsContent).toContain("var(--app-surface-opacity, 0.96)");
+    expect(settingsContent).toContain("var(--surface-page-bg)");
+    expect(settingsSurface).toBeTruthy();
+    expect(settingsSurface).toContain("var(--surface-overlay-bg)");
+    expect(settingsSurface).toContain("var(--app-surface-opacity, 0.96)");
+    expect(settingsSurface).toContain("backdrop-filter: var(--app-surface-backdrop-filter, none)");
+    expect(appTopbar).toContain("var(--surface-overlay-bg)");
+    expect(appTopbar).toContain("var(--app-surface-opacity, 0.96)");
+    expect(appTopbar).toContain("backdrop-filter: var(--app-surface-backdrop-filter, none)");
+    expect(workspacePage).toContain("background: transparent");
+    expect(workspaceBody).toContain("background: transparent");
+    expect(workspaceMainArea).toContain("background: transparent");
+    expect(workspaceMainStage).toContain("background: transparent");
+    expect(agentPanes).toContain("background: transparent");
+    expect(agentPane).toContain("background: transparent");
+    expect(agentPanesStage).toContain("background: transparent");
+    expect(paneLayout).toContain("background: transparent");
+    expect(paneLayoutChild).toContain("background: transparent");
+    expect(leftPanel).toContain("background: transparent");
+    expect(workspaceSidebarPanel).toContain("background: var(--ws-sidebar-bg)");
+    expect(workspaceSidebarPanel).toContain("backdrop-filter: var(--ws-backdrop-filter)");
+    expect(workspaceSidebarPanel).not.toContain("var(--surface-overlay-bg)");
+    expect(workspaceActivityBar).toContain("background: var(--ws-activitybar-bg)");
+    expect(workspaceStatusBar).toContain("background: var(--ws-statusbar-bg)");
+    expect(workspaceSidebarContent).toContain("background: transparent");
+    expect(workspaceSidebarView).toContain("background: transparent");
+    expect(workspaceSidebarBody).toContain("background: transparent");
+    expect(sessionCard).toContain("background: var(--ws-session-bg)");
+    expect(sessionCard).toContain("backdrop-filter: var(--ws-backdrop-filter)");
+    expect(activeSessionCard).toContain("background: var(--ws-session-active-bg)");
+    expect(activeSessionHeader).toContain("background: var(--ws-session-header-bg)");
+    expect(activeSessionHeader).toContain("backdrop-filter: var(--ws-backdrop-filter)");
+    expect(activeSessionCard).not.toContain("background: var(--bg-active)");
+    expect(sessionTerminal).toContain("background: transparent");
+    expect(workspaceEmptyInner).toContain("var(--ws-editor-toolbar-bg)");
+    expect(workspaceEmptyInner).toContain("var(--ws-editor-shell-bg)");
+    expect(workspaceEmptyInner).toContain("backdrop-filter: var(--ws-backdrop-filter)");
+    expect(workspaceResolvingCard).toContain("var(--ws-editor-toolbar-bg)");
+    expect(workspaceResolvingCard).toContain("var(--ws-editor-shell-bg)");
+    expect(workspaceResolvingCard).toContain("backdrop-filter: var(--ws-backdrop-filter)");
+    expect(bottomTerminal).toContain("background: var(--ws-terminal-shell-bg)");
+    expect(bottomTerminal).toContain("backdrop-filter: var(--ws-backdrop-filter)");
+    expect(bottomTerminal).toContain("box-shadow: none");
+    expect(bottomTerminalContent).toContain("background: transparent");
+    expect(bottomTerminalXterm).toContain("background: transparent");
+    expect(bottomTerminalEmpty).toContain("background: transparent");
+    expect(xtermScreen).toContain("background: transparent");
+    expect(xtermScreen).not.toContain("var(--bg-terminal)");
+    expect(terminalToolbar).toContain("background: var(--ws-terminal-toolbar-bg)");
+    expect(terminalToolbar).toContain("backdrop-filter: var(--ws-backdrop-filter)");
+    expect(terminalToolbar).not.toContain("var(--bg-surface)");
+    expect(bottomTerminalTabs).toContain("background: var(--ws-terminal-tabs-bg)");
+    expect(bottomTerminalTabs).not.toContain("var(--bg-surface)");
+    expect(mobileShell).toContain("background: transparent");
+    expect(mobileTopbar).toContain("var(--surface-overlay-bg)");
+    expect(mobileTopbar).toContain("var(--app-surface-opacity, 0.96)");
+    expect(mobileTopbar).toContain("backdrop-filter: var(--app-surface-backdrop-filter, none)");
+    expect(mobileBottomStack).toContain("var(--surface-overlay-bg)");
+    expect(mobileBottomStack).toContain("var(--app-surface-opacity, 0.96)");
+    expect(mobileBottomStack).toContain(
+      "backdrop-filter: var(--app-surface-backdrop-filter, none)"
+    );
+  });
+
+  it("keeps workbench backdrops and overlay cards on fallback-safe backdrop filters", () => {
+    const workbenchStyles = readFileSync(
+      `${process.cwd()}/src/components/ui/workbench-layer/index.module.css`,
+      "utf8"
+    );
+    const backdrop = getLastRuleBlockFrom(workbenchStyles, ":global(.workbench-layer-backdrop)");
+    const surface = getLastRuleBlockFrom(workbenchStyles, ":global(.workbench-layer)");
+
+    expect(backdrop).toContain("background: var(--overlay-backdrop)");
+    expect(backdrop).toContain("backdrop-filter: var(--app-surface-backdrop-filter, none)");
+    expect(surface).not.toContain("backdrop-filter:");
+    expect(workbenchStyles).not.toContain("backdrop-filter: blur(8px)");
+  });
+
   it("keeps terminal toolbar controls grouped at the far right", () => {
     const rightToolbar = getLastRuleBlock(".terminal-toolbar-right");
 
@@ -1155,9 +1301,11 @@ describe("components.css theme-sensitive surfaces", () => {
     const addedLine = getLastRuleBlock(".git-diff-line-added");
     const removedLine = getLastRuleBlock(".git-diff-line-removed");
 
-    expect(editorShell).toContain("var(--bg-surface)");
+    expect(editorShell).toContain("background: var(--ws-editor-shell-bg)");
+    expect(editorShell).toContain("backdrop-filter: var(--ws-backdrop-filter)");
     expect(editorShell).not.toContain("rgba(11, 18, 24, 0.92)");
-    expect(editorHeader).toContain("var(--bg-surface)");
+    expect(editorHeader).toContain("background: var(--ws-editor-toolbar-bg)");
+    expect(editorHeader).toContain("backdrop-filter: var(--ws-backdrop-filter)");
     expect(editorHeader).not.toContain("rgba(18, 26, 34, 0.96)");
     expect(editorError).toContain("gap: var(--gap-tight)");
     expect(editorError).toContain("padding: var(--gap-tight) var(--inset-control-inline)");
@@ -1190,6 +1338,7 @@ describe("components.css theme-sensitive surfaces", () => {
     const xtermReplayCard = getLastRuleBlock(".xterm-replay-overlay__card");
     const sessionProgress = getLastRuleBlock(".session-progress");
     const sessionHeader = getLastRuleBlock(".session-header");
+    const supervisorCard = getLastRuleBlock(".supervisor-card");
     const sessionHeaderLeft = getLastRuleBlock(".session-header-left");
     const sessionHeaderCopyBlocks = getRuleBlocksFrom(stylesheet, ".session-header-copy");
     const sessionTitleRow = getLastRuleBlock(".session-title-row");
@@ -1214,6 +1363,8 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(xtermReplayCard).toContain("border-radius: var(--terminal-local-overlay-radius)");
     expect(sessionProgress).toContain("background: var(--state-info-bg)");
     expect(sessionHeader).toContain("padding: var(--gap-tight) var(--inset-control-inline)");
+    expect(supervisorCard).toContain("background: var(--ws-session-header-bg)");
+    expect(supervisorCard).toContain("backdrop-filter: var(--ws-backdrop-filter)");
     expect(sessionHeaderLeft).toContain("gap: var(--gap-default)");
     expect(sessionHeaderCopyBlocks.some((block) => block.includes("gap: var(--gap-compact)"))).toBe(
       true
@@ -1332,6 +1483,8 @@ describe("components.css theme-sensitive surfaces", () => {
 
     expect(launcher).toContain("container-type: inline-size");
     expect(content).toContain("max-width: 100%");
+    expect(content).toContain("var(--surface-overlay-bg)");
+    expect(content).toContain("backdrop-filter: var(--app-surface-backdrop-filter, none)");
     expect(providerCard).toContain("min-width: 0");
     expect(providerBody).toContain("width: 100%");
     expect(providerBody).toContain("gap: var(--gap-tight)");
@@ -1820,21 +1973,27 @@ describe("components.css theme-sensitive surfaces", () => {
 
     expect(settingsPage).toContain("display: flex");
     expect(settingsPage).toContain("min-height: 100vh");
-    expect(settingsPage).toContain("background: var(--bg-page)");
-    expect(baseSettingsHeader).toContain("background: var(--bg-surface)");
-    expect(baseSettingsHeader).toContain("border-bottom: 1px solid var(--border)");
+    expect(settingsPage).toContain("background: transparent");
+    expect(baseSettingsHeader).toContain("var(--surface-overlay-bg)");
+    expect(baseSettingsHeader).toContain("var(--app-surface-opacity, 0.96)");
+    expect(baseSettingsHeader).toContain(
+      "backdrop-filter: var(--app-surface-backdrop-filter, none)"
+    );
     expect(baseSettingsHeader).toContain("padding: var(--sp-1) var(--sp-4)");
     expect(desktopSettingsHeader).toContain("min-height: 48px");
     expect(settingsBody).toContain("align-items: stretch");
-    expect(settingsBody).toContain("background: var(--bg-page)");
-    expect(settingsSidebar).toContain("background: var(--bg-panel)");
+    expect(settingsBody).toContain("background: transparent");
+    expect(settingsSidebar).toContain("var(--surface-overlay-bg)");
+    expect(settingsSidebar).toContain("var(--app-surface-opacity, 0.88)");
+    expect(settingsSidebar).toContain("backdrop-filter: var(--app-surface-backdrop-filter, none)");
     expect(settingsSidebar).toContain("padding: var(--sp-4)");
     expect(settingsSidebar).toContain("width: 240px");
     expect(settingsContent).toContain("display: flex");
     expect(settingsContent).toContain("align-items: flex-start");
     expect(settingsContent).toContain("justify-content: center");
     expect(settingsContent).toContain("padding: var(--sp-6)");
-    expect(settingsContent).toContain("background: var(--bg-page)");
+    expect(settingsContent).toContain("var(--surface-page-bg)");
+    expect(settingsContent).toContain("var(--app-surface-opacity, 0.96)");
     expect(settingsContentFillHeight).toContain("justify-content: flex-start");
     expect(settingsContentFillHeightSurface).toContain("display: flex");
     expect(settingsContentFillHeightSurface).toContain("flex-direction: column");
@@ -2076,9 +2235,10 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(topbarIconButton).toContain("border-radius: 10px");
     expect(topbarIconButton).toContain("background: transparent");
     expect(emptyStage).toContain("padding: clamp(34px, 9vh, 72px) var(--sp-4) var(--sp-3)");
-    expect(bottomStack).toContain("background: linear-gradient(");
+    expect(bottomStack).toContain("var(--surface-overlay-bg)");
+    expect(bottomStack).toContain("var(--app-surface-opacity, 0.96)");
     expect(bottomStack).toContain("border-top: 1px solid color-mix(");
-    expect(bottomStack).not.toContain("backdrop-filter");
+    expect(bottomStack).toContain("backdrop-filter: var(--app-surface-backdrop-filter, none)");
     expect(dockShell).toContain(
       "padding: 3px calc(var(--mobile-safe-right) + var(--sp-4)) 0 calc(var(--mobile-safe-left) + var(--sp-4))"
     );
@@ -2324,6 +2484,38 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(settingsFooter).toContain("border-top: 1px solid var(--border)");
     expect(settingsFooter).toContain("min-height: 32px");
     expect(settingsFooter).toContain("padding: var(--sp-3) var(--sp-6)");
+  });
+
+  it("keeps background-material settings on layered surfaces with a responsive material grid", () => {
+    const hiddenFileInput = getLastRuleBlock(".settings-appearance-file-input");
+    const appearancePanel = getLastRuleBlock(".settings-appearance-panel");
+    const assetSummaryBase = getRuleBlocksFrom(stylesheet, ".settings-appearance-asset-summary")[0];
+    const assetId = getLastRuleBlock(".settings-appearance-asset-id");
+    const actionsBase = getRuleBlocksFrom(stylesheet, ".settings-appearance-actions")[0];
+    const materialGridBase = getRuleBlocksFrom(stylesheet, ".settings-appearance-material-grid")[0];
+    const metricField = getLastRuleBlock(".settings-appearance-metric-field");
+    const overridePanel = getLastRuleBlock(".settings-appearance-override-panel");
+    const assetSummaryMobile = getLastRuleBlock(".settings-appearance-asset-summary");
+    const actionsMobile = getLastRuleBlock(".settings-appearance-actions");
+    const materialGridMobile = getLastRuleBlock(".settings-appearance-material-grid");
+
+    expect(hiddenFileInput).toContain("position: absolute");
+    expect(hiddenFileInput).toContain("clip-path: inset(50%)");
+    expect(appearancePanel).toContain("border: 1px solid");
+    expect(appearancePanel).toContain("border-radius: var(--radius-lg)");
+    expect(appearancePanel).toContain("background: color-mix");
+    expect(assetSummaryBase).toContain("grid-template-columns: minmax(0, 1fr) auto");
+    expect(assetId).toContain("font-family: var(--font-mono)");
+    expect(actionsBase).toContain("justify-content: flex-end");
+    expect(materialGridBase).toContain("display: grid");
+    expect(materialGridBase).toContain("grid-template-columns: repeat(2, minmax(0, 1fr))");
+    expect(metricField).toContain("margin-bottom: 0");
+    expect(metricField).toContain("border-radius: var(--radius-md)");
+    expect(overridePanel).toContain("background: color-mix");
+    expect(overridePanel).toContain("border: 1px solid");
+    expect(assetSummaryMobile).toContain("grid-template-columns: 1fr");
+    expect(actionsMobile).toContain("justify-content: flex-start");
+    expect(materialGridMobile).toContain("grid-template-columns: 1fr");
   });
 
   it("keeps shared appearance pills aligned with flat editor option toggles instead of rounded app chips", () => {

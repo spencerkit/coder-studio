@@ -18,7 +18,7 @@ import type { FC } from "react";
 import { useEffect, useRef, useState } from "react";
 import { themeAtom } from "../../../atoms/app-ui";
 import { dispatchCommandAtom, wsClientAtom } from "../../../atoms/connection";
-import { getThemeById } from "../../../theme";
+import { createWorkspaceMonacoTheme, getThemeById } from "../../../theme";
 import { useOpenLocation } from "../actions/use-open-location";
 import { type PendingEditorNavigation, pendingEditorNavigationAtomFamily } from "../atoms";
 import { globalLspBridge, type LspBridgeState } from "../lsp/bridge";
@@ -156,17 +156,22 @@ export const MonacoHost: FC<MonacoHostProps> = ({
   const editorLanguage = detectEditorLanguage(filePath);
   const lspLanguage = detectLspLanguage(filePath, editorLanguage);
   const resolvedTheme = getThemeById(uiTheme);
-  const editorTheme = `coder-studio-${resolvedTheme.id}`;
+  const editorTheme = isWorkspaceBacked
+    ? `coder-studio-workspace-${resolvedTheme.id}`
+    : `coder-studio-${resolvedTheme.id}`;
+  const monacoTheme = isWorkspaceBacked
+    ? createWorkspaceMonacoTheme(resolvedTheme.monaco)
+    : resolvedTheme.monaco;
 
   useEffect(() => {
     if (!registeredMonacoThemeIds.has(editorTheme)) {
       monaco.editor.defineTheme(
         editorTheme,
-        resolvedTheme.monaco as Parameters<typeof monaco.editor.defineTheme>[1]
+        monacoTheme as Parameters<typeof monaco.editor.defineTheme>[1]
       );
       registeredMonacoThemeIds.add(editorTheme);
     }
-  }, [editorTheme, resolvedTheme]);
+  }, [editorTheme, monacoTheme]);
 
   useEffect(() => {
     if (!containerRef.current || editorRef.current) return;

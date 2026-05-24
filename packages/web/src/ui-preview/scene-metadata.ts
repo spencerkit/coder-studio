@@ -66,7 +66,8 @@ export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
     title: "Settings / Appearance",
     category: "page",
     source: "real-route",
-    description: "Settings appearance section using route-backed production UI.",
+    description:
+      "Settings appearance section using route-backed production UI with deterministic appearance personalization seed data.",
     devices: ["desktop", "mobile"],
     themes: allThemeIds(),
     locales: ["zh", "en"],
@@ -121,7 +122,8 @@ export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
     title: "Workspace / Desktop",
     category: "page",
     source: "real-route",
-    description: "Desktop workspace shell with seeded workspace, git status, and file tree.",
+    description:
+      "Desktop workspace shell with seeded workspace, git status, file tree, and appearance personalization coverage.",
     devices: ["desktop"],
     themes: allThemeIds(),
     locales: ["zh", "en"],
@@ -132,7 +134,8 @@ export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
     title: "Workspace / Mobile",
     category: "page",
     source: "real-route",
-    description: "Mobile workspace shell with seeded workspace and no active sessions.",
+    description:
+      "Mobile workspace shell with seeded workspace, no active sessions, and appearance personalization coverage.",
     devices: ["mobile"],
     themes: allThemeIds(),
     locales: ["zh", "en"],

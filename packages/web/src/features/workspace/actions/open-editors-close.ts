@@ -62,16 +62,10 @@ export function resolveOpenEditorsClose(
     };
   }
 
-  const closingIndex = resolvedOrderedPaths.indexOf(targetPath);
-  const remainingPaths = resolvedOrderedPaths.filter((path) => path !== targetPath);
-
-  const nextActiveFilePath =
-    remainingPaths[closingIndex] ?? remainingPaths[closingIndex - 1] ?? null;
-
   return {
     orderedPaths: resolvedOrderedPaths,
     removedPaths: [targetPath],
-    nextActiveFilePath,
-    shouldExitEditor: nextActiveFilePath === null,
+    nextActiveFilePath: null,
+    shouldExitEditor: true,
   };
 }

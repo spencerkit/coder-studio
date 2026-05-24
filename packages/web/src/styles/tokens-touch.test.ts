@@ -211,6 +211,38 @@ describe("tokens.css touch tokens", () => {
     expect(getCustomProperty(root, "--terminal-line-height")).toBe("1.6");
   });
 
+  it("defines workspace material tokens for solid and glass workspace surfaces", () => {
+    const root = getRuleBlock(":root");
+
+    expect(root).toContain("--ws-backdrop-filter: none");
+    expect(root).toContain("--ws-content-bg: transparent");
+    expect(root).toContain("--ws-sidebar-bg: var(--surface-panel-bg)");
+    expect(root).toContain("--ws-terminal-shell-bg: var(--surface-panel-bg)");
+    expect(root).toContain("--ws-editor-toolbar-bg: var(--surface-elevated-bg)");
+    expect(root).toContain("--ws-level-0: transparent");
+    expect(root).toContain("--ws-level-1: color-mix(");
+    expect(root).toContain("--ws-level-4: color-mix(");
+  });
+
+  it("overrides workspace material tokens for glass and high-contrast runtime states", () => {
+    const glassRoot = getRuleBlock(':root[data-appearance-glass="on"]');
+    const highContrastDark = getRuleBlock(':root[data-theme="hc-dark"]');
+    const highContrastLight = getRuleBlock(':root[data-theme="hc-light"]');
+
+    expect(glassRoot).toContain("--ws-backdrop-filter: var(--app-surface-backdrop-filter, none)");
+    expect(glassRoot).toContain("--ws-sidebar-bg: var(--ws-level-3)");
+    expect(glassRoot).toContain("--ws-terminal-shell-bg: var(--ws-level-3)");
+    expect(glassRoot).toContain("--ws-editor-shell-bg: var(--ws-level-2)");
+
+    expect(highContrastDark).toContain("--ws-backdrop-filter: none");
+    expect(highContrastDark).toContain("--ws-sidebar-bg: var(--surface-panel-bg)");
+    expect(highContrastDark).toContain("--ws-editor-toolbar-bg: var(--surface-elevated-bg)");
+
+    expect(highContrastLight).toContain("--ws-backdrop-filter: none");
+    expect(highContrastLight).toContain("--ws-sidebar-bg: var(--surface-panel-bg)");
+    expect(highContrastLight).toContain("--ws-editor-toolbar-bg: var(--surface-elevated-bg)");
+  });
+
   it("overrides touch tokens on narrow viewport only", () => {
     const mediaMatch = /@media\s*\(max-width:\s*899px\)\s*\{([\s\S]*?)\}\s*\}/m.exec(stylesheet);
 

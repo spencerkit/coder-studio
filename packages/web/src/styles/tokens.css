@@ -119,6 +119,44 @@
   --overlay-width-lg: 680px;
   --overlay-backdrop-opacity: 0.48;
 
+  /* ========== Workspace Material System ========== */
+  --ws-backdrop-filter: none;
+  --ws-content-bg: transparent;
+
+  --ws-level-0: transparent;
+  --ws-level-1: color-mix(
+    in srgb,
+    var(--surface-overlay-bg) calc(var(--app-surface-opacity, 0.96) * 40%),
+    transparent
+  );
+  --ws-level-2: color-mix(
+    in srgb,
+    var(--surface-overlay-bg) calc(var(--app-surface-opacity, 0.96) * 56%),
+    transparent
+  );
+  --ws-level-3: color-mix(
+    in srgb,
+    var(--surface-overlay-bg) calc(var(--app-surface-opacity, 0.96) * 72%),
+    transparent
+  );
+  --ws-level-4: color-mix(
+    in srgb,
+    var(--surface-overlay-bg) calc(var(--app-surface-opacity, 0.96) * 88%),
+    transparent
+  );
+
+  --ws-sidebar-bg: var(--surface-panel-bg);
+  --ws-activitybar-bg: var(--surface-panel-bg);
+  --ws-statusbar-bg: var(--surface-panel-bg);
+  --ws-session-bg: var(--surface-panel-bg);
+  --ws-session-active-bg: var(--surface-elevated-bg);
+  --ws-session-header-bg: var(--surface-elevated-bg);
+  --ws-terminal-shell-bg: var(--surface-panel-bg);
+  --ws-terminal-toolbar-bg: var(--surface-elevated-bg);
+  --ws-terminal-tabs-bg: var(--surface-elevated-bg);
+  --ws-editor-shell-bg: var(--surface-panel-bg);
+  --ws-editor-toolbar-bg: var(--surface-elevated-bg);
+
   /* ========== Foundation: Code Surface Sub-Specs ========== */
   --terminal-panel-inset: 2px;
   --terminal-toolbar-gap: var(--gap-default);
@@ -1383,6 +1421,37 @@
   --radius-overlay: var(--radius-xl);
   --state-focus-ring-color: #0037da;
   --surface-overlay-bg: color-mix(in srgb, #ffffff 96%, transparent);
+}
+
+:root[data-appearance-glass="on"] {
+  --ws-backdrop-filter: var(--app-surface-backdrop-filter, none);
+  --ws-sidebar-bg: var(--ws-level-3);
+  --ws-activitybar-bg: var(--ws-level-2);
+  --ws-statusbar-bg: var(--ws-level-3);
+  --ws-session-bg: var(--ws-level-2);
+  --ws-session-active-bg: var(--ws-level-3);
+  --ws-session-header-bg: var(--ws-level-3);
+  --ws-terminal-shell-bg: var(--ws-level-3);
+  --ws-terminal-toolbar-bg: var(--ws-level-2);
+  --ws-terminal-tabs-bg: var(--ws-level-2);
+  --ws-editor-shell-bg: var(--ws-level-2);
+  --ws-editor-toolbar-bg: var(--ws-level-3);
+}
+
+:root[data-theme="hc-dark"],
+:root[data-theme="hc-light"] {
+  --ws-backdrop-filter: none;
+  --ws-sidebar-bg: var(--surface-panel-bg);
+  --ws-activitybar-bg: var(--surface-panel-bg);
+  --ws-statusbar-bg: var(--surface-panel-bg);
+  --ws-session-bg: var(--surface-panel-bg);
+  --ws-session-active-bg: var(--surface-elevated-bg);
+  --ws-session-header-bg: var(--surface-elevated-bg);
+  --ws-terminal-shell-bg: var(--surface-panel-bg);
+  --ws-terminal-toolbar-bg: var(--surface-elevated-bg);
+  --ws-terminal-tabs-bg: var(--surface-elevated-bg);
+  --ws-editor-shell-bg: var(--surface-panel-bg);
+  --ws-editor-toolbar-bg: var(--surface-elevated-bg);
 }
 
 /* ========== Mobile / Touch Override (Phase 0) ========== */

@@ -140,7 +140,7 @@ describe("WorktreeManagerSurface", () => {
     expect(screen.getByRole("region", { name: "Worktrees sheet" })).toBeInTheDocument();
   });
 
-  it("uses shared Drawer chrome on desktop viewports", () => {
+  it("uses shared Modal chrome on desktop viewports", () => {
     const onClose = vi.fn();
 
     render(
@@ -150,10 +150,11 @@ describe("WorktreeManagerSurface", () => {
     );
 
     const dialog = screen.getByRole("dialog", { name: "Worktrees" });
-    expect(dialog).toHaveClass("drawer-panel", "worktree-manager-surface");
+    expect(dialog).toHaveClass("modal-card", "modal-card-lg", "worktree-manager-surface");
     expect(document.querySelector(".mobile-sheet--worktree")).toBeNull();
+    expect(document.querySelector(".drawer-backdrop")).toBeNull();
 
-    const overlay = document.querySelector(".drawer-backdrop");
+    const overlay = document.querySelector(".modal-overlay");
     expect(overlay).toBeTruthy();
 
     fireEvent.click(overlay as Element);
@@ -213,7 +214,8 @@ describe("WorktreeManagerSurface", () => {
     expect(loadingMessage.closest(".worktree-loading")).toBeTruthy();
   });
 
-  it("creates a worktree, reloads the list, and returns to list mode", async () => {
+  it("creates a worktree and closes the create surface instead of returning to list mode", async () => {
+    const onClose = vi.fn();
     const sendCommand = vi
       .fn()
       .mockImplementation(async (op: string, args: Record<string, string>) => {
@@ -249,7 +251,7 @@ describe("WorktreeManagerSurface", () => {
 
     render(
       <Provider store={buildManagerStore(sendCommand, worktrees, "/repo/main")}>
-        <WorktreeManagerSurface workspaceId="ws-1" openView="create" onClose={vi.fn()} />
+        <WorktreeManagerSurface workspaceId="ws-1" openView="create" onClose={onClose} />
       </Provider>
     );
 
@@ -273,7 +275,31 @@ describe("WorktreeManagerSurface", () => {
       );
     });
 
-    expect(await screen.findByText("feature/new-worktree")).toBeInTheDocument();
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("closes the create surface when cancel is pressed", () => {
+    const onClose = vi.fn();
+
+    render(
+      <Provider store={buildManagerStore(vi.fn(), worktrees, "/repo/main")}>
+        <WorktreeManagerSurface workspaceId="ws-1" openView="create" onClose={onClose} />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not show a back button in create-only mode", () => {
+    render(
+      <Provider store={buildManagerStore(vi.fn(), worktrees, "/repo/main")}>
+        <WorktreeManagerSurface workspaceId="ws-1" openView="create" onClose={vi.fn()} />
+      </Provider>
+    );
+
+    expect(screen.queryByRole("button", { name: "Back" })).toBeNull();
   });
 
   it("renders the create form fields with shared input compatibility classes", () => {

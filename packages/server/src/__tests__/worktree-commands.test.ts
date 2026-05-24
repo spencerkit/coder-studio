@@ -106,6 +106,43 @@ describe("Worktree Commands", () => {
     );
   });
 
+  it("falls back to the worktree directory name for detached worktrees", async () => {
+    const detachedPath = join(
+      tmpdir(),
+      `worktree-command-detached-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    );
+    tempPaths.push(detachedPath);
+
+    await execFileAsync("git", ["worktree", "add", "--detach", detachedPath, "HEAD"], {
+      cwd: repoDir,
+    });
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "worktree-list-detached-name",
+        op: "worktree.list",
+        args: {
+          workspaceId,
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.data).toEqual(
+      expect.objectContaining({
+        worktrees: expect.arrayContaining([
+          expect.objectContaining({
+            path: detachedPath,
+            branch: "detached HEAD",
+            name: detachedPath.split("/").pop(),
+          }),
+        ]),
+      })
+    );
+  });
+
   it.each([
     "worktree.status",
     "worktree.diff",

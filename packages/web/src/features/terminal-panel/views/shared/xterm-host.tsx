@@ -25,12 +25,14 @@ import {
   useRef,
   useState,
 } from "react";
-import { themeAtom } from "../../../../atoms/app-ui";
+import { resolveAppearancePersonalizationForViewport } from "../../../../appearance/personalization";
+import { appearancePersonalizationAtom, themeAtom } from "../../../../atoms/app-ui";
 import { dispatchCommandAtom, wsClientAtom } from "../../../../atoms/connection";
 import { Button, LocalOverlay, Notice } from "../../../../components/ui";
 import { useViewport } from "../../../../hooks/use-viewport";
 import { copyTextWithFallback } from "../../../../lib/clipboard";
 import { useTranslation } from "../../../../lib/i18n";
+import type { TerminalThemeDefinition } from "../../../../theme";
 import { getThemeById } from "../../../../theme";
 import type { ConnectionStatus, TerminalBinaryPayload } from "../../../../ws/client";
 import { pushToastAtom } from "../../../notifications/atoms";
@@ -324,6 +326,168 @@ export function trimWrittenChunks(buffer: OutputBuffer, writtenChunkCount: numbe
   };
 }
 
+function resolveXtermTheme(themeId: string): TerminalThemeDefinition {
+  const terminalTheme = getThemeById(themeId).terminalTheme;
+  return {
+    ...terminalTheme,
+    // xterm theme parsing rejects the `transparent` keyword and falls back to
+    // opaque black, so use an explicit transparent RGBA hex color.
+    background: "#00000000",
+  };
+}
+
+function resolveReportedXtermTheme(themeId: string): TerminalThemeDefinition {
+  return getThemeById(themeId).terminalTheme;
+}
+
+function parseTerminalThemeRgb(color: string): [number, number, number] | null {
+  const trimmed = color.trim();
+  if (!trimmed.startsWith("#")) {
+    return null;
+  }
+
+  const hex = trimmed.slice(1);
+  let normalized: string;
+
+  if (hex.length === 3 || hex.length === 4) {
+    normalized = hex
+      .slice(0, 3)
+      .split("")
+      .map((channel) => `${channel}${channel}`)
+      .join("");
+  } else if (hex.length === 6 || hex.length === 8) {
+    normalized = hex.slice(0, 6);
+  } else {
+    return null;
+  }
+
+  if (!/^[\da-f]{6}$/iu.test(normalized)) {
+    return null;
+  }
+
+  return [
+    Number.parseInt(normalized.slice(0, 2), 16),
+    Number.parseInt(normalized.slice(2, 4), 16),
+    Number.parseInt(normalized.slice(4, 6), 16),
+  ];
+}
+
+function formatTerminalThemeQueryResponse(ident: "10" | "11", color: string): string | null {
+  const rgb = parseTerminalThemeRgb(color);
+  if (!rgb) {
+    return null;
+  }
+
+  const encodeChannel = (channel: number) => channel.toString(16).padStart(2, "0").repeat(2);
+  return `\x1b]${ident};rgb:${encodeChannel(rgb[0])}/${encodeChannel(rgb[1])}/${encodeChannel(
+    rgb[2]
+  )}\x1b\\`;
+}
+
+function parseCssColorRgb(color: string): [number, number, number] | null {
+  const trimmed = color.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const rgbMatch = trimmed.match(
+    /^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})(?:\s*,\s*(?:\d*\.?\d+))?\s*\)$/iu
+  );
+  if (rgbMatch) {
+    return [
+      Math.min(255, Number.parseInt(rgbMatch[1] ?? "0", 10)),
+      Math.min(255, Number.parseInt(rgbMatch[2] ?? "0", 10)),
+      Math.min(255, Number.parseInt(rgbMatch[3] ?? "0", 10)),
+    ];
+  }
+
+  return parseTerminalThemeRgb(trimmed);
+}
+
+function formatCssRgbColor(rgb: [number, number, number], alpha: number): string {
+  const clampedAlpha = Math.min(Math.max(alpha, 0), 1);
+  if (clampedAlpha >= 0.999) {
+    return `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
+  }
+
+  return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${Math.round(clampedAlpha * 1000) / 1000})`;
+}
+
+function shouldNormalizeTerminalCellBackground(element: HTMLSpanElement): boolean {
+  return !Array.from(element.classList).some(
+    (className) => className === "xterm-cursor" || className.startsWith("xterm-cursor-")
+  );
+}
+
+function resolveTerminalCellBackgroundSource(element: HTMLSpanElement): string | null {
+  const inlineBackground = element.style.backgroundColor.trim();
+  if (inlineBackground) {
+    return inlineBackground;
+  }
+
+  const hasPaletteBackgroundClass = Array.from(element.classList).some((className) =>
+    className.startsWith("xterm-bg-")
+  );
+  if (!hasPaletteBackgroundClass || typeof window === "undefined") {
+    return null;
+  }
+
+  const computedBackground = window.getComputedStyle(element).backgroundColor.trim();
+  return computedBackground ? computedBackground : null;
+}
+
+function applyTerminalMaterialToRenderedRows(
+  container: HTMLElement | null,
+  alpha: number,
+  range?: { start: number; end: number }
+): void {
+  if (!container) {
+    return;
+  }
+
+  const rowsElement = container.querySelector(".xterm-rows");
+  if (!(rowsElement instanceof HTMLElement)) {
+    return;
+  }
+
+  const rowElements = Array.from(rowsElement.children);
+  if (rowElements.length === 0) {
+    return;
+  }
+
+  const start = Math.max(0, range?.start ?? 0);
+  const end = Math.min(rowElements.length - 1, range?.end ?? rowElements.length - 1);
+
+  for (let rowIndex = start; rowIndex <= end; rowIndex += 1) {
+    const rowElement = rowElements[rowIndex];
+    if (!(rowElement instanceof HTMLElement)) {
+      continue;
+    }
+
+    const spanElements = rowElement.querySelectorAll("span");
+    for (const spanElement of spanElements) {
+      if (
+        !(spanElement instanceof HTMLSpanElement) ||
+        !shouldNormalizeTerminalCellBackground(spanElement)
+      ) {
+        continue;
+      }
+
+      const sourceBackground = resolveTerminalCellBackgroundSource(spanElement);
+      if (!sourceBackground) {
+        continue;
+      }
+
+      const rgb = parseCssColorRgb(sourceBackground);
+      if (!rgb) {
+        continue;
+      }
+
+      spanElement.style.backgroundColor = formatCssRgbColor(rgb, alpha);
+    }
+  }
+}
+
 interface XtermHostProps {
   /** Terminal ID */
   terminalId: string;
@@ -402,6 +566,7 @@ export function XtermHost({
   const t = useTranslation();
   const viewport = useViewport();
   const uiTheme = useAtomValue(themeAtom);
+  const appearancePersonalization = useAtomValue(appearancePersonalizationAtom);
   const terminalPreferences = useAtomValue(terminalPreferencesAtom);
   const terminalFontSize = getTerminalFontSizeForViewport(terminalPreferences, viewport);
   const wsClient = useAtomValue(wsClientAtom);
@@ -448,6 +613,7 @@ export function XtermHost({
   const showUnrecoverableHistoryRef = useRef<(() => Promise<void>) | null>(null);
   const showUnavailableTerminalRef = useRef<(() => Promise<void>) | null>(null);
   const retryHistoricalRecoveryRef = useRef<(() => void) | null>(null);
+  const manualRecoveryRetryAttemptedRef = useRef(false);
   const coldStartStateRef = useRef<"idle" | "in-flight" | "done">("idle");
   const activeHistoricalRecoveryModeRef = useRef<"initial" | "reconnect" | null>(null);
   const latestRenderedSeqRef = useRef(0);
@@ -509,6 +675,16 @@ export function XtermHost({
 
     return wsClient.getStatus();
   });
+  const resolvedTerminalTheme = resolveXtermTheme(uiTheme);
+  const resolvedAppearancePersonalization = resolveAppearancePersonalizationForViewport(
+    appearancePersonalization,
+    viewport
+  );
+  const terminalMaterialBackgroundAlpha =
+    uiTheme === "hc-dark" || uiTheme === "hc-light"
+      ? 1
+      : Math.min(Math.max(resolvedAppearancePersonalization.surfaceOpacity, 0), 100) / 100;
+  const terminalMaterialBackgroundAlphaRef = useRef(terminalMaterialBackgroundAlpha);
 
   // Latest copies of callback identities used inside the mount effect, exposed
   // via refs so the effect's cleanup/re-creation is not tied to their churn.
@@ -616,9 +792,14 @@ export function XtermHost({
 
   useEffect(() => {
     if (terminalRef.current) {
-      terminalRef.current.options.theme = getThemeById(uiTheme).terminalTheme;
+      terminalRef.current.options.theme = resolvedTerminalTheme;
     }
-  }, [uiTheme]);
+  }, [resolvedTerminalTheme]);
+
+  useEffect(() => {
+    terminalMaterialBackgroundAlphaRef.current = terminalMaterialBackgroundAlpha;
+    applyTerminalMaterialToRenderedRows(containerRef.current, terminalMaterialBackgroundAlpha);
+  }, [terminalMaterialBackgroundAlpha]);
 
   useEffect(() => {
     if (replayUiState.kind !== "loading") {
@@ -1357,7 +1538,8 @@ export function XtermHost({
     // characters used by TUIs (claude, codex) render as a continuous frame
     // with no gaps between rows.
     const terminal = new Terminal({
-      theme: getThemeById(initialThemeRef.current).terminalTheme,
+      theme: resolveXtermTheme(initialThemeRef.current),
+      allowTransparency: true,
       fontFamily: "JetBrains Mono, Fira Code, SF Mono, monospace",
       fontSize: terminalFontSize,
       scrollback: 5000,
@@ -1365,6 +1547,38 @@ export function XtermHost({
       cursorStyle: "block",
       disableStdin: !isInteractive || uploadBusy,
       allowProposedApi: true,
+    });
+
+    const reportTerminalThemeColor = (ident: "10" | "11", color: string) => {
+      const response = formatTerminalThemeQueryResponse(ident, color);
+      if (!response) {
+        return false;
+      }
+
+      void handleInputRef.current(response, "system");
+      return true;
+    };
+
+    const foregroundColorQueryDisposable = terminal.parser.registerOscHandler(10, (data) => {
+      if (data !== "?") {
+        return false;
+      }
+
+      return reportTerminalThemeColor(
+        "10",
+        resolveReportedXtermTheme(initialThemeRef.current).foreground
+      );
+    });
+
+    const backgroundColorQueryDisposable = terminal.parser.registerOscHandler(11, (data) => {
+      if (data !== "?") {
+        return false;
+      }
+
+      return reportTerminalThemeColor(
+        "11",
+        resolveReportedXtermTheme(initialThemeRef.current).background
+      );
     });
 
     const fitAddon = new FitAddon();
@@ -1376,6 +1590,16 @@ export function XtermHost({
     terminal.onData((data) => {
       void handleInputRef.current(data);
     });
+    const renderDisposable =
+      typeof terminal.onRender === "function"
+        ? terminal.onRender(({ start, end }) => {
+            applyTerminalMaterialToRenderedRows(
+              containerRef.current,
+              terminalMaterialBackgroundAlphaRef.current,
+              { start, end }
+            );
+          })
+        : undefined;
     const selectionChangeDisposable =
       typeof terminal.onSelectionChange === "function"
         ? terminal.onSelectionChange(() => {
@@ -1599,8 +1823,7 @@ export function XtermHost({
       resetTerminalBeforeWrite?: boolean;
     }) => {
       let coveredSeq = options?.coveredSeq ?? replayedSeqRef.current;
-      let nextWrites: HistoricalWrite[] = [];
-      let firstBatch = true;
+      const nextWrites: HistoricalWrite[] = [];
 
       if (options?.bytes && typeof options.coveredSeq === "number") {
         nextWrites.push({
@@ -1615,7 +1838,6 @@ export function XtermHost({
 
       if (nextWrites.length > 0) {
         await writeHistoricalBatch(nextWrites);
-        firstBatch = false;
       }
 
       replayedSeqRef.current = coveredSeq;
@@ -1641,7 +1863,6 @@ export function XtermHost({
         }));
 
         await writeHistoricalBatch(pendingWrites);
-        firstBatch = false;
       }
 
       finalizeHistoricalRecovery(activeHistoricalRecoveryModeRef.current);
@@ -1671,7 +1892,12 @@ export function XtermHost({
       }
 
       activeRecoveryUiModeRef.current = "error";
-      setReplayUiState({ kind: "retryable_failure", reason: classifyReplayFailure(error) });
+      const reason = classifyReplayFailure(error);
+      setReplayUiState(
+        manualRecoveryRetryAttemptedRef.current
+          ? { kind: "failed", reason }
+          : { kind: "retryable_failure", reason }
+      );
       releaseHydration();
       await flushHistoricalRecovery();
     };
@@ -1713,6 +1939,7 @@ export function XtermHost({
       coldStartStateRef.current = "in-flight";
       activeHistoricalRecoveryModeRef.current = "reconnect";
       activeRecoveryUiModeRef.current = "silent";
+      manualRecoveryRetryAttemptedRef.current = false;
       setReplayUiState({ kind: "ready" });
       releaseHydration();
       await flushHistoricalRecovery({
@@ -1731,6 +1958,7 @@ export function XtermHost({
       coldStartStateRef.current = "in-flight";
       activeHistoricalRecoveryModeRef.current = "initial";
       activeRecoveryUiModeRef.current = "silent";
+      manualRecoveryRetryAttemptedRef.current = false;
       setReplayUiState({ kind: "ready" });
       releaseHydration();
       await flushHistoricalRecovery({
@@ -2135,6 +2363,13 @@ export function XtermHost({
       } else {
         selectionChangeDisposable?.dispose?.();
       }
+      if (typeof renderDisposable === "function") {
+        renderDisposable();
+      } else {
+        renderDisposable?.dispose?.();
+      }
+      foregroundColorQueryDisposable.dispose();
+      backgroundColorQueryDisposable.dispose();
     };
   }, [
     hydrationState.kind,
@@ -2424,6 +2659,7 @@ export function XtermHost({
   }, []);
 
   const handleRetryRecovery = useCallback(() => {
+    manualRecoveryRetryAttemptedRef.current = true;
     setReplayUiState({ kind: "loading" });
 
     if (recoveryCoordinator) {
@@ -2459,6 +2695,7 @@ export function XtermHost({
     canShowRecoverySurface;
   const showInlineRecoveryNotice =
     replayUiState.kind === "retryable_failure" ||
+    replayUiState.kind === "failed" ||
     replayUiState.kind === "unrecoverable_history" ||
     replayUiState.kind === "truncated";
 
@@ -2508,6 +2745,9 @@ export function XtermHost({
         {t("terminal.replay.retry_action")}
       </Button>
     );
+  } else if (replayUiState.kind === "failed") {
+    noticeTitle = t("terminal.replay.failed_title");
+    noticeBody = t("terminal.replay.failed_body");
   } else if (replayUiState.kind === "unrecoverable_history") {
     noticeTitle = t("terminal.replay.unrecoverable_title");
     noticeBody = t("terminal.replay.unrecoverable_body");

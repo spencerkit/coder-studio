@@ -173,7 +173,7 @@ const readmeDesktopGitStatus: GitStatus = {
   headSubject: "feat: stage readme screenshot refresh scenes",
   staged: [{ path: "README.md", status: "modified" }],
   modified: [
-    { path: "packages/web/src/ui-preview/scenes/showcase-scenes.tsx", status: "modified" },
+    { path: "packages/web/src/features/topbar/index.tsx", status: "modified" },
     { path: "docs/help/assets/screenshot-desktop-workspace-full.png", status: "modified" },
   ],
   untracked: [{ path: "docs/help/assets/screenshot-mobile-progress.png", status: "untracked" }],

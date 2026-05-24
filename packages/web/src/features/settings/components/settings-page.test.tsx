@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { createStore, Provider } from "jotai";
 import { BrowserRouter, MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { appearancePersonalizationAtom } from "../../../atoms/app-ui";
 import {
   type ConnectionStatus,
   connectionStatusAtom,
@@ -38,9 +39,23 @@ const navigatorMocks = vi.hoisted(() => ({
   displayModeStandalone: false,
 }));
 
+const appearanceMocks = vi.hoisted(() => ({
+  deleteAppearanceAsset: vi.fn(),
+  uploadAppearanceAsset: vi.fn(),
+}));
+
 vi.mock("../../../hooks/use-viewport", () => ({
   useViewport: () => viewportMocks.viewport,
 }));
+
+vi.mock("../../../appearance", async () => {
+  const actual = await vi.importActual<typeof import("../../../appearance")>("../../../appearance");
+  return {
+    ...actual,
+    deleteAppearanceAsset: appearanceMocks.deleteAppearanceAsset,
+    uploadAppearanceAsset: appearanceMocks.uploadAppearanceAsset,
+  };
+});
 
 vi.mock("./config-editor", () => ({
   ConfigEditor: ({ configType }: { configType: "claude" | "codex" }) => (
@@ -151,6 +166,8 @@ describe("SettingsPage", () => {
     vi.clearAllMocks();
     routerMocks.navigate.mockReset();
     viewportMocks.viewport = "desktop";
+    appearanceMocks.deleteAppearanceAsset.mockReset();
+    appearanceMocks.uploadAppearanceAsset.mockReset();
     window.localStorage.clear();
     document.documentElement.removeAttribute("data-theme");
     notificationMocks.permission = "default";
@@ -1352,6 +1369,290 @@ describe("SettingsPage", () => {
     expect(screen.queryByRole("switch", { name: "选中自动复制" })).not.toBeInTheDocument();
     expect(themePicker).toHaveAttribute("aria-haspopup", "listbox");
     expect(chineseLanguagePill).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("hydrates appearance personalization controls from settings.get and syncs the global atom", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "appearance.personalization.common.backgroundMode": "image",
+          "appearance.personalization.common.backgroundAssetId": "asset-common",
+          "appearance.personalization.common.backgroundFit": "contain",
+          "appearance.personalization.common.backgroundDimness": 33,
+          "appearance.personalization.common.backgroundBlur": 8,
+          "appearance.personalization.common.glassEnabled": true,
+          "appearance.personalization.common.glassIntensity": 44,
+          "appearance.personalization.common.surfaceOpacity": 91,
+          "appearance.personalization.desktop.surfaceOpacity": 72,
+          "appearance.personalization.mobile.surfaceOpacity": 64,
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "外观" }));
+
+    await waitFor(() => {
+      expect(store.get(appearancePersonalizationAtom)).toEqual({
+        version: 1,
+        common: {
+          backgroundMode: "image",
+          backgroundAssetId: "asset-common",
+          backgroundFit: "contain",
+          backgroundDimness: 33,
+          backgroundBlur: 8,
+          glassEnabled: true,
+          glassIntensity: 44,
+          surfaceOpacity: 91,
+        },
+        desktop: {
+          surfaceOpacity: 72,
+        },
+        mobile: {
+          surfaceOpacity: 64,
+        },
+      });
+    });
+
+    expect(await screen.findByRole("spinbutton", { name: "背景压暗" })).toHaveValue(33);
+    expect(screen.getByRole("spinbutton", { name: "背景模糊" })).toHaveValue(8);
+    expect(screen.getByRole("spinbutton", { name: "毛玻璃强度" })).toHaveValue(44);
+    expect(document.getElementById("appearance-surface-opacity")).toHaveValue(91);
+    expect(document.getElementById("appearance-desktop-surface-opacity")).toHaveValue(72);
+    expect(document.getElementById("appearance-mobile-surface-opacity")).toHaveValue(64);
+  });
+
+  it("enables desktop and mobile appearance override groups through shared toggles", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "appearance.personalization.common.backgroundMode": "image",
+          "appearance.personalization.common.backgroundAssetId": "asset-common",
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "外观" }));
+
+    fireEvent.click(await screen.findByRole("switch", { name: "桌面端覆盖" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            appearance: {
+              personalization: {
+                version: 1,
+                common: {
+                  backgroundMode: "image",
+                  backgroundAssetId: "asset-common",
+                  backgroundFit: "cover",
+                  backgroundDimness: 24,
+                  backgroundBlur: 0,
+                  glassEnabled: false,
+                  glassIntensity: 24,
+                  surfaceOpacity: 96,
+                },
+                desktop: {
+                  surfaceOpacity: 96,
+                },
+                mobile: {},
+              },
+            },
+          },
+        },
+        undefined
+      );
+    });
+
+    expect(document.getElementById("appearance-desktop-surface-opacity")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("switch", { name: "移动端覆盖" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            appearance: {
+              personalization: {
+                version: 1,
+                common: {
+                  backgroundMode: "image",
+                  backgroundAssetId: "asset-common",
+                  backgroundFit: "cover",
+                  backgroundDimness: 24,
+                  backgroundBlur: 0,
+                  glassEnabled: false,
+                  glassIntensity: 24,
+                  surfaceOpacity: 96,
+                },
+                desktop: {
+                  surfaceOpacity: 96,
+                },
+                mobile: {
+                  surfaceOpacity: 96,
+                },
+              },
+            },
+          },
+        },
+        undefined
+      );
+    });
+
+    expect(document.getElementById("appearance-mobile-surface-opacity")).toBeInTheDocument();
+  });
+
+  it("groups background material controls into asset and material surfaces", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "appearance.personalization.common.backgroundMode": "image",
+          "appearance.personalization.common.backgroundAssetId": "asset-common",
+          "appearance.personalization.common.backgroundFit": "contain",
+          "appearance.personalization.common.backgroundDimness": 33,
+          "appearance.personalization.common.backgroundBlur": 8,
+          "appearance.personalization.common.glassEnabled": true,
+          "appearance.personalization.common.glassIntensity": 44,
+          "appearance.personalization.common.surfaceOpacity": 91,
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "外观" }));
+
+    const backgroundMaterialGroup = (
+      await screen.findByRole("heading", { name: "背景与材质" })
+    ).closest(".settings-group");
+
+    expect(backgroundMaterialGroup).not.toBeNull();
+
+    const assetPanel = backgroundMaterialGroup?.querySelector(".settings-appearance-panel--asset");
+    const materialPanel = backgroundMaterialGroup?.querySelector(
+      ".settings-appearance-panel--material"
+    );
+
+    expect(assetPanel).not.toBeNull();
+    expect(materialPanel).not.toBeNull();
+    expect(
+      document
+        .getElementById("appearance-background-mode")
+        ?.closest(".settings-appearance-panel--asset")
+    ).toBe(assetPanel);
+    expect(
+      document
+        .getElementById("appearance-background-fit")
+        ?.closest(".settings-appearance-panel--asset")
+    ).toBe(assetPanel);
+    expect(screen.getByText("asset-common")).toHaveClass("settings-appearance-asset-id");
+    expect(assetPanel?.querySelector(".settings-appearance-actions")).not.toBeNull();
+    expect(
+      screen
+        .getByRole("spinbutton", { name: "背景压暗" })
+        .closest(".settings-appearance-material-grid")
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("spinbutton", { name: "面板不透明度" })
+        .closest(".settings-appearance-material-grid")
+    ).toBeTruthy();
+  });
+
+  it("renders desktop and mobile override controls inside nested appearance panels", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "appearance.personalization.common.backgroundMode": "image",
+          "appearance.personalization.common.backgroundAssetId": "asset-common",
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "外观" }));
+
+    fireEvent.click(await screen.findByRole("switch", { name: "桌面端覆盖" }));
+
+    const desktopSurfaceOpacity = document.getElementById("appearance-desktop-surface-opacity");
+
+    expect(desktopSurfaceOpacity).not.toBeNull();
+    expect(desktopSurfaceOpacity?.closest(".settings-appearance-override-panel")).toBeTruthy();
+    expect(
+      desktopSurfaceOpacity
+        ?.closest(".settings-appearance-override-panel")
+        ?.querySelector(".settings-appearance-actions")
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("switch", { name: "移动端覆盖" }));
+
+    const mobileSurfaceOpacity = document.getElementById("appearance-mobile-surface-opacity");
+
+    expect(mobileSurfaceOpacity).not.toBeNull();
+    expect(mobileSurfaceOpacity?.closest(".settings-appearance-override-panel")).toBeTruthy();
+  });
+
+  it("deletes the shared appearance background asset and persists a null background asset id", async () => {
+    appearanceMocks.deleteAppearanceAsset.mockResolvedValue(undefined);
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "appearance.personalization.common.backgroundMode": "image",
+          "appearance.personalization.common.backgroundAssetId": "asset-common",
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "外观" }));
+    fireEvent.click(await screen.findByRole("button", { name: "移除背景图" }));
+
+    await waitFor(() => {
+      expect(appearanceMocks.deleteAppearanceAsset).toHaveBeenCalledWith("asset-common");
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            appearance: {
+              personalization: {
+                version: 1,
+                common: {
+                  backgroundMode: "image",
+                  backgroundAssetId: null,
+                  backgroundFit: "cover",
+                  backgroundDimness: 24,
+                  backgroundBlur: 0,
+                  glassEnabled: false,
+                  glassIntensity: 24,
+                  surfaceOpacity: 96,
+                },
+                desktop: {},
+                mobile: {},
+              },
+            },
+          },
+        },
+        undefined
+      );
+    });
+
+    expect(store.get(appearancePersonalizationAtom).common.backgroundAssetId).toBeNull();
   });
 
   it("renders terminal option groups through shared pills in general settings", async () => {

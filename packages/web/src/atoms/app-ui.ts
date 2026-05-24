@@ -7,6 +7,8 @@
 import type { WorkspaceLastViewedTarget } from "@coder-studio/core";
 import { atom } from "jotai";
 import { atomWithStorage, createJSONStorage } from "jotai/utils";
+import type { AppearancePersonalization } from "../appearance";
+import { DEFAULT_APPEARANCE_PERSONALIZATION } from "../appearance";
 import { resolveStoredThemeId } from "../theme";
 
 const THEME_ID_STORAGE_KEY = "ui.themeId";
@@ -100,3 +102,13 @@ export const lastViewedTargetAtom = atom<WorkspaceLastViewedTarget | null>(null)
  * This is transient render state, not persisted workspace UI state.
  */
 export const visibleMobileSessionIdAtom = atom<string | null>(null);
+
+/**
+ * Server-hydrated appearance personalization settings.
+ *
+ * This mirrors the server-backed appearance contract and is not persisted
+ * locally.
+ */
+export const appearancePersonalizationAtom = atom<AppearancePersonalization>(
+  DEFAULT_APPEARANCE_PERSONALIZATION
+);

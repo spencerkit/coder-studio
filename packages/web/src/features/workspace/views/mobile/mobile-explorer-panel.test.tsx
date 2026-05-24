@@ -167,7 +167,7 @@ describe("MobileExplorerPanel", () => {
     expect(onSelectFile).toHaveBeenCalledWith("README.md");
   });
 
-  it("renders shared open editor controls on mobile and closing the active row selects the next file", () => {
+  it("renders shared open editor controls on mobile and closing the active row exits editor focus", () => {
     const onSelectFile = vi.fn();
     const store = createStore();
     store.set(fileTreeAtomFamily("ws-test"), new Map([[".", []]]));
@@ -227,13 +227,14 @@ describe("MobileExplorerPanel", () => {
       })
     );
 
-    expect(within(section).getByRole("button", { name: "src/beta.tsx" })).toHaveClass(
+    expect(within(section).getByRole("button", { name: "src/beta.tsx" })).not.toHaveClass(
       "workspace-open-editors__item--active"
     );
     expect(within(section).queryByRole("button", { name: "src/alpha.tsx" })).toBeNull();
     expect(heading).toHaveTextContent(/(Open Editors|打开的编辑器)\s*\(1\)/i);
     expect(Object.keys(store.get(openFilesAtomFamily("ws-test")))).toEqual(["src/beta.tsx"]);
-    expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/beta.tsx");
+    expect(store.get(activeFilePathAtomFamily("ws-test"))).toBeNull();
+    expect(onSelectFile).not.toHaveBeenCalled();
   });
 
   it("renders workspace actions inside the Workspace section and wires mobile callbacks", () => {

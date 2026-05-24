@@ -19,6 +19,7 @@ export type TerminalReplayUiState =
   | { kind: "unavailable" }
   | { kind: "truncated" }
   | { kind: "retryable_failure"; reason: "timeout" | "failed" }
+  | { kind: "failed"; reason: "timeout" | "failed" }
   | { kind: "unrecoverable_history"; reason: "too_old_no_snapshot" };
 
 export function classifyReplayFailure(error: unknown): "timeout" | "failed" {

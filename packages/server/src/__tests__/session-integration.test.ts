@@ -882,6 +882,57 @@ describe("Session Integration", () => {
       expect(result.ok).toBe(true);
       expect(sessionMgr.get(sessionId)?.state).toBe("running");
     });
+
+    it("ignores typing echo and keeps the session idle when PTY output follows without a submit", async () => {
+      vi.advanceTimersByTime(3050);
+      expect(sessionMgr.get(sessionId)?.state).toBe("idle");
+
+      const typingResult = await dispatch(
+        {
+          kind: "command",
+          id: "idle-test-typing-echo",
+          op: "terminal.input",
+          args: {
+            terminalId,
+            bytes: btoa("g"),
+            activity: "typing",
+          },
+        },
+        ctx
+      );
+
+      expect(typingResult.ok).toBe(true);
+
+      triggerDataForProcessIndex(0, "g");
+      expect(sessionMgr.get(sessionId)?.state).toBe("idle");
+
+      triggerDataForProcessIndex(0, "assistant working\n");
+      expect(sessionMgr.get(sessionId)?.state).toBe("idle");
+    });
+
+    it("keeps the session idle when a recovered PTY stream mixes typing echo with output", async () => {
+      vi.advanceTimersByTime(3050);
+      expect(sessionMgr.get(sessionId)?.state).toBe("idle");
+
+      const typingResult = await dispatch(
+        {
+          kind: "command",
+          id: "idle-test-mixed-typing-output",
+          op: "terminal.input",
+          args: {
+            terminalId,
+            bytes: btoa("g"),
+            activity: "typing",
+          },
+        },
+        ctx
+      );
+
+      expect(typingResult.ok).toBe(true);
+
+      triggerDataForProcessIndex(0, "gassistant working\n");
+      expect(sessionMgr.get(sessionId)?.state).toBe("idle");
+    });
   });
 
   describe("Session hydration", () => {

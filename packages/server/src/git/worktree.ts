@@ -64,6 +64,7 @@ export async function listWorktrees(repoPath: string): Promise<WorktreeInfo[]> {
         current.name = branch.split("/").pop() || branch;
       } else if (line === "detached") {
         current.branch = "detached HEAD";
+        current.name = path.basename(current.path ?? "") || "detached";
       } else if (line === "") {
         // Empty line might indicate end of record
         if (current.path) {

@@ -413,6 +413,152 @@ describe("settings commands", () => {
     expect(settingsRepo.get("appearance.desktopTerminalFontSize")).toBeUndefined();
   });
 
+  it("settings.update persists appearance.personalization common and device override keys", async () => {
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "settings-update-appearance-personalization",
+        op: "settings.update",
+        args: {
+          settings: {
+            appearance: {
+              personalization: {
+                version: 1,
+                common: {
+                  backgroundMode: "image",
+                  backgroundAssetId: "asset-common",
+                  backgroundFit: "contain",
+                  backgroundDimness: 32,
+                  backgroundBlur: 8,
+                  glassEnabled: false,
+                  glassIntensity: 40,
+                  surfaceOpacity: 92,
+                },
+                desktop: {
+                  backgroundAssetId: "asset-desktop",
+                  glassEnabled: true,
+                },
+                mobile: {
+                  surfaceOpacity: 88,
+                },
+              },
+            },
+          },
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(settingsRepo.get("appearance.personalization.common.backgroundMode")).toBe("image");
+    expect(settingsRepo.get("appearance.personalization.desktop.glassEnabled")).toBe(true);
+    expect(settingsRepo.get("appearance.personalization.mobile.surfaceOpacity")).toBe(88);
+  });
+
+  it("settings.update rejects appearance.personalization values outside the supported ranges", async () => {
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "settings-update-appearance-personalization-invalid",
+        op: "settings.update",
+        args: {
+          settings: {
+            appearance: {
+              personalization: {
+                common: {
+                  backgroundMode: "image",
+                  backgroundBlur: 99,
+                },
+                mobile: {
+                  surfaceOpacity: 88,
+                },
+              },
+            },
+          },
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("validation_error");
+    expect(settingsRepo.get("appearance.personalization.common.backgroundBlur")).toBeUndefined();
+  });
+
+  it("settings.update clears persisted appearance.personalization device overrides when an override object is emptied", async () => {
+    settingsRepo.set("appearance.personalization.desktop.backgroundAssetId", "asset-desktop");
+    settingsRepo.set("appearance.personalization.desktop.surfaceOpacity", 88);
+    settingsRepo.set("appearance.personalization.mobile.glassEnabled", true);
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "settings-update-appearance-personalization-clear-device-overrides",
+        op: "settings.update",
+        args: {
+          settings: {
+            appearance: {
+              personalization: {
+                version: 1,
+                common: {
+                  backgroundMode: "none",
+                  backgroundAssetId: null,
+                  backgroundFit: "cover",
+                  backgroundDimness: 24,
+                  backgroundBlur: 0,
+                  glassEnabled: false,
+                  glassIntensity: 24,
+                  surfaceOpacity: 96,
+                },
+                desktop: {},
+                mobile: {},
+              },
+            },
+          },
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(
+      settingsRepo.get("appearance.personalization.desktop.backgroundAssetId")
+    ).toBeUndefined();
+    expect(settingsRepo.get("appearance.personalization.desktop.surfaceOpacity")).toBeUndefined();
+    expect(settingsRepo.get("appearance.personalization.mobile.glassEnabled")).toBeUndefined();
+  });
+
+  it("settings.update preserves persisted appearance.personalization sibling override keys during partial updates", async () => {
+    settingsRepo.set("appearance.personalization.desktop.backgroundAssetId", "asset-desktop");
+    settingsRepo.set("appearance.personalization.desktop.surfaceOpacity", 88);
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "settings-update-appearance-personalization-partial-device-overrides",
+        op: "settings.update",
+        args: {
+          settings: {
+            appearance: {
+              personalization: {
+                desktop: {
+                  surfaceOpacity: 72,
+                },
+              },
+            },
+          },
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(settingsRepo.get("appearance.personalization.desktop.backgroundAssetId")).toBe(
+      "asset-desktop"
+    );
+    expect(settingsRepo.get("appearance.personalization.desktop.surfaceOpacity")).toBe(72);
+  });
+
   it("settings.update persists provider startup command arguments into the file-backed provider config store", async () => {
     const result = await dispatch(
       {
@@ -665,5 +811,28 @@ describe("settings commands", () => {
 
     expect(result.ok).toBe(true);
     expect(result.data?.["supervisor.evaluationTimeoutSec"]).toBe(600);
+  });
+
+  it("settings.get returns persisted appearance.personalization keys unchanged", async () => {
+    settingsRepo.set("appearance.personalization.common.backgroundMode", "image");
+    settingsRepo.set("appearance.personalization.desktop.glassEnabled", true);
+    settingsRepo.set("appearance.personalization.mobile.surfaceOpacity", 88);
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "settings-get-appearance-personalization",
+        op: "settings.get",
+        args: {},
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.data).toMatchObject({
+      "appearance.personalization.common.backgroundMode": "image",
+      "appearance.personalization.desktop.glassEnabled": true,
+      "appearance.personalization.mobile.surfaceOpacity": 88,
+    });
   });
 });

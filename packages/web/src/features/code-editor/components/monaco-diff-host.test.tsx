@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { describe, expect, it, vi } from "vitest";
+import { getThemeById } from "../../../theme";
 import { MonacoDiffHost } from "./monaco-diff-host";
 
 const {
@@ -78,6 +79,16 @@ describe("MonacoDiffHost", () => {
     );
 
     expect(mockCreateDiffEditor).toHaveBeenCalled();
+    expect(mockDefineTheme).toHaveBeenCalledWith(
+      "coder-studio-workspace-mint-dark",
+      expect.objectContaining({
+        ...getThemeById("mint-dark").monaco,
+        colors: expect.objectContaining({
+          ...getThemeById("mint-dark").monaco.colors,
+          "editor.background": "#00000000",
+        }),
+      })
+    );
     expect(mockSetModel).toHaveBeenCalledWith({
       original: mockOriginalModel,
       modified: mockModifiedModel,

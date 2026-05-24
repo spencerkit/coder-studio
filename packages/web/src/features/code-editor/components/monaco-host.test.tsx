@@ -339,11 +339,42 @@ describe("MonacoHost", () => {
     );
 
     await waitFor(() => {
-      expect(mockDefineTheme).toHaveBeenCalledWith("coder-studio-mint-light", theme.monaco);
+      expect(mockDefineTheme).toHaveBeenCalledWith(
+        "coder-studio-workspace-mint-light",
+        expect.objectContaining({
+          ...theme.monaco,
+          colors: expect.objectContaining({
+            ...theme.monaco.colors,
+            "editor.background": "#00000000",
+          }),
+        })
+      );
       expect(mockCreateEditor).toHaveBeenCalledWith(
         expect.any(HTMLDivElement),
         expect.objectContaining({
           readOnly: false,
+          theme: "coder-studio-workspace-mint-light",
+        })
+      );
+    });
+  });
+
+  it("keeps standalone Monaco themes opaque for non-workspace editors", async () => {
+    const store = createStore();
+    store.set(themeAtom, "mint-light");
+    const theme = getThemeById("mint-light");
+
+    render(
+      <Provider store={store}>
+        <MonacoHost filePath="settings.json" content='{"theme":"mint-light"}' standalone />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(mockDefineTheme).toHaveBeenCalledWith("coder-studio-mint-light", theme.monaco);
+      expect(mockCreateEditor).toHaveBeenCalledWith(
+        expect.any(HTMLDivElement),
+        expect.objectContaining({
           theme: "coder-studio-mint-light",
         })
       );
@@ -432,10 +463,16 @@ describe("MonacoHost", () => {
 
     await waitFor(() => {
       expect(mockDefineTheme).toHaveBeenCalledWith(
-        "coder-studio-graphite-light",
-        getThemeById("graphite-light").monaco
+        "coder-studio-workspace-graphite-light",
+        expect.objectContaining({
+          ...getThemeById("graphite-light").monaco,
+          colors: expect.objectContaining({
+            ...getThemeById("graphite-light").monaco.colors,
+            "editor.background": "#00000000",
+          }),
+        })
       );
-      expect(mockSetTheme).toHaveBeenCalledWith("coder-studio-graphite-light");
+      expect(mockSetTheme).toHaveBeenCalledWith("coder-studio-workspace-graphite-light");
     });
   });
 

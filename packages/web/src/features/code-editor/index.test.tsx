@@ -20,6 +20,7 @@ import {
   editorModeAtomFamily,
   editorRefreshTokenAtomFamily,
   gitDiffPreviewAtomFamily,
+  gitDiffPreviewDismissedAtomFamily,
   gitStateAtomFamily,
   type OpenFile,
   openFilesAtomFamily,
@@ -476,7 +477,7 @@ describe("CodeEditorHost", () => {
     });
   });
 
-  it("closing a pending active file from the header reactivates the remaining loaded editor and ignores the late load", async () => {
+  it("closing a pending active file from the header exits the editor and ignores the late load", async () => {
     const pendingRead = createDeferred<{
       kind: "text";
       content: string;
@@ -518,7 +519,7 @@ describe("CodeEditorHost", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
 
-    expect(store.get(activeFilePathAtomFamily("ws-1"))).toBe("src/a.ts");
+    expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
     expect(store.get(openFilesAtomFamily("ws-1"))).toMatchObject({
       "src/a.ts": expect.objectContaining({ content: "alpha" }),
     });
@@ -533,12 +534,12 @@ describe("CodeEditorHost", () => {
     });
 
     await waitFor(() => {
-      expect(store.get(activeFilePathAtomFamily("ws-1"))).toBe("src/a.ts");
+      expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
       expect(store.get(openFilesAtomFamily("ws-1"))["src/b.ts"]).toBeUndefined();
     });
   });
 
-  it("closing a pending active file from the shared open editors list reactivates the remaining loaded editor", async () => {
+  it("closing a pending active file from the shared open editors list exits the editor", async () => {
     const pendingRead = createDeferred<{
       kind: "text";
       content: string;
@@ -584,7 +585,7 @@ describe("CodeEditorHost", () => {
       .closest(".workspace-open-editors__row") as HTMLElement;
     fireEvent.click(within(activeRow).getByRole("button", { name: "Close src/b.ts" }));
 
-    expect(store.get(activeFilePathAtomFamily("ws-1"))).toBe("src/a.ts");
+    expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
 
     await act(async () => {
       pendingRead.resolve({
@@ -596,12 +597,12 @@ describe("CodeEditorHost", () => {
     });
 
     await waitFor(() => {
-      expect(store.get(activeFilePathAtomFamily("ws-1"))).toBe("src/a.ts");
+      expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
       expect(store.get(openFilesAtomFamily("ws-1"))["src/b.ts"]).toBeUndefined();
     });
   });
 
-  it("closing the lexicographically last active editor from open editors reactivates the previous sorted editor", async () => {
+  it("closing the active editor from open editors exits the editor instead of reactivating another tab", async () => {
     const { store } = setupStore({
       activePath: "src/c.ts",
       openFiles: {
@@ -646,8 +647,8 @@ describe("CodeEditorHost", () => {
       .closest(".workspace-open-editors__row") as HTMLElement;
     fireEvent.click(within(activeRow).getByRole("button", { name: "Close src/c.ts" }));
 
-    expect(store.get(activeFilePathAtomFamily("ws-1"))).toBe("src/b.ts");
-    expect(screen.getByTestId("monaco-host")).toHaveTextContent("beta");
+    expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
+    expect(screen.queryByTestId("monaco-host")).not.toBeInTheDocument();
   });
 
   it("cancels an older pending load when switching to a different path so it cannot resurrect after the newer path closes", async () => {
@@ -748,7 +749,7 @@ describe("CodeEditorHost", () => {
     expect(sendCommand).not.toHaveBeenCalled();
   });
 
-  it("closing the active editor from the header switches to the next sorted open file", async () => {
+  it("closing the active editor from the header exits to the empty editor state", async () => {
     const { store } = setupStore({
       activePath: "src/c.ts",
       openFiles: {
@@ -802,15 +803,10 @@ describe("CodeEditorHost", () => {
 
     fireEvent.click(closeBtn);
 
-    expect(store.get(activeFilePathAtomFamily("ws-1"))).toBe("src/d.ts");
+    expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
     expect(store.get(openFilesAtomFamily("ws-1"))["src/c.ts"]).toBeUndefined();
     expect(store.get(editorModeAtomFamily("ws-1"))).toBe("edit");
-    expect(store.get(gitDiffPreviewAtomFamily("ws-1"))).toEqual({
-      path: "src/unrelated.ts",
-      diff: "diff --git a/src/unrelated.ts b/src/unrelated.ts",
-      staged: false,
-      source: "file",
-    });
+    expect(store.get(gitDiffPreviewAtomFamily("ws-1"))).toBeNull();
     expect(mockRegistryDisposeFile).toHaveBeenCalledWith("/tmp/ws", "src/c.ts");
   });
 
@@ -1414,6 +1410,59 @@ describe("CodeEditorHost", () => {
     expect(result.current.hasUnsavedChangesOutsideDiff).toBe(true);
   });
 
+  it("marks file diff preview dismissed when closing the active diff editor", async () => {
+    const { store } = setupStore({
+      activePath: "src/app.ts",
+      openFiles: {
+        "src/app.ts": {
+          kind: "text",
+          path: "src/app.ts",
+          content: "export const app = 2;",
+          savedContent: "export const app = 1;",
+          baseHash: "hash-app",
+          isDirty: true,
+        },
+      },
+    });
+    store.set(editorModeAtomFamily("ws-1"), "diff");
+    store.set(gitStateAtomFamily("ws-1"), {
+      branch: "main",
+      ahead: 0,
+      behind: 0,
+      staged: [],
+      modified: [{ path: "src/app.ts", status: "modified" }],
+      deleted: [],
+      untracked: [],
+    });
+    store.set(gitDiffPreviewAtomFamily("ws-1"), {
+      path: "src/app.ts",
+      diff: "diff --git a/src/app.ts b/src/app.ts",
+      staged: false,
+      source: "file",
+      renderAs: "text",
+      originalContent: "export const app = 1;",
+      modifiedContent: "export const app = 2;",
+    });
+
+    render(
+      <Provider store={store}>
+        <CodeEditorHost />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("monaco-diff-host")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+
+    await waitFor(() => {
+      expect(store.get(gitDiffPreviewAtomFamily("ws-1"))).toBeNull();
+      expect(store.get(gitDiffPreviewDismissedAtomFamily("ws-1"))).toBe(true);
+      expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
+    });
+  });
+
   it("shows the save tooltip on desktop for a text buffer", async () => {
     const { store } = setupStore({
       activePath: "src/save.ts",
@@ -1528,7 +1577,7 @@ describe("CodeEditorHost", () => {
     expect(screen.queryByText(/changed on disk/i)).not.toBeInTheDocument();
   });
 
-  it("clears a stale save error after closing the failed file from the sidebar and switching active file", async () => {
+  it("clears a stale save error after closing the failed file from the sidebar without switching active file", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string, args?: { path?: string }) => {
       if (op === "file.write" && args?.path === "src/a.ts") {
         throw new Error("Save failed on A");
@@ -1585,11 +1634,11 @@ describe("CodeEditorHost", () => {
     fireEvent.click(within(activeRow).getByRole("button", { name: "Close src/a.ts" }));
 
     await waitFor(() => {
-      expect(store.get(activeFilePathAtomFamily("ws-1"))).toBe("src/b.ts");
+      expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
     });
 
     expect(screen.queryByText("Save failed on A")).not.toBeInTheDocument();
-    expect(screen.getByTestId("monaco-host")).toHaveTextContent("saved b");
+    expect(screen.queryByTestId("monaco-host")).not.toBeInTheDocument();
   });
 
   it("keeps save state scoped to the active file when switching during an in-flight save", async () => {

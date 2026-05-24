@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import en from "../locales/en.json";
 import zh from "../locales/zh.json";
-import { THEME_IDS, THEMES } from "./index";
+import { createWorkspaceMonacoTheme, THEME_IDS, THEMES } from "./index";
 
 function getTranslationValue(messages: Record<string, unknown>, key: string): unknown {
   return key.split(".").reduce<unknown>((current, segment) => {
@@ -178,5 +178,14 @@ describe("theme registry", () => {
         expect.objectContaining({ token: "keyword", foreground: "5b7fa8" }),
       ])
     );
+  });
+
+  it("creates workspace monaco themes with transparent editor backgrounds", () => {
+    for (const theme of THEMES) {
+      expect(createWorkspaceMonacoTheme(theme.monaco).colors["editor.background"]).toBe(
+        "#00000000"
+      );
+      expect(theme.monaco.colors["editor.background"]).not.toBe("#00000000");
+    }
   });
 });

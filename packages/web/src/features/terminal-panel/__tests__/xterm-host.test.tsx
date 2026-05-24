@@ -9,7 +9,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import userEvent from "@testing-library/user-event";
 import { createStore, Provider } from "jotai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { localeAtom, themeAtom } from "../../../atoms/app-ui";
+import { appearancePersonalizationAtom, localeAtom, themeAtom } from "../../../atoms/app-ui";
 import { wsClientAtom } from "../../../atoms/connection";
 import { JotaiProvider } from "../../../test-utils/jotai-provider";
 import { getThemeById } from "../../../theme";
@@ -278,10 +278,12 @@ const mockTerminal = {
   open: vi.fn(),
   onData: vi.fn(() => vi.fn()), // Return dispose function
   onResize: vi.fn(() => vi.fn()),
+  onRender: vi.fn(() => vi.fn()),
   onSelectionChange: vi.fn(() => vi.fn()),
   attachCustomKeyEventHandler: vi.fn(),
   hasSelection: vi.fn(() => false),
   getSelection: vi.fn(() => ""),
+  input: vi.fn(),
   write: vi.fn(),
   writeln: vi.fn(),
   scrollLines: vi.fn(),
@@ -296,6 +298,9 @@ const mockTerminal = {
       baseY: 0,
       getLine: vi.fn((row: number) => mockBufferLines.get(row)),
     },
+  },
+  parser: {
+    registerOscHandler: vi.fn(() => ({ dispose: vi.fn() })),
   },
   options: {},
 };
@@ -356,6 +361,8 @@ describe("XtermHost", () => {
     mockTerminal.write.mockImplementation((_data: Uint8Array | string, callback?: () => void) => {
       callback?.();
     });
+    mockTerminal.onRender.mockImplementation(() => vi.fn());
+    mockTerminal.input.mockImplementation(() => {});
     mockTerminal.writeln.mockImplementation(() => {});
     mockTerminal.reset.mockImplementation(() => {});
     mockTerminal.scrollLines.mockImplementation((amount: number) => {
@@ -1202,7 +1209,10 @@ describe("XtermHost", () => {
     const { Terminal } = await import("@xterm/xterm");
     expect(Terminal).toHaveBeenCalledWith(
       expect.objectContaining({
-        theme: expect.objectContaining(getThemeById("mint-light").terminalTheme),
+        theme: expect.objectContaining({
+          ...getThemeById("mint-light").terminalTheme,
+          background: "#00000000",
+        }),
       })
     );
   });
@@ -1435,6 +1445,76 @@ describe("XtermHost", () => {
       { terminalId: "retry-local-terminal", lastSeq: 0 },
       { terminalId: "retry-local-terminal", lastSeq: 0 },
     ]);
+
+    global.requestAnimationFrame = originalRequestAnimationFrame;
+    global.cancelAnimationFrame = originalCancelAnimationFrame;
+  });
+
+  it("removes the retry action after a manual retry also fails", async () => {
+    const store = createStore();
+    const sendCommand = vi.fn().mockImplementation((op: string) => {
+      if (op === "terminal.snapshot") {
+        return Promise.resolve({ status: "unsupported" });
+      }
+
+      if (op === "terminal.replay") {
+        return Promise.reject(new Error("Command timeout: terminal.replay"));
+      }
+
+      return Promise.resolve({ status: "ok" });
+    });
+    const subscribe = vi.fn(() => vi.fn());
+    const rafCallbacks: FrameRequestCallback[] = [];
+    const originalRequestAnimationFrame = global.requestAnimationFrame;
+    const originalCancelAnimationFrame = global.cancelAnimationFrame;
+
+    mockTerminal.cols = 132;
+    mockTerminal.rows = 36;
+
+    global.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      rafCallbacks.push(callback);
+      return rafCallbacks.length;
+    }) as typeof requestAnimationFrame;
+    global.cancelAnimationFrame = vi.fn() as typeof cancelAnimationFrame;
+
+    store.set(localeAtom, "zh");
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe,
+      getStatus: vi.fn(() => "connected"),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="retry-final-failure-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await act(async () => {
+      const callback = rafCallbacks.shift();
+      callback?.(16);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "重试恢复" })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "重试恢复" }));
+
+    await waitFor(() => {
+      expect(sendCommand.mock.calls.filter(([op]) => op === "terminal.snapshot")).toHaveLength(2);
+      expect(sendCommand.mock.calls.filter(([op]) => op === "terminal.replay")).toHaveLength(2);
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: "重试恢复" })).not.toBeInTheDocument();
+    });
+    expect(screen.getByText("终端历史暂未恢复")).toBeInTheDocument();
+    expect(document.querySelector(".xterm-replay-overlay")).toBeFalsy();
 
     global.requestAnimationFrame = originalRequestAnimationFrame;
     global.cancelAnimationFrame = originalCancelAnimationFrame;
@@ -2630,7 +2710,11 @@ describe("XtermHost", () => {
 
     expect(Terminal).toHaveBeenCalledWith(
       expect.objectContaining({
-        theme: expect.objectContaining(getThemeById("mint-dark").terminalTheme),
+        allowTransparency: true,
+        theme: expect.objectContaining({
+          ...getThemeById("mint-dark").terminalTheme,
+          background: "#00000000",
+        }),
       })
     );
   });
@@ -2648,7 +2732,46 @@ describe("XtermHost", () => {
 
     expect(Terminal).toHaveBeenCalledWith(
       expect.objectContaining({
-        theme: expect.objectContaining(getThemeById("mint-light").terminalTheme),
+        allowTransparency: true,
+        theme: expect.objectContaining({
+          ...getThemeById("mint-light").terminalTheme,
+          background: "#00000000",
+        }),
+      })
+    );
+  });
+
+  it("uses a transparent xterm background when glass surfaces are enabled", async () => {
+    const { Terminal } = await import("@xterm/xterm");
+    const store = createStore();
+    store.set(appearancePersonalizationAtom, {
+      version: 1,
+      common: {
+        backgroundMode: "image",
+        backgroundAssetId: "asset-glass-terminal",
+        backgroundFit: "cover",
+        backgroundDimness: 18,
+        backgroundBlur: 6,
+        glassEnabled: true,
+        glassIntensity: 24,
+        surfaceOpacity: 56,
+      },
+      desktop: {},
+      mobile: {},
+    });
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="glass-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    expect(Terminal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        theme: expect.objectContaining({
+          ...getThemeById("mint-dark").terminalTheme,
+          background: "#00000000",
+        }),
       })
     );
   });
@@ -2670,10 +2793,174 @@ describe("XtermHost", () => {
     await waitFor(() => {
       expect(mockTerminal.options).toEqual(
         expect.objectContaining({
-          theme: expect.objectContaining(getThemeById("graphite-light").terminalTheme),
+          theme: expect.objectContaining({
+            ...getThemeById("graphite-light").terminalTheme,
+            background: "#00000000",
+          }),
         })
       );
     });
+  });
+
+  it("keeps the live xterm background transparent after a theme switch when glass surfaces are enabled", async () => {
+    const store = createStore();
+    store.set(themeAtom, "mint-dark");
+    store.set(appearancePersonalizationAtom, {
+      version: 1,
+      common: {
+        backgroundMode: "image",
+        backgroundAssetId: "asset-glass-theme-sync",
+        backgroundFit: "cover",
+        backgroundDimness: 16,
+        backgroundBlur: 4,
+        glassEnabled: true,
+        glassIntensity: 28,
+        surfaceOpacity: 52,
+      },
+      desktop: {},
+      mobile: {},
+    });
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="glass-theme-sync-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await act(async () => {
+      store.set(themeAtom, "graphite-light");
+    });
+
+    await waitFor(() => {
+      expect(mockTerminal.options).toEqual(
+        expect.objectContaining({
+          theme: expect.objectContaining({
+            ...getThemeById("graphite-light").terminalTheme,
+            background: "#00000000",
+          }),
+        })
+      );
+    });
+  });
+
+  it("reports semantic terminal colors for OSC 10/11 queries while keeping the rendered background transparent", async () => {
+    const store = createStore();
+    const sendTerminalInput = vi.fn().mockResolvedValue(undefined);
+    store.set(themeAtom, "mint-light");
+    store.set(wsClientAtom, {
+      sendTerminalInput,
+      sendCommand: vi.fn().mockResolvedValue({ status: "ok" }),
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => "connected"),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="osc-query-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    const fgHandlerCall = mockTerminal.parser.registerOscHandler.mock.calls.find(
+      ([ident]) => ident === 10
+    );
+    const bgHandlerCall = mockTerminal.parser.registerOscHandler.mock.calls.find(
+      ([ident]) => ident === 11
+    );
+
+    expect(fgHandlerCall).toBeTruthy();
+    expect(bgHandlerCall).toBeTruthy();
+
+    const fgHandler = fgHandlerCall?.[1] as
+      | ((data: string) => boolean | Promise<boolean>)
+      | undefined;
+    const bgHandler = bgHandlerCall?.[1] as
+      | ((data: string) => boolean | Promise<boolean>)
+      | undefined;
+
+    await act(async () => {
+      expect(await fgHandler?.("?")).toBe(true);
+      expect(await bgHandler?.("?")).toBe(true);
+    });
+
+    await waitFor(() => {
+      expect(sendTerminalInput).toHaveBeenNthCalledWith(
+        1,
+        "osc-query-terminal",
+        textEncoder.encode("\u001b]10;rgb:1f1f/2323/2828\u001b\\"),
+        "system",
+        undefined
+      );
+      expect(sendTerminalInput).toHaveBeenNthCalledWith(
+        2,
+        "osc-query-terminal",
+        textEncoder.encode("\u001b]11;rgb:fcfc/ffff/fdfd\u001b\\"),
+        "system",
+        undefined
+      );
+    });
+
+    expect(mockTerminal.options).toEqual(
+      expect.objectContaining({
+        theme: expect.objectContaining({
+          ...getThemeById("mint-light").terminalTheme,
+          background: "#00000000",
+        }),
+      })
+    );
+  });
+
+  it("normalizes rendered ANSI cell backgrounds to the active surface opacity", async () => {
+    const store = createStore();
+    store.set(themeAtom, "mint-light");
+    store.set(appearancePersonalizationAtom, {
+      version: 1,
+      common: {
+        backgroundMode: "image",
+        backgroundAssetId: "asset-terminal-material-alpha",
+        backgroundFit: "cover",
+        backgroundDimness: 18,
+        backgroundBlur: 4,
+        glassEnabled: true,
+        glassIntensity: 28,
+        surfaceOpacity: 52,
+      },
+      desktop: {},
+      mobile: {},
+    });
+
+    let renderListener: ((viewport: { start: number; end: number }) => void) | undefined;
+    mockTerminal.onRender.mockImplementationOnce((listener) => {
+      renderListener = listener;
+      return vi.fn();
+    });
+
+    const { container } = render(
+      <Provider store={store}>
+        <XtermHost terminalId="terminal-material-alpha" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    const host = container.querySelector(".xterm-host") as HTMLDivElement | null;
+    expect(host).toBeTruthy();
+    expect(renderListener).toBeTypeOf("function");
+
+    const rowsElement = document.createElement("div");
+    rowsElement.className = "xterm-rows";
+    const row = document.createElement("div");
+    const cell = document.createElement("span");
+    cell.textContent = "你好";
+    cell.style.backgroundColor = "rgb(55, 55, 55)";
+    cell.style.color = "rgb(255, 255, 255)";
+    row.appendChild(cell);
+    rowsElement.appendChild(row);
+    host!.appendChild(rowsElement);
+
+    await act(async () => {
+      renderListener?.({ start: 0, end: 0 });
+    });
+
+    expect(cell.style.backgroundColor).toBe("rgba(55, 55, 55, 0.52)");
   });
 
   it("uses the high-contrast dark terminal palette for hc-dark", async () => {
@@ -2689,7 +2976,10 @@ describe("XtermHost", () => {
 
     expect(Terminal).toHaveBeenCalledWith(
       expect.objectContaining({
-        theme: expect.objectContaining(getThemeById("hc-dark").terminalTheme),
+        theme: expect.objectContaining({
+          ...getThemeById("hc-dark").terminalTheme,
+          background: "#00000000",
+        }),
       })
     );
   });

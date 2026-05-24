@@ -10,7 +10,18 @@ import type {
   WorktreeInfo,
 } from "@coder-studio/core";
 import { createStore, type Store } from "jotai";
-import { authenticatedAtom, commandPaletteOpenAtom, localeAtom, themeAtom } from "../atoms/app-ui";
+import {
+  applyAppearancePersonalizationToDocument,
+  applyResolvedTheme,
+  resolveAppearancePersonalizationSetting,
+} from "../appearance";
+import {
+  appearancePersonalizationAtom,
+  authenticatedAtom,
+  commandPaletteOpenAtom,
+  localeAtom,
+  themeAtom,
+} from "../atoms/app-ui";
 import {
   authEnabledAtom,
   connectionStatusAtom,
@@ -397,8 +408,11 @@ export function buildUiPreviewStore(seed: UiPreviewSeed): Store {
   const store = createStore();
   const dispatch = createPreviewDispatcher(seed);
   const workspaces = seed.workspaces ?? [];
+  const resolvedThemeId = resolveStoredThemeId(seed.theme);
+  const personalization = resolveAppearancePersonalizationSetting(seed.commands?.settingsGet ?? {});
 
-  store.set(themeAtom, resolveStoredThemeId(seed.theme));
+  store.set(themeAtom, resolvedThemeId);
+  store.set(appearancePersonalizationAtom, personalization);
   store.set(localeAtom, seed.locale);
   store.set(authEnabledAtom, seed.authEnabled === undefined ? false : seed.authEnabled);
   store.set(authenticatedAtom, seed.authenticated ?? true);
@@ -461,6 +475,13 @@ export function buildUiPreviewStore(seed: UiPreviewSeed): Store {
     disconnect: () => {},
     getStatus: () => "connected",
   } as never);
+
+  if (typeof document !== "undefined") {
+    applyResolvedTheme(resolvedThemeId);
+    document.documentElement.setAttribute("lang", seed.locale);
+    document.body.dataset.uiPreviewDevice = seed.device;
+    applyAppearancePersonalizationToDocument(personalization, resolvedThemeId);
+  }
 
   for (const [workspaceId, layout] of Object.entries(seed.paneLayoutByWorkspaceId ?? {})) {
     store.set(paneLayoutAtomFamily(workspaceId), layout);

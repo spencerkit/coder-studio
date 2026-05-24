@@ -7,8 +7,8 @@
   align-items: flex-start;
   justify-content: center;
   padding: var(--sp-16) var(--sp-4) var(--sp-4);
-  background: color-mix(in srgb, black 58%, transparent);
-  backdrop-filter: blur(8px);
+  background: var(--overlay-backdrop);
+  backdrop-filter: var(--app-surface-backdrop-filter, none);
 }
 
 .surface,
