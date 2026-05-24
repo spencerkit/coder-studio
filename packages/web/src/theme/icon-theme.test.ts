@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getIconPresentation, ICON_SEMANTICS, THEME_IDS } from "./index";
+import { BASE_ICON_THEME, getIconPresentation, ICON_SEMANTICS, THEME_IDS } from "./index";
 
 describe("theme icon resolver", () => {
   const builtInThemes = THEME_IDS;
@@ -219,13 +219,13 @@ describe("theme icon resolver", () => {
     for (const themeId of seasonalThemes) {
       for (const [semantic, tone, surface] of semanticStatusExpectations) {
         const seasonalPresentation = getIconPresentation(themeId, semantic);
-        const basePresentation = getIconPresentation("mint-dark", semantic);
+        const basePresentation = BASE_ICON_THEME.icons[semantic];
 
         expect(seasonalPresentation).toEqual(
           expect.objectContaining({
             tone,
             surface,
-            Icon: basePresentation.Icon,
+            Icon: basePresentation.glyph,
             strokeWidth: basePresentation.strokeWidth,
           })
         );
