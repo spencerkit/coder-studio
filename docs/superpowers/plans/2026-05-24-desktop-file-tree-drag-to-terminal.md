@@ -4,7 +4,7 @@
 
 **Goal:** Allow desktop users to drag file-tree rows into the active terminal to insert shell-quoted workspace-relative paths without uploading anything.
 
-**Architecture:** Define one shared drag payload contract in `packages/web/src/lib`, then teach the terminal drop hook to recognize that payload before the existing file-upload path, and finally make desktop `FileTreeNode` rows emit the payload on `dragstart`. Keep the change web-only, leave search/mobile/open-editors untouched, and reuse the existing `quoteShellSingle()` plus `sendTextToTerminal()` path so terminal input stays consistent.
+**Architecture:** Define one shared drag payload contract in `packages/web/src/lib`, then teach the terminal drop hook to recognize that payload before the existing file-upload path, and finally make desktop `FileTreeNode` rows emit the payload on `dragstart`. Keep the change web-only, leave search/mobile/open-editors untouched, and reuse the existing `quoteShellSingle()` plus terminal insertion sequencing so internal path drops stay ordered relative to uploads without incorrectly entering the upload-busy state.
 
 **Tech Stack:** TypeScript, React 19, Vitest, Testing Library, Jotai, DOM Drag and Drop APIs
 
@@ -303,6 +303,57 @@ it("prevents default for internal workspace drags and inserts a quoted relative 
   expect(result.current.busy).toBe(false);
 });
 
+it("keeps internal path insertion ordered behind earlier uploads", async () => {
+  const store = createStore();
+  let resolveUpload: ((value: Response) => void) | undefined;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveUpload = resolve as (value: Response) => void;
+        })
+    )
+  );
+
+  renderHook(
+    () =>
+      usePasteDropUpload({
+        containerRef: { current: container },
+        workspaceId: "ws-1",
+        sendTextToTerminal: sendInput,
+        enabled: true,
+      }),
+    { wrapper: makeWrapper(store) }
+  );
+
+  await act(async () => {
+    fireDrop(container, [makeFile("upload.txt")]);
+    fireWorkspacePathDrop(container, {
+      workspaceId: "ws-1",
+      path: "src/app.tsx",
+      kind: "file",
+    });
+    await Promise.resolve();
+  });
+
+  expect(sendInput).not.toHaveBeenCalled();
+
+  await act(async () => {
+    resolveUpload?.({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        ok: true,
+        files: [{ path: "/abs/upload.txt", originalName: "upload.txt", size: 1 }],
+      }),
+    } as Response);
+    await flushAsyncWork();
+  });
+
+  expect(sendInput.mock.calls).toEqual([["'/abs/upload.txt' "], ["'src/app.tsx' "]]);
+});
+
 it("rejects internal workspace drops from another workspace", async () => {
   const store = createStore();
   const { result } = renderHook(
@@ -334,6 +385,45 @@ it("rejects internal workspace drops from another workspace", async () => {
   );
   expect(result.current.busy).toBe(false);
 });
+
+it("toasts when the internal workspace payload is invalid", async () => {
+  const store = createStore();
+
+  renderHook(
+    () =>
+      usePasteDropUpload({
+        containerRef: { current: container },
+        workspaceId: "ws-1",
+        sendTextToTerminal: sendInput,
+        enabled: true,
+      }),
+    { wrapper: makeWrapper(store) }
+  );
+
+  await act(async () => {
+    const event = new Event("drop", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "dataTransfer", {
+      value: {
+        files: [],
+        types: [WORKSPACE_PATH_DRAG_MIME, "text/plain"],
+        items: [],
+        getData: (type: string) =>
+          type === WORKSPACE_PATH_DRAG_MIME ? "{bad json" : "src/app.tsx",
+      },
+    });
+    container.dispatchEvent(event);
+    await flushAsyncWork();
+  });
+
+  expect(sendInput).not.toHaveBeenCalled();
+  expect(store.get(toastsAtom)).toContainEqual(
+    expect.objectContaining({
+      kind: "error",
+      title: "Drop failed",
+      body: "Could not read the dragged workspace path.",
+    })
+  );
+});
 ```
 
 - [ ] **Step 2: Run the terminal drop-hook tests to verify they fail**
@@ -346,7 +436,7 @@ pnpm --filter @coder-studio/web exec vitest run src/features/terminal-panel/uplo
 
 Expected: FAIL on the new workspace-path drag tests because the hook still ignores the custom MIME payload, so `defaultPrevented` stays `false` and `sendTextToTerminal()` is never called.
 
-- [ ] **Step 3: Implement internal workspace-path drop parsing without touching upload flow**
+- [ ] **Step 3: Implement internal workspace-path drop parsing while preserving terminal insertion order**
 
 Update the imports and helpers in `packages/web/src/features/terminal-panel/uploads/use-paste-drop-upload.ts`:
 
@@ -355,6 +445,53 @@ import {
   getWorkspacePathDragPayload,
   hasWorkspacePathDragType,
 } from "../../../lib/workspace-path-drag";
+```
+
+Before wiring the new callback, refactor `runSequence()` so uploads and internal path drops share the same output queue while only uploads toggle `busy` and use the default upload toast:
+
+```ts
+interface RunSequenceOptions {
+  trackBusy?: boolean;
+  onError?: (error: unknown) => void;
+}
+
+  const runSequence = useCallback(
+    async (task: () => Promise<string | null>, options?: RunSequenceOptions) => {
+      const { trackBusy = true, onError } = options ?? {};
+      const sequence = nextSequenceRef.current;
+      nextSequenceRef.current += 1;
+
+      if (trackBusy) {
+        inFlightCountRef.current += 1;
+        setBusy(true);
+      }
+
+      try {
+        const text = await task();
+        await settleSequence(sequence, text);
+      } catch (error) {
+        await settleSequence(sequence, null);
+        if (onError) {
+          onError(error);
+          return;
+        }
+
+        const code = error instanceof UploadError ? error.code : "unknown";
+        pushToast({
+          kind: "error",
+          title: "Upload failed",
+          body: `Could not upload file(s): ${code}`,
+          duration: 5_000,
+        });
+      } finally {
+        if (trackBusy) {
+          inFlightCountRef.current = Math.max(0, inFlightCountRef.current - 1);
+          setBusy(inFlightCountRef.current > 0);
+        }
+      }
+    },
+    [pushToast, settleSequence]
+  );
 ```
 
 Add this callback next to the existing `handleText()` callback:
@@ -383,19 +520,20 @@ Add this callback next to the existing `handleText()` callback:
         return;
       }
 
-      try {
-        await sendTextToTerminal(`${quoteShellSingle(payload.path)} `);
-      } catch (error) {
-        console.debug("Workspace path drop failed:", error);
-        pushToast({
-          kind: "error",
-          title: "Drop failed",
-          body: "Could not insert the dragged path into the terminal.",
-          duration: 3_000,
-        });
-      }
+      await runSequence(async () => `${quoteShellSingle(payload.path)} `, {
+        trackBusy: false,
+        onError: (error) => {
+          console.debug("Workspace path drop failed:", error);
+          pushToast({
+            kind: "error",
+            title: "Drop failed",
+            body: "Could not insert the dragged path into the terminal.",
+            duration: 3_000,
+          });
+        },
+      });
     },
-    [pushToast, sendTextToTerminal, workspaceId]
+    [pushToast, runSequence, workspaceId]
   );
 ```
 
@@ -527,6 +665,40 @@ it("marks desktop tree rows draggable and writes workspace path drag data on dra
     })
   );
   expect(values.get("text/plain")).toBe("README.md");
+});
+
+it("writes workspace drag data for nested desktop nodes too", () => {
+  const store = createStore();
+  store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+  store.set(
+    fileTreeAtomFamily("ws-test"),
+    new Map([
+      [".", [{ path: "src", name: "src", kind: "dir", children: [] }]],
+      ["src", [{ path: "src/app.tsx", name: "app.tsx", kind: "file" }]],
+    ])
+  );
+  store.set(expandedDirsAtomFamily("ws-test"), new Set(["src"]));
+
+  render(
+    <Provider store={store}>
+      <FileTreePanel workspaceId="ws-test" variant="desktop" showSearch={false} />
+    </Provider>
+  );
+
+  const nestedRow = screen.getByText("app.tsx").closest(".tree-item");
+  expect(nestedRow).toHaveAttribute("draggable", "true");
+
+  const { dataTransfer, values } = createDragDataTransfer();
+  fireEvent.dragStart(nestedRow!, { dataTransfer });
+
+  expect(values.get(WORKSPACE_PATH_DRAG_MIME)).toBe(
+    JSON.stringify({
+      workspaceId: "ws-test",
+      path: "src/app.tsx",
+      kind: "file",
+    })
+  );
+  expect(values.get("text/plain")).toBe("src/app.tsx");
 });
 
 it("keeps mobile tree rows non-draggable", () => {
