@@ -1,3 +1,4 @@
+import { AlertTriangle, Info } from "lucide-react";
 import { describe, expect, it } from "vitest";
 import { BASE_ICON_THEME, getIconPresentation, ICON_SEMANTICS, THEME_IDS } from "./index";
 
@@ -7,10 +8,10 @@ describe("theme icon resolver", () => {
     /^(spring|summer|autumn|winter)-(dark|light)$/.test(themeId)
   );
   const semanticStatusExpectations = [
-    ["state.success", "success", "success"],
-    ["state.warning", "warning", "warning"],
-    ["state.error", "error", "error"],
-    ["state.info", "info", "info"],
+    ["state.success", { glyph: Info, tone: "success", surface: "success" }],
+    ["state.warning", { glyph: AlertTriangle, tone: "warning", surface: "warning" }],
+    ["state.error", { glyph: AlertTriangle, tone: "error", surface: "error" }],
+    ["state.info", { glyph: Info, tone: "info", surface: "info" }],
   ] as const;
 
   it("resolves the base semantic set for every built-in theme", () => {
@@ -125,6 +126,12 @@ describe("theme icon resolver", () => {
     }
   });
 
+  it("locks the approved base contract for semantic status icons", () => {
+    for (const [semantic, expected] of semanticStatusExpectations) {
+      expect(BASE_ICON_THEME.icons[semantic]).toEqual(expected);
+    }
+  });
+
   it("applies the approved seasonal icon hierarchy without retheming semantic status icons", () => {
     for (const themeId of ["spring-dark", "spring-light"] as const) {
       expect(getIconPresentation(themeId, "mobile.dock.agent")).toEqual(
@@ -217,14 +224,14 @@ describe("theme icon resolver", () => {
     }
 
     for (const themeId of seasonalThemes) {
-      for (const [semantic, tone, surface] of semanticStatusExpectations) {
+      for (const [semantic, expected] of semanticStatusExpectations) {
         const seasonalPresentation = getIconPresentation(themeId, semantic);
         const basePresentation = BASE_ICON_THEME.icons[semantic];
 
         expect(seasonalPresentation).toEqual(
           expect.objectContaining({
-            tone,
-            surface,
+            tone: expected.tone,
+            surface: expected.surface,
             Icon: basePresentation.glyph,
             strokeWidth: basePresentation.strokeWidth,
           })
