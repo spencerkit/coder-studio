@@ -429,6 +429,7 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
               searchResults.map((node) => (
                 <FileSearchResultRow
                   key={node.path}
+                  workspaceId={workspaceId}
                   node={node}
                   variant={variant}
                   selectedPath={activeFilePath}
@@ -508,6 +509,7 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
 };
 
 interface FileSearchResultRowProps {
+  workspaceId: string;
   node: FileNode;
   variant: "desktop" | "mobile";
   selectedPath: string | null;
@@ -529,6 +531,7 @@ interface FileSearchResultRowProps {
 }
 
 const FileSearchResultRow: FC<FileSearchResultRowProps> = ({
+  workspaceId,
   node,
   variant,
   selectedPath,
@@ -542,12 +545,25 @@ const FileSearchResultRow: FC<FileSearchResultRowProps> = ({
 }) => {
   const dirName = node.path.includes("/") ? node.path.slice(0, node.path.lastIndexOf("/")) : "";
   const surface = variant === "mobile" ? "mobile" : "search";
+  const handleDragStart = (event: ReactDragEvent<HTMLDivElement>) => {
+    if (variant !== "desktop" || !event.dataTransfer) {
+      return;
+    }
+
+    setWorkspacePathDragData(event.dataTransfer, {
+      workspaceId,
+      path: node.path,
+      kind: node.kind,
+    });
+  };
 
   return (
     <div
       className={`tree-item tree-item--file ${selectedPath === node.path ? "selected" : ""} ${
         isContextTarget ? "tree-item--context-target" : ""
       }`}
+      draggable={variant === "desktop" ? true : undefined}
+      onDragStart={variant === "desktop" ? handleDragStart : undefined}
       onClick={() => {
         if (consumeSuppressedClick()) {
           return;

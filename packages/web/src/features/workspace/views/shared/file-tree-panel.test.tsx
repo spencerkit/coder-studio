@@ -1369,6 +1369,48 @@ describe("FileTreePanel", () => {
     ).toBeInTheDocument();
   });
 
+  it("marks desktop search result rows draggable and writes workspace path drag data", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args: { query?: string }) => {
+      if (op === "file.search") {
+        const query = args.query?.toLowerCase() ?? "";
+        const files = [{ path: "src/app.tsx", name: "app.tsx", kind: "file" }].filter((item) =>
+          item.name.toLowerCase().includes(query)
+        );
+
+        return { files };
+      }
+
+      return { ok: true };
+    });
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    fireEvent.change(screen.getByPlaceholderText("action.search_files"), {
+      target: { value: "app" },
+    });
+
+    const searchRow = (await screen.findByText("app.tsx")).closest(".tree-item");
+    expect(searchRow).toHaveAttribute("draggable", "true");
+
+    const { dataTransfer, values } = createDragDataTransfer();
+    fireEvent.dragStart(searchRow!, { dataTransfer });
+
+    expect(values.get(WORKSPACE_PATH_DRAG_MIME)).toBe(
+      JSON.stringify({
+        workspaceId: "ws-test",
+        path: "src/app.tsx",
+        kind: "file",
+      })
+    );
+    expect(values.get("text/plain")).toBe("src/app.tsx");
+  });
+
   it("opens the rename modal from the context menu and submits file.rename", async () => {
     const sendCommand = vi
       .fn()
