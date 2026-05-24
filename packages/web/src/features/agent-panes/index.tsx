@@ -12,6 +12,7 @@ import { EmptyState } from "../../components/ui";
 import { useTranslation } from "../../lib/i18n";
 import type { PaneDropIntent } from "./actions/pane-drag-types";
 import { usePaneActions } from "./actions/use-pane-actions";
+import { usePaneDragController } from "./actions/use-pane-drag-controller";
 import { useSessionActions } from "./actions/use-session-actions";
 import { useWorkspaceSessions } from "./actions/use-workspace-sessions";
 import { type PaneNode, readPaneRatio, writePaneRatio } from "./atoms/pane-layout";
@@ -66,6 +67,7 @@ export const AgentPanes: FC<AgentPanesProps> = ({ hydrateSessions = true }) => {
 
     paneActions.insertSessionPaneAtEdge(intent.sourcePaneId, intent.targetPaneId, intent.placement);
   };
+  const dragController = usePaneDragController({ onDrop: handlePaneDrop });
 
   if (!workspace) {
     return (
@@ -98,6 +100,7 @@ export const AgentPanes: FC<AgentPanesProps> = ({ hydrateSessions = true }) => {
         onSplitSession={paneActions.splitSessionPane}
         onCloseDraftPane={paneActions.closeDraftPane}
         onAssignSession={paneActions.assignSession}
+        dragController={dragController}
         onPaneDrop={handlePaneDrop}
         onReplaceWithSession={paneActions.replaceWithSession}
         onCloseSessionCommand={sessionActions.closeSession}
@@ -107,6 +110,7 @@ export const AgentPanes: FC<AgentPanesProps> = ({ hydrateSessions = true }) => {
 };
 
 interface PaneNodeRendererProps {
+  dragController: ReturnType<typeof usePaneDragController>;
   node: PaneNode;
   workspaceId: string;
   onAssignSession: (paneId: string, sessionId: string) => void;
@@ -126,6 +130,7 @@ interface PaneNodeRendererProps {
  * Recursively render pane tree
  */
 const PaneNodeRenderer: FC<PaneNodeRendererProps> = ({
+  dragController,
   node,
   workspaceId,
   onAssignSession,
@@ -181,6 +186,7 @@ const PaneNodeRenderer: FC<PaneNodeRendererProps> = ({
       {node.children?.map((child) => (
         <PaneNodeRenderer
           key={child.id}
+          dragController={dragController}
           node={child}
           workspaceId={workspaceId}
           onAssignSession={onAssignSession}
