@@ -8,7 +8,7 @@ import tsWorker from "monaco-editor/esm/vs/language/typescript/ts.worker?worker"
 import type { FC } from "react";
 import { useEffect, useRef } from "react";
 import { themeAtom } from "../../../atoms/app-ui";
-import { getThemeById } from "../../../theme";
+import { createWorkspaceMonacoTheme, getThemeById } from "../../../theme";
 
 const monacoGlobal = globalThis as typeof globalThis & {
   MonacoEnvironment?: monaco.Environment;
@@ -43,14 +43,15 @@ export const MonacoDiffHost: FC<MonacoDiffHostProps> = ({
   const originalModelRef = useRef<monaco.editor.ITextModel | null>(null);
   const modifiedModelRef = useRef<monaco.editor.ITextModel | null>(null);
   const resolvedTheme = getThemeById(uiTheme);
-  const editorTheme = `coder-studio-${resolvedTheme.id}`;
+  const editorTheme = `coder-studio-workspace-${resolvedTheme.id}`;
+  const monacoTheme = createWorkspaceMonacoTheme(resolvedTheme.monaco);
 
   useEffect(() => {
     monaco.editor.defineTheme(
       editorTheme,
-      resolvedTheme.monaco as Parameters<typeof monaco.editor.defineTheme>[1]
+      monacoTheme as Parameters<typeof monaco.editor.defineTheme>[1]
     );
-  }, [editorTheme, resolvedTheme]);
+  }, [editorTheme, monacoTheme]);
 
   useEffect(() => {
     if (!containerRef.current || editorRef.current) {

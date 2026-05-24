@@ -1202,7 +1202,10 @@ describe("XtermHost", () => {
     const { Terminal } = await import("@xterm/xterm");
     expect(Terminal).toHaveBeenCalledWith(
       expect.objectContaining({
-        theme: expect.objectContaining(getThemeById("mint-light").terminalTheme),
+        theme: expect.objectContaining({
+          ...getThemeById("mint-light").terminalTheme,
+          background: "transparent",
+        }),
       })
     );
   });
@@ -2700,7 +2703,10 @@ describe("XtermHost", () => {
 
     expect(Terminal).toHaveBeenCalledWith(
       expect.objectContaining({
-        theme: expect.objectContaining(getThemeById("mint-dark").terminalTheme),
+        theme: expect.objectContaining({
+          ...getThemeById("mint-dark").terminalTheme,
+          background: "transparent",
+        }),
       })
     );
   });
@@ -2718,7 +2724,10 @@ describe("XtermHost", () => {
 
     expect(Terminal).toHaveBeenCalledWith(
       expect.objectContaining({
-        theme: expect.objectContaining(getThemeById("mint-light").terminalTheme),
+        theme: expect.objectContaining({
+          ...getThemeById("mint-light").terminalTheme,
+          background: "transparent",
+        }),
       })
     );
   });
@@ -2775,7 +2784,10 @@ describe("XtermHost", () => {
     await waitFor(() => {
       expect(mockTerminal.options).toEqual(
         expect.objectContaining({
-          theme: expect.objectContaining(getThemeById("graphite-light").terminalTheme),
+          theme: expect.objectContaining({
+            ...getThemeById("graphite-light").terminalTheme,
+            background: "transparent",
+          }),
         })
       );
     });
@@ -2835,7 +2847,10 @@ describe("XtermHost", () => {
 
     expect(Terminal).toHaveBeenCalledWith(
       expect.objectContaining({
-        theme: expect.objectContaining(getThemeById("hc-dark").terminalTheme),
+        theme: expect.objectContaining({
+          ...getThemeById("hc-dark").terminalTheme,
+          background: "transparent",
+        }),
       })
     );
   });

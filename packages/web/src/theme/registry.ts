@@ -783,5 +783,15 @@ const THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
 
 registerIconThemes(THEMES_REGISTRY);
 
+export function createWorkspaceMonacoTheme(theme: MonacoThemeDefinition): MonacoThemeDefinition {
+  return {
+    ...theme,
+    colors: {
+      ...theme.colors,
+      "editor.background": "#00000000",
+    },
+  };
+}
+
 export const THEMES = THEMES_REGISTRY;
 export const THEME_IDS = THEMES_REGISTRY.map((theme) => theme.id) as readonly string[];

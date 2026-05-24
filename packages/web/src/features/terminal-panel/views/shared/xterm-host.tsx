@@ -25,8 +25,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { resolveAppearancePersonalizationForViewport } from "../../../../appearance";
-import { appearancePersonalizationAtom, themeAtom } from "../../../../atoms/app-ui";
+import { themeAtom } from "../../../../atoms/app-ui";
 import { dispatchCommandAtom, wsClientAtom } from "../../../../atoms/connection";
 import { Button, LocalOverlay, Notice } from "../../../../components/ui";
 import { useViewport } from "../../../../hooks/use-viewport";
@@ -326,12 +325,8 @@ export function trimWrittenChunks(buffer: OutputBuffer, writtenChunkCount: numbe
   };
 }
 
-function resolveXtermTheme(themeId: string, glassEnabled: boolean): TerminalThemeDefinition {
+function resolveXtermTheme(themeId: string): TerminalThemeDefinition {
   const terminalTheme = getThemeById(themeId).terminalTheme;
-  if (!glassEnabled) {
-    return terminalTheme;
-  }
-
   return {
     ...terminalTheme,
     background: "transparent",
@@ -416,7 +411,6 @@ export function XtermHost({
   const t = useTranslation();
   const viewport = useViewport();
   const uiTheme = useAtomValue(themeAtom);
-  const appearancePersonalization = useAtomValue(appearancePersonalizationAtom);
   const terminalPreferences = useAtomValue(terminalPreferencesAtom);
   const terminalFontSize = getTerminalFontSizeForViewport(terminalPreferences, viewport);
   const wsClient = useAtomValue(wsClientAtom);
@@ -525,13 +519,7 @@ export function XtermHost({
 
     return wsClient.getStatus();
   });
-  const effectiveAppearance = resolveAppearancePersonalizationForViewport(
-    appearancePersonalization,
-    viewport
-  );
-  const glassEnabled =
-    effectiveAppearance.glassEnabled && uiTheme !== "hc-dark" && uiTheme !== "hc-light";
-  const resolvedTerminalTheme = resolveXtermTheme(uiTheme, glassEnabled);
+  const resolvedTerminalTheme = resolveXtermTheme(uiTheme);
 
   // Latest copies of callback identities used inside the mount effect, exposed
   // via refs so the effect's cleanup/re-creation is not tied to their churn.
@@ -1380,7 +1368,7 @@ export function XtermHost({
     // characters used by TUIs (claude, codex) render as a continuous frame
     // with no gaps between rows.
     const terminal = new Terminal({
-      theme: resolveXtermTheme(initialThemeRef.current, glassEnabled),
+      theme: resolveXtermTheme(initialThemeRef.current),
       fontFamily: "JetBrains Mono, Fira Code, SF Mono, monospace",
       fontSize: terminalFontSize,
       scrollback: 5000,
