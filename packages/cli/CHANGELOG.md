@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.5
+
+### Patch Changes
+
+- [#60](https://github.com/spencerkit/coder-studio/pull/60) [`b271591`](https://github.com/spencerkit/coder-studio/commit/b271591eb48f90d33883049e44db639a4afc2b51) Thanks [@pallyoung](https://github.com/pallyoung)! - Polish workspace background material rendering so personalized glass and background image settings apply more consistently across the main workspace surfaces.
+
 ## 0.4.4
 
 ### Patch Changes
