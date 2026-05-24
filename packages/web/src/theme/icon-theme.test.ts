@@ -6,6 +6,12 @@ describe("theme icon resolver", () => {
   const seasonalThemes = THEME_IDS.filter((themeId) =>
     /^(spring|summer|autumn|winter)-(dark|light)$/.test(themeId)
   );
+  const semanticStatusExpectations = [
+    ["state.success", "success", "success"],
+    ["state.warning", "warning", "warning"],
+    ["state.error", "error", "error"],
+    ["state.info", "info", "info"],
+  ] as const;
 
   it("resolves the base semantic set for every built-in theme", () => {
     for (const themeId of builtInThemes) {
@@ -211,18 +217,19 @@ describe("theme icon resolver", () => {
     }
 
     for (const themeId of seasonalThemes) {
-      expect(getIconPresentation(themeId, "state.error")).toEqual(
-        expect.objectContaining({ tone: "error" })
-      );
-      expect(getIconPresentation(themeId, "state.warning")).toEqual(
-        expect.objectContaining({ tone: "warning" })
-      );
-      expect(getIconPresentation(themeId, "state.success")).toEqual(
-        expect.objectContaining({ tone: "success" })
-      );
-      expect(getIconPresentation(themeId, "state.info")).toEqual(
-        expect.objectContaining({ tone: "info", surface: "info" })
-      );
+      for (const [semantic, tone, surface] of semanticStatusExpectations) {
+        const seasonalPresentation = getIconPresentation(themeId, semantic);
+        const basePresentation = getIconPresentation("mint-dark", semantic);
+
+        expect(seasonalPresentation).toEqual(
+          expect.objectContaining({
+            tone,
+            surface,
+            Icon: basePresentation.Icon,
+            strokeWidth: basePresentation.strokeWidth,
+          })
+        );
+      }
     }
   });
 

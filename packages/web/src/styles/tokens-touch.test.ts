@@ -35,6 +35,14 @@ function getRuleBlock(selector: string): string {
   return blocks.join("\n");
 }
 
+function getLastRuleBlock(selector: string): string {
+  const block = getRuleBlocks(selector).at(-1);
+
+  expect(block, `expected final rule block for ${selector}`).toBeDefined();
+
+  return block ?? "";
+}
+
 function getCustomProperty(block: string, name: string): string | null {
   const matcher = new RegExp(`${name}:\\s*([^;]+);`, "g");
   let value: string | null = null;
@@ -747,6 +755,35 @@ describe("tokens.css touch tokens", () => {
     );
     expect(getCustomProperty(autumnLight, "--radius-overlay")).toBe("var(--radius-xl)");
     expect(getCustomProperty(winterDark, "--gap-content")).toBe("var(--sp-3)");
+  });
+
+  it("defines the seasonal bottom override blocks with only the shared foundation overrides", () => {
+    const seasonalOverrideExpectations = [
+      ['[data-theme="spring-dark"]', "#d95f7e", "color-mix(in srgb, #21161c 96%, transparent)"],
+      ['[data-theme="spring-light"]', "#c84b6a", "color-mix(in srgb, #fffafc 96%, transparent)"],
+      ['[data-theme="summer-dark"]', "#4db57a", "color-mix(in srgb, #18211c 96%, transparent)"],
+      ['[data-theme="summer-light"]', "#2f9560", "color-mix(in srgb, #fbfefc 96%, transparent)"],
+      ['[data-theme="autumn-dark"]', "#c08a3c", "color-mix(in srgb, #201913 96%, transparent)"],
+      ['[data-theme="autumn-light"]', "#b7791f", "color-mix(in srgb, #fffbf5 96%, transparent)"],
+      ['[data-theme="winter-dark"]', "#8aa4c8", "color-mix(in srgb, #161e27 96%, transparent)"],
+      ['[data-theme="winter-light"]', "#6f89ad", "color-mix(in srgb, #fbfdff 96%, transparent)"],
+    ] as const;
+
+    for (const [selector, focusRingColor, overlayBackground] of seasonalOverrideExpectations) {
+      const blocks = getRuleBlocks(selector);
+      const overrideBlock = getLastRuleBlock(selector);
+
+      expect(
+        blocks.length,
+        `${selector} should include both the main block and the bottom override`
+      ).toBe(2);
+      expect(getCustomProperty(overrideBlock, "--gap-content")).toBe("var(--sp-3)");
+      expect(getCustomProperty(overrideBlock, "--radius-overlay")).toBe("var(--radius-xl)");
+      expect(getCustomProperty(overrideBlock, "--state-focus-ring-color")).toBe(focusRingColor);
+      expect(getCustomProperty(overrideBlock, "--surface-overlay-bg")).toBe(overlayBackground);
+      expect(getCustomProperty(overrideBlock, "--bg-page")).toBeNull();
+      expect(getCustomProperty(overrideBlock, "--icon-primary")).toBeNull();
+    }
   });
 
   it("keeps light-theme icon tokens visually distinct across families", () => {
