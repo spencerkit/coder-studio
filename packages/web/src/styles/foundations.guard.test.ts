@@ -18,6 +18,7 @@ const sharedUiSources = [
   "src/components/ui/tag/index.module.css",
   "src/components/ui/badge/index.module.css",
   "src/components/ui/pill/index.module.css",
+  "src/components/ui/select/index.module.css",
   "src/components/ui/tooltip/index.module.css",
   "src/components/ui/notice/index.module.css",
   "src/components/ui/modal/index.module.css",
