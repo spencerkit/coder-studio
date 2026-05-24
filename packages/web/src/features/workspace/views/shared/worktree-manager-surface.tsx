@@ -138,6 +138,7 @@ export function WorktreeManagerSurface({
   const canSubmit =
     branchDraft.trim().length > 0 && /^(?:\/|[A-Za-z]:[\\/]|\\\\)/.test(pathDraft.trim());
   const pathHintId = `worktree-path-hint-${workspaceId}`;
+  const createOnlyMode = openView === "create";
   const closeDeleteConfirm = () => {
     setRemoveError(null);
     setDeleteTargetPath(null);
@@ -182,7 +183,11 @@ export function WorktreeManagerSurface({
           void createWorktree(branchDraft.trim(), pathDraft.trim()).then((result) => {
             if (result.ok) {
               resetCreateForm();
-              setView("list");
+              if (createOnlyMode) {
+                onClose();
+              } else {
+                setView("list");
+              }
               return;
             }
 
@@ -229,7 +234,16 @@ export function WorktreeManagerSurface({
         </div>
 
         <div className="worktree-manager__form-actions">
-          <Button variant="secondary" onClick={() => setView("list")}>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              if (createOnlyMode) {
+                onClose();
+              } else {
+                setView("list");
+              }
+            }}
+          >
             {t("action.cancel")}
           </Button>
           <Button type="submit" variant="primary" disabled={!canSubmit}>
@@ -375,7 +389,17 @@ export function WorktreeManagerSurface({
         body={<div className="worktree-manager-surface">{body}</div>}
         bodyClassName="mobile-sheet__body--flush"
         contentClassName="mobile-sheet--worktree"
-        onBack={view === "list" ? undefined : () => setView("list")}
+        onBack={
+          view === "list"
+            ? undefined
+            : () => {
+                if (createOnlyMode) {
+                  onClose();
+                } else {
+                  setView("list");
+                }
+              }
+        }
         headerAction={
           view === "list" ? (
             <Button size="sm" variant="primary" onClick={openCreate}>
@@ -401,7 +425,17 @@ export function WorktreeManagerSurface({
                 {t("worktree.new")}
               </Button>
             ) : (
-              <Button size="sm" variant="ghost" onClick={() => setView("list")}>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  if (createOnlyMode) {
+                    onClose();
+                  } else {
+                    setView("list");
+                  }
+                }}
+              >
                 {t("action.back")}
               </Button>
             )}
@@ -427,7 +461,17 @@ export function WorktreeManagerSurface({
               {t("worktree.new")}
             </Button>
           ) : (
-            <Button size="sm" variant="ghost" onClick={() => setView("list")}>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                if (createOnlyMode) {
+                  onClose();
+                } else {
+                  setView("list");
+                }
+              }}
+            >
               {t("action.back")}
             </Button>
           )}

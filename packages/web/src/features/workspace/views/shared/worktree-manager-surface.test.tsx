@@ -213,7 +213,8 @@ describe("WorktreeManagerSurface", () => {
     expect(loadingMessage.closest(".worktree-loading")).toBeTruthy();
   });
 
-  it("creates a worktree, reloads the list, and returns to list mode", async () => {
+  it("creates a worktree and closes the create surface instead of returning to list mode", async () => {
+    const onClose = vi.fn();
     const sendCommand = vi
       .fn()
       .mockImplementation(async (op: string, args: Record<string, string>) => {
@@ -249,7 +250,7 @@ describe("WorktreeManagerSurface", () => {
 
     render(
       <Provider store={buildManagerStore(sendCommand, worktrees, "/repo/main")}>
-        <WorktreeManagerSurface workspaceId="ws-1" openView="create" onClose={vi.fn()} />
+        <WorktreeManagerSurface workspaceId="ws-1" openView="create" onClose={onClose} />
       </Provider>
     );
 
@@ -273,7 +274,21 @@ describe("WorktreeManagerSurface", () => {
       );
     });
 
-    expect(await screen.findByText("feature/new-worktree")).toBeInTheDocument();
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("closes the create surface when cancel is pressed", () => {
+    const onClose = vi.fn();
+
+    render(
+      <Provider store={buildManagerStore(vi.fn(), worktrees, "/repo/main")}>
+        <WorktreeManagerSurface workspaceId="ws-1" openView="create" onClose={onClose} />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it("renders the create form fields with shared input compatibility classes", () => {
