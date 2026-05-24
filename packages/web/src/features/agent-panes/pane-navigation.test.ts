@@ -187,4 +187,55 @@ describe("pane-navigation", () => {
 
     expect(findAdjacentSessionId(layout, "sess-active", "right")).toBe("sess-near-right");
   });
+
+  it("prefers an overlapping candidate over a closer non-overlapping candidate", () => {
+    const layout: PaneNode = {
+      id: "root",
+      type: "split",
+      direction: "horizontal",
+      ratio: 0.25,
+      children: [
+        {
+          id: "left-stack",
+          type: "split",
+          direction: "vertical",
+          ratio: 0.5,
+          children: [
+            { id: "active", type: "leaf", sessionId: "sess-active" },
+            { id: "bottom-left", type: "leaf", sessionId: "sess-bottom-left" },
+          ],
+        },
+        {
+          id: "right-region",
+          type: "split",
+          direction: "horizontal",
+          ratio: 0.2,
+          children: [
+            {
+              id: "near-column",
+              type: "split",
+              direction: "vertical",
+              ratio: 0.5,
+              children: [
+                { id: "near-top", type: "leaf" },
+                { id: "near-bottom", type: "leaf", sessionId: "sess-near-bottom" },
+              ],
+            },
+            {
+              id: "overlap-column",
+              type: "split",
+              direction: "vertical",
+              ratio: 0.25,
+              children: [
+                { id: "overlap-top", type: "leaf", sessionId: "sess-overlap-top" },
+                { id: "overlap-bottom", type: "leaf", sessionId: "sess-overlap-bottom" },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(findAdjacentSessionId(layout, "sess-active", "right")).toBe("sess-overlap-top");
+  });
 });
