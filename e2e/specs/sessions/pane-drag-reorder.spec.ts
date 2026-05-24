@@ -1,4 +1,5 @@
 import { expect, type Locator, type Page, test } from "@playwright/test";
+import { translatePatternForE2E } from "../../fixtures/i18n.js";
 import {
   launchClaudeSession,
   openWorkspace,
@@ -13,42 +14,39 @@ function getDraftPanes(page: Page): Locator {
   return page.locator("[data-pane-id]:has(.agent-draft-launcher)");
 }
 
-async function normalizeToSingleSession(page: Page): Promise<void> {
-  await openWorkspace(page);
+async function resetWorkspaceIsolation(page: Page): Promise<void> {
+  await page.goto("/workspace");
+  await page.waitForFunction(
+    () => {
+      const loading = document.querySelector(
+        '.app-loading-shell, [data-testid="workspace-resolving-shell"]'
+      );
+      if (loading) {
+        return false;
+      }
 
-  while ((await getSessionPanes(page).count()) > 1) {
-    const sessionPanes = getSessionPanes(page);
-    const sessionCountBeforeClose = await sessionPanes.count();
-    await sessionPanes
-      .nth(sessionCountBeforeClose - 1)
-      .getByRole("button", { name: "Close" })
-      .click();
-    await expect(getSessionPanes(page)).toHaveCount(sessionCountBeforeClose - 1, {
-      timeout: 15000,
-    });
-  }
+      return Boolean(
+        document.querySelector(
+          ".welcome-container, .workspace-page, .agent-draft-launcher, .session-card.agent-pane[data-session-id]"
+        )
+      );
+    },
+    { timeout: 20000 }
+  );
 
-  while ((await getDraftPanes(page).count()) > 0 && (await getSessionPanes(page).count()) > 0) {
-    const draftPanes = getDraftPanes(page);
-    const draftCountBeforeClose = await draftPanes.count();
-    await draftPanes
-      .nth(draftCountBeforeClose - 1)
-      .getByRole("button", { name: "Close" })
-      .click();
+  const closeWorkspaceButtons = page.getByRole("button", {
+    name: translatePatternForE2E("action.close_workspace"),
+  });
+
+  while ((await closeWorkspaceButtons.count()) > 0) {
+    const countBeforeClose = await closeWorkspaceButtons.count();
+    await closeWorkspaceButtons.first().click();
     await expect
-      .poll(async () => getDraftPanes(page).count(), {
+      .poll(async () => closeWorkspaceButtons.count(), {
         timeout: 15000,
       })
-      .toBeLessThan(draftCountBeforeClose);
+      .toBeLessThan(countBeforeClose);
   }
-
-  if ((await getSessionPanes(page).count()) === 0) {
-    await launchClaudeSession(page);
-  }
-
-  await expect(getSessionPanes(page)).toHaveCount(1, { timeout: 20000 });
-  await expect(getDraftPanes(page)).toHaveCount(0, { timeout: 15000 });
-  await waitForSessionReady(page);
 }
 
 async function splitPaneHorizontally(page: Page, pane: Locator): Promise<void> {
@@ -82,15 +80,29 @@ async function dragHandleToPaneCenter(
   await page.mouse.up();
 }
 
-async function getPaneSessionIds(page: Page): Promise<string[]> {
-  return page
-    .locator(".session-card.agent-pane[data-session-id]")
-    .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-session-id") ?? ""));
+interface SessionPaneSnapshot {
+  paneId: string;
+  sessionId: string;
+}
+
+async function getSessionPaneSnapshots(page: Page): Promise<SessionPaneSnapshot[]> {
+  return page.locator(".session-card.agent-pane[data-session-id]").evaluateAll((nodes) =>
+    nodes.map((node) => ({
+      paneId: node.getAttribute("data-pane-id") ?? "",
+      sessionId: node.getAttribute("data-session-id") ?? "",
+    }))
+  );
 }
 
 test.describe("session pane desktop drag reorder", () => {
+  test.beforeEach(async ({ page }) => {
+    await resetWorkspaceIsolation(page);
+  });
+
   test("swaps two session panes when dragging onto another pane center", async ({ page }) => {
-    await normalizeToSingleSession(page);
+    await openWorkspace(page);
+    await launchClaudeSession(page);
+    await waitForSessionReady(page);
 
     const firstPane = getSessionPanes(page).first();
     await splitPaneHorizontally(page, firstPane);
@@ -106,8 +118,8 @@ test.describe("session pane desktop drag reorder", () => {
       { timeout: 20000 }
     );
 
-    const sessionIdsBeforeDrag = await getPaneSessionIds(page);
-    expect(sessionIdsBeforeDrag).toHaveLength(2);
+    const paneSnapshotsBeforeDrag = await getSessionPaneSnapshots(page);
+    expect(paneSnapshotsBeforeDrag).toHaveLength(2);
 
     const sourcePane = getSessionPanes(page).nth(0);
     const targetPane = getSessionPanes(page).nth(1);
@@ -117,22 +129,34 @@ test.describe("session pane desktop drag reorder", () => {
       targetPane
     );
 
-    await expect(page.getByText("Swap")).toHaveCount(0);
     await expect
-      .poll(async () => getPaneSessionIds(page), {
+      .poll(async () => getSessionPaneSnapshots(page), {
         timeout: 10000,
       })
-      .toEqual([sessionIdsBeforeDrag[1], sessionIdsBeforeDrag[0]]);
+      .toEqual([
+        {
+          paneId: paneSnapshotsBeforeDrag[0]?.paneId ?? "",
+          sessionId: paneSnapshotsBeforeDrag[1]?.sessionId ?? "",
+        },
+        {
+          paneId: paneSnapshotsBeforeDrag[1]?.paneId ?? "",
+          sessionId: paneSnapshotsBeforeDrag[0]?.sessionId ?? "",
+        },
+      ]);
   });
 
   test("moves a session pane into a draft pane on center drop", async ({ page }) => {
-    await normalizeToSingleSession(page);
+    await openWorkspace(page);
+    await launchClaudeSession(page);
+    await waitForSessionReady(page);
 
     const sessionPane = getSessionPanes(page).first();
+    const sourceSessionId = await sessionPane.getAttribute("data-session-id");
     await splitPaneHorizontally(page, sessionPane);
 
     const draftPane = getDraftPanes(page).first();
     await expect(draftPane).toBeVisible({ timeout: 15000 });
+    const targetDraftPaneId = await draftPane.getAttribute("data-pane-id");
 
     await dragHandleToPaneCenter(
       page,
@@ -140,8 +164,15 @@ test.describe("session pane desktop drag reorder", () => {
       draftPane
     );
 
-    await expect(page.getByText("Move here")).toHaveCount(0);
     await expect(page.locator(".agent-draft-launcher")).toHaveCount(0, { timeout: 10000 });
     await expect(getSessionPanes(page)).toHaveCount(1, { timeout: 10000 });
+    await expect(getSessionPanes(page).first()).toHaveAttribute(
+      "data-pane-id",
+      targetDraftPaneId ?? ""
+    );
+    await expect(getSessionPanes(page).first()).toHaveAttribute(
+      "data-session-id",
+      sourceSessionId ?? ""
+    );
   });
 });
