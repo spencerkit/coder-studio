@@ -4,6 +4,8 @@
  * Builds the Fastify application with all routes and middleware
  */
 
+import { join, resolve } from "node:path";
+import { IN_MEMORY_STATE_DIR } from "@coder-studio/core/state-paths";
 import compress from "@fastify/compress";
 import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
@@ -19,9 +21,14 @@ import {
 } from "./auth/index.js";
 import type { ServerConfig } from "./config.js";
 import { PreviewSessionStore } from "./preview/session-store.js";
+import { registerAppearanceAssetsRoutes } from "./routes/appearance-assets.js";
 import { registerFileAssetRoutes } from "./routes/file-asset.js";
 import { registerPreviewRoutes } from "./routes/preview.js";
 import { registerUploadsRoute } from "./routes/uploads.js";
+import {
+  AppearanceAssetRepo,
+  type AppearanceAssetRepo as AppearanceAssetRepoType,
+} from "./storage/repositories/appearance-asset-repo.js";
 import type { AuthLoginBlockRepo } from "./storage/repositories/auth-login-block-repo.js";
 import type { AuthSessionRepo } from "./storage/repositories/auth-session-repo.js";
 import { MAX_FILE_BYTES, MAX_FILES_PER_BATCH } from "./uploads/constants.js";
@@ -36,6 +43,7 @@ interface AppDeps {
   config: ServerConfig;
   authSessionRepo: AuthSessionRepo;
   authLoginBlockRepo: AuthLoginBlockRepo;
+  appearanceAssetRepo?: AppearanceAssetRepoType;
   logger?: FastifyServerOptions["logger"];
 }
 
@@ -43,6 +51,16 @@ interface AppDeps {
  * Build Fastify application
  */
 export async function buildFastifyApp(deps: AppDeps): Promise<FastifyInstance> {
+  const stateRoot =
+    deps.config.stateDir === IN_MEMORY_STATE_DIR
+      ? resolve(deps.config.uploadsDir, "..")
+      : deps.config.stateDir;
+  const appearanceAssetRepo =
+    deps.appearanceAssetRepo ??
+    new AppearanceAssetRepo({
+      filePath: join(stateRoot, "state", "appearance-assets.json"),
+    });
+
   const app = Fastify({
     logger: deps.logger ?? {
       level: "info",
@@ -142,6 +160,11 @@ export async function buildFastifyApp(deps: AppDeps): Promise<FastifyInstance> {
   // only needs its own path-safety and allowlist checks.
   registerFileAssetRoutes(app, {
     workspaceMgr: deps.workspaceMgr,
+  });
+
+  registerAppearanceAssetsRoutes(app, {
+    uploadsDir: deps.config.uploadsDir,
+    repo: appearanceAssetRepo,
   });
 
   const previewSessions = new PreviewSessionStore();

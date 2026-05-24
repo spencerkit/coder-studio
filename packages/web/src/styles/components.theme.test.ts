@@ -925,7 +925,9 @@ describe("components.css theme-sensitive surfaces", () => {
     ).join("\n");
     const bottomTerminalShell = getLastRuleBlock(".workspace-bottom-panel > .bottom-terminal");
 
-    expect(topbar).toContain("var(--bg-surface)");
+    expect(topbar).toContain("var(--surface-overlay-bg)");
+    expect(topbar).toContain("var(--app-surface-opacity, 0.96)");
+    expect(topbar).toContain("backdrop-filter: var(--app-surface-backdrop-filter, none)");
     expect(topbarTabs).toContain("gap: var(--gap-micro)");
     expect(topbarTab).toContain("gap: var(--gap-tight)");
     expect(topbarTab).toContain(
@@ -976,6 +978,9 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(sessionTerminal).not.toContain("rgba(11, 18, 24, 0.98)");
     expect(sessionCard).toContain("border: none");
     expect(sessionCard).not.toContain("border: 1px solid var(--border)");
+    expect(sessionCard).toContain("var(--surface-overlay-bg)");
+    expect(sessionCard).toContain("var(--app-surface-opacity, 0.96)");
+    expect(sessionCard).toContain("backdrop-filter: var(--app-surface-backdrop-filter, none)");
     expect(activeSessionCard).toContain("background: var(--bg-active)");
     expect(activeSessionCard).toContain("box-shadow: inset 0 0 0 1px var(--border-focus)");
     expect(activeSessionHeader).toContain(
@@ -1030,8 +1035,11 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(bottomPanel).toContain("padding: 0");
     expect(bottomPanel).not.toContain("padding: 0 0 14px");
     expect(bottomPanel).not.toContain("padding: 0 14px 14px");
-    expect(bottomTerminalShellRules).toContain("var(--bg-terminal)");
-    expect(bottomTerminalShellRules).not.toContain("rgba(17, 24, 31, 0.96)");
+    expect(bottomTerminalShellRules).toContain("var(--surface-overlay-bg)");
+    expect(bottomTerminalShellRules).toContain("var(--app-surface-opacity, 0.96)");
+    expect(bottomTerminalShellRules).toContain(
+      "backdrop-filter: var(--app-surface-backdrop-filter, none)"
+    );
     expect(bottomTerminalShell).toContain("border: none");
     expect(bottomTerminalShellRules).toContain("border-radius: 0");
     expect(bottomTerminalShellRules).not.toContain("border-radius: 14px");
@@ -1130,6 +1138,62 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(dirtyChip).toContain("color: var(--state-warning-text)");
     expect(dirtyChip).toContain("background: var(--state-warning-bg)");
     expect(mobileTabs).toContain("z-index: var(--z-inline)");
+  });
+
+  it("routes settings and workspace shared surfaces through appearance-aware background tokens", () => {
+    const settingsContent = getLastRuleBlock(".settings-content");
+    const settingsSurface = getRuleBlocksFrom(stylesheet, ".settings-content-surface").find(
+      (block) => block.includes("var(--surface-overlay-bg)")
+    );
+    const appTopbar = getLastRuleBlock(".app-topbar");
+    const workspacePage = getLastRuleBlock(".workspace-page");
+    const sessionCard = getLastRuleBlock(".session-card");
+    const bottomTerminal = getLastRuleBlock(".workspace-bottom-panel > .bottom-terminal");
+    const mobileShell = getLastGroupedRuleBlock(/\.mobile-shell\s*\{([^}]*)\}/g);
+    const mobileTopbar = getLastRuleBlock(".mobile-topbar");
+    const mobileBottomStack = getLastRuleBlock(".mobile-shell__bottom-stack");
+
+    expect(settingsContent).toContain("var(--app-surface-opacity, 0.96)");
+    expect(settingsContent).toContain("var(--surface-page-bg)");
+    expect(settingsSurface).toBeTruthy();
+    expect(settingsSurface).toContain("var(--surface-overlay-bg)");
+    expect(settingsSurface).toContain("var(--app-surface-opacity, 0.96)");
+    expect(settingsSurface).toContain("backdrop-filter: var(--app-surface-backdrop-filter, none)");
+    expect(appTopbar).toContain("var(--surface-overlay-bg)");
+    expect(appTopbar).toContain("var(--app-surface-opacity, 0.96)");
+    expect(appTopbar).toContain("backdrop-filter: var(--app-surface-backdrop-filter, none)");
+    expect(workspacePage).toContain("var(--surface-page-bg)");
+    expect(workspacePage).toContain("var(--app-surface-opacity, 0.96)");
+    expect(sessionCard).toContain("var(--surface-overlay-bg)");
+    expect(sessionCard).toContain("var(--app-surface-opacity, 0.96)");
+    expect(sessionCard).toContain("backdrop-filter: var(--app-surface-backdrop-filter, none)");
+    expect(bottomTerminal).toContain("var(--surface-overlay-bg)");
+    expect(bottomTerminal).toContain("var(--app-surface-opacity, 0.96)");
+    expect(bottomTerminal).toContain("backdrop-filter: var(--app-surface-backdrop-filter, none)");
+    expect(mobileShell).toContain("var(--surface-page-bg)");
+    expect(mobileShell).toContain("var(--app-surface-opacity, 0.96)");
+    expect(mobileTopbar).toContain("var(--surface-overlay-bg)");
+    expect(mobileTopbar).toContain("var(--app-surface-opacity, 0.96)");
+    expect(mobileTopbar).toContain("backdrop-filter: var(--app-surface-backdrop-filter, none)");
+    expect(mobileBottomStack).toContain("var(--surface-overlay-bg)");
+    expect(mobileBottomStack).toContain("var(--app-surface-opacity, 0.96)");
+    expect(mobileBottomStack).toContain(
+      "backdrop-filter: var(--app-surface-backdrop-filter, none)"
+    );
+  });
+
+  it("keeps workbench backdrops and overlay cards on fallback-safe backdrop filters", () => {
+    const workbenchStyles = readFileSync(
+      `${process.cwd()}/src/components/ui/workbench-layer/index.module.css`,
+      "utf8"
+    );
+    const backdrop = getLastRuleBlockFrom(workbenchStyles, ":global(.workbench-layer-backdrop)");
+    const surface = getLastRuleBlockFrom(workbenchStyles, ":global(.workbench-layer)");
+
+    expect(backdrop).toContain("background: var(--overlay-backdrop)");
+    expect(backdrop).toContain("backdrop-filter: var(--app-surface-backdrop-filter, none)");
+    expect(surface).not.toContain("backdrop-filter:");
+    expect(workbenchStyles).not.toContain("backdrop-filter: blur(8px)");
   });
 
   it("keeps terminal toolbar controls grouped at the far right", () => {
@@ -1834,7 +1898,8 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(settingsContent).toContain("align-items: flex-start");
     expect(settingsContent).toContain("justify-content: center");
     expect(settingsContent).toContain("padding: var(--sp-6)");
-    expect(settingsContent).toContain("background: var(--bg-page)");
+    expect(settingsContent).toContain("var(--surface-page-bg)");
+    expect(settingsContent).toContain("var(--app-surface-opacity, 0.96)");
     expect(settingsContentFillHeight).toContain("justify-content: flex-start");
     expect(settingsContentFillHeightSurface).toContain("display: flex");
     expect(settingsContentFillHeightSurface).toContain("flex-direction: column");
@@ -2076,9 +2141,10 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(topbarIconButton).toContain("border-radius: 10px");
     expect(topbarIconButton).toContain("background: transparent");
     expect(emptyStage).toContain("padding: clamp(34px, 9vh, 72px) var(--sp-4) var(--sp-3)");
-    expect(bottomStack).toContain("background: linear-gradient(");
+    expect(bottomStack).toContain("var(--surface-overlay-bg)");
+    expect(bottomStack).toContain("var(--app-surface-opacity, 0.96)");
     expect(bottomStack).toContain("border-top: 1px solid color-mix(");
-    expect(bottomStack).not.toContain("backdrop-filter");
+    expect(bottomStack).toContain("backdrop-filter: var(--app-surface-backdrop-filter, none)");
     expect(dockShell).toContain(
       "padding: 3px calc(var(--mobile-safe-right) + var(--sp-4)) 0 calc(var(--mobile-safe-left) + var(--sp-4))"
     );

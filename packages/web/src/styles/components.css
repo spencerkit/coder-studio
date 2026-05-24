@@ -962,7 +962,11 @@
   justify-content: center;
   padding: var(--sp-6);
   overflow-y: auto;
-  background: var(--bg-page);
+  background: color-mix(
+    in srgb,
+    var(--surface-page-bg) calc(var(--app-surface-opacity, 0.96) * 100%),
+    transparent
+  );
 }
 
 .settings-content--fill-height {
@@ -984,10 +988,15 @@
   min-width: 0;
   min-height: 100%;
   padding: var(--sp-6);
-  background: var(--bg-elevated);
+  background: color-mix(
+    in srgb,
+    var(--surface-overlay-bg) calc(var(--app-surface-opacity, 0.96) * 100%),
+    transparent
+  );
   border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-lg);
+  backdrop-filter: var(--app-surface-backdrop-filter, none);
 }
 
 .settings-section {
@@ -1940,7 +1949,11 @@ body.focus-mode-active .split-divider-h {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: var(--bg);
+  background: color-mix(
+    in srgb,
+    var(--surface-page-bg) calc(var(--app-surface-opacity, 0.96) * 100%),
+    transparent
+  );
 }
 
 .workspace-page-focus {
@@ -3203,11 +3216,16 @@ body.is-resizing-panels * {
   display: flex;
   align-items: center;
   padding: 0 var(--sp-2);
-  background: color-mix(in srgb, var(--bg-surface) 95%, var(--blue) 5%);
+  background: color-mix(
+    in srgb,
+    var(--surface-overlay-bg) calc(var(--app-surface-opacity, 0.96) * 100%),
+    transparent
+  );
   border-bottom: 1px solid var(--border);
   gap: var(--gap-compact);
   user-select: none;
   flex-shrink: 0;
+  backdrop-filter: var(--app-surface-backdrop-filter, none);
 }
 
 .topbar-tabs {
@@ -5981,7 +5999,11 @@ textarea.input {
 .workspace-page {
   background:
     radial-gradient(circle at top center, rgba(108, 182, 255, 0.06), transparent 32%),
-    var(--bg-page);
+    color-mix(
+      in srgb,
+      var(--surface-page-bg) calc(var(--app-surface-opacity, 0.96) * 100%),
+      transparent
+    );
 }
 
 .workspace-body {
@@ -8230,10 +8252,15 @@ textarea.input {
 }
 
 .session-card {
-  background: var(--bg-page);
+  background: color-mix(
+    in srgb,
+    var(--surface-overlay-bg) calc(var(--app-surface-opacity, 0.96) * 100%),
+    transparent
+  );
   border: none;
   border-radius: 0;
   box-shadow: none;
+  backdrop-filter: var(--app-surface-backdrop-filter, none);
 }
 
 .session-card.session-card--active {
@@ -8249,8 +8276,12 @@ textarea.input {
 .session-header {
   padding: var(--gap-tight) var(--inset-control-inline);
   border-bottom: 1px solid var(--border);
-  background: var(--bg-page);
-  backdrop-filter: none;
+  background: color-mix(
+    in srgb,
+    var(--surface-overlay-bg) calc(var(--app-surface-opacity, 0.96) * 100%),
+    transparent
+  );
+  backdrop-filter: var(--app-surface-backdrop-filter, none);
 }
 
 .session-card.session-card--active .session-header {
@@ -8386,11 +8417,12 @@ textarea.input {
   flex: 1;
   min-height: 0;
   border: none;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--bg-terminal) 96%, white 4%),
-    color-mix(in srgb, var(--bg-terminal) 88%, var(--bg-page) 12%)
+  background: color-mix(
+    in srgb,
+    var(--surface-overlay-bg) calc(var(--app-surface-opacity, 0.96) * 100%),
+    transparent
   );
+  backdrop-filter: var(--app-surface-backdrop-filter, none);
 }
 
 .terminal-toolbar {
@@ -8860,8 +8892,13 @@ textarea.input {
 
 .app-topbar {
   min-height: var(--desktop-topbar-height);
-  background: color-mix(in srgb, var(--bg-surface) 95%, var(--accent-blue) 5%);
+  background: color-mix(
+    in srgb,
+    var(--surface-overlay-bg) calc(var(--app-surface-opacity, 0.96) * 100%),
+    transparent
+  );
   border-bottom-color: color-mix(in srgb, var(--border) 80%, var(--accent-blue) 20%);
+  backdrop-filter: var(--app-surface-backdrop-filter, none);
 }
 
 .topbar-tab.active {
@@ -9579,10 +9616,10 @@ textarea.input {
     overflow: hidden;
     background:
       radial-gradient(circle at top left, rgba(108, 182, 255, 0.12), transparent 36%),
-      linear-gradient(
-        180deg,
-        color-mix(in srgb, var(--bg-surface) 94%, black) 0%,
-        var(--bg-page) 100%
+      color-mix(
+        in srgb,
+        var(--surface-page-bg) calc(var(--app-surface-opacity, 0.96) * 100%),
+        transparent
       );
   }
 
@@ -9596,12 +9633,13 @@ textarea.input {
     gap: var(--sp-3);
     padding: calc(var(--mobile-safe-top) + var(--sp-1)) calc(var(--mobile-safe-right) + var(--sp-4))
       var(--sp-1) calc(var(--mobile-safe-left) + var(--sp-4));
-    background: linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--bg-surface) 98%, transparent) 0%,
-      color-mix(in srgb, var(--bg-page) 96%, var(--bg-surface) 4%) 100%
+    background: color-mix(
+      in srgb,
+      var(--surface-overlay-bg) calc(var(--app-surface-opacity, 0.96) * 100%),
+      transparent
     );
     border-bottom: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
+    backdrop-filter: var(--app-surface-backdrop-filter, none);
   }
 
   .mobile-topbar__workspace-button,
@@ -10116,11 +10154,12 @@ textarea.input {
     gap: 0;
     padding: 0 0 var(--mobile-keyboard-inset) 0;
     border-top: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
-    background: linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--bg-surface) 98%, transparent) 0%,
-      color-mix(in srgb, var(--bg-page) 94%, var(--bg-surface) 6%) 100%
+    background: color-mix(
+      in srgb,
+      var(--surface-overlay-bg) calc(var(--app-surface-opacity, 0.96) * 100%),
+      transparent
     );
+    backdrop-filter: var(--app-surface-backdrop-filter, none);
     transition: padding-bottom var(--mobile-shell-motion-enter-duration) var(--ease-out);
   }
 
@@ -12129,6 +12168,12 @@ textarea.input {
   .settings-page--mobile > .settings-header {
     padding: calc(var(--mobile-safe-top) + var(--sp-1)) calc(var(--mobile-safe-right) + var(--sp-4))
       var(--sp-1) calc(var(--mobile-safe-left) + var(--sp-4));
+    background: color-mix(
+      in srgb,
+      var(--surface-overlay-bg) calc(var(--app-surface-opacity, 0.96) * 100%),
+      transparent
+    );
+    backdrop-filter: var(--app-surface-backdrop-filter, none);
   }
 
   .settings-header .mobile-page-header {

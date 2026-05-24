@@ -18,6 +18,12 @@ import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import type { Store } from "jotai/vanilla/store";
 import { useEffect, useRef } from "react";
 import {
+  applyAppearancePersonalizationToDocument,
+  applyResolvedTheme,
+  DEFAULT_APPEARANCE_PERSONALIZATION,
+  resolveAppearancePersonalizationSetting,
+} from "../appearance";
+import {
   authEnabledAtom,
   connectionErrorAtom,
   connectionStatusAtom,
@@ -38,7 +44,7 @@ import {
   activationReasonAtom,
   activationStatusAtom,
 } from "../atoms/activation";
-import { authenticatedAtom, themeAtom } from "../atoms/app-ui";
+import { appearancePersonalizationAtom, authenticatedAtom, themeAtom } from "../atoms/app-ui";
 import type { DispatchCommand } from "../atoms/connection";
 import { activeWorkspaceIdAtom } from "../atoms/workspaces";
 import { type PaneNode, paneLayoutAtomFamily } from "../features/agent-panes/atoms/pane-layout";
@@ -101,6 +107,7 @@ interface WorkspaceActivityState {
 
 interface AppearanceSelectionVersion {
   theme: number;
+  personalization: number;
 }
 
 const DEFAULT_REFRESH_HINT: WorkspaceRefreshHint = {
@@ -138,12 +145,6 @@ function readStoredThemePreference(): unknown {
   }
 
   return undefined;
-}
-
-function applyResolvedTheme(themeId: unknown): string {
-  const resolvedTheme = getThemeById(resolveStoredThemeId(themeId));
-  document.documentElement.setAttribute("data-theme", resolvedTheme.documentThemeAttr);
-  return resolvedTheme.id;
 }
 
 export function resetAppProvidersSingletonsForTests() {
@@ -311,6 +312,7 @@ export function AppProviders({ children }: AppProvidersProps) {
   });
   const appearanceSelectionVersionRef = useRef<AppearanceSelectionVersion>({
     theme: 0,
+    personalization: 0,
   });
   const preferPersistedThemeOnFirstHydrationRef = useRef(false);
 
@@ -499,6 +501,51 @@ export function AppProviders({ children }: AppProvidersProps) {
   }, [theme]);
 
   useEffect(() => {
+    const applyCurrentAppearance = () => {
+      applyAppearancePersonalizationToDocument(
+        store.get(appearancePersonalizationAtom),
+        store.get(themeAtom)
+      );
+    };
+
+    applyCurrentAppearance();
+
+    const unsubscribeTheme = store.sub(themeAtom, applyCurrentAppearance);
+    const unsubscribePersonalization = store.sub(
+      appearancePersonalizationAtom,
+      applyCurrentAppearance
+    );
+
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      return () => {
+        unsubscribeTheme();
+        unsubscribePersonalization();
+      };
+    }
+
+    const mediaQueryList = window.matchMedia("(max-width: 899px), (pointer: coarse)");
+    const handleViewportChange = () => {
+      applyCurrentAppearance();
+    };
+
+    if (typeof mediaQueryList.addEventListener === "function") {
+      mediaQueryList.addEventListener("change", handleViewportChange);
+      return () => {
+        unsubscribeTheme();
+        unsubscribePersonalization();
+        mediaQueryList.removeEventListener("change", handleViewportChange);
+      };
+    }
+
+    mediaQueryList.addListener(handleViewportChange);
+    return () => {
+      unsubscribeTheme();
+      unsubscribePersonalization();
+      mediaQueryList.removeListener(handleViewportChange);
+    };
+  }, [store]);
+
+  useEffect(() => {
     if (connectionStatus !== "connected") {
       return;
     }
@@ -534,6 +581,13 @@ export function AppProviders({ children }: AppProvidersProps) {
       );
 
       setTheme(resolvedThemeId);
+
+      if (
+        appearanceSelectionVersionRef.current.personalization ===
+        appearanceSelectionVersionAtRequestStart.personalization
+      ) {
+        store.set(appearancePersonalizationAtom, resolveAppearancePersonalizationSetting(settings));
+      }
     };
 
     void hydrateTheme();
@@ -547,9 +601,16 @@ export function AppProviders({ children }: AppProvidersProps) {
     const unsubscribeTheme = store.sub(themeAtom, () => {
       appearanceSelectionVersionRef.current.theme += 1;
     });
+    const unsubscribePersonalization = store.sub(appearancePersonalizationAtom, () => {
+      const next = store.get(appearancePersonalizationAtom);
+      if (next !== DEFAULT_APPEARANCE_PERSONALIZATION) {
+        appearanceSelectionVersionRef.current.personalization += 1;
+      }
+    });
 
     return () => {
       unsubscribeTheme();
+      unsubscribePersonalization();
     };
   }, [store]);
 

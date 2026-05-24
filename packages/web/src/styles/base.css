@@ -27,6 +27,7 @@ body {
   font-weight: var(--type-body-3-weight);
   color: var(--text-primary);
   background-color: var(--bg-page);
+  background-image: none;
   overflow: hidden;
 }
 
@@ -645,13 +646,42 @@ textarea::placeholder {
 
 /* ========== App Shell ========== */
 .app {
+  position: relative;
   width: 100vw;
   height: 100dvh;
   display: flex;
   flex-direction: column;
-  background: var(--bg-page);
+  background: var(--surface-page-bg);
   color: var(--text-primary);
   overflow: hidden;
+  isolation: isolate;
+}
+
+.app::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  background-image: var(--app-bg-image, none);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: var(--app-bg-fit, cover);
+  filter: blur(var(--app-bg-blur, 0px));
+  transform: scale(1.04);
+  pointer-events: none;
+}
+
+.app::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: color-mix(
+    in srgb,
+    var(--surface-page-bg) calc(var(--app-bg-dim, 0) * 100%),
+    transparent
+  );
+  pointer-events: none;
 }
 
 .connection-banner {
@@ -724,7 +754,12 @@ textarea::placeholder {
   display: grid;
   place-items: center;
   padding: var(--sp-8);
-  background: var(--surface-page-bg);
+  background: color-mix(
+    in srgb,
+    var(--surface-page-bg) calc(var(--app-surface-opacity, 0.96) * 100%),
+    transparent
+  );
+  backdrop-filter: var(--app-surface-backdrop-filter, none);
 }
 
 .app-loading-card {
@@ -732,7 +767,12 @@ textarea::placeholder {
   padding: var(--sp-8);
   border: 1px solid var(--border);
   border-radius: var(--radius-overlay);
-  background: var(--surface-overlay-bg);
+  background: color-mix(
+    in srgb,
+    var(--surface-overlay-bg) calc(var(--app-surface-opacity, 0.96) * 100%),
+    transparent
+  );
+  backdrop-filter: var(--app-surface-backdrop-filter, none);
   box-shadow: var(--surface-overlay-shadow);
 }
 

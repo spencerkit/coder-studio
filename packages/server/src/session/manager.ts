@@ -743,10 +743,6 @@ export class SessionManager {
     }
   }
 
-  private clearRecentInputEchoes(session: ActiveSession): void {
-    session.recentInputEchoes = [];
-  }
-
   private clearPendingResumeAggregation(session: ActiveSession): void {
     if (session.pendingResumeAggregation?.timer) {
       clearTimeout(session.pendingResumeAggregation.timer);
