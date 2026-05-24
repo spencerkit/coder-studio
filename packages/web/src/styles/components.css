@@ -12555,6 +12555,65 @@ textarea.input {
   gap: var(--gap-micro);
 }
 
+.workspace-open-editors__header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--gap-compact);
+  margin-bottom: var(--sp-2);
+}
+
+.workspace-open-editors__toggle {
+  color: var(--text-tertiary);
+}
+
+.workspace-open-editors__title {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: var(--gap-compact);
+  margin: 0;
+  min-width: 0;
+}
+
+.workspace-open-editors__title-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-open-editors__count {
+  color: var(--text-secondary);
+  font-size: var(--type-body-6-size);
+  line-height: var(--type-body-6-line-height);
+}
+
+.workspace-open-editors__close-all {
+  min-height: 28px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--type-body-5-size);
+  line-height: var(--type-body-5-line-height);
+  font-weight: var(--type-body-5-weight);
+}
+
+.workspace-open-editors__close-all:hover:not(:disabled) {
+  color: var(--text-primary);
+}
+
+.workspace-open-editors__close-all:disabled {
+  color: var(--text-muted);
+}
+
+.workspace-open-editors__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--gap-compact);
+}
+
 .workspace-open-editors__item {
   display: block;
   width: 100%;
@@ -12571,6 +12630,13 @@ textarea.input {
   white-space: nowrap;
 }
 
+.workspace-open-editors__item-label {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .workspace-open-editors__item:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
@@ -12579,6 +12645,11 @@ textarea.input {
 .workspace-open-editors__item--active {
   background: var(--state-selected-bg);
   color: var(--text-primary);
+}
+
+.workspace-open-editors__item-close {
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
 }
 
 .workspace-quick-jump {

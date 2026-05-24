@@ -2631,9 +2631,15 @@ describe("components.css theme-sensitive surfaces", () => {
   });
 
   it("keeps workspace search and quick open on compact editor-search chrome", () => {
+    const openEditorsHeader = getLastRuleBlock(".workspace-open-editors__header");
+    const openEditorsTitle = getLastRuleBlock(".workspace-open-editors__title");
+    const openEditorsTitleText = getLastRuleBlock(".workspace-open-editors__title-text");
+    const openEditorsCloseAll = getLastRuleBlock(".workspace-open-editors__close-all");
+    const openEditorsRow = getLastRuleBlock(".workspace-open-editors__row");
     const searchControls = getLastRuleBlock(".workspace-search-panel__controls");
     const searchInput = getLastRuleBlock(".workspace-search-panel__input");
     const openEditorsItem = getLastRuleBlock(".workspace-open-editors__item");
+    const openEditorsItemLabel = getLastRuleBlock(".workspace-open-editors__item-label");
     const searchGroupHeader = getLastRuleBlock(".workspace-search-panel__group-header");
     const searchGroupPath = getLastRuleBlock(".workspace-search-panel__group-path");
     const searchMatch = getLastRuleBlock(".workspace-search-panel__match");
@@ -2649,6 +2655,14 @@ describe("components.css theme-sensitive surfaces", () => {
       '.quick-open__item[aria-selected="true"] .quick-open__secondary'
     );
 
+    expect(openEditorsHeader).toContain("grid-template-columns: auto minmax(0, 1fr) auto");
+    expect(openEditorsTitle).toContain("justify-content: center");
+    expect(openEditorsTitle).toContain("min-width: 0");
+    expect(openEditorsTitleText).toContain("text-overflow: ellipsis");
+    expect(openEditorsTitleText).toContain("white-space: nowrap");
+    expect(openEditorsCloseAll).toContain("background: transparent");
+    expect(openEditorsCloseAll).toContain("color: var(--text-secondary)");
+    expect(openEditorsRow).toContain("grid-template-columns: minmax(0, 1fr) auto");
     expect(searchControls).toContain("border-bottom: 1px solid color-mix(");
     expect(searchControls).toContain("background: color-mix(");
     expect(searchInput).toContain("min-height: 34px");
@@ -2657,6 +2671,8 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(openEditorsItem).toContain("overflow: hidden");
     expect(openEditorsItem).toContain("text-overflow: ellipsis");
     expect(openEditorsItem).toContain("white-space: nowrap");
+    expect(openEditorsItemLabel).toContain("text-overflow: ellipsis");
+    expect(openEditorsItemLabel).toContain("white-space: nowrap");
     expect(searchGroupHeader).toContain("grid-template-columns: 14px minmax(0, 1fr) auto");
     expect(searchGroupHeader).toContain("box-shadow: inset 0 -1px 0 color-mix(");
     expect(searchGroupPath).toContain("font-family: var(--font-mono)");

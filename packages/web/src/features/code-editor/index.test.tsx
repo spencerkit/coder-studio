@@ -1,4 +1,12 @@
-import { act, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -16,7 +24,9 @@ import {
   type OpenFile,
   openFilesAtomFamily,
 } from "../workspace/atoms";
+import { OpenEditorsSection } from "../workspace/views/shared/open-editors-section";
 import { useCodeEditorActions } from "./actions/use-code-editor-actions";
+import { useOpenLocation } from "./actions/use-open-location";
 import { CodeEditorHost } from "./views/shared/code-editor-host";
 
 const viewportMocks = vi.hoisted(() => ({
@@ -345,6 +355,322 @@ describe("CodeEditorHost", () => {
         savedContent: "fresh content",
         baseHash: "fresh-hash",
       });
+    });
+  });
+
+  it("ignores a late file.read success after close all clears a different open editor", async () => {
+    const pendingRead = createDeferred<{
+      kind: "text";
+      content: string;
+      baseHash: string;
+      encoding: "utf-8";
+    }>();
+    const sendCommand = vi.fn().mockImplementation(() => pendingRead.promise);
+    const { store } = setupStore({
+      activePath: "src/pending.ts",
+      openFiles: {
+        "src/open.ts": {
+          kind: "text",
+          path: "src/open.ts",
+          content: "already open",
+          savedContent: "already open",
+          baseHash: "open-hash",
+          isDirty: false,
+        },
+      },
+      sendCommand,
+    });
+
+    render(
+      <Provider store={store}>
+        <CodeEditorHost />
+        <OpenEditorsSection workspaceId="ws-1" />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "file.read",
+        {
+          workspaceId: "ws-1",
+          path: "src/pending.ts",
+        },
+        undefined
+      );
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Close all" }));
+
+    expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
+    expect(store.get(openFilesAtomFamily("ws-1"))).toEqual({});
+
+    await act(async () => {
+      pendingRead.resolve({
+        kind: "text",
+        content: "late content",
+        baseHash: "late-hash",
+        encoding: "utf-8",
+      });
+    });
+
+    await waitFor(() => {
+      expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
+      expect(store.get(openFilesAtomFamily("ws-1"))).toEqual({});
+    });
+  });
+
+  it("keeps pending-only active editors closable through shared close all and ignores the late load", async () => {
+    const pendingRead = createDeferred<{
+      kind: "text";
+      content: string;
+      baseHash: string;
+      encoding: "utf-8";
+    }>();
+    const sendCommand = vi.fn().mockImplementation(() => pendingRead.promise);
+    const { store } = setupStore({
+      activePath: "src/pending-only.ts",
+      openFiles: {},
+      sendCommand,
+    });
+
+    render(
+      <Provider store={store}>
+        <CodeEditorHost />
+        <OpenEditorsSection workspaceId="ws-1" />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "file.read",
+        {
+          workspaceId: "ws-1",
+          path: "src/pending-only.ts",
+        },
+        undefined
+      );
+    });
+
+    const heading = screen.getByRole("heading", { level: 2, name: "Open Editors (1)" });
+    const section = heading.closest("section") as HTMLElement;
+    const closeAll = within(section).getByRole("button", { name: "Close all" });
+    expect(closeAll).toBeEnabled();
+
+    fireEvent.click(closeAll);
+
+    expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
+    expect(store.get(openFilesAtomFamily("ws-1"))).toEqual({});
+
+    await act(async () => {
+      pendingRead.resolve({
+        kind: "text",
+        content: "late content",
+        baseHash: "late-hash",
+        encoding: "utf-8",
+      });
+    });
+
+    await waitFor(() => {
+      expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
+      expect(store.get(openFilesAtomFamily("ws-1"))).toEqual({});
+    });
+  });
+
+  it("closing a pending active file from the header reactivates the remaining loaded editor and ignores the late load", async () => {
+    const pendingRead = createDeferred<{
+      kind: "text";
+      content: string;
+      baseHash: string;
+      encoding: "utf-8";
+    }>();
+    const sendCommand = vi.fn().mockImplementation(() => pendingRead.promise);
+    const { store } = setupStore({
+      activePath: "src/b.ts",
+      openFiles: {
+        "src/a.ts": {
+          kind: "text",
+          path: "src/a.ts",
+          content: "alpha",
+          savedContent: "alpha",
+          baseHash: "hash-a",
+          isDirty: false,
+        },
+      },
+      sendCommand,
+    });
+
+    render(
+      <Provider store={store}>
+        <CodeEditorHost />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "file.read",
+        {
+          workspaceId: "ws-1",
+          path: "src/b.ts",
+        },
+        undefined
+      );
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+
+    expect(store.get(activeFilePathAtomFamily("ws-1"))).toBe("src/a.ts");
+    expect(store.get(openFilesAtomFamily("ws-1"))).toMatchObject({
+      "src/a.ts": expect.objectContaining({ content: "alpha" }),
+    });
+
+    await act(async () => {
+      pendingRead.resolve({
+        kind: "text",
+        content: "late content",
+        baseHash: "late-hash",
+        encoding: "utf-8",
+      });
+    });
+
+    await waitFor(() => {
+      expect(store.get(activeFilePathAtomFamily("ws-1"))).toBe("src/a.ts");
+      expect(store.get(openFilesAtomFamily("ws-1"))["src/b.ts"]).toBeUndefined();
+    });
+  });
+
+  it("closing a pending active file from the shared open editors list reactivates the remaining loaded editor", async () => {
+    const pendingRead = createDeferred<{
+      kind: "text";
+      content: string;
+      baseHash: string;
+      encoding: "utf-8";
+    }>();
+    const sendCommand = vi.fn().mockImplementation(() => pendingRead.promise);
+    const { store } = setupStore({
+      activePath: "src/b.ts",
+      openFiles: {
+        "src/a.ts": {
+          kind: "text",
+          path: "src/a.ts",
+          content: "alpha",
+          savedContent: "alpha",
+          baseHash: "hash-a",
+          isDirty: false,
+        },
+      },
+      sendCommand,
+    });
+
+    render(
+      <Provider store={store}>
+        <CodeEditorHost />
+        <OpenEditorsSection workspaceId="ws-1" />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "file.read",
+        {
+          workspaceId: "ws-1",
+          path: "src/b.ts",
+        },
+        undefined
+      );
+    });
+
+    const activeRow = screen
+      .getByRole("button", { name: "src/b.ts" })
+      .closest(".workspace-open-editors__row") as HTMLElement;
+    fireEvent.click(within(activeRow).getByRole("button", { name: "Close src/b.ts" }));
+
+    expect(store.get(activeFilePathAtomFamily("ws-1"))).toBe("src/a.ts");
+
+    await act(async () => {
+      pendingRead.resolve({
+        kind: "text",
+        content: "late content",
+        baseHash: "late-hash",
+        encoding: "utf-8",
+      });
+    });
+
+    await waitFor(() => {
+      expect(store.get(activeFilePathAtomFamily("ws-1"))).toBe("src/a.ts");
+      expect(store.get(openFilesAtomFamily("ws-1"))["src/b.ts"]).toBeUndefined();
+    });
+  });
+
+  it("cancels an older pending load when switching to a different path so it cannot resurrect after the newer path closes", async () => {
+    const firstRead = createDeferred<{
+      kind: "text";
+      content: string;
+      baseHash: string;
+      encoding: "utf-8";
+    }>();
+    const secondRead = createDeferred<{
+      kind: "text";
+      content: string;
+      baseHash: string;
+      encoding: "utf-8";
+    }>();
+    const sendCommand = vi
+      .fn()
+      .mockImplementationOnce(() => firstRead.promise)
+      .mockImplementationOnce(() => secondRead.promise);
+    const { store } = setupStore({ activePath: "src/a.ts", sendCommand });
+
+    render(
+      <Provider store={store}>
+        <CodeEditorHost />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenNthCalledWith(
+        1,
+        "file.read",
+        {
+          workspaceId: "ws-1",
+          path: "src/a.ts",
+        },
+        undefined
+      );
+    });
+
+    act(() => {
+      store.set(activeFilePathAtomFamily("ws-1"), "src/b.ts");
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenNthCalledWith(
+        2,
+        "file.read",
+        {
+          workspaceId: "ws-1",
+          path: "src/b.ts",
+        },
+        undefined
+      );
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+
+    expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
+    expect(store.get(openFilesAtomFamily("ws-1"))).toEqual({});
+
+    await act(async () => {
+      firstRead.resolve({
+        kind: "text",
+        content: "late alpha",
+        baseHash: "hash-a",
+        encoding: "utf-8",
+      });
+    });
+
+    await waitFor(() => {
+      expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
+      expect(store.get(openFilesAtomFamily("ws-1"))).toEqual({});
     });
   });
 
@@ -735,6 +1061,240 @@ describe("CodeEditorHost", () => {
     expect(screen.queryByRole("button", { name: "Close" })).not.toBeInTheDocument();
   });
 
+  it("opens a normal file over an active commit-history preview", async () => {
+    const { store } = setupStore({
+      activePath: "src/background.ts",
+      openFiles: {
+        "src/background.ts": {
+          kind: "text",
+          path: "src/background.ts",
+          content: "background",
+          savedContent: "background",
+          baseHash: "hash-bg",
+          isDirty: false,
+        },
+        "src/target.ts": {
+          kind: "text",
+          path: "src/target.ts",
+          content: "target content",
+          savedContent: "target content",
+          baseHash: "hash-target",
+          isDirty: false,
+        },
+      },
+    });
+    store.set(gitDiffPreviewAtomFamily("ws-1"), {
+      path: "abc123",
+      title: "abc123 · commit subject",
+      diff: "diff --git a/src/app.tsx b/src/app.tsx",
+      source: "commit",
+    });
+
+    render(
+      <Provider store={store}>
+        <CodeEditorHost />
+      </Provider>
+    );
+
+    expect(screen.getByTestId("monaco-diff-host")).toBeInTheDocument();
+
+    const { result } = renderHook(() => useOpenLocation("ws-1"), {
+      wrapper: wrapperFor(store),
+    });
+
+    await act(async () => {
+      await result.current.openLocation({
+        workspaceId: "ws-1",
+        path: "src/target.ts",
+        source: "manual",
+      });
+    });
+
+    await waitFor(() => {
+      expect(store.get(activeFilePathAtomFamily("ws-1"))).toBe("src/target.ts");
+      expect(store.get(gitDiffPreviewAtomFamily("ws-1"))).toBeNull();
+      expect(screen.getByTestId("monaco-host")).toHaveTextContent("target content");
+      expect(screen.queryByTestId("monaco-diff-host")).not.toBeInTheDocument();
+    });
+  });
+
+  it("closing a commit-history preview restores the background file to its normal mode", async () => {
+    const { store } = setupStore({
+      activePath: "src/background.ts",
+      openFiles: {
+        "src/background.ts": {
+          kind: "text",
+          path: "src/background.ts",
+          content: "background",
+          savedContent: "background",
+          baseHash: "hash-bg",
+          isDirty: false,
+        },
+      },
+    });
+
+    render(
+      <Provider store={store}>
+        <CodeEditorHost />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(store.get(editorModeAtomFamily("ws-1"))).toBe("edit");
+      expect(screen.getByTestId("monaco-host")).toHaveTextContent("background");
+    });
+
+    act(() => {
+      store.set(editorModeAtomFamily("ws-1"), "diff");
+      store.set(gitDiffPreviewAtomFamily("ws-1"), {
+        path: "abc123",
+        title: "abc123 · commit subject",
+        diff: "diff --git a/src/app.tsx b/src/app.tsx",
+        source: "commit",
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("monaco-diff-host")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+
+    await waitFor(() => {
+      expect(store.get(gitDiffPreviewAtomFamily("ws-1"))).toBeNull();
+      expect(store.get(editorModeAtomFamily("ws-1"))).toBe("edit");
+      expect(screen.getByTestId("monaco-host")).toHaveTextContent("background");
+      expect(screen.queryByTestId("monaco-diff-host")).not.toBeInTheDocument();
+    });
+  });
+
+  it("closing a commit-history preview restores the background file save error", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args?: { path?: string }) => {
+      if (op === "file.write" && args?.path === "src/background.ts") {
+        throw new Error("Save failed on background");
+      }
+
+      if (op === "file.read") {
+        return {
+          kind: "text",
+          content: "hello world",
+          baseHash: "abc123",
+          encoding: "utf-8",
+        };
+      }
+
+      return null;
+    });
+    const { store } = setupStore({
+      activePath: "src/background.ts",
+      sendCommand,
+      openFiles: {
+        "src/background.ts": {
+          kind: "text",
+          path: "src/background.ts",
+          content: "changed background",
+          savedContent: "saved background",
+          baseHash: "hash-bg",
+          isDirty: true,
+        },
+      },
+    });
+
+    render(
+      <Provider store={store}>
+        <CodeEditorHost />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Save File" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Save failed on background");
+
+    act(() => {
+      store.set(gitDiffPreviewAtomFamily("ws-1"), {
+        path: "abc123",
+        title: "abc123 · commit subject",
+        diff: "diff --git a/src/app.tsx b/src/app.tsx",
+        source: "commit",
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("monaco-diff-host")).toBeInTheDocument();
+      expect(screen.queryByText("Save failed on background")).not.toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+
+    await waitFor(() => {
+      expect(store.get(gitDiffPreviewAtomFamily("ws-1"))).toBeNull();
+      expect(screen.getByTestId("monaco-host")).toHaveTextContent("changed background");
+      expect(screen.getByRole("alert")).toHaveTextContent("Save failed on background");
+    });
+  });
+
+  it("openLocation normalizes editor mode when exiting a commit-history preview over a file-diff background", async () => {
+    const { store } = setupStore({
+      activePath: "src/background.ts",
+      openFiles: {
+        "src/background.ts": {
+          kind: "text",
+          path: "src/background.ts",
+          content: "background",
+          savedContent: "background",
+          baseHash: "hash-bg",
+          isDirty: false,
+        },
+      },
+    });
+
+    render(
+      <Provider store={store}>
+        <CodeEditorHost />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(store.get(editorModeAtomFamily("ws-1"))).toBe("edit");
+      expect(screen.getByTestId("monaco-host")).toHaveTextContent("background");
+    });
+
+    act(() => {
+      store.set(editorModeAtomFamily("ws-1"), "diff");
+      store.set(gitDiffPreviewAtomFamily("ws-1"), {
+        path: "abc123",
+        title: "abc123 · commit subject",
+        diff: "diff --git a/src/app.tsx b/src/app.tsx",
+        source: "commit",
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("monaco-diff-host")).toBeInTheDocument();
+      expect(store.get(editorModeAtomFamily("ws-1"))).toBe("diff");
+    });
+
+    const { result } = renderHook(() => useOpenLocation("ws-1"), {
+      wrapper: wrapperFor(store),
+    });
+
+    await act(async () => {
+      await result.current.openLocation({
+        workspaceId: "ws-1",
+        path: "src/background.ts",
+        source: "manual",
+      });
+    });
+
+    await waitFor(() => {
+      expect(store.get(gitDiffPreviewAtomFamily("ws-1"))).toBeNull();
+      expect(store.get(activeFilePathAtomFamily("ws-1"))).toBe("src/background.ts");
+      expect(store.get(editorModeAtomFamily("ws-1"))).toBe("edit");
+      expect(screen.getByTestId("monaco-host")).toHaveTextContent("background");
+      expect(screen.queryByTestId("monaco-diff-host")).not.toBeInTheDocument();
+    });
+  });
+
   it("derives diff enablement from git status for the active file", () => {
     const { store } = setupStore({
       activePath: "src/app.ts",
@@ -919,6 +1479,391 @@ describe("CodeEditorHost", () => {
     expect(screen.queryByText(/changed on disk/i)).not.toBeInTheDocument();
   });
 
+  it("clears a stale save error after closing the failed file from the sidebar and switching active file", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args?: { path?: string }) => {
+      if (op === "file.write" && args?.path === "src/a.ts") {
+        throw new Error("Save failed on A");
+      }
+
+      if (op === "file.read") {
+        return {
+          kind: "text",
+          content: "hello world",
+          baseHash: "abc123",
+          encoding: "utf-8",
+        };
+      }
+
+      return null;
+    });
+    const { store } = setupStore({
+      activePath: "src/a.ts",
+      sendCommand,
+      openFiles: {
+        "src/a.ts": {
+          kind: "text",
+          path: "src/a.ts",
+          content: "changed a",
+          savedContent: "saved a",
+          baseHash: "hash-a",
+          isDirty: true,
+        },
+        "src/b.ts": {
+          kind: "text",
+          path: "src/b.ts",
+          content: "saved b",
+          savedContent: "saved b",
+          baseHash: "hash-b",
+          isDirty: false,
+        },
+      },
+    });
+
+    render(
+      <Provider store={store}>
+        <CodeEditorHost />
+        <OpenEditorsSection workspaceId="ws-1" />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Save File" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Save failed on A");
+
+    const activeRow = screen
+      .getByRole("button", { name: "src/a.ts" })
+      .closest(".workspace-open-editors__row") as HTMLElement;
+    fireEvent.click(within(activeRow).getByRole("button", { name: "Close src/a.ts" }));
+
+    await waitFor(() => {
+      expect(store.get(activeFilePathAtomFamily("ws-1"))).toBe("src/b.ts");
+    });
+
+    expect(screen.queryByText("Save failed on A")).not.toBeInTheDocument();
+    expect(screen.getByTestId("monaco-host")).toHaveTextContent("saved b");
+  });
+
+  it("keeps save state scoped to the active file when switching during an in-flight save", async () => {
+    const saveADeferred = createDeferred<{ newHash: string }>();
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args?: { path?: string }) => {
+      if (op === "file.write" && args?.path === "src/a.ts") {
+        return saveADeferred.promise;
+      }
+
+      if (op === "file.write" && args?.path === "src/b.ts") {
+        return { newHash: "hash-b-2" };
+      }
+
+      if (op === "file.read") {
+        return {
+          kind: "text",
+          content: "hello world",
+          baseHash: "abc123",
+          encoding: "utf-8",
+        };
+      }
+
+      return null;
+    });
+    const { store } = setupStore({
+      activePath: "src/a.ts",
+      sendCommand,
+      openFiles: {
+        "src/a.ts": {
+          kind: "text",
+          path: "src/a.ts",
+          content: "changed a",
+          savedContent: "saved a",
+          baseHash: "hash-a",
+          isDirty: true,
+        },
+        "src/b.ts": {
+          kind: "text",
+          path: "src/b.ts",
+          content: "changed b",
+          savedContent: "saved b",
+          baseHash: "hash-b",
+          isDirty: true,
+        },
+      },
+    });
+
+    render(
+      <Provider store={store}>
+        <CodeEditorHost />
+        <OpenEditorsSection workspaceId="ws-1" />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Save File" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "file.write",
+        {
+          workspaceId: "ws-1",
+          path: "src/a.ts",
+          content: "changed a",
+          baseHash: "hash-a",
+        },
+        undefined
+      );
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "src/b.ts" }));
+
+    await waitFor(() => {
+      expect(store.get(activeFilePathAtomFamily("ws-1"))).toBe("src/b.ts");
+    });
+
+    expect(screen.getByTestId("monaco-host")).toHaveTextContent("changed b");
+    expect(screen.queryByRole("button", { name: "Saving" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save File" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "file.write",
+        {
+          workspaceId: "ws-1",
+          path: "src/b.ts",
+          content: "changed b",
+          baseHash: "hash-b",
+        },
+        undefined
+      );
+    });
+
+    await act(async () => {
+      saveADeferred.resolve({ newHash: "hash-a-2" });
+    });
+  });
+
+  it("ignores a stale save success after close all preserves commit preview and the file is reopened", async () => {
+    const staleSave = createDeferred<{ newHash: string }>();
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args?: { path?: string }) => {
+      if (op === "file.write" && args?.path === "src/a.ts") {
+        return staleSave.promise;
+      }
+
+      if (op === "file.read" && args?.path === "src/a.ts") {
+        return {
+          kind: "text",
+          content: "reopened content",
+          baseHash: "reopen-hash",
+          encoding: "utf-8",
+        };
+      }
+
+      return null;
+    });
+    const { store } = setupStore({
+      activePath: "src/a.ts",
+      sendCommand,
+      openFiles: {
+        "src/a.ts": {
+          kind: "text",
+          path: "src/a.ts",
+          content: "changed a",
+          savedContent: "saved a",
+          baseHash: "hash-a",
+          isDirty: true,
+        },
+      },
+    });
+
+    render(
+      <Provider store={store}>
+        <CodeEditorHost />
+        <OpenEditorsSection workspaceId="ws-1" />
+      </Provider>
+    );
+
+    const { result } = renderHook(() => useOpenLocation("ws-1"), {
+      wrapper: wrapperFor(store),
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Save File" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "file.write",
+        {
+          workspaceId: "ws-1",
+          path: "src/a.ts",
+          content: "changed a",
+          baseHash: "hash-a",
+        },
+        undefined
+      );
+    });
+
+    act(() => {
+      store.set(gitDiffPreviewAtomFamily("ws-1"), {
+        path: "abc123",
+        title: "abc123 · commit subject",
+        diff: "diff --git a/src/app.tsx b/src/app.tsx",
+        source: "commit",
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("monaco-diff-host")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Close all" }));
+
+    expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
+    expect(store.get(openFilesAtomFamily("ws-1"))).toEqual({});
+    expect(store.get(gitDiffPreviewAtomFamily("ws-1"))).toEqual({
+      path: "abc123",
+      title: "abc123 · commit subject",
+      diff: "diff --git a/src/app.tsx b/src/app.tsx",
+      source: "commit",
+    });
+
+    await act(async () => {
+      await result.current.openLocation({
+        workspaceId: "ws-1",
+        path: "src/a.ts",
+        source: "manual",
+      });
+    });
+
+    await waitFor(() => {
+      expect(store.get(activeFilePathAtomFamily("ws-1"))).toBe("src/a.ts");
+      expect(store.get(gitDiffPreviewAtomFamily("ws-1"))).toBeNull();
+      expect(screen.getByTestId("monaco-host")).toHaveTextContent("reopened content");
+    });
+
+    expect(screen.queryByRole("button", { name: /Saving/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+
+    await act(async () => {
+      staleSave.resolve({ newHash: "stale-hash" });
+    });
+
+    await waitFor(() => {
+      expect(store.get(openFilesAtomFamily("ws-1"))["src/a.ts"]).toMatchObject({
+        content: "reopened content",
+        savedContent: "reopened content",
+        baseHash: "reopen-hash",
+        isDirty: false,
+      });
+    });
+
+    expect(screen.queryByRole("button", { name: /Saving/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("ignores a stale save failure after close all preserves commit preview and the file is reopened", async () => {
+    const staleSave = createDeferred<{ newHash: string }>();
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args?: { path?: string }) => {
+      if (op === "file.write" && args?.path === "src/a.ts") {
+        return staleSave.promise;
+      }
+
+      if (op === "file.read" && args?.path === "src/a.ts") {
+        return {
+          kind: "text",
+          content: "reopened content",
+          baseHash: "reopen-hash",
+          encoding: "utf-8",
+        };
+      }
+
+      return null;
+    });
+    const { store } = setupStore({
+      activePath: "src/a.ts",
+      sendCommand,
+      openFiles: {
+        "src/a.ts": {
+          kind: "text",
+          path: "src/a.ts",
+          content: "changed a",
+          savedContent: "saved a",
+          baseHash: "hash-a",
+          isDirty: true,
+        },
+      },
+    });
+
+    render(
+      <Provider store={store}>
+        <CodeEditorHost />
+        <OpenEditorsSection workspaceId="ws-1" />
+      </Provider>
+    );
+
+    const { result } = renderHook(() => useOpenLocation("ws-1"), {
+      wrapper: wrapperFor(store),
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Save File" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "file.write",
+        {
+          workspaceId: "ws-1",
+          path: "src/a.ts",
+          content: "changed a",
+          baseHash: "hash-a",
+        },
+        undefined
+      );
+    });
+
+    act(() => {
+      store.set(gitDiffPreviewAtomFamily("ws-1"), {
+        path: "abc123",
+        title: "abc123 · commit subject",
+        diff: "diff --git a/src/app.tsx b/src/app.tsx",
+        source: "commit",
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("monaco-diff-host")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Close all" }));
+
+    await act(async () => {
+      await result.current.openLocation({
+        workspaceId: "ws-1",
+        path: "src/a.ts",
+        source: "manual",
+      });
+    });
+
+    await waitFor(() => {
+      expect(store.get(activeFilePathAtomFamily("ws-1"))).toBe("src/a.ts");
+      expect(store.get(gitDiffPreviewAtomFamily("ws-1"))).toBeNull();
+      expect(screen.getByTestId("monaco-host")).toHaveTextContent("reopened content");
+    });
+
+    expect(screen.queryByRole("button", { name: /Saving/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+
+    await act(async () => {
+      staleSave.reject(new Error("Stale save failed"));
+    });
+
+    await waitFor(() => {
+      expect(store.get(openFilesAtomFamily("ws-1"))["src/a.ts"]).toMatchObject({
+        content: "reopened content",
+        savedContent: "reopened content",
+        baseHash: "reopen-hash",
+        isDirty: false,
+      });
+    });
+
+    expect(screen.queryByRole("button", { name: /Saving/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
   it("marks a dirty text buffer as externally modified without overwriting local edits", async () => {
     const sendCommand = vi.fn().mockResolvedValue({
       kind: "text",
@@ -1008,6 +1953,102 @@ describe("CodeEditorHost", () => {
     });
     expect(store.get(openFilesAtomFamily("ws-1"))["src/deleted.ts"]).toMatchObject({
       externalState: "deleted",
+    });
+  });
+
+  it("clears deleted-on-disk editor state after closing the final editor before reopening the path", async () => {
+    const pendingReopenRead = createDeferred<{
+      kind: "text";
+      content: string;
+      baseHash: string;
+      encoding: "utf-8";
+    }>();
+    let readCount = 0;
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op !== "file.read") {
+        return null;
+      }
+
+      readCount += 1;
+
+      if (readCount === 1) {
+        throw new CommandResultError({
+          code: "not_found",
+          message: "Target not found",
+        });
+      }
+
+      return pendingReopenRead.promise;
+    });
+
+    const { store } = setupStore({
+      activePath: "src/deleted.ts",
+      sendCommand,
+      openFiles: {
+        "src/deleted.ts": {
+          kind: "text",
+          path: "src/deleted.ts",
+          content: "stale buffer",
+          savedContent: "stale buffer",
+          baseHash: "hash-1",
+          isDirty: false,
+        },
+      },
+    });
+
+    const { result } = renderHook(() => useCodeEditorActions(), {
+      wrapper: wrapperFor(store),
+    });
+
+    act(() => {
+      store.set(editorRefreshTokenAtomFamily("ws-1"), 1);
+    });
+
+    await waitFor(() => {
+      expect(result.current.activeExternalStatus).toBe("deleted");
+    });
+
+    act(() => {
+      result.current.handleClose();
+    });
+
+    expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
+    expect(store.get(openFilesAtomFamily("ws-1"))).toEqual({});
+    expect(result.current.activeExternalStatus).toBeNull();
+
+    act(() => {
+      store.set(activeFilePathAtomFamily("ws-1"), "src/deleted.ts");
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "file.read",
+        {
+          workspaceId: "ws-1",
+          path: "src/deleted.ts",
+        },
+        undefined
+      );
+    });
+
+    expect(result.current.activeExternalStatus).toBeNull();
+
+    await act(async () => {
+      pendingReopenRead.resolve({
+        kind: "text",
+        content: "fresh content",
+        baseHash: "hash-2",
+        encoding: "utf-8",
+      });
+    });
+
+    await waitFor(() => {
+      expect(result.current.currentFile).toMatchObject({
+        kind: "text",
+        path: "src/deleted.ts",
+        content: "fresh content",
+      });
+      expect(result.current.activeExternalStatus).toBeNull();
     });
   });
 

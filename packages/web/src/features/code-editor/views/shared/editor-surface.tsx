@@ -1,5 +1,6 @@
+import { X } from "lucide-react";
 import type { FC } from "react";
-import { EmptyState, ThemedIcon } from "../../../../components/ui";
+import { EmptyState, IconButton, ThemedIcon, Tooltip } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { deriveDocumentPreviewKind } from "../../../workspace/atoms";
 import { DocumentPreview } from "../../components/document-preview";
@@ -24,6 +25,7 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
     activeLoadError,
     currentFile,
     documentPreview,
+    handleClose,
     handleContentChange,
     handleSave,
     hasUnsavedChangesOutsideDiff,
@@ -50,11 +52,12 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
 
   const currentTextFile = currentFile?.kind === "text" ? currentFile : null;
   const currentImageFile = currentFile?.kind === "image" ? currentFile : null;
-  const dirtyIndicator = currentTextFile?.isDirty ? (
-    <span className="dirty-indicator">*</span>
-  ) : null;
   const showHeader = chrome === "full";
   const isCommitPreview = activeDiffChange?.source === "commit";
+  const dirtyIndicator =
+    !isCommitPreview && currentTextFile?.isDirty ? (
+      <span className="dirty-indicator">*</span>
+    ) : null;
   const canRenderTextDiff =
     (mode === "diff" || isCommitPreview) &&
     Boolean(activeDiffChange) &&
@@ -65,9 +68,11 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
     mode === "preview" &&
     currentTextFile !== null &&
     deriveDocumentPreviewKind(currentTextFile.path) !== null;
-  const titleText = currentFile
-    ? currentFile.path
-    : (activeDiffChange?.title ?? activeFilePath ?? t("file.title"));
+  const titleText = isCommitPreview
+    ? (activeDiffChange.title ?? activeDiffChange.path)
+    : currentFile
+      ? currentFile.path
+      : (activeDiffChange?.title ?? activeFilePath ?? t("file.title"));
 
   return (
     <div className="workspace-git-view">
@@ -75,7 +80,7 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
         {showHeader ? (
           <div className="code-editor-header editor-surface__header">
             <span className="code-file-path">
-              {currentFile ? (
+              {currentFile && !isCommitPreview ? (
                 <>
                   {titleText}
                   {dirtyIndicator}
@@ -86,15 +91,15 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
             </span>
             {isCommitPreview ? (
               <div className="editor-surface__toolbar" role="toolbar" aria-label="Editor actions">
-                <button
-                  type="button"
-                  className={`code-mode-btn editor-surface__mode-btn${mode === "diff" ? " active" : ""}`}
-                  onClick={() => void openInDiffMode()}
-                  aria-pressed={mode === "diff"}
-                  aria-label={t("code_editor.mode_diff")}
-                >
-                  <span>{t("code_editor.mode_diff")}</span>
-                </button>
+                <Tooltip content={t("action.close")}>
+                  <IconButton
+                    aria-label={t("action.close")}
+                    className="code-mode-btn editor-surface__action-btn"
+                    icon={<X size={12} />}
+                    onClick={handleClose}
+                    size="sm"
+                  />
+                </Tooltip>
               </div>
             ) : (
               <CodeEditorDesktopHeaderActions state={state} />
@@ -102,14 +107,14 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
           </div>
         ) : null}
 
-        {saveError ? (
+        {!isCommitPreview && saveError ? (
           <div className="code-editor-error" role="alert">
             <ThemedIcon semantic="state.error" size={14} />
             <span>{saveError}</span>
           </div>
         ) : null}
 
-        {activeExternalStatus ? (
+        {!isCommitPreview && activeExternalStatus ? (
           <div className="code-editor-error" role="alert">
             <ThemedIcon
               semantic={
@@ -125,7 +130,7 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
           </div>
         ) : null}
 
-        {hasUnsavedChangesOutsideDiff ? (
+        {!isCommitPreview && hasUnsavedChangesOutsideDiff ? (
           <div className="code-editor-error" role="alert">
             <ThemedIcon semantic="state.warning" size={14} />
             <span>{t("code_editor.diff_saved_only")}</span>

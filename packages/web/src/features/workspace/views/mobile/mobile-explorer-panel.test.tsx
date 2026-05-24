@@ -129,4 +129,73 @@ describe("MobileExplorerPanel", () => {
 
     expect(onSelectFile).toHaveBeenCalledWith("README.md");
   });
+
+  it("renders shared open editor controls on mobile and closing the active row selects the next file", () => {
+    const onSelectFile = vi.fn();
+    const store = createStore();
+    store.set(fileTreeAtomFamily("ws-test"), new Map([[".", []]]));
+    store.set(activeFilePathAtomFamily("ws-test"), "src/alpha.tsx");
+    store.set(openFilesAtomFamily("ws-test"), {
+      "src/alpha.tsx": {
+        kind: "text",
+        path: "src/alpha.tsx",
+        content: "export const alpha = 1;\n",
+        savedContent: "export const alpha = 1;\n",
+        baseHash: "base-alpha",
+        isDirty: false,
+      },
+      "src/beta.tsx": {
+        kind: "text",
+        path: "src/beta.tsx",
+        content: "export const beta = 2;\n",
+        savedContent: "export const beta = 2;\n",
+        baseHash: "base-beta",
+        isDirty: false,
+      },
+    });
+
+    render(
+      <Provider store={store}>
+        <MobileExplorerPanel
+          workspaceId="ws-test"
+          routeToDetail={onSelectFile}
+          collapseVersion={0}
+        />
+      </Provider>
+    );
+
+    const heading = screen.getByRole("heading", { level: 2, name: /(Open Editors|打开的编辑器)/i });
+    expect(heading).toHaveTextContent(/(Open Editors|打开的编辑器)\s*\(2\)/i);
+
+    const section = heading.closest("section") as HTMLElement;
+
+    expect(
+      within(section).getByRole("button", {
+        name: /Collapse Open Editors|Expand Open Editors|收起打开的编辑器|展开打开的编辑器/i,
+      })
+    ).toHaveAttribute("aria-expanded", "true");
+    expect(
+      within(section).getByRole("button", { name: /Close all|全部关闭/i })
+    ).toBeInTheDocument();
+    expect(within(section).getByRole("button", { name: "src/alpha.tsx" })).toHaveClass(
+      "workspace-open-editors__item--active"
+    );
+
+    const activeRow = within(section)
+      .getByRole("button", { name: "src/alpha.tsx" })
+      .closest(".workspace-open-editors__row") as HTMLElement;
+    fireEvent.click(
+      within(activeRow).getByRole("button", {
+        name: /Close src\/alpha\.tsx|关闭 src\/alpha\.tsx/i,
+      })
+    );
+
+    expect(within(section).getByRole("button", { name: "src/beta.tsx" })).toHaveClass(
+      "workspace-open-editors__item--active"
+    );
+    expect(within(section).queryByRole("button", { name: "src/alpha.tsx" })).toBeNull();
+    expect(heading).toHaveTextContent(/(Open Editors|打开的编辑器)\s*\(1\)/i);
+    expect(Object.keys(store.get(openFilesAtomFamily("ws-test")))).toEqual(["src/beta.tsx"]);
+    expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/beta.tsx");
+  });
 });

@@ -1,6 +1,11 @@
 import { useAtom, useAtomValue } from "jotai";
 import { useCallback } from "react";
 import { workspaceByIdAtomFamily } from "../../../atoms/workspaces";
+import {
+  cancelAllPendingEditorLoads,
+  cancelPendingEditorLoad,
+  hasAnyPendingEditorLoads,
+} from "../../code-editor/actions/pending-editor-loads";
 import { monacoModelRegistry } from "../../code-editor/monaco/model-registry";
 import {
   activeFilePathAtomFamily,
@@ -18,17 +23,22 @@ interface UseOpenEditorsActionsOptions {
 function shouldClearDiffPreview(
   preview: GitDiffPreview | null,
   removedPaths: string[],
-  shouldExitEditor: boolean
+  shouldExitEditor: boolean,
+  options?: { preserveCommitPreviewOnExit?: boolean }
 ): boolean {
   if (!preview) {
     return false;
+  }
+
+  if (preview.source === "commit") {
+    return shouldExitEditor && !options?.preserveCommitPreviewOnExit;
   }
 
   if (shouldExitEditor) {
     return true;
   }
 
-  return preview.source === "file" && removedPaths.includes(preview.path);
+  return removedPaths.includes(preview.path);
 }
 
 export function useOpenEditorsActions(workspaceId: string, options?: UseOpenEditorsActionsOptions) {
@@ -41,9 +51,12 @@ export function useOpenEditorsActions(workspaceId: string, options?: UseOpenEdit
 
   const closePath = useCallback(
     (targetPath?: string) => {
+      const transientActiveFilePath =
+        activeFilePath && !(activeFilePath in openFiles) ? activeFilePath : null;
       const resolution = resolveOpenEditorsClose({
         openFiles,
         activeFilePath,
+        pendingActiveFilePath: transientActiveFilePath,
         targetPath,
       });
 
@@ -60,6 +73,11 @@ export function useOpenEditorsActions(workspaceId: string, options?: UseOpenEdit
       });
 
       for (const path of resolution.removedPaths) {
+        if (!(path in openFiles)) {
+          cancelPendingEditorLoad(workspaceId, path);
+          continue;
+        }
+
         const removedFile = openFiles[path];
         if (workspaceRootPath && removedFile?.kind === "text") {
           monacoModelRegistry.disposeFile(workspaceRootPath, path);
@@ -84,21 +102,30 @@ export function useOpenEditorsActions(workspaceId: string, options?: UseOpenEdit
       setDiffPreview,
       setEditorMode,
       setOpenFiles,
+      workspaceId,
       workspaceRootPath,
     ]
   );
 
   const closeAll = useCallback(() => {
+    const transientActiveFilePath =
+      activeFilePath && !(activeFilePath in openFiles) ? activeFilePath : null;
     const resolution = resolveOpenEditorsClose({
       openFiles,
       activeFilePath,
+      pendingActiveFilePath: transientActiveFilePath,
       closeAll: true,
     });
 
-    if (resolution.removedPaths.length === 0) {
+    if (
+      resolution.removedPaths.length === 0 &&
+      activeFilePath === null &&
+      !hasAnyPendingEditorLoads(workspaceId)
+    ) {
       return;
     }
 
+    cancelAllPendingEditorLoads(workspaceId);
     setOpenFiles({});
 
     for (const path of resolution.removedPaths) {
@@ -110,7 +137,13 @@ export function useOpenEditorsActions(workspaceId: string, options?: UseOpenEdit
 
     setActiveFilePath(null);
     setEditorMode("edit");
-    setDiffPreview(null);
+    setDiffPreview((current) =>
+      shouldClearDiffPreview(current, resolution.removedPaths, resolution.shouldExitEditor, {
+        preserveCommitPreviewOnExit: true,
+      })
+        ? null
+        : current
+    );
   }, [
     activeFilePath,
     openFiles,
@@ -118,6 +151,7 @@ export function useOpenEditorsActions(workspaceId: string, options?: UseOpenEdit
     setDiffPreview,
     setEditorMode,
     setOpenFiles,
+    workspaceId,
     workspaceRootPath,
   ]);
 

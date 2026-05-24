@@ -131,10 +131,13 @@ export const CodeEditorHeaderActions: FC<CodeEditorHeaderActionsProps> = ({
 }) => {
   const t = useTranslation();
   const {
+    activeFilePath,
+    activeDiffChange,
     canDiff,
     canEdit,
     canPreview,
     canSave,
+    handleClose,
     handleSave,
     isImageFile,
     isSaving,
@@ -148,9 +151,25 @@ export const CodeEditorHeaderActions: FC<CodeEditorHeaderActionsProps> = ({
   const toggleModeTitle = isImageFile
     ? t("code_editor.edit_as_text")
     : t("code_editor.preview_as_image");
+  const isCommitPreview = activeDiffChange?.source === "commit";
 
   if (variant !== "mobile") {
     return <CodeEditorDesktopHeaderActions state={state} />;
+  }
+
+  if (isCommitPreview) {
+    return (
+      <div className="mobile-sheet__header-actions">
+        <button
+          type="button"
+          className="mobile-sheet__action"
+          onClick={handleClose}
+          aria-label={t("action.close")}
+        >
+          {t("action.close")}
+        </button>
+      </div>
+    );
   }
 
   const handlePreviewMode = () => {
@@ -223,6 +242,16 @@ export const CodeEditorHeaderActions: FC<CodeEditorHeaderActionsProps> = ({
       >
         {saveLabel}
       </button>
+      {activeFilePath || activeDiffChange?.source === "commit" ? (
+        <button
+          type="button"
+          className="mobile-sheet__action"
+          onClick={handleClose}
+          aria-label={t("action.close")}
+        >
+          {t("action.close")}
+        </button>
+      ) : null}
     </div>
   );
 };

@@ -84,6 +84,24 @@ describe("resolveOpenEditorsClose", () => {
     });
   });
 
+  it("closing a pending active editor selects the previous loaded editor by shared sorted order", () => {
+    expect(
+      resolveOpenEditorsClose({
+        openFiles: {
+          "src/a.ts": createFile("src/a.ts"),
+        },
+        activeFilePath: "src/b.ts",
+        pendingActiveFilePath: "src/b.ts",
+        targetPath: "src/b.ts",
+      })
+    ).toEqual({
+      orderedPaths: ["src/a.ts", "src/b.ts"],
+      removedPaths: ["src/b.ts"],
+      nextActiveFilePath: "src/a.ts",
+      shouldExitEditor: false,
+    });
+  });
+
   it("closing the final remaining file signals editor exit", () => {
     expect(
       resolveOpenEditorsClose({

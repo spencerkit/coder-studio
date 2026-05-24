@@ -17,6 +17,13 @@ import {
   type WorkspaceEditorMode,
 } from "../../workspace/atoms";
 import { monacoModelRegistry } from "../monaco/model-registry";
+import {
+  beginPendingEditorLoad,
+  cancelPendingEditorLoad,
+  finishPendingEditorLoad,
+  hasPendingEditorLoad,
+  shouldIgnorePendingEditorLoadResult,
+} from "./pending-editor-loads";
 import { usePreviewSession } from "./use-preview-session";
 
 type FileReadTextPayload = {
@@ -53,8 +60,8 @@ export function useCodeEditorActions() {
   const dispatch = useAtomValue(dispatchCommandAtom);
   const setDiffPreview = useSetAtom(gitDiffPreviewAtomFamily(workspace?.id ?? ""));
 
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
+  const [savingPaths, setSavingPaths] = useState<Set<string>>(() => new Set());
+  const [saveError, setSaveError] = useState<{ path: string; message: string } | null>(null);
   const [fileLoadError, setFileLoadError] = useState<{ path: string; message: string } | null>(
     null
   );
@@ -71,9 +78,10 @@ export function useCodeEditorActions() {
   const diffPreview = useAtomValue(gitDiffPreviewAtomFamily(workspaceId ?? ""));
   const gitState = useAtomValue(gitStateAtomFamily(workspaceId ?? ""));
   const lastSeededModePathRef = useRef<string | null>(null);
-  const nextLoadRequestIdRef = useRef(0);
-  const pendingLoadRequestIdsRef = useRef<Record<string, number>>({});
-  const cancelledLoadRequestIdsRef = useRef<Record<string, number>>({});
+  const pendingActivePathRef = useRef<string | null>(null);
+  const nextSaveRequestIdRef = useRef(0);
+  const activeSaveRequestIdByPathRef = useRef<Map<string, number>>(new Map());
+  const previousOpenFilePathsRef = useRef<string[] | null>(null);
   const { closePath } = useOpenEditorsActions(workspaceId ?? "", {
     workspaceRootPath,
   });
@@ -101,23 +109,64 @@ export function useCodeEditorActions() {
     }
   }, [activeFilePath, currentFile, diffPreview, mode, setMode, workspaceId]);
 
-  const shouldIgnoreLoadResult = useCallback((path: string, requestId: number) => {
-    if (cancelledLoadRequestIdsRef.current[path] === requestId) {
-      delete cancelledLoadRequestIdsRef.current[path];
-      return true;
+  useEffect(() => {
+    setSaveError((current) => (current?.path === activeFilePath ? current : null));
+    setFileLoadError((current) => (current?.path === activeFilePath ? current : null));
+    setExternalStatus((current) => (current?.path === activeFilePath ? current : null));
+  }, [activeFilePath]);
+
+  const invalidateSaveStateForPaths = useCallback((paths: string[]) => {
+    if (paths.length === 0) {
+      return;
     }
 
-    return pendingLoadRequestIdsRef.current[path] !== requestId;
+    const removedPaths = new Set(paths);
+    for (const path of removedPaths) {
+      activeSaveRequestIdByPathRef.current.delete(path);
+    }
+
+    setSavingPaths((current) => {
+      let changed = false;
+      const next = new Set(current);
+      for (const path of removedPaths) {
+        if (next.delete(path)) {
+          changed = true;
+        }
+      }
+
+      return changed ? next : current;
+    });
+    setSaveError((current) => (current && removedPaths.has(current.path) ? null : current));
   }, []);
 
-  const finishLoadRequest = useCallback((path: string, requestId: number) => {
-    if (pendingLoadRequestIdsRef.current[path] === requestId) {
-      delete pendingLoadRequestIdsRef.current[path];
+  useEffect(() => {
+    const currentOpenFilePaths = Object.keys(openFiles);
+    if (previousOpenFilePathsRef.current === null) {
+      previousOpenFilePathsRef.current = currentOpenFilePaths;
+      return;
     }
-    if (cancelledLoadRequestIdsRef.current[path] === requestId) {
-      delete cancelledLoadRequestIdsRef.current[path];
+
+    const removedPaths = previousOpenFilePathsRef.current.filter((path) => !(path in openFiles));
+    previousOpenFilePathsRef.current = currentOpenFilePaths;
+    invalidateSaveStateForPaths(removedPaths);
+  }, [invalidateSaveStateForPaths, openFiles]);
+
+  useEffect(() => {
+    if (!workspaceId) {
+      pendingActivePathRef.current = null;
+      return;
     }
-  }, []);
+
+    const nextPendingActivePath =
+      activeFilePath && !openFiles[activeFilePath] ? activeFilePath : null;
+    const previousPendingActivePath = pendingActivePathRef.current;
+
+    if (previousPendingActivePath && previousPendingActivePath !== nextPendingActivePath) {
+      cancelPendingEditorLoad(workspaceId, previousPendingActivePath);
+    }
+
+    pendingActivePathRef.current = nextPendingActivePath;
+  }, [activeFilePath, openFiles, workspaceId]);
 
   const loadFile = useCallback(
     async (path: string, options?: { forceText?: boolean }) => {
@@ -125,21 +174,19 @@ export function useCodeEditorActions() {
         return;
       }
 
-      const requestId = nextLoadRequestIdRef.current + 1;
-      nextLoadRequestIdRef.current = requestId;
-      pendingLoadRequestIdsRef.current[path] = requestId;
+      const requestId = beginPendingEditorLoad(workspaceId, path);
       setFileLoadError((current) => (current?.path === path ? null : current));
       const result = await dispatch<FileReadPayload>("file.read", {
         workspaceId,
         path,
       });
 
-      if (shouldIgnoreLoadResult(path, requestId)) {
+      if (shouldIgnorePendingEditorLoadResult(workspaceId, path, requestId)) {
         return;
       }
 
       if (!result.ok || !result.data) {
-        finishLoadRequest(path, requestId);
+        finishPendingEditorLoad(workspaceId, path, requestId);
         const message = result.error?.message ?? "Failed to open file";
         console.error("Failed to open file:", message);
         setFileLoadError({ path, message });
@@ -151,12 +198,12 @@ export function useCodeEditorActions() {
       if (options?.forceText && data.kind === "image" && data.isTextBacked) {
         try {
           const response = await fetch(data.url, { credentials: "include" });
-          if (shouldIgnoreLoadResult(path, requestId)) {
+          if (shouldIgnorePendingEditorLoadResult(workspaceId, path, requestId)) {
             return;
           }
 
           if (!response.ok) {
-            finishLoadRequest(path, requestId);
+            finishPendingEditorLoad(workspaceId, path, requestId);
             const message = `Failed to fetch text-backed image bytes: ${response.status}`;
             console.error(message);
             setFileLoadError({ path, message });
@@ -164,7 +211,7 @@ export function useCodeEditorActions() {
           }
 
           const content = await response.text();
-          if (shouldIgnoreLoadResult(path, requestId)) {
+          if (shouldIgnorePendingEditorLoadResult(workspaceId, path, requestId)) {
             return;
           }
 
@@ -178,7 +225,7 @@ export function useCodeEditorActions() {
             viewingTextBackedImageAsText: true,
           };
 
-          finishLoadRequest(path, requestId);
+          finishPendingEditorLoad(workspaceId, path, requestId);
           setOpenFiles((prev) => ({ ...prev, [path]: newFile }));
           if (workspaceRootPath) {
             monacoModelRegistry.updateFromDisk({
@@ -189,7 +236,7 @@ export function useCodeEditorActions() {
           }
           setFileLoadError((current) => (current?.path === path ? null : current));
         } catch (error) {
-          finishLoadRequest(path, requestId);
+          finishPendingEditorLoad(workspaceId, path, requestId);
           const message =
             error instanceof Error ? error.message : "Failed to fetch text-backed image bytes";
           console.error("Failed to fetch text-backed image bytes:", error);
@@ -221,7 +268,7 @@ export function useCodeEditorActions() {
               externalState: undefined,
             };
 
-      finishLoadRequest(path, requestId);
+      finishPendingEditorLoad(workspaceId, path, requestId);
       setOpenFiles((prev) => ({ ...prev, [path]: newFile }));
       if (workspaceRootPath && data.kind === "text") {
         monacoModelRegistry.updateFromDisk({
@@ -233,14 +280,7 @@ export function useCodeEditorActions() {
       setExternalStatus((current) => (current?.path === path ? null : current));
       setFileLoadError((current) => (current?.path === path ? null : current));
     },
-    [
-      dispatch,
-      finishLoadRequest,
-      setOpenFiles,
-      shouldIgnoreLoadResult,
-      workspaceId,
-      workspaceRootPath,
-    ]
+    [dispatch, setOpenFiles, workspaceId, workspaceRootPath]
   );
 
   const loadTextBackedImageContent = useCallback(async (url: string) => {
@@ -253,45 +293,61 @@ export function useCodeEditorActions() {
   }, []);
 
   const handleSave = useCallback(async () => {
-    if (!workspaceId || !currentFile || currentFile.kind !== "text" || isSaving) {
+    if (!workspaceId || !currentFile || currentFile.kind !== "text") {
       return;
     }
 
-    setIsSaving(true);
-    setSaveError(null);
+    const { path, content, baseHash } = currentFile;
+    if (savingPaths.has(path)) {
+      return;
+    }
+
+    const requestId = ++nextSaveRequestIdRef.current;
+    activeSaveRequestIdByPathRef.current.set(path, requestId);
+    setSavingPaths((current) => new Set(current).add(path));
+    setSaveError((current) => (current?.path === path ? null : current));
 
     const result = await dispatch<{ newHash: string }>("file.write", {
       workspaceId,
-      path: currentFile.path,
-      content: currentFile.content,
-      baseHash: currentFile.baseHash || undefined,
+      path,
+      content,
+      baseHash: baseHash || undefined,
     });
+
+    if (activeSaveRequestIdByPathRef.current.get(path) !== requestId) {
+      return;
+    }
 
     if (result.ok && result.data) {
       setOpenFiles((prev) => {
-        const prevFile = prev[currentFile.path];
+        const prevFile = prev[path];
         if (!prevFile || prevFile.kind !== "text") {
           return prev;
         }
 
         return {
           ...prev,
-          [currentFile.path]: {
+          [path]: {
             ...prevFile,
-            savedContent: currentFile.content,
+            savedContent: content,
             baseHash: result.data!.newHash,
             isDirty: false,
             externalState: undefined,
           },
         };
       });
-      setExternalStatus((current) => (current?.path === currentFile.path ? null : current));
+      setExternalStatus((current) => (current?.path === path ? null : current));
     } else {
-      setSaveError(result.error?.message ?? "Failed to save file");
+      setSaveError({ path, message: result.error?.message ?? "Failed to save file" });
     }
 
-    setIsSaving(false);
-  }, [currentFile, dispatch, isSaving, setOpenFiles, workspaceId]);
+    activeSaveRequestIdByPathRef.current.delete(path);
+    setSavingPaths((current) => {
+      const next = new Set(current);
+      next.delete(path);
+      return next;
+    });
+  }, [currentFile, dispatch, savingPaths, setOpenFiles, workspaceId]);
 
   const handleContentChange = useCallback(
     (newContent: string) => {
@@ -327,7 +383,7 @@ export function useCodeEditorActions() {
       return;
     }
 
-    if (pendingLoadRequestIdsRef.current[activeFilePath] !== undefined) {
+    if (hasPendingEditorLoad(workspaceId, activeFilePath)) {
       return;
     }
 
@@ -571,20 +627,23 @@ export function useCodeEditorActions() {
   ]);
 
   const handleClose = useCallback(() => {
-    if (currentFile?.path) {
-      closePath(currentFile.path);
-    } else if (activeFilePath) {
-      const pendingRequestId = pendingLoadRequestIdsRef.current[activeFilePath];
-      if (pendingRequestId !== undefined) {
-        cancelledLoadRequestIdsRef.current[activeFilePath] = pendingRequestId;
-        delete pendingLoadRequestIdsRef.current[activeFilePath];
+    if (diffPreview?.source === "commit") {
+      setDiffPreview(null);
+      if (currentFile) {
+        const nextMode = deriveEditorModeForOpenFile(currentFile);
+        if (nextMode !== mode) {
+          setMode(nextMode);
+        }
       }
-      setActiveFilePath(null);
-      setMode("edit");
+      return;
+    }
+
+    if (currentFile?.path || activeFilePath) {
+      closePath(currentFile?.path ?? activeFilePath);
     }
 
     setSaveError(null);
-  }, [activeFilePath, closePath, currentFile, setActiveFilePath, setMode]);
+  }, [activeFilePath, closePath, currentFile, diffPreview, mode, setDiffPreview, setMode]);
 
   const toggleSvgTextMode = useCallback(() => {
     if (!workspaceId || !currentFile) {
@@ -669,11 +728,14 @@ export function useCodeEditorActions() {
       diffPreview.source === "commit")
       ? diffPreview
       : null;
+  const isSaving = Boolean(isTextFile && savingPaths.has(currentFile.path));
   const canSave = Boolean(isTextFile && currentFile.isDirty && !isSaving);
   const activeLoadError =
     activeFilePath && fileLoadError?.path === activeFilePath ? fileLoadError.message : null;
   const activeExternalStatus =
     activeFilePath && externalStatus?.path === activeFilePath ? externalStatus.status : null;
+  const activeSaveError =
+    activeFilePath && saveError?.path === activeFilePath ? saveError.message : null;
   const documentPreviewKind =
     currentFile?.kind === "text" ? deriveDocumentPreviewKind(currentFile.path) : null;
   const documentPreview = usePreviewSession({
@@ -705,7 +767,7 @@ export function useCodeEditorActions() {
     isTextFile,
     mode,
     openInDiffMode,
-    saveError,
+    saveError: activeSaveError,
     setMode: (nextMode: WorkspaceEditorMode) => {
       setMode(nextMode);
     },
