@@ -236,10 +236,13 @@ describe("useWorkspaceNavigationShortcuts", () => {
       key: "ArrowRight",
       ctrlKey: true,
       shiftKey: true,
+      cancelable: true,
     });
 
+    event.preventDefault();
+    expect(event.defaultPrevented).toBe(true);
+
     act(() => {
-      event.preventDefault();
       window.dispatchEvent(event);
     });
 
