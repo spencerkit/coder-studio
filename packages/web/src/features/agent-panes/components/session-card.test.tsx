@@ -298,6 +298,27 @@ describe("SessionCard", () => {
     );
   });
 
+  it("does not start pane drag from the drag handle for touch pointers on desktop", () => {
+    const { store } = createSessionStore({
+      terminalId: "term-live",
+      state: "running",
+      endedAt: undefined,
+    });
+    const onPaneDragStart = vi.fn();
+
+    render(
+      <Provider store={store}>
+        <SessionCard paneId="pane-1" sessionId="sess_123456" onPaneDragStart={onPaneDragStart} />
+      </Provider>
+    );
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Drag pane" }), {
+      pointerType: "touch",
+    });
+
+    expect(onPaneDragStart).not.toHaveBeenCalled();
+  });
+
   it("passes isActiveSession to XtermHost when the workspace ui state targets this session", () => {
     const { store } = createSessionStore({
       terminalId: "term-live",

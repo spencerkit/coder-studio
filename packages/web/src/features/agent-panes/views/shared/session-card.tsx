@@ -234,6 +234,10 @@ export const SessionCard: FC<SessionCardProps> = ({
                           event.preventDefault();
                           event.stopPropagation();
 
+                          if (event.pointerType === "touch") {
+                            return;
+                          }
+
                           if (!paneId) {
                             return;
                           }
