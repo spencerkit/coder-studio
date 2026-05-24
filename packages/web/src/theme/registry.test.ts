@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import en from "../locales/en.json";
 import zh from "../locales/zh.json";
-import { createWorkspaceMonacoTheme, THEME_IDS, THEMES } from "./index";
+import { BASE_ICON_THEME, createWorkspaceMonacoTheme, THEME_IDS, THEMES } from "./index";
 
 function getTranslationValue(messages: Record<string, unknown>, key: string): unknown {
   return key.split(".").reduce<unknown>((current, segment) => {
@@ -281,6 +281,37 @@ describe("theme registry", () => {
         expect.objectContaining({ token: "keyword", foreground: "8aa4c8" }),
       ])
     );
+  });
+
+  it("keeps semantic state icons unchanged for seasonal themes", () => {
+    const seasonalThemeIds = [
+      "spring-light",
+      "spring-dark",
+      "summer-light",
+      "summer-dark",
+      "autumn-light",
+      "autumn-dark",
+      "winter-light",
+      "winter-dark",
+    ];
+
+    for (const themeId of seasonalThemeIds) {
+      const theme = THEMES.find((candidate) => candidate.id === themeId);
+
+      expect(theme?.iconTheme.icons["state.info"]).toEqual(BASE_ICON_THEME.icons["state.info"]);
+      expect(theme?.iconTheme.icons["state.welcome.terminal"]).toEqual(
+        BASE_ICON_THEME.icons["state.welcome.terminal"]
+      );
+      expect(theme?.iconTheme.icons["state.welcome.workspace"]).toEqual(
+        BASE_ICON_THEME.icons["state.welcome.workspace"]
+      );
+      expect(theme?.iconTheme.icons["state.welcome.git"]).toEqual(
+        BASE_ICON_THEME.icons["state.welcome.git"]
+      );
+      expect(theme?.iconTheme.icons["state.welcome.lightning"]).toEqual(
+        BASE_ICON_THEME.icons["state.welcome.lightning"]
+      );
+    }
   });
 
   it("creates workspace monaco themes with transparent editor backgrounds", () => {

@@ -941,31 +941,6 @@ const THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
         ...BASE_ICON_THEME.icons["git.commit"],
         tone: "accent",
       },
-      "state.info": {
-        ...BASE_ICON_THEME.icons["state.info"],
-        tone: "accent",
-        surface: "subtle",
-      },
-      "state.welcome.terminal": {
-        ...BASE_ICON_THEME.icons["state.welcome.terminal"],
-        tone: "accent",
-        surface: "accent",
-      },
-      "state.welcome.workspace": {
-        ...BASE_ICON_THEME.icons["state.welcome.workspace"],
-        tone: "accent",
-        surface: "accent",
-      },
-      "state.welcome.git": {
-        ...BASE_ICON_THEME.icons["state.welcome.git"],
-        tone: "accent",
-        surface: "accent",
-      },
-      "state.welcome.lightning": {
-        ...BASE_ICON_THEME.icons["state.welcome.lightning"],
-        tone: "accent",
-        surface: "accent",
-      },
     }),
     monaco: {
       base: "vs",
@@ -1052,11 +1027,6 @@ const THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
       "git.commit": {
         ...BASE_ICON_THEME.icons["git.commit"],
         tone: "accent",
-      },
-      "state.info": {
-        ...BASE_ICON_THEME.icons["state.info"],
-        tone: "accent",
-        surface: "subtle",
       },
     }),
     monaco: {
@@ -1153,11 +1123,6 @@ const THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
         ...BASE_ICON_THEME.icons["git.commit"],
         tone: "accent",
       },
-      "state.info": {
-        ...BASE_ICON_THEME.icons["state.info"],
-        tone: "accent",
-        surface: "subtle",
-      },
     }),
     monaco: {
       base: "vs",
@@ -1230,11 +1195,6 @@ const THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
         ...BASE_ICON_THEME.icons["git.commit"],
         tone: "accent",
       },
-      "state.info": {
-        ...BASE_ICON_THEME.icons["state.info"],
-        tone: "accent",
-        surface: "subtle",
-      },
     }),
     monaco: {
       base: "vs-dark",
@@ -1306,11 +1266,6 @@ const THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
       "git.commit": {
         ...BASE_ICON_THEME.icons["git.commit"],
         tone: "accent",
-      },
-      "state.info": {
-        ...BASE_ICON_THEME.icons["state.info"],
-        tone: "accent",
-        surface: "subtle",
       },
     }),
     monaco: {
@@ -1398,11 +1353,6 @@ const THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
       "git.commit": {
         ...BASE_ICON_THEME.icons["git.commit"],
         tone: "accent",
-      },
-      "state.info": {
-        ...BASE_ICON_THEME.icons["state.info"],
-        tone: "accent",
-        surface: "subtle",
       },
     }),
     monaco: {
@@ -1499,26 +1449,6 @@ const THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
         ...BASE_ICON_THEME.icons["git.commit"],
         tone: "info",
       },
-      "state.welcome.terminal": {
-        ...BASE_ICON_THEME.icons["state.welcome.terminal"],
-        tone: "info",
-        surface: "info",
-      },
-      "state.welcome.workspace": {
-        ...BASE_ICON_THEME.icons["state.welcome.workspace"],
-        tone: "info",
-        surface: "info",
-      },
-      "state.welcome.git": {
-        ...BASE_ICON_THEME.icons["state.welcome.git"],
-        tone: "info",
-        surface: "info",
-      },
-      "state.welcome.lightning": {
-        ...BASE_ICON_THEME.icons["state.welcome.lightning"],
-        tone: "info",
-        surface: "info",
-      },
     }),
     monaco: {
       base: "vs",
@@ -1590,26 +1520,6 @@ const THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
       "git.commit": {
         ...BASE_ICON_THEME.icons["git.commit"],
         tone: "info",
-      },
-      "state.welcome.terminal": {
-        ...BASE_ICON_THEME.icons["state.welcome.terminal"],
-        tone: "info",
-        surface: "info",
-      },
-      "state.welcome.workspace": {
-        ...BASE_ICON_THEME.icons["state.welcome.workspace"],
-        tone: "info",
-        surface: "info",
-      },
-      "state.welcome.git": {
-        ...BASE_ICON_THEME.icons["state.welcome.git"],
-        tone: "info",
-        surface: "info",
-      },
-      "state.welcome.lightning": {
-        ...BASE_ICON_THEME.icons["state.welcome.lightning"],
-        tone: "info",
-        surface: "info",
       },
     }),
     monaco: {
