@@ -87,10 +87,19 @@ interface SessionPaneSnapshot {
 
 async function getSessionPaneSnapshots(page: Page): Promise<SessionPaneSnapshot[]> {
   return page.locator(".session-card.agent-pane[data-session-id]").evaluateAll((nodes) =>
-    nodes.map((node) => ({
-      paneId: node.getAttribute("data-pane-id") ?? "",
-      sessionId: node.getAttribute("data-session-id") ?? "",
-    }))
+    nodes.map((node) => {
+      const paneId = node.getAttribute("data-pane-id");
+      const sessionId = node.getAttribute("data-session-id");
+
+      if (!paneId || !sessionId) {
+        throw new Error("Session pane is missing drag identity attributes");
+      }
+
+      return {
+        paneId,
+        sessionId,
+      };
+    })
   );
 }
 
@@ -152,11 +161,13 @@ test.describe("session pane desktop drag reorder", () => {
 
     const sessionPane = getSessionPanes(page).first();
     const sourceSessionId = await sessionPane.getAttribute("data-session-id");
+    expect(sourceSessionId).toBeTruthy();
     await splitPaneHorizontally(page, sessionPane);
 
     const draftPane = getDraftPanes(page).first();
     await expect(draftPane).toBeVisible({ timeout: 15000 });
     const targetDraftPaneId = await draftPane.getAttribute("data-pane-id");
+    expect(targetDraftPaneId).toBeTruthy();
 
     await dragHandleToPaneCenter(
       page,
