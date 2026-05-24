@@ -54,9 +54,11 @@ export function ShortcutsSettings() {
       if (isMac && event.metaKey) {
         parts.push("Mod");
       }
-      if (event.ctrlKey && (isMac || isArrowKey)) {
+      if (event.ctrlKey && isArrowKey) {
         parts.push("Ctrl");
       } else if (!isMac && event.ctrlKey) {
+        parts.push("Mod");
+      } else if (isMac && event.ctrlKey) {
         parts.push("Mod");
       }
       if (event.shiftKey) {

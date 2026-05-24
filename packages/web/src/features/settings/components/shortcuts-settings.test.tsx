@@ -123,7 +123,10 @@ describe("ShortcutsSettings", () => {
     const { store } = renderShortcutsSettings(sendCommand);
 
     fireEvent.click(screen.getByRole("tab", { name: "工作区" }));
-    fireEvent.click(await screen.findByText("Ctrl+←"));
+    const shortcutRow = (await screen.findByText("切换到左侧会话")).closest(".shortcuts-item");
+    expect(shortcutRow).not.toBeNull();
+
+    fireEvent.click(within(shortcutRow as HTMLElement).getByText("Ctrl+←"));
     fireEvent.keyDown(screen.getByRole("textbox", { name: "切换到左侧会话" }), {
       key: "ArrowDown",
       ctrlKey: true,
@@ -143,8 +146,66 @@ describe("ShortcutsSettings", () => {
       "session.navigate.left": "Ctrl+ArrowDown",
     });
 
-    const shortcutRow = screen.getByText("切换到左侧会话").closest(".shortcuts-item");
-    expect(shortcutRow).not.toBeNull();
     expect(within(shortcutRow as HTMLElement).getByText("Ctrl+↓")).toBeInTheDocument();
+  });
+
+  it("stores macOS Ctrl+letter captures as Mod bindings", async () => {
+    vi.spyOn(window.navigator, "platform", "get").mockReturnValue("MacIntel");
+
+    const sendCommand = vi.fn().mockResolvedValue({});
+    const { store } = renderShortcutsSettings(sendCommand);
+
+    fireEvent.click(screen.getByText("⌘+K"));
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "命令面板" }), {
+      key: "p",
+      ctrlKey: true,
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: { shortcuts: { "command-palette.toggle": "Mod+P" } },
+        },
+        undefined
+      );
+    });
+
+    expect(store.get(customShortcutsAtom)).toMatchObject({
+      "command-palette.toggle": "Mod+P",
+    });
+    expect(screen.getByText("⌘+P")).toBeInTheDocument();
+  });
+
+  it("preserves explicit Ctrl for macOS arrow captures only", async () => {
+    vi.spyOn(window.navigator, "platform", "get").mockReturnValue("MacIntel");
+
+    const sendCommand = vi.fn().mockResolvedValue({});
+    const { store } = renderShortcutsSettings(sendCommand);
+
+    fireEvent.click(screen.getByRole("tab", { name: "工作区" }));
+    const shortcutRow = (await screen.findByText("切换到左侧会话")).closest(".shortcuts-item");
+    expect(shortcutRow).not.toBeNull();
+
+    fireEvent.click(within(shortcutRow as HTMLElement).getByText("Ctrl+←"));
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "切换到左侧会话" }), {
+      key: "ArrowUp",
+      ctrlKey: true,
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: { shortcuts: { "session.navigate.left": "Ctrl+ArrowUp" } },
+        },
+        undefined
+      );
+    });
+
+    expect(store.get(customShortcutsAtom)).toMatchObject({
+      "session.navigate.left": "Ctrl+ArrowUp",
+    });
+    expect(within(shortcutRow as HTMLElement).getByText("Ctrl+↑")).toBeInTheDocument();
   });
 });
