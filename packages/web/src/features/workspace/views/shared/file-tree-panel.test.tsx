@@ -3,6 +3,7 @@ import { createStore, Provider } from "jotai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { wsClientAtom } from "../../../../atoms/connection";
 import { workspacesAtom } from "../../../../atoms/workspaces";
+import { WORKSPACE_PATH_DRAG_MIME } from "../../../../lib/workspace-path-drag";
 import { pendingEditorNavigationAtomFamily } from "../../../code-editor/atoms";
 import {
   activeFilePathAtomFamily,
@@ -35,6 +36,18 @@ vi.mock("../../../../lib/i18n", () => ({
     return key;
   },
 }));
+
+function createDragDataTransfer() {
+  const values = new Map<string, string>();
+  const dataTransfer = {
+    effectAllowed: "none",
+    setData: vi.fn((type: string, value: string) => {
+      values.set(type, value);
+    }),
+  } as unknown as DataTransfer;
+
+  return { dataTransfer, values };
+}
 
 describe("FileTreePanel", () => {
   beforeEach(() => {
@@ -2082,6 +2095,100 @@ describe("FileTreePanel", () => {
 
     expect(screen.queryByLabelText("action.search_files")).toBeNull();
     expect(document.querySelector(".file-tree-search")).toBeNull();
+  });
+
+  it("marks desktop tree rows draggable and writes workspace path drag data on dragstart", () => {
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+    store.set(
+      fileTreeAtomFamily("ws-test"),
+      new Map([
+        [
+          ".",
+          [
+            { path: "README.md", name: "README.md", kind: "file" },
+            { path: "src", name: "src", kind: "dir", children: [] },
+          ],
+        ],
+      ])
+    );
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" variant="desktop" showSearch={false} />
+      </Provider>
+    );
+
+    const fileRow = screen.getByText("README.md").closest(".tree-item");
+    const folderRow = screen.getByText("src").closest(".tree-item");
+    expect(fileRow).toHaveAttribute("draggable", "true");
+    expect(folderRow).toHaveAttribute("draggable", "true");
+
+    const { dataTransfer, values } = createDragDataTransfer();
+    fireEvent.dragStart(fileRow!, { dataTransfer });
+
+    expect(values.get(WORKSPACE_PATH_DRAG_MIME)).toBe(
+      JSON.stringify({
+        workspaceId: "ws-test",
+        path: "README.md",
+        kind: "file",
+      })
+    );
+    expect(values.get("text/plain")).toBe("README.md");
+  });
+
+  it("writes workspace drag data for nested desktop nodes too", () => {
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+    store.set(
+      fileTreeAtomFamily("ws-test"),
+      new Map([
+        [".", [{ path: "src", name: "src", kind: "dir", children: [] }]],
+        ["src", [{ path: "src/app.tsx", name: "app.tsx", kind: "file" }]],
+      ])
+    );
+    store.set(expandedDirsAtomFamily("ws-test"), new Set(["src"]));
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" variant="desktop" showSearch={false} />
+      </Provider>
+    );
+
+    const nestedRow = screen.getByText("app.tsx").closest(".tree-item");
+    expect(nestedRow).toHaveAttribute("draggable", "true");
+
+    const { dataTransfer, values } = createDragDataTransfer();
+    fireEvent.dragStart(nestedRow!, { dataTransfer });
+
+    expect(values.get(WORKSPACE_PATH_DRAG_MIME)).toBe(
+      JSON.stringify({
+        workspaceId: "ws-test",
+        path: "src/app.tsx",
+        kind: "file",
+      })
+    );
+    expect(values.get("text/plain")).toBe("src/app.tsx");
+  });
+
+  it("keeps mobile tree rows non-draggable", () => {
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+    store.set(
+      fileTreeAtomFamily("ws-test"),
+      new Map([[".", [{ path: "README.md", name: "README.md", kind: "file" }]]])
+    );
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" variant="mobile" showSearch={false} />
+      </Provider>
+    );
+
+    expect(screen.getByText("README.md").closest(".tree-item")).not.toHaveAttribute(
+      "draggable",
+      "true"
+    );
   });
 
   it("opens the mobile action sheet on long press but not on ordinary tap", async () => {

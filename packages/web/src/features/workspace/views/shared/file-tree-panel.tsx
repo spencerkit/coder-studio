@@ -2,7 +2,12 @@ import type { FileNode } from "@coder-studio/core";
 import { atom, useAtom, useAtomValue, useSetAtom } from "jotai";
 import { atomFamily } from "jotai-family";
 import { ChevronDown, ChevronRight, X } from "lucide-react";
-import type { FC, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
+import type {
+  FC,
+  DragEvent as ReactDragEvent,
+  MouseEvent as ReactMouseEvent,
+  PointerEvent as ReactPointerEvent,
+} from "react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { workspaceByIdAtomFamily } from "../../../../atoms/workspaces";
 import {
@@ -20,6 +25,7 @@ import {
   Tooltip,
 } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
+import { setWorkspacePathDragData } from "../../../../lib/workspace-path-drag";
 import { useCreateShellTerminal } from "../../../terminal-panel/actions/use-create-shell-terminal";
 import {
   type CreateDialogState,
@@ -442,6 +448,7 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
             treeNodes.map((node) => (
               <FileTreeNode
                 key={node.path}
+                workspaceId={workspaceId}
                 node={node}
                 depth={0}
                 variant={variant}
@@ -572,6 +579,7 @@ const FileSearchResultRow: FC<FileSearchResultRowProps> = ({
 };
 
 interface FileTreeNodeProps {
+  workspaceId: string;
   node: FileNode;
   depth: number;
   variant: "desktop" | "mobile";
@@ -600,6 +608,7 @@ interface FileTreeNodeProps {
 }
 
 const FileTreeNode: FC<FileTreeNodeProps> = ({
+  workspaceId,
   node,
   depth,
   variant,
@@ -664,6 +673,18 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
     onToggleDirs(nextExpanded);
   };
 
+  const handleDragStart = (event: ReactDragEvent<HTMLDivElement>) => {
+    if (variant !== "desktop" || !event.dataTransfer) {
+      return;
+    }
+
+    setWorkspacePathDragData(event.dataTransfer, {
+      workspaceId,
+      path: node.path,
+      kind: node.kind,
+    });
+  };
+
   const paddingLeft = depth * 14 + 16;
 
   return (
@@ -672,6 +693,8 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
         className={`tree-item tree-item--${node.kind} ${
           selectedPath === node.path ? "selected" : ""
         } ${contextTargetPath === node.path ? "tree-item--context-target" : ""}`}
+        draggable={variant === "desktop" ? true : undefined}
+        onDragStart={variant === "desktop" ? handleDragStart : undefined}
         onClick={handleClick}
         onContextMenu={
           variant === "desktop" ? (event) => onOpenContextMenu(event, node, "tree") : undefined
@@ -737,6 +760,7 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
           {sortNodes(node.children).map((child) => (
             <FileTreeNode
               key={child.path}
+              workspaceId={workspaceId}
               node={child}
               depth={depth + 1}
               variant={variant}
