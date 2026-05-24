@@ -84,6 +84,7 @@ export function WorkspaceMobileView() {
     activeWorkspaceId,
     closeMobileSession,
     closeMobileSheet,
+    diffPreview,
     handleMobileSessionCreated,
     handleOpenBranchSwitcher,
     gitState,
@@ -236,6 +237,57 @@ export function WorkspaceMobileView() {
     supervisorDetails.sessionId,
     supervisorDialog.open,
     supervisorDialog.sessionId,
+  ]);
+
+  useEffect(() => {
+    if (mobileSheet !== "files" || mobileFilesRoute.kind !== "detail") {
+      return;
+    }
+
+    const isCommitDetailRoute =
+      diffPreview?.source === "commit" &&
+      mobileFilesRoute.path === diffPreview.path &&
+      mobileFilesRoute.title === diffPreview.title;
+
+    if (isCommitDetailRoute) {
+      return;
+    }
+
+    if (mobileEditorState.activeFilePath) {
+      if (
+        mobileFilesRoute.path !== mobileEditorState.activeFilePath ||
+        mobileFilesRoute.title !== undefined
+      ) {
+        updateMobileFilesRoute({
+          kind: "detail",
+          path: mobileEditorState.activeFilePath,
+        });
+      }
+      return;
+    }
+
+    if (diffPreview?.source === "commit") {
+      if (
+        mobileFilesRoute.path !== diffPreview.path ||
+        mobileFilesRoute.title !== diffPreview.title
+      ) {
+        updateMobileFilesRoute({
+          kind: "detail",
+          path: diffPreview.path,
+          title: diffPreview.title,
+        });
+      }
+      return;
+    }
+
+    closeMobileSheet();
+  }, [
+    closeMobileSheet,
+    diffPreview,
+    mobileEditorState.activeFilePath,
+    mobileFilesRoute,
+    mobileSheet,
+    updateMobileFilesRoute,
   ]);
 
   const filesSheetKicker = mobileFilesRoute.kind === "detail" ? t("file.title") : null;

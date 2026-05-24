@@ -81,7 +81,8 @@
     "search_commands": "搜索命令",
     "back": "返回",
     "expand": "展开",
-    "collapse": "收起"
+    "collapse": "收起",
+    "close_all": "全部关闭"
   },
   "label": {
     "workspace": "工作区",
@@ -167,6 +168,12 @@
       "placeholder": "输入文件名或路径",
       "no_results": "未找到匹配文件。",
       "failed": "文件搜索失败，请重试。"
+    },
+    "open_editors": {
+      "title_with_count": "{title} ({count})",
+      "close_path": "关闭 {path}",
+      "expand_label": "展开打开的编辑器",
+      "collapse_label": "收起打开的编辑器"
     },
     "search": {
       "empty": "输入关键词以搜索文件内容。",

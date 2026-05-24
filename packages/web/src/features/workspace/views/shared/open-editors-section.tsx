@@ -1,6 +1,15 @@
 import { useAtomValue, useSetAtom } from "jotai";
+import { ChevronDown, ChevronRight, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { IconButton, Tooltip } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
+import {
+  hasPendingEditorLoad,
+  subscribeToPendingEditorLoads,
+} from "../../../code-editor/actions/pending-editor-loads";
 import { useOpenLocation } from "../../../code-editor/actions/use-open-location";
+import { orderOpenEditorPaths } from "../../actions/open-editors-close";
+import { useOpenEditorsActions } from "../../actions/use-open-editors-actions";
 import {
   activeFilePathAtomFamily,
   deriveEditorModeForPath,
@@ -20,36 +29,101 @@ export function OpenEditorsSection({ workspaceId, onSelectFile, title }: OpenEdi
   const activeFilePath = useAtomValue(activeFilePathAtomFamily(workspaceId));
   const setEditorMode = useSetAtom(editorModeAtomFamily(workspaceId));
   const { openLocation } = useOpenLocation(workspaceId);
-  const openEditorPaths = Object.keys(openFiles).sort((left, right) => left.localeCompare(right));
+  const { closeAll, closePath } = useOpenEditorsActions(workspaceId);
+  const [collapsed, setCollapsed] = useState(false);
+  const [, setPendingLoadVersion] = useState(0);
+
+  useEffect(() => {
+    const unsubscribe = subscribeToPendingEditorLoads(workspaceId, () =>
+      setPendingLoadVersion((v) => v + 1)
+    );
+    setPendingLoadVersion((v) => v + 1);
+    return unsubscribe;
+  }, [workspaceId]);
+
+  const pendingActivePath =
+    activeFilePath &&
+    !(activeFilePath in openFiles) &&
+    hasPendingEditorLoad(workspaceId, activeFilePath)
+      ? activeFilePath
+      : null;
+  const openEditorPaths = pendingActivePath
+    ? [...orderOpenEditorPaths(openFiles), pendingActivePath].sort()
+    : orderOpenEditorPaths(openFiles);
+  const resolvedTitle = title ?? t("workspace.sidebar.open_editors");
+  const headingLabel = t("workspace.open_editors.title_with_count", {
+    count: openEditorPaths.length,
+    title: resolvedTitle,
+  });
+  const canExpand = openEditorPaths.length > 0;
+  const isExpanded = canExpand && !collapsed;
+  const toggleLabel = isExpanded
+    ? t("workspace.open_editors.collapse_label")
+    : t("workspace.open_editors.expand_label");
 
   return (
     <section className="workspace-sidebar-section">
-      <h2 className="workspace-sidebar-section__title">
-        {title ?? t("workspace.sidebar.open_editors")}
-      </h2>
-      <div className="workspace-open-editors">
-        {openEditorPaths.map((path) => (
-          <button
-            key={path}
-            type="button"
-            className={`workspace-open-editors__item ${
-              activeFilePath === path ? "workspace-open-editors__item--active" : ""
-            }`}
-            title={path}
-            onClick={() => {
-              setEditorMode(deriveEditorModeForPath(path));
-              void openLocation({
-                workspaceId,
-                path,
-                source: "manual",
-              });
-              onSelectFile?.(path);
-            }}
-          >
-            {path}
-          </button>
-        ))}
+      <div className="workspace-open-editors__header">
+        <Tooltip content={toggleLabel}>
+          <IconButton
+            aria-label={toggleLabel}
+            aria-expanded={canExpand ? isExpanded : undefined}
+            className="workspace-open-editors__toggle"
+            disabled={!canExpand}
+            icon={isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            size="sm"
+            onClick={() => setCollapsed((value) => !value)}
+          />
+        </Tooltip>
+        <h2 className="workspace-sidebar-section__title workspace-open-editors__title">
+          <span className="workspace-open-editors__title-text">{headingLabel}</span>
+        </h2>
+        <button
+          type="button"
+          className="workspace-open-editors__close-all"
+          disabled={openEditorPaths.length === 0}
+          onClick={() => closeAll()}
+        >
+          {t("action.close_all")}
+        </button>
       </div>
+      {isExpanded ? (
+        <div className="workspace-open-editors">
+          {openEditorPaths.map((path) => (
+            <div key={path} className="workspace-open-editors__row">
+              <button
+                type="button"
+                className={`workspace-open-editors__item ${
+                  activeFilePath === path ? "workspace-open-editors__item--active" : ""
+                }`}
+                aria-current={activeFilePath === path ? "true" : undefined}
+                aria-label={path}
+                title={path}
+                onClick={() => {
+                  setEditorMode(deriveEditorModeForPath(path));
+                  void openLocation({
+                    workspaceId,
+                    path,
+                    source: "manual",
+                  });
+                  onSelectFile?.(path);
+                }}
+              >
+                <span className="workspace-open-editors__item-label">{path}</span>
+              </button>
+              <Tooltip content={t("action.close")}>
+                <IconButton
+                  aria-label={t("workspace.open_editors.close_path", { path })}
+                  className="workspace-open-editors__item-close"
+                  icon={<X size={14} />}
+                  size="sm"
+                  onClick={() => closePath(path)}
+                />
+              </Tooltip>
+            </div>
+          ))}
+        </div>
+      ) : null}
     </section>
   );
 }

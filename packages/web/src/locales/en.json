@@ -81,7 +81,8 @@
     "search_commands": "Search Commands",
     "back": "Back",
     "expand": "Expand",
-    "collapse": "Collapse"
+    "collapse": "Collapse",
+    "close_all": "Close all"
   },
   "label": {
     "workspace": "Workspace",
@@ -167,6 +168,12 @@
       "placeholder": "Type a filename or path",
       "no_results": "No matching files found.",
       "failed": "File search failed. Try again."
+    },
+    "open_editors": {
+      "title_with_count": "{title} ({count})",
+      "close_path": "Close {path}",
+      "expand_label": "Expand Open Editors",
+      "collapse_label": "Collapse Open Editors"
     },
     "search": {
       "empty": "Type to search across file contents.",

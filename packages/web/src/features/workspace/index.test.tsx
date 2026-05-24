@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -1444,6 +1444,79 @@ describe("WorkspacePage", () => {
     expect(screen.queryByTestId("git-diff-viewer")).not.toBeInTheDocument();
   });
 
+  it("returns from editor mode to the agent session view when close all closes the last desktop editor", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return {
+          branch: "main",
+          ahead: 0,
+          behind: 0,
+          staged: [],
+          modified: [],
+          deleted: [],
+          untracked: [],
+        };
+      }
+
+      return [];
+    });
+
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedReadyWorkspaceState(store, {
+      "ws-test": {
+        id: "ws-test",
+        path: "/home/spencer/workspace/coder-studio",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+    store.set(activeFilePathAtomFamily("ws-test"), "src/app.tsx");
+    store.set(editorModeAtomFamily("ws-test"), "edit");
+    store.set(openFilesAtomFamily("ws-test"), {
+      "src/app.tsx": {
+        kind: "text",
+        path: "src/app.tsx",
+        content: "const app = 1;",
+        savedContent: "const app = 1;",
+        baseHash: "hash-app",
+        isDirty: false,
+      },
+    });
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/workspace"]}>
+          <Routes>
+            <Route path="/workspace" element={<WorkspaceDesktopView />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>
+    );
+
+    await screen.findByTestId("code-editor-host");
+    expect(screen.queryByTestId("agent-panes")).not.toBeInTheDocument();
+
+    const heading = screen.getByRole("heading", { level: 2, name: /(Open Editors|打开的编辑器)/i });
+    expect(heading).toHaveTextContent(/(Open Editors|打开的编辑器)\s*\(1\)/i);
+
+    const section = heading.closest("section") as HTMLElement;
+    fireEvent.click(within(section).getByRole("button", { name: /Close all|全部关闭/i }));
+
+    await screen.findByTestId("agent-panes");
+    expect(heading).toHaveTextContent(/(Open Editors|打开的编辑器)\s*\(0\)/i);
+    expect(screen.queryByTestId("code-editor-host")).not.toBeInTheDocument();
+    expect(store.get(openFilesAtomFamily("ws-test"))).toEqual({});
+    expect(store.get(activeFilePathAtomFamily("ws-test"))).toBeNull();
+  });
+
   it("keeps commit-history diff previews reachable on desktop without an active file", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "git.status") {
@@ -1497,6 +1570,167 @@ describe("WorkspacePage", () => {
 
     await screen.findByTestId("code-editor-host");
     expect(screen.queryByTestId("agent-panes")).not.toBeInTheDocument();
+  });
+
+  it("keeps commit-history diff previews reachable after close all clears open editors", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return {
+          branch: "main",
+          ahead: 0,
+          behind: 0,
+          staged: [],
+          modified: [],
+          deleted: [],
+          untracked: [],
+        };
+      }
+
+      return [];
+    });
+
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedReadyWorkspaceState(store, {
+      "ws-test": {
+        id: "ws-test",
+        path: "/home/spencer/workspace/coder-studio",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+    store.set(activeFilePathAtomFamily("ws-test"), "src/app.tsx");
+    store.set(editorModeAtomFamily("ws-test"), "edit");
+    store.set(openFilesAtomFamily("ws-test"), {
+      "src/app.tsx": {
+        kind: "text",
+        path: "src/app.tsx",
+        content: "const app = 1;",
+        savedContent: "const app = 1;",
+        baseHash: "hash-app",
+        isDirty: false,
+      },
+    });
+    store.set(gitDiffPreviewAtomFamily("ws-test"), {
+      path: "abc123",
+      title: "abc123 · commit subject",
+      diff: "diff --git a/src/app.tsx b/src/app.tsx",
+      source: "commit",
+    });
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/workspace"]}>
+          <Routes>
+            <Route path="/workspace" element={<WorkspaceDesktopView />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>
+    );
+
+    await screen.findByTestId("code-editor-host");
+
+    const heading = screen.getByRole("heading", { level: 2, name: /(Open Editors|打开的编辑器)/i });
+    const section = heading.closest("section") as HTMLElement;
+    fireEvent.click(within(section).getByRole("button", { name: /Close all|全部关闭/i }));
+
+    await screen.findByTestId("code-editor-host");
+    expect(screen.queryByTestId("agent-panes")).not.toBeInTheDocument();
+    expect(store.get(openFilesAtomFamily("ws-test"))).toEqual({});
+    expect(store.get(activeFilePathAtomFamily("ws-test"))).toBeNull();
+    expect(store.get(gitDiffPreviewAtomFamily("ws-test"))).toEqual({
+      path: "abc123",
+      title: "abc123 · commit subject",
+      diff: "diff --git a/src/app.tsx b/src/app.tsx",
+      source: "commit",
+    });
+  });
+
+  it("clearing the final open editor from Open Editors also clears an active commit preview", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return {
+          branch: "main",
+          ahead: 0,
+          behind: 0,
+          staged: [],
+          modified: [],
+          deleted: [],
+          untracked: [],
+        };
+      }
+
+      return [];
+    });
+
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedReadyWorkspaceState(store, {
+      "ws-test": {
+        id: "ws-test",
+        path: "/home/spencer/workspace/coder-studio",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+    store.set(activeFilePathAtomFamily("ws-test"), "src/app.tsx");
+    store.set(editorModeAtomFamily("ws-test"), "edit");
+    store.set(openFilesAtomFamily("ws-test"), {
+      "src/app.tsx": {
+        kind: "text",
+        path: "src/app.tsx",
+        content: "const app = 1;",
+        savedContent: "const app = 1;",
+        baseHash: "hash-app",
+        isDirty: false,
+      },
+    });
+    store.set(gitDiffPreviewAtomFamily("ws-test"), {
+      path: "abc123",
+      title: "abc123 · commit subject",
+      diff: "diff --git a/src/app.tsx b/src/app.tsx",
+      source: "commit",
+    });
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/workspace"]}>
+          <Routes>
+            <Route path="/workspace" element={<WorkspaceDesktopView />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>
+    );
+
+    await screen.findByTestId("code-editor-host");
+    expect(screen.queryByTestId("agent-panes")).not.toBeInTheDocument();
+
+    const activeRow = screen
+      .getByRole("button", { name: "src/app.tsx" })
+      .closest(".workspace-open-editors__row") as HTMLElement;
+    fireEvent.click(
+      within(activeRow).getByRole("button", { name: /^(Close|关闭) src\/app\.tsx$/ })
+    );
+
+    await screen.findByTestId("agent-panes");
+    expect(screen.queryByTestId("code-editor-host")).not.toBeInTheDocument();
+    expect(store.get(activeFilePathAtomFamily("ws-test"))).toBeNull();
+    expect(store.get(openFilesAtomFamily("ws-test"))).toEqual({});
+    expect(store.get(gitDiffPreviewAtomFamily("ws-test"))).toBeNull();
   });
 
   it("keeps the resized desktop file panel width after dragging the left separator", async () => {
