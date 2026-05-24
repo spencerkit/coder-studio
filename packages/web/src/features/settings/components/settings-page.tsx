@@ -218,6 +218,22 @@ const MOBILE_SETTINGS_GROUPS = [
   sections: readonly SettingsSection[];
 }[];
 
+function resolveOrderedThemeDefinitions(
+  themeIds: readonly string[],
+  themeDefinitionsById: ReadonlyMap<string, (typeof THEMES)[number]>,
+  groupName: string
+) {
+  return themeIds.map((themeId) => {
+    const themeDefinition = themeDefinitionsById.get(themeId);
+
+    if (!themeDefinition) {
+      throw new Error(`Missing theme registry entry for "${themeId}" in ${groupName}.`);
+    }
+
+    return themeDefinition;
+  });
+}
+
 function resolveMobileSettingsGroups(
   availableSections: readonly {
     id: SettingsSection;
@@ -1864,14 +1880,23 @@ function AppearanceSettings({
   const themeDefinitionsById = new Map(
     THEMES.map((registeredTheme) => [registeredTheme.id, registeredTheme])
   );
+  const coreThemes = resolveOrderedThemeDefinitions(
+    CORE_THEME_IDS,
+    themeDefinitionsById,
+    "core theme picker group"
+  );
+  const seasonalThemes = resolveOrderedThemeDefinitions(
+    SEASONAL_THEME_IDS,
+    themeDefinitionsById,
+    "seasonal theme picker group"
+  );
   const themeOptions = [
     {
       value: "__group_core",
       label: t("settings.theme.group_core"),
       disabled: true,
     },
-    ...CORE_THEME_IDS.map((themeId) => {
-      const registeredTheme = themeDefinitionsById.get(themeId)!;
+    ...coreThemes.map((registeredTheme) => {
       return {
         value: registeredTheme.id,
         label: t(registeredTheme.labelKey),
@@ -1882,8 +1907,7 @@ function AppearanceSettings({
       label: t("settings.theme.group_seasonal"),
       disabled: true,
     },
-    ...SEASONAL_THEME_IDS.map((themeId) => {
-      const registeredTheme = themeDefinitionsById.get(themeId)!;
+    ...seasonalThemes.map((registeredTheme) => {
       return {
         value: registeredTheme.id,
         label: t(registeredTheme.labelKey),

@@ -2838,6 +2838,30 @@ describe("SettingsPage", () => {
     fireEvent.click(picker);
 
     const listbox = await screen.findByRole("listbox", { name: "Theme" });
+    expect(
+      within(listbox)
+        .getAllByRole("option")
+        .map((option) => option.textContent)
+    ).toEqual([
+      "Core Themes",
+      "Mint Dark",
+      "Mint Light",
+      "Graphite Dark",
+      "Graphite Light",
+      "Nord Dark",
+      "Nord Light",
+      "High Contrast Dark",
+      "High Contrast Light",
+      "Seasonal Themes",
+      "Spring Light",
+      "Spring Dark",
+      "Summer Light",
+      "Summer Dark",
+      "Autumn Light",
+      "Autumn Dark",
+      "Winter Light",
+      "Winter Dark",
+    ]);
     expect(within(listbox).getByRole("option", { name: "Mint Dark" })).toHaveAttribute(
       "aria-selected",
       "true"
@@ -2937,6 +2961,26 @@ describe("SettingsPage", () => {
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Theme Nord Light" })).toBeInTheDocument();
+    });
+  });
+
+  it("hydrates the grouped theme picker from a seasonal settings.get themeId", async () => {
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "appearance.themeId": "winter-dark",
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "Appearance" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Theme Winter Dark" })).toBeInTheDocument();
     });
   });
 
