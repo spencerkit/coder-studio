@@ -61,7 +61,7 @@ interface GitPanelProps {
 
 interface GitPanelState {
   pendingWorktreeDeletePath: string | null;
-  worktreeSurfaceView: "list" | "create" | null;
+  worktreeSurfaceView: "create" | null;
   worktreesExpanded: boolean;
   historyExpanded: boolean;
   collapsedGroups: Record<string, boolean>;
@@ -173,10 +173,6 @@ export const GitPanel: FC<GitPanelProps> = ({
 
   const handleWorktreeOpen = async (worktree: WorktreeInfo) => {
     if (currentWorktree?.path === worktree.path) {
-      setPanelState((current) => ({
-        ...current,
-        worktreeSurfaceView: "list",
-      }));
       return;
     }
 
@@ -245,33 +241,19 @@ export const GitPanel: FC<GitPanelProps> = ({
                   <ChevronDown size={14} />
                 </span>
               </button>
-              <div className="git-panel-section-actions">
-                <button
-                  type="button"
-                  className="git-panel-section-link"
-                  onClick={() =>
-                    setPanelState((current) => ({
-                      ...current,
-                      worktreeSurfaceView: "list",
-                    }))
-                  }
-                >
-                  <span>{t("worktree.manage")}</span>
-                </button>
-                <button
-                  type="button"
-                  className="git-panel-section-link"
-                  onClick={() =>
-                    setPanelState((current) => ({
-                      ...current,
-                      worktreeSurfaceView: "create",
-                    }))
-                  }
-                >
-                  <ThemedIcon semantic="worktree.action.new" size={12} />
-                  <span>{t("worktree.new")}</span>
-                </button>
-              </div>
+              <button
+                type="button"
+                className="git-panel-section-link"
+                onClick={() =>
+                  setPanelState((current) => ({
+                    ...current,
+                    worktreeSurfaceView: "create",
+                  }))
+                }
+              >
+                <ThemedIcon semantic="worktree.action.new" size={12} />
+                <span>{t("worktree.new")}</span>
+              </button>
             </div>
 
             {worktreesExpanded ? (
