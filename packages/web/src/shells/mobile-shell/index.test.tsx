@@ -1705,24 +1705,26 @@ describe("MobileShell Phase 2 workspace", () => {
       },
       undefined
     );
-    expect(sendCommand).toHaveBeenCalledWith(
-      "workspace.uiState.set",
-      expect.objectContaining({
-        workspaceId: "ws-1",
-        uiState: expect.objectContaining({
-          activeSessionId: "sess_3",
-          paneLayout: expect.objectContaining({
-            type: "split",
-            direction: "vertical",
-            children: [
-              expect.objectContaining({ sessionId: "sess_2" }),
-              expect.objectContaining({ sessionId: "sess_3" }),
-            ],
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "workspace.uiState.set",
+        expect.objectContaining({
+          workspaceId: "ws-1",
+          uiState: expect.objectContaining({
+            activeSessionId: "sess_3",
+            paneLayout: expect.objectContaining({
+              type: "split",
+              direction: "horizontal",
+              children: [
+                expect.objectContaining({ sessionId: "sess_2" }),
+                expect.objectContaining({ sessionId: "sess_3" }),
+              ],
+            }),
           }),
         }),
-      }),
-      undefined
-    );
+        undefined
+      );
+    });
   });
 
   it("closes the agent sheet once when selecting an existing session", async () => {
