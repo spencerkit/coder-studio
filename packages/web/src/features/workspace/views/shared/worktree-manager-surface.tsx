@@ -1,5 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Button, ConfirmDialog, Drawer, EmptyState, Input, Sheet } from "../../../../components/ui";
+import {
+  Button,
+  ConfirmDialog,
+  EmptyState,
+  Input,
+  Modal,
+  ModalBody,
+  ModalHeader,
+  ModalTitle,
+  Sheet,
+} from "../../../../components/ui";
 import { useViewport } from "../../../../hooks/use-viewport";
 import { useTranslation } from "../../../../lib/i18n";
 import { useWorktreeManagementActions } from "../../actions/use-worktree-management-actions";
@@ -451,10 +461,20 @@ export function WorktreeManagerSurface({
   }
 
   return (
-    <Drawer
-      backdropDismiss={false}
+    <Modal
       className="worktree-manager-surface"
-      headerActions={
+      dismissible={false}
+      initialFocus={() => (view === "create" ? branchInputRef.current : null)}
+      onOpenChange={(open) => {
+        if (!open) {
+          onClose();
+        }
+      }}
+      open
+      size="lg"
+    >
+      <ModalHeader>
+        <ModalTitle>{title}</ModalTitle>
         <div className="worktree-manager-surface__header-actions">
           {view === "list" ? (
             <Button size="sm" variant="primary" onClick={openCreate}>
@@ -479,17 +499,8 @@ export function WorktreeManagerSurface({
             {t("action.close")}
           </Button>
         </div>
-      }
-      initialFocus={() => (view === "create" ? branchInputRef.current : null)}
-      onOpenChange={(open) => {
-        if (!open) {
-          onClose();
-        }
-      }}
-      open
-      title={title}
-    >
-      {body}
-    </Drawer>
+      </ModalHeader>
+      <ModalBody>{body}</ModalBody>
+    </Modal>
   );
 }
