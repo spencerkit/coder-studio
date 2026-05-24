@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.4
+
+### Patch Changes
+
+- [#58](https://github.com/spencerkit/coder-studio/pull/58) [`5641146`](https://github.com/spencerkit/coder-studio/commit/5641146c06fe6ecfe0f5d19d738b94298b1b5c57) Thanks [@pallyoung](https://github.com/pallyoung)! - Refine workspace navigation and editor management across desktop and mobile by
+  polishing sidebar section actions, improving quick jump and search flows, and
+  tightening preview and recovery behavior around open editors.
+
 ## 0.4.3
 
 ### Patch Changes
