@@ -277,6 +277,7 @@ function stubRowsGeometry(
 const mockTerminal = {
   open: vi.fn(),
   onData: vi.fn(() => vi.fn()), // Return dispose function
+  onBinary: vi.fn(() => vi.fn()),
   onResize: vi.fn(() => vi.fn()),
   onRender: vi.fn(() => vi.fn()),
   onSelectionChange: vi.fn(() => vi.fn()),
@@ -3237,6 +3238,77 @@ describe("XtermHost", () => {
     expect(onDataCallback).toBeTypeOf("function");
 
     await onDataCallback?.("ls -la\n");
+
+    await act(async () => {
+      const callback = rafCallbacks.shift();
+      callback?.(16);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(sendTerminalInput).not.toHaveBeenCalled();
+
+    global.requestAnimationFrame = originalRequestAnimationFrame;
+    global.cancelAnimationFrame = originalCancelAnimationFrame;
+  });
+
+  it("dispatches binary terminal input bytes without UTF-8 re-encoding", async () => {
+    const store = createStore();
+    const sendTerminalInput = vi.fn().mockResolvedValue(undefined);
+
+    store.set(wsClientAtom, {
+      sendTerminalInput,
+      subscribe: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="binary-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    const onBinaryCallback = mockTerminal.onBinary.mock.calls[0]?.[0];
+    expect(onBinaryCallback).toBeTypeOf("function");
+
+    await onBinaryCallback?.("\x1b[M\u00ffA");
+
+    expect(sendTerminalInput).toHaveBeenCalledWith(
+      "binary-terminal",
+      Uint8Array.from([0x1b, 0x5b, 0x4d, 0xff, 0x41]),
+      "control",
+      undefined
+    );
+  });
+
+  it("does not send binary terminal input when rendered in read-only mode", async () => {
+    const store = createStore();
+    const sendTerminalInput = vi.fn().mockResolvedValue(undefined);
+    const rafCallbacks: FrameRequestCallback[] = [];
+    const originalRequestAnimationFrame = global.requestAnimationFrame;
+    const originalCancelAnimationFrame = global.cancelAnimationFrame;
+
+    global.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      rafCallbacks.push(callback);
+      return rafCallbacks.length;
+    }) as typeof requestAnimationFrame;
+    global.cancelAnimationFrame = vi.fn() as typeof cancelAnimationFrame;
+
+    store.set(wsClientAtom, {
+      sendTerminalInput,
+      subscribe: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="readonly-binary-terminal" workspaceId="test-workspace" readOnly />
+      </Provider>
+    );
+
+    const onBinaryCallback = mockTerminal.onBinary.mock.calls[0]?.[0];
+    expect(onBinaryCallback).toBeTypeOf("function");
+
+    await onBinaryCallback?.("\x1b[M !!");
 
     await act(async () => {
       const callback = rafCallbacks.shift();
