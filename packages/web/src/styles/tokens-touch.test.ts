@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { THEME_IDS } from "../theme";
 
 const stylesheet = readFileSync(`${process.cwd()}/src/styles/tokens.css`, "utf8");
 
@@ -51,25 +52,6 @@ function getDeclaredCustomProperties(block: string): string[] {
 }
 
 describe("tokens.css touch tokens", () => {
-  const builtInThemes = [
-    "mint-dark",
-    "mint-light",
-    "graphite-dark",
-    "graphite-light",
-    "nord-dark",
-    "nord-light",
-    "hc-dark",
-    "hc-light",
-    "spring-dark",
-    "spring-light",
-    "summer-dark",
-    "summer-light",
-    "autumn-dark",
-    "autumn-light",
-    "winter-dark",
-    "winter-light",
-  ] as const;
-
   const requiredIconTokens = [
     "--icon-primary",
     "--icon-secondary",
@@ -209,21 +191,10 @@ describe("tokens.css touch tokens", () => {
 
   it("defines named theme blocks for all built-in themes", () => {
     expect(stylesheet).toContain(':root,\n[data-theme="mint-dark"]');
-    expect(stylesheet).toContain('[data-theme="mint-light"]');
-    expect(stylesheet).toContain('[data-theme="graphite-dark"]');
-    expect(stylesheet).toContain('[data-theme="graphite-light"]');
-    expect(stylesheet).toContain('[data-theme="nord-dark"]');
-    expect(stylesheet).toContain('[data-theme="nord-light"]');
-    expect(stylesheet).toContain('[data-theme="hc-dark"]');
-    expect(stylesheet).toContain('[data-theme="hc-light"]');
-    expect(stylesheet).toContain('[data-theme="spring-dark"]');
-    expect(stylesheet).toContain('[data-theme="spring-light"]');
-    expect(stylesheet).toContain('[data-theme="summer-dark"]');
-    expect(stylesheet).toContain('[data-theme="summer-light"]');
-    expect(stylesheet).toContain('[data-theme="autumn-dark"]');
-    expect(stylesheet).toContain('[data-theme="autumn-light"]');
-    expect(stylesheet).toContain('[data-theme="winter-dark"]');
-    expect(stylesheet).toContain('[data-theme="winter-light"]');
+
+    for (const themeId of THEME_IDS.filter((themeId) => themeId !== "mint-dark")) {
+      expect(stylesheet).toContain(`[data-theme="${themeId}"]`);
+    }
   });
 
   it("defines desktop-default touch target tokens on :root", () => {
@@ -679,7 +650,7 @@ describe("tokens.css touch tokens", () => {
   });
 
   it("defines required icon tokens for every built-in theme", () => {
-    for (const theme of builtInThemes) {
+    for (const theme of THEME_IDS) {
       const block = getRuleBlock(`[data-theme="${theme}"]`);
 
       for (const token of requiredIconTokens) {
@@ -770,10 +741,12 @@ describe("tokens.css touch tokens", () => {
       getCustomProperty(graphiteLight, "--gap-content")
     );
 
-    expect(getCustomProperty(springLight, "--state-focus-ring-color")).not.toBeNull();
-    expect(getCustomProperty(summerDark, "--surface-overlay-bg")).not.toBeNull();
-    expect(getCustomProperty(autumnLight, "--radius-overlay")).not.toBeNull();
-    expect(getCustomProperty(winterDark, "--gap-content")).not.toBeNull();
+    expect(getCustomProperty(springLight, "--state-focus-ring-color")).toBe("#c84b6a");
+    expect(getCustomProperty(summerDark, "--surface-overlay-bg")).toBe(
+      "color-mix(in srgb, #18211c 96%, transparent)"
+    );
+    expect(getCustomProperty(autumnLight, "--radius-overlay")).toBe("var(--radius-xl)");
+    expect(getCustomProperty(winterDark, "--gap-content")).toBe("var(--sp-3)");
   });
 
   it("keeps light-theme icon tokens visually distinct across families", () => {

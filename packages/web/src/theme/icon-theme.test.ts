@@ -1,35 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { getIconPresentation, ICON_SEMANTICS } from "./index";
+import { getIconPresentation, ICON_SEMANTICS, THEME_IDS } from "./index";
 
 describe("theme icon resolver", () => {
-  const builtInThemes = [
-    "mint-dark",
-    "mint-light",
-    "graphite-dark",
-    "graphite-light",
-    "nord-dark",
-    "nord-light",
-    "hc-dark",
-    "hc-light",
-    "spring-dark",
-    "spring-light",
-    "summer-dark",
-    "summer-light",
-    "autumn-dark",
-    "autumn-light",
-    "winter-dark",
-    "winter-light",
-  ] as const;
-  const seasonalThemes = [
-    "spring-dark",
-    "spring-light",
-    "summer-dark",
-    "summer-light",
-    "autumn-dark",
-    "autumn-light",
-    "winter-dark",
-    "winter-light",
-  ] as const;
+  const builtInThemes = THEME_IDS;
+  const seasonalThemes = THEME_IDS.filter((themeId) =>
+    /^(spring|summer|autumn|winter)-(dark|light)$/.test(themeId)
+  );
 
   it("resolves the base semantic set for every built-in theme", () => {
     for (const themeId of builtInThemes) {
