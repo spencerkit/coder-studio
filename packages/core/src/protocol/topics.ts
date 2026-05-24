@@ -26,12 +26,15 @@ export const Topics = {
     `workspace.${workspaceId}.terminal.${terminalId}.created`,
   terminalOutput: (workspaceId: string, terminalId: string) =>
     `workspace.${workspaceId}.terminal.${terminalId}.output`,
+  terminalContinuityLost: (workspaceId: string, terminalId: string) =>
+    `workspace.${workspaceId}.terminal.${terminalId}.continuity_lost`,
   terminalExit: (workspaceId: string, terminalId: string) =>
     `workspace.${workspaceId}.terminal.${terminalId}.exit`,
   terminalsAll: (workspaceId: string) => `workspace.${workspaceId}.terminal.*`,
 
   // Notification
   notificationToast: "notification.toast",
+  updateStateChanged: "update.state.changed",
 
   // Supervisor-level (Phase 3)
   supervisorState: (workspaceId: string, sessionId: string) =>

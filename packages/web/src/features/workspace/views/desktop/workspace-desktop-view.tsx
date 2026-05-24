@@ -1,37 +1,42 @@
-import { useSetAtom } from "jotai";
-import { ChevronsUp } from "lucide-react";
-import { type FC, useEffect, useRef, useState } from "react";
-import {
-  EmptyState,
-  IconButton,
-  Tab,
-  TabList,
-  Tabs,
-  ThemedIcon,
-  Tooltip,
-} from "../../../../components/ui";
+import { useAtomValue, useSetAtom } from "jotai";
+import { type FC, useEffect, useRef } from "react";
+import { activeWorkspaceAtom } from "../../../../atoms/workspaces";
+import { EmptyState } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { AgentPanes } from "../../../agent-panes";
 import { CodeEditorHost } from "../../../code-editor/views/shared/code-editor-host";
 import { PanelHeader } from "../../../shared/components/panel-header";
 import { TerminalPanel } from "../../../terminal-panel";
 import { TopBar } from "../../../topbar";
-import { useGitDiffViewerActions } from "../../actions/use-git-actions";
 import { useWorkspaceFullscreen } from "../../actions/use-workspace-fullscreen";
 import { useWorkspaceScreenModel } from "../../actions/use-workspace-screen-model";
-import { activeFilePathAtomFamily, sidebarCollapsedAtom } from "../../atoms";
-import { FileTreePanel } from "../shared/file-tree-panel";
-import { GitDiffViewer } from "../shared/git-diff-viewer";
+import { sidebarCollapsedAtom } from "../../atoms";
+import { sanitizeDesktopSidebarView } from "../../atoms/layout";
+import { ExplorerPanel } from "../shared/explorer-panel";
 import { GitPanel } from "../shared/git-panel";
+import { SearchPanel } from "../shared/search-panel";
+import { WorkspaceActivityBar } from "../shared/workspace-activity-bar";
 import { WorkspaceStatusBar } from "../shared/workspace-status-bar";
 
-export const WorkspaceDesktopView: FC = () => {
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  if (target.isContentEditable || target.closest('[contenteditable="true"]')) {
+    return true;
+  }
+
+  return ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
+}
+
+const WorkspaceDesktopScene: FC = () => {
   const fullscreenRootRef = useRef<HTMLDivElement>(null);
   const fullscreenController = useWorkspaceFullscreen(fullscreenRootRef);
-  const [fileTreeCollapseVersion, setFileTreeCollapseVersion] = useState(0);
   const t = useTranslation();
   const {
     createRequest,
+    desktopSidebarView,
     focusMode,
     gitState,
     handleBottomMouseDown,
@@ -43,20 +48,22 @@ export const WorkspaceDesktopView: FC = () => {
     leftPanelWidth,
     leftPanelRef,
     mainAreaMode,
-    setSidebarTab,
+    setDesktopSidebarView,
     sidebarCollapsed,
-    sidebarTab,
     terminalPanelVisible,
     workspace,
     bottomPanelHeight,
     bottomPanelRef,
-    workspaceId,
   } = useWorkspaceScreenModel();
-  const setActiveFilePath = useSetAtom(activeFilePathAtomFamily(workspaceId));
   const setSidebarCollapsed = useSetAtom(sidebarCollapsedAtom);
-  const { closePreview } = useGitDiffViewerActions(workspaceId);
+  const activeSidebarView = sanitizeDesktopSidebarView(desktopSidebarView);
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || isEditableTarget(event.target)) {
+        return;
+      }
+
       if (!(event.metaKey || event.ctrlKey)) {
         return;
       }
@@ -69,39 +76,25 @@ export const WorkspaceDesktopView: FC = () => {
 
       if (event.key === "1") {
         event.preventDefault();
-        setSidebarTab("files");
+        setDesktopSidebarView("explorer");
         return;
       }
 
       if (event.key === "2") {
         event.preventDefault();
-        setSidebarTab("git");
+        setDesktopSidebarView("search");
+        return;
+      }
+
+      if (event.key === "3") {
+        event.preventDefault();
+        setDesktopSidebarView("source-control");
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [setSidebarCollapsed, setSidebarTab]);
-
-  if (!workspace) {
-    return (
-      <div className="workspace-page workspace-page-empty">
-        <div className="workspace-empty-content">
-          <div className="workspace-empty-inner">
-            <EmptyState
-              style={{ minHeight: "auto", padding: 0 }}
-              title={<p>{t("workspace.no_workspace")}</p>}
-            />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const handleCloseDiff = () => {
-    closePreview();
-    setActiveFilePath(null);
-  };
+  }, [setDesktopSidebarView, setSidebarCollapsed]);
 
   return (
     <div ref={fullscreenRootRef} className="workspace-page workspace-page--desktop">
@@ -116,73 +109,34 @@ export const WorkspaceDesktopView: FC = () => {
               style={{ width: `${leftPanelWidth}px` }}
             >
               <div className="nav-panel workspace-sidebar-panel">
-                <PanelHeader
-                  title={t("workspace.title")}
-                  meta={
-                    <Tabs
-                      aria-label="Workspace sections"
-                      onValueChange={setSidebarTab}
-                      value={sidebarTab}
-                    >
-                      <TabList className="workspace-sidebar-panel__tabs">
-                        <Tab className="workspace-sidebar-panel__tab" value="files">
-                          <span>{t("file.title")}</span>
-                        </Tab>
-                        <Tab className="workspace-sidebar-panel__tab" value="git">
-                          <span>{t("label.git")}</span>
-                        </Tab>
-                      </TabList>
-                    </Tabs>
-                  }
-                  actions={
-                    <div className="workspace-sidebar-panel__actions">
-                      {sidebarTab === "files" ? (
-                        <>
-                          <Tooltip content={t("file.new_file")}>
-                            <IconButton
-                              className="panel-toolbar-btn"
-                              aria-label={t("file.new_file")}
-                              icon={<ThemedIcon semantic="file.action.new" size={14} />}
-                              onClick={handleOpenFileCreate}
-                              size="sm"
-                            />
-                          </Tooltip>
-                          <Tooltip content={t("file.new_folder")}>
-                            <IconButton
-                              className="panel-toolbar-btn"
-                              aria-label={t("file.new_folder")}
-                              icon={<ThemedIcon semantic="file.action.newFolder" size={14} />}
-                              onClick={handleOpenFolderCreate}
-                              size="sm"
-                            />
-                          </Tooltip>
-                          <Tooltip content={t("file.collapse_all")}>
-                            <IconButton
-                              className="panel-toolbar-btn"
-                              aria-label={t("file.collapse_all")}
-                              icon={<ChevronsUp size={14} />}
-                              onClick={() => setFileTreeCollapseVersion((value) => value + 1)}
-                              size="sm"
-                            />
-                          </Tooltip>
-                        </>
-                      ) : null}
-                    </div>
-                  }
+                <WorkspaceActivityBar
+                  activeView={activeSidebarView}
+                  onSelectView={setDesktopSidebarView}
                 />
 
-                <div className="workspace-sidebar-panel__body">
-                  {sidebarTab === "files" ? (
-                    <FileTreePanel
+                <div className="workspace-sidebar-panel__content">
+                  {activeSidebarView === "explorer" ? (
+                    <ExplorerPanel
                       workspaceId={workspace.id}
                       createRequest={createRequest}
                       onCreateRequestConsumed={handleConsumeCreateRequest}
-                      collapseVersion={fileTreeCollapseVersion}
-                      variant="desktop"
+                      onOpenFileCreate={handleOpenFileCreate}
+                      onOpenFolderCreate={handleOpenFolderCreate}
                     />
-                  ) : (
-                    <GitPanel workspaceId={workspace.id} variant="desktop" />
-                  )}
+                  ) : null}
+
+                  {activeSidebarView === "search" ? (
+                    <SearchPanel workspaceId={workspace.id} />
+                  ) : null}
+
+                  {activeSidebarView === "source-control" ? (
+                    <div className="workspace-sidebar-view">
+                      <PanelHeader title={t("workspace.sidebar.source_control")} />
+                      <div className="workspace-sidebar-panel__body">
+                        <GitPanel workspaceId={workspace.id} variant="desktop" />
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             </aside>
@@ -199,9 +153,7 @@ export const WorkspaceDesktopView: FC = () => {
 
         <div className="workspace-main-area">
           <div className="workspace-main-stage">
-            {mainAreaMode === "diff" ? (
-              <GitDiffViewer workspaceId={workspace.id} onClose={handleCloseDiff} />
-            ) : mainAreaMode === "editor" ? (
+            {mainAreaMode === "editor" ? (
               <CodeEditorHost />
             ) : (
               <div className="agent-panes">
@@ -240,6 +192,28 @@ export const WorkspaceDesktopView: FC = () => {
       />
     </div>
   );
+};
+
+export const WorkspaceDesktopView: FC = () => {
+  const workspace = useAtomValue(activeWorkspaceAtom);
+  const t = useTranslation();
+
+  if (!workspace) {
+    return (
+      <div className="workspace-page workspace-page-empty">
+        <div className="workspace-empty-content">
+          <div className="workspace-empty-inner">
+            <EmptyState
+              style={{ minHeight: "auto", padding: 0 }}
+              title={<p>{t("workspace.no_workspace")}</p>}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return <WorkspaceDesktopScene key={workspace.id} />;
 };
 
 export { WorkspaceDesktopView as WorkspacePage };

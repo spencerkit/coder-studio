@@ -86,10 +86,23 @@ function createConnectedStore(
   return store;
 }
 
-function renderSettingsPage(store = createConnectedStore(vi.fn().mockResolvedValue({}))) {
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+function renderSettingsPage(
+  store = createConnectedStore(vi.fn().mockResolvedValue({})),
+  { initialEntry = "/settings" }: { initialEntry?: string } = {}
+) {
   return render(
     <Provider store={store}>
-      <MemoryRouter initialEntries={["/settings"]}>
+      <MemoryRouter initialEntries={[initialEntry]}>
         <SettingsPage />
       </MemoryRouter>
     </Provider>
@@ -217,6 +230,25 @@ describe("SettingsPage", () => {
     });
   });
 
+  it("redirects to session gate instead of showing an inline load error when activation is required", async () => {
+    const sendCommand = vi.fn().mockRejectedValue(
+      new CommandResultError({
+        code: "activation_required",
+        message: "This tab is no longer the active session",
+      })
+    );
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+
+    await waitFor(() => {
+      expect(routerMocks.navigate).toHaveBeenCalledWith("/session-gate", { replace: true });
+    });
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByText("This tab is no longer the active session")).not.toBeInTheDocument();
+  });
+
   it("renders the footer version from server metadata", () => {
     const store = createConnectedStore(vi.fn().mockResolvedValue({}));
     store.set(serverInfoAtom, {
@@ -279,6 +311,9 @@ describe("SettingsPage", () => {
       desktopView.container.querySelector('[data-icon-semantic="nav.settings.shortcuts"]')
     ).toBeTruthy();
     expect(
+      desktopView.container.querySelector('[data-icon-semantic="nav.settings.about"]')
+    ).toBeTruthy();
+    expect(
       desktopView.container.querySelector('[data-icon-semantic="nav.settings.diagnostics"]')
     ).toBeNull();
 
@@ -305,6 +340,9 @@ describe("SettingsPage", () => {
     ).toBeTruthy();
     expect(
       mobileView.container.querySelector('[data-icon-semantic="nav.settings.shortcuts"]')
+    ).toBeTruthy();
+    expect(
+      mobileView.container.querySelector('[data-icon-semantic="nav.settings.about"]')
     ).toBeTruthy();
     expect(
       mobileView.container.querySelector('[data-icon-semantic="nav.settings.diagnostics"]')
@@ -357,10 +395,112 @@ describe("SettingsPage", () => {
     const buttons = within(mobileRoot).getAllByRole("button");
     const labels = buttons.map((button) => button.getAttribute("aria-label")).filter(Boolean);
 
-    expect(labels).toEqual(expect.arrayContaining(["通用", "Agents", "外观", "快捷键"]));
+    expect(labels).toEqual(expect.arrayContaining(["通用", "Agents", "外观", "快捷键", "关于"]));
     expect(labels.indexOf("通用")).toBeLessThan(labels.indexOf("Agents"));
     expect(labels.indexOf("Agents")).toBeLessThan(labels.indexOf("外观"));
     expect(labels.indexOf("外观")).toBeLessThan(labels.indexOf("快捷键"));
+    expect(labels.indexOf("快捷键")).toBeLessThan(labels.indexOf("关于"));
+  });
+
+  it("renders the About section and saves update preferences through settings.update", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "updates.autoCheckEnabled": true,
+          "updates.checkIntervalSec": 21600,
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+
+    fireEvent.click(await screen.findByRole("button", { name: "关于" }));
+    fireEvent.click(screen.getByRole("switch", { name: "自动检查更新" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            updates: {
+              autoCheckEnabled: false,
+            },
+          },
+        },
+        undefined
+      );
+    });
+  });
+
+  it("opens the About section on load when section=about is present", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "updates.autoCheckEnabled": true,
+          "updates.checkIntervalSec": 21600,
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store, { initialEntry: "/settings?section=about" });
+
+    expect(await screen.findByTestId("about-settings")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "关于" })).toBeInTheDocument();
+  });
+
+  it("does not let late settings hydration overwrite a local update preference change", async () => {
+    const settingsGetDeferred = createDeferred<Record<string, unknown>>();
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return settingsGetDeferred.promise;
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+
+    fireEvent.click(await screen.findByRole("button", { name: "关于" }));
+    fireEvent.click(screen.getByRole("switch", { name: "自动检查更新" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            updates: {
+              autoCheckEnabled: false,
+            },
+          },
+        },
+        undefined
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("switch", { name: "自动检查更新" })).toHaveAttribute(
+        "aria-checked",
+        "false"
+      );
+    });
+
+    settingsGetDeferred.resolve({
+      "updates.autoCheckEnabled": true,
+      "updates.checkIntervalSec": 21600,
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith("settings.get", {}, undefined);
+    });
+
+    expect(screen.getByRole("switch", { name: "自动检查更新" })).toHaveAttribute(
+      "aria-checked",
+      "false"
+    );
   });
 
   it("localizes the new mobile settings homepage section headings", async () => {

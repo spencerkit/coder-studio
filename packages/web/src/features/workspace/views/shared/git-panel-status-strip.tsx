@@ -11,7 +11,6 @@ interface GitPanelStatusStripProps {
   workspaceId: string;
   gitState: GitStatus | null | undefined;
   onOpenBranchSwitcher?: () => void;
-  align?: "start" | "end";
 }
 
 interface BranchTriggerProps {
@@ -61,7 +60,6 @@ export function GitPanelStatusStrip({
   workspaceId,
   gitState,
   onOpenBranchSwitcher,
-  align = "end",
 }: GitPanelStatusStripProps) {
   const t = useTranslation();
   const viewport = useViewport();
@@ -88,25 +86,27 @@ export function GitPanelStatusStrip({
   );
 
   return (
-    <div className={`git-panel-status-strip git-panel-status-strip--${align}`}>
-      {viewport === "desktop" && onOpenBranchSwitcher ? (
-        <DesktopBranchQuickPickPopover
-          workspaceId={workspaceId}
-          onOpenBranchSwitcher={onOpenBranchSwitcher}
-        >
-          {branchTrigger}
-        </DesktopBranchQuickPickPopover>
-      ) : (
-        branchTrigger
-      )}
-      <div className="git-panel-status-strip__meta">
-        <GitStatusBar
-          workspaceId={workspaceId}
-          gitState={gitState}
-          inline
-          onRefresh={refreshWorkspace}
-          refreshStatus={refreshStatus}
-        />
+    <div className="git-panel-status-strip">
+      <div className="git-panel-status-strip__left">
+        {viewport === "desktop" && onOpenBranchSwitcher ? (
+          <DesktopBranchQuickPickPopover
+            workspaceId={workspaceId}
+            onOpenBranchSwitcher={onOpenBranchSwitcher}
+          >
+            {branchTrigger}
+          </DesktopBranchQuickPickPopover>
+        ) : (
+          branchTrigger
+        )}
+        <div className="git-panel-status-strip__meta">
+          <GitStatusBar
+            workspaceId={workspaceId}
+            gitState={gitState}
+            inline
+            onRefresh={refreshWorkspace}
+            refreshStatus={refreshStatus}
+          />
+        </div>
       </div>
     </div>
   );

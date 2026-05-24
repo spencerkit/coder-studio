@@ -14,14 +14,14 @@ import { WsHub } from "./ws/hub.js";
 
 describe("app routing", () => {
   let tempDir: string;
-  let dbPath: string;
+  let stateDir: string;
   let app: FastifyInstance;
   let webRoot: string;
 
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), "coder-studio-app-"));
     webRoot = join(tempDir, "web");
-    dbPath = join(tempDir, "app.db");
+    stateDir = join(tempDir, "state-root");
 
     mkdirSync(join(webRoot, "assets"), { recursive: true });
     writeFileSync(
@@ -48,7 +48,7 @@ describe("app routing", () => {
     const config = {
       host: "127.0.0.1",
       port: 0,
-      dataDir: dbPath,
+      stateDir,
       uploadsDir: join(tempDir, "uploads"),
       logLevel: "info" as const,
       webRoot,
@@ -214,6 +214,21 @@ describe("app routing", () => {
     const response = await instance.inject({
       method: "GET",
       url: "/missing.js",
+      headers: {
+        accept: "text/html",
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.body).not.toContain("<!doctype html>");
+  });
+
+  it("does not fall back to index.html for preview routes", async () => {
+    const instance = await createApp();
+
+    const response = await instance.inject({
+      method: "GET",
+      url: "/api/preview/session/missing/docs/guide/index.html",
       headers: {
         accept: "text/html",
       },

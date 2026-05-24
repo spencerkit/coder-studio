@@ -34,6 +34,7 @@ export function ObjectiveDialog({ workspaceId, sessionId }: ObjectiveDialogProps
     selectedRecoverableTargetId,
     isRecoverableTargetsLoading,
     hasObjectiveChanged,
+    hasChanges,
     close,
     updateDraft,
     openRestoreStep,
@@ -50,7 +51,7 @@ export function ObjectiveDialog({ workspaceId, sessionId }: ObjectiveDialogProps
   const isRestoreMode = restoreStep === "restore";
   const isSaveDisabled =
     mode === "edit"
-      ? !hasObjectiveChanged || !dialog.draftObjective.trim() || !isMaxSupervisionCountValid
+      ? !hasChanges || !dialog.draftObjective.trim() || !isMaxSupervisionCountValid
       : !dialog.draftObjective.trim() || !isMaxSupervisionCountValid;
 
   return (
@@ -111,7 +112,7 @@ export function ObjectiveDialog({ workspaceId, sessionId }: ObjectiveDialogProps
           <Button
             variant="primary"
             onClick={() => {
-              if (mode === "edit" && !isRestoreMode) {
+              if (mode === "edit" && !isRestoreMode && hasObjectiveChanged) {
                 setIsSaveConfirmOpen(true);
                 return;
               }

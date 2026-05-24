@@ -85,6 +85,66 @@ describe("LspToolManager.resolve", () => {
     });
   });
 
+  it("ignores a managed manifest when the JSON is corrupted", async () => {
+    const root = mkdtempSync(join(tmpdir(), "lsp-tools-"));
+    mkdirSync(join(root, "python"), { recursive: true });
+    writeFileSync(join(root, "python", "manifest.json"), "{invalid json", "utf8");
+
+    const manager = new LspToolManager({
+      manifestStore: new FileManifestStore(root),
+      commandExists: vi.fn(async (command: string) => command === "python3"),
+      resolveBundledCommand: vi.fn(() => null),
+    });
+
+    const result = await manager.resolve({
+      workspace,
+      serverKind: "python",
+      env: {},
+    });
+
+    expect(result).toMatchObject({
+      kind: "tool_missing",
+      serverKind: "python",
+      errorCode: "lsp_tool_missing",
+    });
+  });
+
+  it("ignores a managed manifest when the stored version no longer matches the definition", async () => {
+    const root = mkdtempSync(join(tmpdir(), "lsp-tools-"));
+    const executablePath = join(root, "python", "old", "bin", "pylsp");
+    mkdirSync(dirname(executablePath), { recursive: true });
+    writeFileSync(executablePath, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+    writeFileSync(
+      join(root, "python", "manifest.json"),
+      JSON.stringify({
+        serverKind: "python",
+        version: "0.0.1",
+        executablePath,
+        installedAt: 1,
+        source: "managed",
+        platform: process.platform,
+      })
+    );
+
+    const manager = new LspToolManager({
+      manifestStore: new FileManifestStore(root),
+      commandExists: vi.fn(async (command: string) => command === "python3"),
+      resolveBundledCommand: vi.fn(() => null),
+    });
+
+    const result = await manager.resolve({
+      workspace,
+      serverKind: "python",
+      env: {},
+    });
+
+    expect(result).toMatchObject({
+      kind: "tool_missing",
+      serverKind: "python",
+      errorCode: "lsp_tool_missing",
+    });
+  });
+
   it("uses the bundled TypeScript language server before system PATH", async () => {
     const root = mkdtempSync(join(tmpdir(), "lsp-tools-"));
     const manager = new LspToolManager({

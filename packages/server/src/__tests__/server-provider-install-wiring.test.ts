@@ -19,7 +19,7 @@ import { createServer, type Server } from "../server.js";
 
 describe("createServer provider install wiring", () => {
   let server: Server | undefined;
-  let dataDir: string;
+  let stateDir: string;
   const originalPlatform = Object.getOwnPropertyDescriptor(process, "platform");
 
   afterEach(async () => {
@@ -28,8 +28,8 @@ describe("createServer provider install wiring", () => {
       server = undefined;
     }
 
-    if (dataDir) {
-      rmSync(dataDir, { recursive: true, force: true });
+    if (stateDir) {
+      rmSync(stateDir, { recursive: true, force: true });
     }
 
     if (originalPlatform) {
@@ -132,9 +132,9 @@ describe("createServer provider install wiring", () => {
       }
     );
 
-    dataDir = mkdtempSync(join(tmpdir(), "coder-studio-server-provider-install-"));
+    stateDir = mkdtempSync(join(tmpdir(), "coder-studio-server-provider-install-"));
     server = await createServer({
-      dataDir: join(dataDir, "server.db"),
+      stateDir,
       host: "127.0.0.1",
       port: 0,
     });

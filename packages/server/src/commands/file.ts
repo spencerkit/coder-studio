@@ -3,6 +3,7 @@
  */
 
 import { z } from "zod";
+import { searchFileContents } from "../fs/content-search.js";
 import {
   createDirectory,
   createFile,
@@ -46,6 +47,29 @@ registerCommand(
     }
 
     return searchFiles(workspace.path, args.query, args.limit ?? 10);
+  }
+);
+
+// file.searchContent
+registerCommand(
+  "file.searchContent",
+  z.object({
+    workspaceId: z.string(),
+    query: z.string(),
+    maxFiles: z.number().int().positive().max(100),
+    maxMatchesPerFile: z.number().int().positive().max(100),
+  }),
+  async (args, ctx) => {
+    const workspace = ctx.workspaceMgr.get(args.workspaceId);
+    if (!workspace) {
+      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
+    }
+
+    return searchFileContents(workspace.path, {
+      query: args.query,
+      maxFiles: args.maxFiles,
+      maxMatchesPerFile: args.maxMatchesPerFile,
+    });
   }
 );
 

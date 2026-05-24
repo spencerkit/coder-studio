@@ -36,6 +36,8 @@ describe("File Commands", () => {
 
     await writeFile(join(testDir, "README.md"), "readme\n");
     await writeFile(join(testDir, "src.ts"), "export const src = true;\n");
+    await mkdir(join(testDir, "src"));
+    await writeFile(join(testDir, "src", "guide.md"), "guide\n");
     await mkdir(join(testDir, "docs"));
     await writeFile(join(testDir, "docs", "src-note.md"), "note\n");
     await writeFile(join(testDir, "docs", "readme-copy.md"), "copy\n");
@@ -101,7 +103,7 @@ describe("File Commands", () => {
     expect(files.some((item) => item.path === "src.ts")).toBe(false);
   });
 
-  it("matches by filename only and ignores directory names", async () => {
+  it("matches directory paths while keeping filename hits ahead of path-only matches", async () => {
     const result = await dispatch(
       {
         kind: "command",
@@ -109,7 +111,8 @@ describe("File Commands", () => {
         op: "file.search",
         args: {
           workspaceId,
-          query: "docs",
+          query: "src",
+          limit: 10,
         },
       },
       ctx
@@ -117,7 +120,27 @@ describe("File Commands", () => {
 
     expect(result.ok).toBe(true);
     const files = (result.data as { files: Array<{ path: string }> }).files;
-    expect(files).toHaveLength(0);
+    expect(files[0]?.path).toBe("src.ts");
+    expect(files.some((item) => item.path === "src/guide.md")).toBe(true);
+
+    const directoryResult = await dispatch(
+      {
+        kind: "command",
+        id: "file-search-2-path",
+        op: "file.search",
+        args: {
+          workspaceId,
+          query: "docs",
+          limit: 10,
+        },
+      },
+      ctx
+    );
+
+    expect(directoryResult.ok).toBe(true);
+    const directoryFiles = (directoryResult.data as { files: Array<{ path: string }> }).files;
+    expect(directoryFiles.length).toBeGreaterThan(0);
+    expect(directoryFiles.every((item) => item.path.startsWith("docs/"))).toBe(true);
   });
 
   it("keeps .gitignore filtering for search results", async () => {
@@ -140,6 +163,51 @@ describe("File Commands", () => {
     expect(result.ok).toBe(true);
     const files = (result.data as { files: Array<{ path: string }> }).files;
     expect(files).toHaveLength(0);
+  });
+
+  it("dispatches file.searchContent and returns grouped content matches", async () => {
+    await writeFile(join(testDir, "alpha.ts"), "const hit = 'match';\nconst second = 'match';\n");
+    await writeFile(join(testDir, "notes.md"), "match in docs\n");
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "file-search-content-1",
+        op: "file.searchContent",
+        args: {
+          workspaceId,
+          query: "match",
+          maxFiles: 1,
+          maxMatchesPerFile: 1,
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.data).toMatchObject({
+      totalMatchCount: 3,
+      hasMoreFiles: true,
+      truncatedMatchFileCount: 1,
+      files: [
+        {
+          path: "alpha.ts",
+          name: "alpha.ts",
+          matchCount: 2,
+          hasMoreMatches: true,
+          matches: [
+            {
+              line: 1,
+              column: 14,
+              endColumn: 19,
+              preview: "const hit = 'match';",
+              previewColumnStart: 14,
+              previewColumnEnd: 19,
+            },
+          ],
+        },
+      ],
+    });
   });
 
   it("shows dotfiles and node_modules in file.readTree while still hiding .git", async () => {

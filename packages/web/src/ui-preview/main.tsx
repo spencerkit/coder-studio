@@ -1,3 +1,4 @@
+import "@vitejs/plugin-react/preamble";
 import { Provider } from "jotai";
 import ReactDOM from "react-dom/client";
 import { resolvePreviewRequest, UiPreviewApp } from "./app";

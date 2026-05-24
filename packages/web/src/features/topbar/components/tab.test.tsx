@@ -1,9 +1,10 @@
-import type { Workspace } from "@coder-studio/core";
+import type { Session, Workspace } from "@coder-studio/core";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { lastViewedTargetAtom, localeAtom } from "../../../atoms/app-ui";
-import { wsClientAtom } from "../../../atoms/connection";
+import { connectionStatusAtom, wsClientAtom } from "../../../atoms/connection";
+import { sessionsAtom } from "../../../atoms/sessions";
 import {
   activeWorkspaceIdAtom,
   workspaceOrderAtom,
@@ -11,6 +12,7 @@ import {
 } from "../../../atoms/workspaces";
 import { TabList, Tabs } from "../../../components/ui";
 import { CommandResultError } from "../../../ws/client";
+import { paneLayoutAtomFamily } from "../../agent-panes/atoms/pane-layout";
 import { WorkspaceTab } from "./tab";
 
 const routerMocks = vi.hoisted(() => ({
@@ -37,6 +39,19 @@ function createWorkspace(id: string, path: string): Workspace {
       bottomPanelHeight: 200,
       focusMode: false,
     },
+  };
+}
+
+function createSession(id: string, state: Session["state"], workspaceId: string): Session {
+  return {
+    id,
+    workspaceId,
+    terminalId: `term-${id}`,
+    providerId: "codex",
+    state,
+    capability: "full",
+    startedAt: 1,
+    lastActiveAt: 1,
   };
 }
 
@@ -305,5 +320,127 @@ describe("WorkspaceTab", () => {
     renderWorkspaceTab(store, workspace);
 
     expect(document.querySelector(".topbar-unread")).toBeNull();
+  });
+
+  it("renders the runtime pane layout for the active workspace instead of the stale persisted layout", () => {
+    const workspace = {
+      ...createWorkspace("ws-2", "/tmp/two"),
+      uiState: {
+        leftPanelWidth: 280,
+        bottomPanelHeight: 200,
+        focusMode: false,
+        paneLayout: { id: "persisted-root", type: "leaf", sessionId: "sess-persisted" },
+      },
+    };
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(paneLayoutAtomFamily("ws-2"), {
+      id: "runtime-root",
+      type: "split",
+      direction: "horizontal",
+      children: [
+        { id: "left", type: "leaf", sessionId: "sess-running" },
+        { id: "right", type: "leaf" },
+      ],
+    });
+    store.set(sessionsAtom, {
+      "sess-running": createSession("sess-running", "running", "ws-2"),
+    });
+
+    const { container } = renderWorkspaceTab(store, workspace, { isActive: true, value: "ws-2" });
+    const content = container.querySelector(".topbar-tab-content");
+    const miniMap = container.querySelector(".workspace-session-mini-map");
+
+    expect(container.querySelector(".topbar-dot")).toBeNull();
+    expect(miniMap).not.toBeNull();
+    expect(content).not.toBeNull();
+    expect(content).toContainElement(miniMap as HTMLElement);
+    const columns = container.querySelectorAll(".workspace-session-mini-map__column");
+
+    expect(columns).toHaveLength(2);
+    expect(columns[0]?.getAttribute("style")).toContain("var(--workspace-session-map-running)");
+    expect(columns[1]?.getAttribute("style")).toContain("var(--workspace-session-map-empty)");
+  });
+
+  it("hydrates inactive workspace sessions once and renders ended panes as empty cells", async () => {
+    const workspace = {
+      ...createWorkspace("ws-3", "/tmp/three"),
+      uiState: {
+        leftPanelWidth: 280,
+        bottomPanelHeight: 200,
+        focusMode: false,
+        paneLayout: {
+          id: "persisted-root",
+          type: "split",
+          direction: "vertical",
+          children: [
+            { id: "top", type: "leaf", sessionId: "sess-starting" },
+            { id: "bottom", type: "leaf", sessionId: "sess-ended" },
+          ],
+        },
+      },
+    };
+    const sendCommand = vi.fn(async (op: string, args?: Record<string, unknown>) => {
+      if (op === "session.list") {
+        expect(args).toEqual({ workspaceId: "ws-3" });
+        return [
+          createSession("sess-starting", "starting", "ws-3"),
+          {
+            ...createSession("sess-ended", "ended", "ws-3"),
+            endedAt: 2,
+          },
+        ];
+      }
+
+      if (op === "workspace.uiState.set") {
+        return {
+          ...workspace,
+          uiState: args?.uiState as Workspace["uiState"],
+        };
+      }
+
+      return undefined;
+    });
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(connectionStatusAtom, "connected");
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(workspacesAtom, { "ws-3": workspace });
+    store.set(workspaceOrderAtom, ["ws-1", "ws-3"]);
+    store.set(activeWorkspaceIdAtom, "ws-1");
+
+    const { container } = renderWorkspaceTab(store, workspace, { isActive: false, value: "ws-1" });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith("session.list", { workspaceId: "ws-3" }, undefined);
+    });
+
+    expect(sendCommand.mock.calls.filter(([op]) => op === "session.list")).toHaveLength(1);
+    expect(container.querySelector(".topbar-dot")).toBeNull();
+
+    await waitFor(() => {
+      expect(container.querySelectorAll(".workspace-session-mini-map__column")).toHaveLength(1);
+    });
+
+    expect(container.querySelector(".topbar-tab-content")).toContainElement(
+      container.querySelector(".workspace-session-mini-map") as HTMLElement
+    );
+    const firstColumnStyle = container
+      .querySelector(".workspace-session-mini-map__column")
+      ?.getAttribute("style");
+
+    expect(firstColumnStyle).toContain("var(--workspace-session-map-starting)");
+    expect(firstColumnStyle).toContain("var(--workspace-session-map-empty)");
+    expect(store.get(paneLayoutAtomFamily("ws-3"))).toEqual(
+      expect.objectContaining({
+        id: "persisted-root",
+        type: "split",
+        direction: "vertical",
+        children: [
+          expect.objectContaining({ id: "top", sessionId: "sess-starting" }),
+          expect.objectContaining({ id: "bottom", sessionId: "sess-ended" }),
+        ],
+      })
+    );
   });
 });

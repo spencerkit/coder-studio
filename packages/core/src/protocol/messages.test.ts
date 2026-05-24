@@ -4,10 +4,14 @@ import {
   decodeTerminalOutputFrame,
   encodeTerminalBinaryFrame,
   encodeTerminalOutputFrame,
+  type RecoveryReconcileDecision,
+  type RecoveryReconcileRequest,
   TERMINAL_BINARY_OUTPUT_VERSION,
   TERMINAL_BINARY_PROTOCOL_VERSION,
   TerminalBinaryFrameType,
+  type TerminalContinuityLostEvent,
 } from "./messages";
+import { Topics } from "./topics";
 
 describe("Protocol schemas", () => {
   it("placeholder test", () => {
@@ -95,5 +99,59 @@ describe("terminal binary frame codec", () => {
     expect(decoded.header.meta).toBe(123);
     expect(decoded.header.streamId).toBe(9);
     expect(decoded.payload).toEqual(payload);
+  });
+});
+
+describe("terminal recovery protocol types", () => {
+  it("exports a terminal continuity topic builder", () => {
+    expect(Topics.terminalContinuityLost("ws-1", "term-1")).toBe(
+      "workspace.ws-1.terminal.term-1.continuity_lost"
+    );
+  });
+
+  it("accepts a recovery reconcile request shape", () => {
+    const request: RecoveryReconcileRequest = {
+      reason: "foreground_resume",
+      terminals: [
+        {
+          terminalId: "term-1",
+          renderedSeq: 128,
+        },
+      ],
+    };
+
+    expect(request.terminals[0]?.renderedSeq).toBe(128);
+  });
+
+  it("supports the full reconcile decision union", () => {
+    const decisions: RecoveryReconcileDecision[] = [
+      { terminalId: "term-noop", action: "noop", headSeq: 10 },
+      { terminalId: "term-replay", action: "replay", fromSeq: 4, headSeq: 10 },
+      { terminalId: "term-snapshot", action: "snapshot", headSeq: 10 },
+      { terminalId: "term-closed", action: "closed", headSeq: 10, exitCode: 0 },
+      {
+        terminalId: "term-bad",
+        action: "unrecoverable",
+        reason: "too_old_no_snapshot",
+      },
+    ];
+
+    expect(decisions.map((entry) => entry.action)).toEqual([
+      "noop",
+      "replay",
+      "snapshot",
+      "closed",
+      "unrecoverable",
+    ]);
+  });
+
+  it("models terminal continuity lost control events", () => {
+    const event: TerminalContinuityLostEvent = {
+      workspaceId: "ws-1",
+      terminalId: "term-1",
+      reason: "stream_drop",
+    };
+
+    expect(event.reason).toBe("stream_drop");
   });
 });

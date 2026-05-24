@@ -28,7 +28,7 @@ function formatBytes(bytes: number): string {
 function mimeToLabel(mime: string): string {
   // "image/png" → "PNG", "image/svg+xml" → "SVG", "image/x-icon" → "ICO"
   const sub = mime.split("/")[1] ?? mime;
-  const head = sub.split("+")[0].replace(/^x-/, "");
+  const head = (sub.split("+")[0] ?? sub).replace(/^x-/, "");
   return head.toUpperCase();
 }
 

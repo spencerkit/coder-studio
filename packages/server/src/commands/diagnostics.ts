@@ -6,6 +6,7 @@ import type {
   ProviderRuntimeStatusEntry,
 } from "@coder-studio/core";
 import { z } from "zod";
+import { runCommandAsString } from "../provider-runtime/command-runner.js";
 import { buildProviderRuntimeStatus } from "../provider-runtime/runtime-status.js";
 import { validatePath } from "../workspace/validator.js";
 import { type CommandContext, registerCommand } from "../ws/dispatch.js";
@@ -280,6 +281,48 @@ function buildMobileHostCheck(ctx: CommandContext): {
   };
 }
 
+async function readCommandVersion(
+  command: string,
+  args: string[],
+  ctx: CommandContext
+): Promise<string | null> {
+  const runner = ctx.providerRuntimeDeps?.runCommand ?? runCommandAsString;
+
+  try {
+    const { stdout } = await runner(command, args, { windowsHide: true });
+    const version = stdout.trim();
+    return version.length > 0 ? version : null;
+  } catch {
+    return null;
+  }
+}
+
+async function buildBaseRuntimeChecks(
+  ctx: CommandContext
+): Promise<{ canContinue: boolean; checks: DiagnosticsCheck[] }> {
+  const gitVersion = await readCommandVersion("git", ["--version"], ctx);
+  const nodeVersion = await readCommandVersion("node", ["--version"], ctx);
+  const checks: DiagnosticsCheck[] = [
+    {
+      id: "runtime:git",
+      code: gitVersion ? "git_ready" : "git_missing",
+      status: gitVersion ? "ready" : "needs_attention",
+      version: gitVersion ?? undefined,
+    },
+    {
+      id: "runtime:nodejs",
+      code: nodeVersion ? "nodejs_ready" : "nodejs_missing",
+      status: nodeVersion ? "ready" : "needs_attention",
+      version: nodeVersion ?? undefined,
+    },
+  ];
+
+  return {
+    canContinue: Boolean(gitVersion && nodeVersion),
+    checks,
+  };
+}
+
 async function buildSessionStartDiagnostics(
   args: DiagnosticsRequest,
   ctx: CommandContext
@@ -314,11 +357,11 @@ async function buildManualDiagnostics(
   args: DiagnosticsRequest,
   ctx: CommandContext
 ): Promise<DiagnosticsResponse> {
-  const workspaceSelection = await buildWorkspaceSelectionChecks(args, ctx);
+  const baseRuntime = await buildBaseRuntimeChecks(ctx);
   const providerChecks = await buildAllProviderChecks(ctx, args.providerId);
   const mobileHost = buildMobileHostCheck(ctx);
   const checks: DiagnosticsCheck[] = [
-    ...workspaceSelection.checks,
+    ...baseRuntime.checks,
     ...providerChecks.checks,
     buildServerAuthCheck(ctx),
     mobileHost.check,
@@ -333,7 +376,7 @@ async function buildManualDiagnostics(
       host: ctx.config?.host,
       providerId: args.providerId,
       workspaceId: args.workspaceId,
-      workspacePath: workspaceSelection.workspacePath ?? args.workspacePath,
+      workspacePath: args.workspacePath,
     },
   };
 }

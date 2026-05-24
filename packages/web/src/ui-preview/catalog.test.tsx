@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { Provider } from "jotai";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -128,6 +128,8 @@ describe("UI preview catalog", () => {
         "workspace-launch-modal",
         "command-palette",
         "branch-quick-pick",
+        "footer-update-rail-review",
+        "footer-update-rail-confirm-review",
         "toast-stack",
         "mobile-workspace-drawer",
         "mobile-files-sheet",
@@ -339,6 +341,45 @@ describe("UI preview catalog", () => {
     expect(screen.getAllByText("Supervisor").length).toBeGreaterThan(0);
     expect(document.querySelector(".mobile-shell .session-card")).toBeTruthy();
     expect(document.querySelector(".mobile-shell .workspace-status-bar")).toBeTruthy();
+  });
+
+  it("renders the footer update rail review scene with a desktop update prompt", async () => {
+    renderScene("footer-update-rail-review");
+
+    expect(await screen.findByText("New version detected v0.5.0")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /update now/i })).toBeInTheDocument();
+    expect(document.querySelector(".footer-update-rail-review .workspace-status-bar")).toBeTruthy();
+  });
+
+  it("renders the footer update rail review scene on mobile with the same update prompt", async () => {
+    renderScene("footer-update-rail-review", "mobile");
+
+    expect(await screen.findByText("New version detected v0.5.0")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /update now/i })).toBeInTheDocument();
+    expect(document.querySelector(".footer-update-rail-review.mobile-shell")).toBeTruthy();
+    expect(
+      document.querySelector(
+        ".mobile-shell__bottom-stack .workspace-status-bar__right .footer-update-rail"
+      )
+    ).toBeTruthy();
+  });
+
+  it("renders the footer update confirm review scene with the post-click confirmation dialog", async () => {
+    renderScene("footer-update-rail-confirm-review");
+
+    const dialog = await screen.findByRole("dialog", { name: /confirm update/i });
+    expect(dialog).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: /update now/i })).toBeInTheDocument();
+    expect(screen.getByText(/1 terminals, 2 sessions, and 3 supervisor tasks/)).toBeInTheDocument();
+  });
+
+  it("renders the footer update confirm review scene on mobile with the post-click confirmation dialog", async () => {
+    renderScene("footer-update-rail-confirm-review", "mobile");
+
+    const dialog = await screen.findByRole("dialog", { name: /confirm update/i });
+    expect(dialog).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: /update now/i })).toBeInTheDocument();
+    expect(screen.getByText(/1 terminals, 2 sessions, and 3 supervisor tasks/)).toBeInTheDocument();
   });
 
   it("renders the workspace terminal empty review scene", async () => {

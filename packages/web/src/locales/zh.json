@@ -41,6 +41,8 @@
     "success": "成功",
     "warning": "警告",
     "info": "信息",
+    "enabled": "已启用",
+    "disabled": "已禁用",
     "confirm": "确认",
     "cancel": "取消",
     "save": "保存",
@@ -60,7 +62,7 @@
     "create_session": "创建会话",
     "stop_session": "停止会话",
     "resume_session": "恢复会话",
-    "save_file": "保存文件",
+    "save_file": "保存",
     "save_all": "保存全部",
     "save": "保存",
     "discard_changes": "放弃更改",
@@ -79,7 +81,8 @@
     "search_commands": "搜索命令",
     "back": "返回",
     "expand": "展开",
-    "collapse": "收起"
+    "collapse": "收起",
+    "close_all": "全部关闭"
   },
   "label": {
     "workspace": "工作区",
@@ -152,6 +155,36 @@
     "loading_description": "正在准备工作区列表并恢复上次活跃的会话。",
     "load_failed_title": "工作区加载失败",
     "load_failed_description": "获取工作区列表失败",
+    "sidebar": {
+      "label": "工作区活动栏",
+      "explorer": "资源管理器",
+      "search": "搜索",
+      "source_control": "源代码管理",
+      "open_editors": "打开的编辑器",
+      "workspace": "工作区"
+    },
+    "quick_jump": {
+      "title": "快速跳转",
+      "placeholder": "输入文件名或路径",
+      "no_results": "未找到匹配文件。",
+      "failed": "文件搜索失败，请重试。"
+    },
+    "open_editors": {
+      "title_with_count": "{title} ({count})",
+      "close_path": "关闭 {path}",
+      "expand_label": "展开打开的编辑器",
+      "collapse_label": "收起打开的编辑器"
+    },
+    "search": {
+      "empty": "输入关键词以搜索文件内容。",
+      "placeholder": "搜索文件内容",
+      "results_count": "在 {files} 个文件中找到 {count} 条结果",
+      "no_results": "未找到内容匹配。",
+      "truncated": "结果已截断，以保持搜索响应速度。",
+      "file_match_count": "{count}{suffix} 条匹配",
+      "failed": "搜索失败，请重试。",
+      "retry": "重试"
+    },
     "launch": {
       "kicker": "启动工作区",
       "title": "打开工作区",
@@ -178,6 +211,15 @@
       "missing_node": "未找到 Node.js",
       "missing_provider": "未找到 {provider} CLI"
     }
+  },
+  "quick_open": {
+    "title": "跳转到文件",
+    "placeholder": "输入文件名或路径",
+    "empty": "输入内容以按文件名或路径搜索。",
+    "no_results": "未找到匹配文件。",
+    "failed": "文件搜索失败，请重试。",
+    "command_label": "跳转到文件...",
+    "command_description": "在当前工作区中快速打开文件"
   },
   "mobile": {
     "dock": {
@@ -299,10 +341,19 @@
       "up_next": "即将开始…",
       "loading_title": "正在恢复终端内容…",
       "loading_body": "恢复期间暂时无法使用当前终端；请耐心等待，历史内容恢复完成后再继续。内容较多时可能需要更久。",
-      "failed_title": "历史内容恢复失败",
-      "failed_body": "新输出仍会继续显示；如果需要完整历史，再手动刷新页面。",
-      "closed_title": "该会话已被关闭",
-      "closed_body": "请重新开启新会话。",
+      "failed_title": "终端历史暂未恢复",
+      "failed_body": "当前终端可以继续使用，但较早输出这次没有补齐。你可以重试恢复；如果服务端仍保留历史，稍后或刷新页面后仍可能找回。",
+      "retryable_title": "终端历史暂未恢复",
+      "retryable_body": "当前终端可以继续使用，但较早输出这次没有补齐。你可以重试恢复；如果服务端仍保留历史，稍后或刷新页面后仍可能找回。",
+      "retry_action": "重试恢复",
+      "unrecoverable_title": "较早历史已无法恢复",
+      "unrecoverable_body": "较早的终端输出已经从回放缓冲区中淘汰，而且当前也没有可用快照。现在只能继续查看后续输出。",
+      "unknown_title": "当前终端已不可恢复",
+      "unknown_body": "这个终端会话已经不在服务端，历史输出无法再补回。请重新打开一个新终端继续。",
+      "unknown_body_with_provider": "这个终端会话已经不在服务端。是否重新打开一个 {provider} 会话继续？",
+      "closed_title": "当前会话已结束",
+      "closed_body": "是否重新打开一个新会话继续。",
+      "closed_body_with_provider": "是否重新打开一个 {provider} 会话继续。",
       "truncated_title": "历史内容不完整",
       "truncated_body": "较早的终端输出已被回放缓冲区淘汰，后续输出仍会继续显示。"
     }
@@ -347,8 +398,15 @@
     "saving": "保存中...",
     "edit_as_text": "以文本编辑",
     "preview_as_image": "以图像预览",
+    "preview_loading": "正在加载预览...",
+    "preview_unavailable": "预览不可用",
+    "preview_retry": "重试",
     "mode_text": "文本",
     "mode_image": "图像",
+    "mode_preview": "预览",
+    "mode_edit": "编辑",
+    "mode_diff": "Diff",
+    "diff_saved_only": "Diff 仅基于已保存到磁盘的文件内容。",
     "open_failed_title": "打开文件失败",
     "empty_hint": "从左侧选择一个文件以在编辑器中打开。",
     "modified_on_disk": "该文件在打开后已被磁盘上的其他操作修改。请谨慎保存或重新加载文件。",
@@ -507,6 +565,60 @@
     "mobile_groups": {
       "workspace_runtime": "工作区与运行",
       "interface_interaction": "界面与交互"
+    },
+    "about": {
+      "title": "关于",
+      "description": "查看当前应用信息、版本状态以及更新能力。",
+      "product_name": "产品名称",
+      "current_version": "当前版本",
+      "server_instance_id": "服务实例 ID",
+      "install_support": "安装支持",
+      "install_supported": "支持应用内更新",
+      "install_unsupported": "当前安装方式不支持应用内更新",
+      "update_group": "更新",
+      "update_group_hint": "手动检查新版本，并在支持的安装方式下启动更新。",
+      "latest_version": "最新版本",
+      "last_checked": "上次检查",
+      "availability": "版本状态",
+      "availability_unknown": "尚未检查",
+      "availability_up_to_date": "已是最新版本",
+      "availability_update_available": "发现新版本",
+      "availability_check_failed": "检查失败",
+      "update_status": "更新流程",
+      "update_status_unknown": "未知",
+      "update_status_idle": "空闲",
+      "update_status_checking": "检查中",
+      "update_status_installing": "安装中",
+      "update_status_restarting": "重启服务中",
+      "update_status_succeeded": "更新成功",
+      "update_status_failed": "更新失败",
+      "update_status_manual_required": "需要手动处理",
+      "error_summary": "错误摘要",
+      "manual_command": "手动命令",
+      "check_now": "立即检查",
+      "checking": "检查中",
+      "check_failed": "检查更新失败",
+      "update_now": "立即更新",
+      "installing": "处理中",
+      "auto_check_group": "自动检查",
+      "auto_check_group_hint": "配置后台轮询 npm 的节奏。相关偏好会持久化到设置文件。",
+      "auto_check_enabled": "自动检查更新",
+      "auto_check_enabled_hint": "开启后，服务会按所选间隔轮询最新版本。",
+      "check_interval": "检查间隔",
+      "interval_3600": "1 小时",
+      "interval_21600": "6 小时",
+      "interval_43200": "12 小时",
+      "interval_86400": "24 小时",
+      "confirm_update_title": "确认更新",
+      "confirm_update_message": "更新会安装新版本并重启服务，当前运行中的终端、Agent 会话或 Supervisor 任务可能被中断。",
+      "confirm_update_activity": "检测到 {terminals} 个终端、{sessions} 个会话、{supervisors} 个 Supervisor 任务仍在运行。",
+      "footer_update_available": "检测到新版本 {version}",
+      "footer_installing": "更新中...",
+      "footer_restarting": "正在重启服务...",
+      "footer_failed": "更新失败",
+      "footer_manual_required": "需要手动处理",
+      "footer_view_details": "查看详情",
+      "footer_succeeded": "已更新到 {version}"
     },
     "help_diagnostics": "帮助与诊断",
     "autosave_hint": "设置已自动保存",
@@ -917,7 +1029,8 @@
       "workspace": "工作区",
       "provider": "Provider",
       "missing_commands": "缺失命令",
-      "missing_prerequisites": "缺失前置依赖"
+      "missing_prerequisites": "缺失前置依赖",
+      "current_version": "当前版本"
     },
     "context": {
       "workspace_open": {
@@ -961,6 +1074,22 @@
       "session_workspace_missing": {
         "title": "工作区缺失",
         "description": "先选择或重新打开工作区，再启动会话。"
+      },
+      "git_ready": {
+        "title": "Git 已就绪",
+        "description": "当前环境已安装 Git，且可以正常使用。"
+      },
+      "git_missing": {
+        "title": "Git 缺失",
+        "description": "使用工作区仓库相关能力前，需要先安装 Git。"
+      },
+      "nodejs_ready": {
+        "title": "Node.js 已就绪",
+        "description": "当前环境已安装 Node.js，且可以正常使用。"
+      },
+      "nodejs_missing": {
+        "title": "Node.js 缺失",
+        "description": "运行本地 JavaScript 和包管理任务前，需要先安装 Node.js。"
       },
       "provider_runtime_ready": {
         "title": "{provider} 已就绪",

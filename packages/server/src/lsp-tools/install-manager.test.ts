@@ -18,6 +18,7 @@ const workspace: Workspace = {
 describe("LspToolInstallManager", () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it("returns missing_prerequisite when python3 is unavailable", async () => {
@@ -37,6 +38,61 @@ describe("LspToolInstallManager", () => {
       code: "missing_prerequisite",
       missingCommands: ["python3"],
     });
+  });
+
+  it("allows managed Python install on Windows when python is available but python3 is not", async () => {
+    const root = mkdtempSync(join(tmpdir(), "lsp-tools-"));
+    let installed = false;
+    const venvRoot = join(root, "python", "1.14.0", "venv");
+    const pipPath = join(venvRoot, "Scripts", "pip.exe");
+    const executablePath = join(venvRoot, "Scripts", "pylsp.exe");
+
+    const manager = new LspToolInstallManager({
+      manifestStore: new FileManifestStore(root),
+      platform: "win32",
+      commandExists: vi.fn(async (command: string) => {
+        if (command === "python3") {
+          return false;
+        }
+        if (command === "python") {
+          return true;
+        }
+        if (command === executablePath) {
+          return installed;
+        }
+        return false;
+      }),
+      runCommand: vi.fn(async (file: string, args: string[]) => {
+        if (file === "python" && args[0] === "-m" && args[1] === "venv") {
+          return { stdout: "created venv", stderr: "" };
+        }
+
+        if (file === pipPath) {
+          installed = true;
+          return { stdout: "installed pylsp", stderr: "" };
+        }
+
+        throw new Error(`unexpected command: ${file}`);
+      }),
+    });
+
+    const started = await manager.start({
+      workspace,
+      serverKind: "python",
+    });
+
+    await vi.waitFor(() => {
+      expect(manager.get(started.jobId)?.status).toBe("succeeded");
+    });
+
+    expect(manager.get(started.jobId)?.steps).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "create-python-venv",
+          command: "python",
+        }),
+      ])
+    );
   });
 
   it("returns unsupported_platform for WSL workspaces", async () => {

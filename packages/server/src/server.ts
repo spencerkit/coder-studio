@@ -5,19 +5,25 @@
  */
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import {
   deleteRuntimeConfig,
   getRuntimePath,
   type RuntimeConfig,
   writeRuntimeConfig,
 } from "@coder-studio/core/runtime";
+import { IN_MEMORY_STATE_DIR } from "@coder-studio/core/state-paths";
 import { providerRegistry } from "@coder-studio/providers";
 import { isDirectExecution } from "@coder-studio/utils";
 import type { FastifyInstance } from "fastify";
 import { buildFastifyApp } from "./app.js";
 import { EventBus } from "./bus/event-bus.js";
-import { ensureDataDir, parseServerConfig, type ServerConfig } from "./config.js";
+import {
+  ensureStateDir,
+  parseServerConfig,
+  resolveConfiguredStateDir,
+  type ServerConfigInput,
+} from "./config.js";
 import { AutoFetchScheduler } from "./git/auto-fetch.js";
 import { LspManager } from "./lsp/manager.js";
 import { LspToolInstallManager } from "./lsp-tools/install-manager.js";
@@ -37,11 +43,13 @@ import { SessionRepo } from "./storage/repositories/session-repo.js";
 import { SettingsRepo } from "./storage/repositories/settings-repo.js";
 import { SupervisorRepo } from "./storage/repositories/supervisor-repo.js";
 import { TerminalRepo } from "./storage/repositories/terminal-repo.js";
+import { UpdateStateRepo } from "./storage/repositories/update-state-repo.js";
 import { WorkspaceRepo } from "./storage/repositories/workspace-repo.js";
 import { SupervisorManager } from "./supervisor/manager.js";
 import * as targetStore from "./supervisor/target-store.js";
 import { TerminalManager } from "./terminal/manager.js";
 import { NodePtyHost } from "./terminal/pty-host.js";
+import { UpdateService } from "./update/update-service.js";
 import { deleteWorkspaceUploads, runStartupGc } from "./uploads/cleanup.js";
 import { STARTUP_GC_DELAY_MS } from "./uploads/constants.js";
 import { WorkspaceManager } from "./workspace/manager.js";
@@ -66,16 +74,16 @@ export interface ServerRuntimeOptions {
 }
 
 export async function createServer(
-  configOverrides?: Partial<ServerConfig> & ServerRuntimeOptions
+  configOverrides?: ServerConfigInput & ServerRuntimeOptions
 ): Promise<Server> {
   const config = parseServerConfig(configOverrides);
-  const stateRoot =
-    config.dataDir === ":memory:"
-      ? mkdtempSync(join(tmpdir(), "coder-studio-state-"))
-      : dirname(config.dataDir);
-  const shouldCleanupStateRoot = config.dataDir === ":memory:";
+  const configuredStateDir = resolveConfiguredStateDir(config);
+  const shouldCleanupStateRoot = configuredStateDir === IN_MEMORY_STATE_DIR;
+  const stateRoot = shouldCleanupStateRoot
+    ? mkdtempSync(join(tmpdir(), "coder-studio-state-"))
+    : configuredStateDir;
 
-  ensureDataDir(config);
+  ensureStateDir(config);
 
   const eventBus = new EventBus();
   const activationMgr = new ActivationManager();
@@ -100,6 +108,10 @@ export async function createServer(
 
   const settingsRepo = new SettingsRepo({
     filePath: join(stateRoot, "state", "settings.json"),
+  });
+  const updateStateRepo = new UpdateStateRepo({
+    filePath: join(stateRoot, "state", "update-state.json"),
+    currentVersion: config.appVersion ?? "0.0.0",
   });
   const autoFetch = new AutoFetchScheduler({
     workspaceMgr: { get: (workspaceId) => workspaceMgr.get(workspaceId) },
@@ -150,6 +162,7 @@ export async function createServer(
   });
 
   let supervisorMgr: SupervisorManager | undefined;
+  let updateService: UpdateService | undefined;
 
   workspaceMgr = new WorkspaceManager({
     workspaceRepo,
@@ -211,7 +224,7 @@ export async function createServer(
   workspaceMgr.setLogger(app.log);
   workspaceMgr.hydrateWatchers();
 
-  const lspManifestStore = new FileManifestStore(resolveLspToolRoot(config.dataDir));
+  const lspManifestStore = new FileManifestStore(resolveLspToolRoot(stateRoot));
   const lspToolMgr = new LspToolManager({
     manifestStore: lspManifestStore,
   });
@@ -261,6 +274,24 @@ export async function createServer(
     runCommand: providerMockOverrides?.runCommand ?? runCommandAsString,
   });
 
+  updateService = new UpdateService({
+    settingsRepo,
+    updateStateRepo,
+    broadcaster: wsHub,
+    runtime: {
+      ...config.update,
+      currentVersion: config.appVersion ?? "0.0.0",
+    },
+    updateWorkerLogFilePath: join(stateRoot, "logs", "update-worker.log"),
+    countRunningTerminals: () => terminalMgr.getAll().filter((terminal) => terminal.alive).length,
+    countRunningSessions: () =>
+      sessionMgr
+        .getAll()
+        .filter((session) => session.state === "starting" || session.state === "running").length,
+    countActiveSupervisors: () => supervisorMgr?.countActive() ?? 0,
+  });
+  updateService.start();
+
   commandContext = {
     workspaceMgr,
     sessionMgr,
@@ -280,6 +311,7 @@ export async function createServer(
     lspMgr,
     lspToolMgr,
     lspToolInstallMgr,
+    updateService,
   };
 
   wsHub.setCommandContext(commandContext);
@@ -325,6 +357,7 @@ export async function createServer(
     await lspMgr?.disposeAll();
     autoFetch.stop();
     supervisorMgr.stop();
+    updateService?.stop();
     terminalMgr.shutdown();
     wsHub.destroy();
     eventBus.clear();

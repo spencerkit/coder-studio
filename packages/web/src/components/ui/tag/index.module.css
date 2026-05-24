@@ -3,6 +3,7 @@
   display: inline-flex;
   align-items: center;
   gap: var(--sp-1);
+  flex-shrink: 0;
   height: 20px;
   padding: 0 var(--sp-2);
   font-family: var(--font-sans);
@@ -10,6 +11,7 @@
   line-height: var(--type-body-6-line-height);
   font-weight: var(--type-body-6-weight);
   letter-spacing: 0.08em;
+  white-space: nowrap;
   text-transform: uppercase;
 }
 

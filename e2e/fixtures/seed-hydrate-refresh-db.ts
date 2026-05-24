@@ -1,6 +1,11 @@
 import { mkdirSync, rmSync } from "node:fs";
-import { dirname } from "node:path";
-import { closeDatabase, openDatabase } from "../../packages/server/src/storage/db.ts";
+import { join } from "node:path";
+import {
+  SessionRepo,
+  SettingsRepo,
+  TerminalRepo,
+  WorkspaceRepo,
+} from "../../packages/server/src/storage/index.ts";
 
 const WORKSPACE_ID = "ws-hydrate-e2e";
 const INTERRUPTED_SESSION_ID = "sess-hydrate-interrupted";
@@ -17,139 +22,120 @@ const HYDRATED_PANE_LAYOUT = {
   ],
 };
 
-const [, , dbPath, workspacePath] = process.argv;
+const [, , stateDir, workspacePath] = process.argv;
 
-if (!dbPath || !workspacePath) {
-  throw new Error("Usage: tsx seed-hydrate-refresh-db.ts <db-path> <workspace-path>");
+if (!stateDir || !workspacePath) {
+  throw new Error("Usage: tsx seed-hydrate-refresh-db.ts <state-dir> <workspace-path>");
 }
 
-mkdirSync(dirname(dbPath), { recursive: true });
-rmSync(dbPath, { force: true });
+mkdirSync(stateDir, { recursive: true });
+rmSync(join(stateDir, "state"), { recursive: true, force: true });
 
-const db = openDatabase(dbPath);
 const now = Date.now();
+const workspaceRepo = new WorkspaceRepo({
+  filePath: join(stateDir, "state", "workspaces.json"),
+});
+const terminalRepo = new TerminalRepo({
+  filePath: join(stateDir, "state", "terminals.json"),
+});
+const sessionRepo = new SessionRepo({
+  filePath: join(stateDir, "state", "sessions.json"),
+});
+const settingsRepo = new SettingsRepo({
+  filePath: join(stateDir, "state", "settings.json"),
+});
 
-try {
-  db.prepare(
-    `INSERT INTO workspaces (id, path, target_runtime, wsl_distro, opened_at, last_active_at, ui_state)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
-  ).run(
-    WORKSPACE_ID,
-    workspacePath,
-    "native",
-    null,
-    now,
-    now,
-    JSON.stringify({
-      leftPanelWidth: 280,
-      bottomPanelHeight: 200,
-      focusMode: false,
-      activeSessionId: UNAVAILABLE_SESSION_ID,
-      paneLayout: HYDRATED_PANE_LAYOUT,
-    })
-  );
+workspaceRepo.create({
+  id: WORKSPACE_ID,
+  path: workspacePath,
+  targetRuntime: "native",
+  openedAt: now,
+  lastActiveAt: now,
+  uiState: {
+    leftPanelWidth: 280,
+    bottomPanelHeight: 200,
+    focusMode: false,
+    activeSessionId: UNAVAILABLE_SESSION_ID,
+    paneLayout: HYDRATED_PANE_LAYOUT,
+  },
+});
 
-  const insertTerminal = db.prepare(
-    `INSERT INTO terminals (id, workspace_id, kind, cwd, argv, env, title, cols, rows, created_at, ended_at, exit_code)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  );
+terminalRepo.insert({
+  id: INTERRUPTED_TERMINAL_ID,
+  workspaceId: WORKSPACE_ID,
+  kind: "agent",
+  cwd: workspacePath,
+  argv: [],
+  env: undefined,
+  title: "Claude",
+  cols: 120,
+  rows: 30,
+  alive: false,
+  createdAt: now,
+  endedAt: now,
+  exitCode: 0,
+});
 
-  insertTerminal.run(
-    INTERRUPTED_TERMINAL_ID,
-    WORKSPACE_ID,
-    "agent",
-    workspacePath,
-    "[]",
-    null,
-    "Claude",
-    120,
-    30,
-    now,
-    now,
-    0
-  );
+terminalRepo.insert({
+  id: UNAVAILABLE_TERMINAL_ID,
+  workspaceId: WORKSPACE_ID,
+  kind: "agent",
+  cwd: workspacePath,
+  argv: [],
+  env: undefined,
+  title: "Codex",
+  cols: 120,
+  rows: 30,
+  alive: false,
+  createdAt: now,
+  endedAt: now,
+  exitCode: 0,
+});
 
-  insertTerminal.run(
-    UNAVAILABLE_TERMINAL_ID,
-    WORKSPACE_ID,
-    "agent",
-    workspacePath,
-    "[]",
-    null,
-    "Codex",
-    120,
-    30,
-    now,
-    now,
-    0
-  );
+sessionRepo.insert({
+  id: INTERRUPTED_SESSION_ID,
+  workspace_id: WORKSPACE_ID,
+  terminal_id: INTERRUPTED_TERMINAL_ID,
+  provider_id: "claude",
+  capability: "full",
+  state: "running",
+  started_at: now,
+  ended_at: null,
+  last_active_at: now,
+  completion_percent: null,
+  error_reason: "Orphaned before restart",
+  archived: 0,
+  title: "Resume me",
+  draft: null,
+});
 
-  const insertSession = db.prepare(
-    `INSERT INTO sessions (
-      id,
-      workspace_id,
-      terminal_id,
-      provider_id,
-      capability,
-      state,
-      started_at,
-      ended_at,
-      last_active_at,
-      completion_percent,
-      error_reason,
-      archived,
-      title
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  );
+sessionRepo.insert({
+  id: UNAVAILABLE_SESSION_ID,
+  workspace_id: WORKSPACE_ID,
+  terminal_id: UNAVAILABLE_TERMINAL_ID,
+  provider_id: "codex",
+  capability: "full",
+  state: "running",
+  started_at: now,
+  ended_at: null,
+  last_active_at: now,
+  completion_percent: null,
+  error_reason: "Terminal missing after restart",
+  archived: 0,
+  title: "Unavailable",
+  draft: null,
+});
 
-  insertSession.run(
-    INTERRUPTED_SESSION_ID,
-    WORKSPACE_ID,
-    INTERRUPTED_TERMINAL_ID,
-    "claude",
-    "full",
-    "running",
-    now,
-    null,
-    now,
-    null,
-    "Orphaned before restart",
-    0,
-    "Resume me"
-  );
+settingsRepo.set("workspace.lastViewedTarget", {
+  workspaceId: WORKSPACE_ID,
+  sessionId: INTERRUPTED_SESSION_ID,
+  updatedAt: now,
+});
 
-  insertSession.run(
-    UNAVAILABLE_SESSION_ID,
-    WORKSPACE_ID,
-    UNAVAILABLE_TERMINAL_ID,
-    "codex",
-    "full",
-    "running",
-    now,
-    null,
-    now,
-    null,
-    "Terminal missing after restart",
-    0,
-    "Unavailable"
-  );
-
-  db.prepare("INSERT INTO user_settings (key, value) VALUES (?, ?)").run(
-    "workspace.lastViewedTarget",
-    JSON.stringify({
-      workspaceId: WORKSPACE_ID,
-      sessionId: INTERRUPTED_SESSION_ID,
-      updatedAt: now,
-    })
-  );
-
-  console.log(
-    JSON.stringify({
-      dbPath,
-      workspaceId: WORKSPACE_ID,
-      sessions: [INTERRUPTED_SESSION_ID, UNAVAILABLE_SESSION_ID],
-    })
-  );
-} finally {
-  closeDatabase(db);
-}
+console.log(
+  JSON.stringify({
+    stateDir,
+    workspaceId: WORKSPACE_ID,
+    sessions: [INTERRUPTED_SESSION_ID, UNAVAILABLE_SESSION_ID],
+  })
+);

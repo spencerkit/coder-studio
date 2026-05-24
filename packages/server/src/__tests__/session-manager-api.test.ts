@@ -250,7 +250,7 @@ describe("SessionManager session-level API", () => {
     expect(lifecycleEvents).toEqual([]);
   });
 
-  it("does not promote an idle session back to running on PTY output alone", async () => {
+  it("promotes an idle session back to running when PTY emits real output", async () => {
     vi.useFakeTimers();
     provider = {
       ...provider,
@@ -282,11 +282,309 @@ describe("SessionManager session-level API", () => {
     vi.advanceTimersByTime(3000);
     expect(sessionMgr.get(session.id)?.state).toBe("idle");
 
-    onData?.("prompt repaint\n");
-    expect(sessionMgr.get(session.id)?.state).toBe("idle");
+    onData?.("assistant working\n");
+    expect(sessionMgr.get(session.id)?.state).toBe("running");
 
     vi.advanceTimersByTime(3000);
     expect(sessionMgr.get(session.id)?.state).toBe("idle");
+  });
+
+  it("ignores recent input echo while promoting real PTY output back to running", async () => {
+    vi.useFakeTimers();
+    provider = {
+      ...provider,
+      idleHeuristics: {
+        idlePromptPatterns: [],
+        idleDebounceMs: 3000,
+      },
+    } as ProviderDefinition;
+    sessionMgr = new SessionManager({
+      terminalMgr,
+      eventBus,
+      db: {
+        insert: vi.fn(),
+        update: vi.fn(),
+        findById: vi.fn(),
+        findByWorkspaceId: vi.fn().mockReturnValue([]),
+        listHydratable: vi.fn().mockReturnValue([]),
+        delete: vi.fn(),
+      } as SessionDatabase,
+      broadcaster: { broadcast: vi.fn() } as Broadcaster,
+      providerRegistry: [provider],
+      providerConfigRepo: providerConfigRepoStub,
+    });
+
+    const session = await createSession();
+    const onData = vi.mocked(mockPty.onData).mock.calls.at(-1)?.[0];
+
+    onData?.("booting up\n");
+    vi.advanceTimersByTime(3000);
+    expect(sessionMgr.get(session.id)?.state).toBe("idle");
+
+    sessionMgr.sendInput(session.id, Buffer.from("g"), "typing");
+    expect(sessionMgr.get(session.id)?.state).toBe("idle");
+
+    onData?.("g");
+    expect(sessionMgr.get(session.id)?.state).toBe("idle");
+
+    onData?.("assistant working\n");
+    expect(sessionMgr.get(session.id)?.state).toBe("running");
+
+    vi.advanceTimersByTime(3000);
+    expect(sessionMgr.get(session.id)?.state).toBe("idle");
+  });
+
+  it("restores running when PTY output contains remaining text beyond a recent typing echo", async () => {
+    vi.useFakeTimers();
+    provider = {
+      ...provider,
+      idleHeuristics: {
+        idlePromptPatterns: [],
+        idleDebounceMs: 3000,
+      },
+    } as ProviderDefinition;
+    sessionMgr = new SessionManager({
+      terminalMgr,
+      eventBus,
+      db: {
+        insert: vi.fn(),
+        update: vi.fn(),
+        findById: vi.fn(),
+        findByWorkspaceId: vi.fn().mockReturnValue([]),
+        listHydratable: vi.fn().mockReturnValue([]),
+        delete: vi.fn(),
+      } as SessionDatabase,
+      broadcaster: { broadcast: vi.fn() } as Broadcaster,
+      providerRegistry: [provider],
+      providerConfigRepo: providerConfigRepoStub,
+    });
+
+    const session = await createSession();
+    const onData = vi.mocked(mockPty.onData).mock.calls.at(-1)?.[0];
+
+    onData?.("booting up\n");
+    vi.advanceTimersByTime(3000);
+    expect(sessionMgr.get(session.id)?.state).toBe("idle");
+
+    sessionMgr.sendInput(session.id, Buffer.from("gen"), "typing");
+    expect(sessionMgr.get(session.id)?.state).toBe("idle");
+
+    onData?.("g");
+    expect(sessionMgr.get(session.id)?.state).toBe("idle");
+
+    onData?.("enerating...\n");
+    expect(sessionMgr.get(session.id)?.state).toBe("running");
+  });
+
+  it("restores running when a single PTY chunk mixes typing echo with real output", async () => {
+    vi.useFakeTimers();
+    provider = {
+      ...provider,
+      idleHeuristics: {
+        idlePromptPatterns: [],
+        idleDebounceMs: 3000,
+      },
+    } as ProviderDefinition;
+    sessionMgr = new SessionManager({
+      terminalMgr,
+      eventBus,
+      db: {
+        insert: vi.fn(),
+        update: vi.fn(),
+        findById: vi.fn(),
+        findByWorkspaceId: vi.fn().mockReturnValue([]),
+        listHydratable: vi.fn().mockReturnValue([]),
+        delete: vi.fn(),
+      } as SessionDatabase,
+      broadcaster: { broadcast: vi.fn() } as Broadcaster,
+      providerRegistry: [provider],
+      providerConfigRepo: providerConfigRepoStub,
+    });
+
+    const session = await createSession();
+    const onData = vi.mocked(mockPty.onData).mock.calls.at(-1)?.[0];
+
+    onData?.("booting up\n");
+    vi.advanceTimersByTime(3000);
+    expect(sessionMgr.get(session.id)?.state).toBe("idle");
+
+    sessionMgr.sendInput(session.id, Buffer.from("g"), "typing");
+    expect(sessionMgr.get(session.id)?.state).toBe("idle");
+
+    onData?.("gassistant working\n");
+    expect(sessionMgr.get(session.id)?.state).toBe("running");
+
+    vi.advanceTimersByTime(3000);
+    expect(sessionMgr.get(session.id)?.state).toBe("idle");
+  });
+
+  it("does not restore running for a typing-triggered line repaint split across chunks", async () => {
+    vi.useFakeTimers();
+    provider = {
+      ...provider,
+      idleHeuristics: {
+        idlePromptPatterns: [],
+        idleDebounceMs: 3000,
+      },
+    } as ProviderDefinition;
+    sessionMgr = new SessionManager({
+      terminalMgr,
+      eventBus,
+      db: {
+        insert: vi.fn(),
+        update: vi.fn(),
+        findById: vi.fn(),
+        findByWorkspaceId: vi.fn().mockReturnValue([]),
+        listHydratable: vi.fn().mockReturnValue([]),
+        delete: vi.fn(),
+      } as SessionDatabase,
+      broadcaster: { broadcast: vi.fn() } as Broadcaster,
+      providerRegistry: [provider],
+      providerConfigRepo: providerConfigRepoStub,
+    });
+
+    const session = await createSession();
+    const onData = vi.mocked(mockPty.onData).mock.calls.at(-1)?.[0];
+
+    onData?.("booting up\n");
+    vi.advanceTimersByTime(3000);
+    expect(sessionMgr.get(session.id)?.state).toBe("idle");
+
+    sessionMgr.sendInput(session.id, Buffer.from("git status"), "typing");
+    expect(sessionMgr.get(session.id)?.state).toBe("idle");
+
+    onData?.("\r\x1b[Kgit ");
+    expect(sessionMgr.get(session.id)?.state).toBe("idle");
+
+    onData?.("status");
+    expect(sessionMgr.get(session.id)?.state).toBe("idle");
+
+    vi.advanceTimersByTime(100);
+    expect(sessionMgr.get(session.id)?.state).toBe("idle");
+  });
+
+  it("restores running when real output follows a typing repaint sequence within the aggregation window", async () => {
+    vi.useFakeTimers();
+    provider = {
+      ...provider,
+      idleHeuristics: {
+        idlePromptPatterns: [],
+        idleDebounceMs: 3000,
+      },
+    } as ProviderDefinition;
+    sessionMgr = new SessionManager({
+      terminalMgr,
+      eventBus,
+      db: {
+        insert: vi.fn(),
+        update: vi.fn(),
+        findById: vi.fn(),
+        findByWorkspaceId: vi.fn().mockReturnValue([]),
+        listHydratable: vi.fn().mockReturnValue([]),
+        delete: vi.fn(),
+      } as SessionDatabase,
+      broadcaster: { broadcast: vi.fn() } as Broadcaster,
+      providerRegistry: [provider],
+      providerConfigRepo: providerConfigRepoStub,
+    });
+
+    const session = await createSession();
+    const onData = vi.mocked(mockPty.onData).mock.calls.at(-1)?.[0];
+
+    onData?.("booting up\n");
+    vi.advanceTimersByTime(3000);
+    expect(sessionMgr.get(session.id)?.state).toBe("idle");
+
+    sessionMgr.sendInput(session.id, Buffer.from("git status"), "typing");
+    expect(sessionMgr.get(session.id)?.state).toBe("idle");
+
+    onData?.("\r\x1b[Kgit ");
+    expect(sessionMgr.get(session.id)?.state).toBe("idle");
+
+    onData?.("status");
+    expect(sessionMgr.get(session.id)?.state).toBe("idle");
+
+    onData?.("\nassistant working\n");
+    expect(sessionMgr.get(session.id)?.state).toBe("running");
+  });
+
+  it("does not restore running for a pure control-triggered line repaint", async () => {
+    vi.useFakeTimers();
+    provider = {
+      ...provider,
+      idleHeuristics: {
+        idlePromptPatterns: [],
+        idleDebounceMs: 3000,
+      },
+    } as ProviderDefinition;
+    sessionMgr = new SessionManager({
+      terminalMgr,
+      eventBus,
+      db: {
+        insert: vi.fn(),
+        update: vi.fn(),
+        findById: vi.fn(),
+        findByWorkspaceId: vi.fn().mockReturnValue([]),
+        listHydratable: vi.fn().mockReturnValue([]),
+        delete: vi.fn(),
+      } as SessionDatabase,
+      broadcaster: { broadcast: vi.fn() } as Broadcaster,
+      providerRegistry: [provider],
+      providerConfigRepo: providerConfigRepoStub,
+    });
+
+    const session = await createSession();
+    const onData = vi.mocked(mockPty.onData).mock.calls.at(-1)?.[0];
+
+    onData?.("booting up\n");
+    vi.advanceTimersByTime(3000);
+    expect(sessionMgr.get(session.id)?.state).toBe("idle");
+
+    sessionMgr.sendInput(session.id, Buffer.from("\u001b[D"), "control");
+    expect(sessionMgr.get(session.id)?.state).toBe("idle");
+
+    onData?.("\r\x1b[K$ git status");
+    expect(sessionMgr.get(session.id)?.state).toBe("idle");
+  });
+
+  it("restores running when real output arrives after recent control input has aged out", async () => {
+    vi.useFakeTimers();
+    provider = {
+      ...provider,
+      idleHeuristics: {
+        idlePromptPatterns: [],
+        idleDebounceMs: 3000,
+      },
+    } as ProviderDefinition;
+    sessionMgr = new SessionManager({
+      terminalMgr,
+      eventBus,
+      db: {
+        insert: vi.fn(),
+        update: vi.fn(),
+        findById: vi.fn(),
+        findByWorkspaceId: vi.fn().mockReturnValue([]),
+        listHydratable: vi.fn().mockReturnValue([]),
+        delete: vi.fn(),
+      } as SessionDatabase,
+      broadcaster: { broadcast: vi.fn() } as Broadcaster,
+      providerRegistry: [provider],
+      providerConfigRepo: providerConfigRepoStub,
+    });
+
+    const session = await createSession();
+    const onData = vi.mocked(mockPty.onData).mock.calls.at(-1)?.[0];
+
+    onData?.("booting up\n");
+    vi.advanceTimersByTime(3000);
+    expect(sessionMgr.get(session.id)?.state).toBe("idle");
+
+    sessionMgr.sendInput(session.id, Buffer.from("\u001b[D"), "control");
+    expect(sessionMgr.get(session.id)?.state).toBe("idle");
+
+    vi.advanceTimersByTime(250);
+    onData?.("assistant working\n");
+    expect(sessionMgr.get(session.id)?.state).toBe("running");
   });
 
   it("emits turn_completed only after an armed submit returns to idle", async () => {

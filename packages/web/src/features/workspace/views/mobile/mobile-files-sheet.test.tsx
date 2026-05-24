@@ -1,16 +1,19 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { wsClientAtom } from "../../../../atoms/connection";
+import type { GitDiffPreview } from "../../atoms";
 import { MobileFilesSheet } from "./mobile-files-sheet";
+
+const mobileExplorerPanelSpy = vi.fn();
 
 vi.mock("../../../../lib/i18n", () => ({
   useTranslation: () => (key: string) => {
     const translations: Record<string, string> = {
       "mobile.files.tabs": "Files tabs",
-      "file.title": "Files",
-      "label.git": "Git",
-      "action.search_files": "Search files",
+      "workspace.sidebar.explorer": "Explorer",
+      "workspace.sidebar.search": "Search",
+      "workspace.sidebar.source_control": "Source Control",
       "file.new_file": "New File",
       "file.new_folder": "New Folder",
       "file.collapse_all": "Collapse All",
@@ -25,65 +28,137 @@ vi.mock("../../../code-editor/views/shared/code-editor-host", () => ({
   CodeEditorHost: () => <div data-testid="code-editor-host" />,
 }));
 
-vi.mock("../shared/git-diff-viewer", () => ({
-  GitDiffViewer: () => <div data-testid="git-diff-viewer" />,
+vi.mock("./mobile-explorer-panel", () => ({
+  MobileExplorerPanel: (props: unknown) => {
+    mobileExplorerPanelSpy(props);
+    return <div data-testid="mobile-explorer-panel" />;
+  },
+}));
+
+vi.mock("../shared/search-panel", () => ({
+  SearchPanel: ({ variant }: { variant?: string }) => (
+    <div data-testid="search-panel" data-variant={variant} />
+  ),
 }));
 
 vi.mock("../shared/git-panel", () => ({
-  GitPanel: () => <div data-testid="git-panel" />,
-}));
-
-vi.mock("../../actions/use-git-actions", () => ({
-  useGitDiffViewerActions: () => ({
-    closePreview: vi.fn(),
-  }),
+  GitPanel: ({ onPreviewOpen }: { onPreviewOpen?: (preview: GitDiffPreview) => void }) => (
+    <button
+      type="button"
+      data-testid="git-panel"
+      onClick={() =>
+        onPreviewOpen?.({
+          path: "abc123",
+          title: "abc123 · commit subject",
+          diff: "diff --git a/src/app.tsx b/src/app.tsx",
+          source: "commit",
+        })
+      }
+    >
+      git-panel
+    </button>
+  ),
 }));
 
 describe("MobileFilesSheet", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    mobileExplorerPanelSpy.mockReset();
   });
 
-  it("renders file actions in the tab row instead of a separate dock", async () => {
-    const sendCommand = vi.fn().mockResolvedValue({
-      path: "/workspace",
-      children: [],
-    });
-
-    const store = createStore();
-    store.set(wsClientAtom, { sendCommand } as never);
-
-    render(
-      <Provider store={store}>
-        <MobileFilesSheet workspaceId="ws-test" route={{ kind: "root" }} activeTab="files" />
-      </Provider>
-    );
-
-    const newFileButton = await screen.findByRole("button", { name: "New File" });
-    const searchInput = await screen.findByRole("searchbox", { name: "Search files" });
-
-    expect(document.querySelector(".mobile-files-sheet__dock")).toBeNull();
-    expect(document.querySelector(".file-tree-mobile-actions")).toBeNull();
-    expect(newFileButton.closest(".mobile-files-sheet__tab-actions")).not.toBeNull();
-    expect(
-      newFileButton.compareDocumentPosition(searchInput) & Node.DOCUMENT_POSITION_FOLLOWING
-    ).toBeTruthy();
-    expect(searchInput).toBeInTheDocument();
-  });
-
-  it("uses the mobile segmented tab styling without legacy panel-tab classes", () => {
+  it("renders three icon tabs and keeps explorer actions inside the explorer content", () => {
     render(
       <Provider store={createStore()}>
-        <MobileFilesSheet workspaceId="ws-test" route={{ kind: "root" }} activeTab="git" />
+        <MobileFilesSheet workspaceId="ws-test" route={{ kind: "root" }} activeView="explorer" />
       </Provider>
     );
 
-    const filesTab = screen.getByRole("tab", { name: "Files" });
-    const gitTab = screen.getByRole("tab", { name: "Git" });
+    expect(screen.getByRole("tab", { name: "Explorer" })).toHaveClass(
+      "mobile-files-sheet__segment",
+      "active"
+    );
+    expect(screen.getByRole("tab", { name: "Search" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Source Control" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "New File" })).toBeNull();
+    expect(screen.getByTestId("mobile-explorer-panel")).toBeInTheDocument();
+  });
 
-    expect(filesTab).toHaveClass("mobile-files-sheet__segment");
-    expect(filesTab).not.toHaveClass("panel-tab");
-    expect(gitTab).toHaveClass("mobile-files-sheet__segment", "active");
-    expect(gitTab).not.toHaveClass("panel-tab");
+  it("renders the mobile search panel without explorer actions when Search is active", () => {
+    render(
+      <Provider store={createStore()}>
+        <MobileFilesSheet workspaceId="ws-test" route={{ kind: "root" }} activeView="search" />
+      </Provider>
+    );
+
+    expect(screen.queryByRole("button", { name: "New File" })).toBeNull();
+    expect(screen.getByTestId("search-panel")).toHaveAttribute("data-variant", "mobile");
+  });
+
+  it("passes workspace action callbacks through to the explorer content", () => {
+    const onCreateFile = vi.fn();
+    const onCreateFolder = vi.fn();
+    const onCollapseAll = vi.fn();
+
+    render(
+      <Provider store={createStore()}>
+        <MobileFilesSheet
+          workspaceId="ws-test"
+          route={{ kind: "root" }}
+          activeView="explorer"
+          collapseVersion={7}
+          onCreateFile={onCreateFile}
+          onCreateFolder={onCreateFolder}
+          onCollapseAll={onCollapseAll}
+        />
+      </Provider>
+    );
+
+    expect(mobileExplorerPanelSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        collapseVersion: 7,
+        onCollapseAll,
+        onOpenFileCreate: onCreateFile,
+        onOpenFolderCreate: onCreateFolder,
+        workspaceId: "ws-test",
+      })
+    );
+  });
+
+  it("uses one file detail surface for preview edit and diff instead of separate editor and diff pages", () => {
+    render(
+      <Provider store={createStore()}>
+        <MobileFilesSheet
+          workspaceId="ws-test"
+          route={{ kind: "detail", path: "src/app.tsx" }}
+          activeView="explorer"
+        />
+      </Provider>
+    );
+
+    expect(screen.getByTestId("code-editor-host")).toBeInTheDocument();
+    expect(screen.queryByTestId("git-diff-viewer")).not.toBeInTheDocument();
+  });
+
+  it("navigates into the unified detail surface for commit-history diff previews too", () => {
+    const handleRouteChange = vi.fn();
+
+    render(
+      <Provider store={createStore()}>
+        <MobileFilesSheet
+          workspaceId="ws-test"
+          route={{ kind: "root" }}
+          activeView="source-control"
+          onRouteChange={handleRouteChange}
+        />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "git-panel" }));
+
+    expect(handleRouteChange).toHaveBeenCalledWith({
+      kind: "detail",
+      path: "abc123",
+      title: "abc123 · commit subject",
+    });
   });
 });

@@ -3,13 +3,15 @@ import { createStore, Provider } from "jotai";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { lastViewedTargetAtom, pendingFocusSessionAtom } from "../../../atoms/app-ui";
-import { wsClientAtom } from "../../../atoms/connection";
+import { connectionStatusAtom, wsClientAtom } from "../../../atoms/connection";
 import { sessionsAtom } from "../../../atoms/sessions";
 import {
   activeWorkspaceIdAtom,
   workspacesAtom,
   workspacesLoadStateAtom,
 } from "../../../atoms/workspaces";
+import { supervisorsAtom } from "../../supervisor/atoms";
+import { paneLayoutAtomFamily } from "../atoms/pane-layout";
 import { SessionCard } from "../views/shared/session-card";
 
 const mockXtermHost = vi.fn((props: Record<string, unknown>) => (
@@ -87,12 +89,119 @@ describe("SessionCard", () => {
     expect(mockXtermHost).toHaveBeenCalled();
     expect(mockXtermHost.mock.calls[0]?.[0]).toEqual(
       expect.objectContaining({
+        closedSessionProviderLabel: "Codex",
         terminalId: "term-ended",
         workspaceId: "ws-123",
         readOnly: true,
         terminalKind: "agent",
+        onClosedSessionClose: expect.any(Function),
+        onClosedSessionContinue: expect.any(Function),
       })
     );
+  });
+
+  it("continues an ended session by relaunching the same provider in place", async () => {
+    const nextSession = {
+      id: "sess_654321",
+      workspaceId: "ws-123",
+      terminalId: "term-new",
+      providerId: "codex",
+      state: "starting",
+      capability: "full",
+      startedAt: Date.now(),
+      lastActiveAt: Date.now(),
+    };
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args: unknown) => {
+      if (op === "session.create") {
+        return nextSession;
+      }
+
+      if (op === "workspace.lastViewedTarget.set") {
+        return {
+          workspaceId: "ws-123",
+          sessionId: "sess_654321",
+          updatedAt: 42,
+        };
+      }
+
+      if (op === "workspace.uiState.set") {
+        const { uiState } = args as {
+          workspaceId: string;
+          uiState: Record<string, unknown>;
+        };
+        return {
+          id: "ws-123",
+          path: "/tmp/ws-123",
+          targetRuntime: "native",
+          uiState,
+        };
+      }
+
+      return undefined;
+    });
+    const { store } = createSessionStore({}, sendCommand);
+    store.set(paneLayoutAtomFamily("ws-123"), {
+      id: "root",
+      type: "leaf",
+      sessionId: "sess_123456",
+    });
+
+    render(
+      <Provider store={store}>
+        <SessionCard sessionId="sess_123456" />
+      </Provider>
+    );
+
+    const props = getLastXtermHostProps() as {
+      onClosedSessionContinue?: () => void;
+    };
+
+    act(() => {
+      props.onClosedSessionContinue?.();
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "session.create",
+        {
+          workspaceId: "ws-123",
+          providerId: "codex",
+        },
+        undefined
+      );
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "session.remove",
+        { sessionId: "sess_123456" },
+        undefined
+      );
+    });
+
+    expect(store.get(sessionsAtom)).toMatchObject({
+      sess_654321: nextSession,
+    });
+    expect(store.get(paneLayoutAtomFamily("ws-123"))).toEqual({
+      id: "root",
+      type: "leaf",
+      sessionId: "sess_654321",
+    });
+    expect(store.get(lastViewedTargetAtom)).toMatchObject({
+      workspaceId: "ws-123",
+      sessionId: "sess_654321",
+    });
+    expect(store.get(workspacesAtom)["ws-123"]?.uiState).toEqual(
+      expect.objectContaining({
+        activeSessionId: "sess_654321",
+        paneLayout: {
+          id: "root",
+          type: "leaf",
+          sessionId: "sess_654321",
+        },
+      })
+    );
+    expect(sendCommand).not.toHaveBeenCalledWith("session.close", expect.anything(), undefined);
   });
 
   it("renders interactive sessions without the extra command input", () => {
@@ -384,34 +493,45 @@ describe("SessionCard", () => {
     );
   });
 
-  it("hydrates supervisor state for full-capability sessions and renders the card above the terminal", async () => {
-    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
-      if (op === "supervisor.get") {
-        return {
-          supervisor: {
-            id: "sup-1",
-            sessionId: "sess_123456",
-            workspaceId: "ws-123",
-            state: "idle",
-            objective: "Keep the agent on track",
-            evaluatorProviderId: "claude",
-            maxSupervisionCount: 0,
-            completedSupervisionCount: 0,
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-          },
-        };
-      }
-      return undefined;
+  it("hydrates supervisor state via supervisor.get once after the session becomes connected", async () => {
+    const { store, sendCommand } = createSessionStore({
+      state: "running",
+      capability: "full",
+      endedAt: undefined,
+      terminalId: "term-live",
+    });
+    sendCommand.mockResolvedValue({
+      supervisor: {
+        id: "sup-1",
+        sessionId: "sess_123456",
+        workspaceId: "ws-123",
+        targetId: "tgt-1",
+        state: "idle",
+        objective: "Keep the rollout healthy",
+        evaluatorProviderId: "claude",
+        maxSupervisionCount: 0,
+        completedSupervisionCount: 0,
+        recentTargetCycles: [],
+        createdAt: 1,
+        updatedAt: 1,
+      },
     });
 
-    const { store } = createSessionStore({ state: "running", capability: "full" }, sendCommand);
-
-    render(
+    const { rerender } = render(
       <Provider store={store}>
         <SessionCard sessionId="sess_123456" />
       </Provider>
     );
+
+    expect(sendCommand).not.toHaveBeenCalledWith(
+      "supervisor.get",
+      { sessionId: "sess_123456" },
+      undefined
+    );
+
+    act(() => {
+      store.set(connectionStatusAtom, "connected");
+    });
 
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith(
@@ -421,7 +541,61 @@ describe("SessionCard", () => {
       );
     });
 
-    expect(screen.getByText("Supervisor")).toBeInTheDocument();
+    expect(store.get(supervisorsAtom).get("sess_123456")).toMatchObject({
+      id: "sup-1",
+      targetId: "tgt-1",
+      objective: "Keep the rollout healthy",
+    });
+
+    rerender(
+      <Provider store={store}>
+        <SessionCard sessionId="sess_123456" />
+      </Provider>
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(
+      sendCommand.mock.calls.filter(([op]) => op === "supervisor.get" && Boolean(op))
+    ).toHaveLength(1);
+  });
+
+  it("re-hydrates supervisor state after a reconnect cycle", async () => {
+    const { store, sendCommand } = createSessionStore({
+      state: "running",
+      capability: "full",
+      endedAt: undefined,
+      terminalId: "term-live",
+    });
+    sendCommand.mockResolvedValue({ supervisor: null });
+
+    render(
+      <Provider store={store}>
+        <SessionCard sessionId="sess_123456" />
+      </Provider>
+    );
+
+    act(() => {
+      store.set(connectionStatusAtom, "connected");
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledTimes(1);
+    });
+
+    act(() => {
+      store.set(connectionStatusAtom, "reconnecting");
+    });
+
+    act(() => {
+      store.set(connectionStatusAtom, "connected");
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledTimes(2);
+    });
   });
 
   it("reacts to a pending-focus request by scrolling itself into view and pulsing, then clears the marker", async () => {

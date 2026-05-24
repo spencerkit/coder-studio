@@ -118,6 +118,21 @@ export function useObjectiveDialogState({
   const isRecoverableTargetsLoading = dialog.isRecoverableTargetsLoading ?? false;
   const trimmedDraftObjective = dialog.draftObjective.trim();
   const hasObjectiveChanged = trimmedDraftObjective !== (dialog.initialObjective?.trim() ?? "");
+  const normalizedDraftEvaluatorModel = (dialog.draftEvaluatorModel ?? "").trim();
+  const normalizedSupervisorEvaluatorModel = supervisor?.evaluatorModel?.trim() ?? "";
+  const draftMaxSupervisionCount = parseDraftMaxSupervisionCount(
+    dialog.draftMaxSupervisionCount ?? "0"
+  );
+  const draftScheduledAt = parseDraftScheduledAt(dialog.draftScheduledAt ?? "") ?? null;
+  const supervisorScheduledAt = supervisor?.scheduledAt ?? null;
+  const hasSettingsChanged = Boolean(
+    supervisor &&
+      (dialog.draftEvaluatorProviderId !== supervisor.evaluatorProviderId ||
+        normalizedDraftEvaluatorModel !== normalizedSupervisorEvaluatorModel ||
+        draftMaxSupervisionCount !== supervisor.maxSupervisionCount ||
+        draftScheduledAt !== supervisorScheduledAt)
+  );
+  const hasChanges = hasObjectiveChanged || hasSettingsChanged;
 
   const close = useCallback(() => {
     const nextSessionId = dialog.returnToDetails ? dialog.sessionId : null;
@@ -165,15 +180,19 @@ export function useObjectiveDialogState({
         return current;
       }
 
+      const filteredTargets = (result.ok ? (result.data?.targets ?? []) : []).filter((target) => {
+        return target.targetId !== supervisor?.targetId;
+      });
+
       return {
         ...current,
         restoreStep: "restore",
         isRecoverableTargetsLoading: false,
-        recoverableTargets: result.ok ? (result.data?.targets ?? []) : [],
+        recoverableTargets: filteredTargets,
         selectedRecoverableTargetId: null,
       };
     });
-  }, [dispatch, effectiveSessionId, mode, setDialog, workspaceId]);
+  }, [dispatch, effectiveSessionId, setDialog, supervisor?.targetId, workspaceId]);
 
   const closeRestoreStep = useCallback(() => {
     setDialog((current) => ({
@@ -295,6 +314,8 @@ export function useObjectiveDialogState({
     selectedRecoverableTargetId,
     isRecoverableTargetsLoading,
     hasObjectiveChanged,
+    hasSettingsChanged,
+    hasChanges,
     close,
     updateDraft,
     openRestoreStep,

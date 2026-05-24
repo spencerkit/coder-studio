@@ -273,5 +273,23 @@ describe("WsClient", () => {
         "Stream buffer pressure"
       );
     });
+
+    it("invokes a continuity callback when a terminal stream frame is dropped", () => {
+      const onTerminalContinuityLost = vi.fn();
+      client = new WsClient(mockSocket, "test-client-id", logger, {
+        onTerminalContinuityLost,
+      });
+
+      mockSocket.bufferedAmount = HIGH;
+      client.sendStream("workspace.ws-1.terminal.term-1.output", Buffer.from("aaaa"));
+      client.sendStream("workspace.ws-1.terminal.term-1.output", Buffer.from("bbbb"));
+      client.sendStream("workspace.ws-1.terminal.term-1.output", Buffer.alloc(600 * 1024, 1));
+
+      expect(onTerminalContinuityLost).toHaveBeenCalledWith({
+        clientId: "test-client-id",
+        topic: "workspace.ws-1.terminal.term-1.output",
+        reason: "stream_drop",
+      });
+    });
   });
 });

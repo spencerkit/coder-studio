@@ -19,7 +19,7 @@ type TerminalTraceEntry = {
 };
 let sandboxDir: string;
 let workspaceDir: string;
-let dbPath: string;
+let stateDir: string;
 let runtimeDir: string;
 let backendProcess: ChildProcess | undefined;
 let webProcess: ChildProcess | undefined;
@@ -75,7 +75,7 @@ test.describe("session hydrate refresh acceptance", () => {
   test.beforeAll(async () => {
     sandboxDir = mkdtempSync(join(tmpdir(), "coder-studio-hydrate-e2e-"));
     workspaceDir = join(sandboxDir, "workspace");
-    dbPath = join(sandboxDir, "coder-studio.db");
+    stateDir = join(sandboxDir, "state");
     runtimeDir = join(sandboxDir, "runtime");
 
     mkdirSync(join(workspaceDir, ".git"), { recursive: true });
@@ -84,7 +84,7 @@ test.describe("session hydrate refresh acceptance", () => {
 
     const seed = spawn(
       "pnpm",
-      ["exec", "tsx", "e2e/fixtures/seed-hydrate-refresh-db.ts", dbPath, workspaceDir],
+      ["exec", "tsx", "e2e/fixtures/seed-hydrate-refresh-db.ts", stateDir, workspaceDir],
       {
         cwd: REPO_ROOT,
         env: process.env,
@@ -112,7 +112,7 @@ test.describe("session hydrate refresh acceptance", () => {
       env: {
         HOST,
         PORT: String(SERVER_PORT),
-        DATA_DIR: dbPath,
+        STATE_DIR: stateDir,
         RUNTIME_DIR: runtimeDir,
         NO_AUTH: "true",
       },

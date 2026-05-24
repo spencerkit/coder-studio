@@ -1151,6 +1151,63 @@ describe("FileTreePanel", () => {
     expect(screen.queryByText("AppController.tsx")).not.toBeInTheDocument();
   });
 
+  it("restores file search state per workspace tab instance", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args: { query?: string }) => {
+      if (op === "file.search") {
+        const query = args.query?.toLowerCase() ?? "";
+        const files = [
+          { path: "README.md", name: "README.md", kind: "file" },
+          { path: "src/AppController.tsx", name: "AppController.tsx", kind: "file" },
+          { path: "src/button.tsx", name: "button.tsx", kind: "file" },
+        ].filter((item) => item.name.toLowerCase().includes(query));
+
+        return { files };
+      }
+
+      return { ok: true };
+    });
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    const { rerender } = render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-a" />
+      </Provider>
+    );
+
+    fireEvent.change(screen.getByPlaceholderText("action.search_files"), {
+      target: { value: "app" },
+    });
+
+    expect(await screen.findByText("AppController.tsx")).toBeInTheDocument();
+
+    rerender(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-b" />
+      </Provider>
+    );
+
+    expect(await screen.findByPlaceholderText("action.search_files")).toHaveValue("");
+    expect(screen.queryByText("AppController.tsx")).toBeNull();
+
+    fireEvent.change(screen.getByPlaceholderText("action.search_files"), {
+      target: { value: "read" },
+    });
+
+    expect(await screen.findByText("README.md")).toBeInTheDocument();
+    expect(screen.queryByText("AppController.tsx")).toBeNull();
+
+    rerender(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-a" />
+      </Provider>
+    );
+
+    expect(await screen.findByPlaceholderText("action.search_files")).toHaveValue("app");
+    expect(await screen.findByText("AppController.tsx")).toBeInTheDocument();
+    expect(screen.queryByText("README.md")).toBeNull();
+  });
+
   it("renders the compact shared empty shell for search misses", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string, args: { query?: string }) => {
       if (op === "file.search") {
@@ -2010,6 +2067,21 @@ describe("FileTreePanel", () => {
     expect(document.querySelector(".file-tree-status-strip")).toBeNull();
     expect(screen.queryByText("file.visible_count")).toBeNull();
     expect(document.querySelector(".tree-item-actions")).toBeNull();
+  });
+
+  it("omits the desktop filename search input when showSearch is false", () => {
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+    store.set(fileTreeAtomFamily("ws-test"), new Map([[".", []]]));
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" variant="desktop" showSearch={false} />
+      </Provider>
+    );
+
+    expect(screen.queryByLabelText("action.search_files")).toBeNull();
+    expect(document.querySelector(".file-tree-search")).toBeNull();
   });
 
   it("opens the mobile action sheet on long press but not on ordinary tap", async () => {

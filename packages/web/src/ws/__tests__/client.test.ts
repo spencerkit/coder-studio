@@ -1293,7 +1293,7 @@ describe("web WsClient", () => {
     }
   });
 
-  it("probes an apparently connected socket during recovery and reconnects if the probe times out", async () => {
+  it("forces reconnect when probe times out", async () => {
     vi.useFakeTimers();
 
     try {
@@ -1327,14 +1327,17 @@ describe("web WsClient", () => {
     }
   });
 
-  it("keeps the current socket when the recovery probe succeeds", async () => {
+  it("does not emit terminal recovery callbacks on successful probe of a connected socket", async () => {
     const client = new WsClient("ws://127.0.0.1:4173/ws");
     const connectPromise = client.connect();
     const socket = MockWebSocket.instances[0]!;
     socket.triggerOpen();
     await connectPromise;
 
-    client.recoverConnection("visibility_resume");
+    const statusListener = vi.fn();
+    client.onStatus(statusListener);
+
+    const probePromise = client.probeConnection("foreground_resume");
 
     const probeCommand = socket.sent
       .filter((entry): entry is string => typeof entry === "string")
@@ -1352,10 +1355,11 @@ describe("web WsClient", () => {
       },
     });
 
-    await Promise.resolve();
+    await expect(probePromise).resolves.toEqual({ ok: true });
 
     expect(MockWebSocket.instances).toHaveLength(1);
     expect(client.getStatus()).toBe("connected");
+    expect(statusListener).not.toHaveBeenCalledWith("reconnecting");
   });
 
   it("dispatches wildcard subscriptions for nested workspace events", async () => {

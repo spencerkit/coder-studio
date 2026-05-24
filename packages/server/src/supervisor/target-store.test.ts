@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -331,6 +331,56 @@ describe("target store", () => {
     });
   });
 
+  it("falls back to default metadata and memory when persisted JSON is corrupted", async () => {
+    await createTargetFiles(workspacePath, {
+      targetId: "tgt-corrupt",
+      sessionId: "sess-1",
+      workspaceId: "ws-1",
+      objective: "Corrupt state",
+      createdAt: 1,
+    });
+
+    const targetRoot = join(workspacePath, ".coder-studio", "supervisor", "targets", "tgt-corrupt");
+    writeFileSync(join(targetRoot, "meta.json"), "{broken", "utf8");
+    writeFileSync(join(targetRoot, "memory.json"), "{broken", "utf8");
+    writeFileSync(
+      join(targetRoot, "cycles.jsonl"),
+      '{"cycleId":"ok","targetId":"tgt-corrupt","startedAt":1,"completedAt":2,"result":"continue","attemptCount":1}\n{broken}\n',
+      "utf8"
+    );
+
+    await expect(readTargetMeta(workspacePath, "tgt-corrupt")).resolves.toEqual({
+      targetId: "tgt-corrupt",
+      sessionId: "",
+      workspaceId: "",
+      objective: "",
+      status: "active",
+      createdAt: 0,
+      updatedAt: 0,
+      supersededBy: null,
+      completedAt: null,
+      supervisor: undefined,
+    });
+
+    await expect(loadTargetMemory(workspacePath, "tgt-corrupt")).resolves.toEqual({
+      targetId: "tgt-corrupt",
+      decompositionGenerated: false,
+      decompositionMode: undefined,
+      items: [],
+      activeItemId: undefined,
+      progressSummary: undefined,
+      lastGuidance: undefined,
+      stalledCount: 0,
+      updatedAt: 0,
+    });
+
+    await expect(readTargetCycleRecords(workspacePath, "tgt-corrupt")).resolves.toEqual([
+      expect.objectContaining({
+        cycleId: "ok",
+      }),
+    ]);
+  });
+
   it("lists recoverable targets with summary details", async () => {
     await createTargetFiles(workspacePath, {
       targetId: "tgt-1",
@@ -413,6 +463,35 @@ describe("target store", () => {
     const targets = await listRecoverableTargets(workspacePath);
 
     expect(targets[0]?.cycleCount).toBe(1);
+  });
+
+  it("ignores backup and reset staging directories when listing recoverable targets", async () => {
+    await createTargetFiles(workspacePath, {
+      targetId: "tgt-1",
+      sessionId: "sess-1",
+      workspaceId: "ws-1",
+      objective: "Recover this target",
+      createdAt: 1,
+    });
+
+    const targetsDir = join(workspacePath, ".coder-studio", "supervisor", "targets");
+    mkdirSync(join(targetsDir, "tgt-1.backup-123"), { recursive: true });
+    mkdirSync(join(targetsDir, "tgt-1.reset-456"), { recursive: true });
+    writeFileSync(
+      join(targetsDir, "tgt-1.backup-123", "meta.json"),
+      JSON.stringify({ targetId: "tgt-1.backup-123", updatedAt: 999 }),
+      "utf8"
+    );
+    writeFileSync(
+      join(targetsDir, "tgt-1.reset-456", "meta.json"),
+      JSON.stringify({ targetId: "tgt-1.reset-456", updatedAt: 998 }),
+      "utf8"
+    );
+
+    const targets = await listRecoverableTargets(workspacePath);
+
+    expect(targets).toHaveLength(1);
+    expect(targets[0]?.targetId).toBe("tgt-1");
   });
 
   it("clones a target into a new target id and rewrites persisted identifiers", async () => {

@@ -123,6 +123,8 @@ describe("base.css desktop typography foundation", () => {
 
   it("defines semantic overlay z-index tokens for governed layers", () => {
     expect(tokensStylesheet).toContain("--z-local-overlay:");
+    expect(tokensStylesheet).toContain("--z-sheet-backdrop:");
+    expect(tokensStylesheet).toContain("--z-sheet:");
     expect(tokensStylesheet).toContain("--z-drawer-backdrop:");
     expect(tokensStylesheet).toContain("--z-drawer:");
     expect(tokensStylesheet).toContain("--z-workbench-backdrop:");

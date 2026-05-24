@@ -9,7 +9,7 @@ const ownsPhase1Sandbox = !process.env.CODER_STUDIO_PHASE1_SANDBOX_DIR;
 const sandboxDir =
   process.env.CODER_STUDIO_PHASE1_SANDBOX_DIR ??
   mkdtempSync(join(tmpdir(), "coder-studio-phase1-acceptance-"));
-const dataDir = process.env.CODER_STUDIO_PHASE1_DATA_DIR ?? join(sandboxDir, "coder-studio.db");
+const stateDir = process.env.CODER_STUDIO_PHASE1_STATE_DIR ?? join(sandboxDir, "state");
 const runtimeDir = process.env.CODER_STUDIO_PHASE1_RUNTIME_DIR ?? join(sandboxDir, "runtime");
 const providerMockDir =
   process.env.CODER_STUDIO_E2E_PROVIDER_MOCK_DIR ?? join(sandboxDir, "provider-mock");
@@ -54,7 +54,7 @@ const BASE_URL = `http://${HOST}:${WEB_PORT}`;
 if (ownsPhase1Sandbox) {
   mkdirSync(runtimeDir, { recursive: true });
   process.env.CODER_STUDIO_PHASE1_SANDBOX_DIR = sandboxDir;
-  process.env.CODER_STUDIO_PHASE1_DATA_DIR = dataDir;
+  process.env.CODER_STUDIO_PHASE1_STATE_DIR = stateDir;
   process.env.CODER_STUDIO_PHASE1_RUNTIME_DIR = runtimeDir;
   process.env.CODER_STUDIO_PHASE1_SERVER_PORT = String(SERVER_PORT);
   process.env.CODER_STUDIO_PHASE1_WEB_PORT = String(WEB_PORT);
@@ -83,7 +83,7 @@ export default defineConfig({
         ...process.env,
         HOST,
         PORT: String(SERVER_PORT),
-        DATA_DIR: dataDir,
+        STATE_DIR: stateDir,
         RUNTIME_DIR: runtimeDir,
         NO_AUTH: "true",
         CODER_STUDIO_E2E_PROVIDER_STATE_PATH: providerMockStatePath,

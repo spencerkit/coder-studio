@@ -1,4 +1,4 @@
-import type { Workspace } from "@coder-studio/core";
+import type { UpdateStateView, Workspace } from "@coder-studio/core";
 import { act, render } from "@testing-library/react";
 import { createStore, Provider, useAtomValue } from "jotai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -16,7 +16,10 @@ import {
   workspacesAtom,
   workspacesLoadStateAtom,
 } from "../atoms/workspaces";
+import { toastsAtom } from "../features/notifications/atoms";
 import { terminalPreferencesAtom } from "../features/terminal-panel/preferences";
+import { getGlobalRecoveryCoordinator } from "../features/terminal-panel/recovery-singleton";
+import { updateStateAtom } from "../features/updates/atoms";
 import {
   expandedDirsAtomFamily,
   fileTreeAtomFamily,
@@ -35,6 +38,7 @@ const wsState = vi.hoisted(() => ({
     subscribe: ReturnType<typeof vi.fn>;
     onStatus: ReturnType<typeof vi.fn>;
     getStatus: ReturnType<typeof vi.fn>;
+    probeConnection?: ReturnType<typeof vi.fn>;
     recoverConnection: ReturnType<typeof vi.fn>;
     sendCommand?: ReturnType<typeof vi.fn>;
     eventHandler?: (topic: string, payload: unknown, seq: number) => void;
@@ -80,6 +84,11 @@ function renderProviders(store = createStore()) {
 
 function TerminalPreferencesProbe() {
   useAtomValue(terminalPreferencesAtom);
+  return null;
+}
+
+function UpdateStateProbe() {
+  useAtomValue(updateStateAtom);
   return null;
 }
 
@@ -198,6 +207,7 @@ describe("AppProviders lifecycle recovery", () => {
         };
       }),
       getStatus: vi.fn(() => "disconnected"),
+      probeConnection: vi.fn().mockResolvedValue({ ok: true }),
       recoverConnection: vi.fn(),
       sendCommand: createWsSendCommandMock(),
     };
@@ -261,6 +271,129 @@ describe("AppProviders lifecycle recovery", () => {
         workspaceId: "ws-1",
       });
     });
+  });
+
+  it("hydrates update state after the websocket connects", async () => {
+    const updateState: UpdateStateView = {
+      version: 1,
+      currentVersion: "0.4.0",
+      latestVersion: "0.5.0",
+      availability: "update_available",
+      updateStatus: "idle",
+      lastCheckedAt: 123,
+      targetVersion: null,
+      startedAt: null,
+      finishedAt: null,
+      requiresManualStep: false,
+      manualCommand: null,
+      errorSummary: null,
+      supported: true,
+      installKind: "global_npm",
+      unsupportedReason: null,
+    };
+    wsState.client!.sendCommand = createWsSendCommandMock(async (op) => {
+      if (op === "updates.getState") {
+        return updateState;
+      }
+      return undefined;
+    });
+    const store = createStore();
+    setVisibilityState("visible");
+
+    await act(async () => {
+      render(
+        <Provider store={store}>
+          <AppProviders>
+            <UpdateStateProbe />
+          </AppProviders>
+        </Provider>
+      );
+    });
+
+    act(() => {
+      wsState.client?.statusHandler?.("connected");
+    });
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.sendCommand).toHaveBeenCalledWith("updates.getState", {}, undefined);
+    });
+
+    await vi.waitFor(() => {
+      expect(store.get(updateStateAtom)).toEqual(updateState);
+    });
+  });
+
+  it("subscribes to update topics so update events stream without a reconnect", async () => {
+    const store = createStore();
+    setVisibilityState("visible");
+
+    renderProviders(store);
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+      expect(wsState.client?.subscribe).toHaveBeenCalled();
+    });
+
+    const topics = wsState.client?.subscribe.mock.calls.at(-1)?.[0];
+
+    expect(topics).toEqual(expect.arrayContaining(["update.*"]));
+  });
+
+  it("hydrates update state without emitting a toast when an update becomes available after connect", async () => {
+    const updateState: UpdateStateView = {
+      version: 1,
+      currentVersion: "0.4.0",
+      latestVersion: "0.5.0",
+      availability: "update_available",
+      updateStatus: "idle",
+      lastCheckedAt: 123,
+      targetVersion: null,
+      startedAt: null,
+      finishedAt: null,
+      requiresManualStep: false,
+      manualCommand: null,
+      errorSummary: null,
+      supported: true,
+      installKind: "global_npm",
+      unsupportedReason: null,
+    };
+    wsState.client!.sendCommand = createWsSendCommandMock(async (op) => {
+      if (op === "updates.getState") {
+        return {
+          ...updateState,
+          latestVersion: null,
+          availability: "unknown" as const,
+          lastCheckedAt: null,
+        };
+      }
+      return undefined;
+    });
+    const store = createStore();
+    setVisibilityState("visible");
+
+    renderProviders(store);
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
+
+    act(() => {
+      wsState.client?.statusHandler?.("connected");
+    });
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.sendCommand).toHaveBeenCalledWith("updates.getState", {}, undefined);
+    });
+
+    act(() => {
+      wsState.client?.eventHandler?.("update.state.changed", updateState, 1);
+    });
+
+    await vi.waitFor(() => {
+      expect(store.get(updateStateAtom)).toEqual(updateState);
+    });
+
+    expect(store.get(toastsAtom)).toEqual([]);
   });
 
   it("sends workspace.deactivate when the page becomes hidden", async () => {
@@ -498,78 +631,250 @@ describe("AppProviders lifecycle recovery", () => {
     });
   });
 
-  it("recovers the websocket when the page becomes visible again", () => {
+  it("reconciles instead of forcing transport recovery when the page becomes visible again", async () => {
+    const probeConnection = vi.fn().mockResolvedValue({ ok: true });
+    const sendCommand = createWsSendCommandMock((op) => {
+      if (op === "recovery.reconcile") {
+        return {
+          terminals: [],
+        };
+      }
+      return undefined;
+    });
+
+    wsState.client = {
+      ...wsState.client!,
+      getStatus: vi.fn(() => "connected"),
+      probeConnection,
+      sendCommand,
+    };
+
+    setVisibilityState("hidden");
     renderProviders();
 
-    return vi
-      .waitFor(() => {
-        expect(wsState.client?.connect).toHaveBeenCalled();
-      })
-      .then(() => {
-        Object.defineProperty(document, "visibilityState", {
-          configurable: true,
-          value: "visible",
-        });
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
 
-        act(() => {
-          document.dispatchEvent(new Event("visibilitychange"));
-        });
+    act(() => {
+      setVisibilityState("visible");
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
 
-        expect(wsState.client?.recoverConnection).toHaveBeenCalledWith("visibility_resume");
-      });
+    await vi.waitFor(() => {
+      expect(probeConnection).toHaveBeenCalledWith("foreground_resume");
+    });
+    await vi.waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "recovery.reconcile",
+        expect.objectContaining({ reason: "foreground_resume" }),
+        undefined
+      );
+    });
+    expect(wsState.client?.recoverConnection).not.toHaveBeenCalledWith("visibility_resume");
   });
 
   it("recovers the websocket when the browser reports network return", () => {
+    wsState.client = {
+      ...wsState.client!,
+      getStatus: vi.fn(() => "connected"),
+      sendCommand: createWsSendCommandMock((op) => {
+        if (op === "recovery.reconcile") {
+          return {
+            terminals: [],
+          };
+        }
+        return undefined;
+      }),
+    };
+
     renderProviders();
 
     return vi
       .waitFor(() => {
         expect(wsState.client?.connect).toHaveBeenCalled();
       })
-      .then(() => {
+      .then(async () => {
         act(() => {
           window.dispatchEvent(new Event("online"));
         });
 
-        expect(wsState.client?.recoverConnection).toHaveBeenCalledWith("network_online");
+        await vi.waitFor(() => {
+          expect(wsState.client?.sendCommand).toHaveBeenCalledWith(
+            "recovery.reconcile",
+            expect.objectContaining({ reason: "network_online" }),
+            undefined
+          );
+        });
       });
   });
 
-  it("recovers the websocket when the window regains focus while already visible", () => {
-    setVisibilityState("visible");
-    renderProviders();
+  it("probes and reconciles on visibility return instead of forcing replay semantics", async () => {
+    const probeConnection = vi.fn().mockResolvedValue({ ok: true });
+    const sendCommand = createWsSendCommandMock((op) => {
+      if (op === "recovery.reconcile") {
+        return {
+          terminals: [],
+        };
+      }
+      return undefined;
+    });
 
-    return vi
-      .waitFor(() => {
-        expect(wsState.client?.connect).toHaveBeenCalled();
-      })
-      .then(() => {
-        act(() => {
-          window.dispatchEvent(new Event("focus"));
-        });
+    wsState.client = {
+      ...wsState.client!,
+      getStatus: vi.fn(() => "connected"),
+      probeConnection,
+      sendCommand,
+    };
 
-        expect(wsState.client?.recoverConnection).toHaveBeenCalledWith("visibility_resume");
-      });
+    const store = createStore();
+    setVisibilityState("hidden");
+    renderProviders(store);
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
+
+    act(() => {
+      setVisibilityState("visible");
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+
+    await vi.waitFor(() => {
+      expect(probeConnection).toHaveBeenCalledWith("foreground_resume");
+    });
+    await vi.waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "recovery.reconcile",
+        expect.objectContaining({ reason: "foreground_resume" }),
+        undefined
+      );
+    });
   });
 
-  it("recovers the websocket when the page is shown again while visible", () => {
-    setVisibilityState("visible");
+  it("defers foreground reconciliation until websocket reconnects when the page returns while disconnected", async () => {
+    let connectionStatus:
+      | "connecting"
+      | "connected"
+      | "disconnected"
+      | "reconnecting"
+      | "rejected" = "disconnected";
+    const statusListeners = new Set<(status: string) => void>();
+    const probeConnection = vi.fn().mockResolvedValue({ ok: true });
+    const setUiMode = vi.fn();
+    const sendCommand = createWsSendCommandMock((op) => {
+      if (op === "recovery.reconcile") {
+        return {
+          terminals: [{ terminalId: "term-1", action: "noop", headSeq: 9 }],
+        };
+      }
+      return undefined;
+    });
+
+    wsState.client = {
+      ...wsState.client!,
+      getStatus: vi.fn(() => connectionStatus),
+      onStatus: vi.fn((listener) => {
+        statusListeners.add(listener);
+        return () => {
+          statusListeners.delete(listener);
+        };
+      }),
+      probeConnection,
+      sendCommand,
+    };
+
+    setVisibilityState("hidden");
     renderProviders();
 
-    return vi
-      .waitFor(() => {
-        expect(wsState.client?.connect).toHaveBeenCalled();
-      })
-      .then(() => {
-        act(() => {
-          window.dispatchEvent(new Event("pageshow"));
-        });
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
+    getGlobalRecoveryCoordinator()?.registerTerminal({
+      terminalId: "term-1",
+      workspaceId: "ws-1",
+      getRenderedSeq: () => 9,
+      setUiMode,
+    });
 
-        expect(wsState.client?.recoverConnection).toHaveBeenCalledWith("visibility_resume");
-      });
+    sendCommand.mockClear();
+    probeConnection.mockClear();
+
+    await act(async () => {
+      setVisibilityState("visible");
+      document.dispatchEvent(new Event("visibilitychange"));
+      await Promise.resolve();
+    });
+
+    expect(probeConnection).not.toHaveBeenCalled();
+    expect(sendCommand).not.toHaveBeenCalledWith(
+      "recovery.reconcile",
+      expect.anything(),
+      undefined
+    );
+
+    await act(async () => {
+      connectionStatus = "connected";
+      for (const listener of statusListeners) {
+        listener("connected");
+      }
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await vi.waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "recovery.reconcile",
+        {
+          reason: "socket_reconnected",
+          terminals: [{ terminalId: "term-1", renderedSeq: 9 }],
+        },
+        undefined
+      );
+    });
+    expect(probeConnection).not.toHaveBeenCalled();
+    expect(setUiMode).toHaveBeenCalledWith("silent");
+  });
+
+  it("does not reconcile on foreground return while activation is gated", async () => {
+    const probeConnection = vi.fn().mockResolvedValue({ ok: true });
+    wsState.client = {
+      ...wsState.client!,
+      getStatus: vi.fn(() => "connected"),
+      probeConnection,
+      sendCommand: createWsSendCommandMock(),
+    };
+
+    const store = createStore();
+    act(() => {
+      store.set(activationStatusAtom, "gated");
+    });
+
+    renderProviders(store);
+
+    act(() => {
+      setVisibilityState("visible");
+      window.dispatchEvent(new Event("focus"));
+    });
+
+    await Promise.resolve();
+    expect(probeConnection).not.toHaveBeenCalled();
   });
 
   it("coalesces back-to-back foreground recovery signals", async () => {
+    wsState.client = {
+      ...wsState.client!,
+      getStatus: vi.fn(() => "connected"),
+      sendCommand: createWsSendCommandMock((op) => {
+        if (op === "recovery.reconcile") {
+          return {
+            terminals: [],
+          };
+        }
+        return undefined;
+      }),
+    };
+
     setVisibilityState("visible");
     renderProviders();
 
@@ -577,15 +882,21 @@ describe("AppProviders lifecycle recovery", () => {
       expect(wsState.client?.connect).toHaveBeenCalled();
     });
 
-    wsState.client?.recoverConnection.mockClear();
+    wsState.client?.sendCommand?.mockClear();
     vi.useFakeTimers();
 
     act(() => {
       window.dispatchEvent(new Event("focus"));
     });
 
-    expect(wsState.client?.recoverConnection).toHaveBeenCalledTimes(1);
-    expect(wsState.client?.recoverConnection).toHaveBeenLastCalledWith("visibility_resume");
+    await vi.waitFor(() => {
+      expect(wsState.client?.sendCommand).toHaveBeenCalledTimes(1);
+      expect(wsState.client?.sendCommand).toHaveBeenLastCalledWith(
+        "recovery.reconcile",
+        expect.objectContaining({ reason: "foreground_resume" }),
+        undefined
+      );
+    });
 
     act(() => {
       vi.advanceTimersByTime(100);
@@ -593,15 +904,21 @@ describe("AppProviders lifecycle recovery", () => {
       document.dispatchEvent(new Event("visibilitychange"));
     });
 
-    expect(wsState.client?.recoverConnection).toHaveBeenCalledTimes(1);
+    expect(wsState.client?.sendCommand).toHaveBeenCalledTimes(1);
 
     act(() => {
       vi.advanceTimersByTime(250);
       window.dispatchEvent(new Event("focus"));
     });
 
-    expect(wsState.client?.recoverConnection).toHaveBeenCalledTimes(2);
-    expect(wsState.client?.recoverConnection).toHaveBeenLastCalledWith("visibility_resume");
+    await vi.waitFor(() => {
+      expect(wsState.client?.sendCommand).toHaveBeenCalledTimes(2);
+      expect(wsState.client?.sendCommand).toHaveBeenLastCalledWith(
+        "recovery.reconcile",
+        expect.objectContaining({ reason: "foreground_resume" }),
+        undefined
+      );
+    });
   });
 
   it("hydrates authEnabled and authenticated from /auth/status instead of trusting stale local state", async () => {

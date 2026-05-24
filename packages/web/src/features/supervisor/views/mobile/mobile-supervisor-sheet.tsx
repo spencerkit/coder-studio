@@ -38,6 +38,7 @@ export function MobileSupervisorSheet({
     selectedRecoverableTargetId,
     isRecoverableTargetsLoading,
     hasObjectiveChanged,
+    hasChanges,
     close,
     updateDraft,
     openRestoreStep,
@@ -192,7 +193,7 @@ export function MobileSupervisorSheet({
       <Button
         variant="primary"
         onClick={() => {
-          if (mode === "edit" && restoreStep !== "restore") {
+          if (mode === "edit" && restoreStep !== "restore" && hasObjectiveChanged) {
             setIsSaveConfirmOpen(true);
             return;
           }
@@ -214,7 +215,7 @@ export function MobileSupervisorSheet({
               isRecoverableTargetsLoading ||
               !isMaxSupervisionCountValid
             : mode === "edit"
-              ? !hasObjectiveChanged || !dialog.draftObjective.trim() || !isMaxSupervisionCountValid
+              ? !hasChanges || !dialog.draftObjective.trim() || !isMaxSupervisionCountValid
               : !dialog.draftObjective.trim() || !isMaxSupervisionCountValid
         }
       >

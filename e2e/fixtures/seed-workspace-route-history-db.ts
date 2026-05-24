@@ -1,22 +1,19 @@
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { closeDatabase, openDatabase } from "../../packages/server/src/storage/db.ts";
+import { join } from "node:path";
+import { SettingsRepo, WorkspaceRepo } from "../../packages/server/src/storage/index.ts";
 
 const RECENT_WORKSPACE_ID = "ws-history-recent";
 const OLDER_WORKSPACE_ID = "ws-history-older";
 
-const [, , dbPath, workspacesRoot] = process.argv;
+const [, , stateDir, workspacesRoot] = process.argv;
 
-if (!dbPath || !workspacesRoot) {
-  throw new Error("Usage: tsx seed-workspace-route-history-db.ts <db-path> <workspaces-root>");
+if (!stateDir || !workspacesRoot) {
+  throw new Error("Usage: tsx seed-workspace-route-history-db.ts <state-dir> <workspaces-root>");
 }
 
-mkdirSync(dirname(dbPath), { recursive: true });
+mkdirSync(stateDir, { recursive: true });
 mkdirSync(workspacesRoot, { recursive: true });
-rmSync(dbPath, { force: true });
-
-const db = openDatabase(dbPath);
-const now = Date.now();
+rmSync(join(stateDir, "state"), { recursive: true, force: true });
 
 function createWorkspaceDir(dirName: string): string {
   const workspacePath = join(workspacesRoot, dirName);
@@ -26,50 +23,51 @@ function createWorkspaceDir(dirName: string): string {
   return workspacePath;
 }
 
-try {
-  const recentPath = createWorkspaceDir("recent-workspace");
-  const olderPath = createWorkspaceDir("older-workspace");
+const workspaceRepo = new WorkspaceRepo({
+  filePath: join(stateDir, "state", "workspaces.json"),
+});
+const settingsRepo = new SettingsRepo({
+  filePath: join(stateDir, "state", "settings.json"),
+});
+const now = Date.now();
+const recentPath = createWorkspaceDir("recent-workspace");
+const olderPath = createWorkspaceDir("older-workspace");
 
-  const insertWorkspace = db.prepare(
-    `INSERT INTO workspaces (id, path, target_runtime, wsl_distro, opened_at, last_active_at, ui_state)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
-  );
+workspaceRepo.create({
+  id: RECENT_WORKSPACE_ID,
+  path: recentPath,
+  targetRuntime: "native",
+  openedAt: now - 10_000,
+  lastActiveAt: now,
+  uiState: {
+    leftPanelWidth: 280,
+    bottomPanelHeight: 200,
+    focusMode: false,
+  },
+});
 
-  insertWorkspace.run(
-    RECENT_WORKSPACE_ID,
-    recentPath,
-    "native",
-    null,
-    now - 10_000,
-    now,
-    JSON.stringify({
-      leftPanelWidth: 280,
-      bottomPanelHeight: 200,
-      focusMode: false,
-    })
-  );
+workspaceRepo.create({
+  id: OLDER_WORKSPACE_ID,
+  path: olderPath,
+  targetRuntime: "native",
+  openedAt: now - 20_000,
+  lastActiveAt: now - 5_000,
+  uiState: {
+    leftPanelWidth: 280,
+    bottomPanelHeight: 200,
+    focusMode: false,
+  },
+});
 
-  insertWorkspace.run(
-    OLDER_WORKSPACE_ID,
-    olderPath,
-    "native",
-    null,
-    now - 20_000,
-    now - 5_000,
-    JSON.stringify({
-      leftPanelWidth: 280,
-      bottomPanelHeight: 200,
-      focusMode: false,
-    })
-  );
+settingsRepo.set("workspace.lastViewedTarget", {
+  workspaceId: OLDER_WORKSPACE_ID,
+  updatedAt: now,
+});
 
-  console.log(
-    JSON.stringify({
-      dbPath,
-      workspaceIds: [RECENT_WORKSPACE_ID, OLDER_WORKSPACE_ID],
-      workspacePaths: [recentPath, olderPath],
-    })
-  );
-} finally {
-  closeDatabase(db);
-}
+console.log(
+  JSON.stringify({
+    stateDir,
+    workspaceIds: [RECENT_WORKSPACE_ID, OLDER_WORKSPACE_ID],
+    workspacePaths: [recentPath, olderPath],
+  })
+);

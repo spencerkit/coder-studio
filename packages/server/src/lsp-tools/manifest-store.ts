@@ -24,7 +24,11 @@ export class FileManifestStore {
       return null;
     }
 
-    return JSON.parse(readFileSync(path, "utf8")) as ManagedLspToolManifest;
+    try {
+      return JSON.parse(readFileSync(path, "utf8")) as ManagedLspToolManifest;
+    } catch {
+      return null;
+    }
   }
 
   write(serverKind: LspServerKind, manifest: ManagedLspToolManifest): void {

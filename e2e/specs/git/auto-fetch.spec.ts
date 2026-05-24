@@ -132,7 +132,7 @@ const pushRemoteBranch = () => {
 test.describe("git auto-fetch acceptance", () => {
   test.beforeAll(async () => {
     sandboxDir = mkdtempSync(join(tmpdir(), "coder-studio-git-auto-fetch-e2e-"));
-    dbPath = join(sandboxDir, "coder-studio.db");
+    dbPath = join(sandboxDir, "state");
     runtimeDir = join(sandboxDir, "runtime");
     workspacesRoot = join(sandboxDir, "workspaces");
     contributorDir = join(sandboxDir, "git-auto-fetch-contributor");
@@ -170,7 +170,7 @@ test.describe("git auto-fetch acceptance", () => {
       env: {
         HOST,
         PORT: String(SERVER_PORT),
-        DATA_DIR: dbPath,
+        STATE_DIR: dbPath,
         RUNTIME_DIR: runtimeDir,
         NO_AUTH: "true",
       },

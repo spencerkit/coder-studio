@@ -4,7 +4,8 @@
  * Builds the Fastify application with all routes and middleware
  */
 
-import { dirname, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
+import { IN_MEMORY_STATE_DIR } from "@coder-studio/core/state-paths";
 import compress from "@fastify/compress";
 import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
@@ -19,8 +20,10 @@ import {
   registerAuthStatusRoute,
 } from "./auth/index.js";
 import type { ServerConfig } from "./config.js";
+import { PreviewSessionStore } from "./preview/session-store.js";
 import { registerAppearanceAssetsRoutes } from "./routes/appearance-assets.js";
 import { registerFileAssetRoutes } from "./routes/file-asset.js";
+import { registerPreviewRoutes } from "./routes/preview.js";
 import { registerUploadsRoute } from "./routes/uploads.js";
 import {
   AppearanceAssetRepo,
@@ -49,9 +52,9 @@ interface AppDeps {
  */
 export async function buildFastifyApp(deps: AppDeps): Promise<FastifyInstance> {
   const stateRoot =
-    deps.config.dataDir === ":memory:"
+    deps.config.stateDir === IN_MEMORY_STATE_DIR
       ? resolve(deps.config.uploadsDir, "..")
-      : dirname(deps.config.dataDir);
+      : deps.config.stateDir;
   const appearanceAssetRepo =
     deps.appearanceAssetRepo ??
     new AppearanceAssetRepo({
@@ -162,6 +165,12 @@ export async function buildFastifyApp(deps: AppDeps): Promise<FastifyInstance> {
   registerAppearanceAssetsRoutes(app, {
     uploadsDir: deps.config.uploadsDir,
     repo: appearanceAssetRepo,
+  });
+
+  const previewSessions = new PreviewSessionStore();
+  registerPreviewRoutes(app, {
+    workspaceMgr: deps.workspaceMgr,
+    previewSessions,
   });
 
   registerUploadsRoute(app, {

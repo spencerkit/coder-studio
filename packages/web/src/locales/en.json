@@ -41,6 +41,8 @@
     "success": "Success",
     "warning": "Warning",
     "info": "Info",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
     "confirm": "Confirm",
     "cancel": "Cancel",
     "save": "Save",
@@ -79,7 +81,8 @@
     "search_commands": "Search Commands",
     "back": "Back",
     "expand": "Expand",
-    "collapse": "Collapse"
+    "collapse": "Collapse",
+    "close_all": "Close all"
   },
   "label": {
     "workspace": "Workspace",
@@ -152,6 +155,36 @@
     "loading_description": "Preparing your workspace list and restoring the last active session.",
     "load_failed_title": "Failed to load workspaces",
     "load_failed_description": "Failed to fetch workspace list",
+    "sidebar": {
+      "label": "Workspace activity bar",
+      "explorer": "Explorer",
+      "search": "Search",
+      "source_control": "Source Control",
+      "open_editors": "Open Editors",
+      "workspace": "Workspace"
+    },
+    "quick_jump": {
+      "title": "Quick Jump",
+      "placeholder": "Type a filename or path",
+      "no_results": "No matching files found.",
+      "failed": "File search failed. Try again."
+    },
+    "open_editors": {
+      "title_with_count": "{title} ({count})",
+      "close_path": "Close {path}",
+      "expand_label": "Expand Open Editors",
+      "collapse_label": "Collapse Open Editors"
+    },
+    "search": {
+      "empty": "Type to search across file contents.",
+      "placeholder": "Search across file contents",
+      "results_count": "{count} results in {files} files",
+      "no_results": "No content matches found.",
+      "truncated": "Results limited to keep search responsive.",
+      "file_match_count": "{count}{suffix} matches",
+      "failed": "Search failed. Try again.",
+      "retry": "Retry"
+    },
     "launch": {
       "kicker": "START WORKSPACE",
       "title": "Open Workspace",
@@ -178,6 +211,15 @@
       "missing_node": "Node.js not found",
       "missing_provider": "{provider} CLI not found"
     }
+  },
+  "quick_open": {
+    "title": "Go to File",
+    "placeholder": "Type a filename or path",
+    "empty": "Type to search by filename or path.",
+    "no_results": "No matching files found.",
+    "failed": "File search failed. Try again.",
+    "command_label": "Go to File...",
+    "command_description": "Quickly open a file in the current workspace"
   },
   "mobile": {
     "dock": {
@@ -299,10 +341,19 @@
       "up_next": "Up next...",
       "loading_title": "Restoring terminal output...",
       "loading_body": "This terminal is unavailable while history is being restored. Please wait until recovery finishes before continuing. Larger histories may take longer to restore.",
-      "failed_title": "Terminal history could not be restored",
-      "failed_body": "New output will keep streaming. Refresh manually only if you need the missing history.",
-      "closed_title": "This session has been closed",
-      "closed_body": "Start a new session to continue.",
+      "failed_title": "Terminal history was not restored yet",
+      "failed_body": "The terminal is still usable, but older output was not filled back in this time. You can retry recovery; if the server still retains the history, it may still come back later or after a refresh.",
+      "retryable_title": "Terminal history was not restored yet",
+      "retryable_body": "The terminal is still usable, but older output was not filled back in this time. You can retry recovery; if the server still retains the history, it may still come back later or after a refresh.",
+      "retry_action": "Retry recovery",
+      "unrecoverable_title": "Earlier history can no longer be restored",
+      "unrecoverable_body": "Older terminal output has already fallen out of the replay buffer and there is no usable snapshot available now. Only later output can still be viewed.",
+      "unknown_title": "This terminal can no longer be restored",
+      "unknown_body": "This terminal session is no longer present on the server, so its history cannot be recovered. Open a new terminal to continue.",
+      "unknown_body_with_provider": "This terminal session is no longer present on the server. Reopen a {provider} session to continue?",
+      "closed_title": "This session has ended",
+      "closed_body": "Reopen a new session to continue?",
+      "closed_body_with_provider": "Reopen a {provider} session to continue?",
       "truncated_title": "Terminal history is partial",
       "truncated_body": "Older output has already fallen out of the replay buffer, but new output will continue to stream."
     }
@@ -347,8 +398,15 @@
     "saving": "Saving...",
     "edit_as_text": "Edit as text",
     "preview_as_image": "Preview as image",
+    "preview_loading": "Loading preview...",
+    "preview_unavailable": "Preview unavailable",
+    "preview_retry": "Retry",
     "mode_text": "Text",
     "mode_image": "Image",
+    "mode_preview": "Preview",
+    "mode_edit": "Edit",
+    "mode_diff": "Diff",
+    "diff_saved_only": "Diff preview is based on saved file contents.",
     "open_failed_title": "Failed to open file",
     "empty_hint": "Select a file on the left to open it in the editor.",
     "modified_on_disk": "This file changed on disk after you opened it. Save carefully or reload the file.",
@@ -507,6 +565,60 @@
     "mobile_groups": {
       "workspace_runtime": "Workspace & Runtime",
       "interface_interaction": "Interface & Interaction"
+    },
+    "about": {
+      "title": "About",
+      "description": "View basic app details, version status, and update actions.",
+      "product_name": "Product",
+      "current_version": "Current Version",
+      "server_instance_id": "Server Instance ID",
+      "install_support": "Install Support",
+      "install_supported": "In-app update supported",
+      "install_unsupported": "This install shape does not support in-app updates",
+      "update_group": "Update",
+      "update_group_hint": "Check for new releases manually and start updates when the install shape supports it.",
+      "latest_version": "Latest Version",
+      "last_checked": "Last Checked",
+      "availability": "Availability",
+      "availability_unknown": "Not checked yet",
+      "availability_up_to_date": "Up to date",
+      "availability_update_available": "Update available",
+      "availability_check_failed": "Check failed",
+      "update_status": "Workflow Status",
+      "update_status_unknown": "Unknown",
+      "update_status_idle": "Idle",
+      "update_status_checking": "Checking",
+      "update_status_installing": "Installing",
+      "update_status_restarting": "Restarting service",
+      "update_status_succeeded": "Update succeeded",
+      "update_status_failed": "Update failed",
+      "update_status_manual_required": "Manual action required",
+      "error_summary": "Error Summary",
+      "manual_command": "Manual Command",
+      "check_now": "Check Now",
+      "checking": "Checking",
+      "check_failed": "Failed to check for updates",
+      "update_now": "Update Now",
+      "installing": "Working",
+      "auto_check_group": "Automatic Checks",
+      "auto_check_group_hint": "Configure the npm polling cadence. These preferences are persisted in the settings file.",
+      "auto_check_enabled": "Automatically check for updates",
+      "auto_check_enabled_hint": "When enabled, the service polls for the latest version on the selected interval.",
+      "check_interval": "Check Interval",
+      "interval_3600": "1 hour",
+      "interval_21600": "6 hours",
+      "interval_43200": "12 hours",
+      "interval_86400": "24 hours",
+      "confirm_update_title": "Confirm Update",
+      "confirm_update_message": "Updating installs a new version and restarts the service. Running terminals, agent sessions, or supervisor tasks may be interrupted.",
+      "confirm_update_activity": "{terminals} terminals, {sessions} sessions, and {supervisors} supervisor tasks are still active.",
+      "footer_update_available": "New version detected {version}",
+      "footer_installing": "Updating...",
+      "footer_restarting": "Restarting service...",
+      "footer_failed": "Update failed",
+      "footer_manual_required": "Manual action required",
+      "footer_view_details": "View details",
+      "footer_succeeded": "Updated to {version}"
     },
     "help_diagnostics": "Help & Diagnostics",
     "autosave_hint": "Settings saved automatically",
@@ -917,7 +1029,8 @@
       "workspace": "Workspace",
       "provider": "Provider",
       "missing_commands": "Missing commands",
-      "missing_prerequisites": "Missing prerequisites"
+      "missing_prerequisites": "Missing prerequisites",
+      "current_version": "Current version"
     },
     "context": {
       "workspace_open": {
@@ -961,6 +1074,22 @@
       "session_workspace_missing": {
         "title": "Workspace is missing",
         "description": "Select or reopen the workspace before starting a session."
+      },
+      "git_ready": {
+        "title": "Git is ready",
+        "description": "Git is installed and available in the current environment."
+      },
+      "git_missing": {
+        "title": "Git is missing",
+        "description": "Install Git before relying on workspace repository features."
+      },
+      "nodejs_ready": {
+        "title": "Node.js is ready",
+        "description": "Node.js is installed and available in the current environment."
+      },
+      "nodejs_missing": {
+        "title": "Node.js is missing",
+        "description": "Install Node.js before running local JavaScript and package tasks."
       },
       "provider_runtime_ready": {
         "title": "{provider} is ready",

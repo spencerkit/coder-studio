@@ -4,7 +4,7 @@
 
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "fs/promises";
 import { tmpdir } from "os";
-import { join } from "path";
+import { join, win32 } from "path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   createDirectory,
@@ -46,6 +46,10 @@ describe("resolveSafe", () => {
 
   it("should allow paths when the workspace root is /", () => {
     expect(resolveSafe("/", "tmp/file.txt")).toBe("/tmp/file.txt");
+  });
+
+  it("should reject win32 parent traversal that escapes the workspace root", () => {
+    expect(() => resolveSafe("C:\\workspace", "..\\outside.txt", win32)).toThrow();
   });
 });
 

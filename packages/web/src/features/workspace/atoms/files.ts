@@ -74,6 +74,51 @@ export interface OpenImageFile {
 
 export type OpenFile = OpenTextFile | OpenImageFile;
 
+export type WorkspaceEditorMode = "preview" | "edit" | "diff";
+
+const IMAGE_FILE_EXTENSION_PATTERN = /\.(avif|bmp|gif|ico|jpe?g|png|svg|tiff?|webp)$/i;
+const DOCUMENT_PREVIEW_EXTENSION_PATTERN = /\.(md|markdown|html?)$/i;
+
+export function isDocumentPreviewPath(path: string): boolean {
+  return DOCUMENT_PREVIEW_EXTENSION_PATTERN.test(path);
+}
+
+export function deriveDocumentPreviewKind(path: string): "markdown" | "html" | null {
+  if (/\.(md|markdown)$/i.test(path)) {
+    return "markdown";
+  }
+
+  if (/\.html?$/i.test(path)) {
+    return "html";
+  }
+
+  return null;
+}
+
+export function isPreviewByDefaultPath(path: string): boolean {
+  return IMAGE_FILE_EXTENSION_PATTERN.test(path) || isDocumentPreviewPath(path);
+}
+
+export function deriveEditorModeForOpenFile(file: OpenFile): WorkspaceEditorMode {
+  if (file.kind === "image") {
+    return "preview";
+  }
+
+  if (isDocumentPreviewPath(file.path)) {
+    return "preview";
+  }
+
+  if (file.viewingTextBackedImageAsText) {
+    return "edit";
+  }
+
+  return "edit";
+}
+
+export function deriveEditorModeForPath(path: string): WorkspaceEditorMode {
+  return isPreviewByDefaultPath(path) ? "preview" : "edit";
+}
+
 export const openFilesAtomFamily = atomFamily((workspaceId: string) =>
   atom<Record<string, OpenFile>>({})
 );
@@ -83,6 +128,10 @@ export const openFilesAtomFamily = atomFamily((workspaceId: string) =>
  */
 export const activeFilePathAtomFamily = atomFamily((workspaceId: string) =>
   atom<string | null>(null)
+);
+
+export const editorModeAtomFamily = atomFamily((workspaceId: string) =>
+  atom<WorkspaceEditorMode>("preview")
 );
 
 /**

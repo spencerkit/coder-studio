@@ -148,14 +148,15 @@ describe("pm2-control", () => {
   });
 
   it("waits for the previous PM2 app to disappear before starting a replacement", async () => {
+    const previousPid = 999_990;
     describeProcess
       .mockImplementationOnce(
         (_name: string, callback: (error: Error | null, result: unknown[]) => void) =>
-          callback(null, [{ pid: 111, pm2_env: { status: "online", restart_time: 0 } }])
+          callback(null, [{ pid: previousPid, pm2_env: { status: "online", restart_time: 0 } }])
       )
       .mockImplementationOnce(
         (_name: string, callback: (error: Error | null, result: unknown[]) => void) =>
-          callback(null, [{ pid: 111, pm2_env: { status: "stopping", restart_time: 0 } }])
+          callback(null, [{ pid: previousPid, pm2_env: { status: "stopping", restart_time: 0 } }])
       )
       .mockImplementationOnce(
         (_name: string, callback: (error: Error | null, result: unknown[]) => void) =>
@@ -180,14 +181,15 @@ describe("pm2-control", () => {
   });
 
   it("reuses one pm2 session while polling deletion during startup", async () => {
+    const previousPid = 999_992;
     describeProcess
       .mockImplementationOnce(
         (_name: string, callback: (error: Error | null, result: unknown[]) => void) =>
-          callback(null, [{ pid: 111, pm2_env: { status: "online", restart_time: 0 } }])
+          callback(null, [{ pid: previousPid, pm2_env: { status: "online", restart_time: 0 } }])
       )
       .mockImplementationOnce(
         (_name: string, callback: (error: Error | null, result: unknown[]) => void) =>
-          callback(null, [{ pid: 111, pm2_env: { status: "stopping", restart_time: 0 } }])
+          callback(null, [{ pid: previousPid, pm2_env: { status: "stopping", restart_time: 0 } }])
       )
       .mockImplementationOnce(
         (_name: string, callback: (error: Error | null, result: unknown[]) => void) =>
@@ -204,15 +206,55 @@ describe("pm2-control", () => {
     expect(disconnect).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps waiting during startup when delete reports missing but the old app still lingers", async () => {
+  it("waits for the previous process pid to exit before starting a replacement", async () => {
+    const previousPid = 999_991;
+    const killSpy = vi.spyOn(process, "kill");
+    killSpy
+      .mockImplementationOnce(() => true)
+      .mockImplementationOnce(() => true)
+      .mockImplementationOnce(() => {
+        const error = new Error("process not found") as NodeJS.ErrnoException;
+        error.code = "ESRCH";
+        throw error;
+      });
     describeProcess
       .mockImplementationOnce(
         (_name: string, callback: (error: Error | null, result: unknown[]) => void) =>
-          callback(null, [{ pid: 111, pm2_env: { status: "online", restart_time: 0 } }])
+          callback(null, [{ pid: previousPid, pm2_env: { status: "online", restart_time: 0 } }])
       )
       .mockImplementationOnce(
         (_name: string, callback: (error: Error | null, result: unknown[]) => void) =>
-          callback(null, [{ pid: 111, pm2_env: { status: "stopping", restart_time: 0 } }])
+          callback(null, [])
+      );
+
+    const pendingStart = startManagedServer({
+      script: "/cli/dist/esm/server-runner.js",
+      cwd: "/repo",
+      waitMs: 10,
+    });
+
+    await expect(
+      Promise.race([
+        pendingStart.then(() => "started"),
+        new Promise((resolve) => setTimeout(() => resolve("waiting"), 20)),
+      ])
+    ).resolves.toBe("waiting");
+
+    expect(start).not.toHaveBeenCalled();
+    await pendingStart;
+    expect(killSpy).toHaveBeenCalledWith(previousPid, 0);
+  });
+
+  it("keeps waiting during startup when delete reports missing but the old app still lingers", async () => {
+    const previousPid = 999_993;
+    describeProcess
+      .mockImplementationOnce(
+        (_name: string, callback: (error: Error | null, result: unknown[]) => void) =>
+          callback(null, [{ pid: previousPid, pm2_env: { status: "online", restart_time: 0 } }])
+      )
+      .mockImplementationOnce(
+        (_name: string, callback: (error: Error | null, result: unknown[]) => void) =>
+          callback(null, [{ pid: previousPid, pm2_env: { status: "stopping", restart_time: 0 } }])
       )
       .mockImplementationOnce(
         (_name: string, callback: (error: Error | null, result: unknown[]) => void) =>

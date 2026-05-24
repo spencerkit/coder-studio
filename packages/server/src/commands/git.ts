@@ -95,9 +95,7 @@ registerCommand(
       throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
     }
 
-    return {
-      diff: await getFileDiff(workspace.path, args.path, args.staged ?? false),
-    };
+    return getFileDiff(workspace.path, args.path, args.staged ?? false);
   }
 );
 

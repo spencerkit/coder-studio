@@ -36,5 +36,12 @@ export type DomainEvent =
       cwd: string;
     }
   | { type: "terminal.output"; workspaceId: string; terminalId: string; chunk: Buffer; seq: number }
+  | {
+      type: "terminal.continuity_lost";
+      workspaceId: string;
+      terminalId: string;
+      clientId: string;
+      reason: "stream_drop" | "topic_evicted";
+    }
   | { type: "terminal.exited"; workspaceId: string; terminalId: string; exitCode: number }
   | ({ type: "lsp.diagnostics.updated" } & LspDiagnosticsEvent);

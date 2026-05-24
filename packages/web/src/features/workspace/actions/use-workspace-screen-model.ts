@@ -1,6 +1,7 @@
 import type { GitStatus, Session } from "@coder-studio/core";
-import { useAtomValue, useSetAtom, useStore } from "jotai";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { atom, useAtomValue, useSetAtom, useStore } from "jotai";
+import { atomFamily } from "jotai-family";
+import { useCallback, useEffect, useMemo } from "react";
 import { dispatchCommandAtom } from "../../../atoms/connection";
 import {
   activeWorkspaceAtom,
@@ -15,6 +16,7 @@ import { collectSessionIds } from "../../agent-panes/pane-layout-tree";
 import {
   activeFilePathAtomFamily,
   branchQuickPickAtom,
+  desktopSidebarViewAtom,
   focusModeAtom,
   gitDiffPreviewAtomFamily,
   gitStateAtomFamily,
@@ -23,13 +25,16 @@ import {
 } from "../atoms";
 import { useWorkspaceLayoutActions } from "./use-workspace-layout-actions";
 
-export type WorkspaceSidebarTab = "files" | "git";
-export type WorkspaceMainAreaMode = "agent" | "editor" | "diff";
+export type WorkspaceMainAreaMode = "agent" | "editor";
 export type MobileWorkspaceSheetKind = "files" | "terminal" | "supervisor" | null;
+export type MobileWorkspaceSidebarView = "explorer" | "search" | "source-control";
 export type MobileFilesRoute =
   | { kind: "root" }
-  | { kind: "editor"; path: string }
-  | { kind: "diff"; path: string };
+  | {
+      kind: "detail";
+      path?: string;
+      title?: string;
+    };
 
 export interface WorkspaceCreateRequest {
   id: number;
@@ -37,9 +42,38 @@ export interface WorkspaceCreateRequest {
   baseDir: string | null;
 }
 
+interface WorkspaceScreenState {
+  createRequest: WorkspaceCreateRequest | null;
+  panelRefreshToken: number;
+  mobileSheet: MobileWorkspaceSheetKind;
+  mobileFilesRoute: MobileFilesRoute;
+  mobileActiveSessionId: string | null;
+  mobileSelectionVersion: number;
+}
+
+function createRootMobileFilesRoute(): MobileFilesRoute {
+  return { kind: "root" };
+}
+
+function createInitialWorkspaceScreenState(): WorkspaceScreenState {
+  return {
+    createRequest: null,
+    panelRefreshToken: 0,
+    mobileSheet: null,
+    mobileFilesRoute: createRootMobileFilesRoute(),
+    mobileActiveSessionId: null,
+    mobileSelectionVersion: 0,
+  };
+}
+
+const workspaceScreenStateAtomFamily = atomFamily((workspaceId: string) =>
+  atom<WorkspaceScreenState>(createInitialWorkspaceScreenState())
+);
+
 export function useWorkspaceScreenModel() {
   const workspace = useAtomValue(activeWorkspaceAtom);
   const workspaceId = workspace?.id ?? "__workspace_placeholder__";
+  const screenStateAtom = workspaceScreenStateAtomFamily(workspaceId);
   const activeWorkspaceId = useAtomValue(resolvedActiveWorkspaceIdAtom);
   const setActiveWorkspaceId = useSetAtom(activeWorkspaceIdAtom);
   const workspaces = useAtomValue(orderedWorkspacesAtom);
@@ -49,21 +83,18 @@ export function useWorkspaceScreenModel() {
   const focusMode = useAtomValue(focusModeAtom);
   const terminalPanelVisible = useAtomValue(terminalPanelVisibleAtom);
   const sidebarCollapsed = useAtomValue(sidebarCollapsedAtom);
+  const desktopSidebarView = useAtomValue(desktopSidebarViewAtom);
   const { sessions, paneLayout } = useWorkspaceSessions(workspace);
   const dispatch = useAtomValue(dispatchCommandAtom);
   const setBranchQuickPick = useSetAtom(branchQuickPickAtom);
+  const screenState = useAtomValue(screenStateAtom);
+  const setScreenState = useSetAtom(screenStateAtom);
   const store = useStore();
-  const layout = useWorkspaceLayoutActions();
+  const layout = useWorkspaceLayoutActions(workspaceId);
   const paneActions = usePaneActions(workspaceId);
   const sessionActions = useSessionActions();
-
-  const [sidebarTab, setSidebarTab] = useState<WorkspaceSidebarTab>("files");
-  const [createRequest, setCreateRequest] = useState<WorkspaceCreateRequest | null>(null);
-  const [panelRefreshToken, setPanelRefreshToken] = useState(0);
-  const [mobileSheet, setMobileSheet] = useState<MobileWorkspaceSheetKind>(null);
-  const [mobileFilesRoute, setMobileFilesRoute] = useState<MobileFilesRoute>({ kind: "root" });
-  const [mobileActiveSessionId, setMobileActiveSessionId] = useState<string | null>(null);
-  const mobileSelectionVersionRef = useRef(0);
+  const { createRequest, mobileActiveSessionId, mobileFilesRoute, mobileSheet, panelRefreshToken } =
+    screenState;
 
   useEffect(() => {
     if (!workspace) {
@@ -72,10 +103,6 @@ export function useWorkspaceScreenModel() {
     }
 
     setActiveWorkspaceId(workspace.id);
-
-    return () => {
-      setActiveWorkspaceId((current) => (current === workspace.id ? null : current));
-    };
   }, [setActiveWorkspaceId, workspace]);
 
   useEffect(() => {
@@ -109,37 +136,53 @@ export function useWorkspaceScreenModel() {
       return;
     }
 
-    setSidebarTab("git");
+    store.set(desktopSidebarViewAtom, "source-control");
     setBranchQuickPick({
       visible: true,
       workspaceId: workspace.id,
       inputValue: "",
     });
-  }, [setBranchQuickPick, workspace]);
+  }, [setBranchQuickPick, store, workspace]);
 
   const handleOpenFileCreate = useCallback(() => {
-    setCreateRequest((previous) => ({
-      id: (previous?.id ?? 0) + 1,
-      mode: "file",
-      baseDir: null,
+    setScreenState((previous) => ({
+      ...previous,
+      createRequest: {
+        id: (previous.createRequest?.id ?? 0) + 1,
+        mode: "file",
+        baseDir: null,
+      },
     }));
-  }, []);
+  }, [setScreenState]);
 
   const handleOpenFolderCreate = useCallback(() => {
-    setCreateRequest((previous) => ({
-      id: (previous?.id ?? 0) + 1,
-      mode: "folder",
-      baseDir: null,
+    setScreenState((previous) => ({
+      ...previous,
+      createRequest: {
+        id: (previous.createRequest?.id ?? 0) + 1,
+        mode: "folder",
+        baseDir: null,
+      },
     }));
-  }, []);
+  }, [setScreenState]);
 
   const handleConsumeCreateRequest = useCallback(() => {
-    setCreateRequest(null);
-  }, []);
+    setScreenState((current) =>
+      current.createRequest === null
+        ? current
+        : {
+            ...current,
+            createRequest: null,
+          }
+    );
+  }, [setScreenState]);
 
   const handleRefreshSidebarPanel = useCallback(() => {
-    setPanelRefreshToken((previous) => previous + 1);
-  }, []);
+    setScreenState((previous) => ({
+      ...previous,
+      panelRefreshToken: previous.panelRefreshToken + 1,
+    }));
+  }, [setScreenState]);
 
   const orderedSessions = useMemo(() => {
     const sessionMap = new Map(sessions.map((session) => [session.id, session]));
@@ -171,47 +214,78 @@ export function useWorkspaceScreenModel() {
         paneActions.appendSession(sessionId, mobileActiveSessionId, "vertical");
       }
 
-      mobileSelectionVersionRef.current += 1;
-      setMobileActiveSessionId(sessionId);
+      setScreenState((current) => ({
+        ...current,
+        mobileSelectionVersion: current.mobileSelectionVersion + 1,
+        mobileActiveSessionId: sessionId,
+      }));
     },
-    [mobileActiveSessionId, orderedSessions, paneActions, sessions]
+    [mobileActiveSessionId, orderedSessions, paneActions, sessions, setScreenState]
   );
 
   const handleMobileSessionCreated = useCallback(
     (sessionId: string) => {
       paneActions.appendSession(sessionId, mobileActiveSessionId, "vertical");
-      mobileSelectionVersionRef.current += 1;
-      setMobileActiveSessionId(sessionId);
+      setScreenState((current) => ({
+        ...current,
+        mobileSelectionVersion: current.mobileSelectionVersion + 1,
+        mobileActiveSessionId: sessionId,
+      }));
     },
-    [mobileActiveSessionId, paneActions]
+    [mobileActiveSessionId, paneActions, setScreenState]
   );
 
   const closeMobileSession = useCallback(
     async (sessionId: string) => {
       const wasActive = mobileActiveSessionId === sessionId;
-      const selectionVersionAtCloseStart = mobileSelectionVersionRef.current;
+      const selectionVersionAtCloseStart = store.get(screenStateAtom).mobileSelectionVersion;
       const remainingSessions = mobileAgentSessions.filter((session) => session.id !== sessionId);
       const nextActiveSessionId = remainingSessions[0]?.id ?? null;
 
       if (wasActive) {
-        setMobileActiveSessionId(nextActiveSessionId);
+        setScreenState((current) =>
+          current.mobileActiveSessionId === sessionId
+            ? {
+                ...current,
+                mobileActiveSessionId: nextActiveSessionId,
+              }
+            : current
+        );
       }
 
       const closed = await sessionActions.closeSession(sessionId, "remove");
       if (!closed) {
-        if (!wasActive || mobileSelectionVersionRef.current !== selectionVersionAtCloseStart) {
+        if (
+          !wasActive ||
+          store.get(screenStateAtom).mobileSelectionVersion !== selectionVersionAtCloseStart
+        ) {
           return;
         }
 
-        setMobileActiveSessionId((current) =>
-          current === nextActiveSessionId ? sessionId : current
+        setScreenState((current) =>
+          current.mobileActiveSessionId === nextActiveSessionId
+            ? {
+                ...current,
+                mobileActiveSessionId: sessionId,
+              }
+            : current
         );
         return;
       }
 
-      mobileSelectionVersionRef.current += 1;
+      setScreenState((current) => ({
+        ...current,
+        mobileSelectionVersion: current.mobileSelectionVersion + 1,
+      }));
     },
-    [mobileActiveSessionId, mobileAgentSessions, sessionActions]
+    [
+      mobileActiveSessionId,
+      mobileAgentSessions,
+      screenStateAtom,
+      sessionActions,
+      setScreenState,
+      store,
+    ]
   );
 
   const restoreMobileSession = useCallback(
@@ -224,30 +298,47 @@ export function useWorkspaceScreenModel() {
         paneActions.appendSession(sessionId, mobileActiveSessionId, "vertical");
       }
 
-      mobileSelectionVersionRef.current += 1;
-      setMobileActiveSessionId(sessionId);
+      setScreenState((current) => ({
+        ...current,
+        mobileSelectionVersion: current.mobileSelectionVersion + 1,
+        mobileActiveSessionId: sessionId,
+      }));
     },
-    [mobileActiveSessionId, orderedSessions, paneActions, sessions]
+    [mobileActiveSessionId, orderedSessions, paneActions, sessions, setScreenState]
   );
 
-  const openMobileSheet = useCallback((sheet: Exclude<MobileWorkspaceSheetKind, null>) => {
-    setMobileSheet(sheet);
-    if (sheet !== "files") {
-      setMobileFilesRoute({ kind: "root" });
-    }
-  }, []);
+  const openMobileSheet = useCallback(
+    (sheet: Exclude<MobileWorkspaceSheetKind, null>) => {
+      setScreenState((current) => ({
+        ...current,
+        mobileSheet: sheet,
+        mobileFilesRoute:
+          sheet === "files" ? current.mobileFilesRoute : createRootMobileFilesRoute(),
+      }));
+    },
+    [setScreenState]
+  );
 
   const closeMobileSheet = useCallback(() => {
-    setMobileSheet(null);
-    setMobileFilesRoute({ kind: "root" });
-  }, []);
+    setScreenState((current) => ({
+      ...current,
+      mobileSheet: null,
+      mobileFilesRoute: createRootMobileFilesRoute(),
+    }));
+  }, [setScreenState]);
 
-  const updateMobileFilesRoute = useCallback((route: MobileFilesRoute) => {
-    setMobileFilesRoute(route);
-  }, []);
+  const updateMobileFilesRoute = useCallback(
+    (route: MobileFilesRoute) => {
+      setScreenState((current) => ({
+        ...current,
+        mobileFilesRoute: route,
+      }));
+    },
+    [setScreenState]
+  );
 
   const mainAreaMode: WorkspaceMainAreaMode =
-    sidebarTab === "git" && diffPreview ? "diff" : activeFilePath ? "editor" : "agent";
+    activeFilePath || diffPreview?.source === "commit" ? "editor" : "agent";
 
   return {
     activeSession,
@@ -277,9 +368,10 @@ export function useWorkspaceScreenModel() {
     restoreMobileSession,
     selectMobileSession,
     sessions,
-    setSidebarTab,
+    desktopSidebarView,
+    setDesktopSidebarView: (view: typeof desktopSidebarView) =>
+      store.set(desktopSidebarViewAtom, view),
     sidebarCollapsed,
-    sidebarTab,
     closeMobileSheet,
     terminalPanelVisible,
     updateMobileFilesRoute,

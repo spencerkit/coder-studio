@@ -12,13 +12,11 @@ import "../commands/supervisor.js";
 
 describe("supervisor hydrate restart", () => {
   let server: Server | undefined;
-  let dataDir: string;
-  let dbPath: string;
+  let stateDir: string;
   let workspaceDir: string;
 
   beforeEach(() => {
-    dataDir = mkdtempSync(join(tmpdir(), "coder-studio-data-"));
-    dbPath = join(dataDir, "coder-studio.db");
+    stateDir = mkdtempSync(join(tmpdir(), "coder-studio-state-"));
     workspaceDir = mkdtempSync(join(tmpdir(), "coder-studio-workspace-"));
     mkdirSync(join(workspaceDir, ".git"), { recursive: true });
     writeFileSync(join(workspaceDir, ".git", "HEAD"), "ref: refs/heads/main\n");
@@ -29,13 +27,13 @@ describe("supervisor hydrate restart", () => {
       await server.stop();
       server = undefined;
     }
-    rmSync(dataDir, { recursive: true, force: true });
+    rmSync(stateDir, { recursive: true, force: true });
     rmSync(workspaceDir, { recursive: true, force: true });
   });
 
   it("does not auto-restore persisted supervisors after server restart", async () => {
     server = await createServer({
-      dataDir: dbPath,
+      stateDir,
       host: "127.0.0.1",
       port: 0,
     });
@@ -56,10 +54,10 @@ describe("supervisor hydrate restart", () => {
     const now = Date.now();
 
     const terminalRepo = new TerminalRepo({
-      filePath: join(dataDir, "state", "terminals.json"),
+      filePath: join(stateDir, "state", "terminals.json"),
     });
     const sessionRepo = new SessionRepo({
-      filePath: join(dataDir, "state", "sessions.json"),
+      filePath: join(stateDir, "state", "sessions.json"),
     });
 
     terminalRepo.insert({
@@ -105,7 +103,7 @@ describe("supervisor hydrate restart", () => {
     server = undefined;
 
     server = await createServer({
-      dataDir: dbPath,
+      stateDir,
       host: "127.0.0.1",
       port: 0,
     });

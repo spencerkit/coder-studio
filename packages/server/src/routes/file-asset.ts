@@ -21,19 +21,16 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { createReadStream } from "fs";
 import { realpath, stat } from "fs/promises";
-import { isAbsolute, relative } from "path";
 import { resolveSafe } from "../fs/file-io.js";
 import { getImageTypeInfo } from "../fs/image.js";
+import { isPathInsideRoot } from "../fs/path-safety.js";
+import { parseGitImageRevisionSelector, readImageAtRevision } from "../git/image-revision.js";
 import type { WorkspaceManager } from "../workspace/manager.js";
-
-function isPathInsideRoot(rootPath: string, targetPath: string): boolean {
-  const rel = relative(rootPath, targetPath);
-  return rel !== ".." && !rel.startsWith(`..${"/"}`) && !isAbsolute(rel);
-}
 
 interface FileAssetQuery {
   workspaceId?: string;
   path?: string;
+  revision?: string;
 }
 
 export function registerFileAssetRoutes(
@@ -43,7 +40,7 @@ export function registerFileAssetRoutes(
   app.get(
     "/api/file",
     async (request: FastifyRequest<{ Querystring: FileAssetQuery }>, reply: FastifyReply) => {
-      const { workspaceId, path: relPath } = request.query;
+      const { workspaceId, path: relPath, revision } = request.query;
 
       if (!workspaceId || !relPath) {
         return reply.status(400).send({ ok: false, error: "workspaceId and path are required" });
@@ -62,11 +59,35 @@ export function registerFileAssetRoutes(
         return reply.status(404).send({ ok: false, error: "not_an_image" });
       }
 
+      const revisionSelector = revision ? parseGitImageRevisionSelector(revision) : null;
+      if (revision && !revisionSelector) {
+        return reply.status(400).send({ ok: false, error: "invalid_revision" });
+      }
+
       let absPath: string;
       try {
         absPath = resolveSafe(workspace.path, relPath);
       } catch {
         return reply.status(400).send({ ok: false, error: "path_escape" });
+      }
+
+      if (revisionSelector) {
+        try {
+          const asset = await readImageAtRevision(workspace.path, revisionSelector, relPath);
+          if (!asset.exists || !asset.bytes) {
+            return reply.status(404).send({ ok: false, error: "not_found" });
+          }
+
+          reply
+            .header("Content-Type", asset.mime)
+            .header("Content-Length", String(asset.bytes.byteLength))
+            .header("Cache-Control", "no-store")
+            .header("X-Content-Type-Options", "nosniff");
+
+          return reply.send(asset.bytes);
+        } catch {
+          return reply.status(404).send({ ok: false, error: "not_found" });
+        }
       }
 
       try {

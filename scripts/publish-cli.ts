@@ -162,7 +162,6 @@ export async function assertCliPublishArtifacts(
   await assertFile(resolve(cliDir, "dist/esm/index.mjs"));
   await assertFile(resolve(cliDir, "dist/esm/server-runner.mjs"));
   await assertFile(resolve(cliDir, "dist/web/index.html"));
-  await assertDirectoryHasFile(resolve(cliDir, "dist/esm/migrations"), ".sql");
   assertBundleRuntimeDependenciesDeclared(
     pkg.dependencies,
     await collectBareImports(resolve(cliDir, "dist/esm"), [
@@ -297,18 +296,6 @@ async function assertFile(path: string): Promise<void> {
   const stats = await stat(path).catch(() => null);
   if (!stats?.isFile()) {
     throw new Error(`Required publish artifact is missing: ${path}`);
-  }
-}
-
-async function assertDirectoryHasFile(dir: string, extension: string): Promise<void> {
-  const stats = await stat(dir).catch(() => null);
-  if (!stats?.isDirectory()) {
-    throw new Error(`Required publish artifact directory is missing: ${dir}`);
-  }
-
-  const files = await readdir(dir);
-  if (!files.some((file) => file.endsWith(extension))) {
-    throw new Error(`Required publish artifact directory has no ${extension} files: ${dir}`);
   }
 }
 

@@ -34,9 +34,10 @@ export type ConnectionStatus =
 
 export type EventListener = (topic: string, payload: unknown, seq: number) => void;
 export type StatusListener = (status: ConnectionStatus) => void;
-export type RecoveryListener = (
-  trigger: "visibility_resume" | "network_online" | "manual_retry" | "reconnected"
-) => void;
+export type ProbeTrigger = "foreground_resume" | "network_online" | "manual_retry";
+export interface ProbeResult {
+  ok: true;
+}
 
 export class CommandResultError extends Error {
   code: string;
@@ -111,7 +112,6 @@ export class WsClient {
   private pendingCommands = new Map<string, PendingCommand>();
   private eventListeners = new Map<string, Set<EventListener>>();
   private statusListeners = new Set<StatusListener>();
-  private recoveryListeners = new Set<RecoveryListener>();
   private lastSeenSeq = new Map<string, number>();
   private pendingBinaryStreamIds = new Map<
     number,
@@ -126,12 +126,15 @@ export class WsClient {
     { frameType: TerminalBinaryFrameType; bytes: Uint8Array; timeoutId: NodeJS.Timeout }
   >();
   private nextTerminalInputStreamId = 1;
+  private pendingProbe: {
+    id: string;
+    resolve: (value: ProbeResult) => void;
+    reject: (error: Error) => void;
+    timeoutId: NodeJS.Timeout;
+    trigger: ProbeTrigger;
+  } | null = null;
   private reconnectAttempts = 0;
   private reconnectTimer: NodeJS.Timeout | null = null;
-  private recoveryProbeTimer: NodeJS.Timeout | null = null;
-  private recoveryProbeCommandId: string | null = null;
-  private activeRecoveryTrigger: "visibility_resume" | "network_online" | "manual_retry" | null =
-    null;
   private isManualClose = false;
   private status: ConnectionStatus = "disconnected";
   private url: string;
@@ -181,7 +184,6 @@ export class WsClient {
 
         this.setStatus("connected");
         this.reconnectAttempts = 0;
-        this.clearRecoveryProbeState();
 
         const subscribedTopics = Array.from(this.eventListeners.keys());
         if (subscribedTopics.length > 0) {
@@ -192,11 +194,6 @@ export class WsClient {
         // Resync if we have lastSeen events
         if (this.lastSeenSeq.size > 0) {
           this.resync();
-        }
-
-        if (this.activeRecoveryTrigger) {
-          this.notifyRecoveryListeners("reconnected");
-          this.activeRecoveryTrigger = null;
         }
 
         this.resolveConnectDeferred();
@@ -269,8 +266,7 @@ export class WsClient {
     this.rejectConnectDeferred(new Error("WebSocket disconnected"));
     this.rejectPendingCommands(new Error("WebSocket disconnected"));
     this.clearBinaryCommandState();
-    this.clearRecoveryProbeState();
-    this.activeRecoveryTrigger = null;
+    this.clearPendingProbe();
 
     if (this.ws) {
       this.ws.close(1000, reason || "client_disconnect");
@@ -280,16 +276,14 @@ export class WsClient {
     this.setStatus("disconnected");
   }
 
-  recoverConnection(
-    trigger: "visibility_resume" | "network_online" | "manual_retry" = "manual_retry"
-  ): void {
+  recoverConnection(trigger: ProbeTrigger = "manual_retry"): void {
     const status = this.getStatus();
     if (status === "rejected") {
       return;
     }
 
     if (status === "connected") {
-      this.probeConnectedSocket(trigger);
+      void this.probeConnection(trigger).catch(() => {});
       return;
     }
 
@@ -303,10 +297,67 @@ export class WsClient {
     }
 
     this.reconnectAttempts = 0;
-    this.activeRecoveryTrigger = trigger;
     console.log(`[WsClient] Recovering connection after ${trigger}`);
     void this.connect().catch((err) => {
       console.error("Recovery connect failed:", err);
+    });
+  }
+
+  async probeConnection(trigger: ProbeTrigger): Promise<ProbeResult> {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      this.forceReconnect(`probe_${trigger}_socket_unavailable`);
+      throw new Error("WebSocket not connected");
+    }
+
+    if (this.pendingProbe) {
+      return new Promise<ProbeResult>((resolve, reject) => {
+        const current = this.pendingProbe;
+        if (!current) {
+          reject(new Error("Connection probe unavailable"));
+          return;
+        }
+
+        this.pendingProbe = {
+          ...current,
+          resolve,
+          reject,
+        };
+      });
+    }
+
+    return new Promise<ProbeResult>((resolve, reject) => {
+      const id = createCommandId();
+      const timeoutId = setTimeout(() => {
+        if (this.pendingProbe?.id !== id) {
+          return;
+        }
+        this.forceReconnect("probe_timeout");
+        reject(new Error("Connection probe timeout"));
+      }, CONNECTION_PROBE_TIMEOUT_MS);
+
+      this.pendingProbe = { id, resolve, reject, timeoutId, trigger };
+
+      this.pendingCommands.set(id, {
+        resolve: () => {
+          if (this.pendingProbe?.id !== id) {
+            return;
+          }
+          this.clearPendingProbe();
+          resolve({ ok: true });
+        },
+        reject: (error) => {
+          if (this.pendingProbe?.id !== id) {
+            return;
+          }
+          this.clearPendingProbe();
+          this.forceReconnect("probe_rejected");
+          reject(error);
+        },
+        timeoutId,
+      });
+
+      const msg: ClientToServer = { kind: "command", id, op: "connection.probe", args: {} };
+      this.ws!.send(JSON.stringify(msg));
     });
   }
 
@@ -430,11 +481,6 @@ export class WsClient {
   onStatus(listener: StatusListener): () => void {
     this.statusListeners.add(listener);
     return () => this.statusListeners.delete(listener);
-  }
-
-  onRecovery(listener: RecoveryListener): () => void {
-    this.recoveryListeners.add(listener);
-    return () => this.recoveryListeners.delete(listener);
   }
 
   /**
@@ -656,7 +702,7 @@ export class WsClient {
     this.ws = null;
     this.rejectPendingCommands(new Error("WebSocket disconnected"));
     this.clearBinaryCommandState();
-    this.clearRecoveryProbeState();
+    this.clearPendingProbe();
 
     // Check for rejection codes
     if (code === 4001 || code === 4002) {
@@ -725,58 +771,8 @@ export class WsClient {
     }
   }
 
-  private probeConnectedSocket(
-    trigger: "visibility_resume" | "network_online" | "manual_retry"
-  ): void {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      this.activeRecoveryTrigger = trigger;
-      this.forceReconnect("probe_socket_unavailable");
-      return;
-    }
-
-    if (this.recoveryProbeCommandId) {
-      return;
-    }
-
-    const id = createCommandId();
-    const timeoutId = setTimeout(() => {
-      if (this.recoveryProbeCommandId !== id) {
-        return;
-      }
-      this.forceReconnect("probe_timeout");
-    }, CONNECTION_PROBE_TIMEOUT_MS);
-
-    this.recoveryProbeCommandId = id;
-    this.recoveryProbeTimer = timeoutId;
-    this.activeRecoveryTrigger = trigger;
-
-    const pending = this.pendingCommands.get(id);
-    if (pending) {
-      clearTimeout(pending.timeoutId);
-      this.pendingCommands.delete(id);
-    }
-
-    this.pendingCommands.set(id, {
-      resolve: () => {
-        this.clearRecoveryProbeState();
-        this.notifyRecoveryListeners(trigger);
-        this.activeRecoveryTrigger = null;
-      },
-      reject: () => {
-        if (this.recoveryProbeCommandId !== id) {
-          return;
-        }
-        this.forceReconnect("probe_rejected");
-      },
-      timeoutId,
-    });
-
-    const msg: ClientToServer = { kind: "command", id, op: "connection.probe", args: {} };
-    this.ws.send(JSON.stringify(msg));
-  }
-
   private forceReconnect(reason: string): void {
-    this.clearRecoveryProbeState();
+    this.clearPendingProbe();
     if (this.ws) {
       const socket = this.ws;
       this.ws = null;
@@ -789,32 +785,14 @@ export class WsClient {
     this.handleClose(1006, reason);
   }
 
-  private clearRecoveryProbeState(): void {
-    if (this.recoveryProbeTimer) {
-      clearTimeout(this.recoveryProbeTimer);
-      this.recoveryProbeTimer = null;
+  private clearPendingProbe(): void {
+    if (!this.pendingProbe) {
+      return;
     }
 
-    if (this.recoveryProbeCommandId) {
-      const pending = this.pendingCommands.get(this.recoveryProbeCommandId);
-      if (pending) {
-        clearTimeout(pending.timeoutId);
-        this.pendingCommands.delete(this.recoveryProbeCommandId);
-      }
-      this.recoveryProbeCommandId = null;
-    }
-  }
-
-  private notifyRecoveryListeners(
-    trigger: "visibility_resume" | "network_online" | "manual_retry" | "reconnected"
-  ): void {
-    for (const listener of this.recoveryListeners) {
-      try {
-        listener(trigger);
-      } catch (err) {
-        console.error("Error in recovery listener:", err);
-      }
-    }
+    clearTimeout(this.pendingProbe.timeoutId);
+    this.pendingCommands.delete(this.pendingProbe.id);
+    this.pendingProbe = null;
   }
 }
 

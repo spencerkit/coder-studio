@@ -34,6 +34,7 @@ import {
   supervisorDialogAtom,
   supervisorsAtom,
 } from "../../features/supervisor/atoms";
+import { updateStateAtom } from "../../features/updates/atoms";
 import {
   branchQuickPickAtom,
   gitDiffPreviewAtomFamily,
@@ -43,9 +44,16 @@ import { seedReadyWorkspaceState } from "../../test-utils/workspace-state";
 import { CommandResultError } from "../../ws/client";
 import { MobileShell } from "./index";
 
-const { mockMobileEditorHandleSave, mockMobileEditorToggleSvgTextMode } = vi.hoisted(() => ({
+const {
+  mockMobileEditorHandleSave,
+  mockMobileEditorToggleSvgTextMode,
+  mockMobileEditorOpenInDiffMode,
+  mockMobileEditorSetMode,
+} = vi.hoisted(() => ({
   mockMobileEditorHandleSave: vi.fn(),
   mockMobileEditorToggleSvgTextMode: vi.fn(),
+  mockMobileEditorOpenInDiffMode: vi.fn(),
+  mockMobileEditorSetMode: vi.fn(),
 }));
 
 vi.mock("../../features/welcome", () => ({
@@ -146,30 +154,41 @@ vi.mock("../../features/workspace/views/shared/git-panel", () => ({
   GitPanel: ({
     onPreviewOpen,
   }: {
-    onPreviewOpen?: (preview: { path: string; diff: string; staged: boolean }) => void;
+    onPreviewOpen?: (preview: {
+      path: string;
+      diff: string;
+      staged?: boolean;
+      source?: "file" | "commit";
+      title?: string;
+    }) => void;
   }) => (
-    <button
-      type="button"
-      onClick={() =>
-        onPreviewOpen?.({
-          path: "src/app.tsx",
-          diff: "diff --git a/src/app.tsx b/src/app.tsx",
-          staged: false,
-        })
-      }
-    >
-      mock-git-panel
-    </button>
-  ),
-}));
-
-vi.mock("../../features/workspace/views/shared/git-diff-viewer", () => ({
-  GitDiffViewer: ({ onClose }: { onClose?: () => void }) => (
-    <div data-testid="mobile-git-diff-viewer">
-      <button type="button" aria-label="关闭" onClick={onClose}>
-        关闭
+    <div>
+      <button
+        type="button"
+        onClick={() =>
+          onPreviewOpen?.({
+            path: "src/app.tsx",
+            diff: "diff --git a/src/app.tsx b/src/app.tsx",
+            staged: false,
+            source: "file",
+          })
+        }
+      >
+        mock-git-panel
       </button>
-      GitDiffViewer
+      <button
+        type="button"
+        onClick={() =>
+          onPreviewOpen?.({
+            path: "abc123",
+            title: "abc123 · commit subject",
+            diff: "diff --git a/src/app.tsx b/src/app.tsx",
+            source: "commit",
+          })
+        }
+      >
+        mock-git-history
+      </button>
     </div>
   ),
 }));
@@ -177,8 +196,13 @@ vi.mock("../../features/workspace/views/shared/git-diff-viewer", () => ({
 vi.mock("../../features/code-editor/actions/use-code-editor-actions", () => ({
   useCodeEditorActions: () => ({
     activeFilePath: "src/app.tsx",
+    activeDiffChange: null,
+    activeExternalStatus: null,
     activeLoadError: null,
     canSave: true,
+    canDiff: true,
+    canEdit: true,
+    canPreview: true,
     currentFile: {
       kind: "text",
       path: "src/app.tsx",
@@ -189,13 +213,16 @@ vi.mock("../../features/code-editor/actions/use-code-editor-actions", () => ({
     },
     handleClose: vi.fn(),
     handleContentChange: vi.fn(),
+    hasUnsavedChangesOutsideDiff: false,
     handleSave: mockMobileEditorHandleSave,
     isImageFile: false,
     isSaving: false,
     isSvgTextBacked: false,
     isTextFile: true,
-    openInDiffMode: vi.fn(),
+    mode: "edit",
+    openInDiffMode: mockMobileEditorOpenInDiffMode,
     saveError: null,
+    setMode: mockMobileEditorSetMode,
     toggleSvgTextMode: mockMobileEditorToggleSvgTextMode,
     workspace: {
       id: "ws-1",
@@ -221,9 +248,20 @@ vi.mock("../../features/code-editor/views/shared/code-editor-host", () => ({
     </div>
   ),
   CodeEditorHeaderActions: () => (
-    <button type="button" aria-label="保存文件" onClick={mockMobileEditorHandleSave}>
-      保存文件
-    </button>
+    <div>
+      <button type="button" aria-label="Diff" onClick={mockMobileEditorOpenInDiffMode}>
+        Diff
+      </button>
+      <button type="button" aria-label="预览" onClick={() => mockMobileEditorSetMode("preview")}>
+        预览
+      </button>
+      <button type="button" aria-label="编辑" onClick={() => mockMobileEditorSetMode("edit")}>
+        编辑
+      </button>
+      <button type="button" aria-label="保存" onClick={mockMobileEditorHandleSave}>
+        保存
+      </button>
+    </div>
   ),
 }));
 
@@ -231,10 +269,17 @@ vi.mock("../../features/terminal-panel", () => ({
   TerminalPanel: () => <div data-testid="mobile-terminal-panel">TerminalPanel</div>,
 }));
 
-vi.mock("../../features/notifications", () => ({
-  useSessionNotifications: () => {},
-  ToastContainer: () => null,
-}));
+vi.mock("../../features/notifications", async () => {
+  const actual = await vi.importActual<typeof import("../../features/notifications")>(
+    "../../features/notifications"
+  );
+
+  return {
+    ...actual,
+    useSessionNotifications: () => {},
+    ToastContainer: () => null,
+  };
+});
 
 function createSession(
   partial: Partial<Session> & Pick<Session, "id" | "terminalId" | "providerId">
@@ -678,11 +723,33 @@ describe("MobileShell Phase 2 workspace", () => {
       return undefined;
     });
 
-    renderMobileShell({ initialEntry: "/workspace", sendCommand });
+    const { store } = renderMobileShell({ initialEntry: "/workspace", sendCommand });
+
+    act(() => {
+      store.set(updateStateAtom, {
+        version: 1,
+        currentVersion: "0.4.0",
+        latestVersion: "0.5.0",
+        availability: "update_available",
+        updateStatus: "idle",
+        lastCheckedAt: 123,
+        targetVersion: null,
+        startedAt: null,
+        finishedAt: null,
+        requiresManualStep: false,
+        manualCommand: null,
+        errorSummary: null,
+        supported: true,
+        installKind: "global_npm",
+        unsupportedReason: null,
+      });
+    });
 
     await waitFor(() => {
       expect(
-        document.querySelector(".mobile-shell__bottom-stack .git-panel-status-strip__branch-text")
+        document.querySelector(
+          ".mobile-shell__bottom-stack .workspace-status-bar__left .git-panel-status-strip__branch-text"
+        )
       ).toHaveTextContent("feature/mobile-footer");
     });
 
@@ -690,8 +757,13 @@ describe("MobileShell Phase 2 workspace", () => {
       document.querySelector(".mobile-shell__bottom-stack .workspace-status-bar")
     ).not.toBeNull();
     expect(
-      document.querySelector(".mobile-shell__bottom-stack .git-panel-status-strip__branch-text")
+      document.querySelector(
+        ".mobile-shell__bottom-stack .workspace-status-bar__left .git-panel-status-strip__branch-text"
+      )
     ).toHaveTextContent("feature/mobile-footer");
+    expect(
+      document.querySelector(".mobile-shell__bottom-stack .workspace-status-bar__right")
+    ).toHaveTextContent("v0.5.0");
     expect(document.querySelector(".mobile-shell__bottom-stack")?.lastElementChild).toHaveClass(
       "workspace-status-bar"
     );
@@ -704,12 +776,12 @@ describe("MobileShell Phase 2 workspace", () => {
     await user.click(screen.getByRole("button", { name: "Open Files sheet" }));
 
     expect(screen.getByRole("tablist", { name: "Files sheet tabs" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Files" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Explorer" })).toHaveAttribute("aria-selected", "true");
     expect(screen.queryByRole("button", { name: "Close current sheet" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /back|返回/i }));
 
-    expect(screen.queryByRole("tab", { name: "Files" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Explorer" })).not.toBeInTheDocument();
   });
 
   it("shows the current branch name in the shared workspace footer", async () => {
@@ -3013,7 +3085,7 @@ describe("MobileShell Phase 2 workspace", () => {
 
     await user.click(screen.getByRole("button", { name: "打开文件面板" }));
 
-    expect(screen.getByRole("region", { name: "文件面板" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "资源管理器面板" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "关闭当前面板" })).toBeInTheDocument();
   });
 
@@ -3089,66 +3161,105 @@ describe("MobileShell Phase 2 workspace", () => {
     renderMobileShell();
 
     await user.click(screen.getByRole("button", { name: "Open Files sheet" }));
-    expect(screen.getByRole("region", { name: "Files sheet" })).toHaveClass(
+    expect(screen.getByRole("region", { name: "Explorer sheet" })).toHaveClass(
       "mobile-sheet--fullscreen"
     );
-    expect(screen.getByRole("tab", { name: "Files" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^new file$|^新建文件$/i })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "mock-file-tree" }));
     expect(screen.getByTestId("mobile-code-editor")).toBeInTheDocument();
     expect(screen.getByTestId("mobile-code-editor")).toHaveAttribute("data-chrome", "content-only");
     expect(screen.getAllByRole("button", { name: /back|返回/i })).toHaveLength(1);
     expect(screen.queryByRole("button", { name: "Close current sheet" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /save file|保存文件/i }));
+    await user.click(screen.getByRole("button", { name: /save file|保存/i }));
     expect(mockMobileEditorHandleSave).toHaveBeenCalledTimes(1);
 
     await user.click(screen.getByRole("button", { name: /back|返回/i }));
     expect(screen.getByRole("button", { name: "mock-file-tree" })).toBeInTheDocument();
   });
 
-  it("switches to the git tab and navigates into the diff viewer", async () => {
+  it("switches to the git tab and navigates into the unified file detail view", async () => {
     const user = userEvent.setup();
     renderMobileShell();
 
     await user.click(screen.getByRole("button", { name: "Open Files sheet" }));
-    await user.click(screen.getByRole("tab", { name: "Git" }));
-    expect(screen.getByRole("tab", { name: "Git" })).toHaveAttribute("aria-selected", "true");
+    await user.click(screen.getByRole("tab", { name: /Source Control|源代码管理/i }));
+    expect(screen.getByRole("tab", { name: /Source Control|源代码管理/i })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
     await user.click(screen.getByRole("button", { name: "mock-git-panel" }));
 
-    expect(screen.getByTestId("mobile-git-diff-viewer")).toBeInTheDocument();
+    expect(screen.getByTestId("mobile-code-editor")).toBeInTheDocument();
   });
 
-  it("shows file actions in the tab row only on the files tab", async () => {
+  it("navigates commit-history diff previews into the same unified detail view", async () => {
     const user = userEvent.setup();
     renderMobileShell();
 
     await user.click(screen.getByRole("button", { name: "Open Files sheet" }));
-    expect(screen.getByRole("button", { name: /^new file$|^新建文件$/i })).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: /Source Control|源代码管理/i }));
+    await user.click(screen.getByRole("button", { name: "mock-git-history" }));
+
+    expect(screen.getByTestId("mobile-code-editor")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /back|返回/i })).toBeInTheDocument();
+  });
+
+  it("shows mobile diff preview and edit mode actions in the unified detail header", async () => {
+    const user = userEvent.setup();
+    renderMobileShell();
+
+    await user.click(screen.getByRole("button", { name: "Open Files sheet" }));
+    await user.click(screen.getByRole("button", { name: "mock-file-tree" }));
+
+    await user.click(screen.getByRole("button", { name: "Diff" }));
+    expect(mockMobileEditorOpenInDiffMode).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByRole("button", { name: "预览" }));
+    expect(mockMobileEditorSetMode).toHaveBeenCalledWith("preview");
+
+    await user.click(screen.getByRole("button", { name: "编辑" }));
+    expect(mockMobileEditorSetMode).toHaveBeenCalledWith("edit");
+  });
+
+  it("shows file actions inside the workspace section only on the explorer tab", async () => {
+    const user = userEvent.setup();
+    renderMobileShell();
+
+    await user.click(screen.getByRole("button", { name: "Open Files sheet" }));
+    const workspaceSection = screen
+      .getByRole("heading", { level: 2, name: /workspace|工作区/i })
+      .closest("section") as HTMLElement;
+    expect(
+      within(workspaceSection).getByRole("button", { name: /^new file$|^新建文件$/i })
+    ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /refresh|刷新/i })).toBeNull();
 
-    await user.click(screen.getByRole("tab", { name: "Git" }));
+    await user.click(screen.getByRole("tab", { name: /Source Control|源代码管理/i }));
 
     expect(screen.queryByRole("button", { name: /^new file$|^新建文件$/i })).toBeNull();
   });
 
-  it("returns to the session content when closing the diff viewer", async () => {
+  it("returns to the files root when backing out of the unified file detail view", async () => {
     const user = userEvent.setup();
     renderMobileShell();
 
     await user.click(screen.getByRole("button", { name: "Open Files sheet" }));
-    await user.click(screen.getByRole("tab", { name: "Git" }));
-    expect(screen.getByRole("tab", { name: "Git" })).toHaveAttribute("aria-selected", "true");
+    await user.click(screen.getByRole("tab", { name: /Source Control|源代码管理/i }));
+    expect(screen.getByRole("tab", { name: /Source Control|源代码管理/i })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
     await user.click(screen.getByRole("button", { name: "mock-git-panel" }));
 
-    expect(screen.getByTestId("mobile-git-diff-viewer")).toBeInTheDocument();
+    expect(screen.getByTestId("mobile-code-editor")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "关闭" }));
+    await user.click(screen.getByRole("button", { name: /back|返回/i }));
 
     await waitFor(() => {
-      expect(screen.queryByTestId("mobile-git-diff-viewer")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("mobile-code-editor")).not.toBeInTheDocument();
     });
-    expect(screen.getByTestId("mobile-session-card")).toBeInTheDocument();
-    expect(screen.queryByRole("region", { name: "Files sheet" })).not.toBeInTheDocument();
+    expect(screen.getByText("mock-git-panel")).toBeInTheDocument();
   });
 
   it("does not navigate into the diff viewer when the git tab auto-hydrates preview state", async () => {
@@ -3156,8 +3267,11 @@ describe("MobileShell Phase 2 workspace", () => {
     const { store } = renderMobileShell();
 
     await user.click(screen.getByRole("button", { name: "Open Files sheet" }));
-    await user.click(screen.getByRole("tab", { name: "Git" }));
-    expect(screen.getByRole("tab", { name: "Git" })).toHaveAttribute("aria-selected", "true");
+    await user.click(screen.getByRole("tab", { name: /Source Control|源代码管理/i }));
+    expect(screen.getByRole("tab", { name: /Source Control|源代码管理/i })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
 
     store.set(gitDiffPreviewAtomFamily("ws-1"), {
       path: "src/app.tsx",
@@ -3168,7 +3282,7 @@ describe("MobileShell Phase 2 workspace", () => {
     await waitFor(() => {
       expect(screen.getByText("mock-git-panel")).toBeInTheDocument();
     });
-    expect(screen.queryByTestId("mobile-git-diff-viewer")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("mobile-code-editor")).not.toBeInTheDocument();
   });
 
   it("opens the terminal sheet from the dock", async () => {

@@ -233,15 +233,17 @@
   --z-dropdown: 100;
   --z-sticky: 200;
   --z-local-overlay: 240;
-  --z-modal-backdrop: 300;
-  --z-modal: 310;
-  --z-drawer-backdrop: 320;
-  --z-drawer: 330;
-  --z-workbench-backdrop: 340;
-  --z-workbench: 350;
-  --z-popover: 360;
-  --z-tooltip: 370;
-  --z-toast: 380;
+  --z-sheet-backdrop: 300;
+  --z-sheet: 310;
+  --z-modal-backdrop: 320;
+  --z-modal: 330;
+  --z-drawer-backdrop: 340;
+  --z-drawer: 350;
+  --z-workbench-backdrop: 360;
+  --z-workbench: 370;
+  --z-popover: 380;
+  --z-tooltip: 390;
+  --z-toast: 400;
 
   /* ========== Visual稿别名 (short aliases) ========== */
   --text: var(--text-primary);
@@ -315,6 +317,16 @@
 
   /* Status Dot */
   --status-dot-size: 8px;
+
+  /* Workspace Tab Session Mini Map */
+  --workspace-session-map-running: var(--state-success-text);
+  --workspace-session-map-starting: var(--state-warning-text);
+  --workspace-session-map-idle: color-mix(
+    in srgb,
+    var(--text-tertiary) 90%,
+    var(--accent-blue) 10%
+  );
+  --workspace-session-map-empty: color-mix(in srgb, var(--text-tertiary) 56%, var(--bg-panel) 44%);
 
   /* Progress Bar */
   --progress-height: 4px;

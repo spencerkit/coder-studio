@@ -500,7 +500,7 @@ describe("main", () => {
     readCliConfig.mockReturnValue({
       host: "0.0.0.0",
       port: 0,
-      dataDir: "/tmp/cs-data/coder-studio.db",
+      stateDir: "/tmp/cs-data",
       password: "sekrit",
     });
 
@@ -508,7 +508,7 @@ describe("main", () => {
 
     expect(writeCliConfig).toHaveBeenCalledWith({
       host: "127.0.0.1",
-      dataDir: "/tmp/cs-data/coder-studio.db",
+      stateDir: "/tmp/cs-data",
       password: "sekrit",
     });
   });
@@ -577,9 +577,17 @@ describe("parseArgs", () => {
   });
 
   it("parses config command with data-dir and password values", () => {
+    expect(parseArgs(["config", "--state-dir", "/tmp/cs-data", "--password", "sekrit"])).toEqual({
+      command: "config",
+      stateDir: "/tmp/cs-data",
+      password: "sekrit",
+    });
+  });
+
+  it("accepts legacy data-dir as a config alias", () => {
     expect(parseArgs(["config", "--data-dir", "/tmp/cs-data", "--password", "sekrit"])).toEqual({
       command: "config",
-      dataDir: "/tmp/cs-data",
+      stateDir: "/tmp/cs-data",
       password: "sekrit",
     });
   });
@@ -705,12 +713,16 @@ describe("parseArgs", () => {
     expect(() => parseArgs(["serve", "--port", "4186"])).toThrow(RUNTIME_CONFIG_ERROR);
   });
 
-  it("rejects serve-time data-dir overrides", () => {
-    expect(() => parseArgs(["serve", "--data-dir", "/tmp/data"])).toThrow(RUNTIME_CONFIG_ERROR);
+  it("rejects serve-time state-dir overrides", () => {
+    expect(() => parseArgs(["serve", "--state-dir", "/tmp/data"])).toThrow(RUNTIME_CONFIG_ERROR);
   });
 
-  it("rejects bare data-dir overrides", () => {
+  it("rejects bare legacy data-dir overrides", () => {
     expect(() => parseArgs(["--data-dir", "/tmp/cs-data"])).toThrow(RUNTIME_CONFIG_ERROR);
+  });
+
+  it("rejects bare state-dir overrides", () => {
+    expect(() => parseArgs(["--state-dir", "/tmp/cs-data"])).toThrow(RUNTIME_CONFIG_ERROR);
   });
 
   it("rejects serve-time password overrides", () => {
@@ -757,9 +769,9 @@ describe("parseArgs", () => {
     expect(() => parseArgs(["logs", "--tail", "10junk"])).toThrow("Invalid tail number");
   });
 
-  it("rejects stop-time data-dir overrides", () => {
-    expect(() => parseArgs(["stop", "--data-dir", "/tmp/cs-data"])).toThrow(
-      "Unknown option: --data-dir"
+  it("rejects stop-time state-dir overrides", () => {
+    expect(() => parseArgs(["stop", "--state-dir", "/tmp/cs-data"])).toThrow(
+      "Unknown option: --state-dir"
     );
   });
 
@@ -839,10 +851,10 @@ describe("parseArgs", () => {
     });
   });
 
-  it("allows config-time data-dir updates", () => {
-    expect(parseArgs(["config", "--data-dir", "/custom/path"])).toEqual({
+  it("allows config-time state-dir updates", () => {
+    expect(parseArgs(["config", "--state-dir", "/custom/path"])).toEqual({
       command: "config",
-      dataDir: "/custom/path",
+      stateDir: "/custom/path",
     });
   });
 

@@ -21,6 +21,8 @@ describe("ui preview scene metadata", () => {
         "readme-desktop-hero",
         "readme-desktop-review",
         "readme-mobile-progress",
+        "footer-update-rail-review",
+        "footer-update-rail-confirm-review",
         "workspace-topbar-review",
         "workspace-sidebar-files-review",
         "workspace-sidebar-git-review",

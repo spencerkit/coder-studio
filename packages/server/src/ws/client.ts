@@ -29,6 +29,14 @@ export interface WsClientLogger {
   warn(context: Record<string, unknown>, message: string): void;
 }
 
+export interface WsClientHooks {
+  onTerminalContinuityLost?: (event: {
+    clientId: string;
+    topic: string;
+    reason: "stream_drop" | "topic_evicted";
+  }) => void;
+}
+
 const NOOP_LOGGER: WsClientLogger = {
   warn: () => {},
 };
@@ -48,14 +56,17 @@ export class WsClient {
   private evictedBytesSinceLastWarn = 0;
   private lastStreamBufferWarnAt = 0;
   private readonly logger: WsClientLogger;
+  private readonly hooks: WsClientHooks;
 
   constructor(
     private readonly socket: WebSocket,
     id: ClientId,
-    logger?: WsClientLogger
+    logger?: WsClientLogger,
+    hooks?: WsClientHooks
   ) {
     this.id = id;
     this.logger = logger ?? NOOP_LOGGER;
+    this.hooks = hooks ?? {};
     this.streamBuffer = new StreamBuffer({
       ...STREAM_BUFFER_DEFAULTS,
       onDropOldest: (event) => this.handleStreamBufferDrop(event),
@@ -276,6 +287,7 @@ export class WsClient {
   private handleStreamBufferDrop(event: StreamBufferDropOldestEvent): void {
     this.droppedFramesSinceLastWarn += 1;
     this.droppedBytesSinceLastWarn += event.frameSize;
+    this.emitContinuityLost(event.topic, "stream_drop");
     this.warnStreamBufferPressure("topic-cap", event.topic);
   }
 
@@ -283,7 +295,20 @@ export class WsClient {
     this.evictedTopicsSinceLastWarn += 1;
     this.evictedFramesSinceLastWarn += event.frames;
     this.evictedBytesSinceLastWarn += event.bytes;
+    this.emitContinuityLost(event.topic, "topic_evicted");
     this.warnStreamBufferPressure("topic-lru", event.topic);
+  }
+
+  private emitContinuityLost(topic: string, reason: "stream_drop" | "topic_evicted"): void {
+    if (!topic.includes(".terminal.") || !topic.endsWith(".output")) {
+      return;
+    }
+
+    this.hooks.onTerminalContinuityLost?.({
+      clientId: this.id,
+      topic,
+      reason,
+    });
   }
 
   private warnStreamBufferPressure(reason: "topic-cap" | "topic-lru", topic: string): void {

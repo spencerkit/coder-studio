@@ -15,6 +15,7 @@ import { CommandPalette } from "../features/command-palette";
 import { DiagnosticsPage } from "../features/diagnostics";
 import { NotFoundPage } from "../features/not-found";
 import { ToastContainer } from "../features/notifications";
+import { QuickOpen } from "../features/quick-open";
 import { SettingsPage } from "../features/settings";
 import { WelcomePage } from "../features/welcome";
 import { WorkspaceDesktopView } from "../features/workspace/views/desktop/workspace-desktop-view";
@@ -85,6 +86,7 @@ export function DesktopShell() {
         )}
       </main>
 
+      <QuickOpen />
       <CommandPalette />
       <ToastContainer />
     </div>

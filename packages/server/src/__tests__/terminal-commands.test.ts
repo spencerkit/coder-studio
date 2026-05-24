@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CommandContext } from "../ws/dispatch.js";
 import { dispatch } from "../ws/dispatch.js";
 
+import "../commands/recovery.js";
 import "../commands/terminal.js";
 import { clearPendingTerminalInput, registerPendingTerminalInput } from "../commands/terminal.js";
 
@@ -600,6 +601,161 @@ describe("terminal commands", () => {
     expect(decodeTerminalBinaryFrame(snapshotFrame).header.type).toBe(
       TerminalBinaryFrameType.Snapshot
     );
+  });
+
+  it("returns noop when rendered seq already matches terminal head seq", async () => {
+    const baseCtx = createContext();
+    const ctx = createContext({
+      terminalMgr: {
+        ...baseCtx.terminalMgr,
+        inspectRecovery: vi.fn().mockReturnValue({
+          status: "ok",
+          headSeq: 42,
+          replay: { kind: "available", fromSeq: 42 },
+          snapshot: { kind: "available" },
+          alive: true,
+        }),
+      } as never,
+    });
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "recovery-reconcile-noop",
+        op: "recovery.reconcile",
+        args: {
+          reason: "foreground_resume",
+          terminals: [{ terminalId: "term-1", renderedSeq: 42 }],
+        },
+      },
+      ctx,
+      "client-1"
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.data).toEqual({
+      terminals: [{ terminalId: "term-1", action: "noop", headSeq: 42 }],
+    });
+  });
+
+  it("prefers snapshot on initial mount when snapshot is available", async () => {
+    const baseCtx = createContext();
+    const ctx = createContext({
+      terminalMgr: {
+        ...baseCtx.terminalMgr,
+        inspectRecovery: vi.fn().mockReturnValue({
+          status: "ok",
+          headSeq: 42,
+          replay: { kind: "available", fromSeq: 0 },
+          snapshot: { kind: "available" },
+          alive: true,
+        }),
+      } as never,
+    });
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "recovery-reconcile-snapshot",
+        op: "recovery.reconcile",
+        args: {
+          reason: "initial_mount",
+          terminals: [{ terminalId: "term-1", renderedSeq: 0 }],
+        },
+      },
+      ctx,
+      "client-1"
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.data).toEqual({
+      terminals: [{ terminalId: "term-1", action: "snapshot", headSeq: 42 }],
+    });
+  });
+
+  it("falls back to unrecoverable when replay is too old and no snapshot is available", async () => {
+    const baseCtx = createContext();
+    const ctx = createContext({
+      terminalMgr: {
+        ...baseCtx.terminalMgr,
+        inspectRecovery: vi.fn().mockReturnValue({
+          status: "ok",
+          headSeq: 42,
+          replay: { kind: "too_old" },
+          snapshot: { kind: "unavailable" },
+          alive: true,
+        }),
+      } as never,
+    });
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "recovery-reconcile-bad",
+        op: "recovery.reconcile",
+        args: {
+          reason: "seq_gap",
+          terminals: [{ terminalId: "term-1", renderedSeq: 0 }],
+        },
+      },
+      ctx,
+      "client-1"
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.data).toEqual({
+      terminals: [
+        {
+          terminalId: "term-1",
+          action: "unrecoverable",
+          reason: "too_old_no_snapshot",
+        },
+      ],
+    });
+  });
+
+  it("returns closed together with replay when the terminal exited while the client is behind head seq", async () => {
+    const baseCtx = createContext();
+    const ctx = createContext({
+      terminalMgr: {
+        ...baseCtx.terminalMgr,
+        inspectRecovery: vi.fn().mockReturnValue({
+          status: "ok",
+          headSeq: 42,
+          replay: { kind: "available", fromSeq: 12 },
+          snapshot: { kind: "available" },
+          alive: false,
+          exitCode: 7,
+        }),
+      } as never,
+    });
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "recovery-reconcile-closed-replay",
+        op: "recovery.reconcile",
+        args: {
+          reason: "socket_reconnected",
+          terminals: [{ terminalId: "term-1", renderedSeq: 12 }],
+        },
+      },
+      ctx,
+      "client-1"
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.data).toEqual({
+      terminals: [
+        {
+          terminalId: "term-1",
+          action: "replay",
+          fromSeq: 12,
+          headSeq: 42,
+          closed: { exitCode: 7 },
+        },
+      ],
+    });
   });
 
   it("delegates terminal.input binary payload to sessionMgr.sendInput when a session owns the terminal", async () => {

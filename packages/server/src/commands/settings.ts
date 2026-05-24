@@ -4,6 +4,7 @@
 
 import {
   DEFAULT_SUPERVISOR_EVALUATION_TIMEOUT_SEC,
+  isUpdateCheckIntervalSec,
   MAX_SUPERVISOR_EVALUATION_TIMEOUT_SEC,
   MAX_SUPERVISOR_RETRY_DELAY_SEC,
   MAX_SUPERVISOR_RETRY_MAX_COUNT,
@@ -117,6 +118,12 @@ const SettingsSchema = z.object({
       mode: z.enum(["auto", "off"]).optional(),
     })
     .optional(),
+  updates: z
+    .object({
+      autoCheckEnabled: z.boolean().optional(),
+      checkIntervalSec: z.number().int().refine(isUpdateCheckIntervalSec).optional(),
+    })
+    .optional(),
   providers: ProviderSettingsSchema.optional(),
 });
 
@@ -213,6 +220,13 @@ registerCommand(
       }
     }
 
+    if (
+      flatSettings["updates.autoCheckEnabled"] !== undefined ||
+      flatSettings["updates.checkIntervalSec"] !== undefined
+    ) {
+      ctx.updateService?.reloadScheduleFromSettings();
+    }
+
     return {
       updated: [
         ...Object.keys(flatSettings),
@@ -283,7 +297,7 @@ function resolveAppearancePersonalizationOverrideKeysToDelete(
     return [];
   }
 
-  if (!isFullAppearancePersonalizationSnapshot(personalization)) {
+  if (!isFullAppearancePersonalizationSnapshot(personalization as Record<string, unknown>)) {
     return [];
   }
 

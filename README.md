@@ -143,7 +143,7 @@ The same workspace URL works across all devices — interface adapts automatical
 | [Common Workflows](docs/help/workflows.md) | Task-based tutorials |
 | [Troubleshooting](docs/help/troubleshooting.md) | FAQ and known issues |
 | [CLI Reference](docs/help/cli.md) | Command-line options |
-| [GitHub Wiki Source](docs/wiki/README.md) | Wiki pages for product positioning, security, and workflows |
+| [GitHub Wiki Source](docs/wiki/README.md) | Wiki source pages and publish flow |
 | [AI Coding Terms](docs/wiki/AI-Coding-Terms.md) | Vibe coding, agentic harnesses, eval harnesses, and where Coder Studio fits |
 
 ---

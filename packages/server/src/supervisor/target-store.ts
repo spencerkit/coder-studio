@@ -417,6 +417,18 @@ function countsTowardCycleTotal(record: SupervisorCycleTargetRecord): boolean {
   return record.result !== "error";
 }
 
+function tryParseJson(raw: string): unknown {
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+function isTransientTargetDirectory(name: string): boolean {
+  return name.includes(".backup-") || name.includes(".reset-");
+}
+
 async function writeResetTargetFiles(
   dirPath: string,
   input: {
@@ -536,7 +548,7 @@ export async function readTargetMeta(
   targetId: string
 ): Promise<SupervisorTargetMeta> {
   return normalizeTargetMeta(
-    JSON.parse(await readFile(metaPath(workspacePath, targetId), "utf-8")),
+    tryParseJson(await readFile(metaPath(workspacePath, targetId), "utf-8")),
     targetId
   );
 }
@@ -546,7 +558,7 @@ export async function loadTargetMemory(
   targetId: string
 ): Promise<SupervisorTargetMemory> {
   return normalizeTargetMemory(
-    JSON.parse(await readFile(memoryPath(workspacePath, targetId), "utf-8")),
+    tryParseJson(await readFile(memoryPath(workspacePath, targetId), "utf-8")),
     targetId
   );
 }
@@ -595,7 +607,10 @@ export async function readTargetCycleRecords(
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean)
-    .map((line) => JSON.parse(line) as SupervisorCycleTargetRecord)
+    .flatMap<SupervisorCycleTargetRecord>((line) => {
+      const parsed = tryParseJson(line);
+      return parsed ? [parsed as SupervisorCycleTargetRecord] : [];
+    })
     .slice(-limit)
     .reverse();
 }
@@ -607,7 +622,7 @@ export async function listRecoverableTargets(
   const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
   const targets = await Promise.all(
     entries
-      .filter((entry) => entry.isDirectory())
+      .filter((entry) => entry.isDirectory() && !isTransientTargetDirectory(entry.name))
       .map(async (entry) => {
         const targetId = entry.name;
         const [meta, memory, cycles] = await Promise.all([

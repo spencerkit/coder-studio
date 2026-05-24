@@ -13,6 +13,10 @@ export type DiagnosticsCheckCode =
   | "workspace_path_unreadable"
   | "session_workspace_ready"
   | "session_workspace_missing"
+  | "git_ready"
+  | "git_missing"
+  | "nodejs_ready"
+  | "nodejs_missing"
   | "provider_runtime_ready"
   | "provider_cli_missing"
   | "provider_prerequisite_missing"
@@ -43,6 +47,7 @@ export interface DiagnosticsCheck {
   missingPrerequisites?: string[];
   manualGuideKeys?: string[];
   docUrl?: string;
+  version?: string;
 }
 
 export interface DiagnosticsMetadata {

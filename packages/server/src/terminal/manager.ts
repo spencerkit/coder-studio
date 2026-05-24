@@ -13,6 +13,7 @@ import type {
   ReplayResult,
   TerminalDatabase,
   TerminalId,
+  TerminalRecoveryInspection,
   TerminalSpec,
 } from "./types";
 import { TerminalSpawnError } from "./types";
@@ -431,6 +432,31 @@ export class TerminalManager {
     }
 
     return { status: "unknown" };
+  }
+
+  inspectRecovery(terminalId: TerminalId, renderedSeq: number): TerminalRecoveryInspection {
+    const terminal = this.terminals.get(terminalId);
+    if (!terminal) {
+      return { status: "unknown" };
+    }
+
+    const headSeq = terminal.ringBuffer.getSeq();
+    const replay = terminal.ringBuffer.replayFrom(renderedSeq);
+
+    return {
+      status: "ok",
+      headSeq,
+      replay:
+        replay.status === "too_old"
+          ? { kind: "too_old" }
+          : { kind: "available", fromSeq: renderedSeq },
+      snapshot:
+        terminal.snapshotBuffer && !terminal.snapshotBuffer.disabled
+          ? { kind: "available" }
+          : { kind: "unavailable" },
+      alive: terminal.alive,
+      exitCode: terminal.exitCode,
+    };
   }
 
   /**

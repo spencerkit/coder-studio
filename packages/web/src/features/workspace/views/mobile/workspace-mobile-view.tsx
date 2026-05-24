@@ -16,7 +16,10 @@ import { MobileSupervisorSheet } from "../../../supervisor/views/mobile/mobile-s
 import { TerminalPanel } from "../../../terminal-panel";
 import type { CreateRequest } from "../../actions/use-file-actions";
 import { useWorkspaceFullscreen } from "../../actions/use-workspace-fullscreen";
-import { useWorkspaceScreenModel } from "../../actions/use-workspace-screen-model";
+import {
+  type MobileWorkspaceSidebarView,
+  useWorkspaceScreenModel,
+} from "../../actions/use-workspace-screen-model";
 import { useWorkspaceUiStatePersistence } from "../../actions/use-workspace-ui-state-persistence";
 import { WorkspaceLaunchModal } from "../shared/workspace-launch-modal";
 import { WorkspaceStatusBar } from "../shared/workspace-status-bar";
@@ -81,6 +84,7 @@ export function WorkspaceMobileView() {
     activeWorkspaceId,
     closeMobileSession,
     closeMobileSheet,
+    diffPreview,
     handleMobileSessionCreated,
     handleOpenBranchSwitcher,
     gitState,
@@ -101,7 +105,7 @@ export function WorkspaceMobileView() {
   );
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [agentSheetOpen, setAgentSheetOpen] = useState(false);
-  const [mobileFilesTab, setMobileFilesTab] = useState<"files" | "git">("files");
+  const [mobileFilesView, setMobileFilesView] = useState<MobileWorkspaceSidebarView>("explorer");
   const [mobileFileCreateRequest, setMobileFileCreateRequest] = useState<CreateRequest | null>(
     null
   );
@@ -235,12 +239,58 @@ export function WorkspaceMobileView() {
     supervisorDialog.sessionId,
   ]);
 
-  const filesSheetKicker =
-    mobileFilesRoute.kind === "editor"
-      ? t("file.title")
-      : mobileFilesRoute.kind === "diff"
-        ? t("label.git")
-        : null;
+  useEffect(() => {
+    if (mobileSheet !== "files" || mobileFilesRoute.kind !== "detail") {
+      return;
+    }
+
+    const isCommitDetailRoute =
+      diffPreview?.source === "commit" &&
+      mobileFilesRoute.path === diffPreview.path &&
+      mobileFilesRoute.title === diffPreview.title;
+
+    if (isCommitDetailRoute) {
+      return;
+    }
+
+    if (mobileEditorState.activeFilePath) {
+      if (
+        mobileFilesRoute.path !== mobileEditorState.activeFilePath ||
+        mobileFilesRoute.title !== undefined
+      ) {
+        updateMobileFilesRoute({
+          kind: "detail",
+          path: mobileEditorState.activeFilePath,
+        });
+      }
+      return;
+    }
+
+    if (diffPreview?.source === "commit") {
+      if (
+        mobileFilesRoute.path !== diffPreview.path ||
+        mobileFilesRoute.title !== diffPreview.title
+      ) {
+        updateMobileFilesRoute({
+          kind: "detail",
+          path: diffPreview.path,
+          title: diffPreview.title,
+        });
+      }
+      return;
+    }
+
+    closeMobileSheet();
+  }, [
+    closeMobileSheet,
+    diffPreview,
+    mobileEditorState.activeFilePath,
+    mobileFilesRoute,
+    mobileSheet,
+    updateMobileFilesRoute,
+  ]);
+
+  const filesSheetKicker = mobileFilesRoute.kind === "detail" ? t("file.title") : null;
 
   const handleMobileCreateRequest = (mode: "file" | "folder") => {
     setMobileFileCreateRequest((previous) => ({
@@ -251,7 +301,7 @@ export function WorkspaceMobileView() {
   };
 
   const filesSheetHeaderAction =
-    mobileFilesRoute.kind === "editor" ? (
+    mobileFilesRoute.kind === "detail" ? (
       <CodeEditorHeaderActions state={mobileEditorState} variant="mobile" />
     ) : null;
 
@@ -259,18 +309,20 @@ export function WorkspaceMobileView() {
     mobileSheet === "files"
       ? {
           title:
-            mobileFilesRoute.kind === "editor"
-              ? (mobileFilesRoute.path.split("/").pop() ?? t("mobile.files.editor_fallback"))
-              : mobileFilesRoute.kind === "diff"
-                ? (mobileFilesRoute.path.split("/").pop() ?? t("worktree.diff_tab"))
-                : mobileFilesTab === "files"
-                  ? t("file.title")
-                  : t("label.git"),
+            mobileFilesRoute.kind === "detail"
+              ? (mobileFilesRoute.title ??
+                mobileFilesRoute.path?.split("/").pop() ??
+                t("mobile.files.editor_fallback"))
+              : mobileFilesView === "explorer"
+                ? t("workspace.sidebar.explorer")
+                : mobileFilesView === "search"
+                  ? t("workspace.sidebar.search")
+                  : t("workspace.sidebar.source_control"),
           body: activeWorkspaceId ? (
             <MobileFilesSheet
               workspaceId={activeWorkspaceId}
               route={mobileFilesRoute}
-              activeTab={mobileFilesTab}
+              activeView={mobileFilesView}
               createRequest={mobileFileCreateRequest}
               onCreateRequestConsumed={() => setMobileFileCreateRequest(null)}
               collapseVersion={mobileFileCollapseVersion}
@@ -278,7 +330,7 @@ export function WorkspaceMobileView() {
               onCreateFolder={() => handleMobileCreateRequest("folder")}
               onCollapseAll={() => setMobileFileCollapseVersion((value) => value + 1)}
               onRouteChange={updateMobileFilesRoute}
-              onTabChange={setMobileFilesTab}
+              onTabChange={setMobileFilesView}
               onCloseSheet={closeMobileSheet}
               editorState={mobileEditorState}
             />

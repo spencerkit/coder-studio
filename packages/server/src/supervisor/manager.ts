@@ -417,6 +417,13 @@ export class SupervisorManager {
     const existing = this.getBySession(req.sessionId);
     const now = Date.now();
 
+    if (existing && req.sourceTargetId === existing.targetId) {
+      throw {
+        code: "supervisor_restore_same_target",
+        message: `Cannot restore target ${req.sourceTargetId} into itself`,
+      };
+    }
+
     if (!existing) {
       const created = await this.create({
         sessionId: req.sessionId,
@@ -643,6 +650,16 @@ export class SupervisorManager {
     });
 
     return started.cycle;
+  }
+
+  countActive(): number {
+    let count = 0;
+    for (const supervisor of this.supervisors.values()) {
+      if (supervisor.state === "evaluating" || supervisor.state === "injecting") {
+        count += 1;
+      }
+    }
+    return count;
   }
 
   /**

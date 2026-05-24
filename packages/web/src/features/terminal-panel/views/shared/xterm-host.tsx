@@ -8,12 +8,17 @@
  * - Aurora Mint theme that follows the current UI mode
  */
 
-import { type TerminalInputActivity, Topics } from "@coder-studio/core";
+import {
+  type RecoveryClosedTerminalState,
+  type TerminalInputActivity,
+  Topics,
+} from "@coder-studio/core";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import {
   type ChangeEvent as ReactChangeEvent,
+  type ReactNode,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -22,7 +27,7 @@ import {
 } from "react";
 import { themeAtom } from "../../../../atoms/app-ui";
 import { dispatchCommandAtom, wsClientAtom } from "../../../../atoms/connection";
-import { LocalOverlay } from "../../../../components/ui";
+import { Button, LocalOverlay, Notice } from "../../../../components/ui";
 import { useViewport } from "../../../../hooks/use-viewport";
 import { copyTextWithFallback } from "../../../../lib/clipboard";
 import { useTranslation } from "../../../../lib/i18n";
@@ -47,8 +52,10 @@ import {
   toggleCtrlMode,
 } from "../../mobile/virtual-terminal-keys";
 import { getTerminalFontSizeForViewport, terminalPreferencesAtom } from "../../preferences";
+import { getGlobalRecoveryCoordinator } from "../../recovery-singleton";
 import {
   classifyReplayFailure,
+  type RecoveryUiMode,
   TERMINAL_REPLAY_TIMEOUT_MS,
   type TerminalReplayUiState,
 } from "../../replay-state";
@@ -65,6 +72,7 @@ const MOBILE_COPY_MODE_LONG_PRESS_MS = 500;
 const MOBILE_COPY_MODE_MOVE_TOLERANCE_PX = 10;
 const TERMINAL_FOCUS_REPORTING_BYTES = new Set(["\x1b[I", "\x1b[O"]);
 const TERMINAL_COPY_ON_SELECT_ERROR_THROTTLE_MS = 3_000;
+const TERMINAL_RECOVERY_LOADING_OVERLAY_DELAY_MS = 1_200;
 
 interface TerminalInputDraftState {
   nextDraft: string;
@@ -329,6 +337,14 @@ interface XtermHostProps {
   terminalKind?: "agent" | "shell";
   /** Container element ref for sizing */
   containerRef?: React.RefObject<HTMLDivElement>;
+  /** Closed session CTA label */
+  closedSessionContinueLabel?: string;
+  /** Closed session provider label for fallback copy */
+  closedSessionProviderLabel?: string;
+  /** Continue with same provider from a closed session */
+  onClosedSessionContinue?: () => void;
+  /** Close the current closed-session pane */
+  onClosedSessionClose?: () => void;
 }
 
 interface ReplayPayload {
@@ -373,6 +389,10 @@ interface SnapshotCommandResult {
  * 3. Unmount: dispose Terminal, unsubscribe from events
  */
 export function XtermHost({
+  closedSessionContinueLabel,
+  closedSessionProviderLabel,
+  onClosedSessionClose,
+  onClosedSessionContinue,
   terminalId,
   workspaceId,
   readOnly = false,
@@ -387,10 +407,12 @@ export function XtermHost({
   const wsClient = useAtomValue(wsClientAtom);
   const dispatch = useAtomValue(dispatchCommandAtom);
   const pushToast = useSetAtom(pushToastAtom);
+  const setTerminalMeta = useSetAtom(terminalMetaAtomFamily(terminalId));
   const [outputAtom, setOutputAtom] = useAtom(terminalOutputAtomFamily(terminalId));
   const meta = useAtomValue(terminalMetaAtomFamily(terminalId));
+  const terminalMetaRef = useRef(meta);
   const terminalKind = terminalKindProp ?? meta?.kind ?? "shell";
-  const isInteractive = !readOnly && meta?.alive !== false;
+  const baseIsInteractive = !readOnly && meta?.alive !== false;
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -411,6 +433,21 @@ export function XtermHost({
   const pendingReplayChunksRef = useRef<Array<{ bytes: Uint8Array; seq: number }>>([]);
   const replayCompletedRef = useRef(false);
   const replayedSeqRef = useRef(0);
+  const recoveryReplayAnchorSeqRef = useRef<number | null>(null);
+  const applyReplayPayloadRef = useRef<
+    | ((payload: ReplayPayload, options?: { resetTerminalBeforeWrite?: boolean }) => Promise<void>)
+    | null
+  >(null);
+  const applySnapshotPayloadRef = useRef<((payload: SnapshotPayload) => Promise<void>) | null>(
+    null
+  );
+  const completeHistoricalRecoveryRef = useRef<
+    ((coveredSeq: number, closed?: RecoveryClosedTerminalState) => Promise<void>) | null
+  >(null);
+  const failHistoricalRecoveryRef = useRef<((error: unknown) => Promise<void>) | null>(null);
+  const showUnrecoverableHistoryRef = useRef<(() => Promise<void>) | null>(null);
+  const showUnavailableTerminalRef = useRef<(() => Promise<void>) | null>(null);
+  const retryHistoricalRecoveryRef = useRef<(() => void) | null>(null);
   const coldStartStateRef = useRef<"idle" | "in-flight" | "done">("idle");
   const activeHistoricalRecoveryModeRef = useRef<"initial" | "reconnect" | null>(null);
   const latestRenderedSeqRef = useRef(0);
@@ -454,6 +491,10 @@ export function XtermHost({
   });
 
   const [replayUiState, setReplayUiState] = useState<TerminalReplayUiState>({ kind: "loading" });
+  const [loadingOverlayVisible, setLoadingOverlayVisible] = useState(false);
+  const isInteractive =
+    baseIsInteractive && replayUiState.kind !== "closed" && replayUiState.kind !== "unavailable";
+  const activeRecoveryUiModeRef = useRef<RecoveryUiMode>("blocking_rebuild");
   const [hydrationState, setHydrationState] = useState<
     { kind: "idle" } | { kind: "queued"; queuePosition: number } | { kind: "granted" }
   >(viewport === "mobile" ? { kind: "granted" } : { kind: "idle" });
@@ -474,6 +515,38 @@ export function XtermHost({
   const handleInputRef = useRef<(data: string) => void | Promise<void>>(() => {});
   const handleResizeRef = useRef<(size: { cols: number; rows: number }) => void | Promise<void>>(
     () => {}
+  );
+
+  const recoveryCoordinator = getGlobalRecoveryCoordinator();
+
+  useEffect(() => {
+    terminalMetaRef.current = meta;
+  }, [meta]);
+
+  const markTerminalClosed = useCallback(
+    (exitCode?: number) => {
+      const currentMeta = terminalMetaRef.current;
+      if (currentMeta?.alive === false) {
+        return;
+      }
+
+      setTerminalMeta((current) => {
+        if (!current) {
+          return current;
+        }
+
+        return {
+          ...current,
+          alive: false,
+          exitCode,
+        };
+      });
+
+      if (terminalRef.current) {
+        terminalRef.current.writeln(`\r\n[Process exited with code ${exitCode ?? 0}]`);
+      }
+    },
+    [setTerminalMeta]
   );
 
   useEffect(() => {
@@ -546,6 +619,22 @@ export function XtermHost({
       terminalRef.current.options.theme = getThemeById(uiTheme).terminalTheme;
     }
   }, [uiTheme]);
+
+  useEffect(() => {
+    if (replayUiState.kind !== "loading") {
+      setLoadingOverlayVisible(false);
+      return;
+    }
+
+    setLoadingOverlayVisible(false);
+    const timeoutId = setTimeout(() => {
+      setLoadingOverlayVisible(true);
+    }, TERMINAL_RECOVERY_LOADING_OVERLAY_DELAY_MS);
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [replayUiState]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -1136,6 +1225,85 @@ export function XtermHost({
     });
   }, [wsClient]);
 
+  useEffect(() => {
+    if (!recoveryCoordinator) {
+      return;
+    }
+
+    return recoveryCoordinator.registerTerminal({
+      terminalId,
+      workspaceId,
+      getRenderedSeq: () => recoveryReplayAnchorSeqRef.current ?? latestRenderedSeqRef.current,
+      setUiMode: (mode, detail) => {
+        activeRecoveryUiModeRef.current = mode;
+        if (mode === "silent") {
+          recoveryReplayAnchorSeqRef.current = null;
+          setReplayUiState({ kind: "ready" });
+          return;
+        }
+
+        if (mode === "closed") {
+          recoveryReplayAnchorSeqRef.current = null;
+          setReplayUiState({ kind: "closed" });
+          return;
+        }
+
+        if (mode === "error") {
+          if (detail?.reason === "too_old_no_snapshot") {
+            if (showUnrecoverableHistoryRef.current) {
+              void showUnrecoverableHistoryRef.current();
+              return;
+            }
+
+            recoveryReplayAnchorSeqRef.current = null;
+            setReplayUiState({ kind: "unrecoverable_history", reason: "too_old_no_snapshot" });
+            return;
+          }
+
+          if (detail?.reason === "unknown_terminal") {
+            if (showUnavailableTerminalRef.current) {
+              void showUnavailableTerminalRef.current();
+              return;
+            }
+
+            recoveryReplayAnchorSeqRef.current = null;
+            setReplayUiState({ kind: "unavailable" });
+            return;
+          }
+
+          if (failHistoricalRecoveryRef.current) {
+            void failHistoricalRecoveryRef.current(new Error("terminal recovery failed"));
+            return;
+          }
+
+          setReplayUiState({ kind: "retryable_failure", reason: "failed" });
+          return;
+        }
+
+        if (
+          (mode === "non_blocking_recovering" || mode === "blocking_rebuild") &&
+          recoveryReplayAnchorSeqRef.current === null
+        ) {
+          recoveryReplayAnchorSeqRef.current = latestRenderedSeqRef.current;
+        }
+
+        setReplayUiState({ kind: "loading" });
+      },
+      markClosed: ({ exitCode }) => {
+        markTerminalClosed(exitCode);
+      },
+      completeRecovery: async (headSeq, closed) => {
+        await completeHistoricalRecoveryRef.current?.(headSeq, closed);
+      },
+      applyReplay: async (payload) => {
+        await applyReplayPayloadRef.current?.(payload);
+      },
+      applySnapshot: async (payload) => {
+        await applySnapshotPayloadRef.current?.(payload);
+      },
+    });
+  }, [markTerminalClosed, recoveryCoordinator, terminalId, workspaceId]);
+
   useLayoutEffect(() => {
     updateCtrlMode("off");
     updateShiftArmed(false);
@@ -1172,12 +1340,10 @@ export function XtermHost({
     let disposed = false;
     let unsubscribeStatus: (() => void) | null = null;
     const replayWriteGeneration = replayWriteGenerationRef.current + 1;
-
     replayWriteGenerationRef.current = replayWriteGeneration;
     replayWriteDepthRef.current = 0;
     reconnectRecoveryTriggerRef.current = null;
     pendingRecoveryModeRef.current = null;
-
     replayCompletedRef.current = false;
     replayedSeqRef.current = 0;
     coldStartStateRef.current = "idle";
@@ -1323,6 +1489,12 @@ export function XtermHost({
 
     const outputTopic = Topics.terminalOutput(workspaceId, terminalId);
     const exitTopic = Topics.terminalExit(workspaceId, terminalId);
+    type HistoricalWrite = {
+      kind: "historical" | "pending";
+      bytes: Uint8Array;
+      seq: number;
+      resetTerminalBeforeWrite?: boolean;
+    };
 
     const collectPendingReplayChunks = (coveredSeq: number) => {
       const pending = pendingReplayChunksRef.current;
@@ -1345,6 +1517,13 @@ export function XtermHost({
       };
     };
 
+    const releaseHydration = () => {
+      if (viewport !== "mobile") {
+        hydrationHandleRef.current?.release();
+        hydrationReleasedRef.current = true;
+      }
+    };
+
     const finalizeHistoricalRecovery = (completedRecoveryMode: "initial" | "reconnect" | null) => {
       coldStartStateRef.current = "done";
       activeHistoricalRecoveryModeRef.current = null;
@@ -1354,192 +1533,212 @@ export function XtermHost({
       reconnectRecoveryTriggerRef.current?.();
     };
 
-    const queueHistoricalWrites = (
-      completedRecoveryMode: "initial" | "reconnect" | null,
-      coveredSeq: number,
-      writes: Array<{
-        kind: "historical" | "pending";
-        bytes: Uint8Array;
-        seq: number;
-        resetTerminalBeforeWrite?: boolean;
-      }>
-    ) => {
-      replayedSeqRef.current = coveredSeq;
-      replayCompletedRef.current = true;
-
+    const writeHistoricalBatch = async (writes: HistoricalWrite[]) => {
       if (writes.length === 0) {
-        latestRenderedSeqRef.current = Math.max(latestRenderedSeqRef.current, coveredSeq);
-        finalizeHistoricalRecovery(completedRecoveryMode);
         return;
       }
 
-      let pendingWriteCount = writes.length;
-      const markWriteRendered = (seq: number) => {
-        if (!mountedRef.current || replayWriteGenerationRef.current !== replayWriteGeneration) {
-          return;
-        }
+      await new Promise<void>((resolve, reject) => {
+        let pendingWriteCount = writes.length;
+        let settled = false;
+        const markWriteRendered = (seq: number) => {
+          if (mountedRef.current && replayWriteGenerationRef.current === replayWriteGeneration) {
+            latestRenderedSeqRef.current = Math.max(latestRenderedSeqRef.current, seq);
+          }
 
-        latestRenderedSeqRef.current = Math.max(latestRenderedSeqRef.current, seq);
-        pendingWriteCount = Math.max(0, pendingWriteCount - 1);
-        if (pendingWriteCount === 0) {
-          finalizeHistoricalRecovery(completedRecoveryMode);
-        }
-      };
+          pendingWriteCount = Math.max(0, pendingWriteCount - 1);
+          if (pendingWriteCount === 0 && !settled) {
+            settled = true;
+            resolve();
+          }
+        };
 
-      for (const write of writes) {
-        if (write.resetTerminalBeforeWrite && typeof terminalRef.current?.reset === "function") {
-          terminalRef.current.reset();
-        }
+        for (const write of writes) {
+          if (write.resetTerminalBeforeWrite && typeof terminalRef.current?.reset === "function") {
+            terminalRef.current.reset();
+          }
 
-        if (write.kind === "historical") {
-          traceTerminal(terminalId, "write.historical", {
-            seq: write.seq,
-            size: write.bytes.byteLength,
-            summary: summarizeTerminalData(write.bytes),
-          });
-        } else {
-          traceTerminal(terminalId, "write.pending-replay-chunk", {
-            seq: write.seq,
-            summary: summarizeTerminalData(write.bytes),
-          });
-        }
+          if (write.kind === "historical") {
+            traceTerminal(terminalId, "write.historical", {
+              seq: write.seq,
+              size: write.bytes.byteLength,
+              summary: summarizeTerminalData(write.bytes),
+            });
+          } else {
+            traceTerminal(terminalId, "write.pending-replay-chunk", {
+              seq: write.seq,
+              summary: summarizeTerminalData(write.bytes),
+            });
+          }
 
-        if (write.kind === "historical") {
-          writeReplayBytes(write.bytes, () => {
-            markWriteRendered(write.seq);
-          });
-          continue;
-        }
+          try {
+            if (write.kind === "historical") {
+              writeReplayBytes(write.bytes, () => {
+                markWriteRendered(write.seq);
+              });
+              continue;
+            }
 
-        // Chunks buffered while the snapshot/replay baseline was loading are
-        // still live PTY output and must keep xterm auto-responses enabled.
-        terminal.write(write.bytes, () => {
-          markWriteRendered(write.seq);
-        });
-      }
+            terminal.write(write.bytes, () => {
+              markWriteRendered(write.seq);
+            });
+          } catch (error) {
+            if (!settled) {
+              settled = true;
+              reject(error);
+            }
+            return;
+          }
+        }
+      });
     };
 
-    const finishHistoricalLoad = (
-      result: ReplayCommandResult | null,
-      options: {
-        successStatus: "ok";
-        successBytes: Uint8Array | undefined;
-        coveredSeq: number | undefined;
-        resetTerminalBeforeWrite?: boolean;
-      }
-    ) => {
-      if (!mountedRef.current || !terminalRef.current || !result) {
-        return;
-      }
+    const flushHistoricalRecovery = async (options?: {
+      bytes?: Uint8Array;
+      coveredSeq?: number;
+      resetTerminalBeforeWrite?: boolean;
+    }) => {
+      let coveredSeq = options?.coveredSeq ?? replayedSeqRef.current;
+      let nextWrites: HistoricalWrite[] = [];
+      let firstBatch = true;
 
-      const completedRecoveryMode = activeHistoricalRecoveryModeRef.current;
-      let coveredSeq = replayedSeqRef.current;
-      const writes: Array<{
-        kind: "historical" | "pending";
-        bytes: Uint8Array;
-        seq: number;
-        resetTerminalBeforeWrite?: boolean;
-      }> = [];
-      if (result.ok && result.data?.status === options.successStatus) {
-        if (options.successBytes) {
-          writes.push({
-            kind: "historical",
-            bytes: options.successBytes,
-            seq: options.coveredSeq ?? coveredSeq,
-            resetTerminalBeforeWrite: options.resetTerminalBeforeWrite,
-          });
-        }
-        coveredSeq = options.coveredSeq ?? coveredSeq;
-        setReplayUiState({ kind: "ready" });
-        if (viewport !== "mobile") {
-          hydrationHandleRef.current?.release();
-          hydrationReleasedRef.current = true;
-        }
-      } else if (result.data?.status === "too_old") {
-        // Ring buffer overflow - show a message to the user
-        if (terminalRef.current) {
-          terminalRef.current.writeln(
-            "\r\n\x1b[33m[Session history truncated - output exceeds buffer size]\x1b[0m"
-          );
-        }
-        setReplayUiState({ kind: "degraded", reason: "truncated" });
-        if (viewport !== "mobile") {
-          hydrationHandleRef.current?.release();
-          hydrationReleasedRef.current = true;
-        }
-      } else if (result.data?.status === "unknown") {
-        setReplayUiState({ kind: "degraded", reason: "closed" });
-        if (viewport !== "mobile") {
-          hydrationHandleRef.current?.release();
-          hydrationReleasedRef.current = true;
-        }
-      } else if (!result.ok) {
-        console.error("Failed to replay terminal output:", result.error);
-        setReplayUiState({ kind: "degraded", reason: classifyReplayFailure(result.error) });
-        if (viewport !== "mobile") {
-          hydrationHandleRef.current?.release();
-          hydrationReleasedRef.current = true;
-        }
-      }
-
-      const { entries: pendingWrites, latestCoveredSeq } = collectPendingReplayChunks(coveredSeq);
-      coveredSeq = latestCoveredSeq;
-      for (const entry of pendingWrites) {
-        writes.push({
-          kind: "pending",
-          bytes: entry.bytes,
-          seq: entry.seq,
+      if (options?.bytes && typeof options.coveredSeq === "number") {
+        nextWrites.push({
+          kind: "historical",
+          bytes: options.bytes,
+          seq: options.coveredSeq,
+          resetTerminalBeforeWrite: options.resetTerminalBeforeWrite,
         });
       }
 
+      replayCompletedRef.current = false;
+
+      if (nextWrites.length > 0) {
+        await writeHistoricalBatch(nextWrites);
+        firstBatch = false;
+      }
+
+      replayedSeqRef.current = coveredSeq;
+      latestRenderedSeqRef.current = Math.max(latestRenderedSeqRef.current, coveredSeq);
+      replayCompletedRef.current = true;
       setOutputAtom((prev: OutputBuffer) => ({
         ...prev,
         chunks: [],
         lastSeq: Math.max(prev.lastSeq, coveredSeq),
       }));
 
-      queueHistoricalWrites(completedRecoveryMode, coveredSeq, writes);
+      while (true) {
+        const { entries, latestCoveredSeq } = collectPendingReplayChunks(coveredSeq);
+        if (entries.length === 0) {
+          break;
+        }
+
+        coveredSeq = latestCoveredSeq;
+        const pendingWrites = entries.map((entry) => ({
+          kind: "pending" as const,
+          bytes: entry.bytes,
+          seq: entry.seq,
+        }));
+
+        await writeHistoricalBatch(pendingWrites);
+        firstBatch = false;
+      }
+
+      finalizeHistoricalRecovery(activeHistoricalRecoveryModeRef.current);
     };
 
-    const finishReplay = (result: ReplayCommandResult | null) => {
-      finishHistoricalLoad(result, {
-        successStatus: "ok",
-        successBytes: result?.data?.bytes,
-        coveredSeq: result?.data?.seq,
-      });
-    };
+    const completeHistoricalRecovery = async (
+      coveredSeq: number,
+      closed?: RecoveryClosedTerminalState
+    ) => {
+      if (!mountedRef.current || !terminalRef.current) {
+        return;
+      }
 
-    const failHistoricalRecovery = (error: unknown) => {
+      releaseHydration();
+      await flushHistoricalRecovery({ coveredSeq });
+      recoveryReplayAnchorSeqRef.current = null;
+      if (closed) {
+        markTerminalClosed(closed.exitCode);
+      }
+    };
+    completeHistoricalRecoveryRef.current = completeHistoricalRecovery;
+
+    const failHistoricalRecovery = async (error: unknown) => {
       console.error("Failed to recover terminal output:", error);
       if (!mountedRef.current || !terminalRef.current) {
         return;
       }
 
-      const completedRecoveryMode = activeHistoricalRecoveryModeRef.current;
-      setReplayUiState({ kind: "degraded", reason: classifyReplayFailure(error) });
-      if (viewport !== "mobile") {
-        hydrationHandleRef.current?.release();
-        hydrationReleasedRef.current = true;
+      activeRecoveryUiModeRef.current = "error";
+      setReplayUiState({ kind: "retryable_failure", reason: classifyReplayFailure(error) });
+      releaseHydration();
+      await flushHistoricalRecovery();
+    };
+    failHistoricalRecoveryRef.current = failHistoricalRecovery;
+
+    const showUnrecoverableHistory = async () => {
+      if (!mountedRef.current || !terminalRef.current) {
+        return;
       }
 
-      setOutputAtom((prev: OutputBuffer) => ({
-        ...prev,
-        chunks: [],
-        lastSeq: Math.max(prev.lastSeq, replayedSeqRef.current),
-      }));
+      activeRecoveryUiModeRef.current = "error";
+      recoveryReplayAnchorSeqRef.current = null;
+      setReplayUiState({ kind: "unrecoverable_history", reason: "too_old_no_snapshot" });
+      releaseHydration();
+      await flushHistoricalRecovery();
+    };
+    showUnrecoverableHistoryRef.current = showUnrecoverableHistory;
 
-      const { entries: pendingWrites, latestCoveredSeq } = collectPendingReplayChunks(
-        replayedSeqRef.current
-      );
-      queueHistoricalWrites(
-        completedRecoveryMode,
-        latestCoveredSeq,
-        pendingWrites.map((entry) => ({
-          kind: "pending" as const,
-          bytes: entry.bytes,
-          seq: entry.seq,
-        }))
-      );
+    const showUnavailableTerminal = async () => {
+      if (!mountedRef.current || !terminalRef.current) {
+        return;
+      }
+
+      activeRecoveryUiModeRef.current = "error";
+      recoveryReplayAnchorSeqRef.current = null;
+      setReplayUiState({ kind: "unavailable" });
+      releaseHydration();
+      await flushHistoricalRecovery();
+    };
+    showUnavailableTerminalRef.current = showUnavailableTerminal;
+
+    applyReplayPayloadRef.current = async (payload, options) => {
+      if (!mountedRef.current || !terminalRef.current) {
+        return;
+      }
+
+      const resetTerminalBeforeWrite =
+        options?.resetTerminalBeforeWrite ?? recoveryReplayAnchorSeqRef.current === 0;
+      coldStartStateRef.current = "in-flight";
+      activeHistoricalRecoveryModeRef.current = "reconnect";
+      activeRecoveryUiModeRef.current = "silent";
+      setReplayUiState({ kind: "ready" });
+      releaseHydration();
+      await flushHistoricalRecovery({
+        bytes: payload.bytes,
+        coveredSeq: payload.seq,
+        resetTerminalBeforeWrite,
+      });
+      recoveryReplayAnchorSeqRef.current = null;
+    };
+
+    applySnapshotPayloadRef.current = async (payload) => {
+      if (!mountedRef.current || !terminalRef.current) {
+        return;
+      }
+
+      coldStartStateRef.current = "in-flight";
+      activeHistoricalRecoveryModeRef.current = "initial";
+      activeRecoveryUiModeRef.current = "silent";
+      setReplayUiState({ kind: "ready" });
+      releaseHydration();
+      await flushHistoricalRecovery({
+        bytes: payload.bytes,
+        coveredSeq: payload.seq,
+        resetTerminalBeforeWrite: true,
+      });
+      recoveryReplayAnchorSeqRef.current = null;
     };
 
     const requestSnapshot = (options?: {
@@ -1550,6 +1749,9 @@ export function XtermHost({
         return;
       }
 
+      if (recoveryReplayAnchorSeqRef.current === null) {
+        recoveryReplayAnchorSeqRef.current = latestRenderedSeqRef.current;
+      }
       coldStartStateRef.current = "in-flight";
       replayCompletedRef.current = false;
       setReplayUiState({ kind: "loading" });
@@ -1574,11 +1776,9 @@ export function XtermHost({
           result.data.bytes &&
           typeof result.data.seq === "number"
         ) {
-          finishHistoricalLoad(result, {
-            successStatus: "ok",
-            successBytes: result.data.bytes,
-            coveredSeq: result.data.seq,
-            resetTerminalBeforeWrite: options?.resetTerminalBeforeWrite,
+          void applySnapshotPayloadRef.current?.({
+            ...result.data,
+            bytes: result.data.bytes,
           });
           return;
         }
@@ -1588,7 +1788,7 @@ export function XtermHost({
           return;
         }
 
-        failHistoricalRecovery(
+        void failHistoricalRecovery(
           result.ok
             ? new Error(`terminal.snapshot returned status ${result.data?.status ?? "unknown"}`)
             : result.error
@@ -1601,11 +1801,13 @@ export function XtermHost({
       options?: {
         onTooOld?: () => void;
         onError?: (error: unknown) => void;
+        resetTerminalBeforeWrite?: boolean;
       }
     ) => {
       if (!wsClient) {
         return;
       }
+      recoveryReplayAnchorSeqRef.current = lastSeq;
       coldStartStateRef.current = "in-flight";
       replayCompletedRef.current = false;
       if (lastSeq === 0) {
@@ -1614,30 +1816,43 @@ export function XtermHost({
       traceTerminal(terminalId, "replay.request", { lastSeq });
 
       const replayPromise: Promise<ReplayCommandResult> = wsClient
-        ? wsClient
-            .sendCommand<ReplayPayload>(
-              "terminal.replay",
-              { terminalId, lastSeq },
-              { timeoutMs: TERMINAL_REPLAY_TIMEOUT_MS }
-            )
-            .then((data) => ({ ok: true as const, data }))
-        : dispatch<ReplayPayload>("terminal.replay", { terminalId, lastSeq });
+        .sendCommand<ReplayPayload>(
+          "terminal.replay",
+          { terminalId, lastSeq },
+          { timeoutMs: TERMINAL_REPLAY_TIMEOUT_MS }
+        )
+        .then((data) => ({ ok: true as const, data }))
+        .catch((error) => ({ ok: false as const, error }));
 
-      void replayPromise
-        .then((result) => {
-          if (result.ok && result.data?.status === "too_old" && options?.onTooOld) {
-            options.onTooOld();
-            return;
-          }
-          finishReplay(result);
-        })
-        .catch((error) => {
-          if (options?.onError) {
-            options.onError(error);
-            return;
-          }
-          failHistoricalRecovery(error);
-        });
+      void replayPromise.then((result) => {
+        if (result.ok && result.data?.status === "too_old" && options?.onTooOld) {
+          options.onTooOld();
+          return;
+        }
+
+        if (result.ok && result.data?.status === "ok" && result.data.bytes) {
+          void applyReplayPayloadRef.current?.(
+            {
+              ...result.data,
+              bytes: result.data.bytes,
+            },
+            { resetTerminalBeforeWrite: options?.resetTerminalBeforeWrite ?? lastSeq === 0 }
+          );
+          return;
+        }
+
+        if (result.ok && result.data?.status === "unknown") {
+          void showUnavailableTerminal();
+          return;
+        }
+
+        if (options?.onError) {
+          options.onError(result.ok ? undefined : result.error);
+          return;
+        }
+
+        void failHistoricalRecovery(result.ok ? new Error("terminal.replay failed") : result.error);
+      });
     };
 
     const deferRecoveryUntilReconnect = () => {
@@ -1651,7 +1866,7 @@ export function XtermHost({
     };
 
     const getConnectionStatus = (): ConnectionStatus =>
-      typeof wsClient.getStatus === "function" ? wsClient.getStatus() : "connected";
+      typeof wsClient?.getStatus === "function" ? wsClient.getStatus() : "connected";
 
     const requestReconnectSnapshotFallback = (reason: "too_old" | "error", error?: unknown) => {
       const connectionStatus = getConnectionStatus();
@@ -1692,11 +1907,33 @@ export function XtermHost({
             return;
           }
 
-          failHistoricalRecovery(
+          if (reason === "too_old" && result.ok && result.data?.status === "unsupported") {
+            void showUnrecoverableHistory();
+            return;
+          }
+
+          void failHistoricalRecovery(
             result.ok
               ? new Error(`terminal.snapshot returned status ${result.data?.status ?? "unknown"}`)
               : result.error
           );
+        },
+      });
+    };
+
+    const requestReconnectRecovery = (fromSeq: number) => {
+      activeHistoricalRecoveryModeRef.current = "reconnect";
+      activeRecoveryUiModeRef.current = "non_blocking_recovering";
+      setReplayUiState({ kind: "loading" });
+      retryHistoricalRecoveryRef.current = () => {
+        requestReconnectRecovery(fromSeq);
+      };
+      requestReplay(fromSeq, {
+        onTooOld: () => {
+          requestReconnectSnapshotFallback("too_old");
+        },
+        onError: (error) => {
+          requestReconnectSnapshotFallback("error", error);
         },
       });
     };
@@ -1706,21 +1943,16 @@ export function XtermHost({
         return;
       }
 
-      activeHistoricalRecoveryModeRef.current = mode;
-
       if (mode === "reconnect") {
-        setReplayUiState({ kind: "loading" });
-        requestReplay(latestRenderedSeqRef.current, {
-          onTooOld: () => {
-            requestReconnectSnapshotFallback("too_old");
-          },
-          onError: (error) => {
-            requestReconnectSnapshotFallback("error", error);
-          },
-        });
+        requestReconnectRecovery(latestRenderedSeqRef.current);
         return;
       }
 
+      activeHistoricalRecoveryModeRef.current = "initial";
+      activeRecoveryUiModeRef.current = "blocking_rebuild";
+      retryHistoricalRecoveryRef.current = () => {
+        requestHistoricalRecovery("initial");
+      };
       requestSnapshot({
         onUnavailable: (result) => {
           const connectionStatus = getConnectionStatus();
@@ -1740,6 +1972,16 @@ export function XtermHost({
           traceTerminal(terminalId, "snapshot.fallback", {
             reason: result.ok ? (result.data?.status ?? "unsupported") : String(result.error),
           });
+          if (result.ok && result.data?.status === "unsupported") {
+            requestReplay(0, {
+              resetTerminalBeforeWrite: true,
+              onTooOld: () => {
+                void showUnrecoverableHistory();
+              },
+            });
+            return;
+          }
+
           requestReplay(0);
         },
       });
@@ -1750,7 +1992,7 @@ export function XtermHost({
         return;
       }
 
-      if (typeof wsClient.getStatus === "function" && wsClient.getStatus() !== "connected") {
+      if (typeof wsClient?.getStatus === "function" && wsClient.getStatus() !== "connected") {
         return;
       }
 
@@ -1808,7 +2050,13 @@ export function XtermHost({
                 chunks: [],
                 lastSeq: replayedSeqRef.current,
               }));
-              requestReplay(replayedSeqRef.current);
+              if (recoveryCoordinator) {
+                void recoveryCoordinator.notifyReason("seq_gap", terminalId).catch((error) => {
+                  void failHistoricalRecovery(error);
+                });
+              } else {
+                requestReconnectRecovery(replayedSeqRef.current);
+              }
               return;
             }
 
@@ -1825,9 +2073,7 @@ export function XtermHost({
             replayedSeqRef.current = _seq;
           } else if (topic === exitTopic) {
             const exitData = payload as { code: number };
-            if (terminalRef.current) {
-              terminalRef.current.writeln(`\r\n[Process exited with code ${exitData.code}]`);
-            }
+            markTerminalClosed(exitData.code);
           }
         }
       );
@@ -1839,15 +2085,26 @@ export function XtermHost({
         return;
       }
 
+      if (recoveryCoordinator) {
+        await recoveryCoordinator.notifyReason("initial_mount", terminalId);
+        return;
+      }
+
       requestHistoricalRecovery("initial");
     })().catch((error) => {
-      failHistoricalRecovery(error);
+      void failHistoricalRecovery(error);
     });
 
     return () => {
       disposed = true;
-      reconnectRecoveryTriggerRef.current = null;
-      pendingRecoveryModeRef.current = null;
+      applyReplayPayloadRef.current = null;
+      applySnapshotPayloadRef.current = null;
+      completeHistoricalRecoveryRef.current = null;
+      failHistoricalRecoveryRef.current = null;
+      showUnrecoverableHistoryRef.current = null;
+      showUnavailableTerminalRef.current = null;
+      retryHistoricalRecoveryRef.current = null;
+      recoveryReplayAnchorSeqRef.current = null;
       if (replayWriteGenerationRef.current === replayWriteGeneration) {
         replayWriteGenerationRef.current += 1;
         replayWriteDepthRef.current = 0;
@@ -1880,8 +2137,8 @@ export function XtermHost({
       }
     };
   }, [
-    dispatch,
     hydrationState.kind,
+    markTerminalClosed,
     scheduleFit,
     setOutputAtom,
     terminalId,
@@ -1963,8 +2220,12 @@ export function XtermHost({
     };
   }, [copySelectionOnSelect, terminalPreferences.copyOnSelect, viewport]);
 
+  /**
+   * Legacy recovery fallback for tests and isolated hosts without AppProviders.
+   * Production mounts install a global coordinator and skip this path.
+   */
   useEffect(() => {
-    if (!wsClient || typeof wsClient.onStatus !== "function") {
+    if (recoveryCoordinator || !wsClient || typeof wsClient.onStatus !== "function") {
       return;
     }
 
@@ -1985,27 +2246,7 @@ export function XtermHost({
     });
 
     return unsubscribe;
-  }, [wsClient]);
-
-  useEffect(() => {
-    if (!wsClient || typeof wsClient.onRecovery !== "function") {
-      return;
-    }
-
-    return wsClient.onRecovery((trigger) => {
-      if (trigger === "reconnected") {
-        return;
-      }
-
-      pendingRecoveryModeRef.current = "reconnect";
-
-      if (coldStartStateRef.current === "in-flight") {
-        return;
-      }
-
-      reconnectRecoveryTriggerRef.current?.();
-    });
-  }, [wsClient]);
+  }, [recoveryCoordinator, wsClient]);
 
   /**
    * Write new output chunks to terminal
@@ -2085,12 +2326,12 @@ export function XtermHost({
     if (
       viewport !== "mobile" &&
       hydrationState.kind === "granted" &&
-      meta?.alive &&
+      isInteractive &&
       terminalRef.current
     ) {
       terminalRef.current.focus();
     }
-  }, [hydrationState.kind, meta?.alive, viewport]);
+  }, [hydrationState.kind, isInteractive, viewport]);
 
   const showMobileInputBar = viewport === "mobile" && isInteractive;
   const mobileInputDisabled = !isInteractive || uploadBusy || connectionStatus !== "connected";
@@ -2182,6 +2423,19 @@ export function XtermHost({
     fileInputRef.current?.click();
   }, []);
 
+  const handleRetryRecovery = useCallback(() => {
+    setReplayUiState({ kind: "loading" });
+
+    if (recoveryCoordinator) {
+      void recoveryCoordinator.notifyReason("foreground_resume", terminalId).catch((error) => {
+        void failHistoricalRecoveryRef.current?.(error);
+      });
+      return;
+    }
+
+    retryHistoricalRecoveryRef.current?.();
+  }, [recoveryCoordinator, terminalId]);
+
   const handleFileInputChange = useCallback(
     async (event: ReactChangeEvent<HTMLInputElement>) => {
       const files = Array.from(event.currentTarget.files ?? []);
@@ -2195,30 +2449,71 @@ export function XtermHost({
     [handleFiles]
   );
 
+  const shouldBlockTerminal =
+    replayUiState.kind === "loading" && activeRecoveryUiModeRef.current === "blocking_rebuild";
+  const canShowRecoverySurface = viewport === "mobile" || hydrationState.kind === "granted";
   const showReplayOverlay =
-    replayUiState.kind !== "ready" && (viewport === "mobile" || hydrationState.kind === "granted");
+    ((replayUiState.kind === "loading" && shouldBlockTerminal && loadingOverlayVisible) ||
+      replayUiState.kind === "closed" ||
+      replayUiState.kind === "unavailable") &&
+    canShowRecoverySurface;
+  const showInlineRecoveryNotice =
+    replayUiState.kind === "retryable_failure" ||
+    replayUiState.kind === "unrecoverable_history" ||
+    replayUiState.kind === "truncated";
 
   let replayTitle = "";
   let replayBody = "";
   let replayClassName = "xterm-replay-overlay";
+  const showRecoveryActions =
+    (replayUiState.kind === "closed" || replayUiState.kind === "unavailable") &&
+    terminalKind === "agent" &&
+    Boolean(onClosedSessionContinue) &&
+    Boolean(onClosedSessionClose);
+  let noticeTitle = "";
+  let noticeBody = "";
+  let noticeAction: ReactNode = null;
+  let noticeTone: "warning" | "error" = "warning";
 
   if (replayUiState.kind === "loading") {
     replayTitle = t("terminal.replay.loading_title");
     replayBody = t("terminal.replay.loading_body");
-  } else {
+  } else if (replayUiState.kind === "closed") {
     replayClassName += " xterm-replay-overlay--degraded";
-    replayTitle =
-      replayUiState.reason === "truncated"
-        ? t("terminal.replay.truncated_title")
-        : replayUiState.reason === "closed"
-          ? t("terminal.replay.closed_title")
-          : t("terminal.replay.failed_title");
-    replayBody =
-      replayUiState.reason === "truncated"
-        ? t("terminal.replay.truncated_body")
-        : replayUiState.reason === "closed"
-          ? t("terminal.replay.closed_body")
-          : t("terminal.replay.failed_body");
+    replayBody = closedSessionProviderLabel
+      ? t("terminal.replay.closed_body_with_provider", {
+          provider: closedSessionProviderLabel,
+        })
+      : t("terminal.replay.closed_body");
+    replayTitle = t("terminal.replay.closed_title");
+  } else if (replayUiState.kind === "unavailable") {
+    replayClassName += " xterm-replay-overlay--degraded";
+    replayBody = closedSessionProviderLabel
+      ? t("terminal.replay.unknown_body_with_provider", {
+          provider: closedSessionProviderLabel,
+        })
+      : t("terminal.replay.unknown_body");
+    replayTitle = t("terminal.replay.unknown_title");
+  } else if (replayUiState.kind === "retryable_failure") {
+    noticeTitle = t("terminal.replay.retryable_title");
+    noticeBody = t("terminal.replay.retryable_body");
+    noticeAction = (
+      <Button
+        onClick={() => {
+          handleRetryRecovery();
+        }}
+        size="sm"
+        variant="ghost"
+      >
+        {t("terminal.replay.retry_action")}
+      </Button>
+    );
+  } else if (replayUiState.kind === "unrecoverable_history") {
+    noticeTitle = t("terminal.replay.unrecoverable_title");
+    noticeBody = t("terminal.replay.unrecoverable_body");
+  } else if (replayUiState.kind === "truncated") {
+    noticeTitle = t("terminal.replay.truncated_title");
+    noticeBody = t("terminal.replay.truncated_body");
   }
 
   return (
@@ -2251,6 +2546,9 @@ export function XtermHost({
           void handleFileInputChange(event);
         }}
       />
+      {showInlineRecoveryNotice ? (
+        <Notice action={noticeAction} message={noticeBody} title={noticeTitle} tone={noticeTone} />
+      ) : null}
       <div
         ref={containerRef}
         className="xterm-host"
@@ -2325,8 +2623,8 @@ export function XtermHost({
       {showReplayOverlay ? (
         <LocalOverlay
           className={replayClassName}
-          interactive={false}
-          mode="status"
+          interactive={showRecoveryActions}
+          mode={showRecoveryActions ? "dialog" : "status"}
           open
           surfaceClassName="xterm-replay-overlay__card"
         >
@@ -2335,6 +2633,28 @@ export function XtermHost({
           ) : null}
           <div className="xterm-replay-overlay__title">{replayTitle}</div>
           {replayBody ? <div className="xterm-replay-overlay__body">{replayBody}</div> : null}
+          {showRecoveryActions ? (
+            <div className="xterm-replay-overlay__actions">
+              <Button
+                className="xterm-replay-overlay__action-btn"
+                onClick={() => {
+                  onClosedSessionContinue?.();
+                }}
+                variant="primary"
+              >
+                {closedSessionContinueLabel ?? t("action.confirm")}
+              </Button>
+              <Button
+                className="xterm-replay-overlay__action-btn"
+                onClick={() => {
+                  onClosedSessionClose?.();
+                }}
+                variant="secondary"
+              >
+                {t("action.close")}
+              </Button>
+            </div>
+          ) : null}
         </LocalOverlay>
       ) : null}
     </div>

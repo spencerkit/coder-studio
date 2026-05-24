@@ -1,8 +1,9 @@
 import type { GitCommitSummary, GitFileChange, WorktreeInfo } from "@coder-studio/core";
-import { useAtomValue } from "jotai";
+import { atom, useAtom, useAtomValue } from "jotai";
+import { atomFamily } from "jotai-family";
 import { ChevronDown, Minus, Plus, RotateCcw } from "lucide-react";
 import type { FC, MouseEvent, ReactNode } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { localeAtom } from "../../../../atoms/app-ui";
 import {
   ConfirmDialog,
@@ -58,6 +59,42 @@ interface GitPanelProps {
   variant?: "desktop" | "mobile";
 }
 
+interface GitPanelState {
+  worktreeSurfaceView: "list" | "create" | null;
+  worktreesExpanded: boolean;
+  historyExpanded: boolean;
+  collapsedGroups: Record<string, boolean>;
+}
+
+function createInitialCollapsedGroups(isMobile: boolean): Record<string, boolean> {
+  return isMobile
+    ? {
+        staged: false,
+        changes: true,
+      }
+    : {
+        staged: false,
+        changes: false,
+      };
+}
+
+function createInitialGitPanelState(isMobile: boolean): GitPanelState {
+  return {
+    worktreeSurfaceView: null,
+    worktreesExpanded: false,
+    historyExpanded: false,
+    collapsedGroups: createInitialCollapsedGroups(isMobile),
+  };
+}
+
+function getGitPanelStateKey(workspaceId: string, variant: "desktop" | "mobile"): string {
+  return `${workspaceId}::${variant}`;
+}
+
+const gitPanelStateAtomFamily = atomFamily((stateKey: string) =>
+  atom<GitPanelState>(createInitialGitPanelState(stateKey.endsWith("::mobile")))
+);
+
 export const GitPanel: FC<GitPanelProps> = ({
   workspaceId,
   refreshToken = 0,
@@ -65,6 +102,9 @@ export const GitPanel: FC<GitPanelProps> = ({
   variant = "desktop",
 }) => {
   const isMobile = variant === "mobile";
+  const [panelState, setPanelState] = useAtom(
+    gitPanelStateAtomFamily(getGitPanelStateKey(workspaceId, variant))
+  );
   const locale = useAtomValue(localeAtom) === "zh" ? "zh" : "en";
   const t = useTranslation();
   const {
@@ -95,21 +135,8 @@ export const GitPanel: FC<GitPanelProps> = ({
   });
   const { currentWorktree, hasWorkspace, list, loadWorktrees, openWorktree } =
     useWorktreeManagementActions(workspaceId);
-  const [worktreeSurfaceView, setWorktreeSurfaceView] = useState<"list" | "create" | null>(null);
-  const [worktreesExpanded, setWorktreesExpanded] = useState(false);
-  const [historyExpanded, setHistoryExpanded] = useState(false);
   const worktreeAutoLoadAttemptedRef = useRef(false);
-  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>(() =>
-    isMobile
-      ? {
-          staged: false,
-          changes: true,
-        }
-      : {
-          staged: false,
-          changes: false,
-        }
-  );
+  const { collapsedGroups, historyExpanded, worktreeSurfaceView, worktreesExpanded } = panelState;
 
   useEffect(() => {
     worktreeAutoLoadAttemptedRef.current = false;
@@ -134,7 +161,10 @@ export const GitPanel: FC<GitPanelProps> = ({
 
   const handleWorktreeOpen = async (worktree: WorktreeInfo) => {
     if (currentWorktree?.path === worktree.path) {
-      setWorktreeSurfaceView("list");
+      setPanelState((current) => ({
+        ...current,
+        worktreeSurfaceView: "list",
+      }));
       return;
     }
 
@@ -180,7 +210,12 @@ export const GitPanel: FC<GitPanelProps> = ({
               <button
                 type="button"
                 className="git-panel-section-toggle"
-                onClick={() => setWorktreesExpanded((value) => !value)}
+                onClick={() =>
+                  setPanelState((current) => ({
+                    ...current,
+                    worktreesExpanded: !current.worktreesExpanded,
+                  }))
+                }
                 aria-expanded={worktreesExpanded}
               >
                 <span>{t("worktree.list_title")}</span>
@@ -194,7 +229,12 @@ export const GitPanel: FC<GitPanelProps> = ({
               <button
                 type="button"
                 className="git-panel-section-link"
-                onClick={() => setWorktreeSurfaceView("create")}
+                onClick={() =>
+                  setPanelState((current) => ({
+                    ...current,
+                    worktreeSurfaceView: "create",
+                  }))
+                }
               >
                 <ThemedIcon semantic="worktree.action.new" size={12} />
                 <span>{t("worktree.new")}</span>
@@ -265,9 +305,12 @@ export const GitPanel: FC<GitPanelProps> = ({
                     collapsed={collapsedGroups[group.title] ?? false}
                     selectedPath={diffPreview?.path ?? null}
                     onToggleCollapsed={() =>
-                      setCollapsedGroups((prev) => ({
-                        ...prev,
-                        [group.title]: !(prev[group.title] ?? false),
+                      setPanelState((current) => ({
+                        ...current,
+                        collapsedGroups: {
+                          ...current.collapsedGroups,
+                          [group.title]: !(current.collapsedGroups[group.title] ?? false),
+                        },
                       }))
                     }
                     onStageAll={async () => {
@@ -300,7 +343,12 @@ export const GitPanel: FC<GitPanelProps> = ({
               <button
                 type="button"
                 className="git-panel-section-toggle"
-                onClick={() => setHistoryExpanded((value) => !value)}
+                onClick={() =>
+                  setPanelState((current) => ({
+                    ...current,
+                    historyExpanded: !current.historyExpanded,
+                  }))
+                }
                 aria-expanded={historyExpanded}
               >
                 <span>{t("git.history")}</span>
@@ -336,7 +384,12 @@ export const GitPanel: FC<GitPanelProps> = ({
       <WorktreeManagerSurface
         workspaceId={workspaceId}
         openView={worktreeSurfaceView}
-        onClose={() => setWorktreeSurfaceView(null)}
+        onClose={() =>
+          setPanelState((current) => ({
+            ...current,
+            worktreeSurfaceView: null,
+          }))
+        }
       />
 
       <GitDiscardConfirmModal
