@@ -91,22 +91,41 @@ describe("theme icon resolver", () => {
   });
 
   it("keeps mobile dock icons aligned within each built-in theme", () => {
-    for (const themeId of [
-      "mint-dark",
-      "mint-light",
-      "graphite-dark",
-      "graphite-light",
-      "nord-dark",
-      "nord-light",
-      "hc-dark",
-      "hc-light",
-    ] as const) {
+    for (const themeId of builtInThemes) {
       const agentTone = getIconPresentation(themeId, "mobile.dock.agent").tone;
       const filesTone = getIconPresentation(themeId, "mobile.dock.files").tone;
       const terminalTone = getIconPresentation(themeId, "mobile.dock.terminal").tone;
 
-      expect(agentTone).toBe(filesTone);
       expect(filesTone).toBe(terminalTone);
+
+      if (themeId === "spring-dark" || themeId === "autumn-dark") {
+        expect(agentTone).toBe("accent");
+        expect(filesTone).toBe("current");
+      } else if (
+        themeId === "spring-light" ||
+        themeId === "summer-dark" ||
+        themeId === "summer-light" ||
+        themeId === "autumn-light"
+      ) {
+        expect(agentTone).toBe("accent");
+        expect(filesTone).toBe("secondary");
+      } else if (themeId === "winter-dark" || themeId === "winter-light") {
+        expect(agentTone).toBe("info");
+        expect(filesTone).toBe("secondary");
+      } else {
+        expect(agentTone).toBe(filesTone);
+      }
+    }
+  });
+
+  it("keeps the seasonal shared git footer hierarchy stable", () => {
+    for (const themeId of seasonalThemes) {
+      expect(getIconPresentation(themeId, "git.footer.diff")).toEqual(
+        expect.objectContaining({ tone: "warning" })
+      );
+      expect(getIconPresentation(themeId, "git.footer.push")).toEqual(
+        expect.objectContaining({ tone: "success" })
+      );
     }
   });
 

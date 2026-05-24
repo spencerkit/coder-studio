@@ -752,6 +752,10 @@ describe("tokens.css touch tokens", () => {
   it("keeps actively themed foundation roles and shared defaults visible in theme blocks", () => {
     const mintDark = getRuleBlock('[data-theme="mint-dark"]');
     const graphiteLight = getRuleBlock('[data-theme="graphite-light"]');
+    const springLight = getRuleBlock('[data-theme="spring-light"]');
+    const summerDark = getRuleBlock('[data-theme="summer-dark"]');
+    const autumnLight = getRuleBlock('[data-theme="autumn-light"]');
+    const winterDark = getRuleBlock('[data-theme="winter-dark"]');
 
     expect(getCustomProperty(mintDark, "--state-focus-ring-color")).not.toBe(
       getCustomProperty(graphiteLight, "--state-focus-ring-color")
@@ -765,6 +769,11 @@ describe("tokens.css touch tokens", () => {
     expect(getCustomProperty(mintDark, "--gap-content")).toBe(
       getCustomProperty(graphiteLight, "--gap-content")
     );
+
+    expect(getCustomProperty(springLight, "--state-focus-ring-color")).not.toBeNull();
+    expect(getCustomProperty(summerDark, "--surface-overlay-bg")).not.toBeNull();
+    expect(getCustomProperty(autumnLight, "--radius-overlay")).not.toBeNull();
+    expect(getCustomProperty(winterDark, "--gap-content")).not.toBeNull();
   });
 
   it("keeps light-theme icon tokens visually distinct across families", () => {
