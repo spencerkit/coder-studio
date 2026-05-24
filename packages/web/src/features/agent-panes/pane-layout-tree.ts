@@ -1,6 +1,7 @@
 import type { PaneNode } from "./atoms/pane-layout";
 
 type PaneDirection = NonNullable<PaneNode["direction"]>;
+type PaneDropPlacement = "left" | "right" | "top" | "bottom" | "center";
 
 function createDraftLeaf(id: string): PaneNode {
   return {
@@ -14,6 +15,101 @@ function createSessionLeaf(id: string, sessionId: string): PaneNode {
     id,
     type: "leaf",
     sessionId,
+  };
+}
+
+function createDragSplitId(
+  targetPaneId: string,
+  placement: Exclude<PaneDropPlacement, "center">
+): string {
+  return `split-${targetPaneId}-${placement}-${Date.now()}`;
+}
+
+function findLeafByPaneId(node: PaneNode, paneId: string): PaneNode | null {
+  if (node.type === "leaf") {
+    return node.id === paneId ? node : null;
+  }
+
+  for (const child of node.children ?? []) {
+    const match = findLeafByPaneId(child, paneId);
+    if (match) {
+      return match;
+    }
+  }
+
+  return null;
+}
+
+function replaceLeafByPaneId(
+  node: PaneNode,
+  paneId: string,
+  replace: (leaf: PaneNode) => PaneNode
+): PaneNode {
+  if (node.type === "leaf") {
+    if (node.id !== paneId) {
+      return node;
+    }
+
+    return replace(node);
+  }
+
+  const children = node.children ?? [];
+  let changed = false;
+  const nextChildren = children.map((child) => {
+    const nextChild = replaceLeafByPaneId(child, paneId, replace);
+    if (nextChild !== child) {
+      changed = true;
+    }
+    return nextChild;
+  });
+
+  if (!changed) {
+    return node;
+  }
+
+  return {
+    ...node,
+    children: nextChildren,
+  };
+}
+
+function removeLeafByPaneId(node: PaneNode, paneId: string): PaneNode | null {
+  if (node.type === "leaf") {
+    if (node.id === paneId) {
+      return null;
+    }
+
+    return node;
+  }
+
+  const children = node.children ?? [];
+  let changed = false;
+  const nextChildren: PaneNode[] = [];
+  for (const child of children) {
+    const nextChild = removeLeafByPaneId(child, paneId);
+    if (nextChild !== child) {
+      changed = true;
+    }
+    if (nextChild !== null) {
+      nextChildren.push(nextChild);
+    }
+  }
+
+  if (!changed) {
+    return node;
+  }
+
+  if (nextChildren.length === 1) {
+    return nextChildren[0]!;
+  }
+
+  if (nextChildren.length === 0) {
+    return null;
+  }
+
+  return {
+    ...node,
+    children: nextChildren,
   };
 }
 
@@ -163,6 +259,84 @@ export function replaceSessionInPane(
     ...node,
     children: nextChildren,
   };
+}
+
+export function swapPaneSessionsByPaneId(
+  node: PaneNode,
+  sourcePaneId: string,
+  targetPaneId: string
+): PaneNode {
+  if (sourcePaneId === targetPaneId) {
+    return node;
+  }
+
+  const source = findLeafByPaneId(node, sourcePaneId);
+  const target = findLeafByPaneId(node, targetPaneId);
+  if (!source?.sessionId || !target?.sessionId) {
+    return node;
+  }
+
+  const withSourceSwapped = replaceLeafByPaneId(node, sourcePaneId, (leaf) => ({
+    ...leaf,
+    sessionId: target.sessionId,
+  }));
+
+  return replaceLeafByPaneId(withSourceSwapped, targetPaneId, (leaf) => ({
+    ...leaf,
+    sessionId: source.sessionId!,
+  }));
+}
+
+export function moveSessionToDraftPane(
+  node: PaneNode,
+  sourcePaneId: string,
+  targetPaneId: string
+): PaneNode {
+  if (sourcePaneId === targetPaneId) {
+    return node;
+  }
+
+  const source = findLeafByPaneId(node, sourcePaneId);
+  const target = findLeafByPaneId(node, targetPaneId);
+  if (!source?.sessionId || !target || target.sessionId) {
+    return node;
+  }
+
+  const stripped = removeLeafByPaneId(node, sourcePaneId) ?? { id: node.id, type: "leaf" };
+  return assignSessionToPane(stripped, targetPaneId, source.sessionId);
+}
+
+export function insertPaneAtEdge(
+  node: PaneNode,
+  sourcePaneId: string,
+  targetPaneId: string,
+  placement: Exclude<PaneDropPlacement, "center">
+): PaneNode {
+  if (sourcePaneId === targetPaneId) {
+    return node;
+  }
+
+  const source = findLeafByPaneId(node, sourcePaneId);
+  const target = findLeafByPaneId(node, targetPaneId);
+  if (!source?.sessionId || !target?.sessionId) {
+    return node;
+  }
+
+  const stripped = removeLeafByPaneId(node, sourcePaneId) ?? { id: node.id, type: "leaf" };
+  const incomingLeaf: PaneNode = {
+    id: source.id,
+    type: "leaf",
+    sessionId: source.sessionId,
+  };
+
+  return replaceLeafByPaneId(stripped, targetPaneId, (leaf) => ({
+    id: createDragSplitId(leaf.id, placement),
+    type: "split",
+    direction: placement === "left" || placement === "right" ? "horizontal" : "vertical",
+    ratio: 0.5,
+    children:
+      placement === "left" || placement === "top" ? [incomingLeaf, leaf] : [leaf, incomingLeaf],
+  }));
 }
 
 export function closePaneBySessionId(node: PaneNode, sessionId: string): PaneNode {

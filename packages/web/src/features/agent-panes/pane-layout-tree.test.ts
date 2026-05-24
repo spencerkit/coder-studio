@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { PaneNode } from "./atoms/pane-layout";
 import {
   appendSessionToLayout,
@@ -7,9 +7,12 @@ import {
   closeDraftPaneById,
   closePaneBySessionId,
   createFallbackPaneLayout,
+  insertPaneAtEdge,
+  moveSessionToDraftPane,
   removePaneBySessionId,
   splitPaneByPaneId,
   splitPaneBySessionId,
+  swapPaneSessionsByPaneId,
 } from "./pane-layout-tree";
 
 describe("pane-layout-tree", () => {
@@ -102,6 +105,125 @@ describe("pane-layout-tree", () => {
         { id: "right", type: "leaf", sessionId: "sess_3" },
       ],
     });
+  });
+
+  it("swaps session ids between two session panes without changing pane ids", () => {
+    const layout: PaneNode = {
+      id: "root",
+      type: "split",
+      direction: "horizontal",
+      ratio: 0.5,
+      children: [
+        { id: "left", type: "leaf", sessionId: "sess_1" },
+        { id: "right", type: "leaf", sessionId: "sess_2" },
+      ],
+    };
+
+    expect(swapPaneSessionsByPaneId(layout, "left", "right")).toEqual({
+      id: "root",
+      type: "split",
+      direction: "horizontal",
+      ratio: 0.5,
+      children: [
+        { id: "left", type: "leaf", sessionId: "sess_2" },
+        { id: "right", type: "leaf", sessionId: "sess_1" },
+      ],
+    });
+  });
+
+  it("moves a session into a draft leaf and collapses the old source branch", () => {
+    const layout: PaneNode = {
+      id: "root",
+      type: "split",
+      direction: "horizontal",
+      ratio: 0.5,
+      children: [
+        {
+          id: "left-split",
+          type: "split",
+          direction: "vertical",
+          ratio: 0.5,
+          children: [
+            { id: "left-top", type: "leaf", sessionId: "sess_1" },
+            { id: "left-bottom", type: "leaf", sessionId: "sess_2" },
+          ],
+        },
+        { id: "right", type: "leaf" },
+      ],
+    };
+
+    expect(moveSessionToDraftPane(layout, "left-bottom", "right")).toEqual({
+      id: "root",
+      type: "split",
+      direction: "horizontal",
+      ratio: 0.5,
+      children: [
+        { id: "left-top", type: "leaf", sessionId: "sess_1" },
+        { id: "right", type: "leaf", sessionId: "sess_2" },
+      ],
+    });
+  });
+
+  it("wraps the target leaf with a horizontal split on left insert", () => {
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(1700000000000);
+
+    try {
+      const layout: PaneNode = {
+        id: "root",
+        type: "split",
+        direction: "horizontal",
+        ratio: 0.5,
+        children: [
+          { id: "left", type: "leaf", sessionId: "sess_1" },
+          { id: "right", type: "leaf", sessionId: "sess_2" },
+        ],
+      };
+
+      expect(insertPaneAtEdge(layout, "left", "right", "left")).toEqual({
+        id: "split-right-left-1700000000000",
+        type: "split",
+        direction: "horizontal",
+        ratio: 0.5,
+        children: [
+          { id: "left", type: "leaf", sessionId: "sess_1" },
+          { id: "right", type: "leaf", sessionId: "sess_2" },
+        ],
+      });
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it("returns the original tree when attempting to drag onto the same pane", () => {
+    const layout: PaneNode = {
+      id: "root",
+      type: "split",
+      direction: "horizontal",
+      ratio: 0.5,
+      children: [
+        { id: "left", type: "leaf", sessionId: "sess_1" },
+        { id: "right", type: "leaf", sessionId: "sess_2" },
+      ],
+    };
+
+    expect(insertPaneAtEdge(layout, "left", "left", "left")).toBe(layout);
+    expect(moveSessionToDraftPane(layout, "left", "left")).toBe(layout);
+    expect(swapPaneSessionsByPaneId(layout, "left", "left")).toBe(layout);
+  });
+
+  it("rejects draft edge insertion and preserves the input layout", () => {
+    const layout: PaneNode = {
+      id: "root",
+      type: "split",
+      direction: "horizontal",
+      ratio: 0.5,
+      children: [
+        { id: "left", type: "leaf", sessionId: "sess_1" },
+        { id: "right", type: "leaf" },
+      ],
+    };
+
+    expect(insertPaneAtEdge(layout, "left", "right", "right")).toBe(layout);
   });
 
   it("splits a draft pane by pane id without relying on a session id marker", () => {
