@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.4.4
+
+### Patch Changes
+
+- [#58](https://github.com/spencerkit/coder-studio/pull/58) [`5641146`](https://github.com/spencerkit/coder-studio/commit/5641146c06fe6ecfe0f5d19d738b94298b1b5c57) Thanks [@pallyoung](https://github.com/pallyoung)! - Refine workspace navigation and editor management across desktop and mobile by
+  polishing sidebar section actions, improving quick jump and search flows, and
+  tightening preview and recovery behavior around open editors.
+
+## 0.4.3
+
+### Patch Changes
+
+- [#56](https://github.com/spencerkit/coder-studio/pull/56) [`5b93d9d`](https://github.com/spencerkit/coder-studio/commit/5b93d9d994c6d33f738fa0657c3d37e7cd93a157) Thanks [@pallyoung](https://github.com/pallyoung)! - Fix terminal recovery so session output no longer stalls after noop reconcile
+  decisions or gets cleared when queued live chunks flush after snapshot
+  hydration.
+
+## 0.4.2
+
+### Patch Changes
+
+- [#54](https://github.com/spencerkit/coder-studio/pull/54) [`911fc5f`](https://github.com/spencerkit/coder-studio/commit/911fc5f706c186db7809564937550e009c44b190) Thanks [@pallyoung](https://github.com/pallyoung)! - Refine diagnostics and review workflows by surfacing installed Git and Node.js
+  versions, keeping mobile and desktop commit diff previews consistent, and
+  hardening Windows path safety plus server CI builds.
+
 ## 0.4.1
 
 ### Patch Changes
