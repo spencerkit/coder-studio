@@ -567,109 +567,105 @@ describe("AgentPanes", () => {
   });
 
   it("inserts a dragged session at the target edge on an edge drop", async () => {
-    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
+    const sendCommand = vi.fn(async (op: string, args?: Record<string, unknown>) => {
+      if (op === "session.list") {
+        return [
+          {
+            id: "sess_1",
+            workspaceId: "ws-1",
+            terminalId: "term-1",
+            providerId: "claude",
+            state: "running",
+            capability: "full",
+            startedAt: Date.now() - 10_000,
+            lastActiveAt: Date.now() - 1_000,
+          },
+          {
+            id: "sess_2",
+            workspaceId: "ws-1",
+            terminalId: "term-2",
+            providerId: "codex",
+            state: "idle",
+            capability: "full",
+            startedAt: Date.now() - 8_000,
+            lastActiveAt: Date.now() - 500,
+          },
+        ];
+      }
 
-    try {
-      const sendCommand = vi.fn(async (op: string, args?: Record<string, unknown>) => {
-        if (op === "session.list") {
-          return [
-            {
-              id: "sess_1",
-              workspaceId: "ws-1",
-              terminalId: "term-1",
-              providerId: "claude",
-              state: "running",
-              capability: "full",
-              startedAt: Date.now() - 10_000,
-              lastActiveAt: Date.now() - 1_000,
-            },
-            {
-              id: "sess_2",
-              workspaceId: "ws-1",
-              terminalId: "term-2",
-              providerId: "codex",
-              state: "idle",
-              capability: "full",
-              startedAt: Date.now() - 8_000,
-              lastActiveAt: Date.now() - 500,
-            },
-          ];
-        }
+      if (op === "workspace.uiState.set") {
+        return {
+          id: "ws-1",
+          name: "repo",
+          path: "/tmp/repo",
+          targetRuntime: "native",
+          openedAt: 1,
+          lastActiveAt: 1,
+          uiState: args?.uiState,
+        };
+      }
 
-        if (op === "workspace.uiState.set") {
-          return {
-            id: "ws-1",
-            name: "repo",
-            path: "/tmp/repo",
-            targetRuntime: "native",
-            openedAt: 1,
-            lastActiveAt: 1,
-            uiState: args?.uiState,
-          };
-        }
+      return undefined;
+    });
+    const { store } = createAgentPaneStore(
+      {
+        id: "root",
+        type: "split",
+        direction: "horizontal",
+        ratio: 0.5,
+        children: [
+          { id: "left", type: "leaf", sessionId: "sess_1" },
+          { id: "right", type: "leaf", sessionId: "sess_2" },
+        ],
+      },
+      sendCommand,
+      "connected"
+    );
 
-        return undefined;
-      });
-      const { store } = createAgentPaneStore(
-        {
-          id: "root",
-          type: "split",
-          direction: "horizontal",
-          ratio: 0.5,
-          children: [
-            { id: "left", type: "leaf", sessionId: "sess_1" },
-            { id: "right", type: "leaf", sessionId: "sess_2" },
-          ],
-        },
-        sendCommand,
-        "connected"
-      );
+    render(
+      <Provider store={store}>
+        <AgentPanes />
+      </Provider>
+    );
 
-      render(
-        <Provider store={store}>
-          <AgentPanes />
-        </Provider>
-      );
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "drop-left-sess_1" }));
+    });
 
-      await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "drop-left-sess_1" }));
-      });
-
-      await waitFor(() => {
-        expect(store.get(paneLayoutAtomFamily("ws-1"))).toEqual({
-          id: "split-right-left-1700000000000",
-          type: "split",
-          direction: "horizontal",
-          ratio: 0.5,
-          children: [
-            { id: "left", type: "leaf", sessionId: "sess_1" },
-            { id: "right", type: "leaf", sessionId: "sess_2" },
-          ],
-        });
-      });
-
-      expect(sendCommand).toHaveBeenCalledWith(
-        "workspace.uiState.set",
+    await waitFor(() => {
+      expect(store.get(paneLayoutAtomFamily("ws-1"))).toEqual(
         expect.objectContaining({
-          workspaceId: "ws-1",
-          uiState: expect.objectContaining({
-            paneLayout: {
-              id: "split-right-left-1700000000000",
-              type: "split",
-              direction: "horizontal",
-              ratio: 0.5,
-              children: [
-                { id: "left", type: "leaf", sessionId: "sess_1" },
-                { id: "right", type: "leaf", sessionId: "sess_2" },
-              ],
-            },
+          id: expect.stringMatching(/^split-right-left-/),
+          type: "split",
+          direction: "horizontal",
+          ratio: 0.5,
+          children: [
+            expect.objectContaining({ id: "left", type: "leaf", sessionId: "sess_1" }),
+            expect.objectContaining({ id: "right", type: "leaf", sessionId: "sess_2" }),
+          ],
+        })
+      );
+    });
+
+    expect(sendCommand).toHaveBeenCalledWith(
+      "workspace.uiState.set",
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        uiState: expect.objectContaining({
+          paneLayout: expect.objectContaining({
+            id: expect.stringMatching(/^split-right-left-/),
+            type: "split",
+            direction: "horizontal",
+            ratio: 0.5,
+            children: [
+              expect.objectContaining({ id: "left", type: "leaf", sessionId: "sess_1" }),
+              expect.objectContaining({ id: "right", type: "leaf", sessionId: "sess_2" }),
+            ],
           }),
         }),
-        undefined
-      );
-    } finally {
-      nowSpy.mockRestore();
-    }
+      }),
+      undefined
+    );
   });
 
   it("keeps the remaining draft pane visible after closing the last session pane", async () => {

@@ -142,13 +142,8 @@ const PaneNodeRenderer: FC<PaneNodeRendererProps> = ({
     if (node.sessionId) {
       return (
         <SessionCard
-          {...({
-            paneId: node.id,
-            onPaneDrop,
-          } satisfies {
-            paneId: string;
-            onPaneDrop: (intent: PaneDropIntent) => void;
-          })}
+          paneId={node.id}
+          onPaneDrop={onPaneDrop}
           sessionId={node.sessionId}
           onClose={async () => {
             onCloseSession(node.sessionId!);
@@ -165,11 +160,7 @@ const PaneNodeRenderer: FC<PaneNodeRendererProps> = ({
           paneId={node.id}
           onAssignSession={onAssignSession}
           onClosePane={onCloseDraftPane}
-          {...({
-            onPaneDrop,
-          } satisfies {
-            onPaneDrop: (intent: PaneDropIntent) => void;
-          })}
+          onPaneDrop={onPaneDrop}
           onReplaceWithSession={onReplaceWithSession}
           onSplitPane={onSplitDraftPane}
         />

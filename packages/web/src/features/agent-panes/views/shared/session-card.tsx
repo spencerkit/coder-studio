@@ -21,18 +21,21 @@ import { SupervisorCard } from "../../../supervisor/views/shared/supervisor-card
 import { XtermHost } from "../../../terminal-panel/views/shared/xterm-host";
 import { usePersistWorkspaceLastViewedTarget } from "../../../workspace/actions/use-persist-workspace-last-viewed-target";
 import { useWorkspaceUiStatePersistence } from "../../../workspace/actions/use-workspace-ui-state-persistence";
+import type { PaneDropIntent } from "../../actions/pane-drag-types";
 import { usePaneActions } from "../../actions/use-pane-actions";
 import { useSessionActions } from "../../actions/use-session-actions";
 
 type SessionCardAction = () => void | Promise<void>;
 
 interface SessionCardProps {
+  paneId?: string;
   sessionId: string;
   showHeaderActions?: boolean;
   showSupervisorInline?: boolean;
   terminalReadOnlyOverride?: boolean;
   headerAccessory?: ReactNode;
   onClose?: SessionCardAction;
+  onPaneDrop?: (intent: PaneDropIntent) => void;
   onSplitHorizontal?: SessionCardAction;
   onSplitVertical?: SessionCardAction;
 }
@@ -45,12 +48,14 @@ interface SessionCardProps {
  *   - Terminal area (xterm.js)
  */
 export const SessionCard: FC<SessionCardProps> = ({
+  paneId: _paneId,
   sessionId,
   showHeaderActions = true,
   showSupervisorInline = true,
   terminalReadOnlyOverride,
   headerAccessory,
   onClose,
+  onPaneDrop: _onPaneDrop,
   onSplitHorizontal,
   onSplitVertical,
 }) => {
