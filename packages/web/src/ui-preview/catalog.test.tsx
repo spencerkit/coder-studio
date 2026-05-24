@@ -6,6 +6,7 @@ import { terminalOutputAtomFamily } from "../features/terminal-panel/atoms";
 import { getThemeById } from "../theme";
 import { getUiPreviewScene, UI_PREVIEW_SCENES } from "./catalog";
 import { buildUiPreviewStore } from "./preview-store";
+import type { UiPreviewSceneTheme } from "./scene-metadata";
 
 const VIEWPORT_QUERY = "(max-width: 899px), (pointer: coarse)";
 
@@ -29,7 +30,7 @@ function installMatchMedia(device: "desktop" | "mobile") {
 function renderScene(
   sceneId: string,
   device: "desktop" | "mobile" = "desktop",
-  theme: "mint-dark" | "mint-light" = "mint-dark"
+  theme: UiPreviewSceneTheme = "mint-dark"
 ) {
   const scene = getUiPreviewScene(sceneId);
   if (!scene) {
