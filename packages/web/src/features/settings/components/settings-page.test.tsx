@@ -1510,6 +1510,99 @@ describe("SettingsPage", () => {
     expect(document.getElementById("appearance-mobile-surface-opacity")).toBeInTheDocument();
   });
 
+  it("groups background material controls into asset and material surfaces", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "appearance.personalization.common.backgroundMode": "image",
+          "appearance.personalization.common.backgroundAssetId": "asset-common",
+          "appearance.personalization.common.backgroundFit": "contain",
+          "appearance.personalization.common.backgroundDimness": 33,
+          "appearance.personalization.common.backgroundBlur": 8,
+          "appearance.personalization.common.glassEnabled": true,
+          "appearance.personalization.common.glassIntensity": 44,
+          "appearance.personalization.common.surfaceOpacity": 91,
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "外观" }));
+
+    const backgroundMaterialGroup = (
+      await screen.findByRole("heading", { name: "背景与材质" })
+    ).closest(".settings-group");
+
+    expect(backgroundMaterialGroup).not.toBeNull();
+
+    const assetPanel = backgroundMaterialGroup?.querySelector(".settings-appearance-panel--asset");
+    const materialPanel = backgroundMaterialGroup?.querySelector(
+      ".settings-appearance-panel--material"
+    );
+
+    expect(assetPanel).not.toBeNull();
+    expect(materialPanel).not.toBeNull();
+    expect(
+      document
+        .getElementById("appearance-background-mode")
+        ?.closest(".settings-appearance-panel--asset")
+    ).toBe(assetPanel);
+    expect(
+      document
+        .getElementById("appearance-background-fit")
+        ?.closest(".settings-appearance-panel--asset")
+    ).toBe(assetPanel);
+    expect(screen.getByText("asset-common")).toHaveClass("settings-appearance-asset-id");
+    expect(assetPanel?.querySelector(".settings-appearance-actions")).not.toBeNull();
+    expect(
+      screen
+        .getByRole("spinbutton", { name: "背景压暗" })
+        .closest(".settings-appearance-material-grid")
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("spinbutton", { name: "面板不透明度" })
+        .closest(".settings-appearance-material-grid")
+    ).toBeTruthy();
+  });
+
+  it("renders desktop and mobile override controls inside nested appearance panels", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "appearance.personalization.common.backgroundMode": "image",
+          "appearance.personalization.common.backgroundAssetId": "asset-common",
+        };
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "外观" }));
+
+    fireEvent.click(await screen.findByRole("switch", { name: "桌面端覆盖" }));
+
+    const desktopSurfaceOpacity = document.getElementById("appearance-desktop-surface-opacity");
+
+    expect(desktopSurfaceOpacity).not.toBeNull();
+    expect(desktopSurfaceOpacity?.closest(".settings-appearance-override-panel")).toBeTruthy();
+    expect(
+      desktopSurfaceOpacity
+        ?.closest(".settings-appearance-override-panel")
+        ?.querySelector(".settings-appearance-actions")
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("switch", { name: "移动端覆盖" }));
+
+    const mobileSurfaceOpacity = document.getElementById("appearance-mobile-surface-opacity");
+
+    expect(mobileSurfaceOpacity).not.toBeNull();
+    expect(mobileSurfaceOpacity?.closest(".settings-appearance-override-panel")).toBeTruthy();
+  });
+
   it("deletes the shared appearance background asset and persists a null background asset id", async () => {
     appearanceMocks.deleteAppearanceAsset.mockResolvedValue(undefined);
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {

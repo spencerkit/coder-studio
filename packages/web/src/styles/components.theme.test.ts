@@ -2503,6 +2503,38 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(settingsFooter).toContain("padding: var(--sp-3) var(--sp-6)");
   });
 
+  it("keeps background-material settings on layered surfaces with a responsive material grid", () => {
+    const hiddenFileInput = getLastRuleBlock(".settings-appearance-file-input");
+    const appearancePanel = getLastRuleBlock(".settings-appearance-panel");
+    const assetSummaryBase = getRuleBlocksFrom(stylesheet, ".settings-appearance-asset-summary")[0];
+    const assetId = getLastRuleBlock(".settings-appearance-asset-id");
+    const actionsBase = getRuleBlocksFrom(stylesheet, ".settings-appearance-actions")[0];
+    const materialGridBase = getRuleBlocksFrom(stylesheet, ".settings-appearance-material-grid")[0];
+    const metricField = getLastRuleBlock(".settings-appearance-metric-field");
+    const overridePanel = getLastRuleBlock(".settings-appearance-override-panel");
+    const assetSummaryMobile = getLastRuleBlock(".settings-appearance-asset-summary");
+    const actionsMobile = getLastRuleBlock(".settings-appearance-actions");
+    const materialGridMobile = getLastRuleBlock(".settings-appearance-material-grid");
+
+    expect(hiddenFileInput).toContain("position: absolute");
+    expect(hiddenFileInput).toContain("clip-path: inset(50%)");
+    expect(appearancePanel).toContain("border: 1px solid");
+    expect(appearancePanel).toContain("border-radius: var(--radius-lg)");
+    expect(appearancePanel).toContain("background: color-mix");
+    expect(assetSummaryBase).toContain("grid-template-columns: minmax(0, 1fr) auto");
+    expect(assetId).toContain("font-family: var(--font-mono)");
+    expect(actionsBase).toContain("justify-content: flex-end");
+    expect(materialGridBase).toContain("display: grid");
+    expect(materialGridBase).toContain("grid-template-columns: repeat(2, minmax(0, 1fr))");
+    expect(metricField).toContain("margin-bottom: 0");
+    expect(metricField).toContain("border-radius: var(--radius-md)");
+    expect(overridePanel).toContain("background: color-mix");
+    expect(overridePanel).toContain("border: 1px solid");
+    expect(assetSummaryMobile).toContain("grid-template-columns: 1fr");
+    expect(actionsMobile).toContain("justify-content: flex-start");
+    expect(materialGridMobile).toContain("grid-template-columns: 1fr");
+  });
+
   it("keeps shared appearance pills aligned with flat editor option toggles instead of rounded app chips", () => {
     const pill = getLastRuleBlockFrom(pillStylesheet, ".pill");
     const pillHover = getLastRuleBlockFrom(pillStylesheet, ".pill:hover:not(:disabled)");
