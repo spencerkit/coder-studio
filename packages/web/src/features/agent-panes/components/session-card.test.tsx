@@ -14,12 +14,12 @@ import { supervisorsAtom } from "../../supervisor/atoms";
 import { paneLayoutAtomFamily } from "../atoms/pane-layout";
 import { SessionCard } from "../views/shared/session-card";
 
-const viewportMock = vi.hoisted(() => ({
-  value: "desktop" as "desktop" | "mobile",
+const paneDragEnabledMock = vi.hoisted(() => ({
+  value: true,
 }));
 
-vi.mock("../../../components/ui/_internal/use-viewport", () => ({
-  useViewport: () => viewportMock.value,
+vi.mock("../actions/use-pane-drag-enabled", () => ({
+  usePaneDragEnabled: () => paneDragEnabledMock.value,
 }));
 
 const mockXtermHost = vi.fn((props: Record<string, unknown>) => (
@@ -83,7 +83,7 @@ function createSessionStore(
 describe("SessionCard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    viewportMock.value = "desktop";
+    paneDragEnabledMock.value = true;
   });
 
   it("renders ended sessions with a read-only terminal host", () => {
@@ -255,7 +255,7 @@ describe("SessionCard", () => {
   });
 
   it("does not render a pane drag handle button on mobile", () => {
-    viewportMock.value = "mobile";
+    paneDragEnabledMock.value = false;
     const { store } = createSessionStore({
       terminalId: "term-live",
       state: "running",

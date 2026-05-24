@@ -9,11 +9,11 @@ import { useAtomValue } from "jotai";
 import { type FC, useCallback, useEffect, useRef } from "react";
 import { activeWorkspaceAtom } from "../../atoms/workspaces";
 import { EmptyState } from "../../components/ui";
-import { useViewport } from "../../components/ui/_internal/use-viewport";
 import { useTranslation } from "../../lib/i18n";
 import type { PaneDropIntent } from "./actions/pane-drag-types";
 import { usePaneActions } from "./actions/use-pane-actions";
 import { usePaneDragController } from "./actions/use-pane-drag-controller";
+import { usePaneDragEnabled } from "./actions/use-pane-drag-enabled";
 import { useSessionActions } from "./actions/use-session-actions";
 import { useWorkspaceSessions } from "./actions/use-workspace-sessions";
 import { type PaneNode, readPaneRatio, writePaneRatio } from "./atoms/pane-layout";
@@ -43,7 +43,7 @@ const emptyStateTitleStyle = {
 
 export const AgentPanes: FC<AgentPanesProps> = ({ hydrateSessions = true }) => {
   const t = useTranslation();
-  const viewport = useViewport();
+  const paneDragEnabled = usePaneDragEnabled();
   const workspace = useAtomValue(activeWorkspaceAtom);
   const { workspaceId, sessions, paneLayout } = useWorkspaceSessions(workspace, {
     disabled: !hydrateSessions,
@@ -74,7 +74,7 @@ export const AgentPanes: FC<AgentPanesProps> = ({ hydrateSessions = true }) => {
     [insertSessionPaneAtEdge, moveSessionToDraft, swapPaneSessions]
   );
   const dragController = usePaneDragController({
-    enabled: viewport === "desktop",
+    enabled: paneDragEnabled,
     onDrop: handlePaneDrop,
   });
 

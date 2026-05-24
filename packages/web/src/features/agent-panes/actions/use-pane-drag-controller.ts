@@ -150,6 +150,12 @@ export function usePaneDragController({ enabled = true, onDrop }: UsePaneDragCon
     onDropRef.current = onDrop;
   }, [onDrop]);
 
+  useEffect(() => {
+    if (!enabled && stateRef.current.isDragging) {
+      clearDrag();
+    }
+  }, [clearDrag, enabled]);
+
   const handlePointerMove = useCallback(
     (event: PointerEvent) => {
       setDragState((current) => {

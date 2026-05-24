@@ -15,7 +15,6 @@ import { dispatchCommandAtom } from "../../../../atoms/connection";
 import { sessionByIdAtomFamily, sessionsAtom } from "../../../../atoms/sessions";
 import { workspaceByIdAtomFamily } from "../../../../atoms/workspaces";
 import { IconButton, StatusDot, Tag, Tooltip } from "../../../../components/ui";
-import { useViewport } from "../../../../components/ui/_internal/use-viewport";
 import { PanelHeader } from "../../../shared/components/panel-header";
 import { useSupervisor } from "../../../supervisor/actions/use-supervisor";
 import { SupervisorCard } from "../../../supervisor/views/shared/supervisor-card";
@@ -25,6 +24,7 @@ import { useWorkspaceUiStatePersistence } from "../../../workspace/actions/use-w
 import type { PaneDropIntent, PaneDropPlacement } from "../../actions/pane-drag-types";
 import { usePaneActions } from "../../actions/use-pane-actions";
 import type { PaneDragSourceSnapshot } from "../../actions/use-pane-drag-controller";
+import { usePaneDragEnabled } from "../../actions/use-pane-drag-enabled";
 import { useSessionActions } from "../../actions/use-session-actions";
 
 type SessionCardAction = () => void | Promise<void>;
@@ -79,7 +79,7 @@ export const SessionCard: FC<SessionCardProps> = ({
   );
   const pendingFocus = useAtomValue(pendingFocusSessionAtom);
   const setPendingFocus = useSetAtom(pendingFocusSessionAtom);
-  const viewport = useViewport();
+  const supportsPaneDrag = usePaneDragEnabled();
 
   const cardRef = useRef<HTMLDivElement | null>(null);
   const [highlight, setHighlight] = useState(false);
@@ -114,7 +114,6 @@ export const SessionCard: FC<SessionCardProps> = ({
   const sessionStateLabel = formatSessionStateLabel(session.state);
   const terminalReadOnly = terminalReadOnlyOverride ?? !isSessionInteractive(session.state);
   const isActiveSession = workspace?.uiState.activeSessionId === session.id;
-  const supportsPaneDrag = viewport === "desktop";
   const isRunning = session.state === "running";
   const dragOverlayPlacement = dragState?.isActiveDropTarget ? dragState.hoverPlacement : null;
   const handleClosedSessionContinue = async () => {
