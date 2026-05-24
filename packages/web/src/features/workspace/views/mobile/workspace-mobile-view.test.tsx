@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { connectionStatusAtom, wsClientAtom } from "../../../../atoms/connection";
 import { activeWorkspaceIdAtom } from "../../../../atoms/workspaces";
 import { seedReadyWorkspaceState } from "../../../../test-utils/workspace-state";
+import { useOpenEditorsActions } from "../../actions/use-open-editors-actions";
 import {
   activeFilePathAtomFamily,
   gitDiffPreviewAtomFamily,
@@ -114,15 +115,19 @@ vi.mock("./mobile-dock", () => ({
 
 vi.mock("./mobile-files-sheet", () => ({
   MobileFilesSheet: ({
+    workspaceId,
     route,
     onRouteChange,
   }: {
+    workspaceId: string;
     route: { kind: "root" } | { kind: "detail"; path?: string; title?: string };
     onRouteChange?: (
       route: { kind: "root" } | { kind: "detail"; path?: string; title?: string }
     ) => void;
-  }) =>
-    route.kind === "root" ? (
+  }) => {
+    const { closeAll } = useOpenEditorsActions(workspaceId);
+
+    return route.kind === "root" ? (
       <div data-testid="mobile-files-sheet-root">
         <button
           type="button"
@@ -148,10 +153,19 @@ vi.mock("./mobile-files-sheet", () => ({
         >
           Open commit preview
         </button>
+        <button type="button" onClick={() => closeAll()}>
+          Close all
+        </button>
       </div>
     ) : (
-      <div data-testid="mobile-files-sheet-detail">{route.title ?? route.path}</div>
-    ),
+      <div data-testid="mobile-files-sheet-detail">
+        <div>{route.title ?? route.path}</div>
+        <button type="button" onClick={() => closeAll()}>
+          Close all
+        </button>
+      </div>
+    );
+  },
 }));
 
 vi.mock("./mobile-topbar", () => ({
@@ -341,6 +355,49 @@ describe("WorkspaceMobileView", () => {
       expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/a.ts");
       expect(store.get(gitDiffPreviewAtomFamily("ws-test"))).toBeNull();
       expect(screen.getByRole("heading", { level: 2, name: "a.ts" })).toBeInTheDocument();
+    });
+  });
+
+  it("preserves an active commit preview when close all clears open editors", async () => {
+    const diffPreview = {
+      path: "abc123",
+      title: "abc123 · commit subject",
+      diff: "diff --git a/src/app.tsx b/src/app.tsx",
+      source: "commit" as const,
+    };
+    const store = renderMobileView({
+      activePath: "src/a.ts",
+      openFiles: {
+        "src/a.ts": {
+          kind: "text",
+          path: "src/a.ts",
+          content: "alpha",
+          savedContent: "alpha",
+          baseHash: "hash-a",
+          isDirty: false,
+        },
+      },
+      diffPreview,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Files" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open commit preview" }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("heading", { level: 2, name: "abc123 · commit subject" })
+      ).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Close all" }));
+
+    await waitFor(() => {
+      expect(store.get(openFilesAtomFamily("ws-test"))).toEqual({});
+      expect(store.get(activeFilePathAtomFamily("ws-test"))).toBeNull();
+      expect(store.get(gitDiffPreviewAtomFamily("ws-test"))).toEqual(diffPreview);
+      expect(
+        screen.getByRole("heading", { level: 2, name: "abc123 · commit subject" })
+      ).toBeInTheDocument();
     });
   });
 });

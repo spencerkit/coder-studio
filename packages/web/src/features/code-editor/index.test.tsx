@@ -601,6 +601,55 @@ describe("CodeEditorHost", () => {
     });
   });
 
+  it("closing the lexicographically last active editor from open editors reactivates the previous sorted editor", async () => {
+    const { store } = setupStore({
+      activePath: "src/c.ts",
+      openFiles: {
+        "src/a.ts": {
+          kind: "text",
+          path: "src/a.ts",
+          content: "alpha",
+          savedContent: "alpha",
+          baseHash: "hash-a",
+          isDirty: false,
+        },
+        "src/b.ts": {
+          kind: "text",
+          path: "src/b.ts",
+          content: "beta",
+          savedContent: "beta",
+          baseHash: "hash-b",
+          isDirty: false,
+        },
+        "src/c.ts": {
+          kind: "text",
+          path: "src/c.ts",
+          content: "gamma",
+          savedContent: "gamma",
+          baseHash: "hash-c",
+          isDirty: false,
+        },
+      },
+    });
+
+    render(
+      <Provider store={store}>
+        <CodeEditorHost />
+        <OpenEditorsSection workspaceId="ws-1" />
+      </Provider>
+    );
+
+    expect(screen.getByTestId("monaco-host")).toHaveTextContent("gamma");
+
+    const activeRow = screen
+      .getByRole("button", { name: "src/c.ts" })
+      .closest(".workspace-open-editors__row") as HTMLElement;
+    fireEvent.click(within(activeRow).getByRole("button", { name: "Close src/c.ts" }));
+
+    expect(store.get(activeFilePathAtomFamily("ws-1"))).toBe("src/b.ts");
+    expect(screen.getByTestId("monaco-host")).toHaveTextContent("beta");
+  });
+
   it("cancels an older pending load when switching to a different path so it cannot resurrect after the newer path closes", async () => {
     const firstRead = createDeferred<{
       kind: "text";
