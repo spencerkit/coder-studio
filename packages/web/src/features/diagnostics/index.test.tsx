@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { createStore, Provider } from "jotai";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { activationStatusAtom } from "../../atoms/activation";
 import { lastViewedTargetAtom, localeAtom } from "../../atoms/app-ui";
 import { connectionStatusAtom, wsClientAtom } from "../../atoms/connection";
 import { sessionsAtom } from "../../atoms/sessions";
@@ -615,6 +616,217 @@ describe("DiagnosticsPage", () => {
     expect(await screen.findByText("Package manager: apt-get")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Install Git" })).toBeDisabled();
     expect(startCalls).toBe(1);
+  });
+
+  it("blocks starting a second dependency install while another dependency install is active", async () => {
+    const startCalls: string[] = [];
+    const sendCommand = vi.fn(async (op: string, args?: Record<string, unknown>) => {
+      if (op === "diagnostics.get") {
+        return createResponse({ context: "manual_check", canContinue: false }, [
+          {
+            id: "git-missing",
+            code: "git_missing",
+            status: "needs_attention",
+            dependencyId: "git",
+            autoInstallSupported: true,
+            installReadiness: "ready",
+            manualGuideKeys: ["system_deps.install.git.manual"],
+            docUrl: "https://git-scm.com/downloads",
+          },
+          {
+            id: "node-missing",
+            code: "nodejs_missing",
+            status: "needs_attention",
+            dependencyId: "node",
+            autoInstallSupported: true,
+            installReadiness: "ready",
+            manualGuideKeys: ["system_deps.install.node.manual"],
+            docUrl: "https://nodejs.org/en/download",
+          },
+        ] as DiagnosticsCheck[]);
+      }
+
+      if (op === "systemDeps.install.start") {
+        const dependencyId = String(args?.dependencyId);
+        startCalls.push(dependencyId);
+        return {
+          jobId: "job-global-guard",
+          dependencyId,
+          status: "waiting_input",
+          packageManager: dependencyId === "git" ? "apt-get" : "brew",
+          currentStepId: `install-${dependencyId}`,
+          steps: [],
+          interaction: {
+            kind: "sudo_password",
+            promptExcerpt: "[sudo] password for spencer:",
+            echo: false,
+          },
+        };
+      }
+
+      if (op === "systemDeps.install.get") {
+        return {
+          jobId: "job-global-guard",
+          dependencyId: "git",
+          status: "waiting_input",
+          packageManager: "apt-get",
+          currentStepId: "install-git",
+          steps: [],
+          interaction: {
+            kind: "sudo_password",
+            promptExcerpt: "[sudo] password for spencer:",
+            echo: false,
+          },
+        };
+      }
+
+      throw new Error(`Unexpected op: ${op}`);
+    });
+
+    renderDiagnostics("/diagnostics?context=manual_check", sendCommand);
+
+    const installGitButton = await screen.findByRole("button", { name: "Install Git" });
+    const installNodeButton = screen.getByRole("button", { name: "Install Node.js" });
+    expect(installGitButton).toBeEnabled();
+    expect(installNodeButton).toBeEnabled();
+
+    fireEvent.click(installGitButton);
+
+    expect(await screen.findByText("Package manager: apt-get")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Install Git" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Install Node.js" })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Install Node.js" }));
+    expect(startCalls).toEqual(["git"]);
+  });
+
+  it("pauses failed polling while disconnected and resumes after reconnect", async () => {
+    let disconnected = false;
+    let installGetCalls = 0;
+    const sendCommand = vi.fn(async (op: string) => {
+      if (op === "diagnostics.get") {
+        return createResponse({ context: "manual_check", canContinue: false }, [
+          {
+            id: "git-missing",
+            code: "git_missing",
+            status: "needs_attention",
+            dependencyId: "git",
+            autoInstallSupported: true,
+            installReadiness: "ready",
+            manualGuideKeys: ["system_deps.install.git.manual"],
+            docUrl: "https://git-scm.com/downloads",
+          },
+        ] as DiagnosticsCheck[]);
+      }
+
+      if (op === "systemDeps.install.start") {
+        return {
+          jobId: "job-reconnect",
+          dependencyId: "git",
+          status: "running",
+          packageManager: "apt-get",
+          currentStepId: "install-git",
+          steps: [],
+          interaction: { kind: "none", echo: false },
+        };
+      }
+
+      if (op === "systemDeps.install.get") {
+        installGetCalls += 1;
+        if (disconnected) {
+          throw new Error("socket closed");
+        }
+
+        return {
+          jobId: "job-reconnect",
+          dependencyId: "git",
+          status: "succeeded",
+          packageManager: "apt-get",
+          currentStepId: "verify-git",
+          steps: [],
+          interaction: { kind: "none", echo: false },
+        };
+      }
+
+      if (op === "diagnostics.recheck") {
+        return createResponse({ context: "manual_check", canContinue: true }, [
+          {
+            id: "git-ready",
+            code: "git_ready",
+            status: "ready",
+            dependencyId: "git",
+            version: "git version 2.49.0",
+          },
+        ] as DiagnosticsCheck[]);
+      }
+
+      throw new Error(`Unexpected op: ${op}`);
+    });
+
+    const store = createStoreWithClient(sendCommand);
+    store.set(activationStatusAtom, "active");
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/diagnostics?context=manual_check"]}>
+          <Routes>
+            <Route path="/diagnostics" element={<DiagnosticsPage />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>
+    );
+
+    expect(await screen.findByText("Git is missing")).toBeInTheDocument();
+    vi.useFakeTimers();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Install Git" }));
+      await Promise.resolve();
+    });
+
+    act(() => {
+      disconnected = true;
+      store.set(connectionStatusAtom, "disconnected");
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60);
+    });
+
+    expect(installGetCalls).toBe(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(250);
+    });
+
+    expect(installGetCalls).toBe(1);
+
+    await act(async () => {
+      disconnected = false;
+      store.set(connectionStatusAtom, "connected");
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60);
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(installGetCalls).toBe(2);
+    expect(sendCommand).toHaveBeenCalledWith(
+      "diagnostics.recheck",
+      {
+        context: "manual_check",
+        workspaceId: undefined,
+        workspacePath: undefined,
+        providerId: undefined,
+      },
+      undefined
+    );
+    expect(screen.getByText("Git is ready")).toBeInTheDocument();
   });
 
   it("shows the current step and structured failure details for failed installs", async () => {

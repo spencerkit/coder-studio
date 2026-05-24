@@ -6,18 +6,30 @@ import type {
 import { Topics } from "@coder-studio/core";
 import { useAtomValue } from "jotai";
 import { useEffect, useRef, useState } from "react";
-import { dispatchCommandAtom, wsClientAtom } from "../../../atoms/connection";
+import { activationStatusAtom } from "../../../atoms/activation";
+import { connectionStatusAtom, dispatchCommandAtom, wsClientAtom } from "../../../atoms/connection";
 
 export function useSystemDependencyInstaller(onSucceeded: () => Promise<void>) {
   const dispatch = useAtomValue(dispatchCommandAtom);
+  const activationStatus = useAtomValue(activationStatusAtom);
+  const connectionStatus = useAtomValue(connectionStatusAtom);
   const wsClient = useAtomValue(wsClientAtom);
   const [job, setJob] = useState<SystemDependencyInstallJobSnapshot | null>(null);
   const [output, setOutput] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [, setPendingDependencyId] = useState<SystemDependencyId | null>(null);
+  const [pendingDependencyId, setPendingDependencyId] = useState<SystemDependencyId | null>(null);
   const jobRef = useRef<SystemDependencyInstallJobSnapshot | null>(null);
   const pendingDependencyIdRef = useRef<SystemDependencyId | null>(null);
   const pollTimerRef = useRef<number | null>(null);
+  const dispatchRef = useRef(dispatch);
+  const onSucceededRef = useRef(onSucceeded);
+  const canResumePollingRef = useRef(false);
+  const pollRef = useRef<((jobId: string) => Promise<void>) | null>(null);
+
+  dispatchRef.current = dispatch;
+  onSucceededRef.current = onSucceeded;
+  canResumePollingRef.current =
+    activationStatus === "active" && connectionStatus === "connected" && wsClient !== null;
 
   const clearPollTimer = () => {
     if (pollTimerRef.current !== null) {
@@ -29,12 +41,21 @@ export function useSystemDependencyInstaller(onSucceeded: () => Promise<void>) {
   const schedulePoll = (jobId: string) => {
     clearPollTimer();
     pollTimerRef.current = window.setTimeout(() => {
-      void poll(jobId);
+      pollTimerRef.current = null;
+      void pollRef.current?.(jobId);
     }, 50);
   };
 
   const isActiveJobStatus = (status: SystemDependencyInstallJobSnapshot["status"]) =>
     status === "queued" || status === "running" || status === "waiting_input";
+
+  const hasActiveInstallRef = () => {
+    const currentJob = jobRef.current;
+    return (
+      pendingDependencyIdRef.current !== null ||
+      (currentJob !== null && isActiveJobStatus(currentJob.status))
+    );
+  };
 
   const setCurrentJob = (nextJob: SystemDependencyInstallJobSnapshot | null) => {
     jobRef.current = nextJob;
@@ -49,14 +70,26 @@ export function useSystemDependencyInstaller(onSucceeded: () => Promise<void>) {
   const isInstallingDependency = (dependencyId: SystemDependencyId) =>
     pendingDependencyIdRef.current === dependencyId ||
     (jobRef.current?.dependencyId === dependencyId && isActiveJobStatus(jobRef.current.status));
+  const hasActiveInstall =
+    pendingDependencyId !== null || (job !== null && isActiveJobStatus(job.status));
 
-  const poll = async (jobId: string) => {
-    const result = await dispatch<SystemDependencyInstallJobSnapshot>("systemDeps.install.get", {
-      jobId,
-    });
+  pollRef.current = async (jobId: string) => {
+    const result = await dispatchRef.current<SystemDependencyInstallJobSnapshot>(
+      "systemDeps.install.get",
+      {
+        jobId,
+      }
+    );
 
     if (!result.ok || !result.data) {
       setPendingDependency(null);
+      if (
+        canResumePollingRef.current &&
+        jobRef.current?.jobId === jobId &&
+        isActiveJobStatus(jobRef.current.status)
+      ) {
+        schedulePoll(jobId);
+      }
       return;
     }
 
@@ -70,7 +103,7 @@ export function useSystemDependencyInstaller(onSucceeded: () => Promise<void>) {
 
     if (result.data.status === "succeeded") {
       clearPollTimer();
-      await onSucceeded();
+      await onSucceededRef.current();
       setCurrentJob(null);
       setOutput("");
     }
@@ -96,9 +129,22 @@ export function useSystemDependencyInstaller(onSucceeded: () => Promise<void>) {
     );
   }, [job, wsClient]);
 
+  useEffect(() => {
+    if (!canResumePollingRef.current) {
+      return;
+    }
+
+    const currentJob = jobRef.current;
+    if (!currentJob || !isActiveJobStatus(currentJob.status) || pollTimerRef.current !== null) {
+      return;
+    }
+
+    schedulePoll(currentJob.jobId);
+  }, [activationStatus, connectionStatus, job, wsClient]);
+
   const start = async (dependencyId: SystemDependencyId) => {
-    if (isInstallingDependency(dependencyId)) {
-      if (jobRef.current) {
+    if (hasActiveInstallRef()) {
+      if (isInstallingDependency(dependencyId) && jobRef.current) {
         schedulePoll(jobRef.current.jobId);
       }
       return;
@@ -179,5 +225,5 @@ export function useSystemDependencyInstaller(onSucceeded: () => Promise<void>) {
     }
   };
 
-  return { job, output, submitting, start, submitInput, cancel, isInstallingDependency };
+  return { job, output, submitting, start, submitInput, cancel, hasActiveInstall };
 }

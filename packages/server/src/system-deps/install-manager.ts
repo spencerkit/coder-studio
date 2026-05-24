@@ -353,7 +353,7 @@ export class SystemDependencyInstallManager {
         ],
         interaction: { kind: "none", echo: false },
         failure: {
-          code: details.code === "ENOENT" ? "command_not_found" : "unknown_failure",
+          code: classifySpawnFailure(details),
           dependencyId,
           failedStepId: stepId,
           message: details.message,
@@ -670,4 +670,33 @@ function toErrorDetails(error: unknown): {
     stdout: candidate.stdout,
     stderr: candidate.stderr,
   };
+}
+
+function classifySpawnFailure(details: {
+  code?: string;
+  message: string;
+  stdout?: string;
+  stderr?: string;
+}): SystemDependencyInstallFailure["code"] {
+  const haystack = `${details.code ?? ""}\n${details.message}\n${details.stderr ?? ""}\n${
+    details.stdout ?? ""
+  }`.toLowerCase();
+
+  if (
+    haystack.includes("permission denied") ||
+    haystack.includes("eacces") ||
+    haystack.includes("eperm")
+  ) {
+    return "permission_denied";
+  }
+
+  if (
+    haystack.includes("not found") ||
+    haystack.includes("is not recognized") ||
+    haystack.includes("enoent")
+  ) {
+    return "command_not_found";
+  }
+
+  return "command_failed";
 }

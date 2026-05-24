@@ -644,7 +644,7 @@ export function DiagnosticsPage() {
                           check.status === "needs_attention" &&
                           check.autoInstallSupported ? (
                             <Button
-                              disabled={installer.isInstallingDependency(check.dependencyId)}
+                              disabled={installer.hasActiveInstall}
                               onClick={() => {
                                 const dependencyId = check.dependencyId;
                                 if (!dependencyId) {

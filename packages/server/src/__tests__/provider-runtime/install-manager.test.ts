@@ -147,6 +147,62 @@ describe("ProviderInstallManager", () => {
     expect(stored?.steps[0]?.status).toBe("failed");
   });
 
+  it("classifies install-step EACCES failures as permission_denied", async () => {
+    const installError = Object.assign(new Error("spawn npm EACCES"), {
+      code: "EACCES",
+      stderr: "Permission denied",
+      stdout: "",
+    });
+    const manager = new ProviderInstallManager([codexDefinition], {
+      platform: "linux",
+      commandExists: vi.fn(async (command: string) => command === "npm"),
+      runCommand: vi.fn(async () => {
+        throw installError;
+      }),
+    });
+
+    const started = await manager.start("codex");
+
+    await vi.waitFor(() => {
+      expect(manager.get(started.jobId)?.status).toBe("failed");
+    });
+
+    expect(manager.get(started.jobId)).toMatchObject({
+      status: "failed",
+      failure: {
+        code: "permission_denied",
+      },
+    });
+  });
+
+  it("classifies install-step non-ENOENT non-permission failures as command_failed", async () => {
+    const installError = Object.assign(new Error("spawn npm EIO"), {
+      code: "EIO",
+      stderr: "terminal backend failed",
+      stdout: "",
+    });
+    const manager = new ProviderInstallManager([codexDefinition], {
+      platform: "linux",
+      commandExists: vi.fn(async (command: string) => command === "npm"),
+      runCommand: vi.fn(async () => {
+        throw installError;
+      }),
+    });
+
+    const started = await manager.start("codex");
+
+    await vi.waitFor(() => {
+      expect(manager.get(started.jobId)?.status).toBe("failed");
+    });
+
+    expect(manager.get(started.jobId)).toMatchObject({
+      status: "failed",
+      failure: {
+        code: "command_failed",
+      },
+    });
+  });
+
   it("executes Windows install steps with the declared command names", async () => {
     let npmInstalled = false;
     let codexInstalled = false;

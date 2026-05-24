@@ -276,4 +276,60 @@ describe("SystemDependencyInstallManager", () => {
     expect(retried.jobId).not.toBe(first.jobId);
     expect(spawn).toHaveBeenCalledTimes(2);
   });
+
+  it("classifies PTY spawn EACCES failures as permission_denied", async () => {
+    const manager = new SystemDependencyInstallManager({
+      platform: "linux",
+      ptyHost: {
+        spawn: vi.fn(() => {
+          throw Object.assign(new Error("spawn sudo EACCES"), {
+            code: "EACCES",
+            stderr: "Permission denied",
+          });
+        }),
+      } as never,
+      broadcaster: { sendToClient: vi.fn(() => true) } as never,
+      commandExists: vi.fn(async (command: string) => command === "apt-get"),
+      runCommand: vi.fn(async () => {
+        throw Object.assign(new Error("missing"), { exitCode: 127, stdout: "", stderr: "" });
+      }),
+    });
+
+    const job = await manager.start("git", "tab-a", "client-a");
+
+    expect(job).toMatchObject({
+      status: "failed",
+      failure: {
+        code: "permission_denied",
+      },
+    });
+  });
+
+  it("classifies PTY spawn failures without a known permission or ENOENT code as command_failed", async () => {
+    const manager = new SystemDependencyInstallManager({
+      platform: "linux",
+      ptyHost: {
+        spawn: vi.fn(() => {
+          throw Object.assign(new Error("spawn failed"), {
+            code: "EIO",
+            stderr: "terminal backend failed",
+          });
+        }),
+      } as never,
+      broadcaster: { sendToClient: vi.fn(() => true) } as never,
+      commandExists: vi.fn(async (command: string) => command === "apt-get"),
+      runCommand: vi.fn(async () => {
+        throw Object.assign(new Error("missing"), { exitCode: 127, stdout: "", stderr: "" });
+      }),
+    });
+
+    const job = await manager.start("git", "tab-a", "client-a");
+
+    expect(job).toMatchObject({
+      status: "failed",
+      failure: {
+        code: "command_failed",
+      },
+    });
+  });
 });
