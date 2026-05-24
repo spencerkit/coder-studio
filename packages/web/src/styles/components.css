@@ -14125,3 +14125,358 @@ textarea.input {
 .paste-dialog__button--primary:hover {
   background: color-mix(in srgb, var(--accent-blue) 85%, white);
 }
+
+/* ========== Workspace Appearance Personalization ========== */
+.workspace-page {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+}
+
+.workspace-main-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: transparent;
+}
+
+.workspace-main-stage > .agent-panes {
+  flex: 1;
+  min-height: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.workspace-git-view {
+  flex: 1;
+  min-height: 0;
+  padding: var(--editor-pane-inset);
+  background: transparent;
+}
+
+.mobile-terminal-sheet {
+  padding: 0;
+  gap: 0;
+  background: transparent;
+}
+
+.mobile-sheet--terminal,
+.mobile-sheet--terminal .mobile-sheet__footer {
+  background: transparent;
+}
+
+.left-panel {
+  background: transparent;
+  border-right: none;
+}
+
+.workspace-sidebar-panel {
+  background: color-mix(
+    in srgb,
+    var(--surface-overlay-bg) calc(var(--app-surface-opacity, 0.96) * 76%),
+    transparent
+  );
+  border-right: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  backdrop-filter: var(--app-surface-backdrop-filter, none);
+}
+
+.workspace-activity-bar {
+  display: flex;
+  width: 52px;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-2);
+  border-right: 1px solid var(--border);
+  background: color-mix(
+    in srgb,
+    var(--surface-overlay-bg) calc(var(--app-surface-opacity, 0.88) * 62%),
+    transparent
+  );
+  border-right-color: color-mix(in srgb, var(--border) 72%, transparent);
+  backdrop-filter: var(--app-surface-backdrop-filter, none);
+}
+
+.workspace-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  min-height: var(--desktop-statusbar-height);
+  min-width: 0;
+  flex-shrink: 0;
+  padding: 0 12px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 62%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--surface-overlay-bg) calc(var(--app-surface-opacity, 0.96) * 68%),
+    transparent
+  );
+  backdrop-filter: var(--app-surface-backdrop-filter, none);
+}
+
+.workspace-status-bar--flush {
+  background: transparent;
+  backdrop-filter: none;
+}
+
+.workspace-empty-inner,
+.workspace-resolving-card {
+  background: linear-gradient(
+    180deg,
+    color-mix(
+      in srgb,
+      var(--surface-overlay-bg) calc(var(--app-surface-opacity, 0.96) * 82%),
+      color-mix(in srgb, var(--bg-surface) 52%, transparent)
+    ),
+    color-mix(
+      in srgb,
+      var(--surface-overlay-bg) calc(var(--app-surface-opacity, 0.88) * 70%),
+      color-mix(in srgb, var(--bg-page) 8%, transparent)
+    )
+  );
+  backdrop-filter: var(--app-surface-backdrop-filter, none);
+}
+
+.workspace-git-editor {
+  background: linear-gradient(
+    180deg,
+    color-mix(
+      in srgb,
+      var(--surface-overlay-bg) calc(var(--app-surface-opacity, 0.96) * 86%),
+      color-mix(in srgb, var(--bg-surface) 60%, transparent)
+    ),
+    color-mix(
+      in srgb,
+      var(--surface-overlay-bg) calc(var(--app-surface-opacity, 0.92) * 74%),
+      color-mix(in srgb, var(--bg-terminal) 62%, transparent)
+    )
+  );
+  backdrop-filter: var(--app-surface-backdrop-filter, none);
+}
+
+.code-editor-header {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-default);
+  padding: var(--gap-default) var(--editor-toolbar-inset);
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, var(--accent-blue) 28%);
+  background: color-mix(
+    in srgb,
+    var(--surface-overlay-bg) calc(var(--app-surface-opacity, 0.88) * 82%),
+    color-mix(in srgb, var(--bg-surface) 46%, transparent)
+  );
+  backdrop-filter: var(--app-surface-backdrop-filter, none);
+}
+
+.session-card {
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  background: color-mix(
+    in srgb,
+    var(--surface-overlay-bg) calc(var(--app-surface-opacity, 0.96) * 44%),
+    transparent
+  );
+  backdrop-filter: var(--app-surface-backdrop-filter, none);
+}
+
+.session-card.session-card--active {
+  background: color-mix(
+    in srgb,
+    var(--surface-overlay-bg) calc(var(--app-surface-opacity, 0.96) * 52%),
+    color-mix(in srgb, var(--accent-blue) 10%, transparent)
+  );
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border-focus) 84%, transparent);
+}
+
+.session-header {
+  padding: var(--gap-tight) var(--inset-control-inline);
+  border-bottom: 1px solid var(--border);
+  background: color-mix(
+    in srgb,
+    var(--surface-overlay-bg) calc(var(--app-surface-opacity, 0.96) * 66%),
+    transparent
+  );
+  backdrop-filter: var(--app-surface-backdrop-filter, none);
+}
+
+.session-card.session-card--active > .panel-header {
+  background: color-mix(
+    in srgb,
+    var(--surface-overlay-bg) calc(var(--app-surface-opacity, 0.96) * 76%),
+    color-mix(in srgb, var(--accent-blue) 8%, transparent)
+  );
+  border-bottom-color: color-mix(in srgb, var(--border-focus) 76%, transparent);
+}
+
+.session-card.session-card--active .session-header {
+  background: color-mix(
+    in srgb,
+    var(--surface-overlay-bg) calc(var(--app-surface-opacity, 0.96) * 76%),
+    color-mix(in srgb, var(--accent-blue) 8%, transparent)
+  );
+  border-bottom-color: color-mix(in srgb, var(--border-focus) 76%, transparent);
+}
+
+.session-terminal {
+  background: transparent;
+}
+
+.workspace-sidebar-panel__content,
+.workspace-sidebar-view,
+.workspace-sidebar-panel__body {
+  background: transparent;
+}
+
+.agent-draft-launcher {
+  container-type: inline-size;
+  background:
+    radial-gradient(circle at center, rgba(108, 182, 255, 0.06), transparent 32%), transparent;
+}
+
+.agent-draft-content {
+  width: min(680px, calc(100% - 48px));
+  max-width: 100%;
+  align-items: stretch;
+  gap: var(--sp-4);
+  padding: var(--sp-8) var(--sp-6);
+  border: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
+  border-radius: calc(var(--radius-xl) + var(--sp-1));
+  background: linear-gradient(
+    180deg,
+    color-mix(
+      in srgb,
+      var(--surface-overlay-bg) calc(var(--app-surface-opacity, 0.96) * 78%),
+      color-mix(in srgb, var(--bg-surface) 34%, transparent)
+    ),
+    color-mix(
+      in srgb,
+      var(--surface-overlay-bg) calc(var(--app-surface-opacity, 0.88) * 64%),
+      color-mix(in srgb, var(--bg-page) 4%, transparent)
+    )
+  );
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: var(--app-surface-backdrop-filter, none);
+}
+
+.agent-provider-card {
+  height: auto;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: var(--sp-4);
+  border-radius: var(--radius-xl);
+  text-align: left;
+  white-space: normal;
+  background: color-mix(
+    in srgb,
+    var(--surface-overlay-bg) calc(var(--app-surface-opacity, 0.88) * 44%),
+    transparent
+  );
+}
+
+.terminal-toolbar {
+  background: color-mix(
+    in srgb,
+    var(--surface-overlay-bg) calc(var(--app-surface-opacity, 0.88) * 66%),
+    transparent
+  );
+  backdrop-filter: var(--app-surface-backdrop-filter, none);
+}
+
+.bottom-terminal-tabs {
+  background: color-mix(
+    in srgb,
+    var(--surface-overlay-bg) calc(var(--app-surface-opacity, 0.88) * 56%),
+    transparent
+  );
+  backdrop-filter: var(--app-surface-backdrop-filter, none);
+}
+
+.workspace-bottom-panel > .bottom-terminal {
+  border: none;
+  border-radius: 0;
+  background: color-mix(
+    in srgb,
+    var(--surface-overlay-bg) calc(var(--app-surface-opacity, 0.96) * 60%),
+    transparent
+  );
+  backdrop-filter: var(--app-surface-backdrop-filter, none);
+}
+
+.bottom-terminal-content,
+.bottom-terminal-xterm,
+.bottom-terminal-empty {
+  background: transparent;
+}
+
+.mobile-shell__agent-stage .session-card:not(.session-card--active),
+.mobile-terminal-sheet .bottom-terminal,
+.mobile-sheet--files .file-tree-shell--mobile,
+.mobile-sheet--files .git-panel--mobile,
+.mobile-sheet--files .workspace-git-editor {
+  background: color-mix(
+    in srgb,
+    var(--surface-overlay-bg) calc(var(--app-surface-opacity, 0.96) * 100%),
+    color-mix(in srgb, var(--bg-panel) 80%, transparent)
+  );
+  backdrop-filter: var(--app-surface-backdrop-filter, none);
+}
+
+.mobile-sheet--files .file-tree-shell--mobile,
+.mobile-sheet--files .git-panel--mobile,
+.mobile-sheet--files .workspace-git-editor,
+.mobile-sheet--files .workspace-git-view {
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  border-radius: var(--radius-md);
+  box-shadow: none;
+}
+
+.mobile-sheet--files .workspace-git-view {
+  padding: 0;
+}
+
+.mobile-terminal-sheet .bottom-terminal {
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.mobile-shell__agent-stage .session-card.session-card--active {
+  background: color-mix(
+    in srgb,
+    var(--bg-active) 76%,
+    color-mix(
+      in srgb,
+      var(--surface-overlay-bg) calc(var(--app-surface-opacity, 0.96) * 100%),
+      transparent
+    )
+  );
+  backdrop-filter: var(--app-surface-backdrop-filter, none);
+}
+
+@media (max-width: 899px), (pointer: coarse) {
+  .mobile-shell {
+    --mobile-safe-top: env(safe-area-inset-top, 0px);
+    --mobile-safe-right: env(safe-area-inset-right, 0px);
+    --mobile-safe-bottom: env(safe-area-inset-bottom, 0px);
+    --mobile-safe-left: env(safe-area-inset-left, 0px);
+    --mobile-keyboard-inset: 0px;
+    --mobile-shell-motion-enter-duration: 220ms;
+    --mobile-shell-motion-press-duration: 100ms;
+    --mobile-shell-motion-surface-duration: 160ms;
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+    min-height: 100dvh;
+    overflow: hidden;
+    background: transparent;
+  }
+}
