@@ -829,6 +829,67 @@ describe("DiagnosticsPage", () => {
     expect(screen.getByText("Git is ready")).toBeInTheDocument();
   });
 
+  it("stops polling after an install.get command error while still connected", async () => {
+    let installGetCalls = 0;
+    const sendCommand = vi.fn(async (op: string) => {
+      if (op === "diagnostics.get") {
+        return createResponse({ context: "manual_check", canContinue: false }, [
+          {
+            id: "git-missing",
+            code: "git_missing",
+            status: "needs_attention",
+            dependencyId: "git",
+            autoInstallSupported: true,
+            installReadiness: "ready",
+            manualGuideKeys: ["system_deps.install.git.manual"],
+            docUrl: "https://git-scm.com/downloads",
+          },
+        ] as DiagnosticsCheck[]);
+      }
+
+      if (op === "systemDeps.install.start") {
+        return {
+          jobId: "job-command-error",
+          dependencyId: "git",
+          status: "running",
+          packageManager: "apt-get",
+          currentStepId: "install-git",
+          steps: [],
+          interaction: { kind: "none", echo: false },
+        };
+      }
+
+      if (op === "systemDeps.install.get") {
+        installGetCalls += 1;
+        throw new Error("job lookup failed");
+      }
+
+      throw new Error(`Unexpected op: ${op}`);
+    });
+
+    renderDiagnostics("/diagnostics?context=manual_check", sendCommand);
+
+    expect(await screen.findByText("Git is missing")).toBeInTheDocument();
+    vi.useFakeTimers();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Install Git" }));
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60);
+    });
+
+    expect(installGetCalls).toBe(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(250);
+    });
+
+    expect(installGetCalls).toBe(1);
+  });
+
   it("shows the current step and structured failure details for failed installs", async () => {
     const sendCommand = vi.fn(async (op: string, args?: Record<string, unknown>) => {
       if (op === "diagnostics.get") {

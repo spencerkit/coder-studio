@@ -49,6 +49,18 @@ export function useSystemDependencyInstaller(onSucceeded: () => Promise<void>) {
   const isActiveJobStatus = (status: SystemDependencyInstallJobSnapshot["status"]) =>
     status === "queued" || status === "running" || status === "waiting_input";
 
+  const isRetryablePollError = (
+    errorCode: string | undefined,
+    errorMessage: string | undefined
+  ) => {
+    if (errorCode === "no_client") {
+      return true;
+    }
+
+    const haystack = `${errorCode ?? ""}\n${errorMessage ?? ""}`.toLowerCase();
+    return haystack.includes("socket closed") || haystack.includes("websocket");
+  };
+
   const hasActiveInstallRef = () => {
     const currentJob = jobRef.current;
     return (
@@ -85,6 +97,7 @@ export function useSystemDependencyInstaller(onSucceeded: () => Promise<void>) {
       setPendingDependency(null);
       if (
         canResumePollingRef.current &&
+        isRetryablePollError(result.error?.code, result.error?.message) &&
         jobRef.current?.jobId === jobId &&
         isActiveJobStatus(jobRef.current.status)
       ) {
