@@ -342,7 +342,7 @@
       "loading_title": "Restoring terminal output...",
       "loading_body": "This terminal is unavailable while history is being restored. Please wait until recovery finishes before continuing. Larger histories may take longer to restore.",
       "failed_title": "Terminal history was not restored yet",
-      "failed_body": "The terminal is still usable, but older output was not filled back in this time. You can retry recovery; if the server still retains the history, it may still come back later or after a refresh.",
+      "failed_body": "The terminal is still usable, but older output still could not be filled back in. Try again later or after a refresh; if the server still retains the history, it may still come back.",
       "retryable_title": "Terminal history was not restored yet",
       "retryable_body": "The terminal is still usable, but older output was not filled back in this time. You can retry recovery; if the server still retains the history, it may still come back later or after a refresh.",
       "retry_action": "Retry recovery",
