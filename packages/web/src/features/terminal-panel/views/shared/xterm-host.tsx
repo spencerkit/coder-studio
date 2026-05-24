@@ -25,12 +25,14 @@ import {
   useRef,
   useState,
 } from "react";
-import { themeAtom } from "../../../../atoms/app-ui";
+import { resolveAppearancePersonalizationForViewport } from "../../../../appearance";
+import { appearancePersonalizationAtom, themeAtom } from "../../../../atoms/app-ui";
 import { dispatchCommandAtom, wsClientAtom } from "../../../../atoms/connection";
 import { Button, LocalOverlay, Notice } from "../../../../components/ui";
 import { useViewport } from "../../../../hooks/use-viewport";
 import { copyTextWithFallback } from "../../../../lib/clipboard";
 import { useTranslation } from "../../../../lib/i18n";
+import type { TerminalThemeDefinition } from "../../../../theme";
 import { getThemeById } from "../../../../theme";
 import type { ConnectionStatus, TerminalBinaryPayload } from "../../../../ws/client";
 import { pushToastAtom } from "../../../notifications/atoms";
@@ -324,6 +326,18 @@ export function trimWrittenChunks(buffer: OutputBuffer, writtenChunkCount: numbe
   };
 }
 
+function resolveXtermTheme(themeId: string, glassEnabled: boolean): TerminalThemeDefinition {
+  const terminalTheme = getThemeById(themeId).terminalTheme;
+  if (!glassEnabled) {
+    return terminalTheme;
+  }
+
+  return {
+    ...terminalTheme,
+    background: "transparent",
+  };
+}
+
 interface XtermHostProps {
   /** Terminal ID */
   terminalId: string;
@@ -402,6 +416,7 @@ export function XtermHost({
   const t = useTranslation();
   const viewport = useViewport();
   const uiTheme = useAtomValue(themeAtom);
+  const appearancePersonalization = useAtomValue(appearancePersonalizationAtom);
   const terminalPreferences = useAtomValue(terminalPreferencesAtom);
   const terminalFontSize = getTerminalFontSizeForViewport(terminalPreferences, viewport);
   const wsClient = useAtomValue(wsClientAtom);
@@ -510,6 +525,13 @@ export function XtermHost({
 
     return wsClient.getStatus();
   });
+  const effectiveAppearance = resolveAppearancePersonalizationForViewport(
+    appearancePersonalization,
+    viewport
+  );
+  const glassEnabled =
+    effectiveAppearance.glassEnabled && uiTheme !== "hc-dark" && uiTheme !== "hc-light";
+  const resolvedTerminalTheme = resolveXtermTheme(uiTheme, glassEnabled);
 
   // Latest copies of callback identities used inside the mount effect, exposed
   // via refs so the effect's cleanup/re-creation is not tied to their churn.
@@ -617,9 +639,9 @@ export function XtermHost({
 
   useEffect(() => {
     if (terminalRef.current) {
-      terminalRef.current.options.theme = getThemeById(uiTheme).terminalTheme;
+      terminalRef.current.options.theme = resolvedTerminalTheme;
     }
-  }, [uiTheme]);
+  }, [resolvedTerminalTheme]);
 
   useEffect(() => {
     if (replayUiState.kind !== "loading") {
@@ -1358,7 +1380,7 @@ export function XtermHost({
     // characters used by TUIs (claude, codex) render as a continuous frame
     // with no gaps between rows.
     const terminal = new Terminal({
-      theme: getThemeById(initialThemeRef.current).terminalTheme,
+      theme: resolveXtermTheme(initialThemeRef.current, glassEnabled),
       fontFamily: "JetBrains Mono, Fira Code, SF Mono, monospace",
       fontSize: terminalFontSize,
       scrollback: 5000,

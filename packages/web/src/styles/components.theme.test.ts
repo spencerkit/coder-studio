@@ -1162,8 +1162,14 @@ describe("components.css theme-sensitive surfaces", () => {
     );
     const appTopbar = getLastRuleBlock(".app-topbar");
     const workspacePage = getLastRuleBlock(".workspace-page");
+    const workspaceBody = getLastRuleBlock(".workspace-body");
     const workspaceMainArea = getLastRuleBlock(".workspace-main-area");
+    const workspaceMainStage = getLastRuleBlock(".workspace-main-stage");
+    const agentPanes = getLastRuleBlock(".agent-panes");
+    const agentPane = getLastRuleBlock(".agent-pane");
     const agentPanesStage = getLastRuleBlock(".workspace-main-stage > .agent-panes");
+    const paneLayout = getLastRuleBlock(".pane-layout");
+    const paneLayoutChild = getLastRuleBlock(".pane-layout-child");
     const leftPanel = getLastRuleBlock(".left-panel");
     const workspaceSidebarPanel = getLastRuleBlock(".workspace-sidebar-panel");
     const workspaceActivityBar = getLastRuleBlock(".workspace-activity-bar");
@@ -1180,6 +1186,10 @@ describe("components.css theme-sensitive surfaces", () => {
     const bottomTerminalContent = getLastRuleBlock(".bottom-terminal-content");
     const bottomTerminalXterm = getLastRuleBlock(".bottom-terminal-xterm");
     const bottomTerminalEmpty = getLastRuleBlock(".bottom-terminal-empty");
+    const xtermScreen = getLastRuleBlock(".xterm-host .xterm-screen");
+    const glassXtermScreen = getLastRuleBlock(
+      '[data-appearance-glass="on"] .xterm-host .xterm-screen'
+    );
     const terminalToolbar = getLastRuleBlock(".terminal-toolbar");
     const bottomTerminalTabs = getLastRuleBlock(".bottom-terminal-tabs");
     const mobileShell = getLastGroupedRuleBlock(/\.mobile-shell\s*\{([^}]*)\}/g);
@@ -1196,8 +1206,14 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(appTopbar).toContain("var(--app-surface-opacity, 0.96)");
     expect(appTopbar).toContain("backdrop-filter: var(--app-surface-backdrop-filter, none)");
     expect(workspacePage).toContain("background: transparent");
+    expect(workspaceBody).toContain("background: transparent");
     expect(workspaceMainArea).toContain("background: transparent");
+    expect(workspaceMainStage).toContain("background: transparent");
+    expect(agentPanes).toContain("background: transparent");
+    expect(agentPane).toContain("background: transparent");
     expect(agentPanesStage).toContain("background: transparent");
+    expect(paneLayout).toContain("background: transparent");
+    expect(paneLayoutChild).toContain("background: transparent");
     expect(leftPanel).toContain("background: transparent");
     expect(workspaceSidebarPanel).toContain("var(--surface-overlay-bg)");
     expect(workspaceSidebarPanel).toContain("var(--app-surface-opacity, 0.96)");
@@ -1244,9 +1260,12 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(bottomTerminal).toContain("var(--app-surface-opacity, 0.96)");
     expect(bottomTerminal).toContain("calc(var(--app-surface-opacity, 0.96) * 60%)");
     expect(bottomTerminal).toContain("backdrop-filter: var(--app-surface-backdrop-filter, none)");
+    expect(bottomTerminal).toContain("box-shadow: none");
     expect(bottomTerminalContent).toContain("background: transparent");
     expect(bottomTerminalXterm).toContain("background: transparent");
     expect(bottomTerminalEmpty).toContain("background: transparent");
+    expect(xtermScreen).toContain("background: var(--bg-terminal)");
+    expect(glassXtermScreen).toContain("background: transparent");
     expect(terminalToolbar).toContain("var(--surface-overlay-bg)");
     expect(terminalToolbar).toContain("var(--app-surface-opacity, 0.88)");
     expect(terminalToolbar).toContain("calc(var(--app-surface-opacity, 0.88) * 66%)");

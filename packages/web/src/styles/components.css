@@ -1854,6 +1854,10 @@
   background: var(--bg-terminal);
 }
 
+[data-appearance-glass="on"] .xterm-host .xterm-screen {
+  background: transparent;
+}
+
 /* Third-party widgets render their own scroll containers, so bridge them back
  * to the shared scrollbar tokens instead of letting their library defaults
  * drift away from the rest of the app. */
@@ -1950,6 +1954,7 @@ body.focus-mode-active .split-divider-h {
   display: flex;
   flex: 1;
   min-height: 0;
+  background: transparent;
 }
 
 /* ========== Workspace Page Layout ========== */
@@ -2287,7 +2292,7 @@ body.is-resizing-panels * {
   flex: 1;
   display: flex;
   flex-direction: column;
-  background: var(--bg);
+  background: transparent;
   position: relative;
   overflow: hidden;
   min-height: 0;
@@ -2308,7 +2313,7 @@ body.is-resizing-panels * {
   flex: 1;
   display: flex;
   flex-direction: column;
-  background: var(--bg);
+  background: transparent;
   position: relative;
   min-height: 0;
 }
@@ -3014,6 +3019,7 @@ body.is-resizing-panels * {
   width: 100%;
   height: 100%;
   overflow: hidden;
+  background: transparent;
 }
 
 .pane-layout-horizontal {
@@ -3026,6 +3032,7 @@ body.is-resizing-panels * {
 
 .pane-layout-child {
   overflow: hidden;
+  background: transparent;
 }
 
 .pane-layout-divider {
@@ -6219,9 +6226,7 @@ textarea.input {
 }
 
 .agent-panes {
-  background:
-    radial-gradient(circle at top center, rgba(108, 182, 255, 0.05), transparent 24%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.015), transparent 20%), var(--bg-page);
+  background: transparent;
 }
 
 .agent-draft-launcher {
@@ -7296,6 +7301,7 @@ textarea.input {
   min-width: 0;
   display: flex;
   flex-direction: column;
+  background: transparent;
 }
 
 .workspace-main-stage > .agent-panes {
@@ -7995,6 +8001,7 @@ textarea.input {
 .pane-layout,
 .pane-layout-child {
   height: 100%;
+  background: transparent;
 }
 
 .panel-body {
@@ -14406,6 +14413,7 @@ textarea.input {
     var(--surface-overlay-bg) calc(var(--app-surface-opacity, 0.96) * 60%),
     transparent
   );
+  box-shadow: none;
   backdrop-filter: var(--app-surface-backdrop-filter, none);
 }
 

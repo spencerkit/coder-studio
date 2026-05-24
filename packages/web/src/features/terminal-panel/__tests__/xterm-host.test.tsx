@@ -9,7 +9,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import userEvent from "@testing-library/user-event";
 import { createStore, Provider } from "jotai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { localeAtom, themeAtom } from "../../../atoms/app-ui";
+import { appearancePersonalizationAtom, localeAtom, themeAtom } from "../../../atoms/app-ui";
 import { wsClientAtom } from "../../../atoms/connection";
 import { JotaiProvider } from "../../../test-utils/jotai-provider";
 import { getThemeById } from "../../../theme";
@@ -2723,6 +2723,41 @@ describe("XtermHost", () => {
     );
   });
 
+  it("uses a transparent xterm background when glass surfaces are enabled", async () => {
+    const { Terminal } = await import("@xterm/xterm");
+    const store = createStore();
+    store.set(appearancePersonalizationAtom, {
+      version: 1,
+      common: {
+        backgroundMode: "image",
+        backgroundAssetId: "asset-glass-terminal",
+        backgroundFit: "cover",
+        backgroundDimness: 18,
+        backgroundBlur: 6,
+        glassEnabled: true,
+        glassIntensity: 24,
+        surfaceOpacity: 56,
+      },
+      desktop: {},
+      mobile: {},
+    });
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="glass-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    expect(Terminal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        theme: expect.objectContaining({
+          ...getThemeById("mint-dark").terminalTheme,
+          background: "transparent",
+        }),
+      })
+    );
+  });
+
   it("updates the live xterm theme when the ui theme changes to graphite-light", async () => {
     const store = createStore();
     store.set(themeAtom, "mint-dark");
@@ -2741,6 +2776,47 @@ describe("XtermHost", () => {
       expect(mockTerminal.options).toEqual(
         expect.objectContaining({
           theme: expect.objectContaining(getThemeById("graphite-light").terminalTheme),
+        })
+      );
+    });
+  });
+
+  it("keeps the live xterm background transparent after a theme switch when glass surfaces are enabled", async () => {
+    const store = createStore();
+    store.set(themeAtom, "mint-dark");
+    store.set(appearancePersonalizationAtom, {
+      version: 1,
+      common: {
+        backgroundMode: "image",
+        backgroundAssetId: "asset-glass-theme-sync",
+        backgroundFit: "cover",
+        backgroundDimness: 16,
+        backgroundBlur: 4,
+        glassEnabled: true,
+        glassIntensity: 28,
+        surfaceOpacity: 52,
+      },
+      desktop: {},
+      mobile: {},
+    });
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="glass-theme-sync-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await act(async () => {
+      store.set(themeAtom, "graphite-light");
+    });
+
+    await waitFor(() => {
+      expect(mockTerminal.options).toEqual(
+        expect.objectContaining({
+          theme: expect.objectContaining({
+            ...getThemeById("graphite-light").terminalTheme,
+            background: "transparent",
+          }),
         })
       );
     });
