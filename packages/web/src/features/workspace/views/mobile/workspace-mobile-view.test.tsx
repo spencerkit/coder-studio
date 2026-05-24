@@ -250,7 +250,7 @@ describe("WorkspaceMobileView", () => {
     vi.restoreAllMocks();
   });
 
-  it("rebinds the mobile files detail route to the next active editor when the mobile header closes the current file", async () => {
+  it("closes the mobile files sheet when the mobile header closes the current file", async () => {
     const store = renderMobileView({
       activePath: "src/a.ts",
       openFiles: {
@@ -281,8 +281,9 @@ describe("WorkspaceMobileView", () => {
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
 
     await waitFor(() => {
-      expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/b.ts");
-      expect(screen.getByRole("heading", { level: 2, name: "b.ts" })).toBeInTheDocument();
+      expect(store.get(activeFilePathAtomFamily("ws-test"))).toBeNull();
+      expect(screen.queryByTestId("mobile-files-sheet-root")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("mobile-files-sheet-detail")).not.toBeInTheDocument();
     });
   });
 

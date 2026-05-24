@@ -46,7 +46,7 @@ describe("resolveOpenEditorsClose", () => {
     });
   });
 
-  it("closing the active file selects the next editor when available later in sorted order", () => {
+  it("closing the active file exits the editor instead of selecting the next editor", () => {
     expect(
       resolveOpenEditorsClose({
         openFiles: {
@@ -60,12 +60,12 @@ describe("resolveOpenEditorsClose", () => {
     ).toEqual({
       orderedPaths: ["src/a.ts", "src/b.ts", "src/c.ts"],
       removedPaths: ["src/b.ts"],
-      nextActiveFilePath: "src/c.ts",
-      shouldExitEditor: false,
+      nextActiveFilePath: null,
+      shouldExitEditor: true,
     });
   });
 
-  it("closing the active last item selects the previous editor", () => {
+  it("closing the active last item exits the editor", () => {
     expect(
       resolveOpenEditorsClose({
         openFiles: {
@@ -79,12 +79,12 @@ describe("resolveOpenEditorsClose", () => {
     ).toEqual({
       orderedPaths: ["src/a.ts", "src/b.ts", "src/c.ts"],
       removedPaths: ["src/c.ts"],
-      nextActiveFilePath: "src/b.ts",
-      shouldExitEditor: false,
+      nextActiveFilePath: null,
+      shouldExitEditor: true,
     });
   });
 
-  it("closing a pending active editor selects the previous loaded editor by shared sorted order", () => {
+  it("closing a pending active editor exits the editor", () => {
     expect(
       resolveOpenEditorsClose({
         openFiles: {
@@ -97,8 +97,8 @@ describe("resolveOpenEditorsClose", () => {
     ).toEqual({
       orderedPaths: ["src/a.ts", "src/b.ts"],
       removedPaths: ["src/b.ts"],
-      nextActiveFilePath: "src/a.ts",
-      shouldExitEditor: false,
+      nextActiveFilePath: null,
+      shouldExitEditor: true,
     });
   });
 
