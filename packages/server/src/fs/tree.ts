@@ -103,7 +103,7 @@ export async function searchFiles(
       }
 
       if (entry.isFile()) {
-        const rank = scoreFilenameMatch(entry.name, normalizedQuery);
+        const rank = scoreFileMatch(relPath, entry.name, normalizedQuery);
         if (rank === null) {
           continue;
         }
@@ -153,6 +153,15 @@ export async function searchFiles(
   return { files };
 }
 
+function scoreFileMatch(path: string, name: string, query: string): number | null {
+  const filenameRank = scoreFilenameMatch(name, query);
+  if (filenameRank !== null) {
+    return filenameRank;
+  }
+
+  return scorePathMatch(path, query);
+}
+
 function scoreFilenameMatch(name: string, query: string): number | null {
   const normalizedName = name.toLowerCase();
   const baseName = normalizedName.replace(/\.[^.]+$/, "");
@@ -183,6 +192,28 @@ function scoreFilenameMatch(name: string, query: string): number | null {
 
   if (isSubsequence(query, normalizedName)) {
     return 6;
+  }
+
+  return null;
+}
+
+function scorePathMatch(path: string, query: string): number | null {
+  const normalizedPath = path.toLowerCase();
+
+  if (normalizedPath === query) {
+    return 7;
+  }
+
+  if (normalizedPath.startsWith(query)) {
+    return 8;
+  }
+
+  if (normalizedPath.includes(query)) {
+    return 9;
+  }
+
+  if (isSubsequence(query, normalizedPath)) {
+    return 10;
   }
 
   return null;

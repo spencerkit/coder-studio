@@ -1,6 +1,6 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { connectionStatusAtom, wsClientAtom } from "../../atoms/connection";
 import { activeWorkspaceIdAtom, workspaceOrderAtom, workspacesAtom } from "../../atoms/workspaces";
@@ -203,7 +203,7 @@ describe("WorkspacePage", () => {
     expect(document.querySelector('[data-icon-semantic="file.action.newFolder"]')).toBeTruthy();
     expect(screen.queryByRole("button", { name: /refresh|刷新/i })).toBeNull();
 
-    fireEvent.click(screen.getByRole("tab", { name: "Git" }));
+    fireEvent.click(screen.getByRole("button", { name: /Source Control|源代码管理/i }));
 
     expect(screen.getByTestId("git-panel")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^new file$|^新建文件$/i })).toBeNull();
@@ -274,11 +274,11 @@ describe("WorkspacePage", () => {
     expect(branchButton?.querySelector('[data-icon-semantic="git.footer.branch"]')).toBeTruthy();
     fireEvent.click(branchButton as HTMLElement);
 
-    const gitTab = screen.getByRole("tab", { name: "Git" });
-    expect(screen.getByRole("tablist", { name: "Workspace sections" })).toBeInTheDocument();
-    expect(gitTab).toHaveAttribute("aria-selected", "true");
-    expect(gitTab).toHaveClass("workspace-sidebar-panel__tab", "active");
-    expect(gitTab).not.toHaveClass("panel-tab");
+    const sourceControlButton = screen.getByRole("button", { name: /Source Control|源代码管理/i });
+    expect(
+      screen.getByRole("navigation", { name: /Workspace activity bar|工作区活动栏/i })
+    ).toBeInTheDocument();
+    expect(sourceControlButton).toHaveAttribute("aria-pressed", "true");
     expect(
       await screen.findByPlaceholderText("Search branches or create new branch...")
     ).toBeInTheDocument();
@@ -289,7 +289,7 @@ describe("WorkspacePage", () => {
     });
   });
 
-  it("uses workspace sidebar-specific tab styling without legacy panel-tab classes", async () => {
+  it("uses workspace activity bar styling without legacy tab chrome", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "git.status") {
         return {
@@ -334,15 +334,568 @@ describe("WorkspacePage", () => {
       </Provider>
     );
 
+    await screen.findByRole("button", { name: /Explorer|资源管理器/i });
+
+    expect(document.querySelector(".workspace-activity-bar")).toBeTruthy();
+    expect(document.querySelector(".workspace-sidebar-panel__tabs")).toBeNull();
+    expect(document.querySelector(".workspace-sidebar-panel__tab")).toBeNull();
+  });
+
+  it("renders an explorer-first activity bar and removes the desktop tree search box", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return {
+          branch: "main",
+          ahead: 0,
+          behind: 0,
+          staged: [],
+          modified: [],
+          deleted: [],
+          untracked: [],
+        };
+      }
+
+      return [];
+    });
+
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedReadyWorkspaceState(store, {
+      "ws-test": {
+        id: "ws-test",
+        path: "/home/spencer/workspace/coder-studio",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+    store.set(openFilesAtomFamily("ws-test"), {
+      "README.md": {
+        kind: "text",
+        path: "README.md",
+        content: "# README",
+        savedContent: "# README",
+        baseHash: "hash-readme",
+        isDirty: false,
+      },
+      "src/app.tsx": {
+        kind: "text",
+        path: "src/app.tsx",
+        content: "export const app = true;",
+        savedContent: "export const app = true;",
+        baseHash: "hash-app",
+        isDirty: false,
+      },
+    });
+    store.set(activeFilePathAtomFamily("ws-test"), "src/app.tsx");
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/workspace"]}>
+          <Routes>
+            <Route path="/workspace" element={<WorkspaceDesktopView />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>
+    );
+
+    await screen.findByText(/Open Editors|打开的编辑器/i);
+
+    const explorerButton = screen.getByRole("button", { name: /Explorer|资源管理器/i });
+    expect(explorerButton).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "README.md" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "src/app.tsx" })).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Search files|搜索文件/i)).toBeNull();
+    expect(document.querySelector(".workspace-activity-bar")).toBeTruthy();
+  });
+
+  it("switches desktop sidebar views from the activity bar", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return {
+          branch: "main",
+          ahead: 0,
+          behind: 0,
+          staged: [],
+          modified: [],
+          deleted: [],
+          untracked: [],
+        };
+      }
+
+      return [];
+    });
+
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedReadyWorkspaceState(store, {
+      "ws-test": {
+        id: "ws-test",
+        path: "/home/spencer/workspace/coder-studio",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/workspace"]}>
+          <Routes>
+            <Route path="/workspace" element={<WorkspaceDesktopView />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Search|搜索/i }));
+    await waitFor(() => {
+      expect(
+        document.querySelector(".workspace-sidebar-view .panel-header__title")
+      ).toHaveTextContent(/Search|搜索/i);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Source Control|源代码管理/i }));
+    expect(screen.getByTestId("git-panel")).toBeInTheDocument();
+  });
+
+  it("renders the content search input when the Search activity item is active", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return {
+          branch: "main",
+          ahead: 0,
+          behind: 0,
+          staged: [],
+          modified: [],
+          deleted: [],
+          untracked: [],
+        };
+      }
+
+      if (op === "file.searchContent") {
+        return {
+          files: [],
+          totalMatchCount: 0,
+          hasMoreFiles: false,
+          truncatedMatchFileCount: 0,
+        };
+      }
+
+      return [];
+    });
+
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedReadyWorkspaceState(store, {
+      "ws-test": {
+        id: "ws-test",
+        path: "/home/spencer/workspace/coder-studio",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/workspace"]}>
+          <Routes>
+            <Route path="/workspace" element={<WorkspaceDesktopView />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Search|搜索/i }));
+    expect(await screen.findByRole("searchbox", { name: /Search|搜索/i })).toBeInTheDocument();
+  });
+
+  it("keeps sidebar view and terminal visibility isolated per workspace tab instance", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return {
+          branch: "main",
+          ahead: 0,
+          behind: 0,
+          staged: [],
+          modified: [],
+          deleted: [],
+          untracked: [],
+        };
+      }
+
+      return [];
+    });
+
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedReadyWorkspaceState(store, {
+      "ws-a": {
+        id: "ws-a",
+        path: "/workspace-a",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+      "ws-b": {
+        id: "ws-b",
+        path: "/workspace-b",
+        targetRuntime: "native",
+        openedAt: 2,
+        lastActiveAt: 2,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+    store.set(activeWorkspaceIdAtom, "ws-a");
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/workspace"]}>
+          <Routes>
+            <Route path="/workspace" element={<WorkspaceDesktopView />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>
+    );
+
     await screen.findByTestId("file-tree-panel");
 
-    const filesTab = screen.getByRole("tab", { name: /Files|文件/i });
-    const gitTab = screen.getByRole("tab", { name: "Git" });
+    fireEvent.click(screen.getByRole("button", { name: /Search|搜索/i }));
+    expect(await screen.findByRole("searchbox", { name: /Search|搜索/i })).toBeInTheDocument();
 
-    expect(filesTab).toHaveClass("workspace-sidebar-panel__tab", "active");
-    expect(filesTab).not.toHaveClass("panel-tab");
-    expect(gitTab).toHaveClass("workspace-sidebar-panel__tab");
-    expect(gitTab).not.toHaveClass("panel-tab");
+    act(() => {
+      store.set(terminalPanelVisibleAtom, false);
+    });
+
+    expect(screen.queryByTestId("terminal-panel")).toBeNull();
+
+    act(() => {
+      store.set(activeWorkspaceIdAtom, "ws-b");
+    });
+
+    await screen.findByTestId("file-tree-panel");
+    expect(screen.queryByRole("searchbox", { name: /Search|搜索/i })).toBeNull();
+    expect(screen.getByTestId("terminal-panel")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Source Control|源代码管理/i }));
+    expect(screen.getByTestId("git-panel")).toBeInTheDocument();
+
+    act(() => {
+      store.set(activeWorkspaceIdAtom, "ws-a");
+    });
+
+    expect(await screen.findByRole("searchbox", { name: /Search|搜索/i })).toBeInTheDocument();
+    expect(screen.queryByTestId("terminal-panel")).toBeNull();
+
+    act(() => {
+      store.set(activeWorkspaceIdAtom, "ws-b");
+    });
+
+    expect(await screen.findByTestId("git-panel")).toBeInTheDocument();
+    expect(screen.getByTestId("terminal-panel")).toBeInTheDocument();
+  });
+
+  it("restores content search query and results per workspace tab instance", async () => {
+    vi.useFakeTimers();
+
+    const sendCommand = vi
+      .fn()
+      .mockImplementation(async (op: string, args?: { workspaceId?: string; query?: string }) => {
+        if (op === "git.status") {
+          return {
+            branch: "main",
+            ahead: 0,
+            behind: 0,
+            staged: [],
+            modified: [],
+            deleted: [],
+            untracked: [],
+          };
+        }
+
+        if (op === "file.searchContent") {
+          if (args?.workspaceId === "ws-a" && args.query === "alpha") {
+            return {
+              files: [
+                {
+                  path: "src/alpha.tsx",
+                  name: "alpha.tsx",
+                  matchCount: 1,
+                  hasMoreMatches: false,
+                  matches: [
+                    {
+                      line: 3,
+                      column: 7,
+                      endColumn: 12,
+                      preview: "const alpha = true;",
+                      previewColumnStart: 7,
+                      previewColumnEnd: 12,
+                    },
+                  ],
+                },
+              ],
+              totalMatchCount: 1,
+              hasMoreFiles: false,
+              truncatedMatchFileCount: 0,
+            };
+          }
+
+          if (args?.workspaceId === "ws-b" && args.query === "beta") {
+            return {
+              files: [
+                {
+                  path: "src/beta.tsx",
+                  name: "beta.tsx",
+                  matchCount: 1,
+                  hasMoreMatches: false,
+                  matches: [
+                    {
+                      line: 4,
+                      column: 7,
+                      endColumn: 11,
+                      preview: "const beta = true;",
+                      previewColumnStart: 7,
+                      previewColumnEnd: 11,
+                    },
+                  ],
+                },
+              ],
+              totalMatchCount: 1,
+              hasMoreFiles: false,
+              truncatedMatchFileCount: 0,
+            };
+          }
+
+          return {
+            files: [],
+            totalMatchCount: 0,
+            hasMoreFiles: false,
+            truncatedMatchFileCount: 0,
+          };
+        }
+
+        return [];
+      });
+
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedReadyWorkspaceState(store, {
+      "ws-a": {
+        id: "ws-a",
+        path: "/workspace-a",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+      "ws-b": {
+        id: "ws-b",
+        path: "/workspace-b",
+        targetRuntime: "native",
+        openedAt: 2,
+        lastActiveAt: 2,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+    store.set(activeWorkspaceIdAtom, "ws-a");
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/workspace"]}>
+          <Routes>
+            <Route path="/workspace" element={<WorkspaceDesktopView />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Search|搜索/i }));
+    const alphaInput = screen.getByRole("searchbox", { name: /Search|搜索/i });
+    fireEvent.change(alphaInput, { target: { value: "alpha" } });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(250);
+    });
+
+    expect(screen.getByDisplayValue("alpha")).toBeInTheDocument();
+    expect(screen.getByText("alpha.tsx")).toBeInTheDocument();
+
+    act(() => {
+      store.set(activeWorkspaceIdAtom, "ws-b");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Search|搜索/i }));
+    const betaInput = screen.getByRole("searchbox", { name: /Search|搜索/i });
+    expect(betaInput).toHaveValue("");
+
+    fireEvent.change(betaInput, { target: { value: "beta" } });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(250);
+    });
+
+    expect(screen.getByDisplayValue("beta")).toBeInTheDocument();
+    expect(screen.getByText("beta.tsx")).toBeInTheDocument();
+
+    act(() => {
+      store.set(activeWorkspaceIdAtom, "ws-a");
+    });
+
+    expect(screen.getByRole("searchbox", { name: /Search|搜索/i })).toHaveValue("alpha");
+    expect(screen.getByText("alpha.tsx")).toBeInTheDocument();
+    expect(screen.queryByText("beta.tsx")).toBeNull();
+
+    vi.useRealTimers();
+  });
+
+  it("falls back to Explorer when the persisted desktop sidebar view is invalid", async () => {
+    window.localStorage.setItem("ui.desktopSidebarView", JSON.stringify("legacy"));
+
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return {
+          branch: "main",
+          ahead: 0,
+          behind: 0,
+          staged: [],
+          modified: [],
+          deleted: [],
+          untracked: [],
+        };
+      }
+
+      return [];
+    });
+
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedReadyWorkspaceState(store, {
+      "ws-test": {
+        id: "ws-test",
+        path: "/home/spencer/workspace/coder-studio",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/workspace"]}>
+          <Routes>
+            <Route path="/workspace" element={<WorkspaceDesktopView />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>
+    );
+
+    const explorerButton = await screen.findByRole("button", { name: /Explorer|资源管理器/i });
+    expect(explorerButton).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByTestId("file-tree-panel")).toBeInTheDocument();
+  });
+
+  it("ignores sidebar shortcuts while focus is inside an editable field", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return {
+          branch: "main",
+          ahead: 0,
+          behind: 0,
+          staged: [],
+          modified: [],
+          deleted: [],
+          untracked: [],
+        };
+      }
+
+      return [];
+    });
+
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedReadyWorkspaceState(store, {
+      "ws-test": {
+        id: "ws-test",
+        path: "/home/spencer/workspace/coder-studio",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/workspace"]}>
+          <Routes>
+            <Route path="/workspace" element={<WorkspaceDesktopView />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>
+    );
+
+    const input = document.createElement("input");
+    document.body.appendChild(input);
+    input.focus();
+
+    fireEvent.keyDown(input, { key: "3", ctrlKey: true });
+
+    expect(screen.queryByTestId("git-panel")).toBeNull();
+    expect(screen.getByRole("button", { name: /Explorer|资源管理器/i })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+
+    input.remove();
   });
 
   it("does not render a duplicate worktree entry button in the desktop git header", async () => {
@@ -399,7 +952,7 @@ describe("WorkspacePage", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("writes the displayed workspace id on mount and clears it on unmount", async () => {
+  it("writes the displayed workspace id on mount and preserves it on unmount", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "git.status") {
         return {
@@ -450,7 +1003,103 @@ describe("WorkspacePage", () => {
 
     unmount();
 
-    expect(store.get(activeWorkspaceIdAtom)).toBeNull();
+    expect(store.get(activeWorkspaceIdAtom)).toBe("ws-test");
+  });
+
+  it("preserves the active workspace when leaving /workspace and returning later", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return {
+          branch: "main",
+          ahead: 0,
+          behind: 0,
+          staged: [],
+          modified: [],
+          deleted: [],
+          untracked: [],
+        };
+      }
+
+      return [];
+    });
+
+    function SettingsTestPage() {
+      const navigate = useNavigate();
+
+      return (
+        <button type="button" onClick={() => navigate("/workspace")}>
+          返回工作区
+        </button>
+      );
+    }
+
+    function WorkspaceRouteControls() {
+      const navigate = useNavigate();
+
+      return (
+        <>
+          <button type="button" onClick={() => navigate("/settings")}>
+            打开设置
+          </button>
+          <WorkspaceDesktopView />
+        </>
+      );
+    }
+
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedReadyWorkspaceState(store, {
+      "ws-a": {
+        id: "ws-a",
+        path: "/workspace-a",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+      "ws-b": {
+        id: "ws-b",
+        path: "/workspace-b",
+        targetRuntime: "native",
+        openedAt: 2,
+        lastActiveAt: 2,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+    store.set(activeWorkspaceIdAtom, "ws-b");
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/workspace"]}>
+          <Routes>
+            <Route path="/workspace" element={<WorkspaceRouteControls />} />
+            <Route path="/settings" element={<SettingsTestPage />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>
+    );
+
+    await screen.findByTestId("file-tree-panel");
+    expect(store.get(activeWorkspaceIdAtom)).toBe("ws-b");
+
+    fireEvent.click(screen.getByRole("button", { name: "打开设置" }));
+
+    await screen.findByRole("button", { name: "返回工作区" });
+    expect(store.get(activeWorkspaceIdAtom)).toBe("ws-b");
+
+    fireEvent.click(screen.getByRole("button", { name: "返回工作区" }));
+
+    await screen.findByTestId("file-tree-panel");
+    expect(store.get(activeWorkspaceIdAtom)).toBe("ws-b");
   });
 
   it("shows the empty state when rendered without an active workspace", async () => {
@@ -795,6 +1444,79 @@ describe("WorkspacePage", () => {
     expect(screen.queryByTestId("git-diff-viewer")).not.toBeInTheDocument();
   });
 
+  it("returns from editor mode to the agent session view when close all closes the last desktop editor", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return {
+          branch: "main",
+          ahead: 0,
+          behind: 0,
+          staged: [],
+          modified: [],
+          deleted: [],
+          untracked: [],
+        };
+      }
+
+      return [];
+    });
+
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedReadyWorkspaceState(store, {
+      "ws-test": {
+        id: "ws-test",
+        path: "/home/spencer/workspace/coder-studio",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+    store.set(activeFilePathAtomFamily("ws-test"), "src/app.tsx");
+    store.set(editorModeAtomFamily("ws-test"), "edit");
+    store.set(openFilesAtomFamily("ws-test"), {
+      "src/app.tsx": {
+        kind: "text",
+        path: "src/app.tsx",
+        content: "const app = 1;",
+        savedContent: "const app = 1;",
+        baseHash: "hash-app",
+        isDirty: false,
+      },
+    });
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/workspace"]}>
+          <Routes>
+            <Route path="/workspace" element={<WorkspaceDesktopView />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>
+    );
+
+    await screen.findByTestId("code-editor-host");
+    expect(screen.queryByTestId("agent-panes")).not.toBeInTheDocument();
+
+    const heading = screen.getByRole("heading", { level: 2, name: /(Open Editors|打开的编辑器)/i });
+    expect(heading).toHaveTextContent(/(Open Editors|打开的编辑器)\s*\(1\)/i);
+
+    const section = heading.closest("section") as HTMLElement;
+    fireEvent.click(within(section).getByRole("button", { name: /Close all|全部关闭/i }));
+
+    await screen.findByTestId("agent-panes");
+    expect(heading).toHaveTextContent(/(Open Editors|打开的编辑器)\s*\(0\)/i);
+    expect(screen.queryByTestId("code-editor-host")).not.toBeInTheDocument();
+    expect(store.get(openFilesAtomFamily("ws-test"))).toEqual({});
+    expect(store.get(activeFilePathAtomFamily("ws-test"))).toBeNull();
+  });
+
   it("keeps commit-history diff previews reachable on desktop without an active file", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "git.status") {
@@ -848,6 +1570,167 @@ describe("WorkspacePage", () => {
 
     await screen.findByTestId("code-editor-host");
     expect(screen.queryByTestId("agent-panes")).not.toBeInTheDocument();
+  });
+
+  it("keeps commit-history diff previews reachable after close all clears open editors", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return {
+          branch: "main",
+          ahead: 0,
+          behind: 0,
+          staged: [],
+          modified: [],
+          deleted: [],
+          untracked: [],
+        };
+      }
+
+      return [];
+    });
+
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedReadyWorkspaceState(store, {
+      "ws-test": {
+        id: "ws-test",
+        path: "/home/spencer/workspace/coder-studio",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+    store.set(activeFilePathAtomFamily("ws-test"), "src/app.tsx");
+    store.set(editorModeAtomFamily("ws-test"), "edit");
+    store.set(openFilesAtomFamily("ws-test"), {
+      "src/app.tsx": {
+        kind: "text",
+        path: "src/app.tsx",
+        content: "const app = 1;",
+        savedContent: "const app = 1;",
+        baseHash: "hash-app",
+        isDirty: false,
+      },
+    });
+    store.set(gitDiffPreviewAtomFamily("ws-test"), {
+      path: "abc123",
+      title: "abc123 · commit subject",
+      diff: "diff --git a/src/app.tsx b/src/app.tsx",
+      source: "commit",
+    });
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/workspace"]}>
+          <Routes>
+            <Route path="/workspace" element={<WorkspaceDesktopView />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>
+    );
+
+    await screen.findByTestId("code-editor-host");
+
+    const heading = screen.getByRole("heading", { level: 2, name: /(Open Editors|打开的编辑器)/i });
+    const section = heading.closest("section") as HTMLElement;
+    fireEvent.click(within(section).getByRole("button", { name: /Close all|全部关闭/i }));
+
+    await screen.findByTestId("code-editor-host");
+    expect(screen.queryByTestId("agent-panes")).not.toBeInTheDocument();
+    expect(store.get(openFilesAtomFamily("ws-test"))).toEqual({});
+    expect(store.get(activeFilePathAtomFamily("ws-test"))).toBeNull();
+    expect(store.get(gitDiffPreviewAtomFamily("ws-test"))).toEqual({
+      path: "abc123",
+      title: "abc123 · commit subject",
+      diff: "diff --git a/src/app.tsx b/src/app.tsx",
+      source: "commit",
+    });
+  });
+
+  it("clearing the final open editor from Open Editors also clears an active commit preview", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return {
+          branch: "main",
+          ahead: 0,
+          behind: 0,
+          staged: [],
+          modified: [],
+          deleted: [],
+          untracked: [],
+        };
+      }
+
+      return [];
+    });
+
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedReadyWorkspaceState(store, {
+      "ws-test": {
+        id: "ws-test",
+        path: "/home/spencer/workspace/coder-studio",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+    store.set(activeFilePathAtomFamily("ws-test"), "src/app.tsx");
+    store.set(editorModeAtomFamily("ws-test"), "edit");
+    store.set(openFilesAtomFamily("ws-test"), {
+      "src/app.tsx": {
+        kind: "text",
+        path: "src/app.tsx",
+        content: "const app = 1;",
+        savedContent: "const app = 1;",
+        baseHash: "hash-app",
+        isDirty: false,
+      },
+    });
+    store.set(gitDiffPreviewAtomFamily("ws-test"), {
+      path: "abc123",
+      title: "abc123 · commit subject",
+      diff: "diff --git a/src/app.tsx b/src/app.tsx",
+      source: "commit",
+    });
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/workspace"]}>
+          <Routes>
+            <Route path="/workspace" element={<WorkspaceDesktopView />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>
+    );
+
+    await screen.findByTestId("code-editor-host");
+    expect(screen.queryByTestId("agent-panes")).not.toBeInTheDocument();
+
+    const activeRow = screen
+      .getByRole("button", { name: "src/app.tsx" })
+      .closest(".workspace-open-editors__row") as HTMLElement;
+    fireEvent.click(
+      within(activeRow).getByRole("button", { name: /^(Close|关闭) src\/app\.tsx$/ })
+    );
+
+    await screen.findByTestId("agent-panes");
+    expect(screen.queryByTestId("code-editor-host")).not.toBeInTheDocument();
+    expect(store.get(activeFilePathAtomFamily("ws-test"))).toBeNull();
+    expect(store.get(openFilesAtomFamily("ws-test"))).toEqual({});
+    expect(store.get(gitDiffPreviewAtomFamily("ws-test"))).toBeNull();
   });
 
   it("keeps the resized desktop file panel width after dragging the left separator", async () => {

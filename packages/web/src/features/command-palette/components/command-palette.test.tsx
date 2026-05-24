@@ -2,7 +2,7 @@ import type { Workspace } from "@coder-studio/core";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { commandPaletteOpenAtom, localeAtom } from "../../../atoms/app-ui";
+import { commandPaletteOpenAtom, localeAtom, quickOpenOpenAtom } from "../../../atoms/app-ui";
 import { wsClientAtom } from "../../../atoms/connection";
 import {
   activeWorkspaceIdAtom,
@@ -231,6 +231,51 @@ describe("CommandPalette", () => {
     fireEvent.click(screen.getByText("Terminal"));
 
     expect(store.get(terminalPanelVisibleAtom)).toBe(true);
+  });
+
+  it("opens Quick Open from the quick actions list on desktop", () => {
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(commandPaletteOpenAtom, true);
+    store.set(workspacesAtom, {
+      "ws-1": createWorkspace("ws-1", "/tmp/one"),
+    });
+    store.set(workspaceOrderAtom, ["ws-1"]);
+    store.set(workspacesLoadStateAtom, "ready");
+    store.set(activeWorkspaceIdAtom, "ws-1");
+
+    render(
+      <Provider store={store}>
+        <CommandPalette />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByText("Go to File..."));
+
+    expect(store.get(quickOpenOpenAtom)).toBe(true);
+    expect(store.get(commandPaletteOpenAtom)).toBe(false);
+  });
+
+  it("hides Go to File on mobile", () => {
+    viewportMocks.viewport = "mobile";
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(commandPaletteOpenAtom, true);
+    store.set(workspacesAtom, {
+      "ws-1": createWorkspace("ws-1", "/tmp/one"),
+    });
+    store.set(workspaceOrderAtom, ["ws-1"]);
+    store.set(workspacesLoadStateAtom, "ready");
+    store.set(activeWorkspaceIdAtom, "ws-1");
+
+    render(
+      <Provider store={store}>
+        <CommandPalette />
+      </Provider>
+    );
+
+    expect(screen.queryByText("Go to File...")).toBeNull();
   });
 
   it("keeps the desktop palette inside the shared workbench layer", () => {

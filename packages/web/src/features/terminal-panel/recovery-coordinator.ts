@@ -12,13 +12,17 @@ import type {
   TerminalReplayPayload,
   TerminalSnapshotPayload,
 } from "../../ws/client";
-import { type RecoveryUiMode, TERMINAL_REPLAY_TIMEOUT_MS } from "./replay-state";
+import {
+  type RecoveryUiMode,
+  type RecoveryUiModeDetail,
+  TERMINAL_REPLAY_TIMEOUT_MS,
+} from "./replay-state";
 
 interface RegisteredTerminal {
   terminalId: string;
   workspaceId: string;
   getRenderedSeq: () => number;
-  setUiMode: (mode: RecoveryUiMode) => void;
+  setUiMode: (mode: RecoveryUiMode, detail?: RecoveryUiModeDetail) => void;
   markClosed?: (state: RecoveryClosedTerminalState) => Promise<void> | void;
   completeRecovery?: (
     headSeq: number,
@@ -285,7 +289,7 @@ export function createRecoveryCoordinator(deps: RecoveryCoordinatorDeps): Recove
       await deps.applySnapshot(terminalId, snapshotResult.data);
     }
     await applyClosedState(terminal, closed);
-    terminal.setUiMode("silent");
+    terminal.setUiMode(closed ? "closed" : "silent");
   };
 
   const applyClosedState = async (
@@ -323,12 +327,12 @@ export function createRecoveryCoordinator(deps: RecoveryCoordinatorDeps): Recove
       } else {
         await applyClosedState(terminal, { exitCode: decision.exitCode });
       }
-      terminal.setUiMode("silent");
+      terminal.setUiMode("closed");
       return;
     }
 
     if (decision.action === "unrecoverable") {
-      terminal.setUiMode("error");
+      terminal.setUiMode("error", { reason: decision.reason });
       return;
     }
 
@@ -371,7 +375,7 @@ export function createRecoveryCoordinator(deps: RecoveryCoordinatorDeps): Recove
         await deps.applyReplay(decision.terminalId, replayResult.data);
       }
       await applyClosedState(terminal, decision.closed);
-      terminal.setUiMode("silent");
+      terminal.setUiMode(decision.closed ? "closed" : "silent");
       return;
     }
 

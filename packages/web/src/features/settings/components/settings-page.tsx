@@ -30,11 +30,7 @@ import { Check, ChevronRight } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { localeAtom, themeAtom } from "../../../atoms/app-ui";
-import {
-  connectionStatusAtom,
-  dispatchCommandAtom,
-  serverInfoAtom,
-} from "../../../atoms/connection";
+import { connectionStatusAtom, serverInfoAtom } from "../../../atoms/connection";
 import { resolvedActiveWorkspaceIdAtom } from "../../../atoms/workspaces";
 import { Button, Input, Notice, Pill, Select, Switch, ThemedIcon } from "../../../components/ui";
 import { useViewport } from "../../../hooks/use-viewport";
@@ -64,6 +60,7 @@ import {
   type SettingsSection,
 } from "./settings-sections";
 import { ShortcutsSettings } from "./shortcuts-settings";
+import { useSessionGateDispatch } from "./use-session-gate-dispatch";
 
 type NotificationCapabilityStatus = "available" | "limited" | "unsupported";
 type NotificationPermissionState = NotificationPermission | "unavailable";
@@ -212,7 +209,7 @@ export function SettingsPage() {
   const navigate = useNavigate();
   const viewport = useViewport();
   const isMobile = viewport === "mobile";
-  const dispatch = useAtomValue(dispatchCommandAtom);
+  const dispatch = useSessionGateDispatch();
   const connectionStatus = useAtomValue(connectionStatusAtom);
   const serverInfo = useAtomValue(serverInfoAtom);
   const resolvedActiveWorkspaceId = useAtomValue(resolvedActiveWorkspaceIdAtom);
@@ -354,6 +351,10 @@ export function SettingsPage() {
         ...updateSelectionVersionRef.current,
       };
       const result = await dispatch<Record<string, unknown>>("settings.get", {});
+      if (result === null) {
+        return;
+      }
+
       if (!result.ok || !result.data) {
         if (!cancelled) {
           setSettingsLoadError(result.error?.message ?? settingsLoadFailedUnknownRef.current);
@@ -564,12 +565,12 @@ export function SettingsPage() {
         },
       },
     });
-    if (!persistResult.ok) {
+    if (persistResult === null || !persistResult.ok) {
       return;
     }
 
     const runtimeResult = await dispatch("lsp.setMode", { mode: nextMode });
-    if (!runtimeResult.ok) {
+    if (runtimeResult === null || !runtimeResult.ok) {
       return;
     }
 
@@ -592,6 +593,9 @@ export function SettingsPage() {
     updateSelectionVersionRef.current.autoCheckEnabled += 1;
     setUpdateAutoCheckEnabled(value);
     const result = await saveUpdateSettings({ autoCheckEnabled: value });
+    if (result === null) {
+      return;
+    }
     if (!result.ok) {
       setUpdateAutoCheckEnabled((current) => !value);
     }
@@ -605,6 +609,9 @@ export function SettingsPage() {
     updateSelectionVersionRef.current.checkIntervalSec += 1;
     setUpdateCheckIntervalSec(value);
     const result = await saveUpdateSettings({ checkIntervalSec: value });
+    if (result === null) {
+      return;
+    }
     if (!result.ok) {
       setUpdateCheckIntervalSec(previous);
     }
@@ -977,7 +984,7 @@ function GeneralSettings({
   const lspRuntimeModeDescId = useId();
   const copyOnSelectLabelId = useId();
   const copyOnSelectDescId = useId();
-  const dispatch = useAtomValue(dispatchCommandAtom);
+  const dispatch = useSessionGateDispatch();
   const setNotificationPreferences = useSetAtom(notificationPreferencesAtom);
   const [notificationPermission, setNotificationPermission] =
     useState<NotificationPermissionState>("unavailable");
@@ -1072,6 +1079,10 @@ function GeneralSettings({
       },
     });
 
+    if (result === null) {
+      return;
+    }
+
     if (!result.ok) {
       setSupervisorTimeoutDraft(String(supervisorEvaluationTimeoutSec));
       setSupervisorTimeoutError(result.error?.message || t("settings.config_files.save_failed"));
@@ -1106,6 +1117,10 @@ function GeneralSettings({
         retryMaxCount: parsed,
       },
     });
+
+    if (result === null) {
+      return;
+    }
 
     if (!result.ok) {
       setSupervisorRetryMaxCountDraft(String(supervisorRetryMaxCount));
@@ -1143,6 +1158,10 @@ function GeneralSettings({
         retryDelaySec: parsed,
       },
     });
+
+    if (result === null) {
+      return;
+    }
 
     if (!result.ok) {
       setSupervisorRetryDelayDraft(String(supervisorRetryDelaySec));
@@ -1605,7 +1624,7 @@ function AppearanceSettings({
   const desktopTerminalFontSizeDescId = useId();
   const mobileTerminalFontSizeLabelId = useId();
   const mobileTerminalFontSizeDescId = useId();
-  const dispatch = useAtomValue(dispatchCommandAtom);
+  const dispatch = useSessionGateDispatch();
   const currentThemeId = resolveStoredThemeId(theme);
   const themeOptions = THEMES.map((registeredTheme) => ({
     value: registeredTheme.id,
@@ -1631,7 +1650,7 @@ function AppearanceSettings({
   });
 
   const saveSettings = async (settings: Record<string, unknown>) => {
-    await dispatch("settings.update", { settings });
+    return await dispatch("settings.update", { settings });
   };
 
   useEffect(() => {
@@ -1703,6 +1722,10 @@ function AppearanceSettings({
         },
       },
     });
+
+    if (result === null) {
+      return;
+    }
 
     if (!result.ok) {
       setDraft(String(currentValue));

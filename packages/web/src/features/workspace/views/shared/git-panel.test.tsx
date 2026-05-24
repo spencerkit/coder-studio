@@ -2215,6 +2215,112 @@ describe("GitPanel", () => {
     expect(otherTextarea?.value).toBe("");
   });
 
+  it("restores git panel instance state per workspace tab instance", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return status;
+      }
+
+      if (op === "git.branches") {
+        return { current: "feature/ai-agent", branches: [] };
+      }
+
+      if (op === "worktree.list") {
+        return {
+          worktrees,
+        };
+      }
+
+      if (op === "git.log") {
+        return {
+          entries: historyEntries,
+        };
+      }
+
+      return {};
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(workspacesAtom, {
+      "ws-a": {
+        id: "ws-a",
+        path: "/repo/a",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+      "ws-b": {
+        id: "ws-b",
+        path: "/repo/b",
+        targetRuntime: "native",
+        openedAt: 2,
+        lastActiveAt: 2,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    } as never);
+
+    const { rerender } = render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-a" />
+      </Provider>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /Worktrees/ }));
+    fireEvent.click(screen.getByRole("button", { name: "History" }));
+    fireEvent.click(screen.getByRole("button", { name: "New" }));
+
+    expect(await screen.findByText("pr/123-fix-auth")).toBeInTheDocument();
+    expect(await screen.findByText("feat: refresh source control surface")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Branch")).toBeInTheDocument();
+
+    rerender(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-b" />
+      </Provider>
+    );
+
+    expect(await screen.findByRole("button", { name: /Worktrees/ })).toHaveAttribute(
+      "aria-expanded",
+      "false"
+    );
+    expect(screen.getByRole("button", { name: "History" })).toHaveAttribute(
+      "aria-expanded",
+      "false"
+    );
+    expect(screen.queryByText("pr/123-fix-auth")).toBeNull();
+    expect(screen.queryByText("feat: refresh source control surface")).toBeNull();
+    expect(screen.queryByLabelText("Branch")).toBeNull();
+
+    rerender(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-a" />
+      </Provider>
+    );
+
+    expect(await screen.findByRole("button", { name: /Worktrees/ })).toHaveAttribute(
+      "aria-expanded",
+      "true"
+    );
+    expect(screen.getByRole("button", { name: "History" })).toHaveAttribute(
+      "aria-expanded",
+      "true"
+    );
+    expect(await screen.findByText("pr/123-fix-auth")).toBeInTheDocument();
+    expect(await screen.findByText("feat: refresh source control surface")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Branch")).toBeInTheDocument();
+  });
+
   it("clears the persisted commit draft for the workspace after a successful commit", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "git.status") {

@@ -1,6 +1,6 @@
 import { useAtom } from "jotai";
 import { type MouseEvent as ReactMouseEvent, useCallback, useRef } from "react";
-import { bottomPanelHeightAtom, leftPanelWidthAtom } from "../atoms";
+import { bottomPanelHeightAtomFamily, leftPanelWidthAtomFamily } from "../atoms";
 
 const MIN_LEFT_WIDTH = 220;
 const MIN_BOTTOM_HEIGHT = 120;
@@ -18,9 +18,11 @@ function resolvePanelSize(measuredSize: number, inlineSize: string, fallbackSize
   return fallbackSize;
 }
 
-export function useWorkspaceLayoutActions() {
-  const [storedLeftPanelWidth, setLeftPanelWidth] = useAtom(leftPanelWidthAtom);
-  const [storedBottomPanelHeight, setBottomPanelHeight] = useAtom(bottomPanelHeightAtom);
+export function useWorkspaceLayoutActions(workspaceId: string) {
+  const [storedLeftPanelWidth, setLeftPanelWidth] = useAtom(leftPanelWidthAtomFamily(workspaceId));
+  const [storedBottomPanelHeight, setBottomPanelHeight] = useAtom(
+    bottomPanelHeightAtomFamily(workspaceId)
+  );
 
   const leftMouseDown = useRef(false);
   const leftPanelRef = useRef<HTMLElement | null>(null);

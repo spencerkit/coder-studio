@@ -33,6 +33,10 @@ vi.mock("../features/command-palette", () => ({
   CommandPalette: () => null,
 }));
 
+vi.mock("../features/quick-open", () => ({
+  QuickOpen: () => <div>QuickOpen</div>,
+}));
+
 vi.mock("../features/workspace/views/shared/branch-quick-pick", () => ({
   BranchQuickPick: () => null,
 }));
@@ -204,6 +208,36 @@ describe("DesktopShell auth gating", () => {
     renderShell(store);
 
     expect(screen.getByText("WorkspacePage")).toBeInTheDocument();
+  });
+
+  it("mounts QuickOpen beside CommandPalette on desktop", () => {
+    window.history.replaceState({}, "", "/workspace");
+
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(authEnabledAtom, false);
+    store.set(authenticatedAtom, true);
+    store.set(workspacesAtom, {
+      "ws-1": {
+        id: "ws-1",
+        path: "/tmp/ws-1",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+    store.set(workspaceOrderAtom, ["ws-1"]);
+    store.set(activeWorkspaceIdAtom, "ws-1");
+    store.set(workspacesLoadStateAtom, "ready");
+
+    renderShell(store);
+
+    expect(screen.getByText("QuickOpen")).toBeInTheDocument();
   });
 
   it("shows the shared workspace gate on desktop while /workspace is unresolved", () => {

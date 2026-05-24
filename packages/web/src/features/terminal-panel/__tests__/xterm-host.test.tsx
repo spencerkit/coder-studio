@@ -81,6 +81,10 @@ const uploadHookMocks = vi.hoisted(() => ({
   handleFiles: vi.fn().mockResolvedValue(undefined),
 }));
 
+const baseRequestAnimationFrame = global.requestAnimationFrame;
+const baseCancelAnimationFrame = global.cancelAnimationFrame;
+const baseResizeObserver = global.ResizeObserver;
+
 const clipboardHelperMocks = vi.hoisted(() => ({
   copyTextWithFallback: vi.fn(),
 }));
@@ -371,6 +375,10 @@ describe("XtermHost", () => {
 
   afterEach(() => {
     resetGlobalRecoveryCoordinator();
+    vi.useRealTimers();
+    global.requestAnimationFrame = baseRequestAnimationFrame;
+    global.cancelAnimationFrame = baseCancelAnimationFrame;
+    global.ResizeObserver = baseResizeObserver;
     vi.restoreAllMocks();
   });
 
@@ -913,19 +921,20 @@ describe("XtermHost", () => {
     );
   });
 
-  it("shows a restoring overlay while the initial replay is in flight", async () => {
+  it("shows a restoring overlay only after the initial recovery exceeds the grace delay", async () => {
     const store = createStore();
     const sendCommand = vi.fn().mockImplementation((op: string) => {
-      if (op === "terminal.replay") {
+      if (op === "terminal.snapshot") {
         return new Promise(() => {});
       }
 
-      return Promise.resolve({ ok: true, data: { status: "ok" } });
+      return Promise.resolve({ status: "ok" });
     });
     const subscribe = vi.fn(() => vi.fn());
     const rafCallbacks: FrameRequestCallback[] = [];
     const originalRequestAnimationFrame = global.requestAnimationFrame;
     const originalCancelAnimationFrame = global.cancelAnimationFrame;
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
 
     mockTerminal.cols = 132;
     mockTerminal.rows = 36;
@@ -958,7 +967,19 @@ describe("XtermHost", () => {
       await Promise.resolve();
     });
 
-    expect(await screen.findByText("正在恢复终端内容…")).toBeInTheDocument();
+    expect(screen.queryByText("正在恢复终端内容…")).not.toBeInTheDocument();
+
+    await act(async () => {
+      vi.advanceTimersByTime(1199);
+    });
+
+    expect(screen.queryByText("正在恢复终端内容…")).not.toBeInTheDocument();
+
+    await act(async () => {
+      vi.advanceTimersByTime(1);
+    });
+
+    expect(screen.getByText("正在恢复终端内容…")).toBeInTheDocument();
     expect(
       screen.getByText(
         "恢复期间暂时无法使用当前终端；请耐心等待，历史内容恢复完成后再继续。内容较多时可能需要更久。"
@@ -969,6 +990,85 @@ describe("XtermHost", () => {
 
     global.requestAnimationFrame = originalRequestAnimationFrame;
     global.cancelAnimationFrame = originalCancelAnimationFrame;
+    vi.useRealTimers();
+  });
+
+  it("does not show a restoring overlay when recovery finishes within the grace delay", async () => {
+    const store = createStore();
+    const snapshotBytes = new TextEncoder().encode("hello");
+    const sendCommand = vi.fn().mockImplementation((op: string) => {
+      if (op === "terminal.snapshot") {
+        return new Promise((resolve) => {
+          setTimeout(() => {
+            resolve({
+              status: "ok",
+              transport: "binary",
+              streamId: 7,
+              size: 5,
+              seq: 5,
+              rows: 24,
+              cols: 80,
+              bytes: snapshotBytes,
+            });
+          }, 800);
+        });
+      }
+
+      return Promise.resolve({ status: "ok" });
+    });
+    const subscribe = vi.fn(() => vi.fn());
+    const rafCallbacks: FrameRequestCallback[] = [];
+    const originalRequestAnimationFrame = global.requestAnimationFrame;
+    const originalCancelAnimationFrame = global.cancelAnimationFrame;
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+
+    mockTerminal.cols = 132;
+    mockTerminal.rows = 36;
+
+    global.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      rafCallbacks.push(callback);
+      return rafCallbacks.length;
+    }) as typeof requestAnimationFrame;
+    global.cancelAnimationFrame = vi.fn() as typeof cancelAnimationFrame;
+
+    store.set(localeAtom, "zh");
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe,
+      getStatus: vi.fn(() => "connected"),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="fast-recovery-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await act(async () => {
+      const callback = rafCallbacks.shift();
+      callback?.(16);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(screen.queryByText("正在恢复终端内容…")).not.toBeInTheDocument();
+
+    await act(async () => {
+      vi.advanceTimersByTime(800);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expectTerminalWriteData(snapshotBytes);
+    expect(screen.queryByText("正在恢复终端内容…")).not.toBeInTheDocument();
+    expect(document.querySelector(".xterm-replay-overlay")).toBeFalsy();
+
+    global.requestAnimationFrame = originalRequestAnimationFrame;
+    global.cancelAnimationFrame = originalCancelAnimationFrame;
+    vi.useRealTimers();
   });
 
   it("queues desktop hydration before creating xterm and shows queue placeholder copy", async () => {
@@ -1188,7 +1288,7 @@ describe("XtermHost", () => {
     });
 
     expect(hydrationCoordinatorMocks.request).not.toHaveBeenCalled();
-    expect(await screen.findByText("Restoring terminal output...")).toBeInTheDocument();
+    expect(screen.queryByText("Restoring terminal output...")).not.toBeInTheDocument();
     expect(sendCommand).toHaveBeenCalledWith(
       "terminal.replay",
       {
@@ -1204,7 +1304,7 @@ describe("XtermHost", () => {
     global.cancelAnimationFrame = originalCancelAnimationFrame;
   });
 
-  it("shows a degraded overlay message when replay fails so the terminal remains usable", async () => {
+  it("shows a retryable recovery notice instead of a blocking overlay when replay fails", async () => {
     const store = createStore();
     const sendCommand = vi.fn().mockImplementation((op: string) => {
       if (op === "terminal.replay") {
@@ -1250,14 +1350,602 @@ describe("XtermHost", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText("历史内容恢复失败")).toBeInTheDocument();
+      expect(screen.getByText("终端历史暂未恢复")).toBeInTheDocument();
     });
     expect(
-      screen.getByText("新输出仍会继续显示；如果需要完整历史，再手动刷新页面。")
+      screen.getByText(
+        "当前终端可以继续使用，但较早输出这次没有补齐。你可以重试恢复；如果服务端仍保留历史，稍后或刷新页面后仍可能找回。"
+      )
     ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "重试恢复" })).toBeInTheDocument();
+    expect(document.querySelector(".xterm-replay-overlay")).toBeFalsy();
 
     global.requestAnimationFrame = originalRequestAnimationFrame;
     global.cancelAnimationFrame = originalCancelAnimationFrame;
+  });
+
+  it("retries local recovery when the retry action is clicked", async () => {
+    const store = createStore();
+    const sendCommand = vi.fn().mockImplementation((op: string) => {
+      if (op === "terminal.snapshot") {
+        return Promise.resolve({ status: "unsupported" });
+      }
+
+      if (op === "terminal.replay") {
+        return Promise.reject(new Error("Command timeout: terminal.replay"));
+      }
+
+      return Promise.resolve({ status: "ok" });
+    });
+    const subscribe = vi.fn(() => vi.fn());
+    const rafCallbacks: FrameRequestCallback[] = [];
+    const originalRequestAnimationFrame = global.requestAnimationFrame;
+    const originalCancelAnimationFrame = global.cancelAnimationFrame;
+
+    mockTerminal.cols = 132;
+    mockTerminal.rows = 36;
+
+    global.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      rafCallbacks.push(callback);
+      return rafCallbacks.length;
+    }) as typeof requestAnimationFrame;
+    global.cancelAnimationFrame = vi.fn() as typeof cancelAnimationFrame;
+
+    store.set(localeAtom, "zh");
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe,
+      getStatus: vi.fn(() => "connected"),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="retry-local-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await act(async () => {
+      const callback = rafCallbacks.shift();
+      callback?.(16);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "重试恢复" })).toBeInTheDocument();
+    });
+
+    expect(sendCommand.mock.calls.filter(([op]) => op === "terminal.snapshot")).toHaveLength(1);
+    expect(sendCommand.mock.calls.filter(([op]) => op === "terminal.replay")).toHaveLength(1);
+    expect(
+      sendCommand.mock.calls.filter(([op]) => op === "terminal.replay").map(([, args]) => args)
+    ).toEqual([{ terminalId: "retry-local-terminal", lastSeq: 0 }]);
+
+    fireEvent.click(screen.getByRole("button", { name: "重试恢复" }));
+
+    await waitFor(() => {
+      expect(sendCommand.mock.calls.filter(([op]) => op === "terminal.snapshot")).toHaveLength(2);
+      expect(sendCommand.mock.calls.filter(([op]) => op === "terminal.replay")).toHaveLength(2);
+    });
+    expect(
+      sendCommand.mock.calls.filter(([op]) => op === "terminal.replay").map(([, args]) => args)
+    ).toEqual([
+      { terminalId: "retry-local-terminal", lastSeq: 0 },
+      { terminalId: "retry-local-terminal", lastSeq: 0 },
+    ]);
+
+    global.requestAnimationFrame = originalRequestAnimationFrame;
+    global.cancelAnimationFrame = originalCancelAnimationFrame;
+  });
+
+  it("retries local gap recovery from the original missing-history seq", async () => {
+    const store = createStore();
+    const initialReplayChunk = new TextEncoder().encode("snapshot\n");
+    const gapChunk = new TextEncoder().encode("tail\n");
+    let subscriptionHandler: ((topic: string, payload: unknown, seq: number) => void) | undefined;
+    const rafCallbacks: FrameRequestCallback[] = [];
+    const originalRequestAnimationFrame = global.requestAnimationFrame;
+    const originalCancelAnimationFrame = global.cancelAnimationFrame;
+    let replayCount = 0;
+    const sendCommand = vi.fn().mockImplementation((op: string) => {
+      if (op === "terminal.snapshot") {
+        return Promise.resolve({ status: "unsupported" });
+      }
+
+      if (op === "terminal.replay") {
+        replayCount += 1;
+        if (replayCount === 1) {
+          return Promise.resolve({
+            status: "ok",
+            transport: "binary",
+            streamId: 1,
+            size: initialReplayChunk.byteLength,
+            seq: 100,
+            bytes: initialReplayChunk,
+          } satisfies TerminalReplayPayload);
+        }
+
+        return Promise.reject(new Error("Command timeout: terminal.replay"));
+      }
+
+      return Promise.resolve({ status: "ok" });
+    });
+
+    mockTerminal.cols = 132;
+    mockTerminal.rows = 36;
+
+    global.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      rafCallbacks.push(callback);
+      return rafCallbacks.length;
+    }) as typeof requestAnimationFrame;
+    global.cancelAnimationFrame = vi.fn() as typeof cancelAnimationFrame;
+
+    store.set(localeAtom, "zh");
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe: vi.fn((_topics, handler) => {
+        subscriptionHandler = handler;
+        return vi.fn();
+      }),
+      getStatus: vi.fn(() => "connected"),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="gap-retry-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await act(async () => {
+      const callback = rafCallbacks.shift();
+      callback?.(16);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expectReplayCall(sendCommand, "gap-retry-terminal", 0);
+      expectTerminalWriteData(initialReplayChunk);
+    });
+
+    mockTerminal.write.mockClear();
+
+    await act(async () => {
+      subscriptionHandler?.(
+        Topics.terminalOutput("test-workspace", "gap-retry-terminal"),
+        { transport: "binary", streamId: 2, size: gapChunk.byteLength, bytes: gapChunk },
+        112
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "重试恢复" })).toBeInTheDocument();
+    });
+    expect(
+      sendCommand.mock.calls.filter(([op]) => op === "terminal.replay").map(([, args]) => args)
+    ).toEqual([
+      { terminalId: "gap-retry-terminal", lastSeq: 0 },
+      { terminalId: "gap-retry-terminal", lastSeq: 100 },
+    ]);
+
+    fireEvent.click(screen.getByRole("button", { name: "重试恢复" }));
+
+    await waitFor(() => {
+      expect(sendCommand.mock.calls.filter(([op]) => op === "terminal.replay")).toHaveLength(3);
+    });
+    expect(
+      sendCommand.mock.calls.filter(([op]) => op === "terminal.replay").map(([, args]) => args)
+    ).toEqual([
+      { terminalId: "gap-retry-terminal", lastSeq: 0 },
+      { terminalId: "gap-retry-terminal", lastSeq: 100 },
+      { terminalId: "gap-retry-terminal", lastSeq: 100 },
+    ]);
+
+    global.requestAnimationFrame = originalRequestAnimationFrame;
+    global.cancelAnimationFrame = originalCancelAnimationFrame;
+  });
+
+  it("routes retry through recovery.reconcile when a coordinator is installed", async () => {
+    const probeConnection = vi.fn().mockResolvedValue({ ok: true });
+    const sendCommand = vi.fn(async (op: string) => {
+      if (op === "recovery.reconcile") {
+        return {
+          terminals: [
+            {
+              terminalId: "retry-coordinator-terminal",
+              action: "replay",
+              fromSeq: 0,
+              headSeq: 10,
+            },
+          ],
+        };
+      }
+
+      if (op === "terminal.replay") {
+        throw new Error("Command timeout: terminal.replay");
+      }
+
+      if (op === "terminal.resize") {
+        return { status: "ok" };
+      }
+
+      throw new Error(`Unexpected op ${op}`);
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "zh");
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => "connected"),
+      probeConnection,
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    setGlobalRecoveryCoordinator(
+      createRecoveryCoordinator({
+        wsClient: {
+          getStatus: vi.fn(() => "connected"),
+          probeConnection,
+          onStatus: vi.fn(() => () => {}),
+          subscribe: vi.fn(() => () => {}),
+        } as never,
+        sendCommand: async (op, args, options) => {
+          try {
+            const data = await sendCommand(op, args, options);
+            return { ok: true, data };
+          } catch (error) {
+            return {
+              ok: false,
+              error: {
+                code: "command_error",
+                message: error instanceof Error ? error.message : String(error),
+              },
+            };
+          }
+        },
+        applyReplay: vi.fn(),
+        applySnapshot: vi.fn(),
+      })
+    );
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="retry-coordinator-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "重试恢复" })).toBeInTheDocument();
+    });
+
+    sendCommand.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "重试恢复" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "recovery.reconcile",
+        {
+          reason: "foreground_resume",
+          terminals: [{ terminalId: "retry-coordinator-terminal", renderedSeq: 0 }],
+        },
+        undefined
+      );
+    });
+  });
+
+  it("preserves the original recovery anchor when coordinator retry follows a failed gap recovery", async () => {
+    const initialReplayChunk = new TextEncoder().encode("snapshot\n");
+    const gapChunk = new TextEncoder().encode("tail\n");
+    let subscriptionHandler: ((topic: string, payload: unknown, seq: number) => void) | undefined;
+    const probeConnection = vi.fn().mockResolvedValue({ ok: true });
+    const sendCommand = vi.fn(
+      async (op: string, args?: { terminals?: Array<{ renderedSeq: number }> }) => {
+        if (op === "recovery.reconcile") {
+          return {
+            terminals: [
+              {
+                terminalId: "retry-coordinator-gap-terminal",
+                action: "replay",
+                fromSeq: args?.terminals?.[0]?.renderedSeq ?? 0,
+                headSeq: 130,
+              },
+            ],
+          };
+        }
+
+        if (op === "terminal.replay") {
+          if (args?.terminals) {
+            throw new Error(
+              `Unexpected reconcile-shaped args for terminal.replay: ${JSON.stringify(args)}`
+            );
+          }
+
+          if (
+            (sendCommand.mock.calls.filter(([name]) => name === "terminal.replay").length ?? 0) ===
+            1
+          ) {
+            return {
+              status: "ok",
+              transport: "binary",
+              streamId: 1,
+              size: initialReplayChunk.byteLength,
+              seq: 100,
+              bytes: initialReplayChunk,
+            } satisfies TerminalReplayPayload;
+          }
+
+          throw new Error("Command timeout: terminal.replay");
+        }
+
+        if (op === "terminal.resize") {
+          return { status: "ok" };
+        }
+
+        throw new Error(`Unexpected op ${op}`);
+      }
+    );
+
+    const store = createStore();
+    store.set(localeAtom, "zh");
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe: vi.fn((_topics, handler) => {
+        subscriptionHandler = handler;
+        return vi.fn();
+      }),
+      getStatus: vi.fn(() => "connected"),
+      probeConnection,
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    setGlobalRecoveryCoordinator(
+      createRecoveryCoordinator({
+        wsClient: {
+          getStatus: vi.fn(() => "connected"),
+          probeConnection,
+          onStatus: vi.fn(() => () => {}),
+          subscribe: vi.fn(() => () => {}),
+        } as never,
+        sendCommand: async (op, innerArgs, options) => {
+          try {
+            const data = await sendCommand(op, innerArgs as never, options);
+            return { ok: true, data };
+          } catch (error) {
+            return {
+              ok: false,
+              error: {
+                code: "command_error",
+                message: error instanceof Error ? error.message : String(error),
+              },
+            };
+          }
+        },
+        applyReplay: vi.fn(),
+        applySnapshot: vi.fn(),
+      })
+    );
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="retry-coordinator-gap-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "recovery.reconcile",
+        {
+          reason: "initial_mount",
+          terminals: [{ terminalId: "retry-coordinator-gap-terminal", renderedSeq: 0 }],
+        },
+        undefined
+      );
+      expectTerminalWriteData(initialReplayChunk);
+    });
+
+    await act(async () => {
+      subscriptionHandler?.(
+        Topics.terminalOutput("test-workspace", "retry-coordinator-gap-terminal"),
+        { transport: "binary", streamId: 2, size: gapChunk.byteLength, bytes: gapChunk },
+        112
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "重试恢复" })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "重试恢复" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "recovery.reconcile",
+        {
+          reason: "foreground_resume",
+          terminals: [{ terminalId: "retry-coordinator-gap-terminal", renderedSeq: 100 }],
+        },
+        undefined
+      );
+    });
+  });
+
+  it("shows a dedicated notice when earlier history is no longer recoverable", async () => {
+    const initialSnapshot = new TextEncoder().encode("init");
+    const probeConnection = vi.fn().mockResolvedValue({ ok: true });
+    const sendCommand = vi.fn(async (op: string) => {
+      if (op === "recovery.reconcile") {
+        return {
+          terminals: [
+            {
+              terminalId: "too-old-terminal",
+              action: "unrecoverable",
+              reason: "too_old_no_snapshot",
+            },
+          ],
+        };
+      }
+
+      if (op === "terminal.snapshot") {
+        return {
+          status: "ok",
+          transport: "binary",
+          streamId: 1,
+          size: initialSnapshot.byteLength,
+          seq: 12,
+          rows: 24,
+          cols: 80,
+          source: "headless",
+          bytes: initialSnapshot,
+        };
+      }
+
+      throw new Error(`Unexpected op ${op}`);
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "zh");
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => "connected"),
+      probeConnection,
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    setGlobalRecoveryCoordinator(
+      createRecoveryCoordinator({
+        wsClient: {
+          getStatus: vi.fn(() => "connected"),
+          probeConnection,
+          onStatus: vi.fn(() => () => {}),
+          subscribe: vi.fn(() => () => {}),
+        } as never,
+        sendCommand: async (op, args, options) => {
+          try {
+            const data = await sendCommand(op, args, options);
+            return { ok: true, data };
+          } catch (error) {
+            return {
+              ok: false,
+              error: {
+                code: "command_error",
+                message: error instanceof Error ? error.message : String(error),
+              },
+            };
+          }
+        },
+        applyReplay: vi.fn(),
+        applySnapshot: vi.fn(),
+      })
+    );
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="too-old-terminal" workspaceId="ws-1" />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("较早历史已无法恢复")).toBeInTheDocument();
+    });
+    expect(
+      screen.getByText(
+        "较早的终端输出已经从回放缓冲区中淘汰，而且当前也没有可用快照。现在只能继续查看后续输出。"
+      )
+    ).toBeInTheDocument();
+    expect(document.querySelector(".xterm-replay-overlay")).toBeFalsy();
+  });
+
+  it("shows an unavailable terminal overlay when the coordinator reports unknown_terminal", async () => {
+    const probeConnection = vi.fn().mockResolvedValue({ ok: true });
+    const sendCommand = vi.fn(async (op: string) => {
+      if (op === "recovery.reconcile") {
+        return {
+          terminals: [
+            {
+              terminalId: "unknown-terminal",
+              action: "unrecoverable",
+              reason: "unknown_terminal",
+            },
+          ],
+        };
+      }
+
+      if (op === "terminal.resize") {
+        return { status: "ok" };
+      }
+
+      throw new Error(`Unexpected op ${op}`);
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "zh");
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => "connected"),
+      probeConnection,
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    setGlobalRecoveryCoordinator(
+      createRecoveryCoordinator({
+        wsClient: {
+          getStatus: vi.fn(() => "connected"),
+          probeConnection,
+          onStatus: vi.fn(() => () => {}),
+          subscribe: vi.fn(() => () => {}),
+        } as never,
+        sendCommand: async (op, args, options) => {
+          try {
+            const data = await sendCommand(op, args, options);
+            return { ok: true, data };
+          } catch (error) {
+            return {
+              ok: false,
+              error: {
+                code: "command_error",
+                message: error instanceof Error ? error.message : String(error),
+              },
+            };
+          }
+        },
+        applyReplay: vi.fn(),
+        applySnapshot: vi.fn(),
+      })
+    );
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="unknown-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("当前终端已不可恢复")).toBeInTheDocument();
+    });
+    expect(
+      screen.getByText("这个终端会话已经不在服务端，历史输出无法再补回。请重新打开一个新终端继续。")
+    ).toBeInTheDocument();
+    expect(document.querySelector(".xterm-replay-overlay")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "重试恢复" })).not.toBeInTheDocument();
+    expect(mockTerminal.options).toEqual(
+      expect.objectContaining({
+        disableStdin: true,
+        cursorBlink: false,
+      })
+    );
   });
 
   it("shows a degraded overlay when replay returns unknown so unavailable terminals do not stay loading", async () => {
@@ -1306,10 +1994,18 @@ describe("XtermHost", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText("当前会话已结束")).toBeInTheDocument();
+      expect(screen.getByText("当前终端已不可恢复")).toBeInTheDocument();
     });
-    expect(screen.getByText("是否重新打开一个新会话继续。")).toBeInTheDocument();
+    expect(
+      screen.getByText("这个终端会话已经不在服务端，历史输出无法再补回。请重新打开一个新终端继续。")
+    ).toBeInTheDocument();
     expect(screen.queryByText("正在恢复终端内容…")).not.toBeInTheDocument();
+    expect(mockTerminal.options).toEqual(
+      expect.objectContaining({
+        disableStdin: true,
+        cursorBlink: false,
+      })
+    );
 
     global.requestAnimationFrame = originalRequestAnimationFrame;
     global.cancelAnimationFrame = originalCancelAnimationFrame;
@@ -1371,9 +2067,11 @@ describe("XtermHost", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText("当前会话已结束")).toBeInTheDocument();
+      expect(screen.getByText("当前终端已不可恢复")).toBeInTheDocument();
     });
-    expect(screen.getByText("是否重新打开一个 Codex 会话继续。")).toBeInTheDocument();
+    expect(
+      screen.getByText("这个终端会话已经不在服务端。是否重新打开一个 Codex 会话继续？")
+    ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "确认" }));
     fireEvent.click(screen.getByRole("button", { name: "关闭" }));
@@ -1725,6 +2423,101 @@ describe("XtermHost", () => {
     });
   });
 
+  it("renders live output immediately after an unrecoverable recovery decision", async () => {
+    let eventHandler: ((topic: string, payload: unknown, seq: number) => void) | undefined;
+    const liveChunk = new TextEncoder().encode("later output");
+    const sendCommand = vi.fn(async (op: string) => {
+      if (op === "terminal.resize") {
+        return { status: "ok" };
+      }
+
+      if (op === "recovery.reconcile") {
+        return {
+          terminals: [
+            {
+              terminalId: "too-old-live-terminal",
+              action: "unrecoverable",
+              reason: "too_old_no_snapshot",
+            },
+          ],
+        };
+      }
+
+      throw new Error(`Unexpected op ${op}`);
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe: vi.fn((_topics, handler) => {
+        eventHandler = handler;
+        return () => {
+          eventHandler = undefined;
+        };
+      }),
+      getStatus: vi.fn(() => "connected"),
+      probeConnection: vi.fn().mockResolvedValue({ ok: true }),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    setGlobalRecoveryCoordinator(
+      createRecoveryCoordinator({
+        wsClient: {
+          getStatus: vi.fn(() => "connected"),
+          probeConnection: vi.fn().mockResolvedValue({ ok: true }),
+          onStatus: vi.fn(() => () => {}),
+          subscribe: vi.fn(() => () => {}),
+        } as never,
+        sendCommand: async (op, args, options) => {
+          try {
+            const data = await sendCommand(op, args, options);
+            return { ok: true, data };
+          } catch (error) {
+            return {
+              ok: false,
+              error: {
+                code: "command_error",
+                message: error instanceof Error ? error.message : String(error),
+              },
+            };
+          }
+        },
+        applyReplay: vi.fn(),
+        applySnapshot: vi.fn(),
+      })
+    );
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="too-old-live-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Earlier history can no longer be restored")).toBeInTheDocument();
+    });
+
+    mockTerminal.write.mockClear();
+
+    act(() => {
+      eventHandler?.(
+        Topics.terminalOutput("test-workspace", "too-old-live-terminal"),
+        {
+          transport: "binary",
+          streamId: 12,
+          size: liveChunk.byteLength,
+          bytes: liveChunk,
+        },
+        liveChunk.byteLength
+      );
+    });
+
+    await waitFor(() => {
+      expectTerminalWriteData(liveChunk);
+    });
+  });
+
   it("marks terminal closed after recovery reconcile returns closed state", async () => {
     const sendCommand = vi.fn(async (op: string) => {
       if (op === "terminal.resize") {
@@ -1809,6 +2602,17 @@ describe("XtermHost", () => {
         undefined
       );
     });
+    await waitFor(() => {
+      expect(screen.getByText("This session has ended")).toBeInTheDocument();
+    });
+    expect(screen.getByText("Reopen a new session to continue?")).toBeInTheDocument();
+    expect(document.querySelector(".xterm-replay-overlay")).toBeTruthy();
+    expect(mockTerminal.options).toEqual(
+      expect.objectContaining({
+        disableStdin: true,
+        cursorBlink: false,
+      })
+    );
     expect(store.get(terminalMetaAtomFamily("closed-terminal"))).toMatchObject({
       alive: false,
       exitCode: 3,

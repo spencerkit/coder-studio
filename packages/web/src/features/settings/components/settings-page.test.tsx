@@ -213,6 +213,25 @@ describe("SettingsPage", () => {
     });
   });
 
+  it("redirects to session gate instead of showing an inline load error when activation is required", async () => {
+    const sendCommand = vi.fn().mockRejectedValue(
+      new CommandResultError({
+        code: "activation_required",
+        message: "This tab is no longer the active session",
+      })
+    );
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+
+    await waitFor(() => {
+      expect(routerMocks.navigate).toHaveBeenCalledWith("/session-gate", { replace: true });
+    });
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByText("This tab is no longer the active session")).not.toBeInTheDocument();
+  });
+
   it("renders the footer version from server metadata", () => {
     const store = createConnectedStore(vi.fn().mockResolvedValue({}));
     store.set(serverInfoAtom, {

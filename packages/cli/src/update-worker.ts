@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { createWriteStream } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
 interface UpdateStateSnapshot {
   version: 1;
@@ -37,11 +38,28 @@ interface WorkerEnv {
   installArgsPrefix: string[];
 }
 
+type WorkerMode = "install" | "restart-handoff";
+
+const RESTART_HANDOFF_MODE: WorkerMode = "restart-handoff";
+const DEFAULT_MODE: WorkerMode = "install";
+const RESTART_HANDOFF_WAIT_MS = 5_000;
+const WORKER_ENTRY_PATH = fileURLToPath(import.meta.url);
+
 async function writeState(filePath: string, value: UpdateStateSnapshot): Promise<void> {
   await mkdir(dirname(filePath), { recursive: true });
   await import("node:fs/promises").then(({ writeFile }) =>
     writeFile(filePath, JSON.stringify(value, null, 2) + "\n", "utf-8")
   );
+}
+
+function closeLogStream(stream: NodeJS.WritableStream): Promise<void> {
+  return new Promise((resolve, reject) => {
+    stream.once("error", reject);
+    stream.end(() => {
+      stream.off("error", reject);
+      resolve();
+    });
+  });
 }
 
 function parseJsonArray(value: string | undefined, fallback: string[]): string[] {
@@ -97,6 +115,22 @@ function buildManualCommand(input: WorkerEnv): string {
   ].join("\n");
 }
 
+function readWorkerMode(env = process.env): WorkerMode {
+  return env.CODER_STUDIO_UPDATE_WORKER_MODE === RESTART_HANDOFF_MODE
+    ? RESTART_HANDOFF_MODE
+    : DEFAULT_MODE;
+}
+
+function readRestartParentPid(env = process.env): number | null {
+  const raw = env.CODER_STUDIO_UPDATE_PARENT_PID;
+  if (!raw) {
+    return null;
+  }
+
+  const pid = Number.parseInt(raw, 10);
+  return Number.isInteger(pid) && pid > 0 ? pid : null;
+}
+
 const INTERNAL_ENV_KEYS = new Set([
   "CODER_STUDIO_RUNTIME_JSON_PATH",
   "CODER_STUDIO_SESSION_ID",
@@ -123,6 +157,71 @@ function buildChildProcessEnv(env = process.env): NodeJS.ProcessEnv {
   }
 
   return nextEnv;
+}
+
+function buildWorkerEnv(input: WorkerEnv): NodeJS.ProcessEnv {
+  return {
+    CODER_STUDIO_UPDATE_STATE_PATH: input.stateFilePath,
+    CODER_STUDIO_UPDATE_LOG_PATH: input.logFilePath,
+    CODER_STUDIO_UPDATE_PACKAGE_NAME: input.packageName,
+    CODER_STUDIO_UPDATE_TARGET_VERSION: input.targetVersion,
+    CODER_STUDIO_UPDATE_CLI_COMMAND: input.cliCommand,
+    CODER_STUDIO_UPDATE_CURRENT_VERSION: input.currentVersion,
+    CODER_STUDIO_UPDATE_NPM_COMMAND: input.npmCommand,
+    CODER_STUDIO_UPDATE_RESTART_ARGS: JSON.stringify(input.restartArgs),
+    CODER_STUDIO_UPDATE_INSTALL_ARGS_PREFIX: JSON.stringify(input.installArgsPrefix),
+  };
+}
+
+function spawnDetachedProcess(
+  command: string,
+  args: string[],
+  env: NodeJS.ProcessEnv
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      detached: true,
+      stdio: "ignore",
+      env,
+    });
+
+    child.on("error", reject);
+    child.unref();
+    resolve();
+  });
+}
+
+const isMissingProcessError = (error: unknown): boolean =>
+  Boolean(
+    error &&
+      typeof error === "object" &&
+      "code" in error &&
+      (error as NodeJS.ErrnoException).code === "ESRCH"
+  );
+
+async function waitForProcessExit(pid: number, waitMs = RESTART_HANDOFF_WAIT_MS): Promise<void> {
+  const deadline = Date.now() + waitMs;
+
+  while (Date.now() <= deadline) {
+    try {
+      process.kill(pid, 0);
+    } catch (error) {
+      if (isMissingProcessError(error)) {
+        return;
+      }
+
+      throw error;
+    }
+
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) {
+      break;
+    }
+
+    await new Promise((resolve) => {
+      setTimeout(resolve, Math.min(100, remainingMs));
+    });
+  }
 }
 
 function runCommand(
@@ -163,6 +262,8 @@ export async function runUpdateWorker(
   deps?: {
     runCommand?: typeof runCommand;
     now?: () => number;
+    processId?: number;
+    spawnDetachedProcess?: typeof spawnDetachedProcess;
   }
 ): Promise<void> {
   const now = deps?.now ?? Date.now;
@@ -170,6 +271,8 @@ export async function runUpdateWorker(
   const logStream = createWriteStream(input.logFilePath, { flags: "a" });
   const execute = deps?.runCommand ?? runCommand;
   const childEnv = buildChildProcessEnv(process.env);
+  const processId = deps?.processId ?? process.pid;
+  const spawnRestartHandoff = deps?.spawnDetachedProcess ?? spawnDetachedProcess;
 
   try {
     await execute(
@@ -196,7 +299,7 @@ export async function runUpdateWorker(
       manualCommand: permissionRelated ? buildManualCommand(input) : null,
       errorSummary: message,
     });
-    logStream.end();
+    await closeLogStream(logStream);
     return;
   }
 
@@ -216,6 +319,55 @@ export async function runUpdateWorker(
   });
 
   try {
+    await spawnRestartHandoff(process.execPath, [WORKER_ENTRY_PATH], {
+      ...childEnv,
+      ...buildWorkerEnv(input),
+      CODER_STUDIO_UPDATE_WORKER_MODE: RESTART_HANDOFF_MODE,
+      CODER_STUDIO_UPDATE_PARENT_PID: String(processId),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await writeState(input.stateFilePath, {
+      version: 1,
+      currentVersion: input.currentVersion,
+      latestVersion: input.targetVersion,
+      availability: "update_available",
+      updateStatus: "failed",
+      lastCheckedAt: now(),
+      targetVersion: input.targetVersion,
+      startedAt: now(),
+      finishedAt: now(),
+      requiresManualStep: true,
+      manualCommand: `${input.cliCommand} ${input.restartArgs.join(" ")}`,
+      errorSummary: `new version installed but service restart failed: ${message}`,
+    });
+  } finally {
+    await closeLogStream(logStream);
+  }
+}
+
+export async function runRestartHandoff(
+  input = readEnv(),
+  deps?: {
+    runCommand?: typeof runCommand;
+    now?: () => number;
+    waitForProcessExit?: typeof waitForProcessExit;
+    restartParentPid?: number | null;
+  }
+): Promise<void> {
+  const now = deps?.now ?? Date.now;
+  await mkdir(dirname(input.logFilePath), { recursive: true });
+  const logStream = createWriteStream(input.logFilePath, { flags: "a" });
+  const execute = deps?.runCommand ?? runCommand;
+  const waitForParentExit = deps?.waitForProcessExit ?? waitForProcessExit;
+  const childEnv = buildChildProcessEnv(process.env);
+  const restartParentPid = deps?.restartParentPid ?? readRestartParentPid(process.env);
+
+  try {
+    if (restartParentPid !== null) {
+      await waitForParentExit(restartParentPid);
+    }
+
     await execute(input.cliCommand, input.restartArgs, { logStream, env: childEnv });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -234,12 +386,15 @@ export async function runUpdateWorker(
       errorSummary: `new version installed but service restart failed: ${message}`,
     });
   } finally {
-    logStream.end();
+    await closeLogStream(logStream);
   }
 }
 
 if (process.env.CODER_STUDIO_UPDATE_STATE_PATH) {
-  void runUpdateWorker().catch((error) => {
+  const run =
+    readWorkerMode(process.env) === RESTART_HANDOFF_MODE ? runRestartHandoff : runUpdateWorker;
+
+  void run().catch((error) => {
     console.error("[update-worker]", error);
     process.exitCode = 1;
   });

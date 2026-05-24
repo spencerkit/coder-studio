@@ -239,4 +239,69 @@ describe("EditorSurface", () => {
 
     expect(buttonLabels).toEqual(["Diff", "预览", "编辑", "Save File", "Close"]);
   });
+
+  it("renders a working close action for commit-history previews", () => {
+    const state = createState({
+      activeFilePath: "src/app.ts",
+      activeDiffChange: {
+        path: "abc123",
+        title: "abc123 · commit subject",
+        diff: "diff --git a/src/app.ts b/src/app.ts",
+        source: "commit",
+      },
+    });
+
+    render(<EditorSurface state={state} />);
+
+    expect(screen.queryByRole("button", { name: "Diff" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(state.handleClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the commit preview title without leaking the background file dirty marker", () => {
+    const state = createState({
+      currentFile: {
+        kind: "text",
+        path: "src/app.ts",
+        content: "export const app = 2;\n",
+        savedContent: "export const app = 1;\n",
+        baseHash: "hash-1",
+        isDirty: true,
+      },
+      activeDiffChange: {
+        path: "abc123",
+        title: "abc123 · commit subject",
+        diff: "diff --git a/src/app.ts b/src/app.ts",
+        source: "commit",
+      },
+    });
+
+    render(<EditorSurface state={state} />);
+
+    expect(screen.getByText("abc123 · commit subject")).toBeInTheDocument();
+    expect(screen.queryByText("src/app.ts")).not.toBeInTheDocument();
+    expect(document.querySelector(".dirty-indicator")).toBeNull();
+  });
+
+  it("suppresses file-scoped alerts while a commit-history preview is active", () => {
+    const state = createState({
+      activeExternalStatus: "modified",
+      activeDiffChange: {
+        path: "abc123",
+        title: "abc123 · commit subject",
+        diff: "diff --git a/src/app.ts b/src/app.ts",
+        source: "commit",
+      },
+      hasUnsavedChangesOutsideDiff: true,
+      saveError: "Failed to save file",
+    });
+
+    render(<EditorSurface state={state} />);
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByText("Failed to save file")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Diff preview is based on saved file contents.")
+    ).not.toBeInTheDocument();
+  });
 });

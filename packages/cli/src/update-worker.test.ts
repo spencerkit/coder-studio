@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { runUpdateWorker } from "./update-worker.js";
+import { runRestartHandoff, runUpdateWorker } from "./update-worker.js";
 
 describe("update-worker", () => {
   const tempDirs: string[] = [];
@@ -29,13 +29,16 @@ describe("update-worker", () => {
     };
   }
 
-  it("writes restarting state after install success and restart handoff", async () => {
+  it("writes restarting state and spawns a detached restart handoff after install success", async () => {
     const env = createEnv();
     const runCommand = vi.fn(async () => {});
+    const spawnDetachedProcess = vi.fn(async () => {});
 
     await runUpdateWorker(env, {
       runCommand,
       now: () => 1000,
+      processId: 4242,
+      spawnDetachedProcess,
     });
 
     const state = JSON.parse(readFileSync(env.stateFilePath, "utf-8")) as { updateStatus: string };
@@ -46,11 +49,13 @@ describe("update-worker", () => {
       ["install", "-g", "@spencer-kit/coder-studio@0.5.0"],
       expect.any(Object)
     );
-    expect(runCommand).toHaveBeenNthCalledWith(
-      2,
-      "coder-studio",
-      ["serve", "--restart"],
-      expect.any(Object)
+    expect(spawnDetachedProcess).toHaveBeenCalledWith(
+      process.execPath,
+      expect.any(Array),
+      expect.objectContaining({
+        CODER_STUDIO_UPDATE_WORKER_MODE: "restart-handoff",
+        CODER_STUDIO_UPDATE_PARENT_PID: "4242",
+      })
     );
   });
 
@@ -77,14 +82,14 @@ describe("update-worker", () => {
 
   it("marks restart failures with manual restart guidance", async () => {
     const env = createEnv();
-    const runCommand = vi
-      .fn()
-      .mockResolvedValueOnce(undefined)
-      .mockRejectedValueOnce(new Error("pm2 restart failed"));
+    const runCommand = vi.fn().mockRejectedValueOnce(new Error("pm2 restart failed"));
+    const waitForProcessExit = vi.fn(async () => {});
 
-    await runUpdateWorker(env, {
+    await runRestartHandoff(env, {
       runCommand,
       now: () => 1000,
+      waitForProcessExit,
+      restartParentPid: 999,
     });
 
     const state = JSON.parse(readFileSync(env.stateFilePath, "utf-8")) as {
@@ -95,11 +100,13 @@ describe("update-worker", () => {
     expect(state.updateStatus).toBe("failed");
     expect(state.manualCommand).toBe("coder-studio serve --restart");
     expect(state.errorSummary).toContain("restart failed");
+    expect(waitForProcessExit).toHaveBeenCalledWith(999);
   });
 
   it("sanitizes pm2 and runtime override env before invoking install and restart commands", async () => {
     const env = createEnv();
     const runCommand = vi.fn(async () => {});
+    const spawnDetachedProcess = vi.fn(async () => {});
     const originalEnv = {
       PM2_HOME: process.env.PM2_HOME,
       PM2_PROGRAMMATIC: process.env.PM2_PROGRAMMATIC,
@@ -130,6 +137,8 @@ describe("update-worker", () => {
       await runUpdateWorker(env, {
         runCommand,
         now: () => 1000,
+        processId: 4242,
+        spawnDetachedProcess,
       });
     } finally {
       for (const [key, value] of Object.entries(originalEnv)) {
@@ -155,5 +164,37 @@ describe("update-worker", () => {
       expect(options.env?.CODER_STUDIO_UPDATE_STATE_PATH).toBeUndefined();
       expect(options.env?.pm_id).toBeUndefined();
     }
+
+    const handoffEnv = spawnDetachedProcess.mock.calls[0]?.[2] as NodeJS.ProcessEnv | undefined;
+    expect(handoffEnv?.PM2_HOME).toBe("/tmp/custom-pm2-home");
+    expect(handoffEnv?.PM2_PROGRAMMATIC).toBeUndefined();
+    expect(handoffEnv?.PM2_JSON_PROCESSING).toBeUndefined();
+    expect(handoffEnv?.PM2_INTERACTOR_PROCESSING).toBeUndefined();
+    expect(handoffEnv?.NODE_APP_INSTANCE).toBeUndefined();
+    expect(handoffEnv?.NODE_CHANNEL_FD).toBeUndefined();
+    expect(handoffEnv?.NODE_CHANNEL_SERIALIZATION_MODE).toBeUndefined();
+    expect(handoffEnv?.CODER_STUDIO_RUNTIME_JSON_PATH).toBeUndefined();
+    expect(handoffEnv?.CODER_STUDIO_SESSION_ID).toBeUndefined();
+    expect(handoffEnv?.pm_id).toBeUndefined();
+  });
+
+  it("waits for the install worker to exit before running the restart command", async () => {
+    const env = createEnv();
+    const waitForProcessExit = vi.fn(async () => {});
+    const runCommand = vi.fn(async () => {});
+
+    await runRestartHandoff(env, {
+      runCommand,
+      now: () => 1000,
+      waitForProcessExit,
+      restartParentPid: 777,
+    });
+
+    expect(waitForProcessExit).toHaveBeenCalledWith(777);
+    expect(runCommand).toHaveBeenCalledWith(
+      "coder-studio",
+      ["serve", "--restart"],
+      expect.any(Object)
+    );
   });
 });
