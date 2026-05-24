@@ -211,7 +211,7 @@ export function useWorkspaceScreenModel() {
         !orderedSessions.some((session) => session.id === sessionId) &&
         sessions.some((session) => session.id === sessionId && session.state !== "draft")
       ) {
-        paneActions.appendSession(sessionId, mobileActiveSessionId, "vertical");
+        paneActions.appendSessionToMobileColumn(sessionId);
       }
 
       setScreenState((current) => ({
@@ -225,14 +225,14 @@ export function useWorkspaceScreenModel() {
 
   const handleMobileSessionCreated = useCallback(
     (sessionId: string) => {
-      paneActions.appendSession(sessionId, mobileActiveSessionId, "vertical");
+      paneActions.appendSessionToMobileColumn(sessionId);
       setScreenState((current) => ({
         ...current,
         mobileSelectionVersion: current.mobileSelectionVersion + 1,
         mobileActiveSessionId: sessionId,
       }));
     },
-    [mobileActiveSessionId, paneActions, setScreenState]
+    [paneActions, setScreenState]
   );
 
   const closeMobileSession = useCallback(
@@ -295,7 +295,7 @@ export function useWorkspaceScreenModel() {
         !orderedSessions.some((session) => session.id === sessionId) &&
         sessions.some((session) => session.id === sessionId && session.state !== "draft")
       ) {
-        paneActions.appendSession(sessionId, mobileActiveSessionId, "vertical");
+        paneActions.appendSessionToMobileColumn(sessionId);
       }
 
       setScreenState((current) => ({
@@ -304,7 +304,7 @@ export function useWorkspaceScreenModel() {
         mobileActiveSessionId: sessionId,
       }));
     },
-    [mobileActiveSessionId, orderedSessions, paneActions, sessions, setScreenState]
+    [orderedSessions, paneActions, sessions, setScreenState]
   );
 
   const openMobileSheet = useCallback(

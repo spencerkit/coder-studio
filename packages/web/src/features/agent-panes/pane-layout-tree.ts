@@ -368,6 +368,20 @@ export function appendSessionToLayout(
   };
 }
 
+export function appendSessionToWidestColumn(node: PaneNode, sessionId: string): PaneNode {
+  const draftFilled = assignFirstDraftPane(node, sessionId);
+  if (draftFilled) {
+    return draftFilled;
+  }
+
+  const widestColumnSplit = splitWidestColumnForNewSession(node, sessionId);
+  if (widestColumnSplit) {
+    return widestColumnSplit;
+  }
+
+  return appendSessionToLayout(node, sessionId, undefined, "horizontal");
+}
+
 export function createFallbackPaneLayout(sessionIds: string[]): PaneNode {
   if (sessionIds.length === 0) {
     return { id: "root", type: "leaf" };
@@ -496,6 +510,119 @@ function splitLeafForNewSession(
   }
 
   return null;
+}
+
+interface ColumnCandidate {
+  path: number[];
+  width: number;
+}
+
+function splitWidestColumnForNewSession(node: PaneNode, sessionId: string): PaneNode | null {
+  const candidate = findWidestColumnCandidate(node);
+  if (!candidate) {
+    return null;
+  }
+
+  return replaceNodeAtPath(node, candidate.path, (target) => {
+    const splitId = `split-${target.id}-horizontal-${Date.now()}`;
+    return {
+      id: splitId,
+      type: "split",
+      direction: "horizontal",
+      ratio: 0.5,
+      children: [{ ...target }, createSessionLeaf(`${splitId}-session`, sessionId)],
+    };
+  });
+}
+
+function findWidestColumnCandidate(
+  node: PaneNode,
+  width = 1,
+  path: number[] = []
+): ColumnCandidate | null {
+  if (node.type === "leaf") {
+    if (!node.sessionId) {
+      return null;
+    }
+
+    return {
+      path,
+      width,
+    };
+  }
+
+  const children = node.children ?? [];
+  if (children.length === 0) {
+    return null;
+  }
+
+  if (node.direction === "vertical") {
+    return subtreeHasSession(node)
+      ? {
+          path,
+          width,
+        }
+      : null;
+  }
+
+  const ratio = node.ratio ?? 0.5;
+  const firstWidth = width * ratio;
+  const secondWidth = width * (1 - ratio);
+
+  const firstCandidate = findWidestColumnCandidate(children[0]!, firstWidth, [...path, 0]);
+  const secondCandidate = findWidestColumnCandidate(children[1]!, secondWidth, [...path, 1]);
+
+  return chooseWiderCandidate(firstCandidate, secondCandidate);
+}
+
+function subtreeHasSession(node: PaneNode): boolean {
+  if (node.type === "leaf") {
+    return Boolean(node.sessionId);
+  }
+
+  return (node.children ?? []).some((child) => subtreeHasSession(child));
+}
+
+function chooseWiderCandidate(
+  ...candidates: Array<ColumnCandidate | null>
+): ColumnCandidate | null {
+  let best: ColumnCandidate | null = null;
+
+  for (const candidate of candidates) {
+    if (!candidate) {
+      continue;
+    }
+
+    if (!best || candidate.width > best.width) {
+      best = candidate;
+    }
+  }
+
+  return best;
+}
+
+function replaceNodeAtPath(
+  node: PaneNode,
+  path: number[],
+  replace: (target: PaneNode) => PaneNode
+): PaneNode {
+  if (path.length === 0) {
+    return replace(node);
+  }
+
+  if (node.type === "leaf") {
+    return node;
+  }
+
+  const [index, ...rest] = path;
+  const children = node.children ?? [];
+
+  return {
+    ...node,
+    children: children.map((child, childIndex) =>
+      childIndex === index ? replaceNodeAtPath(child, rest, replace) : child
+    ),
+  };
 }
 
 function createFallbackPaneLayoutBranch(sessionIds: string[], startIndex: number): PaneNode {

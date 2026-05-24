@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { PaneNode } from "./atoms/pane-layout";
 import {
   appendSessionToLayout,
+  appendSessionToWidestColumn,
   assignSessionToPane,
   closeDraftPaneById,
   closePaneBySessionId,
@@ -180,6 +181,57 @@ describe("pane-layout-tree", () => {
       children: [
         { id: "root", type: "leaf", sessionId: "sess_1" },
         expect.objectContaining({ type: "leaf", sessionId: "sess_2" }),
+      ],
+    });
+  });
+
+  it("appends a new session by splitting the widest column horizontally", () => {
+    const layout: PaneNode = {
+      id: "root",
+      type: "split",
+      direction: "horizontal",
+      ratio: 0.3,
+      children: [
+        { id: "left", type: "leaf", sessionId: "sess_1" },
+        {
+          id: "right-column",
+          type: "split",
+          direction: "vertical",
+          ratio: 0.5,
+          children: [
+            { id: "right-top", type: "leaf", sessionId: "sess_2" },
+            { id: "right-bottom", type: "leaf", sessionId: "sess_3" },
+          ],
+        },
+      ],
+    };
+
+    expect(appendSessionToWidestColumn(layout, "sess_4")).toEqual({
+      id: "root",
+      type: "split",
+      direction: "horizontal",
+      ratio: 0.3,
+      children: [
+        { id: "left", type: "leaf", sessionId: "sess_1" },
+        {
+          id: expect.stringMatching(/^split-right-column-horizontal-/),
+          type: "split",
+          direction: "horizontal",
+          ratio: 0.5,
+          children: [
+            {
+              id: "right-column",
+              type: "split",
+              direction: "vertical",
+              ratio: 0.5,
+              children: [
+                { id: "right-top", type: "leaf", sessionId: "sess_2" },
+                { id: "right-bottom", type: "leaf", sessionId: "sess_3" },
+              ],
+            },
+            expect.objectContaining({ type: "leaf", sessionId: "sess_4" }),
+          ],
+        },
       ],
     });
   });
