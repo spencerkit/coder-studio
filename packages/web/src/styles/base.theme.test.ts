@@ -159,6 +159,21 @@ describe("base.css desktop typography foundation", () => {
     expect(getRuleBlock("select")).toContain("font-size: var(--type-body-3-size)");
   });
 
+  it("maps foundational surfaces and field chrome onto semantic tokens", () => {
+    expect(getRuleBlock("body")).toContain("background-color: var(--surface-page)");
+    expect(getRuleBlock("code")).toContain("background-color: var(--surface-hover)");
+    expect(getRuleBlock("pre")).toContain("background-color: var(--surface-panel)");
+    expect(getRuleBlock("::selection")).toContain("background-color: var(--text-link)");
+    expect(getRuleBlock("::selection")).toContain("color: var(--text-inverse)");
+
+    expect(getRuleBlock("input")).toContain("background-color: var(--field-bg)");
+    expect(getRuleBlock("input")).toContain("border: 1px solid var(--field-border)");
+    expect(getRuleBlock("textarea")).toContain("background-color: var(--field-bg)");
+    expect(getRuleBlock("textarea")).toContain("border: 1px solid var(--field-border)");
+    expect(getRuleBlock("select")).toContain("background-color: var(--field-bg)");
+    expect(getRuleBlock("select")).toContain("border: 1px solid var(--field-border)");
+  });
+
   it("maps headings and helper text onto the new semantic hierarchy", () => {
     expect(getRuleBlock("h1")).toContain("font-size: var(--type-heading-1-size)");
     expect(getRuleBlock("h1")).toContain("font-weight: var(--type-heading-1-weight)");
@@ -183,8 +198,18 @@ describe("base.css desktop typography foundation", () => {
     expect(getRuleBlock(".connection-banner")).toContain(
       "line-height: var(--type-body-6-line-height)"
     );
+    expect(getRuleBlock(".connection-banner")).toContain("background: var(--status-warning-fg)");
+    expect(getRuleBlock(".connection-banner--error")).toContain(
+      "background: var(--status-danger-fg)"
+    );
     expect(getRuleBlock(".app-loading-kicker")).toContain("font-size: var(--type-body-6-size)");
     expect(getRuleBlock(".app-loading-title")).toContain("font-size: var(--type-heading-1-size)");
     expect(getRuleBlock(".app-loading-desc")).toContain("font-size: var(--type-body-3-size)");
+  });
+
+  it("maps status text utilities onto semantic status tokens", () => {
+    expect(getRuleBlock(".text-success")).toContain("color: var(--status-success-fg)");
+    expect(getRuleBlock(".text-warning")).toContain("color: var(--status-warning-fg)");
+    expect(getRuleBlock(".text-error")).toContain("color: var(--status-danger-fg)");
   });
 });
