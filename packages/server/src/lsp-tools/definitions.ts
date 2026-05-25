@@ -64,6 +64,12 @@ export const LSP_TOOL_DEFINITIONS: Record<LspServerKind, LspToolDefinition> = {
       supportedPlatforms: ["linux", "darwin", "win32"],
     },
   },
+  vue: {
+    serverKind: "vue",
+    displayName: "Vue language server",
+    defaultCommand: "vue-language-server",
+    defaultArgs: ["--stdio"],
+  },
 };
 
 export function getLspToolDefinition(serverKind: LspServerKind): LspToolDefinition {

@@ -4,6 +4,7 @@ const TYPESCRIPT_EXTENSIONS = new Set(["ts", "tsx", "js", "jsx", "mts", "cts", "
 const PYTHON_EXTENSIONS = new Set(["py"]);
 const GO_EXTENSIONS = new Set(["go"]);
 const RUST_EXTENSIONS = new Set(["rs"]);
+const VUE_EXTENSIONS = new Set(["vue"]);
 
 export function resolveLspServerKind(
   filePath: string,
@@ -22,6 +23,9 @@ export function resolveLspServerKind(
   }
   if (RUST_EXTENSIONS.has(extension) || monacoLanguage === "rust") {
     return "rust";
+  }
+  if (VUE_EXTENSIONS.has(extension) || monacoLanguage === "vue") {
+    return "vue";
   }
 
   return null;

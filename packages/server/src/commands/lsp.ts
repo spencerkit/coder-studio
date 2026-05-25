@@ -54,7 +54,7 @@ registerCommand(
   "lsp.install.start",
   z.object({
     workspaceId: z.string(),
-    serverKind: z.enum(["typescript", "python", "go", "rust"]),
+    serverKind: z.enum(["typescript", "python", "go", "rust", "vue"]),
   }),
   async (args, ctx) => {
     if (!ctx.lspToolInstallMgr) {

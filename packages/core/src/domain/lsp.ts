@@ -1,4 +1,4 @@
-export type LspServerKind = "typescript" | "python" | "go" | "rust";
+export type LspServerKind = "typescript" | "python" | "go" | "rust" | "vue";
 export type LspToolSource = "override" | "managed" | "bundled" | "system";
 export type LspRuntimeMode = "auto" | "off";
 

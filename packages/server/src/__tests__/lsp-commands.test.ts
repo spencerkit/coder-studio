@@ -82,12 +82,12 @@ class FakeLspManager {
 }
 
 class FakeLspToolInstallManager {
-  async start() {
+  async start(input: { serverKind: "typescript" | "python" | "go" | "rust" | "vue" }) {
     return {
       jobId: "job-1",
-      serverKind: "python" as const,
+      serverKind: input.serverKind,
       status: "queued" as const,
-      currentStepId: "install-python-lsp",
+      currentStepId: `install-${input.serverKind}-lsp`,
       steps: [],
     };
   }
@@ -257,6 +257,24 @@ describe("LSP commands", () => {
     expect(start.data).toMatchObject({
       jobId: "job-1",
       serverKind: "python",
+    });
+
+    const startVue = await dispatch(
+      {
+        kind: "command",
+        id: crypto.randomUUID(),
+        op: "lsp.install.start",
+        args: { workspaceId, serverKind: "vue" },
+      },
+      ctx
+    );
+
+    expect(startVue.ok).toBe(true);
+    expect(startVue.data).toMatchObject({
+      jobId: "job-1",
+      serverKind: "vue",
+      status: "queued",
+      currentStepId: "install-vue-lsp",
     });
 
     const get = await dispatch(

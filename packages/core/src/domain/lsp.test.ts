@@ -66,7 +66,7 @@ describe("LSP shared surface", () => {
 
     expectTypeOf<LspDiagnosticsEvent>().toEqualTypeOf<{
       workspaceId: string;
-      serverKind: "typescript" | "python" | "go" | "rust";
+      serverKind: "typescript" | "python" | "go" | "rust" | "vue";
       path: string;
       version?: number;
       diagnostics: LspDiagnostic[];
@@ -74,7 +74,7 @@ describe("LSP shared surface", () => {
 
     expectTypeOf<LspSessionSummary>().toEqualTypeOf<{
       workspaceId: string;
-      serverKind: "typescript" | "python" | "go" | "rust";
+      serverKind: "typescript" | "python" | "go" | "rust" | "vue";
       status: "unsupported" | "starting" | "ready" | "degraded" | "stopped";
       capabilities: {
         definition: boolean;
@@ -90,7 +90,7 @@ describe("LSP shared surface", () => {
     expectTypeOf<LspToolSource>().toEqualTypeOf<"override" | "managed" | "bundled" | "system">();
 
     expectTypeOf<LspToolRuntimeStatusEntry>().toEqualTypeOf<{
-      serverKind: "typescript" | "python" | "go" | "rust";
+      serverKind: "typescript" | "python" | "go" | "rust" | "vue";
       displayName: string;
       available: boolean;
       source?: LspToolSource;
@@ -125,7 +125,7 @@ describe("LSP shared surface", () => {
         | "verification_failed"
         | "download_failed"
         | "unknown_failure";
-      serverKind: "typescript" | "python" | "go" | "rust";
+      serverKind: "typescript" | "python" | "go" | "rust" | "vue";
       message: string;
       failedStepId: string;
       command: string;
@@ -138,7 +138,7 @@ describe("LSP shared surface", () => {
 
     expectTypeOf<LspToolInstallJobSnapshot>().toEqualTypeOf<{
       jobId: string;
-      serverKind: "typescript" | "python" | "go" | "rust";
+      serverKind: "typescript" | "python" | "go" | "rust" | "vue";
       status: "queued" | "running" | "succeeded" | "failed";
       currentStepId?: string;
       steps: LspToolInstallStepSnapshot[];
@@ -162,7 +162,7 @@ describe("LSP shared surface", () => {
         }
       | {
           kind: "tool_missing" | "installing" | "failed";
-          serverKind: "typescript" | "python" | "go" | "rust";
+          serverKind: "typescript" | "python" | "go" | "rust" | "vue";
           displayName: string;
           errorCode:
             | "lsp_tool_missing"
@@ -193,7 +193,7 @@ describe("LSP shared surface", () => {
     expectTypeOf<LspDiagnosticsUpdatedEvent>().toMatchTypeOf<{
       type: "lsp.diagnostics.updated";
       workspaceId: string;
-      serverKind: "typescript" | "python" | "go" | "rust";
+      serverKind: "typescript" | "python" | "go" | "rust" | "vue";
       path: string;
       version?: number;
       diagnostics: LspDiagnostic[];
