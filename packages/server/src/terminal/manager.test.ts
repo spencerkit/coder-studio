@@ -195,17 +195,23 @@ describe("TerminalManager", () => {
     });
 
     it("omits COLORFGBG when themeBackground is not provided", () => {
-      const spec: TerminalSpec = {
-        workspaceId: "ws-123",
-        kind: "shell",
-        argv: ["bash"],
-        cwd: "/home/user",
-      };
+      vi.stubEnv("COLORFGBG", "0;15");
 
-      manager.create(spec);
+      try {
+        const spec: TerminalSpec = {
+          workspaceId: "ws-123",
+          kind: "shell",
+          argv: ["bash"],
+          cwd: "/home/user",
+        };
 
-      const spawnOptions = (mockPtyHost.spawn as Mock).mock.calls[0][1];
-      expect(spawnOptions.env.COLORFGBG).toBeUndefined();
+        manager.create(spec);
+
+        const spawnOptions = (mockPtyHost.spawn as Mock).mock.calls[0][1];
+        expect(spawnOptions.env.COLORFGBG).toBeUndefined();
+      } finally {
+        vi.unstubAllEnvs();
+      }
     });
 
     it("omits COLORFGBG when themeBackground is malformed", () => {
