@@ -7,6 +7,7 @@
 import type { WorkspacePaneLeafKind, WorkspacePaneNode } from "@coder-studio/core";
 import { atom } from "jotai";
 import { atomFamily } from "jotai-family";
+import { enforceSingleEditorPaneInvariant } from "../pane-layout-tree";
 
 /**
  * Pane layout by workspace (agent pane splits).
@@ -76,6 +77,13 @@ export function readLegacyPaneLayout(workspaceId: string): PaneNode | null {
 export function normalizePaneLayout(
   layout: WorkspacePaneNode | PaneNode | null | undefined
 ): PaneNode | null {
+  const normalized = normalizePaneLayoutNode(layout);
+  return normalized ? enforceSingleEditorPaneInvariant(normalized) : null;
+}
+
+function normalizePaneLayoutNode(
+  layout: WorkspacePaneNode | PaneNode | null | undefined
+): PaneNode | null {
   if (!layout) {
     return null;
   }
@@ -109,7 +117,7 @@ export function normalizePaneLayout(
     type: "split",
     direction: layout.direction,
     ratio: "ratio" in layout ? layout.ratio : undefined,
-    children: layout.children?.map((child) => normalizePaneLayout(child) ?? defaultPaneLayout),
+    children: layout.children?.map((child) => normalizePaneLayoutNode(child) ?? defaultPaneLayout),
   };
 }
 

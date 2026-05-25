@@ -325,6 +325,97 @@ describe("Workspace Commands", () => {
       });
     });
 
+    it("rejects invalid typed pane leaves", async () => {
+      const dir = join(tmpdir(), `workspace-command-invalid-pane-test-${Date.now()}`);
+      await mkdir(dir);
+
+      const openResult = await dispatch(
+        {
+          kind: "command",
+          id: "open-workspace-invalid-pane-layout",
+          op: "workspace.open",
+          args: {
+            path: dir,
+          },
+        },
+        ctx
+      );
+
+      expect(openResult.ok).toBe(true);
+      const workspaceId = (openResult.data as { id: string }).id;
+
+      const draftWithSessionId = await dispatch(
+        {
+          kind: "command",
+          id: "set-ui-state-invalid-draft-pane-layout",
+          op: "workspace.uiState.set",
+          args: {
+            workspaceId,
+            uiState: {
+              leftPanelWidth: 320,
+              bottomPanelHeight: 210,
+              focusMode: false,
+              paneLayout: {
+                id: "root",
+                type: "leaf",
+                leafKind: "draft",
+                sessionId: "sess-invalid",
+              },
+            },
+          },
+        },
+        ctx
+      );
+      expect(draftWithSessionId.ok).toBe(false);
+
+      const sessionWithoutSessionId = await dispatch(
+        {
+          kind: "command",
+          id: "set-ui-state-invalid-session-pane-layout",
+          op: "workspace.uiState.set",
+          args: {
+            workspaceId,
+            uiState: {
+              leftPanelWidth: 320,
+              bottomPanelHeight: 210,
+              focusMode: false,
+              paneLayout: {
+                id: "root",
+                type: "leaf",
+                leafKind: "session",
+              },
+            },
+          },
+        },
+        ctx
+      );
+      expect(sessionWithoutSessionId.ok).toBe(false);
+
+      const editorWithSessionId = await dispatch(
+        {
+          kind: "command",
+          id: "set-ui-state-invalid-editor-pane-layout",
+          op: "workspace.uiState.set",
+          args: {
+            workspaceId,
+            uiState: {
+              leftPanelWidth: 320,
+              bottomPanelHeight: 210,
+              focusMode: false,
+              paneLayout: {
+                id: "root",
+                type: "leaf",
+                leafKind: "editor",
+                sessionId: "sess-invalid",
+              },
+            },
+          },
+        },
+        ctx
+      );
+      expect(editorWithSessionId.ok).toBe(false);
+    });
+
     it("persists fileTreeExpandedDirs into workspace ui state", async () => {
       const dir = join(tmpdir(), `workspace-expanded-dirs-test-${Date.now()}`);
       await mkdir(dir);

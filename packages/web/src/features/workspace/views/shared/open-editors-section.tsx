@@ -1,4 +1,4 @@
-import { useAtomValue, useSetAtom } from "jotai";
+import { useAtomValue } from "jotai";
 import { ChevronDown, ChevronRight, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { IconButton, Tooltip } from "../../../../components/ui";
@@ -7,15 +7,10 @@ import {
   hasPendingEditorLoad,
   subscribeToPendingEditorLoads,
 } from "../../../code-editor/actions/pending-editor-loads";
-import { useOpenLocation } from "../../../code-editor/actions/use-open-location";
 import { orderOpenEditorPaths } from "../../actions/open-editors-close";
 import { useOpenEditorsActions } from "../../actions/use-open-editors-actions";
-import {
-  activeFilePathAtomFamily,
-  deriveEditorModeForPath,
-  editorModeAtomFamily,
-  openFilesAtomFamily,
-} from "../../atoms";
+import { useOpenWorkspaceFile } from "../../actions/use-open-workspace-file";
+import { activeFilePathAtomFamily, openFilesAtomFamily } from "../../atoms";
 
 interface OpenEditorsSectionProps {
   workspaceId: string;
@@ -27,8 +22,7 @@ export function OpenEditorsSection({ workspaceId, onSelectFile, title }: OpenEdi
   const t = useTranslation();
   const openFiles = useAtomValue(openFilesAtomFamily(workspaceId));
   const activeFilePath = useAtomValue(activeFilePathAtomFamily(workspaceId));
-  const setEditorMode = useSetAtom(editorModeAtomFamily(workspaceId));
-  const { openLocation } = useOpenLocation(workspaceId);
+  const { openWorkspaceFile } = useOpenWorkspaceFile(workspaceId);
   const { closeAll, closePath } = useOpenEditorsActions(workspaceId);
   const [collapsed, setCollapsed] = useState(false);
   const [, setPendingLoadVersion] = useState(0);
@@ -102,8 +96,7 @@ export function OpenEditorsSection({ workspaceId, onSelectFile, title }: OpenEdi
                 aria-label={path}
                 title={path}
                 onClick={() => {
-                  setEditorMode(deriveEditorModeForPath(path));
-                  void openLocation({
+                  void openWorkspaceFile({
                     workspaceId,
                     path,
                     source: "manual",

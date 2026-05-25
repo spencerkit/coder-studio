@@ -10,6 +10,7 @@ import {
   activeEditorPaneIdAtomFamily,
   focusedEditorPaneIdAtomFamily,
 } from "../../agent-panes/atoms/editor-panes";
+import { paneLayoutAtomFamily } from "../../agent-panes/atoms/pane-layout";
 import { pendingEditorNavigationAtomFamily } from "../../code-editor/atoms";
 import { activeFilePathAtomFamily, fileTreeAtomFamily, openFilesAtomFamily } from "../atoms";
 import { useFileActions } from "./use-file-actions";
@@ -167,6 +168,11 @@ describe("useFileActions rename behavior", () => {
     store.set(localeAtom, "en");
     store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
     store.set(fileTreeAtomFamily("ws-test"), new Map([[".", []]]));
+    store.set(paneLayoutAtomFamily("ws-test"), {
+      id: "pane-editor-1",
+      type: "leaf",
+      leafKind: "editor",
+    });
     store.set(focusedEditorPaneIdAtomFamily("ws-test"), "pane-editor-1");
 
     const { result } = renderHook(() => useFileActions({ workspaceId: "ws-test" }), {

@@ -19,9 +19,29 @@ function isEditorLeaf(node: PaneNode): boolean {
   return node.type === "leaf" && node.leafKind === "editor";
 }
 
+export function findEditorPaneId(node: PaneNode): string | null {
+  if (node.type === "leaf") {
+    return isEditorLeaf(node) ? node.id : null;
+  }
+
+  for (const child of node.children ?? []) {
+    const match = findEditorPaneId(child);
+    if (match) {
+      return match;
+    }
+  }
+
+  return null;
+}
+
 export function paneLayoutHasEditorPaneId(node: PaneNode, paneId: string): boolean {
   const leaf = findLeafByPaneId(node, paneId);
   return leaf ? isEditorLeaf(leaf) : false;
+}
+
+export function paneLayoutHasDraftPaneId(node: PaneNode, paneId: string): boolean {
+  const leaf = findLeafByPaneId(node, paneId);
+  return leaf ? isDraftLeaf(leaf) : false;
 }
 
 function createDraftLeaf(id: string, legacy = false): PaneNode {
@@ -423,6 +443,11 @@ export function closeDraftPaneById(node: PaneNode, paneId: string): PaneNode {
 }
 
 export function convertDraftPaneToEditor(node: PaneNode, paneId: string): PaneNode {
+  const existingEditorPaneId = findEditorPaneId(node);
+  if (existingEditorPaneId && existingEditorPaneId !== paneId) {
+    return node;
+  }
+
   return replaceLeafByPaneId(node, paneId, (leaf) => {
     if (!isDraftLeaf(leaf)) {
       return leaf;
@@ -683,6 +708,60 @@ function assignFirstDraftPane(node: PaneNode, sessionId: string): PaneNode | nul
   }
 
   return null;
+}
+
+export function enforceSingleEditorPaneInvariant(node: PaneNode): PaneNode {
+  return enforceSingleEditorPaneInvariantInternal(node, false).node;
+}
+
+function enforceSingleEditorPaneInvariantInternal(
+  node: PaneNode,
+  hasSeenEditorPane: boolean
+): { node: PaneNode; hasSeenEditorPane: boolean } {
+  if (node.type === "leaf") {
+    if (!isEditorLeaf(node)) {
+      return { node, hasSeenEditorPane };
+    }
+
+    if (hasSeenEditorPane) {
+      return {
+        node: createDraftLeaf(node.id),
+        hasSeenEditorPane,
+      };
+    }
+
+    return {
+      node,
+      hasSeenEditorPane: true,
+    };
+  }
+
+  const children = node.children ?? [];
+  let changed = false;
+  let nextHasSeenEditorPane = hasSeenEditorPane;
+  const nextChildren = children.map((child) => {
+    const result = enforceSingleEditorPaneInvariantInternal(child, nextHasSeenEditorPane);
+    if (result.node !== child) {
+      changed = true;
+    }
+    nextHasSeenEditorPane = result.hasSeenEditorPane;
+    return result.node;
+  });
+
+  if (!changed) {
+    return {
+      node,
+      hasSeenEditorPane: nextHasSeenEditorPane,
+    };
+  }
+
+  return {
+    node: {
+      ...node,
+      children: nextChildren,
+    },
+    hasSeenEditorPane: nextHasSeenEditorPane,
+  };
 }
 
 function splitLeafForNewSession(

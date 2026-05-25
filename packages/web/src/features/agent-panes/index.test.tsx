@@ -1651,6 +1651,39 @@ describe("AgentPanes", () => {
     expect(await screen.findByTestId("editor-pane-root")).toBeInTheDocument();
   });
 
+  it("reuses the existing editor pane when another draft launcher opens a file", async () => {
+    const { store } = createAgentPaneStore({
+      id: "root",
+      type: "split",
+      direction: "horizontal",
+      children: [
+        { id: "left", type: "leaf", leafKind: "editor" },
+        { id: "right", type: "leaf", leafKind: "draft" },
+      ],
+    });
+
+    render(
+      <Provider store={store}>
+        <AgentPanes hydrateSessions={false} />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "open-file-right" }));
+
+    expect(store.get(paneLayoutAtomFamily("ws-1"))).toEqual({
+      id: "root",
+      type: "split",
+      direction: "horizontal",
+      children: [
+        { id: "left", type: "leaf", leafKind: "editor" },
+        { id: "right", type: "leaf", leafKind: "draft" },
+      ],
+    });
+    expect(store.get(activeEditorPaneIdAtomFamily("ws-1"))).toBe("left");
+    expect(store.get(focusedEditorPaneIdAtomFamily("ws-1"))).toBe("left");
+    expect(store.get(activeFilePathAtomFamily("ws-1"))).toBe("src/app.tsx");
+  });
+
   it("closes an editor pane back to draft and clears the active editor target", async () => {
     const { store } = createAgentPaneStore({
       id: "root",

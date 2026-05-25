@@ -43,14 +43,42 @@ async function buildRootPaths(currentPath: string): Promise<string[]> {
   return Array.from(roots);
 }
 
-const workspacePaneNodeSchema: z.ZodType<WorkspacePaneNode> = z.lazy(() =>
-  z.union([
-    z.object({
+const workspacePaneLeafSchema = z.union([
+  z
+    .object({
       id: z.string(),
       type: z.literal("leaf"),
-      leafKind: z.enum(["draft", "session", "editor"]).optional(),
+      leafKind: z.undefined().optional(),
       sessionId: z.string().optional(),
-    }),
+    })
+    .strict(),
+  z
+    .object({
+      id: z.string(),
+      type: z.literal("leaf"),
+      leafKind: z.literal("draft"),
+    })
+    .strict(),
+  z
+    .object({
+      id: z.string(),
+      type: z.literal("leaf"),
+      leafKind: z.literal("session"),
+      sessionId: z.string(),
+    })
+    .strict(),
+  z
+    .object({
+      id: z.string(),
+      type: z.literal("leaf"),
+      leafKind: z.literal("editor"),
+    })
+    .strict(),
+]);
+
+const workspacePaneNodeSchema: z.ZodType<WorkspacePaneNode> = z.lazy(() =>
+  z.union([
+    workspacePaneLeafSchema,
     z.object({
       id: z.string(),
       type: z.literal("split"),

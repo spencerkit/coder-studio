@@ -9,6 +9,8 @@ import {
   closePaneBySessionId,
   convertDraftPaneToEditor,
   createFallbackPaneLayout,
+  enforceSingleEditorPaneInvariant,
+  findEditorPaneId,
   insertPaneAtEdge,
   moveSessionToDraftPane,
   removePaneBySessionId,
@@ -30,6 +32,43 @@ describe("pane-layout-tree", () => {
       type: "leaf",
       leafKind: "editor",
     });
+  });
+
+  it("keeps the existing editor leaf when another draft tries to convert", () => {
+    const layout: PaneNode = {
+      id: "root",
+      type: "split",
+      direction: "horizontal",
+      children: [
+        { id: "left", type: "leaf", leafKind: "editor" },
+        { id: "right", type: "leaf", leafKind: "draft" },
+      ],
+    };
+
+    expect(convertDraftPaneToEditor(layout, "right")).toBe(layout);
+  });
+
+  it("collapses extra editor leaves back to drafts when enforcing the invariant", () => {
+    const layout: PaneNode = {
+      id: "root",
+      type: "split",
+      direction: "horizontal",
+      children: [
+        { id: "left", type: "leaf", leafKind: "editor" },
+        { id: "right", type: "leaf", leafKind: "editor" },
+      ],
+    };
+
+    expect(enforceSingleEditorPaneInvariant(layout)).toEqual({
+      id: "root",
+      type: "split",
+      direction: "horizontal",
+      children: [
+        { id: "left", type: "leaf", leafKind: "editor" },
+        { id: "right", type: "leaf", leafKind: "draft" },
+      ],
+    });
+    expect(findEditorPaneId(layout)).toBe("left");
   });
 
   it("turns a closed editor leaf back into a draft leaf while preserving siblings", () => {

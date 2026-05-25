@@ -5,6 +5,11 @@ import { createStore, Provider } from "jotai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { workspacesAtom } from "../../../../atoms/workspaces";
 import {
+  activeEditorPaneIdAtomFamily,
+  focusedEditorPaneIdAtomFamily,
+} from "../../../agent-panes/atoms/editor-panes";
+import { paneLayoutAtomFamily } from "../../../agent-panes/atoms/pane-layout";
+import {
   __resetPendingEditorLoadsForTests,
   beginPendingEditorLoad,
 } from "../../../code-editor/actions/pending-editor-loads";
@@ -39,7 +44,11 @@ function createFile(path: string): OpenFile {
   };
 }
 
-function renderSection(openFiles?: Record<string, OpenFile>, activePath?: string | null) {
+function renderSection(
+  openFiles?: Record<string, OpenFile>,
+  activePath?: string | null,
+  seedStore?: (store: ReturnType<typeof createStore>) => void
+) {
   const store = createStore();
   store.set(workspacesAtom, {
     "ws-test": {
@@ -60,6 +69,7 @@ function renderSection(openFiles?: Record<string, OpenFile>, activePath?: string
     activePath ?? (files["src/beta.ts"] ? "src/beta.ts" : (Object.keys(files)[0] ?? null))
   );
   store.set(openFilesAtomFamily("ws-test"), files);
+  seedStore?.(store);
 
   render(
     <Provider store={store}>
@@ -172,5 +182,21 @@ describe("OpenEditorsSection", () => {
     expect(within(section).getByRole("button", { name: "src/pending.ts" })).toHaveClass(
       "workspace-open-editors__item--active"
     );
+  });
+
+  it("routes open-editor clicks into the focused editor pane", () => {
+    const { store } = renderSection(undefined, undefined, (draftStore) => {
+      draftStore.set(paneLayoutAtomFamily("ws-test"), {
+        id: "root",
+        type: "leaf",
+        leafKind: "editor",
+      });
+      draftStore.set(focusedEditorPaneIdAtomFamily("ws-test"), "root");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "README.md" }));
+
+    expect(store.get(activeEditorPaneIdAtomFamily("ws-test"))).toBe("root");
+    expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("README.md");
   });
 });

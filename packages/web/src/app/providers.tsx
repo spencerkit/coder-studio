@@ -83,7 +83,6 @@ import {
   worktreeListAtomFamily,
 } from "../features/workspace/atoms";
 import { useActivation } from "../hooks/use-activation";
-import { useTranslation } from "../lib/i18n";
 import { getThemeById, resolveStoredThemeId } from "../theme";
 import type { ConnectionStatus, EventListener } from "../ws";
 import { resolveWsUrl, WsClient } from "../ws";
@@ -270,7 +269,6 @@ interface AppProvidersProps {
 }
 
 export function AppProviders({ children }: AppProvidersProps) {
-  const t = useTranslation();
   const [, setWsClient] = useAtom(wsClientAtom);
   const [theme, setTheme] = useAtom(themeAtom);
   const authEnabled = useAtomValue(authEnabledAtom);

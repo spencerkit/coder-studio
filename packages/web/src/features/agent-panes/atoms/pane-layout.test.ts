@@ -51,4 +51,26 @@ describe("pane layout storage helpers", () => {
       sessionId: "sess_1",
     });
   });
+
+  it("normalizes persisted layouts back to a single editor pane", () => {
+    expect(
+      normalizePaneLayout({
+        id: "root",
+        type: "split",
+        direction: "horizontal",
+        children: [
+          { id: "left", type: "leaf", leafKind: "editor" },
+          { id: "right", type: "leaf", leafKind: "editor" },
+        ],
+      })
+    ).toEqual({
+      id: "root",
+      type: "split",
+      direction: "horizontal",
+      children: [
+        { id: "left", type: "leaf", leafKind: "editor" },
+        { id: "right", type: "leaf", leafKind: "draft" },
+      ],
+    });
+  });
 });

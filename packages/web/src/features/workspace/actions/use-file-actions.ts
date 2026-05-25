@@ -4,20 +4,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { dispatchCommandAtom } from "../../../atoms/connection";
 import { useTranslation } from "../../../lib/i18n";
 import {
-  activeEditorPaneIdAtomFamily,
-  focusedEditorPaneIdAtomFamily,
-} from "../../agent-panes/atoms/editor-panes";
-import { useOpenLocation } from "../../code-editor/actions/use-open-location";
-import {
   activeFilePathAtomFamily,
-  deriveEditorModeForPath,
-  editorModeAtomFamily,
   fileTreeAtomFamily,
   fileTreeStaleAtomFamily,
   loadedDirsAtomFamily,
   type OpenFile,
   openFilesAtomFamily,
 } from "../atoms";
+import { useOpenWorkspaceFile } from "./use-open-workspace-file";
 
 export interface CreateRequest {
   id: number;
@@ -109,15 +103,12 @@ export function useFileActions({
   const fileTree = useAtomValue(fileTreeAtomFamily(workspaceId));
   const fileTreeStale = useAtomValue(fileTreeStaleAtomFamily(workspaceId));
   const activeFilePath = useAtomValue(activeFilePathAtomFamily(workspaceId));
-  const focusedEditorPaneId = useAtomValue(focusedEditorPaneIdAtomFamily(workspaceId));
   const dispatch = useAtomValue(dispatchCommandAtom);
   const setFileTree = useSetAtom(fileTreeAtomFamily(workspaceId));
   const setFileTreeStale = useSetAtom(fileTreeStaleAtomFamily(workspaceId));
   const setActiveFilePath = useSetAtom(activeFilePathAtomFamily(workspaceId));
-  const setActiveEditorPaneId = useSetAtom(activeEditorPaneIdAtomFamily(workspaceId));
-  const setEditorMode = useSetAtom(editorModeAtomFamily(workspaceId));
   const setOpenFiles = useSetAtom(openFilesAtomFamily(workspaceId));
-  const { openLocation } = useOpenLocation(workspaceId);
+  const { openWorkspaceFile } = useOpenWorkspaceFile(workspaceId);
   const loadedDirs = useAtomValue(loadedDirsAtomFamily(workspaceId));
   const setLoadedDirs = useSetAtom(loadedDirsAtomFamily(workspaceId));
 
@@ -308,26 +299,14 @@ export function useFileActions({
     await loadFileTree();
     closeCreateDialog();
 
-    setActiveEditorPaneId(focusedEditorPaneId);
-
     if (createDialog.mode === "file") {
-      void openLocation({
+      void openWorkspaceFile({
         workspaceId,
         path,
         source: "manual",
       });
     }
-  }, [
-    createDialog,
-    dispatch,
-    workspaceId,
-    loadFileTree,
-    closeCreateDialog,
-    focusedEditorPaneId,
-    openLocation,
-    setActiveEditorPaneId,
-    t,
-  ]);
+  }, [createDialog, dispatch, workspaceId, loadFileTree, closeCreateDialog, openWorkspaceFile, t]);
 
   const submitRenameDialog = useCallback(async () => {
     if (!renameDialog) {
@@ -480,23 +459,14 @@ export function useFileActions({
 
   const handleSelectFile = useCallback(
     (path: string) => {
-      setActiveEditorPaneId(focusedEditorPaneId);
-      setEditorMode(deriveEditorModeForPath(path));
-      void openLocation({
+      void openWorkspaceFile({
         workspaceId,
         path,
         source: "file-tree",
       });
       onSelectFile?.(path);
     },
-    [
-      focusedEditorPaneId,
-      onSelectFile,
-      openLocation,
-      setActiveEditorPaneId,
-      setEditorMode,
-      workspaceId,
-    ]
+    [onSelectFile, openWorkspaceFile, workspaceId]
   );
 
   return {

@@ -10,8 +10,8 @@ import { type FC, useCallback, useEffect, useRef } from "react";
 import { activeWorkspaceAtom } from "../../atoms/workspaces";
 import { EmptyState } from "../../components/ui";
 import { useTranslation } from "../../lib/i18n";
-import { useOpenLocation } from "../code-editor/actions/use-open-location";
 import { useOpenEditorsActions } from "../workspace/actions/use-open-editors-actions";
+import { useOpenWorkspaceFile } from "../workspace/actions/use-open-workspace-file";
 import type { PaneDropIntent } from "./actions/pane-drag-types";
 import { usePaneActions } from "./actions/use-pane-actions";
 import { usePaneDragController } from "./actions/use-pane-drag-controller";
@@ -62,7 +62,7 @@ export const AgentPanes: FC<AgentPanesProps> = ({ hydrateSessions = true }) => {
   });
   const paneActions = usePaneActions(workspaceId);
   const sessionActions = useSessionActions();
-  const { openLocation } = useOpenLocation(workspaceId);
+  const { openWorkspaceFile } = useOpenWorkspaceFile(workspaceId);
   const { closeAll } = useOpenEditorsActions(workspaceId, {
     workspaceRootPath: workspace?.path,
   });
@@ -77,16 +77,18 @@ export const AgentPanes: FC<AgentPanesProps> = ({ hydrateSessions = true }) => {
 
   const handleOpenFile = useCallback(
     (paneId: string, path: string) => {
-      paneActions.convertDraftPane(paneId);
-      setActiveEditorPaneId(paneId);
-      setFocusedEditorPaneId(paneId);
-      void openLocation({
-        workspaceId,
-        path,
-        source: "file-tree",
-      });
+      void openWorkspaceFile(
+        {
+          workspaceId,
+          path,
+          source: "file-tree",
+        },
+        {
+          targetDraftPaneId: paneId,
+        }
+      );
     },
-    [openLocation, paneActions, setActiveEditorPaneId, setFocusedEditorPaneId, workspaceId]
+    [openWorkspaceFile, workspaceId]
   );
 
   const handleActivateEditorPane = useCallback(
