@@ -33,6 +33,7 @@ describe("StatusDot", () => {
   it("preserves legacy session compatibility classes for migrated callers", () => {
     render(
       <StatusDot
+        tone="error"
         className="session-dot session-dot-running session-header-indicator"
         data-testid="dot"
       />
@@ -40,15 +41,16 @@ describe("StatusDot", () => {
 
     const dot = screen.getByTestId("dot");
     expect(dot).toHaveClass("session-dot", "session-dot-running", "session-header-indicator");
-    expect(dot.style.getPropertyValue("--status-dot-tone-color")).toBe("var(--status-dot-idle)");
+    expect(dot.style.getPropertyValue("--status-dot-tone-color")).toBe("var(--status-dot-error)");
     expect(dot.style.getPropertyValue("--status-dot-tone-ring")).toBe(
-      "var(--status-dot-idle-ring)"
+      "var(--status-dot-error-ring)"
     );
   });
 
   it("preserves legacy connection compatibility classes for migrated callers", () => {
     render(
       <StatusDot
+        tone="success"
         size="sm"
         className="connection-status-dot connection-status-dot-disconnected"
         data-testid="dot"
@@ -58,9 +60,11 @@ describe("StatusDot", () => {
     const dot = screen.getByTestId("dot");
     expect(dot).toHaveClass("connection-status-dot", "connection-status-dot-disconnected");
     expect(dot.style.getPropertyValue("--status-dot-current-size")).toBe("6px");
-    expect(dot.style.getPropertyValue("--status-dot-tone-color")).toBe("var(--status-dot-idle)");
+    expect(dot.style.getPropertyValue("--status-dot-tone-color")).toBe(
+      "var(--status-dot-complete)"
+    );
     expect(dot.style.getPropertyValue("--status-dot-tone-ring")).toBe(
-      "var(--status-dot-idle-ring)"
+      "var(--status-dot-complete-ring)"
     );
   });
 
