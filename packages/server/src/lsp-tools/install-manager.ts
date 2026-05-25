@@ -18,6 +18,8 @@ import {
   getLspToolDefinition,
   getManagedPrerequisites,
   resolveManagedPythonCommand,
+  VUE_LANGUAGE_SERVER_VERSION,
+  VUE_TYPESCRIPT_VERSION,
 } from "./definitions.js";
 import { FileManifestStore } from "./manifest-store.js";
 
@@ -35,7 +37,6 @@ interface InstallPlanStep {
 
 const PYTHON_MANAGED_VERSION = "1.14.0";
 const RUST_ANALYZER_RELEASE_TAG = "2026-05-18";
-const VUE_LANGUAGE_SERVER_VERSION = "3.3.2";
 
 export interface LspToolInstallManagerDeps extends CommandCheckDeps {
   manifestStore: FileManifestStore;
@@ -345,7 +346,7 @@ export class LspToolInstallManager {
             "install",
             "--no-save",
             `@vue/language-server@${VUE_LANGUAGE_SERVER_VERSION}`,
-            "typescript@^6.0.3",
+            `typescript@${VUE_TYPESCRIPT_VERSION}`,
           ],
           cwd: input.installRoot,
         },

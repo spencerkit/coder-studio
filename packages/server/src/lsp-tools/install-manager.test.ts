@@ -3,6 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Workspace } from "@coder-studio/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  VUE_LANGUAGE_SERVER_VERSION,
+  VUE_MANAGED_VERSION,
+  VUE_TYPESCRIPT_VERSION,
+} from "./definitions.js";
 import { LspToolInstallManager } from "./install-manager.js";
 import { FileManifestStore } from "./manifest-store.js";
 
@@ -163,11 +168,19 @@ describe("LspToolInstallManager", () => {
     const executablePath = join(
       root,
       "vue",
-      "3.3.2",
+      VUE_MANAGED_VERSION,
       "node_modules",
       ".bin",
       process.platform === "win32" ? "vue-language-server.cmd" : "vue-language-server"
     );
+    const runCommand = vi.fn(async (file: string) => {
+      if (file === "npm") {
+        installed = true;
+        return { stdout: "installed vue-language-server", stderr: "" };
+      }
+
+      throw new Error(`unexpected command: ${file}`);
+    });
 
     const manager = new LspToolInstallManager({
       manifestStore: new FileManifestStore(root),
@@ -182,14 +195,7 @@ describe("LspToolInstallManager", () => {
 
         return false;
       }),
-      runCommand: vi.fn(async (file: string) => {
-        if (file === "npm") {
-          installed = true;
-          return { stdout: "installed vue-language-server", stderr: "" };
-        }
-
-        throw new Error(`unexpected command: ${file}`);
-      }),
+      runCommand,
     });
 
     const started = await manager.start({
@@ -203,9 +209,22 @@ describe("LspToolInstallManager", () => {
 
     expect(new FileManifestStore(root).read("vue")).toMatchObject({
       serverKind: "vue",
+      version: VUE_MANAGED_VERSION,
       executablePath,
       source: "managed",
     });
+    expect(runCommand).toHaveBeenCalledWith(
+      "npm",
+      [
+        "install",
+        "--no-save",
+        `@vue/language-server@${VUE_LANGUAGE_SERVER_VERSION}`,
+        `typescript@${VUE_TYPESCRIPT_VERSION}`,
+      ],
+      expect.objectContaining({
+        cwd: join(root, "vue", VUE_MANAGED_VERSION),
+      })
+    );
   });
 
   it("classifies install-step ENOENT failures as command_not_found", async () => {

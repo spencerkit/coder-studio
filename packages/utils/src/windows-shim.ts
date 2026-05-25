@@ -8,11 +8,23 @@
  * must keep shell:false to avoid breaking argument escaping.
  */
 
+import { basename, extname } from "node:path";
+
 const WINDOWS_CMD_SHIMS = new Set(["pnpm", "npm", "npx"]);
+const WINDOWS_SHELL_EXTENSIONS = new Set([".cmd", ".bat"]);
 
 export function shouldUseShellForCommand(
   command: string,
   platform: NodeJS.Platform = process.platform
 ): boolean {
-  return platform === "win32" && WINDOWS_CMD_SHIMS.has(command.toLowerCase());
+  if (platform !== "win32") {
+    return false;
+  }
+
+  const normalizedCommand = command.toLowerCase();
+  if (WINDOWS_CMD_SHIMS.has(normalizedCommand)) {
+    return true;
+  }
+
+  return WINDOWS_SHELL_EXTENSIONS.has(extname(basename(normalizedCommand)));
 }

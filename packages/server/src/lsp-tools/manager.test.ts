@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { Workspace } from "@coder-studio/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { VUE_MANAGED_VERSION } from "./definitions.js";
 import { LspToolManager } from "./manager.js";
 import { FileManifestStore } from "./manifest-store.js";
 
@@ -247,7 +248,7 @@ describe("LspToolManager.resolve", () => {
     const executablePath = join(
       root,
       "vue",
-      "3.3.2",
+      VUE_MANAGED_VERSION,
       "node_modules",
       ".bin",
       process.platform === "win32" ? "vue-language-server.cmd" : "vue-language-server"
@@ -258,7 +259,7 @@ describe("LspToolManager.resolve", () => {
       join(root, "vue", "manifest.json"),
       JSON.stringify({
         serverKind: "vue",
-        version: "3.3.2",
+        version: VUE_MANAGED_VERSION,
         executablePath,
         installedAt: 1,
         source: "managed",

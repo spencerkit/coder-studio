@@ -1,5 +1,9 @@
 import type { LspServerKind } from "@coder-studio/core";
 
+export const VUE_LANGUAGE_SERVER_VERSION = "3.3.2";
+export const VUE_TYPESCRIPT_VERSION = "6.0.3";
+export const VUE_MANAGED_VERSION = `${VUE_LANGUAGE_SERVER_VERSION}-typescript-${VUE_TYPESCRIPT_VERSION}`;
+
 export interface LspToolDefinition {
   serverKind: LspServerKind;
   displayName: string;
@@ -70,7 +74,7 @@ export const LSP_TOOL_DEFINITIONS: Record<LspServerKind, LspToolDefinition> = {
     defaultCommand: "vue-language-server",
     defaultArgs: ["--stdio"],
     managed: {
-      version: "3.3.2",
+      version: VUE_MANAGED_VERSION,
       prerequisites: ["npm"],
       supportedPlatforms: ["linux", "darwin", "win32"],
     },
