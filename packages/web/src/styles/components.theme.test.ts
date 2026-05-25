@@ -1192,7 +1192,7 @@ describe("components.css theme-sensitive surfaces", () => {
     );
     expect(paneDividerLineRules).toContain("border-radius: var(--radius-pill)");
     expect(paneDividerHoverRules).toContain(
-      "background: color-mix(in srgb, var(--border-focus) 44%, transparent 56%)"
+      "background: var(--component-mix-border-focus-44pct-transparent-56pct)"
     );
     expect(paneDividerHorizontalRules).toContain("width: 10px");
     expect(paneDividerHorizontalRules).toContain("margin-left: -5px");

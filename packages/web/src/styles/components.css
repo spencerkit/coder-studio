@@ -7445,7 +7445,7 @@ textarea.input {
 }
 
 .pane-layout-divider:hover {
-  background: color-mix(in srgb, var(--border-focus) 44%, transparent 56%);
+  background: var(--component-mix-border-focus-44pct-transparent-56pct);
 }
 
 .session-card {
@@ -14435,15 +14435,15 @@ body.is-dragging-pane .session-action-btn-drag {
   inset: 0;
   z-index: var(--z-inline-raised);
   pointer-events: none;
-  border: 1px dashed color-mix(in srgb, var(--state-info-text) 55%, transparent);
+  border: 1px dashed var(--component-mix-state-info-text-55pct-transparent);
   border-radius: inherit;
-  background: color-mix(in srgb, var(--state-info-bg) 12%, transparent);
+  background: var(--component-mix-state-info-bg-12pct-transparent);
 }
 
 .pane-drop-overlay::before {
   content: "";
   position: absolute;
-  background: color-mix(in srgb, var(--state-info-text) 18%, transparent);
+  background: var(--component-mix-state-info-text-18pct-transparent);
 }
 
 .pane-drop-overlay--left::before {
@@ -14477,9 +14477,9 @@ body.is-dragging-pane .session-action-btn-drag {
   left: 50%;
   transform: translate(-50%, -50%);
   padding: var(--sp-1) var(--sp-2);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--bg-elevated) 92%, transparent);
+  background: var(--component-mix-surface-elevated-92pct-transparent);
   color: var(--text-primary);
   font-size: var(--type-body-6-size);
   line-height: var(--type-body-6-line-height);

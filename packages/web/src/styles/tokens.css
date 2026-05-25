@@ -746,6 +746,21 @@
     var(--status-info-fg) 18%,
     transparent
   );
+  --component-mix-state-info-text-55pct-transparent: color-mix(
+    in srgb,
+    var(--state-info-text) 55%,
+    transparent
+  );
+  --component-mix-state-info-bg-12pct-transparent: color-mix(
+    in srgb,
+    var(--state-info-bg) 12%,
+    transparent
+  );
+  --component-mix-state-info-text-18pct-transparent: color-mix(
+    in srgb,
+    var(--state-info-text) 18%,
+    transparent
+  );
   --component-mix-border-default-78pct-transparent: color-mix(
     in srgb,
     var(--border-default) 78%,
@@ -1129,6 +1144,11 @@
     in srgb,
     var(--status-info-fg) 40%,
     transparent
+  );
+  --component-mix-border-focus-44pct-transparent-56pct: color-mix(
+    in srgb,
+    var(--border-focus) 44%,
+    transparent 56%
   );
   --component-mix-border-focus-44pct-transparent-56pct: color-mix(
     in srgb,
