@@ -41,12 +41,9 @@ const legacyPublicPattern = /var\(--(?:bg-|accent-|color-|ws-)/;
 
 const expectedRawColorConsumers = ["src/styles/components.css"];
 
-const expectedRuntimeConsumers = ["src/styles/components.css"];
+const expectedRuntimeConsumers: string[] = [];
 
-const expectedLegacyPublicConsumers = [
-  "src/components/ui/select/index.module.css",
-  "src/styles/components.css",
-];
+const expectedLegacyPublicConsumers: string[] = [];
 
 function offenders(pattern: RegExp) {
   return files
