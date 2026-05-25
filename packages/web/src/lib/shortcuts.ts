@@ -35,15 +35,15 @@ export const DEFAULT_SHORTCUTS: ShortcutDefinition[] = [
     id: "workspace.previous",
     name: "上一个工作区",
     description: "切换到上一个工作区标签",
-    defaultBinding: "Mod+Shift+[",
-    category: "global",
+    defaultBinding: "Ctrl+Shift+ArrowLeft",
+    category: "workspace",
   },
   {
     id: "workspace.next",
     name: "下一个工作区",
     description: "切换到下一个工作区标签",
-    defaultBinding: "Mod+Shift+]",
-    category: "global",
+    defaultBinding: "Ctrl+Shift+ArrowRight",
+    category: "workspace",
   },
   {
     id: "focus-mode.toggle",
@@ -58,6 +58,34 @@ export const DEFAULT_SHORTCUTS: ShortcutDefinition[] = [
     name: "垂直分屏",
     description: "垂直分割 Agent 面板",
     defaultBinding: "Mod+D",
+    category: "workspace",
+  },
+  {
+    id: "session.navigate.left",
+    name: "切换到左侧会话",
+    description: "将焦点切换到左侧会话",
+    defaultBinding: "Ctrl+ArrowLeft",
+    category: "workspace",
+  },
+  {
+    id: "session.navigate.right",
+    name: "切换到右侧会话",
+    description: "将焦点切换到右侧会话",
+    defaultBinding: "Ctrl+ArrowRight",
+    category: "workspace",
+  },
+  {
+    id: "session.navigate.up",
+    name: "切换到上方会话",
+    description: "将焦点切换到上方会话",
+    defaultBinding: "Ctrl+ArrowUp",
+    category: "workspace",
+  },
+  {
+    id: "session.navigate.down",
+    name: "切换到下方会话",
+    description: "将焦点切换到下方会话",
+    defaultBinding: "Ctrl+ArrowDown",
     category: "workspace",
   },
   {
@@ -104,8 +132,13 @@ export function parseShortcut(binding: string): {
 export function formatShortcut(binding: string): string {
   return binding
     .replace("Mod", navigator.platform.includes("Mac") ? "⌘" : "Ctrl")
+    .replace("Ctrl", "Ctrl")
     .replace("Shift", "⇧")
-    .replace("Alt", navigator.platform.includes("Mac") ? "⌥" : "Alt");
+    .replace("Alt", navigator.platform.includes("Mac") ? "⌥" : "Alt")
+    .replace("ArrowLeft", "←")
+    .replace("ArrowRight", "→")
+    .replace("ArrowUp", "↑")
+    .replace("ArrowDown", "↓");
 }
 
 /**
@@ -114,17 +147,15 @@ export function formatShortcut(binding: string): string {
 export function matchesShortcut(event: KeyboardEvent, binding: string): boolean {
   const { modifiers, key } = parseShortcut(binding);
   const isMac = navigator.platform.includes("Mac");
+  const expectedCtrl = modifiers.includes("Ctrl") || (!isMac && modifiers.includes("Mod"));
+  const expectedMeta = isMac && modifiers.includes("Mod");
+  const expectedShift = modifiers.includes("Shift");
+  const expectedAlt = modifiers.includes("Alt");
 
-  const modPressed = isMac ? event.metaKey : event.ctrlKey;
-  const shiftPressed = event.shiftKey;
-  const altPressed = event.altKey;
-
-  // Check modifiers
-  for (const modifier of modifiers) {
-    if (modifier === "Mod" && !modPressed) return false;
-    if (modifier === "Shift" && !shiftPressed) return false;
-    if (modifier === "Alt" && !altPressed) return false;
-  }
+  if (event.ctrlKey !== expectedCtrl) return false;
+  if (event.metaKey !== expectedMeta) return false;
+  if (event.shiftKey !== expectedShift) return false;
+  if (event.altKey !== expectedAlt) return false;
 
   // Check key
   const eventKey = event.key.toLowerCase();
