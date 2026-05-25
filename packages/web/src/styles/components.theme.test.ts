@@ -1066,12 +1066,18 @@ describe("components.css theme-sensitive surfaces", () => {
     );
     const paneDividerHorizontalRules = getRuleBlocksFrom(
       stylesheet,
-      ".pane-layout-horizontal .pane-layout-divider"
+      ".pane-layout-horizontal-divider"
     ).join("\n");
     const paneDividerVerticalRules = getRuleBlocksFrom(
       stylesheet,
-      ".pane-layout-vertical .pane-layout-divider"
+      ".pane-layout-vertical-divider"
     ).join("\n");
+    const hasLegacyPaneDividerHorizontalRule = hasRuleBlock(
+      ".pane-layout-horizontal .pane-layout-divider"
+    );
+    const hasLegacyPaneDividerVerticalRule = hasRuleBlock(
+      ".pane-layout-vertical .pane-layout-divider"
+    );
     const bottomTerminalShellRules = getRuleBlocksFrom(
       stylesheet,
       ".workspace-bottom-panel > .bottom-terminal"
@@ -1201,10 +1207,13 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(paneDividerHorizontalRules).toContain("margin-left: -5px");
     expect(paneDividerHorizontalRules).toContain("margin-right: -5px");
     expect(paneDividerHorizontalRules).not.toContain("background: transparent");
+    expect(paneDividerVerticalRules).toContain("width: 100%");
     expect(paneDividerVerticalRules).toContain("height: 10px");
     expect(paneDividerVerticalRules).toContain("margin-top: -5px");
     expect(paneDividerVerticalRules).toContain("margin-bottom: -5px");
     expect(paneDividerVerticalRules).not.toContain("background: transparent");
+    expect(hasLegacyPaneDividerHorizontalRule).toBe(false);
+    expect(hasLegacyPaneDividerVerticalRule).toBe(false);
     expect(bottomPanel).toContain("padding: 0");
     expect(bottomPanel).not.toContain("padding: 0 0 14px");
     expect(bottomPanel).not.toContain("padding: 0 14px 14px");

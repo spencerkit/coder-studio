@@ -25,6 +25,32 @@ describe("PaneLayout", () => {
     document.body.classList.remove("is-resizing-panels");
   });
 
+  it("renders direction-specific divider classes", () => {
+    const { container, rerender } = render(
+      <PaneLayout splitId="split-a" direction="horizontal" ratio={0.5}>
+        <div>left</div>
+        <div>right</div>
+      </PaneLayout>
+    );
+
+    const horizontalDivider = container.querySelector('[role="separator"]');
+
+    expect(horizontalDivider).toHaveClass("pane-layout-divider", "pane-layout-horizontal-divider");
+    expect(horizontalDivider).toHaveAttribute("aria-orientation", "vertical");
+
+    rerender(
+      <PaneLayout splitId="split-b" direction="vertical" ratio={0.5}>
+        <div>top</div>
+        <div>bottom</div>
+      </PaneLayout>
+    );
+
+    const verticalDivider = container.querySelector('[role="separator"]');
+
+    expect(verticalDivider).toHaveClass("pane-layout-divider", "pane-layout-vertical-divider");
+    expect(verticalDivider).toHaveAttribute("aria-orientation", "horizontal");
+  });
+
   it("resets the local ratio when the split identity changes", () => {
     mockContainerRect(1000);
 

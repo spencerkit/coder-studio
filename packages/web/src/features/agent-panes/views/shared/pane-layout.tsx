@@ -92,6 +92,10 @@ export const PaneLayout: FC<PaneLayoutProps> = ({
     direction === "horizontal"
       ? { gridTemplateColumns: `${currentRatio * 100}% 0px ${(1 - currentRatio) * 100}%` }
       : { gridTemplateRows: `${currentRatio * 100}% 0px ${(1 - currentRatio) * 100}%` };
+  const dividerClassName =
+    direction === "horizontal"
+      ? "pane-layout-divider pane-layout-horizontal-divider"
+      : "pane-layout-divider pane-layout-vertical-divider";
 
   return (
     <div
@@ -101,7 +105,7 @@ export const PaneLayout: FC<PaneLayoutProps> = ({
     >
       <div className="pane-layout-child">{first}</div>
       <div
-        className="pane-layout-divider"
+        className={dividerClassName}
         onMouseDown={handleMouseDown}
         role="separator"
         aria-orientation={direction === "horizontal" ? "vertical" : "horizontal"}

@@ -3155,7 +3155,7 @@ body.is-dragging-pane {
   background: var(--border-focus);
 }
 
-.pane-layout-horizontal .pane-layout-divider {
+.pane-layout-horizontal-divider {
   cursor: col-resize;
   width: 10px;
   margin-left: -5px;
@@ -3163,8 +3163,9 @@ body.is-dragging-pane {
   justify-self: center;
 }
 
-.pane-layout-vertical .pane-layout-divider {
+.pane-layout-vertical-divider {
   cursor: row-resize;
+  width: 100%;
   height: 10px;
   margin-top: -5px;
   margin-bottom: -5px;
@@ -7416,6 +7417,15 @@ textarea.input {
   background: linear-gradient(180deg, transparent, var(--state-info-bg), transparent);
 }
 
+.pane-layout-vertical-divider {
+  background: linear-gradient(
+    180deg,
+    transparent,
+    var(--component-mix-status-info-fg-24pct-transparent),
+    transparent
+  );
+}
+
 .pane-layout-divider::after {
   content: "";
   position: absolute;
@@ -7424,7 +7434,7 @@ textarea.input {
   background: var(--component-mix-border-default-62pct-transparent);
 }
 
-.pane-layout-horizontal .pane-layout-divider::after {
+.pane-layout-horizontal-divider::after {
   top: 0;
   bottom: 0;
   left: 50%;
@@ -7432,11 +7442,12 @@ textarea.input {
   transform: translateX(-50%);
 }
 
-.pane-layout-vertical .pane-layout-divider::after {
+.pane-layout-vertical-divider::after {
   left: 0;
   right: 0;
   top: 50%;
   height: 1px;
+  background: var(--component-mix-border-default-78pct-status-info-fg-22pct);
   transform: translateY(-50%);
 }
 
