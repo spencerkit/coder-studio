@@ -210,6 +210,55 @@ describe("createLspBridge", () => {
     });
   });
 
+  it("opens vue documents through the lazy lsp bridge using the vue language id", async () => {
+    const sendCommand = vi
+      .fn()
+      .mockResolvedValueOnce({
+        kind: "ready",
+        displayName: "Vue language server",
+        source: "managed",
+        summary: {
+          workspaceId: "ws-1",
+          serverKind: "vue",
+          status: "ready",
+          capabilities: {
+            definition: true,
+            references: true,
+            hover: true,
+            documentSymbols: true,
+            diagnostics: true,
+          },
+        },
+      })
+      .mockResolvedValue(undefined);
+
+    const bridge = createLspBridge({
+      sendCommand: sendCommand as BridgeSendCommand,
+      subscribe: vi.fn(() => () => {}),
+    });
+
+    bridge.attachModel({
+      workspaceId: "ws-1",
+      workspaceRootPath: "/repo",
+      path: "src/App.vue",
+      monacoLanguage: "vue",
+      model: createMockModel(
+        "<template><div /></template>\n",
+        1,
+        monaco.Uri.file("/repo/src/App.vue")
+      ),
+    });
+
+    await vi.waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith("lsp.openDocument", {
+        workspaceId: "ws-1",
+        path: "src/App.vue",
+        languageId: "vue",
+        text: "<template><div /></template>\n",
+      });
+    });
+  });
+
   it("does not open a document when ensureSession returns disabled", async () => {
     const sendCommand = vi.fn().mockResolvedValueOnce({
       kind: "disabled",

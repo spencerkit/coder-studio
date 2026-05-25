@@ -241,4 +241,48 @@ describe("LspToolManager.resolve", () => {
       missingCommands: ["rust-analyzer"],
     });
   });
+
+  it("prefers a managed vue install over system PATH", async () => {
+    const root = mkdtempSync(join(tmpdir(), "lsp-tools-"));
+    const executablePath = join(
+      root,
+      "vue",
+      "3.3.2",
+      "node_modules",
+      ".bin",
+      process.platform === "win32" ? "vue-language-server.cmd" : "vue-language-server"
+    );
+    mkdirSync(dirname(executablePath), { recursive: true });
+    writeFileSync(executablePath, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+    writeFileSync(
+      join(root, "vue", "manifest.json"),
+      JSON.stringify({
+        serverKind: "vue",
+        version: "3.3.2",
+        executablePath,
+        installedAt: 1,
+        source: "managed",
+        platform: process.platform,
+      })
+    );
+
+    const manager = new LspToolManager({
+      manifestStore: new FileManifestStore(root),
+      commandExists: vi.fn(async () => true),
+      resolveBundledCommand: vi.fn(() => null),
+    });
+
+    const result = await manager.resolve({
+      workspace,
+      serverKind: "vue",
+      env: {},
+    });
+
+    expect(result).toMatchObject({
+      kind: "ready",
+      source: "managed",
+      command: executablePath,
+      args: ["--stdio"],
+    });
+  });
 });

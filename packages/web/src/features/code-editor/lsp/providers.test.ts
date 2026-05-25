@@ -72,6 +72,34 @@ function createMockModel(
 }
 
 describe("LSP providers", () => {
+  it("registers Monaco providers for vue files on the vue language", () => {
+    const bridge = createLspBridge({
+      sendCommand: vi.fn() as BridgeSendCommand,
+      subscribe: vi.fn(() => () => {}),
+    });
+
+    const registerDefinitionProvider = vi.mocked(monaco.languages.registerDefinitionProvider);
+
+    bridge.attachModel({
+      workspaceId: "ws-1",
+      workspaceRootPath: "/repo",
+      path: "src/App.vue",
+      monacoLanguage: "vue",
+      model: createMockModel(
+        "<template><AppButton /></template>\n",
+        1,
+        monaco.Uri.file("/repo/src/App.vue")
+      ),
+    });
+
+    expect(registerDefinitionProvider).toHaveBeenCalledWith(
+      "vue",
+      expect.objectContaining({
+        provideDefinition: expect.any(Function),
+      })
+    );
+  });
+
   it("registers a link provider that resolves relative import specifiers to workspace files", async () => {
     const registerLinkProvider = vi.mocked(monaco.languages.registerLinkProvider);
     const requestDefinition = vi.fn(async () => [

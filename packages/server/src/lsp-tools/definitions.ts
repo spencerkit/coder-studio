@@ -69,6 +69,11 @@ export const LSP_TOOL_DEFINITIONS: Record<LspServerKind, LspToolDefinition> = {
     displayName: "Vue language server",
     defaultCommand: "vue-language-server",
     defaultArgs: ["--stdio"],
+    managed: {
+      version: "3.3.2",
+      prerequisites: ["npm"],
+      supportedPlatforms: ["linux", "darwin", "win32"],
+    },
   },
 };
 

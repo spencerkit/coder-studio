@@ -157,6 +157,57 @@ describe("LspToolInstallManager", () => {
     });
   });
 
+  it("installs the vue language server into the managed tool directory and writes a manifest", async () => {
+    const root = mkdtempSync(join(tmpdir(), "lsp-tools-"));
+    let installed = false;
+    const executablePath = join(
+      root,
+      "vue",
+      "3.3.2",
+      "node_modules",
+      ".bin",
+      process.platform === "win32" ? "vue-language-server.cmd" : "vue-language-server"
+    );
+
+    const manager = new LspToolInstallManager({
+      manifestStore: new FileManifestStore(root),
+      commandExists: vi.fn(async (command: string) => {
+        if (command === "npm") {
+          return true;
+        }
+
+        if (command === executablePath) {
+          return installed;
+        }
+
+        return false;
+      }),
+      runCommand: vi.fn(async (file: string) => {
+        if (file === "npm") {
+          installed = true;
+          return { stdout: "installed vue-language-server", stderr: "" };
+        }
+
+        throw new Error(`unexpected command: ${file}`);
+      }),
+    });
+
+    const started = await manager.start({
+      workspace,
+      serverKind: "vue",
+    });
+
+    await vi.waitFor(() => {
+      expect(manager.get(started.jobId)?.status).toBe("succeeded");
+    });
+
+    expect(new FileManifestStore(root).read("vue")).toMatchObject({
+      serverKind: "vue",
+      executablePath,
+      source: "managed",
+    });
+  });
+
   it("classifies install-step ENOENT failures as command_not_found", async () => {
     const installError = Object.assign(new Error("spawn python3 ENOENT"), {
       code: "ENOENT",

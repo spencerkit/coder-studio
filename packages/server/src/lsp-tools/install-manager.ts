@@ -35,6 +35,7 @@ interface InstallPlanStep {
 
 const PYTHON_MANAGED_VERSION = "1.14.0";
 const RUST_ANALYZER_RELEASE_TAG = "2026-05-18";
+const VUE_LANGUAGE_SERVER_VERSION = "3.3.2";
 
 export interface LspToolInstallManagerDeps extends CommandCheckDeps {
   manifestStore: FileManifestStore;
@@ -155,17 +156,7 @@ export class LspToolInstallManager {
     }
 
     const installRoot = join(this.deps.manifestStore.getRoot(), input.serverKind, managed.version);
-    const executablePath =
-      input.serverKind === "python"
-        ? join(
-            installRoot,
-            "venv",
-            platform === "win32" ? "Scripts" : "bin",
-            platform === "win32" ? "pylsp.exe" : "pylsp"
-          )
-        : input.serverKind === "go"
-          ? join(installRoot, "bin", platform === "win32" ? "gopls.exe" : "gopls")
-          : join(installRoot, "bin", platform === "win32" ? "rust-analyzer.exe" : "rust-analyzer");
+    const executablePath = resolveManagedExecutablePath(input.serverKind, installRoot, platform);
 
     const plannedSteps = this.planInstallSteps({
       serverKind: input.serverKind,
@@ -201,17 +192,7 @@ export class LspToolInstallManager {
     this.jobs.set(job.jobId, job);
 
     const installRoot = join(this.deps.manifestStore.getRoot(), serverKind, managed.version);
-    const executablePath =
-      serverKind === "python"
-        ? join(
-            installRoot,
-            "venv",
-            platform === "win32" ? "Scripts" : "bin",
-            platform === "win32" ? "pylsp.exe" : "pylsp"
-          )
-        : serverKind === "go"
-          ? join(installRoot, "bin", platform === "win32" ? "gopls.exe" : "gopls")
-          : join(installRoot, "bin", platform === "win32" ? "rust-analyzer.exe" : "rust-analyzer");
+    const executablePath = resolveManagedExecutablePath(serverKind, installRoot, platform);
 
     const commandExists =
       this.deps.commandExists ?? ((command: string) => checkCommandAvailable(command, this.deps));
@@ -353,6 +334,31 @@ export class LspToolInstallManager {
       ];
     }
 
+    if (input.serverKind === "vue") {
+      return [
+        {
+          id: "install-vue-lsp",
+          title: "Install Vue language server",
+          kind: "install",
+          command: "npm",
+          args: [
+            "install",
+            "--no-save",
+            `@vue/language-server@${VUE_LANGUAGE_SERVER_VERSION}`,
+            "typescript@^6.0.3",
+          ],
+          cwd: input.installRoot,
+        },
+        {
+          id: "verify-vue-lsp",
+          title: "Verify Vue language server",
+          kind: "verify",
+          command: input.executablePath,
+          args: ["--version"],
+        },
+      ];
+    }
+
     return [
       {
         id: "install-rust-lsp",
@@ -398,6 +404,36 @@ export class LspToolInstallManager {
       this.activeJobIdsByServerKind.delete(serverKind);
     }
   }
+}
+
+function resolveManagedExecutablePath(
+  serverKind: LspServerKind,
+  installRoot: string,
+  platform: NodeJS.Platform
+): string {
+  if (serverKind === "python") {
+    return join(
+      installRoot,
+      "venv",
+      platform === "win32" ? "Scripts" : "bin",
+      platform === "win32" ? "pylsp.exe" : "pylsp"
+    );
+  }
+
+  if (serverKind === "go") {
+    return join(installRoot, "bin", platform === "win32" ? "gopls.exe" : "gopls");
+  }
+
+  if (serverKind === "rust") {
+    return join(installRoot, "bin", platform === "win32" ? "rust-analyzer.exe" : "rust-analyzer");
+  }
+
+  return join(
+    installRoot,
+    "node_modules",
+    ".bin",
+    platform === "win32" ? "vue-language-server.cmd" : "vue-language-server"
+  );
 }
 
 function toSnapshotStep(step: InstallPlanStep): LspToolInstallStepSnapshot {
