@@ -2670,9 +2670,47 @@ body.is-resizing-panels * {
 
 .welcome-actions-group {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--sp-3);
   flex-wrap: wrap;
+}
+
+.welcome-step-hint,
+.welcome-step-detail,
+.welcome-settings-hint {
+  width: 100%;
+  margin: 0;
+}
+
+.welcome-step-hint {
+  width: 100%;
+  margin: 0;
+  font-size: var(--type-body-6-size);
+  line-height: var(--type-body-6-line-height);
+  font-weight: var(--type-body-6-weight);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-ter);
+}
+
+.welcome-step-detail {
+  width: 100%;
+  margin: 0;
+  max-width: 440px;
+  font-size: var(--type-body-5-size);
+  line-height: var(--type-body-5-line-height);
+  font-weight: var(--type-body-5-weight);
+  color: var(--text-secondary);
+}
+
+.welcome-settings-hint {
+  width: 100%;
+  margin: 0;
+  padding-top: var(--sp-2);
+  font-size: var(--type-body-6-size);
+  line-height: var(--type-body-6-line-height);
+  font-weight: var(--type-body-6-weight);
+  color: var(--text-ter);
 }
 
 .welcome-kicker {
@@ -11876,6 +11914,11 @@ textarea.input {
     font-size: var(--type-body-3-size);
     line-height: var(--type-body-3-line-height);
     font-weight: var(--type-body-3-weight);
+  }
+
+  .welcome-card--mobile .welcome-step-detail,
+  .welcome-card--mobile .welcome-settings-hint {
+    max-width: none;
   }
 
   .welcome-card--mobile.diagnostics-card {
