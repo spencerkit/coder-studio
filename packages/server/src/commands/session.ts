@@ -42,6 +42,10 @@ registerCommand(
     workspaceId: z.string(),
     providerId: z.string(),
     draft: z.string().optional(),
+    themeBackground: z
+      .string()
+      .regex(/^#[0-9a-fA-F]{3,8}$/)
+      .optional(),
   }),
   async (args, ctx) => {
     // Get workspace
@@ -75,6 +79,7 @@ registerCommand(
       providerId: args.providerId,
       provider,
       draft: args.draft,
+      themeBackground: args.themeBackground,
     });
   }
 );

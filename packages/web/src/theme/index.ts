@@ -28,3 +28,4 @@ export {
   getThemeVariant,
   resolveStoredThemeId,
 } from "./resolve";
+export { useTerminalThemeBackground } from "./use-terminal-theme-background";

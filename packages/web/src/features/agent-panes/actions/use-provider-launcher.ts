@@ -7,6 +7,7 @@ import type {
 } from "@coder-studio/core";
 import { useEffect, useRef, useState } from "react";
 import type { DispatchCommand } from "../../../atoms/connection";
+import { useTerminalThemeBackground } from "../../../theme";
 
 export type ProviderId = "claude" | "codex";
 
@@ -65,6 +66,7 @@ export function useProviderLauncher(
 ): UseProviderLauncherResult {
   const [states, setStates] = useState<Record<ProviderId, ProviderCardState>>(buildStateMap());
   const pollingTimers = useRef<Partial<Record<ProviderId, number>>>({});
+  const themeBackground = useTerminalThemeBackground();
 
   useEffect(() => {
     let cancelled = false;
@@ -190,6 +192,7 @@ export function useProviderLauncher(
       const createResult = await dispatch<Session>("session.create", {
         workspaceId,
         providerId,
+        themeBackground,
       });
 
       if (createResult.ok && createResult.data) {
@@ -259,6 +262,7 @@ export function useProviderLauncher(
       const createResult = await dispatch<Session>("session.create", {
         workspaceId,
         providerId,
+        themeBackground,
       });
 
       if (createResult.ok && createResult.data) {
@@ -315,6 +319,7 @@ export function useProviderLauncher(
       const createResult = await dispatch<Session>("session.create", {
         workspaceId,
         providerId,
+        themeBackground,
       });
 
       if (createResult.ok && createResult.data) {

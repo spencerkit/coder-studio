@@ -2,6 +2,7 @@ import { act, renderHook } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { WORKSPACE_PATH_DRAG_MIME } from "../../../lib/workspace-path-drag";
 import { toastsAtom } from "../../notifications/atoms";
 import { usePasteDropUpload } from "./use-paste-drop-upload.js";
 
@@ -39,6 +40,42 @@ function fireDrop(target: HTMLElement, files: File[]) {
   const event = new Event("drop", { bubbles: true, cancelable: true });
   Object.defineProperty(event, "dataTransfer", {
     value: { files, types: files.length ? ["Files"] : [], items: [] },
+  });
+  target.dispatchEvent(event);
+  return event;
+}
+
+function fireWorkspacePathDragOver(
+  target: HTMLElement,
+  payload: { workspaceId: string; path: string; kind: "file" | "dir" }
+) {
+  const event = new Event("dragover", { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "dataTransfer", {
+    value: {
+      files: [],
+      types: [WORKSPACE_PATH_DRAG_MIME, "text/plain"],
+      items: [],
+      getData: (type: string) =>
+        type === WORKSPACE_PATH_DRAG_MIME ? JSON.stringify(payload) : payload.path,
+    },
+  });
+  target.dispatchEvent(event);
+  return event;
+}
+
+function fireWorkspacePathDrop(
+  target: HTMLElement,
+  payload: { workspaceId: string; path: string; kind: "file" | "dir" }
+) {
+  const event = new Event("drop", { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "dataTransfer", {
+    value: {
+      files: [],
+      types: [WORKSPACE_PATH_DRAG_MIME, "text/plain"],
+      items: [],
+      getData: (type: string) =>
+        type === WORKSPACE_PATH_DRAG_MIME ? JSON.stringify(payload) : payload.path,
+    },
   });
   target.dispatchEvent(event);
   return event;
@@ -226,6 +263,92 @@ describe("usePasteDropUpload", () => {
     expect(sendInput).toHaveBeenCalledWith("ls -la");
   });
 
+  it("keeps plain text insertion out of upload busy handling while pending", async () => {
+    const store = createStore();
+    const clipboardRead = vi.fn().mockResolvedValue([]);
+    const clipboardReadText = vi.fn().mockResolvedValue("ls -la");
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        read: clipboardRead,
+        readText: clipboardReadText,
+      } satisfies Pick<Clipboard, "readText"> & { read: () => Promise<ClipboardItem[]> },
+    });
+    let resolveSend: (() => void) | undefined;
+    sendInput.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveSend = resolve;
+        })
+    );
+
+    const { result } = renderHook(
+      () =>
+        usePasteDropUpload({
+          containerRef: { current: container },
+          workspaceId: "ws-1",
+          sendTextToTerminal: sendInput,
+          enabled: true,
+        }),
+      { wrapper: makeWrapper(store) }
+    );
+
+    const pastePromise = result.current.handleClipboardPaste();
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(result.current.busy).toBe(false);
+
+    await act(async () => {
+      resolveSend?.();
+      await pastePromise;
+    });
+  });
+
+  it("surfaces plain text send failures as paste errors, not upload errors", async () => {
+    const store = createStore();
+    const clipboardRead = vi.fn().mockResolvedValue([]);
+    const clipboardReadText = vi.fn().mockResolvedValue("ls -la");
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        read: clipboardRead,
+        readText: clipboardReadText,
+      } satisfies Pick<Clipboard, "readText"> & { read: () => Promise<ClipboardItem[]> },
+    });
+    sendInput.mockRejectedValueOnce(new Error("terminal write failed"));
+
+    const { result } = renderHook(
+      () =>
+        usePasteDropUpload({
+          containerRef: { current: container },
+          workspaceId: "ws-1",
+          sendTextToTerminal: sendInput,
+          enabled: true,
+        }),
+      { wrapper: makeWrapper(store) }
+    );
+
+    await act(async () => {
+      await expect(result.current.handleClipboardPaste()).rejects.toThrow("terminal write failed");
+      await flushAsyncWork();
+    });
+
+    expect(store.get(toastsAtom)).toContainEqual(
+      expect.objectContaining({
+        kind: "error",
+        title: "Paste failed",
+      })
+    );
+    expect(store.get(toastsAtom)).not.toContainEqual(
+      expect.objectContaining({
+        kind: "error",
+        title: "Upload failed",
+      })
+    );
+  });
+
   it("uploads files passed directly to the explicit file handler", async () => {
     const store = createStore();
     const { result } = renderHook(
@@ -262,6 +385,163 @@ describe("usePasteDropUpload", () => {
     const evt = fireTextDrop(container);
     expect(evt.defaultPrevented).toBe(false);
     expect(sendInput).not.toHaveBeenCalled();
+  });
+
+  it("prevents default for internal workspace drags and inserts a quoted relative path", async () => {
+    const store = createStore();
+    const { result } = renderHook(
+      () =>
+        usePasteDropUpload({
+          containerRef: { current: container },
+          workspaceId: "ws-1",
+          sendTextToTerminal: sendInput,
+          enabled: true,
+        }),
+      { wrapper: makeWrapper(store) }
+    );
+
+    const dragOver = fireWorkspacePathDragOver(container, {
+      workspaceId: "ws-1",
+      path: "src/app.tsx",
+      kind: "file",
+    });
+    expect(dragOver.defaultPrevented).toBe(true);
+
+    await act(async () => {
+      const drop = fireWorkspacePathDrop(container, {
+        workspaceId: "ws-1",
+        path: "src/app.tsx",
+        kind: "file",
+      });
+      expect(drop.defaultPrevented).toBe(true);
+      await flushAsyncWork();
+    });
+
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+    expect(sendInput).toHaveBeenCalledWith("'src/app.tsx' ");
+    expect(result.current.busy).toBe(false);
+  });
+
+  it("keeps internal path insertion ordered behind earlier uploads", async () => {
+    const store = createStore();
+    let resolveUpload: ((value: Response) => void) | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            resolveUpload = resolve as (value: Response) => void;
+          })
+      )
+    );
+
+    renderHook(
+      () =>
+        usePasteDropUpload({
+          containerRef: { current: container },
+          workspaceId: "ws-1",
+          sendTextToTerminal: sendInput,
+          enabled: true,
+        }),
+      { wrapper: makeWrapper(store) }
+    );
+
+    await act(async () => {
+      fireDrop(container, [makeFile("upload.txt")]);
+      fireWorkspacePathDrop(container, {
+        workspaceId: "ws-1",
+        path: "src/app.tsx",
+        kind: "file",
+      });
+      await Promise.resolve();
+    });
+
+    expect(sendInput).not.toHaveBeenCalled();
+
+    await act(async () => {
+      resolveUpload?.({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ok: true,
+          files: [{ path: "/abs/upload.txt", originalName: "upload.txt", size: 1 }],
+        }),
+      } as Response);
+      await flushAsyncWork();
+    });
+
+    expect(sendInput.mock.calls).toEqual([["'/abs/upload.txt' "], ["'src/app.tsx' "]]);
+  });
+
+  it("rejects internal workspace drops from another workspace", async () => {
+    const store = createStore();
+    const { result } = renderHook(
+      () =>
+        usePasteDropUpload({
+          containerRef: { current: container },
+          workspaceId: "ws-1",
+          sendTextToTerminal: sendInput,
+          enabled: true,
+        }),
+      { wrapper: makeWrapper(store) }
+    );
+
+    await act(async () => {
+      fireWorkspacePathDrop(container, {
+        workspaceId: "ws-2",
+        path: "src/app.tsx",
+        kind: "file",
+      });
+      await flushAsyncWork();
+    });
+
+    expect(sendInput).not.toHaveBeenCalled();
+    expect(store.get(toastsAtom)).toContainEqual(
+      expect.objectContaining({
+        kind: "error",
+        title: "Drop failed",
+      })
+    );
+    expect(result.current.busy).toBe(false);
+  });
+
+  it("toasts when the internal workspace payload is invalid", async () => {
+    const store = createStore();
+
+    renderHook(
+      () =>
+        usePasteDropUpload({
+          containerRef: { current: container },
+          workspaceId: "ws-1",
+          sendTextToTerminal: sendInput,
+          enabled: true,
+        }),
+      { wrapper: makeWrapper(store) }
+    );
+
+    await act(async () => {
+      const event = new Event("drop", { bubbles: true, cancelable: true });
+      Object.defineProperty(event, "dataTransfer", {
+        value: {
+          files: [],
+          types: [WORKSPACE_PATH_DRAG_MIME, "text/plain"],
+          items: [],
+          getData: (type: string) =>
+            type === WORKSPACE_PATH_DRAG_MIME ? "{bad json" : "src/app.tsx",
+        },
+      });
+      container.dispatchEvent(event);
+      await flushAsyncWork();
+    });
+
+    expect(sendInput).not.toHaveBeenCalled();
+    expect(store.get(toastsAtom)).toContainEqual(
+      expect.objectContaining({
+        kind: "error",
+        title: "Drop failed",
+        body: "Could not read the dragged workspace path.",
+      })
+    );
   });
 
   it("keeps busy true until overlapping uploads both finish", async () => {

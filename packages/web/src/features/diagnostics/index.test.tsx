@@ -469,10 +469,13 @@ describe("DiagnosticsPage", () => {
       }
 
       if (op === "session.create") {
-        expect(args).toEqual({
-          workspaceId: "ws-1",
-          providerId: "claude",
-        });
+        expect(args).toEqual(
+          expect.objectContaining({
+            workspaceId: "ws-1",
+            providerId: "claude",
+            themeBackground: expect.stringMatching(/^#[0-9a-fA-F]{6,8}$/),
+          })
+        );
         return {
           id: "sess-1",
           workspaceId: "ws-1",

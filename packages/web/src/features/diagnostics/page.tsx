@@ -22,6 +22,7 @@ import {
 import { Button, Notice, Tag, ThemedIcon } from "../../components/ui";
 import { useViewport } from "../../hooks/use-viewport";
 import { useTranslation } from "../../lib/i18n";
+import { useTerminalThemeBackground } from "../../theme";
 import {
   defaultPaneLayout,
   type PaneNode,
@@ -203,6 +204,7 @@ export function DiagnosticsPage() {
   const intent = parseDiagnosticsSearch(location.search);
   const store = useStore();
   const dispatch = useAtomValue(dispatchCommandAtom);
+  const themeBackground = useTerminalThemeBackground();
   const connectionStatus = useAtomValue(connectionStatusAtom);
   const persistLastViewedTarget = usePersistWorkspaceLastViewedTarget();
   const setActiveWorkspaceId = useSetAtom(activeWorkspaceIdAtom);
@@ -354,6 +356,7 @@ export function DiagnosticsPage() {
     const createResult = await dispatch<Session>("session.create", {
       workspaceId,
       providerId,
+      themeBackground,
     });
 
     if (!createResult.ok || !createResult.data) {

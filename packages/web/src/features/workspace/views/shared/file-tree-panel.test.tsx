@@ -3,6 +3,7 @@ import { createStore, Provider } from "jotai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { wsClientAtom } from "../../../../atoms/connection";
 import { workspacesAtom } from "../../../../atoms/workspaces";
+import { WORKSPACE_PATH_DRAG_MIME } from "../../../../lib/workspace-path-drag";
 import { pendingEditorNavigationAtomFamily } from "../../../code-editor/atoms";
 import {
   activeFilePathAtomFamily,
@@ -35,6 +36,18 @@ vi.mock("../../../../lib/i18n", () => ({
     return key;
   },
 }));
+
+function createDragDataTransfer() {
+  const values = new Map<string, string>();
+  const dataTransfer = {
+    effectAllowed: "none",
+    setData: vi.fn((type: string, value: string) => {
+      values.set(type, value);
+    }),
+  } as unknown as DataTransfer;
+
+  return { dataTransfer, values };
+}
 
 describe("FileTreePanel", () => {
   beforeEach(() => {
@@ -1356,6 +1369,48 @@ describe("FileTreePanel", () => {
     ).toBeInTheDocument();
   });
 
+  it("marks desktop search result rows draggable and writes workspace path drag data", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args: { query?: string }) => {
+      if (op === "file.search") {
+        const query = args.query?.toLowerCase() ?? "";
+        const files = [{ path: "src/app.tsx", name: "app.tsx", kind: "file" }].filter((item) =>
+          item.name.toLowerCase().includes(query)
+        );
+
+        return { files };
+      }
+
+      return { ok: true };
+    });
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    fireEvent.change(screen.getByPlaceholderText("action.search_files"), {
+      target: { value: "app" },
+    });
+
+    const searchRow = (await screen.findByText("app.tsx")).closest(".tree-item");
+    expect(searchRow).toHaveAttribute("draggable", "true");
+
+    const { dataTransfer, values } = createDragDataTransfer();
+    fireEvent.dragStart(searchRow!, { dataTransfer });
+
+    expect(values.get(WORKSPACE_PATH_DRAG_MIME)).toBe(
+      JSON.stringify({
+        workspaceId: "ws-test",
+        path: "src/app.tsx",
+        kind: "file",
+      })
+    );
+    expect(values.get("text/plain")).toBe("src/app.tsx");
+  });
+
   it("opens the rename modal from the context menu and submits file.rename", async () => {
     const sendCommand = vi
       .fn()
@@ -1551,10 +1606,11 @@ describe("FileTreePanel", () => {
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith(
         "terminal.create",
-        {
+        expect.objectContaining({
           workspaceId: "ws-test",
           cwdPath: "src",
-        },
+          themeBackground: expect.stringMatching(/^#[0-9a-fA-F]{6,8}$/),
+        }),
         undefined
       );
     });
@@ -1569,10 +1625,11 @@ describe("FileTreePanel", () => {
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith(
         "terminal.create",
-        {
+        expect.objectContaining({
           workspaceId: "ws-test",
           cwdPath: undefined,
-        },
+          themeBackground: expect.stringMatching(/^#[0-9a-fA-F]{6,8}$/),
+        }),
         undefined
       );
     });
@@ -2082,6 +2139,142 @@ describe("FileTreePanel", () => {
 
     expect(screen.queryByLabelText("action.search_files")).toBeNull();
     expect(document.querySelector(".file-tree-search")).toBeNull();
+  });
+
+  it("marks desktop tree rows draggable and writes workspace path drag data on dragstart", () => {
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+    store.set(
+      fileTreeAtomFamily("ws-test"),
+      new Map([
+        [
+          ".",
+          [
+            { path: "README.md", name: "README.md", kind: "file" },
+            { path: "src", name: "src", kind: "dir", children: [] },
+          ],
+        ],
+      ])
+    );
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" variant="desktop" showSearch={false} />
+      </Provider>
+    );
+
+    const fileRow = screen.getByText("README.md").closest(".tree-item");
+    const folderRow = screen.getByText("src").closest(".tree-item");
+    expect(fileRow).toHaveAttribute("draggable", "true");
+    expect(folderRow).toHaveAttribute("draggable", "true");
+
+    const { dataTransfer, values } = createDragDataTransfer();
+    fireEvent.dragStart(fileRow!, { dataTransfer });
+
+    expect(values.get(WORKSPACE_PATH_DRAG_MIME)).toBe(
+      JSON.stringify({
+        workspaceId: "ws-test",
+        path: "README.md",
+        kind: "file",
+      })
+    );
+    expect(values.get("text/plain")).toBe("README.md");
+  });
+
+  it("writes workspace drag data for nested desktop nodes too", () => {
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+    store.set(
+      fileTreeAtomFamily("ws-test"),
+      new Map([
+        [".", [{ path: "src", name: "src", kind: "dir", children: [] }]],
+        ["src", [{ path: "src/app.tsx", name: "app.tsx", kind: "file" }]],
+      ])
+    );
+    store.set(expandedDirsAtomFamily("ws-test"), new Set(["src"]));
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" variant="desktop" showSearch={false} />
+      </Provider>
+    );
+
+    const nestedRow = screen.getByText("app.tsx").closest(".tree-item");
+    expect(nestedRow).toHaveAttribute("draggable", "true");
+
+    const { dataTransfer, values } = createDragDataTransfer();
+    fireEvent.dragStart(nestedRow!, { dataTransfer });
+
+    expect(values.get(WORKSPACE_PATH_DRAG_MIME)).toBe(
+      JSON.stringify({
+        workspaceId: "ws-test",
+        path: "src/app.tsx",
+        kind: "file",
+      })
+    );
+    expect(values.get("text/plain")).toBe("src/app.tsx");
+  });
+
+  it("keeps desktop draggable file rows clickable for shared editor navigation", async () => {
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand: vi.fn().mockResolvedValue({}) } as never);
+    store.set(
+      fileTreeAtomFamily("ws-test"),
+      new Map([
+        [
+          ".",
+          [
+            {
+              path: "src/app.tsx",
+              name: "app.tsx",
+              kind: "file",
+            },
+          ],
+        ],
+      ])
+    );
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" variant="desktop" showSearch={false} />
+      </Provider>
+    );
+
+    const row = screen.getByText("app.tsx").closest(".tree-item");
+    expect(row).toHaveAttribute("draggable", "true");
+
+    fireEvent.click(row!);
+
+    await waitFor(() => {
+      expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/app.tsx");
+    });
+
+    expect(store.get(pendingEditorNavigationAtomFamily("ws-test"))).toMatchObject({
+      workspaceId: "ws-test",
+      path: "src/app.tsx",
+      source: "file-tree",
+      requestId: expect.any(Number),
+    });
+  });
+
+  it("keeps mobile tree rows non-draggable", () => {
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+    store.set(
+      fileTreeAtomFamily("ws-test"),
+      new Map([[".", [{ path: "README.md", name: "README.md", kind: "file" }]]])
+    );
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" variant="mobile" showSearch={false} />
+      </Provider>
+    );
+
+    expect(screen.getByText("README.md").closest(".tree-item")).not.toHaveAttribute(
+      "draggable",
+      "true"
+    );
   });
 
   it("opens the mobile action sheet on long press but not on ordinary tap", async () => {

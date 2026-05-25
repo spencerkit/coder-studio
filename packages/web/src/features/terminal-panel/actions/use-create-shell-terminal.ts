@@ -2,6 +2,7 @@ import type { Terminal as TerminalDto } from "@coder-studio/core";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { dispatchCommandAtom } from "../../../atoms/connection";
 import { useTranslation } from "../../../lib/i18n";
+import { useTerminalThemeBackground } from "../../../theme";
 import { pushToastAtom } from "../../notifications/atoms";
 import {
   terminalActiveIdAtomFamily,
@@ -25,6 +26,7 @@ export function useCreateShellTerminal(workspaceId: string | null) {
   const dispatch = useAtomValue(dispatchCommandAtom);
   const pushToast = useSetAtom(pushToastAtom);
   const store = useStore();
+  const themeBackground = useTerminalThemeBackground();
 
   return {
     async createShellTerminal(args: { cwdPath?: string } = {}) {
@@ -41,6 +43,7 @@ export function useCreateShellTerminal(workspaceId: string | null) {
         const result = await dispatch<TerminalDto>("terminal.create", {
           workspaceId,
           cwdPath: args.cwdPath,
+          themeBackground,
         });
 
         if (!result.ok || !result.data) {

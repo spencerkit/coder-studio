@@ -171,8 +171,8 @@ Add shortcut definitions for:
 - `session.navigate.right`
 - `session.navigate.up`
 - `session.navigate.down`
-- `workspace.navigate.previous`
-- `workspace.navigate.next`
+- existing `workspace.previous`
+- existing `workspace.next`
 
 Default bindings:
 
@@ -187,8 +187,10 @@ The shortcut utility layer must be extended so it can:
 
 - parse explicit modifiers beyond `Mod`
 - distinguish `Ctrl` from `Mod`
+- reject extra modifiers so `Ctrl+Shift+ArrowRight` does not also match `Ctrl+ArrowRight`
 - correctly match arrow keys
 - format arrow bindings for the settings UI
+- preserve explicit `Ctrl+Arrow*` bindings when the settings UI records a shortcut while keeping existing `Mod+letter` behavior intact
 
 This is a targeted extension, not a full keyboard abstraction rewrite.
 

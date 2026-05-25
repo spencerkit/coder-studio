@@ -161,12 +161,15 @@ describe("UI preview catalog", () => {
   it("renders the mobile terminal showcase without the replay loading overlay", async () => {
     renderScene("mobile-terminal-sheet", "mobile");
 
+    expect(await screen.findByRole("button", { name: "New Terminal" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Close Terminal" })).toBeInTheDocument();
     await waitFor(() => {
+      expect(
+        document.querySelector(".mobile-sheet--terminal .terminal-toolbar-mobile-row")
+      ).toBeTruthy();
       expect(screen.queryByText("Restoring terminal output...")).not.toBeInTheDocument();
     });
     expect(document.querySelector(".mobile-sheet--terminal")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "New Terminal" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Close Terminal" })).toBeInTheDocument();
     expect(
       document.querySelector(".mobile-sheet--terminal .terminal-toolbar-mobile-row")
     ).toBeTruthy();

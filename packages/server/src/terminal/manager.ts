@@ -22,6 +22,59 @@ function isTerminalTraceEnabled(): boolean {
   return process.env.CODER_STUDIO_TERMINAL_TRACE === "1";
 }
 
+/**
+ * Parse a #RRGGBB / #RRGGBBAA / #RGB hex color into 8-bit RGB.
+ * Returns null for any unrecognized input so callers can skip injection.
+ */
+function parseHexColor(input: string): { r: number; g: number; b: number } | null {
+  const trimmed = input.trim();
+  if (!trimmed.startsWith("#")) {
+    return null;
+  }
+
+  const hex = trimmed.slice(1);
+  let r: number;
+  let g: number;
+  let b: number;
+  if (hex.length === 3) {
+    r = Number.parseInt(hex[0]! + hex[0]!, 16);
+    g = Number.parseInt(hex[1]! + hex[1]!, 16);
+    b = Number.parseInt(hex[2]! + hex[2]!, 16);
+  } else if (hex.length === 6 || hex.length === 8) {
+    r = Number.parseInt(hex.slice(0, 2), 16);
+    g = Number.parseInt(hex.slice(2, 4), 16);
+    b = Number.parseInt(hex.slice(4, 6), 16);
+  } else {
+    return null;
+  }
+
+  if ([r, g, b].some((v) => Number.isNaN(v))) {
+    return null;
+  }
+  return { r, g, b };
+}
+
+/**
+ * Derive an xterm-style COLORFGBG value from a theme background hex color.
+ *
+ * Returns "0;15" (dark text on light background) when the perceived luma is
+ * above the threshold, "15;0" (light text on dark background) otherwise.
+ * Returns undefined when the input cannot be parsed so the caller leaves the
+ * variable untouched and the child TUI falls back to its own default.
+ *
+ * Luma uses the Rec. 601 coefficients; the threshold is 0.5 which is the same
+ * cutoff most TUIs (Ink, chalk, bat, delta) use internally.
+ */
+export function computeColorFgBg(background: string): string | undefined {
+  const rgb = parseHexColor(background);
+  if (!rgb) {
+    return undefined;
+  }
+
+  const luma = (0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b) / 255;
+  return luma > 0.5 ? "0;15" : "15;0";
+}
+
 function countOccurrences(text: string, needle: string): number {
   return text.split(needle).length - 1;
 }
@@ -109,6 +162,16 @@ export class TerminalManager {
     // FORCE_COLOR makes agent CLIs that are spawned directly (e.g. Claude Code
     // via Ink/chalk, Codex) emit ANSI colors without relying on the user's
     // shell rc to set it. spec.env can still override explicitly.
+    //
+    // COLORFGBG advertises the frontend xterm theme's light/dark intent so
+    // TUIs that auto-pick color schemes (Claude Code, Codex, bat, delta, …)
+    // can match the page background. We derive it from spec.themeBackground.
+    // On Windows the ConPTY layer intercepts OSC 11 background-color queries
+    // and never forwards xterm.js's response back to the child, so this env
+    // variable is the only signal that survives the round trip.
+    const derivedColorFgBg = spec.themeBackground
+      ? computeColorFgBg(spec.themeBackground)
+      : undefined;
     const terminalEnv: Record<string, string> = {
       ...Object.fromEntries(
         Object.entries(process.env).filter((e): e is [string, string] => e[1] != null)
@@ -116,6 +179,7 @@ export class TerminalManager {
       TERM: "xterm-256color",
       COLORTERM: "truecolor",
       FORCE_COLOR: "3",
+      ...(derivedColorFgBg ? { COLORFGBG: derivedColorFgBg } : {}),
       ...spec.env,
     };
 

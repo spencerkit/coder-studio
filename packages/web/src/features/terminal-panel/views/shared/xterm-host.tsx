@@ -189,6 +189,16 @@ function consumeTerminalInputDraft(
   return { nextDraft, submittedText };
 }
 
+function binaryStringToBytes(data: string): Uint8Array {
+  const bytes = new Uint8Array(data.length);
+
+  for (let index = 0; index < data.length; index += 1) {
+    bytes[index] = data.charCodeAt(index) & 0xff;
+  }
+
+  return bytes;
+}
+
 function getTouchAt(
   list: TouchList | ArrayLike<TouchPointLike> | undefined | null,
   index: number
@@ -689,6 +699,7 @@ export function XtermHost({
   // Latest copies of callback identities used inside the mount effect, exposed
   // via refs so the effect's cleanup/re-creation is not tied to their churn.
   const handleInputRef = useRef<(data: string) => void | Promise<void>>(() => {});
+  const handleBinaryInputRef = useRef<(data: string) => void | Promise<void>>(() => {});
   const handleResizeRef = useRef<(size: { cols: number; rows: number }) => void | Promise<void>>(
     () => {}
   );
@@ -1256,6 +1267,22 @@ export function XtermHost({
     }
   }, [pushCopyOnSelectFailureToast, terminalPreferences.copyOnSelect, viewport]);
 
+  const dispatchTerminalInput = useCallback(
+    async (bytes: Uint8Array, activity: TerminalInputActivity, submittedText?: string) => {
+      if (!interactiveRef.current) {
+        return;
+      }
+
+      if (!wsClient) {
+        console.error("Cannot send terminal input: WebSocket not connected");
+        return;
+      }
+
+      await wsClient.sendTerminalInput(terminalId, bytes, activity, submittedText);
+    },
+    [terminalId, wsClient]
+  );
+
   /**
    * Handle user input - dispatch to server
    */
@@ -1265,15 +1292,6 @@ export function XtermHost({
         traceTerminal(terminalId, "input.suppressed-replay-response", {
           summary: summarizeTerminalData(data),
         });
-        return;
-      }
-
-      if (!interactiveRef.current) {
-        return;
-      }
-
-      if (!wsClient) {
-        console.error("Cannot send terminal input: WebSocket not connected");
         return;
       }
 
@@ -1301,8 +1319,7 @@ export function XtermHost({
         });
         inputDraftRef.current = nextDraft;
 
-        await wsClient.sendTerminalInput(
-          terminalId,
+        await dispatchTerminalInput(
           terminalInputEncoder.encode(normalized.data),
           activity,
           submittedText
@@ -1320,7 +1337,25 @@ export function XtermHost({
         console.error("Failed to send terminal input:", error);
       }
     },
-    [terminalId, updateCtrlMode, wsClient]
+    [dispatchTerminalInput, terminalId, updateCtrlMode]
+  );
+
+  const handleBinaryInput = useCallback(
+    async (data: string) => {
+      const bytes = binaryStringToBytes(data);
+
+      traceTerminal(terminalId, "input.binary", {
+        activity: "control",
+        summary: summarizeTerminalData(bytes),
+      });
+
+      try {
+        await dispatchTerminalInput(bytes, "control");
+      } catch (error) {
+        console.error("Failed to send terminal input:", error);
+      }
+    },
+    [dispatchTerminalInput, terminalId]
   );
 
   const handleResize = useCallback(
@@ -1499,6 +1534,10 @@ export function XtermHost({
   }, [handleInput]);
 
   useEffect(() => {
+    handleBinaryInputRef.current = handleBinaryInput;
+  }, [handleBinaryInput]);
+
+  useEffect(() => {
     handleResizeRef.current = handleResize;
   }, [handleResize]);
 
@@ -1590,6 +1629,11 @@ export function XtermHost({
     terminal.onData((data) => {
       void handleInputRef.current(data);
     });
+    if (typeof terminal.onBinary === "function") {
+      terminal.onBinary((data) => {
+        void handleBinaryInputRef.current(data);
+      });
+    }
     const renderDisposable =
       typeof terminal.onRender === "function"
         ? terminal.onRender(({ start, end }) => {
