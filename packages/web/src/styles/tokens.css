@@ -358,7 +358,8 @@
 
   /* Scrollbar */
   --scrollbar-width: 8px;
-  --scrollbar-track: transparent;
+  --scrollbar-track: color-mix(in srgb, var(--surface-panel) 86%, var(--border-default) 14%);
+  --scrollbar-thumb: color-mix(in srgb, var(--border-default) 74%, var(--status-info-fg) 26%);
 
   /* ========== Touch / Pointer (Mobile-Friendly Phase 0) ========== */
   /* Desktop defaults - overridden below for narrow viewport or coarse pointer. */
@@ -2017,7 +2018,6 @@
   --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.12);
   --shadow-xl: 0 16px 48px rgba(0, 0, 0, 0.15);
   --shadow-glow: 0 0 12px rgba(21, 143, 119, 0.18);
-  --scrollbar-thumb: #d0d7de;
 
   --accent-purple: #8250df;
 }
@@ -2058,7 +2058,6 @@
   --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.64);
   --shadow-xl: 0 16px 48px rgba(0, 0, 0, 0.74);
   --shadow-glow: 0 0 12px rgba(122, 162, 247, 0.24);
-  --scrollbar-thumb: #353c46;
 
   --accent-purple: #c099ff;
 }
@@ -2123,7 +2122,6 @@
   --shadow-lg: 0 8px 32px rgba(15, 23, 42, 0.12);
   --shadow-xl: 0 16px 48px rgba(15, 23, 42, 0.16);
   --shadow-glow: 0 0 12px rgba(49, 95, 221, 0.16);
-  --scrollbar-thumb: #c7d0da;
 
   --accent-purple: #7c3aed;
 }
@@ -2166,7 +2164,6 @@
   --shadow-lg: 0 8px 32px rgba(17, 24, 39, 0.58);
   --shadow-xl: 0 16px 48px rgba(17, 24, 39, 0.68);
   --shadow-glow: 0 0 12px rgba(136, 192, 208, 0.26);
-  --scrollbar-thumb: #4c566a;
 
   --accent-purple: #b48ead;
 }
@@ -2231,7 +2228,6 @@
   --shadow-lg: 0 8px 32px rgba(46, 52, 64, 0.12);
   --shadow-xl: 0 16px 48px rgba(46, 52, 64, 0.15);
   --shadow-glow: 0 0 12px rgba(91, 127, 168, 0.18);
-  --scrollbar-thumb: #c6ceda;
 
   --accent-purple: #8f5b9c;
 }

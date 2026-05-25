@@ -277,6 +277,44 @@ describe("tokens.css touch tokens", () => {
     expect(root).toContain("--diff-removed-border: var(--status-danger-border)");
   });
 
+  it("derives the shared native scrollbar palette from semantic surface tokens", () => {
+    const root = getRuleBlock(":root");
+
+    expect(getCustomProperty(root, "--scrollbar-width")).toBe("8px");
+    expect(getCustomProperty(root, "--scrollbar-track")).toBe(
+      "color-mix(in srgb, var(--surface-panel) 86%, var(--border-default) 14%)"
+    );
+    expect(getCustomProperty(root, "--scrollbar-thumb")).toBe(
+      "color-mix(in srgb, var(--border-default) 74%, var(--status-info-fg) 26%)"
+    );
+  });
+
+  it("limits explicit scrollbar thumb overrides to the high-contrast themes", () => {
+    const inheritedThemes = [
+      "mint-light",
+      "graphite-dark",
+      "graphite-light",
+      "nord-dark",
+      "nord-light",
+    ] as const;
+
+    for (const theme of inheritedThemes) {
+      const themeSpecificBlock = getRuleBlocks(`[data-theme="${theme}"]`).at(-1) ?? "";
+
+      expect(
+        getCustomProperty(themeSpecificBlock, "--scrollbar-thumb"),
+        `${theme} should inherit the shared scrollbar thumb palette`
+      ).toBeNull();
+    }
+
+    expect(
+      getCustomProperty(getRuleBlocks('[data-theme="hc-dark"]').at(-1) ?? "", "--scrollbar-thumb")
+    ).toBe("#ffffff");
+    expect(
+      getCustomProperty(getRuleBlocks('[data-theme="hc-light"]').at(-1) ?? "", "--scrollbar-thumb")
+    ).toBe("#5c5c5c");
+  });
+
   it("defines the shared foundation tokens on :root without changing code font-size plumbing", () => {
     const root = getRuleBlock(":root");
 

@@ -85,6 +85,29 @@ describe("base.css theme-sensitive shells", () => {
     );
   });
 
+  it("defines a single token-driven native scrollbar contract for themed surfaces", () => {
+    const scrollbar = getRuleBlock("::-webkit-scrollbar");
+    const track = getRuleBlock("::-webkit-scrollbar-track");
+    const trackPiece = getRuleBlock("::-webkit-scrollbar-track-piece");
+    const thumb = getRuleBlock("::-webkit-scrollbar-thumb");
+    const thumbHover = getRuleBlock("::-webkit-scrollbar-thumb:hover");
+    const button = getRuleBlock("::-webkit-scrollbar-button");
+    const corner = getRuleBlock("::-webkit-scrollbar-corner");
+    const firefox = getRuleBlock("*");
+
+    expect(scrollbar).toContain("width: var(--scrollbar-width)");
+    expect(scrollbar).toContain("height: var(--scrollbar-width)");
+    expect(track).toContain("background: var(--scrollbar-track)");
+    expect(trackPiece).toContain("background: var(--scrollbar-track)");
+    expect(thumb).toContain("background: var(--scrollbar-thumb)");
+    expect(thumb).toContain("border-radius: var(--radius-full)");
+    expect(thumbHover).toContain("background: var(--border-focus)");
+    expect(button).toContain("background: var(--scrollbar-track)");
+    expect(corner).toContain("background: var(--scrollbar-track)");
+    expect(firefox).toContain("scrollbar-width: thin");
+    expect(firefox).toContain("scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track)");
+  });
+
   it("defines app-shell background variables and shared background dim hooks", () => {
     const app = getRuleBlock(".app");
     const appBefore = getRuleBlock(".app::before");

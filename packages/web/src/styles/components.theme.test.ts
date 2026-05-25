@@ -1613,6 +1613,30 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(monacoSliderHover).toContain("var(--border-focus)");
   });
 
+  it("limits component scrollbar overrides to hidden affordances or shared-token bridges", () => {
+    const mobileTerminalKeys = getLastRuleBlock(".mobile-terminal-input-bar__keys");
+    const mobileTerminalKeysScrollbar = getLastRuleBlock(
+      ".mobile-terminal-input-bar__keys::-webkit-scrollbar"
+    );
+    const tabsScroller = getLastRuleBlockFrom(
+      tabsStyles,
+      '.tabList[data-orientation="horizontal"]'
+    );
+    const tabsScrollbar = getLastRuleBlockFrom(
+      tabsStyles,
+      '.tabList[data-orientation="horizontal"]::-webkit-scrollbar'
+    );
+
+    expect(mobileTerminalKeys).toContain("scrollbar-width: none");
+    expect(mobileTerminalKeysScrollbar).toContain("display: none");
+    expect(tabsScroller).toContain("scrollbar-width: none");
+    expect(tabsScrollbar).toContain("display: none");
+
+    expect(stylesheet).not.toContain("::-webkit-scrollbar-thumb");
+    expect(stylesheet).not.toContain("::-webkit-scrollbar-track");
+    expect(stylesheet).not.toContain("scrollbar-color:");
+  });
+
   it("keeps xterm viewport touch-scrollable on mobile browsers", () => {
     const xtermViewport = getLastRuleBlock(".xterm-host .xterm-viewport");
 
