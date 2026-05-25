@@ -2021,12 +2021,14 @@ describe("XtermHost", () => {
     ).toBeInTheDocument();
     expect(document.querySelector(".xterm-replay-overlay")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "重试恢复" })).not.toBeInTheDocument();
-    expect(mockTerminal.options).toEqual(
-      expect.objectContaining({
-        disableStdin: true,
-        cursorBlink: false,
-      })
-    );
+    await waitFor(() => {
+      expect(mockTerminal.options).toEqual(
+        expect.objectContaining({
+          disableStdin: true,
+          cursorBlink: false,
+        })
+      );
+    });
   });
 
   it("shows a degraded overlay when replay returns unknown so unavailable terminals do not stay loading", async () => {

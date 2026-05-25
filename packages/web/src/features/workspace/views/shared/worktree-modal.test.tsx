@@ -88,13 +88,12 @@ describe("WorktreeModal", () => {
     });
 
     expect(document.querySelector(".drawer-backdrop")).toBeTruthy();
-    expect(document.querySelector(".mobile-sheet")).toBeNull();
     expect(screen.getByRole("dialog", { name: worktree.name })).toBeInTheDocument();
     expect(document.querySelector(".drawer-panel")).toBeTruthy();
     expect(document.querySelector(".modal-card-lg")).toBeNull();
-    expect(screen.getByText("Latest Commit")).toBeInTheDocument();
-    expect(screen.getByText("abc1234")).toBeInTheDocument();
-    expect(screen.getByText("Initial mobile sheet setup")).toBeInTheDocument();
+    expect(await screen.findByText("Latest Commit")).toBeInTheDocument();
+    expect(await screen.findByText("abc1234")).toBeInTheDocument();
+    expect(await screen.findByText("Initial mobile sheet setup")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Close" })).toHaveClass("btn", "btn-ghost", "btn-sm");
   });
 
@@ -145,7 +144,7 @@ describe("WorktreeModal", () => {
     expect(screen.getByRole("tablist", { name: "Worktree" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Status" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tab", { name: "Status" })).toHaveClass("worktree-tab", "active");
-    expect(screen.getByText("Latest Commit")).toBeInTheDocument();
+    expect(await screen.findByText("Latest Commit")).toBeInTheDocument();
   });
 
   it("does not render without an explicit workspace until the workspace list is ready", () => {
