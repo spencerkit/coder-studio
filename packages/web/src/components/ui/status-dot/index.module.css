@@ -5,9 +5,9 @@
   height: var(--status-dot-current-size, var(--status-dot-size));
   flex-shrink: 0;
   border-radius: var(--radius-chip);
-  background: var(--status-dot-current-color, var(--text-tertiary));
+  background: var(--status-dot-current-color, var(--status-dot-tone-color, var(--status-dot-idle)));
   box-shadow: 0 0 0 1px
-    color-mix(in srgb, var(--status-dot-current-color, var(--text-tertiary)) 18%, transparent);
+    var(--status-dot-current-ring, var(--status-dot-tone-ring, var(--status-dot-idle-ring)));
 }
 
 .pulse {
@@ -43,23 +43,25 @@
 }
 
 :global(.session-dot-idle) {
-  --status-dot-current-color: var(--text-tertiary);
+  --status-dot-current-color: var(--status-dot-idle);
+  --status-dot-current-ring: var(--status-dot-idle-ring);
 }
 
 :global(.session-dot-starting),
 :global(.connection-status-dot-connecting),
 :global(.connection-status-dot-reconnecting) {
-  --status-dot-current-color: var(--state-warning-text);
+  --status-dot-current-color: var(--status-dot-starting);
+  --status-dot-current-ring: var(--status-dot-starting-ring);
   animation: statusDotPulse 1s ease-in-out infinite;
 }
 
 :global(.session-dot-running) {
-  --status-dot-current-color: var(--state-info-text);
+  --status-dot-current-color: var(--status-dot-running);
   animation: statusDotRunningPulse 1.18s cubic-bezier(0.22, 1, 0.36, 1) infinite;
   box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--state-info-text) 26%, transparent),
-    0 0 0 5px color-mix(in srgb, var(--state-info-text) 12%, transparent),
-    0 0 12px color-mix(in srgb, var(--state-info-text) 22%, transparent);
+    0 0 0 1px var(--status-dot-running-ring-1),
+    0 0 0 5px var(--status-dot-running-ring-2),
+    0 0 12px var(--status-dot-running-ring-3);
 }
 
 :global(.session-dot-running)::before,
@@ -72,28 +74,31 @@
 
 :global(.session-dot-running)::before {
   inset: -4px;
-  border: 1px solid color-mix(in srgb, var(--state-info-text) 28%, transparent);
+  border: 1px solid var(--status-dot-running-ring-ghost);
   opacity: 0.7;
   animation: statusDotRunningRingGhost 1.18s cubic-bezier(0.16, 1, 0.3, 1) infinite;
 }
 
 :global(.session-dot-running)::after {
   inset: -7px;
-  border: 1px solid color-mix(in srgb, var(--state-info-text) 34%, transparent);
+  border: 1px solid var(--status-dot-running-ring-outer);
   opacity: 0.75;
   animation: statusDotRunningRing 1.18s cubic-bezier(0.16, 1, 0.3, 1) infinite;
 }
 
 :global(.connection-status-dot-connected) {
-  --status-dot-current-color: var(--state-info-text);
+  --status-dot-current-color: var(--status-dot-running);
+  --status-dot-current-ring: var(--status-dot-running-ring-1);
 }
 
 :global(.session-dot-complete) {
-  --status-dot-current-color: var(--state-success-text);
+  --status-dot-current-color: var(--status-dot-complete);
+  --status-dot-current-ring: var(--status-dot-complete-ring);
 }
 
 :global(.connection-status-dot-disconnected) {
-  --status-dot-current-color: var(--state-error-text);
+  --status-dot-current-color: var(--status-dot-error);
+  --status-dot-current-ring: var(--status-dot-error-ring);
 }
 
 @keyframes statusDotRunningPulse {

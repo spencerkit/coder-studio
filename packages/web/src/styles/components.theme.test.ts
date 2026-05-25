@@ -709,12 +709,32 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(getLastRuleBlockFrom(tagStyles, ":where(.tag)")).toContain(
       "border-radius: var(--radius-tag)"
     );
+    expect(getLastRuleBlockFrom(tagStyles, ":where(.blue)")).toContain(
+      "background: var(--tag-info-bg)"
+    );
+    expect(getLastRuleBlockFrom(tagStyles, ":where(.blue)")).toContain("color: var(--tag-info-fg)");
+    expect(getLastRuleBlockFrom(tagStyles, ":where(.purple)")).toContain(
+      "background: var(--tag-accent-bg)"
+    );
+    expect(getLastRuleBlockFrom(tagStyles, ":where(.purple)")).toContain(
+      "color: var(--tag-accent-fg)"
+    );
+    expect(getLastRuleBlockFrom(tagStyles, ":where(.neutral)")).toContain(
+      "background: var(--tag-accent-bg)"
+    );
+    expect(getLastRuleBlockFrom(tagStyles, ":where(.neutral)")).toContain(
+      "color: var(--tag-accent-fg)"
+    );
     expect(getLastRuleBlockFrom(badgeStyles, ":where(.badge)")).toContain(
       "border-radius: var(--radius-chip)"
+    );
+    expect(getLastRuleBlockFrom(badgeStyles, ":where(.badge)")).toContain(
+      "background: var(--status-info-fg)"
     );
     expect(getLastRuleBlockFrom(pillStylesheet, ".pill")).toContain(
       "border-radius: var(--radius-pill)"
     );
+    expect(pillStylesheet).not.toContain("color-mix(");
 
     expect(tooltip).toContain("border: 1px solid var(--surface-overlay-border)");
     expect(tooltip).toContain("border-radius: var(--radius-overlay)");
@@ -724,30 +744,30 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(notice).toContain("gap: var(--gap-content)");
     expect(notice).toContain("padding: var(--inset-control-block) var(--inset-control-inline)");
     expect(notice).toContain("border-radius: var(--radius-overlay)");
-    expect(notice).toContain("background: var(--surface-elevated-bg)");
+    expect(notice).toContain("background: var(--material-elevated)");
     expect(getLastRuleBlockFrom(noticeStylesheet, ".info")).toContain(
-      "border-color: var(--state-info-border)"
+      "border-color: var(--status-info-border)"
     );
     expect(getLastRuleBlockFrom(noticeStylesheet, ".info")).toContain(
-      "background: var(--state-info-bg)"
+      "background: var(--status-info-bg)"
     );
     expect(getLastRuleBlockFrom(noticeStylesheet, ".success")).toContain(
-      "border-color: var(--state-success-border)"
+      "border-color: var(--status-success-border)"
     );
     expect(getLastRuleBlockFrom(noticeStylesheet, ".success")).toContain(
-      "background: var(--state-success-bg)"
+      "background: var(--status-success-bg)"
     );
     expect(getLastRuleBlockFrom(noticeStylesheet, ".warning")).toContain(
-      "border-color: var(--state-warning-border)"
+      "border-color: var(--status-warning-border)"
     );
     expect(getLastRuleBlockFrom(noticeStylesheet, ".warning")).toContain(
-      "background: var(--state-warning-bg)"
+      "background: var(--status-warning-bg)"
     );
     expect(getLastRuleBlockFrom(noticeStylesheet, ".error")).toContain(
-      "border-color: var(--state-error-border)"
+      "border-color: var(--status-danger-border)"
     );
     expect(getLastRuleBlockFrom(noticeStylesheet, ".error")).toContain(
-      "background: var(--state-error-bg)"
+      "background: var(--status-danger-bg)"
     );
 
     expect(modalOverlay).toContain("background: var(--overlay-backdrop)");
@@ -763,7 +783,7 @@ describe("components.css theme-sensitive surfaces", () => {
     ).toBe(true);
     expect(
       getRuleBlocksFrom(modalStyles, ".card").some((block) =>
-        block.includes("background: var(--surface-overlay-bg)")
+        block.includes("background: var(--material-overlay)")
       )
     ).toBe(true);
     expect(
@@ -785,7 +805,7 @@ describe("components.css theme-sensitive surfaces", () => {
     ).toBe(true);
     expect(
       getRuleBlocksFrom(drawerStylesheet, ".panel").some((block) =>
-        block.includes("background: var(--surface-overlay-bg)")
+        block.includes("background: var(--material-overlay)")
       )
     ).toBe(true);
     expect(
@@ -794,7 +814,7 @@ describe("components.css theme-sensitive surfaces", () => {
       )
     ).toBe(true);
 
-    expect(localOverlay).toContain("background: var(--overlay-backdrop)");
+    expect(localOverlay).toContain("background: var(--material-local-overlay)");
     expect(localOverlayCard).toContain("border: 1px solid var(--surface-overlay-border)");
     expect(localOverlayCard).toContain("border-radius: var(--radius-local-overlay)");
     expect(localOverlayCard).toContain("background: var(--surface-overlay-bg)");
@@ -802,35 +822,55 @@ describe("components.css theme-sensitive surfaces", () => {
 
     expect(toast).toContain("border: 1px solid var(--surface-overlay-border)");
     expect(toast).toContain("border-radius: var(--radius-overlay)");
-    expect(toast).toContain("background: var(--surface-overlay-bg)");
+    expect(toast).toContain("background: var(--material-overlay)");
     expect(toast).toContain("box-shadow: var(--surface-overlay-shadow)");
 
-    expect(progressRoot).toContain("background: var(--state-info-bg)");
+    expect(progressRoot).toContain("background: var(--status-info-bg)");
+    expect(progressBarStylesheet).not.toContain("color-mix(");
     expect(getLastRuleBlockFrom(progressBarStylesheet, ".success")).toContain(
-      "--progress-bar-color: var(--state-success-text)"
+      "--progress-bar-color: var(--status-success-fg)"
     );
     expect(getLastRuleBlockFrom(progressBarStylesheet, ".warning")).toContain(
-      "--progress-bar-color: var(--state-warning-text)"
+      "--progress-bar-color: var(--status-warning-fg)"
     );
     expect(getLastRuleBlockFrom(progressBarStylesheet, ".error")).toContain(
-      "--progress-bar-color: var(--state-error-text)"
+      "--progress-bar-color: var(--status-danger-fg)"
     );
     expect(getLastRuleBlockFrom(progressBarStylesheet, ".info")).toContain(
-      "--progress-bar-color: var(--state-info-text)"
+      "--progress-bar-color: var(--status-info-fg)"
     );
     expect(getLastRuleBlockFrom(progressBarStylesheet, ".neutral")).toContain(
-      "--progress-bar-color: var(--state-disabled-text)"
+      "--progress-bar-color: var(--text-disabled)"
     );
 
     expect(getLastRuleBlockFrom(statusDotStylesheet, ".dot")).toContain(
       "border-radius: var(--radius-chip)"
     );
-    expect(getLastRuleBlockFrom(statusDotStylesheet, ":global(.session-dot-running)")).toContain(
-      "--status-dot-current-color: var(--state-info-text)"
+    expect(getLastRuleBlockFrom(statusDotStylesheet, ".dot")).toContain(
+      "background: var(--status-dot-current-color, var(--status-dot-tone-color, var(--status-dot-idle)))"
     );
+    expect(getLastRuleBlockFrom(statusDotStylesheet, ".dot").replace(/\s+/g, " ")).toContain(
+      "box-shadow: 0 0 0 1px var(--status-dot-current-ring, var(--status-dot-tone-ring, var(--status-dot-idle-ring)))"
+    );
+    expect(getLastRuleBlockFrom(statusDotStylesheet, ":global(.session-dot-running)")).toContain(
+      "--status-dot-current-color: var(--status-dot-running)"
+    );
+    expect(getLastRuleBlockFrom(statusDotStylesheet, ":global(.session-dot-running)")).toContain(
+      "var(--status-dot-running-ring-2)"
+    );
+    expect(getLastRuleBlockFrom(statusDotStylesheet, ":global(.session-dot-starting)")).toContain(
+      "--status-dot-current-ring: var(--status-dot-starting-ring)"
+    );
+    expect(getLastRuleBlockFrom(statusDotStylesheet, ":global(.session-dot-complete)")).toContain(
+      "--status-dot-current-ring: var(--status-dot-complete-ring)"
+    );
+    expect(
+      getLastRuleBlockFrom(statusDotStylesheet, ":global(.connection-status-dot-disconnected)")
+    ).toContain("--status-dot-current-ring: var(--status-dot-error-ring)");
 
     expect(emptyState).toContain("gap: var(--gap-content)");
     expect(emptyState).toContain("padding: var(--inset-dialog) var(--inset-panel)");
+    expect(confirmDialogStyles).not.toContain("color-mix(");
   });
 
   it("keeps config status colors on icon tokens", () => {
@@ -2618,7 +2658,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(pillHover).toContain("background: var(--state-hover-bg-subtle)");
     expect(pillHover).toContain("border-color: var(--state-selected-border)");
     expect(pillFocus).toContain("border-color: var(--state-focus-ring-color)");
-    expect(pillFocus).toContain("box-shadow: 0 0 0 var(--state-focus-ring-width)");
+    expect(pillFocus).toContain("box-shadow: var(--control-focus-ring)");
     expect(active).toContain("background: var(--state-selected-bg)");
     expect(active).toContain("border-color: var(--state-selected-border)");
     expect(active).not.toContain("background: var(--accent-blue)");
@@ -2635,12 +2675,12 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(notice).toContain("margin: 0 0 var(--space-default)");
     expect(notice).toContain("padding: var(--inset-control-block) var(--inset-control-inline)");
     expect(notice).toContain("border-radius: var(--radius-overlay)");
-    expect(notice).toContain("background: var(--surface-elevated-bg)");
+    expect(notice).toContain("background: var(--material-elevated)");
     expect(notice).toContain("overflow: hidden");
-    expect(warning).toContain("background: var(--state-warning-bg)");
-    expect(warning).toContain("border-color: var(--state-warning-border)");
-    expect(error).toContain("background: var(--state-error-bg)");
-    expect(error).toContain("border-color: var(--state-error-border)");
+    expect(warning).toContain("background: var(--status-warning-bg)");
+    expect(warning).toContain("border-color: var(--status-warning-border)");
+    expect(error).toContain("background: var(--status-danger-bg)");
+    expect(error).toContain("border-color: var(--status-danger-border)");
     expect(title).toContain("text-transform: uppercase");
     expect(title).toContain("font-size: var(--type-body-6-size)");
     expect(message).toContain("font-size: var(--type-body-5-size)");

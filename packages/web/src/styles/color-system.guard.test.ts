@@ -39,22 +39,12 @@ const runtimePattern = /--app-surface-opacity|--app-surface-backdrop-filter|data
 const privateRefPattern = /var\(--ref-/;
 const legacyPublicPattern = /var\(--(?:bg-|accent-|color-|ws-)/;
 
-const expectedRawColorConsumers = [
-  "src/components/ui/pill/index.module.css",
-  "src/components/ui/status-dot/index.module.css",
-  "src/components/ui/tag/index.module.css",
-  "src/styles/components.css",
-];
+const expectedRawColorConsumers = ["src/styles/components.css"];
 
 const expectedRuntimeConsumers = ["src/styles/components.css"];
 
 const expectedLegacyPublicConsumers = [
-  "src/components/ui/badge/index.module.css",
-  "src/components/ui/modal/index.module.css",
-  "src/components/ui/popover/index.module.css",
   "src/components/ui/select/index.module.css",
-  "src/components/ui/tag/index.module.css",
-  "src/components/ui/toast/index.module.css",
   "src/styles/components.css",
 ];
 

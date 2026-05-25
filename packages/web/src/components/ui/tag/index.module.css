@@ -34,36 +34,36 @@
 
 :where(.blue),
 :global(:where(.badge-blue)) {
-  background: color-mix(in srgb, var(--accent-blue) 15%, transparent);
-  color: var(--accent-blue);
+  background: var(--tag-info-bg);
+  color: var(--tag-info-fg);
 }
 
 :where(.green),
 :global(:where(.badge-green)) {
-  background: color-mix(in srgb, var(--accent-green) 15%, transparent);
-  color: var(--accent-green);
+  background: var(--tag-success-bg);
+  color: var(--tag-success-fg);
 }
 
 :where(.amber),
 :global(:where(.badge-amber)) {
-  background: color-mix(in srgb, var(--accent-amber) 15%, transparent);
-  color: var(--accent-amber);
+  background: var(--tag-warning-bg);
+  color: var(--tag-warning-fg);
 }
 
 :where(.pink),
 :global(:where(.badge-pink)) {
-  background: color-mix(in srgb, var(--accent-pink) 15%, transparent);
-  color: var(--accent-pink);
+  background: var(--tag-danger-bg);
+  color: var(--tag-danger-fg);
 }
 
 :where(.purple),
 :global(:where(.badge-purple)) {
-  background: color-mix(in srgb, var(--accent-purple) 15%, transparent);
-  color: var(--accent-purple);
+  background: var(--tag-accent-bg);
+  color: var(--tag-accent-fg);
 }
 
 :where(.neutral),
 :global(:where(.badge-gray)) {
-  background: color-mix(in srgb, var(--text-tertiary) 15%, transparent);
-  color: var(--text-tertiary);
+  background: var(--tag-accent-bg);
+  color: var(--tag-accent-fg);
 }

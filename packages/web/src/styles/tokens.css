@@ -594,9 +594,15 @@
   --status-dot-running: var(--status-info-fg);
   --status-dot-complete: var(--status-success-fg);
   --status-dot-error: var(--status-danger-fg);
+  --status-dot-idle-ring: color-mix(in srgb, var(--status-dot-idle) 18%, transparent);
+  --status-dot-starting-ring: color-mix(in srgb, var(--status-dot-starting) 18%, transparent);
   --status-dot-running-ring-1: color-mix(in srgb, var(--status-info-fg) 26%, transparent);
   --status-dot-running-ring-2: color-mix(in srgb, var(--status-info-fg) 12%, transparent);
   --status-dot-running-ring-3: color-mix(in srgb, var(--status-info-fg) 22%, transparent);
+  --status-dot-running-ring-ghost: color-mix(in srgb, var(--status-dot-running) 28%, transparent);
+  --status-dot-running-ring-outer: color-mix(in srgb, var(--status-dot-running) 34%, transparent);
+  --status-dot-complete-ring: color-mix(in srgb, var(--status-dot-complete) 18%, transparent);
+  --status-dot-error-ring: color-mix(in srgb, var(--status-dot-error) 18%, transparent);
 
   /* Foundation compatibility */
   --state-focus-ring-color: #6cb6ff;
