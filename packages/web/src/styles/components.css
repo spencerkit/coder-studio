@@ -3182,7 +3182,6 @@ body.is-dragging-pane {
   margin-left: -5px;
   margin-right: -5px;
   justify-self: center;
-  background: transparent;
 }
 
 .pane-layout-vertical .pane-layout-divider {
@@ -3191,7 +3190,6 @@ body.is-dragging-pane {
   margin-top: -5px;
   margin-bottom: -5px;
   align-self: center;
-  background: transparent;
 }
 
 /* ========== Draft Launcher ========== */
@@ -7441,7 +7439,7 @@ textarea.input {
 
 .pane-layout-divider {
   position: relative;
-  background: transparent;
+  background: linear-gradient(180deg, transparent, var(--state-info-bg), transparent);
 }
 
 .pane-layout-divider::after {
@@ -7470,6 +7468,10 @@ textarea.input {
 
 .pane-layout-divider:hover::after {
   background: color-mix(in srgb, var(--border-focus) 58%, transparent);
+}
+
+.pane-layout-divider:hover {
+  background: color-mix(in srgb, var(--border-focus) 44%, transparent 56%);
 }
 
 .session-card {

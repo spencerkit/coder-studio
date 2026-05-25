@@ -914,6 +914,9 @@ describe("components.css theme-sensitive surfaces", () => {
       ".split-divider-h::before"
     ).join("\n");
     const paneDividerBaseRules = getRuleBlocksFrom(stylesheet, ".pane-layout-divider").join("\n");
+    const paneDividerHoverRules = getRuleBlocksFrom(stylesheet, ".pane-layout-divider:hover").join(
+      "\n"
+    );
     const paneDividerLineRules = getRuleBlocksFrom(stylesheet, ".pane-layout-divider::after").join(
       "\n"
     );
@@ -1038,16 +1041,24 @@ describe("components.css theme-sensitive surfaces", () => {
     );
     expect(paneDividerBaseRules).toContain("position: relative");
     expect(paneDividerBaseRules).toContain("z-index: var(--z-inline-raised)");
+    expect(paneDividerBaseRules).toContain(
+      "background: linear-gradient(180deg, transparent, var(--state-info-bg), transparent)"
+    );
     expect(paneDividerLineRules).toContain(
       "background: color-mix(in srgb, var(--border) 62%, transparent)"
     );
     expect(paneDividerLineRules).toContain("border-radius: var(--radius-pill)");
+    expect(paneDividerHoverRules).toContain(
+      "background: color-mix(in srgb, var(--border-focus) 44%, transparent 56%)"
+    );
     expect(paneDividerHorizontalRules).toContain("width: 10px");
     expect(paneDividerHorizontalRules).toContain("margin-left: -5px");
     expect(paneDividerHorizontalRules).toContain("margin-right: -5px");
+    expect(paneDividerHorizontalRules).not.toContain("background: transparent");
     expect(paneDividerVerticalRules).toContain("height: 10px");
     expect(paneDividerVerticalRules).toContain("margin-top: -5px");
     expect(paneDividerVerticalRules).toContain("margin-bottom: -5px");
+    expect(paneDividerVerticalRules).not.toContain("background: transparent");
     expect(bottomPanel).toContain("padding: 0");
     expect(bottomPanel).not.toContain("padding: 0 0 14px");
     expect(bottomPanel).not.toContain("padding: 0 14px 14px");
