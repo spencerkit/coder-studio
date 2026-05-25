@@ -30,16 +30,27 @@ function getRuleBlock(selector: string) {
 }
 
 describe("base.css theme-sensitive shells", () => {
-  it("keeps the app loading shell on theme tokens instead of dark-only gradients", () => {
+  it("keeps the app loading shell on semantic material tokens", () => {
     const shell = getRuleBlock(".app-loading-shell");
     const card = getRuleBlock(".app-loading-card");
 
-    expect(shell).toContain("var(--surface-page-bg)");
-    expect(shell).toContain("backdrop-filter: var(--app-surface-backdrop-filter, none)");
-    expect(card).toContain("var(--surface-overlay-bg)");
-    expect(card).toContain("backdrop-filter: var(--app-surface-backdrop-filter, none)");
+    expect(shell).toContain("background: var(--material-shell-page)");
+    expect(shell).toContain("backdrop-filter: var(--material-backdrop-filter)");
+    expect(card).toContain("background: var(--material-overlay)");
+    expect(card).toContain("backdrop-filter: var(--material-backdrop-filter)");
     expect(card).toContain("box-shadow: var(--surface-overlay-shadow)");
     expect(card).toContain("border-radius: var(--radius-overlay)");
+    expect(shell).not.toContain("--app-surface-opacity");
+    expect(card).not.toContain("--app-surface-backdrop-filter");
+  });
+
+  it("maps links and themed icons onto semantic/domain tokens", () => {
+    expect(getRuleBlock("a")).toContain("color: var(--text-link)");
+    expect(getRuleBlock("a:hover")).toContain("color: var(--text-link-hover)");
+    expect(getRuleBlock(".themed-icon--tone-warning")).toContain("color: var(--icon-warning)");
+    expect(getRuleBlock(".themed-icon--surface-info")).toContain(
+      "background: var(--icon-surface-info)"
+    );
   });
 
   it("defines shared icon tone and surface utilities", () => {
@@ -47,49 +58,45 @@ describe("base.css theme-sensitive shells", () => {
     const surface = getRuleBlock(".icon-surface-warning");
     const chip = getRuleBlock(".icon-chip");
     const themedIcon = getRuleBlock(".themed-icon");
-    const themedTone = getRuleBlock(".themed-icon--tone-warning");
-    const themedSurface = getRuleBlock(".themed-icon--surface-info");
 
     expect(tone).toContain("color: var(--icon-secondary)");
-    expect(surface).toContain("background: var(--state-warning-bg)");
+    expect(surface).toContain("background: var(--icon-surface-warning)");
     expect(chip).toContain("display: inline-flex");
     expect(chip).toContain("align-items: center");
     expect(chip).toContain("justify-content: center");
     expect(chip).toContain("border-radius: var(--radius-control)");
     expect(themedIcon).toContain("display: inline-flex");
     expect(themedIcon).toContain("line-height: 0");
-    expect(themedTone).toContain("color: var(--icon-warning)");
-    expect(themedSurface).toContain("background: var(--icon-surface-info)");
   });
 
   it("routes focus and shell chrome through semantic foundation tokens", () => {
     expect(getRuleBlock(":focus-visible")).toContain(
       "outline: var(--state-focus-ring-width) solid var(--state-focus-ring-color)"
     );
-    expect(getRuleBlock(".app-loading-shell")).toContain("var(--surface-page-bg)");
-    expect(getRuleBlock(".app-loading-card")).toContain("var(--surface-overlay-bg)");
+    expect(getRuleBlock(".app-loading-shell")).toContain("background: var(--material-shell-page)");
+    expect(getRuleBlock(".app-loading-card")).toContain("background: var(--material-overlay)");
     expect(getRuleBlock(".app-loading-card")).toContain(
       "box-shadow: var(--surface-overlay-shadow)"
     );
     expect(getRuleBlock(".app-loading-card")).toContain("border-radius: var(--radius-overlay)");
     expect(getRuleBlock(".icon-chip")).toContain("border-radius: var(--radius-control)");
-    expect(getRuleBlock(".icon-surface-warning")).toContain("background: var(--state-warning-bg)");
+    expect(getRuleBlock(".icon-surface-warning")).toContain(
+      "background: var(--icon-surface-warning)"
+    );
   });
 
-  it("defines app-shell background variables and appearance-aware loading shell hooks", () => {
+  it("defines app-shell background variables and shared background dim hooks", () => {
     const app = getRuleBlock(".app");
     const appBefore = getRuleBlock(".app::before");
     const appAfter = getRuleBlock(".app::after");
-    const loadingShell = getRuleBlock(".app-loading-shell");
 
-    expect(app).toContain("background: var(--surface-page-bg)");
+    expect(app).toContain("background: var(--surface-page)");
     expect(app).toContain("isolation: isolate");
     expect(appBefore).toContain("background-image: var(--app-bg-image, none)");
     expect(appBefore).toContain("background-size: var(--app-bg-fit, cover)");
     expect(appBefore).toContain("filter: blur(var(--app-bg-blur, 0px))");
+    expect(appAfter).toContain("background: var(--surface-page)");
     expect(appAfter).toContain("var(--app-bg-dim, 0)");
-    expect(loadingShell).toContain("var(--app-surface-opacity, 0.96)");
-    expect(loadingShell).toContain("backdrop-filter: var(--app-surface-backdrop-filter, none)");
   });
 });
 

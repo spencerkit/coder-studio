@@ -54,13 +54,11 @@ const expectedRawColorConsumers = [
   "src/components/ui/tabs/index.module.css",
   "src/components/ui/tag/index.module.css",
   "src/components/ui/textarea/index.module.css",
-  "src/styles/base.css",
   "src/styles/components.css",
 ];
 
 const expectedRuntimeConsumers = [
   "src/components/ui/workbench-layer/index.module.css",
-  "src/styles/base.css",
   "src/styles/components.css",
 ];
 
@@ -82,7 +80,6 @@ const expectedLegacyPublicConsumers = [
   "src/components/ui/tag/index.module.css",
   "src/components/ui/textarea/index.module.css",
   "src/components/ui/toast/index.module.css",
-  "src/styles/base.css",
   "src/styles/components.css",
 ];
 
