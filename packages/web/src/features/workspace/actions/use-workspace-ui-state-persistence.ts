@@ -3,6 +3,7 @@ import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { useCallback } from "react";
 import { dispatchCommandAtom } from "../../../atoms/connection";
 import { workspacesAtom } from "../../../atoms/workspaces";
+import { paneLayoutAtomFamily } from "../../agent-panes/atoms/pane-layout";
 import {
   bottomPanelHeightAtomFamily,
   focusModeAtomFamily,
@@ -44,6 +45,7 @@ export function useWorkspaceUiStatePersistence(workspaceId: string) {
         leftPanelWidth: store.get(leftPanelWidthAtomFamily(workspaceId)),
         bottomPanelHeight: store.get(bottomPanelHeightAtomFamily(workspaceId)),
         focusMode: store.get(focusModeAtomFamily(workspaceId)),
+        paneLayout: store.get(paneLayoutAtomFamily(workspaceId)),
         ...patch,
       };
 
