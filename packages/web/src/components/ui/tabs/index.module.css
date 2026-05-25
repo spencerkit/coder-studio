@@ -78,7 +78,7 @@
   line-height: var(--type-body-6-line-height);
   padding: var(--inset-control-block) var(--inset-control-inline);
   border-radius: var(--radius-control);
-  color: var(--text-ter);
+  color: var(--text-tertiary);
 }
 
 :global(.panel-tab:hover) {
