@@ -2430,6 +2430,19 @@ body.is-resizing-panels * {
   min-height: 0;
 }
 
+body.is-dragging-pane {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.agent-pane-leaf {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
 .agent-progress {
   height: 3px;
   background: var(--state-info-bg);
@@ -8532,6 +8545,14 @@ textarea.input {
   border-radius: 4px;
 }
 
+.session-action-btn-drag {
+  cursor: grab;
+}
+
+body.is-dragging-pane .session-action-btn-drag {
+  cursor: grabbing;
+}
+
 .workspace-bottom-panel {
   display: flex;
   flex-direction: column;
@@ -14398,6 +14419,62 @@ textarea.input {
 
 .session-terminal {
   background: transparent;
+}
+
+.pane-drop-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-inline-raised);
+  pointer-events: none;
+  border: 1px dashed color-mix(in srgb, var(--state-info-text) 55%, transparent);
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--state-info-bg) 12%, transparent);
+}
+
+.pane-drop-overlay::before {
+  content: "";
+  position: absolute;
+  background: color-mix(in srgb, var(--state-info-text) 18%, transparent);
+}
+
+.pane-drop-overlay--left::before {
+  inset: 0 auto 0 0;
+  width: 24%;
+}
+
+.pane-drop-overlay--right::before {
+  inset: 0 0 0 auto;
+  width: 24%;
+}
+
+.pane-drop-overlay--top::before {
+  inset: 0 0 auto 0;
+  height: 24%;
+}
+
+.pane-drop-overlay--bottom::before {
+  inset: auto 0 0 0;
+  height: 24%;
+}
+
+.pane-drop-overlay--center::before,
+.pane-drop-overlay--draft::before {
+  inset: 22%;
+}
+
+.pane-drop-overlay__center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--bg-elevated) 92%, transparent);
+  color: var(--text-primary);
+  font-size: var(--type-body-6-size);
+  line-height: var(--type-body-6-line-height);
+  font-weight: var(--type-body-6-weight);
 }
 
 .workspace-sidebar-panel__content,

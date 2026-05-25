@@ -7,7 +7,7 @@
 
 import type { Session, SessionState } from "@coder-studio/core";
 import { useAtomValue, useSetAtom } from "jotai";
-import { FlipHorizontal, FlipVertical, X } from "lucide-react";
+import { FlipHorizontal, FlipVertical, GripVertical, X } from "lucide-react";
 import type { FC, ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { pendingFocusSessionAtom } from "../../../../atoms/app-ui";
@@ -22,18 +22,31 @@ import { SupervisorCard } from "../../../supervisor/views/shared/supervisor-card
 import { XtermHost } from "../../../terminal-panel/views/shared/xterm-host";
 import { usePersistWorkspaceLastViewedTarget } from "../../../workspace/actions/use-persist-workspace-last-viewed-target";
 import { useWorkspaceUiStatePersistence } from "../../../workspace/actions/use-workspace-ui-state-persistence";
+import type { PaneDropIntent, PaneDropPlacement } from "../../actions/pane-drag-types";
 import { usePaneActions } from "../../actions/use-pane-actions";
+import type { PaneDragSourceSnapshot } from "../../actions/use-pane-drag-controller";
+import { usePaneDragEnabled } from "../../actions/use-pane-drag-enabled";
 import { useSessionActions } from "../../actions/use-session-actions";
 
 type SessionCardAction = () => void | Promise<void>;
 
+interface SessionCardDragState {
+  isDragging: boolean;
+  isActiveDropTarget: boolean;
+  hoverPlacement: PaneDropPlacement | null;
+}
+
 interface SessionCardProps {
+  paneId?: string;
+  dragState?: SessionCardDragState;
   sessionId: string;
   showHeaderActions?: boolean;
   showSupervisorInline?: boolean;
   terminalReadOnlyOverride?: boolean;
   headerAccessory?: ReactNode;
   onClose?: SessionCardAction;
+  onPaneDragStart?: (source: PaneDragSourceSnapshot) => void;
+  onPaneDrop?: (intent: PaneDropIntent) => void;
   onSplitHorizontal?: SessionCardAction;
   onSplitVertical?: SessionCardAction;
 }
@@ -46,12 +59,16 @@ interface SessionCardProps {
  *   - Terminal area (xterm.js)
  */
 export const SessionCard: FC<SessionCardProps> = ({
+  paneId,
+  dragState,
   sessionId,
   showHeaderActions = true,
   showSupervisorInline = true,
   terminalReadOnlyOverride,
   headerAccessory,
   onClose,
+  onPaneDragStart,
+  onPaneDrop: _onPaneDrop,
   onSplitHorizontal,
   onSplitVertical,
 }) => {
@@ -64,6 +81,7 @@ export const SessionCard: FC<SessionCardProps> = ({
   );
   const pendingFocus = useAtomValue(pendingFocusSessionAtom);
   const setPendingFocus = useSetAtom(pendingFocusSessionAtom);
+  const supportsPaneDrag = usePaneDragEnabled();
 
   const cardRef = useRef<HTMLDivElement | null>(null);
   const [highlight, setHighlight] = useState(false);
@@ -99,6 +117,7 @@ export const SessionCard: FC<SessionCardProps> = ({
   const terminalReadOnly = terminalReadOnlyOverride ?? !isSessionInteractive(session.state);
   const isActiveSession = workspace?.uiState.activeSessionId === session.id;
   const isRunning = session.state === "running";
+  const dragOverlayPlacement = dragState?.isActiveDropTarget ? dragState.hoverPlacement : null;
   const handleClosedSessionContinue = async () => {
     const createResult = await dispatch<Session>("session.create", {
       workspaceId: session.workspaceId,
@@ -160,10 +179,19 @@ export const SessionCard: FC<SessionCardProps> = ({
   return (
     <div
       ref={cardRef}
-      className={`session-card agent-pane${isActiveSession ? " session-card--active" : ""}${highlight ? " session-card--focus-pulse" : ""}${isRunning ? " session-card--running" : ""}`}
+      className={`session-card agent-pane${isActiveSession ? " session-card--active" : ""}${highlight ? " session-card--focus-pulse" : ""}${isRunning ? " session-card--running" : ""}${dragState?.isDragging ? " session-card--dragging" : ""}${dragState?.isActiveDropTarget ? " session-card--drop-target" : ""}`}
+      data-pane-id={paneId}
       data-session-id={sessionId}
       onClick={handleCardClick}
     >
+      {dragOverlayPlacement ? (
+        <div className={`pane-drop-overlay pane-drop-overlay--${dragOverlayPlacement}`}>
+          {dragOverlayPlacement === "center" ? (
+            <div className="pane-drop-overlay__center">Swap</div>
+          ) : null}
+        </div>
+      ) : null}
+
       <PanelHeader
         className={isRunning ? "session-header--running" : undefined}
         title={sessionTitle}
@@ -198,6 +226,35 @@ export const SessionCard: FC<SessionCardProps> = ({
 
               {showHeaderActions ? (
                 <div className="session-header-actions">
+                  {supportsPaneDrag ? (
+                    <Tooltip content="Drag pane">
+                      <IconButton
+                        aria-label="Drag pane"
+                        className="session-action-btn session-action-btn-drag"
+                        icon={<GripVertical size={13} />}
+                        onPointerDown={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+
+                          if (event.pointerType === "touch") {
+                            return;
+                          }
+
+                          if (!paneId) {
+                            return;
+                          }
+
+                          onPaneDragStart?.({
+                            paneId,
+                            sessionId: session.id,
+                            title: sessionTitle,
+                            providerLabel,
+                          });
+                        }}
+                        size="sm"
+                      />
+                    </Tooltip>
+                  ) : null}
                   <Tooltip content="Split horizontal">
                     <IconButton
                       aria-label="Split horizontal"

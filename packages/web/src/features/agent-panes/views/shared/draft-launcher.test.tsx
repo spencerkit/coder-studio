@@ -124,6 +124,32 @@ describe("DraftLauncher", () => {
     expect(screen.getByText("Select Agent")).toBeInTheDocument();
   });
 
+  it("renders a draft drop label when pane drag hover is active", () => {
+    const store = createStore();
+
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn(),
+      subscribe: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <DraftLauncher
+          workspaceId="ws-123"
+          paneId="pane-1"
+          dragState={{
+            isDragging: true,
+            isActiveDropTarget: true,
+            hoverPlacement: "center",
+          }}
+        />
+      </Provider>
+    );
+
+    expect(screen.getByText("Move here")).toBeInTheDocument();
+  });
+
   it("preserves session-start intent in diagnostics links for blocked providers", () => {
     mockUseProviderLauncher.mockReturnValue({
       states: {
