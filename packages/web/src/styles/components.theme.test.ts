@@ -563,7 +563,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(getLastRuleBlockFrom(buttonStyles, ".secondary")).toContain(
       "border-color: var(--control-secondary-border)"
     );
-    expect(getLastRuleBlockFrom(buttonStyles, ".btn:focus-visible")).toContain(
+    expect(getLastRuleBlockFrom(buttonStyles, ".btn:focus-visible").replace(/\s+/g, " ")).toContain(
       "box-shadow: 0 0 0 2px var(--surface-page), var(--control-focus-ring)"
     );
 
