@@ -621,7 +621,7 @@ describe("components.css theme-sensitive surfaces", () => {
       "utf8"
     );
     expect(getLastRuleBlockFrom(actionMenuStyles, ".content")).toContain(
-      "background: var(--material-overlay)"
+      "background: var(--surface-overlay-bg)"
     );
     expect(getLastRuleBlockFrom(actionMenuStyles, ".itemDanger:hover")).toContain(
       "background: var(--menu-danger-hover-bg)"

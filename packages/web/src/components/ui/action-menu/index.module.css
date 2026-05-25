@@ -10,7 +10,7 @@
   padding: var(--sp-2);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-xl);
-  background: var(--material-overlay);
+  background: var(--surface-overlay-bg);
   box-shadow: var(--shadow-lg);
 }
 
