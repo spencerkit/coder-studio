@@ -52,7 +52,7 @@
   flex-direction: column;
   gap: var(--sp-2);
   padding: var(--sp-2);
-  border: 1px dashed var(--border);
+  border: 1px dashed var(--border-default);
   border-radius: var(--radius-md);
   color: var(--text-tertiary);
   font-size: var(--type-body-6-size);
@@ -64,7 +64,7 @@
   display: flex;
   gap: var(--sp-2);
   padding: var(--sp-2);
-  border: 1px dashed var(--border);
+  border: 1px dashed var(--border-default);
   border-radius: var(--radius-md);
   color: var(--text-tertiary);
   font-size: var(--type-body-6-size);
@@ -85,9 +85,9 @@
   gap: var(--sp-2);
   min-height: 44px;
   padding: 0 var(--sp-3);
-  border: 1px solid var(--border);
+  border: 1px solid var(--control-secondary-border);
   border-radius: var(--radius-md);
-  background: var(--bg-surface);
+  background: var(--control-secondary-bg);
   color: var(--text-primary);
   font-size: var(--type-body-3-size);
   line-height: var(--type-body-3-line-height);
@@ -100,8 +100,8 @@
 }
 
 .action:hover {
-  background: var(--bg-hover);
-  border-color: var(--border-light);
+  background: var(--control-secondary-bg-hover);
+  border-color: var(--control-secondary-border-hover);
 }
 
 .action:disabled {
@@ -147,9 +147,9 @@
   justify-content: center;
   width: 28px;
   height: 28px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--control-secondary-border);
   border-radius: var(--radius-sm);
-  background: var(--bg-surface);
+  background: var(--control-secondary-bg);
   color: var(--text-secondary);
   cursor: pointer;
   transition:
@@ -158,7 +158,7 @@
 }
 
 .calendarNav:hover {
-  background: var(--bg-hover);
+  background: var(--control-secondary-bg-hover);
   color: var(--text-primary);
 }
 
@@ -167,7 +167,7 @@
   grid-template-columns: repeat(7, 1fr);
   gap: var(--sp-1);
   padding: var(--sp-2) 0;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-default);
 }
 
 .calendarWeekday {
@@ -203,21 +203,21 @@
 }
 
 .calendarDay:hover:not(:disabled) {
-  background: var(--bg-hover);
+  background: var(--surface-hover);
 }
 
 .calendarDayToday {
-  color: var(--accent-blue);
+  color: var(--status-info-fg);
   font-weight: var(--font-semibold);
 }
 
 .calendarDaySelected {
-  background: var(--accent-blue);
-  color: var(--text-inverse);
+  background: var(--control-primary-bg);
+  color: var(--control-primary-fg);
 }
 
 .calendarDaySelected:hover {
-  background: color-mix(in srgb, var(--accent-blue) 85%, white 15%);
+  background: var(--control-primary-bg-hover);
 }
 
 .calendarDayDisabled {
@@ -264,7 +264,7 @@
   flex-direction: column;
   gap: var(--sp-2);
   padding-top: var(--sp-3);
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--border-default);
 }
 
 /* Additional i18n keys needed */

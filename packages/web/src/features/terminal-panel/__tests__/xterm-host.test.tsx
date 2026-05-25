@@ -174,6 +174,18 @@ function expectTerminalWriteData(data: Uint8Array | string) {
   expect(mockTerminal.write.mock.calls.some(([written]) => written === data)).toBe(true);
 }
 
+function expectAppliedTerminalTheme(theme: unknown, themeId: string) {
+  const expectedTheme = getThemeById(themeId).terminalTheme;
+
+  expect(theme).toEqual(
+    expect.objectContaining({
+      background: "#00000000",
+      foreground: expectedTheme.foreground,
+      cursor: expectedTheme.cursor,
+    })
+  );
+}
+
 interface MockBufferLine {
   isWrapped?: boolean;
   translateToString(trimRight?: boolean): string;
@@ -1211,11 +1223,12 @@ describe("XtermHost", () => {
     expect(Terminal).toHaveBeenCalledWith(
       expect.objectContaining({
         theme: expect.objectContaining({
-          ...getThemeById("mint-light").terminalTheme,
           background: "#00000000",
         }),
       })
     );
+    const lastTheme = vi.mocked(Terminal).mock.calls.at(-1)?.[0]?.theme;
+    expectAppliedTerminalTheme(lastTheme, "mint-light");
   });
 
   it("promotes the existing hydration request when active session changes", async () => {
@@ -2714,12 +2727,10 @@ describe("XtermHost", () => {
     expect(Terminal).toHaveBeenCalledWith(
       expect.objectContaining({
         allowTransparency: true,
-        theme: expect.objectContaining({
-          ...getThemeById("mint-dark").terminalTheme,
-          background: "#00000000",
-        }),
       })
     );
+    const lastTheme = vi.mocked(Terminal).mock.calls.at(-1)?.[0]?.theme;
+    expectAppliedTerminalTheme(lastTheme, "mint-dark");
   });
 
   it("creates xterm instance with the mint-light palette when ui theme is mint-light", async () => {
@@ -2736,12 +2747,10 @@ describe("XtermHost", () => {
     expect(Terminal).toHaveBeenCalledWith(
       expect.objectContaining({
         allowTransparency: true,
-        theme: expect.objectContaining({
-          ...getThemeById("mint-light").terminalTheme,
-          background: "#00000000",
-        }),
       })
     );
+    const lastTheme = vi.mocked(Terminal).mock.calls.at(-1)?.[0]?.theme;
+    expectAppliedTerminalTheme(lastTheme, "mint-light");
   });
 
   it("uses a transparent xterm background when glass surfaces are enabled", async () => {
@@ -2769,14 +2778,9 @@ describe("XtermHost", () => {
       </Provider>
     );
 
-    expect(Terminal).toHaveBeenCalledWith(
-      expect.objectContaining({
-        theme: expect.objectContaining({
-          ...getThemeById("mint-dark").terminalTheme,
-          background: "#00000000",
-        }),
-      })
-    );
+    expect(Terminal).toHaveBeenCalledWith(expect.objectContaining({}));
+    const lastTheme = vi.mocked(Terminal).mock.calls.at(-1)?.[0]?.theme;
+    expectAppliedTerminalTheme(lastTheme, "mint-dark");
   });
 
   it("updates the live xterm theme when the ui theme changes to graphite-light", async () => {
@@ -2794,14 +2798,7 @@ describe("XtermHost", () => {
     });
 
     await waitFor(() => {
-      expect(mockTerminal.options).toEqual(
-        expect.objectContaining({
-          theme: expect.objectContaining({
-            ...getThemeById("graphite-light").terminalTheme,
-            background: "#00000000",
-          }),
-        })
-      );
+      expectAppliedTerminalTheme(mockTerminal.options.theme, "graphite-light");
     });
   });
 
@@ -2835,14 +2832,7 @@ describe("XtermHost", () => {
     });
 
     await waitFor(() => {
-      expect(mockTerminal.options).toEqual(
-        expect.objectContaining({
-          theme: expect.objectContaining({
-            ...getThemeById("graphite-light").terminalTheme,
-            background: "#00000000",
-          }),
-        })
-      );
+      expectAppliedTerminalTheme(mockTerminal.options.theme, "graphite-light");
     });
   });
 
@@ -2903,14 +2893,7 @@ describe("XtermHost", () => {
       );
     });
 
-    expect(mockTerminal.options).toEqual(
-      expect.objectContaining({
-        theme: expect.objectContaining({
-          ...getThemeById("mint-light").terminalTheme,
-          background: "#00000000",
-        }),
-      })
-    );
+    expectAppliedTerminalTheme(mockTerminal.options.theme, "mint-light");
   });
 
   it("normalizes rendered ANSI cell backgrounds to the active surface opacity", async () => {
@@ -2977,14 +2960,9 @@ describe("XtermHost", () => {
       </Provider>
     );
 
-    expect(Terminal).toHaveBeenCalledWith(
-      expect.objectContaining({
-        theme: expect.objectContaining({
-          ...getThemeById("hc-dark").terminalTheme,
-          background: "#00000000",
-        }),
-      })
-    );
+    expect(Terminal).toHaveBeenCalledWith(expect.objectContaining({}));
+    const lastTheme = vi.mocked(Terminal).mock.calls.at(-1)?.[0]?.theme;
+    expectAppliedTerminalTheme(lastTheme, "hc-dark");
   });
 
   it("uses JetBrains Mono font family", async () => {

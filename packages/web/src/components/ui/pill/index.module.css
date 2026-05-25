@@ -29,8 +29,7 @@
 .pill:focus-visible {
   outline: none;
   border-color: var(--state-focus-ring-color);
-  box-shadow: 0 0 0 var(--state-focus-ring-width)
-    color-mix(in srgb, var(--state-focus-ring-color) 35%, transparent);
+  box-shadow: var(--control-focus-ring);
 }
 
 .active {

@@ -20,7 +20,7 @@
   overflow: hidden;
   border: 1px solid var(--surface-overlay-border);
   border-radius: var(--radius-overlay);
-  background: var(--surface-overlay-bg);
+  background: var(--material-overlay);
   box-shadow: var(--surface-overlay-shadow);
   outline: none;
 }
@@ -50,7 +50,7 @@
   justify-content: space-between;
   gap: var(--sp-3);
   padding: var(--sp-4) var(--sp-5);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-default);
 }
 
 .dialogHeader,
@@ -82,7 +82,7 @@
   height: 28px;
   border-radius: var(--radius-md);
   flex-shrink: 0;
-  background: var(--bg-hover);
+  background: var(--surface-hover);
   color: var(--text-secondary);
 }
 
@@ -121,7 +121,7 @@
   justify-content: flex-end;
   gap: var(--sp-3);
   padding: var(--sp-4) var(--sp-5);
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--border-default);
 }
 
 :global(.modal-close) {
@@ -129,7 +129,7 @@
 }
 
 :global(.modal-close:hover) {
-  background: var(--bg-hover);
+  background: var(--surface-hover);
 }
 
 @media (max-width: 640px) {

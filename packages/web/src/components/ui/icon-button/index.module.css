@@ -33,19 +33,19 @@
 }
 
 .ghost:hover:not(:disabled):not([aria-disabled="true"]) {
-  background: var(--bg-hover);
+  background: var(--control-ghost-bg-hover);
   color: var(--text-primary);
 }
 
 .filled {
-  background: color-mix(in srgb, var(--bg-surface) 84%, var(--accent-blue) 16%);
-  border-color: color-mix(in srgb, var(--border) 70%, var(--accent-blue) 30%);
+  background: var(--control-secondary-bg);
+  border-color: var(--control-secondary-border);
   color: var(--text-primary);
 }
 
 .filled:hover:not(:disabled):not([aria-disabled="true"]) {
-  background: color-mix(in srgb, var(--bg-hover) 72%, var(--accent-blue) 28%);
-  border-color: color-mix(in srgb, var(--border-light) 70%, var(--accent-blue) 30%);
+  background: var(--control-secondary-bg-hover);
+  border-color: var(--control-secondary-border-hover);
 }
 
 .sm {

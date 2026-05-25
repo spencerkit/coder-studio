@@ -12,11 +12,19 @@ export interface StatusDotProps extends Omit<ComponentPropsWithoutRef<"span">, "
 }
 
 const toneColorMap: Record<StatusDotTone, string> = {
-  success: "var(--state-success-text)",
-  warning: "var(--state-warning-text)",
-  error: "var(--state-error-text)",
-  info: "var(--state-info-text)",
-  neutral: "var(--text-tertiary)",
+  success: "var(--status-dot-complete)",
+  warning: "var(--status-dot-starting)",
+  error: "var(--status-dot-error)",
+  info: "var(--status-dot-running)",
+  neutral: "var(--status-dot-idle)",
+};
+
+const toneRingMap: Record<StatusDotTone, string> = {
+  success: "var(--status-dot-complete-ring)",
+  warning: "var(--status-dot-starting-ring)",
+  error: "var(--status-dot-error-ring)",
+  info: "var(--status-dot-running-ring-1)",
+  neutral: "var(--status-dot-idle-ring)",
 };
 
 const sizeMap: Record<StatusDotSize, string> = {
@@ -41,7 +49,8 @@ export function StatusDot({
       className={clsx(styles.dot, pulse ? styles.pulse : undefined, className)}
       style={
         {
-          "--status-dot-current-color": toneColorMap[tone],
+          "--status-dot-tone-color": toneColorMap[tone],
+          "--status-dot-tone-ring": toneRingMap[tone],
           "--status-dot-current-size": sizeMap[size],
           ...style,
         } as CSSProperties

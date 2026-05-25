@@ -80,40 +80,40 @@
   /* ========== Foundation: State / Interaction ========== */
   --state-focus-ring-color: var(--border-focus);
   --state-focus-ring-width: 2px;
-  --state-hover-bg-subtle: var(--bg-hover);
-  --state-hover-bg-strong: var(--bg-active);
-  --state-active-bg: var(--bg-active);
-  --state-selected-bg: color-mix(in srgb, var(--accent-blue) 12%, var(--bg-panel));
-  --state-selected-border: color-mix(in srgb, var(--accent-blue) 22%, transparent);
-  --state-disabled-bg: var(--bg-disabled);
-  --state-disabled-border: var(--border);
+  --state-hover-bg-subtle: var(--surface-hover);
+  --state-hover-bg-strong: var(--surface-active);
+  --state-active-bg: var(--surface-active);
+  --state-selected-bg: color-mix(in srgb, var(--status-info-fg) 12%, var(--surface-panel));
+  --state-selected-border: color-mix(in srgb, var(--status-info-fg) 22%, transparent);
+  --state-disabled-bg: var(--surface-disabled);
+  --state-disabled-border: var(--border-default);
   --state-disabled-text: var(--text-disabled);
-  --state-success-bg: color-mix(in srgb, var(--color-success) 14%, transparent);
-  --state-success-border: color-mix(in srgb, var(--color-success) 28%, transparent);
-  --state-success-text: var(--color-success);
+  --state-success-bg: color-mix(in srgb, var(--status-success-fg) 14%, transparent);
+  --state-success-border: color-mix(in srgb, var(--status-success-fg) 28%, transparent);
+  --state-success-text: var(--status-success-fg);
   --state-success-icon: var(--icon-success);
-  --state-warning-bg: color-mix(in srgb, var(--color-warning) 14%, transparent);
-  --state-warning-border: color-mix(in srgb, var(--color-warning) 28%, transparent);
-  --state-warning-text: var(--color-warning);
+  --state-warning-bg: color-mix(in srgb, var(--status-warning-fg) 14%, transparent);
+  --state-warning-border: color-mix(in srgb, var(--status-warning-fg) 28%, transparent);
+  --state-warning-text: var(--status-warning-fg);
   --state-warning-icon: var(--icon-warning);
-  --state-error-bg: color-mix(in srgb, var(--color-error) 14%, transparent);
-  --state-error-border: color-mix(in srgb, var(--color-error) 28%, transparent);
-  --state-error-text: var(--color-error);
+  --state-error-bg: color-mix(in srgb, var(--status-danger-fg) 14%, transparent);
+  --state-error-border: color-mix(in srgb, var(--status-danger-fg) 28%, transparent);
+  --state-error-text: var(--status-danger-fg);
   --state-error-icon: var(--icon-error);
-  --state-info-bg: color-mix(in srgb, var(--color-info) 14%, transparent);
-  --state-info-border: color-mix(in srgb, var(--color-info) 28%, transparent);
-  --state-info-text: var(--color-info);
+  --state-info-bg: color-mix(in srgb, var(--status-info-fg) 14%, transparent);
+  --state-info-border: color-mix(in srgb, var(--status-info-fg) 28%, transparent);
+  --state-info-text: var(--status-info-fg);
   --state-info-icon: var(--icon-info);
 
   /* ========== Foundation: Surface / Overlay ========== */
-  --surface-page-bg: var(--bg-page);
-  --surface-panel-bg: var(--bg-panel);
-  --surface-elevated-bg: var(--bg-elevated);
-  --surface-overlay-bg: color-mix(in srgb, var(--bg-elevated) 96%, transparent);
-  --surface-overlay-border: var(--border);
+  --surface-page-bg: var(--surface-page);
+  --surface-panel-bg: var(--surface-panel);
+  --surface-elevated-bg: var(--surface-elevated);
+  --surface-overlay-bg: color-mix(in srgb, var(--surface-elevated) 96%, transparent);
+  --surface-overlay-border: var(--border-default);
   --surface-overlay-shadow: var(--shadow-lg);
-  --surface-overlay-backdrop: color-mix(in srgb, var(--bg-page) 72%, black 28%);
-  --surface-sticky-bg: color-mix(in srgb, var(--bg-page) 96%, var(--bg-surface) 4%);
+  --surface-overlay-backdrop: color-mix(in srgb, var(--surface-page) 72%, black 28%);
+  --surface-sticky-bg: color-mix(in srgb, var(--surface-page) 96%, var(--surface-panel) 4%);
   --overlay-width-sm: 360px;
   --overlay-width-md: 480px;
   --overlay-width-lg: 680px;
@@ -144,18 +144,6 @@
     var(--surface-overlay-bg) calc(var(--app-surface-opacity, 0.96) * 88%),
     transparent
   );
-
-  --ws-sidebar-bg: var(--surface-panel-bg);
-  --ws-activitybar-bg: var(--surface-panel-bg);
-  --ws-statusbar-bg: var(--surface-panel-bg);
-  --ws-session-bg: var(--surface-panel-bg);
-  --ws-session-active-bg: var(--surface-elevated-bg);
-  --ws-session-header-bg: var(--surface-elevated-bg);
-  --ws-terminal-shell-bg: var(--surface-panel-bg);
-  --ws-terminal-toolbar-bg: var(--surface-elevated-bg);
-  --ws-terminal-tabs-bg: var(--surface-elevated-bg);
-  --ws-editor-shell-bg: var(--surface-panel-bg);
-  --ws-editor-toolbar-bg: var(--surface-elevated-bg);
 
   /* ========== Foundation: Code Surface Sub-Specs ========== */
   --terminal-panel-inset: 2px;
@@ -287,13 +275,8 @@
   --text: var(--text-primary);
   --text-sec: var(--text-secondary);
   --text-ter: var(--text-tertiary);
-  --blue: var(--accent-blue);
-  --green: var(--accent-green);
-  --amber: var(--accent-amber);
-  --pink: var(--accent-pink);
   --sans: var(--font-sans);
   --mono: var(--font-mono);
-  --bg: var(--bg-page);
 
   /* ========== Component-Specific Tokens ========== */
 
@@ -334,24 +317,24 @@
   --terminal-line-height: 1.6;
   --terminal-scrollback: 5000;
   --terminal-height: 200px;
-  --terminal-bg: var(--bg-terminal);
-  --terminal-border: var(--border);
+  --terminal-bg: var(--surface-input);
+  --terminal-border: var(--border-default);
   --terminal-text: var(--text-primary);
-  --terminal-accent: var(--accent-blue);
-  --session-bg: var(--bg-panel);
-  --session-border: var(--border);
+  --terminal-accent: var(--status-info-fg);
+  --session-bg: var(--surface-panel);
+  --session-border: var(--border-default);
   --session-text: var(--text-primary);
-  --session-accent: var(--accent-green);
-  --editor-bg: var(--bg-surface);
-  --editor-border: var(--border);
+  --session-accent: var(--status-success-fg);
+  --editor-bg: var(--surface-panel);
+  --editor-border: var(--border-default);
   --editor-text: var(--text-primary);
   --editor-gutter: var(--text-tertiary);
-  --diff-added-bg: color-mix(in srgb, var(--color-success) 18%, transparent);
-  --diff-added-border: color-mix(in srgb, var(--color-success) 48%, var(--border));
-  --diff-removed-bg: color-mix(in srgb, var(--color-error) 18%, transparent);
-  --diff-removed-border: color-mix(in srgb, var(--color-error) 48%, var(--border));
-  --diff-modified-bg: color-mix(in srgb, var(--color-warning) 18%, transparent);
-  --diff-modified-border: color-mix(in srgb, var(--color-warning) 48%, var(--border));
+  --diff-added-bg: color-mix(in srgb, var(--status-success-fg) 18%, transparent);
+  --diff-added-border: color-mix(in srgb, var(--status-success-fg) 48%, var(--border-default));
+  --diff-removed-bg: color-mix(in srgb, var(--status-danger-fg) 18%, transparent);
+  --diff-removed-border: color-mix(in srgb, var(--status-danger-fg) 48%, var(--border-default));
+  --diff-modified-bg: color-mix(in srgb, var(--status-warning-fg) 18%, transparent);
+  --diff-modified-border: color-mix(in srgb, var(--status-warning-fg) 48%, var(--border-default));
 
   /* Status Dot */
   --status-dot-size: 8px;
@@ -362,9 +345,13 @@
   --workspace-session-map-idle: color-mix(
     in srgb,
     var(--text-tertiary) 90%,
-    var(--accent-blue) 10%
+    var(--status-info-fg) 10%
   );
-  --workspace-session-map-empty: color-mix(in srgb, var(--text-tertiary) 56%, var(--bg-panel) 44%);
+  --workspace-session-map-empty: color-mix(
+    in srgb,
+    var(--text-tertiary) 56%,
+    var(--surface-panel) 44%
+  );
 
   /* Progress Bar */
   --progress-height: 4px;
@@ -383,829 +370,1895 @@
 }
 
 :root,
-[data-theme="mint-dark"] {
-  /* ========== Backgrounds ========== */
-  --bg-page: #0a1014;
-  --bg-surface: #11181f;
-  --bg-sidebar: #0d141a;
-  --bg-terminal: #0b1218;
-  --bg-hover: #1a2632;
-  --bg-active: #1e3040;
-  --bg-disabled: #151f28;
-  --bg-input: #0d141a;
+[data-theme="mint-dark"],
+[data-theme="mint-light"],
+[data-theme="graphite-dark"],
+[data-theme="graphite-light"],
+[data-theme="nord-dark"],
+[data-theme="nord-light"],
+[data-theme="hc-dark"],
+[data-theme="hc-light"] {
+  /* Private reference layer */
+  --ref-fg-0: #e5edf3;
+  --ref-fg-1: #9fb0bc;
+  --ref-fg-2: #728492;
+  --ref-fg-3: #4a5b6a;
+  --ref-fg-inverse: #0a1014;
+  --ref-bg-0: #0a1014;
+  --ref-bg-1: #11181f;
+  --ref-bg-2: #0d141a;
+  --ref-bg-3: #151f28;
+  --ref-bg-4: #1a2632;
+  --ref-bg-5: #1e3040;
+  --ref-bg-6: #22303c;
+  --ref-border-0: #1e2a35;
+  --ref-border-1: #263545;
+  --ref-border-2: #314454;
+  --ref-border-focus: #6cb6ff;
+  --ref-border-danger: #ff9eb0;
+  --ref-status-success: #78d7b2;
+  --ref-status-warning: #f1b86a;
+  --ref-status-danger: #ff9eb0;
+  --ref-status-info: #6cb6ff;
 
-  /* ========== Borders ========== */
-  --border: #1e2a35;
-  --border-light: #263545;
-  --border-focus: #6cb6ff;
-  --border-error: #ff9eb0;
+  /* Public semantic layer */
+  --text-primary: var(--ref-fg-0);
+  --text-secondary: var(--ref-fg-1);
+  --text-tertiary: var(--ref-fg-2);
+  --text-disabled: var(--ref-fg-3);
+  --text-inverse: var(--ref-fg-inverse);
+  --text-link: var(--ref-status-info);
+  --text-link-hover: color-mix(in srgb, var(--ref-status-info) 82%, white 18%);
 
-  /* ========== Text ========== */
-  --text-primary: #e5edf3;
-  --text-secondary: #9fb0bc;
-  --text-tertiary: #728492;
-  --text-muted: var(--text-tertiary);
-  --text-disabled: #4a5b6a;
-  --text-inverse: #0a1014;
+  --surface-page: var(--ref-bg-0);
+  --surface-panel: color-mix(in srgb, var(--ref-bg-1) 94%, var(--ref-bg-0));
+  --surface-elevated: color-mix(in srgb, var(--ref-bg-1) 98%, white 2%);
+  --surface-input: var(--ref-bg-2);
+  --surface-muted: var(--ref-bg-2);
+  --surface-hover: var(--ref-bg-4);
+  --surface-active: var(--ref-bg-5);
+  --surface-disabled: var(--ref-bg-3);
 
-  /* ========== Accents ========== */
-  --accent-blue: #6cb6ff;
-  --accent-green: #78d7b2;
-  --accent-amber: #f1b86a;
-  --accent-pink: #ff9eb0;
-  --accent-red: var(--color-error);
-  --accent-purple: #c792ea;
+  --border-default: var(--ref-border-0);
+  --border-subtle: var(--ref-border-1);
+  --border-strong: var(--ref-border-2);
+  --border-focus: var(--ref-border-focus);
+  --border-danger: var(--ref-border-danger);
 
-  /* ========== Semantic Colors ========== */
-  --color-success: #78d7b2;
-  --color-warning: #f1b86a;
-  --color-error: #ff9eb0;
-  --color-info: #6cb6ff;
-  --bg-panel: color-mix(in srgb, var(--bg-surface) 94%, var(--bg-page));
-  --bg-elevated: color-mix(in srgb, var(--bg-surface) 98%, white 2%);
+  --status-success-fg: var(--ref-status-success);
+  --status-success-bg: color-mix(in srgb, var(--ref-status-success) 18%, var(--surface-panel));
+  --status-success-border: color-mix(in srgb, var(--ref-status-success) 48%, var(--border-default));
+  --status-success-icon: var(--ref-status-success);
+  --status-warning-fg: var(--ref-status-warning);
+  --status-warning-bg: color-mix(in srgb, var(--ref-status-warning) 18%, var(--surface-panel));
+  --status-warning-border: color-mix(in srgb, var(--ref-status-warning) 48%, var(--border-default));
+  --status-warning-icon: var(--ref-status-warning);
+  --status-danger-fg: var(--ref-status-danger);
+  --status-danger-bg: color-mix(in srgb, var(--ref-status-danger) 18%, var(--surface-panel));
+  --status-danger-border: color-mix(in srgb, var(--ref-status-danger) 48%, var(--border-default));
+  --status-danger-icon: var(--ref-status-danger);
+  --status-info-fg: var(--ref-status-info);
+  --status-info-bg: color-mix(in srgb, var(--ref-status-info) 18%, var(--surface-panel));
+  --status-info-border: color-mix(in srgb, var(--ref-status-info) 48%, var(--border-default));
+  --status-info-icon: var(--ref-status-info);
 
-  /* ========== Foundation: State / Surface / Overlay ========== */
-  --state-focus-ring-color: var(--border-focus);
-  --state-focus-ring-offset: 2px;
-  --state-focus-ring-width: 2px;
-  --state-hover-bg: var(--bg-hover);
-  --state-hover-border: var(--border-light);
-  --state-hover-text: var(--text-primary);
-  --state-active-bg: var(--bg-active);
-  --state-selected-bg: color-mix(in srgb, var(--accent-blue) 20%, var(--bg-surface));
-  --state-selected-border: color-mix(in srgb, var(--accent-blue) 52%, var(--border));
-  --state-selected-text: var(--text-primary);
-  --state-disabled-bg: var(--bg-disabled);
-  --state-disabled-border: var(--border);
-  --state-disabled-text: var(--text-disabled);
-  --state-success-bg: color-mix(in srgb, var(--color-success) 18%, var(--bg-surface));
-  --state-success-border: color-mix(in srgb, var(--color-success) 48%, var(--border));
-  --state-success-text: var(--color-success);
-  --state-warning-bg: color-mix(in srgb, var(--color-warning) 18%, var(--bg-surface));
-  --state-warning-border: color-mix(in srgb, var(--color-warning) 48%, var(--border));
-  --state-warning-text: var(--color-warning);
-  --state-error-bg: color-mix(in srgb, var(--color-error) 18%, var(--bg-surface));
-  --state-error-border: color-mix(in srgb, var(--color-error) 48%, var(--border));
-  --state-error-text: var(--color-error);
-  --state-info-bg: color-mix(in srgb, var(--color-info) 18%, var(--bg-surface));
-  --state-info-border: color-mix(in srgb, var(--color-info) 48%, var(--border));
-  --state-info-text: var(--color-info);
-  --surface-canvas: var(--bg-page);
-  --surface-panel: var(--bg-panel);
-  --surface-panel-border: var(--border);
-  --surface-elevated: var(--bg-elevated);
-  --surface-elevated-border: var(--border-light);
-  --surface-input: var(--bg-input);
-  --surface-input-border: var(--border);
-  --surface-muted: var(--bg-sidebar);
-  --surface-inverse: var(--text-primary);
-  --overlay-backdrop: color-mix(in srgb, var(--bg-page) 68%, transparent);
-  --overlay-scrim: color-mix(in srgb, var(--bg-page) 82%, transparent);
-  --overlay-panel: var(--bg-elevated);
-  --overlay-panel-border: var(--border-light);
-  --overlay-local-backdrop: color-mix(in srgb, var(--bg-page) 54%, transparent);
-  --overlay-local-panel: var(--bg-panel);
-  --overlay-local-panel-border: var(--border);
+  /* Material layer */
+  --material-backdrop-filter: none;
+  --material-panel: var(--surface-panel);
+  --material-elevated: var(--surface-elevated);
+  --material-overlay: color-mix(
+    in srgb,
+    var(--surface-elevated) calc(var(--app-surface-opacity, 0.96) * 100%),
+    transparent
+  );
+  --material-local-overlay: color-mix(
+    in srgb,
+    var(--surface-panel) calc(var(--app-surface-opacity, 0.92) * 100%),
+    transparent
+  );
+  --material-shell-page: color-mix(
+    in srgb,
+    var(--surface-page) calc(var(--app-surface-opacity, 0.96) * 100%),
+    transparent
+  );
+  --material-shell-topbar: color-mix(
+    in srgb,
+    var(--surface-elevated) calc(var(--app-surface-opacity, 0.96) * 100%),
+    transparent
+  );
 
-  /* ========== Icon Tokens ========== */
+  --workspace-sidebar-surface: var(--surface-panel);
+  --workspace-activitybar-surface: var(--surface-panel);
+  --workspace-statusbar-surface: var(--surface-panel);
+  --workspace-session-surface: var(--surface-panel);
+  --workspace-session-active-surface: var(--surface-elevated);
+  --workspace-session-header-surface: var(--surface-elevated);
+  --workspace-terminal-shell-surface: var(--surface-panel);
+  --workspace-terminal-toolbar-surface: var(--surface-elevated);
+  --workspace-terminal-tabs-surface: var(--surface-elevated);
+  --workspace-editor-shell-surface: var(--surface-panel);
+  --workspace-editor-toolbar-surface: var(--surface-elevated);
+  --workspace-editor-toolbar-border: color-mix(
+    in srgb,
+    var(--border-default) 72%,
+    var(--status-info-fg) 28%
+  );
+  --workspace-content-surface: transparent;
+  --settings-header-surface: var(--material-overlay);
+  --settings-sidebar-surface: var(--material-overlay);
+  --topbar-surface: var(--material-overlay);
+  --workspace-page-surface: var(--material-shell-page);
+  --workspace-session-idle-surface: var(--material-overlay);
+  --workspace-session-idle-header-surface: var(--material-overlay);
+  --workspace-bottom-terminal-surface: var(--material-overlay);
+  --agent-draft-surface: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--material-overlay) 78%, var(--surface-panel) 22%),
+    color-mix(in srgb, var(--material-overlay) 64%, var(--surface-page) 36%)
+  );
+  --agent-provider-card-surface: color-mix(in srgb, var(--material-overlay) 44%, transparent);
+  --mobile-sheet-file-surface: color-mix(
+    in srgb,
+    var(--material-overlay) 100%,
+    color-mix(in srgb, var(--surface-panel) 80%, transparent)
+  );
+  --workspace-session-mobile-active-surface: color-mix(
+    in srgb,
+    var(--surface-active) 76%,
+    var(--material-overlay) 24%
+  );
+  --selection-accent-bg: color-mix(in srgb, var(--status-info-fg) 18%, transparent);
+  --editor-dirty-indicator-fg: var(--status-warning-fg);
+  --session-focus-pulse-color: var(--status-success-fg);
+
+  /* Domain/component-role layer */
+  --git-status-added-fg: var(--status-success-fg);
+  --git-status-added-bg: var(--status-success-bg);
+  --git-status-added-border: var(--status-success-border);
+  --git-status-modified-fg: var(--status-warning-fg);
+  --git-status-modified-bg: var(--status-warning-bg);
+  --git-status-modified-border: var(--status-warning-border);
+  --git-status-deleted-fg: var(--status-danger-fg);
+  --git-status-deleted-bg: var(--status-danger-bg);
+  --git-status-deleted-border: var(--status-danger-border);
+  --git-status-untracked-fg: var(--status-info-fg);
+  --git-status-untracked-bg: var(--status-info-bg);
+  --git-status-untracked-border: var(--status-info-border);
+  --git-status-renamed-fg: var(--status-info-fg);
+  --git-status-renamed-bg: var(--status-info-bg);
+  --git-status-renamed-border: var(--status-info-border);
+
+  --diff-added-bg: var(--status-success-bg);
+  --diff-added-border: var(--status-success-border);
+  --diff-added-fg: var(--status-success-fg);
+  --diff-modified-bg: var(--status-info-bg);
+  --diff-modified-border: var(--status-info-border);
+  --diff-modified-fg: var(--status-info-fg);
+  --diff-deleted-bg: var(--status-danger-bg);
+  --diff-deleted-border: var(--status-danger-border);
+  --diff-deleted-fg: var(--status-danger-fg);
+
   --icon-primary: var(--text-primary);
   --icon-secondary: var(--text-secondary);
   --icon-muted: var(--text-tertiary);
-  --icon-accent: var(--accent-green);
-  --icon-success: var(--color-success);
-  --icon-warning: var(--color-warning);
-  --icon-error: var(--color-error);
-  --icon-info: var(--color-info);
-
+  --icon-accent: var(--status-success-icon);
+  --icon-success: var(--status-success-icon);
+  --icon-warning: var(--status-warning-icon);
+  --icon-error: var(--status-danger-icon);
+  --icon-info: var(--status-info-icon);
   --icon-file-folder: #8adfc0;
-  --icon-file-code: var(--accent-blue);
+  --icon-file-code: var(--status-info-fg);
   --icon-file-data: var(--accent-purple);
   --icon-file-doc: #d7e2ec;
   --icon-file-media: #ffb7c5;
   --icon-file-default: var(--text-secondary);
-  --icon-git-staged: var(--color-success);
-  --icon-git-modified: var(--color-warning);
-  --icon-git-deleted: var(--color-error);
-  --icon-git-untracked: var(--color-info);
+  --icon-git-staged: var(--status-success-fg);
+  --icon-git-modified: var(--status-warning-fg);
+  --icon-git-deleted: var(--status-danger-fg);
+  --icon-git-untracked: var(--status-info-fg);
+  --icon-surface-subtle: color-mix(in srgb, var(--text-secondary) 18%, var(--surface-panel));
+  --icon-surface-accent: color-mix(in srgb, var(--icon-accent) 24%, var(--surface-panel));
+  --icon-surface-success: color-mix(in srgb, var(--status-success-fg) 24%, var(--surface-panel));
+  --icon-surface-warning: color-mix(in srgb, var(--status-warning-fg) 24%, var(--surface-panel));
+  --icon-surface-error: color-mix(in srgb, var(--status-danger-fg) 24%, var(--surface-panel));
+  --icon-surface-info: color-mix(in srgb, var(--status-info-fg) 24%, var(--surface-panel));
 
-  --icon-surface-subtle: color-mix(in srgb, var(--text-secondary) 18%, var(--bg-surface));
-  --icon-surface-accent: color-mix(in srgb, var(--accent-green) 24%, var(--bg-surface));
-  --icon-surface-success: color-mix(in srgb, var(--color-success) 24%, var(--bg-surface));
-  --icon-surface-warning: color-mix(in srgb, var(--color-warning) 24%, var(--bg-surface));
-  --icon-surface-error: color-mix(in srgb, var(--color-error) 24%, var(--bg-surface));
-  --icon-surface-info: color-mix(in srgb, var(--color-info) 24%, var(--bg-surface));
+  --control-focus-ring: 0 0 0 calc(var(--state-focus-ring-width) * 2)
+    color-mix(in srgb, var(--border-focus) 35%, transparent);
+  --control-primary-bg: var(--status-info-fg);
+  --control-primary-bg-hover: color-mix(in srgb, var(--status-info-fg) 84%, white 16%);
+  --control-primary-fg: var(--text-inverse);
+  --control-secondary-bg: color-mix(in srgb, var(--surface-panel) 84%, var(--status-info-fg) 16%);
+  --control-secondary-bg-hover: color-mix(
+    in srgb,
+    var(--surface-hover) 72%,
+    var(--status-info-fg) 28%
+  );
+  --control-secondary-border: color-mix(
+    in srgb,
+    var(--border-default) 70%,
+    var(--status-info-fg) 30%
+  );
+  --control-secondary-border-hover: color-mix(
+    in srgb,
+    var(--border-subtle) 70%,
+    var(--status-info-fg) 30%
+  );
+  --control-ghost-bg-hover: var(--surface-hover);
+  --control-ghost-fg: var(--text-secondary);
+  --control-danger-bg: var(--status-danger-fg);
+  --control-danger-fg: var(--text-inverse);
+  --control-spinner-track: color-mix(in srgb, currentColor 30%, var(--surface-page) 70%);
 
-  /* ========== Shadows ========== */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
-  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.6);
-  --shadow-xl: 0 16px 48px rgba(0, 0, 0, 0.7);
-  --shadow-glow: 0 0 12px rgba(120, 215, 178, 0.3);
+  --field-bg: var(--surface-page);
+  --field-border: var(--border-default);
+  --field-border-hover: var(--border-subtle);
+  --field-ring: 0 0 0 var(--state-focus-ring-width)
+    color-mix(in srgb, var(--border-focus) 40%, transparent);
+  --field-invalid-ring: 0 0 0 1px color-mix(in srgb, var(--border-danger) 70%, transparent 30%);
+  --kbd-surface: color-mix(in srgb, var(--surface-input) 82%, var(--surface-panel) 18%);
+  --menu-danger-hover-bg: color-mix(in srgb, var(--status-danger-fg) 10%, var(--surface-panel));
 
-  /* Scrollbar */
-  --scrollbar-thumb: #263545;
+  --tag-info-bg: color-mix(in srgb, var(--status-info-fg) 15%, transparent);
+  --tag-info-fg: var(--status-info-fg);
+  --tag-success-bg: color-mix(in srgb, var(--status-success-fg) 15%, transparent);
+  --tag-success-fg: var(--status-success-fg);
+  --tag-warning-bg: color-mix(in srgb, var(--status-warning-fg) 15%, transparent);
+  --tag-warning-fg: var(--status-warning-fg);
+  --tag-danger-bg: color-mix(in srgb, var(--status-danger-fg) 15%, transparent);
+  --tag-danger-fg: var(--status-danger-fg);
+  --tag-accent-bg: color-mix(in srgb, var(--text-secondary) 15%, transparent);
+  --tag-accent-fg: var(--text-secondary);
+
+  --status-dot-idle: var(--text-tertiary);
+  --status-dot-starting: var(--status-warning-fg);
+  --status-dot-running: var(--status-info-fg);
+  --status-dot-complete: var(--status-success-fg);
+  --status-dot-error: var(--status-danger-fg);
+  --status-dot-idle-ring: color-mix(in srgb, var(--status-dot-idle) 18%, transparent);
+  --status-dot-starting-ring: color-mix(in srgb, var(--status-dot-starting) 18%, transparent);
+  --status-dot-running-ring-1: color-mix(in srgb, var(--status-info-fg) 26%, transparent);
+  --status-dot-running-ring-2: color-mix(in srgb, var(--status-info-fg) 12%, transparent);
+  --status-dot-running-ring-3: color-mix(in srgb, var(--status-info-fg) 22%, transparent);
+  --status-dot-running-ring-ghost: color-mix(in srgb, var(--status-dot-running) 28%, transparent);
+  --status-dot-running-ring-outer: color-mix(in srgb, var(--status-dot-running) 34%, transparent);
+  --status-dot-complete-ring: color-mix(in srgb, var(--status-dot-complete) 18%, transparent);
+  --status-dot-error-ring: color-mix(in srgb, var(--status-dot-error) 18%, transparent);
+
+  /* ========== Centralized Derived Component Visual Tokens ========== */
+  --component-mix-surface-panel-98pct-transparent: color-mix(
+    in srgb,
+    var(--surface-panel) 98%,
+    transparent
+  );
+  --component-mix-surface-page-96pct-surface-panel-4pct: color-mix(
+    in srgb,
+    var(--surface-page) 96%,
+    var(--surface-panel) 4%
+  );
+  --component-mix-border-default-82pct-transparent: color-mix(
+    in srgb,
+    var(--border-default) 82%,
+    transparent
+  );
+  --component-mix-surface-panel-66pct-transparent: color-mix(
+    in srgb,
+    var(--surface-panel) 66%,
+    transparent
+  );
+  --component-mix-text-tertiary-92pct-surface-panel: color-mix(
+    in srgb,
+    var(--text-tertiary) 92%,
+    var(--surface-panel)
+  );
+  --component-mix-border-default-96pct-transparent: color-mix(
+    in srgb,
+    var(--border-default) 96%,
+    transparent
+  );
+  --component-mix-status-info-fg-12pct-surface-panel: color-mix(
+    in srgb,
+    var(--status-info-fg) 12%,
+    var(--surface-panel)
+  );
+  --component-mix-status-info-fg-14pct-surface-panel: color-mix(
+    in srgb,
+    var(--status-info-fg) 14%,
+    var(--surface-panel)
+  );
+  --component-mix-border-focus-64pct-transparent: color-mix(
+    in srgb,
+    var(--border-focus) 64%,
+    transparent
+  );
+  --component-mix-status-info-fg-52pct-text-secondary: color-mix(
+    in srgb,
+    var(--status-info-fg) 52%,
+    var(--text-secondary)
+  );
+  --component-mix-surface-panel-92pct-surface-page: color-mix(
+    in srgb,
+    var(--surface-panel) 92%,
+    var(--surface-page)
+  );
+  --component-mix-surface-panel-94pct-surface-page: color-mix(
+    in srgb,
+    var(--surface-panel) 94%,
+    var(--surface-page)
+  );
+  --component-mix-border-default-84pct-transparent: color-mix(
+    in srgb,
+    var(--border-default) 84%,
+    transparent
+  );
+  --component-mix-status-info-fg-10pct-surface-panel: color-mix(
+    in srgb,
+    var(--status-info-fg) 10%,
+    var(--surface-panel)
+  );
+  --component-mix-border-default-64pct-transparent: color-mix(
+    in srgb,
+    var(--border-default) 64%,
+    transparent
+  );
+  --component-mix-surface-page-82pct-surface-panel-18pct: color-mix(
+    in srgb,
+    var(--surface-page) 82%,
+    var(--surface-panel) 18%
+  );
+  --component-mix-border-default-76pct-transparent: color-mix(
+    in srgb,
+    var(--border-default) 76%,
+    transparent
+  );
+  --component-mix-surface-page-94pct-surface-panel-6pct: color-mix(
+    in srgb,
+    var(--surface-page) 94%,
+    var(--surface-panel) 6%
+  );
+  --component-mix-status-info-fg-72pct-transparent: color-mix(
+    in srgb,
+    var(--status-info-fg) 72%,
+    transparent
+  );
+  --component-mix-status-info-fg-74pct-text-primary: color-mix(
+    in srgb,
+    var(--status-info-fg) 74%,
+    var(--text-primary)
+  );
+  --component-mix-border-default-44pct-transparent: color-mix(
+    in srgb,
+    var(--border-default) 44%,
+    transparent
+  );
+  --component-mix-status-danger-fg-76pct-text-primary: color-mix(
+    in srgb,
+    var(--status-danger-fg) 76%,
+    var(--text-primary)
+  );
+  --component-mix-status-info-fg-42pct-border-default-58pct: color-mix(
+    in srgb,
+    var(--status-info-fg) 42%,
+    var(--border-default) 58%
+  );
+  --component-mix-status-info-fg-18pct-transparent: color-mix(
+    in srgb,
+    var(--status-info-fg) 18%,
+    transparent
+  );
+  --component-mix-border-default-78pct-transparent: color-mix(
+    in srgb,
+    var(--border-default) 78%,
+    transparent
+  );
+  --component-mix-surface-input-72pct-surface-panel-28pct: color-mix(
+    in srgb,
+    var(--surface-input) 72%,
+    var(--surface-panel) 28%
+  );
+  --component-mix-border-default-70pct-transparent: color-mix(
+    in srgb,
+    var(--border-default) 70%,
+    transparent
+  );
+  --component-mix-surface-panel-82pct-transparent: color-mix(
+    in srgb,
+    var(--surface-panel) 82%,
+    transparent
+  );
+  --component-mix-surface-panel-78pct-transparent: color-mix(
+    in srgb,
+    var(--surface-panel) 78%,
+    transparent
+  );
+  --component-mix-border-default-68pct-transparent: color-mix(
+    in srgb,
+    var(--border-default) 68%,
+    transparent
+  );
+  --component-mix-surface-panel-74pct-transparent: color-mix(
+    in srgb,
+    var(--surface-panel) 74%,
+    transparent
+  );
+  --component-mix-surface-input-82pct-surface-panel-18pct: color-mix(
+    in srgb,
+    var(--surface-input) 82%,
+    var(--surface-panel) 18%
+  );
+  --component-mix-surface-page-92pct-surface-input-8pct: color-mix(
+    in srgb,
+    var(--surface-page) 92%,
+    var(--surface-input) 8%
+  );
+  --component-mix-border-default-56pct-transparent: color-mix(
+    in srgb,
+    var(--border-default) 56%,
+    transparent
+  );
+  --component-mix-surface-page-78pct-surface-panel-22pct: color-mix(
+    in srgb,
+    var(--surface-page) 78%,
+    var(--surface-panel) 22%
+  );
+  --component-mix-surface-page-80pct-surface-panel-20pct: color-mix(
+    in srgb,
+    var(--surface-page) 80%,
+    var(--surface-panel) 20%
+  );
+  --component-mix-status-info-fg-28pct-border-default: color-mix(
+    in srgb,
+    var(--status-info-fg) 28%,
+    var(--border-default)
+  );
+  --component-mix-status-info-fg-8pct-surface-panel: color-mix(
+    in srgb,
+    var(--status-info-fg) 8%,
+    var(--surface-panel)
+  );
+  --component-mix-status-info-fg-42pct-border-default: color-mix(
+    in srgb,
+    var(--status-info-fg) 42%,
+    var(--border-default)
+  );
+  --component-mix-status-info-fg-84pct-text-primary: color-mix(
+    in srgb,
+    var(--status-info-fg) 84%,
+    var(--text-primary)
+  );
+  --component-mix-border-default-78pct-status-info-fg-22pct: color-mix(
+    in srgb,
+    var(--border-default) 78%,
+    var(--status-info-fg) 22%
+  );
+  --component-mix-surface-elevated-92pct-transparent: color-mix(
+    in srgb,
+    var(--surface-elevated) 92%,
+    transparent
+  );
+  --component-mix-border-default-68pct-status-warning-fg-32pct: color-mix(
+    in srgb,
+    var(--border-default) 68%,
+    var(--status-warning-fg) 32%
+  );
+  --component-mix-status-info-fg-24pct-transparent: color-mix(
+    in srgb,
+    var(--status-info-fg) 24%,
+    transparent
+  );
+  --component-mix-border-default-62pct-transparent: color-mix(
+    in srgb,
+    var(--border-default) 62%,
+    transparent
+  );
+  --component-mix-border-focus-58pct-transparent: color-mix(
+    in srgb,
+    var(--border-focus) 58%,
+    transparent
+  );
+  --component-mix-state-selected-bg-72pct-transparent: color-mix(
+    in srgb,
+    var(--state-selected-bg) 72%,
+    transparent
+  );
+  --component-mix-surface-page-97pct-surface-panel-3pct: color-mix(
+    in srgb,
+    var(--surface-page) 97%,
+    var(--surface-panel) 3%
+  );
+  --component-mix-status-info-fg-88pct-white-12pct: color-mix(
+    in srgb,
+    var(--status-info-fg) 88%,
+    white 12%
+  );
+  --component-mix-border-default-42pct-transparent: color-mix(
+    in srgb,
+    var(--border-default) 42%,
+    transparent
+  );
+  --component-mix-status-warning-fg-8pct-surface-panel: color-mix(
+    in srgb,
+    var(--status-warning-fg) 8%,
+    var(--surface-panel)
+  );
+  --component-mix-border-default-88pct-transparent: color-mix(
+    in srgb,
+    var(--border-default) 88%,
+    transparent
+  );
+  --component-mix-status-danger-fg-34pct-border-default: color-mix(
+    in srgb,
+    var(--status-danger-fg) 34%,
+    var(--border-default)
+  );
+  --component-mix-status-danger-fg-84pct-text-primary: color-mix(
+    in srgb,
+    var(--status-danger-fg) 84%,
+    var(--text-primary)
+  );
+  --component-mix-surface-panel-72pct-status-info-fg-28pct: color-mix(
+    in srgb,
+    var(--surface-panel) 72%,
+    var(--status-info-fg) 28%
+  );
+  --component-rgba-108-182-255-0-2: rgba(108, 182, 255, 0.2);
+  --component-rgba-241-184-106-0-2: rgba(241, 184, 106, 0.2);
+  --component-rgba-120-215-178-0-2: rgba(120, 215, 178, 0.2);
+  --component-mix-state-success-border-40pct-transparent: color-mix(
+    in srgb,
+    var(--state-success-border) 40%,
+    transparent
+  );
+  --component-mix-state-info-border-40pct-transparent: color-mix(
+    in srgb,
+    var(--state-info-border) 40%,
+    transparent
+  );
+  --component-mix-state-warning-border-40pct-transparent: color-mix(
+    in srgb,
+    var(--state-warning-border) 40%,
+    transparent
+  );
+  --component-mix-state-error-border-40pct-transparent: color-mix(
+    in srgb,
+    var(--state-error-border) 40%,
+    transparent
+  );
+  --component-mix-surface-hover-76pct-status-info-fg-24pct: color-mix(
+    in srgb,
+    var(--surface-hover) 76%,
+    var(--status-info-fg) 24%
+  );
+  --component-mix-surface-panel-90pct-surface-page-10pct: color-mix(
+    in srgb,
+    var(--surface-panel) 90%,
+    var(--surface-page) 10%
+  );
+  --component-mix-surface-panel-88pct-surface-page-12pct: color-mix(
+    in srgb,
+    var(--surface-panel) 88%,
+    var(--surface-page) 12%
+  );
+  --component-mix-surface-page-44pct-surface-panel-56pct: color-mix(
+    in srgb,
+    var(--surface-page) 44%,
+    var(--surface-panel) 56%
+  );
+  --component-mix-border-default-68pct-surface-page-32pct: color-mix(
+    in srgb,
+    var(--border-default) 68%,
+    var(--surface-page) 32%
+  );
+  --component-mix-status-info-fg-7pct-surface-panel-93pct: color-mix(
+    in srgb,
+    var(--status-info-fg) 7%,
+    var(--surface-panel) 93%
+  );
+  --component-mix-status-info-fg-16pct-transparent: color-mix(
+    in srgb,
+    var(--status-info-fg) 16%,
+    transparent
+  );
+  --component-mix-border-default-70pct-surface-page-30pct: color-mix(
+    in srgb,
+    var(--border-default) 70%,
+    var(--surface-page) 30%
+  );
+  --component-mix-surface-page-74pct-surface-panel-26pct: color-mix(
+    in srgb,
+    var(--surface-page) 74%,
+    var(--surface-panel) 26%
+  );
+  --component-mix-surface-page-82pct-transparent: color-mix(
+    in srgb,
+    var(--surface-page) 82%,
+    transparent
+  );
+  --component-mix-status-success-fg-60pct-border-default-40pct: color-mix(
+    in srgb,
+    var(--status-success-fg) 60%,
+    var(--border-default) 40%
+  );
+  --component-mix-status-success-fg-70pct-surface-panel-30pct: color-mix(
+    in srgb,
+    var(--status-success-fg) 70%,
+    var(--surface-panel) 30%
+  );
+  --component-mix-status-info-fg-62pct-border-default-38pct: color-mix(
+    in srgb,
+    var(--status-info-fg) 62%,
+    var(--border-default) 38%
+  );
+  --component-mix-status-info-fg-62pct-surface-panel-38pct: color-mix(
+    in srgb,
+    var(--status-info-fg) 62%,
+    var(--surface-panel) 38%
+  );
+  --component-mix-border-default-72pct-surface-page-28pct: color-mix(
+    in srgb,
+    var(--border-default) 72%,
+    var(--surface-page) 28%
+  );
+  --component-mix-surface-page-68pct-surface-panel-32pct: color-mix(
+    in srgb,
+    var(--surface-page) 68%,
+    var(--surface-panel) 32%
+  );
+  --component-mix-icon-file-data-16pct-surface-panel: color-mix(
+    in srgb,
+    var(--icon-file-data) 16%,
+    var(--surface-panel)
+  );
+  --component-mix-border-default-90pct-transparent: color-mix(
+    in srgb,
+    var(--border-default) 90%,
+    transparent
+  );
+  --component-mix-surface-panel-88pct-surface-hover: color-mix(
+    in srgb,
+    var(--surface-panel) 88%,
+    var(--surface-hover)
+  );
+  --component-mix-border-strong-72pct-border-default: color-mix(
+    in srgb,
+    var(--border-strong) 72%,
+    var(--border-default)
+  );
+  --component-mix-surface-panel-92pct-surface-hover: color-mix(
+    in srgb,
+    var(--surface-panel) 92%,
+    var(--surface-hover)
+  );
+  --component-mix-icon-success-42pct-transparent: color-mix(
+    in srgb,
+    var(--icon-success) 42%,
+    transparent
+  );
+  --component-mix-surface-active-78pct-status-warning-fg-22pct: color-mix(
+    in srgb,
+    var(--surface-active) 78%,
+    var(--status-warning-fg) 22%
+  );
+  --component-mix-state-info-bg-78pct-surface-panel-22pct: color-mix(
+    in srgb,
+    var(--state-info-bg) 78%,
+    var(--surface-panel) 22%
+  );
+  --component-mix-state-focus-ring-color-24pct-transparent: color-mix(
+    in srgb,
+    var(--state-focus-ring-color) 24%,
+    transparent
+  );
+  --component-mix-status-info-fg-78pct-white-22pct: color-mix(
+    in srgb,
+    var(--status-info-fg) 78%,
+    white 22%
+  );
+  --component-mix-status-info-fg-92pct-black-8pct: color-mix(
+    in srgb,
+    var(--status-info-fg) 92%,
+    black 8%
+  );
+  --component-mix-state-focus-ring-color-35pct-transparent: color-mix(
+    in srgb,
+    var(--state-focus-ring-color) 35%,
+    transparent
+  );
+  --component-mix-status-info-fg-84pct-white-16pct: color-mix(
+    in srgb,
+    var(--status-info-fg) 84%,
+    white 16%
+  );
+  --component-mix-surface-panel-84pct-status-info-fg-16pct: color-mix(
+    in srgb,
+    var(--surface-panel) 84%,
+    var(--status-info-fg) 16%
+  );
+  --component-mix-border-default-70pct-status-info-fg-30pct: color-mix(
+    in srgb,
+    var(--border-default) 70%,
+    var(--status-info-fg) 30%
+  );
+  --component-mix-surface-hover-72pct-status-info-fg-28pct: color-mix(
+    in srgb,
+    var(--surface-hover) 72%,
+    var(--status-info-fg) 28%
+  );
+  --component-mix-border-subtle-70pct-status-info-fg-30pct: color-mix(
+    in srgb,
+    var(--border-subtle) 70%,
+    var(--status-info-fg) 30%
+  );
+  --component-mix-state-focus-ring-color-40pct-transparent: color-mix(
+    in srgb,
+    var(--state-focus-ring-color) 40%,
+    transparent
+  );
+  --component-mix-status-info-fg-15pct-transparent: color-mix(
+    in srgb,
+    var(--status-info-fg) 15%,
+    transparent
+  );
+  --component-mix-status-success-fg-15pct-transparent: color-mix(
+    in srgb,
+    var(--status-success-fg) 15%,
+    transparent
+  );
+  --component-mix-status-warning-fg-15pct-transparent: color-mix(
+    in srgb,
+    var(--status-warning-fg) 15%,
+    transparent
+  );
+  --component-mix-status-danger-fg-15pct-transparent: color-mix(
+    in srgb,
+    var(--status-danger-fg) 15%,
+    transparent
+  );
+  --component-mix-text-tertiary-15pct-transparent: color-mix(
+    in srgb,
+    var(--text-tertiary) 15%,
+    transparent
+  );
+  --component-mix-surface-panel-95pct-status-info-fg-5pct: color-mix(
+    in srgb,
+    var(--surface-panel) 95%,
+    var(--status-info-fg) 5%
+  );
+  --component-rgba-108-182-255-0-06: rgba(108, 182, 255, 0.06);
+  --component-mix-status-info-fg-40pct-transparent: color-mix(
+    in srgb,
+    var(--status-info-fg) 40%,
+    transparent
+  );
+  --component-mix-border-focus-44pct-transparent-56pct: color-mix(
+    in srgb,
+    var(--border-focus) 44%,
+    transparent 56%
+  );
+  --component-mix-state-selected-bg-80pct-transparent: color-mix(
+    in srgb,
+    var(--state-selected-bg) 80%,
+    transparent
+  );
+  --component-rgba-108-182-255-0-08: rgba(108, 182, 255, 0.08);
+  --component-mix-status-info-fg-white-20pct: color-mix(in srgb, var(--status-info-fg), white 20%);
+  --component-rgba-255-255-255-0-02: rgba(255, 255, 255, 0.02);
+  --component-rgba-108-182-255-0-05: rgba(108, 182, 255, 0.05);
+  --component-rgba-10-16-20-0-88: rgba(10, 16, 20, 0.88);
+  --component-mix-surface-hover-72pct-transparent: color-mix(
+    in srgb,
+    var(--surface-hover) 72%,
+    transparent
+  );
+  --component-rgba-255-255-255-0-04: rgba(255, 255, 255, 0.04);
+  --component-rgba-255-255-255-0-015: rgba(255, 255, 255, 0.015);
+  --component-mix-surface-input-92pct-surface-page-8pct: color-mix(
+    in srgb,
+    var(--surface-input) 92%,
+    var(--surface-page) 8%
+  );
+  --component-mix-border-subtle-68pct-status-info-fg-32pct: color-mix(
+    in srgb,
+    var(--border-subtle) 68%,
+    var(--status-info-fg) 32%
+  );
+  --component-mix-surface-input-90pct-surface-page-10pct: color-mix(
+    in srgb,
+    var(--surface-input) 90%,
+    var(--surface-page) 10%
+  );
+  --component-mix-surface-panel-90pct-surface-input-10pct: color-mix(
+    in srgb,
+    var(--surface-panel) 90%,
+    var(--surface-input) 10%
+  );
+  --component-mix-surface-hover-72pct-surface-panel-28pct: color-mix(
+    in srgb,
+    var(--surface-hover) 72%,
+    var(--surface-panel) 28%
+  );
+  --component-mix-status-info-fg-22pct-transparent: color-mix(
+    in srgb,
+    var(--status-info-fg) 22%,
+    transparent
+  );
+  --component-rgba-18-26-34-0-94: rgba(18, 26, 34, 0.94);
+  --component-rgba-11-18-24-0-98: rgba(11, 18, 24, 0.98);
+  --component-mix-border-subtle-66pct-status-info-fg-34pct: color-mix(
+    in srgb,
+    var(--border-subtle) 66%,
+    var(--status-info-fg) 34%
+  );
+  --component-mix-border-default-72pct-status-info-fg-28pct: color-mix(
+    in srgb,
+    var(--border-default) 72%,
+    var(--status-info-fg) 28%
+  );
+  --component-rgba-18-26-34-0-96: rgba(18, 26, 34, 0.96);
+  --component-rgba-14-21-28-0-92: rgba(14, 21, 28, 0.92);
+  --component-blur-12px: blur(12px);
+  --component-mix-border-subtle-64pct-status-info-fg-36pct: color-mix(
+    in srgb,
+    var(--border-subtle) 64%,
+    var(--status-info-fg) 36%
+  );
+  --component-mix-surface-input-96pct-white-4pct: color-mix(
+    in srgb,
+    var(--surface-input) 96%,
+    white 4%
+  );
+  --component-mix-surface-input-88pct-surface-page-12pct: color-mix(
+    in srgb,
+    var(--surface-input) 88%,
+    var(--surface-page) 12%
+  );
+  --component-hex-ff5f57: #ff5f57;
+  --component-hex-febc2e: #febc2e;
+  --component-hex-28c840: #28c840;
+  --component-mix-border-subtle-70pct-transparent: color-mix(
+    in srgb,
+    var(--border-subtle) 70%,
+    transparent
+  );
+  --component-rgba-255-255-255-0-06: rgba(255, 255, 255, 0.06);
+  --component-rgba-8-12-16-0-56: rgba(8, 12, 16, 0.56);
+  --component-mix-surface-panel-97pct-white-3pct: color-mix(
+    in srgb,
+    var(--surface-panel) 97%,
+    white 3%
+  );
+  --component-mix-surface-panel-84pct-surface-input-16pct: color-mix(
+    in srgb,
+    var(--surface-panel) 84%,
+    var(--surface-input) 16%
+  );
+  --component-mix-surface-active-90pct-white-10pct: color-mix(
+    in srgb,
+    var(--surface-active) 90%,
+    white 10%
+  );
+  --component-mix-surface-active-94pct-surface-panel-6pct: color-mix(
+    in srgb,
+    var(--surface-active) 94%,
+    var(--surface-panel) 6%
+  );
+  --component-mix-white-6pct-transparent: color-mix(in srgb, white 6%, transparent);
+  --component-mix-status-success-fg-12pct-transparent: color-mix(
+    in srgb,
+    var(--status-success-fg) 12%,
+    transparent
+  );
+  --component-mix-status-info-fg-82pct-white-18pct: color-mix(
+    in srgb,
+    var(--status-info-fg) 82%,
+    white 18%
+  );
+  --component-hex-081118: #081118;
+  --component-mix-border-subtle-72pct-transparent: color-mix(
+    in srgb,
+    var(--border-subtle) 72%,
+    transparent
+  );
+  --component-rgba-18-26-34-0-8: rgba(18, 26, 34, 0.8);
+  --component-rgba-14-21-28-0-28: rgba(14, 21, 28, 0.28);
+  --component-mix-text-tertiary-82pct-status-info-fg-18pct: color-mix(
+    in srgb,
+    var(--text-tertiary) 82%,
+    var(--status-info-fg) 18%
+  );
+  --component-mix-surface-panel-bg-96pct-transparent: color-mix(
+    in srgb,
+    var(--surface-panel-bg) 96%,
+    transparent
+  );
+  --component-mix-white-4pct-transparent: color-mix(in srgb, white 4%, transparent);
+  --component-mix-text-tertiary-78pct-status-info-fg-22pct: color-mix(
+    in srgb,
+    var(--text-tertiary) 78%,
+    var(--status-info-fg) 22%
+  );
+  --component-mix-status-dot-current-color-var-text-tertiary-12pct-transparent: color-mix(
+    in srgb,
+    var(--status-dot-current-color, var(--text-tertiary)) 12%,
+    transparent
+  );
+  --component-mix-terminal-state-running-border-32pct-transparent: color-mix(
+    in srgb,
+    var(--terminal-state-running-border) 32%,
+    transparent
+  );
+  --component-mix-surface-input-98pct-white-2pct: color-mix(
+    in srgb,
+    var(--surface-input) 98%,
+    white 2%
+  );
+  --component-rgba-120-215-178-0-08: rgba(120, 215, 178, 0.08);
+  --component-rgba-108-182-255-0-1: rgba(108, 182, 255, 0.1);
+  --component-rgba-17-24-31-0-96: rgba(17, 24, 31, 0.96);
+  --component-rgba-10-16-20-0-98: rgba(10, 16, 20, 0.98);
+  --component-mix-text-tertiary-80pct-status-info-fg-20pct: color-mix(
+    in srgb,
+    var(--text-tertiary) 80%,
+    var(--status-info-fg) 20%
+  );
+  --component-rgba-13-20-26-0-96: rgba(13, 20, 26, 0.96);
+  --component-rgba-8-13-18-0-98: rgba(8, 13, 18, 0.98);
+  --component-rgba-17-24-31-0-98: rgba(17, 24, 31, 0.98);
+  --component-rgba-13-20-26-0-92: rgba(13, 20, 26, 0.92);
+  --component-rgba-13-20-26-0-98: rgba(13, 20, 26, 0.98);
+  --component-rgba-9-15-20-1: rgba(9, 15, 20, 1);
+  --component-mix-state-success-border-32pct-transparent: color-mix(
+    in srgb,
+    var(--state-success-border) 32%,
+    transparent
+  );
+  --component-mix-surface-hover-74pct-surface-panel-26pct: color-mix(
+    in srgb,
+    var(--surface-hover) 74%,
+    var(--surface-panel) 26%
+  );
+  --component-rgba-255-255-255-0-08: rgba(255, 255, 255, 0.08);
+  --component-rgba-108-182-255-0-22: rgba(108, 182, 255, 0.22);
+  --component-mix-surface-active-88pct-surface-page-12pct: color-mix(
+    in srgb,
+    var(--surface-active) 88%,
+    var(--surface-page) 12%
+  );
+  --component-mix-current-color-22pct-transparent: color-mix(
+    in srgb,
+    currentColor 22%,
+    transparent
+  );
+  --component-mix-current-color-12pct-transparent: color-mix(
+    in srgb,
+    currentColor 12%,
+    transparent
+  );
+  --component-mix-white-8pct-transparent: color-mix(in srgb, white 8%, transparent);
+  --component-mix-current-color-10pct-transparent: color-mix(
+    in srgb,
+    currentColor 10%,
+    transparent
+  );
+  --component-mix-current-color-16pct-transparent: color-mix(
+    in srgb,
+    currentColor 16%,
+    transparent
+  );
+  --component-mix-white-50pct-transparent: color-mix(in srgb, white 50%, transparent);
+  --component-mix-current-color-8pct-transparent: color-mix(in srgb, currentColor 8%, transparent);
+  --component-rgba-43-60-75-0-94: rgba(43, 60, 75, 0.94);
+  --component-rgba-30-44-56-0-98: rgba(30, 44, 56, 0.98);
+  --component-mix-border-subtle-72pct-status-info-fg-28pct: color-mix(
+    in srgb,
+    var(--border-subtle) 72%,
+    var(--status-info-fg) 28%
+  );
+  --component-mix-text-tertiary-84pct-status-info-fg-16pct: color-mix(
+    in srgb,
+    var(--text-tertiary) 84%,
+    var(--status-info-fg) 16%
+  );
+  --component-mix-surface-panel-82pct-surface-page-18pct: color-mix(
+    in srgb,
+    var(--surface-panel) 82%,
+    var(--surface-page) 18%
+  );
+  --component-mix-border-default-80pct-status-info-fg-20pct: color-mix(
+    in srgb,
+    var(--border-default) 80%,
+    var(--status-info-fg) 20%
+  );
+  --component-mix-surface-active-86pct-white-14pct: color-mix(
+    in srgb,
+    var(--surface-active) 86%,
+    white 14%
+  );
+  --component-mix-white-22pct-transparent: color-mix(in srgb, white 22%, transparent);
+  --component-mix-surface-panel-94pct-white-6pct: color-mix(
+    in srgb,
+    var(--surface-panel) 94%,
+    white 6%
+  );
+  --component-mix-surface-input-88pct-surface-panel-12pct: color-mix(
+    in srgb,
+    var(--surface-input) 88%,
+    var(--surface-panel) 12%
+  );
+  --component-mix-surface-input-94pct-white-6pct: color-mix(
+    in srgb,
+    var(--surface-input) 94%,
+    white 6%
+  );
+  --component-mix-surface-input-100pct-transparent: color-mix(
+    in srgb,
+    var(--surface-input) 100%,
+    transparent
+  );
+  --component-mix-surface-input-84pct-surface-page-16pct: color-mix(
+    in srgb,
+    var(--surface-input) 84%,
+    var(--surface-page) 16%
+  );
+  --component-mix-status-info-fg-16pct-white-22pct: color-mix(
+    in srgb,
+    var(--status-info-fg) 16%,
+    white 22%
+  );
+  --component-mix-session-focus-pulse-color-60pct-transparent: color-mix(
+    in srgb,
+    var(--session-focus-pulse-color) 60%,
+    transparent
+  );
+  --component-mix-session-focus-pulse-color-0pct-transparent: color-mix(
+    in srgb,
+    var(--session-focus-pulse-color) 0%,
+    transparent
+  );
+  --component-mix-session-focus-pulse-color-45pct-transparent: color-mix(
+    in srgb,
+    var(--session-focus-pulse-color) 45%,
+    transparent
+  );
+  --component-mix-surface-panel-78pct-status-info-fg-22pct: color-mix(
+    in srgb,
+    var(--surface-panel) 78%,
+    var(--status-info-fg) 22%
+  );
+  --component-mix-surface-panel-70pct-status-info-fg-30pct: color-mix(
+    in srgb,
+    var(--surface-panel) 70%,
+    var(--status-info-fg) 30%
+  );
+  --component-mix-surface-panel-88pct-transparent-12pct: color-mix(
+    in srgb,
+    var(--surface-panel) 88%,
+    transparent 12%
+  );
+  --component-mix-surface-panel-92pct-surface-hover-8pct: color-mix(
+    in srgb,
+    var(--surface-panel) 92%,
+    var(--surface-hover) 8%
+  );
+  --component-mix-status-danger-fg-10pct-surface-panel: color-mix(
+    in srgb,
+    var(--status-danger-fg) 10%,
+    var(--surface-panel)
+  );
+  --component-rgba-108-182-255-0-12: rgba(108, 182, 255, 0.12);
+  --component-mix-surface-panel-24pct-transparent: color-mix(
+    in srgb,
+    var(--surface-panel) 24%,
+    transparent
+  );
+  --component-mix-text-secondary-88pct-status-info-fg-12pct: color-mix(
+    in srgb,
+    var(--text-secondary) 88%,
+    var(--status-info-fg) 12%
+  );
+  --component-mix-status-warning-fg-36pct-border-default: color-mix(
+    in srgb,
+    var(--status-warning-fg) 36%,
+    var(--border-default)
+  );
+  --component-mix-status-warning-fg-12pct-surface-panel: color-mix(
+    in srgb,
+    var(--status-warning-fg) 12%,
+    var(--surface-panel)
+  );
+  --component-mix-status-danger-fg-42pct-border-default: color-mix(
+    in srgb,
+    var(--status-danger-fg) 42%,
+    var(--border-default)
+  );
+  --component-mix-surface-page-98pct-transparent: color-mix(
+    in srgb,
+    var(--surface-page) 98%,
+    transparent
+  );
+  --component-mix-text-tertiary-24pct-transparent: color-mix(
+    in srgb,
+    var(--text-tertiary) 24%,
+    transparent
+  );
+  --component-mix-border-default-86pct-transparent: color-mix(
+    in srgb,
+    var(--border-default) 86%,
+    transparent
+  );
+  --component-mix-surface-panel-90pct-transparent: color-mix(
+    in srgb,
+    var(--surface-panel) 90%,
+    transparent
+  );
+  --component-mix-status-info-fg-46pct-border-default: color-mix(
+    in srgb,
+    var(--status-info-fg) 46%,
+    var(--border-default)
+  );
+  --component-mix-status-info-fg-34pct-border-default: color-mix(
+    in srgb,
+    var(--status-info-fg) 34%,
+    var(--border-default)
+  );
+  --component-mix-border-default-74pct-transparent: color-mix(
+    in srgb,
+    var(--border-default) 74%,
+    transparent
+  );
+  --component-mix-status-info-fg-6pct-surface-page-94pct: color-mix(
+    in srgb,
+    var(--status-info-fg) 6%,
+    var(--surface-page) 94%
+  );
+  --component-mix-surface-page-98pct-surface-panel-2pct: color-mix(
+    in srgb,
+    var(--surface-page) 98%,
+    var(--surface-panel) 2%
+  );
+  --component-mix-text-tertiary-88pct-surface-panel: color-mix(
+    in srgb,
+    var(--text-tertiary) 88%,
+    var(--surface-panel)
+  );
+  --component-mix-surface-panel-96pct-transparent: color-mix(
+    in srgb,
+    var(--surface-panel) 96%,
+    transparent
+  );
+  --component-mix-fg-white-8pct-transparent: color-mix(in srgb, var(--fg-white) 8%, transparent);
+  --component-mix-surface-page-42pct-transparent: color-mix(
+    in srgb,
+    var(--surface-page) 42%,
+    transparent
+  );
+  --component-mix-surface-panel-96pct-surface-page: color-mix(
+    in srgb,
+    var(--surface-panel) 96%,
+    var(--surface-page)
+  );
+  --component-mix-fg-white-6pct-transparent: color-mix(in srgb, var(--fg-white) 6%, transparent);
+  --component-mix-status-info-fg-52pct-transparent: color-mix(
+    in srgb,
+    var(--status-info-fg) 52%,
+    transparent
+  );
+  --component-mix-status-info-fg-86pct-surface-panel: color-mix(
+    in srgb,
+    var(--status-info-fg) 86%,
+    var(--surface-panel)
+  );
+  --component-mix-surface-page-0pct-transparent: color-mix(
+    in srgb,
+    var(--surface-page) 0%,
+    transparent
+  );
+  --component-mix-border-default-80pct-transparent: color-mix(
+    in srgb,
+    var(--border-default) 80%,
+    transparent
+  );
+  --component-mix-surface-panel-88pct-surface-page: color-mix(
+    in srgb,
+    var(--surface-panel) 88%,
+    var(--surface-page)
+  );
+  --component-mix-fg-white-5pct-transparent: color-mix(in srgb, var(--fg-white) 5%, transparent);
+  --component-mix-surface-page-20pct-transparent: color-mix(
+    in srgb,
+    var(--surface-page) 20%,
+    transparent
+  );
+  --component-mix-text-secondary-86pct-status-info-fg-14pct: color-mix(
+    in srgb,
+    var(--text-secondary) 86%,
+    var(--status-info-fg) 14%
+  );
+  --component-mix-fg-white-4pct-transparent: color-mix(in srgb, var(--fg-white) 4%, transparent);
+  --component-mix-status-info-fg-30pct-border-default: color-mix(
+    in srgb,
+    var(--status-info-fg) 30%,
+    var(--border-default)
+  );
+  --component-mix-border-default-72pct-transparent: color-mix(
+    in srgb,
+    var(--border-default) 72%,
+    transparent
+  );
+  --component-mix-surface-page-76pct-surface-panel-24pct: color-mix(
+    in srgb,
+    var(--surface-page) 76%,
+    var(--surface-panel) 24%
+  );
+  --component-mix-surface-page-92pct-surface-panel-8pct: color-mix(
+    in srgb,
+    var(--surface-page) 92%,
+    var(--surface-panel) 8%
+  );
+  --component-mix-surface-page-18pct-transparent: color-mix(
+    in srgb,
+    var(--surface-page) 18%,
+    transparent
+  );
+  --component-mix-status-info-fg-12pct-surface-page: color-mix(
+    in srgb,
+    var(--status-info-fg) 12%,
+    var(--surface-page)
+  );
+  --component-mix-surface-input-96pct-surface-page: color-mix(
+    in srgb,
+    var(--surface-input) 96%,
+    var(--surface-page)
+  );
+  --component-mix-border-default-66pct-transparent: color-mix(
+    in srgb,
+    var(--border-default) 66%,
+    transparent
+  );
+  --component-mix-border-default-62pct-status-info-fg-38pct: color-mix(
+    in srgb,
+    var(--border-default) 62%,
+    var(--status-info-fg) 38%
+  );
+  --component-mix-border-default-54pct-transparent: color-mix(
+    in srgb,
+    var(--border-default) 54%,
+    transparent
+  );
+  --component-mix-surface-panel-64pct-status-info-fg-12pct: color-mix(
+    in srgb,
+    var(--surface-panel) 64%,
+    var(--status-info-fg) 12%
+  );
+  --component-mix-status-info-fg-76pct-transparent: color-mix(
+    in srgb,
+    var(--status-info-fg) 76%,
+    transparent
+  );
+  --component-mix-status-info-fg-14pct-transparent: color-mix(
+    in srgb,
+    var(--status-info-fg) 14%,
+    transparent
+  );
+  --component-mix-surface-panel-78pct-surface-page: color-mix(
+    in srgb,
+    var(--surface-panel) 78%,
+    var(--surface-page)
+  );
+  --component-mix-surface-hover-84pct-transparent: color-mix(
+    in srgb,
+    var(--surface-hover) 84%,
+    transparent
+  );
+  --component-mix-surface-panel-88pct-transparent: color-mix(
+    in srgb,
+    var(--surface-panel) 88%,
+    transparent
+  );
+  --component-mix-surface-page-16pct-transparent: color-mix(
+    in srgb,
+    var(--surface-page) 16%,
+    transparent
+  );
+  --component-mix-status-info-fg-10pct-surface-page: color-mix(
+    in srgb,
+    var(--status-info-fg) 10%,
+    var(--surface-page)
+  );
+  --component-mix-surface-panel-92pct-surface-elevated: color-mix(
+    in srgb,
+    var(--surface-panel) 92%,
+    var(--surface-elevated)
+  );
+  --component-mix-status-info-fg-12pct-transparent: color-mix(
+    in srgb,
+    var(--status-info-fg) 12%,
+    transparent
+  );
+  --component-mix-status-info-fg-8pct-transparent: color-mix(
+    in srgb,
+    var(--status-info-fg) 8%,
+    transparent
+  );
+  --component-mix-status-danger-fg-82pct-text-primary: color-mix(
+    in srgb,
+    var(--status-danger-fg) 82%,
+    var(--text-primary)
+  );
+  --component-mix-surface-panel-76pct-transparent: color-mix(
+    in srgb,
+    var(--surface-panel) 76%,
+    transparent
+  );
+  --component-mix-status-danger-fg-8pct-transparent: color-mix(
+    in srgb,
+    var(--status-danger-fg) 8%,
+    transparent
+  );
+  --component-mix-status-info-fg-26pct-transparent: color-mix(
+    in srgb,
+    var(--status-info-fg) 26%,
+    transparent
+  );
+  --component-mix-surface-panel-80pct-transparent: color-mix(
+    in srgb,
+    var(--surface-panel) 80%,
+    transparent
+  );
+  --component-mix-surface-hover-82pct-transparent: color-mix(
+    in srgb,
+    var(--surface-hover) 82%,
+    transparent
+  );
+  --component-mix-status-info-fg-10pct-transparent: color-mix(
+    in srgb,
+    var(--status-info-fg) 10%,
+    transparent
+  );
+  --component-mix-surface-page-95pct-surface-panel-5pct: color-mix(
+    in srgb,
+    var(--surface-page) 95%,
+    var(--surface-panel) 5%
+  );
+  --component-mix-surface-panel-96pct-surface-page-4pct: color-mix(
+    in srgb,
+    var(--surface-panel) 96%,
+    var(--surface-page) 4%
+  );
+  --component-mix-surface-panel-90pct-status-info-fg-10pct: color-mix(
+    in srgb,
+    var(--surface-panel) 90%,
+    var(--status-info-fg) 10%
+  );
+  --component-mix-border-default-36pct-transparent: color-mix(
+    in srgb,
+    var(--border-default) 36%,
+    transparent
+  );
+  --component-mix-icon-surface-subtle-82pct-surface-panel: color-mix(
+    in srgb,
+    var(--icon-surface-subtle) 82%,
+    var(--surface-panel)
+  );
+  --component-mix-status-info-fg-35pct-transparent: color-mix(
+    in srgb,
+    var(--status-info-fg) 35%,
+    transparent
+  );
+  --component-mix-status-info-fg-70pct-transparent: color-mix(
+    in srgb,
+    var(--status-info-fg) 70%,
+    transparent
+  );
+  --component-mix-surface-panel-90pct-surface-page: color-mix(
+    in srgb,
+    var(--surface-panel) 90%,
+    var(--surface-page)
+  );
+  --component-mix-surface-hover-92pct-transparent: color-mix(
+    in srgb,
+    var(--surface-hover) 92%,
+    transparent
+  );
+  --component-mix-status-info-fg-44pct-transparent: color-mix(
+    in srgb,
+    var(--status-info-fg) 44%,
+    transparent
+  );
+  --component-mix-surface-hover-88pct-transparent: color-mix(
+    in srgb,
+    var(--surface-hover) 88%,
+    transparent
+  );
+  --component-mix-state-selected-bg-76pct-transparent: color-mix(
+    in srgb,
+    var(--state-selected-bg) 76%,
+    transparent
+  );
+  --component-mix-surface-hover-90pct-transparent: color-mix(
+    in srgb,
+    var(--surface-hover) 90%,
+    transparent
+  );
+  --component-mix-status-success-fg-78pct-white-22pct: color-mix(
+    in srgb,
+    var(--status-success-fg) 78%,
+    white 22%
+  );
+  --component-mix-status-warning-fg-88pct-white-12pct: color-mix(
+    in srgb,
+    var(--status-warning-fg) 88%,
+    white 12%
+  );
+  --component-mix-status-info-fg-80pct-white-20pct: color-mix(
+    in srgb,
+    var(--status-info-fg) 80%,
+    white 20%
+  );
+  --component-hex-0b1020: #0b1020;
+  --component-mix-status-info-fg-90pct-white-10pct: color-mix(
+    in srgb,
+    var(--status-info-fg) 90%,
+    white 10%
+  );
+  --component-mix-status-success-fg-88pct-white-12pct: color-mix(
+    in srgb,
+    var(--status-success-fg) 88%,
+    white 12%
+  );
+  --component-mix-status-danger-fg-82pct-white-18pct: color-mix(
+    in srgb,
+    var(--status-danger-fg) 82%,
+    white 18%
+  );
+  --component-hex-b8a6e0: #b8a6e0;
+  --component-hex-8a8a93: #8a8a93;
+  --component-mix-text-tertiary-88pct-transparent: color-mix(
+    in srgb,
+    var(--text-tertiary) 88%,
+    transparent
+  );
+  --component-mix-status-info-fg-74pct-transparent: color-mix(
+    in srgb,
+    var(--status-info-fg) 74%,
+    transparent
+  );
+  --component-mix-status-info-fg-20pct-transparent: color-mix(
+    in srgb,
+    var(--status-info-fg) 20%,
+    transparent
+  );
+  --component-mix-surface-panel-50pct-surface-page-50pct: color-mix(
+    in srgb,
+    var(--surface-panel) 50%,
+    var(--surface-page) 50%
+  );
+  --component-mix-status-info-fg-85pct-white: color-mix(in srgb, var(--status-info-fg) 85%, white);
+  --component-mix-border-focus-84pct-transparent: color-mix(
+    in srgb,
+    var(--border-focus) 84%,
+    transparent
+  );
+  --component-mix-border-focus-76pct-transparent: color-mix(
+    in srgb,
+    var(--border-focus) 76%,
+    transparent
+  );
+  /* ========== End Derived Component Visual Tokens ========== */
+
+  /* Foundation compatibility */
+  --state-focus-ring-color: #6cb6ff;
+  --state-focus-ring-offset: 2px;
+  --state-focus-ring-width: 2px;
+  --state-hover-bg: var(--surface-hover);
+  --state-hover-border: var(--border-subtle);
+  --state-hover-text: var(--text-primary);
+  --state-active-bg: var(--surface-active);
+  --state-selected-bg: color-mix(in srgb, var(--status-info-fg) 20%, var(--surface-page));
+  --state-selected-border: color-mix(in srgb, var(--status-info-fg) 52%, var(--border-default));
+  --state-selected-text: var(--text-primary);
+  --state-disabled-bg: var(--surface-disabled);
+  --state-disabled-border: var(--border-default);
+  --state-disabled-text: var(--text-disabled);
+  --state-success-bg: var(--status-success-bg);
+  --state-success-border: var(--status-success-border);
+  --state-success-text: var(--status-success-fg);
+  --state-success-icon: var(--status-success-icon);
+  --state-warning-bg: var(--status-warning-bg);
+  --state-warning-border: var(--status-warning-border);
+  --state-warning-text: var(--status-warning-fg);
+  --state-warning-icon: var(--status-warning-icon);
+  --state-error-bg: var(--status-danger-bg);
+  --state-error-border: var(--status-danger-border);
+  --state-error-text: var(--status-danger-fg);
+  --state-error-icon: var(--status-danger-icon);
+  --state-info-bg: var(--status-info-bg);
+  --state-info-border: var(--status-info-border);
+  --state-info-text: var(--status-info-fg);
+  --state-info-icon: var(--status-info-icon);
+
+  --surface-canvas: var(--surface-page);
+  --surface-panel-border: var(--border-default);
+  --surface-elevated-border: var(--border-subtle);
+  --surface-input-border: var(--border-default);
+  --surface-inverse: var(--text-primary);
+  --overlay-backdrop: color-mix(in srgb, var(--surface-page) 68%, transparent);
+  --overlay-scrim: color-mix(in srgb, var(--surface-page) 82%, transparent);
+  --overlay-panel: var(--surface-elevated);
+  --overlay-panel-border: var(--border-subtle);
+  --overlay-local-backdrop: color-mix(in srgb, var(--surface-page) 54%, transparent);
+  --overlay-local-panel: var(--surface-panel);
+  --overlay-local-panel-border: var(--border-default);
+  --surface-page-bg: var(--surface-page);
+  --surface-panel-bg: var(--surface-panel);
+  --surface-elevated-bg: var(--surface-elevated);
+  --surface-overlay-bg: color-mix(in srgb, #131b22 96%, transparent);
+  --surface-overlay-border: var(--border-default);
+  --surface-overlay-shadow: var(--shadow-lg);
+  --surface-overlay-backdrop: color-mix(in srgb, var(--surface-page) 72%, black 28%);
+  --surface-sticky-bg: color-mix(in srgb, var(--surface-page) 96%, var(--surface-panel) 4%);
+  --overlay-width-sm: 360px;
+  --overlay-width-md: 480px;
+  --overlay-width-lg: 680px;
+  --overlay-backdrop-opacity: 0.48;
+
+  --ws-backdrop-filter: var(--material-backdrop-filter);
+  --ws-content-bg: var(--workspace-content-surface);
+  --ws-level-0: transparent;
+  --ws-level-1: color-mix(
+    in srgb,
+    var(--surface-overlay-bg) calc(var(--app-surface-opacity, 0.96) * 40%),
+    transparent
+  );
+  --ws-level-2: color-mix(
+    in srgb,
+    var(--surface-overlay-bg) calc(var(--app-surface-opacity, 0.96) * 56%),
+    transparent
+  );
+  --ws-level-3: color-mix(
+    in srgb,
+    var(--surface-overlay-bg) calc(var(--app-surface-opacity, 0.96) * 72%),
+    transparent
+  );
+  --ws-level-4: color-mix(
+    in srgb,
+    var(--surface-overlay-bg) calc(var(--app-surface-opacity, 0.96) * 88%),
+    transparent
+  );
+  /* Existing compatibility tokens */
+  --diff-removed-bg: var(--status-danger-bg);
+  --diff-removed-border: var(--status-danger-border);
+  --diff-add-bg: var(--diff-added-bg);
+  --diff-modify-bg: var(--diff-modified-bg);
+  --diff-delete-bg: var(--diff-deleted-bg);
+  --text-muted: var(--text-tertiary);
+  --accent-purple: #c792ea;
 }
 
 [data-theme="mint-light"] {
-  /* ========== Backgrounds ========== */
-  --bg-page: #f3fbf7;
-  --bg-surface: #fcfffd;
-  --bg-sidebar: #edf7f2;
-  --bg-terminal: #fafbfc;
-  --bg-hover: #ddefe5;
-  --bg-active: #d1e8dc;
-  --bg-disabled: #f0f3f6;
-  --bg-input: #ffffff;
+  --ref-fg-0: #1f2328;
+  --ref-fg-1: #557067;
+  --ref-fg-2: #8b949e;
+  --ref-fg-3: #6e7681;
+  --ref-fg-inverse: #ffffff;
+  --ref-bg-0: #f3fbf7;
+  --ref-bg-1: #fcfffd;
+  --ref-bg-2: #edf7f2;
+  --ref-bg-3: #f0f3f6;
+  --ref-bg-4: #ddefe5;
+  --ref-bg-5: #d1e8dc;
+  --ref-bg-6: #c7d8cf;
+  --ref-border-0: #c7d8cf;
+  --ref-border-1: #d8e7df;
+  --ref-border-2: #b8ccc1;
+  --ref-border-focus: #158f77;
+  --ref-border-danger: #cf222e;
+  --ref-status-success: #1a7f37;
+  --ref-status-warning: #9a6700;
+  --ref-status-danger: #cf222e;
+  --ref-status-info: #148a7a;
 
-  /* ========== Borders ========== */
-  --border: #c7d8cf;
-  --border-light: #d8e7df;
-  --border-focus: #158f77;
-  --border-error: #cf222e;
+  --surface-panel: color-mix(in srgb, var(--ref-bg-1) 92%, var(--ref-bg-2));
+  --surface-elevated: color-mix(in srgb, var(--ref-bg-1) 96%, white 4%);
+  --status-success-bg: color-mix(in srgb, var(--ref-status-success) 14%, var(--surface-page));
+  --status-success-border: color-mix(in srgb, var(--ref-status-success) 36%, var(--border-default));
+  --status-warning-bg: color-mix(in srgb, var(--ref-status-warning) 14%, var(--surface-page));
+  --status-warning-border: color-mix(in srgb, var(--ref-status-warning) 36%, var(--border-default));
+  --status-danger-bg: color-mix(in srgb, var(--ref-status-danger) 14%, var(--surface-page));
+  --status-danger-border: color-mix(in srgb, var(--ref-status-danger) 36%, var(--border-default));
+  --status-info-bg: color-mix(in srgb, var(--ref-status-info) 14%, var(--surface-page));
+  --status-info-border: color-mix(in srgb, var(--ref-status-info) 36%, var(--border-default));
 
-  /* ========== Text ========== */
-  --text-primary: #1f2328;
-  --text-secondary: #557067;
-  --text-tertiary: #8b949e;
-  --text-muted: var(--text-tertiary);
-  --text-disabled: #6e7681;
-  --text-inverse: #ffffff;
-
-  /* ========== Accents ========== */
-  --accent-blue: #148a7a;
-  --accent-green: #1a7f37;
-  --accent-amber: #9a6700;
-  --accent-pink: #cf222e;
-  --accent-red: var(--color-error);
-  --accent-purple: #8250df;
-
-  /* ========== Semantic Colors ========== */
-  --color-success: #1a7f37;
-  --color-warning: #9a6700;
-  --color-error: #cf222e;
-  --color-info: #148a7a;
-  --bg-panel: color-mix(in srgb, var(--bg-surface) 92%, var(--bg-sidebar));
-  --bg-elevated: color-mix(in srgb, var(--bg-surface) 96%, white 4%);
-
-  /* ========== Foundation: State / Surface / Overlay ========== */
-  --state-focus-ring-color: var(--border-focus);
-  --state-focus-ring-offset: 2px;
-  --state-focus-ring-width: 2px;
-  --state-hover-bg: var(--bg-hover);
-  --state-hover-border: var(--border-light);
-  --state-hover-text: var(--text-primary);
-  --state-active-bg: var(--bg-active);
-  --state-selected-bg: color-mix(in srgb, var(--accent-blue) 16%, var(--bg-surface));
-  --state-selected-border: color-mix(in srgb, var(--accent-blue) 42%, var(--border));
-  --state-selected-text: var(--text-primary);
-  --state-disabled-bg: var(--bg-disabled);
-  --state-disabled-border: var(--border);
-  --state-disabled-text: var(--text-disabled);
-  --state-success-bg: color-mix(in srgb, var(--color-success) 14%, var(--bg-surface));
-  --state-success-border: color-mix(in srgb, var(--color-success) 36%, var(--border));
-  --state-success-text: var(--color-success);
-  --state-warning-bg: color-mix(in srgb, var(--color-warning) 14%, var(--bg-surface));
-  --state-warning-border: color-mix(in srgb, var(--color-warning) 36%, var(--border));
-  --state-warning-text: var(--color-warning);
-  --state-error-bg: color-mix(in srgb, var(--color-error) 14%, var(--bg-surface));
-  --state-error-border: color-mix(in srgb, var(--color-error) 36%, var(--border));
-  --state-error-text: var(--color-error);
-  --state-info-bg: color-mix(in srgb, var(--color-info) 14%, var(--bg-surface));
-  --state-info-border: color-mix(in srgb, var(--color-info) 36%, var(--border));
-  --state-info-text: var(--color-info);
-  --surface-canvas: var(--bg-page);
-  --surface-panel: var(--bg-panel);
-  --surface-panel-border: var(--border);
-  --surface-elevated: var(--bg-elevated);
-  --surface-elevated-border: var(--border-light);
-  --surface-input: var(--bg-input);
-  --surface-input-border: var(--border);
-  --surface-muted: var(--bg-sidebar);
+  --state-focus-ring-color: #158f77;
+  --state-selected-bg: color-mix(in srgb, var(--status-info-fg) 16%, var(--surface-page));
+  --state-selected-border: color-mix(in srgb, var(--status-info-fg) 42%, var(--border-default));
   --surface-inverse: var(--text-inverse);
   --overlay-backdrop: color-mix(in srgb, #0f172a 26%, transparent);
   --overlay-scrim: color-mix(in srgb, #0f172a 40%, transparent);
-  --overlay-panel: var(--bg-elevated);
-  --overlay-panel-border: var(--border-light);
   --overlay-local-backdrop: color-mix(in srgb, #0f172a 18%, transparent);
-  --overlay-local-panel: var(--bg-panel);
-  --overlay-local-panel-border: var(--border);
+  --surface-overlay-bg: color-mix(in srgb, #ffffff 96%, transparent);
+  --surface-overlay-backdrop: color-mix(in srgb, #0f172a 26%, transparent);
 
-  /* ========== Icon Tokens ========== */
-  --icon-primary: var(--text-primary);
-  --icon-secondary: var(--text-secondary);
-  --icon-muted: var(--text-tertiary);
-  --icon-accent: var(--accent-blue);
-  --icon-success: var(--color-success);
-  --icon-warning: var(--color-warning);
-  --icon-error: var(--color-error);
-  --icon-info: var(--color-info);
-
+  --icon-accent: #148a7a;
   --icon-file-folder: #1f9d7f;
   --icon-file-code: #1373a5;
   --icon-file-data: var(--accent-purple);
   --icon-file-doc: #567065;
   --icon-file-media: #c65f80;
-  --icon-file-default: var(--text-secondary);
-  --icon-git-staged: var(--color-success);
-  --icon-git-modified: var(--color-warning);
-  --icon-git-deleted: var(--color-error);
-  --icon-git-untracked: var(--color-info);
+  --icon-surface-subtle: color-mix(in srgb, var(--text-secondary) 16%, var(--surface-panel));
+  --icon-surface-accent: color-mix(in srgb, var(--icon-accent) 18%, var(--surface-panel));
+  --icon-surface-success: color-mix(in srgb, var(--status-success-fg) 18%, var(--surface-panel));
+  --icon-surface-warning: color-mix(in srgb, var(--status-warning-fg) 18%, var(--surface-panel));
+  --icon-surface-error: color-mix(in srgb, var(--status-danger-fg) 18%, var(--surface-panel));
+  --icon-surface-info: color-mix(in srgb, var(--status-info-fg) 18%, var(--surface-panel));
 
-  --icon-surface-subtle: color-mix(in srgb, var(--text-secondary) 16%, var(--bg-surface));
-  --icon-surface-accent: color-mix(in srgb, var(--accent-blue) 18%, var(--bg-surface));
-  --icon-surface-success: color-mix(in srgb, var(--color-success) 18%, var(--bg-surface));
-  --icon-surface-warning: color-mix(in srgb, var(--color-warning) 18%, var(--bg-surface));
-  --icon-surface-error: color-mix(in srgb, var(--color-error) 18%, var(--bg-surface));
-  --icon-surface-info: color-mix(in srgb, var(--color-info) 18%, var(--bg-surface));
-
-  /* ========== Shadows ========== */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.08);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1);
   --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.12);
   --shadow-xl: 0 16px 48px rgba(0, 0, 0, 0.15);
   --shadow-glow: 0 0 12px rgba(21, 143, 119, 0.18);
-
-  /* Scrollbar */
   --scrollbar-thumb: #d0d7de;
+
+  --accent-purple: #8250df;
 }
 
 [data-theme="graphite-dark"] {
-  /* ========== Backgrounds ========== */
-  --bg-page: #0d1014;
-  --bg-surface: #14171c;
-  --bg-sidebar: #101318;
-  --bg-terminal: #111317;
-  --bg-hover: #1c2026;
-  --bg-active: #252b33;
-  --bg-disabled: #161a20;
-  --bg-input: #101318;
+  --ref-fg-0: #e6e6e6;
+  --ref-fg-1: #a8b0ba;
+  --ref-fg-2: #7d8590;
+  --ref-fg-3: #5d6672;
+  --ref-fg-inverse: #111317;
+  --ref-bg-0: #0d1014;
+  --ref-bg-1: #14171c;
+  --ref-bg-2: #101318;
+  --ref-bg-3: #161a20;
+  --ref-bg-4: #1c2026;
+  --ref-bg-5: #252b33;
+  --ref-bg-6: #313842;
+  --ref-border-0: #2a3038;
+  --ref-border-1: #353c46;
+  --ref-border-2: #434c55;
+  --ref-border-focus: #9bb8ff;
+  --ref-border-danger: #ffa198;
+  --ref-status-success: #8ddb8c;
+  --ref-status-warning: #dcb86a;
+  --ref-status-danger: #ff7b72;
+  --ref-status-info: #7aa2f7;
 
-  /* ========== Borders ========== */
-  --border: #2a3038;
-  --border-light: #353c46;
-  --border-focus: #9bb8ff;
-  --border-error: #ffa198;
+  --state-focus-ring-color: #9bb8ff;
+  --surface-overlay-bg: color-mix(in srgb, #1a1f27 96%, transparent);
 
-  /* ========== Text ========== */
-  --text-primary: #e6e6e6;
-  --text-secondary: #a8b0ba;
-  --text-tertiary: #7d8590;
-  --text-muted: var(--text-tertiary);
-  --text-disabled: #5d6672;
-  --text-inverse: #111317;
-
-  /* ========== Accents ========== */
-  --accent-blue: #7aa2f7;
-  --accent-green: #8ddb8c;
-  --accent-amber: #dcb86a;
-  --accent-pink: #ff7b72;
-  --accent-red: var(--color-error);
-  --accent-purple: #c099ff;
-
-  /* ========== Semantic Colors ========== */
-  --color-success: #8ddb8c;
-  --color-warning: #dcb86a;
-  --color-error: #ff7b72;
-  --color-info: #7aa2f7;
-  --bg-panel: color-mix(in srgb, var(--bg-surface) 94%, var(--bg-page));
-  --bg-elevated: color-mix(in srgb, var(--bg-surface) 98%, white 2%);
-
-  /* ========== Foundation: State / Surface / Overlay ========== */
-  --state-focus-ring-color: var(--border-focus);
-  --state-focus-ring-offset: 2px;
-  --state-focus-ring-width: 2px;
-  --state-hover-bg: var(--bg-hover);
-  --state-hover-border: var(--border-light);
-  --state-hover-text: var(--text-primary);
-  --state-active-bg: var(--bg-active);
-  --state-selected-bg: color-mix(in srgb, var(--accent-blue) 20%, var(--bg-surface));
-  --state-selected-border: color-mix(in srgb, var(--accent-blue) 52%, var(--border));
-  --state-selected-text: var(--text-primary);
-  --state-disabled-bg: var(--bg-disabled);
-  --state-disabled-border: var(--border);
-  --state-disabled-text: var(--text-disabled);
-  --state-success-bg: color-mix(in srgb, var(--color-success) 18%, var(--bg-surface));
-  --state-success-border: color-mix(in srgb, var(--color-success) 48%, var(--border));
-  --state-success-text: var(--color-success);
-  --state-warning-bg: color-mix(in srgb, var(--color-warning) 18%, var(--bg-surface));
-  --state-warning-border: color-mix(in srgb, var(--color-warning) 48%, var(--border));
-  --state-warning-text: var(--color-warning);
-  --state-error-bg: color-mix(in srgb, var(--color-error) 18%, var(--bg-surface));
-  --state-error-border: color-mix(in srgb, var(--color-error) 48%, var(--border));
-  --state-error-text: var(--color-error);
-  --state-info-bg: color-mix(in srgb, var(--color-info) 18%, var(--bg-surface));
-  --state-info-border: color-mix(in srgb, var(--color-info) 48%, var(--border));
-  --state-info-text: var(--color-info);
-  --surface-canvas: var(--bg-page);
-  --surface-panel: var(--bg-panel);
-  --surface-panel-border: var(--border);
-  --surface-elevated: var(--bg-elevated);
-  --surface-elevated-border: var(--border-light);
-  --surface-input: var(--bg-input);
-  --surface-input-border: var(--border);
-  --surface-muted: var(--bg-sidebar);
-  --surface-inverse: var(--text-primary);
-  --overlay-backdrop: color-mix(in srgb, var(--bg-page) 68%, transparent);
-  --overlay-scrim: color-mix(in srgb, var(--bg-page) 82%, transparent);
-  --overlay-panel: var(--bg-elevated);
-  --overlay-panel-border: var(--border-light);
-  --overlay-local-backdrop: color-mix(in srgb, var(--bg-page) 54%, transparent);
-  --overlay-local-panel: var(--bg-panel);
-  --overlay-local-panel-border: var(--border);
-
-  /* ========== Icon Tokens ========== */
-  --icon-primary: var(--text-primary);
-  --icon-secondary: var(--text-secondary);
-  --icon-muted: var(--text-tertiary);
   --icon-accent: #8fb1ff;
-  --icon-success: var(--color-success);
-  --icon-warning: var(--color-warning);
-  --icon-error: var(--color-error);
-  --icon-info: var(--color-info);
-
   --icon-file-folder: #e1b86b;
-  --icon-file-code: var(--accent-blue);
-  --icon-file-data: var(--accent-purple);
   --icon-file-doc: #c5ccd6;
   --icon-file-media: #ff9f99;
-  --icon-file-default: var(--text-secondary);
-  --icon-git-staged: var(--color-success);
-  --icon-git-modified: var(--color-warning);
-  --icon-git-deleted: var(--color-error);
-  --icon-git-untracked: var(--color-info);
 
-  --icon-surface-subtle: color-mix(in srgb, var(--text-secondary) 18%, var(--bg-surface));
-  --icon-surface-accent: color-mix(in srgb, #8fb1ff 24%, var(--bg-surface));
-  --icon-surface-success: color-mix(in srgb, var(--color-success) 24%, var(--bg-surface));
-  --icon-surface-warning: color-mix(in srgb, var(--color-warning) 24%, var(--bg-surface));
-  --icon-surface-error: color-mix(in srgb, var(--color-error) 24%, var(--bg-surface));
-  --icon-surface-info: color-mix(in srgb, var(--color-info) 24%, var(--bg-surface));
-
-  /* ========== Shadows ========== */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.42);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.54);
   --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.64);
   --shadow-xl: 0 16px 48px rgba(0, 0, 0, 0.74);
   --shadow-glow: 0 0 12px rgba(122, 162, 247, 0.24);
-
-  /* Scrollbar */
   --scrollbar-thumb: #353c46;
+
+  --accent-purple: #c099ff;
 }
 
 [data-theme="graphite-light"] {
-  /* ========== Backgrounds ========== */
-  --bg-page: #e7edf3;
-  --bg-surface: #ffffff;
-  --bg-sidebar: #dfe6ee;
-  --bg-terminal: #f3f4f6;
-  --bg-hover: #d4dce5;
-  --bg-active: #c8d1dc;
-  --bg-disabled: #eef2f6;
-  --bg-input: #ffffff;
+  --ref-fg-0: #1f2933;
+  --ref-fg-1: #4d5b6a;
+  --ref-fg-2: #7b8794;
+  --ref-fg-3: #9aa5b1;
+  --ref-fg-inverse: #ffffff;
+  --ref-bg-0: #e7edf3;
+  --ref-bg-1: #ffffff;
+  --ref-bg-2: #dfe6ee;
+  --ref-bg-3: #eef2f6;
+  --ref-bg-4: #d4dce5;
+  --ref-bg-5: #c8d1dc;
+  --ref-bg-6: #b8c3cf;
+  --ref-border-0: #b8c3cf;
+  --ref-border-1: #ccd5de;
+  --ref-border-2: #aab7c6;
+  --ref-border-focus: #315fdd;
+  --ref-border-danger: #d14343;
+  --ref-status-success: #15803d;
+  --ref-status-warning: #a16207;
+  --ref-status-danger: #d14343;
+  --ref-status-info: #315fdd;
 
-  /* ========== Borders ========== */
-  --border: #b8c3cf;
-  --border-light: #ccd5de;
-  --border-focus: #315fdd;
-  --border-error: #d14343;
+  --surface-panel: color-mix(in srgb, var(--ref-bg-1) 92%, var(--ref-bg-2));
+  --surface-elevated: color-mix(in srgb, var(--ref-bg-1) 96%, white 4%);
+  --status-success-bg: color-mix(in srgb, var(--ref-status-success) 14%, var(--surface-page));
+  --status-success-border: color-mix(in srgb, var(--ref-status-success) 36%, var(--border-default));
+  --status-warning-bg: color-mix(in srgb, var(--ref-status-warning) 14%, var(--surface-page));
+  --status-warning-border: color-mix(in srgb, var(--ref-status-warning) 36%, var(--border-default));
+  --status-danger-bg: color-mix(in srgb, var(--ref-status-danger) 14%, var(--surface-page));
+  --status-danger-border: color-mix(in srgb, var(--ref-status-danger) 36%, var(--border-default));
+  --status-info-bg: color-mix(in srgb, var(--ref-status-info) 14%, var(--surface-page));
+  --status-info-border: color-mix(in srgb, var(--ref-status-info) 36%, var(--border-default));
 
-  /* ========== Text ========== */
-  --text-primary: #1f2933;
-  --text-secondary: #4d5b6a;
-  --text-tertiary: #7b8794;
-  --text-muted: var(--text-tertiary);
-  --text-disabled: #9aa5b1;
-  --text-inverse: #ffffff;
-
-  /* ========== Accents ========== */
-  --accent-blue: #315fdd;
-  --accent-green: #15803d;
-  --accent-amber: #a16207;
-  --accent-pink: #d14343;
-  --accent-red: var(--color-error);
-  --accent-purple: #7c3aed;
-
-  /* ========== Semantic Colors ========== */
-  --color-success: #15803d;
-  --color-warning: #a16207;
-  --color-error: #d14343;
-  --color-info: #315fdd;
-  --bg-panel: color-mix(in srgb, var(--bg-surface) 92%, var(--bg-sidebar));
-  --bg-elevated: color-mix(in srgb, var(--bg-surface) 96%, white 4%);
-
-  /* ========== Foundation: State / Surface / Overlay ========== */
-  --state-focus-ring-color: var(--border-focus);
-  --state-focus-ring-offset: 2px;
-  --state-focus-ring-width: 2px;
-  --state-hover-bg: var(--bg-hover);
-  --state-hover-border: var(--border-light);
-  --state-hover-text: var(--text-primary);
-  --state-active-bg: var(--bg-active);
-  --state-selected-bg: color-mix(in srgb, var(--accent-blue) 16%, var(--bg-surface));
-  --state-selected-border: color-mix(in srgb, var(--accent-blue) 42%, var(--border));
-  --state-selected-text: var(--text-primary);
-  --state-disabled-bg: var(--bg-disabled);
-  --state-disabled-border: var(--border);
-  --state-disabled-text: var(--text-disabled);
-  --state-success-bg: color-mix(in srgb, var(--color-success) 14%, var(--bg-surface));
-  --state-success-border: color-mix(in srgb, var(--color-success) 36%, var(--border));
-  --state-success-text: var(--color-success);
-  --state-warning-bg: color-mix(in srgb, var(--color-warning) 14%, var(--bg-surface));
-  --state-warning-border: color-mix(in srgb, var(--color-warning) 36%, var(--border));
-  --state-warning-text: var(--color-warning);
-  --state-error-bg: color-mix(in srgb, var(--color-error) 14%, var(--bg-surface));
-  --state-error-border: color-mix(in srgb, var(--color-error) 36%, var(--border));
-  --state-error-text: var(--color-error);
-  --state-info-bg: color-mix(in srgb, var(--color-info) 14%, var(--bg-surface));
-  --state-info-border: color-mix(in srgb, var(--color-info) 36%, var(--border));
-  --state-info-text: var(--color-info);
-  --surface-canvas: var(--bg-page);
-  --surface-panel: var(--bg-panel);
-  --surface-panel-border: var(--border);
-  --surface-elevated: var(--bg-elevated);
-  --surface-elevated-border: var(--border-light);
-  --surface-input: var(--bg-input);
-  --surface-input-border: var(--border);
-  --surface-muted: var(--bg-sidebar);
+  --state-focus-ring-color: #315fdd;
+  --state-selected-bg: color-mix(in srgb, var(--status-info-fg) 16%, var(--surface-page));
+  --state-selected-border: color-mix(in srgb, var(--status-info-fg) 42%, var(--border-default));
   --surface-inverse: var(--text-inverse);
   --overlay-backdrop: color-mix(in srgb, #0f172a 26%, transparent);
   --overlay-scrim: color-mix(in srgb, #0f172a 40%, transparent);
-  --overlay-panel: var(--bg-elevated);
-  --overlay-panel-border: var(--border-light);
   --overlay-local-backdrop: color-mix(in srgb, #0f172a 18%, transparent);
-  --overlay-local-panel: var(--bg-panel);
-  --overlay-local-panel-border: var(--border);
+  --surface-overlay-bg: color-mix(in srgb, #ffffff 96%, transparent);
+  --surface-overlay-backdrop: color-mix(in srgb, #0f172a 26%, transparent);
 
-  /* ========== Icon Tokens ========== */
-  --icon-primary: var(--text-primary);
-  --icon-secondary: var(--text-secondary);
-  --icon-muted: var(--text-tertiary);
   --icon-accent: #2f4fb8;
-  --icon-success: var(--color-success);
-  --icon-warning: var(--color-warning);
-  --icon-error: var(--color-error);
-  --icon-info: var(--color-info);
-
   --icon-file-folder: #8a6324;
-  --icon-file-code: var(--accent-blue);
-  --icon-file-data: var(--accent-purple);
   --icon-file-doc: #516171;
   --icon-file-media: #bf5a5a;
-  --icon-file-default: var(--text-secondary);
-  --icon-git-staged: var(--color-success);
-  --icon-git-modified: var(--color-warning);
-  --icon-git-deleted: var(--color-error);
-  --icon-git-untracked: var(--color-info);
+  --icon-surface-subtle: color-mix(in srgb, var(--text-secondary) 16%, var(--surface-panel));
+  --icon-surface-accent: color-mix(in srgb, var(--icon-accent) 18%, var(--surface-panel));
+  --icon-surface-success: color-mix(in srgb, var(--status-success-fg) 18%, var(--surface-panel));
+  --icon-surface-warning: color-mix(in srgb, var(--status-warning-fg) 18%, var(--surface-panel));
+  --icon-surface-error: color-mix(in srgb, var(--status-danger-fg) 18%, var(--surface-panel));
+  --icon-surface-info: color-mix(in srgb, var(--status-info-fg) 18%, var(--surface-panel));
 
-  --icon-surface-subtle: color-mix(in srgb, var(--text-secondary) 16%, var(--bg-surface));
-  --icon-surface-accent: color-mix(in srgb, #2f4fb8 18%, var(--bg-surface));
-  --icon-surface-success: color-mix(in srgb, var(--color-success) 18%, var(--bg-surface));
-  --icon-surface-warning: color-mix(in srgb, var(--color-warning) 18%, var(--bg-surface));
-  --icon-surface-error: color-mix(in srgb, var(--color-error) 18%, var(--bg-surface));
-  --icon-surface-info: color-mix(in srgb, var(--color-info) 18%, var(--bg-surface));
-
-  /* ========== Shadows ========== */
   --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.08);
   --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.1);
   --shadow-lg: 0 8px 32px rgba(15, 23, 42, 0.12);
   --shadow-xl: 0 16px 48px rgba(15, 23, 42, 0.16);
   --shadow-glow: 0 0 12px rgba(49, 95, 221, 0.16);
-
-  /* Scrollbar */
   --scrollbar-thumb: #c7d0da;
+
+  --accent-purple: #7c3aed;
 }
 
 [data-theme="nord-dark"] {
-  /* ========== Backgrounds ========== */
-  --bg-page: #242933;
-  --bg-surface: #2e3440;
-  --bg-sidebar: #282e39;
-  --bg-terminal: #2e3440;
-  --bg-hover: #384152;
-  --bg-active: #434c5e;
-  --bg-disabled: #2b313c;
-  --bg-input: #272d38;
+  --ref-fg-0: #d8dee9;
+  --ref-fg-1: #b5c1d2;
+  --ref-fg-2: #7b88a1;
+  --ref-fg-3: #616e88;
+  --ref-fg-inverse: #2e3440;
+  --ref-bg-0: #242933;
+  --ref-bg-1: #2e3440;
+  --ref-bg-2: #282e39;
+  --ref-bg-3: #2b313c;
+  --ref-bg-4: #384152;
+  --ref-bg-5: #434c5e;
+  --ref-bg-6: #4b5566;
+  --ref-border-0: #4c566a;
+  --ref-border-1: #616e88;
+  --ref-border-2: #73809c;
+  --ref-border-focus: #88c0d0;
+  --ref-border-danger: #d08770;
+  --ref-status-success: #a3be8c;
+  --ref-status-warning: #ebcb8b;
+  --ref-status-danger: #bf616a;
+  --ref-status-info: #88c0d0;
 
-  /* ========== Borders ========== */
-  --border: #4c566a;
-  --border-light: #616e88;
-  --border-focus: #88c0d0;
-  --border-error: #d08770;
+  --state-focus-ring-color: #88c0d0;
+  --surface-overlay-bg: color-mix(in srgb, #2e3440 96%, transparent);
 
-  /* ========== Text ========== */
-  --text-primary: #d8dee9;
-  --text-secondary: #b5c1d2;
-  --text-tertiary: #7b88a1;
-  --text-muted: var(--text-tertiary);
-  --text-disabled: #616e88;
-  --text-inverse: #2e3440;
-
-  /* ========== Accents ========== */
-  --accent-blue: #81a1c1;
-  --accent-green: #a3be8c;
-  --accent-amber: #ebcb8b;
-  --accent-pink: #bf616a;
-  --accent-red: var(--color-error);
-  --accent-purple: #b48ead;
-
-  /* ========== Semantic Colors ========== */
-  --color-success: #a3be8c;
-  --color-warning: #ebcb8b;
-  --color-error: #bf616a;
-  --color-info: #88c0d0;
-  --bg-panel: color-mix(in srgb, var(--bg-surface) 94%, var(--bg-page));
-  --bg-elevated: color-mix(in srgb, var(--bg-surface) 98%, white 2%);
-
-  /* ========== Foundation: State / Surface / Overlay ========== */
-  --state-focus-ring-color: var(--border-focus);
-  --state-focus-ring-offset: 2px;
-  --state-focus-ring-width: 2px;
-  --state-hover-bg: var(--bg-hover);
-  --state-hover-border: var(--border-light);
-  --state-hover-text: var(--text-primary);
-  --state-active-bg: var(--bg-active);
-  --state-selected-bg: color-mix(in srgb, var(--accent-blue) 20%, var(--bg-surface));
-  --state-selected-border: color-mix(in srgb, var(--accent-blue) 52%, var(--border));
-  --state-selected-text: var(--text-primary);
-  --state-disabled-bg: var(--bg-disabled);
-  --state-disabled-border: var(--border);
-  --state-disabled-text: var(--text-disabled);
-  --state-success-bg: color-mix(in srgb, var(--color-success) 18%, var(--bg-surface));
-  --state-success-border: color-mix(in srgb, var(--color-success) 48%, var(--border));
-  --state-success-text: var(--color-success);
-  --state-warning-bg: color-mix(in srgb, var(--color-warning) 18%, var(--bg-surface));
-  --state-warning-border: color-mix(in srgb, var(--color-warning) 48%, var(--border));
-  --state-warning-text: var(--color-warning);
-  --state-error-bg: color-mix(in srgb, var(--color-error) 18%, var(--bg-surface));
-  --state-error-border: color-mix(in srgb, var(--color-error) 48%, var(--border));
-  --state-error-text: var(--color-error);
-  --state-info-bg: color-mix(in srgb, var(--color-info) 18%, var(--bg-surface));
-  --state-info-border: color-mix(in srgb, var(--color-info) 48%, var(--border));
-  --state-info-text: var(--color-info);
-  --surface-canvas: var(--bg-page);
-  --surface-panel: var(--bg-panel);
-  --surface-panel-border: var(--border);
-  --surface-elevated: var(--bg-elevated);
-  --surface-elevated-border: var(--border-light);
-  --surface-input: var(--bg-input);
-  --surface-input-border: var(--border);
-  --surface-muted: var(--bg-sidebar);
-  --surface-inverse: var(--text-primary);
-  --overlay-backdrop: color-mix(in srgb, var(--bg-page) 68%, transparent);
-  --overlay-scrim: color-mix(in srgb, var(--bg-page) 82%, transparent);
-  --overlay-panel: var(--bg-elevated);
-  --overlay-panel-border: var(--border-light);
-  --overlay-local-backdrop: color-mix(in srgb, var(--bg-page) 54%, transparent);
-  --overlay-local-panel: var(--bg-panel);
-  --overlay-local-panel-border: var(--border);
-
-  /* ========== Icon Tokens ========== */
-  --icon-primary: var(--text-primary);
-  --icon-secondary: var(--text-secondary);
-  --icon-muted: var(--text-tertiary);
   --icon-accent: #8fbcbb;
-  --icon-success: var(--color-success);
-  --icon-warning: var(--color-warning);
-  --icon-error: var(--color-error);
-  --icon-info: var(--color-info);
-
   --icon-file-folder: #d8b76e;
-  --icon-file-code: var(--accent-blue);
-  --icon-file-data: var(--accent-purple);
   --icon-file-doc: #c7d3e0;
   --icon-file-media: #cf8c95;
-  --icon-file-default: var(--text-secondary);
-  --icon-git-staged: var(--color-success);
-  --icon-git-modified: var(--color-warning);
-  --icon-git-deleted: var(--color-error);
-  --icon-git-untracked: var(--color-info);
+  --icon-surface-subtle: color-mix(in srgb, var(--text-secondary) 20%, var(--surface-panel));
+  --icon-surface-accent: color-mix(in srgb, var(--icon-accent) 24%, var(--surface-panel));
 
-  --icon-surface-subtle: color-mix(in srgb, var(--text-secondary) 20%, var(--bg-surface));
-  --icon-surface-accent: color-mix(in srgb, #8fbcbb 24%, var(--bg-surface));
-  --icon-surface-success: color-mix(in srgb, var(--color-success) 24%, var(--bg-surface));
-  --icon-surface-warning: color-mix(in srgb, var(--color-warning) 24%, var(--bg-surface));
-  --icon-surface-error: color-mix(in srgb, var(--color-error) 24%, var(--bg-surface));
-  --icon-surface-info: color-mix(in srgb, var(--color-info) 24%, var(--bg-surface));
-
-  /* ========== Shadows ========== */
   --shadow-sm: 0 1px 2px rgba(17, 24, 39, 0.36);
   --shadow-md: 0 4px 12px rgba(17, 24, 39, 0.46);
   --shadow-lg: 0 8px 32px rgba(17, 24, 39, 0.58);
   --shadow-xl: 0 16px 48px rgba(17, 24, 39, 0.68);
   --shadow-glow: 0 0 12px rgba(136, 192, 208, 0.26);
-
-  /* Scrollbar */
   --scrollbar-thumb: #4c566a;
+
+  --accent-purple: #b48ead;
 }
 
 [data-theme="nord-light"] {
-  /* ========== Backgrounds ========== */
-  --bg-page: #e3ebf4;
-  --bg-surface: #f1f5fa;
-  --bg-sidebar: #dbe4ef;
-  --bg-terminal: #eceff4;
-  --bg-hover: #d2ddea;
-  --bg-active: #c8d4e2;
-  --bg-disabled: #edf1f6;
-  --bg-input: #f7f9fc;
+  --ref-fg-0: #2e3440;
+  --ref-fg-1: #4d5a6f;
+  --ref-fg-2: #7b88a1;
+  --ref-fg-3: #93a0b7;
+  --ref-fg-inverse: #ffffff;
+  --ref-bg-0: #e3ebf4;
+  --ref-bg-1: #f1f5fa;
+  --ref-bg-2: #dbe4ef;
+  --ref-bg-3: #edf1f6;
+  --ref-bg-4: #d2ddea;
+  --ref-bg-5: #c8d4e2;
+  --ref-bg-6: #b8c6d7;
+  --ref-border-0: #b8c6d7;
+  --ref-border-1: #cad5e2;
+  --ref-border-2: #aab9cc;
+  --ref-border-focus: #5b7fa8;
+  --ref-border-danger: #bf616a;
+  --ref-status-success: #4c7a5b;
+  --ref-status-warning: #a77f2f;
+  --ref-status-danger: #bf616a;
+  --ref-status-info: #5b7fa8;
 
-  /* ========== Borders ========== */
-  --border: #b8c6d7;
-  --border-light: #cad5e2;
-  --border-focus: #5b7fa8;
-  --border-error: #bf616a;
+  --surface-panel: color-mix(in srgb, var(--ref-bg-1) 92%, var(--ref-bg-2));
+  --surface-elevated: color-mix(in srgb, var(--ref-bg-1) 96%, white 4%);
+  --status-success-bg: color-mix(in srgb, var(--ref-status-success) 14%, var(--surface-page));
+  --status-success-border: color-mix(in srgb, var(--ref-status-success) 36%, var(--border-default));
+  --status-warning-bg: color-mix(in srgb, var(--ref-status-warning) 14%, var(--surface-page));
+  --status-warning-border: color-mix(in srgb, var(--ref-status-warning) 36%, var(--border-default));
+  --status-danger-bg: color-mix(in srgb, var(--ref-status-danger) 14%, var(--surface-page));
+  --status-danger-border: color-mix(in srgb, var(--ref-status-danger) 36%, var(--border-default));
+  --status-info-bg: color-mix(in srgb, var(--ref-status-info) 14%, var(--surface-page));
+  --status-info-border: color-mix(in srgb, var(--ref-status-info) 36%, var(--border-default));
 
-  /* ========== Text ========== */
-  --text-primary: #2e3440;
-  --text-secondary: #4d5a6f;
-  --text-tertiary: #7b88a1;
-  --text-muted: var(--text-tertiary);
-  --text-disabled: #93a0b7;
-  --text-inverse: #ffffff;
-
-  /* ========== Accents ========== */
-  --accent-blue: #5b7fa8;
-  --accent-green: #4c7a5b;
-  --accent-amber: #a77f2f;
-  --accent-pink: #bf616a;
-  --accent-red: var(--color-error);
-  --accent-purple: #8f5b9c;
-
-  /* ========== Semantic Colors ========== */
-  --color-success: #4c7a5b;
-  --color-warning: #a77f2f;
-  --color-error: #bf616a;
-  --color-info: #5b7fa8;
-  --bg-panel: color-mix(in srgb, var(--bg-surface) 92%, var(--bg-sidebar));
-  --bg-elevated: color-mix(in srgb, var(--bg-surface) 96%, white 4%);
-
-  /* ========== Foundation: State / Surface / Overlay ========== */
-  --state-focus-ring-color: var(--border-focus);
-  --state-focus-ring-offset: 2px;
-  --state-focus-ring-width: 2px;
-  --state-hover-bg: var(--bg-hover);
-  --state-hover-border: var(--border-light);
-  --state-hover-text: var(--text-primary);
-  --state-active-bg: var(--bg-active);
-  --state-selected-bg: color-mix(in srgb, var(--accent-blue) 16%, var(--bg-surface));
-  --state-selected-border: color-mix(in srgb, var(--accent-blue) 42%, var(--border));
-  --state-selected-text: var(--text-primary);
-  --state-disabled-bg: var(--bg-disabled);
-  --state-disabled-border: var(--border);
-  --state-disabled-text: var(--text-disabled);
-  --state-success-bg: color-mix(in srgb, var(--color-success) 14%, var(--bg-surface));
-  --state-success-border: color-mix(in srgb, var(--color-success) 36%, var(--border));
-  --state-success-text: var(--color-success);
-  --state-warning-bg: color-mix(in srgb, var(--color-warning) 14%, var(--bg-surface));
-  --state-warning-border: color-mix(in srgb, var(--color-warning) 36%, var(--border));
-  --state-warning-text: var(--color-warning);
-  --state-error-bg: color-mix(in srgb, var(--color-error) 14%, var(--bg-surface));
-  --state-error-border: color-mix(in srgb, var(--color-error) 36%, var(--border));
-  --state-error-text: var(--color-error);
-  --state-info-bg: color-mix(in srgb, var(--color-info) 14%, var(--bg-surface));
-  --state-info-border: color-mix(in srgb, var(--color-info) 36%, var(--border));
-  --state-info-text: var(--color-info);
-  --surface-canvas: var(--bg-page);
-  --surface-panel: var(--bg-panel);
-  --surface-panel-border: var(--border);
-  --surface-elevated: var(--bg-elevated);
-  --surface-elevated-border: var(--border-light);
-  --surface-input: var(--bg-input);
-  --surface-input-border: var(--border);
-  --surface-muted: var(--bg-sidebar);
+  --state-focus-ring-color: #5b7fa8;
+  --state-selected-bg: color-mix(in srgb, var(--status-info-fg) 16%, var(--surface-page));
+  --state-selected-border: color-mix(in srgb, var(--status-info-fg) 42%, var(--border-default));
   --surface-inverse: var(--text-inverse);
   --overlay-backdrop: color-mix(in srgb, #243447 20%, transparent);
   --overlay-scrim: color-mix(in srgb, #243447 32%, transparent);
-  --overlay-panel: var(--bg-elevated);
-  --overlay-panel-border: var(--border-light);
   --overlay-local-backdrop: color-mix(in srgb, #243447 14%, transparent);
-  --overlay-local-panel: var(--bg-panel);
-  --overlay-local-panel-border: var(--border);
+  --surface-overlay-bg: color-mix(in srgb, #ffffff 96%, transparent);
+  --surface-overlay-backdrop: color-mix(in srgb, #243447 20%, transparent);
 
-  /* ========== Icon Tokens ========== */
-  --icon-primary: var(--text-primary);
-  --icon-secondary: var(--text-secondary);
-  --icon-muted: var(--text-tertiary);
   --icon-accent: #6b8fb9;
-  --icon-success: var(--color-success);
-  --icon-warning: var(--color-warning);
-  --icon-error: var(--color-error);
-  --icon-info: var(--color-info);
-
   --icon-file-folder: #b28a49;
-  --icon-file-code: var(--accent-blue);
-  --icon-file-data: var(--accent-purple);
   --icon-file-doc: #5d6c82;
   --icon-file-media: #b96f77;
-  --icon-file-default: var(--text-secondary);
-  --icon-git-staged: var(--color-success);
-  --icon-git-modified: var(--color-warning);
-  --icon-git-deleted: var(--color-error);
-  --icon-git-untracked: var(--color-info);
+  --icon-surface-subtle: color-mix(in srgb, var(--text-secondary) 16%, var(--surface-panel));
+  --icon-surface-accent: color-mix(in srgb, var(--icon-accent) 18%, var(--surface-panel));
+  --icon-surface-success: color-mix(in srgb, var(--status-success-fg) 18%, var(--surface-panel));
+  --icon-surface-warning: color-mix(in srgb, var(--status-warning-fg) 18%, var(--surface-panel));
+  --icon-surface-error: color-mix(in srgb, var(--status-danger-fg) 18%, var(--surface-panel));
+  --icon-surface-info: color-mix(in srgb, var(--status-info-fg) 18%, var(--surface-panel));
 
-  --icon-surface-subtle: color-mix(in srgb, var(--text-secondary) 16%, var(--bg-surface));
-  --icon-surface-accent: color-mix(in srgb, #6b8fb9 18%, var(--bg-surface));
-  --icon-surface-success: color-mix(in srgb, var(--color-success) 18%, var(--bg-surface));
-  --icon-surface-warning: color-mix(in srgb, var(--color-warning) 18%, var(--bg-surface));
-  --icon-surface-error: color-mix(in srgb, var(--color-error) 18%, var(--bg-surface));
-  --icon-surface-info: color-mix(in srgb, var(--color-info) 18%, var(--bg-surface));
-
-  /* ========== Shadows ========== */
   --shadow-sm: 0 1px 2px rgba(46, 52, 64, 0.08);
   --shadow-md: 0 4px 12px rgba(46, 52, 64, 0.1);
   --shadow-lg: 0 8px 32px rgba(46, 52, 64, 0.12);
   --shadow-xl: 0 16px 48px rgba(46, 52, 64, 0.15);
   --shadow-glow: 0 0 12px rgba(91, 127, 168, 0.18);
-
-  /* Scrollbar */
   --scrollbar-thumb: #c6ceda;
+
+  --accent-purple: #8f5b9c;
 }
 
 [data-theme="hc-dark"] {
-  /* ========== Backgrounds ========== */
-  --bg-page: #000000;
-  --bg-surface: #000000;
-  --bg-sidebar: #000000;
-  --bg-terminal: #000000;
-  --bg-hover: #141414;
-  --bg-active: #264f78;
-  --bg-disabled: #0d0d0d;
-  --bg-input: #000000;
+  --ref-fg-0: #ffffff;
+  --ref-fg-1: #f0f0f0;
+  --ref-fg-2: #d0d0d0;
+  --ref-fg-3: #8f8f8f;
+  --ref-fg-inverse: #000000;
+  --ref-bg-0: #000000;
+  --ref-bg-1: #000000;
+  --ref-bg-2: #000000;
+  --ref-bg-3: #0d0d0d;
+  --ref-bg-4: #141414;
+  --ref-bg-5: #264f78;
+  --ref-bg-6: #101010;
+  --ref-border-0: #ffffff;
+  --ref-border-1: #ffff00;
+  --ref-border-2: #ffff00;
+  --ref-border-focus: #ffff00;
+  --ref-border-danger: #ff4d4d;
+  --ref-status-success: #00ff7f;
+  --ref-status-warning: #ffff66;
+  --ref-status-danger: #ff4d4d;
+  --ref-status-info: #66b3ff;
 
-  /* ========== Borders ========== */
-  --border: #ffffff;
-  --border-light: #ffff00;
-  --border-focus: #ffff00;
-  --border-error: #ff4d4d;
+  --surface-panel: color-mix(in srgb, var(--ref-bg-1) 92%, var(--ref-bg-6));
+  --surface-elevated: color-mix(in srgb, var(--ref-bg-1) 98%, white 2%);
+  --status-success-bg: color-mix(in srgb, var(--ref-status-success) 24%, var(--surface-page));
+  --status-success-border: color-mix(in srgb, var(--ref-status-success) 56%, var(--border-default));
+  --status-warning-bg: color-mix(in srgb, var(--ref-status-warning) 24%, var(--surface-page));
+  --status-warning-border: color-mix(in srgb, var(--ref-status-warning) 56%, var(--border-default));
+  --status-danger-bg: color-mix(in srgb, var(--ref-status-danger) 24%, var(--surface-page));
+  --status-danger-border: color-mix(in srgb, var(--ref-status-danger) 56%, var(--border-default));
+  --status-info-bg: color-mix(in srgb, var(--ref-status-info) 24%, var(--surface-page));
+  --status-info-border: color-mix(in srgb, var(--ref-status-info) 56%, var(--border-default));
 
-  /* ========== Text ========== */
-  --text-primary: #ffffff;
-  --text-secondary: #f0f0f0;
-  --text-tertiary: #d0d0d0;
-  --text-muted: var(--text-tertiary);
-  --text-disabled: #8f8f8f;
-  --text-inverse: #000000;
-
-  /* ========== Accents ========== */
-  --accent-blue: #66b3ff;
-  --accent-green: #00ff7f;
-  --accent-amber: #ffff66;
-  --accent-pink: #ff4d4d;
-  --accent-red: var(--color-error);
-  --accent-purple: #ff7fff;
-
-  /* ========== Semantic Colors ========== */
-  --color-success: #00ff7f;
-  --color-warning: #ffff66;
-  --color-error: #ff4d4d;
-  --color-info: #66b3ff;
-  --bg-panel: color-mix(in srgb, var(--bg-surface) 92%, #101010);
-  --bg-elevated: color-mix(in srgb, var(--bg-surface) 98%, white 2%);
-
-  /* ========== Foundation: State / Surface / Overlay ========== */
-  --state-focus-ring-color: var(--border-focus);
-  --state-focus-ring-offset: 2px;
-  --state-focus-ring-width: 2px;
-  --state-hover-bg: var(--bg-hover);
-  --state-hover-border: var(--border-light);
-  --state-hover-text: var(--text-primary);
-  --state-active-bg: var(--bg-active);
-  --state-selected-bg: color-mix(in srgb, var(--accent-blue) 24%, var(--bg-surface));
-  --state-selected-border: color-mix(in srgb, var(--accent-blue) 60%, var(--border));
-  --state-selected-text: var(--text-primary);
-  --state-disabled-bg: var(--bg-disabled);
-  --state-disabled-border: var(--border);
-  --state-disabled-text: var(--text-disabled);
-  --state-success-bg: color-mix(in srgb, var(--color-success) 24%, var(--bg-surface));
-  --state-success-border: color-mix(in srgb, var(--color-success) 56%, var(--border));
-  --state-success-text: var(--color-success);
-  --state-warning-bg: color-mix(in srgb, var(--color-warning) 24%, var(--bg-surface));
-  --state-warning-border: color-mix(in srgb, var(--color-warning) 56%, var(--border));
-  --state-warning-text: var(--color-warning);
-  --state-error-bg: color-mix(in srgb, var(--color-error) 24%, var(--bg-surface));
-  --state-error-border: color-mix(in srgb, var(--color-error) 56%, var(--border));
-  --state-error-text: var(--color-error);
-  --state-info-bg: color-mix(in srgb, var(--color-info) 24%, var(--bg-surface));
-  --state-info-border: color-mix(in srgb, var(--color-info) 56%, var(--border));
-  --state-info-text: var(--color-info);
-  --surface-canvas: var(--bg-page);
-  --surface-panel: var(--bg-panel);
-  --surface-panel-border: var(--border);
-  --surface-elevated: var(--bg-elevated);
-  --surface-elevated-border: var(--border-light);
-  --surface-input: var(--bg-input);
-  --surface-input-border: var(--border);
-  --surface-muted: var(--bg-sidebar);
-  --surface-inverse: var(--text-primary);
+  --state-focus-ring-color: #ffff00;
+  --state-selected-bg: color-mix(in srgb, var(--status-info-fg) 24%, var(--surface-page));
+  --state-selected-border: color-mix(in srgb, var(--status-info-fg) 60%, var(--border-default));
+  --surface-overlay-bg: color-mix(in srgb, #111111 96%, transparent);
+  --surface-overlay-backdrop: color-mix(in srgb, #000000 72%, transparent);
   --overlay-backdrop: color-mix(in srgb, #000000 72%, transparent);
   --overlay-scrim: color-mix(in srgb, #000000 84%, transparent);
-  --overlay-panel: var(--bg-elevated);
-  --overlay-panel-border: var(--border-light);
   --overlay-local-backdrop: color-mix(in srgb, #000000 58%, transparent);
-  --overlay-local-panel: var(--bg-panel);
-  --overlay-local-panel-border: var(--border);
 
-  /* ========== Icon Tokens ========== */
   --icon-primary: #ffffff;
   --icon-secondary: #ffff00;
   --icon-muted: #d0d0d0;
@@ -1214,7 +2267,6 @@
   --icon-warning: #ffff66;
   --icon-error: #ff4d4d;
   --icon-info: #66b3ff;
-
   --icon-file-folder: #ffff00;
   --icon-file-code: #66b3ff;
   --icon-file-data: #ff7fff;
@@ -1225,110 +2277,67 @@
   --icon-git-modified: #ffff66;
   --icon-git-deleted: #ff4d4d;
   --icon-git-untracked: #66b3ff;
+  --icon-surface-subtle: color-mix(in srgb, #ffffff 20%, var(--surface-panel));
+  --icon-surface-accent: color-mix(in srgb, #66b3ff 28%, var(--surface-panel));
+  --icon-surface-success: color-mix(in srgb, #00ff7f 28%, var(--surface-panel));
+  --icon-surface-warning: color-mix(in srgb, #ffff66 28%, var(--surface-panel));
+  --icon-surface-error: color-mix(in srgb, #ff4d4d 28%, var(--surface-panel));
+  --icon-surface-info: color-mix(in srgb, #66b3ff 28%, var(--surface-panel));
 
-  --icon-surface-subtle: color-mix(in srgb, #ffffff 20%, var(--bg-surface));
-  --icon-surface-accent: color-mix(in srgb, #66b3ff 28%, var(--bg-surface));
-  --icon-surface-success: color-mix(in srgb, #00ff7f 28%, var(--bg-surface));
-  --icon-surface-warning: color-mix(in srgb, #ffff66 28%, var(--bg-surface));
-  --icon-surface-error: color-mix(in srgb, #ff4d4d 28%, var(--bg-surface));
-  --icon-surface-info: color-mix(in srgb, #66b3ff 28%, var(--bg-surface));
-
-  /* ========== Shadows ========== */
   --shadow-sm: 0 0 0 1px rgba(255, 255, 255, 0.55);
   --shadow-md: 0 0 0 1px rgba(255, 255, 255, 0.72);
   --shadow-lg: 0 0 0 2px rgba(255, 255, 255, 0.72);
   --shadow-xl: 0 0 0 3px rgba(255, 255, 255, 0.8);
   --shadow-glow: 0 0 0 2px rgba(255, 255, 0, 0.52);
-
-  /* Scrollbar */
   --scrollbar-thumb: #ffffff;
+
+  --accent-purple: #ff7fff;
 }
 
 [data-theme="hc-light"] {
-  /* ========== Backgrounds ========== */
-  --bg-page: #ffffff;
-  --bg-surface: #ffffff;
-  --bg-sidebar: #ffffff;
-  --bg-terminal: #ffffff;
-  --bg-hover: #eef4ff;
-  --bg-active: #add6ff;
-  --bg-disabled: #f3f3f3;
-  --bg-input: #ffffff;
+  --ref-fg-0: #000000;
+  --ref-fg-1: #111111;
+  --ref-fg-2: #333333;
+  --ref-fg-3: #5c5c5c;
+  --ref-fg-inverse: #ffffff;
+  --ref-bg-0: #ffffff;
+  --ref-bg-1: #ffffff;
+  --ref-bg-2: #ffffff;
+  --ref-bg-3: #f3f3f3;
+  --ref-bg-4: #eef4ff;
+  --ref-bg-5: #add6ff;
+  --ref-bg-6: #f0f0f0;
+  --ref-border-0: #000000;
+  --ref-border-1: #5c5c5c;
+  --ref-border-2: #5c5c5c;
+  --ref-border-focus: #0037da;
+  --ref-border-danger: #b00020;
+  --ref-status-success: #006b3c;
+  --ref-status-warning: #7a5c00;
+  --ref-status-danger: #b00020;
+  --ref-status-info: #0037da;
 
-  /* ========== Borders ========== */
-  --border: #000000;
-  --border-light: #5c5c5c;
-  --border-focus: #0037da;
-  --border-error: #b00020;
+  --surface-panel: color-mix(in srgb, var(--ref-bg-1) 92%, var(--ref-bg-6));
+  --surface-elevated: color-mix(in srgb, var(--ref-bg-1) 96%, white 4%);
+  --status-success-bg: color-mix(in srgb, var(--ref-status-success) 16%, var(--surface-page));
+  --status-success-border: color-mix(in srgb, var(--ref-status-success) 38%, var(--border-default));
+  --status-warning-bg: color-mix(in srgb, var(--ref-status-warning) 16%, var(--surface-page));
+  --status-warning-border: color-mix(in srgb, var(--ref-status-warning) 38%, var(--border-default));
+  --status-danger-bg: color-mix(in srgb, var(--ref-status-danger) 16%, var(--surface-page));
+  --status-danger-border: color-mix(in srgb, var(--ref-status-danger) 38%, var(--border-default));
+  --status-info-bg: color-mix(in srgb, var(--ref-status-info) 16%, var(--surface-page));
+  --status-info-border: color-mix(in srgb, var(--ref-status-info) 38%, var(--border-default));
 
-  /* ========== Text ========== */
-  --text-primary: #000000;
-  --text-secondary: #111111;
-  --text-tertiary: #333333;
-  --text-muted: var(--text-tertiary);
-  --text-disabled: #5c5c5c;
-  --text-inverse: #ffffff;
-
-  /* ========== Accents ========== */
-  --accent-blue: #0037da;
-  --accent-green: #006b3c;
-  --accent-amber: #7a5c00;
-  --accent-pink: #b00020;
-  --accent-red: var(--color-error);
-  --accent-purple: #7a00cc;
-
-  /* ========== Semantic Colors ========== */
-  --color-success: #006b3c;
-  --color-warning: #7a5c00;
-  --color-error: #b00020;
-  --color-info: #0037da;
-  --bg-panel: color-mix(in srgb, var(--bg-surface) 92%, #f0f0f0);
-  --bg-elevated: color-mix(in srgb, var(--bg-surface) 96%, white 4%);
-
-  /* ========== Foundation: State / Surface / Overlay ========== */
-  --state-focus-ring-color: var(--border-focus);
-  --state-focus-ring-offset: 2px;
-  --state-focus-ring-width: 2px;
-  --state-hover-bg: var(--bg-hover);
-  --state-hover-border: var(--border-light);
-  --state-hover-text: var(--text-primary);
-  --state-active-bg: var(--bg-active);
-  --state-selected-bg: color-mix(in srgb, var(--accent-blue) 18%, var(--bg-surface));
-  --state-selected-border: color-mix(in srgb, var(--accent-blue) 44%, var(--border));
-  --state-selected-text: var(--text-primary);
-  --state-disabled-bg: var(--bg-disabled);
-  --state-disabled-border: var(--border-light);
-  --state-disabled-text: var(--text-disabled);
-  --state-success-bg: color-mix(in srgb, var(--color-success) 16%, var(--bg-surface));
-  --state-success-border: color-mix(in srgb, var(--color-success) 38%, var(--border));
-  --state-success-text: var(--color-success);
-  --state-warning-bg: color-mix(in srgb, var(--color-warning) 16%, var(--bg-surface));
-  --state-warning-border: color-mix(in srgb, var(--color-warning) 38%, var(--border));
-  --state-warning-text: var(--color-warning);
-  --state-error-bg: color-mix(in srgb, var(--color-error) 16%, var(--bg-surface));
-  --state-error-border: color-mix(in srgb, var(--color-error) 38%, var(--border));
-  --state-error-text: var(--color-error);
-  --state-info-bg: color-mix(in srgb, var(--color-info) 16%, var(--bg-surface));
-  --state-info-border: color-mix(in srgb, var(--color-info) 38%, var(--border));
-  --state-info-text: var(--color-info);
-  --surface-canvas: var(--bg-page);
-  --surface-panel: var(--bg-panel);
-  --surface-panel-border: var(--border);
-  --surface-elevated: var(--bg-elevated);
-  --surface-elevated-border: var(--border-light);
-  --surface-input: var(--bg-input);
-  --surface-input-border: var(--border);
-  --surface-muted: var(--bg-sidebar);
+  --state-focus-ring-color: #0037da;
+  --state-selected-bg: color-mix(in srgb, var(--status-info-fg) 18%, var(--surface-page));
+  --state-selected-border: color-mix(in srgb, var(--status-info-fg) 44%, var(--border-default));
   --surface-inverse: var(--text-inverse);
+  --surface-overlay-bg: color-mix(in srgb, #ffffff 96%, transparent);
+  --surface-overlay-backdrop: color-mix(in srgb, #000000 20%, transparent);
   --overlay-backdrop: color-mix(in srgb, #000000 20%, transparent);
   --overlay-scrim: color-mix(in srgb, #000000 30%, transparent);
-  --overlay-panel: var(--bg-elevated);
-  --overlay-panel-border: var(--border-light);
   --overlay-local-backdrop: color-mix(in srgb, #000000 14%, transparent);
-  --overlay-local-panel: var(--bg-panel);
-  --overlay-local-panel-border: var(--border);
 
-  /* ========== Icon Tokens ========== */
   --icon-primary: #000000;
   --icon-secondary: #111111;
   --icon-muted: #333333;
@@ -1337,7 +2346,6 @@
   --icon-warning: #7a5c00;
   --icon-error: #b00020;
   --icon-info: #0037da;
-
   --icon-file-folder: #7a5c00;
   --icon-file-code: #0037da;
   --icon-file-data: #7a00cc;
@@ -1348,110 +2356,100 @@
   --icon-git-modified: #7a5c00;
   --icon-git-deleted: #b00020;
   --icon-git-untracked: #0037da;
+  --icon-surface-subtle: color-mix(in srgb, #000000 12%, var(--surface-panel));
+  --icon-surface-accent: color-mix(in srgb, #0037da 18%, var(--surface-panel));
+  --icon-surface-success: color-mix(in srgb, #006b3c 18%, var(--surface-panel));
+  --icon-surface-warning: color-mix(in srgb, #7a5c00 18%, var(--surface-panel));
+  --icon-surface-error: color-mix(in srgb, #b00020 18%, var(--surface-panel));
+  --icon-surface-info: color-mix(in srgb, #0037da 18%, var(--surface-panel));
 
-  --icon-surface-subtle: color-mix(in srgb, #000000 12%, var(--bg-surface));
-  --icon-surface-accent: color-mix(in srgb, #0037da 18%, var(--bg-surface));
-  --icon-surface-success: color-mix(in srgb, #006b3c 18%, var(--bg-surface));
-  --icon-surface-warning: color-mix(in srgb, #7a5c00 18%, var(--bg-surface));
-  --icon-surface-error: color-mix(in srgb, #b00020 18%, var(--bg-surface));
-  --icon-surface-info: color-mix(in srgb, #0037da 18%, var(--bg-surface));
-
-  /* ========== Shadows ========== */
   --shadow-sm: 0 0 0 1px rgba(0, 0, 0, 0.18);
   --shadow-md: 0 0 0 1px rgba(0, 0, 0, 0.3);
   --shadow-lg: 0 0 0 2px rgba(0, 0, 0, 0.32);
   --shadow-xl: 0 0 0 3px rgba(0, 0, 0, 0.36);
   --shadow-glow: 0 0 0 2px rgba(0, 55, 218, 0.3);
-
-  /* Scrollbar */
   --scrollbar-thumb: #5c5c5c;
-}
 
-[data-theme="mint-dark"] {
-  --gap-content: var(--sp-3);
-  --radius-overlay: var(--radius-xl);
-  --state-focus-ring-color: #6cb6ff;
-  --surface-overlay-bg: color-mix(in srgb, #131b22 96%, transparent);
-}
-
-[data-theme="mint-light"] {
-  --gap-content: var(--sp-3);
-  --radius-overlay: var(--radius-xl);
-  --state-focus-ring-color: #158f77;
-  --surface-overlay-bg: color-mix(in srgb, #ffffff 96%, transparent);
-}
-
-[data-theme="graphite-dark"] {
-  --gap-content: var(--sp-3);
-  --radius-overlay: var(--radius-xl);
-  --state-focus-ring-color: #9bb8ff;
-  --surface-overlay-bg: color-mix(in srgb, #1a1f27 96%, transparent);
-}
-
-[data-theme="graphite-light"] {
-  --gap-content: var(--sp-3);
-  --radius-overlay: var(--radius-xl);
-  --state-focus-ring-color: #315fdd;
-  --surface-overlay-bg: color-mix(in srgb, #ffffff 96%, transparent);
-}
-
-[data-theme="nord-dark"] {
-  --gap-content: var(--sp-3);
-  --radius-overlay: var(--radius-xl);
-  --state-focus-ring-color: #88c0d0;
-  --surface-overlay-bg: color-mix(in srgb, #2e3440 96%, transparent);
-}
-
-[data-theme="nord-light"] {
-  --gap-content: var(--sp-3);
-  --radius-overlay: var(--radius-xl);
-  --state-focus-ring-color: #5b7fa8;
-  --surface-overlay-bg: color-mix(in srgb, #ffffff 96%, transparent);
-}
-
-[data-theme="hc-dark"] {
-  --gap-content: var(--sp-3);
-  --radius-overlay: var(--radius-xl);
-  --state-focus-ring-color: #ffff00;
-  --surface-overlay-bg: color-mix(in srgb, #111111 96%, transparent);
-}
-
-[data-theme="hc-light"] {
-  --gap-content: var(--sp-3);
-  --radius-overlay: var(--radius-xl);
-  --state-focus-ring-color: #0037da;
-  --surface-overlay-bg: color-mix(in srgb, #ffffff 96%, transparent);
+  --accent-purple: #7a00cc;
 }
 
 :root[data-appearance-glass="on"] {
-  --ws-backdrop-filter: var(--app-surface-backdrop-filter, none);
-  --ws-sidebar-bg: var(--ws-level-3);
-  --ws-activitybar-bg: var(--ws-level-2);
-  --ws-statusbar-bg: var(--ws-level-3);
-  --ws-session-bg: var(--ws-level-2);
-  --ws-session-active-bg: var(--ws-level-3);
-  --ws-session-header-bg: var(--ws-level-3);
-  --ws-terminal-shell-bg: var(--ws-level-3);
-  --ws-terminal-toolbar-bg: var(--ws-level-2);
-  --ws-terminal-tabs-bg: var(--ws-level-2);
-  --ws-editor-shell-bg: var(--ws-level-2);
-  --ws-editor-toolbar-bg: var(--ws-level-3);
+  --material-backdrop-filter: var(--app-surface-backdrop-filter, none);
+  --material-panel: color-mix(
+    in srgb,
+    var(--surface-panel) calc(var(--app-surface-opacity, 0.96) * 100%),
+    transparent
+  );
+  --material-elevated: color-mix(
+    in srgb,
+    var(--surface-elevated) calc(var(--app-surface-opacity, 0.92) * 100%),
+    transparent
+  );
+  --material-overlay: color-mix(
+    in srgb,
+    var(--surface-elevated) calc(var(--app-surface-opacity, 0.88) * 100%),
+    transparent
+  );
+  --material-local-overlay: color-mix(
+    in srgb,
+    var(--surface-panel) calc(var(--app-surface-opacity, 0.84) * 100%),
+    transparent
+  );
+  --material-shell-page: color-mix(
+    in srgb,
+    var(--surface-page) calc(var(--app-surface-opacity, 0.96) * 100%),
+    transparent
+  );
+  --material-shell-topbar: color-mix(
+    in srgb,
+    var(--surface-elevated) calc(var(--app-surface-opacity, 0.96) * 100%),
+    transparent
+  );
+  --workspace-sidebar-surface: var(--material-elevated);
+  --workspace-activitybar-surface: var(--material-panel);
+  --workspace-statusbar-surface: var(--material-elevated);
+  --workspace-session-surface: var(--material-panel);
+  --workspace-session-active-surface: var(--material-elevated);
+  --workspace-session-header-surface: var(--material-elevated);
+  --workspace-terminal-shell-surface: var(--material-elevated);
+  --workspace-terminal-toolbar-surface: var(--material-panel);
+  --workspace-terminal-tabs-surface: var(--material-panel);
+  --workspace-editor-shell-surface: var(--material-panel);
+  --workspace-editor-toolbar-surface: var(--material-elevated);
+  --workspace-editor-toolbar-border: color-mix(
+    in srgb,
+    var(--border-default) 72%,
+    var(--status-info-fg) 28%
+  );
+  --ws-backdrop-filter: var(--material-backdrop-filter);
 }
 
 :root[data-theme="hc-dark"],
 :root[data-theme="hc-light"] {
+  --material-backdrop-filter: none;
+  --material-panel: var(--surface-panel);
+  --material-elevated: var(--surface-elevated);
+  --material-overlay: var(--surface-elevated);
+  --material-local-overlay: var(--surface-panel);
+  --material-shell-page: var(--surface-page);
+  --material-shell-topbar: var(--surface-elevated);
+  --workspace-sidebar-surface: var(--surface-panel);
+  --workspace-activitybar-surface: var(--surface-panel);
+  --workspace-statusbar-surface: var(--surface-panel);
+  --workspace-session-surface: var(--surface-panel);
+  --workspace-session-active-surface: var(--surface-elevated);
+  --workspace-session-header-surface: var(--surface-elevated);
+  --workspace-terminal-shell-surface: var(--surface-panel);
+  --workspace-terminal-toolbar-surface: var(--surface-elevated);
+  --workspace-terminal-tabs-surface: var(--surface-elevated);
+  --workspace-editor-shell-surface: var(--surface-panel);
+  --workspace-editor-toolbar-surface: var(--surface-elevated);
+  --workspace-editor-toolbar-border: color-mix(
+    in srgb,
+    var(--border-default) 72%,
+    var(--status-info-fg) 28%
+  );
   --ws-backdrop-filter: none;
-  --ws-sidebar-bg: var(--surface-panel-bg);
-  --ws-activitybar-bg: var(--surface-panel-bg);
-  --ws-statusbar-bg: var(--surface-panel-bg);
-  --ws-session-bg: var(--surface-panel-bg);
-  --ws-session-active-bg: var(--surface-elevated-bg);
-  --ws-session-header-bg: var(--surface-elevated-bg);
-  --ws-terminal-shell-bg: var(--surface-panel-bg);
-  --ws-terminal-toolbar-bg: var(--surface-elevated-bg);
-  --ws-terminal-tabs-bg: var(--surface-elevated-bg);
-  --ws-editor-shell-bg: var(--surface-panel-bg);
-  --ws-editor-toolbar-bg: var(--surface-elevated-bg);
 }
 
 /* ========== Mobile / Touch Override (Phase 0) ========== */

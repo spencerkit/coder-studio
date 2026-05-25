@@ -30,8 +30,8 @@
   height: 100%;
   box-sizing: border-box;
   border-radius: var(--radius-pill);
-  background: var(--bg-hover);
-  border: 1px solid var(--border);
+  background: var(--surface-hover);
+  border: 1px solid var(--border-default);
   transition:
     background var(--duration-fast) var(--ease-out),
     border-color var(--duration-fast) var(--ease-out),
@@ -40,19 +40,18 @@
 
 .switch:hover:not(:disabled) .track,
 :global(.settings-toggle):hover:not(:disabled) .track {
-  border-color: var(--border-light);
+  border-color: var(--border-subtle);
 }
 
 .switch:focus-visible .track,
 :global(.settings-toggle):focus-visible .track {
-  border-color: var(--state-focus-ring-color);
-  box-shadow: 0 0 0 var(--state-focus-ring-width)
-    color-mix(in srgb, var(--state-focus-ring-color) 35%, transparent);
+  border-color: var(--border-focus);
+  box-shadow: var(--control-focus-ring);
 }
 
 .checked .track {
-  background: var(--accent-green);
-  border-color: var(--accent-green);
+  background: var(--status-success-fg);
+  border-color: var(--status-success-fg);
 }
 
 .thumb {
@@ -78,8 +77,8 @@
 
 .switch:disabled .track,
 :global(.settings-toggle):disabled .track {
-  background: var(--bg-disabled);
-  border-color: var(--border);
+  background: var(--surface-disabled);
+  border-color: var(--border-default);
 }
 
 .switch:disabled.checked .track,

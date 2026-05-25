@@ -28,7 +28,7 @@
   padding: var(--sp-3) var(--sp-4);
   border: 1px solid var(--surface-overlay-border);
   border-radius: var(--radius-overlay);
-  background: var(--surface-overlay-bg);
+  background: var(--material-overlay);
   box-shadow: var(--surface-overlay-shadow);
   pointer-events: auto;
   animation: slideIn var(--duration-slower) var(--ease-out);
@@ -43,7 +43,7 @@
 }
 
 .toast:hover {
-  border-color: var(--border-light);
+  border-color: var(--border-subtle);
   box-shadow: var(--shadow-xl);
 }
 
@@ -123,7 +123,7 @@
   flex-shrink: 0;
   align-self: center;
   border-radius: var(--radius-sm);
-  color: var(--accent-blue);
+  color: var(--status-info-fg);
   font-size: var(--type-body-3-size);
   line-height: var(--type-body-3-line-height);
   font-weight: var(--type-body-3-weight);
@@ -133,7 +133,7 @@
 }
 
 .action:hover {
-  background: var(--bg-hover);
+  background: var(--surface-hover);
 }
 
 .close {
@@ -151,7 +151,7 @@
 }
 
 .close:hover {
-  background: var(--bg-hover);
+  background: var(--surface-hover);
   color: var(--text-primary);
 }
 
