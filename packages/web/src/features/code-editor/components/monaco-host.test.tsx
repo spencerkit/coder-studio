@@ -28,6 +28,9 @@ const {
   mockSetJavaScriptCompilerOptions,
   mockSetJavaScriptDiagnosticsOptions,
   mockSetJavaScriptEagerModelSync,
+  mockRegisterLanguage,
+  mockSetLanguageConfiguration,
+  mockSetMonarchTokensProvider,
   mockSetTypeScriptCompilerOptions,
   mockSetTypeScriptDiagnosticsOptions,
   mockSetTypeScriptEagerModelSync,
@@ -137,6 +140,9 @@ const {
       return { dispose: vi.fn() };
     }
   );
+  const mockRegisterLanguage = vi.fn();
+  const mockSetLanguageConfiguration = vi.fn();
+  const mockSetMonarchTokensProvider = vi.fn();
   const mockSetTypeScriptCompilerOptions = vi.fn();
   const mockSetJavaScriptCompilerOptions = vi.fn();
   const mockSetTypeScriptDiagnosticsOptions = vi.fn();
@@ -172,6 +178,9 @@ const {
     mockRevealRangeInCenter,
     mockRegistryGetOrCreate,
     mockRegisterCodeEditorOpenHandler,
+    mockRegisterLanguage,
+    mockSetLanguageConfiguration,
+    mockSetMonarchTokensProvider,
     mockSetJavaScriptCompilerOptions,
     mockSetJavaScriptDiagnosticsOptions,
     mockSetJavaScriptEagerModelSync,
@@ -212,6 +221,9 @@ vi.mock("monaco-editor", () => ({
     CtrlCmd: 2048,
   },
   languages: {
+    register: mockRegisterLanguage,
+    setLanguageConfiguration: mockSetLanguageConfiguration,
+    setMonarchTokensProvider: mockSetMonarchTokensProvider,
     typescript: {
       JsxEmit: {
         ReactJSX: 4,
@@ -279,6 +291,9 @@ describe("MonacoHost", () => {
     mockRevealRangeInCenter.mockClear();
     mockRegistryGetOrCreate.mockClear();
     mockRegisterCodeEditorOpenHandler.mockClear();
+    mockRegisterLanguage.mockClear();
+    mockSetLanguageConfiguration.mockClear();
+    mockSetMonarchTokensProvider.mockClear();
     mockEditorInstance.dispose.mockClear();
     mockEditorInstance.getValue.mockClear();
     mockEditorInstance.layout.mockClear();
@@ -618,6 +633,39 @@ describe("MonacoHost", () => {
           workspaceRootPath: "/repo",
           path: "src/app.tsx",
           monacoLanguage: "typescriptreact",
+          model: workspaceModelA,
+        },
+        expect.any(Function)
+      );
+    });
+  });
+
+  it("attaches vue workspace-backed models with the vue language id", async () => {
+    render(
+      <Provider store={createStore()}>
+        <MonacoHost
+          workspaceId="ws-test"
+          workspaceRootPath="/repo"
+          filePath="src/App.vue"
+          content={'<script setup lang="ts">const count = 1;</script>'}
+        />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(mockRegistryGetOrCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          workspaceRootPath: "/repo",
+          path: "src/App.vue",
+          language: "vue",
+        })
+      );
+      expect(mockAttachLspBridgeModel).toHaveBeenCalledWith(
+        {
+          workspaceId: "ws-test",
+          workspaceRootPath: "/repo",
+          path: "src/App.vue",
+          monacoLanguage: "vue",
           model: workspaceModelA,
         },
         expect.any(Function)
