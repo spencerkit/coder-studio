@@ -553,6 +553,44 @@ describe("components.css theme-sensitive surfaces", () => {
     );
   });
 
+  it("maps shared controls onto semantic color roles", () => {
+    expect(getLastRuleBlockFrom(buttonStyles, ".primary")).toContain(
+      "background: var(--control-primary-bg)"
+    );
+    expect(getLastRuleBlockFrom(buttonStyles, ".secondary")).toContain(
+      "background: var(--control-secondary-bg)"
+    );
+    expect(getLastRuleBlockFrom(buttonStyles, ".secondary")).toContain(
+      "border-color: var(--control-secondary-border)"
+    );
+    expect(getLastRuleBlockFrom(buttonStyles, ".btn:focus-visible")).toContain(
+      "box-shadow: var(--control-focus-ring)"
+    );
+
+    expect(getLastRuleBlockFrom(iconButtonStyles, ".filled")).toContain(
+      "background: var(--control-secondary-bg)"
+    );
+    expect(getLastRuleBlockFrom(iconButtonStyles, ".filled")).toContain(
+      "border-color: var(--control-secondary-border)"
+    );
+
+    expect(getLastRuleBlockFrom(inputStyles, ".input")).toContain("background: var(--field-bg)");
+    expect(getLastRuleBlockFrom(inputStyles, ".input")).toContain(
+      "border: 1px solid var(--field-border)"
+    );
+    expect(getLastRuleBlockFrom(inputStyles, ".input:focus-visible")).toContain(
+      "box-shadow: var(--field-ring)"
+    );
+
+    expect(getLastRuleBlockFrom(textareaStyles, ".input")).toContain("background: var(--field-bg)");
+
+    expect(getLastRuleBlockFrom(segmentedControlStylesheet, ".segmentedControl")).toContain(
+      "background: var(--control-secondary-bg)"
+    );
+
+    expect(getLastRuleBlockFrom(kbdStylesheet, ".kbd")).toContain("background: var(--kbd-surface)");
+  });
+
   it("keeps desktop popovers above modal shells so picker overlays are not occluded", () => {
     expect(getLastRuleBlockFrom(modalStylesheet, ":global(.modal-overlay)")).toContain(
       "z-index: var(--z-modal-backdrop)"
@@ -2596,19 +2634,19 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(providerTabs).toContain("padding: 0");
     expect(providerTab).toContain("background: transparent");
     expect(providerTab).toContain("border-color: transparent");
-    expect(providerTabActive).toContain("background: var(--bg-active)");
+    expect(providerTabActive).toContain("background: var(--surface-active)");
     expect(providerTabActive).toContain("border-color: var(--border-focus)");
     expect(providerTabActive).not.toContain("var(--accent-blue)");
     expect(providerSubnav).toContain("background: transparent");
     expect(providerSubnav).toContain("border-bottom: 1px solid var(--border)");
-    expect(providerSubnavActive).toContain("background: var(--bg-active)");
+    expect(providerSubnavActive).toContain("background: var(--surface-active)");
     expect(providerSubnavActive).toContain("border-color: var(--border-focus)");
     expect(shortcutsTabs).toContain("background: transparent");
     expect(shortcutsTabs).toContain("border: none");
     expect(shortcutsTabs).toContain("padding: 0");
     expect(shortcutsTab).toContain("background: transparent");
     expect(shortcutsTab).toContain("border-color: transparent");
-    expect(shortcutsTabActive).toContain("background: var(--bg-active)");
+    expect(shortcutsTabActive).toContain("background: var(--surface-active)");
     expect(shortcutsTabActive).toContain("border-color: var(--border-focus)");
     expect(shortcutsTabActive).not.toContain(
       "color-mix(in srgb, var(--accent-blue) 18%, var(--bg-surface))"
@@ -2623,13 +2661,13 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(keycap).toContain("display: inline-flex");
     expect(keycap).toContain("align-items: center");
     expect(keycap).toContain("justify-content: center");
-    expect(keycap).toContain("background: color-mix");
+    expect(keycap).toContain("background: var(--kbd-surface)");
     expect(keycap).toContain("color: var(--text-primary)");
     expect(keycap).toContain("border-radius: var(--radius-control-sm)");
-    expect(hover).toContain("border-color: var(--border-focus)");
-    expect(hover).toContain("background: var(--bg-active)");
-    expect(focus).toContain("border-color: var(--state-focus-ring-color)");
-    expect(focus).toContain("box-shadow: 0 0 0 var(--state-focus-ring-width)");
+    expect(hover).toContain("border-color: var(--border-subtle)");
+    expect(hover).toContain("background: var(--surface-active)");
+    expect(focus).toContain("border-color: var(--border-focus)");
+    expect(focus).toContain("box-shadow: var(--field-ring)");
   });
 
   it("keeps shortcut settings rows aligned with editor-pane list treatment instead of standalone cards", () => {

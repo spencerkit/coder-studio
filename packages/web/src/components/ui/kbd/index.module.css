@@ -5,9 +5,9 @@
   justify-content: center;
   min-width: 80px;
   padding: var(--inset-control-block) var(--inset-control-inline);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-control-sm);
-  background: color-mix(in srgb, var(--bg-input) 82%, var(--bg-surface) 18%);
+  background: var(--kbd-surface);
   color: var(--text-primary);
   font-family: var(--font-mono);
   font-size: var(--type-body-5-size);
@@ -18,16 +18,15 @@
 
 .interactive:hover,
 :global(.shortcuts-key):hover {
-  border-color: var(--border-focus);
-  background: var(--bg-active);
+  border-color: var(--border-subtle);
+  background: var(--surface-active);
 }
 
 .kbd:focus-visible,
 :global(.shortcuts-key):focus-visible {
   outline: none;
-  border-color: var(--state-focus-ring-color);
-  box-shadow: 0 0 0 var(--state-focus-ring-width)
-    color-mix(in srgb, var(--state-focus-ring-color) 40%, transparent);
+  border-color: var(--border-focus);
+  box-shadow: var(--field-ring);
 }
 
 .sm {

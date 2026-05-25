@@ -11,8 +11,8 @@
 .segmentedControl {
   padding: var(--sp-1);
   border-radius: var(--radius-lg);
-  background: color-mix(in srgb, var(--bg-surface) 94%, var(--bg-page));
-  border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+  background: var(--control-secondary-bg);
+  border: 1px solid var(--control-secondary-border);
 }
 
 .segmentedControlOption,
@@ -45,7 +45,7 @@
 :global(.settings-provider-tab:hover),
 :global(.settings-provider-subnav-button:hover),
 :global(.shortcuts-category-tab:hover) {
-  background: var(--bg-hover);
+  background: var(--surface-hover);
   color: var(--text-primary);
 }
 
@@ -53,8 +53,8 @@
 :global(.settings-provider-tab.active),
 :global(.settings-provider-subnav-button.active),
 :global(.shortcuts-category-tab.active) {
-  background: var(--bg-active);
-  border-color: color-mix(in srgb, var(--accent-blue) 56%, var(--border));
+  background: var(--surface-active);
+  border-color: var(--state-selected-border);
   color: var(--text-primary);
 }
 
@@ -89,7 +89,7 @@
 }
 
 :global(.settings-provider-tab.active) {
-  background: var(--bg-active);
+  background: var(--surface-active);
   border-color: var(--border-focus);
 }
 
@@ -98,7 +98,7 @@
 }
 
 :global(.settings-provider-subnav-button.active) {
-  background: var(--bg-active);
+  background: var(--surface-active);
   border-color: var(--border-focus);
 }
 
@@ -116,6 +116,6 @@
 }
 
 :global(.shortcuts-category-tab.active) {
-  background: var(--bg-active);
+  background: var(--surface-active);
   border-color: var(--border-focus);
 }

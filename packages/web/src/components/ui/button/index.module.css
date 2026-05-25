@@ -23,10 +23,7 @@
 
 .btn:focus-visible,
 :global(.btn):focus-visible {
-  box-shadow:
-    0 0 0 2px var(--bg-page),
-    0 0 0 calc(var(--state-focus-ring-width) * 2)
-    color-mix(in srgb, var(--state-focus-ring-color) 35%, transparent);
+  box-shadow: var(--control-focus-ring);
 }
 
 .btn:hover:not(:disabled),
@@ -36,28 +33,28 @@
 
 .primary,
 :global(.btn-primary) {
-  background: var(--accent-blue);
-  color: var(--text-inverse);
+  background: var(--control-primary-bg);
+  color: var(--control-primary-fg);
 }
 
 .primary:hover:not(:disabled):not([aria-disabled="true"]),
 :global(.btn-primary):hover:not(:disabled):not([aria-disabled="true"]) {
-  background: color-mix(in srgb, var(--accent-blue) 84%, white 16%);
+  background: var(--control-primary-bg-hover);
 }
 
 .secondary,
 :global(.btn-default),
 :global(.btn-secondary) {
-  background: color-mix(in srgb, var(--bg-surface) 84%, var(--accent-blue) 16%);
-  border-color: color-mix(in srgb, var(--border) 70%, var(--accent-blue) 30%);
+  background: var(--control-secondary-bg);
+  border-color: var(--control-secondary-border);
   color: var(--text-primary);
 }
 
 .secondary:hover:not(:disabled):not([aria-disabled="true"]),
 :global(.btn-default):hover:not(:disabled):not([aria-disabled="true"]),
 :global(.btn-secondary):hover:not(:disabled):not([aria-disabled="true"]) {
-  background: color-mix(in srgb, var(--bg-hover) 72%, var(--accent-blue) 28%);
-  border-color: color-mix(in srgb, var(--border-light) 70%, var(--accent-blue) 30%);
+  background: var(--control-secondary-bg-hover);
+  border-color: var(--control-secondary-border-hover);
 }
 
 .ghost,
@@ -69,14 +66,14 @@
 
 .ghost:hover:not(:disabled):not([aria-disabled="true"]),
 :global(.btn-ghost):hover:not(:disabled):not([aria-disabled="true"]) {
-  background: var(--bg-hover);
+  background: var(--control-ghost-bg-hover);
   color: var(--text-primary);
 }
 
 .danger,
 :global(.btn-danger) {
-  background: var(--accent-pink);
-  color: var(--text-inverse);
+  background: var(--control-danger-bg);
+  color: var(--control-danger-fg);
 }
 
 .sm,
@@ -113,7 +110,7 @@
 .spinner {
   width: var(--sp-3);
   height: var(--sp-3);
-  border: calc(var(--sp-1) / 2) solid color-mix(in srgb, currentColor 30%, var(--bg-page) 70%);
+  border: calc(var(--sp-1) / 2) solid var(--control-spinner-track);
   border-top-color: currentColor;
   border-radius: var(--radius-full);
 }

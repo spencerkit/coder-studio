@@ -63,10 +63,7 @@
 :global(.panel-tab):focus-visible,
 :global(.worktree-tab):focus-visible {
   outline: none;
-  box-shadow:
-    0 0 0 2px var(--bg-page),
-    0 0 0 calc(var(--state-focus-ring-width) * 2)
-    color-mix(in srgb, var(--state-focus-ring-color) 35%, transparent);
+  box-shadow: var(--control-focus-ring);
 }
 
 .tabActive,
@@ -85,12 +82,12 @@
 }
 
 :global(.panel-tab:hover) {
-  color: var(--text-sec);
+  color: var(--text-secondary);
 }
 
 :global(.panel-tab.active) {
-  background: var(--blue);
-  color: var(--bg);
+  background: var(--control-primary-bg);
+  color: var(--control-primary-fg);
   font-weight: var(--type-body-6-weight);
 }
 
@@ -104,11 +101,11 @@
 
 :global(.worktree-tab:hover) {
   color: var(--text-primary);
-  background: var(--bg-hover);
+  background: var(--surface-hover);
 }
 
 :global(.worktree-tab.active) {
-  border-bottom: 2px solid var(--accent-blue);
+  border-bottom: 2px solid var(--status-info-fg);
 }
 
 .panel {

@@ -40,42 +40,20 @@ const privateRefPattern = /var\(--ref-/;
 const legacyPublicPattern = /var\(--(?:bg-|accent-|color-|ws-)/;
 
 const expectedRawColorConsumers = [
-  "src/components/ui/action-menu/index.module.css",
-  "src/components/ui/button/index.module.css",
-  "src/components/ui/datetime-picker/index.module.css",
-  "src/components/ui/icon-button/index.module.css",
-  "src/components/ui/input/index.module.css",
-  "src/components/ui/kbd/index.module.css",
   "src/components/ui/pill/index.module.css",
-  "src/components/ui/segmented-control/index.module.css",
-  "src/components/ui/spinner/index.module.css",
   "src/components/ui/status-dot/index.module.css",
-  "src/components/ui/switch/index.module.css",
-  "src/components/ui/tabs/index.module.css",
   "src/components/ui/tag/index.module.css",
-  "src/components/ui/textarea/index.module.css",
   "src/styles/components.css",
 ];
 
 const expectedRuntimeConsumers = ["src/styles/components.css"];
 
 const expectedLegacyPublicConsumers = [
-  "src/components/ui/action-menu/index.module.css",
   "src/components/ui/badge/index.module.css",
-  "src/components/ui/button/index.module.css",
-  "src/components/ui/datetime-picker/index.module.css",
-  "src/components/ui/icon-button/index.module.css",
-  "src/components/ui/input/index.module.css",
-  "src/components/ui/kbd/index.module.css",
   "src/components/ui/modal/index.module.css",
   "src/components/ui/popover/index.module.css",
-  "src/components/ui/segmented-control/index.module.css",
   "src/components/ui/select/index.module.css",
-  "src/components/ui/spinner/index.module.css",
-  "src/components/ui/switch/index.module.css",
-  "src/components/ui/tabs/index.module.css",
   "src/components/ui/tag/index.module.css",
-  "src/components/ui/textarea/index.module.css",
   "src/components/ui/toast/index.module.css",
   "src/styles/components.css",
 ];
