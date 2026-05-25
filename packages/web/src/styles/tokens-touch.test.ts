@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 const stylesheet = readFileSync(`${process.cwd()}/src/styles/tokens.css`, "utf8");
 
-function getRuleBlock(selector: string): string {
+function getRuleBlocks(selector: string): string[] {
   const blocks: string[] = [];
   const matcher = /([^{}]+)\{([^}]*)\}/g;
   let match: RegExpExecArray | null = null;
@@ -25,6 +25,12 @@ function getRuleBlock(selector: string): string {
     }
   }
 
+  return blocks;
+}
+
+function getRuleBlock(selector: string): string {
+  const blocks = getRuleBlocks(selector);
+
   return blocks.join("\n");
 }
 
@@ -38,6 +44,10 @@ function getCustomProperty(block: string, name: string): string | null {
   }
 
   return value;
+}
+
+function getDeclaredCustomProperties(block: string): string[] {
+  return [...block.matchAll(/^\s*(--[a-z0-9-]+)\s*:/gm)].map((match) => match[1]);
 }
 
 describe("tokens.css touch tokens", () => {
@@ -143,6 +153,22 @@ describe("tokens.css touch tokens", () => {
     "--ws-editor-toolbar-bg",
   ] as const;
 
+  const allowedThemeSpecificOverridePatterns = [
+    /^--ref-[a-z0-9-]+$/,
+    /^--surface-(?:panel|elevated|inverse|overlay-bg|overlay-backdrop)$/,
+    /^--status-(?:success|warning|danger|info)-(?:bg|border)$/,
+    /^--state-focus-ring-color$/,
+    /^--state-selected-(?:bg|border)$/,
+    /^--overlay-(?:backdrop|scrim|local-backdrop)$/,
+    /^--icon-(?:primary|secondary|muted|accent|success|warning|error|info)$/,
+    /^--icon-file-(?:folder|code|data|doc|media|default)$/,
+    /^--icon-git-(?:staged|modified|deleted|untracked)$/,
+    /^--icon-surface-(?:subtle|accent|success|warning|error|info)$/,
+    /^--shadow-(?:sm|md|lg|xl|glow)$/,
+    /^--scrollbar-thumb$/,
+    /^--accent-purple$/,
+  ] as const;
+
   it("defines named theme blocks for all built-in themes", () => {
     expect(stylesheet).toContain(':root,\n[data-theme="mint-dark"]');
     expect(stylesheet).toContain('[data-theme="mint-light"]');
@@ -191,6 +217,13 @@ describe("tokens.css touch tokens", () => {
     for (const token of domainLayerTokens) {
       expect(getCustomProperty(root, token), `:root should define ${token}`).not.toBeNull();
     }
+  });
+
+  it("maps diff modified tokens to the planned info status palette", () => {
+    const root = getRuleBlock(":root");
+
+    expect(root).toContain("--diff-modified-bg: var(--status-info-bg)");
+    expect(root).toContain("--diff-modified-border: var(--status-info-border)");
   });
 
   it("keeps temporary legacy aliases inside tokens.css only during migration", () => {
@@ -581,6 +614,24 @@ describe("tokens.css touch tokens", () => {
         getCustomProperty(block, "--status-dot-running-ring-2"),
         `${theme} should define --status-dot-running-ring-2`
       ).not.toBeNull();
+    }
+  });
+
+  it("limits theme-specific overrides to sanctioned public token categories", () => {
+    for (const theme of builtInThemes.filter((theme) => theme !== "mint-dark")) {
+      const blocks = getRuleBlocks(`[data-theme="${theme}"]`);
+      const themeSpecificBlock = blocks.at(-1) ?? "";
+      const disallowedOverrides = getDeclaredCustomProperties(themeSpecificBlock).filter(
+        (token) => !allowedThemeSpecificOverridePatterns.some((pattern) => pattern.test(token))
+      );
+
+      expect(blocks.length, `${theme} should have a theme-specific override block`).toBeGreaterThan(
+        1
+      );
+      expect(
+        disallowedOverrides,
+        `${theme} should only override sanctioned theme-local token categories`
+      ).toEqual([]);
     }
   });
 
