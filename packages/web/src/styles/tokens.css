@@ -1215,6 +1215,8 @@
   --material-elevated: var(--surface-elevated);
   --material-overlay: var(--surface-elevated);
   --material-local-overlay: var(--surface-panel);
+  --material-shell-page: var(--surface-page);
+  --material-shell-topbar: var(--surface-elevated);
   --workspace-sidebar-surface: var(--surface-panel);
   --workspace-activitybar-surface: var(--surface-panel);
   --workspace-statusbar-surface: var(--surface-panel);

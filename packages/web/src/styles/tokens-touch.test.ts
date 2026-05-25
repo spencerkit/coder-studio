@@ -366,6 +366,8 @@ describe("tokens.css touch tokens", () => {
 
     expect(highContrastDark).toContain("--material-backdrop-filter: none");
     expect(highContrastDark).toContain("--material-panel: var(--surface-panel)");
+    expect(highContrastDark).toContain("--material-shell-page: var(--surface-page)");
+    expect(highContrastDark).toContain("--material-shell-topbar: var(--surface-elevated)");
     expect(highContrastDark).toContain("--workspace-sidebar-surface: var(--surface-panel)");
   });
 
