@@ -36,7 +36,7 @@
   flex-direction: column;
   gap: var(--sp-1);
   padding: var(--sp-1);
-  background: var(--material-overlay);
+  background: var(--surface-overlay-bg);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);

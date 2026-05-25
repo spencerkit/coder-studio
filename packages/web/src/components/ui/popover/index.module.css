@@ -15,5 +15,5 @@
   padding: var(--inset-panel);
   border: 1px solid var(--surface-overlay-border);
   border-radius: var(--radius-overlay);
-  background: var(--material-overlay);
+  background: var(--surface-overlay-bg);
 }

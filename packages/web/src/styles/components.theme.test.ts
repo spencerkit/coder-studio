@@ -626,6 +626,9 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(getLastRuleBlockFrom(actionMenuStyles, ".itemDanger:hover")).toContain(
       "background: var(--menu-danger-hover-bg)"
     );
+    expect(getLastRuleBlockFrom(popoverStyles, ".content")).toContain(
+      "background: var(--surface-overlay-bg)"
+    );
 
     expect(getLastRuleBlockFrom(datetimePickerStyles, ".calendar")).toContain(
       "border: 1px dashed var(--border-default)"
@@ -646,7 +649,7 @@ describe("components.css theme-sensitive surfaces", () => {
       "border-bottom: 2px solid var(--state-selected-border)"
     );
     expect(getLastRuleBlockFrom(selectStylesheet, ".listbox")).toContain(
-      "background: var(--material-overlay)"
+      "background: var(--surface-overlay-bg)"
     );
     expect(getLastRuleBlockFrom(selectStylesheet, ".optionSelected")).toContain(
       "background: var(--state-hover-bg)"
