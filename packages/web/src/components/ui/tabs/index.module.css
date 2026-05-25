@@ -31,7 +31,7 @@
 }
 
 :global(.worktree-tabs) {
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-default);
 }
 
 .tab,
@@ -105,7 +105,7 @@
 }
 
 :global(.worktree-tab.active) {
-  border-bottom: 2px solid var(--status-info-fg);
+  border-bottom: 2px solid var(--state-selected-border);
 }
 
 .panel {

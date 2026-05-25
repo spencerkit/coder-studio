@@ -587,8 +587,60 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(getLastRuleBlockFrom(segmentedControlStylesheet, ".segmentedControl")).toContain(
       "background: var(--control-secondary-bg)"
     );
+    expect(
+      getLastRuleBlockFrom(segmentedControlStylesheet, ":global(.settings-provider-subnav)")
+    ).toContain("border-bottom: 1px solid var(--border-default)");
 
     expect(getLastRuleBlockFrom(kbdStylesheet, ".kbd")).toContain("background: var(--kbd-surface)");
+
+    const switchStyles = readFileSync(
+      `${process.cwd()}/src/components/ui/switch/index.module.css`,
+      "utf8"
+    );
+    expect(getLastRuleBlockFrom(switchStyles, ".checked .track")).toContain(
+      "background: var(--status-success-fg)"
+    );
+    expect(getLastRuleBlockFrom(switchStyles, ".switch:disabled.checked .track")).toContain(
+      "background: var(--state-success-bg)"
+    );
+
+    const spinnerStyles = readFileSync(
+      `${process.cwd()}/src/components/ui/spinner/index.module.css`,
+      "utf8"
+    );
+    expect(getLastRuleBlockFrom(spinnerStyles, ".spinner")).toContain(
+      "border: 2px solid var(--control-spinner-track)"
+    );
+
+    const actionMenuStyles = readFileSync(
+      `${process.cwd()}/src/components/ui/action-menu/index.module.css`,
+      "utf8"
+    );
+    expect(getLastRuleBlockFrom(actionMenuStyles, ".content")).toContain(
+      "background: var(--material-overlay)"
+    );
+    expect(getLastRuleBlockFrom(actionMenuStyles, ".itemDanger:hover")).toContain(
+      "background: var(--menu-danger-hover-bg)"
+    );
+
+    expect(getLastRuleBlockFrom(datetimePickerStyles, ".calendar")).toContain(
+      "border: 1px dashed var(--border-default)"
+    );
+    expect(getLastRuleBlockFrom(datetimePickerStyles, ".calendarWeekdays")).toContain(
+      "border-bottom: 1px solid var(--border-default)"
+    );
+    expect(getLastRuleBlockFrom(datetimePickerStyles, ".timeSection")).toContain(
+      "border-top: 1px solid var(--border-default)"
+    );
+    expect(getLastRuleBlockFrom(datetimePickerStyles, ".calendarDaySelected")).toContain(
+      "background: var(--control-primary-bg)"
+    );
+    expect(getLastRuleBlockFrom(tabsStyles, ":global(.worktree-tabs)")).toContain(
+      "border-bottom: 1px solid var(--border-default)"
+    );
+    expect(getLastRuleBlockFrom(tabsStyles, ":global(.worktree-tab.active)")).toContain(
+      "border-bottom: 2px solid var(--state-selected-border)"
+    );
   });
 
   it("keeps desktop popovers above modal shells so picker overlays are not occluded", () => {
@@ -2638,7 +2690,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(providerTabActive).toContain("border-color: var(--border-focus)");
     expect(providerTabActive).not.toContain("var(--accent-blue)");
     expect(providerSubnav).toContain("background: transparent");
-    expect(providerSubnav).toContain("border-bottom: 1px solid var(--border)");
+    expect(providerSubnav).toContain("border-bottom: 1px solid var(--border-default)");
     expect(providerSubnavActive).toContain("background: var(--surface-active)");
     expect(providerSubnavActive).toContain("border-color: var(--border-focus)");
     expect(shortcutsTabs).toContain("background: transparent");

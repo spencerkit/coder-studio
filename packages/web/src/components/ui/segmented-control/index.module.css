@@ -71,7 +71,7 @@
   width: 100%;
   margin-bottom: var(--space-panel);
   padding-bottom: var(--sp-3);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-default);
   border-radius: 0;
   background: transparent;
   border-top: none;
