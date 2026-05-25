@@ -96,12 +96,14 @@ function compareVersions(left: string, right: string): number {
 }
 
 export class UpdateService {
+  private static readonly CHECK_TIMEOUT_MS = 15_000;
   private readonly now: () => number;
   private readonly runtime: UpdateRuntimeConfig;
   private readonly updateWorkerLogFilePath: string;
   private readonly runLatestVersionLookup: (packageName: string) => Promise<string>;
   private readonly spawnDetachedWorkerImpl: UpdateServiceDeps["spawnDetachedWorker"];
   private scheduleTimer: NodeJS.Timeout | null = null;
+  private inFlightCheck: Promise<UpdateStateView> | null = null;
 
   constructor(private readonly deps: UpdateServiceDeps) {
     this.now = deps.now ?? Date.now;
@@ -158,10 +160,8 @@ export class UpdateService {
   }
 
   getStateView(): UpdateStateView {
-    return {
-      ...this.deps.updateStateRepo.get(),
-      ...this.getSupportInfo(),
-    };
+    const persisted = this.deps.updateStateRepo.get();
+    return this.composeStateView(persisted);
   }
 
   getPrepareInstallState(): UpdatePrepareInstallResponse {
@@ -185,42 +185,17 @@ export class UpdateService {
     if (current.updateStatus === "installing" || current.updateStatus === "restarting") {
       throw createBusyError("Update installation is already in progress");
     }
-    if (current.updateStatus === "checking") {
+    if (this.inFlightCheck) {
       throw createBusyError("Update check is already in progress");
     }
 
-    this.persistAndBroadcast({
-      updateStatus: "checking",
-      finishedAt: null,
-      errorSummary: null,
-    });
+    this.inFlightCheck = this.runCheckForUpdates();
+    this.broadcastStateChange();
 
     try {
-      const latestVersion = await this.runLatestVersionLookup(this.runtime.packageName);
-      const availability =
-        compareVersions(latestVersion, this.runtime.currentVersion) > 0
-          ? "update_available"
-          : "up_to_date";
-
-      return this.persistAndBroadcast({
-        currentVersion: this.runtime.currentVersion,
-        latestVersion,
-        availability,
-        updateStatus: "idle",
-        lastCheckedAt: this.now(),
-        errorSummary: null,
-        requiresManualStep: false,
-        manualCommand: null,
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return this.persistAndBroadcast({
-        currentVersion: this.runtime.currentVersion,
-        availability: "check_failed",
-        updateStatus: "idle",
-        lastCheckedAt: this.now(),
-        errorSummary: message,
-      });
+      return await this.inFlightCheck;
+    } finally {
+      this.inFlightCheck = null;
     }
   }
 
@@ -239,6 +214,9 @@ export class UpdateService {
     }
     if (state.updateStatus === "installing" || state.updateStatus === "restarting") {
       throw createBusyError("Update installation is already in progress");
+    }
+    if (this.inFlightCheck) {
+      throw createBusyError("Update check is already in progress");
     }
     const targetVersion = input.targetVersion ?? state.latestVersion;
     if (!targetVersion) {
@@ -317,6 +295,15 @@ export class UpdateService {
         errorSummary: null,
       });
     }
+    if (current.updateStatus === "checking") {
+      return this.persistAndBroadcast({
+        currentVersion: this.runtime.currentVersion,
+        availability: "check_failed",
+        updateStatus: "failed",
+        finishedAt: this.now(),
+        errorSummary: "Update check did not complete before the service restarted",
+      });
+    }
     if (current.updateStatus === "installing" || current.updateStatus === "restarting") {
       return this.persistAndBroadcast({
         currentVersion: this.runtime.currentVersion,
@@ -373,19 +360,6 @@ export class UpdateService {
     };
   }
 
-  private persistAndBroadcast(patch: Partial<UpdateStateSnapshot>): UpdateStateView {
-    const snapshot = this.deps.updateStateRepo.update((current) => ({
-      ...patch,
-      currentVersion: patch.currentVersion ?? current.currentVersion,
-    }));
-    const view: UpdateStateView = {
-      ...snapshot,
-      ...this.getSupportInfo(),
-    };
-    this.deps.broadcaster.broadcast("update.state.changed", view);
-    return view;
-  }
-
   private buildManualCommand(targetVersion: string): string {
     return [
       `${this.runtime.npmCommand ?? "npm"} install -g ${this.runtime.packageName}@${targetVersion}`,
@@ -418,5 +392,97 @@ export class UpdateService {
       },
     });
     child.unref();
+  }
+
+  private composeStateView(
+    snapshot: UpdateStateSnapshot,
+    options?: { includeInFlightCheck?: boolean }
+  ): UpdateStateView {
+    if (options?.includeInFlightCheck !== false && this.inFlightCheck) {
+      return {
+        ...snapshot,
+        ...this.getSupportInfo(),
+        updateStatus: "checking",
+        errorSummary: null,
+      };
+    }
+    return {
+      ...snapshot,
+      ...this.getSupportInfo(),
+    };
+  }
+
+  private broadcastStateChange(): void {
+    this.deps.broadcaster.broadcast("update.state.changed", this.getStateView());
+  }
+
+  private async runCheckForUpdates(): Promise<UpdateStateView> {
+    try {
+      const latestVersion = await this.withCheckTimeout(
+        this.runLatestVersionLookup(this.runtime.packageName)
+      );
+      const availability =
+        compareVersions(latestVersion, this.runtime.currentVersion) > 0
+          ? "update_available"
+          : "up_to_date";
+
+      return this.persistAndBroadcast(
+        {
+          currentVersion: this.runtime.currentVersion,
+          latestVersion,
+          availability,
+          updateStatus: "idle",
+          lastCheckedAt: this.now(),
+          errorSummary: null,
+          requiresManualStep: false,
+          manualCommand: null,
+        },
+        false
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return this.persistAndBroadcast(
+        {
+          currentVersion: this.runtime.currentVersion,
+          availability: "check_failed",
+          updateStatus: "idle",
+          lastCheckedAt: this.now(),
+          errorSummary: message,
+        },
+        false
+      );
+    }
+  }
+
+  private async withCheckTimeout<T>(promise: Promise<T>): Promise<T> {
+    let timeoutHandle: NodeJS.Timeout | null = null;
+    try {
+      return await Promise.race([
+        promise,
+        new Promise<T>((_, reject) => {
+          timeoutHandle = setTimeout(() => {
+            reject(new Error(`Update check timed out after ${UpdateService.CHECK_TIMEOUT_MS}ms`));
+          }, UpdateService.CHECK_TIMEOUT_MS);
+          timeoutHandle.unref?.();
+        }),
+      ]);
+    } finally {
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle);
+      }
+    }
+  }
+
+  private persistAndBroadcast(
+    patch: Partial<UpdateStateSnapshot>,
+    includeInFlightCheck = true
+  ): UpdateStateView {
+    const snapshot = this.deps.updateStateRepo.update((current) => ({
+      ...patch,
+      currentVersion: patch.currentVersion ?? current.currentVersion,
+    }));
+    const view = this.composeStateView(snapshot, { includeInFlightCheck });
+    this.deps.broadcaster.broadcast("update.state.changed", view);
+    return view;
   }
 }
