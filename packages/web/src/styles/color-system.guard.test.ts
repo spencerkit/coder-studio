@@ -39,7 +39,7 @@ const runtimePattern = /--app-surface-opacity|--app-surface-backdrop-filter|data
 const privateRefPattern = /var\(--ref-/;
 const legacyPublicPattern = /var\(--(?:bg-|accent-|color-|ws-)/;
 
-const expectedRawColorConsumers = ["src/styles/components.css"];
+const expectedRawColorConsumers: string[] = [];
 
 const expectedRuntimeConsumers: string[] = [];
 

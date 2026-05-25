@@ -115,9 +115,11 @@ describe("base.css viewport sizing", () => {
 describe("base.css desktop typography foundation", () => {
   it("defines the semantic and desktop layout tokens used by polished PC surfaces", () => {
     expect(tokensStylesheet).toContain("--text-muted:");
-    expect(tokensStylesheet).toContain("--bg-panel:");
-    expect(tokensStylesheet).toContain("--bg-elevated:");
-    expect(tokensStylesheet).toContain("--accent-red:");
+    expect(tokensStylesheet).toContain("--surface-panel-bg:");
+    expect(tokensStylesheet).toContain("--surface-elevated-bg:");
+    expect(tokensStylesheet).toContain("--status-danger-fg:");
+    expect(tokensStylesheet).toContain("--workspace-sidebar-surface:");
+    expect(tokensStylesheet).toContain("--material-panel:");
     expect(tokensStylesheet).toContain("--desktop-topbar-height:");
     expect(tokensStylesheet).toContain("--desktop-statusbar-height:");
     expect(tokensStylesheet).toContain("--desktop-sidebar-header-height:");
@@ -126,6 +128,9 @@ describe("base.css desktop typography foundation", () => {
     expect(tokensStylesheet).toContain("--desktop-content-max-width:");
     expect(tokensStylesheet).toContain("--desktop-modal-max-width-md:");
     expect(tokensStylesheet).toContain("--desktop-modal-max-width-lg:");
+    expect(tokensStylesheet).not.toContain("--bg-panel: var(");
+    expect(tokensStylesheet).not.toContain("--bg-elevated: var(");
+    expect(tokensStylesheet).not.toContain("--accent-red: var(");
   });
 
   it("defines semantic overlay z-index tokens for governed layers", () => {

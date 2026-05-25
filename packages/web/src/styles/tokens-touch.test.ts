@@ -138,19 +138,49 @@ describe("tokens.css touch tokens", () => {
     "--status-dot-running-ring-3",
   ] as const;
 
-  const legacyMigrationAliases = [
+  const forbiddenLegacyWorkspaceAliases = [
+    "--ws-sidebar-bg",
+    "--ws-activitybar-bg",
+    "--ws-statusbar-bg",
+    "--ws-session-bg",
+    "--ws-session-active-bg",
+    "--ws-session-header-bg",
+    "--ws-terminal-shell-bg",
+    "--ws-terminal-toolbar-bg",
+    "--ws-terminal-tabs-bg",
+    "--ws-editor-shell-bg",
+    "--ws-editor-toolbar-bg",
+  ] as const;
+
+  const forbiddenLegacyPublicAliases = [
     "--bg-page",
     "--bg-panel",
     "--bg-elevated",
+    "--bg-surface",
+    "--bg-sidebar",
+    "--bg-terminal",
+    "--bg-hover",
+    "--bg-active",
+    "--bg-disabled",
+    "--bg-input",
     "--accent-blue",
     "--accent-green",
     "--accent-amber",
+    "--accent-red",
+    "--accent-pink",
     "--color-success",
     "--color-warning",
     "--color-error",
     "--color-info",
-    "--ws-sidebar-bg",
-    "--ws-editor-toolbar-bg",
+    "--border",
+    "--border-light",
+    "--border-error",
+    ...forbiddenLegacyWorkspaceAliases,
+    "--blue",
+    "--green",
+    "--amber",
+    "--pink",
+    "--bg",
   ] as const;
 
   const allowedThemeSpecificOverridePatterns = [
@@ -226,20 +256,25 @@ describe("tokens.css touch tokens", () => {
     expect(root).toContain("--diff-modified-border: var(--status-info-border)");
   });
 
-  it("keeps temporary legacy aliases inside tokens.css only during migration", () => {
+  it("forbids the legacy public color aliases on :root", () => {
     const root = getRuleBlock(":root");
 
-    expect(root).toContain("--bg-page: var(--surface-page)");
-    expect(root).toContain("--accent-blue: var(--status-info-fg)");
-    expect(root).toContain("--color-error: var(--status-danger-fg)");
-    expect(root).toContain("--ws-sidebar-bg: var(--workspace-sidebar-surface)");
-
-    for (const token of legacyMigrationAliases) {
-      expect(
-        getCustomProperty(root, token),
-        `:root should keep migration alias ${token}`
-      ).not.toBeNull();
+    for (const token of forbiddenLegacyPublicAliases) {
+      expect(getCustomProperty(root, token), `:root should not publish ${token}`).toBeNull();
     }
+  });
+
+  it("keeps root semantic compatibility tokens on direct semantic references", () => {
+    const root = getRuleBlock(":root");
+
+    expect(root).toContain("--text-muted: var(--text-tertiary)");
+    expect(root).toContain("--surface-page-bg: var(--surface-page)");
+    expect(root).toContain("--surface-panel-bg: var(--surface-panel)");
+    expect(root).toContain("--surface-elevated-bg: var(--surface-elevated)");
+    expect(root).toContain("--ws-backdrop-filter: var(--material-backdrop-filter)");
+    expect(root).toContain("--ws-content-bg: var(--workspace-content-surface)");
+    expect(root).toContain("--diff-removed-bg: var(--status-danger-bg)");
+    expect(root).toContain("--diff-removed-border: var(--status-danger-border)");
   });
 
   it("defines the shared foundation tokens on :root without changing code font-size plumbing", () => {
@@ -259,14 +294,24 @@ describe("tokens.css touch tokens", () => {
 
     expect(root).toContain("--state-focus-ring-color: var(--border-focus)");
     expect(root).toContain("--state-focus-ring-width: 2px");
-    expect(root).toContain("--state-hover-bg-subtle: var(--bg-hover)");
-    expect(root).toContain("--state-hover-bg-strong: var(--bg-active)");
-    expect(root).toContain("--state-selected-bg:");
+    expect(root).toContain("--state-hover-bg-subtle: var(--surface-hover)");
+    expect(root).toContain("--state-hover-bg-strong: var(--surface-active)");
+    expect(root).toContain(
+      "--state-selected-bg: color-mix(in srgb, var(--status-info-fg) 12%, var(--surface-panel))"
+    );
     expect(root).toContain("--state-disabled-bg:");
-    expect(root).toContain("--state-success-bg:");
-    expect(root).toContain("--state-warning-bg:");
-    expect(root).toContain("--state-error-bg:");
-    expect(root).toContain("--state-info-bg:");
+    expect(root).toContain(
+      "--state-success-bg: color-mix(in srgb, var(--status-success-fg) 14%, transparent)"
+    );
+    expect(root).toContain(
+      "--state-warning-bg: color-mix(in srgb, var(--status-warning-fg) 14%, transparent)"
+    );
+    expect(root).toContain(
+      "--state-error-bg: color-mix(in srgb, var(--status-danger-fg) 14%, transparent)"
+    );
+    expect(root).toContain(
+      "--state-info-bg: color-mix(in srgb, var(--status-info-fg) 14%, transparent)"
+    );
 
     expect(root).toContain("--gap-hairline:");
     expect(root).toContain("--gap-micro:");
@@ -379,12 +424,13 @@ describe("tokens.css touch tokens", () => {
 
     expect(root).toContain("--ws-backdrop-filter: none");
     expect(root).toContain("--ws-content-bg: transparent");
-    expect(root).toContain("--ws-sidebar-bg: var(--surface-panel-bg)");
-    expect(root).toContain("--ws-terminal-shell-bg: var(--surface-panel-bg)");
-    expect(root).toContain("--ws-editor-toolbar-bg: var(--surface-elevated-bg)");
     expect(root).toContain("--ws-level-0: transparent");
     expect(root).toContain("--ws-level-1: color-mix(");
     expect(root).toContain("--ws-level-4: color-mix(");
+
+    for (const token of forbiddenLegacyWorkspaceAliases) {
+      expect(getCustomProperty(root, token), `:root should not publish ${token}`).toBeNull();
+    }
   });
 
   it("keeps the glass/high-contrast material outputs in the token layer", () => {
@@ -397,11 +443,25 @@ describe("tokens.css touch tokens", () => {
     expect(glassRoot).toContain("--workspace-sidebar-surface: var(--material-elevated)");
     expect(glassRoot).toContain("--workspace-terminal-shell-surface: var(--material-elevated)");
 
+    for (const token of forbiddenLegacyWorkspaceAliases) {
+      expect(
+        getCustomProperty(glassRoot, token),
+        `glass root should not publish ${token}`
+      ).toBeNull();
+    }
+
     expect(highContrastDark).toContain("--material-backdrop-filter: none");
     expect(highContrastDark).toContain("--material-panel: var(--surface-panel)");
     expect(highContrastDark).toContain("--material-shell-page: var(--surface-page)");
     expect(highContrastDark).toContain("--material-shell-topbar: var(--surface-elevated)");
     expect(highContrastDark).toContain("--workspace-sidebar-surface: var(--surface-panel)");
+
+    for (const token of forbiddenLegacyWorkspaceAliases) {
+      expect(
+        getCustomProperty(highContrastDark, token),
+        `hc dark should not publish ${token}`
+      ).toBeNull();
+    }
   });
 
   it("overrides touch tokens on narrow viewport only", () => {
