@@ -73,7 +73,7 @@ describe("useOpenWorkspaceFile", () => {
     });
   });
 
-  it("falls back to the standalone editor when no editor pane is focused", async () => {
+  it("reuses the active editor pane when focus is cleared", async () => {
     const store = createStore();
     seedWorkspace(store);
     store.set(paneLayoutAtomFamily("ws-test"), {
@@ -95,8 +95,34 @@ describe("useOpenWorkspaceFile", () => {
       });
     });
 
-    expect(store.get(activeEditorPaneIdAtomFamily("ws-test"))).toBeNull();
+    expect(store.get(activeEditorPaneIdAtomFamily("ws-test"))).toBe("root");
     expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/standalone.ts");
+  });
+
+  it("falls back to the standalone editor when no reusable editor pane exists", async () => {
+    const store = createStore();
+    seedWorkspace(store);
+    store.set(paneLayoutAtomFamily("ws-test"), {
+      id: "root",
+      type: "leaf",
+      leafKind: "draft",
+    });
+    store.set(activeEditorPaneIdAtomFamily("ws-test"), "stale-editor-pane");
+
+    const { result } = renderHook(() => useOpenWorkspaceFile("ws-test"), {
+      wrapper: wrapperFor(store),
+    });
+
+    await act(async () => {
+      await result.current.openWorkspaceFile({
+        workspaceId: "ws-test",
+        path: "src/fallback.ts",
+        source: "manual",
+      });
+    });
+
+    expect(store.get(activeEditorPaneIdAtomFamily("ws-test"))).toBeNull();
+    expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/fallback.ts");
   });
 
   it("converts a dropped draft pane into the editor target when no editor pane exists", async () => {

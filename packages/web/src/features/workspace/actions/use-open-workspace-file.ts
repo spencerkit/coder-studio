@@ -21,6 +21,7 @@ interface OpenWorkspaceFileOptions {
 
 export function useOpenWorkspaceFile(workspaceId: string) {
   const paneLayout = useAtomValue(paneLayoutAtomFamily(workspaceId));
+  const activeEditorPaneId = useAtomValue(activeEditorPaneIdAtomFamily(workspaceId));
   const focusedEditorPaneId = useAtomValue(focusedEditorPaneIdAtomFamily(workspaceId));
   const setActiveEditorPaneId = useSetAtom(activeEditorPaneIdAtomFamily(workspaceId));
   const setFocusedEditorPaneId = useSetAtom(focusedEditorPaneIdAtomFamily(workspaceId));
@@ -47,6 +48,8 @@ export function useOpenWorkspaceFile(workspaceId: string) {
         paneLayoutHasEditorPaneId(paneLayout, focusedEditorPaneId)
       ) {
         targetEditorPaneId = focusedEditorPaneId;
+      } else if (activeEditorPaneId && paneLayoutHasEditorPaneId(paneLayout, activeEditorPaneId)) {
+        targetEditorPaneId = activeEditorPaneId;
       }
 
       setActiveEditorPaneId(targetEditorPaneId);
@@ -54,6 +57,7 @@ export function useOpenWorkspaceFile(workspaceId: string) {
       await openLocation(input);
     },
     [
+      activeEditorPaneId,
       convertDraftPane,
       focusedEditorPaneId,
       openLocation,

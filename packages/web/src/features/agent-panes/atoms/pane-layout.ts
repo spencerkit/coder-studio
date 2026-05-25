@@ -90,11 +90,19 @@ function normalizePaneLayoutNode(
 
   if (layout.type === "leaf") {
     if ("leafKind" in layout && layout.leafKind) {
+      if (layout.leafKind === "session" && layout.sessionId) {
+        return {
+          id: layout.id,
+          type: "leaf",
+          leafKind: "session",
+          sessionId: layout.sessionId,
+        };
+      }
+
       return {
         id: layout.id,
         type: "leaf",
-        leafKind: layout.leafKind,
-        sessionId: layout.sessionId,
+        leafKind: layout.leafKind === "editor" ? "editor" : "draft",
       };
     }
 

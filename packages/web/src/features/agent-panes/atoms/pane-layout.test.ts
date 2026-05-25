@@ -73,4 +73,28 @@ describe("pane layout storage helpers", () => {
       ],
     });
   });
+
+  it("repairs invalid typed leaves from older persisted layouts", () => {
+    expect(
+      normalizePaneLayout({
+        id: "root",
+        type: "split",
+        direction: "horizontal",
+        children: [
+          { id: "left", type: "leaf", leafKind: "draft", sessionId: "sess-invalid" },
+          { id: "center", type: "leaf", leafKind: "editor", sessionId: "sess-invalid" },
+          { id: "right", type: "leaf", leafKind: "session" },
+        ],
+      })
+    ).toEqual({
+      id: "root",
+      type: "split",
+      direction: "horizontal",
+      children: [
+        { id: "left", type: "leaf", leafKind: "draft" },
+        { id: "center", type: "leaf", leafKind: "editor" },
+        { id: "right", type: "leaf", leafKind: "draft" },
+      ],
+    });
+  });
 });

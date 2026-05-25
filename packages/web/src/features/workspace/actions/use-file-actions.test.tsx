@@ -193,11 +193,16 @@ describe("useFileActions rename behavior", () => {
     });
   });
 
-  it("keeps explorer file opens on the standalone editor path when no editor pane is focused", async () => {
+  it("keeps explorer file opens on the standalone editor path when no reusable editor pane exists", async () => {
     const store = createStore();
     store.set(localeAtom, "en");
     store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
     store.set(fileTreeAtomFamily("ws-test"), new Map([[".", []]]));
+    store.set(paneLayoutAtomFamily("ws-test"), {
+      id: "root",
+      type: "leaf",
+      leafKind: "draft",
+    });
     store.set(activeEditorPaneIdAtomFamily("ws-test"), "pane-editor-1");
 
     const { result } = renderHook(() => useFileActions({ workspaceId: "ws-test" }), {
