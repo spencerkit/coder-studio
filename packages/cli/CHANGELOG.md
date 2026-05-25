@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.6
+
+### Patch Changes
+
+- [#62](https://github.com/spencerkit/coder-studio/pull/62) [`535c3c0`](https://github.com/spencerkit/coder-studio/commit/535c3c09cc5895e3b3b949067633f8a6bb3644f8) Thanks [@pallyoung](https://github.com/pallyoung)! - Improve desktop workspace ergonomics by adding keyboard pane navigation,
+  supporting workspace path drops into terminal sessions, and launching themed
+  PTYs with terminal-aware background environment hints.
+
 ## 0.4.5
 
 ### Patch Changes
