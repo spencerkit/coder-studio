@@ -47,7 +47,10 @@ import {
 import { appearancePersonalizationAtom, authenticatedAtom, themeAtom } from "../atoms/app-ui";
 import type { DispatchCommand } from "../atoms/connection";
 import { activeWorkspaceIdAtom } from "../atoms/workspaces";
-import { type PaneNode, paneLayoutAtomFamily } from "../features/agent-panes/atoms/pane-layout";
+import {
+  normalizePaneLayout,
+  paneLayoutAtomFamily,
+} from "../features/agent-panes/atoms/pane-layout";
 import { monacoModelRegistry } from "../features/code-editor/monaco/model-registry";
 import { useSessionNotifications } from "../features/notifications";
 import { supervisorsAtom } from "../features/supervisor/atoms";
@@ -1416,14 +1419,4 @@ export function routeEventToAtom(topic: string, payload: unknown, store: Store):
 
   // Unknown topic - log for debugging
   console.log(`Unhandled event topic: ${topic}`, payload);
-}
-
-function normalizePaneLayout(layout: Workspace["uiState"]["paneLayout"]): PaneNode {
-  return {
-    id: layout?.id ?? "root",
-    type: layout?.type ?? "leaf",
-    sessionId: layout?.sessionId,
-    direction: layout?.direction,
-    children: layout?.children?.map((child) => normalizePaneLayout(child)),
-  };
 }

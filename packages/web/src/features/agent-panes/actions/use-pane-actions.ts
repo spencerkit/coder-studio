@@ -8,7 +8,9 @@ import {
   appendSessionToWidestColumn,
   assignSessionToPane,
   closeDraftPaneById,
+  closeEditorPaneById,
   closePaneBySessionId,
+  convertDraftPaneToEditor,
   insertPaneAtEdge,
   moveSessionToDraftPane,
   removePaneBySessionId,
@@ -63,6 +65,13 @@ export function usePaneActions(workspaceId: string) {
     [applyLayout]
   );
 
+  const closeEditorPane = useCallback(
+    (paneId: string) => {
+      applyLayout((current) => closeEditorPaneById(current, paneId));
+    },
+    [applyLayout]
+  );
+
   const removeSessionPane = useCallback(
     (sessionId: string) => {
       applyLayout((current) => removePaneBySessionId(current, sessionId));
@@ -77,11 +86,19 @@ export function usePaneActions(workspaceId: string) {
     [applyLayout]
   );
 
+  const convertDraftPane = useCallback(
+    (paneId: string) => {
+      applyLayout((current) => convertDraftPaneToEditor(current, paneId));
+    },
+    [applyLayout]
+  );
+
   const replaceWithSession = useCallback(
     (sessionId: string) => {
       applyLayout({
         id: "root",
         type: "leaf",
+        leafKind: "session",
         sessionId,
       });
     },
@@ -145,7 +162,9 @@ export function usePaneActions(workspaceId: string) {
     appendSessionToMobileColumn,
     assignSession,
     closeDraftPane,
+    closeEditorPane,
     closeSessionPane,
+    convertDraftPane,
     removeSessionPane,
     replaceSession,
     replaceWithSession,

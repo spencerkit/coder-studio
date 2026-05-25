@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   clearLegacyPaneLayout,
+  defaultPaneLayout,
+  normalizePaneLayout,
   readLegacyPaneLayout,
   readPaneRatio,
   writePaneRatio,
@@ -31,5 +33,22 @@ describe("pane layout storage helpers", () => {
 
     expect(() => writePaneRatio("ws-1", "root", 0.5)).not.toThrow();
     expect(() => clearLegacyPaneLayout("ws-1")).not.toThrow();
+  });
+
+  it("uses a typed draft leaf as the default pane layout", () => {
+    expect(defaultPaneLayout).toEqual({
+      id: "root",
+      type: "leaf",
+      leafKind: "draft",
+    });
+  });
+
+  it("normalizes a legacy session leaf into a typed session leaf", () => {
+    expect(normalizePaneLayout({ id: "root", type: "leaf", sessionId: "sess_1" })).toEqual({
+      id: "root",
+      type: "leaf",
+      leafKind: "session",
+      sessionId: "sess_1",
+    });
   });
 });

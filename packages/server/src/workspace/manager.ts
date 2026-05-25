@@ -147,6 +147,7 @@ export class WorkspaceManager {
         paneLayout: {
           id: "root",
           type: "leaf",
+          leafKind: "draft",
         },
       },
     };

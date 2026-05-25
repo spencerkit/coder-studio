@@ -1,8 +1,9 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { createEvent, fireEvent, render, screen } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../../../atoms/app-ui";
 import { wsClientAtom } from "../../../../atoms/connection";
+import { WORKSPACE_PATH_DRAG_MIME } from "../../../../lib/workspace-path-drag";
 import { DraftLauncher } from "./draft-launcher";
 
 const mockUseProviderLauncher = vi.fn();
@@ -192,5 +193,44 @@ describe("DraftLauncher", () => {
       "href",
       "/diagnostics?context=session_start&workspaceId=ws-123&providerId=claude&paneId=pane-1&launchMode=assign"
     );
+  });
+
+  it("highlights file drag-over state and opens the dropped workspace file in an editor pane", async () => {
+    const store = createStore();
+    const onOpenFile = vi.fn();
+
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn(),
+      subscribe: vi.fn(() => () => {}),
+    } as never);
+
+    const { container } = render(
+      <Provider store={store}>
+        <DraftLauncher workspaceId="ws-123" paneId="pane-1" onOpenFile={onOpenFile} />
+      </Provider>
+    );
+
+    const root = container.querySelector('[data-pane-id="pane-1"]') as HTMLElement;
+    const payload = { workspaceId: "ws-123", path: "src/app.tsx", kind: "file" as const };
+
+    const dataTransfer = {
+      files: [],
+      types: [WORKSPACE_PATH_DRAG_MIME, "text/plain"],
+      items: [],
+      getData: (type: string) =>
+        type === WORKSPACE_PATH_DRAG_MIME ? JSON.stringify(payload) : payload.path,
+    };
+    const dragOver = createEvent.dragOver(root, { dataTransfer });
+    fireEvent(root, dragOver);
+
+    expect(dragOver.defaultPrevented).toBe(true);
+    expect(await screen.findByText("Open in editor")).toBeInTheDocument();
+
+    const drop = createEvent.drop(root, { dataTransfer });
+    fireEvent(root, drop);
+
+    expect(drop.defaultPrevented).toBe(true);
+    expect(onOpenFile).toHaveBeenCalledWith("pane-1", "src/app.tsx");
   });
 });

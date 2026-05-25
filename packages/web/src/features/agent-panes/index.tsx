@@ -5,20 +5,24 @@
  * Each panel contains a terminal showing agent output.
  */
 
-import { useAtomValue } from "jotai";
+import { useAtomValue, useSetAtom } from "jotai";
 import { type FC, useCallback, useEffect, useRef } from "react";
 import { activeWorkspaceAtom } from "../../atoms/workspaces";
 import { EmptyState } from "../../components/ui";
 import { useTranslation } from "../../lib/i18n";
+import { useOpenLocation } from "../code-editor/actions/use-open-location";
+import { useOpenEditorsActions } from "../workspace/actions/use-open-editors-actions";
 import type { PaneDropIntent } from "./actions/pane-drag-types";
 import { usePaneActions } from "./actions/use-pane-actions";
 import { usePaneDragController } from "./actions/use-pane-drag-controller";
 import { usePaneDragEnabled } from "./actions/use-pane-drag-enabled";
 import { useSessionActions } from "./actions/use-session-actions";
 import { useWorkspaceSessions } from "./actions/use-workspace-sessions";
+import { activeEditorPaneIdAtomFamily, focusedEditorPaneIdAtomFamily } from "./atoms/editor-panes";
 import { type PaneNode, readPaneRatio, writePaneRatio } from "./atoms/pane-layout";
-import { collectSessionIds } from "./pane-layout-tree";
+import { collectSessionIds, paneLayoutHasEditorPaneId } from "./pane-layout-tree";
 import { DraftLauncher } from "./views/shared/draft-launcher";
+import { EditorPaneCard } from "./views/shared/editor-pane-card";
 import { PaneLayout } from "./views/shared/pane-layout";
 import { SessionCard } from "./views/shared/session-card";
 
@@ -41,6 +45,14 @@ const emptyStateTitleStyle = {
   fontWeight: "var(--font-normal)",
 };
 
+function isDraftLeaf(node: PaneLeafNode): boolean {
+  return node.leafKind === "draft" || (!node.leafKind && !node.sessionId);
+}
+
+function isEditorLeaf(node: PaneLeafNode): boolean {
+  return node.leafKind === "editor";
+}
+
 export const AgentPanes: FC<AgentPanesProps> = ({ hydrateSessions = true }) => {
   const t = useTranslation();
   const paneDragEnabled = usePaneDragEnabled();
@@ -50,12 +62,63 @@ export const AgentPanes: FC<AgentPanesProps> = ({ hydrateSessions = true }) => {
   });
   const paneActions = usePaneActions(workspaceId);
   const sessionActions = useSessionActions();
+  const { openLocation } = useOpenLocation(workspaceId);
+  const { closeAll } = useOpenEditorsActions(workspaceId, {
+    workspaceRootPath: workspace?.path,
+  });
+  const setActiveEditorPaneId = useSetAtom(activeEditorPaneIdAtomFamily(workspaceId));
+  const setFocusedEditorPaneId = useSetAtom(focusedEditorPaneIdAtomFamily(workspaceId));
   const { insertSessionPaneAtEdge, moveSessionToDraft, swapPaneSessions } = paneActions;
   const hasLayoutSessions = collectSessionIds(paneLayout).length > 0;
   const shouldShowStandaloneDraftLauncher =
     sessions.length === 0 &&
     (hasLayoutSessions ||
-      (paneLayout.type === "leaf" && !paneLayout.sessionId && paneLayout.id === "root"));
+      (paneLayout.type === "leaf" && isDraftLeaf(paneLayout) && paneLayout.id === "root"));
+
+  const handleOpenFile = useCallback(
+    (paneId: string, path: string) => {
+      paneActions.convertDraftPane(paneId);
+      setActiveEditorPaneId(paneId);
+      setFocusedEditorPaneId(paneId);
+      void openLocation({
+        workspaceId,
+        path,
+        source: "file-tree",
+      });
+    },
+    [openLocation, paneActions, setActiveEditorPaneId, setFocusedEditorPaneId, workspaceId]
+  );
+
+  const handleActivateEditorPane = useCallback(
+    (paneId: string) => {
+      setActiveEditorPaneId(paneId);
+      setFocusedEditorPaneId(paneId);
+    },
+    [setActiveEditorPaneId, setFocusedEditorPaneId]
+  );
+
+  const handleBlurEditorFocus = useCallback(() => {
+    setFocusedEditorPaneId(null);
+  }, [setFocusedEditorPaneId]);
+
+  const handleCloseEditorPane = useCallback(
+    (paneId: string) => {
+      closeAll();
+      paneActions.closeEditorPane(paneId);
+      setActiveEditorPaneId((current) => (current === paneId ? null : current));
+      setFocusedEditorPaneId((current) => (current === paneId ? null : current));
+    },
+    [closeAll, paneActions, setActiveEditorPaneId, setFocusedEditorPaneId]
+  );
+
+  useEffect(() => {
+    setActiveEditorPaneId((current) =>
+      current && !paneLayoutHasEditorPaneId(paneLayout, current) ? null : current
+    );
+    setFocusedEditorPaneId((current) =>
+      current && !paneLayoutHasEditorPaneId(paneLayout, current) ? null : current
+    );
+  }, [paneLayout, setActiveEditorPaneId, setFocusedEditorPaneId]);
 
   const handlePaneDrop = useCallback(
     (intent: PaneDropIntent) => {
@@ -106,9 +169,13 @@ export const AgentPanes: FC<AgentPanesProps> = ({ hydrateSessions = true }) => {
         workspaceId={workspaceId}
         onCloseSession={paneActions.closeSessionPane}
         onSplitDraftPane={paneActions.splitDraftPane}
+        onActivateEditorPane={handleActivateEditorPane}
+        onBlurEditorFocus={handleBlurEditorFocus}
+        onCloseEditorPane={handleCloseEditorPane}
         onSplitSession={paneActions.splitSessionPane}
         onCloseDraftPane={paneActions.closeDraftPane}
         onAssignSession={paneActions.assignSession}
+        onOpenFile={handleOpenFile}
         dragController={dragController}
         onPaneDrop={handlePaneDrop}
         onReplaceWithSession={paneActions.replaceWithSession}
@@ -123,12 +190,16 @@ interface PaneNodeRendererProps {
   node: PaneNode;
   workspaceId: string;
   onAssignSession: (paneId: string, sessionId: string) => void;
+  onActivateEditorPane: (paneId: string) => void;
+  onBlurEditorFocus: () => void;
   onCloseDraftPane: (paneId: string) => void;
+  onCloseEditorPane: (paneId: string) => void;
   onCloseSession: (sessionId: string) => void;
   onCloseSessionCommand: (
     sessionId: string,
     paneDisposition?: "draft" | "remove"
   ) => Promise<boolean | void>;
+  onOpenFile: (paneId: string, path: string) => void;
   onPaneDrop: (intent: PaneDropIntent) => void;
   onReplaceWithSession: (sessionId: string) => void;
   onSplitDraftPane: (paneId: string, direction: "horizontal" | "vertical") => void;
@@ -137,6 +208,7 @@ interface PaneNodeRendererProps {
 
 type PaneLeafNode = PaneNode & {
   type: "leaf";
+  leafKind?: "draft" | "session" | "editor";
   sessionId?: string;
 };
 
@@ -164,12 +236,16 @@ interface PaneLeafProps {
   node: PaneLeafNode;
   workspaceId: string;
   onAssignSession: (paneId: string, sessionId: string) => void;
+  onActivateEditorPane: (paneId: string) => void;
+  onBlurEditorFocus: () => void;
   onCloseDraftPane: (paneId: string) => void;
+  onCloseEditorPane: (paneId: string) => void;
   onCloseSession: (sessionId: string) => void;
   onCloseSessionCommand: (
     sessionId: string,
     paneDisposition?: "draft" | "remove"
   ) => Promise<boolean | void>;
+  onOpenFile: (paneId: string, path: string) => void;
   onPaneDrop: (intent: PaneDropIntent) => void;
   onReplaceWithSession: (sessionId: string) => void;
   onSplitDraftPane: (paneId: string, direction: "horizontal" | "vertical") => void;
@@ -181,9 +257,13 @@ const PaneLeaf: FC<PaneLeafProps> = ({
   node,
   workspaceId,
   onAssignSession,
+  onActivateEditorPane,
+  onBlurEditorFocus,
   onCloseDraftPane,
+  onCloseEditorPane,
   onCloseSession,
   onCloseSessionCommand,
+  onOpenFile,
   onPaneDrop,
   onReplaceWithSession,
   onSplitDraftPane,
@@ -199,6 +279,10 @@ const PaneLeaf: FC<PaneLeafProps> = ({
       return;
     }
 
+    if (isEditorLeaf(node)) {
+      return;
+    }
+
     dragController.registerPane(node.id, {
       type: node.sessionId ? "session" : "draft",
       element,
@@ -207,7 +291,7 @@ const PaneLeaf: FC<PaneLeafProps> = ({
     return () => {
       dragController.registerPane(node.id, null);
     };
-  }, [dragController, node.id, node.sessionId]);
+  }, [dragController, node]);
 
   if (node.sessionId) {
     return (
@@ -218,6 +302,7 @@ const PaneLeaf: FC<PaneLeafProps> = ({
         data-pane-dragging={dragState.isDragging ? "true" : undefined}
         data-pane-drop-target={dragState.isActiveDropTarget ? "true" : undefined}
         data-pane-hover-placement={dragState.hoverPlacement ?? undefined}
+        onPointerDownCapture={onBlurEditorFocus}
       >
         <SessionCard
           dragState={dragState}
@@ -236,6 +321,25 @@ const PaneLeaf: FC<PaneLeafProps> = ({
     );
   }
 
+  if (isEditorLeaf(node)) {
+    return (
+      <div
+        ref={leafRef}
+        className="agent-pane-leaf"
+        data-pane-id={node.id}
+        data-pane-dragging={dragState.isDragging ? "true" : undefined}
+        onPointerDownCapture={() => onActivateEditorPane(node.id)}
+      >
+        <EditorPaneCard
+          paneId={node.id}
+          workspaceId={workspaceId}
+          onClosePane={onCloseEditorPane}
+          onSplitPane={onSplitDraftPane}
+        />
+      </div>
+    );
+  }
+
   return (
     <div
       ref={leafRef}
@@ -244,6 +348,7 @@ const PaneLeaf: FC<PaneLeafProps> = ({
       data-pane-dragging={dragState.isDragging ? "true" : undefined}
       data-pane-drop-target={dragState.isActiveDropTarget ? "true" : undefined}
       data-pane-hover-placement={dragState.hoverPlacement ?? undefined}
+      onPointerDownCapture={onBlurEditorFocus}
     >
       <DraftLauncher
         dragState={{
@@ -255,6 +360,7 @@ const PaneLeaf: FC<PaneLeafProps> = ({
         paneId={node.id}
         onAssignSession={onAssignSession}
         onClosePane={onCloseDraftPane}
+        onOpenFile={onOpenFile}
         onPaneDrop={onPaneDrop}
         onReplaceWithSession={onReplaceWithSession}
         onSplitPane={onSplitDraftPane}
@@ -271,9 +377,13 @@ const PaneNodeRenderer: FC<PaneNodeRendererProps> = ({
   node,
   workspaceId,
   onAssignSession,
+  onActivateEditorPane,
+  onBlurEditorFocus,
   onCloseDraftPane,
+  onCloseEditorPane,
   onCloseSession,
   onCloseSessionCommand,
+  onOpenFile,
   onPaneDrop,
   onReplaceWithSession,
   onSplitDraftPane,
@@ -286,9 +396,13 @@ const PaneNodeRenderer: FC<PaneNodeRendererProps> = ({
         node={node}
         workspaceId={workspaceId}
         onAssignSession={onAssignSession}
+        onActivateEditorPane={onActivateEditorPane}
+        onBlurEditorFocus={onBlurEditorFocus}
         onCloseDraftPane={onCloseDraftPane}
+        onCloseEditorPane={onCloseEditorPane}
         onCloseSession={onCloseSession}
         onCloseSessionCommand={onCloseSessionCommand}
+        onOpenFile={onOpenFile}
         onPaneDrop={onPaneDrop}
         onReplaceWithSession={onReplaceWithSession}
         onSplitDraftPane={onSplitDraftPane}
@@ -314,9 +428,13 @@ const PaneNodeRenderer: FC<PaneNodeRendererProps> = ({
           node={child}
           workspaceId={workspaceId}
           onAssignSession={onAssignSession}
+          onActivateEditorPane={onActivateEditorPane}
+          onBlurEditorFocus={onBlurEditorFocus}
           onCloseDraftPane={onCloseDraftPane}
+          onCloseEditorPane={onCloseEditorPane}
           onCloseSession={onCloseSession}
           onCloseSessionCommand={onCloseSessionCommand}
+          onOpenFile={onOpenFile}
           onPaneDrop={onPaneDrop}
           onReplaceWithSession={onReplaceWithSession}
           onSplitDraftPane={onSplitDraftPane}

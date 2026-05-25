@@ -7,8 +7,10 @@ import { connectionStatusAtom, wsClientAtom } from "../../atoms/connection";
 import { sessionsAtom } from "../../atoms/sessions";
 import { activeWorkspaceIdAtom, workspacesLoadStateAtom } from "../../atoms/workspaces";
 import { seedReadyWorkspaceState } from "../../test-utils/workspace-state";
+import { activeFilePathAtomFamily, openFilesAtomFamily } from "../workspace/atoms";
 import type { PaneDropIntent } from "./actions/pane-drag-types";
 import type { PaneDragSourceSnapshot } from "./actions/use-pane-drag-controller";
+import { activeEditorPaneIdAtomFamily, focusedEditorPaneIdAtomFamily } from "./atoms/editor-panes";
 import { LEGACY_PANE_LAYOUT_STORAGE_KEY_PREFIX, paneLayoutAtomFamily } from "./atoms/pane-layout";
 import { AgentPanes } from "./index";
 
@@ -117,6 +119,7 @@ type MockDraftLauncherProps = {
   paneId?: string;
   onAssignSession?: (paneId: string, sessionId: string) => void;
   onClosePane?: (paneId: string) => void;
+  onOpenFile?: (paneId: string, path: string) => void;
   onReplaceWithSession?: (sessionId: string) => void;
   onSplitPane?: (paneId: string, direction: "horizontal" | "vertical") => void;
   onPaneDrop?: (intent: PaneDropIntent) => void;
@@ -152,10 +155,42 @@ vi.mock("./views/shared/draft-launcher", async () => {
             move-to-draft-{paneId}
           </button>
         ) : null}
+        {paneId && props.onOpenFile ? (
+          <button type="button" onClick={() => props.onOpenFile?.(paneId, "src/app.tsx")}>
+            open-file-{paneId}
+          </button>
+        ) : null}
       </div>
     ),
   };
 });
+
+const mockEditorPaneCard = vi.fn(
+  ({
+    paneId,
+    onClosePane,
+  }: {
+    paneId: string;
+    workspaceId: string;
+    onClosePane: (paneId: string) => void;
+    onSplitPane: (paneId: string, direction: "horizontal" | "vertical") => void;
+  }) => (
+    <div data-testid={`editor-pane-${paneId}`}>
+      <button type="button" onClick={() => onClosePane(paneId)}>
+        close-editor-{paneId}
+      </button>
+    </div>
+  )
+);
+
+vi.mock("./views/shared/editor-pane-card", () => ({
+  EditorPaneCard: (props: {
+    paneId: string;
+    workspaceId: string;
+    onClosePane: (paneId: string) => void;
+    onSplitPane: (paneId: string, direction: "horizontal" | "vertical") => void;
+  }) => mockEditorPaneCard(props),
+}));
 
 vi.mock("./views/shared/pane-layout", () => ({
   PaneLayout: ({
@@ -1020,8 +1055,8 @@ describe("AgentPanes", () => {
       direction: "horizontal",
       ratio: 0.5,
       children: [
-        { id: "fallback-leaf-1", type: "leaf", sessionId: "sess_1" },
-        { id: "fallback-leaf-2", type: "leaf", sessionId: "sess_2" },
+        { id: "fallback-leaf-1", type: "leaf", leafKind: "session", sessionId: "sess_1" },
+        { id: "fallback-leaf-2", type: "leaf", leafKind: "session", sessionId: "sess_2" },
       ],
     });
     expect(mockSessionCard).toHaveBeenCalledWith(expect.objectContaining({ sessionId: "sess_1" }));
@@ -1098,14 +1133,30 @@ describe("AgentPanes", () => {
         expect.objectContaining({
           workspaceId: "ws-1",
           uiState: expect.objectContaining({
-            paneLayout: legacyLayout,
+            paneLayout: {
+              id: "root",
+              type: "split",
+              direction: "horizontal",
+              children: [
+                { id: "left", type: "leaf", leafKind: "session", sessionId: "sess_1" },
+                { id: "right", type: "leaf", leafKind: "session", sessionId: "sess_2" },
+              ],
+            },
           }),
         }),
         undefined
       );
     });
 
-    expect(store.get(paneLayoutAtomFamily("ws-1"))).toEqual(legacyLayout);
+    expect(store.get(paneLayoutAtomFamily("ws-1"))).toEqual({
+      id: "root",
+      type: "split",
+      direction: "horizontal",
+      children: [
+        { id: "left", type: "leaf", leafKind: "session", sessionId: "sess_1" },
+        { id: "right", type: "leaf", leafKind: "session", sessionId: "sess_2" },
+      ],
+    });
     expect(window.localStorage.getItem(`${LEGACY_PANE_LAYOUT_STORAGE_KEY_PREFIX}ws-1`)).toBeNull();
   });
 
@@ -1554,5 +1605,89 @@ describe("AgentPanes", () => {
     );
     expect(screen.getByRole("link", { name: "Open Diagnostics" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open official docs" })).toBeInTheDocument();
+  });
+
+  it("renders editor leaves with the editor pane card instead of the draft launcher", async () => {
+    const { store } = createAgentPaneStore({
+      id: "root",
+      type: "leaf",
+      leafKind: "editor",
+    });
+
+    render(
+      <Provider store={store}>
+        <AgentPanes />
+      </Provider>
+    );
+
+    expect(screen.getByTestId("editor-pane-root")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(mockSessionCard).toHaveBeenCalledTimes(2);
+    });
+    expect(screen.getByTestId("editor-pane-root")).toBeInTheDocument();
+    expect(screen.queryByTestId("draft-launcher-root")).not.toBeInTheDocument();
+  });
+
+  it("converts a draft pane into an editor pane when a file is opened from the draft launcher", async () => {
+    const { store } = createAgentPaneStore({
+      id: "root",
+      type: "leaf",
+      leafKind: "draft",
+    });
+
+    render(
+      <Provider store={store}>
+        <AgentPanes hydrateSessions={false} />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "open-file-root" }));
+
+    expect(store.get(paneLayoutAtomFamily("ws-1"))).toEqual({
+      id: "root",
+      type: "leaf",
+      leafKind: "editor",
+    });
+    expect(await screen.findByTestId("editor-pane-root")).toBeInTheDocument();
+  });
+
+  it("closes an editor pane back to draft and clears the active editor target", async () => {
+    const { store } = createAgentPaneStore({
+      id: "root",
+      type: "leaf",
+      leafKind: "editor",
+    });
+    store.set(activeEditorPaneIdAtomFamily("ws-1"), "root");
+    store.set(focusedEditorPaneIdAtomFamily("ws-1"), "root");
+    store.set(activeFilePathAtomFamily("ws-1"), "src/app.tsx");
+    store.set(openFilesAtomFamily("ws-1"), {
+      "src/app.tsx": {
+        kind: "text",
+        path: "src/app.tsx",
+        content: "export const app = 1;",
+        savedContent: "export const app = 1;",
+        baseHash: "hash-app",
+        isDirty: false,
+      },
+    });
+
+    render(
+      <Provider store={store}>
+        <AgentPanes hydrateSessions={false} />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "close-editor-root" }));
+
+    expect(store.get(paneLayoutAtomFamily("ws-1"))).toEqual({
+      id: "root",
+      type: "leaf",
+      leafKind: "draft",
+    });
+    expect(store.get(activeEditorPaneIdAtomFamily("ws-1"))).toBeNull();
+    expect(store.get(focusedEditorPaneIdAtomFamily("ws-1"))).toBeNull();
+    expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
+    expect(store.get(openFilesAtomFamily("ws-1"))).toEqual({});
+    expect(await screen.findByTestId("draft-launcher-root")).toBeInTheDocument();
   });
 });

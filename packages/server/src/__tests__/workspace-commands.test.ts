@@ -268,6 +268,63 @@ describe("Workspace Commands", () => {
       });
     });
 
+    it("persists typed pane leaves with draft and editor kinds", async () => {
+      const dir = join(tmpdir(), `workspace-command-typed-pane-test-${Date.now()}`);
+      await mkdir(dir);
+
+      const openResult = await dispatch(
+        {
+          kind: "command",
+          id: "open-workspace-typed-pane-layout",
+          op: "workspace.open",
+          args: {
+            path: dir,
+          },
+        },
+        ctx
+      );
+
+      expect(openResult.ok).toBe(true);
+
+      const workspaceId = (openResult.data as { id: string }).id;
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "set-ui-state-typed-pane-layout",
+          op: "workspace.uiState.set",
+          args: {
+            workspaceId,
+            uiState: {
+              leftPanelWidth: 320,
+              bottomPanelHeight: 210,
+              focusMode: false,
+              paneLayout: {
+                id: "root",
+                type: "split",
+                direction: "horizontal",
+                children: [
+                  { id: "left", type: "leaf", leafKind: "draft" },
+                  { id: "right", type: "leaf", leafKind: "editor" },
+                ],
+              },
+            },
+          },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(true);
+      expect((result.data as { uiState: { paneLayout: unknown } }).uiState.paneLayout).toEqual({
+        id: "root",
+        type: "split",
+        direction: "horizontal",
+        children: [
+          { id: "left", type: "leaf", leafKind: "draft" },
+          { id: "right", type: "leaf", leafKind: "editor" },
+        ],
+      });
+    });
+
     it("persists fileTreeExpandedDirs into workspace ui state", async () => {
       const dir = join(tmpdir(), `workspace-expanded-dirs-test-${Date.now()}`);
       await mkdir(dir);

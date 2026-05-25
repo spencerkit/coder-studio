@@ -161,7 +161,45 @@ describe("routeEventToAtom", () => {
     expect(store.get(paneLayoutAtomFamily("ws-1"))).toEqual({
       id: "root",
       type: "leaf",
+      leafKind: "session",
       sessionId: "sess-1",
+    });
+  });
+
+  it("preserves typed pane leaf kinds from workspace meta updates", () => {
+    const store = createStore();
+
+    routeEventToAtom(
+      "workspace.ws-1.meta",
+      {
+        path: "/tmp/ws-1",
+        targetRuntime: "native",
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+          paneLayout: {
+            id: "root",
+            type: "split",
+            direction: "horizontal",
+            children: [
+              { id: "left", type: "leaf", leafKind: "draft" },
+              { id: "right", type: "leaf", leafKind: "editor" },
+            ],
+          },
+        },
+      },
+      store
+    );
+
+    expect(store.get(paneLayoutAtomFamily("ws-1"))).toEqual({
+      id: "root",
+      type: "split",
+      direction: "horizontal",
+      children: [
+        { id: "left", type: "leaf", leafKind: "draft" },
+        { id: "right", type: "leaf", leafKind: "editor" },
+      ],
     });
   });
 

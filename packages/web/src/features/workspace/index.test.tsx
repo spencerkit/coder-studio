@@ -6,6 +6,7 @@ import { lastViewedTargetAtom } from "../../atoms/app-ui";
 import { connectionStatusAtom, wsClientAtom } from "../../atoms/connection";
 import { activeWorkspaceIdAtom, workspaceOrderAtom, workspacesAtom } from "../../atoms/workspaces";
 import { seedReadyWorkspaceState } from "../../test-utils/workspace-state";
+import { activeEditorPaneIdAtomFamily } from "../agent-panes/atoms/editor-panes";
 import { paneLayoutAtomFamily } from "../agent-panes/atoms/pane-layout";
 import { updateStateAtom } from "../updates/atoms";
 import {
@@ -1484,6 +1485,62 @@ describe("WorkspacePage", () => {
     await screen.findByTestId("code-editor-host");
     expect(screen.queryByTestId("git-diff-viewer")).not.toBeInTheDocument();
     expect(screen.queryByTestId("agent-panes")).not.toBeInTheDocument();
+  });
+
+  it("keeps the desktop main area on agent panes when an active file is targeted at an editor pane", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return {
+          branch: "main",
+          ahead: 0,
+          behind: 0,
+          staged: [],
+          modified: [],
+          deleted: [],
+          untracked: [],
+        };
+      }
+
+      return [];
+    });
+
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedReadyWorkspaceState(store, {
+      "ws-test": {
+        id: "ws-test",
+        path: "/home/spencer/workspace/coder-studio",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+    store.set(activeFilePathAtomFamily("ws-test"), "src/app.tsx");
+    store.set(activeEditorPaneIdAtomFamily("ws-test"), "root");
+    store.set(paneLayoutAtomFamily("ws-test"), {
+      id: "root",
+      type: "leaf",
+      leafKind: "editor",
+    });
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/workspace"]}>
+          <Routes>
+            <Route path="/workspace" element={<WorkspaceDesktopView />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>
+    );
+
+    await screen.findByTestId("agent-panes");
+    expect(screen.queryByTestId("code-editor-host")).not.toBeInTheDocument();
   });
 
   it("does not switch to a dedicated diff page when git preview payload state changes", async () => {
