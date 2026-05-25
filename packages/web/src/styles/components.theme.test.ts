@@ -1168,6 +1168,7 @@ describe("components.css theme-sensitive surfaces", () => {
     const workspaceMainStage = getLastRuleBlock(".workspace-main-stage");
     const agentPanes = getLastRuleBlock(".agent-panes");
     const agentPane = getLastRuleBlock(".agent-pane");
+    const agentPaneLeaf = getLastRuleBlock(".agent-pane-leaf");
     const agentPanesStage = getLastRuleBlock(".workspace-main-stage > .agent-panes");
     const paneLayout = getLastRuleBlock(".pane-layout");
     const paneLayoutChild = getLastRuleBlock(".pane-layout-child");
@@ -1215,6 +1216,10 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(workspaceMainStage).toContain("background: transparent");
     expect(agentPanes).toContain("background: transparent");
     expect(agentPane).toContain("background: transparent");
+    expect(agentPaneLeaf).toContain("display: flex");
+    expect(agentPaneLeaf).toContain("flex: 1");
+    expect(agentPaneLeaf).toContain("height: 100%");
+    expect(agentPaneLeaf).toContain("min-height: 0");
     expect(agentPanesStage).toContain("background: transparent");
     expect(paneLayout).toContain("background: transparent");
     expect(paneLayoutChild).toContain("background: transparent");
