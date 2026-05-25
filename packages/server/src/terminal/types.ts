@@ -14,6 +14,15 @@ export interface TerminalSpec {
   cols?: number;
   rows?: number;
   title?: string;
+  /**
+   * Hex color (e.g. "#fcfffd") of the frontend xterm.js theme background that
+   * will render this terminal. The TerminalManager uses it to derive
+   * COLORFGBG so child TUIs (Claude Code, Codex, …) can pick a matching
+   * light/dark color scheme. This is the only signal that survives the
+   * Windows ConPTY layer, which otherwise intercepts OSC 11 background
+   * queries and forces TUIs into their dark fallback.
+   */
+  themeBackground?: string;
 }
 
 /**

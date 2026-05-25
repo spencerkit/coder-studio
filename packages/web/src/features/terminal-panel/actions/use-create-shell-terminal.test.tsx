@@ -51,10 +51,11 @@ describe("useCreateShellTerminal", () => {
 
     expect(sendCommand).toHaveBeenCalledWith(
       "terminal.create",
-      {
+      expect.objectContaining({
         workspaceId: "ws-test",
         cwdPath: "src",
-      },
+        themeBackground: expect.stringMatching(/^#[0-9a-fA-F]{6,8}$/),
+      }),
       undefined
     );
     expect(store.get(terminalIdsAtomFamily("ws-test"))).toEqual(["term_1", "term_2"]);

@@ -31,6 +31,12 @@ export interface CreateSessionRequest {
   providerId: string;
   provider: ProviderDefinition;
   draft?: string;
+  /**
+   * Hex color of the xterm.js theme background that will render this
+   * session's terminal. Forwarded to TerminalSpec.themeBackground so the
+   * PTY env can advertise COLORFGBG to the agent CLI (see TerminalManager).
+   */
+  themeBackground?: string;
 }
 
 export interface SessionLogger {
@@ -249,6 +255,7 @@ export class SessionManager {
         CODER_STUDIO_SESSION_ID: sessionId,
       },
       title: req.provider.displayName,
+      themeBackground: req.themeBackground,
     };
 
     // Create terminal (delegates to TerminalManager)

@@ -3,7 +3,7 @@
 import type { DomainEvent, Terminal } from "@coder-studio/core";
 import { beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import { EventBus } from "../bus/event-bus";
-import { TerminalManager } from "./manager";
+import { computeColorFgBg, TerminalManager } from "./manager";
 import { RingBuffer } from "./ring-buffer";
 import * as snapshotBufferModule from "./terminal-snapshot-buffer";
 import type { PtyHost, PtyProcess, TerminalDatabase, TerminalSpec } from "./types";
@@ -162,6 +162,116 @@ describe("TerminalManager", () => {
       expect(spawnOptions.env.TERM).toBe("dumb");
       expect(spawnOptions.env.COLORTERM).toBe("truecolor");
       expect(spawnOptions.env.FORCE_COLOR).toBe("0");
+    });
+
+    it("injects COLORFGBG=0;15 for a light themeBackground", () => {
+      const spec: TerminalSpec = {
+        workspaceId: "ws-123",
+        kind: "shell",
+        argv: ["bash"],
+        cwd: "/home/user",
+        themeBackground: "#fcfffd",
+      };
+
+      manager.create(spec);
+
+      const spawnOptions = (mockPtyHost.spawn as Mock).mock.calls[0][1];
+      expect(spawnOptions.env.COLORFGBG).toBe("0;15");
+    });
+
+    it("injects COLORFGBG=15;0 for a dark themeBackground", () => {
+      const spec: TerminalSpec = {
+        workspaceId: "ws-123",
+        kind: "shell",
+        argv: ["bash"],
+        cwd: "/home/user",
+        themeBackground: "#0b1218",
+      };
+
+      manager.create(spec);
+
+      const spawnOptions = (mockPtyHost.spawn as Mock).mock.calls[0][1];
+      expect(spawnOptions.env.COLORFGBG).toBe("15;0");
+    });
+
+    it("omits COLORFGBG when themeBackground is not provided", () => {
+      const spec: TerminalSpec = {
+        workspaceId: "ws-123",
+        kind: "shell",
+        argv: ["bash"],
+        cwd: "/home/user",
+      };
+
+      manager.create(spec);
+
+      const spawnOptions = (mockPtyHost.spawn as Mock).mock.calls[0][1];
+      expect(spawnOptions.env.COLORFGBG).toBeUndefined();
+    });
+
+    it("omits COLORFGBG when themeBackground is malformed", () => {
+      const spec: TerminalSpec = {
+        workspaceId: "ws-123",
+        kind: "shell",
+        argv: ["bash"],
+        cwd: "/home/user",
+        themeBackground: "not-a-color",
+      };
+
+      manager.create(spec);
+
+      const spawnOptions = (mockPtyHost.spawn as Mock).mock.calls[0][1];
+      expect(spawnOptions.env.COLORFGBG).toBeUndefined();
+    });
+
+    it("lets spec.env override the derived COLORFGBG when explicitly set", () => {
+      const spec: TerminalSpec = {
+        workspaceId: "ws-123",
+        kind: "shell",
+        argv: ["bash"],
+        cwd: "/home/user",
+        themeBackground: "#fcfffd",
+        env: {
+          COLORFGBG: "7;0",
+        },
+      };
+
+      manager.create(spec);
+
+      const spawnOptions = (mockPtyHost.spawn as Mock).mock.calls[0][1];
+      expect(spawnOptions.env.COLORFGBG).toBe("7;0");
+    });
+  });
+
+  describe("computeColorFgBg", () => {
+    it.each([
+      ["#ffffff", "0;15"],
+      ["#fcfffd", "0;15"],
+      ["#f5f7fa", "0;15"],
+      ["#fff", "0;15"],
+    ])("returns 0;15 (light bg) for %s", (input, expected) => {
+      expect(computeColorFgBg(input)).toBe(expected);
+    });
+
+    it.each([
+      ["#000000", "15;0"],
+      ["#0b1218", "15;0"],
+      ["#2e3440", "15;0"],
+      ["#000", "15;0"],
+    ])("returns 15;0 (dark bg) for %s", (input, expected) => {
+      expect(computeColorFgBg(input)).toBe(expected);
+    });
+
+    it("accepts #RRGGBBAA and ignores the alpha channel", () => {
+      expect(computeColorFgBg("#ffffff80")).toBe("0;15");
+      expect(computeColorFgBg("#00000080")).toBe("15;0");
+    });
+
+    it("returns undefined for malformed input", () => {
+      expect(computeColorFgBg("")).toBeUndefined();
+      expect(computeColorFgBg("white")).toBeUndefined();
+      expect(computeColorFgBg("#xyz")).toBeUndefined();
+      expect(computeColorFgBg("#12")).toBeUndefined();
+      expect(computeColorFgBg("rgb(0,0,0)")).toBeUndefined();
     });
 
     it("should throw error on spawn failure", () => {

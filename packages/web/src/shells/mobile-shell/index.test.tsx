@@ -1571,10 +1571,11 @@ describe("MobileShell Phase 2 workspace", () => {
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith(
         "session.create",
-        {
+        expect.objectContaining({
           workspaceId: "ws-1",
           providerId: "codex",
-        },
+          themeBackground: expect.stringMatching(/^#[0-9a-fA-F]{6,8}$/),
+        }),
         undefined
       );
     });
@@ -1699,10 +1700,11 @@ describe("MobileShell Phase 2 workspace", () => {
     });
     expect(sendCommand).toHaveBeenCalledWith(
       "session.create",
-      {
+      expect.objectContaining({
         workspaceId: "ws-1",
         providerId: "codex",
-      },
+        themeBackground: expect.stringMatching(/^#[0-9a-fA-F]{6,8}$/),
+      }),
       undefined
     );
     await waitFor(() => {

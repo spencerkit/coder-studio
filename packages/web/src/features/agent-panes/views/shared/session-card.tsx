@@ -15,6 +15,7 @@ import { dispatchCommandAtom } from "../../../../atoms/connection";
 import { sessionByIdAtomFamily, sessionsAtom } from "../../../../atoms/sessions";
 import { workspaceByIdAtomFamily } from "../../../../atoms/workspaces";
 import { IconButton, StatusDot, Tag, Tooltip } from "../../../../components/ui";
+import { useTerminalThemeBackground } from "../../../../theme";
 import { PanelHeader } from "../../../shared/components/panel-header";
 import { useSupervisor } from "../../../supervisor/actions/use-supervisor";
 import { SupervisorCard } from "../../../supervisor/views/shared/supervisor-card";
@@ -57,6 +58,7 @@ export const SessionCard: FC<SessionCardProps> = ({
   const session = useAtomValue(sessionByIdAtomFamily(sessionId));
   const dispatch = useAtomValue(dispatchCommandAtom);
   const setSessions = useSetAtom(sessionsAtom);
+  const themeBackground = useTerminalThemeBackground();
   const workspace = useAtomValue(
     workspaceByIdAtomFamily(session?.workspaceId ?? "__workspace_empty__")
   );
@@ -101,6 +103,7 @@ export const SessionCard: FC<SessionCardProps> = ({
     const createResult = await dispatch<Session>("session.create", {
       workspaceId: session.workspaceId,
       providerId: session.providerId,
+      themeBackground,
     });
     if (!createResult.ok || !createResult.data) {
       return;

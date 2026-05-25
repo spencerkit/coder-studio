@@ -169,10 +169,14 @@ describe("useProviderLauncher", () => {
     await waitFor(() => {
       expect(dispatch).toHaveBeenCalledWith("provider.install.get", { jobId: "job-1" });
       expect(dispatch).toHaveBeenCalledWith("provider.runtimeStatus", {});
-      expect(dispatch).toHaveBeenCalledWith("session.create", {
-        workspaceId: "ws-1",
-        providerId: "claude",
-      });
+      expect(dispatch).toHaveBeenCalledWith(
+        "session.create",
+        expect.objectContaining({
+          workspaceId: "ws-1",
+          providerId: "claude",
+          themeBackground: expect.stringMatching(/^#[0-9a-fA-F]{6,8}$/),
+        })
+      );
     });
 
     expect(onSessionCreated).toHaveBeenCalledWith(
@@ -278,10 +282,14 @@ describe("useProviderLauncher", () => {
 
     await waitFor(() => {
       expect(dispatch).toHaveBeenCalledWith("provider.runtimeStatus", {});
-      expect(dispatch).toHaveBeenCalledWith("session.create", {
-        workspaceId: "ws-1",
-        providerId: "claude",
-      });
+      expect(dispatch).toHaveBeenCalledWith(
+        "session.create",
+        expect.objectContaining({
+          workspaceId: "ws-1",
+          providerId: "claude",
+          themeBackground: expect.stringMatching(/^#[0-9a-fA-F]{6,8}$/),
+        })
+      );
       expect(result.current.states.claude.runtime?.available).toBe(false);
       expect(result.current.states.claude.inlineError).toBe("Claude CLI is missing");
     });

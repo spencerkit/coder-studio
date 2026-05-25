@@ -163,10 +163,11 @@ describe("SessionCard", () => {
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith(
         "session.create",
-        {
+        expect.objectContaining({
           workspaceId: "ws-123",
           providerId: "codex",
-        },
+          themeBackground: expect.stringMatching(/^#[0-9a-fA-F]{6,8}$/),
+        }),
         undefined
       );
     });

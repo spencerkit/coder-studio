@@ -1606,10 +1606,11 @@ describe("FileTreePanel", () => {
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith(
         "terminal.create",
-        {
+        expect.objectContaining({
           workspaceId: "ws-test",
           cwdPath: "src",
-        },
+          themeBackground: expect.stringMatching(/^#[0-9a-fA-F]{6,8}$/),
+        }),
         undefined
       );
     });
@@ -1624,10 +1625,11 @@ describe("FileTreePanel", () => {
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith(
         "terminal.create",
-        {
+        expect.objectContaining({
           workspaceId: "ws-test",
           cwdPath: undefined,
-        },
+          themeBackground: expect.stringMatching(/^#[0-9a-fA-F]{6,8}$/),
+        }),
         undefined
       );
     });

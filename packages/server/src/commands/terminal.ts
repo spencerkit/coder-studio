@@ -154,6 +154,10 @@ registerCommand(
     cols: z.number().int().positive().optional(),
     rows: z.number().int().positive().optional(),
     cwdPath: z.string().optional(),
+    themeBackground: z
+      .string()
+      .regex(/^#[0-9a-fA-F]{3,8}$/)
+      .optional(),
   }),
   async (args, ctx) => {
     const workspace = ctx.workspaceMgr.get(args.workspaceId);
@@ -204,6 +208,7 @@ registerCommand(
       cwd,
       cols: args.cols ?? 120,
       rows: args.rows ?? 30,
+      themeBackground: args.themeBackground,
     });
 
     return terminal;
