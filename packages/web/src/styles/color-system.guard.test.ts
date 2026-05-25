@@ -57,10 +57,7 @@ const expectedRawColorConsumers = [
   "src/styles/components.css",
 ];
 
-const expectedRuntimeConsumers = [
-  "src/components/ui/workbench-layer/index.module.css",
-  "src/styles/components.css",
-];
+const expectedRuntimeConsumers = ["src/styles/components.css"];
 
 const expectedLegacyPublicConsumers = [
   "src/components/ui/action-menu/index.module.css",

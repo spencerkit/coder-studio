@@ -972,11 +972,7 @@
   justify-content: center;
   padding: var(--sp-6);
   overflow-y: auto;
-  background: color-mix(
-    in srgb,
-    var(--surface-page-bg) calc(var(--app-surface-opacity, 0.96) * 100%),
-    transparent
-  );
+  background: var(--material-shell-page);
 }
 
 .settings-content--fill-height {
@@ -998,15 +994,11 @@
   min-width: 0;
   min-height: 100%;
   padding: var(--sp-6);
-  background: color-mix(
-    in srgb,
-    var(--surface-overlay-bg) calc(var(--app-surface-opacity, 0.96) * 100%),
-    transparent
-  );
+  background: var(--material-overlay);
   border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-lg);
-  backdrop-filter: var(--app-surface-backdrop-filter, none);
+  backdrop-filter: var(--material-backdrop-filter);
 }
 
 .settings-section {
@@ -9022,13 +9014,9 @@ textarea.input {
 
 .app-topbar {
   min-height: var(--desktop-topbar-height);
-  background: color-mix(
-    in srgb,
-    var(--surface-overlay-bg) calc(var(--app-surface-opacity, 0.96) * 100%),
-    transparent
-  );
+  background: var(--material-shell-topbar);
   border-bottom-color: color-mix(in srgb, var(--border) 80%, var(--accent-blue) 20%);
-  backdrop-filter: var(--app-surface-backdrop-filter, none);
+  backdrop-filter: var(--material-backdrop-filter);
 }
 
 .topbar-tab.active {
@@ -9763,13 +9751,9 @@ textarea.input {
     gap: var(--sp-3);
     padding: calc(var(--mobile-safe-top) + var(--sp-1)) calc(var(--mobile-safe-right) + var(--sp-4))
       var(--sp-1) calc(var(--mobile-safe-left) + var(--sp-4));
-    background: color-mix(
-      in srgb,
-      var(--surface-overlay-bg) calc(var(--app-surface-opacity, 0.96) * 100%),
-      transparent
-    );
+    background: var(--material-shell-topbar);
     border-bottom: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
-    backdrop-filter: var(--app-surface-backdrop-filter, none);
+    backdrop-filter: var(--material-backdrop-filter);
   }
 
   .mobile-topbar__workspace-button,
@@ -10284,12 +10268,8 @@ textarea.input {
     gap: 0;
     padding: 0 0 var(--mobile-keyboard-inset) 0;
     border-top: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
-    background: color-mix(
-      in srgb,
-      var(--surface-overlay-bg) calc(var(--app-surface-opacity, 0.96) * 100%),
-      transparent
-    );
-    backdrop-filter: var(--app-surface-backdrop-filter, none);
+    background: var(--material-overlay);
+    backdrop-filter: var(--material-backdrop-filter);
     transition: padding-bottom var(--mobile-shell-motion-enter-duration) var(--ease-out);
   }
 
@@ -12575,7 +12555,8 @@ textarea.input {
   flex-shrink: 0;
   padding: 0 12px;
   border-top: 1px solid color-mix(in srgb, var(--border) 62%, transparent);
-  background: var(--bg-panel);
+  background: var(--workspace-statusbar-surface);
+  backdrop-filter: var(--material-backdrop-filter);
 }
 
 .workspace-status-bar--flush {
@@ -12635,7 +12616,9 @@ textarea.input {
   min-height: 0;
   height: 100%;
   flex-direction: row;
-  background: var(--bg-panel);
+  background: var(--workspace-sidebar-surface);
+  border-right: 1px solid color-mix(in srgb, var(--border-default) 72%, transparent);
+  backdrop-filter: var(--material-backdrop-filter);
 }
 
 .workspace-activity-bar {
@@ -12646,7 +12629,9 @@ textarea.input {
   gap: var(--sp-2);
   padding: var(--sp-3) var(--sp-2);
   border-right: 1px solid var(--border);
-  background: color-mix(in srgb, var(--bg-panel) 88%, var(--bg-page));
+  background: var(--workspace-activitybar-surface);
+  border-right-color: color-mix(in srgb, var(--border-default) 72%, transparent);
+  backdrop-filter: var(--material-backdrop-filter);
 }
 
 .workspace-activity-bar__button {
@@ -14311,9 +14296,9 @@ textarea.input {
 }
 
 .workspace-sidebar-panel {
-  background: var(--ws-sidebar-bg);
-  border-right: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
-  backdrop-filter: var(--ws-backdrop-filter);
+  background: var(--workspace-sidebar-surface);
+  border-right: 1px solid color-mix(in srgb, var(--border-default) 72%, transparent);
+  backdrop-filter: var(--material-backdrop-filter);
 }
 
 .workspace-activity-bar {
@@ -14324,9 +14309,9 @@ textarea.input {
   gap: var(--sp-2);
   padding: var(--sp-3) var(--sp-2);
   border-right: 1px solid var(--border);
-  background: var(--ws-activitybar-bg);
-  border-right-color: color-mix(in srgb, var(--border) 72%, transparent);
-  backdrop-filter: var(--ws-backdrop-filter);
+  background: var(--workspace-activitybar-surface);
+  border-right-color: color-mix(in srgb, var(--border-default) 72%, transparent);
+  backdrop-filter: var(--material-backdrop-filter);
 }
 
 .workspace-status-bar {
@@ -14339,8 +14324,8 @@ textarea.input {
   flex-shrink: 0;
   padding: 0 12px;
   border-top: 1px solid color-mix(in srgb, var(--border) 62%, transparent);
-  background: var(--ws-statusbar-bg);
-  backdrop-filter: var(--ws-backdrop-filter);
+  background: var(--workspace-statusbar-surface);
+  backdrop-filter: var(--material-backdrop-filter);
 }
 
 .workspace-status-bar--flush {
@@ -14373,12 +14358,12 @@ textarea.input {
   border: none;
   border-radius: 0;
   box-shadow: none;
-  background: var(--ws-session-bg);
-  backdrop-filter: var(--ws-backdrop-filter);
+  background: var(--workspace-session-surface);
+  backdrop-filter: var(--material-backdrop-filter);
 }
 
 .session-card.session-card--active {
-  background: var(--ws-session-active-bg);
+  background: var(--workspace-session-active-surface);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border-focus) 84%, transparent);
 }
 
@@ -14387,8 +14372,8 @@ textarea.input {
 .session-card.session-card--active .session-header {
   padding: var(--gap-tight) var(--inset-control-inline);
   border-bottom: 1px solid var(--border);
-  background: var(--ws-session-header-bg);
-  backdrop-filter: var(--ws-backdrop-filter);
+  background: var(--workspace-session-header-surface);
+  backdrop-filter: var(--material-backdrop-filter);
 }
 
 .session-card.session-card--active > .panel-header,
@@ -14402,8 +14387,14 @@ textarea.input {
 
 .workspace-sidebar-panel__content,
 .workspace-sidebar-view,
-.workspace-sidebar-panel__body {
-  background: transparent;
+.workspace-sidebar-panel__body,
+.workspace-body,
+.workspace-main-stage,
+.agent-panes,
+.agent-pane,
+.pane-layout,
+.pane-layout-child {
+  background: var(--workspace-content-surface);
 }
 
 .agent-draft-launcher {
@@ -14454,27 +14445,27 @@ textarea.input {
 }
 
 .terminal-toolbar {
-  background: var(--ws-terminal-toolbar-bg);
-  backdrop-filter: var(--ws-backdrop-filter);
+  background: var(--workspace-terminal-toolbar-surface);
+  backdrop-filter: var(--material-backdrop-filter);
 }
 
 .bottom-terminal-tabs {
-  background: var(--ws-terminal-tabs-bg);
-  backdrop-filter: var(--ws-backdrop-filter);
+  background: var(--workspace-terminal-tabs-surface);
+  backdrop-filter: var(--material-backdrop-filter);
 }
 
 .workspace-bottom-panel > .bottom-terminal {
   border: none;
   border-radius: 0;
-  background: var(--ws-terminal-shell-bg);
+  background: var(--workspace-terminal-shell-surface);
   box-shadow: none;
-  backdrop-filter: var(--ws-backdrop-filter);
+  backdrop-filter: var(--material-backdrop-filter);
 }
 
 .bottom-terminal-content,
 .bottom-terminal-xterm,
 .bottom-terminal-empty {
-  background: transparent;
+  background: var(--workspace-content-surface);
 }
 
 .mobile-shell__agent-stage .session-card:not(.session-card--active),

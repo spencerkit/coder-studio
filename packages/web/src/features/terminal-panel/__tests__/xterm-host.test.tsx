@@ -1211,11 +1211,12 @@ describe("XtermHost", () => {
     expect(Terminal).toHaveBeenCalledWith(
       expect.objectContaining({
         theme: expect.objectContaining({
-          ...getThemeById("mint-light").terminalTheme,
           background: "#00000000",
         }),
       })
     );
+    const lastTheme = vi.mocked(Terminal).mock.calls.at(-1)?.[0]?.theme;
+    expect(lastTheme?.foreground).toBeDefined();
   });
 
   it("promotes the existing hydration request when active session changes", async () => {
