@@ -2683,8 +2683,6 @@ body.is-resizing-panels * {
 }
 
 .welcome-step-hint {
-  width: 100%;
-  margin: 0;
   font-size: var(--type-body-6-size);
   line-height: var(--type-body-6-line-height);
   font-weight: var(--type-body-6-weight);
@@ -2694,8 +2692,6 @@ body.is-resizing-panels * {
 }
 
 .welcome-step-detail {
-  width: 100%;
-  margin: 0;
   max-width: 440px;
   font-size: var(--type-body-5-size);
   line-height: var(--type-body-5-line-height);
@@ -2704,8 +2700,6 @@ body.is-resizing-panels * {
 }
 
 .welcome-settings-hint {
-  width: 100%;
-  margin: 0;
   padding-top: var(--sp-2);
   font-size: var(--type-body-6-size);
   line-height: var(--type-body-6-line-height);

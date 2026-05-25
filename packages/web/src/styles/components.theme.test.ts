@@ -1098,13 +1098,17 @@ describe("components.css theme-sensitive surfaces", () => {
 
   it("styles welcome activation hints as supporting copy around the primary action", () => {
     const actionsGroup = getLastRuleBlock(".welcome-actions-group");
+    const sharedHintCopy = getLastGroupedRuleBlock(
+      /\.welcome-step-hint,\s*\.welcome-step-detail,\s*\.welcome-settings-hint\s*\{([^}]*)\}/g
+    );
     const stepHint = getLastRuleBlock(".welcome-step-hint");
     const stepDetail = getLastRuleBlock(".welcome-step-detail");
     const settingsHint = getLastRuleBlock(".welcome-settings-hint");
     const mobileStepDetail = getLastRuleBlock(".welcome-card--mobile .welcome-step-detail");
 
     expect(actionsGroup).toContain("align-items: flex-start");
-    expect(stepHint).toContain("width: 100%");
+    expect(sharedHintCopy).toContain("width: 100%");
+    expect(sharedHintCopy).toContain("margin: 0");
     expect(stepHint).toContain("text-transform: uppercase");
     expect(stepHint).toContain("color: var(--text-ter)");
     expect(stepDetail).toContain("max-width: 440px");
