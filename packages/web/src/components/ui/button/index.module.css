@@ -23,7 +23,9 @@
 
 .btn:focus-visible,
 :global(.btn):focus-visible {
-  box-shadow: var(--control-focus-ring);
+  box-shadow:
+    0 0 0 2px var(--surface-page),
+    var(--control-focus-ring);
 }
 
 .btn:hover:not(:disabled),
