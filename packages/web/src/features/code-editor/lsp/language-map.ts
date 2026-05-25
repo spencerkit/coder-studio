@@ -12,6 +12,9 @@ export function resolveLspServerKind(
 ): LspServerKind | null {
   const extension = filePath.split(".").pop()?.toLowerCase() ?? "";
 
+  if (VUE_EXTENSIONS.has(extension) || monacoLanguage === "vue") {
+    return "vue";
+  }
   if (TYPESCRIPT_EXTENSIONS.has(extension) || monacoLanguage === "typescript") {
     return "typescript";
   }
@@ -23,9 +26,6 @@ export function resolveLspServerKind(
   }
   if (RUST_EXTENSIONS.has(extension) || monacoLanguage === "rust") {
     return "rust";
-  }
-  if (VUE_EXTENSIONS.has(extension) || monacoLanguage === "vue") {
-    return "vue";
   }
 
   return null;
