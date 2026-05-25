@@ -1,9 +1,14 @@
 import * as monaco from "monaco-editor";
 
-let vueLanguageRegistered = false;
+const VUE_LANGUAGE_REGISTERED_KEY = Symbol.for("coder-studio.monaco.vue-language.registered");
+
+type VueLanguageRegistrationState = typeof globalThis & {
+  [VUE_LANGUAGE_REGISTERED_KEY]?: boolean;
+};
 
 export function ensureVueLanguageRegistered(): void {
-  if (vueLanguageRegistered) {
+  const registrationState = globalThis as VueLanguageRegistrationState;
+  if (registrationState[VUE_LANGUAGE_REGISTERED_KEY]) {
     return;
   }
 
@@ -47,5 +52,5 @@ export function ensureVueLanguageRegistered(): void {
     },
   });
 
-  vueLanguageRegistered = true;
+  registrationState[VUE_LANGUAGE_REGISTERED_KEY] = true;
 }
