@@ -5,7 +5,6 @@ import { join } from "path";
 import { promisify } from "util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventBus } from "../bus/event-bus.js";
-import { closeDatabase, openDatabase } from "../storage/db.js";
 import { SessionMetadataRepo } from "../storage/repositories/session-metadata-repo.js";
 import type { CommandContext } from "../ws/dispatch.js";
 import { dispatch } from "../ws/dispatch.js";
@@ -14,15 +13,17 @@ import "../commands/agent-context.js";
 const execFileAsync = promisify(execFile);
 
 describe("agent context commands", () => {
-  let db: ReturnType<typeof openDatabase>;
   let repoDir: string;
+  let stateDir: string;
   let metadataRepo: SessionMetadataRepo;
   let ctx: CommandContext & { sessionMetadataRepo: SessionMetadataRepo };
 
   beforeEach(async () => {
-    db = openDatabase(":memory:");
     repoDir = await mkdtemp(join(tmpdir(), "agent-context-command-"));
-    metadataRepo = new SessionMetadataRepo(db);
+    stateDir = await mkdtemp(join(tmpdir(), "agent-context-command-state-"));
+    metadataRepo = new SessionMetadataRepo({
+      filePath: join(stateDir, "session-metadata.json"),
+    });
 
     await execFileAsync("git", ["init"], { cwd: repoDir });
     await execFileAsync("git", ["config", "user.name", "Test"], { cwd: repoDir });
@@ -45,26 +46,6 @@ describe("agent context commands", () => {
     await execFileAsync("git", ["add", "."], { cwd: repoDir });
     await execFileAsync("git", ["commit", "-m", "Initial commit"], { cwd: repoDir });
     const { stdout } = await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: repoDir });
-
-    db.prepare(
-      `INSERT INTO workspaces (id, path, target_runtime, opened_at, last_active_at, ui_state)
-       VALUES (?, ?, ?, ?, ?, ?)`
-    ).run(
-      "ws-1",
-      repoDir,
-      "native",
-      1,
-      1,
-      JSON.stringify({ leftPanelWidth: 1, bottomPanelHeight: 1, focusMode: false })
-    );
-    db.prepare(
-      `INSERT INTO terminals (id, workspace_id, kind, cwd, argv, cols, rows, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run("term-1", "ws-1", "agent", repoDir, JSON.stringify(["codex"]), 80, 24, 1);
-    db.prepare(
-      `INSERT INTO sessions (id, workspace_id, terminal_id, provider_id, capability, state, started_at, last_active_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run("sess-1", "ws-1", "term-1", "codex", "full", "starting", 1, 1);
 
     metadataRepo.upsert({
       sessionId: "sess-1",
@@ -94,7 +75,7 @@ describe("agent context commands", () => {
       terminalMgr: {} as never,
       eventBus: new EventBus(),
       broadcaster: { broadcast: vi.fn() } as never,
-      db,
+      db: {} as never,
       providerRegistry: [],
       fencingMgr: {} as never,
       supervisorMgr: {} as never,
@@ -105,7 +86,7 @@ describe("agent context commands", () => {
   });
 
   afterEach(async () => {
-    closeDatabase(db);
+    await rm(stateDir, { recursive: true, force: true });
     await rm(repoDir, { recursive: true, force: true });
   });
 

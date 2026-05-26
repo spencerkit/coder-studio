@@ -5,20 +5,21 @@ import { join } from "path";
 import { promisify } from "util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildSessionReviewSummary, getSessionReviewDiff } from "../../session-review/review.js";
-import { closeDatabase, openDatabase } from "../../storage/db.js";
 import { SessionMetadataRepo } from "../../storage/repositories/session-metadata-repo.js";
 
 const execFileAsync = promisify(execFile);
 
 describe("session review", () => {
-  let db: ReturnType<typeof openDatabase>;
   let repo: SessionMetadataRepo;
   let repoDir: string;
+  let stateDir: string;
 
   beforeEach(async () => {
-    db = openDatabase(":memory:");
-    repo = new SessionMetadataRepo(db);
     repoDir = await mkdtemp(join(tmpdir(), "session-review-"));
+    stateDir = await mkdtemp(join(tmpdir(), "session-review-state-"));
+    repo = new SessionMetadataRepo({
+      filePath: join(stateDir, "session-metadata.json"),
+    });
 
     await execFileAsync("git", ["init"], { cwd: repoDir });
     await execFileAsync("git", ["config", "user.name", "Test"], { cwd: repoDir });
@@ -29,26 +30,6 @@ describe("session review", () => {
 
     const { stdout } = await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: repoDir });
     const baseline = stdout.trim();
-
-    db.prepare(
-      `INSERT INTO workspaces (id, path, target_runtime, opened_at, last_active_at, ui_state)
-       VALUES (?, ?, ?, ?, ?, ?)`
-    ).run(
-      "ws-1",
-      repoDir,
-      "native",
-      1,
-      1,
-      JSON.stringify({ leftPanelWidth: 1, bottomPanelHeight: 1, focusMode: false })
-    );
-    db.prepare(
-      `INSERT INTO terminals (id, workspace_id, kind, cwd, argv, cols, rows, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run("term-1", "ws-1", "agent", repoDir, JSON.stringify(["codex"]), 80, 24, 1);
-    db.prepare(
-      `INSERT INTO sessions (id, workspace_id, terminal_id, provider_id, capability, state, started_at, last_active_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run("sess-1", "ws-1", "term-1", "codex", "full", "starting", 1, 1);
     repo.upsert({
       sessionId: "sess-1",
       workspaceId: "ws-1",
@@ -60,7 +41,7 @@ describe("session review", () => {
   });
 
   afterEach(async () => {
-    closeDatabase(db);
+    await rm(stateDir, { recursive: true, force: true });
     await rm(repoDir, { recursive: true, force: true });
   });
 
@@ -82,7 +63,7 @@ describe("session review", () => {
   });
 
   it("returns a warning when baseline is missing", async () => {
-    db.prepare("DELETE FROM session_metadata WHERE session_id = ?").run("sess-1");
+    repo.delete("sess-1");
     repo.upsert({
       sessionId: "sess-1",
       workspaceId: "ws-1",
