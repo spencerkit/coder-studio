@@ -2640,15 +2640,12 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(mobileFilesGitSurface).toContain("border-radius: var(--radius-md)");
     expect(mobileFilesGitSurface).toContain("box-shadow: none");
     expect(mobileFileSearch).toContain("margin: 0");
-    expect(mobileFileSearch).toContain("border-radius: 0");
-    expect(mobileFileSearch).toContain("border-right: none");
-    expect(mobileFileSearch).toContain("border-left: none");
-    expect(mobileFileSearch).toContain("background: transparent");
+    expect(mobileFileSearch).toContain("border-radius: var(--radius-md)");
     expect(mobileFileRow).toContain("min-height: 40px");
-    expect(mobileFileRow).toContain("border-radius: 0");
-    expect(mobileFileRowSelected).toContain(
-      "border-left: 2px solid var(--component-mix-status-info-fg-88pct-white-12pct)"
-    );
+    expect(mobileFileRow).toContain("border-radius: var(--radius-md)");
+    expect(mobileFileRowSelected).not.toContain("border-left:");
+    expect(mobileFileRowSelected).toContain("border: 1px solid var(--state-selected-border)");
+    expect(mobileFileRowSelected).toContain("background: var(--state-selected-bg)");
     expect(drawerItem).toContain("border-radius: var(--radius-xl)");
     expect(drawerFooterButton).toContain("border-radius: var(--radius-md)");
     expect(welcomeCard).toContain("border-radius: var(--radius-lg)");
@@ -3112,9 +3109,6 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(rowSelected).toContain("border: 1px solid var(--state-selected-border)");
     expect(rowSelected).toContain("background: var(--state-selected-bg)");
     expect(rowSelected).toContain("color: var(--text-primary)");
-    expect(mobileRowSelected).toContain(
-      "border-left: 2px solid var(--component-mix-status-info-fg-88pct-white-12pct)"
-    );
     expect(rowActionsBase).toContain("gap: var(--gap-compact)");
     expect(rowActionsDesktop).toContain("opacity: 0");
   });

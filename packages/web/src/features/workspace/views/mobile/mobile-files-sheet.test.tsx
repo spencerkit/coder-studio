@@ -77,6 +77,7 @@ describe("MobileFilesSheet", () => {
       "mobile-files-sheet__segment",
       "active"
     );
+    expect(document.querySelector(".mobile-files-sheet__content")).not.toBeNull();
     expect(screen.getByRole("tab", { name: "Search" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Source Control" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "New File" })).toBeNull();
