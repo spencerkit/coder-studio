@@ -31,8 +31,8 @@ function shouldClearDiffPreview(
     return false;
   }
 
-  if (preview.source === "commit") {
-    return shouldExitEditor && !options?.preserveCommitPreviewOnExit;
+  if (preview.kind === "commit-file-list" || preview.kind === "commit-file-diff") {
+    return false;
   }
 
   if (shouldExitEditor) {
@@ -92,7 +92,7 @@ export function useOpenEditorsActions(workspaceId: string, options?: UseOpenEdit
       }
 
       const shouldDismissPreview =
-        diffPreview?.source === "file" &&
+        diffPreview?.kind === "worktree-file-diff" &&
         shouldClearDiffPreview(diffPreview, resolution.removedPaths, resolution.shouldExitEditor);
       if (shouldDismissPreview) {
         setDiffPreviewDismissed(true);
@@ -149,7 +149,7 @@ export function useOpenEditorsActions(workspaceId: string, options?: UseOpenEdit
     setActiveFilePath(null);
     setEditorMode("edit");
     const shouldDismissPreview =
-      diffPreview?.source === "file" &&
+      diffPreview?.kind === "worktree-file-diff" &&
       shouldClearDiffPreview(diffPreview, resolution.removedPaths, resolution.shouldExitEditor, {
         preserveCommitPreviewOnExit: true,
       });

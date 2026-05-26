@@ -338,7 +338,11 @@ export function useWorkspaceScreenModel() {
   );
 
   const mainAreaMode: WorkspaceMainAreaMode =
-    activeFilePath || diffPreview?.source === "commit" ? "editor" : "agent";
+    activeFilePath ||
+    diffPreview?.kind === "commit-file-list" ||
+    diffPreview?.kind === "commit-file-diff"
+      ? "editor"
+      : "agent";
 
   return {
     activeSession,

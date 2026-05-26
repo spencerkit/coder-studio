@@ -151,7 +151,8 @@ export const CodeEditorHeaderActions: FC<CodeEditorHeaderActionsProps> = ({
   const toggleModeTitle = isImageFile
     ? t("code_editor.edit_as_text")
     : t("code_editor.preview_as_image");
-  const isCommitPreview = activeDiffChange?.source === "commit";
+  const isCommitPreview =
+    activeDiffChange?.kind === "commit-file-list" || activeDiffChange?.kind === "commit-file-diff";
 
   if (variant !== "mobile") {
     return <CodeEditorDesktopHeaderActions state={state} />;
@@ -242,7 +243,7 @@ export const CodeEditorHeaderActions: FC<CodeEditorHeaderActionsProps> = ({
       >
         {saveLabel}
       </button>
-      {activeFilePath || activeDiffChange?.source === "commit" ? (
+      {activeFilePath || isCommitPreview ? (
         <button
           type="button"
           className="mobile-sheet__action"

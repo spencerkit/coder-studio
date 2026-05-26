@@ -1465,10 +1465,14 @@ describe("WorkspacePage", () => {
       },
     });
     store.set(gitDiffPreviewAtomFamily("ws-test"), {
+      kind: "worktree-file-diff",
       path: "src/app.tsx",
       diff: "diff --git a/src/app.tsx b/src/app.tsx",
       staged: false,
-      source: "file",
+      renderAs: "text",
+      status: "modified",
+      originalContent: "const app = 0;",
+      modifiedContent: "const app = 1;",
     });
 
     render(
@@ -1535,10 +1539,14 @@ describe("WorkspacePage", () => {
 
     act(() => {
       store.set(gitDiffPreviewAtomFamily("ws-test"), {
+        kind: "worktree-file-diff",
         path: "src/app.tsx",
         diff: "diff --git a/src/app.tsx b/src/app.tsx",
         staged: false,
-        source: "file",
+        renderAs: "text",
+        status: "modified",
+        originalContent: "const app = 0;",
+        modifiedContent: "const app = 1;",
       });
     });
 
@@ -1654,10 +1662,23 @@ describe("WorkspacePage", () => {
       },
     });
     store.set(gitDiffPreviewAtomFamily("ws-test"), {
+      kind: "commit-file-list",
       path: "abc123",
       title: "abc123 · commit subject",
-      diff: "diff --git a/src/app.tsx b/src/app.tsx",
-      source: "commit",
+      commit: {
+        sha: "abc123",
+        shortSha: "abc123",
+        subject: "commit subject",
+        authorName: "Spencer",
+        authoredAt: 1,
+      },
+      files: [
+        {
+          path: "src/app.tsx",
+          status: "modified",
+          renderAs: "text",
+        },
+      ],
     });
 
     render(
@@ -1721,10 +1742,23 @@ describe("WorkspacePage", () => {
       },
     });
     store.set(gitDiffPreviewAtomFamily("ws-test"), {
+      kind: "commit-file-list",
       path: "abc123",
       title: "abc123 · commit subject",
-      diff: "diff --git a/src/app.tsx b/src/app.tsx",
-      source: "commit",
+      commit: {
+        sha: "abc123",
+        shortSha: "abc123",
+        subject: "commit subject",
+        authorName: "Spencer",
+        authoredAt: 1,
+      },
+      files: [
+        {
+          path: "src/app.tsx",
+          status: "modified",
+          renderAs: "text",
+        },
+      ],
     });
 
     render(
@@ -1748,14 +1782,27 @@ describe("WorkspacePage", () => {
     expect(store.get(openFilesAtomFamily("ws-test"))).toEqual({});
     expect(store.get(activeFilePathAtomFamily("ws-test"))).toBeNull();
     expect(store.get(gitDiffPreviewAtomFamily("ws-test"))).toEqual({
+      kind: "commit-file-list",
       path: "abc123",
       title: "abc123 · commit subject",
-      diff: "diff --git a/src/app.tsx b/src/app.tsx",
-      source: "commit",
+      commit: {
+        sha: "abc123",
+        shortSha: "abc123",
+        subject: "commit subject",
+        authorName: "Spencer",
+        authoredAt: 1,
+      },
+      files: [
+        {
+          path: "src/app.tsx",
+          status: "modified",
+          renderAs: "text",
+        },
+      ],
     });
   });
 
-  it("clearing the final open editor from Open Editors also clears an active commit preview", async () => {
+  it("clearing the final open editor from Open Editors preserves an active commit preview", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "git.status") {
         return {
@@ -1802,10 +1849,23 @@ describe("WorkspacePage", () => {
       },
     });
     store.set(gitDiffPreviewAtomFamily("ws-test"), {
+      kind: "commit-file-list",
       path: "abc123",
       title: "abc123 · commit subject",
-      diff: "diff --git a/src/app.tsx b/src/app.tsx",
-      source: "commit",
+      commit: {
+        sha: "abc123",
+        shortSha: "abc123",
+        subject: "commit subject",
+        authorName: "Spencer",
+        authoredAt: 1,
+      },
+      files: [
+        {
+          path: "src/app.tsx",
+          status: "modified",
+          renderAs: "text",
+        },
+      ],
     });
 
     render(
@@ -1828,11 +1888,29 @@ describe("WorkspacePage", () => {
       within(activeRow).getByRole("button", { name: /^(Close|关闭) src\/app\.tsx$/ })
     );
 
-    await screen.findByTestId("agent-panes");
-    expect(screen.queryByTestId("code-editor-host")).not.toBeInTheDocument();
+    await screen.findByTestId("code-editor-host");
+    expect(screen.queryByTestId("agent-panes")).not.toBeInTheDocument();
     expect(store.get(activeFilePathAtomFamily("ws-test"))).toBeNull();
     expect(store.get(openFilesAtomFamily("ws-test"))).toEqual({});
-    expect(store.get(gitDiffPreviewAtomFamily("ws-test"))).toBeNull();
+    expect(store.get(gitDiffPreviewAtomFamily("ws-test"))).toEqual({
+      kind: "commit-file-list",
+      path: "abc123",
+      title: "abc123 · commit subject",
+      commit: {
+        sha: "abc123",
+        shortSha: "abc123",
+        subject: "commit subject",
+        authorName: "Spencer",
+        authoredAt: 1,
+      },
+      files: [
+        {
+          path: "src/app.tsx",
+          status: "modified",
+          renderAs: "text",
+        },
+      ],
+    });
   });
 
   it("keeps the resized desktop file panel width after dragging the left separator", async () => {

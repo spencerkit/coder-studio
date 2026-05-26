@@ -37,6 +37,7 @@ import {
 import { updateStateAtom } from "../../features/updates/atoms";
 import {
   branchQuickPickAtom,
+  type GitDiffPreview,
   gitDiffPreviewAtomFamily,
   gitStateAtomFamily,
 } from "../../features/workspace/atoms";
@@ -151,26 +152,20 @@ vi.mock("../../features/workspace/views/shared/file-tree-panel", () => ({
 }));
 
 vi.mock("../../features/workspace/views/shared/git-panel", () => ({
-  GitPanel: ({
-    onPreviewOpen,
-  }: {
-    onPreviewOpen?: (preview: {
-      path: string;
-      diff: string;
-      staged?: boolean;
-      source?: "file" | "commit";
-      title?: string;
-    }) => void;
-  }) => (
+  GitPanel: ({ onPreviewOpen }: { onPreviewOpen?: (preview: GitDiffPreview) => void }) => (
     <div>
       <button
         type="button"
         onClick={() =>
           onPreviewOpen?.({
+            kind: "worktree-file-diff",
             path: "src/app.tsx",
             diff: "diff --git a/src/app.tsx b/src/app.tsx",
             staged: false,
-            source: "file",
+            renderAs: "text",
+            status: "modified",
+            originalContent: "const app = 0;",
+            modifiedContent: "const app = 1;",
           })
         }
       >
@@ -180,10 +175,23 @@ vi.mock("../../features/workspace/views/shared/git-panel", () => ({
         type="button"
         onClick={() =>
           onPreviewOpen?.({
+            kind: "commit-file-list",
             path: "abc123",
             title: "abc123 · commit subject",
-            diff: "diff --git a/src/app.tsx b/src/app.tsx",
-            source: "commit",
+            commit: {
+              sha: "abc123",
+              shortSha: "abc123",
+              subject: "commit subject",
+              authorName: "Spencer",
+              authoredAt: 1,
+            },
+            files: [
+              {
+                path: "src/app.tsx",
+                status: "modified",
+                renderAs: "text",
+              },
+            ],
           })
         }
       >

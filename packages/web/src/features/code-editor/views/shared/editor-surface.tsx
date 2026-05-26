@@ -3,6 +3,7 @@ import type { FC } from "react";
 import { EmptyState, IconButton, ThemedIcon, Tooltip } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { deriveDocumentPreviewKind } from "../../../workspace/atoms";
+import { CommitFileListPreview } from "../../components/commit-file-list-preview";
 import { DocumentPreview } from "../../components/document-preview";
 import { ImageDiffPreview } from "../../components/image-diff-preview";
 import { ImagePreview } from "../../components/image-preview";
@@ -50,20 +51,29 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
     );
   }
 
+  const activePreviewKind = activeDiffChange?.kind;
   const currentTextFile = currentFile?.kind === "text" ? currentFile : null;
   const currentImageFile = currentFile?.kind === "image" ? currentFile : null;
   const showHeader = chrome === "full";
-  const isCommitPreview = activeDiffChange?.source === "commit";
+  const isCommitFileListPreview = activePreviewKind === "commit-file-list";
+  const isCommitFileDiffPreview = activePreviewKind === "commit-file-diff";
+  const isCommitPreview = isCommitFileListPreview || isCommitFileDiffPreview;
   const dirtyIndicator =
     !isCommitPreview && currentTextFile?.isDirty ? (
       <span className="dirty-indicator">*</span>
     ) : null;
   const canRenderTextDiff =
-    (mode === "diff" || isCommitPreview) &&
     Boolean(activeDiffChange) &&
-    (activeDiffChange?.renderAs === "text" || activeDiffChange?.source === "commit");
+    ((activePreviewKind === "worktree-file-diff" &&
+      mode === "diff" &&
+      activeDiffChange.renderAs === "text") ||
+      (isCommitFileDiffPreview && activeDiffChange.renderAs === "text"));
   const canRenderImageDiff =
-    mode === "diff" && Boolean(activeDiffChange) && activeDiffChange?.renderAs === "image";
+    Boolean(activeDiffChange) &&
+    ((activePreviewKind === "worktree-file-diff" &&
+      mode === "diff" &&
+      activeDiffChange.renderAs === "image") ||
+      (isCommitFileDiffPreview && activeDiffChange.renderAs === "image"));
   const shouldRenderDocumentPreview =
     mode === "preview" &&
     currentTextFile !== null &&
@@ -73,6 +83,16 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
     : currentFile
       ? currentFile.path
       : (activeDiffChange?.title ?? activeFilePath ?? t("file.title"));
+  const buildRevisionUrl = (path: string, revision?: string) => {
+    const query = new URLSearchParams({
+      workspaceId: workspace.id,
+      path,
+    });
+    if (revision) {
+      query.set("revision", revision);
+    }
+    return `/api/file?${query.toString()}`;
+  };
 
   return (
     <div className="workspace-git-view">
@@ -138,9 +158,19 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
         ) : null}
 
         <div className="code-editor-body">
-          {canRenderTextDiff ? (
+          {isCommitFileListPreview ? (
+            <CommitFileListPreview
+              preview={activeDiffChange}
+              onOpenFile={(file) => void state.openCommitFileDiff(file)}
+            />
+          ) : canRenderTextDiff ? (
             <MonacoDiffHost
-              filePath={activeDiffChange?.path ?? currentFile?.path ?? "diff.patch"}
+              filePath={
+                activeDiffChange?.modifiedPath ??
+                activeDiffChange?.path ??
+                currentFile?.path ??
+                "diff.patch"
+              }
               originalContent={activeDiffChange?.originalContent ?? ""}
               modifiedContent={activeDiffChange?.modifiedContent ?? activeDiffChange?.diff ?? ""}
             />
@@ -162,6 +192,30 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
                     : activeDiffChange?.modifiedRevision
                       ? `${currentImageFile.url}&revision=${activeDiffChange.modifiedRevision}`
                       : currentImageFile.url
+              }
+            />
+          ) : isCommitFileDiffPreview && activeDiffChange.renderAs === "image" ? (
+            <ImageDiffPreview
+              path={activeDiffChange.modifiedPath ?? activeDiffChange.path}
+              mime={activeDiffChange.mime ?? "application/octet-stream"}
+              status={activeDiffChange.status}
+              beforeUrl={
+                activeDiffChange.originalPath
+                  ? buildRevisionUrl(
+                      activeDiffChange.originalPath,
+                      activeDiffChange.originalRevision
+                    )
+                  : undefined
+              }
+              afterUrl={
+                activeDiffChange.status === "deleted"
+                  ? undefined
+                  : activeDiffChange.modifiedPath
+                    ? buildRevisionUrl(
+                        activeDiffChange.modifiedPath,
+                        activeDiffChange.modifiedRevision
+                      )
+                    : undefined
               }
             />
           ) : shouldRenderDocumentPreview && currentTextFile ? (

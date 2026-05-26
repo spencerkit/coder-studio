@@ -781,10 +781,10 @@ describe("CodeEditorHost", () => {
     });
     store.set(editorModeAtomFamily("ws-1"), "diff");
     store.set(gitDiffPreviewAtomFamily("ws-1"), {
+      kind: "worktree-file-diff",
       path: "src/unrelated.ts",
       diff: "diff --git a/src/unrelated.ts b/src/unrelated.ts",
       staged: false,
-      source: "file",
     });
 
     render(
@@ -826,10 +826,10 @@ describe("CodeEditorHost", () => {
     });
     store.set(editorModeAtomFamily("ws-1"), "diff");
     store.set(gitDiffPreviewAtomFamily("ws-1"), {
+      kind: "worktree-file-diff",
       path: "src/final.ts",
       diff: "diff --git a/src/final.ts b/src/final.ts",
       staged: false,
-      source: "file",
     });
 
     render(
@@ -1063,10 +1063,10 @@ describe("CodeEditorHost", () => {
       },
     });
     store.set(gitDiffPreviewAtomFamily("ws-1"), {
+      kind: "worktree-file-diff",
       path: "src/dirty.ts",
       diff: "diff --git a/src/dirty.ts b/src/dirty.ts",
       staged: false,
-      source: "file",
     });
 
     render(
@@ -1077,20 +1077,36 @@ describe("CodeEditorHost", () => {
 
     expect(store.get(editorModeAtomFamily("ws-1"))).toBe("edit");
     expect(store.get(gitDiffPreviewAtomFamily("ws-1"))).toEqual({
+      kind: "worktree-file-diff",
       path: "src/dirty.ts",
       diff: "diff --git a/src/dirty.ts b/src/dirty.ts",
       staged: false,
-      source: "file",
     });
   });
 
   it("renders commit diff preview in the mobile content-only editor surface without an active file", () => {
     const { store } = setupStore();
     store.set(gitDiffPreviewAtomFamily("ws-1"), {
-      path: "abc123",
-      title: "abc123 · commit subject",
+      kind: "commit-file-diff",
+      path: "src/app.tsx",
+      title: "src/app.tsx",
       diff: "diff --git a/src/app.tsx b/src/app.tsx",
-      source: "commit",
+      renderAs: "text",
+      status: "modified",
+      originalContent: "const app = 0;",
+      modifiedContent: "const app = 1;",
+      commit: {
+        sha: "abc123",
+        shortSha: "abc123",
+        subject: "commit subject",
+        authorName: "Spencer",
+        authoredAt: 1,
+      },
+      file: {
+        path: "src/app.tsx",
+        status: "modified",
+        renderAs: "text",
+      },
     });
 
     render(
@@ -1100,8 +1116,12 @@ describe("CodeEditorHost", () => {
     );
 
     expect(screen.getByTestId("monaco-diff-host")).toHaveAttribute(
+      "data-original",
+      "const app = 0;"
+    );
+    expect(screen.getByTestId("monaco-diff-host")).toHaveAttribute(
       "data-modified",
-      "diff --git a/src/app.tsx b/src/app.tsx"
+      "const app = 1;"
     );
     expect(screen.queryByRole("button", { name: "Close" })).not.toBeInTheDocument();
   });
@@ -1129,10 +1149,26 @@ describe("CodeEditorHost", () => {
       },
     });
     store.set(gitDiffPreviewAtomFamily("ws-1"), {
-      path: "abc123",
-      title: "abc123 · commit subject",
+      kind: "commit-file-diff",
+      path: "src/app.tsx",
+      title: "src/app.tsx",
       diff: "diff --git a/src/app.tsx b/src/app.tsx",
-      source: "commit",
+      renderAs: "text",
+      status: "modified",
+      originalContent: "const app = 0;",
+      modifiedContent: "const app = 1;",
+      commit: {
+        sha: "abc123",
+        shortSha: "abc123",
+        subject: "commit subject",
+        authorName: "Spencer",
+        authoredAt: 1,
+      },
+      file: {
+        path: "src/app.tsx",
+        status: "modified",
+        renderAs: "text",
+      },
     });
 
     render(
@@ -1163,7 +1199,7 @@ describe("CodeEditorHost", () => {
     });
   });
 
-  it("closing a commit-history preview restores the background file to its normal mode", async () => {
+  it("closing a commit file diff returns to its parent commit file list before restoring the background file", async () => {
     const { store } = setupStore({
       activePath: "src/background.ts",
       openFiles: {
@@ -1192,15 +1228,74 @@ describe("CodeEditorHost", () => {
     act(() => {
       store.set(editorModeAtomFamily("ws-1"), "diff");
       store.set(gitDiffPreviewAtomFamily("ws-1"), {
-        path: "abc123",
-        title: "abc123 · commit subject",
+        kind: "commit-file-diff",
+        path: "src/app.tsx",
+        title: "src/app.tsx",
         diff: "diff --git a/src/app.tsx b/src/app.tsx",
-        source: "commit",
+        renderAs: "text",
+        status: "modified",
+        originalContent: "const app = 0;",
+        modifiedContent: "const app = 1;",
+        commit: {
+          sha: "abc123",
+          shortSha: "abc123",
+          subject: "commit subject",
+          authorName: "Spencer",
+          authoredAt: 1,
+        },
+        file: {
+          path: "src/app.tsx",
+          status: "modified",
+          renderAs: "text",
+        },
       });
+    });
+
+    const sendCommand = (store.get(wsClientAtom) as { sendCommand: ReturnType<typeof vi.fn> })
+      .sendCommand;
+    sendCommand.mockResolvedValueOnce({
+      commit: {
+        sha: "abc123",
+        shortSha: "abc123",
+        subject: "commit subject",
+        authorName: "Spencer",
+        authoredAt: 1,
+      },
+      files: [
+        {
+          path: "src/app.tsx",
+          status: "modified",
+          renderAs: "text",
+        },
+      ],
     });
 
     await waitFor(() => {
       expect(screen.getByTestId("monaco-diff-host")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+
+    await waitFor(() => {
+      expect(store.get(gitDiffPreviewAtomFamily("ws-1"))).toEqual({
+        kind: "commit-file-list",
+        path: "abc123",
+        title: "abc123 · commit subject",
+        commit: {
+          sha: "abc123",
+          shortSha: "abc123",
+          subject: "commit subject",
+          authorName: "Spencer",
+          authoredAt: 1,
+        },
+        files: [
+          {
+            path: "src/app.tsx",
+            status: "modified",
+            renderAs: "text",
+          },
+        ],
+      });
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
@@ -1257,15 +1352,28 @@ describe("CodeEditorHost", () => {
 
     act(() => {
       store.set(gitDiffPreviewAtomFamily("ws-1"), {
+        kind: "commit-file-list",
         path: "abc123",
         title: "abc123 · commit subject",
-        diff: "diff --git a/src/app.tsx b/src/app.tsx",
-        source: "commit",
+        commit: {
+          sha: "abc123",
+          shortSha: "abc123",
+          subject: "commit subject",
+          authorName: "Spencer",
+          authoredAt: 1,
+        },
+        files: [
+          {
+            path: "src/app.tsx",
+            status: "modified",
+            renderAs: "text",
+          },
+        ],
       });
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId("monaco-diff-host")).toBeInTheDocument();
+      expect(screen.getByTestId("commit-file-list-preview")).toBeInTheDocument();
       expect(screen.queryByText("Save failed on background")).not.toBeInTheDocument();
     });
 
@@ -1275,6 +1383,151 @@ describe("CodeEditorHost", () => {
       expect(store.get(gitDiffPreviewAtomFamily("ws-1"))).toBeNull();
       expect(screen.getByTestId("monaco-host")).toHaveTextContent("changed background");
       expect(screen.getByRole("alert")).toHaveTextContent("Save failed on background");
+    });
+  });
+
+  it("openLocation normalizes editor mode when exiting a commit file list preview over a file-diff background", async () => {
+    const { store } = setupStore({
+      activePath: "src/background.ts",
+      openFiles: {
+        "src/background.ts": {
+          kind: "text",
+          path: "src/background.ts",
+          content: "background",
+          savedContent: "background",
+          baseHash: "hash-bg",
+          isDirty: false,
+        },
+      },
+    });
+
+    render(
+      <Provider store={store}>
+        <CodeEditorHost />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(store.get(editorModeAtomFamily("ws-1"))).toBe("edit");
+      expect(screen.getByTestId("monaco-host")).toHaveTextContent("background");
+    });
+
+    act(() => {
+      store.set(editorModeAtomFamily("ws-1"), "diff");
+      store.set(gitDiffPreviewAtomFamily("ws-1"), {
+        kind: "commit-file-list",
+        path: "abc123",
+        title: "abc123 · commit subject",
+        commit: {
+          sha: "abc123",
+          shortSha: "abc123",
+          subject: "commit subject",
+          authorName: "Spencer",
+          authoredAt: 1,
+        },
+        files: [
+          {
+            path: "src/app.tsx",
+            status: "modified",
+            renderAs: "text",
+          },
+        ],
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("commit-file-list-preview")).toBeInTheDocument();
+      expect(store.get(editorModeAtomFamily("ws-1"))).toBe("diff");
+    });
+
+    const { result } = renderHook(() => useOpenLocation("ws-1"), {
+      wrapper: wrapperFor(store),
+    });
+
+    await act(async () => {
+      await result.current.openLocation({
+        workspaceId: "ws-1",
+        path: "src/background.ts",
+        source: "manual",
+      });
+    });
+
+    await waitFor(() => {
+      expect(store.get(gitDiffPreviewAtomFamily("ws-1"))).toBeNull();
+      expect(store.get(activeFilePathAtomFamily("ws-1"))).toBe("src/background.ts");
+      expect(store.get(editorModeAtomFamily("ws-1"))).toBe("edit");
+      expect(screen.getByTestId("monaco-host")).toHaveTextContent("background");
+      expect(screen.queryByTestId("commit-file-list-preview")).not.toBeInTheDocument();
+    });
+  });
+
+  it("shows the commit file list preview while a background save error remains hidden", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args?: { path?: string }) => {
+      if (op === "file.write" && args?.path === "src/background.ts") {
+        throw new Error("Save failed on background");
+      }
+
+      if (op === "file.read") {
+        return {
+          kind: "text",
+          content: "hello world",
+          baseHash: "abc123",
+          encoding: "utf-8",
+        };
+      }
+
+      return null;
+    });
+    const { store } = setupStore({
+      activePath: "src/background.ts",
+      sendCommand,
+      openFiles: {
+        "src/background.ts": {
+          kind: "text",
+          path: "src/background.ts",
+          content: "changed background",
+          savedContent: "saved background",
+          baseHash: "hash-bg",
+          isDirty: true,
+        },
+      },
+    });
+
+    render(
+      <Provider store={store}>
+        <CodeEditorHost />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Save File" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Save failed on background");
+
+    act(() => {
+      store.set(gitDiffPreviewAtomFamily("ws-1"), {
+        kind: "commit-file-list",
+        path: "abc123",
+        title: "abc123 · commit subject",
+        commit: {
+          sha: "abc123",
+          shortSha: "abc123",
+          subject: "commit subject",
+          authorName: "Spencer",
+          authoredAt: 1,
+        },
+        files: [
+          {
+            path: "src/app.tsx",
+            status: "modified",
+            renderAs: "text",
+          },
+        ],
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("commit-file-list-preview")).toBeInTheDocument();
+      expect(screen.queryByText("Save failed on background")).not.toBeInTheDocument();
     });
   });
 
@@ -1307,15 +1560,28 @@ describe("CodeEditorHost", () => {
     act(() => {
       store.set(editorModeAtomFamily("ws-1"), "diff");
       store.set(gitDiffPreviewAtomFamily("ws-1"), {
+        kind: "commit-file-list",
         path: "abc123",
         title: "abc123 · commit subject",
-        diff: "diff --git a/src/app.tsx b/src/app.tsx",
-        source: "commit",
+        commit: {
+          sha: "abc123",
+          shortSha: "abc123",
+          subject: "commit subject",
+          authorName: "Spencer",
+          authoredAt: 1,
+        },
+        files: [
+          {
+            path: "src/app.tsx",
+            status: "modified",
+            renderAs: "text",
+          },
+        ],
       });
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId("monaco-diff-host")).toBeInTheDocument();
+      expect(screen.getByTestId("commit-file-list-preview")).toBeInTheDocument();
       expect(store.get(editorModeAtomFamily("ws-1"))).toBe("diff");
     });
 
@@ -1336,7 +1602,7 @@ describe("CodeEditorHost", () => {
       expect(store.get(activeFilePathAtomFamily("ws-1"))).toBe("src/background.ts");
       expect(store.get(editorModeAtomFamily("ws-1"))).toBe("edit");
       expect(screen.getByTestId("monaco-host")).toHaveTextContent("background");
-      expect(screen.queryByTestId("monaco-diff-host")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("commit-file-list-preview")).not.toBeInTheDocument();
     });
   });
 
@@ -1397,10 +1663,10 @@ describe("CodeEditorHost", () => {
       untracked: [],
     });
     store.set(gitDiffPreviewAtomFamily("ws-1"), {
+      kind: "worktree-file-diff",
       path: "src/app.ts",
       diff: "diff --git a/src/app.ts b/src/app.ts",
       staged: false,
-      source: "file",
     });
 
     const { result } = renderHook(() => useCodeEditorActions(), {
@@ -1435,10 +1701,10 @@ describe("CodeEditorHost", () => {
       untracked: [],
     });
     store.set(gitDiffPreviewAtomFamily("ws-1"), {
+      kind: "worktree-file-diff",
       path: "src/app.ts",
       diff: "diff --git a/src/app.ts b/src/app.ts",
       staged: false,
-      source: "file",
       renderAs: "text",
       originalContent: "export const app = 1;",
       modifiedContent: "export const app = 2;",
@@ -1798,15 +2064,28 @@ describe("CodeEditorHost", () => {
 
     act(() => {
       store.set(gitDiffPreviewAtomFamily("ws-1"), {
+        kind: "commit-file-list",
         path: "abc123",
         title: "abc123 · commit subject",
-        diff: "diff --git a/src/app.tsx b/src/app.tsx",
-        source: "commit",
+        commit: {
+          sha: "abc123",
+          shortSha: "abc123",
+          subject: "commit subject",
+          authorName: "Spencer",
+          authoredAt: 1,
+        },
+        files: [
+          {
+            path: "src/app.tsx",
+            status: "modified",
+            renderAs: "text",
+          },
+        ],
       });
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId("monaco-diff-host")).toBeInTheDocument();
+      expect(screen.getByTestId("commit-file-list-preview")).toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Close all" }));
@@ -1814,10 +2093,23 @@ describe("CodeEditorHost", () => {
     expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
     expect(store.get(openFilesAtomFamily("ws-1"))).toEqual({});
     expect(store.get(gitDiffPreviewAtomFamily("ws-1"))).toEqual({
+      kind: "commit-file-list",
       path: "abc123",
       title: "abc123 · commit subject",
-      diff: "diff --git a/src/app.tsx b/src/app.tsx",
-      source: "commit",
+      commit: {
+        sha: "abc123",
+        shortSha: "abc123",
+        subject: "commit subject",
+        authorName: "Spencer",
+        authoredAt: 1,
+      },
+      files: [
+        {
+          path: "src/app.tsx",
+          status: "modified",
+          renderAs: "text",
+        },
+      ],
     });
 
     await act(async () => {
@@ -1915,15 +2207,28 @@ describe("CodeEditorHost", () => {
 
     act(() => {
       store.set(gitDiffPreviewAtomFamily("ws-1"), {
+        kind: "commit-file-list",
         path: "abc123",
         title: "abc123 · commit subject",
-        diff: "diff --git a/src/app.tsx b/src/app.tsx",
-        source: "commit",
+        commit: {
+          sha: "abc123",
+          shortSha: "abc123",
+          subject: "commit subject",
+          authorName: "Spencer",
+          authoredAt: 1,
+        },
+        files: [
+          {
+            path: "src/app.tsx",
+            status: "modified",
+            renderAs: "text",
+          },
+        ],
       });
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId("monaco-diff-host")).toBeInTheDocument();
+      expect(screen.getByTestId("commit-file-list-preview")).toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Close all" }));
