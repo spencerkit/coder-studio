@@ -1,1 +1,6 @@
-export { MonitoringContent, MonitoringDashboard, useMonitoringData } from "./page";
+export {
+  MonitoringContent,
+  MonitoringDashboard,
+  type UseMonitoringDataResult,
+  useMonitoringData,
+} from "./page";

@@ -18,6 +18,7 @@ import {
   MAX_SUPERVISOR_EVALUATION_TIMEOUT_SEC,
   MAX_SUPERVISOR_RETRY_DELAY_SEC,
   MAX_SUPERVISOR_RETRY_MAX_COUNT,
+  type MonitoringMode,
   type MonitoringSettings,
   resolveMonitoringSettings,
   resolveSupervisorEvaluationTimeoutSec,
@@ -51,6 +52,7 @@ import { useTranslation } from "../../../lib/i18n";
 import { getThemeById, resolveStoredThemeId, THEMES } from "../../../theme";
 import { lspRuntimeModeAtom } from "../../code-editor/lsp/runtime-mode";
 import { buildDiagnosticsPath } from "../../diagnostics";
+import { useMonitoringData } from "../../monitoring";
 import { notificationPreferencesAtom } from "../../notifications/atoms";
 import { MobilePageHeader } from "../../shared/components/mobile-page-header";
 import { PageHeader } from "../../shared/components/page-header";
@@ -218,6 +220,25 @@ function resolveMobileSettingsGroups(
     titleKey: group.titleKey,
     sections: group.sections.map((sectionId) => sectionsById.get(sectionId)!),
   }));
+}
+
+interface MonitoringSettingsSectionProps {
+  readonly mode: MonitoringMode;
+  readonly onChange: (next: MonitoringSettings) => Promise<void> | void;
+  readonly settings: MonitoringSettings;
+}
+
+function MonitoringSettingsSection({ mode, onChange, settings }: MonitoringSettingsSectionProps) {
+  const monitoringData = useMonitoringData();
+
+  return (
+    <MonitoringSettingsSubpage
+      mode={mode}
+      monitoringData={monitoringData}
+      onChange={onChange}
+      settings={settings}
+    />
+  );
 }
 
 /**
@@ -789,7 +810,7 @@ export function SettingsPage() {
         );
       case "monitoring":
         return (
-          <MonitoringSettingsSubpage
+          <MonitoringSettingsSection
             mode={deriveMonitoringMode(monitoringSettings)}
             onChange={handleMonitoringSettingsChange}
             settings={monitoringSettings}

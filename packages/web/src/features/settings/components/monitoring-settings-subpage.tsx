@@ -1,20 +1,21 @@
 import type { MonitoringMode, MonitoringSettings } from "@coder-studio/core";
-import { MonitoringDashboard, useMonitoringData } from "../../monitoring";
+import type { UseMonitoringDataResult } from "../../monitoring";
+import { MonitoringDashboard } from "../../monitoring";
 import { MonitoringSettingsCard } from "./monitoring-settings-card";
 
 interface MonitoringSettingsSubpageProps {
   readonly mode: MonitoringMode;
+  readonly monitoringData: UseMonitoringDataResult;
   readonly onChange: (next: MonitoringSettings) => Promise<void> | void;
   readonly settings: MonitoringSettings;
 }
 
 export function MonitoringSettingsSubpage({
   mode,
+  monitoringData,
   onChange,
   settings,
 }: MonitoringSettingsSubpageProps) {
-  const monitoringData = useMonitoringData();
-
   return (
     <div className="settings-section">
       <MonitoringSettingsCard

@@ -760,6 +760,7 @@ describe("SettingsPage", () => {
         "true"
       );
     });
+    expect(sendCommand).toHaveBeenCalledWith("monitoring.recheck", {}, undefined);
 
     await act(async () => {
       settingsGetDeferred.resolve({
@@ -1208,6 +1209,8 @@ describe("SettingsPage", () => {
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith("settings.get", {}, undefined);
     });
+    expect(sendCommand).not.toHaveBeenCalledWith("monitoring.get", {}, undefined);
+    expect(sendCommand).not.toHaveBeenCalledWith("monitoring.recheck", {}, undefined);
 
     expect(screen.queryByRole("button", { name: "打开监控" })).not.toBeInTheDocument();
     expect(screen.queryByRole("switch", { name: "启用性能监控" })).not.toBeInTheDocument();

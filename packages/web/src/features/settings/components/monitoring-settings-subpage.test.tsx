@@ -5,7 +5,7 @@ import { createStore, Provider } from "jotai";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../../atoms/app-ui";
-import { connectionStatusAtom, wsClientAtom } from "../../../atoms/connection";
+import type { UseMonitoringDataResult } from "../../monitoring";
 import { MonitoringSettingsSubpage } from "./monitoring-settings-subpage";
 
 function createMonitoringResponse(settings: MonitoringSettings): MonitoringResponse {
@@ -59,25 +59,36 @@ function createMonitoringResponse(settings: MonitoringSettings): MonitoringRespo
   };
 }
 
-function renderSubpage(settings: MonitoringSettings) {
-  const response = createMonitoringResponse(settings);
-  const sendCommand = vi.fn().mockResolvedValue(response);
-  const subscribe = vi.fn(() => () => {});
+function createMonitoringDataResult(
+  settings: MonitoringSettings,
+  overrides: Partial<UseMonitoringDataResult> = {}
+): UseMonitoringDataResult {
+  return {
+    error: null,
+    loading: false,
+    refresh: vi.fn(async () => {}),
+    response: createMonitoringResponse(settings),
+    ...overrides,
+  };
+}
+
+function renderSubpage(
+  settings: MonitoringSettings,
+  monitoringData = createMonitoringDataResult(settings)
+) {
   const onChange = vi.fn();
   const store = createStore();
 
   store.set(localeAtom, "en");
-  store.set(connectionStatusAtom, "connected");
-  store.set(wsClientAtom, { sendCommand, subscribe } as never);
 
   return {
-    sendCommand,
-    subscribe,
+    monitoringData,
     onChange,
     ...render(
       <Provider store={store}>
         <MonitoringSettingsSubpage
           mode={deriveMonitoringMode(settings)}
+          monitoringData={monitoringData}
           onChange={onChange}
           settings={settings}
         />
@@ -88,34 +99,34 @@ function renderSubpage(settings: MonitoringSettings) {
 
 function renderStatefulSubpage(options: {
   initialSettings: MonitoringSettings;
-  monitoringGetResponse?: MonitoringResponse;
-  monitoringRecheckResponse?: MonitoringResponse;
+  nextMonitoringResponse?: MonitoringResponse;
 }) {
-  const sendCommand = vi.fn().mockImplementation(async (op: string) => {
-    if (op === "monitoring.get") {
-      return options.monitoringGetResponse ?? createMonitoringResponse(options.initialSettings);
-    }
-
-    if (op === "monitoring.recheck") {
-      return options.monitoringRecheckResponse ?? createMonitoringResponse(options.initialSettings);
-    }
-
-    throw new Error(`Unexpected command: ${op}`);
-  });
-  const subscribe = vi.fn(() => () => {});
   const onChange = vi.fn(async () => {});
   const store = createStore();
+  const refresh = vi.fn(async () => {});
 
   store.set(localeAtom, "en");
-  store.set(connectionStatusAtom, "connected");
-  store.set(wsClientAtom, { sendCommand, subscribe } as never);
 
   function StatefulSubpage() {
     const [settings, setSettings] = useState(options.initialSettings);
+    const [response, setResponse] = useState(createMonitoringResponse(options.initialSettings));
+    const handleRefresh = async () => {
+      await refresh();
+      setResponse(
+        options.nextMonitoringResponse ?? createMonitoringResponse(options.initialSettings)
+      );
+    };
+    const monitoringData: UseMonitoringDataResult = {
+      error: null,
+      loading: false,
+      refresh: handleRefresh,
+      response,
+    };
 
     return (
       <MonitoringSettingsSubpage
         mode={deriveMonitoringMode(settings)}
+        monitoringData={monitoringData}
         onChange={async (next) => {
           setSettings(next);
           await onChange(next);
@@ -126,8 +137,7 @@ function renderStatefulSubpage(options: {
   }
 
   return {
-    sendCommand,
-    subscribe,
+    refresh,
     onChange,
     ...render(
       <Provider store={store}>
@@ -146,7 +156,7 @@ describe("MonitoringSettingsSubpage", () => {
       workspaceAttributionEnabled: true,
     };
 
-    const { sendCommand, subscribe } = renderSubpage(settings);
+    const { monitoringData } = renderSubpage(settings);
 
     expect(await screen.findByText("Host overview")).toBeInTheDocument();
     expect(screen.getByRole("switch", { name: "Enable performance monitoring" })).toHaveAttribute(
@@ -156,8 +166,7 @@ describe("MonitoringSettingsSubpage", () => {
     expect(screen.getByRole("tablist", { name: "Preset" })).toBeInTheDocument();
     expect(screen.getByText("Coder Studio footprint")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Open Monitoring" })).not.toBeInTheDocument();
-    expect(sendCommand).toHaveBeenCalledWith("monitoring.get", {}, undefined);
-    expect(subscribe).toHaveBeenCalledWith(["monitoring.snapshot.updated"], expect.any(Function));
+    expect(monitoringData.refresh).not.toHaveBeenCalled();
   });
 
   it("keeps monitoring configuration available when monitoring is disabled", async () => {
@@ -169,7 +178,7 @@ describe("MonitoringSettingsSubpage", () => {
 
     renderSubpage(settings);
 
-    expect(await screen.findByText("Monitoring disabled")).toBeInTheDocument();
+    expect(await screen.findAllByText("Monitoring disabled")).toHaveLength(2);
     expect(
       screen.getByText(
         "No background sampling is running. Enable monitoring in settings before using this page."
@@ -199,10 +208,9 @@ describe("MonitoringSettingsSubpage", () => {
       enabled: false,
     };
 
-    const { onChange, sendCommand } = renderStatefulSubpage({
+    const { onChange, refresh } = renderStatefulSubpage({
       initialSettings,
-      monitoringGetResponse: createMonitoringResponse(initialSettings),
-      monitoringRecheckResponse: createMonitoringResponse(disabledSettings),
+      nextMonitoringResponse: createMonitoringResponse(disabledSettings),
     });
 
     expect(await screen.findByText("Host overview")).toBeInTheDocument();
@@ -213,7 +221,7 @@ describe("MonitoringSettingsSubpage", () => {
       expect(onChange).toHaveBeenCalledWith(disabledSettings);
     });
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith("monitoring.recheck", {}, undefined);
+      expect(refresh).toHaveBeenCalledTimes(1);
     });
     expect(await screen.findAllByText("Monitoring disabled")).toHaveLength(2);
     expect(screen.queryByText("Host overview")).not.toBeInTheDocument();
