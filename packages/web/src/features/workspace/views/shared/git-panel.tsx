@@ -288,7 +288,9 @@ export const GitPanel: FC<GitPanelProps> = ({
                       >
                         <button
                           type="button"
-                          className="git-worktree-row__main"
+                          className={`git-worktree-row__main workspace-sidebar-row ${
+                            isCurrent ? "workspace-sidebar-row--selected" : ""
+                          }`}
                           onClick={() => void handleWorktreeOpen(worktree)}
                         >
                           <span
@@ -647,7 +649,9 @@ const GitChangeRow: FC<GitChangeRowProps> = ({
 
   return (
     <div
-      className={`git-row ${selected ? "active" : ""} ${mobile ? "mobile" : ""}`}
+      className={`git-row workspace-sidebar-row ${selected ? "active workspace-sidebar-row--selected" : ""} ${
+        mobile ? "mobile" : ""
+      }`}
       onClick={() => void onViewDiff(change, type)}
       role="button"
       tabIndex={0}
@@ -713,7 +717,9 @@ function GitHistoryRow({
   return (
     <button
       type="button"
-      className={`git-history-row ${isCurrent ? "current" : ""}`}
+      className={`git-history-row workspace-sidebar-row ${
+        isCurrent ? "current workspace-sidebar-row--selected" : ""
+      }`}
       onClick={() => void onOpen(entry)}
     >
       <span className="git-history-row__dot" aria-hidden="true" />

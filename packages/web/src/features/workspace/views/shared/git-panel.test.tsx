@@ -947,6 +947,7 @@ describe("GitPanel", () => {
       diff: expect.stringContaining("commit-diff"),
       source: "commit",
     });
+    expect(historyRow).toHaveClass("workspace-sidebar-row", "workspace-sidebar-row--selected");
   });
 
   it("uses the shared tooltip for long history subjects instead of native titles", async () => {
@@ -1089,6 +1090,14 @@ describe("GitPanel", () => {
     await waitFor(() => {
       expect(container.querySelector(".git-row.active")).toBeTruthy();
     });
+    expect(container.querySelector(".git-row.active")).toHaveClass(
+      "workspace-sidebar-row",
+      "workspace-sidebar-row--selected"
+    );
+    expect(container.querySelector(".git-worktree-row.active .git-worktree-row__main")).toHaveClass(
+      "workspace-sidebar-row",
+      "workspace-sidebar-row--selected"
+    );
   });
 
   it("loads branch list on mount", async () => {

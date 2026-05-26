@@ -13775,8 +13775,8 @@ body.is-dragging-pane .session-action-btn-drag {
   min-width: 0;
   flex: 1;
   flex-direction: column;
-  gap: 14px;
-  padding: 0 12px 12px;
+  gap: var(--sp-3);
+  padding: 0 var(--sp-3) var(--sp-3);
   overflow-y: auto;
 }
 
@@ -13899,15 +13899,6 @@ body.is-dragging-pane .session-action-btn-drag {
   text-align: left;
 }
 
-.git-worktree-row__main:hover {
-  background: var(--component-mix-surface-hover-90pct-transparent);
-}
-
-.git-worktree-row.active .git-worktree-row__main {
-  border-color: var(--state-selected-border);
-  background: var(--state-selected-bg);
-}
-
 .git-worktree-row__dot {
   width: 8px;
   height: 8px;
@@ -14009,7 +14000,7 @@ body.is-dragging-pane .session-action-btn-drag {
 
 .git-commit-primary {
   min-height: 28px;
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
 }
 
 .git-commit-primary {
@@ -14044,18 +14035,12 @@ body.is-dragging-pane .session-action-btn-drag {
   gap: 10px;
   min-height: 28px;
   padding: 6px 10px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
   background: transparent;
   transition:
     border-color var(--duration-fast) var(--ease-out),
     background-color var(--duration-fast) var(--ease-out),
     color var(--duration-fast) var(--ease-out),
     box-shadow var(--duration-fast) var(--ease-out);
-}
-
-.git-panel .git-row:hover {
-  background: var(--component-mix-status-info-fg-10pct-transparent);
 }
 
 .git-panel .git-row.active {
@@ -14149,11 +14134,9 @@ body.is-dragging-pane .session-action-btn-drag {
   width: 100%;
   min-height: 34px;
   padding: 4px 0 4px 2px;
-  border: 1px solid transparent;
   background: transparent;
   color: inherit;
   text-align: left;
-  border-radius: var(--radius-md);
   transition:
     border-color var(--duration-fast) var(--ease-out),
     background-color var(--duration-fast) var(--ease-out),
@@ -14161,13 +14144,22 @@ body.is-dragging-pane .session-action-btn-drag {
     box-shadow var(--duration-fast) var(--ease-out);
 }
 
-.git-history-row:hover {
-  background: var(--component-mix-surface-hover-90pct-transparent);
+.git-worktree-row__main,
+.git-panel .git-row,
+.git-history-row {
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
 }
 
+.git-worktree-row.active .git-worktree-row__main,
+.git-panel .git-row.active,
 .git-history-row.current {
   border-color: var(--state-selected-border);
   background: var(--state-selected-bg);
+}
+
+.git-history-row.current {
+  color: var(--text-primary);
 }
 
 .git-history-row__dot {
