@@ -1147,9 +1147,9 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(sessionCard).toContain("backdrop-filter: var(--material-backdrop-filter)");
     expect(activeSessionCard).toContain("background: var(--workspace-session-active-surface)");
     expect(activeSessionCard).not.toContain("background: var(--bg-active)");
-    expect(activeSessionCard).toContain("box-shadow: inset 0 0 0 1px");
-    expect(activeSessionCard).toContain("var(--component-mix-border-focus-84pct-transparent)");
+    expect(activeSessionCard).toContain("box-shadow: none");
     expect(activeSessionHeader).toContain("background: var(--workspace-session-header-surface)");
+    expect(activeSessionHeader).toContain("border-top:");
     expect(activeSessionHeader).toContain("backdrop-filter: var(--material-backdrop-filter)");
     expect(activeSessionHeader).not.toContain("var(--bg-active) 88%");
     expect(activeSessionTitle).toContain("color: var(--text-primary)");
@@ -1538,6 +1538,10 @@ describe("components.css theme-sensitive surfaces", () => {
     const xtermReplayCard = getLastRuleBlock(".xterm-replay-overlay__card");
     const sessionProgress = getLastRuleBlock(".session-progress");
     const sessionHeader = getLastRuleBlock(".session-header");
+    const activeSessionCard = getLastRuleBlock(".session-card.session-card--active");
+    const activeSessionHeader = getLastRuleBlock(
+      ".session-card.session-card--active > .panel-header"
+    );
     const supervisorCard = getLastRuleBlock(".supervisor-card");
     const sessionHeaderLeft = getLastRuleBlock(".session-header-left");
     const sessionHeaderCopyBlocks = getRuleBlocksFrom(stylesheet, ".session-header-copy");
@@ -1563,6 +1567,8 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(xtermReplayCard).toContain("border-radius: var(--terminal-local-overlay-radius)");
     expect(sessionProgress).toContain("background: var(--state-info-bg)");
     expect(sessionHeader).toContain("padding: var(--gap-tight) var(--inset-control-inline)");
+    expect(activeSessionCard).toContain("box-shadow: none");
+    expect(activeSessionHeader).toContain("border-top:");
     expect(supervisorCard).toContain("background: var(--workspace-session-header-surface)");
     expect(supervisorCard).toContain("backdrop-filter: var(--material-backdrop-filter)");
     expect(sessionHeaderLeft).toContain("gap: var(--gap-default)");
@@ -3233,8 +3239,14 @@ describe("components.css theme-sensitive surfaces", () => {
       ".mobile-shell--landscape-compact .mobile-shell__viewport"
     );
     const sessionCard = getLastRuleBlock(".mobile-shell__agent-stage > .session-card");
+    const activeSessionCard = getLastRuleBlock(
+      ".mobile-shell__agent-stage .session-card.session-card--active"
+    );
     const progress = getLastRuleBlock(".mobile-shell__agent-stage .session-progress");
     const header = getLastRuleBlock(".mobile-shell__agent-stage > .session-card > .panel-header");
+    const activeHeader = getLastRuleBlock(
+      ".mobile-shell__agent-stage > .session-card.session-card--active > .panel-header"
+    );
     const titleRow = getLastRuleBlock(".mobile-shell__agent-stage .session-title-row");
     const headerRight = getLastRuleBlock(".mobile-shell__agent-stage .session-header-right");
     const badges = getLastGroupedRuleBlock(
@@ -3252,9 +3264,11 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(content).toContain("gap: 4px");
     expect(sessionCard).toContain("border-radius: 0");
     expect(sessionCard).toContain("box-shadow: none");
+    expect(activeSessionCard).toContain("box-shadow: none");
     expect(progress).toContain("display: none");
     expect(header).toContain("padding: 4px");
     expect(header).toContain("border-bottom:");
+    expect(activeHeader).toContain("border-top:");
     expect(header).not.toContain("linear-gradient(");
     expect(titleRow).toContain("gap: 6px");
     expect(headerRight).toContain("max-width: 100%");
