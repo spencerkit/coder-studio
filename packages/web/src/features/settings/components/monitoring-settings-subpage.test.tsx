@@ -196,7 +196,7 @@ describe("MonitoringSettingsSubpage", () => {
     });
   });
 
-  it("refreshes monitoring data immediately after a successful settings change so the visible view stays in sync", async () => {
+  it("does not trigger monitoring refresh directly after a successful settings change", async () => {
     const initialSettings = {
       ...createDefaultMonitoringSettings(),
       enabled: true,
@@ -220,10 +220,7 @@ describe("MonitoringSettingsSubpage", () => {
     await waitFor(() => {
       expect(onChange).toHaveBeenCalledWith(disabledSettings);
     });
-    await waitFor(() => {
-      expect(refresh).toHaveBeenCalledTimes(1);
-    });
-    expect(await screen.findAllByText("Monitoring disabled")).toHaveLength(2);
-    expect(screen.queryByText("Host overview")).not.toBeInTheDocument();
+    expect(refresh).not.toHaveBeenCalled();
+    expect(screen.getByText("Host overview")).toBeInTheDocument();
   });
 });

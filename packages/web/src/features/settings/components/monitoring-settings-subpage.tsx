@@ -26,8 +26,6 @@ export function MonitoringSettingsSubpage({
           } catch {
             return;
           }
-
-          await monitoringData.refresh();
         }}
         settings={settings}
       />

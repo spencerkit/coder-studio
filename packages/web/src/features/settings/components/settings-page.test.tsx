@@ -870,6 +870,111 @@ describe("SettingsPage", () => {
     });
   });
 
+  it("only triggers monitoring recheck for the latest successful monitoring update", async () => {
+    const firstUpdateDeferred = createDeferred<unknown>();
+    const secondUpdateDeferred = createDeferred<unknown>();
+    let updateCallCount = 0;
+    let recheckCallCount = 0;
+    const disabledSettings = {
+      enabled: false,
+      hostMetricsEnabled: true,
+      runtimeSummaryEnabled: true,
+      workspaceAttributionEnabled: true,
+      subprocessDrilldownEnabled: false,
+      sampleIntervalMs: 2000,
+    } satisfies MonitoringSettings;
+    const enabledSettings = {
+      ...disabledSettings,
+      enabled: true,
+    } satisfies MonitoringSettings;
+
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "monitoring.enabled": disabledSettings.enabled,
+          "monitoring.hostMetricsEnabled": disabledSettings.hostMetricsEnabled,
+          "monitoring.runtimeSummaryEnabled": disabledSettings.runtimeSummaryEnabled,
+          "monitoring.workspaceAttributionEnabled": disabledSettings.workspaceAttributionEnabled,
+          "monitoring.subprocessDrilldownEnabled": disabledSettings.subprocessDrilldownEnabled,
+          "monitoring.sampleIntervalMs": disabledSettings.sampleIntervalMs,
+        };
+      }
+
+      if (op === "settings.update") {
+        updateCallCount += 1;
+        if (updateCallCount === 1) {
+          return firstUpdateDeferred.promise;
+        }
+        if (updateCallCount === 2) {
+          return secondUpdateDeferred.promise;
+        }
+      }
+
+      if (op === "monitoring.get") {
+        return createMonitoringResponse(disabledSettings);
+      }
+
+      if (op === "monitoring.recheck") {
+        recheckCallCount += 1;
+        return createMonitoringResponse(
+          recheckCallCount === 1 ? disabledSettings : enabledSettings
+        );
+      }
+
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store, { initialEntry: "/settings?section=monitoring" });
+
+    const enableSwitch = await screen.findByRole("switch", { name: "启用性能监控" });
+    expect(enableSwitch).toHaveAttribute("aria-checked", "false");
+
+    fireEvent.click(enableSwitch);
+    await waitFor(() => {
+      expect(screen.getByRole("switch", { name: "启用性能监控" })).toHaveAttribute(
+        "aria-checked",
+        "true"
+      );
+    });
+
+    fireEvent.click(screen.getByRole("switch", { name: "启用性能监控" }));
+    await waitFor(() => {
+      expect(screen.getByRole("switch", { name: "启用性能监控" })).toHaveAttribute(
+        "aria-checked",
+        "false"
+      );
+    });
+
+    await act(async () => {
+      secondUpdateDeferred.resolve({});
+    });
+
+    await waitFor(() => {
+      expect(
+        sendCommand.mock.calls.filter(([command]) => command === "monitoring.recheck")
+      ).toHaveLength(1);
+    });
+    await waitFor(() => {
+      expect(screen.queryByText("主机概览")).not.toBeInTheDocument();
+    });
+
+    await act(async () => {
+      firstUpdateDeferred.resolve({});
+    });
+
+    await waitFor(() => {
+      expect(
+        sendCommand.mock.calls.filter(([command]) => command === "monitoring.recheck")
+      ).toHaveLength(1);
+    });
+    expect(screen.getByRole("switch", { name: "启用性能监控" })).toHaveAttribute(
+      "aria-checked",
+      "false"
+    );
+    expect(screen.queryByText("主机概览")).not.toBeInTheDocument();
+  });
+
   it("recovers to hydrated server monitoring settings after a pre-hydration update fails", async () => {
     const settingsGetDeferred = createDeferred<Record<string, unknown>>();
     const updateDeferred = createDeferred<unknown>();

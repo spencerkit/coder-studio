@@ -224,7 +224,10 @@ function resolveMobileSettingsGroups(
 
 interface MonitoringSettingsSectionProps {
   readonly mode: MonitoringMode;
-  readonly onChange: (next: MonitoringSettings) => Promise<void> | void;
+  readonly onChange: (
+    next: MonitoringSettings,
+    onLatestSuccess: () => Promise<void>
+  ) => Promise<void> | void;
   readonly settings: MonitoringSettings;
 }
 
@@ -235,7 +238,7 @@ function MonitoringSettingsSection({ mode, onChange, settings }: MonitoringSetti
     <MonitoringSettingsSubpage
       mode={mode}
       monitoringData={monitoringData}
-      onChange={onChange}
+      onChange={(next) => onChange(next, monitoringData.refresh)}
       settings={settings}
     />
   );
@@ -720,7 +723,10 @@ export function SettingsPage() {
     }
   };
 
-  const handleMonitoringSettingsChange = async (nextSettings: MonitoringSettings) => {
+  const handleMonitoringSettingsChange = async (
+    nextSettings: MonitoringSettings,
+    onLatestSuccess: () => Promise<void>
+  ) => {
     const previousSettings = monitoringSettings;
     const monitoringWasHydrated = monitoringSettingsHydratedRef.current;
     monitoringSelectionVersionRef.current += 1;
@@ -741,6 +747,10 @@ export function SettingsPage() {
         }
       }
       throw result?.error ?? new Error("monitoring update failed");
+    }
+
+    if (monitoringSelectionVersionRef.current === requestVersion) {
+      await onLatestSuccess();
     }
   };
 
