@@ -3190,6 +3190,8 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(openEditorsItemLabel).toContain("text-overflow: ellipsis");
     expect(openEditorsItemLabel).toContain("white-space: nowrap");
     expect(searchGroupHeader).toContain("grid-template-columns: 14px minmax(0, 1fr) auto");
+    expect(searchGroupHeader).toContain("border: 1px solid transparent");
+    expect(searchGroupHeader).toContain("border-radius: var(--radius-md)");
     expect(searchGroupHeader).toContain(
       "box-shadow: inset 0 -1px 0 var(--component-mix-border-default-96pct-transparent)"
     );

@@ -13475,7 +13475,8 @@ body.is-dragging-pane .session-action-btn-drag {
   width: 100%;
   padding: calc(var(--sp-2) - var(--gap-hairline)) var(--sp-3) var(--gap-tight)
     calc(var(--sp-3) - var(--gap-compact));
-  border: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--text-secondary);
   text-align: left;
