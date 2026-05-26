@@ -732,5 +732,10 @@ export function MonitoringContent({
 export function MonitoringPage() {
   const navigate = useNavigate();
 
-  return <MonitoringContent showPageChrome onOpenSettings={() => navigate("/settings")} />;
+  return (
+    <MonitoringContent
+      showPageChrome
+      onOpenSettings={() => navigate("/settings?section=monitoring")}
+    />
+  );
 }

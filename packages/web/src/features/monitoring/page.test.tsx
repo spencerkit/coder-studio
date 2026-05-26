@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../atoms/app-ui";
 import { connectionStatusAtom, wsClientAtom } from "../../atoms/connection";
@@ -14,6 +14,12 @@ const viewportMocks = vi.hoisted(() => ({
 vi.mock("../../hooks/use-viewport", () => ({
   useViewport: () => viewportMocks.viewport,
 }));
+
+function SettingsLocationProbe() {
+  const location = useLocation();
+
+  return <div>{`SettingsPage${location.search}`}</div>;
+}
 
 function renderMonitoringPage(
   response: unknown,
@@ -48,7 +54,7 @@ function renderMonitoringPage(
           <MemoryRouter initialEntries={["/monitoring"]}>
             <Routes>
               <Route path="/monitoring" element={<MonitoringPage />} />
-              <Route path="/settings" element={<div>SettingsPage</div>} />
+              <Route path="/settings" element={<SettingsLocationProbe />} />
             </Routes>
           </MemoryRouter>
         ) : (
@@ -294,7 +300,7 @@ describe("MonitoringContent", () => {
 
     expect(await screen.findByText("Monitoring disabled")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Open Settings" }));
-    expect(await screen.findByText("SettingsPage")).toBeInTheDocument();
+    expect(await screen.findByText("SettingsPage?section=monitoring")).toBeInTheDocument();
   });
 
   it("renders a disabled empty state without the standalone settings CTA when embedded", async () => {
