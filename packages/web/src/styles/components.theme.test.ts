@@ -2646,7 +2646,6 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(mobileFileSearch).toContain("background: transparent");
     expect(mobileFileRow).toContain("min-height: 40px");
     expect(mobileFileRow).toContain("border-radius: 0");
-    expect(mobileFileRowSelected).toContain("border: none");
     expect(mobileFileRowSelected).toContain(
       "border-left: 2px solid var(--component-mix-status-info-fg-88pct-white-12pct)"
     );
@@ -3078,7 +3077,7 @@ describe("components.css theme-sensitive surfaces", () => {
     const searchInputFocus = getLastRuleBlock(".file-tree-shell .file-tree-search-input:focus");
     const emptyState = getLastRuleBlock(".file-tree-empty");
     const row = getLastRuleBlock(".file-tree-shell .tree-item");
-    const rowSelected = getLastRuleBlock(".file-tree-shell .tree-item.selected");
+    const rowSelected = getLastRuleBlock(".file-tree-shell--desktop .tree-item.selected");
     const rowActionsBase = getLastRuleBlock(".file-tree-shell .tree-item-actions");
     const rowActionsDesktop = getLastRuleBlock(".file-tree-shell--desktop .tree-item-actions");
 
@@ -3129,6 +3128,9 @@ describe("components.css theme-sensitive surfaces", () => {
     const searchMatch = getLastRuleBlock(".workspace-search-panel__match");
     const searchMatchActive = getLastRuleBlock(".workspace-search-panel__match--active");
     const searchMatchActiveHover = getLastRuleBlock(".workspace-search-panel__match--active:hover");
+    const searchMatchActiveFocus = getLastRuleBlock(
+      ".workspace-search-panel__match--active:focus-visible"
+    );
     const searchLine = getLastRuleBlock(".workspace-search-panel__line");
     const quickOpen = getLastRuleBlock(".quick-open");
     const quickOpenSearch = getLastRuleBlock(".quick-open__search");
@@ -3182,6 +3184,11 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(searchMatchActive).toContain("background: var(--state-selected-bg)");
     expect(searchMatchActiveHover).toContain("border-color: var(--state-selected-border)");
     expect(searchMatchActiveHover).toContain("background: var(--state-selected-bg)");
+    expect(searchMatchActiveFocus).toContain("border-color: var(--state-selected-border)");
+    expect(searchMatchActiveFocus).toContain("background: var(--state-selected-bg)");
+    expect(searchMatchActiveFocus).toContain(
+      "box-shadow: inset 0 0 0 var(--state-focus-ring-width)"
+    );
     expect(searchLine).toContain("text-align: right");
 
     expect(quickOpen).toContain("border: 1px solid var(--surface-overlay-border)");

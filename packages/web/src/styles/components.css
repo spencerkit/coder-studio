@@ -13324,7 +13324,7 @@ body.is-dragging-pane .session-action-btn-drag {
   background: var(--component-mix-surface-hover-92pct-transparent);
 }
 
-.file-tree-shell .tree-item.selected {
+.file-tree-shell--desktop .tree-item.selected {
   border: 1px solid var(--state-selected-border);
   background: var(--state-selected-bg);
   color: var(--text-primary);
@@ -13602,6 +13602,13 @@ body.is-dragging-pane .session-action-btn-drag {
   background: var(--state-selected-bg);
 }
 
+.workspace-search-panel__match--active:focus-visible {
+  border-color: var(--state-selected-border);
+  background: var(--state-selected-bg);
+  box-shadow: inset 0 0 0 var(--state-focus-ring-width)
+    var(--component-mix-border-focus-64pct-transparent);
+}
+
 .workspace-search-panel__line {
   color: var(--text-tertiary);
   text-align: right;
@@ -13660,7 +13667,6 @@ body.is-dragging-pane .session-action-btn-drag {
 }
 
 .mobile-sheet--files .file-tree-shell--mobile .tree-item.selected {
-  border: none;
   padding-left: 14px;
   border-left: 2px solid var(--component-mix-status-info-fg-88pct-white-12pct);
   background: var(--component-mix-status-info-fg-12pct-transparent);
