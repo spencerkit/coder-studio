@@ -260,10 +260,7 @@ describe("MonitoringSettingsSubpage", () => {
     ).toBeInTheDocument();
     const shell = container.querySelector(".settings-monitoring-shell");
     expect(shell?.firstElementChild).toHaveClass("settings-monitoring-dock");
-    expect(container.querySelector(".settings-monitoring-dock-toggle")).toHaveAttribute(
-      "aria-expanded",
-      "true"
-    );
+    expect(container.querySelector(".settings-monitoring-dock-toggle")).toBeNull();
     expect(
       screen.queryByRole("button", { name: "Open monitoring configuration" })
     ).not.toBeInTheDocument();
@@ -279,7 +276,7 @@ describe("MonitoringSettingsSubpage", () => {
     });
   });
 
-  it("does not trigger monitoring refresh directly after a successful settings change", async () => {
+  it("does not trigger monitoring refresh directly after a successful settings change and keeps stage gating aligned", async () => {
     const initialSettings = {
       ...createDefaultMonitoringSettings(),
       enabled: true,
@@ -304,7 +301,13 @@ describe("MonitoringSettingsSubpage", () => {
       expect(onChange).toHaveBeenCalledWith(disabledSettings);
     });
     expect(refresh).not.toHaveBeenCalled();
-    expect(screen.getByText("Host overview")).toBeInTheDocument();
+    expect(screen.getAllByText("Monitoring disabled").length).toBeGreaterThanOrEqual(1);
+    expect(
+      screen.getAllByText(
+        "No background sampling is running. Enable monitoring in settings before using this page."
+      ).length
+    ).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText("Host overview")).not.toBeInTheDocument();
   });
 
   it("disables monitoring controls before monitoring settings are ready", async () => {

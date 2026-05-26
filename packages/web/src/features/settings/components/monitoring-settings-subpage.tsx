@@ -45,7 +45,18 @@ export function MonitoringSettingsSubpage({
         error={monitoringData.error}
         loading={monitoringData.loading}
         refresh={monitoringData.refresh}
-        response={monitoringData.response}
+        response={
+          monitoringData.response
+            ? {
+                ...monitoringData.response,
+                settings,
+                snapshot: {
+                  ...monitoringData.response.snapshot,
+                  mode,
+                },
+              }
+            : null
+        }
       />
     </section>
   );
@@ -102,7 +113,7 @@ export function MonitoringSettingsSubpage({
                 : t("monitoring.dock_summary_disabled")}
             </p>
           </div>
-          {isMobile ? (
+          {isMobile && settings.enabled ? (
             <Button
               aria-expanded={dockExpanded ? "true" : "false"}
               aria-label={t("monitoring.toggle_settings")}

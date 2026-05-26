@@ -1114,6 +1114,81 @@ describe("SettingsPage", () => {
     expect(screen.queryByText("主机概览")).not.toBeInTheDocument();
   });
 
+  it("keeps stage gating aligned with dock settings when monitoring recheck fails after a successful update", async () => {
+    const enabledSettings = {
+      enabled: true,
+      hostMetricsEnabled: true,
+      runtimeSummaryEnabled: true,
+      workspaceAttributionEnabled: true,
+      subprocessDrilldownEnabled: false,
+      sampleIntervalMs: 2000,
+    } satisfies MonitoringSettings;
+    const disabledSettings = {
+      ...enabledSettings,
+      enabled: false,
+    } satisfies MonitoringSettings;
+
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "monitoring.enabled": enabledSettings.enabled,
+          "monitoring.hostMetricsEnabled": enabledSettings.hostMetricsEnabled,
+          "monitoring.runtimeSummaryEnabled": enabledSettings.runtimeSummaryEnabled,
+          "monitoring.workspaceAttributionEnabled": enabledSettings.workspaceAttributionEnabled,
+          "monitoring.subprocessDrilldownEnabled": enabledSettings.subprocessDrilldownEnabled,
+          "monitoring.sampleIntervalMs": enabledSettings.sampleIntervalMs,
+        };
+      }
+
+      if (op === "settings.update") {
+        return {};
+      }
+
+      if (op === "monitoring.get") {
+        return createMonitoringResponse(enabledSettings);
+      }
+
+      if (op === "monitoring.recheck") {
+        throw new Error("recheck failed");
+      }
+
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store, { initialEntry: "/settings?section=monitoring" });
+
+    const enableSwitch = await screen.findByRole("switch", { name: "启用性能监控" });
+    expect(await screen.findByText("主机概览")).toBeInTheDocument();
+    expect(enableSwitch).toHaveAttribute("aria-checked", "true");
+
+    fireEvent.click(enableSwitch);
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            monitoring: disabledSettings,
+          },
+        },
+        undefined
+      );
+    });
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith("monitoring.recheck", {}, undefined);
+    });
+    await waitFor(() => {
+      expect(screen.getByRole("switch", { name: "启用性能监控" })).toHaveAttribute(
+        "aria-checked",
+        "false"
+      );
+    });
+
+    expect(screen.getAllByText("监控已关闭").length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText("主机概览")).not.toBeInTheDocument();
+  });
+
   it("does not render phone continuation entry from settings even when a workspace is active", async () => {
     const store = createConnectedStore(vi.fn().mockResolvedValue({}));
     store.set(activeWorkspaceIdAtom, "ws-1");
