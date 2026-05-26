@@ -182,6 +182,13 @@ export class TerminalManager {
       ...(derivedColorFgBg ? { COLORFGBG: derivedColorFgBg } : {}),
       ...spec.env,
     };
+    delete terminalEnv.COLORFGBG;
+    if (derivedColorFgBg) {
+      terminalEnv.COLORFGBG = derivedColorFgBg;
+    }
+    if (spec.env?.COLORFGBG) {
+      terminalEnv.COLORFGBG = spec.env.COLORFGBG;
+    }
 
     let pty: PtyProcess;
     try {

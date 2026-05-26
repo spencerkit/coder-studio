@@ -7,7 +7,7 @@
   align-items: center;
   justify-content: center;
   padding: var(--sp-4);
-  background: var(--overlay-backdrop);
+  background: var(--material-local-overlay);
   pointer-events: none;
 }
 

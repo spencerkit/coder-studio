@@ -14,6 +14,14 @@ import { supervisorsAtom } from "../../supervisor/atoms";
 import { paneLayoutAtomFamily } from "../atoms/pane-layout";
 import { SessionCard } from "../views/shared/session-card";
 
+const paneDragEnabledMock = vi.hoisted(() => ({
+  value: true,
+}));
+
+vi.mock("../actions/use-pane-drag-enabled", () => ({
+  usePaneDragEnabled: () => paneDragEnabledMock.value,
+}));
+
 const mockXtermHost = vi.fn((props: Record<string, unknown>) => (
   <div data-testid="mock-xterm-host" data-readonly={String(props.readOnly)} />
 ));
@@ -75,6 +83,7 @@ function createSessionStore(
 describe("SessionCard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    paneDragEnabledMock.value = true;
   });
 
   it("renders ended sessions with a read-only terminal host", () => {
@@ -228,6 +237,87 @@ describe("SessionCard", () => {
         terminalKind: "agent",
       })
     );
+  });
+
+  it("renders a pane drag handle button in the header actions on desktop", () => {
+    const { store } = createSessionStore({
+      terminalId: "term-live",
+      state: "running",
+      endedAt: undefined,
+    });
+
+    render(
+      <Provider store={store}>
+        <SessionCard paneId="pane-1" sessionId="sess_123456" onPaneDragStart={vi.fn()} />
+      </Provider>
+    );
+
+    expect(screen.getByRole("button", { name: "Drag pane" })).toBeInTheDocument();
+  });
+
+  it("does not render a pane drag handle button on mobile", () => {
+    paneDragEnabledMock.value = false;
+    const { store } = createSessionStore({
+      terminalId: "term-live",
+      state: "running",
+      endedAt: undefined,
+    });
+
+    render(
+      <Provider store={store}>
+        <SessionCard paneId="pane-1" sessionId="sess_123456" onPaneDragStart={vi.fn()} />
+      </Provider>
+    );
+
+    expect(screen.queryByRole("button", { name: "Drag pane" })).not.toBeInTheDocument();
+  });
+
+  it("starts pane drag only from the drag handle", () => {
+    const { store } = createSessionStore({
+      terminalId: "term-live",
+      state: "running",
+      endedAt: undefined,
+    });
+    const onPaneDragStart = vi.fn();
+
+    render(
+      <Provider store={store}>
+        <SessionCard paneId="pane-1" sessionId="sess_123456" onPaneDragStart={onPaneDragStart} />
+      </Provider>
+    );
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Drag pane" }));
+    fireEvent.pointerDown(screen.getByText("SESSION-56"));
+
+    expect(onPaneDragStart).toHaveBeenCalledTimes(1);
+    expect(onPaneDragStart).toHaveBeenCalledWith(
+      expect.objectContaining({
+        paneId: "pane-1",
+        sessionId: "sess_123456",
+        providerLabel: "Codex",
+      })
+    );
+  });
+
+  it("does not start pane drag from the drag handle for touch pointers on desktop", () => {
+    const { store } = createSessionStore({
+      terminalId: "term-live",
+      state: "running",
+      endedAt: undefined,
+    });
+    const onPaneDragStart = vi.fn();
+
+    render(
+      <Provider store={store}>
+        <SessionCard paneId="pane-1" sessionId="sess_123456" onPaneDragStart={onPaneDragStart} />
+      </Provider>
+    );
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Drag pane" }), {
+      pointerType: "touch",
+    });
+
+    expect(onPaneDragStart).not.toHaveBeenCalled();
   });
 
   it("passes isActiveSession to XtermHost when the workspace ui state targets this session", () => {

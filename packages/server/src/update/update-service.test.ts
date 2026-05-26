@@ -160,6 +160,56 @@ describe("UpdateService", () => {
     await firstCheck;
   });
 
+  it("does not persist checking while an update check is in progress", async () => {
+    const lookupDeferred = createDeferred<string>();
+    let state = {
+      version: 1 as const,
+      currentVersion: "0.4.0",
+      latestVersion: null as string | null,
+      availability: "unknown" as const,
+      updateStatus: "idle" as const,
+      lastCheckedAt: null as number | null,
+      targetVersion: null as string | null,
+      startedAt: null as number | null,
+      finishedAt: null as number | null,
+      requiresManualStep: false,
+      manualCommand: null as string | null,
+      errorSummary: "previous failure" as string | null,
+    };
+    const update = vi.fn((patch: unknown) => {
+      const resolved =
+        typeof patch === "function"
+          ? (patch as (current: typeof state) => Partial<typeof state>)(state)
+          : (patch as Partial<typeof state>);
+      state = { ...state, ...resolved };
+      return state;
+    });
+    const service = new UpdateService(
+      createDeps({
+        updateStateRepo: {
+          getFilePath: vi.fn(() => "/tmp/update-state.json"),
+          get: vi.fn(() => state),
+          update,
+        },
+        runLatestVersionLookup: vi.fn(() => lookupDeferred.promise),
+      })
+    );
+
+    const firstCheck = service.checkForUpdates({ manual: true });
+
+    expect(service.getStateView().updateStatus).toBe("checking");
+    expect(service.getStateView().errorSummary).toBeNull();
+    expect(update).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        updateStatus: "checking",
+      })
+    );
+    expect(state.updateStatus).toBe("idle");
+
+    lookupDeferred.resolve("0.5.0");
+    await firstCheck;
+  });
+
   it("returns an activity summary for prepareInstall", () => {
     const deps = createDeps({
       countRunningTerminals: vi.fn(() => 2),
@@ -176,6 +226,59 @@ describe("UpdateService", () => {
       runningSupervisorCount: 3,
       hasActiveWork: true,
     });
+  });
+
+  it("rejects install start while an update check is already in progress", async () => {
+    const lookupDeferred = createDeferred<string>();
+    const service = new UpdateService(
+      createDeps({
+        updateStateRepo: {
+          getFilePath: vi.fn(() => "/tmp/update-state.json"),
+          get: vi.fn(() => ({
+            version: 1,
+            currentVersion: "0.4.0",
+            latestVersion: "0.5.0",
+            availability: "update_available",
+            updateStatus: "idle",
+            lastCheckedAt: 5,
+            targetVersion: null,
+            startedAt: null,
+            finishedAt: null,
+            requiresManualStep: false,
+            manualCommand: null,
+            errorSummary: null,
+          })),
+          update: vi.fn((patch: unknown) => ({
+            version: 1,
+            currentVersion: "0.4.0",
+            latestVersion: "0.5.0",
+            availability: "update_available",
+            updateStatus: "idle",
+            lastCheckedAt: 5,
+            targetVersion: null,
+            startedAt: null,
+            finishedAt: null,
+            requiresManualStep: false,
+            manualCommand: null,
+            errorSummary: null,
+            ...(typeof patch === "function" ? patch({}) : patch),
+          })),
+        },
+        runLatestVersionLookup: vi.fn(() => lookupDeferred.promise),
+      })
+    );
+
+    const firstCheck = service.checkForUpdates({ manual: true });
+
+    await expect(
+      service.startInstall({ targetVersion: "0.5.0", force: true })
+    ).rejects.toMatchObject({
+      code: "update_busy",
+      message: "Update check is already in progress",
+    });
+
+    lookupDeferred.resolve("0.5.0");
+    await firstCheck;
   });
 
   it("rejects update start when active work exists without force", async () => {
@@ -258,6 +361,52 @@ describe("UpdateService", () => {
     expect(result.updateStatus).toBe("succeeded");
     expect(result.availability).toBe("up_to_date");
     expect(result.errorSummary).toBeNull();
+  });
+
+  it("reconciles a persisted checking state to failed on startup", () => {
+    const update = vi.fn((patch: unknown) => ({
+      version: 1,
+      currentVersion: "0.4.0",
+      latestVersion: "0.5.0",
+      availability: "check_failed",
+      updateStatus: "failed",
+      lastCheckedAt: 5,
+      targetVersion: null,
+      startedAt: null,
+      finishedAt: 1000,
+      requiresManualStep: false,
+      manualCommand: null,
+      errorSummary: "Update check did not complete before the service restarted",
+      ...(typeof patch === "function" ? patch({}) : patch),
+    }));
+    const service = new UpdateService(
+      createDeps({
+        updateStateRepo: {
+          get: vi.fn(() => ({
+            version: 1,
+            currentVersion: "0.4.0",
+            latestVersion: "0.5.0",
+            availability: "update_available",
+            updateStatus: "checking",
+            lastCheckedAt: 5,
+            targetVersion: null,
+            startedAt: null,
+            finishedAt: null,
+            requiresManualStep: false,
+            manualCommand: null,
+            errorSummary: null,
+          })),
+          update,
+        },
+      })
+    );
+
+    const result = service.reconcileOnStartup();
+
+    expect(result.updateStatus).toBe("failed");
+    expect(result.availability).toBe("check_failed");
+    expect(result.errorSummary).toBe("Update check did not complete before the service restarted");
+    expect(update).toHaveBeenCalled();
   });
 
   it("passes the update state file path into the detached worker contract", async () => {

@@ -18,6 +18,7 @@ const sharedUiSources = [
   "src/components/ui/tag/index.module.css",
   "src/components/ui/badge/index.module.css",
   "src/components/ui/pill/index.module.css",
+  "src/components/ui/select/index.module.css",
   "src/components/ui/tooltip/index.module.css",
   "src/components/ui/notice/index.module.css",
   "src/components/ui/modal/index.module.css",
@@ -27,6 +28,9 @@ const sharedUiSources = [
   "src/components/ui/progress-bar/index.module.css",
   "src/components/ui/status-dot/index.module.css",
   "src/components/ui/empty-state/index.module.css",
+  "src/components/ui/confirm-dialog/index.module.css",
+  "src/components/ui/datetime-picker/index.module.css",
+  "src/components/ui/spinner/index.module.css",
 ].map((file) => [file, readFileSync(`${process.cwd()}/${file}`, "utf8")] as const);
 
 const rawFoundationPattern =

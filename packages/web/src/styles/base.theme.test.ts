@@ -30,16 +30,27 @@ function getRuleBlock(selector: string) {
 }
 
 describe("base.css theme-sensitive shells", () => {
-  it("keeps the app loading shell on theme tokens instead of dark-only gradients", () => {
+  it("keeps the app loading shell on semantic material tokens", () => {
     const shell = getRuleBlock(".app-loading-shell");
     const card = getRuleBlock(".app-loading-card");
 
-    expect(shell).toContain("var(--surface-page-bg)");
-    expect(shell).toContain("backdrop-filter: var(--app-surface-backdrop-filter, none)");
-    expect(card).toContain("var(--surface-overlay-bg)");
-    expect(card).toContain("backdrop-filter: var(--app-surface-backdrop-filter, none)");
+    expect(shell).toContain("background: var(--material-shell-page)");
+    expect(shell).toContain("backdrop-filter: var(--material-backdrop-filter)");
+    expect(card).toContain("background: var(--material-overlay)");
+    expect(card).toContain("backdrop-filter: var(--material-backdrop-filter)");
     expect(card).toContain("box-shadow: var(--surface-overlay-shadow)");
     expect(card).toContain("border-radius: var(--radius-overlay)");
+    expect(shell).not.toContain("--app-surface-opacity");
+    expect(card).not.toContain("--app-surface-backdrop-filter");
+  });
+
+  it("maps links and themed icons onto semantic/domain tokens", () => {
+    expect(getRuleBlock("a")).toContain("color: var(--text-link)");
+    expect(getRuleBlock("a:hover")).toContain("color: var(--text-link-hover)");
+    expect(getRuleBlock(".themed-icon--tone-warning")).toContain("color: var(--icon-warning)");
+    expect(getRuleBlock(".themed-icon--surface-info")).toContain(
+      "background: var(--icon-surface-info)"
+    );
   });
 
   it("defines shared icon tone and surface utilities", () => {
@@ -47,49 +58,68 @@ describe("base.css theme-sensitive shells", () => {
     const surface = getRuleBlock(".icon-surface-warning");
     const chip = getRuleBlock(".icon-chip");
     const themedIcon = getRuleBlock(".themed-icon");
-    const themedTone = getRuleBlock(".themed-icon--tone-warning");
-    const themedSurface = getRuleBlock(".themed-icon--surface-info");
 
     expect(tone).toContain("color: var(--icon-secondary)");
-    expect(surface).toContain("background: var(--state-warning-bg)");
+    expect(surface).toContain("background: var(--icon-surface-warning)");
     expect(chip).toContain("display: inline-flex");
     expect(chip).toContain("align-items: center");
     expect(chip).toContain("justify-content: center");
     expect(chip).toContain("border-radius: var(--radius-control)");
     expect(themedIcon).toContain("display: inline-flex");
     expect(themedIcon).toContain("line-height: 0");
-    expect(themedTone).toContain("color: var(--icon-warning)");
-    expect(themedSurface).toContain("background: var(--icon-surface-info)");
   });
 
   it("routes focus and shell chrome through semantic foundation tokens", () => {
     expect(getRuleBlock(":focus-visible")).toContain(
       "outline: var(--state-focus-ring-width) solid var(--state-focus-ring-color)"
     );
-    expect(getRuleBlock(".app-loading-shell")).toContain("var(--surface-page-bg)");
-    expect(getRuleBlock(".app-loading-card")).toContain("var(--surface-overlay-bg)");
+    expect(getRuleBlock(".app-loading-shell")).toContain("background: var(--material-shell-page)");
+    expect(getRuleBlock(".app-loading-card")).toContain("background: var(--material-overlay)");
     expect(getRuleBlock(".app-loading-card")).toContain(
       "box-shadow: var(--surface-overlay-shadow)"
     );
     expect(getRuleBlock(".app-loading-card")).toContain("border-radius: var(--radius-overlay)");
     expect(getRuleBlock(".icon-chip")).toContain("border-radius: var(--radius-control)");
-    expect(getRuleBlock(".icon-surface-warning")).toContain("background: var(--state-warning-bg)");
+    expect(getRuleBlock(".icon-surface-warning")).toContain(
+      "background: var(--icon-surface-warning)"
+    );
   });
 
-  it("defines app-shell background variables and appearance-aware loading shell hooks", () => {
+  it("defines a single token-driven native scrollbar contract for themed surfaces", () => {
+    const scrollbar = getRuleBlock("::-webkit-scrollbar");
+    const track = getRuleBlock("::-webkit-scrollbar-track");
+    const trackPiece = getRuleBlock("::-webkit-scrollbar-track-piece");
+    const thumb = getRuleBlock("::-webkit-scrollbar-thumb");
+    const thumbHover = getRuleBlock("::-webkit-scrollbar-thumb:hover");
+    const button = getRuleBlock("::-webkit-scrollbar-button");
+    const corner = getRuleBlock("::-webkit-scrollbar-corner");
+    const firefox = getRuleBlock("*");
+
+    expect(scrollbar).toContain("width: var(--scrollbar-width)");
+    expect(scrollbar).toContain("height: var(--scrollbar-width)");
+    expect(track).toContain("background: var(--scrollbar-track)");
+    expect(trackPiece).toContain("background: var(--scrollbar-track)");
+    expect(thumb).toContain("background: var(--scrollbar-thumb)");
+    expect(thumb).toContain("border-radius: var(--radius-full)");
+    expect(thumbHover).toContain("background: var(--border-focus)");
+    expect(button).toContain("background: var(--scrollbar-track)");
+    expect(corner).toContain("background: var(--scrollbar-track)");
+    expect(firefox).toContain("scrollbar-width: thin");
+    expect(firefox).toContain("scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track)");
+  });
+
+  it("defines app-shell background variables and shared background dim hooks", () => {
     const app = getRuleBlock(".app");
     const appBefore = getRuleBlock(".app::before");
     const appAfter = getRuleBlock(".app::after");
-    const loadingShell = getRuleBlock(".app-loading-shell");
 
-    expect(app).toContain("background: var(--surface-page-bg)");
+    expect(app).toContain("background: var(--surface-page)");
     expect(app).toContain("isolation: isolate");
     expect(appBefore).toContain("background-image: var(--app-bg-image, none)");
     expect(appBefore).toContain("background-size: var(--app-bg-fit, cover)");
     expect(appBefore).toContain("filter: blur(var(--app-bg-blur, 0px))");
+    expect(appAfter).toContain("background: var(--surface-page)");
     expect(appAfter).toContain("var(--app-bg-dim, 0)");
-    expect(loadingShell).toContain("var(--app-surface-opacity, 0.96)");
-    expect(loadingShell).toContain("backdrop-filter: var(--app-surface-backdrop-filter, none)");
   });
 });
 
@@ -108,9 +138,11 @@ describe("base.css viewport sizing", () => {
 describe("base.css desktop typography foundation", () => {
   it("defines the semantic and desktop layout tokens used by polished PC surfaces", () => {
     expect(tokensStylesheet).toContain("--text-muted:");
-    expect(tokensStylesheet).toContain("--bg-panel:");
-    expect(tokensStylesheet).toContain("--bg-elevated:");
-    expect(tokensStylesheet).toContain("--accent-red:");
+    expect(tokensStylesheet).toContain("--surface-panel-bg:");
+    expect(tokensStylesheet).toContain("--surface-elevated-bg:");
+    expect(tokensStylesheet).toContain("--status-danger-fg:");
+    expect(tokensStylesheet).toContain("--workspace-sidebar-surface:");
+    expect(tokensStylesheet).toContain("--material-panel:");
     expect(tokensStylesheet).toContain("--desktop-topbar-height:");
     expect(tokensStylesheet).toContain("--desktop-statusbar-height:");
     expect(tokensStylesheet).toContain("--desktop-sidebar-header-height:");
@@ -119,6 +151,9 @@ describe("base.css desktop typography foundation", () => {
     expect(tokensStylesheet).toContain("--desktop-content-max-width:");
     expect(tokensStylesheet).toContain("--desktop-modal-max-width-md:");
     expect(tokensStylesheet).toContain("--desktop-modal-max-width-lg:");
+    expect(tokensStylesheet).not.toContain("--bg-panel: var(");
+    expect(tokensStylesheet).not.toContain("--bg-elevated: var(");
+    expect(tokensStylesheet).not.toContain("--accent-red: var(");
   });
 
   it("defines semantic overlay z-index tokens for governed layers", () => {
@@ -152,6 +187,21 @@ describe("base.css desktop typography foundation", () => {
     expect(getRuleBlock("select")).toContain("font-size: var(--type-body-3-size)");
   });
 
+  it("maps foundational surfaces and field chrome onto semantic tokens", () => {
+    expect(getRuleBlock("body")).toContain("background-color: var(--surface-page)");
+    expect(getRuleBlock("code")).toContain("background-color: var(--surface-hover)");
+    expect(getRuleBlock("pre")).toContain("background-color: var(--surface-panel)");
+    expect(getRuleBlock("::selection")).toContain("background-color: var(--text-link)");
+    expect(getRuleBlock("::selection")).toContain("color: var(--text-inverse)");
+
+    expect(getRuleBlock("input")).toContain("background-color: var(--field-bg)");
+    expect(getRuleBlock("input")).toContain("border: 1px solid var(--field-border)");
+    expect(getRuleBlock("textarea")).toContain("background-color: var(--field-bg)");
+    expect(getRuleBlock("textarea")).toContain("border: 1px solid var(--field-border)");
+    expect(getRuleBlock("select")).toContain("background-color: var(--field-bg)");
+    expect(getRuleBlock("select")).toContain("border: 1px solid var(--field-border)");
+  });
+
   it("maps headings and helper text onto the new semantic hierarchy", () => {
     expect(getRuleBlock("h1")).toContain("font-size: var(--type-heading-1-size)");
     expect(getRuleBlock("h1")).toContain("font-weight: var(--type-heading-1-weight)");
@@ -176,8 +226,18 @@ describe("base.css desktop typography foundation", () => {
     expect(getRuleBlock(".connection-banner")).toContain(
       "line-height: var(--type-body-6-line-height)"
     );
+    expect(getRuleBlock(".connection-banner")).toContain("background: var(--status-warning-fg)");
+    expect(getRuleBlock(".connection-banner--error")).toContain(
+      "background: var(--status-danger-fg)"
+    );
     expect(getRuleBlock(".app-loading-kicker")).toContain("font-size: var(--type-body-6-size)");
     expect(getRuleBlock(".app-loading-title")).toContain("font-size: var(--type-heading-1-size)");
     expect(getRuleBlock(".app-loading-desc")).toContain("font-size: var(--type-body-3-size)");
+  });
+
+  it("maps status text utilities onto semantic status tokens", () => {
+    expect(getRuleBlock(".text-success")).toContain("color: var(--status-success-fg)");
+    expect(getRuleBlock(".text-warning")).toContain("color: var(--status-warning-fg)");
+    expect(getRuleBlock(".text-error")).toContain("color: var(--status-danger-fg)");
   });
 });

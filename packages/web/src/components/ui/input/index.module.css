@@ -1,8 +1,8 @@
 .input {
   height: var(--control-height-md);
   padding: 0 var(--inset-control-inline);
-  background: var(--bg-page);
-  border: 1px solid var(--border);
+  background: var(--field-bg);
+  border: 1px solid var(--field-border);
   border-radius: var(--radius-control);
   color: var(--text-primary);
   font-family: var(--font-sans);
@@ -17,14 +17,13 @@
 }
 
 .input:hover {
-  border-color: var(--border-light);
+  border-color: var(--field-border-hover);
 }
 
 .input:focus,
 .input:focus-visible {
-  border-color: var(--state-focus-ring-color);
-  box-shadow: 0 0 0 var(--state-focus-ring-width)
-    color-mix(in srgb, var(--state-focus-ring-color) 40%, transparent);
+  border-color: var(--border-focus);
+  box-shadow: var(--field-ring);
 }
 
 .sm {
@@ -42,13 +41,13 @@
 
 .invalid,
 .input[aria-invalid="true"] {
-  border-color: var(--border-error);
+  border-color: var(--border-danger);
 }
 
 .invalid:focus,
 .invalid:focus-visible,
 .input[aria-invalid="true"]:focus,
 .input[aria-invalid="true"]:focus-visible {
-  border-color: var(--border-error);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--border-error) 70%, transparent 30%);
+  border-color: var(--border-danger);
+  box-shadow: var(--field-invalid-ring);
 }

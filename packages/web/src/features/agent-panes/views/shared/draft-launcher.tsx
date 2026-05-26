@@ -7,22 +7,33 @@ import { sessionsAtom } from "../../../../atoms/sessions";
 import { Button, IconButton, StatusDot, Tag, ThemedIcon, Tooltip } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { buildDiagnosticsPath } from "../../../diagnostics";
+import type { PaneDropIntent } from "../../actions/pane-drag-types";
 import { type ProviderId, useProviderLauncher } from "../../actions/use-provider-launcher";
 
+interface DraftLauncherDragState {
+  isDragging: boolean;
+  isActiveDropTarget: boolean;
+  hoverPlacement: "center" | null;
+}
+
 interface DraftLauncherProps {
+  dragState?: DraftLauncherDragState;
   workspaceId: string;
   paneId?: string;
   onAssignSession?: (paneId: string, sessionId: string) => void;
   onClosePane?: (paneId: string) => void;
+  onPaneDrop?: (intent: PaneDropIntent) => void;
   onReplaceWithSession?: (sessionId: string) => void;
   onSplitPane?: (paneId: string, direction: "horizontal" | "vertical") => void;
 }
 
 export const DraftLauncher: FC<DraftLauncherProps> = ({
+  dragState,
   workspaceId,
   paneId,
   onAssignSession,
   onClosePane,
+  onPaneDrop: _onPaneDrop,
   onReplaceWithSession,
   onSplitPane,
 }) => {
@@ -135,7 +146,16 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
   };
 
   return (
-    <div className="session-card agent-pane">
+    <div
+      className={`session-card agent-pane${dragState?.isDragging ? " draft-launcher--dragging" : ""}${dragState?.isActiveDropTarget ? " draft-launcher--drop-target" : ""}`}
+      data-pane-id={paneId}
+    >
+      {dragState?.isActiveDropTarget ? (
+        <div className="pane-drop-overlay pane-drop-overlay--draft">
+          <div className="pane-drop-overlay__center">Move here</div>
+        </div>
+      ) : null}
+
       <div className="session-header">
         <div className="session-header-left">
           <StatusDot tone="neutral" className="session-dot session-dot-idle" />

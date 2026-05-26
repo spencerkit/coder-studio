@@ -258,6 +258,7 @@ export function AboutSettings({
             }}
             disabled={
               loading !== null ||
+              updateState?.updateStatus === "checking" ||
               updateState?.updateStatus === "installing" ||
               updateState?.updateStatus === "restarting"
             }
@@ -272,6 +273,7 @@ export function AboutSettings({
               loading !== null ||
               !updateState?.supported ||
               updateState?.availability !== "update_available" ||
+              updateState.updateStatus === "checking" ||
               updateState.updateStatus === "installing" ||
               updateState.updateStatus === "restarting" ||
               Boolean(updateState.manualCommand)

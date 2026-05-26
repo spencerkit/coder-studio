@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 const stylesheet = readFileSync(`${process.cwd()}/src/styles/tokens.css`, "utf8");
 
-function getRuleBlock(selector: string): string {
+function getRuleBlocks(selector: string): string[] {
   const blocks: string[] = [];
   const matcher = /([^{}]+)\{([^}]*)\}/g;
   let match: RegExpExecArray | null = null;
@@ -25,6 +25,12 @@ function getRuleBlock(selector: string): string {
     }
   }
 
+  return blocks;
+}
+
+function getRuleBlock(selector: string): string {
+  const blocks = getRuleBlocks(selector);
+
   return blocks.join("\n");
 }
 
@@ -38,6 +44,10 @@ function getCustomProperty(block: string, name: string): string | null {
   }
 
   return value;
+}
+
+function getDeclaredCustomProperties(block: string): string[] {
+  return [...block.matchAll(/^\s*(--[a-z0-9-]+)\s*:/gm)].map((match) => match[1]);
 }
 
 describe("tokens.css touch tokens", () => {
@@ -67,6 +77,128 @@ describe("tokens.css touch tokens", () => {
     "--icon-surface-error",
   ] as const;
 
+  const domainLayerTokens = [
+    "--git-status-added-fg",
+    "--git-status-added-bg",
+    "--git-status-added-border",
+    "--git-status-modified-fg",
+    "--git-status-modified-bg",
+    "--git-status-modified-border",
+    "--git-status-deleted-fg",
+    "--git-status-deleted-bg",
+    "--git-status-deleted-border",
+    "--git-status-untracked-fg",
+    "--git-status-untracked-bg",
+    "--git-status-untracked-border",
+    "--git-status-renamed-fg",
+    "--git-status-renamed-bg",
+    "--git-status-renamed-border",
+    "--diff-added-bg",
+    "--diff-added-border",
+    "--diff-modified-bg",
+    "--diff-modified-border",
+    "--diff-deleted-bg",
+    "--diff-deleted-border",
+    "--control-primary-bg",
+    "--control-primary-bg-hover",
+    "--control-primary-fg",
+    "--control-secondary-bg",
+    "--control-secondary-bg-hover",
+    "--control-secondary-border",
+    "--control-secondary-border-hover",
+    "--control-ghost-bg-hover",
+    "--control-ghost-fg",
+    "--control-danger-bg",
+    "--control-danger-fg",
+    "--control-spinner-track",
+    "--field-bg",
+    "--field-border",
+    "--field-border-hover",
+    "--field-ring",
+    "--field-invalid-ring",
+    "--kbd-surface",
+    "--menu-danger-hover-bg",
+    "--tag-info-bg",
+    "--tag-info-fg",
+    "--tag-success-bg",
+    "--tag-success-fg",
+    "--tag-warning-bg",
+    "--tag-warning-fg",
+    "--tag-danger-bg",
+    "--tag-danger-fg",
+    "--tag-accent-bg",
+    "--tag-accent-fg",
+    "--status-dot-idle",
+    "--status-dot-starting",
+    "--status-dot-running",
+    "--status-dot-complete",
+    "--status-dot-error",
+    "--status-dot-running-ring-1",
+    "--status-dot-running-ring-2",
+    "--status-dot-running-ring-3",
+  ] as const;
+
+  const forbiddenLegacyWorkspaceAliases = [
+    "--ws-sidebar-bg",
+    "--ws-activitybar-bg",
+    "--ws-statusbar-bg",
+    "--ws-session-bg",
+    "--ws-session-active-bg",
+    "--ws-session-header-bg",
+    "--ws-terminal-shell-bg",
+    "--ws-terminal-toolbar-bg",
+    "--ws-terminal-tabs-bg",
+    "--ws-editor-shell-bg",
+    "--ws-editor-toolbar-bg",
+  ] as const;
+
+  const forbiddenLegacyPublicAliases = [
+    "--bg-page",
+    "--bg-panel",
+    "--bg-elevated",
+    "--bg-surface",
+    "--bg-sidebar",
+    "--bg-terminal",
+    "--bg-hover",
+    "--bg-active",
+    "--bg-disabled",
+    "--bg-input",
+    "--accent-blue",
+    "--accent-green",
+    "--accent-amber",
+    "--accent-red",
+    "--accent-pink",
+    "--color-success",
+    "--color-warning",
+    "--color-error",
+    "--color-info",
+    "--border",
+    "--border-light",
+    "--border-error",
+    ...forbiddenLegacyWorkspaceAliases,
+    "--blue",
+    "--green",
+    "--amber",
+    "--pink",
+    "--bg",
+  ] as const;
+
+  const allowedThemeSpecificOverridePatterns = [
+    /^--ref-[a-z0-9-]+$/,
+    /^--surface-(?:panel|elevated|inverse|overlay-bg|overlay-backdrop)$/,
+    /^--status-(?:success|warning|danger|info)-(?:bg|border)$/,
+    /^--state-focus-ring-color$/,
+    /^--state-selected-(?:bg|border)$/,
+    /^--overlay-(?:backdrop|scrim|local-backdrop)$/,
+    /^--icon-(?:primary|secondary|muted|accent|success|warning|error|info)$/,
+    /^--icon-file-(?:folder|code|data|doc|media|default)$/,
+    /^--icon-git-(?:staged|modified|deleted|untracked)$/,
+    /^--icon-surface-(?:subtle|accent|success|warning|error|info)$/,
+    /^--shadow-(?:sm|md|lg|xl|glow)$/,
+    /^--scrollbar-thumb$/,
+    /^--accent-purple$/,
+  ] as const;
+
   it("defines named theme blocks for all built-in themes", () => {
     expect(stylesheet).toContain(':root,\n[data-theme="mint-dark"]');
     expect(stylesheet).toContain('[data-theme="mint-light"]');
@@ -88,6 +220,101 @@ describe("tokens.css touch tokens", () => {
     expect(root).toContain("--touch-hit-slop: 0px");
   });
 
+  it("defines the semantic color system layers on :root", () => {
+    const root = getRuleBlock(":root");
+
+    expect(root).toContain("--ref-fg-0:");
+    expect(root).toContain("--ref-bg-0:");
+    expect(root).toContain("--ref-border-0:");
+    expect(root).toContain("--ref-status-success:");
+    expect(root).toContain("--text-primary: var(--ref-fg-0)");
+    expect(root).toContain("--surface-page: var(--ref-bg-0)");
+    expect(root).toContain("--border-default: var(--ref-border-0)");
+    expect(root).toContain("--status-success-fg: var(--ref-status-success)");
+    expect(root).toContain("--material-panel:");
+    expect(root).toContain("--material-overlay:");
+    expect(root).toContain("--material-backdrop-filter:");
+    expect(root).toContain("--workspace-sidebar-surface:");
+    expect(root).toContain("--workspace-editor-toolbar-surface:");
+    expect(root).toContain("--git-status-added-bg:");
+    expect(root).toContain("--diff-added-bg:");
+    expect(root).toContain("--icon-primary:");
+    expect(root).toContain("--control-primary-bg:");
+    expect(root).toContain("--field-ring:");
+    expect(root).toContain("--tag-info-bg:");
+    expect(root).toContain("--status-dot-running-ring-2:");
+
+    for (const token of domainLayerTokens) {
+      expect(getCustomProperty(root, token), `:root should define ${token}`).not.toBeNull();
+    }
+  });
+
+  it("maps diff modified tokens to the planned info status palette", () => {
+    const root = getRuleBlock(":root");
+
+    expect(root).toContain("--diff-modified-bg: var(--status-info-bg)");
+    expect(root).toContain("--diff-modified-border: var(--status-info-border)");
+  });
+
+  it("forbids the legacy public color aliases on :root", () => {
+    const root = getRuleBlock(":root");
+
+    for (const token of forbiddenLegacyPublicAliases) {
+      expect(getCustomProperty(root, token), `:root should not publish ${token}`).toBeNull();
+    }
+  });
+
+  it("keeps root semantic compatibility tokens on direct semantic references", () => {
+    const root = getRuleBlock(":root");
+
+    expect(root).toContain("--text-muted: var(--text-tertiary)");
+    expect(root).toContain("--surface-page-bg: var(--surface-page)");
+    expect(root).toContain("--surface-panel-bg: var(--surface-panel)");
+    expect(root).toContain("--surface-elevated-bg: var(--surface-elevated)");
+    expect(root).toContain("--ws-backdrop-filter: var(--material-backdrop-filter)");
+    expect(root).toContain("--ws-content-bg: var(--workspace-content-surface)");
+    expect(root).toContain("--diff-removed-bg: var(--status-danger-bg)");
+    expect(root).toContain("--diff-removed-border: var(--status-danger-border)");
+  });
+
+  it("derives the shared native scrollbar palette from semantic surface tokens", () => {
+    const root = getRuleBlock(":root");
+
+    expect(getCustomProperty(root, "--scrollbar-width")).toBe("8px");
+    expect(getCustomProperty(root, "--scrollbar-track")).toBe(
+      "color-mix(in srgb, var(--surface-panel) 86%, var(--border-default) 14%)"
+    );
+    expect(getCustomProperty(root, "--scrollbar-thumb")).toBe(
+      "color-mix(in srgb, var(--border-default) 74%, var(--status-info-fg) 26%)"
+    );
+  });
+
+  it("limits explicit scrollbar thumb overrides to the high-contrast themes", () => {
+    const inheritedThemes = [
+      "mint-light",
+      "graphite-dark",
+      "graphite-light",
+      "nord-dark",
+      "nord-light",
+    ] as const;
+
+    for (const theme of inheritedThemes) {
+      const themeSpecificBlock = getRuleBlocks(`[data-theme="${theme}"]`).at(-1) ?? "";
+
+      expect(
+        getCustomProperty(themeSpecificBlock, "--scrollbar-thumb"),
+        `${theme} should inherit the shared scrollbar thumb palette`
+      ).toBeNull();
+    }
+
+    expect(
+      getCustomProperty(getRuleBlocks('[data-theme="hc-dark"]').at(-1) ?? "", "--scrollbar-thumb")
+    ).toBe("#ffffff");
+    expect(
+      getCustomProperty(getRuleBlocks('[data-theme="hc-light"]').at(-1) ?? "", "--scrollbar-thumb")
+    ).toBe("#5c5c5c");
+  });
+
   it("defines the shared foundation tokens on :root without changing code font-size plumbing", () => {
     const root = getRuleBlock(":root");
 
@@ -105,14 +332,24 @@ describe("tokens.css touch tokens", () => {
 
     expect(root).toContain("--state-focus-ring-color: var(--border-focus)");
     expect(root).toContain("--state-focus-ring-width: 2px");
-    expect(root).toContain("--state-hover-bg-subtle: var(--bg-hover)");
-    expect(root).toContain("--state-hover-bg-strong: var(--bg-active)");
-    expect(root).toContain("--state-selected-bg:");
+    expect(root).toContain("--state-hover-bg-subtle: var(--surface-hover)");
+    expect(root).toContain("--state-hover-bg-strong: var(--surface-active)");
+    expect(root).toContain(
+      "--state-selected-bg: color-mix(in srgb, var(--status-info-fg) 12%, var(--surface-panel))"
+    );
     expect(root).toContain("--state-disabled-bg:");
-    expect(root).toContain("--state-success-bg:");
-    expect(root).toContain("--state-warning-bg:");
-    expect(root).toContain("--state-error-bg:");
-    expect(root).toContain("--state-info-bg:");
+    expect(root).toContain(
+      "--state-success-bg: color-mix(in srgb, var(--status-success-fg) 14%, transparent)"
+    );
+    expect(root).toContain(
+      "--state-warning-bg: color-mix(in srgb, var(--status-warning-fg) 14%, transparent)"
+    );
+    expect(root).toContain(
+      "--state-error-bg: color-mix(in srgb, var(--status-danger-fg) 14%, transparent)"
+    );
+    expect(root).toContain(
+      "--state-info-bg: color-mix(in srgb, var(--status-info-fg) 14%, transparent)"
+    );
 
     expect(root).toContain("--gap-hairline:");
     expect(root).toContain("--gap-micro:");
@@ -214,33 +451,55 @@ describe("tokens.css touch tokens", () => {
   it("defines workspace material tokens for solid and glass workspace surfaces", () => {
     const root = getRuleBlock(":root");
 
+    expect(root).toContain("--material-backdrop-filter: none");
+    expect(root).toContain("--material-panel: var(--surface-panel)");
+    expect(root).toContain("--material-elevated: var(--surface-elevated)");
+    expect(root).toContain("--material-overlay:");
+    expect(root).toContain("--material-local-overlay:");
+    expect(root).toContain("--workspace-sidebar-surface: var(--surface-panel)");
+    expect(root).toContain("--workspace-terminal-shell-surface: var(--surface-panel)");
+    expect(root).toContain("--workspace-editor-toolbar-surface: var(--surface-elevated)");
+
     expect(root).toContain("--ws-backdrop-filter: none");
     expect(root).toContain("--ws-content-bg: transparent");
-    expect(root).toContain("--ws-sidebar-bg: var(--surface-panel-bg)");
-    expect(root).toContain("--ws-terminal-shell-bg: var(--surface-panel-bg)");
-    expect(root).toContain("--ws-editor-toolbar-bg: var(--surface-elevated-bg)");
     expect(root).toContain("--ws-level-0: transparent");
     expect(root).toContain("--ws-level-1: color-mix(");
     expect(root).toContain("--ws-level-4: color-mix(");
+
+    for (const token of forbiddenLegacyWorkspaceAliases) {
+      expect(getCustomProperty(root, token), `:root should not publish ${token}`).toBeNull();
+    }
   });
 
-  it("overrides workspace material tokens for glass and high-contrast runtime states", () => {
+  it("keeps the glass/high-contrast material outputs in the token layer", () => {
     const glassRoot = getRuleBlock(':root[data-appearance-glass="on"]');
     const highContrastDark = getRuleBlock(':root[data-theme="hc-dark"]');
-    const highContrastLight = getRuleBlock(':root[data-theme="hc-light"]');
+    expect(glassRoot).toContain(
+      "--material-backdrop-filter: var(--app-surface-backdrop-filter, none)"
+    );
+    expect(glassRoot).toContain("--material-panel: color-mix(");
+    expect(glassRoot).toContain("--workspace-sidebar-surface: var(--material-elevated)");
+    expect(glassRoot).toContain("--workspace-terminal-shell-surface: var(--material-elevated)");
 
-    expect(glassRoot).toContain("--ws-backdrop-filter: var(--app-surface-backdrop-filter, none)");
-    expect(glassRoot).toContain("--ws-sidebar-bg: var(--ws-level-3)");
-    expect(glassRoot).toContain("--ws-terminal-shell-bg: var(--ws-level-3)");
-    expect(glassRoot).toContain("--ws-editor-shell-bg: var(--ws-level-2)");
+    for (const token of forbiddenLegacyWorkspaceAliases) {
+      expect(
+        getCustomProperty(glassRoot, token),
+        `glass root should not publish ${token}`
+      ).toBeNull();
+    }
 
-    expect(highContrastDark).toContain("--ws-backdrop-filter: none");
-    expect(highContrastDark).toContain("--ws-sidebar-bg: var(--surface-panel-bg)");
-    expect(highContrastDark).toContain("--ws-editor-toolbar-bg: var(--surface-elevated-bg)");
+    expect(highContrastDark).toContain("--material-backdrop-filter: none");
+    expect(highContrastDark).toContain("--material-panel: var(--surface-panel)");
+    expect(highContrastDark).toContain("--material-shell-page: var(--surface-page)");
+    expect(highContrastDark).toContain("--material-shell-topbar: var(--surface-elevated)");
+    expect(highContrastDark).toContain("--workspace-sidebar-surface: var(--surface-panel)");
 
-    expect(highContrastLight).toContain("--ws-backdrop-filter: none");
-    expect(highContrastLight).toContain("--ws-sidebar-bg: var(--surface-panel-bg)");
-    expect(highContrastLight).toContain("--ws-editor-toolbar-bg: var(--surface-elevated-bg)");
+    for (const token of forbiddenLegacyWorkspaceAliases) {
+      expect(
+        getCustomProperty(highContrastDark, token),
+        `hc dark should not publish ${token}`
+      ).toBeNull();
+    }
   });
 
   it("overrides touch tokens on narrow viewport only", () => {
@@ -370,17 +629,17 @@ describe("tokens.css touch tokens", () => {
     const graphiteLight = getRuleBlock('[data-theme="graphite-light"]');
     const nordLight = getRuleBlock('[data-theme="nord-light"]');
 
-    expect(getCustomProperty(mintLight, "--bg-page")).toBe("#f3fbf7");
-    expect(getCustomProperty(mintLight, "--bg-sidebar")).toBe("#edf7f2");
-    expect(getCustomProperty(mintLight, "--border-focus")).toBe("#158f77");
+    expect(getCustomProperty(mintLight, "--ref-bg-0")).toBe("#f3fbf7");
+    expect(getCustomProperty(mintLight, "--ref-bg-2")).toBe("#edf7f2");
+    expect(getCustomProperty(mintLight, "--ref-border-focus")).toBe("#158f77");
 
-    expect(getCustomProperty(graphiteLight, "--bg-page")).toBe("#e7edf3");
-    expect(getCustomProperty(graphiteLight, "--bg-sidebar")).toBe("#dfe6ee");
-    expect(getCustomProperty(graphiteLight, "--border-focus")).toBe("#315fdd");
+    expect(getCustomProperty(graphiteLight, "--ref-bg-0")).toBe("#e7edf3");
+    expect(getCustomProperty(graphiteLight, "--ref-bg-2")).toBe("#dfe6ee");
+    expect(getCustomProperty(graphiteLight, "--ref-border-focus")).toBe("#315fdd");
 
-    expect(getCustomProperty(nordLight, "--bg-page")).toBe("#e3ebf4");
-    expect(getCustomProperty(nordLight, "--bg-sidebar")).toBe("#dbe4ef");
-    expect(getCustomProperty(nordLight, "--border-focus")).toBe("#5b7fa8");
+    expect(getCustomProperty(nordLight, "--ref-bg-0")).toBe("#e3ebf4");
+    expect(getCustomProperty(nordLight, "--ref-bg-2")).toBe("#dbe4ef");
+    expect(getCustomProperty(nordLight, "--ref-border-focus")).toBe("#5b7fa8");
   });
 
   it("separates the light theme interaction palette across families", () => {
@@ -388,18 +647,18 @@ describe("tokens.css touch tokens", () => {
     const graphiteLight = getRuleBlock('[data-theme="graphite-light"]');
     const nordLight = getRuleBlock('[data-theme="nord-light"]');
 
-    expect(getCustomProperty(mintLight, "--text-secondary")).toBe("#557067");
-    expect(getCustomProperty(mintLight, "--accent-blue")).toBe("#148a7a");
+    expect(getCustomProperty(mintLight, "--ref-fg-1")).toBe("#557067");
+    expect(getCustomProperty(mintLight, "--ref-status-info")).toBe("#148a7a");
     expect(getCustomProperty(mintLight, "--shadow-glow")).toBe("0 0 12px rgba(21, 143, 119, 0.18)");
 
-    expect(getCustomProperty(graphiteLight, "--text-secondary")).toBe("#4d5b6a");
-    expect(getCustomProperty(graphiteLight, "--accent-blue")).toBe("#315fdd");
+    expect(getCustomProperty(graphiteLight, "--ref-fg-1")).toBe("#4d5b6a");
+    expect(getCustomProperty(graphiteLight, "--ref-status-info")).toBe("#315fdd");
     expect(getCustomProperty(graphiteLight, "--shadow-glow")).toBe(
       "0 0 12px rgba(49, 95, 221, 0.16)"
     );
 
-    expect(getCustomProperty(nordLight, "--text-secondary")).toBe("#4d5a6f");
-    expect(getCustomProperty(nordLight, "--accent-blue")).toBe("#5b7fa8");
+    expect(getCustomProperty(nordLight, "--ref-fg-1")).toBe("#4d5a6f");
+    expect(getCustomProperty(nordLight, "--ref-status-info")).toBe("#5b7fa8");
     expect(getCustomProperty(nordLight, "--shadow-glow")).toBe("0 0 12px rgba(91, 127, 168, 0.18)");
   });
 
@@ -410,6 +669,67 @@ describe("tokens.css touch tokens", () => {
       for (const token of requiredIconTokens) {
         expect(getCustomProperty(block, token), `${theme} should define ${token}`).not.toBeNull();
       }
+    }
+  });
+
+  it("mirrors the layered token schema in every theme selector", () => {
+    for (const theme of builtInThemes) {
+      const block = getRuleBlock(`[data-theme="${theme}"]`);
+
+      expect(
+        getCustomProperty(block, "--ref-fg-0"),
+        `${theme} should define --ref-fg-0`
+      ).not.toBeNull();
+      expect(
+        getCustomProperty(block, "--surface-page"),
+        `${theme} should define --surface-page`
+      ).not.toBeNull();
+      expect(
+        getCustomProperty(block, "--status-info-fg"),
+        `${theme} should define --status-info-fg`
+      ).not.toBeNull();
+      expect(
+        getCustomProperty(block, "--material-panel"),
+        `${theme} should define --material-panel`
+      ).not.toBeNull();
+      expect(
+        getCustomProperty(block, "--workspace-sidebar-surface"),
+        `${theme} should define --workspace-sidebar-surface`
+      ).not.toBeNull();
+      expect(
+        getCustomProperty(block, "--control-primary-bg"),
+        `${theme} should define --control-primary-bg`
+      ).not.toBeNull();
+      expect(
+        getCustomProperty(block, "--field-ring"),
+        `${theme} should define --field-ring`
+      ).not.toBeNull();
+      expect(
+        getCustomProperty(block, "--tag-info-bg"),
+        `${theme} should define --tag-info-bg`
+      ).not.toBeNull();
+      expect(
+        getCustomProperty(block, "--status-dot-running-ring-2"),
+        `${theme} should define --status-dot-running-ring-2`
+      ).not.toBeNull();
+    }
+  });
+
+  it("limits theme-specific overrides to sanctioned public token categories", () => {
+    for (const theme of builtInThemes.filter((theme) => theme !== "mint-dark")) {
+      const blocks = getRuleBlocks(`[data-theme="${theme}"]`);
+      const themeSpecificBlock = blocks.at(-1) ?? "";
+      const disallowedOverrides = getDeclaredCustomProperties(themeSpecificBlock).filter(
+        (token) => !allowedThemeSpecificOverridePatterns.some((pattern) => pattern.test(token))
+      );
+
+      expect(blocks.length, `${theme} should have a theme-specific override block`).toBeGreaterThan(
+        1
+      );
+      expect(
+        disallowedOverrides,
+        `${theme} should only override sanctioned theme-local token categories`
+      ).toEqual([]);
     }
   });
 

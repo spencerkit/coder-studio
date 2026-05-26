@@ -13,7 +13,7 @@
   outline: none;
   z-index: var(--z-popover);
   padding: var(--inset-panel);
-  border: 1px solid var(--border);
+  border: 1px solid var(--surface-overlay-border);
   border-radius: var(--radius-overlay);
-  background: var(--bg-surface);
+  background: var(--surface-overlay-bg);
 }

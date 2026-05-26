@@ -26,7 +26,7 @@ body {
   line-height: var(--type-body-3-line-height);
   font-weight: var(--type-body-3-weight);
   color: var(--text-primary);
-  background-color: var(--bg-page);
+  background-color: var(--surface-page);
   background-image: none;
   overflow: hidden;
 }
@@ -128,13 +128,13 @@ samp {
 }
 
 code {
-  background-color: var(--bg-hover);
+  background-color: var(--surface-hover);
   padding: var(--sp-1) var(--sp-2);
   border-radius: var(--radius-sm);
 }
 
 pre {
-  background-color: var(--bg-surface);
+  background-color: var(--surface-panel);
   padding: var(--sp-4);
   border-radius: var(--radius-md);
   overflow-x: auto;
@@ -142,13 +142,13 @@ pre {
 
 /* ========== Links ========== */
 a {
-  color: var(--accent-blue);
+  color: var(--text-link);
   text-decoration: none;
   transition: color var(--duration-fast) var(--ease-out);
 }
 
 a:hover {
-  color: color-mix(in srgb, var(--accent-blue), white 20%);
+  color: var(--text-link-hover);
 }
 
 /* ========== Focus States ========== */
@@ -163,7 +163,7 @@ a:hover {
 
 /* ========== Selection ========== */
 ::selection {
-  background-color: var(--accent-blue);
+  background-color: var(--text-link);
   color: var(--text-inverse);
 }
 
@@ -171,9 +171,13 @@ a:hover {
 ::-webkit-scrollbar {
   width: var(--scrollbar-width);
   height: var(--scrollbar-width);
+  background: var(--scrollbar-track);
 }
 
-::-webkit-scrollbar-track {
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-track-piece,
+::-webkit-scrollbar-button,
+::-webkit-scrollbar-corner {
   background: var(--scrollbar-track);
 }
 
@@ -218,8 +222,8 @@ select {
   line-height: var(--type-body-3-line-height);
   font-weight: var(--type-body-3-weight);
   color: var(--text-primary);
-  background-color: var(--bg-input);
-  border: 1px solid var(--border);
+  background-color: var(--field-bg);
+  border: 1px solid var(--field-border);
   border-radius: var(--radius-md);
   padding: var(--sp-3);
   transition: border-color var(--duration-fast) var(--ease-out);
@@ -294,13 +298,13 @@ textarea::placeholder {
   color: var(--text-tertiary);
 }
 .text-success {
-  color: var(--color-success);
+  color: var(--status-success-fg);
 }
 .text-warning {
-  color: var(--color-warning);
+  color: var(--status-warning-fg);
 }
 .text-error {
-  color: var(--color-error);
+  color: var(--status-danger-fg);
 }
 
 /* Icon utilities */
@@ -411,7 +415,7 @@ textarea::placeholder {
 }
 
 .icon-surface-warning {
-  background: var(--state-warning-bg);
+  background: var(--icon-surface-warning);
 }
 
 .themed-icon--surface-warning {
@@ -651,7 +655,7 @@ textarea::placeholder {
   height: 100dvh;
   display: flex;
   flex-direction: column;
-  background: var(--surface-page-bg);
+  background: var(--surface-page);
   color: var(--text-primary);
   overflow: hidden;
   isolation: isolate;
@@ -676,11 +680,8 @@ textarea::placeholder {
   position: absolute;
   inset: 0;
   z-index: -1;
-  background: color-mix(
-    in srgb,
-    var(--surface-page-bg) calc(var(--app-bg-dim, 0) * 100%),
-    transparent
-  );
+  background: var(--surface-page);
+  opacity: var(--app-bg-dim, 0);
   pointer-events: none;
 }
 
@@ -695,7 +696,7 @@ textarea::placeholder {
   justify-content: center;
   gap: var(--sp-2);
   padding: 0 var(--sp-4);
-  background: var(--accent-amber);
+  background: var(--status-warning-fg);
   color: var(--text-inverse);
   font-size: var(--type-body-6-size);
   line-height: var(--type-body-6-line-height);
@@ -739,7 +740,7 @@ textarea::placeholder {
 }
 
 .connection-banner--error {
-  background: var(--color-error);
+  background: var(--status-danger-fg);
 }
 
 .main-content {
@@ -754,25 +755,17 @@ textarea::placeholder {
   display: grid;
   place-items: center;
   padding: var(--sp-8);
-  background: color-mix(
-    in srgb,
-    var(--surface-page-bg) calc(var(--app-surface-opacity, 0.96) * 100%),
-    transparent
-  );
-  backdrop-filter: var(--app-surface-backdrop-filter, none);
+  background: var(--material-shell-page);
+  backdrop-filter: var(--material-backdrop-filter);
 }
 
 .app-loading-card {
   width: min(520px, 100%);
   padding: var(--sp-8);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-overlay);
-  background: color-mix(
-    in srgb,
-    var(--surface-overlay-bg) calc(var(--app-surface-opacity, 0.96) * 100%),
-    transparent
-  );
-  backdrop-filter: var(--app-surface-backdrop-filter, none);
+  background: var(--material-overlay);
+  backdrop-filter: var(--material-backdrop-filter);
   box-shadow: var(--surface-overlay-shadow);
 }
 

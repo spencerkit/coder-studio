@@ -199,4 +199,29 @@ describe("AboutSettings", () => {
     expect(screen.getByRole("tab", { name: "12 小时" })).toBeDisabled();
     expect(screen.getByRole("tab", { name: "24 小时" })).toBeDisabled();
   });
+
+  it("disables update actions while a check is already in progress", () => {
+    renderAboutSettings({
+      updateState: {
+        version: 1,
+        currentVersion: "0.4.0",
+        latestVersion: "0.5.0",
+        availability: "update_available",
+        updateStatus: "checking",
+        lastCheckedAt: 123,
+        targetVersion: null,
+        startedAt: null,
+        finishedAt: null,
+        requiresManualStep: false,
+        manualCommand: null,
+        errorSummary: null,
+        supported: true,
+        installKind: "global_npm",
+        unsupportedReason: null,
+      },
+    });
+
+    expect(screen.getByRole("button", { name: "立即检查" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "立即更新" })).toBeDisabled();
+  });
 });

@@ -4,6 +4,12 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runRestartHandoff, runUpdateWorker } from "./update-worker.js";
 
+type UpdateWorkerDeps = NonNullable<Parameters<typeof runUpdateWorker>[1]>;
+type RestartHandoffDeps = NonNullable<Parameters<typeof runRestartHandoff>[1]>;
+type RunCommandMock = NonNullable<UpdateWorkerDeps["runCommand"]>;
+type SpawnDetachedProcessMock = NonNullable<UpdateWorkerDeps["spawnDetachedProcess"]>;
+type WaitForProcessExitMock = NonNullable<RestartHandoffDeps["waitForProcessExit"]>;
+
 describe("update-worker", () => {
   const tempDirs: string[] = [];
 
@@ -31,8 +37,8 @@ describe("update-worker", () => {
 
   it("writes restarting state and spawns a detached restart handoff after install success", async () => {
     const env = createEnv();
-    const runCommand = vi.fn(async () => {});
-    const spawnDetachedProcess = vi.fn(async () => {});
+    const runCommand = vi.fn<RunCommandMock>(async () => {});
+    const spawnDetachedProcess = vi.fn<SpawnDetachedProcessMock>(async () => {});
 
     await runUpdateWorker(env, {
       runCommand,
@@ -61,7 +67,7 @@ describe("update-worker", () => {
 
   it("falls back to manual_required on permission-related install errors", async () => {
     const env = createEnv();
-    const runCommand = vi.fn(async () => {
+    const runCommand = vi.fn<RunCommandMock>(async () => {
       throw new Error("npm install failed with EACCES");
     });
 
@@ -82,8 +88,10 @@ describe("update-worker", () => {
 
   it("marks restart failures with manual restart guidance", async () => {
     const env = createEnv();
-    const runCommand = vi.fn().mockRejectedValueOnce(new Error("pm2 restart failed"));
-    const waitForProcessExit = vi.fn(async () => {});
+    const runCommand = vi
+      .fn<RunCommandMock>()
+      .mockRejectedValueOnce(new Error("pm2 restart failed"));
+    const waitForProcessExit = vi.fn<WaitForProcessExitMock>(async () => {});
 
     await runRestartHandoff(env, {
       runCommand,
@@ -105,8 +113,8 @@ describe("update-worker", () => {
 
   it("sanitizes pm2 and runtime override env before invoking install and restart commands", async () => {
     const env = createEnv();
-    const runCommand = vi.fn(async () => {});
-    const spawnDetachedProcess = vi.fn(async () => {});
+    const runCommand = vi.fn<RunCommandMock>(async () => {});
+    const spawnDetachedProcess = vi.fn<SpawnDetachedProcessMock>(async () => {});
     const originalEnv = {
       PM2_HOME: process.env.PM2_HOME,
       PM2_PROGRAMMATIC: process.env.PM2_PROGRAMMATIC,
@@ -150,8 +158,12 @@ describe("update-worker", () => {
       }
     }
 
-    for (const call of runCommand.mock.calls) {
-      const options = call[2] as { env?: NodeJS.ProcessEnv };
+    for (const [, , options] of runCommand.mock.calls) {
+      expect(options).toBeDefined();
+      if (!options) {
+        throw new Error("Expected runCommand to receive an options object");
+      }
+
       expect(options.env?.PM2_HOME).toBe("/tmp/custom-pm2-home");
       expect(options.env?.PM2_PROGRAMMATIC).toBeUndefined();
       expect(options.env?.PM2_JSON_PROCESSING).toBeUndefined();
@@ -165,7 +177,8 @@ describe("update-worker", () => {
       expect(options.env?.pm_id).toBeUndefined();
     }
 
-    const handoffEnv = spawnDetachedProcess.mock.calls[0]?.[2] as NodeJS.ProcessEnv | undefined;
+    const handoffCall = spawnDetachedProcess.mock.calls[0];
+    const handoffEnv = handoffCall?.[2];
     expect(handoffEnv?.PM2_HOME).toBe("/tmp/custom-pm2-home");
     expect(handoffEnv?.PM2_PROGRAMMATIC).toBeUndefined();
     expect(handoffEnv?.PM2_JSON_PROCESSING).toBeUndefined();
@@ -180,8 +193,8 @@ describe("update-worker", () => {
 
   it("waits for the install worker to exit before running the restart command", async () => {
     const env = createEnv();
-    const waitForProcessExit = vi.fn(async () => {});
-    const runCommand = vi.fn(async () => {});
+    const waitForProcessExit = vi.fn<WaitForProcessExitMock>(async () => {});
+    const runCommand = vi.fn<RunCommandMock>(async () => {});
 
     await runRestartHandoff(env, {
       runCommand,
