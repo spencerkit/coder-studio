@@ -326,6 +326,7 @@ export function SettingsPage() {
     autoCheckEnabled: 0,
     checkIntervalSec: 0,
   });
+  const monitoringSelectionVersionRef = useRef(0);
   const detailSection =
     navigationState.kind === "detail" ? navigationState.section : navigationState.lastSection;
   const availableSections = isMobile ? MOBILE_SETTINGS_SECTIONS : SETTINGS_SECTIONS;
@@ -356,7 +357,7 @@ export function SettingsPage() {
         pathname: location.pathname,
         search: nextSearch ? `?${nextSearch}` : "",
       },
-      { replace: false }
+      { replace: true }
     );
 
     setNavigationState({ kind: "detail", section });
@@ -396,6 +397,7 @@ export function SettingsPage() {
       const updateSelectionVersionAtRequestStart = {
         ...updateSelectionVersionRef.current,
       };
+      const monitoringSelectionVersionAtRequestStart = monitoringSelectionVersionRef.current;
       const result = await dispatch<Record<string, unknown>>("settings.get", {});
       if (result === null) {
         return;
@@ -417,7 +419,9 @@ export function SettingsPage() {
       if (typeof settings["notifications.soundEnabled"] === "boolean") {
         setSoundEnabled(settings["notifications.soundEnabled"]);
       }
-      setMonitoringSettings(resolveMonitoringSettings(settings));
+      if (monitoringSelectionVersionRef.current === monitoringSelectionVersionAtRequestStart) {
+        setMonitoringSettings(resolveMonitoringSettings(settings));
+      }
       if (
         updateSelectionVersionRef.current.autoCheckEnabled ===
         updateSelectionVersionAtRequestStart.autoCheckEnabled
@@ -695,6 +699,8 @@ export function SettingsPage() {
 
   const handleMonitoringSettingsChange = async (nextSettings: MonitoringSettings) => {
     const previousSettings = monitoringSettings;
+    monitoringSelectionVersionRef.current += 1;
+    const requestVersion = monitoringSelectionVersionRef.current;
     setMonitoringSettings(nextSettings);
 
     const result = await dispatch("settings.update", {
@@ -704,7 +710,10 @@ export function SettingsPage() {
     });
 
     if (result === null || !result.ok) {
-      setMonitoringSettings(previousSettings);
+      if (monitoringSelectionVersionRef.current === requestVersion) {
+        setMonitoringSettings(previousSettings);
+      }
+      throw result?.error ?? new Error("monitoring update failed");
     }
   };
 
@@ -732,7 +741,7 @@ export function SettingsPage() {
           pathname: location.pathname,
           search: "",
         },
-        { replace: false }
+        { replace: true }
       );
       setNavigationState({ kind: "root", lastSection: navigationState.section });
       return;

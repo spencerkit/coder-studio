@@ -496,6 +496,17 @@ describe("SettingsPage", () => {
 
   it("switches sections after mount when navigating within settings by search param", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "monitoring.enabled": true,
+          "monitoring.hostMetricsEnabled": true,
+          "monitoring.runtimeSummaryEnabled": false,
+          "monitoring.workspaceAttributionEnabled": false,
+          "monitoring.subprocessDrilldownEnabled": false,
+          "monitoring.sampleIntervalMs": 5000,
+        };
+      }
+
       if (op === "monitoring.get") {
         return createMonitoringResponse();
       }
@@ -537,6 +548,17 @@ describe("SettingsPage", () => {
 
   it("leaves a deep-linked section when the user chooses another settings section", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "monitoring.enabled": true,
+          "monitoring.hostMetricsEnabled": true,
+          "monitoring.runtimeSummaryEnabled": false,
+          "monitoring.workspaceAttributionEnabled": false,
+          "monitoring.subprocessDrilldownEnabled": false,
+          "monitoring.sampleIntervalMs": 5000,
+        };
+      }
+
       if (op === "monitoring.get") {
         return createMonitoringResponse();
       }
@@ -563,13 +585,24 @@ describe("SettingsPage", () => {
         pathname: "/settings",
         search: "?section=about",
       },
-      { replace: false }
+      { replace: true }
     );
   });
 
   it("clears a mobile deep-link query when backing out to the settings root", async () => {
     viewportMocks.viewport = "mobile";
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "monitoring.enabled": true,
+          "monitoring.hostMetricsEnabled": true,
+          "monitoring.runtimeSummaryEnabled": false,
+          "monitoring.workspaceAttributionEnabled": false,
+          "monitoring.subprocessDrilldownEnabled": false,
+          "monitoring.sampleIntervalMs": 5000,
+        };
+      }
+
       if (op === "monitoring.get") {
         return createMonitoringResponse();
       }
@@ -590,8 +623,250 @@ describe("SettingsPage", () => {
         pathname: "/settings",
         search: "",
       },
-      { replace: false }
+      { replace: true }
     );
+  });
+
+  it("replaces desktop section history entries so leaving settings is not trapped in internal navigation", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "monitoring.enabled": true,
+          "monitoring.hostMetricsEnabled": true,
+          "monitoring.runtimeSummaryEnabled": false,
+          "monitoring.workspaceAttributionEnabled": false,
+          "monitoring.subprocessDrilldownEnabled": false,
+          "monitoring.sampleIntervalMs": 5000,
+        };
+      }
+
+      if (op === "monitoring.get") {
+        return createMonitoringResponse();
+      }
+
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store, { initialEntry: "/settings?section=monitoring" });
+
+    expect(await screen.findByRole("button", { name: "性能监控" })).toHaveClass(
+      "settings-nav-item-active"
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "关于" }));
+
+    await screen.findByTestId("about-settings");
+    expect(routerMocks.navigate).toHaveBeenCalledWith(
+      {
+        pathname: "/settings",
+        search: "?section=about",
+      },
+      { replace: true }
+    );
+
+    routerMocks.navigate.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "返回" }));
+
+    expect(routerMocks.navigate).toHaveBeenCalledWith("/");
+  });
+
+  it("replaces mobile section history entries so backing out returns to the root instead of old sections", async () => {
+    viewportMocks.viewport = "mobile";
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "monitoring.enabled": true,
+          "monitoring.hostMetricsEnabled": true,
+          "monitoring.runtimeSummaryEnabled": false,
+          "monitoring.workspaceAttributionEnabled": false,
+          "monitoring.subprocessDrilldownEnabled": false,
+          "monitoring.sampleIntervalMs": 5000,
+        };
+      }
+
+      if (op === "monitoring.get") {
+        return createMonitoringResponse();
+      }
+
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store, { initialEntry: "/settings" });
+
+    expect(await screen.findByTestId("settings-mobile-root")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "性能监控" }));
+
+    expect(await screen.findByText("主机概览")).toBeInTheDocument();
+    expect(routerMocks.navigate).toHaveBeenCalledWith(
+      {
+        pathname: "/settings",
+        search: "?section=monitoring",
+      },
+      { replace: true }
+    );
+
+    routerMocks.navigate.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "返回" }));
+
+    expect(await screen.findByTestId("settings-mobile-root")).toBeInTheDocument();
+    expect(routerMocks.navigate).toHaveBeenCalledWith(
+      {
+        pathname: "/settings",
+        search: "",
+      },
+      { replace: true }
+    );
+  });
+
+  it("does not let late settings hydration clobber a just-made monitoring change", async () => {
+    const settingsGetDeferred = createDeferred<Record<string, unknown>>();
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return settingsGetDeferred.promise;
+      }
+
+      if (op === "settings.update") {
+        return {};
+      }
+
+      if (op === "monitoring.get" || op === "monitoring.recheck") {
+        return createMonitoringResponse({
+          enabled: true,
+          hostMetricsEnabled: true,
+          runtimeSummaryEnabled: false,
+          workspaceAttributionEnabled: false,
+          subprocessDrilldownEnabled: false,
+          sampleIntervalMs: 5000,
+        });
+      }
+
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store, { initialEntry: "/settings?section=monitoring" });
+
+    const enableSwitch = await screen.findByRole("switch", { name: "启用性能监控" });
+    expect(enableSwitch).toHaveAttribute("aria-checked", "false");
+
+    fireEvent.click(enableSwitch);
+
+    await waitFor(() => {
+      expect(screen.getByRole("switch", { name: "启用性能监控" })).toHaveAttribute(
+        "aria-checked",
+        "true"
+      );
+    });
+
+    await act(async () => {
+      settingsGetDeferred.resolve({
+        "monitoring.enabled": false,
+        "monitoring.hostMetricsEnabled": true,
+        "monitoring.runtimeSummaryEnabled": true,
+        "monitoring.workspaceAttributionEnabled": true,
+        "monitoring.subprocessDrilldownEnabled": false,
+        "monitoring.sampleIntervalMs": 2000,
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("switch", { name: "启用性能监控" })).toHaveAttribute(
+        "aria-checked",
+        "true"
+      );
+    });
+  });
+
+  it("does not revert a newer successful monitoring update when an older request fails later", async () => {
+    const firstUpdateDeferred = createDeferred<unknown>();
+    const secondUpdateDeferred = createDeferred<unknown>();
+    let updateCallCount = 0;
+
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args?: unknown) => {
+      if (op === "settings.get") {
+        return {
+          "monitoring.enabled": false,
+          "monitoring.hostMetricsEnabled": true,
+          "monitoring.runtimeSummaryEnabled": true,
+          "monitoring.workspaceAttributionEnabled": true,
+          "monitoring.subprocessDrilldownEnabled": false,
+          "monitoring.sampleIntervalMs": 2000,
+        };
+      }
+
+      if (op === "settings.update") {
+        updateCallCount += 1;
+        if (updateCallCount === 1) {
+          return firstUpdateDeferred.promise;
+        }
+        if (updateCallCount === 2) {
+          return secondUpdateDeferred.promise;
+        }
+      }
+
+      if (op === "monitoring.get" || op === "monitoring.recheck") {
+        const nextEnabled =
+          (args as { settings?: { monitoring?: { enabled?: boolean } } } | undefined)?.settings
+            ?.monitoring?.enabled ?? false;
+        return createMonitoringResponse({
+          enabled: nextEnabled,
+          hostMetricsEnabled: true,
+          runtimeSummaryEnabled: true,
+          workspaceAttributionEnabled: true,
+          subprocessDrilldownEnabled: false,
+          sampleIntervalMs: 2000,
+        });
+      }
+
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store, { initialEntry: "/settings?section=monitoring" });
+
+    const enableSwitch = await screen.findByRole("switch", { name: "启用性能监控" });
+    expect(enableSwitch).toHaveAttribute("aria-checked", "false");
+
+    fireEvent.click(enableSwitch);
+    await waitFor(() => {
+      expect(screen.getByRole("switch", { name: "启用性能监控" })).toHaveAttribute(
+        "aria-checked",
+        "true"
+      );
+    });
+
+    fireEvent.click(screen.getByRole("switch", { name: "启用性能监控" }));
+    await waitFor(() => {
+      expect(screen.getByRole("switch", { name: "启用性能监控" })).toHaveAttribute(
+        "aria-checked",
+        "false"
+      );
+    });
+
+    await act(async () => {
+      secondUpdateDeferred.resolve({});
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("switch", { name: "启用性能监控" })).toHaveAttribute(
+        "aria-checked",
+        "false"
+      );
+    });
+
+    await act(async () => {
+      firstUpdateDeferred.reject(new Error("request failed"));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("switch", { name: "启用性能监控" })).toHaveAttribute(
+        "aria-checked",
+        "false"
+      );
+    });
   });
 
   it("does not render phone continuation entry from settings even when a workspace is active", async () => {

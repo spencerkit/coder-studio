@@ -35,6 +35,11 @@ type MonitoringContentProps = {
   showPageChrome?: boolean;
 };
 
+export type MonitoringDashboardProps = UseMonitoringDataResult & {
+  onOpenSettings?: () => void;
+  showPageChrome?: boolean;
+};
+
 export type UseMonitoringDataResult = {
   error: string | null;
   loading: boolean;
@@ -281,13 +286,16 @@ export function useMonitoringData(): UseMonitoringDataResult {
   return { error, loading, refresh, response };
 }
 
-export function MonitoringContent({
+export function MonitoringDashboard({
+  error,
+  loading,
   onOpenSettings,
+  refresh: onRefresh,
+  response,
   showPageChrome = false,
-}: MonitoringContentProps = {}) {
+}: MonitoringDashboardProps) {
   const t = useTranslation();
   const isMobile = useViewport() === "mobile";
-  const { error, loading, refresh, response } = useMonitoringData();
   const [sortMode, setSortMode] = useState<SortMode>("cpu");
   const [mobileSection, setMobileSection] = useState<MobileSection>("overview");
   const [timeWindow, setTimeWindow] = useState<TimeWindow>("15m");
@@ -388,7 +396,7 @@ export function MonitoringContent({
       aria-label={`${t("action.refresh")} ${t("monitoring.command_label").toLowerCase()}`}
       size={isMobile ? "sm" : undefined}
       variant={isMobile ? "ghost" : "secondary"}
-      onClick={() => void refresh()}
+      onClick={() => void onRefresh()}
     >
       {t("action.refresh")}
     </Button>
@@ -726,6 +734,21 @@ export function MonitoringContent({
         )}
       </main>
     </div>
+  );
+}
+
+export function MonitoringContent({
+  onOpenSettings,
+  showPageChrome = false,
+}: MonitoringContentProps = {}) {
+  const monitoringData = useMonitoringData();
+
+  return (
+    <MonitoringDashboard
+      {...monitoringData}
+      onOpenSettings={onOpenSettings}
+      showPageChrome={showPageChrome}
+    />
   );
 }
 

@@ -1,7 +1,8 @@
 import type { MonitoringResponse, MonitoringSettings } from "@coder-studio/core";
 import { createDefaultMonitoringSettings, deriveMonitoringMode } from "@coder-studio/core";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
+import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../../atoms/app-ui";
 import { connectionStatusAtom, wsClientAtom } from "../../../atoms/connection";
@@ -85,6 +86,57 @@ function renderSubpage(settings: MonitoringSettings) {
   };
 }
 
+function renderStatefulSubpage(options: {
+  initialSettings: MonitoringSettings;
+  monitoringGetResponse?: MonitoringResponse;
+  monitoringRecheckResponse?: MonitoringResponse;
+}) {
+  const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+    if (op === "monitoring.get") {
+      return options.monitoringGetResponse ?? createMonitoringResponse(options.initialSettings);
+    }
+
+    if (op === "monitoring.recheck") {
+      return options.monitoringRecheckResponse ?? createMonitoringResponse(options.initialSettings);
+    }
+
+    throw new Error(`Unexpected command: ${op}`);
+  });
+  const subscribe = vi.fn(() => () => {});
+  const onChange = vi.fn(async () => {});
+  const store = createStore();
+
+  store.set(localeAtom, "en");
+  store.set(connectionStatusAtom, "connected");
+  store.set(wsClientAtom, { sendCommand, subscribe } as never);
+
+  function StatefulSubpage() {
+    const [settings, setSettings] = useState(options.initialSettings);
+
+    return (
+      <MonitoringSettingsSubpage
+        mode={deriveMonitoringMode(settings)}
+        onChange={async (next) => {
+          setSettings(next);
+          await onChange(next);
+        }}
+        settings={settings}
+      />
+    );
+  }
+
+  return {
+    sendCommand,
+    subscribe,
+    onChange,
+    ...render(
+      <Provider store={store}>
+        <StatefulSubpage />
+      </Provider>
+    ),
+  };
+}
+
 describe("MonitoringSettingsSubpage", () => {
   it("renders monitoring data and configuration controls together on desktop", async () => {
     const settings = {
@@ -133,5 +185,37 @@ describe("MonitoringSettingsSubpage", () => {
     await waitFor(() => {
       expect(screen.getByRole("switch", { name: "Host metrics" })).toBeDisabled();
     });
+  });
+
+  it("refreshes monitoring data immediately after a successful settings change so the visible view stays in sync", async () => {
+    const initialSettings = {
+      ...createDefaultMonitoringSettings(),
+      enabled: true,
+      runtimeSummaryEnabled: true,
+      workspaceAttributionEnabled: true,
+    };
+    const disabledSettings = {
+      ...initialSettings,
+      enabled: false,
+    };
+
+    const { onChange, sendCommand } = renderStatefulSubpage({
+      initialSettings,
+      monitoringGetResponse: createMonitoringResponse(initialSettings),
+      monitoringRecheckResponse: createMonitoringResponse(disabledSettings),
+    });
+
+    expect(await screen.findByText("Host overview")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("switch", { name: "Enable performance monitoring" }));
+
+    await waitFor(() => {
+      expect(onChange).toHaveBeenCalledWith(disabledSettings);
+    });
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith("monitoring.recheck", {}, undefined);
+    });
+    expect(await screen.findAllByText("Monitoring disabled")).toHaveLength(2);
+    expect(screen.queryByText("Host overview")).not.toBeInTheDocument();
   });
 });
