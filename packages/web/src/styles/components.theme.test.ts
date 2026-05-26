@@ -3076,9 +3076,6 @@ describe("components.css theme-sensitive surfaces", () => {
     const row = getLastRuleBlock(".file-tree-shell .tree-item");
     const rowDesktop = getLastRuleBlock(".file-tree-shell--desktop .tree-item");
     const rowSelected = getLastRuleBlock(".file-tree-shell .tree-item.selected");
-    const mobileRowSelected = getLastRuleBlock(
-      ".mobile-sheet--files .file-tree-shell--mobile .tree-item.selected"
-    );
     const rowActionsBase = getLastRuleBlock(".file-tree-shell .tree-item-actions");
     const rowActionsDesktop = getLastRuleBlock(".file-tree-shell--desktop .tree-item-actions");
 
