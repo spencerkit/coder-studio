@@ -50,6 +50,7 @@ import { UpdateStateRepo } from "./storage/repositories/update-state-repo.js";
 import { WorkspaceRepo } from "./storage/repositories/workspace-repo.js";
 import { SupervisorManager } from "./supervisor/manager.js";
 import * as targetStore from "./supervisor/target-store.js";
+import { SystemDependencyInstallManager } from "./system-deps/install-manager.js";
 import { TerminalManager } from "./terminal/manager.js";
 import { NodePtyHost } from "./terminal/pty-host.js";
 import { UpdateService } from "./update/update-service.js";
@@ -282,11 +283,18 @@ export async function createServer(
   const providerRuntimeDeps: RuntimeStatusDeps = providerMockOverrides
     ? {
         commandExists: providerMockOverrides.commandExists,
+        runCommand: providerMockOverrides.runCommand,
       }
     : {};
   const providerInstallMgr = new ProviderInstallManager(activeProviderRegistry, {
     ...providerRuntimeDeps,
     runCommand: providerMockOverrides?.runCommand ?? runCommandAsString,
+  });
+  const systemDependencyInstallMgr = new SystemDependencyInstallManager({
+    ...providerRuntimeDeps,
+    runCommand: providerMockOverrides?.runCommand ?? runCommandAsString,
+    ptyHost: createPtyHost(),
+    broadcaster: wsHub,
   });
 
   updateService = new UpdateService({
@@ -321,6 +329,7 @@ export async function createServer(
     autoFetch,
     providerRuntimeDeps,
     providerInstallMgr,
+    systemDependencyInstallMgr,
     activationMgr,
     config,
     lspMgr,

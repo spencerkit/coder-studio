@@ -20,6 +20,7 @@ import type { ProviderConfigRepo } from "../storage/repositories/provider-config
 import type { SessionMetadataRepo } from "../storage/repositories/session-metadata-repo.js";
 import type { SettingsRepo } from "../storage/repositories/settings-repo.js";
 import type { SupervisorManager } from "../supervisor/manager.js";
+import type { SystemDependencyInstallManager } from "../system-deps/install-manager.js";
 import type { TerminalManager } from "../terminal/manager.js";
 import type { UpdateService } from "../update/update-service.js";
 import type { WorkspaceManager } from "../workspace/manager.js";
@@ -44,6 +45,7 @@ export interface CommandContext {
   autoFetch: AutoFetchRuntime;
   providerRuntimeDeps?: RuntimeStatusDeps;
   providerInstallMgr?: ProviderInstallManager;
+  systemDependencyInstallMgr?: SystemDependencyInstallManager;
   activationMgr: ActivationManager;
   config?: Pick<ServerConfig, "auth" | "host">;
   lspMgr: LspManager;

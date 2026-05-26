@@ -1135,6 +1135,55 @@
       }
     }
   },
+  "system_deps": {
+    "install": {
+      "install_git": "Install Git",
+      "install_node": "Install Node.js",
+      "package_manager": "Package manager",
+      "current_step": "Current step",
+      "failure_reason": "Failure reason",
+      "failure_details": "Details",
+      "password_label": "Administrator password",
+      "submit_password": "Submit password",
+      "submit_input": "Submit",
+      "cancel": "Cancel install",
+      "failure": {
+        "unsupported_platform": "Unsupported platform",
+        "unsupported_package_manager": "Unsupported package manager",
+        "permission_denied": "Permission denied",
+        "user_cancelled": "Install cancelled",
+        "pty_disconnected": "Installer session disconnected",
+        "command_not_found": "Command not found",
+        "command_failed": "Install command failed",
+        "verification_failed": "Verification failed",
+        "unknown_failure": "Unknown failure"
+      },
+      "step": {
+        "install": {
+          "git": "Install Git",
+          "node": "Install Node.js"
+        },
+        "verify": {
+          "git": "Verify Git",
+          "node": "Verify Node.js"
+        }
+      },
+      "status": {
+        "queued": "Queued",
+        "running": "Installing",
+        "waiting_input": "Waiting for password",
+        "succeeded": "Installed",
+        "failed": "Install failed",
+        "cancelled": "Install cancelled"
+      },
+      "git": {
+        "manual": "Install Git manually if automatic install is not available for this machine."
+      },
+      "node": {
+        "manual": "Install Node.js manually if automatic install is not available for this machine."
+      }
+    }
+  },
   "not_found": {
     "kicker": "ROUTE NOT FOUND",
     "title": "Page not found",

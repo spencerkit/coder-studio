@@ -1135,6 +1135,55 @@
       }
     }
   },
+  "system_deps": {
+    "install": {
+      "install_git": "安装 Git",
+      "install_node": "安装 Node.js",
+      "package_manager": "包管理器",
+      "current_step": "当前步骤",
+      "failure_reason": "失败原因",
+      "failure_details": "详情",
+      "password_label": "管理员密码",
+      "submit_password": "提交密码",
+      "submit_input": "提交",
+      "cancel": "取消安装",
+      "failure": {
+        "unsupported_platform": "当前平台不支持",
+        "unsupported_package_manager": "当前包管理器不支持",
+        "permission_denied": "权限不足",
+        "user_cancelled": "安装已取消",
+        "pty_disconnected": "安装会话已断开",
+        "command_not_found": "命令不存在",
+        "command_failed": "安装命令执行失败",
+        "verification_failed": "验证失败",
+        "unknown_failure": "未知错误"
+      },
+      "step": {
+        "install": {
+          "git": "安装 Git",
+          "node": "安装 Node.js"
+        },
+        "verify": {
+          "git": "验证 Git",
+          "node": "验证 Node.js"
+        }
+      },
+      "status": {
+        "queued": "等待中",
+        "running": "安装中",
+        "waiting_input": "等待输入密码",
+        "succeeded": "安装完成",
+        "failed": "安装失败",
+        "cancelled": "安装已取消"
+      },
+      "git": {
+        "manual": "如果当前机器不支持自动安装，请手动安装 Git。"
+      },
+      "node": {
+        "manual": "如果当前机器不支持自动安装，请手动安装 Node.js。"
+      }
+    }
+  },
   "not_found": {
     "kicker": "路由不存在",
     "title": "页面不存在",

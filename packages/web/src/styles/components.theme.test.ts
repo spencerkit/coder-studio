@@ -3518,6 +3518,13 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(actionRow).toContain("margin-top: var(--sp-3)");
   });
 
+  it("keeps diagnostics install surfaces on theme tokens", () => {
+    expect(stylesheet).toContain(".diagnostics-install-panel");
+    expect(stylesheet).toContain("var(--bg-surface)");
+    expect(stylesheet).toContain("var(--border-default)");
+    expect(stylesheet).toContain("var(--text-secondary)");
+  });
+
   it("does not add a dedicated About interval alignment wrapper", () => {
     expect(hasRuleBlock(".settings-about-interval-control-wrap")).toBe(false);
   });

@@ -21,6 +21,7 @@ import "./settings.js";
 import "./diagnostics.js";
 import "./provider.js";
 import "./custom-provider.js";
+import "./system-deps.js";
 import "./supervisor.js";
 import "./worktree.js";
 import "./fencing.js";
