@@ -1,9 +1,10 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { ProviderDefinition } from "@coder-studio/core";
 import { providerRegistry } from "@coder-studio/providers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventBus } from "../bus/event-bus.js";
-import type { Database } from "../storage/database.js";
-import { closeDatabase, openDatabase } from "../storage/db.js";
 import { CustomProviderRepo } from "../storage/repositories/custom-provider-repo.js";
 import type { CommandContext } from "../ws/dispatch.js";
 import { dispatch } from "../ws/dispatch.js";
@@ -11,12 +12,12 @@ import "../commands/provider.js";
 import "../commands/custom-provider.js";
 
 describe("customProvider commands", () => {
-  let db: Database;
+  let tempDir: string;
   let ctx: CommandContext & { customProviderRepo: CustomProviderRepo };
   let registry: ProviderDefinition[];
 
-  beforeEach(() => {
-    db = openDatabase(":memory:");
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "custom-provider-command-"));
     registry = [...providerRegistry];
     ctx = {
       workspaceMgr: {} as never,
@@ -24,13 +25,15 @@ describe("customProvider commands", () => {
       terminalMgr: {} as never,
       eventBus: new EventBus(),
       broadcaster: { broadcast: vi.fn() } as never,
-      db,
+      db: {} as never,
       providerRegistry: registry,
       fencingMgr: {} as never,
       supervisorMgr: {} as never,
       autoFetch: {} as never,
       activationMgr: {} as never,
-      customProviderRepo: new CustomProviderRepo(db),
+      customProviderRepo: new CustomProviderRepo({
+        filePath: join(tempDir, "custom-providers.json"),
+      }),
       setProviderRegistry: (providers) => {
         registry = providers;
         ctx.providerRegistry = providers;
@@ -38,8 +41,8 @@ describe("customProvider commands", () => {
     };
   });
 
-  afterEach(() => {
-    closeDatabase(db);
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
   });
 
   it("creates, lists, updates, and deletes custom providers through dispatch", async () => {

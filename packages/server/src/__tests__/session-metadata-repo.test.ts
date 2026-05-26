@@ -1,41 +1,33 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { Database } from "../storage/database.js";
-import { closeDatabase, openDatabase } from "../storage/db.js";
 import { SessionMetadataRepo } from "../storage/repositories/session-metadata-repo.js";
 
 describe("SessionMetadataRepo", () => {
-  let db: Database;
+  let tempDir: string;
+  let filePath: string;
   let repo: SessionMetadataRepo;
 
-  beforeEach(() => {
-    db = openDatabase(":memory:");
-    repo = new SessionMetadataRepo(db);
-    db.prepare(
-      `INSERT INTO workspaces (id, path, target_runtime, opened_at, last_active_at, ui_state)
-       VALUES (?, ?, ?, ?, ?, ?)`
-    ).run(
-      "ws-1",
-      "/tmp/ws-1",
-      "native",
-      1,
-      1,
-      JSON.stringify({ leftPanelWidth: 1, bottomPanelHeight: 1, focusMode: false })
-    );
-    db.prepare(
-      `INSERT INTO terminals (id, workspace_id, kind, cwd, argv, cols, rows, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run("term-1", "ws-1", "agent", "/tmp/ws-1", JSON.stringify(["codex"]), 80, 24, 1);
-    db.prepare(
-      `INSERT INTO sessions (id, workspace_id, terminal_id, provider_id, capability, state, started_at, last_active_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run("sess-1", "ws-1", "term-1", "codex", "full", "starting", 1, 1);
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "session-metadata-repo-"));
+    filePath = join(tempDir, "session-metadata.json");
+    repo = new SessionMetadataRepo({
+      filePath,
+    });
   });
 
-  afterEach(() => {
-    closeDatabase(db);
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
   });
 
-  it("creates and reads session metadata without verification runs", () => {
+  it("constructs with a filePath option object", () => {
+    const constructed = new SessionMetadataRepo({ filePath });
+
+    expect(constructed).toBeInstanceOf(SessionMetadataRepo);
+  });
+
+  it("rehydrates session metadata without verification runs in a fresh repo instance", () => {
     repo.upsert({
       sessionId: "sess-1",
       workspaceId: "ws-1",
@@ -46,7 +38,9 @@ describe("SessionMetadataRepo", () => {
       verificationRuns: [],
     });
 
-    expect(repo.get("sess-1")).toEqual({
+    const reloadedRepo = new SessionMetadataRepo({ filePath });
+
+    expect(reloadedRepo.get("sess-1")).toEqual({
       sessionId: "sess-1",
       workspaceId: "ws-1",
       providerId: "codex",
@@ -57,7 +51,7 @@ describe("SessionMetadataRepo", () => {
     });
   });
 
-  it("appends verification runs in created order", () => {
+  it("rehydrates appended verification runs in created order in a fresh repo instance", () => {
     repo.upsert({
       sessionId: "sess-1",
       workspaceId: "ws-1",
@@ -82,7 +76,9 @@ describe("SessionMetadataRepo", () => {
       createdAt: 200,
     });
 
-    expect(repo.get("sess-1")?.verificationRuns).toEqual([
+    const reloadedRepo = new SessionMetadataRepo({ filePath });
+
+    expect(reloadedRepo.get("sess-1")?.verificationRuns).toEqual([
       {
         id: "verify-1",
         command: "pnpm test",

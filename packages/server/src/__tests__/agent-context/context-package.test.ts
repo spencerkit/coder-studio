@@ -10,20 +10,21 @@ import {
   buildProjectSummaryContextPackage,
   buildSessionReviewContextPackage,
 } from "../../agent-context/context-package.js";
-import { closeDatabase, openDatabase } from "../../storage/db.js";
 import { SessionMetadataRepo } from "../../storage/repositories/session-metadata-repo.js";
 
 const execFileAsync = promisify(execFile);
 
 describe("agent context package builders", () => {
-  let db: ReturnType<typeof openDatabase>;
   let metadataRepo: SessionMetadataRepo;
   let repoDir: string;
+  let stateDir: string;
 
   beforeEach(async () => {
-    db = openDatabase(":memory:");
-    metadataRepo = new SessionMetadataRepo(db);
     repoDir = await mkdtemp(join(tmpdir(), "agent-context-"));
+    stateDir = await mkdtemp(join(tmpdir(), "agent-context-state-"));
+    metadataRepo = new SessionMetadataRepo({
+      filePath: join(stateDir, "session-metadata.json"),
+    });
 
     await execFileAsync("git", ["init"], { cwd: repoDir });
     await execFileAsync("git", ["config", "user.name", "Test"], { cwd: repoDir });
@@ -58,25 +59,6 @@ describe("agent context package builders", () => {
     await execFileAsync("git", ["commit", "-m", "Initial commit"], { cwd: repoDir });
 
     const { stdout } = await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: repoDir });
-    db.prepare(
-      `INSERT INTO workspaces (id, path, target_runtime, opened_at, last_active_at, ui_state)
-       VALUES (?, ?, ?, ?, ?, ?)`
-    ).run(
-      "ws-1",
-      repoDir,
-      "native",
-      1,
-      1,
-      JSON.stringify({ leftPanelWidth: 1, bottomPanelHeight: 1, focusMode: false })
-    );
-    db.prepare(
-      `INSERT INTO terminals (id, workspace_id, kind, cwd, argv, cols, rows, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run("term-1", "ws-1", "agent", repoDir, JSON.stringify(["codex"]), 80, 24, 1);
-    db.prepare(
-      `INSERT INTO sessions (id, workspace_id, terminal_id, provider_id, capability, state, started_at, last_active_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run("sess-1", "ws-1", "term-1", "codex", "full", "starting", 1, 1);
 
     metadataRepo.upsert({
       sessionId: "sess-1",
@@ -89,7 +71,7 @@ describe("agent context package builders", () => {
   });
 
   afterEach(async () => {
-    closeDatabase(db);
+    await rm(stateDir, { recursive: true, force: true });
     await rm(repoDir, { recursive: true, force: true });
   });
 

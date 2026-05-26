@@ -1,39 +1,23 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventBus } from "../bus/event-bus.js";
-import type { Database } from "../storage/database.js";
-import { closeDatabase, openDatabase } from "../storage/db.js";
 import { SessionMetadataRepo } from "../storage/repositories/session-metadata-repo.js";
 import type { CommandContext } from "../ws/dispatch.js";
 import { dispatch } from "../ws/dispatch.js";
 import "../commands/session-metadata.js";
 
 describe("session metadata commands", () => {
-  let db: Database;
+  let tempDir: string;
   let metadataRepo: SessionMetadataRepo;
   let ctx: CommandContext & { sessionMetadataRepo: SessionMetadataRepo };
 
-  beforeEach(() => {
-    db = openDatabase(":memory:");
-    metadataRepo = new SessionMetadataRepo(db);
-    db.prepare(
-      `INSERT INTO workspaces (id, path, target_runtime, opened_at, last_active_at, ui_state)
-       VALUES (?, ?, ?, ?, ?, ?)`
-    ).run(
-      "ws-1",
-      "/tmp/ws-1",
-      "native",
-      1,
-      1,
-      JSON.stringify({ leftPanelWidth: 1, bottomPanelHeight: 1, focusMode: false })
-    );
-    db.prepare(
-      `INSERT INTO terminals (id, workspace_id, kind, cwd, argv, cols, rows, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run("term-1", "ws-1", "agent", "/tmp/ws-1", JSON.stringify(["codex"]), 80, 24, 1);
-    db.prepare(
-      `INSERT INTO sessions (id, workspace_id, terminal_id, provider_id, capability, state, started_at, last_active_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run("sess-1", "ws-1", "term-1", "codex", "full", "starting", 1, 1);
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "session-metadata-command-"));
+    metadataRepo = new SessionMetadataRepo({
+      filePath: join(tempDir, "session-metadata.json"),
+    });
     metadataRepo.upsert({
       sessionId: "sess-1",
       workspaceId: "ws-1",
@@ -50,7 +34,7 @@ describe("session metadata commands", () => {
       terminalMgr: {} as never,
       eventBus: new EventBus(),
       broadcaster: { broadcast: vi.fn() } as never,
-      db,
+      db: {} as never,
       providerRegistry: [],
       fencingMgr: {} as never,
       supervisorMgr: {} as never,
@@ -60,8 +44,8 @@ describe("session metadata commands", () => {
     };
   });
 
-  afterEach(() => {
-    closeDatabase(db);
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
   });
 
   it("returns stored metadata", async () => {

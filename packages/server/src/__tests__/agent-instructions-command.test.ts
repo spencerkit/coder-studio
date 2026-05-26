@@ -3,7 +3,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { EventBus } from "../bus/event-bus.js";
-import { openDatabase } from "../storage/db.js";
 import type { CommandContext } from "../ws/dispatch.js";
 import { dispatch } from "../ws/dispatch.js";
 import "../commands/workspace.js";
@@ -52,7 +51,7 @@ describe("agentInstructions commands", () => {
       terminalMgr: {} as never,
       eventBus: new EventBus(),
       broadcaster: {} as never,
-      db: openDatabase(":memory:"),
+      db: {} as never,
       providerRegistry: [],
       fencingMgr: {} as never,
       supervisorMgr: {} as never,
