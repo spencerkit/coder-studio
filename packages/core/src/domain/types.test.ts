@@ -6,6 +6,7 @@ import type {
   GitCommitFileEntry,
   GitDiffRenderMode,
   GitFileDiffPayload,
+  GitRevisionSource,
   SessionState,
 } from "./types";
 import { deriveSessionTitle, SESSION_TITLE_MAX_LENGTH } from "./types";
@@ -68,6 +69,7 @@ describe("AgentContextKind", () => {
 describe("Git history diff contracts", () => {
   it("covers structured commit detail and diff payload types", () => {
     expectTypeOf<GitDiffRenderMode>().toEqualTypeOf<"text" | "image">();
+    expectTypeOf<GitRevisionSource>().toEqualTypeOf<string>();
     expectTypeOf<GitCommitFileEntry["status"]>().toEqualTypeOf<
       "added" | "modified" | "deleted" | "renamed"
     >();
