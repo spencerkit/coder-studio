@@ -873,6 +873,8 @@
     "dock_summary_enabled": "监控正在采集数据，可在这里调整深度、归因和钻取级别。",
     "dock_summary_disabled": "监控当前关闭，请先在这里启用采样，再查看实时运行时信号。",
     "toggle_settings": "切换监控设置",
+    "open_configuration": "打开监控配置",
+    "mobile_entry_summary": "监控已在采集数据。只有需要调整采样深度或归因时，才需要打开配置。",
     "mobile_section": "监控分区",
     "mobile_overview": "概览",
     "mobile_attribution": "归因",

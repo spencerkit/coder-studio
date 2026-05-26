@@ -26,6 +26,7 @@ export function MonitoringSettingsSubpage({
   const isMobile = useViewport() === "mobile";
   const shouldPrioritizeDock = isMobile && !settings.enabled;
   const [dockExpanded, setDockExpanded] = useState(!isMobile || !settings.enabled);
+  const showMobileEntry = isMobile && settings.enabled && !dockExpanded;
 
   useEffect(() => {
     setDockExpanded(!isMobile || !settings.enabled);
@@ -49,7 +50,46 @@ export function MonitoringSettingsSubpage({
     </section>
   );
 
-  const dock = (
+  const dockContent = (
+    <MonitoringSettingsCard
+      mode={mode}
+      monitoringSettingsReady={monitoringSettingsReady}
+      onChange={async (next) => {
+        try {
+          await onChange(next);
+        } catch {
+          return;
+        }
+      }}
+      settings={settings}
+      showHeaderChrome={false}
+    />
+  );
+
+  const dockSurface = showMobileEntry ? (
+    <button
+      type="button"
+      aria-label={t("monitoring.open_configuration")}
+      className="settings-monitoring-mobile-entry"
+      onClick={() => setDockExpanded(true)}
+    >
+      <div className="settings-monitoring-mobile-entry__header">
+        <div className="settings-monitoring-mobile-entry__copy">
+          <p className="settings-monitoring-mobile-entry__eyebrow">
+            {t("monitoring.dock_eyebrow")}
+          </p>
+          <h3 className="settings-monitoring-mobile-entry__title">{t("monitoring.dock_title")}</h3>
+        </div>
+        <span className="settings-monitoring-mobile-entry__badge">{t("action.expand")}</span>
+      </div>
+      <p className="settings-monitoring-mobile-entry__summary">
+        {t("monitoring.mobile_entry_summary")}
+      </p>
+      <span className="settings-monitoring-mobile-entry__action">
+        {t("monitoring.open_configuration")}
+      </span>
+    </button>
+  ) : (
     <aside className="settings-monitoring-dock" aria-label={t("monitoring.dock_label")}>
       <div className="settings-monitoring-dock__panel">
         <div className="settings-monitoring-dock__header">
@@ -75,26 +115,7 @@ export function MonitoringSettingsSubpage({
             </Button>
           ) : null}
         </div>
-        <div
-          className={`settings-monitoring-dock__body ${
-            dockExpanded ? "settings-monitoring-dock__body--expanded" : ""
-          }`}
-          hidden={isMobile && !dockExpanded}
-        >
-          <MonitoringSettingsCard
-            mode={mode}
-            monitoringSettingsReady={monitoringSettingsReady}
-            onChange={async (next) => {
-              try {
-                await onChange(next);
-              } catch {
-                return;
-              }
-            }}
-            settings={settings}
-            showHeaderChrome={false}
-          />
-        </div>
+        <div className="settings-monitoring-dock__body">{dockContent}</div>
       </div>
     </aside>
   );
@@ -105,8 +126,8 @@ export function MonitoringSettingsSubpage({
         isMobile ? "settings-monitoring-shell--mobile" : "settings-monitoring-shell--desktop"
       } ${shouldPrioritizeDock ? "settings-monitoring-shell--dock-priority" : ""}`}
     >
-      {shouldPrioritizeDock ? dock : stage}
-      {shouldPrioritizeDock ? stage : dock}
+      {shouldPrioritizeDock ? dockSurface : stage}
+      {shouldPrioritizeDock ? stage : dockSurface}
     </div>
   );
 }

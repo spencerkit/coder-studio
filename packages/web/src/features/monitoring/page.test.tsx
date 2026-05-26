@@ -1,11 +1,11 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
-import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../atoms/app-ui";
 import { connectionStatusAtom, wsClientAtom } from "../../atoms/connection";
 import * as monitoringExports from "./index";
-import { MonitoringContent, MonitoringPage } from "./page";
+import * as monitoringPageExports from "./page";
+import { MonitoringContent } from "./page";
 
 const viewportMocks = vi.hoisted(() => ({
   viewport: "desktop" as "desktop" | "mobile",
@@ -14,12 +14,6 @@ const viewportMocks = vi.hoisted(() => ({
 vi.mock("../../hooks/use-viewport", () => ({
   useViewport: () => viewportMocks.viewport,
 }));
-
-function SettingsLocationProbe() {
-  const location = useLocation();
-
-  return <div>{`SettingsPage${location.search}`}</div>;
-}
 
 function createDeferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -37,7 +31,6 @@ function renderMonitoringPage(
   options: {
     locale?: "en" | "zh";
     sendCommand?: ReturnType<typeof vi.fn>;
-    page?: "content" | "wrapper";
   } = {}
 ) {
   viewportMocks.viewport = viewport;
@@ -60,16 +53,7 @@ function renderMonitoringPage(
     subscribe,
     ...render(
       <Provider store={store}>
-        {options.page === "wrapper" ? (
-          <MemoryRouter initialEntries={["/monitoring"]}>
-            <Routes>
-              <Route path="/monitoring" element={<MonitoringPage />} />
-              <Route path="/settings" element={<SettingsLocationProbe />} />
-            </Routes>
-          </MemoryRouter>
-        ) : (
-          <MonitoringContent />
-        )}
+        <MonitoringContent />
       </Provider>
     ),
   };
@@ -82,7 +66,11 @@ describe("MonitoringContent", () => {
     expect("MonitoringPage" in monitoringExports).toBe(false);
   });
 
-  it("keeps MonitoringPage as a thin wrapper around the reusable content", async () => {
+  it("does not export a standalone MonitoringPage wrapper from the page module", () => {
+    expect("MonitoringPage" in monitoringPageExports).toBe(false);
+  });
+
+  it("renders reusable monitoring content without standalone page chrome", async () => {
     const response = {
       settings: {
         enabled: true,
@@ -133,9 +121,12 @@ describe("MonitoringContent", () => {
       telemetry: null,
     };
 
-    renderMonitoringPage(response, "desktop", { page: "wrapper" });
+    renderMonitoringPage(response);
 
     expect(await screen.findByText("Host overview")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { level: 1, name: "Performance monitoring" })
+    ).not.toBeInTheDocument();
   });
 
   it("loads the snapshot, subscribes for updates, and renders host plus runtime sections", async () => {
@@ -444,14 +435,13 @@ describe("MonitoringContent", () => {
       telemetry: null,
     };
 
-    renderMonitoringPage(response, "desktop", { page: "wrapper" });
+    renderMonitoringPage(response);
 
     expect(await screen.findByText("Monitoring disabled")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Open Settings" }));
-    expect(await screen.findByText("SettingsPage?section=monitoring")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open Settings" })).not.toBeInTheDocument();
   });
 
-  it("renders a disabled empty state without the standalone settings CTA when embedded", async () => {
+  it("renders a disabled empty state without a standalone settings CTA", async () => {
     const response = {
       settings: {
         enabled: false,

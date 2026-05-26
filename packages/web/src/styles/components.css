@@ -1318,6 +1318,79 @@
   min-width: 0;
 }
 
+.settings-monitoring-mobile-entry {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: var(--sp-3);
+  min-width: 0;
+  padding: var(--sp-4);
+  border: 1px solid var(--surface-elevated-border);
+  border-radius: var(--radius-xl);
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-sm);
+  color: var(--text-primary);
+  text-align: left;
+}
+
+.settings-monitoring-mobile-entry__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+.settings-monitoring-mobile-entry__copy {
+  min-width: 0;
+}
+
+.settings-monitoring-mobile-entry__eyebrow {
+  margin: 0 0 var(--sp-1);
+  color: var(--text-tertiary);
+  font-size: var(--type-body-6-size);
+  line-height: var(--type-body-6-line-height);
+  font-weight: var(--type-body-6-weight);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.settings-monitoring-mobile-entry__title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--type-heading-5-size);
+  line-height: var(--type-heading-5-line-height);
+  font-weight: var(--type-heading-5-weight);
+}
+
+.settings-monitoring-mobile-entry__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius-pill);
+  background: var(--state-selected-bg);
+  color: var(--text-primary);
+  font-size: var(--type-body-6-size);
+  line-height: var(--type-body-6-line-height);
+  font-weight: var(--type-body-6-weight);
+  white-space: nowrap;
+}
+
+.settings-monitoring-mobile-entry__summary {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--type-body-4-size);
+  line-height: var(--type-body-4-line-height);
+  font-weight: var(--type-body-4-weight);
+}
+
+.settings-monitoring-mobile-entry__action {
+  color: var(--text-accent);
+  font-size: var(--type-body-5-size);
+  line-height: var(--type-body-5-line-height);
+  font-weight: var(--type-body-5-weight);
+}
+
 .settings-monitoring-dock-toggle {
   flex-shrink: 0;
 }

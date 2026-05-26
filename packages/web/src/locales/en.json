@@ -873,6 +873,8 @@
     "dock_summary_enabled": "Monitoring is collecting data. Adjust depth, attribution, and drill-down here.",
     "dock_summary_disabled": "Monitoring is off. Enable sampling here before inspecting live runtime signals.",
     "toggle_settings": "Toggle monitoring settings",
+    "open_configuration": "Open monitoring configuration",
+    "mobile_entry_summary": "Monitoring is already collecting data. Open configuration only when you need to adjust sampling depth or attribution.",
     "mobile_section": "Monitoring section",
     "mobile_overview": "Overview",
     "mobile_attribution": "Attribution",

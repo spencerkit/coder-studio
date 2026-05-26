@@ -201,7 +201,7 @@ describe("MonitoringSettingsSubpage", () => {
     expect(monitoringData.refresh).not.toHaveBeenCalled();
   });
 
-  it("keeps data first and configuration collapsed on mobile without the old segmented nav", async () => {
+  it("keeps data first and shows a collapsed configuration entry card on mobile without the old segmented nav", async () => {
     const settings = {
       ...createDefaultMonitoringSettings(),
       enabled: true,
@@ -217,10 +217,23 @@ describe("MonitoringSettingsSubpage", () => {
     const shell = container.querySelector(".settings-monitoring-shell");
     expect(shell).toBeInTheDocument();
     expect(shell?.firstElementChild).toHaveClass("settings-monitoring-stage");
-    expect(container.querySelector(".settings-monitoring-dock-toggle")).toHaveAttribute(
-      "aria-expanded",
-      "false"
+    expect(screen.getByRole("button", { name: "Open monitoring configuration" })).toBeVisible();
+    expect(
+      screen.queryByRole("switch", { name: "Enable performance monitoring" })
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("tablist", { name: "Preset" })).not.toBeInTheDocument();
+    expect(container.querySelector(".settings-monitoring-mobile-entry")).toBeInTheDocument();
+    expect(
+      container.querySelector(".settings-monitoring-dock__panel .settings-monitoring-mobile-entry")
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open monitoring configuration" }));
+
+    expect(screen.getByRole("switch", { name: "Enable performance monitoring" })).toHaveAttribute(
+      "aria-checked",
+      "true"
     );
+    expect(screen.getByRole("tablist", { name: "Preset" })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Overview" })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Attribution" })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Process" })).not.toBeInTheDocument();
@@ -251,6 +264,9 @@ describe("MonitoringSettingsSubpage", () => {
       "aria-expanded",
       "true"
     );
+    expect(
+      screen.queryByRole("button", { name: "Open monitoring configuration" })
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("switch", { name: "Enable performance monitoring" })).toHaveAttribute(
       "aria-checked",
       "false"

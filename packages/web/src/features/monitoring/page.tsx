@@ -9,13 +9,10 @@ import type {
 import { Topics } from "@coder-studio/core";
 import { useAtomValue } from "jotai";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { connectionStatusAtom, wsClientAtom } from "../../atoms/connection";
 import { Button, Notice, SegmentedControl, Tag } from "../../components/ui";
 import { useViewport } from "../../hooks/use-viewport";
 import { useTranslation } from "../../lib/i18n";
-import { MobilePageHeader } from "../shared/components/mobile-page-header";
-import { PageHeader } from "../shared/components/page-header";
 import {
   formatBytes,
   formatLoadAverage,
@@ -29,11 +26,6 @@ import { Sparkline } from "./sparkline";
 type SortMode = "cpu" | "memory";
 type TimeWindow = "5m" | "15m" | "30m";
 type MonitoringViewStatus = "loading" | "disabled" | "ready" | "degraded" | "waiting" | "empty";
-type MonitoringContentProps = {
-  onOpenSettings?: () => void;
-  showPageChrome?: boolean;
-};
-
 export type MonitoringDashboardProps = UseMonitoringDataResult & {
   onOpenSettings?: () => void;
 };
@@ -721,36 +713,15 @@ export function MonitoringDashboard({
   );
 }
 
-export function MonitoringContent({
-  onOpenSettings,
-  showPageChrome = false,
-}: MonitoringContentProps = {}) {
+export function MonitoringContent() {
   const monitoringData = useMonitoringData();
-  const t = useTranslation();
   const isMobile = useViewport() === "mobile";
-  const pageHeader = isMobile ? (
-    <MobilePageHeader title={t("monitoring.title")} titleAs="div" />
-  ) : (
-    <PageHeader title={t("monitoring.title")} titleAs="h1" level="secondary" />
-  );
 
   return (
     <div className={`monitoring-page ${isMobile ? "monitoring-page--mobile" : ""}`}>
-      {showPageChrome ? pageHeader : null}
       <main className="monitoring-content">
-        <MonitoringDashboard {...monitoringData} onOpenSettings={onOpenSettings} />
+        <MonitoringDashboard {...monitoringData} />
       </main>
     </div>
-  );
-}
-
-export function MonitoringPage() {
-  const navigate = useNavigate();
-
-  return (
-    <MonitoringContent
-      showPageChrome
-      onOpenSettings={() => navigate("/settings?section=monitoring")}
-    />
   );
 }

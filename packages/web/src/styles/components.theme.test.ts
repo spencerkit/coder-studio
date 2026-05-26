@@ -3541,6 +3541,9 @@ describe("components.css theme-sensitive surfaces", () => {
     const shell = getLastRuleBlock(".settings-monitoring-shell");
     const stage = getRuleBlocksFrom(stylesheet, ".settings-monitoring-stage")[0];
     const dockPanel = getRuleBlocksFrom(stylesheet, ".settings-monitoring-dock__panel")[0];
+    const mobileEntry = getLastRuleBlock(".settings-monitoring-mobile-entry");
+    const mobileEntryBadge = getLastRuleBlock(".settings-monitoring-mobile-entry__badge");
+    const mobileEntrySummary = getLastRuleBlock(".settings-monitoring-mobile-entry__summary");
     const stageEyebrow = getLastRuleBlock(".settings-monitoring-stage__eyebrow");
     const dockSummary = getLastRuleBlock(".settings-monitoring-dock__summary");
     const toolbarActions = getRuleBlocksFrom(stylesheet, ".monitoring-toolbar__actions")[0];
@@ -3552,6 +3555,12 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(stage).toContain("box-shadow: var(--shadow-sm)");
     expect(dockPanel).toContain("border-radius: var(--radius-xl)");
     expect(dockPanel).toContain("padding: var(--sp-4)");
+    expect(mobileEntry).toContain("border: 1px solid var(--surface-elevated-border)");
+    expect(mobileEntry).toContain("background: var(--surface-elevated)");
+    expect(mobileEntry).toContain("box-shadow: var(--shadow-sm)");
+    expect(mobileEntryBadge).toContain("background: var(--state-selected-bg)");
+    expect(mobileEntryBadge).toContain("color: var(--text-primary)");
+    expect(mobileEntrySummary).toContain("color: var(--text-secondary)");
     expect(stageEyebrow).toContain("color: var(--text-tertiary)");
     expect(dockSummary).toContain("color: var(--text-secondary)");
     expect(toolbarActions).toContain("justify-content: flex-end");
