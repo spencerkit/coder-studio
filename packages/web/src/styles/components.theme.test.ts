@@ -2623,9 +2623,9 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(mobileFilesSegmentActive).toContain("background: transparent");
     expect(mobileFilesSegmentIndicator).toContain("height: 1.5px");
     expect(workspaceSectionHeader).toContain("justify-content: space-between");
-    expect(workspaceSectionHeader).toContain("margin-bottom: var(--sp-2)");
+    expect(workspaceSectionHeader).toContain("margin-bottom: var(--sp-1)");
     expect(workspaceSectionActions).toContain("margin-left: auto");
-    expect(mobileQuickJumpSearch).toContain("border: 1px solid");
+    expect(mobileQuickJumpSearch).toContain("border-radius: var(--radius-md)");
     expect(mobileQuickJumpItem).toContain("grid-template-columns: minmax(0, 1fr)");
     expect(mobileSearchPanel).toContain("background: transparent");
     expect(mobileFilesSurface).toContain(
@@ -3088,9 +3088,8 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(search).toContain("gap: var(--gap-default)");
     expect(search).toContain("margin: var(--space-default) var(--inset-control-inline)");
     expect(search).toContain("padding-inline: var(--inset-control-inline)");
-    expect(search).toContain("min-height: var(--control-height-md)");
+    expect(search).toContain("min-height: 32px");
     expect(search).toContain("border-radius: var(--radius-md)");
-    expect(search).toContain("background: var(--component-mix-surface-panel-90pct-surface-page)");
     expect(searchInput).toContain("border-radius: var(--radius-md)");
     expect(searchInputFocus).toContain("outline: none");
     expect(searchInput).toContain("font-size: var(--type-body-3-size)");
@@ -3103,7 +3102,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(row).toContain("3px");
     expect(row).toContain("var(--inset-control-block)");
     expect(row).toContain("var(--inset-row-inline)");
-    expect(row).toContain("border-radius: var(--radius-panel)");
+    expect(row).toContain("border-radius: var(--radius-md)");
     expect(row).toContain("transition:");
     expect(row).not.toContain("border: 1px solid transparent");
     expect(rowDesktop).toContain("border: 1px solid transparent");
@@ -3130,6 +3129,12 @@ describe("components.css theme-sensitive surfaces", () => {
     const openEditorsTitleText = getLastRuleBlock(".workspace-open-editors__title-text");
     const openEditorsCloseAll = getLastRuleBlock(".workspace-open-editors__close-all");
     const openEditorsRow = getLastRuleBlock(".workspace-open-editors__row");
+    const openEditorsItemHover = getLastRuleBlock(
+      ".workspace-open-editors__item:hover:not(.workspace-open-editors__item--active)"
+    );
+    const openEditorsItemActiveHover = getLastRuleBlock(
+      ".workspace-open-editors__item--active:hover"
+    );
     const searchControls = getLastRuleBlock(".workspace-search-panel__controls");
     const searchInput = getLastRuleBlock(".workspace-search-panel__input");
     const openEditorsItem = getLastRuleBlock(".workspace-open-editors__item");
@@ -3167,6 +3172,8 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(openEditorsCloseAll).toContain("background: transparent");
     expect(openEditorsCloseAll).toContain("color: var(--text-secondary)");
     expect(openEditorsRow).toContain("grid-template-columns: minmax(0, 1fr) auto");
+    expect(openEditorsItemHover).toContain("background: var(--surface-hover)");
+    expect(openEditorsItemActiveHover).toContain("background: var(--state-selected-bg)");
     expect(searchControls).toContain(
       "border-bottom: 1px solid var(--component-mix-border-default-82pct-transparent)"
     );

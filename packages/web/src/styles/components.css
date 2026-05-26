@@ -13127,12 +13127,17 @@ body.is-dragging-pane .session-action-btn-drag {
   white-space: nowrap;
 }
 
-.workspace-open-editors__item:hover {
+.workspace-open-editors__item:hover:not(.workspace-open-editors__item--active) {
   background: var(--surface-hover);
   color: var(--text-primary);
 }
 
 .workspace-open-editors__item--active {
+  background: var(--state-selected-bg);
+  color: var(--text-primary);
+}
+
+.workspace-open-editors__item--active:hover {
   background: var(--state-selected-bg);
   color: var(--text-primary);
 }
