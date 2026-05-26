@@ -9,7 +9,6 @@ import type {
 import { Topics } from "@coder-studio/core";
 import { useAtomValue } from "jotai";
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { connectionStatusAtom, wsClientAtom } from "../../atoms/connection";
 import { Button, Notice, SegmentedControl, Tag } from "../../components/ui";
 import { useViewport } from "../../hooks/use-viewport";
@@ -30,6 +29,16 @@ type MobileSection = "overview" | "attribution" | "process";
 type SortMode = "cpu" | "memory";
 type TimeWindow = "5m" | "15m" | "30m";
 type MonitoringViewStatus = "loading" | "disabled" | "ready" | "degraded" | "waiting" | "empty";
+type MonitoringContentProps = {
+  showPageChrome?: boolean;
+};
+
+export type UseMonitoringDataResult = {
+  error: string | null;
+  loading: boolean;
+  refresh: () => Promise<void>;
+  response: MonitoringResponse | null;
+};
 
 const TIME_WINDOW_MS: Record<TimeWindow, number> = {
   "5m": 5 * 60 * 1000,
@@ -192,19 +201,13 @@ function EntityList({
   );
 }
 
-export function MonitoringPage() {
+export function useMonitoringData(): UseMonitoringDataResult {
   const t = useTranslation();
   const wsClient = useAtomValue(wsClientAtom);
   const connectionStatus = useAtomValue(connectionStatusAtom);
-  const navigate = useNavigate();
-  const isMobile = useViewport() === "mobile";
   const [response, setResponse] = useState<MonitoringResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [sortMode, setSortMode] = useState<SortMode>("cpu");
-  const [mobileSection, setMobileSection] = useState<MobileSection>("overview");
-  const [timeWindow, setTimeWindow] = useState<TimeWindow>("15m");
-  const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!wsClient || connectionStatus !== "connected") {
@@ -272,6 +275,18 @@ export function MonitoringPage() {
       );
     }
   };
+
+  return { error, loading, refresh, response };
+}
+
+export function MonitoringContent({ showPageChrome = false }: MonitoringContentProps = {}) {
+  const t = useTranslation();
+  const isMobile = useViewport() === "mobile";
+  const { error, loading, refresh, response } = useMonitoringData();
+  const [sortMode, setSortMode] = useState<SortMode>("cpu");
+  const [mobileSection, setMobileSection] = useState<MobileSection>("overview");
+  const [timeWindow, setTimeWindow] = useState<TimeWindow>("15m");
+  const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
 
   const attributionEntities = useMemo(() => {
     if (!response) {
@@ -357,34 +372,29 @@ export function MonitoringPage() {
     return "empty";
   }, [processEntities.length, response, runtimeStatus]);
 
-  const header = isMobile ? (
-    <MobilePageHeader
-      title={t("monitoring.title")}
-      titleAs="div"
-      rightSlot={
-        <Button size="sm" variant="ghost" onClick={() => void refresh()}>
-          {t("action.refresh")}
-        </Button>
-      }
-    />
+  const pageHeader = isMobile ? (
+    <MobilePageHeader title={t("monitoring.title")} titleAs="div" />
   ) : (
-    <PageHeader
-      title={t("monitoring.title")}
-      titleAs="h1"
-      level="secondary"
-      rightSlot={
-        <Button variant="secondary" onClick={() => void refresh()}>
-          {t("action.refresh")}
-        </Button>
-      }
-    />
+    <PageHeader title={t("monitoring.title")} titleAs="h1" level="secondary" />
+  );
+
+  const refreshButton = (
+    <Button
+      aria-label={`${t("action.refresh")} ${t("monitoring.command_label").toLowerCase()}`}
+      size={isMobile ? "sm" : undefined}
+      variant={isMobile ? "ghost" : "secondary"}
+      onClick={() => void refresh()}
+    >
+      {t("action.refresh")}
+    </Button>
   );
 
   if (loading) {
     return (
       <div className={`monitoring-page ${isMobile ? "monitoring-page--mobile" : ""}`}>
-        {header}
+        {showPageChrome ? pageHeader : null}
         <main className="monitoring-content">
+          <div className="monitoring-toolbar">{refreshButton}</div>
           <Notice title={t("monitoring.title")} message={t("monitoring.loading")} tone="info" />
         </main>
       </div>
@@ -394,8 +404,9 @@ export function MonitoringPage() {
   if (error && !response) {
     return (
       <div className={`monitoring-page ${isMobile ? "monitoring-page--mobile" : ""}`}>
-        {header}
+        {showPageChrome ? pageHeader : null}
         <main className="monitoring-content">
+          <div className="monitoring-toolbar">{refreshButton}</div>
           <Notice title={t("monitoring.load_failed")} message={error} tone="error" />
         </main>
       </div>
@@ -409,14 +420,12 @@ export function MonitoringPage() {
   if (!response.settings.enabled) {
     return (
       <div className={`monitoring-page ${isMobile ? "monitoring-page--mobile" : ""}`}>
-        {header}
+        {showPageChrome ? pageHeader : null}
         <main className="monitoring-content">
+          <div className="monitoring-toolbar">{refreshButton}</div>
           <div className="monitoring-card">
             <h2>{t("monitoring.disabled_title")}</h2>
             <p>{t("monitoring.disabled_description")}</p>
-            <Button variant="secondary" onClick={() => navigate("/settings")}>
-              {t("monitoring.open_settings")}
-            </Button>
           </div>
         </main>
       </div>
@@ -675,8 +684,9 @@ export function MonitoringPage() {
 
   return (
     <div className={`monitoring-page ${isMobile ? "monitoring-page--mobile" : ""}`}>
-      {header}
+      {showPageChrome ? pageHeader : null}
       <main className="monitoring-content">
+        <div className="monitoring-toolbar">{refreshButton}</div>
         {error ? (
           <Notice title={t("monitoring.refresh_failed")} message={error} tone="error" />
         ) : null}
@@ -707,4 +717,8 @@ export function MonitoringPage() {
       </main>
     </div>
   );
+}
+
+export function MonitoringPage() {
+  return <MonitoringContent showPageChrome />;
 }

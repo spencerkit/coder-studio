@@ -1,10 +1,11 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../atoms/app-ui";
 import { connectionStatusAtom, wsClientAtom } from "../../atoms/connection";
-import { MonitoringPage } from "./page";
+import * as monitoringExports from "./index";
+import { MonitoringContent, MonitoringPage } from "./page";
 
 const viewportMocks = vi.hoisted(() => ({
   viewport: "desktop" as "desktop" | "mobile",
@@ -20,6 +21,7 @@ function renderMonitoringPage(
   options: {
     locale?: "en" | "zh";
     sendCommand?: ReturnType<typeof vi.fn>;
+    page?: "content" | "wrapper";
   } = {}
 ) {
   viewportMocks.viewport = viewport;
@@ -42,18 +44,81 @@ function renderMonitoringPage(
     subscribe,
     ...render(
       <Provider store={store}>
-        <MemoryRouter initialEntries={["/monitoring"]}>
-          <Routes>
-            <Route path="/monitoring" element={<MonitoringPage />} />
-            <Route path="/settings" element={<div>SettingsPage</div>} />
-          </Routes>
-        </MemoryRouter>
+        {options.page === "wrapper" ? (
+          <MemoryRouter>
+            <MonitoringPage />
+          </MemoryRouter>
+        ) : (
+          <MonitoringContent />
+        )}
       </Provider>
     ),
   };
 }
 
-describe("MonitoringPage", () => {
+describe("MonitoringContent", () => {
+  it("exports reusable monitoring primitives from the feature entrypoint", () => {
+    expect(monitoringExports.MonitoringContent).toBeDefined();
+    expect(monitoringExports.useMonitoringData).toBeDefined();
+    expect("MonitoringPage" in monitoringExports).toBe(false);
+  });
+
+  it("keeps MonitoringPage as a thin wrapper around the reusable content", async () => {
+    const response = {
+      settings: {
+        enabled: true,
+        hostMetricsEnabled: true,
+        runtimeSummaryEnabled: true,
+        workspaceAttributionEnabled: true,
+        subprocessDrilldownEnabled: false,
+        sampleIntervalMs: 2000,
+      },
+      snapshot: {
+        sampledAt: 10,
+        mode: "standard",
+        host: {
+          cpuPercent: 72,
+          memoryUsedBytes: 800,
+          memoryTotalBytes: 1000,
+          memoryAvailableBytes: 200,
+          loadAverage: [1, 1, 1],
+          uptimeSec: 60,
+          pressure: "elevated",
+        },
+        runtime: {
+          serverCpuPercent: 10,
+          serverMemoryBytes: 100,
+          totalManagedCpuPercent: 30,
+          totalManagedMemoryBytes: 300,
+          managedProcessCount: 4,
+          cpuShareOfHostPercent: 41.67,
+          memoryShareOfHostPercent: 30,
+        },
+        workspaces: [],
+        sessions: [],
+        subprocessGroups: [],
+        backgroundGroups: [],
+      },
+      history: {
+        host: { points: [{ sampledAt: 10, cpuPercent: 72, memoryBytes: 800 }] },
+        runtime: { points: [{ sampledAt: 10, cpuPercent: 30, memoryBytes: 300, processCount: 4 }] },
+        workspaces: {},
+        sessions: {},
+        subprocessGroups: {},
+      },
+      capabilities: {
+        loadAverageAvailable: true,
+        processMetricsAvailable: true,
+        subprocessHistoryLimited: false,
+      },
+      telemetry: null,
+    };
+
+    renderMonitoringPage(response, "desktop", { page: "wrapper" });
+
+    expect(await screen.findByText("Host overview")).toBeInTheDocument();
+  });
+
   it("loads the snapshot, subscribes for updates, and renders host plus runtime sections", async () => {
     const response = {
       settings: {
@@ -118,7 +183,7 @@ describe("MonitoringPage", () => {
 
     const { sendCommand, subscribe } = renderMonitoringPage(response);
 
-    expect(await screen.findByText("Performance monitoring")).toBeInTheDocument();
+    expect(await screen.findByText("Host overview")).toBeInTheDocument();
     expect(sendCommand).toHaveBeenCalledWith("monitoring.get", {}, undefined);
     expect(subscribe).toHaveBeenCalledWith(["monitoring.snapshot.updated"], expect.any(Function));
     expect(screen.getByText("Host overview")).toBeInTheDocument();
@@ -187,7 +252,7 @@ describe("MonitoringPage", () => {
     expect(screen.queryByText("elevated")).not.toBeInTheDocument();
   });
 
-  it("renders a disabled empty state that links to settings", async () => {
+  it("renders a disabled empty state without standalone route navigation", async () => {
     const response = {
       settings: {
         enabled: false,
@@ -225,8 +290,12 @@ describe("MonitoringPage", () => {
     renderMonitoringPage(response);
 
     expect(await screen.findByText("Monitoring disabled")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Open Settings" }));
-    expect(await screen.findByText("SettingsPage")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "No background sampling is running. Enable monitoring in settings before using this page."
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open Settings" })).not.toBeInTheDocument();
   });
 
   it("falls back to mobile tabbed layout", async () => {
@@ -844,7 +913,7 @@ describe("MonitoringPage", () => {
 
     expect(await screen.findByText("Host overview")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    fireEvent.click(screen.getByRole("button", { name: "Refresh monitoring" }));
 
     expect(await screen.findByText("Could not refresh monitoring")).toBeInTheDocument();
     expect(screen.getByText("refresh exploded")).toBeInTheDocument();

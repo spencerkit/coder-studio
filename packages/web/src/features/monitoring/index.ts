@@ -1,1 +1,1 @@
-export { MonitoringPage } from "./page";
+export { MonitoringContent, useMonitoringData } from "./page";
