@@ -118,6 +118,14 @@ export const SearchPanel: FC<SearchPanelProps> = ({
     }
 
     if (results && !error && resolvedQuery === trimmed && resolvedRetryNonce === retryNonce) {
+      setState((current) =>
+        current.loading
+          ? {
+              ...current,
+              loading: false,
+            }
+          : current
+      );
       return;
     }
 
@@ -218,6 +226,7 @@ export const SearchPanel: FC<SearchPanelProps> = ({
             setState((current) => ({
               ...current,
               query: event.target.value,
+              selectedMatchKey: null,
             }))
           }
           placeholder={t("workspace.search.placeholder")}

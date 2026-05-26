@@ -521,6 +521,61 @@ describe("SearchPanel", () => {
     expect(screen.getByRole("button", { name: /12.*needle/i })).not.toHaveAttribute("aria-current");
   });
 
+  it("rapidly reverting to the resolved query before debounce clears loading and selected match without refetching", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({
+      files: [
+        {
+          path: "src/app.tsx",
+          name: "app.tsx",
+          matchCount: 1,
+          hasMoreMatches: false,
+          matches: [
+            {
+              line: 12,
+              column: 5,
+              endColumn: 11,
+              preview: "const needle = true;",
+              previewColumnStart: 7,
+              previewColumnEnd: 13,
+            },
+          ],
+        },
+      ],
+      totalMatchCount: 1,
+      hasMoreFiles: false,
+      truncatedMatchFileCount: 0,
+    } satisfies SearchContentResult);
+
+    renderSearchPanel(sendCommand);
+
+    await searchFor("needle");
+
+    const searchbox = screen.getByRole("searchbox", { name: /Search|搜索/i });
+    const match = screen.getByRole("button", { name: /12.*needle/i });
+
+    fireEvent.click(match);
+    expect(match).toHaveAttribute("aria-current", "true");
+
+    fireEvent.change(searchbox, { target: { value: "needlex" } });
+    expect(screen.getAllByText(/Loading|加载/i).length).toBeGreaterThan(0);
+
+    fireEvent.change(searchbox, { target: { value: "needle" } });
+
+    expect(screen.queryByText(/Loading|加载/i)).not.toBeInTheDocument();
+    const restoredMatch = screen.getByRole("button", { name: /12.*needle/i });
+    expect(screen.getByText("app.tsx")).toBeInTheDocument();
+    expect(restoredMatch).toBeInTheDocument();
+    expect(restoredMatch).not.toHaveAttribute("aria-current");
+    expect(sendCommand).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(250);
+    });
+
+    expect(sendCommand).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(/Loading|加载/i)).not.toBeInTheDocument();
+  });
+
   it("renders a mobile variant without the desktop header and still opens the selected match", async () => {
     const sendCommand = vi.fn().mockResolvedValue({
       files: [
