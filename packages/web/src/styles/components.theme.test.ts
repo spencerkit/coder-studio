@@ -1264,26 +1264,30 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(authCard).not.toContain("rgba(13, 20, 26, 0.94)");
   });
 
-  it("styles welcome activation hints as supporting copy around the primary action", () => {
-    const actionsGroup = getLastRuleBlock(".welcome-actions-group");
-    const sharedHintCopy = getLastGroupedRuleBlock(
-      /\.welcome-step-hint,\s*\.welcome-step-detail,\s*\.welcome-settings-hint\s*\{([^}]*)\}/g
-    );
+  it("styles the welcome page as a step-first workflow with compact support content", () => {
+    const welcomeLayout = getLastRuleBlock(".welcome-layout");
+    const welcomeFlow = getLastRuleBlock(".welcome-flow");
+    const welcomeSteps = getLastRuleBlock(".welcome-flow__steps");
+    const stepCard = getLastRuleBlock(".welcome-step-card");
+    const supportList = getLastRuleBlock(".welcome-support-list");
     const stepHint = getLastRuleBlock(".welcome-step-hint");
     const stepDetail = getLastRuleBlock(".welcome-step-detail");
     const settingsHint = getLastRuleBlock(".welcome-settings-hint");
-    const mobileStepDetail = getLastRuleBlock(".welcome-card--mobile .welcome-step-detail");
 
-    expect(actionsGroup).toContain("align-items: flex-start");
-    expect(sharedHintCopy).toContain("width: 100%");
-    expect(sharedHintCopy).toContain("margin: 0");
+    expect(welcomeLayout).toContain("display: grid");
+    expect(welcomeLayout).toContain(
+      "grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr)"
+    );
+    expect(welcomeFlow).toContain("flex-direction: column");
+    expect(welcomeSteps).toContain("display: grid");
+    expect(stepCard).toContain("border-radius: var(--radius-lg)");
+    expect(stepCard).toContain("background: var(--component-mix-surface-panel-92pct-surface-page)");
+    expect(supportList).toContain("grid-template-columns: repeat(2, minmax(0, 1fr))");
     expect(stepHint).toContain("text-transform: uppercase");
     expect(stepHint).toContain("color: var(--text-ter)");
-    expect(stepDetail).toContain("max-width: 440px");
+    expect(stepDetail).toContain("max-width: 44ch");
     expect(stepDetail).toContain("color: var(--text-secondary)");
-    expect(settingsHint).toContain("padding-top: var(--sp-2)");
-    expect(settingsHint).toContain("color: var(--text-ter)");
-    expect(mobileStepDetail).toContain("max-width: none");
+    expect(settingsHint).toContain("color: var(--text-tertiary)");
   });
 
   it("keeps quick actions sized to its label instead of icon-button width", () => {
@@ -2635,11 +2639,16 @@ describe("components.css theme-sensitive surfaces", () => {
 
   it("stacks mobile welcome and auth shells vertically so cards size to content", () => {
     const welcomeContainer = getLastRuleBlock(".welcome-container--mobile");
+    const mobileWelcomeLayout = getLastRuleBlock(".welcome-card--mobile .welcome-layout");
+    const mobileSupportList = getLastRuleBlock(".welcome-card--mobile .welcome-support-list");
     const authScreen = getLastRuleBlock(".auth-screen--mobile");
 
     expect(welcomeContainer).toContain("flex-direction: column");
     expect(welcomeContainer).toContain("align-items: stretch");
     expect(welcomeContainer).toContain("justify-content: flex-start");
+    expect(welcomeContainer).toContain("overflow-y: auto");
+    expect(mobileWelcomeLayout).toContain("flex-direction: column");
+    expect(mobileSupportList).toContain("grid-template-columns: 1fr");
     expect(authScreen).toContain("padding:");
   });
 

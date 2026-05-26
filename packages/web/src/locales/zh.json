@@ -992,15 +992,17 @@
   "welcome": {
     "kicker": "本地 AI 编码工作台",
     "title": "先打开工作区，再启动 AI 编码会话",
-    "description": "先选择一个本地项目目录。进入工作区后，你就可以在同一个界面里启动 Claude Code 或 Codex，同时查看文件、Git 变更和终端输出。",
-    "primary_hint": "第 1 步：打开你的项目目录",
-    "secondary_hint": "第 2 步会在工作区里完成：启动 Claude 或 Codex。",
-    "settings_hint": "如果你需要先配置 Provider，可以先去设置。",
+    "description": "先选择一个本地项目目录。打开工作区后，你就可以在同一个界面里启动 Claude Code 或 Codex，同时查看文件、Git 变更和终端输出。",
+    "workflow_title": "使用步骤",
+    "step_1_label": "第 1 步",
+    "step_1_title": "打开你的项目目录",
+    "step_1_detail": "先选择一个本地目录，作为当前工作区。",
+    "step_2_label": "第 2 步",
+    "step_2_title": "启动 Claude 或 Codex",
+    "step_2_detail": "进入工作区后，再为当前项目启动一个 AI 会话。",
+    "settings_hint": "如果要先配置 Provider，可以先去设置。",
+    "support_title": "为什么在这里使用",
     "features": {
-      "agent_first": {
-        "title": "启动 Claude 或 Codex 会话",
-        "description": "先打开工作区，再为当前项目启动一个 AI 会话。"
-      },
       "git_tools": {
         "title": "并排查看代码和 Git 变更",
         "description": "在 Agent 旁边直接查看文件和改动，不用在多个工具之间来回切换。"

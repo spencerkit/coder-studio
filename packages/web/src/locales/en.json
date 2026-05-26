@@ -992,15 +992,17 @@
   "welcome": {
     "kicker": "LOCAL AI CODING WORKSPACE",
     "title": "Open a workspace. Start an AI coding session.",
-    "description": "Choose a local project folder to get started. Inside the workspace, you can launch Claude Code or Codex in the same place where you edit files, inspect Git changes, and watch terminal output.",
-    "primary_hint": "Step 1: Open your project folder",
-    "secondary_hint": "Step 2 happens inside the workspace: start Claude or Codex.",
-    "settings_hint": "Need to configure providers first?",
+    "description": "Choose a local project folder to get started. Once the workspace is open, you can launch Claude Code or Codex right where you review files, Git changes, and terminal output.",
+    "workflow_title": "How it works",
+    "step_1_label": "Step 1",
+    "step_1_title": "Open your project folder",
+    "step_1_detail": "Choose a local directory to become your active workspace.",
+    "step_2_label": "Step 2",
+    "step_2_title": "Start Claude or Codex",
+    "step_2_detail": "Inside the workspace, launch an AI session for that project.",
+    "settings_hint": "Need provider setup first?",
+    "support_title": "Why use it here",
     "features": {
-      "agent_first": {
-        "title": "Start Claude or Codex sessions",
-        "description": "Open a workspace first, then launch an AI session for that project."
-      },
       "git_tools": {
         "title": "Review code and Git side by side",
         "description": "Inspect files and changes next to the agent instead of switching between tools."
