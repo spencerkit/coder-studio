@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.7
+
+### Patch Changes
+
+- [#64](https://github.com/spencerkit/coder-studio/pull/64) [`d14fe08`](https://github.com/spencerkit/coder-studio/commit/d14fe08d7861652a9290559d5a59aa766c286309) Thanks [@pallyoung](https://github.com/pallyoung)! - Refine workspace theming and session ergonomics by adding pane drag reordering,
+  stabilizing update checks, hardening PTY color environment isolation, and
+  polishing shared desktop surfaces across the app.
+
 ## 0.4.6
 
 ### Patch Changes
