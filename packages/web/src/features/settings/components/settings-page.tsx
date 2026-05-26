@@ -422,8 +422,9 @@ export function SettingsPage() {
     }
 
     let cancelled = false;
-    monitoringSettingsHydratedRef.current = false;
-    setMonitoringSettingsReady(false);
+    if (!monitoringSettingsHydratedRef.current) {
+      setMonitoringSettingsReady(false);
+    }
 
     const loadSettings = async () => {
       const appearanceSelectionVersionAtRequestStart = {

@@ -861,6 +861,65 @@ describe("SettingsPage", () => {
     });
   });
 
+  it("keeps monitoring interactions enabled after a later settings reload returns null", async () => {
+    const hydratedSettings = {
+      enabled: true,
+      hostMetricsEnabled: true,
+      runtimeSummaryEnabled: true,
+      workspaceAttributionEnabled: true,
+      subprocessDrilldownEnabled: false,
+      sampleIntervalMs: 2000,
+    } satisfies MonitoringSettings;
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        if (sendCommand.mock.calls.filter(([command]) => command === "settings.get").length === 1) {
+          return {
+            "monitoring.enabled": hydratedSettings.enabled,
+            "monitoring.hostMetricsEnabled": hydratedSettings.hostMetricsEnabled,
+            "monitoring.runtimeSummaryEnabled": hydratedSettings.runtimeSummaryEnabled,
+            "monitoring.workspaceAttributionEnabled": hydratedSettings.workspaceAttributionEnabled,
+            "monitoring.subprocessDrilldownEnabled": hydratedSettings.subprocessDrilldownEnabled,
+            "monitoring.sampleIntervalMs": hydratedSettings.sampleIntervalMs,
+          };
+        }
+
+        return null;
+      }
+
+      if (op === "monitoring.get" || op === "monitoring.recheck") {
+        return createMonitoringResponse(hydratedSettings);
+      }
+
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store, { initialEntry: "/settings?section=monitoring" });
+
+    const enableSwitch = await screen.findByRole("switch", { name: "启用性能监控" });
+    await waitFor(() => {
+      expect(enableSwitch).toBeEnabled();
+    });
+
+    await act(async () => {
+      store.set(connectionStatusAtom, "disconnected");
+    });
+
+    await act(async () => {
+      store.set(connectionStatusAtom, "connected");
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenNthCalledWith(2, "settings.get", {}, undefined);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("switch", { name: "启用性能监控" })).toBeEnabled();
+    });
+    expect(screen.getByRole("switch", { name: "主机指标" })).toBeEnabled();
+    expect(screen.getByRole("tablist", { name: "预设" })).toHaveAttribute("aria-disabled", "false");
+  });
+
   it("does not revert a newer successful monitoring update when an older request fails later", async () => {
     const firstUpdateDeferred = createDeferred<unknown>();
     const secondUpdateDeferred = createDeferred<unknown>();
