@@ -5,6 +5,7 @@ import { MonitoringSettingsCard } from "./monitoring-settings-card";
 
 interface MonitoringSettingsSubpageProps {
   readonly mode: MonitoringMode;
+  readonly monitoringSettingsReady: boolean;
   readonly monitoringData: UseMonitoringDataResult;
   readonly onChange: (next: MonitoringSettings) => Promise<void> | void;
   readonly settings: MonitoringSettings;
@@ -12,6 +13,7 @@ interface MonitoringSettingsSubpageProps {
 
 export function MonitoringSettingsSubpage({
   mode,
+  monitoringSettingsReady,
   monitoringData,
   onChange,
   settings,
@@ -20,6 +22,7 @@ export function MonitoringSettingsSubpage({
     <div className="settings-section">
       <MonitoringSettingsCard
         mode={mode}
+        monitoringSettingsReady={monitoringSettingsReady}
         onChange={async (next) => {
           try {
             await onChange(next);

@@ -13,6 +13,7 @@ type MonitoringPreset = "light" | "standard" | "deep" | "custom";
 interface MonitoringSettingsCardProps {
   readonly settings: MonitoringSettings;
   readonly mode: MonitoringMode;
+  readonly monitoringSettingsReady: boolean;
   readonly onChange: (next: MonitoringSettings) => Promise<void> | void;
   readonly headerActions?: ReactNode;
   readonly showHeaderChrome?: boolean;
@@ -81,12 +82,15 @@ function normalizeSettings(settings: MonitoringSettings): MonitoringSettings {
 export function MonitoringSettingsCard({
   settings,
   mode,
+  monitoringSettingsReady,
   onChange,
   headerActions,
   showHeaderChrome = true,
 }: MonitoringSettingsCardProps) {
   const t = useTranslation();
   const resolvedSettings = normalizeSettings(settings);
+  const controlsDisabled = !monitoringSettingsReady;
+  const dependentControlsDisabled = controlsDisabled || !resolvedSettings.enabled;
 
   const applyPreset = async (preset: MonitoringPreset) => {
     if (preset === "custom") {
@@ -157,6 +161,7 @@ export function MonitoringSettingsCard({
           aria-label={t("monitoring.enable_monitoring")}
           checked={resolvedSettings.enabled}
           className="settings-toggle"
+          disabled={controlsDisabled}
           onCheckedChange={(checked) => void onChange({ ...resolvedSettings, enabled: checked })}
         />
       </div>
@@ -164,13 +169,18 @@ export function MonitoringSettingsCard({
       <div className="settings-info-row monitoring-settings-row">
         <span className="settings-info-label">{t("monitoring.preset")}</span>
         <SegmentedControl
+          aria-disabled={controlsDisabled ? "true" : "false"}
           aria-label={t("monitoring.preset")}
           onChange={(value) => void applyPreset(value as MonitoringPreset)}
           options={[
-            { value: "light", label: t("monitoring.mode_light") },
-            { value: "standard", label: t("monitoring.mode_standard") },
-            { value: "deep", label: t("monitoring.mode_deep") },
-            { value: "custom", label: t("monitoring.mode_custom") },
+            { value: "light", label: t("monitoring.mode_light"), disabled: controlsDisabled },
+            {
+              value: "standard",
+              label: t("monitoring.mode_standard"),
+              disabled: controlsDisabled,
+            },
+            { value: "deep", label: t("monitoring.mode_deep"), disabled: controlsDisabled },
+            { value: "custom", label: t("monitoring.mode_custom"), disabled: controlsDisabled },
           ]}
           size="sm"
           value={toPreset(resolvedSettings)}
@@ -194,7 +204,7 @@ export function MonitoringSettingsCard({
             aria-label={t("monitoring.host_metrics")}
             checked={resolvedSettings.hostMetricsEnabled}
             className="settings-toggle"
-            disabled={!resolvedSettings.enabled}
+            disabled={dependentControlsDisabled}
             onCheckedChange={(checked) =>
               void onChange(normalizeSettings({ ...resolvedSettings, hostMetricsEnabled: checked }))
             }
@@ -209,7 +219,7 @@ export function MonitoringSettingsCard({
             aria-label={t("monitoring.runtime_summary_setting")}
             checked={resolvedSettings.runtimeSummaryEnabled}
             className="settings-toggle"
-            disabled={!resolvedSettings.enabled}
+            disabled={dependentControlsDisabled}
             onCheckedChange={(checked) =>
               void onChange(
                 normalizeSettings({
@@ -235,7 +245,7 @@ export function MonitoringSettingsCard({
             aria-label={t("monitoring.workspace_attribution")}
             checked={resolvedSettings.workspaceAttributionEnabled}
             className="settings-toggle"
-            disabled={!resolvedSettings.enabled}
+            disabled={dependentControlsDisabled}
             onCheckedChange={(checked) =>
               void onChange(
                 normalizeSettings({
@@ -259,7 +269,7 @@ export function MonitoringSettingsCard({
             aria-label={t("monitoring.subprocess_drilldown")}
             checked={resolvedSettings.subprocessDrilldownEnabled}
             className="settings-toggle"
-            disabled={!resolvedSettings.enabled}
+            disabled={dependentControlsDisabled}
             onCheckedChange={(checked) =>
               void onChange(
                 normalizeSettings({
@@ -279,6 +289,7 @@ export function MonitoringSettingsCard({
       <div className="settings-info-row monitoring-settings-row">
         <span className="settings-info-label">{t("monitoring.refresh_rate")}</span>
         <SegmentedControl
+          aria-disabled={controlsDisabled ? "true" : "false"}
           aria-label={t("monitoring.refresh_rate")}
           onChange={(value) =>
             void onChange({
@@ -289,6 +300,7 @@ export function MonitoringSettingsCard({
           options={MONITORING_SAMPLE_INTERVAL_OPTIONS.map((interval) => ({
             value: String(interval),
             label: `${interval / 1000}s`,
+            disabled: controlsDisabled,
           }))}
           size="sm"
           value={String(resolvedSettings.sampleIntervalMs)}

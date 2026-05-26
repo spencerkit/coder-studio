@@ -74,7 +74,8 @@ function createMonitoringDataResult(
 
 function renderSubpage(
   settings: MonitoringSettings,
-  monitoringData = createMonitoringDataResult(settings)
+  monitoringData = createMonitoringDataResult(settings),
+  { monitoringSettingsReady = true }: { monitoringSettingsReady?: boolean } = {}
 ) {
   const onChange = vi.fn();
   const store = createStore();
@@ -89,6 +90,7 @@ function renderSubpage(
         <MonitoringSettingsSubpage
           mode={deriveMonitoringMode(settings)}
           monitoringData={monitoringData}
+          monitoringSettingsReady={monitoringSettingsReady}
           onChange={onChange}
           settings={settings}
         />
@@ -127,6 +129,7 @@ function renderStatefulSubpage(options: {
       <MonitoringSettingsSubpage
         mode={deriveMonitoringMode(settings)}
         monitoringData={monitoringData}
+        monitoringSettingsReady
         onChange={async (next) => {
           setSettings(next);
           await onChange(next);
@@ -222,5 +225,30 @@ describe("MonitoringSettingsSubpage", () => {
     });
     expect(refresh).not.toHaveBeenCalled();
     expect(screen.getByText("Host overview")).toBeInTheDocument();
+  });
+
+  it("disables monitoring controls before monitoring settings are ready", async () => {
+    const settings = {
+      ...createDefaultMonitoringSettings(),
+      enabled: true,
+      runtimeSummaryEnabled: true,
+      workspaceAttributionEnabled: true,
+    };
+
+    const { onChange } = renderSubpage(settings, createMonitoringDataResult(settings), {
+      monitoringSettingsReady: false,
+    });
+
+    expect(await screen.findByText("Host overview")).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "Enable performance monitoring" })).toBeDisabled();
+    expect(screen.getByRole("switch", { name: "Host metrics" })).toBeDisabled();
+    expect(screen.getByRole("tablist", { name: "Preset" })).toHaveAttribute(
+      "aria-disabled",
+      "true"
+    );
+
+    fireEvent.click(screen.getByRole("switch", { name: "Enable performance monitoring" }));
+
+    expect(onChange).not.toHaveBeenCalled();
   });
 });

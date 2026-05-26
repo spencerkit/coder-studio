@@ -224,6 +224,7 @@ function resolveMobileSettingsGroups(
 
 interface MonitoringSettingsSectionProps {
   readonly mode: MonitoringMode;
+  readonly monitoringSettingsReady: boolean;
   readonly onChange: (
     next: MonitoringSettings,
     onLatestSuccess: () => Promise<void>
@@ -231,12 +232,18 @@ interface MonitoringSettingsSectionProps {
   readonly settings: MonitoringSettings;
 }
 
-function MonitoringSettingsSection({ mode, onChange, settings }: MonitoringSettingsSectionProps) {
+function MonitoringSettingsSection({
+  mode,
+  monitoringSettingsReady,
+  onChange,
+  settings,
+}: MonitoringSettingsSectionProps) {
   const monitoringData = useMonitoringData();
 
   return (
     <MonitoringSettingsSubpage
       mode={mode}
+      monitoringSettingsReady={monitoringSettingsReady}
       monitoringData={monitoringData}
       onChange={(next) => onChange(next, monitoringData.refresh)}
       settings={settings}
@@ -317,6 +324,7 @@ export function SettingsPage() {
   const [monitoringSettings, setMonitoringSettings] = useState<MonitoringSettings>(
     createDefaultMonitoringSettings()
   );
+  const [monitoringSettingsReady, setMonitoringSettingsReady] = useState(false);
   const defaultUpdateSettings = createDefaultUpdateSettings();
   const [updateAutoCheckEnabled, setUpdateAutoCheckEnabled] = useState(
     defaultUpdateSettings.autoCheckEnabled
@@ -414,6 +422,8 @@ export function SettingsPage() {
     }
 
     let cancelled = false;
+    monitoringSettingsHydratedRef.current = false;
+    setMonitoringSettingsReady(false);
 
     const loadSettings = async () => {
       const appearanceSelectionVersionAtRequestStart = {
@@ -447,6 +457,7 @@ export function SettingsPage() {
       if (monitoringSelectionVersionRef.current === monitoringSelectionVersionAtRequestStart) {
         setMonitoringSettings(resolveMonitoringSettings(settings));
         monitoringSettingsHydratedRef.current = true;
+        setMonitoringSettingsReady(true);
       }
       if (
         updateSelectionVersionRef.current.autoCheckEnabled ===
@@ -822,6 +833,7 @@ export function SettingsPage() {
         return (
           <MonitoringSettingsSection
             mode={deriveMonitoringMode(monitoringSettings)}
+            monitoringSettingsReady={monitoringSettingsReady}
             onChange={handleMonitoringSettingsChange}
             settings={monitoringSettings}
           />

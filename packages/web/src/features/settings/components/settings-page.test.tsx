@@ -721,7 +721,7 @@ describe("SettingsPage", () => {
     );
   });
 
-  it("does not let late settings hydration clobber a just-made monitoring change", async () => {
+  it("disables monitoring updates until monitoring settings hydrate", async () => {
     const settingsGetDeferred = createDeferred<Record<string, unknown>>();
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "settings.get") {
@@ -750,21 +750,27 @@ describe("SettingsPage", () => {
     renderSettingsPage(store, { initialEntry: "/settings?section=monitoring" });
 
     const enableSwitch = await screen.findByRole("switch", { name: "启用性能监控" });
+    const hostMetricsSwitch = screen.getByRole("switch", { name: "主机指标" });
+    const presetTabs = screen.getByRole("tablist", { name: "预设" });
+
     expect(enableSwitch).toHaveAttribute("aria-checked", "false");
+    expect(enableSwitch).toBeDisabled();
+    expect(hostMetricsSwitch).toBeDisabled();
+    expect(presetTabs).toHaveAttribute("aria-disabled", "true");
 
     fireEvent.click(enableSwitch);
+    fireEvent.click(hostMetricsSwitch);
 
-    await waitFor(() => {
-      expect(screen.getByRole("switch", { name: "启用性能监控" })).toHaveAttribute(
-        "aria-checked",
-        "true"
-      );
-    });
-    expect(sendCommand).toHaveBeenCalledWith("monitoring.recheck", {}, undefined);
+    expect(screen.getByRole("switch", { name: "启用性能监控" })).toHaveAttribute(
+      "aria-checked",
+      "false"
+    );
+    expect(sendCommand).not.toHaveBeenCalledWith("settings.update", expect.anything(), undefined);
+    expect(sendCommand).not.toHaveBeenCalledWith("monitoring.recheck", {}, undefined);
 
     await act(async () => {
       settingsGetDeferred.resolve({
-        "monitoring.enabled": false,
+        "monitoring.enabled": true,
         "monitoring.hostMetricsEnabled": true,
         "monitoring.runtimeSummaryEnabled": true,
         "monitoring.workspaceAttributionEnabled": true,
@@ -777,6 +783,80 @@ describe("SettingsPage", () => {
       expect(screen.getByRole("switch", { name: "启用性能监控" })).toHaveAttribute(
         "aria-checked",
         "true"
+      );
+    });
+    expect(screen.getByRole("switch", { name: "启用性能监控" })).toBeEnabled();
+    expect(screen.getByRole("switch", { name: "主机指标" })).toBeEnabled();
+    expect(screen.getByRole("tablist", { name: "预设" })).toHaveAttribute("aria-disabled", "false");
+  });
+
+  it("restores monitoring interactions after monitoring settings hydrate", async () => {
+    const settingsGetDeferred = createDeferred<Record<string, unknown>>();
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args?: unknown) => {
+      if (op === "settings.get") {
+        return settingsGetDeferred.promise;
+      }
+
+      if (op === "settings.update") {
+        return {};
+      }
+
+      if (op === "monitoring.get" || op === "monitoring.recheck") {
+        return createMonitoringResponse(
+          (args as { settings?: { monitoring?: MonitoringSettings } } | undefined)?.settings
+            ?.monitoring ?? {
+            enabled: true,
+            hostMetricsEnabled: true,
+            runtimeSummaryEnabled: true,
+            workspaceAttributionEnabled: true,
+            subprocessDrilldownEnabled: false,
+            sampleIntervalMs: 2000,
+          }
+        );
+      }
+
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store, { initialEntry: "/settings?section=monitoring" });
+
+    expect(await screen.findByRole("switch", { name: "启用性能监控" })).toBeDisabled();
+
+    await act(async () => {
+      settingsGetDeferred.resolve({
+        "monitoring.enabled": true,
+        "monitoring.hostMetricsEnabled": true,
+        "monitoring.runtimeSummaryEnabled": true,
+        "monitoring.workspaceAttributionEnabled": true,
+        "monitoring.subprocessDrilldownEnabled": false,
+        "monitoring.sampleIntervalMs": 2000,
+      });
+    });
+
+    const enableSwitch = await screen.findByRole("switch", { name: "启用性能监控" });
+    await waitFor(() => {
+      expect(enableSwitch).toBeEnabled();
+    });
+
+    fireEvent.click(enableSwitch);
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            monitoring: {
+              enabled: false,
+              hostMetricsEnabled: true,
+              runtimeSummaryEnabled: true,
+              workspaceAttributionEnabled: true,
+              subprocessDrilldownEnabled: false,
+              sampleIntervalMs: 2000,
+            },
+          },
+        },
+        undefined
       );
     });
   });
@@ -973,77 +1053,6 @@ describe("SettingsPage", () => {
       "false"
     );
     expect(screen.queryByText("主机概览")).not.toBeInTheDocument();
-  });
-
-  it("recovers to hydrated server monitoring settings after a pre-hydration update fails", async () => {
-    const settingsGetDeferred = createDeferred<Record<string, unknown>>();
-    const updateDeferred = createDeferred<unknown>();
-    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
-      if (op === "settings.get") {
-        return settingsGetDeferred.promise;
-      }
-
-      if (op === "settings.update") {
-        return updateDeferred.promise;
-      }
-
-      if (op === "monitoring.get" || op === "monitoring.recheck") {
-        return createMonitoringResponse({
-          enabled: true,
-          hostMetricsEnabled: true,
-          runtimeSummaryEnabled: true,
-          workspaceAttributionEnabled: true,
-          subprocessDrilldownEnabled: false,
-          sampleIntervalMs: 2000,
-        });
-      }
-
-      return {};
-    });
-    const store = createConnectedStore(sendCommand);
-
-    renderSettingsPage(store, { initialEntry: "/settings?section=monitoring" });
-
-    const enableSwitch = await screen.findByRole("switch", { name: "启用性能监控" });
-    expect(enableSwitch).toHaveAttribute("aria-checked", "false");
-
-    fireEvent.click(enableSwitch);
-
-    await waitFor(() => {
-      expect(screen.getByRole("switch", { name: "启用性能监控" })).toHaveAttribute(
-        "aria-checked",
-        "true"
-      );
-    });
-
-    await act(async () => {
-      updateDeferred.reject(new Error("monitoring update failed"));
-    });
-
-    await waitFor(() => {
-      expect(screen.getByRole("switch", { name: "启用性能监控" })).toHaveAttribute(
-        "aria-checked",
-        "false"
-      );
-    });
-
-    await act(async () => {
-      settingsGetDeferred.resolve({
-        "monitoring.enabled": true,
-        "monitoring.hostMetricsEnabled": true,
-        "monitoring.runtimeSummaryEnabled": true,
-        "monitoring.workspaceAttributionEnabled": true,
-        "monitoring.subprocessDrilldownEnabled": false,
-        "monitoring.sampleIntervalMs": 2000,
-      });
-    });
-
-    await waitFor(() => {
-      expect(screen.getByRole("switch", { name: "启用性能监控" })).toHaveAttribute(
-        "aria-checked",
-        "true"
-      );
-    });
   });
 
   it("does not render phone continuation entry from settings even when a workspace is active", async () => {
