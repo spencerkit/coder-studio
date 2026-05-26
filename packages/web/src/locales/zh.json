@@ -356,9 +356,7 @@
       "unknown_body_with_provider": "这个终端会话已经不在服务端。是否重新打开一个 {provider} 会话继续？",
       "closed_title": "当前会话已结束",
       "closed_body": "是否重新打开一个新会话继续。",
-      "closed_body_with_provider": "是否重新打开一个 {provider} 会话继续。",
-      "truncated_title": "历史内容不完整",
-      "truncated_body": "较早的终端输出已被回放缓冲区淘汰，后续输出仍会继续显示。"
+      "closed_body_with_provider": "是否重新打开一个 {provider} 会话继续。"
     }
   },
   "file": {

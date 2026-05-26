@@ -26,7 +26,6 @@ export type TerminalReplayUiState =
   | { kind: "closed" }
   | { kind: "unavailable" }
   | { kind: "recovery_check_failed" }
-  | { kind: "truncated" }
   | { kind: "retryable_failure"; reason: "timeout" | "failed" }
   | { kind: "failed"; reason: "timeout" | "failed" }
   | { kind: "unrecoverable_history"; reason: "too_old_no_snapshot" };
