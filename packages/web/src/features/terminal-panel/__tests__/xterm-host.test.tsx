@@ -13,7 +13,11 @@ import { appearancePersonalizationAtom, localeAtom, themeAtom } from "../../../a
 import { wsClientAtom } from "../../../atoms/connection";
 import { JotaiProvider } from "../../../test-utils/jotai-provider";
 import { getThemeById } from "../../../theme";
-import type { TerminalReplayPayload, TerminalSnapshotPayload } from "../../../ws/client";
+import {
+  CommandResultError,
+  type TerminalReplayPayload,
+  type TerminalSnapshotPayload,
+} from "../../../ws/client";
 import { toastsAtom } from "../../notifications/atoms";
 import { terminalMetaAtomFamily, terminalOutputAtomFamily } from "../atoms";
 import type { HydrationRequestHandle, HydrationTier } from "../hydration-coordinator";
@@ -1388,6 +1392,76 @@ describe("XtermHost", () => {
     global.cancelAnimationFrame = originalCancelAnimationFrame;
   });
 
+  it("shows a recovery-check notice instead of retryable recovery when replay is unavailable as a command", async () => {
+    const store = createStore();
+    const sendCommand = vi.fn().mockImplementation((op: string) => {
+      if (op === "terminal.snapshot") {
+        return Promise.resolve({ status: "unsupported" });
+      }
+
+      if (op === "terminal.replay") {
+        return Promise.reject(
+          new CommandResultError({
+            code: "unknown_op",
+            message: "Unknown operation: terminal.replay",
+          })
+        );
+      }
+
+      return Promise.resolve({ ok: true, data: { status: "ok" } });
+    });
+    const subscribe = vi.fn(() => vi.fn());
+    const rafCallbacks: FrameRequestCallback[] = [];
+    const originalRequestAnimationFrame = global.requestAnimationFrame;
+    const originalCancelAnimationFrame = global.cancelAnimationFrame;
+
+    mockTerminal.cols = 132;
+    mockTerminal.rows = 36;
+
+    global.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      rafCallbacks.push(callback);
+      return rafCallbacks.length;
+    }) as typeof requestAnimationFrame;
+    global.cancelAnimationFrame = vi.fn() as typeof cancelAnimationFrame;
+
+    store.set(localeAtom, "zh");
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe,
+      getStatus: vi.fn(() => "connected"),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="missing-replay-command-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await act(async () => {
+      const callback = rafCallbacks.shift();
+      callback?.(16);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("终端恢复检查未完成")).toBeInTheDocument();
+    });
+    expect(
+      screen.getByText(
+        "这次没有完成恢复决策，当前终端仍可继续使用，但较早历史是否补齐暂时无法确认。请稍后重新检查。"
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "重新检查" })).toBeInTheDocument();
+    expect(screen.queryByText("终端历史暂未恢复")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "重试恢复" })).not.toBeInTheDocument();
+
+    global.requestAnimationFrame = originalRequestAnimationFrame;
+    global.cancelAnimationFrame = originalCancelAnimationFrame;
+  });
+
   it("retries local recovery when the retry action is clicked", async () => {
     const store = createStore();
     const sendCommand = vi.fn().mockImplementation((op: string) => {
@@ -2042,6 +2116,76 @@ describe("XtermHost", () => {
         })
       );
     });
+  });
+
+  it("shows a recovery-check notice when the coordinator cannot run recovery.reconcile", async () => {
+    const probeConnection = vi.fn().mockResolvedValue({ ok: true });
+    const sendCommand = vi.fn(async (op: string) => {
+      if (op === "recovery.reconcile") {
+        throw new Error("Unknown operation: recovery.reconcile");
+      }
+
+      if (op === "terminal.resize") {
+        return { status: "ok" };
+      }
+
+      throw new Error(`Unexpected op ${op}`);
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "zh");
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => "connected"),
+      probeConnection,
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    setGlobalRecoveryCoordinator(
+      createRecoveryCoordinator({
+        wsClient: {
+          getStatus: vi.fn(() => "connected"),
+          probeConnection,
+          onStatus: vi.fn(() => () => {}),
+          subscribe: vi.fn(() => () => {}),
+        } as never,
+        sendCommand: async (op, args, options) => {
+          try {
+            const data = await sendCommand(op, args, options);
+            return { ok: true, data };
+          } catch (error) {
+            return {
+              ok: false,
+              error: {
+                code: "unknown_op",
+                message: error instanceof Error ? error.message : String(error),
+              },
+            };
+          }
+        },
+        applyReplay: vi.fn(),
+        applySnapshot: vi.fn(),
+      })
+    );
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="reconcile-missing-command-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("终端恢复检查未完成")).toBeInTheDocument();
+    });
+    expect(
+      screen.getByText(
+        "这次没有完成恢复决策，当前终端仍可继续使用，但较早历史是否补齐暂时无法确认。请稍后重新检查。"
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "重新检查" })).toBeInTheDocument();
+    expect(screen.queryByText("终端历史暂未恢复")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "重试恢复" })).not.toBeInTheDocument();
   });
 
   it("shows a degraded overlay when replay returns unknown so unavailable terminals do not stay loading", async () => {

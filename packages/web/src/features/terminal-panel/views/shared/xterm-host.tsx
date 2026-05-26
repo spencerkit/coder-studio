@@ -57,7 +57,9 @@ import { getTerminalFontSizeForViewport, terminalPreferencesAtom } from "../../p
 import { getGlobalRecoveryCoordinator } from "../../recovery-singleton";
 import {
   classifyReplayFailure,
+  isRecoveryControlPlaneError,
   type RecoveryUiMode,
+  type RecoveryUiModeDetail,
   TERMINAL_REPLAY_TIMEOUT_MS,
   type TerminalReplayUiState,
 } from "../../replay-state";
@@ -620,6 +622,9 @@ export function XtermHost({
     ((coveredSeq: number, closed?: RecoveryClosedTerminalState) => Promise<void>) | null
   >(null);
   const failHistoricalRecoveryRef = useRef<((error: unknown) => Promise<void>) | null>(null);
+  const showRecoveryCheckFailedRef = useRef<
+    ((detail?: RecoveryUiModeDetail) => Promise<void>) | null
+  >(null);
   const showUnrecoverableHistoryRef = useRef<(() => Promise<void>) | null>(null);
   const showUnavailableTerminalRef = useRef<(() => Promise<void>) | null>(null);
   const retryHistoricalRecoveryRef = useRef<(() => void) | null>(null);
@@ -1487,6 +1492,17 @@ export function XtermHost({
             return;
           }
 
+          if (detail?.reason === "reconcile_failed") {
+            if (showRecoveryCheckFailedRef.current) {
+              void showRecoveryCheckFailedRef.current(detail);
+              return;
+            }
+
+            recoveryReplayAnchorSeqRef.current = null;
+            setReplayUiState({ kind: "recovery_check_failed" });
+            return;
+          }
+
           if (failHistoricalRecoveryRef.current) {
             void failHistoricalRecoveryRef.current(new Error("terminal recovery failed"));
             return;
@@ -1960,6 +1976,19 @@ export function XtermHost({
     };
     showUnrecoverableHistoryRef.current = showUnrecoverableHistory;
 
+    const showRecoveryCheckFailed = async (_detail?: RecoveryUiModeDetail) => {
+      if (!mountedRef.current || !terminalRef.current) {
+        return;
+      }
+
+      activeRecoveryUiModeRef.current = "error";
+      recoveryReplayAnchorSeqRef.current = null;
+      setReplayUiState({ kind: "recovery_check_failed" });
+      releaseHydration();
+      await flushHistoricalRecovery();
+    };
+    showRecoveryCheckFailedRef.current = showRecoveryCheckFailed;
+
     const showUnavailableTerminal = async () => {
       if (!mountedRef.current || !terminalRef.current) {
         return;
@@ -2060,11 +2089,23 @@ export function XtermHost({
           return;
         }
 
-        void failHistoricalRecovery(
-          result.ok
-            ? new Error(`terminal.snapshot returned status ${result.data?.status ?? "unknown"}`)
-            : result.error
-        );
+        if (!result.ok && isRecoveryControlPlaneError(result.error)) {
+          void showRecoveryCheckFailedRef.current?.({
+            reason: "reconcile_failed",
+            operation: "terminal.snapshot",
+          });
+          return;
+        }
+
+        if (result.ok) {
+          void showRecoveryCheckFailedRef.current?.({
+            reason: "reconcile_failed",
+            operation: "terminal.snapshot",
+          });
+          return;
+        }
+
+        void failHistoricalRecovery(result.error);
       });
     };
 
@@ -2123,7 +2164,23 @@ export function XtermHost({
           return;
         }
 
-        void failHistoricalRecovery(result.ok ? new Error("terminal.replay failed") : result.error);
+        if (!result.ok && isRecoveryControlPlaneError(result.error)) {
+          void showRecoveryCheckFailedRef.current?.({
+            reason: "reconcile_failed",
+            operation: "terminal.replay",
+          });
+          return;
+        }
+
+        if (result.ok) {
+          void showRecoveryCheckFailedRef.current?.({
+            reason: "reconcile_failed",
+            operation: "terminal.replay",
+          });
+          return;
+        }
+
+        void failHistoricalRecovery(result.error);
       });
     };
 
@@ -2181,6 +2238,18 @@ export function XtermHost({
 
           if (reason === "too_old" && result.ok && result.data?.status === "unsupported") {
             void showUnrecoverableHistory();
+            return;
+          }
+
+          if (
+            reason === "error" &&
+            (isRecoveryControlPlaneError(error) ||
+              (!result.ok && isRecoveryControlPlaneError(result.error)))
+          ) {
+            void showRecoveryCheckFailedRef.current?.({
+              reason: "reconcile_failed",
+              operation: "terminal.snapshot",
+            });
             return;
           }
 
@@ -2373,6 +2442,7 @@ export function XtermHost({
       applySnapshotPayloadRef.current = null;
       completeHistoricalRecoveryRef.current = null;
       failHistoricalRecoveryRef.current = null;
+      showRecoveryCheckFailedRef.current = null;
       showUnrecoverableHistoryRef.current = null;
       showUnavailableTerminalRef.current = null;
       retryHistoricalRecoveryRef.current = null;
@@ -2738,6 +2808,7 @@ export function XtermHost({
       replayUiState.kind === "unavailable") &&
     canShowRecoverySurface;
   const showInlineRecoveryNotice =
+    replayUiState.kind === "recovery_check_failed" ||
     replayUiState.kind === "retryable_failure" ||
     replayUiState.kind === "failed" ||
     replayUiState.kind === "unrecoverable_history" ||
@@ -2775,6 +2846,20 @@ export function XtermHost({
         })
       : t("terminal.replay.unknown_body");
     replayTitle = t("terminal.replay.unknown_title");
+  } else if (replayUiState.kind === "recovery_check_failed") {
+    noticeTitle = t("terminal.replay.reconcile_failed_title");
+    noticeBody = t("terminal.replay.reconcile_failed_body");
+    noticeAction = (
+      <Button
+        onClick={() => {
+          handleRetryRecovery();
+        }}
+        size="sm"
+        variant="ghost"
+      >
+        {t("terminal.replay.recheck_action")}
+      </Button>
+    );
   } else if (replayUiState.kind === "retryable_failure") {
     noticeTitle = t("terminal.replay.retryable_title");
     noticeBody = t("terminal.replay.retryable_body");
