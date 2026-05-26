@@ -2581,6 +2581,9 @@ describe("components.css theme-sensitive surfaces", () => {
     const mobileQuickJumpSearch = getLastRuleBlock(".workspace-quick-jump__search");
     const mobileQuickJumpItem = getLastRuleBlock(".workspace-quick-jump__item");
     const mobileSearchPanel = getLastRuleBlock(".workspace-search-panel--mobile");
+    const mobileFilesSearchSurface = getLastRuleBlock(
+      ".mobile-sheet--files .workspace-search-panel--mobile"
+    );
     const mobileFileSearch = getLastRuleBlock(
       ".mobile-sheet--files .file-tree-shell--mobile .file-tree-search"
     );
@@ -2628,6 +2631,12 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(mobileQuickJumpSearch).toContain("border-radius: var(--radius-md)");
     expect(mobileQuickJumpItem).toContain("grid-template-columns: minmax(0, 1fr)");
     expect(mobileSearchPanel).toContain("background: transparent");
+    expect(mobileFilesSearchSurface).toContain(
+      "border: 1px solid var(--component-mix-border-default-80pct-transparent)"
+    );
+    expect(mobileFilesSearchSurface).toContain("border-radius: var(--radius-md)");
+    expect(mobileFilesSearchSurface).toContain("background: var(--bg-panel)");
+    expect(mobileFilesSearchSurface).toContain("box-shadow: none");
     expect(mobileFilesSurface).toContain(
       "border: 1px solid var(--component-mix-border-default-80pct-transparent)"
     );
