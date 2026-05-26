@@ -21,6 +21,12 @@ describe("SessionMetadataRepo", () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
+  it("constructs with a filePath option object", () => {
+    const constructed = new SessionMetadataRepo({ filePath });
+
+    expect(constructed).toBeInstanceOf(SessionMetadataRepo);
+  });
+
   it("rehydrates session metadata without verification runs in a fresh repo instance", () => {
     repo.upsert({
       sessionId: "sess-1",

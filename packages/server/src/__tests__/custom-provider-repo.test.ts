@@ -21,6 +21,12 @@ describe("CustomProviderRepo", () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
+  it("constructs with a filePath option object", () => {
+    const constructed = new CustomProviderRepo({ filePath });
+
+    expect(constructed).toBeInstanceOf(CustomProviderRepo);
+  });
+
   it("rehydrates a provider from disk in a fresh repo instance", () => {
     repo.set({
       id: "review-bot",
