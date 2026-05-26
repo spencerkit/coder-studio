@@ -990,21 +990,24 @@
     "conflict": "资源冲突"
   },
   "welcome": {
-    "kicker": "一次部署，随处编码",
-    "title": "欢迎使用 Coder Studio",
-    "description": "只需部署一次编码工作区，即可在任何地方继续工作。同一个工作区，同一个上下文，跨所有设备。",
+    "kicker": "本地 AI 编码工作台",
+    "title": "先打开工作区，再启动 AI 编码会话",
+    "description": "先选择一个本地项目目录。进入工作区后，你就可以在同一个界面里启动 Claude Code 或 Codex，同时查看文件、Git 变更和终端输出。",
+    "primary_hint": "第 1 步：打开你的项目目录",
+    "secondary_hint": "第 2 步会在工作区里完成：启动 Claude 或 Codex。",
+    "settings_hint": "如果你需要先配置 Provider，可以先去设置。",
     "features": {
       "agent_first": {
-        "title": "以 Agent 为核心的 AI 编码",
-        "description": "启动能够编写、测试和部署代码的 AI 会话。"
+        "title": "启动 Claude 或 Codex 会话",
+        "description": "先打开工作区，再为当前项目启动一个 AI 会话。"
       },
       "git_tools": {
-        "title": "内置 Git 工具",
-        "description": "无需离开 IDE，就能暂存、提交并管理分支。"
+        "title": "并排查看代码和 Git 变更",
+        "description": "在 Agent 旁边直接查看文件和改动，不用在多个工具之间来回切换。"
       },
       "terminals": {
-        "title": "集成终端",
-        "description": "在 AI 会话旁边直接运行命令和脚本。"
+        "title": "在同一工作区运行命令",
+        "description": "需要手动操作时，可以直接在集成终端里配合 AI 会话执行命令。"
       }
     }
   },

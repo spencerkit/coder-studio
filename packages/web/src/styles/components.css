@@ -2666,9 +2666,41 @@ body.is-dragging-pane {
 
 .welcome-actions-group {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--sp-3);
   flex-wrap: wrap;
+}
+
+.welcome-step-hint,
+.welcome-step-detail,
+.welcome-settings-hint {
+  width: 100%;
+  margin: 0;
+}
+
+.welcome-step-hint {
+  font-size: var(--type-body-6-size);
+  line-height: var(--type-body-6-line-height);
+  font-weight: var(--type-body-6-weight);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-ter);
+}
+
+.welcome-step-detail {
+  max-width: 440px;
+  font-size: var(--type-body-5-size);
+  line-height: var(--type-body-5-line-height);
+  font-weight: var(--type-body-5-weight);
+  color: var(--text-secondary);
+}
+
+.welcome-settings-hint {
+  padding-top: var(--sp-2);
+  font-size: var(--type-body-6-size);
+  line-height: var(--type-body-6-line-height);
+  font-weight: var(--type-body-6-weight);
+  color: var(--text-ter);
 }
 
 .welcome-kicker {
@@ -11913,6 +11945,11 @@ body.is-dragging-pane .session-action-btn-drag {
     font-size: var(--type-body-3-size);
     line-height: var(--type-body-3-line-height);
     font-weight: var(--type-body-3-weight);
+  }
+
+  .welcome-card--mobile .welcome-step-detail,
+  .welcome-card--mobile .welcome-settings-hint {
+    max-width: none;
   }
 
   .welcome-card--mobile.diagnostics-card {

@@ -1264,6 +1264,28 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(authCard).not.toContain("rgba(13, 20, 26, 0.94)");
   });
 
+  it("styles welcome activation hints as supporting copy around the primary action", () => {
+    const actionsGroup = getLastRuleBlock(".welcome-actions-group");
+    const sharedHintCopy = getLastGroupedRuleBlock(
+      /\.welcome-step-hint,\s*\.welcome-step-detail,\s*\.welcome-settings-hint\s*\{([^}]*)\}/g
+    );
+    const stepHint = getLastRuleBlock(".welcome-step-hint");
+    const stepDetail = getLastRuleBlock(".welcome-step-detail");
+    const settingsHint = getLastRuleBlock(".welcome-settings-hint");
+    const mobileStepDetail = getLastRuleBlock(".welcome-card--mobile .welcome-step-detail");
+
+    expect(actionsGroup).toContain("align-items: flex-start");
+    expect(sharedHintCopy).toContain("width: 100%");
+    expect(sharedHintCopy).toContain("margin: 0");
+    expect(stepHint).toContain("text-transform: uppercase");
+    expect(stepHint).toContain("color: var(--text-ter)");
+    expect(stepDetail).toContain("max-width: 440px");
+    expect(stepDetail).toContain("color: var(--text-secondary)");
+    expect(settingsHint).toContain("padding-top: var(--sp-2)");
+    expect(settingsHint).toContain("color: var(--text-ter)");
+    expect(mobileStepDetail).toContain("max-width: none");
+  });
+
   it("keeps quick actions sized to its label instead of icon-button width", () => {
     const quickActions = getLastRuleBlock(".topbar-quick-actions");
 

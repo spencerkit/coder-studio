@@ -990,21 +990,24 @@
     "conflict": "Resource conflict"
   },
   "welcome": {
-    "kicker": "DEPLOY ONCE, CODE EVERYWHERE",
-    "title": "Welcome to Coder Studio",
-    "description": "Deploy your coding workspace once, then keep working from wherever you are. Same workspace, same context, across all your devices.",
+    "kicker": "LOCAL AI CODING WORKSPACE",
+    "title": "Open a workspace. Start an AI coding session.",
+    "description": "Choose a local project folder to get started. Inside the workspace, you can launch Claude Code or Codex in the same place where you edit files, inspect Git changes, and watch terminal output.",
+    "primary_hint": "Step 1: Open your project folder",
+    "secondary_hint": "Step 2 happens inside the workspace: start Claude or Codex.",
+    "settings_hint": "Need to configure providers first?",
     "features": {
       "agent_first": {
-        "title": "Agent-first AI coding",
-        "description": "Launch AI sessions that write, test, and deploy code."
+        "title": "Start Claude or Codex sessions",
+        "description": "Open a workspace first, then launch an AI session for that project."
       },
       "git_tools": {
-        "title": "Built-in Git tools",
-        "description": "Stage, commit, and manage branches without leaving the IDE."
+        "title": "Review code and Git side by side",
+        "description": "Inspect files and changes next to the agent instead of switching between tools."
       },
       "terminals": {
-        "title": "Integrated terminals",
-        "description": "Run commands and scripts alongside your AI sessions."
+        "title": "Run commands in the same workspace",
+        "description": "Use integrated terminals alongside your AI session when you need manual control."
       }
     }
   },
