@@ -12,6 +12,7 @@ const EMPTY_TREE_SHA = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 
 interface CommitMetadata extends GitCommitSummary {
   parentSha?: string;
+  parentCount: number;
 }
 
 function toRenderMode(path: string): "text" | "image" {
@@ -51,6 +52,7 @@ async function getCommitMetadata(cwd: string, sha: string): Promise<CommitMetada
     authorName,
     authoredAt: Number.parseInt(authoredAt, 10) * 1000,
     parentSha: parents ? parents.split(" ")[0] : undefined,
+    parentCount: parents ? parents.split(" ").filter(Boolean).length : 0,
   };
 }
 
@@ -144,11 +146,21 @@ function resolveCommitFileEntry(
   );
 }
 
+function assertStructuredHistorySupported(commit: CommitMetadata): void {
+  if (commit.parentCount > 1) {
+    throw {
+      code: "git_merge_commit_unsupported",
+      message: `Structured history is not supported for merge commit ${commit.sha}`,
+    };
+  }
+}
+
 export async function getGitCommitDetail(cwd: string, sha: string): Promise<GitCommitDetail> {
   const [commit, files] = await Promise.all([
     getCommitMetadata(cwd, sha),
     getCommitChangedFiles(cwd, sha),
   ]);
+  assertStructuredHistorySupported(commit);
   return {
     commit,
     files,
@@ -161,6 +173,12 @@ export async function getGitCommitFileDiff(
 ): Promise<GitFileDiffPayload> {
   const detail = await getGitCommitDetail(cwd, args.sha);
   const entry = resolveCommitFileEntry(detail.files, args);
+  if (!entry) {
+    throw {
+      code: "git_commit_file_not_found",
+      message: `File ${args.oldPath ?? args.path} is not part of commit ${args.sha}`,
+    };
+  }
   const originalPath = args.oldPath ?? entry?.oldPath ?? args.path;
   const modifiedPath = args.path;
   const diff = await getCommitDiffForPaths(

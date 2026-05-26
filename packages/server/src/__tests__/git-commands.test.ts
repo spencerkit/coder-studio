@@ -54,6 +54,30 @@ async function createCommitHistoryFixture(
   };
 }
 
+async function createMergeCommitFixture(testDir: string): Promise<{ mergeSha: string }> {
+  await execFileAsync("git", ["checkout", "-b", "feature/history-merge"], { cwd: testDir });
+  await writeFile(join(testDir, "feature.txt"), "feature branch change\n");
+  await execFileAsync("git", ["add", "."], { cwd: testDir });
+  await execFileAsync("git", ["commit", "-m", "Feature branch change"], { cwd: testDir });
+
+  await execFileAsync("git", ["checkout", "master"], { cwd: testDir });
+  await writeFile(join(testDir, "main.txt"), "main branch change\n");
+  await execFileAsync("git", ["add", "."], { cwd: testDir });
+  await execFileAsync("git", ["commit", "-m", "Main branch change"], { cwd: testDir });
+
+  await execFileAsync("git", ["merge", "--no-ff", "feature/history-merge", "-m", "Merge feature"], {
+    cwd: testDir,
+  });
+
+  const { stdout: mergeSha } = await execFileAsync("git", ["rev-parse", "HEAD"], {
+    cwd: testDir,
+  });
+
+  return {
+    mergeSha: mergeSha.trim(),
+  };
+}
+
 describe("Git Commands", () => {
   let testDir: string;
   let ctx: CommandContext;
@@ -390,6 +414,76 @@ describe("Git Commands", () => {
         modifiedRevision: headSha,
         originalPath: "pixel.png",
         modifiedPath: "pixel.png",
+      })
+    );
+  });
+
+  it("rejects git.commitFileDiff when the requested file is not part of the target commit", async () => {
+    const { headSha } = await createCommitHistoryFixture(testDir);
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "git-commit-file-diff-invalid-selection",
+        op: "git.commitFileDiff",
+        args: {
+          workspaceId,
+          sha: headSha,
+          path: "missing-from-commit.ts",
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toEqual(
+      expect.objectContaining({
+        code: "git_commit_file_not_found",
+      })
+    );
+  });
+
+  it("rejects structured history commands for merge commits", async () => {
+    const { mergeSha } = await createMergeCommitFixture(testDir);
+
+    const detailResult = await dispatch(
+      {
+        kind: "command",
+        id: "git-commit-detail-merge",
+        op: "git.commitDetail",
+        args: {
+          workspaceId,
+          sha: mergeSha,
+        },
+      },
+      ctx
+    );
+
+    expect(detailResult.ok).toBe(false);
+    expect(detailResult.error).toEqual(
+      expect.objectContaining({
+        code: "git_merge_commit_unsupported",
+      })
+    );
+
+    const fileDiffResult = await dispatch(
+      {
+        kind: "command",
+        id: "git-commit-file-diff-merge",
+        op: "git.commitFileDiff",
+        args: {
+          workspaceId,
+          sha: mergeSha,
+          path: "feature.txt",
+        },
+      },
+      ctx
+    );
+
+    expect(fileDiffResult.ok).toBe(false);
+    expect(fileDiffResult.error).toEqual(
+      expect.objectContaining({
+        code: "git_merge_commit_unsupported",
       })
     );
   });
