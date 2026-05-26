@@ -378,6 +378,149 @@ describe("SearchPanel", () => {
     });
   });
 
+  it("clicked match stays selected until query changes", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (_op: string, args: { query: string }) => {
+      if (args.query === "needle") {
+        return {
+          files: [
+            {
+              path: "src/app.tsx",
+              name: "app.tsx",
+              matchCount: 2,
+              hasMoreMatches: false,
+              matches: [
+                {
+                  line: 12,
+                  column: 5,
+                  endColumn: 11,
+                  preview: "const needle = true;",
+                  previewColumnStart: 7,
+                  previewColumnEnd: 13,
+                },
+                {
+                  line: 18,
+                  column: 9,
+                  endColumn: 15,
+                  preview: "return needle;",
+                  previewColumnStart: 8,
+                  previewColumnEnd: 14,
+                },
+              ],
+            },
+          ],
+          totalMatchCount: 2,
+          hasMoreFiles: false,
+          truncatedMatchFileCount: 0,
+        } satisfies SearchContentResult;
+      }
+
+      return {
+        files: [
+          {
+            path: "src/thread.ts",
+            name: "thread.ts",
+            matchCount: 1,
+            hasMoreMatches: false,
+            matches: [
+              {
+                line: 4,
+                column: 10,
+                endColumn: 16,
+                preview: "threadPool.run(job);",
+                previewColumnStart: 1,
+                previewColumnEnd: 7,
+              },
+            ],
+          },
+        ],
+        totalMatchCount: 1,
+        hasMoreFiles: false,
+        truncatedMatchFileCount: 0,
+      } satisfies SearchContentResult;
+    });
+
+    renderSearchPanel(sendCommand);
+
+    await searchFor("needle");
+
+    const firstMatch = screen.getByRole("button", { name: /12.*needle/i });
+    const secondMatch = screen.getByRole("button", { name: /18.*needle/i });
+
+    fireEvent.click(firstMatch);
+
+    expect(firstMatch).toHaveAttribute("aria-current", "true");
+    expect(firstMatch).toHaveClass(
+      "workspace-search-panel__match--active",
+      "workspace-sidebar-row--selected"
+    );
+    expect(secondMatch).not.toHaveAttribute("aria-current");
+    expect(secondMatch).not.toHaveClass("workspace-search-panel__match--active");
+
+    fireEvent.click(secondMatch);
+
+    expect(secondMatch).toHaveAttribute("aria-current", "true");
+    expect(secondMatch).toHaveClass(
+      "workspace-search-panel__match--active",
+      "workspace-sidebar-row--selected"
+    );
+    expect(firstMatch).not.toHaveAttribute("aria-current");
+    expect(firstMatch).not.toHaveClass("workspace-search-panel__match--active");
+
+    await searchFor("thread");
+
+    expect(screen.getByRole("button", { name: /4.*threadPool/i })).not.toHaveAttribute(
+      "aria-current"
+    );
+  });
+
+  it("clearing query clears selected match", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({
+      files: [
+        {
+          path: "src/app.tsx",
+          name: "app.tsx",
+          matchCount: 1,
+          hasMoreMatches: false,
+          matches: [
+            {
+              line: 12,
+              column: 5,
+              endColumn: 11,
+              preview: "const needle = true;",
+              previewColumnStart: 7,
+              previewColumnEnd: 13,
+            },
+          ],
+        },
+      ],
+      totalMatchCount: 1,
+      hasMoreFiles: false,
+      truncatedMatchFileCount: 0,
+    } satisfies SearchContentResult);
+
+    renderSearchPanel(sendCommand);
+
+    await searchFor("needle");
+
+    const match = screen.getByRole("button", { name: /12.*needle/i });
+
+    fireEvent.click(match);
+
+    expect(match).toHaveAttribute("aria-current", "true");
+    expect(match).toHaveClass(
+      "workspace-search-panel__match--active",
+      "workspace-sidebar-row--selected"
+    );
+
+    await searchFor("");
+
+    expect(screen.queryByRole("button", { name: /12.*needle/i })).not.toBeInTheDocument();
+
+    await searchFor("needle");
+
+    expect(screen.getByRole("button", { name: /12.*needle/i })).not.toHaveAttribute("aria-current");
+  });
+
   it("renders a mobile variant without the desktop header and still opens the selected match", async () => {
     const sendCommand = vi.fn().mockResolvedValue({
       files: [

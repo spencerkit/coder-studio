@@ -13413,6 +13413,7 @@ body.is-dragging-pane .session-action-btn-drag {
   color: var(--component-mix-text-tertiary-92pct-surface-panel);
 }
 
+.workspace-search-panel__input.workspace-sidebar-control:focus-within,
 .workspace-search-panel__input:focus-visible {
   outline: none;
   border-color: var(--component-mix-border-focus-64pct-transparent);
@@ -13573,6 +13574,7 @@ body.is-dragging-pane .session-action-btn-drag {
   background: var(--component-mix-surface-hover-88pct-transparent);
 }
 
+.workspace-search-panel__match.workspace-sidebar-row--selected:hover,
 .workspace-search-panel__match--active:hover {
   border-color: var(--state-selected-border);
   background: var(--state-selected-bg);

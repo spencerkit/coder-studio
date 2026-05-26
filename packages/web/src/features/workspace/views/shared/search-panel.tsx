@@ -23,6 +23,7 @@ interface SearchPanelState {
   resolvedQuery: string;
   resolvedRetryNonce: number;
   results: SearchContentResult | null;
+  selectedMatchKey: string | null;
   expandedFiles: Record<string, boolean>;
   loading: boolean;
   error: boolean;
@@ -35,6 +36,7 @@ const searchPanelStateAtomFamily = atomFamily((workspaceId: string) =>
     resolvedQuery: "",
     resolvedRetryNonce: 0,
     results: null,
+    selectedMatchKey: null,
     expandedFiles: {},
     loading: false,
     error: false,
@@ -80,6 +82,7 @@ export const SearchPanel: FC<SearchPanelProps> = ({
     resolvedRetryNonce,
     results,
     retryNonce,
+    selectedMatchKey,
   } = state;
 
   useEffect(() => {
@@ -104,6 +107,7 @@ export const SearchPanel: FC<SearchPanelProps> = ({
               resolvedQuery: "",
               resolvedRetryNonce: current.retryNonce,
               results: null,
+              selectedMatchKey: null,
               expandedFiles: {},
               loading: false,
               error: false,
@@ -141,6 +145,7 @@ export const SearchPanel: FC<SearchPanelProps> = ({
             setState((current) => ({
               ...current,
               results: null,
+              selectedMatchKey: null,
               expandedFiles: {},
               error: true,
             }));
@@ -152,6 +157,7 @@ export const SearchPanel: FC<SearchPanelProps> = ({
             resolvedQuery: trimmed,
             resolvedRetryNonce: retryNonce,
             results: result.data,
+            selectedMatchKey: null,
             expandedFiles: buildExpandedFileMap(result.data),
           }));
         })
@@ -160,6 +166,7 @@ export const SearchPanel: FC<SearchPanelProps> = ({
             setState((current) => ({
               ...current,
               results: null,
+              selectedMatchKey: null,
               expandedFiles: {},
               error: true,
             }));
@@ -205,7 +212,7 @@ export const SearchPanel: FC<SearchPanelProps> = ({
           ref={inputRef}
           type="search"
           aria-label={t("workspace.sidebar.search")}
-          className="workspace-search-panel__input"
+          className="workspace-search-panel__input workspace-sidebar-control"
           value={query}
           onChange={(event) =>
             setState((current) => ({
@@ -300,21 +307,35 @@ export const SearchPanel: FC<SearchPanelProps> = ({
                   className="workspace-search-panel__matches"
                 >
                   {isExpanded
-                    ? file.matches.map((match) => (
-                        <button
-                          key={`${file.path}:${match.line}:${match.column}`}
-                          type="button"
-                          className="workspace-search-panel__match"
-                          onClick={() =>
-                            openMatch(file.path, match.line, match.column, match.endColumn)
-                          }
-                        >
-                          <span className="workspace-search-panel__line">{match.line}</span>
-                          <span className="workspace-search-panel__preview">
-                            {renderPreview(match)}
-                          </span>
-                        </button>
-                      ))
+                    ? file.matches.map((match) => {
+                        const matchKey = `${file.path}:${match.line}:${match.column}:${match.endColumn}`;
+                        const isSelected = selectedMatchKey === matchKey;
+
+                        return (
+                          <button
+                            key={matchKey}
+                            type="button"
+                            className={`workspace-search-panel__match workspace-sidebar-row${
+                              isSelected
+                                ? " workspace-search-panel__match--active workspace-sidebar-row--selected"
+                                : ""
+                            }`}
+                            aria-current={isSelected ? "true" : undefined}
+                            onClick={() => {
+                              setState((current) => ({
+                                ...current,
+                                selectedMatchKey: matchKey,
+                              }));
+                              openMatch(file.path, match.line, match.column, match.endColumn);
+                            }}
+                          >
+                            <span className="workspace-search-panel__line">{match.line}</span>
+                            <span className="workspace-search-panel__preview">
+                              {renderPreview(match)}
+                            </span>
+                          </button>
+                        );
+                      })
                     : null}
                 </div>
               </section>
