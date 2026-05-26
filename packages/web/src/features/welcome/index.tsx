@@ -105,13 +105,16 @@ export const WelcomePage: FC = () => {
 
                   <div className="welcome-step-card__title">{t("welcome.step_2_title")}</div>
                   <p className="welcome-step-detail meta-text">{t("welcome.step_2_detail")}</p>
-                  <p className="welcome-settings-hint meta-text">{t("welcome.settings_hint")}</p>
-
-                  <button className="welcome-link" onClick={handleOpenSettings}>
-                    <ThemedIcon semantic="nav.settings" size={14} />
-                    <span>{t("action.settings")}</span>
-                  </button>
                 </section>
+              </div>
+
+              <div className="welcome-flow__support">
+                <p className="welcome-settings-hint meta-text">{t("welcome.settings_hint")}</p>
+
+                <button className="welcome-link" onClick={handleOpenSettings}>
+                  <ThemedIcon semantic="nav.settings" size={14} />
+                  <span>{t("action.settings")}</span>
+                </button>
               </div>
             </section>
           </div>

@@ -130,6 +130,7 @@ describe("WelcomePage", () => {
     expect(document.querySelector(".welcome-card__hero")).toBeTruthy();
     expect(document.querySelector(".welcome-flow")).toBeTruthy();
     expect(document.querySelector(".welcome-flow__steps")).toBeTruthy();
+    expect(document.querySelector(".welcome-flow__support")).toBeTruthy();
     expect(document.querySelector(".welcome-step-card")).toBeTruthy();
     expect(document.querySelector(".welcome-card__features")).toBeTruthy();
     expect(document.querySelector(".welcome-support-list")).toBeTruthy();
@@ -137,9 +138,13 @@ describe("WelcomePage", () => {
     const settingsButton = screen.getByRole("button", { name: "Settings" });
     const stepCards = Array.from(document.querySelectorAll(".welcome-step-card"));
     const supportItems = Array.from(document.querySelectorAll(".welcome-feature"));
+    const flowSupport = document.querySelector(".welcome-flow__support");
+    const settingsCard = settingsButton.closest(".welcome-step-card");
 
     expect(stepCards).toHaveLength(2);
     expect(supportItems).toHaveLength(2);
+    expect(flowSupport?.contains(settingsButton)).toBe(true);
+    expect(settingsCard).toBeNull();
     expect(
       openWorkspaceButton.querySelector('[data-icon-semantic="nav.newWorkspace"]')
     ).toBeTruthy();
@@ -228,6 +233,7 @@ describe("WelcomePage", () => {
     expect(container.querySelector(".welcome-card__hero")).toBeTruthy();
     expect(container.querySelector(".welcome-flow")).toBeTruthy();
     expect(container.querySelector(".welcome-flow__steps")).toBeTruthy();
+    expect(container.querySelector(".welcome-flow__support")).toBeTruthy();
     expect(container.querySelector(".welcome-card__features")).toBeTruthy();
     expect(container.querySelector(".welcome-support-list")).toBeTruthy();
     expect(container.querySelector(".welcome-card__panel")).toBeFalsy();

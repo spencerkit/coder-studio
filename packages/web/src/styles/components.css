@@ -2636,8 +2636,8 @@ body.is-dragging-pane {
 }
 
 .welcome-card {
-  width: min(100%, 920px);
-  max-width: 920px;
+  width: min(100%, 1040px);
+  max-width: 1040px;
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -2656,8 +2656,8 @@ body.is-dragging-pane {
 
 .welcome-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
-  gap: var(--sp-8);
+  grid-template-columns: minmax(280px, 0.9fr) minmax(0, 1.1fr);
+  gap: var(--sp-7);
   align-items: start;
 }
 
@@ -2676,7 +2676,7 @@ body.is-dragging-pane {
 
 .welcome-card--landing .welcome-card__hero {
   gap: var(--sp-4);
-  padding-right: var(--sp-2);
+  padding-right: 0;
 }
 
 .welcome-card__actions,
@@ -2724,7 +2724,19 @@ body.is-dragging-pane {
 
 .welcome-flow__steps {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--sp-3);
+}
+
+.welcome-flow__support {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--component-mix-border-default-84pct-transparent);
+  border-radius: var(--radius-lg);
+  background: var(--component-mix-surface-page-96pct-surface-panel-4pct);
 }
 
 .welcome-step-card {
@@ -2769,17 +2781,20 @@ body.is-dragging-pane {
   line-height: var(--type-heading-5-line-height);
   font-weight: var(--type-heading-5-weight);
   color: var(--text-primary);
+  min-height: calc(var(--type-heading-5-line-height) * 2);
 }
 
 .welcome-step-detail {
-  max-width: 44ch;
+  max-width: 34ch;
   font-size: var(--type-body-5-size);
   line-height: var(--type-body-5-line-height);
   font-weight: var(--type-body-5-weight);
   color: var(--text-secondary);
+  flex: 1;
 }
 
 .welcome-settings-hint {
+  max-width: 32ch;
   font-size: var(--type-body-6-size);
   line-height: var(--type-body-6-line-height);
   font-weight: var(--type-body-6-weight);
@@ -2796,19 +2811,20 @@ body.is-dragging-pane {
 }
 
 .welcome-title {
-  font-size: var(--type-heading-1-size);
-  line-height: var(--type-heading-1-line-height);
-  font-weight: var(--type-heading-1-weight);
+  font-size: var(--type-heading-3-size);
+  line-height: var(--type-heading-3-line-height);
+  font-weight: var(--type-heading-3-weight);
   margin: 0;
   color: var(--text);
+  max-width: 12ch;
 }
 
 .welcome-body {
-  font-size: var(--type-body-3-size);
-  line-height: var(--type-body-3-line-height);
-  font-weight: var(--type-body-3-weight);
+  font-size: var(--type-body-4-size);
+  line-height: var(--type-body-4-line-height);
+  font-weight: var(--type-body-4-weight);
   color: var(--text-secondary);
-  max-width: 440px;
+  max-width: 38ch;
   margin: 0;
 }
 
@@ -3085,7 +3101,7 @@ body.is-dragging-pane {
 .welcome-support {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-3);
+  gap: var(--sp-2);
 }
 
 .welcome-support__title {
@@ -3100,14 +3116,14 @@ body.is-dragging-pane {
 .welcome-support-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--sp-3);
+  gap: var(--sp-2);
 }
 
 .welcome-feature {
   display: flex;
   align-items: flex-start;
   gap: var(--sp-3);
-  padding: var(--sp-3) var(--sp-4);
+  padding: var(--sp-3);
   border-radius: var(--radius-lg);
   background: transparent;
   min-height: 0;
@@ -3131,9 +3147,9 @@ body.is-dragging-pane {
 }
 
 .welcome-feature-title {
-  font-size: var(--type-body-3-size);
-  line-height: var(--type-body-3-line-height);
-  font-weight: var(--type-body-3-weight);
+  font-size: var(--type-body-4-size);
+  line-height: var(--type-body-4-line-height);
+  font-weight: var(--type-body-4-weight);
   color: var(--text-primary);
 }
 
@@ -12023,8 +12039,8 @@ body.is-dragging-pane .session-action-btn-drag {
   .welcome-card--mobile {
     width: 100%;
     max-width: none;
-    padding: var(--sp-5) var(--sp-4);
-    gap: var(--sp-4);
+    padding: var(--sp-4);
+    gap: var(--sp-3);
     border-radius: var(--radius-lg);
     box-shadow: none;
   }
@@ -12036,7 +12052,7 @@ body.is-dragging-pane .session-action-btn-drag {
   .welcome-card--mobile .welcome-layout {
     display: flex;
     flex-direction: column;
-    gap: var(--sp-4);
+    gap: var(--sp-3);
   }
 
   .welcome-card--mobile .welcome-card__actions {
@@ -12049,17 +12065,18 @@ body.is-dragging-pane .session-action-btn-drag {
   }
 
   .welcome-card--mobile .welcome-title {
-    font-size: var(--type-heading-1-size);
-    line-height: var(--type-heading-1-line-height);
-    font-weight: var(--type-heading-1-weight);
+    font-size: var(--type-heading-3-size);
+    line-height: var(--type-heading-3-line-height);
+    font-weight: var(--type-heading-3-weight);
     letter-spacing: 0;
+    max-width: 10ch;
   }
 
   .welcome-card--mobile .welcome-body {
     max-width: none;
-    font-size: var(--type-body-4-size);
-    line-height: var(--type-body-4-line-height);
-    font-weight: var(--type-body-4-weight);
+    font-size: var(--type-body-5-size);
+    line-height: var(--type-body-5-line-height);
+    font-weight: var(--type-body-5-weight);
   }
 
   .welcome-card--mobile .welcome-step-detail,
