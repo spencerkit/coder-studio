@@ -1,5 +1,4 @@
 import type { MonitoringMode, MonitoringSettings } from "@coder-studio/core";
-import { useMemo } from "react";
 import { MonitoringDashboard, useMonitoringData } from "../../monitoring";
 import { MonitoringSettingsCard } from "./monitoring-settings-card";
 
@@ -15,20 +14,6 @@ export function MonitoringSettingsSubpage({
   settings,
 }: MonitoringSettingsSubpageProps) {
   const monitoringData = useMonitoringData();
-  const response = useMemo(() => {
-    if (!monitoringData.response) {
-      return null;
-    }
-
-    return {
-      ...monitoringData.response,
-      settings,
-      snapshot: {
-        ...monitoringData.response.snapshot,
-        mode,
-      },
-    };
-  }, [mode, monitoringData.response, settings]);
 
   return (
     <div className="settings-section">
@@ -49,7 +34,7 @@ export function MonitoringSettingsSubpage({
         error={monitoringData.error}
         loading={monitoringData.loading}
         refresh={monitoringData.refresh}
-        response={response}
+        response={monitoringData.response}
       />
     </div>
   );

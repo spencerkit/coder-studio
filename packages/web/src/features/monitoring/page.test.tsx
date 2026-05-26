@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
@@ -19,6 +19,16 @@ function SettingsLocationProbe() {
   const location = useLocation();
 
   return <div>{`SettingsPage${location.search}`}</div>;
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
 }
 
 function renderMonitoringPage(
@@ -198,6 +208,144 @@ describe("MonitoringContent", () => {
     expect(screen.getByText("Host overview")).toBeInTheDocument();
     expect(screen.getByText("Coder Studio footprint")).toBeInTheDocument();
     expect(screen.getByText("ws-1")).toBeInTheDocument();
+  });
+
+  it("does not let a late monitoring.get response overwrite a newer monitoring.recheck response", async () => {
+    const initialDeferred = createDeferred<unknown>();
+    const refreshDeferred = createDeferred<unknown>();
+    const subscribe = vi.fn(() => () => {});
+    const staleResponse = {
+      settings: {
+        enabled: true,
+        hostMetricsEnabled: true,
+        runtimeSummaryEnabled: true,
+        workspaceAttributionEnabled: true,
+        subprocessDrilldownEnabled: false,
+        sampleIntervalMs: 5000,
+      },
+      snapshot: {
+        sampledAt: 10,
+        mode: "light",
+        host: {
+          cpuPercent: 30,
+          memoryUsedBytes: 300,
+          memoryTotalBytes: 1000,
+          memoryAvailableBytes: 700,
+          loadAverage: [0.3, 0.2, 0.1],
+          uptimeSec: 60,
+          pressure: "normal",
+        },
+        runtime: null,
+        workspaces: [],
+        sessions: [],
+        subprocessGroups: [],
+        backgroundGroups: [],
+      },
+      history: {
+        host: { points: [{ sampledAt: 10, cpuPercent: 30, memoryBytes: 300 }] },
+        runtime: null,
+        workspaces: {},
+        sessions: {},
+        subprocessGroups: {},
+      },
+      capabilities: {
+        loadAverageAvailable: true,
+        processMetricsAvailable: false,
+        subprocessHistoryLimited: false,
+      },
+      telemetry: null,
+    };
+    const freshResponse = {
+      settings: {
+        enabled: true,
+        hostMetricsEnabled: true,
+        runtimeSummaryEnabled: true,
+        workspaceAttributionEnabled: true,
+        subprocessDrilldownEnabled: false,
+        sampleIntervalMs: 2000,
+      },
+      snapshot: {
+        sampledAt: 20,
+        mode: "standard",
+        host: {
+          cpuPercent: 72,
+          memoryUsedBytes: 800,
+          memoryTotalBytes: 1000,
+          memoryAvailableBytes: 200,
+          loadAverage: [1, 1, 1],
+          uptimeSec: 60,
+          pressure: "elevated",
+        },
+        runtime: {
+          serverCpuPercent: 10,
+          serverMemoryBytes: 100,
+          totalManagedCpuPercent: 30,
+          totalManagedMemoryBytes: 300,
+          managedProcessCount: 4,
+          cpuShareOfHostPercent: 41.67,
+          memoryShareOfHostPercent: 30,
+        },
+        workspaces: [],
+        sessions: [],
+        subprocessGroups: [],
+        backgroundGroups: [],
+      },
+      history: {
+        host: { points: [{ sampledAt: 20, cpuPercent: 72, memoryBytes: 800 }] },
+        runtime: { points: [{ sampledAt: 20, cpuPercent: 30, memoryBytes: 300, processCount: 4 }] },
+        workspaces: {},
+        sessions: {},
+        subprocessGroups: {},
+      },
+      capabilities: {
+        loadAverageAvailable: true,
+        processMetricsAvailable: true,
+        subprocessHistoryLimited: false,
+      },
+      telemetry: null,
+    };
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "monitoring.get") {
+        return initialDeferred.promise;
+      }
+      if (op === "monitoring.recheck") {
+        return refreshDeferred.promise;
+      }
+      throw new Error(`Unexpected command: ${op}`);
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(connectionStatusAtom, "connected");
+    store.set(wsClientAtom, { sendCommand, subscribe } as never);
+
+    render(
+      <Provider store={store}>
+        <MonitoringContent />
+      </Provider>
+    );
+
+    expect(await screen.findByText("Loading monitoring snapshot...")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Refresh monitoring" }));
+
+    await act(async () => {
+      refreshDeferred.resolve(freshResponse);
+    });
+
+    expect(await screen.findByText("Refresh every 2s")).toBeInTheDocument();
+    expect(screen.getByText("Elevated")).toBeInTheDocument();
+
+    await act(async () => {
+      initialDeferred.resolve(staleResponse);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Refresh every 2s")).toBeInTheDocument();
+    });
+    expect(screen.getByText("Elevated")).toBeInTheDocument();
+    expect(screen.queryByText("Refresh every 5s")).not.toBeInTheDocument();
+    expect(screen.queryByText("Normal")).not.toBeInTheDocument();
   });
 
   it("renders localized monitoring labels instead of raw enum values", async () => {

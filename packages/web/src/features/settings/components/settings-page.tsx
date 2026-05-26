@@ -312,6 +312,7 @@ export function SettingsPage() {
   const setHydratedLspRuntimeMode = useSetAtom(lspRuntimeModeAtom);
   const store = useStore();
   const settingsLoadFailedUnknownRef = useRef(settingsLoadFailedUnknown);
+  const monitoringSettingsHydratedRef = useRef(false);
   const appearanceSelectionVersionRef = useRef({
     theme: 0,
     personalization: 0,
@@ -421,6 +422,7 @@ export function SettingsPage() {
       }
       if (monitoringSelectionVersionRef.current === monitoringSelectionVersionAtRequestStart) {
         setMonitoringSettings(resolveMonitoringSettings(settings));
+        monitoringSettingsHydratedRef.current = true;
       }
       if (
         updateSelectionVersionRef.current.autoCheckEnabled ===
@@ -699,6 +701,7 @@ export function SettingsPage() {
 
   const handleMonitoringSettingsChange = async (nextSettings: MonitoringSettings) => {
     const previousSettings = monitoringSettings;
+    const monitoringWasHydrated = monitoringSettingsHydratedRef.current;
     monitoringSelectionVersionRef.current += 1;
     const requestVersion = monitoringSelectionVersionRef.current;
     setMonitoringSettings(nextSettings);
@@ -712,6 +715,9 @@ export function SettingsPage() {
     if (result === null || !result.ok) {
       if (monitoringSelectionVersionRef.current === requestVersion) {
         setMonitoringSettings(previousSettings);
+        if (!monitoringWasHydrated) {
+          setSettingsRefreshKey((value) => value + 1);
+        }
       }
       throw result?.error ?? new Error("monitoring update failed");
     }

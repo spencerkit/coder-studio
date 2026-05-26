@@ -8,7 +8,7 @@ import type {
 } from "@coder-studio/core";
 import { Topics } from "@coder-studio/core";
 import { useAtomValue } from "jotai";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { connectionStatusAtom, wsClientAtom } from "../../atoms/connection";
 import { Button, Notice, SegmentedControl, Tag } from "../../components/ui";
@@ -215,6 +215,26 @@ export function useMonitoringData(): UseMonitoringDataResult {
   const [response, setResponse] = useState<MonitoringResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const versionCounterRef = useRef(0);
+  const latestIssuedRequestRef = useRef(0);
+  const latestAppliedWriteRef = useRef(0);
+
+  const issueRequestVersion = () => {
+    const nextVersion = versionCounterRef.current + 1;
+    versionCounterRef.current = nextVersion;
+    latestIssuedRequestRef.current = nextVersion;
+    return nextVersion;
+  };
+
+  const commitRequestWrite = (version: number, apply: () => void) => {
+    if (version !== latestIssuedRequestRef.current || version <= latestAppliedWriteRef.current) {
+      return false;
+    }
+
+    latestAppliedWriteRef.current = version;
+    apply();
+    return true;
+  };
 
   useEffect(() => {
     if (!wsClient || connectionStatus !== "connected") {
@@ -224,6 +244,7 @@ export function useMonitoringData(): UseMonitoringDataResult {
     let cancelled = false;
 
     const load = async () => {
+      const requestVersion = issueRequestVersion();
       setLoading(true);
       setError(null);
 
@@ -234,15 +255,18 @@ export function useMonitoringData(): UseMonitoringDataResult {
           undefined
         );
         if (!cancelled) {
-          setResponse(next);
+          commitRequestWrite(requestVersion, () => {
+            setResponse(next);
+            setError(null);
+            setLoading(false);
+          });
         }
       } catch (loadError) {
         if (!cancelled) {
-          setError(loadError instanceof Error ? loadError.message : t("monitoring.load_failed"));
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
+          commitRequestWrite(requestVersion, () => {
+            setError(loadError instanceof Error ? loadError.message : t("monitoring.load_failed"));
+            setLoading(false);
+          });
         }
       }
     };
@@ -251,6 +275,9 @@ export function useMonitoringData(): UseMonitoringDataResult {
     const unsubscribe = wsClient.subscribe(
       [Topics.monitoringSnapshotUpdated],
       (_topic, payload) => {
+        const nextVersion = versionCounterRef.current + 1;
+        versionCounterRef.current = nextVersion;
+        latestAppliedWriteRef.current = nextVersion;
         setResponse(payload as MonitoringResponse);
         setLoading(false);
         setError(null);
@@ -268,6 +295,8 @@ export function useMonitoringData(): UseMonitoringDataResult {
       return;
     }
 
+    const requestVersion = issueRequestVersion();
+
     try {
       setError(null);
       const next = await wsClient.sendCommand<MonitoringResponse>(
@@ -275,11 +304,18 @@ export function useMonitoringData(): UseMonitoringDataResult {
         {},
         undefined
       );
-      setResponse(next);
+      commitRequestWrite(requestVersion, () => {
+        setResponse(next);
+        setError(null);
+        setLoading(false);
+      });
     } catch (refreshError) {
-      setError(
-        refreshError instanceof Error ? refreshError.message : t("monitoring.refresh_failed")
-      );
+      commitRequestWrite(requestVersion, () => {
+        setError(
+          refreshError instanceof Error ? refreshError.message : t("monitoring.refresh_failed")
+        );
+        setLoading(false);
+      });
     }
   };
 
