@@ -2,7 +2,6 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { openDatabase } from "../storage/db.js";
 import type { CommandContext } from "../ws/dispatch.js";
 import { dispatch } from "../ws/dispatch.js";
 import "../commands/workspace.js";
@@ -43,7 +42,6 @@ describe("workspace.intelligence command", () => {
     );
     await writeFile(join(rootPath, "README.md"), "# Repo\n");
 
-    const db = openDatabase(":memory:");
     const ctx = {
       workspaceMgr: {
         get(id: string) {
@@ -69,7 +67,7 @@ describe("workspace.intelligence command", () => {
       terminalMgr: {} as never,
       eventBus: {} as never,
       broadcaster: {} as never,
-      db,
+      db: {} as never,
       providerRegistry: [],
       fencingMgr: {} as never,
       supervisorMgr: {} as never,

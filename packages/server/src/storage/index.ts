@@ -1,5 +1,3 @@
-export { type Database, withTransaction } from "./database.js";
-export { closeDatabase, openDatabase } from "./db.js";
 export {
   type AuthLoginBlockRecord,
   AuthLoginBlockRepo,

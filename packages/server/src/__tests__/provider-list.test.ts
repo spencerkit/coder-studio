@@ -1,34 +1,26 @@
 import { providerRegistry } from "@coder-studio/providers";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { Database } from "../storage/database.js";
-import { closeDatabase, openDatabase } from "../storage/db.js";
+import { beforeEach, describe, expect, it } from "vitest";
 import type { CommandContext } from "../ws/dispatch.js";
 import { dispatch } from "../ws/dispatch.js";
 import "../commands/provider.js";
 
 describe("provider.list command", () => {
-  let db: Database;
   let ctx: CommandContext;
 
   beforeEach(() => {
-    db = openDatabase(":memory:");
     ctx = {
       workspaceMgr: {} as never,
       sessionMgr: {} as never,
       terminalMgr: {} as never,
       eventBus: {} as never,
       broadcaster: {} as never,
-      db,
+      db: {} as never,
       providerRegistry,
       fencingMgr: {} as never,
       supervisorMgr: {} as never,
       autoFetch: {} as never,
       activationMgr: {} as never,
     };
-  });
-
-  afterEach(() => {
-    closeDatabase(db);
   });
 
   it("returns built-in provider DTOs through dispatch", async () => {
