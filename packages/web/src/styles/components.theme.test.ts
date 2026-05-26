@@ -2646,6 +2646,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(mobileFileSearch).toContain("background: transparent");
     expect(mobileFileRow).toContain("min-height: 40px");
     expect(mobileFileRow).toContain("border-radius: 0");
+    expect(mobileFileRowSelected).toContain("border: none");
     expect(mobileFileRowSelected).toContain(
       "border-left: 2px solid var(--component-mix-status-info-fg-88pct-white-12pct)"
     );
@@ -3224,7 +3225,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(gitSection).toContain("gap: 8px");
     expect(gitWorktreeRow).toContain("min-height: 28px");
     expect(gitHistoryRow).toContain("min-height: 34px");
-    expect(gitRowActive).not.toContain("::before");
+    expect(hasRuleBlock(".git-panel .git-row.active::before")).toBe(false);
     expect(gitRowActive).toContain("border-color: var(--state-selected-border)");
     expect(gitRowActive).toContain("background: var(--state-selected-bg)");
     expect(gitHistoryRowCurrent).toContain("border-color: var(--state-selected-border)");
