@@ -1,5 +1,13 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
-import type { AgentContextKind, CustomProviderSessionMode, SessionState } from "./types";
+import type {
+  AgentContextKind,
+  CustomProviderSessionMode,
+  GitCommitDetail,
+  GitCommitFileEntry,
+  GitDiffRenderMode,
+  GitFileDiffPayload,
+  SessionState,
+} from "./types";
 import { deriveSessionTitle, SESSION_TITLE_MAX_LENGTH } from "./types";
 
 describe("deriveSessionTitle", () => {
@@ -54,5 +62,17 @@ describe("AgentContextKind", () => {
     expectTypeOf<AgentContextKind>().toEqualTypeOf<
       "file" | "selection" | "git_diff" | "terminal_output" | "project_summary" | "session_review"
     >();
+  });
+});
+
+describe("Git history diff contracts", () => {
+  it("covers structured commit detail and diff payload types", () => {
+    expectTypeOf<GitDiffRenderMode>().toEqualTypeOf<"text" | "image">();
+    expectTypeOf<GitCommitFileEntry["status"]>().toEqualTypeOf<
+      "added" | "modified" | "deleted" | "renamed"
+    >();
+    expectTypeOf<GitCommitDetail["commit"]["parentSha"]>().toEqualTypeOf<string | undefined>();
+    expectTypeOf<GitCommitDetail["files"][number]["renderAs"]>().toEqualTypeOf<"text" | "image">();
+    expectTypeOf<GitFileDiffPayload["originalRevision"]>().toEqualTypeOf<string | undefined>();
   });
 });

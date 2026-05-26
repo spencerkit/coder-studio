@@ -23,6 +23,37 @@ const PNG_BYTES = Buffer.from(
   "hex"
 );
 
+async function createCommitHistoryFixture(
+  testDir: string
+): Promise<{ headSha: string; parentSha: string }> {
+  await execFileAsync("git", ["checkout", "--", "sample.ts"], { cwd: testDir });
+  await writeFile(join(testDir, "rename-me.ts"), "export const renamed = true;\n");
+  await writeFile(join(testDir, "pixel.png"), PNG_BYTES);
+  await execFileAsync("git", ["add", "."], { cwd: testDir });
+  await execFileAsync("git", ["commit", "-m", "History base"], { cwd: testDir });
+
+  const { stdout: parentSha } = await execFileAsync("git", ["rev-parse", "HEAD"], {
+    cwd: testDir,
+  });
+
+  await writeFile(join(testDir, "sample.ts"), "export const value = 3;\n");
+  await execFileAsync("git", ["mv", "rename-me.ts", "renamed.ts"], { cwd: testDir });
+  const nextBytes = Buffer.from(PNG_BYTES);
+  nextBytes[nextBytes.length - 1] ^= 0x01;
+  await writeFile(join(testDir, "pixel.png"), nextBytes);
+  await execFileAsync("git", ["add", "."], { cwd: testDir });
+  await execFileAsync("git", ["commit", "-m", "Commit history fixture"], { cwd: testDir });
+
+  const { stdout: headSha } = await execFileAsync("git", ["rev-parse", "HEAD"], {
+    cwd: testDir,
+  });
+
+  return {
+    headSha: headSha.trim(),
+    parentSha: parentSha.trim(),
+  };
+}
+
 describe("Git Commands", () => {
   let testDir: string;
   let ctx: CommandContext;
@@ -259,6 +290,108 @@ describe("Git Commands", () => {
 
     expect(result.ok).toBe(false);
     expect(result.error?.code).toBe("validation_error");
+  });
+
+  it("returns structured commit files for git.commitDetail", async () => {
+    const { headSha, parentSha } = await createCommitHistoryFixture(testDir);
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "git-commit-detail-1",
+        op: "git.commitDetail",
+        args: {
+          workspaceId,
+          sha: headSha,
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.data).toEqual(
+      expect.objectContaining({
+        commit: expect.objectContaining({
+          sha: headSha,
+          shortSha: expect.any(String),
+          subject: "Commit history fixture",
+          parentSha,
+        }),
+        files: expect.arrayContaining([
+          expect.objectContaining({
+            path: "sample.ts",
+            status: "modified",
+            renderAs: "text",
+          }),
+          expect.objectContaining({
+            path: "renamed.ts",
+            oldPath: "rename-me.ts",
+            status: "renamed",
+            renderAs: "text",
+          }),
+          expect.objectContaining({
+            path: "pixel.png",
+            status: "modified",
+            renderAs: "image",
+          }),
+        ]),
+      })
+    );
+  });
+
+  it("returns commit file diffs for git.commitFileDiff", async () => {
+    const { headSha } = await createCommitHistoryFixture(testDir);
+
+    const textResult = await dispatch(
+      {
+        kind: "command",
+        id: "git-commit-file-diff-text",
+        op: "git.commitFileDiff",
+        args: {
+          workspaceId,
+          sha: headSha,
+          path: "sample.ts",
+        },
+      },
+      ctx
+    );
+
+    expect(textResult.ok).toBe(true);
+    expect(textResult.data).toEqual(
+      expect.objectContaining({
+        renderAs: "text",
+        status: "modified",
+        originalContent: "export const value = 1;\n",
+        modifiedContent: "export const value = 3;\n",
+      })
+    );
+
+    const imageResult = await dispatch(
+      {
+        kind: "command",
+        id: "git-commit-file-diff-image",
+        op: "git.commitFileDiff",
+        args: {
+          workspaceId,
+          sha: headSha,
+          path: "pixel.png",
+        },
+      },
+      ctx
+    );
+
+    expect(imageResult.ok).toBe(true);
+    expect(imageResult.data).toEqual(
+      expect.objectContaining({
+        renderAs: "image",
+        status: "modified",
+        mime: "image/png",
+        originalRevision: expect.any(String),
+        modifiedRevision: headSha,
+        originalPath: "pixel.png",
+        modifiedPath: "pixel.png",
+      })
+    );
   });
 
   it("discards modified tracked files", async () => {
