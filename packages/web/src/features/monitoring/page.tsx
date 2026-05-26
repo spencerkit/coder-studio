@@ -26,7 +26,6 @@ import {
 } from "./formatters";
 import { Sparkline } from "./sparkline";
 
-type MobileSection = "overview" | "attribution" | "process";
 type SortMode = "cpu" | "memory";
 type TimeWindow = "5m" | "15m" | "30m";
 type MonitoringViewStatus = "loading" | "disabled" | "ready" | "degraded" | "waiting" | "empty";
@@ -37,7 +36,6 @@ type MonitoringContentProps = {
 
 export type MonitoringDashboardProps = UseMonitoringDataResult & {
   onOpenSettings?: () => void;
-  showPageChrome?: boolean;
 };
 
 export type UseMonitoringDataResult = {
@@ -328,12 +326,10 @@ export function MonitoringDashboard({
   onOpenSettings,
   refresh: onRefresh,
   response,
-  showPageChrome = false,
 }: MonitoringDashboardProps) {
   const t = useTranslation();
   const isMobile = useViewport() === "mobile";
   const [sortMode, setSortMode] = useState<SortMode>("cpu");
-  const [mobileSection, setMobileSection] = useState<MobileSection>("overview");
   const [timeWindow, setTimeWindow] = useState<TimeWindow>("15m");
   const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
 
@@ -421,12 +417,6 @@ export function MonitoringDashboard({
     return "empty";
   }, [processEntities.length, response, runtimeStatus]);
 
-  const pageHeader = isMobile ? (
-    <MobilePageHeader title={t("monitoring.title")} titleAs="div" />
-  ) : (
-    <PageHeader title={t("monitoring.title")} titleAs="h1" level="secondary" />
-  );
-
   const refreshButton = (
     <Button
       aria-label={`${t("action.refresh")} ${t("monitoring.command_label").toLowerCase()}`}
@@ -438,82 +428,58 @@ export function MonitoringDashboard({
     </Button>
   );
 
-  if (loading) {
-    return (
-      <div className={`monitoring-page ${isMobile ? "monitoring-page--mobile" : ""}`}>
-        {showPageChrome ? pageHeader : null}
-        <main className="monitoring-content">
-          <div className="monitoring-toolbar">{refreshButton}</div>
-          <Notice title={t("monitoring.title")} message={t("monitoring.loading")} tone="info" />
-        </main>
+  const toolbarSummary = response ? (
+    <div className="monitoring-card">
+      <div className="monitoring-card__header">
+        <strong>{formatRefreshInterval(response.settings.sampleIntervalMs)}</strong>
+        <Tag color="neutral" caps={false}>
+          {formatMonitoringMode(response.snapshot.mode, t)}
+        </Tag>
       </div>
-    );
-  }
+      <MetricRow
+        label={t("monitoring.last_updated")}
+        value={formatTimestamp(response.snapshot.sampledAt)}
+      />
+      <SegmentedControl
+        aria-label={t("monitoring.time_window")}
+        size="sm"
+        value={timeWindow}
+        onChange={(value) => setTimeWindow(value as TimeWindow)}
+        options={[
+          { value: "5m", label: "5m" },
+          { value: "15m", label: "15m" },
+          { value: "30m", label: "30m" },
+        ]}
+      />
+    </div>
+  ) : null;
 
-  if (error && !response) {
-    return (
-      <div className={`monitoring-page ${isMobile ? "monitoring-page--mobile" : ""}`}>
-        {showPageChrome ? pageHeader : null}
-        <main className="monitoring-content">
-          <div className="monitoring-toolbar">{refreshButton}</div>
-          <Notice title={t("monitoring.load_failed")} message={error} tone="error" />
-        </main>
-      </div>
-    );
-  }
+  const primaryState =
+    loading || (error && !response) ? (
+      <Notice
+        title={loading ? t("monitoring.title") : t("monitoring.load_failed")}
+        message={loading ? t("monitoring.loading") : (error ?? t("monitoring.load_failed"))}
+        tone={loading ? "info" : "error"}
+      />
+    ) : null;
 
-  if (!response) {
-    return null;
-  }
-
-  if (!response.settings.enabled) {
-    return (
-      <div className={`monitoring-page ${isMobile ? "monitoring-page--mobile" : ""}`}>
-        {showPageChrome ? pageHeader : null}
-        <main className="monitoring-content">
-          <div className="monitoring-toolbar">{refreshButton}</div>
-          <div className="monitoring-card">
-            <h2>{t("monitoring.disabled_title")}</h2>
-            <p>{t("monitoring.disabled_description")}</p>
-            {onOpenSettings ? (
-              <Button variant="secondary" onClick={onOpenSettings}>
-                {t("monitoring.open_settings")}
-              </Button>
-            ) : null}
+  const disabledState =
+    response && !response.settings.enabled ? (
+      <div className="monitoring-card monitoring-card--empty">
+        <h2>{t("monitoring.disabled_title")}</h2>
+        <p>{t("monitoring.disabled_description")}</p>
+        {onOpenSettings ? (
+          <div className="settings-actions-row">
+            <Button variant="secondary" onClick={onOpenSettings}>
+              {t("monitoring.open_settings")}
+            </Button>
           </div>
-        </main>
+        ) : null}
       </div>
-    );
-  }
+    ) : null;
 
-  const overviewSection = (
-    <>
-      <div className="monitoring-toolbar">
-        <div className="monitoring-card">
-          <div className="monitoring-card__header">
-            <strong>{formatRefreshInterval(response.settings.sampleIntervalMs)}</strong>
-            <Tag color="neutral" caps={false}>
-              {formatMonitoringMode(response.snapshot.mode, t)}
-            </Tag>
-          </div>
-          <MetricRow
-            label={t("monitoring.last_updated")}
-            value={formatTimestamp(response.snapshot.sampledAt)}
-          />
-          <SegmentedControl
-            aria-label={t("monitoring.time_window")}
-            size="sm"
-            value={timeWindow}
-            onChange={(value) => setTimeWindow(value as TimeWindow)}
-            options={[
-              { value: "5m", label: "5m" },
-              { value: "15m", label: "15m" },
-              { value: "30m", label: "30m" },
-            ]}
-          />
-        </div>
-      </div>
-
+  const overviewSection =
+    response && response.settings.enabled ? (
       <section className="monitoring-overview-grid">
         <div className="monitoring-card">
           <div className="monitoring-card__header">
@@ -609,47 +575,119 @@ export function MonitoringDashboard({
           )}
         </div>
       </section>
-    </>
-  );
+    ) : null;
 
-  const attributionSection = (
-    <section className="monitoring-attribution">
-      <div className="monitoring-tree">
-        <div className="monitoring-card__header">
-          <h2>{t("monitoring.attribution_tree")}</h2>
-          <SegmentedControl
-            aria-label={t("monitoring.sort_by")}
-            size="sm"
-            value={sortMode}
-            onChange={(value) => setSortMode(value as SortMode)}
-            options={[
-              { value: "cpu", label: t("monitoring.cpu") },
-              { value: "memory", label: t("monitoring.memory") },
-            ]}
-          />
+  const attributionSection =
+    response && response.settings.enabled ? (
+      <section className="monitoring-attribution">
+        <div className="monitoring-tree">
+          <div className="monitoring-card__header">
+            <h2>{t("monitoring.attribution_tree")}</h2>
+            <SegmentedControl
+              aria-label={t("monitoring.sort_by")}
+              size="sm"
+              value={sortMode}
+              onChange={(value) => setSortMode(value as SortMode)}
+              options={[
+                { value: "cpu", label: t("monitoring.cpu") },
+                { value: "memory", label: t("monitoring.memory") },
+              ]}
+            />
+          </div>
+          {attributionStatus === "disabled" ? (
+            <Notice
+              title={t("monitoring.attribution_disabled")}
+              message={t("monitoring.enable_attribution")}
+              tone="info"
+            />
+          ) : attributionStatus === "ready" ? (
+            <EntityList
+              entities={attributionEntities}
+              selectedEntityId={selectedEntityId}
+              onSelect={(entity) => setSelectedEntityId(entity.id)}
+              history={response.history}
+              sampledAt={response.snapshot.sampledAt}
+              timeWindow={timeWindow}
+            />
+          ) : attributionStatus === "degraded" ? (
+            <Notice
+              title={t("monitoring.process_collection_degraded")}
+              message={t("monitoring.process_collection_unavailable")}
+              tone="warning"
+            />
+          ) : attributionStatus === "waiting" ? (
+            <Notice
+              title={t("monitoring.runtime_summary_pending")}
+              message={t("monitoring.runtime_summary_pending_description")}
+              tone="info"
+            />
+          ) : (
+            <Notice
+              title={t("monitoring.attribution_empty")}
+              message={t("monitoring.attribution_empty_description")}
+              tone="info"
+            />
+          )}
         </div>
-        {attributionStatus === "disabled" ? (
+
+        {!isMobile ? (
+          <div className="monitoring-detail">
+            <div className="monitoring-card__header">
+              <h2>{t("monitoring.detail_panel")}</h2>
+              {selectedEntity ? (
+                <Tag color="neutral" caps={false}>
+                  {selectedEntity.kind}
+                </Tag>
+              ) : null}
+            </div>
+            <p>{t("monitoring.select_entity")}</p>
+            {selectedEntity ? (
+              <>
+                <h3>{selectedEntity.label}</h3>
+                {entityDetailRows(selectedEntity, t).map((row) => (
+                  <MetricRow key={row.label} label={row.label} value={row.value} />
+                ))}
+                <HistorySparkline
+                  bundle={entityHistory(response.history, selectedEntity)}
+                  metric="cpuPercent"
+                  sampledAt={response.snapshot.sampledAt}
+                  timeWindow={timeWindow}
+                />
+              </>
+            ) : null}
+          </div>
+        ) : null}
+      </section>
+    ) : null;
+
+  const processSection =
+    response && response.settings.enabled ? (
+      <section className="monitoring-tree">
+        <div className="monitoring-card__header">
+          <h2>{t("monitoring.subprocess_drilldown")}</h2>
+        </div>
+        {processStatus === "disabled" ? (
           <Notice
-            title={t("monitoring.attribution_disabled")}
-            message={t("monitoring.enable_attribution")}
+            title={t("monitoring.subprocess_disabled")}
+            message={t("monitoring.enable_subprocess")}
             tone="info"
           />
-        ) : attributionStatus === "ready" ? (
+        ) : processStatus === "ready" ? (
           <EntityList
-            entities={attributionEntities}
+            entities={processEntities}
             selectedEntityId={selectedEntityId}
             onSelect={(entity) => setSelectedEntityId(entity.id)}
             history={response.history}
             sampledAt={response.snapshot.sampledAt}
             timeWindow={timeWindow}
           />
-        ) : attributionStatus === "degraded" ? (
+        ) : processStatus === "degraded" ? (
           <Notice
             title={t("monitoring.process_collection_degraded")}
             message={t("monitoring.process_collection_unavailable")}
             tone="warning"
           />
-        ) : attributionStatus === "waiting" ? (
+        ) : processStatus === "waiting" ? (
           <Notice
             title={t("monitoring.runtime_summary_pending")}
             message={t("monitoring.runtime_summary_pending_description")}
@@ -657,118 +695,28 @@ export function MonitoringDashboard({
           />
         ) : (
           <Notice
-            title={t("monitoring.attribution_empty")}
-            message={t("monitoring.attribution_empty_description")}
+            title={t("monitoring.subprocess_empty")}
+            message={t("monitoring.subprocess_empty_description")}
             tone="info"
           />
         )}
-      </div>
-
-      {!isMobile ? (
-        <div className="monitoring-detail">
-          <div className="monitoring-card__header">
-            <h2>{t("monitoring.detail_panel")}</h2>
-            {selectedEntity ? (
-              <Tag color="neutral" caps={false}>
-                {selectedEntity.kind}
-              </Tag>
-            ) : null}
-          </div>
-          <p>{t("monitoring.select_entity")}</p>
-          {selectedEntity ? (
-            <>
-              <h3>{selectedEntity.label}</h3>
-              {entityDetailRows(selectedEntity, t).map((row) => (
-                <MetricRow key={row.label} label={row.label} value={row.value} />
-              ))}
-              <HistorySparkline
-                bundle={entityHistory(response.history, selectedEntity)}
-                metric="cpuPercent"
-                sampledAt={response.snapshot.sampledAt}
-                timeWindow={timeWindow}
-              />
-            </>
-          ) : null}
-        </div>
-      ) : null}
-    </section>
-  );
-
-  const processSection = (
-    <section className="monitoring-tree">
-      <div className="monitoring-card__header">
-        <h2>{t("monitoring.subprocess_drilldown")}</h2>
-      </div>
-      {processStatus === "disabled" ? (
-        <Notice
-          title={t("monitoring.subprocess_disabled")}
-          message={t("monitoring.enable_subprocess")}
-          tone="info"
-        />
-      ) : processStatus === "ready" ? (
-        <EntityList
-          entities={processEntities}
-          selectedEntityId={selectedEntityId}
-          onSelect={(entity) => setSelectedEntityId(entity.id)}
-          history={response.history}
-          sampledAt={response.snapshot.sampledAt}
-          timeWindow={timeWindow}
-        />
-      ) : processStatus === "degraded" ? (
-        <Notice
-          title={t("monitoring.process_collection_degraded")}
-          message={t("monitoring.process_collection_unavailable")}
-          tone="warning"
-        />
-      ) : processStatus === "waiting" ? (
-        <Notice
-          title={t("monitoring.runtime_summary_pending")}
-          message={t("monitoring.runtime_summary_pending_description")}
-          tone="info"
-        />
-      ) : (
-        <Notice
-          title={t("monitoring.subprocess_empty")}
-          message={t("monitoring.subprocess_empty_description")}
-          tone="info"
-        />
-      )}
-    </section>
-  );
+      </section>
+    ) : null;
 
   return (
-    <div className={`monitoring-page ${isMobile ? "monitoring-page--mobile" : ""}`}>
-      {showPageChrome ? pageHeader : null}
-      <main className="monitoring-content">
-        <div className="monitoring-toolbar">{refreshButton}</div>
-        {error ? (
-          <Notice title={t("monitoring.refresh_failed")} message={error} tone="error" />
-        ) : null}
-        {isMobile ? (
-          <>
-            <SegmentedControl
-              aria-label={t("monitoring.mobile_section")}
-              size="sm"
-              value={mobileSection}
-              onChange={(value) => setMobileSection(value as MobileSection)}
-              options={[
-                { value: "overview", label: t("monitoring.mobile_overview") },
-                { value: "attribution", label: t("monitoring.mobile_attribution") },
-                { value: "process", label: t("monitoring.mobile_process") },
-              ]}
-            />
-            {mobileSection === "overview" ? overviewSection : null}
-            {mobileSection === "attribution" ? attributionSection : null}
-            {mobileSection === "process" ? processSection : null}
-          </>
-        ) : (
-          <>
-            {overviewSection}
-            {attributionSection}
-            {processSection}
-          </>
-        )}
-      </main>
+    <div className={`monitoring-dashboard ${isMobile ? "monitoring-dashboard--mobile" : ""}`}>
+      <div className="monitoring-toolbar">
+        {toolbarSummary}
+        <div className="monitoring-toolbar__actions">{refreshButton}</div>
+      </div>
+      {error && response ? (
+        <Notice title={t("monitoring.refresh_failed")} message={error} tone="error" />
+      ) : null}
+      {primaryState}
+      {disabledState}
+      {overviewSection}
+      {attributionSection}
+      {processSection}
     </div>
   );
 }
@@ -778,13 +726,21 @@ export function MonitoringContent({
   showPageChrome = false,
 }: MonitoringContentProps = {}) {
   const monitoringData = useMonitoringData();
+  const t = useTranslation();
+  const isMobile = useViewport() === "mobile";
+  const pageHeader = isMobile ? (
+    <MobilePageHeader title={t("monitoring.title")} titleAs="div" />
+  ) : (
+    <PageHeader title={t("monitoring.title")} titleAs="h1" level="secondary" />
+  );
 
   return (
-    <MonitoringDashboard
-      {...monitoringData}
-      onOpenSettings={onOpenSettings}
-      showPageChrome={showPageChrome}
-    />
+    <div className={`monitoring-page ${isMobile ? "monitoring-page--mobile" : ""}`}>
+      {showPageChrome ? pageHeader : null}
+      <main className="monitoring-content">
+        <MonitoringDashboard {...monitoringData} onOpenSettings={onOpenSettings} />
+      </main>
+    </div>
   );
 }
 

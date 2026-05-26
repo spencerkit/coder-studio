@@ -8,6 +8,14 @@ import { localeAtom } from "../../../atoms/app-ui";
 import type { UseMonitoringDataResult } from "../../monitoring";
 import { MonitoringSettingsSubpage } from "./monitoring-settings-subpage";
 
+const viewportMocks = vi.hoisted(() => ({
+  viewport: "desktop" as "desktop" | "mobile",
+}));
+
+vi.mock("../../../hooks/use-viewport", () => ({
+  useViewport: () => viewportMocks.viewport,
+}));
+
 function createMonitoringResponse(settings: MonitoringSettings): MonitoringResponse {
   return {
     settings,
@@ -75,12 +83,19 @@ function createMonitoringDataResult(
 function renderSubpage(
   settings: MonitoringSettings,
   monitoringData = createMonitoringDataResult(settings),
-  { monitoringSettingsReady = true }: { monitoringSettingsReady?: boolean } = {}
+  {
+    monitoringSettingsReady = true,
+    viewport = "desktop",
+  }: {
+    monitoringSettingsReady?: boolean;
+    viewport?: "desktop" | "mobile";
+  } = {}
 ) {
   const onChange = vi.fn();
   const store = createStore();
 
   store.set(localeAtom, "en");
+  viewportMocks.viewport = viewport;
 
   return {
     monitoringData,
@@ -108,6 +123,7 @@ function renderStatefulSubpage(options: {
   const refresh = vi.fn(async () => {});
 
   store.set(localeAtom, "en");
+  viewportMocks.viewport = "desktop";
 
   function StatefulSubpage() {
     const [settings, setSettings] = useState(options.initialSettings);
@@ -151,7 +167,7 @@ function renderStatefulSubpage(options: {
 }
 
 describe("MonitoringSettingsSubpage", () => {
-  it("renders monitoring data and configuration controls together on desktop", async () => {
+  it("renders distinct stage and dock regions on desktop", async () => {
     const settings = {
       ...createDefaultMonitoringSettings(),
       enabled: true,
@@ -159,9 +175,21 @@ describe("MonitoringSettingsSubpage", () => {
       workspaceAttributionEnabled: true,
     };
 
-    const { monitoringData } = renderSubpage(settings);
+    const { container, monitoringData } = renderSubpage(
+      settings,
+      createMonitoringDataResult(settings),
+      {
+        viewport: "desktop",
+      }
+    );
 
     expect(await screen.findByText("Host overview")).toBeInTheDocument();
+    expect(container.querySelector(".settings-monitoring-shell")).toBeInTheDocument();
+    expect(container.querySelector(".settings-monitoring-stage")).toBeInTheDocument();
+    expect(container.querySelector(".settings-monitoring-dock")).toBeInTheDocument();
+    expect(
+      container.querySelector(".settings-monitoring-stage .monitoring-toolbar")
+    ).toBeInTheDocument();
     expect(screen.getByRole("switch", { name: "Enable performance monitoring" })).toHaveAttribute(
       "aria-checked",
       "true"
@@ -169,17 +197,47 @@ describe("MonitoringSettingsSubpage", () => {
     expect(screen.getByRole("tablist", { name: "Preset" })).toBeInTheDocument();
     expect(screen.getByText("Coder Studio footprint")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Open Monitoring" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open Settings" })).not.toBeInTheDocument();
     expect(monitoringData.refresh).not.toHaveBeenCalled();
   });
 
-  it("keeps monitoring configuration available when monitoring is disabled", async () => {
+  it("keeps data first and configuration collapsed on mobile without the old segmented nav", async () => {
+    const settings = {
+      ...createDefaultMonitoringSettings(),
+      enabled: true,
+      runtimeSummaryEnabled: true,
+      workspaceAttributionEnabled: true,
+    };
+
+    const { container } = renderSubpage(settings, createMonitoringDataResult(settings), {
+      viewport: "mobile",
+    });
+
+    expect(await screen.findByText("Host overview")).toBeInTheDocument();
+    const shell = container.querySelector(".settings-monitoring-shell");
+    expect(shell).toBeInTheDocument();
+    expect(shell?.firstElementChild).toHaveClass("settings-monitoring-stage");
+    expect(container.querySelector(".settings-monitoring-dock-toggle")).toHaveAttribute(
+      "aria-expanded",
+      "false"
+    );
+    expect(screen.queryByRole("tab", { name: "Overview" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Attribution" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Process" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open Monitoring" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open Settings" })).not.toBeInTheDocument();
+  });
+
+  it("auto-expands monitoring configuration and moves it first on mobile when monitoring is disabled", async () => {
     const settings = {
       ...createDefaultMonitoringSettings(),
       enabled: false,
       runtimeSummaryEnabled: true,
     };
 
-    renderSubpage(settings);
+    const { container } = renderSubpage(settings, createMonitoringDataResult(settings), {
+      viewport: "mobile",
+    });
 
     expect(await screen.findAllByText("Monitoring disabled")).toHaveLength(2);
     expect(
@@ -187,6 +245,12 @@ describe("MonitoringSettingsSubpage", () => {
         "No background sampling is running. Enable monitoring in settings before using this page."
       )
     ).toBeInTheDocument();
+    const shell = container.querySelector(".settings-monitoring-shell");
+    expect(shell?.firstElementChild).toHaveClass("settings-monitoring-dock");
+    expect(container.querySelector(".settings-monitoring-dock-toggle")).toHaveAttribute(
+      "aria-expanded",
+      "true"
+    );
     expect(screen.getByRole("switch", { name: "Enable performance monitoring" })).toHaveAttribute(
       "aria-checked",
       "false"

@@ -497,7 +497,7 @@ describe("MonitoringContent", () => {
     expect(screen.queryByRole("button", { name: "Open Settings" })).not.toBeInTheDocument();
   });
 
-  it("falls back to mobile tabbed layout", async () => {
+  it("renders monitoring sections sequentially on mobile without the legacy segmented nav", async () => {
     const response = {
       settings: {
         enabled: true,
@@ -542,8 +542,10 @@ describe("MonitoringContent", () => {
 
     renderMonitoringPage(response, "mobile");
 
-    expect(await screen.findByRole("tab", { name: "Overview" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Attribution" })).toBeInTheDocument();
+    expect(await screen.findByText("Host overview")).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Overview" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Attribution" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Process" })).not.toBeInTheDocument();
     expect(screen.getByText("Enable runtime summary in settings")).toBeInTheDocument();
   });
 
@@ -945,9 +947,7 @@ describe("MonitoringContent", () => {
 
     renderMonitoringPage(response, "mobile");
 
-    expect(await screen.findByRole("tab", { name: "Overview" })).toBeInTheDocument();
-    expect(screen.queryByText("python indexer.py")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("tab", { name: "Process" }));
+    expect(await screen.findByText("Host overview")).toBeInTheDocument();
     expect(screen.getByText("python indexer.py")).toBeInTheDocument();
   });
 

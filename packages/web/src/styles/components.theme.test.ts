@@ -3537,6 +3537,26 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(actionRow).toContain("margin-top: var(--sp-3)");
   });
 
+  it("keeps monitoring subpage stage and dock surfaces on shared theme tokens", () => {
+    const shell = getLastRuleBlock(".settings-monitoring-shell");
+    const stage = getRuleBlocksFrom(stylesheet, ".settings-monitoring-stage")[0];
+    const dockPanel = getRuleBlocksFrom(stylesheet, ".settings-monitoring-dock__panel")[0];
+    const stageEyebrow = getLastRuleBlock(".settings-monitoring-stage__eyebrow");
+    const dockSummary = getLastRuleBlock(".settings-monitoring-dock__summary");
+    const toolbarActions = getRuleBlocksFrom(stylesheet, ".monitoring-toolbar__actions")[0];
+
+    expect(shell).toContain("display: grid");
+    expect(shell).toContain("gap: var(--sp-5)");
+    expect(stage).toContain("border: 1px solid var(--surface-elevated-border)");
+    expect(stage).toContain("background: var(--surface-elevated)");
+    expect(stage).toContain("box-shadow: var(--shadow-sm)");
+    expect(dockPanel).toContain("border-radius: var(--radius-xl)");
+    expect(dockPanel).toContain("padding: var(--sp-4)");
+    expect(stageEyebrow).toContain("color: var(--text-tertiary)");
+    expect(dockSummary).toContain("color: var(--text-secondary)");
+    expect(toolbarActions).toContain("justify-content: flex-end");
+  });
+
   it("keeps diagnostics install surfaces on theme tokens", () => {
     expect(stylesheet).toContain(".diagnostics-install-panel");
     expect(stylesheet).toContain("var(--surface-page)");

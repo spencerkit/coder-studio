@@ -1250,6 +1250,94 @@
   align-items: center;
 }
 
+.settings-monitoring-shell {
+  display: grid;
+  gap: var(--sp-5);
+  align-items: start;
+}
+
+.settings-monitoring-shell--desktop {
+  grid-template-columns: minmax(0, 1.7fr) minmax(320px, 0.9fr);
+}
+
+.settings-monitoring-stage,
+.settings-monitoring-dock__panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-width: 0;
+  border: 1px solid var(--surface-elevated-border);
+  background: var(--surface-elevated);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm);
+  padding: var(--sp-4);
+}
+
+.settings-monitoring-stage__header,
+.settings-monitoring-dock__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+.settings-monitoring-stage__eyebrow,
+.settings-monitoring-dock__eyebrow {
+  margin: 0 0 var(--sp-1);
+  color: var(--text-tertiary);
+  font-size: var(--type-body-6-size);
+  line-height: var(--type-body-6-line-height);
+  font-weight: var(--type-body-6-weight);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.settings-monitoring-stage__title,
+.settings-monitoring-dock__title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--type-heading-5-size);
+  line-height: var(--type-heading-5-line-height);
+  font-weight: var(--type-heading-5-weight);
+}
+
+.settings-monitoring-stage__summary,
+.settings-monitoring-dock__summary {
+  margin: var(--sp-2) 0 0;
+  color: var(--text-secondary);
+  font-size: var(--type-body-4-size);
+  line-height: var(--type-body-4-line-height);
+  font-weight: var(--type-body-4-weight);
+}
+
+.settings-monitoring-dock {
+  min-width: 0;
+}
+
+.settings-monitoring-dock__copy {
+  min-width: 0;
+}
+
+.settings-monitoring-dock-toggle {
+  flex-shrink: 0;
+}
+
+.settings-monitoring-dock__body {
+  min-width: 0;
+}
+
+.settings-monitoring-dock__body > .settings-card--monitoring {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+}
+
+.settings-monitoring-dock__body > .settings-card--monitoring .settings-toggle-row:last-child,
+.settings-monitoring-dock__body > .settings-card--monitoring .settings-info-row:last-child {
+  margin-bottom: 0;
+}
+
 .monitoring-card,
 .settings-card--monitoring,
 .monitoring-tree,
@@ -1297,6 +1385,12 @@
   min-height: 100%;
 }
 
+.monitoring-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+
 .monitoring-content {
   display: flex;
   flex-direction: column;
@@ -1309,6 +1403,16 @@
 .monitoring-attribution {
   display: grid;
   gap: var(--sp-4);
+}
+
+.monitoring-toolbar {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+}
+
+.monitoring-toolbar__actions {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .monitoring-overview-grid {
@@ -14996,6 +15100,28 @@ body.is-dragging-pane .session-action-btn-drag {
 }
 
 @media (max-width: 900px) {
+  .settings-monitoring-shell,
+  .settings-monitoring-shell--desktop {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-monitoring-shell--dock-priority .settings-monitoring-dock {
+    order: -1;
+  }
+
+  .settings-monitoring-stage,
+  .settings-monitoring-dock__panel {
+    padding: var(--sp-3);
+  }
+
+  .monitoring-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .monitoring-toolbar__actions {
+    justify-content: flex-start;
+  }
+
   .monitoring-overview-grid,
   .monitoring-attribution {
     grid-template-columns: 1fr;
