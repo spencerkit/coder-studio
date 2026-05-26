@@ -6,12 +6,14 @@ import { CustomProviderRepo } from "../storage/repositories/custom-provider-repo
 
 describe("CustomProviderRepo", () => {
   let tempDir: string;
+  let filePath: string;
   let repo: CustomProviderRepo;
 
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), "custom-provider-repo-"));
+    filePath = join(tempDir, "custom-providers.json");
     repo = new CustomProviderRepo({
-      filePath: join(tempDir, "custom-providers.json"),
+      filePath,
     });
   });
 
@@ -19,7 +21,7 @@ describe("CustomProviderRepo", () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  it("persists and reloads custom provider configs", () => {
+  it("rehydrates a provider from disk in a fresh repo instance", () => {
     repo.set({
       id: "review-bot",
       displayName: "Review Bot",
@@ -37,7 +39,9 @@ describe("CustomProviderRepo", () => {
       updatedAt: 100,
     });
 
-    expect(repo.get("review-bot")).toEqual({
+    const reloadedRepo = new CustomProviderRepo({ filePath });
+
+    expect(reloadedRepo.get("review-bot")).toEqual({
       id: "review-bot",
       displayName: "Review Bot",
       command: "review-bot",
@@ -55,7 +59,7 @@ describe("CustomProviderRepo", () => {
     });
   });
 
-  it("lists providers in updated order and preserves createdAt on overwrite", () => {
+  it("lists rehydrated providers by updated order and preserves createdAt on overwrite", () => {
     repo.set({
       id: "alpha",
       displayName: "Alpha",
@@ -94,7 +98,9 @@ describe("CustomProviderRepo", () => {
       updatedAt: 30,
     });
 
-    expect(repo.list()).toEqual([
+    const reloadedRepo = new CustomProviderRepo({ filePath });
+
+    expect(reloadedRepo.list()).toEqual([
       {
         id: "alpha",
         displayName: "Alpha 2",
@@ -126,7 +132,7 @@ describe("CustomProviderRepo", () => {
     ]);
   });
 
-  it("deletes a custom provider without affecting others", () => {
+  it("persists deletions so a fresh repo instance keeps only remaining providers", () => {
     repo.set({
       id: "keep",
       displayName: "Keep",
@@ -154,7 +160,9 @@ describe("CustomProviderRepo", () => {
 
     repo.delete("drop");
 
-    expect(repo.get("drop")).toBeUndefined();
-    expect(repo.list().map((provider) => provider.id)).toEqual(["keep"]);
+    const reloadedRepo = new CustomProviderRepo({ filePath });
+
+    expect(reloadedRepo.get("drop")).toBeUndefined();
+    expect(reloadedRepo.list().map((provider) => provider.id)).toEqual(["keep"]);
   });
 });
