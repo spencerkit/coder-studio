@@ -375,7 +375,7 @@ describe("CommandPalette", () => {
     expect(store.get(commandPaletteOpenAtom)).toBe(false);
   });
 
-  it("opens Monitoring from the command palette", () => {
+  it("opens Performance monitoring from the command palette", () => {
     const store = createStore();
     store.set(localeAtom, "en");
     store.set(commandPaletteOpenAtom, true);
@@ -393,7 +393,7 @@ describe("CommandPalette", () => {
 
     fireEvent.click(screen.getByText("Monitoring"));
 
-    expect(routerMocks.navigate).toHaveBeenCalledWith("/monitoring");
+    expect(routerMocks.navigate).toHaveBeenCalledWith("/settings?section=monitoring");
     expect(store.get(commandPaletteOpenAtom)).toBe(false);
   });
 });

@@ -351,7 +351,7 @@ function buildCommands(context: {
       label: t("monitoring.command_label"),
       description: t("monitoring.command_description"),
       action: () => {
-        navigate("/monitoring");
+        navigate("/settings?section=monitoring");
       },
     },
   ];

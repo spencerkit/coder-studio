@@ -1,6 +1,12 @@
 import type { IconSemantic } from "../../../theme";
 
-export type SettingsSection = "general" | "appearance" | "providers" | "shortcuts" | "about";
+export type SettingsSection =
+  | "general"
+  | "monitoring"
+  | "appearance"
+  | "providers"
+  | "shortcuts"
+  | "about";
 
 export interface SettingsSectionMeta {
   id: SettingsSection;
@@ -10,6 +16,7 @@ export interface SettingsSectionMeta {
 
 export const SETTINGS_SECTIONS = [
   { id: "general", labelKey: "settings.general", iconSemantic: "nav.settings.general" },
+  { id: "monitoring", labelKey: "monitoring.title", iconSemantic: "nav.diagnostics" },
   { id: "providers", labelKey: "settings.providers", iconSemantic: "nav.settings.providers" },
   { id: "appearance", labelKey: "settings.appearance", iconSemantic: "nav.settings.appearance" },
   { id: "shortcuts", labelKey: "settings.shortcuts.title", iconSemantic: "nav.settings.shortcuts" },

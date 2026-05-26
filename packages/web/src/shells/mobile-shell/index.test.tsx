@@ -1142,7 +1142,7 @@ describe("MobileShell Phase 2 workspace", () => {
     expect(screen.queryByText("正在连接工作区...")).not.toBeInTheDocument();
   });
 
-  it("renders MonitoringPage on mobile /monitoring while auth status is still unknown", () => {
+  it("shows the loading shell instead of MonitoringPage on mobile /monitoring while auth status is still unknown", () => {
     const store = createStore();
     store.set(connectionStatusAtom, "connected");
     store.set(authEnabledAtom, null);
@@ -1157,9 +1157,10 @@ describe("MobileShell Phase 2 workspace", () => {
       </Provider>
     );
 
-    expect(screen.getByText("MonitoringPage")).toBeInTheDocument();
+    expect(screen.getByText("正在连接工作区...")).toBeInTheDocument();
+    expect(document.querySelector(".app-loading-shell")).toBeTruthy();
     expect(screen.getByTestId("location-display")).toHaveTextContent("/monitoring");
-    expect(screen.queryByText("正在连接工作区...")).not.toBeInTheDocument();
+    expect(screen.queryByText("MonitoringPage")).not.toBeInTheDocument();
   });
 
   it("does not bootstrap workspaces from / on mobile before redirecting to /login when auth is enabled and user is unauthenticated", async () => {

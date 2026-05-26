@@ -131,7 +131,7 @@ describe("DesktopShell auth gating", () => {
     expect(screen.queryByText("正在连接工作区...")).not.toBeInTheDocument();
   });
 
-  it("renders MonitoringPage on /monitoring while auth status is still unknown", () => {
+  it("shows the loading shell instead of MonitoringPage on /monitoring while auth status is still unknown", () => {
     window.history.replaceState({}, "", "/monitoring");
 
     const store = createStore();
@@ -141,8 +141,9 @@ describe("DesktopShell auth gating", () => {
 
     renderShell(store);
 
-    expect(screen.getByText("MonitoringPage")).toBeInTheDocument();
-    expect(screen.queryByText("正在连接工作区...")).not.toBeInTheDocument();
+    expect(screen.getByText("正在连接工作区...")).toBeInTheDocument();
+    expect(document.querySelector(".app-loading-shell")).toBeTruthy();
+    expect(screen.queryByText("MonitoringPage")).not.toBeInTheDocument();
   });
 
   it("redirects / to /login when auth is enabled and user is unauthenticated", async () => {

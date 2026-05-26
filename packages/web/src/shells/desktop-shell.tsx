@@ -13,7 +13,6 @@ import { LoginPage } from "../features/auth";
 import { SessionGatePage } from "../features/auth/session-gate";
 import { CommandPalette } from "../features/command-palette";
 import { DiagnosticsPage } from "../features/diagnostics";
-import { MonitoringPage } from "../features/monitoring";
 import { NotFoundPage } from "../features/not-found";
 import { ToastContainer } from "../features/notifications";
 import { QuickOpen } from "../features/quick-open";
@@ -41,7 +40,6 @@ export function DesktopShell() {
   const shouldBypassAuthLoading =
     location.pathname.startsWith("/settings") ||
     location.pathname.startsWith("/diagnostics") ||
-    location.pathname.startsWith("/monitoring") ||
     location.pathname === "/session-gate";
 
   return (
@@ -74,7 +72,6 @@ export function DesktopShell() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/session-gate" element={<SessionGatePage />} />
             <Route path="/diagnostics" element={<DiagnosticsPage />} />
-            <Route path="/monitoring" element={<MonitoringPage />} />
             <Route
               path="/workspace"
               element={

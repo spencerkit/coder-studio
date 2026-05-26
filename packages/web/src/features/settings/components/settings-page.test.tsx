@@ -57,6 +57,30 @@ vi.mock("../../../appearance", async () => {
   };
 });
 
+vi.mock("../../../components/ui", async () => {
+  const actual =
+    await vi.importActual<typeof import("../../../components/ui")>("../../../components/ui");
+
+  return {
+    ...actual,
+    ThemedIcon: ({
+      semantic,
+      className,
+    }: {
+      semantic: string;
+      className?: string;
+      size?: number;
+    }) => (
+      <span
+        aria-hidden="true"
+        className={className}
+        data-icon-semantic={semantic}
+        data-testid="themed-icon"
+      />
+    ),
+  };
+});
+
 vi.mock("./config-editor", () => ({
   ConfigEditor: ({ configType }: { configType: "claude" | "codex" }) => (
     <div data-testid={`config-editor-${configType}`}>{configType}</div>
@@ -302,6 +326,9 @@ describe("SettingsPage", () => {
       desktopView.container.querySelector('[data-icon-semantic="nav.settings.general"]')
     ).toBeTruthy();
     expect(
+      desktopView.container.querySelector('[data-icon-semantic="nav.diagnostics"]')
+    ).toBeTruthy();
+    expect(
       desktopView.container.querySelector('[data-icon-semantic="nav.settings.providers"]')
     ).toBeTruthy();
     expect(
@@ -331,6 +358,9 @@ describe("SettingsPage", () => {
 
     expect(
       mobileView.container.querySelector('[data-icon-semantic="nav.settings.general"]')
+    ).toBeTruthy();
+    expect(
+      mobileView.container.querySelector('[data-icon-semantic="nav.diagnostics"]')
     ).toBeTruthy();
     expect(
       mobileView.container.querySelector('[data-icon-semantic="nav.settings.providers"]')
@@ -367,6 +397,40 @@ describe("SettingsPage", () => {
     fireEvent.click(diagnosticsButton);
 
     expect(routerMocks.navigate).toHaveBeenCalledWith("/diagnostics?context=manual_check");
+  });
+
+  it("opens the monitoring settings section from section=monitoring without rendering legacy general monitoring controls", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "monitoring.enabled": true,
+          "monitoring.hostMetricsEnabled": true,
+          "monitoring.runtimeSummaryEnabled": false,
+          "monitoring.workspaceAttributionEnabled": false,
+          "monitoring.subprocessDrilldownEnabled": false,
+          "monitoring.sampleIntervalMs": 5000,
+        };
+      }
+      if (op === "monitoring.get") {
+        return {
+          supported: true,
+          metrics: [],
+          updatedAt: Date.now(),
+        };
+      }
+
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store, { initialEntry: "/settings?section=monitoring" });
+
+    const monitoringNavButton = await screen.findByRole("button", { name: "性能监控" });
+
+    expect(monitoringNavButton).toHaveClass("settings-nav-item-active");
+    expect(screen.queryByRole("button", { name: "打开监控" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("switch", { name: "启用性能监控" })).not.toBeInTheDocument();
+    expect(screen.queryByText("设置通知与终端行为。")).not.toBeInTheDocument();
   });
 
   it("does not render phone continuation entry from settings even when a workspace is active", async () => {
@@ -615,7 +679,7 @@ describe("SettingsPage", () => {
     });
   });
 
-  it("hydrates monitoring settings, enforces dependencies, and saves nested monitoring updates", async () => {
+  it("does not render legacy monitoring controls inside general settings after monitoring settings hydrate", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "settings.get") {
         return {
@@ -634,130 +698,14 @@ describe("SettingsPage", () => {
 
     renderSettingsPage(store);
 
-    expect(await screen.findByText("性能监控")).toBeInTheDocument();
-
-    const enableMonitoring = screen.getByRole("switch", { name: "启用性能监控" });
-    const hostMetrics = screen.getByRole("switch", { name: "主机指标" });
-    expect(enableMonitoring).toHaveAttribute("aria-checked", "true");
-    expect(hostMetrics).toHaveAttribute("aria-checked", "true");
     await waitFor(() => {
-      expect(screen.getByRole("switch", { name: "运行时概览" })).toHaveAttribute(
-        "aria-checked",
-        "false"
-      );
-      expect(screen.getByRole("switch", { name: "工作区与会话归因" })).toHaveAttribute(
-        "aria-checked",
-        "false"
-      );
-      expect(screen.getByRole("switch", { name: "子进程钻取" })).toHaveAttribute(
-        "aria-checked",
-        "false"
-      );
-    });
-    expect(screen.getByRole("tab", { name: "轻量" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "标准" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "深度" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "自定义", selected: true })).toBeInTheDocument();
-    expect(screen.queryByText("Light")).not.toBeInTheDocument();
-    expect(screen.queryByText("Custom")).not.toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "5s", selected: true })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("switch", { name: "子进程钻取" }));
-
-    await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith(
-        "settings.update",
-        {
-          settings: {
-            monitoring: {
-              enabled: true,
-              hostMetricsEnabled: true,
-              runtimeSummaryEnabled: true,
-              workspaceAttributionEnabled: true,
-              subprocessDrilldownEnabled: true,
-              sampleIntervalMs: 5000,
-            },
-          },
-        },
-        undefined
-      );
+      expect(sendCommand).toHaveBeenCalledWith("settings.get", {}, undefined);
     });
 
-    await waitFor(() => {
-      expect(screen.getByRole("switch", { name: "运行时概览" })).toHaveAttribute(
-        "aria-checked",
-        "true"
-      );
-      expect(screen.getByRole("switch", { name: "工作区与会话归因" })).toHaveAttribute(
-        "aria-checked",
-        "true"
-      );
-      expect(screen.getByRole("switch", { name: "子进程钻取" })).toHaveAttribute(
-        "aria-checked",
-        "true"
-      );
-    });
-
-    fireEvent.click(screen.getByRole("switch", { name: "运行时概览" }));
-
-    await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith(
-        "settings.update",
-        {
-          settings: {
-            monitoring: {
-              enabled: true,
-              hostMetricsEnabled: true,
-              runtimeSummaryEnabled: false,
-              workspaceAttributionEnabled: false,
-              subprocessDrilldownEnabled: false,
-              sampleIntervalMs: 5000,
-            },
-          },
-        },
-        undefined
-      );
-    });
-
-    await waitFor(() => {
-      expect(screen.getByRole("switch", { name: "运行时概览" })).toHaveAttribute(
-        "aria-checked",
-        "false"
-      );
-      expect(screen.getByRole("switch", { name: "工作区与会话归因" })).toHaveAttribute(
-        "aria-checked",
-        "false"
-      );
-      expect(screen.getByRole("switch", { name: "子进程钻取" })).toHaveAttribute(
-        "aria-checked",
-        "false"
-      );
-    });
-
-    fireEvent.click(screen.getByRole("tab", { name: "10s" }));
-
-    await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith(
-        "settings.update",
-        {
-          settings: {
-            monitoring: {
-              enabled: true,
-              hostMetricsEnabled: true,
-              runtimeSummaryEnabled: false,
-              workspaceAttributionEnabled: false,
-              subprocessDrilldownEnabled: false,
-              sampleIntervalMs: 10000,
-            },
-          },
-        },
-        undefined
-      );
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "打开监控" }));
-
-    expect(routerMocks.navigate).toHaveBeenCalledWith("/monitoring");
+    expect(screen.queryByRole("button", { name: "打开监控" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("switch", { name: "启用性能监控" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("switch", { name: "主机指标" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("switch", { name: "运行时概览" })).not.toBeInTheDocument();
   });
 
   it("loads and saves supervisor evaluation timeout in seconds from general settings", async () => {

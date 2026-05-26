@@ -65,7 +65,6 @@ import {
   terminalPreferencesAtom,
 } from "../../terminal-panel/preferences";
 import { AboutSettings } from "./about-settings";
-import { MonitoringSettingsCard } from "./monitoring-settings-card";
 import { type ProviderInfo, ProviderSettings } from "./provider-settings";
 import { resolveSettingsExitTargetFromBrowserHistory } from "./settings-navigation";
 import {
@@ -167,6 +166,8 @@ function getMobileSectionHintKey(section: SettingsSection) {
   switch (section) {
     case "general":
       return "settings.notifications_channel_hint";
+    case "monitoring":
+      return "monitoring.command_description";
     case "providers":
       return "settings.provider.command_preview_hint";
     case "appearance":
@@ -181,7 +182,7 @@ function getMobileSectionHintKey(section: SettingsSection) {
 const MOBILE_SETTINGS_GROUPS = [
   {
     titleKey: "settings.mobile_groups.workspace_runtime",
-    sections: ["general", "providers"],
+    sections: ["general", "monitoring", "providers"],
   },
   {
     titleKey: "settings.mobile_groups.interface_interaction",
@@ -650,28 +651,6 @@ export function SettingsPage() {
     });
   };
 
-  const saveMonitoringSettings = async (next: MonitoringSettings) => {
-    const previous = monitoringSettings;
-    setMonitoringSettings(next);
-
-    const result = await dispatch("settings.update", {
-      settings: {
-        monitoring: {
-          enabled: next.enabled,
-          hostMetricsEnabled: next.hostMetricsEnabled,
-          runtimeSummaryEnabled: next.runtimeSummaryEnabled,
-          workspaceAttributionEnabled: next.workspaceAttributionEnabled,
-          subprocessDrilldownEnabled: next.subprocessDrilldownEnabled,
-          sampleIntervalMs: next.sampleIntervalMs,
-        },
-      },
-    });
-
-    if (result === null || !result.ok) {
-      setMonitoringSettings(previous);
-    }
-  };
-
   const handleUpdateAutoCheckChange = async (value: boolean) => {
     updateSelectionVersionRef.current.autoCheckEnabled += 1;
     setUpdateAutoCheckEnabled(value);
@@ -755,10 +734,10 @@ export function SettingsPage() {
             terminalCopyOnSelect={terminalPreferences.copyOnSelect}
             setTerminalCopyOnSelect={handleTerminalCopyOnSelectSelection}
             activeWorkspaceId={activeWorkspaceId}
-            monitoringSettings={monitoringSettings}
-            onMonitoringSettingsChange={saveMonitoringSettings}
           />
         );
+      case "monitoring":
+        return <div className="settings-section" />;
       case "appearance":
         return (
           <AppearanceSettings
@@ -968,8 +947,6 @@ interface GeneralSettingsProps {
   terminalCopyOnSelect: boolean;
   setTerminalCopyOnSelect: (value: boolean) => void;
   activeWorkspaceId: string | null;
-  monitoringSettings: MonitoringSettings;
-  onMonitoringSettingsChange: (value: MonitoringSettings) => Promise<void>;
 }
 
 function parseSupervisorTimeoutInput(value: string): number | null {
@@ -1091,8 +1068,6 @@ function GeneralSettings({
   terminalCopyOnSelect,
   setTerminalCopyOnSelect,
   activeWorkspaceId,
-  monitoringSettings,
-  onMonitoringSettingsChange,
 }: GeneralSettingsProps) {
   const t = useTranslation();
   const navigate = useNavigate();
@@ -1298,15 +1273,6 @@ function GeneralSettings({
 
   return (
     <div className="settings-section">
-      <div className="settings-group">
-        <MonitoringSettingsCard
-          mode={deriveMonitoringMode(monitoringSettings)}
-          onChange={onMonitoringSettingsChange}
-          onOpenMonitoring={() => navigate("/monitoring")}
-          settings={monitoringSettings}
-        />
-      </div>
-
       <div className="settings-group">
         <h3 className="settings-group-title">{t("settings.notifications")}</h3>
         <p className="settings-group-desc">{t("settings.notifications_channel_hint")}</p>
