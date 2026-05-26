@@ -9,6 +9,7 @@ import type {
 import { Topics } from "@coder-studio/core";
 import { useAtomValue } from "jotai";
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { connectionStatusAtom, wsClientAtom } from "../../atoms/connection";
 import { Button, Notice, SegmentedControl, Tag } from "../../components/ui";
 import { useViewport } from "../../hooks/use-viewport";
@@ -30,6 +31,7 @@ type SortMode = "cpu" | "memory";
 type TimeWindow = "5m" | "15m" | "30m";
 type MonitoringViewStatus = "loading" | "disabled" | "ready" | "degraded" | "waiting" | "empty";
 type MonitoringContentProps = {
+  onOpenSettings?: () => void;
   showPageChrome?: boolean;
 };
 
@@ -279,7 +281,10 @@ export function useMonitoringData(): UseMonitoringDataResult {
   return { error, loading, refresh, response };
 }
 
-export function MonitoringContent({ showPageChrome = false }: MonitoringContentProps = {}) {
+export function MonitoringContent({
+  onOpenSettings,
+  showPageChrome = false,
+}: MonitoringContentProps = {}) {
   const t = useTranslation();
   const isMobile = useViewport() === "mobile";
   const { error, loading, refresh, response } = useMonitoringData();
@@ -426,6 +431,11 @@ export function MonitoringContent({ showPageChrome = false }: MonitoringContentP
           <div className="monitoring-card">
             <h2>{t("monitoring.disabled_title")}</h2>
             <p>{t("monitoring.disabled_description")}</p>
+            {onOpenSettings ? (
+              <Button variant="secondary" onClick={onOpenSettings}>
+                {t("monitoring.open_settings")}
+              </Button>
+            ) : null}
           </div>
         </main>
       </div>
@@ -720,5 +730,7 @@ export function MonitoringContent({ showPageChrome = false }: MonitoringContentP
 }
 
 export function MonitoringPage() {
-  return <MonitoringContent showPageChrome />;
+  const navigate = useNavigate();
+
+  return <MonitoringContent showPageChrome onOpenSettings={() => navigate("/settings")} />;
 }

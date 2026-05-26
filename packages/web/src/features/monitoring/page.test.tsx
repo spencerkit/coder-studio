@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../atoms/app-ui";
 import { connectionStatusAtom, wsClientAtom } from "../../atoms/connection";
@@ -45,8 +45,11 @@ function renderMonitoringPage(
     ...render(
       <Provider store={store}>
         {options.page === "wrapper" ? (
-          <MemoryRouter>
-            <MonitoringPage />
+          <MemoryRouter initialEntries={["/monitoring"]}>
+            <Routes>
+              <Route path="/monitoring" element={<MonitoringPage />} />
+              <Route path="/settings" element={<div>SettingsPage</div>} />
+            </Routes>
           </MemoryRouter>
         ) : (
           <MonitoringContent />
@@ -252,7 +255,49 @@ describe("MonitoringContent", () => {
     expect(screen.queryByText("elevated")).not.toBeInTheDocument();
   });
 
-  it("renders a disabled empty state without standalone route navigation", async () => {
+  it("renders a disabled empty state that links to settings from the standalone wrapper", async () => {
+    const response = {
+      settings: {
+        enabled: false,
+        hostMetricsEnabled: true,
+        runtimeSummaryEnabled: true,
+        workspaceAttributionEnabled: true,
+        subprocessDrilldownEnabled: false,
+        sampleIntervalMs: 2000,
+      },
+      snapshot: {
+        sampledAt: 0,
+        mode: "disabled",
+        host: null,
+        runtime: null,
+        workspaces: [],
+        sessions: [],
+        subprocessGroups: [],
+        backgroundGroups: [],
+      },
+      history: {
+        host: { points: [] },
+        runtime: null,
+        workspaces: {},
+        sessions: {},
+        subprocessGroups: {},
+      },
+      capabilities: {
+        loadAverageAvailable: true,
+        processMetricsAvailable: false,
+        subprocessHistoryLimited: false,
+      },
+      telemetry: null,
+    };
+
+    renderMonitoringPage(response, "desktop", { page: "wrapper" });
+
+    expect(await screen.findByText("Monitoring disabled")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Open Settings" }));
+    expect(await screen.findByText("SettingsPage")).toBeInTheDocument();
+  });
+
+  it("renders a disabled empty state without the standalone settings CTA when embedded", async () => {
     const response = {
       settings: {
         enabled: false,
