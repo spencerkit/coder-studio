@@ -47,6 +47,7 @@ function createMockPtyHost(): {
       const processIndex = processes.length;
 
       const pty: PtyProcess = {
+        pid: 43210,
         onData: (callback) => {
           processes[processIndex]?.onDataCallbacks.push(callback);
         },

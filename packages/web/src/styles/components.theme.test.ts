@@ -2843,6 +2843,25 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(action).toContain("align-self: flex-start");
   });
 
+  it("keeps monitoring surfaces on shared theme tokens instead of bespoke colors", () => {
+    const monitoringCard = getLastRuleBlock(".monitoring-card");
+    const monitoringSettingsCard = getLastRuleBlock(".settings-card--monitoring");
+    const monitoringEntityRow = getLastRuleBlock(".monitoring-entity-row");
+    const monitoringSparkline = getLastRuleBlock(".monitoring-sparkline");
+
+    expect(monitoringCard).toContain("border: 1px solid var(--surface-elevated-border)");
+    expect(monitoringCard).toContain("background: var(--surface-elevated)");
+    expect(monitoringCard).toContain("border-radius: var(--radius-xl)");
+    expect(monitoringCard).toContain("box-shadow: var(--shadow-sm)");
+    expect(monitoringSettingsCard).toContain("border: 1px solid var(--surface-elevated-border)");
+    expect(monitoringSettingsCard).toContain("background: var(--surface-elevated)");
+    expect(monitoringEntityRow).toContain(
+      "border-bottom: 1px solid var(--surface-elevated-border)"
+    );
+    expect(monitoringEntityRow).toContain("background: transparent");
+    expect(monitoringSparkline).toContain("color: var(--status-info-fg)");
+  });
+
   it("keeps shared segmented controls aligned with flat editor settings tabs instead of pill chrome", () => {
     const providerTabs = getLastRuleBlockFrom(
       segmentedControlStylesheet,

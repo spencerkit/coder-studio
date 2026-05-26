@@ -406,7 +406,7 @@ describe("WorktreeManagerSurface", () => {
 
     const dialog = await screen.findByRole("dialog", { name: "Delete" });
     expect(dialog).toBeInTheDocument();
-    expect(screen.getByText("permission denied")).toBeInTheDocument();
+    expect(await screen.findByText("permission denied")).toBeInTheDocument();
     expect(screen.getByText("Force remove dirty worktree?")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));

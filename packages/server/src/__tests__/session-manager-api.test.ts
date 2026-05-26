@@ -36,6 +36,7 @@ describe("SessionManager session-level API", () => {
     ptyResizes = [];
 
     mockPty = {
+      pid: 43210,
       onData: vi.fn(),
       onExit: vi.fn(),
       write: vi.fn((bytes: Buffer | string) => {

@@ -18,6 +18,7 @@ describe("TerminalManager", () => {
   beforeEach(() => {
     // Create mock PTY process
     mockPty = {
+      pid: 43210,
       onData: vi.fn(),
       onExit: vi.fn(),
       write: vi.fn(),
@@ -60,6 +61,7 @@ describe("TerminalManager", () => {
       expect(terminal.id).toBeDefined();
       expect(terminal.workspaceId).toBe(spec.workspaceId);
       expect(terminal.kind).toBe(spec.kind);
+      expect(terminal.pid).toBe(43210);
       expect(terminal.argv).toEqual(spec.argv);
       expect(terminal.cwd).toBe(spec.cwd);
       expect(terminal.alive).toBe(true);

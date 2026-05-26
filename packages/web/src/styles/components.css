@@ -1208,6 +1208,117 @@
   margin-top: var(--sp-3);
 }
 
+.settings-card {
+  border: 1px solid var(--surface-elevated-border);
+  background: var(--surface-elevated);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm);
+  padding: var(--sp-4);
+}
+
+.settings-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+
+.settings-card__header .settings-group-title,
+.settings-card__header .settings-group-desc {
+  margin-bottom: 0;
+}
+
+.settings-card__header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+.monitoring-settings-grid {
+  display: grid;
+  gap: var(--sp-2);
+}
+
+.monitoring-settings-grid .settings-toggle-row:last-child {
+  border-bottom: none;
+}
+
+.monitoring-settings-row {
+  align-items: center;
+}
+
+.monitoring-card,
+.settings-card--monitoring,
+.monitoring-tree,
+.monitoring-detail,
+.monitoring-process-list {
+  border: 1px solid var(--surface-elevated-border);
+  background: var(--surface-elevated);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm);
+}
+
+.monitoring-card {
+  border: 1px solid var(--surface-elevated-border);
+  background: var(--surface-elevated);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm);
+  padding: var(--sp-4);
+}
+
+.monitoring-entity-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border: 0;
+  border-bottom: 1px solid var(--surface-elevated-border);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.monitoring-entity-row--child {
+  padding-left: var(--sp-7);
+}
+
+.monitoring-sparkline {
+  color: var(--status-info-fg);
+}
+
+.monitoring-page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.monitoring-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  padding: var(--sp-5);
+}
+
+.monitoring-toolbar,
+.monitoring-overview-grid,
+.monitoring-attribution {
+  display: grid;
+  gap: var(--sp-4);
+}
+
+.monitoring-overview-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.monitoring-attribution {
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+}
+
 .settings-provider-tabs {
   display: flex;
   gap: var(--sp-1);
@@ -14881,5 +14992,12 @@ body.is-dragging-pane .session-action-btn-drag {
     min-height: 100dvh;
     overflow: hidden;
     background: transparent;
+  }
+}
+
+@media (max-width: 900px) {
+  .monitoring-overview-grid,
+  .monitoring-attribution {
+    grid-template-columns: 1fr;
   }
 }

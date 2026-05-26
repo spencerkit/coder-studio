@@ -1,0 +1,1 @@
+export { MonitoringPage } from "./page";

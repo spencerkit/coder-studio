@@ -188,6 +188,7 @@ export interface Terminal {
   id: string;
   workspaceId: string;
   kind: "agent" | "shell";
+  pid?: number;
   title: string;
   cwd: string;
   argv: string[];

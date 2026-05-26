@@ -21,6 +21,7 @@ describe("Terminal Events", () => {
   beforeEach(() => {
     // Create mock PTY process
     mockPty = {
+      pid: 43210,
       onData: vi.fn(),
       onExit: vi.fn(),
       write: vi.fn(),

@@ -4,6 +4,7 @@
 
 import {
   DEFAULT_SUPERVISOR_EVALUATION_TIMEOUT_SEC,
+  isMonitoringSampleIntervalMs,
   isUpdateCheckIntervalSec,
   MAX_SUPERVISOR_EVALUATION_TIMEOUT_SEC,
   MAX_SUPERVISOR_RETRY_DELAY_SEC,
@@ -124,6 +125,16 @@ const SettingsSchema = z.object({
       checkIntervalSec: z.number().int().refine(isUpdateCheckIntervalSec).optional(),
     })
     .optional(),
+  monitoring: z
+    .object({
+      enabled: z.boolean().optional(),
+      hostMetricsEnabled: z.boolean().optional(),
+      runtimeSummaryEnabled: z.boolean().optional(),
+      workspaceAttributionEnabled: z.boolean().optional(),
+      subprocessDrilldownEnabled: z.boolean().optional(),
+      sampleIntervalMs: z.number().int().refine(isMonitoringSampleIntervalMs).optional(),
+    })
+    .optional(),
   providers: ProviderSettingsSchema.optional(),
 });
 
@@ -225,6 +236,17 @@ registerCommand(
       flatSettings["updates.checkIntervalSec"] !== undefined
     ) {
       ctx.updateService?.reloadScheduleFromSettings();
+    }
+
+    if (
+      flatSettings["monitoring.enabled"] !== undefined ||
+      flatSettings["monitoring.hostMetricsEnabled"] !== undefined ||
+      flatSettings["monitoring.runtimeSummaryEnabled"] !== undefined ||
+      flatSettings["monitoring.workspaceAttributionEnabled"] !== undefined ||
+      flatSettings["monitoring.subprocessDrilldownEnabled"] !== undefined ||
+      flatSettings["monitoring.sampleIntervalMs"] !== undefined
+    ) {
+      ctx.monitoringService?.reloadFromSettings();
     }
 
     return {

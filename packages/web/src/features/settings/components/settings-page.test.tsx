@@ -356,8 +356,12 @@ describe("SettingsPage", () => {
 
     expect(screen.getByText(/诊断运行环境|Diagnose the runtime environment/)).toBeInTheDocument();
 
-    const diagnosticsButton = await screen.findByRole("button", {
-      name: /Open|打开/,
+    const diagnosticsButton = await waitFor(() => {
+      const button = document.querySelector(
+        ".settings-diagnostics-button"
+      ) as HTMLButtonElement | null;
+      expect(button).not.toBeNull();
+      return button;
     });
     expect(diagnosticsButton).toHaveClass("settings-diagnostics-button");
     fireEvent.click(diagnosticsButton);
@@ -609,6 +613,151 @@ describe("SettingsPage", () => {
         undefined
       );
     });
+  });
+
+  it("hydrates monitoring settings, enforces dependencies, and saves nested monitoring updates", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "monitoring.enabled": true,
+          "monitoring.hostMetricsEnabled": true,
+          "monitoring.runtimeSummaryEnabled": false,
+          "monitoring.workspaceAttributionEnabled": true,
+          "monitoring.subprocessDrilldownEnabled": true,
+          "monitoring.sampleIntervalMs": 5000,
+        };
+      }
+
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+
+    expect(await screen.findByText("性能监控")).toBeInTheDocument();
+
+    const enableMonitoring = screen.getByRole("switch", { name: "启用性能监控" });
+    const hostMetrics = screen.getByRole("switch", { name: "主机指标" });
+    expect(enableMonitoring).toHaveAttribute("aria-checked", "true");
+    expect(hostMetrics).toHaveAttribute("aria-checked", "true");
+    await waitFor(() => {
+      expect(screen.getByRole("switch", { name: "运行时概览" })).toHaveAttribute(
+        "aria-checked",
+        "false"
+      );
+      expect(screen.getByRole("switch", { name: "工作区与会话归因" })).toHaveAttribute(
+        "aria-checked",
+        "false"
+      );
+      expect(screen.getByRole("switch", { name: "子进程钻取" })).toHaveAttribute(
+        "aria-checked",
+        "false"
+      );
+    });
+    expect(screen.getByRole("tab", { name: "轻量" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "标准" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "深度" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "自定义", selected: true })).toBeInTheDocument();
+    expect(screen.queryByText("Light")).not.toBeInTheDocument();
+    expect(screen.queryByText("Custom")).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "5s", selected: true })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("switch", { name: "子进程钻取" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            monitoring: {
+              enabled: true,
+              hostMetricsEnabled: true,
+              runtimeSummaryEnabled: true,
+              workspaceAttributionEnabled: true,
+              subprocessDrilldownEnabled: true,
+              sampleIntervalMs: 5000,
+            },
+          },
+        },
+        undefined
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("switch", { name: "运行时概览" })).toHaveAttribute(
+        "aria-checked",
+        "true"
+      );
+      expect(screen.getByRole("switch", { name: "工作区与会话归因" })).toHaveAttribute(
+        "aria-checked",
+        "true"
+      );
+      expect(screen.getByRole("switch", { name: "子进程钻取" })).toHaveAttribute(
+        "aria-checked",
+        "true"
+      );
+    });
+
+    fireEvent.click(screen.getByRole("switch", { name: "运行时概览" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            monitoring: {
+              enabled: true,
+              hostMetricsEnabled: true,
+              runtimeSummaryEnabled: false,
+              workspaceAttributionEnabled: false,
+              subprocessDrilldownEnabled: false,
+              sampleIntervalMs: 5000,
+            },
+          },
+        },
+        undefined
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("switch", { name: "运行时概览" })).toHaveAttribute(
+        "aria-checked",
+        "false"
+      );
+      expect(screen.getByRole("switch", { name: "工作区与会话归因" })).toHaveAttribute(
+        "aria-checked",
+        "false"
+      );
+      expect(screen.getByRole("switch", { name: "子进程钻取" })).toHaveAttribute(
+        "aria-checked",
+        "false"
+      );
+    });
+
+    fireEvent.click(screen.getByRole("tab", { name: "10s" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            monitoring: {
+              enabled: true,
+              hostMetricsEnabled: true,
+              runtimeSummaryEnabled: false,
+              workspaceAttributionEnabled: false,
+              subprocessDrilldownEnabled: false,
+              sampleIntervalMs: 10000,
+            },
+          },
+        },
+        undefined
+      );
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "打开监控" }));
+
+    expect(routerMocks.navigate).toHaveBeenCalledWith("/monitoring");
   });
 
   it("loads and saves supervisor evaluation timeout in seconds from general settings", async () => {

@@ -8,6 +8,7 @@ export interface NewTerminal {
   id: string;
   workspaceId: string;
   kind: "agent" | "shell";
+  pid?: number;
   cwd: string;
   argv: string[];
   env?: Record<string, string>;
@@ -39,6 +40,7 @@ function isTerminal(value: unknown): value is Terminal {
     typeof value.id === "string" &&
     typeof value.workspaceId === "string" &&
     (value.kind === "agent" || value.kind === "shell") &&
+    (value.pid === undefined || typeof value.pid === "number") &&
     typeof value.cwd === "string" &&
     Array.isArray(value.argv) &&
     typeof value.cols === "number" &&
@@ -156,6 +158,7 @@ export class TerminalRepo {
       id: terminal.id,
       workspaceId: terminal.workspaceId,
       kind: terminal.kind,
+      pid: terminal.pid,
       cwd: terminal.cwd,
       argv: terminal.argv,
       cols: terminal.cols,
@@ -177,6 +180,7 @@ export class TerminalRepo {
       id: terminal.id,
       workspaceId: terminal.workspaceId,
       kind: terminal.kind,
+      pid: terminal.pid,
       cwd: terminal.cwd,
       argv: terminal.argv,
       env: terminal.env,

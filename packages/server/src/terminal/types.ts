@@ -94,6 +94,7 @@ export class TerminalSpawnError extends Error {
  * PTY process interface (abstraction over node-pty)
  */
 export interface PtyProcess {
+  readonly pid: number;
   onData(callback: (data: string) => void): void;
   onExit(
     callback: (event: {

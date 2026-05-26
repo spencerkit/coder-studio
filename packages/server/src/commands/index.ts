@@ -27,3 +27,4 @@ import "./worktree.js";
 import "./fencing.js";
 import "./lsp.js";
 import "./updates.js";
+import "./monitoring.js";

@@ -6,6 +6,7 @@ import type { PtyHost, PtyProcess, TerminalDatabase, TerminalSpec } from "../ter
 describe("TerminalManager.getRingBufferTail", () => {
   it("returns the last N bytes from the terminal ring buffer", () => {
     const mockPty: PtyProcess = {
+      pid: 43210,
       onData: vi.fn(),
       onExit: vi.fn(),
       write: vi.fn(),
