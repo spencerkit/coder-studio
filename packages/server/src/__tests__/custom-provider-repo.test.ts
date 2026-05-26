@@ -1,19 +1,22 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { Database } from "../storage/database.js";
-import { closeDatabase, openDatabase } from "../storage/db.js";
 import { CustomProviderRepo } from "../storage/repositories/custom-provider-repo.js";
 
 describe("CustomProviderRepo", () => {
-  let db: Database;
+  let tempDir: string;
   let repo: CustomProviderRepo;
 
-  beforeEach(() => {
-    db = openDatabase(":memory:");
-    repo = new CustomProviderRepo(db);
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "custom-provider-repo-"));
+    repo = new CustomProviderRepo({
+      filePath: join(tempDir, "custom-providers.json"),
+    });
   });
 
-  afterEach(() => {
-    closeDatabase(db);
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
   });
 
   it("persists and reloads custom provider configs", () => {
