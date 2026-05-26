@@ -13325,6 +13325,7 @@ body.is-dragging-pane .session-action-btn-drag {
 }
 
 .file-tree-shell--desktop .tree-item.selected {
+  padding-left: var(--inset-row-inline);
   border: 1px solid var(--state-selected-border);
   background: var(--state-selected-bg);
   color: var(--text-primary);

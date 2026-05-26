@@ -3103,6 +3103,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(row).toContain("transition:");
     expect(rowSelected).not.toContain("border-left:");
     expect(rowSelected).not.toContain("padding-left: calc(");
+    expect(rowSelected).toContain("padding-left: var(--inset-row-inline)");
     expect(rowSelected).toContain("border: 1px solid var(--state-selected-border)");
     expect(rowSelected).toContain("background: var(--state-selected-bg)");
     expect(rowSelected).toContain("color: var(--text-primary)");
