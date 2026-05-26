@@ -205,6 +205,7 @@
   gap: var(--gap-default);
   padding: calc(var(--sp-3) - var(--gap-compact)) var(--sp-4);
   border-bottom: 1px solid var(--component-mix-border-default-82pct-transparent);
+  border-radius: var(--radius-md);
   background: var(--component-mix-surface-panel-66pct-transparent);
 }
 
@@ -12983,6 +12984,48 @@ body.is-dragging-pane .session-action-btn-drag {
   letter-spacing: 0.06em;
 }
 
+.workspace-sidebar-control {
+  border: 1px solid var(--component-mix-border-default-84pct-transparent);
+  border-radius: var(--radius-md);
+  background: var(--component-mix-surface-panel-92pct-surface-page);
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.workspace-sidebar-control:focus-within {
+  border-color: var(--component-mix-border-focus-64pct-transparent);
+  box-shadow: inset 0 0 0 var(--state-focus-ring-width)
+    var(--component-mix-border-focus-64pct-transparent);
+}
+
+.workspace-sidebar-row {
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.workspace-sidebar-row:hover {
+  background: var(--surface-hover);
+}
+
+.workspace-sidebar-row:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 var(--state-focus-ring-width)
+    var(--component-mix-border-focus-64pct-transparent);
+}
+
+.workspace-sidebar-row--selected {
+  border-color: var(--state-selected-border);
+  background: var(--state-selected-bg);
+  color: var(--text-primary);
+}
+
 .workspace-open-editors {
   display: flex;
   flex-direction: column;
@@ -13105,12 +13148,14 @@ body.is-dragging-pane .session-action-btn-drag {
   min-height: 34px;
   padding: 0 calc(var(--sp-3) - var(--gap-compact));
   border: 1px solid var(--component-mix-border-default-84pct-transparent);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   background: var(--component-mix-surface-panel-92pct-surface-page);
 }
 
 .workspace-quick-jump__search:focus-within {
-  border-color: var(--component-mix-status-info-fg-70pct-transparent);
+  border-color: var(--component-mix-border-focus-64pct-transparent);
+  box-shadow: inset 0 0 0 var(--state-focus-ring-width)
+    var(--component-mix-border-focus-64pct-transparent);
 }
 
 .workspace-quick-jump__input {
@@ -13228,17 +13273,20 @@ body.is-dragging-pane .session-action-btn-drag {
   padding-inline: var(--inset-control-inline);
   min-height: var(--control-height-md);
   border: 1px solid var(--component-mix-border-default-84pct-transparent);
-  border-radius: var(--radius-panel);
+  border-radius: var(--radius-md);
   background: var(--component-mix-surface-panel-90pct-surface-page);
 }
 
 .file-tree-shell .file-tree-search:focus-within,
 .file-tree-shell .file-tree-search--desktop:focus-within {
-  border-color: var(--component-mix-status-info-fg-70pct-transparent);
+  border-color: var(--component-mix-border-focus-64pct-transparent);
+  box-shadow: inset 0 0 0 var(--state-focus-ring-width)
+    var(--component-mix-border-focus-64pct-transparent);
 }
 
 .file-tree-shell .file-tree-search-input {
   min-height: 30px;
+  border-radius: var(--radius-md);
   font-size: var(--type-body-3-size);
   line-height: var(--type-body-3-line-height);
   font-weight: var(--type-body-3-weight);
@@ -13254,11 +13302,14 @@ body.is-dragging-pane .session-action-btn-drag {
   min-height: 26px;
   margin: 0 var(--gap-tight);
   padding: 3px var(--inset-control-block) 3px var(--inset-row-inline);
+  border: 1px solid transparent;
   border-radius: var(--radius-panel);
   color: var(--text-secondary);
   transition:
+    border-color var(--duration-fast) var(--ease-out),
     background-color var(--duration-fast) var(--ease-out),
-    color var(--duration-fast) var(--ease-out);
+    color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
 }
 
 .file-tree-shell .tree-item:hover {
@@ -13266,9 +13317,9 @@ body.is-dragging-pane .session-action-btn-drag {
 }
 
 .file-tree-shell .tree-item.selected {
-  padding-left: calc(var(--inset-row-inline) - var(--state-focus-ring-width));
-  border-left: var(--state-focus-ring-width) solid var(--state-selected-border);
+  border: 1px solid var(--state-selected-border);
   background: var(--state-selected-bg);
+  color: var(--text-primary);
 }
 
 .file-tree-shell .tree-item--context-target {
@@ -13353,7 +13404,7 @@ body.is-dragging-pane .session-action-btn-drag {
   min-height: 34px;
   padding: 0 10px;
   border: 1px solid var(--component-mix-border-default-64pct-transparent);
-  border-radius: 4px;
+  border-radius: var(--radius-md);
   background: var(--component-mix-surface-page-82pct-surface-panel-18pct);
   color: var(--text-primary);
   font-size: var(--type-body-3-size);
@@ -13368,8 +13419,9 @@ body.is-dragging-pane .session-action-btn-drag {
 
 .workspace-search-panel__input:focus-visible {
   outline: none;
-  border-color: var(--component-mix-status-info-fg-72pct-transparent);
-  box-shadow: inset 0 0 0 1px var(--component-mix-status-info-fg-44pct-transparent);
+  border-color: var(--component-mix-border-focus-64pct-transparent);
+  box-shadow: inset 0 0 0 var(--state-focus-ring-width)
+    var(--component-mix-border-focus-64pct-transparent);
 }
 
 .workspace-search-panel__summary {
@@ -13509,13 +13561,16 @@ body.is-dragging-pane .session-action-btn-drag {
   gap: var(--sp-2);
   width: 100%;
   padding: var(--sp-1) var(--sp-3) var(--sp-1) calc(var(--control-height-md) + var(--gap-compact));
-  border: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--text-primary);
   text-align: left;
   transition:
+    border-color var(--duration-fast) var(--ease-out),
     background-color var(--duration-fast) var(--ease-out),
-    color var(--duration-fast) var(--ease-out);
+    color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
 }
 
 .workspace-search-panel__match:hover {
@@ -13527,6 +13582,11 @@ body.is-dragging-pane .session-action-btn-drag {
   background: var(--component-mix-state-selected-bg-76pct-transparent);
   box-shadow: inset 0 0 0 var(--state-focus-ring-width)
     var(--component-mix-border-focus-64pct-transparent);
+}
+
+.workspace-search-panel__match--active {
+  border-color: var(--state-selected-border);
+  background: var(--state-selected-bg);
 }
 
 .workspace-search-panel__line {
@@ -13821,7 +13881,7 @@ body.is-dragging-pane .session-action-btn-drag {
   min-height: 28px;
   padding: 6px 10px;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: transparent;
   color: inherit;
   text-align: left;
@@ -13832,8 +13892,8 @@ body.is-dragging-pane .session-action-btn-drag {
 }
 
 .git-worktree-row.active .git-worktree-row__main {
-  border-color: var(--component-mix-status-info-fg-24pct-transparent);
-  background: var(--component-mix-status-info-fg-10pct-transparent);
+  border-color: var(--state-selected-border);
+  background: var(--state-selected-bg);
 }
 
 .git-worktree-row__dot {
@@ -13903,7 +13963,7 @@ body.is-dragging-pane .session-action-btn-drag {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--sp-2);
 }
 
 .git-panel .git-commit-input {
@@ -13912,7 +13972,7 @@ body.is-dragging-pane .session-action-btn-drag {
   margin: 0;
   padding: 10px 12px;
   border: 1px solid var(--component-mix-border-default-84pct-transparent);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--component-mix-surface-panel-92pct-surface-page);
   color: var(--text-primary);
   font-size: var(--type-body-3-size);
@@ -13921,7 +13981,9 @@ body.is-dragging-pane .session-action-btn-drag {
 }
 
 .git-panel .git-commit-input:focus {
-  border-color: var(--component-mix-status-info-fg-72pct-transparent);
+  border-color: var(--component-mix-border-focus-64pct-transparent);
+  box-shadow: inset 0 0 0 var(--state-focus-ring-width)
+    var(--component-mix-border-focus-64pct-transparent);
 }
 
 .git-commit-actions {
@@ -13969,24 +14031,23 @@ body.is-dragging-pane .session-action-btn-drag {
   gap: 10px;
   min-height: 28px;
   padding: 6px 10px;
-  border-radius: 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
   background: transparent;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
 }
 
-.git-panel .git-row:hover,
-.git-panel .git-row.active {
+.git-panel .git-row:hover {
   background: var(--component-mix-status-info-fg-10pct-transparent);
 }
 
-.git-panel .git-row.active::before {
-  content: "";
-  position: absolute;
-  top: 5px;
-  bottom: 5px;
-  left: 0;
-  width: 2px;
-  border-radius: 999px;
-  background: var(--component-mix-status-info-fg-90pct-white-10pct);
+.git-panel .git-row.active {
+  border-color: var(--state-selected-border);
+  background: var(--state-selected-bg);
 }
 
 .git-row-status-badge {
@@ -14075,15 +14136,25 @@ body.is-dragging-pane .session-action-btn-drag {
   width: 100%;
   min-height: 34px;
   padding: 4px 0 4px 2px;
-  border: none;
+  border: 1px solid transparent;
   background: transparent;
   color: inherit;
   text-align: left;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
 }
 
 .git-history-row:hover {
   background: var(--component-mix-surface-hover-90pct-transparent);
+}
+
+.git-history-row.current {
+  border-color: var(--state-selected-border);
+  background: var(--state-selected-bg);
 }
 
 .git-history-row__dot {

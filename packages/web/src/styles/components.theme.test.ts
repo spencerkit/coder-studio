@@ -2587,9 +2587,6 @@ describe("components.css theme-sensitive surfaces", () => {
     const mobileFileRow = getLastRuleBlock(
       ".mobile-sheet--files .file-tree-shell--mobile .tree-item"
     );
-    const mobileFileRowSelected = getLastRuleBlock(
-      ".mobile-sheet--files .file-tree-shell--mobile .tree-item.selected"
-    );
     const drawerItem = getLastRuleBlock(".mobile-workspace-drawer__item");
     const drawerFooterButton = getLastRuleBlock(".mobile-workspace-drawer__footer-button");
     const welcomeCard = getLastRuleBlock(".welcome-card--mobile");
@@ -2646,9 +2643,6 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(mobileFileSearch).toContain("background: transparent");
     expect(mobileFileRow).toContain("min-height: 40px");
     expect(mobileFileRow).toContain("border-radius: 0");
-    expect(mobileFileRowSelected).toContain(
-      "border-left: 2px solid var(--component-mix-status-info-fg-88pct-white-12pct)"
-    );
     expect(drawerItem).toContain("border-radius: var(--radius-xl)");
     expect(drawerFooterButton).toContain("border-radius: var(--radius-md)");
     expect(welcomeCard).toContain("border-radius: var(--radius-lg)");
@@ -3084,8 +3078,9 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(search).toContain("margin: var(--space-default) var(--inset-control-inline)");
     expect(search).toContain("padding-inline: var(--inset-control-inline)");
     expect(search).toContain("min-height: var(--control-height-md)");
-    expect(search).toContain("border-radius: var(--radius-panel)");
+    expect(search).toContain("border-radius: var(--radius-md)");
     expect(search).toContain("background: var(--component-mix-surface-panel-90pct-surface-page)");
+    expect(searchInput).toContain("border-radius: var(--radius-md)");
     expect(searchInput).toContain("font-size: var(--type-body-3-size)");
     expect(searchInput).toContain("line-height: var(--type-body-3-line-height)");
     expect(searchInput).toContain("font-weight: var(--type-body-3-weight)");
@@ -3098,13 +3093,11 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(row).toContain("var(--inset-row-inline)");
     expect(row).toContain("border-radius: var(--radius-panel)");
     expect(row).toContain("transition:");
-    expect(rowSelected).toContain(
-      "border-left: var(--state-focus-ring-width) solid var(--state-selected-border)"
-    );
-    expect(rowSelected).toContain(
-      "padding-left: calc(var(--inset-row-inline) - var(--state-focus-ring-width))"
-    );
+    expect(rowSelected).not.toContain("border-left:");
+    expect(rowSelected).not.toContain("padding-left: calc(");
+    expect(rowSelected).toContain("border: 1px solid var(--state-selected-border)");
     expect(rowSelected).toContain("background: var(--state-selected-bg)");
+    expect(rowSelected).toContain("color: var(--text-primary)");
     expect(rowActionsBase).toContain("gap: var(--gap-compact)");
     expect(rowActionsDesktop).toContain("opacity: 0");
   });
@@ -3123,6 +3116,7 @@ describe("components.css theme-sensitive surfaces", () => {
     const searchGroupHeader = getLastRuleBlock(".workspace-search-panel__group-header");
     const searchGroupPath = getLastRuleBlock(".workspace-search-panel__group-path");
     const searchMatch = getLastRuleBlock(".workspace-search-panel__match");
+    const searchMatchActive = getLastRuleBlock(".workspace-search-panel__match--active");
     const searchLine = getLastRuleBlock(".workspace-search-panel__line");
     const quickOpen = getLastRuleBlock(".quick-open");
     const quickOpenSearch = getLastRuleBlock(".quick-open__search");
@@ -3153,7 +3147,8 @@ describe("components.css theme-sensitive surfaces", () => {
       "background: var(--component-mix-surface-panel-82pct-transparent)"
     );
     expect(searchInput).toContain("min-height: 34px");
-    expect(searchInput).toContain("border-radius: 4px");
+    expect(searchInput).toContain("border-radius: var(--radius-md)");
+    expect(searchInput).not.toContain("border-radius: 4px");
     expect(searchInput).toContain("box-shadow: none");
     expect(openEditorsItem).toContain("overflow: hidden");
     expect(openEditorsItem).toContain("text-overflow: ellipsis");
@@ -3167,11 +3162,16 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(searchGroupPath).toContain("font-family: var(--font-mono)");
     expect(searchGroupPath).toContain("font-size: var(--type-body-6-size)");
     expect(searchMatch).toContain("grid-template-columns: 40px minmax(0, 1fr)");
+    expect(searchMatch).toContain("border-radius: var(--radius-md)");
+    expect(searchMatch).toContain("border: 1px solid transparent");
+    expect(searchMatchActive).toContain("border-color: var(--state-selected-border)");
+    expect(searchMatchActive).toContain("background: var(--state-selected-bg)");
     expect(searchLine).toContain("text-align: right");
 
     expect(quickOpen).toContain("border: 1px solid var(--surface-overlay-border)");
     expect(quickOpen).toContain("border-radius: var(--radius-overlay)");
     expect(quickOpen).toContain("background: var(--surface-overlay-bg)");
+    expect(quickOpenSearch).toContain("border-radius: var(--radius-md)");
     expect(quickOpenSearch).toContain(
       "border-bottom: 1px solid var(--component-mix-border-default-82pct-transparent)"
     );
@@ -3202,6 +3202,8 @@ describe("components.css theme-sensitive surfaces", () => {
     const gitSection = getLastRuleBlock(".git-panel-section");
     const gitWorktreeRow = getLastRuleBlock(".git-worktree-row");
     const gitHistoryRow = getLastRuleBlock(".git-history-row");
+    const gitRowActive = getLastRuleBlock(".git-panel .git-row.active");
+    const gitHistoryRowCurrent = getLastRuleBlock(".git-history-row.current");
     const commandPalette = getLastRuleBlock(".command-palette");
     const commandPaletteDesktop = getLastRuleBlock(".command-palette--desktop");
     const commandPaletteHeader = getLastRuleBlock(".command-palette-header");
@@ -3212,10 +3214,15 @@ describe("components.css theme-sensitive surfaces", () => {
     const commandPaletteItemShortcut = getLastRuleBlock(".command-palette-item-shortcut");
 
     expect(gitScroll).toContain("gap: 14px");
-    expect(gitCommitBlock).toContain("gap: 10px");
+    expect(gitCommitBlock).toContain("gap: var(--sp-2)");
     expect(gitSection).toContain("gap: 8px");
     expect(gitWorktreeRow).toContain("min-height: 28px");
     expect(gitHistoryRow).toContain("min-height: 34px");
+    expect(gitRowActive).not.toContain("::before");
+    expect(gitRowActive).toContain("border-color: var(--state-selected-border)");
+    expect(gitRowActive).toContain("background: var(--state-selected-bg)");
+    expect(gitHistoryRowCurrent).toContain("border-color: var(--state-selected-border)");
+    expect(gitHistoryRowCurrent).toContain("background: var(--state-selected-bg)");
     expect(commandPalette).toContain("max-width: var(--desktop-modal-max-width-md)");
     expect(commandPaletteDesktop).toContain("overflow: hidden");
     expect(commandPaletteHeader).toContain("padding: var(--sp-3) var(--sp-4)");
