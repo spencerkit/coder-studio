@@ -3520,7 +3520,8 @@ describe("components.css theme-sensitive surfaces", () => {
 
   it("keeps diagnostics install surfaces on theme tokens", () => {
     expect(stylesheet).toContain(".diagnostics-install-panel");
-    expect(stylesheet).toContain("var(--bg-surface)");
+    expect(stylesheet).toContain("var(--surface-page)");
+    expect(stylesheet).toContain("var(--surface-panel)");
     expect(stylesheet).toContain("var(--border-default)");
     expect(stylesheet).toContain("var(--text-secondary)");
   });
