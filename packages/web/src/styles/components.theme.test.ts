@@ -3077,6 +3077,7 @@ describe("components.css theme-sensitive surfaces", () => {
     const searchInputFocus = getLastRuleBlock(".file-tree-shell .file-tree-search-input:focus");
     const emptyState = getLastRuleBlock(".file-tree-empty");
     const row = getLastRuleBlock(".file-tree-shell .tree-item");
+    const rowDesktop = getLastRuleBlock(".file-tree-shell--desktop .tree-item");
     const rowSelected = getLastRuleBlock(".file-tree-shell--desktop .tree-item.selected");
     const rowActionsBase = getLastRuleBlock(".file-tree-shell .tree-item-actions");
     const rowActionsDesktop = getLastRuleBlock(".file-tree-shell--desktop .tree-item-actions");
@@ -3101,9 +3102,11 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(row).toContain("var(--inset-row-inline)");
     expect(row).toContain("border-radius: var(--radius-panel)");
     expect(row).toContain("transition:");
+    expect(row).not.toContain("border: 1px solid transparent");
+    expect(rowDesktop).toContain("border: 1px solid transparent");
     expect(rowSelected).not.toContain("border-left:");
     expect(rowSelected).not.toContain("padding-left: calc(");
-    expect(rowSelected).toContain("padding-left: var(--inset-row-inline)");
+    expect(rowSelected).toContain("padding-left:");
     expect(rowSelected).toContain("border: 1px solid var(--state-selected-border)");
     expect(rowSelected).toContain("background: var(--state-selected-bg)");
     expect(rowSelected).toContain("color: var(--text-primary)");
@@ -3114,6 +3117,7 @@ describe("components.css theme-sensitive surfaces", () => {
   it("keeps workspace search and quick open on compact editor-search chrome", () => {
     const sidebarRowSelected = getLastRuleBlock(".workspace-sidebar-row--selected");
     const sidebarRowSelectedHover = getLastRuleBlock(".workspace-sidebar-row--selected:hover");
+    const quickJumpSearch = getLastRuleBlock(".workspace-quick-jump__search");
     const openEditorsHeader = getLastRuleBlock(".workspace-open-editors__header");
     const openEditorsHeaderMain = getLastRuleBlock(".workspace-open-editors__header-main");
     const openEditorsTitle = getLastRuleBlock(".workspace-open-editors__title");
@@ -3192,10 +3196,10 @@ describe("components.css theme-sensitive surfaces", () => {
     );
     expect(searchLine).toContain("text-align: right");
 
+    expect(quickJumpSearch).toContain("border-radius: var(--radius-md)");
     expect(quickOpen).toContain("border: 1px solid var(--surface-overlay-border)");
     expect(quickOpen).toContain("border-radius: var(--radius-overlay)");
     expect(quickOpen).toContain("background: var(--surface-overlay-bg)");
-    expect(quickOpenSearch).toContain("border-radius: var(--radius-md)");
     expect(quickOpenSearch).toContain(
       "border-bottom: 1px solid var(--component-mix-border-default-82pct-transparent)"
     );

@@ -13310,7 +13310,6 @@ body.is-dragging-pane .session-action-btn-drag {
   min-height: 26px;
   margin: 0 var(--gap-tight);
   padding: 3px var(--inset-control-block) 3px var(--inset-row-inline);
-  border: 1px solid transparent;
   border-radius: var(--radius-panel);
   color: var(--text-secondary);
   transition:
@@ -13393,6 +13392,10 @@ body.is-dragging-pane .session-action-btn-drag {
 
 .file-tree-shell--desktop .tree-item--file .tree-item-actions {
   display: none;
+}
+
+.file-tree-shell--desktop .tree-item {
+  border: 1px solid transparent;
 }
 
 .file-tree-shell--desktop .tree-item:hover .tree-item-actions,
