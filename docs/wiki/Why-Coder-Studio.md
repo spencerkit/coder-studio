@@ -1,8 +1,10 @@
 # Why Coder Studio
 
-Coder Studio is not trying to replace every editor or every terminal. It is built for developers who run vibe coding agents and want a persistent, inspectable workspace around those agents.
+Coder Studio is not trying to replace every editor or every terminal. It is built as an agentic workspace for developers who run coding agents and want a persistent, inspectable engineering loop around those agents.
 
-Another way to frame it: Coder Studio is an agentic coding harness. It does not just ask an AI to write code. It keeps the surrounding engineering loop visible: commands, terminal output, files, Git diffs, sessions, mobile access, and human review.
+Built-in support today is Claude Code and Codex. The workspace framing is broader than those two CLIs: terminals, files, Git, sessions, review, and cross-device visibility should stay useful as more coding agents arrive over time.
+
+Another way to frame it: Coder Studio is the workspace around agentic coding. It does not just ask an AI to write code. It keeps the surrounding engineering loop visible: commands, terminal output, files, Git diffs, sessions, mobile access, and human review.
 
 Vibe coding agents are powerful, but the raw workflow is still fragmented:
 
@@ -19,7 +21,7 @@ Coder Studio turns that scattered workflow into one local browser workspace.
 | Long agent tasks | Watch a terminal or come back later and reconstruct context | Keep sessions, terminal output, files, and Git changes visible in one workspace |
 | Cross-device work | Use SSH, remote desktop, or rebuild context on another machine | Reopen the same local workspace from desktop, tablet, or phone |
 | Reviewing AI changes | Jump between terminal, editor, and Git tools | Inspect files and diffs beside the agent session |
-| Multiple agents | Manage separate terminal windows and histories | Run Claude and Codex sessions side by side in one workspace |
+| Multiple agents | Manage separate terminal windows and histories | Run built-in Claude Code and Codex sessions side by side in one workspace today |
 | Local-first control | Move work into a hosted IDE or cloud VM | Keep the runtime and project files on your own machine |
 
 ## Compared With Vibe Coding Tools
@@ -38,7 +40,7 @@ Use vibe coding for momentum. Use Coder Studio when you want that momentum insid
 
 ## Compared With Claude Code Or Codex CLI
 
-The CLIs are the agent runtime. Coder Studio wraps them in a browser workspace.
+Those CLIs are today's built-in agent runtimes. Coder Studio wraps them in a browser workspace.
 
 Coder Studio adds:
 
@@ -85,7 +87,7 @@ On a phone or tablet, a responsive workspace is easier to inspect than a mirrore
 
 Coder Studio is a good fit if you:
 
-- Use Claude Code or Codex frequently
+- Use Claude Code or Codex today and want a workspace that can grow with broader agent workflows
 - Run long agent tasks
 - Need to check progress away from the desk
 - Want project files and terminals in one browser UI

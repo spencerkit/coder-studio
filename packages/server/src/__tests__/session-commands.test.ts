@@ -5,9 +5,11 @@ import type { ProviderDefinition } from "@coder-studio/core";
 import { providerRegistry } from "@coder-studio/providers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventBus } from "../bus/event-bus.js";
+import { buildCustomProviderDefinition } from "../provider-runtime/custom-provider.js";
 import { SessionManager } from "../session/manager.js";
 import type { SessionDatabase } from "../session/types.js";
 import { ProviderConfigRepo } from "../storage/repositories/provider-config-repo.js";
+import { SessionMetadataRepo } from "../storage/repositories/session-metadata-repo.js";
 import { WorkspaceRepo } from "../storage/repositories/workspace-repo.js";
 import type { TerminalManager } from "../terminal/manager.js";
 import { WorkspaceManager } from "../workspace/manager.js";
@@ -15,7 +17,6 @@ import type { CommandContext } from "../ws/dispatch.js";
 import { dispatch } from "../ws/dispatch.js";
 import type { Broadcaster } from "../ws/hub.js";
 
-// Import command handlers to register them
 import "../commands/workspace.js";
 import "../commands/session.js";
 
@@ -23,16 +24,6 @@ describe("Session Commands", () => {
   const broadcaster = { broadcast: () => {} } satisfies Broadcaster;
   const createProviderConfigRepo = (filePath: string) =>
     new ProviderConfigRepo({ filePath }) as Pick<ProviderConfigRepo, "get"> as ProviderConfigRepo;
-  const terminalMgrStub = {
-    create: () => ({ id: "terminal-1" }),
-    kill: async () => {},
-    close: async () => {},
-  } as unknown as TerminalManager;
-  const sessionDbStub = {
-    insert: () => {},
-    update: () => {},
-    delete: () => {},
-  } as unknown as SessionDatabase;
 
   let ctx: CommandContext;
   let eventBus: EventBus;
@@ -40,14 +31,31 @@ describe("Session Commands", () => {
   let sessionMgr: SessionManager;
   let stateDir: string;
   let tempDirs: string[];
+  let sessionMetadataRepo: SessionMetadataRepo;
+  let terminalMgrStub: TerminalManager;
+  let sessionDbStub: SessionDatabase;
 
   beforeEach(() => {
-    // Create event bus
     eventBus = new EventBus();
     stateDir = mkdtempSync(join(tmpdir(), "session-command-state-"));
     const providerConfigRepo = createProviderConfigRepo(join(stateDir, "provider-configs.json"));
+    sessionMetadataRepo = new SessionMetadataRepo({
+      filePath: join(stateDir, "session-metadata.json"),
+    });
+    terminalMgrStub = {
+      create: () => ({ id: "terminal-1" }),
+      kill: async () => {},
+      close: async () => {},
+    } as unknown as TerminalManager;
+    sessionDbStub = {
+      insert: () => {},
+      update: () => {},
+      findById: () => undefined,
+      findByWorkspaceId: () => [],
+      listHydratable: () => [],
+      delete: () => {},
+    };
 
-    // Create managers
     workspaceMgr = new WorkspaceManager({
       workspaceRepo: new WorkspaceRepo({
         filePath: join(stateDir, "workspaces.json"),
@@ -63,17 +71,17 @@ describe("Session Commands", () => {
       providerConfigRepo,
     });
 
-    // Create context with required dependencies
     ctx = {
       workspaceMgr,
       sessionMgr,
-      terminalMgr: {},
+      terminalMgr: {} as never,
       eventBus,
       broadcaster,
       providerRegistry: [],
-      fencingMgr: {},
-      supervisorMgr: {},
+      fencingMgr: {} as never,
+      supervisorMgr: {} as never,
       providerConfigRepo,
+      sessionMetadataRepo,
     } as unknown as CommandContext;
     tempDirs = [];
   });
@@ -147,6 +155,131 @@ describe("Session Commands", () => {
             providerId: "claude",
             missingCommands: ["claude"],
           },
+        });
+      } finally {
+        rmSync(testDir, { recursive: true, force: true });
+      }
+    });
+
+    it("launches a custom provider through the existing session.create flow", async () => {
+      const testDir = join(tmpdir(), `coder-studio-custom-provider-session-${Date.now()}`);
+      mkdirSync(join(testDir, ".git"), { recursive: true });
+      writeFileSync(join(testDir, ".git", "HEAD"), "ref: refs/heads/main\n");
+
+      const customProvider = buildCustomProviderDefinition({
+        id: "review-bot",
+        displayName: "Review Bot",
+        command: "review-bot",
+        args: ["--stdio"],
+        env: { REVIEW_MODE: "strict" },
+        cwdMode: "workspace_root",
+        sessionMode: "interactive",
+        capabilities: [
+          { key: "interactive_session", supported: true, label: "Interactive session" },
+          { key: "review", supported: true, label: "Review" },
+        ],
+        startupPrompt: "Review before responding.",
+        createdAt: 100,
+        updatedAt: 100,
+      });
+
+      ctx.providerRegistry = [...providerRegistry, customProvider] as ProviderDefinition[];
+      ctx.providerRuntimeDeps = {
+        commandExists: async (command: string) => command === "review-bot",
+      };
+
+      try {
+        const openResult = await dispatch(
+          {
+            kind: "command",
+            id: "workspace-custom-provider",
+            op: "workspace.open",
+            args: { path: testDir },
+          },
+          ctx
+        );
+
+        expect(openResult.ok).toBe(true);
+
+        const result = await dispatch(
+          {
+            kind: "command",
+            id: "session-custom-provider",
+            op: "session.create",
+            args: {
+              workspaceId: openResult.data!.id,
+              providerId: "review-bot",
+            },
+          },
+          ctx
+        );
+
+        expect(result.ok).toBe(true);
+        expect(result.data).toMatchObject({
+          providerId: "review-bot",
+          capability: "full",
+          state: "starting",
+        });
+        expect(sessionMetadataRepo.get(result.data!.id)).toMatchObject({
+          sessionId: result.data!.id,
+          workspaceId: openResult.data!.id,
+          providerId: "review-bot",
+          objective: undefined,
+          baselineGitHead: undefined,
+          verificationRuns: [],
+        });
+      } finally {
+        rmSync(testDir, { recursive: true, force: true });
+      }
+    });
+
+    it("captures session objective and git baseline metadata when available", async () => {
+      const testDir = join(tmpdir(), `coder-studio-session-metadata-${Date.now()}`);
+      mkdirSync(testDir, { recursive: true });
+      mkdirSync(join(testDir, ".git"), { recursive: true });
+      writeFileSync(join(testDir, ".git", "HEAD"), "0123456789abcdef0123456789abcdef01234567\n");
+
+      ctx.providerRegistry = providerRegistry as ProviderDefinition[];
+      ctx.providerRuntimeDeps = {
+        commandExists: async (command: string) => command === "claude",
+      };
+
+      try {
+        const openResult = await dispatch(
+          {
+            kind: "command",
+            id: "workspace-metadata",
+            op: "workspace.open",
+            args: { path: testDir },
+          },
+          ctx
+        );
+
+        expect(openResult.ok).toBe(true);
+
+        const result = await dispatch(
+          {
+            kind: "command",
+            id: "session-metadata",
+            op: "session.create",
+            args: {
+              workspaceId: openResult.data!.id,
+              providerId: "claude",
+              draft: "Fix the build and run focused verification",
+            },
+          },
+          ctx
+        );
+
+        expect(result.ok).toBe(true);
+        expect(sessionMetadataRepo.get(result.data!.id)).toMatchObject({
+          sessionId: result.data!.id,
+          workspaceId: openResult.data!.id,
+          providerId: "claude",
+          objective: "Fix the build and run focused verification",
+          baselineGitHead: "0123456789abcdef0123456789abcdef01234567",
+          baselineCapturedAt: expect.any(Number),
+          verificationRuns: [],
         });
       } finally {
         rmSync(testDir, { recursive: true, force: true });

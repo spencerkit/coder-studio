@@ -6,7 +6,7 @@
 
 **Goal:** Add a review flow that shows changed files and diffs for an agent session using the session Git baseline.
 
-**Architecture:** Use Git baseline metadata as the review anchor. Server commands compute changed files and diffs against baseline; web UI renders a session review panel beside the agent session.
+**Architecture:** Use Git baseline metadata as the review anchor. Server commands compute changed files and diffs against baseline; frontend rendering is explicitly deferred in the current execution scope.
 
 **Tech Stack:** TypeScript, Git CLI helpers, Zod, Vitest, React Testing Library.
 
@@ -18,12 +18,10 @@ Includes:
 
 - Review summary command.
 - Per-file diff command for session baseline.
-- Session review panel.
-- Verification checklist display.
-- Manual "mark verification" action.
 
 Excludes:
 
+- Session review panel and verification UI. Deferred to a later UX phase.
 - Automatic causal attribution.
 - Automatic accept/discard hunk UI.
 - LLM-generated review summary.
@@ -37,10 +35,6 @@ Excludes:
 - Create: `packages/server/src/commands/session-review.ts`
 - Modify: `packages/server/src/commands/index.ts`
 - Create: `packages/server/src/__tests__/session-review-command.test.ts`
-- Create: `packages/web/src/features/session-review/actions/use-session-review.ts`
-- Create: `packages/web/src/features/session-review/components/session-review-panel.tsx`
-- Create: `packages/web/src/features/session-review/components/session-review-panel.test.tsx`
-- Modify: `packages/web/src/features/agent-panes/views/shared/session-card.tsx`
 
 ## Data Model
 
@@ -69,18 +63,12 @@ Add:
 
 ## Tasks
 
-- [ ] Implement changed file detection from `baselineGitHead` to working tree.
-- [ ] Return a warning when baseline is missing.
-- [ ] Return a warning when workspace is not a Git repo.
-- [ ] Implement per-file diff against baseline.
-- [ ] Register session review commands.
-- [ ] Add UI panel showing:
-  - changed files
-  - selected diff
-  - verification runs
-  - baseline warnings
-- [ ] Add action to manually add verification result using `session.verification.add`.
-- [ ] Add tests for clean session, changed session, missing baseline, and non-Git workspace.
+- [x] Implement changed file detection from `baselineGitHead` to working tree.
+- [x] Return a warning when baseline is missing.
+- [x] Return a warning when workspace is not a Git repo.
+- [x] Implement per-file diff against baseline.
+- [x] Register session review commands.
+- [x] Add tests for clean session, changed session, missing baseline, and non-Git workspace.
 
 ## Acceptance Criteria
 
@@ -94,8 +82,7 @@ Add:
 ```bash
 pnpm exec vitest run \
   packages/server/src/__tests__/session-review/review.test.ts \
-  packages/server/src/__tests__/session-review-command.test.ts \
-  packages/web/src/features/session-review/components/session-review-panel.test.tsx
+  packages/server/src/__tests__/session-review-command.test.ts
 ```
 
 Expected: all tests pass.
@@ -103,7 +90,6 @@ Expected: all tests pass.
 ## Suggested Commit
 
 ```bash
-git add packages/core packages/server packages/web/src/features/session-review packages/web/src/features/agent-panes
+git add packages/core packages/server
 git commit -m "feat: add agent session change review"
 ```
-

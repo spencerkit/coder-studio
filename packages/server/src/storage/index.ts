@@ -1,3 +1,5 @@
+export { type Database, withTransaction } from "./database.js";
+export { closeDatabase, openDatabase } from "./db.js";
 export {
   type AuthLoginBlockRecord,
   AuthLoginBlockRepo,
@@ -7,7 +9,15 @@ export {
   AuthSessionRepo,
   type AuthSessionRepoOptions,
 } from "./repositories/auth-session-repo.js";
+export {
+  CustomProviderRepo,
+  type CustomProviderRepoOptions,
+} from "./repositories/custom-provider-repo.js";
 export { ProviderConfigRepo } from "./repositories/provider-config-repo.js";
+export {
+  SessionMetadataRepo,
+  type SessionMetadataRepoOptions,
+} from "./repositories/session-metadata-repo.js";
 export {
   type NewSession,
   rowToSession,

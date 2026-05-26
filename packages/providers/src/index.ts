@@ -15,6 +15,7 @@ export {
   isValidSessionId,
   sessionIdPatterns,
 } from "./codex/stdout-heuristics.js";
+export { getProviderPresets, type ProviderPresetMetadata, providerPresets } from "./presets.js";
 // Provider registry
 export {
   getAllProviderIds,
@@ -22,4 +23,5 @@ export {
   getProvidersByCapability,
   isValidProviderId,
   providerRegistry,
+  toProviderListItem,
 } from "./registry.js";

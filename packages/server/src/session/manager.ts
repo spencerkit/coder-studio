@@ -231,6 +231,10 @@ export class SessionManager {
     });
   }
 
+  setProviderRegistry(providerRegistry: ProviderDefinition[]): void {
+    this.deps.providerRegistry = providerRegistry;
+  }
+
   /**
    * Create a new session with provider
    */

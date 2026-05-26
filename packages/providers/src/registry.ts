@@ -1,4 +1,4 @@
-import type { ProviderDefinition } from "@coder-studio/core";
+import type { ProviderDefinition, ProviderListItem } from "@coder-studio/core";
 
 import { claudeDefinition } from "./claude/definition.js";
 import { codexDefinition } from "./codex/definition.js";
@@ -14,6 +14,21 @@ import { codexDefinition } from "./codex/definition.js";
  * 4. Frontend automatically receives updated list via provider.list command
  */
 export const providerRegistry: ProviderDefinition[] = [claudeDefinition, codexDefinition];
+
+/**
+ * Convert an internal provider definition into a frontend-safe list item.
+ */
+export function toProviderListItem(provider: ProviderDefinition): ProviderListItem {
+  return {
+    id: provider.id,
+    displayName: provider.displayName,
+    badge: provider.badge,
+    kind: provider.kind,
+    capability: provider.capability,
+    capabilities: provider.capabilities.map((capability) => ({ ...capability })),
+    requiredCommands: [...provider.requiredCommands],
+  };
+}
 
 /**
  * Get provider by ID
