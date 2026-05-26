@@ -2587,6 +2587,9 @@ describe("components.css theme-sensitive surfaces", () => {
     const mobileFileRow = getLastRuleBlock(
       ".mobile-sheet--files .file-tree-shell--mobile .tree-item"
     );
+    const mobileFileRowSelected = getLastRuleBlock(
+      ".mobile-sheet--files .file-tree-shell--mobile .tree-item.selected"
+    );
     const drawerItem = getLastRuleBlock(".mobile-workspace-drawer__item");
     const drawerFooterButton = getLastRuleBlock(".mobile-workspace-drawer__footer-button");
     const welcomeCard = getLastRuleBlock(".welcome-card--mobile");
@@ -2643,6 +2646,9 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(mobileFileSearch).toContain("background: transparent");
     expect(mobileFileRow).toContain("min-height: 40px");
     expect(mobileFileRow).toContain("border-radius: 0");
+    expect(mobileFileRowSelected).toContain(
+      "border-left: 2px solid var(--component-mix-status-info-fg-88pct-white-12pct)"
+    );
     expect(drawerItem).toContain("border-radius: var(--radius-xl)");
     expect(drawerFooterButton).toContain("border-radius: var(--radius-md)");
     expect(welcomeCard).toContain("border-radius: var(--radius-lg)");
