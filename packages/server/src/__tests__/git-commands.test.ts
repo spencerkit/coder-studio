@@ -54,13 +54,16 @@ async function createCommitHistoryFixture(
   };
 }
 
-async function createMergeCommitFixture(testDir: string): Promise<{ mergeSha: string }> {
+async function createMergeCommitFixture(
+  testDir: string,
+  initialBranch: string
+): Promise<{ mergeSha: string }> {
   await execFileAsync("git", ["checkout", "-b", "feature/history-merge"], { cwd: testDir });
   await writeFile(join(testDir, "feature.txt"), "feature branch change\n");
   await execFileAsync("git", ["add", "."], { cwd: testDir });
   await execFileAsync("git", ["commit", "-m", "Feature branch change"], { cwd: testDir });
 
-  await execFileAsync("git", ["checkout", "master"], { cwd: testDir });
+  await execFileAsync("git", ["checkout", initialBranch], { cwd: testDir });
   await writeFile(join(testDir, "main.txt"), "main branch change\n");
   await execFileAsync("git", ["add", "."], { cwd: testDir });
   await execFileAsync("git", ["commit", "-m", "Main branch change"], { cwd: testDir });
@@ -84,6 +87,7 @@ describe("Git Commands", () => {
   let workspaceMgr: WorkspaceManager;
   let eventBus: EventBus;
   let workspaceId: string;
+  let initialBranch: string;
   let recordFetchSpy: ReturnType<typeof vi.spyOn>;
   let autoFetch: AutoFetchScheduler;
   let workspaceLookup: ReturnType<typeof vi.fn>;
@@ -100,6 +104,12 @@ describe("Git Commands", () => {
     await writeFile(join(testDir, "sample.ts"), "export const value = 1;\n");
     await execFileAsync("git", ["add", "."], { cwd: testDir });
     await execFileAsync("git", ["commit", "-m", "Initial commit"], { cwd: testDir });
+    const { stdout: initialBranchStdout } = await execFileAsync(
+      "git",
+      ["branch", "--show-current"],
+      { cwd: testDir }
+    );
+    initialBranch = initialBranchStdout.trim();
     await writeFile(join(testDir, "sample.ts"), "export const value = 2;\n");
     stateDir = mkdtempSync(join(tmpdir(), "git-command-state-"));
 
@@ -444,7 +454,7 @@ describe("Git Commands", () => {
   });
 
   it("rejects structured history commands for merge commits", async () => {
-    const { mergeSha } = await createMergeCommitFixture(testDir);
+    const { mergeSha } = await createMergeCommitFixture(testDir, initialBranch);
 
     const detailResult = await dispatch(
       {
