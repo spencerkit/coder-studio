@@ -12954,7 +12954,7 @@ body.is-dragging-pane .session-action-btn-drag {
   display: flex;
   min-height: 0;
   flex-direction: column;
-  padding: var(--sp-3) var(--sp-3) 0;
+  padding: var(--sp-2) var(--sp-3) 0;
 }
 
 .workspace-sidebar-section--fill {
@@ -12964,10 +12964,11 @@ body.is-dragging-pane .session-action-btn-drag {
 
 .workspace-sidebar-section__header {
   display: flex;
+  min-height: 24px;
   align-items: center;
   justify-content: space-between;
   gap: var(--sp-2);
-  margin-bottom: var(--sp-2);
+  margin-bottom: var(--sp-1);
 }
 
 .workspace-sidebar-section__actions {
@@ -13038,9 +13039,10 @@ body.is-dragging-pane .session-action-btn-drag {
 
 .workspace-open-editors__header {
   display: flex;
+  min-height: 24px;
   align-items: center;
   gap: var(--gap-compact);
-  margin-bottom: var(--sp-2);
+  margin-bottom: var(--sp-1);
 }
 
 .workspace-open-editors__header-main {
@@ -13109,7 +13111,6 @@ body.is-dragging-pane .session-action-btn-drag {
   min-width: 0;
   min-height: 28px;
   padding: 0 var(--sp-2);
-  border: none;
   border-radius: var(--radius-md);
   background: transparent;
   overflow: hidden;
@@ -13149,17 +13150,9 @@ body.is-dragging-pane .session-action-btn-drag {
   display: flex;
   align-items: center;
   gap: var(--gap-default);
-  min-height: 34px;
+  min-height: 32px;
   padding: 0 calc(var(--sp-3) - var(--gap-compact));
-  border: 1px solid var(--component-mix-border-default-84pct-transparent);
   border-radius: var(--radius-md);
-  background: var(--component-mix-surface-panel-92pct-surface-page);
-}
-
-.workspace-quick-jump__search:focus-within {
-  border-color: var(--component-mix-border-focus-64pct-transparent);
-  box-shadow: inset 0 0 0 var(--state-focus-ring-width)
-    var(--component-mix-border-focus-64pct-transparent);
 }
 
 .workspace-quick-jump__input {
@@ -13195,7 +13188,6 @@ body.is-dragging-pane .session-action-btn-drag {
   width: 100%;
   min-height: 40px;
   padding: var(--sp-2) 0;
-  border: none;
   background: transparent;
   color: inherit;
   text-align: left;
@@ -13248,10 +13240,10 @@ body.is-dragging-pane .session-action-btn-drag {
 }
 
 .workspace-sidebar-panel .panel-toolbar-btn {
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-tertiary);
 }
@@ -13275,17 +13267,8 @@ body.is-dragging-pane .session-action-btn-drag {
   gap: var(--gap-default);
   margin: var(--space-default) var(--inset-control-inline);
   padding-inline: var(--inset-control-inline);
-  min-height: var(--control-height-md);
-  border: 1px solid var(--component-mix-border-default-84pct-transparent);
+  min-height: 32px;
   border-radius: var(--radius-md);
-  background: var(--component-mix-surface-panel-90pct-surface-page);
-}
-
-.file-tree-shell .file-tree-search:focus-within,
-.file-tree-shell .file-tree-search--desktop:focus-within {
-  border-color: var(--component-mix-border-focus-64pct-transparent);
-  box-shadow: inset 0 0 0 var(--state-focus-ring-width)
-    var(--component-mix-border-focus-64pct-transparent);
 }
 
 .file-tree-shell .file-tree-search-input {
@@ -13310,17 +13293,13 @@ body.is-dragging-pane .session-action-btn-drag {
   min-height: 26px;
   margin: 0 var(--gap-tight);
   padding: 3px var(--inset-control-block) 3px var(--inset-row-inline);
-  border-radius: var(--radius-panel);
+  border-radius: var(--radius-md);
   color: var(--text-secondary);
   transition:
     border-color var(--duration-fast) var(--ease-out),
     background-color var(--duration-fast) var(--ease-out),
     color var(--duration-fast) var(--ease-out),
     box-shadow var(--duration-fast) var(--ease-out);
-}
-
-.file-tree-shell .tree-item:hover {
-  background: var(--component-mix-surface-hover-92pct-transparent);
 }
 
 .file-tree-shell .tree-item.selected {

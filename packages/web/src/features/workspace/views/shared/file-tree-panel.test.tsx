@@ -574,6 +574,47 @@ describe("FileTreePanel", () => {
     });
   });
 
+  it("keeps the selected desktop tree row on the shared row hook without restoring the embedded search field", () => {
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+    store.set(
+      fileTreeAtomFamily("ws-test"),
+      new Map([
+        [
+          ".",
+          [
+            {
+              path: "src",
+              name: "src",
+              kind: "dir",
+              children: [
+                {
+                  path: "src/index.ts",
+                  name: "index.ts",
+                  kind: "file",
+                },
+              ],
+            },
+          ],
+        ],
+      ])
+    );
+    store.set(activeFilePathAtomFamily("ws-test"), "src/index.ts");
+
+    const { container } = render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" showSearch={false} />
+      </Provider>
+    );
+
+    const selectedRow = container.querySelector(".file-tree-shell--desktop .tree-item.selected");
+    expect(selectedRow).toHaveClass("workspace-sidebar-row", "workspace-sidebar-row--selected");
+    expect(
+      screen.queryByRole("searchbox", { name: /Search Files|搜索文件/i })
+    ).not.toBeInTheDocument();
+    expect(container.querySelector(".file-tree-search")).toBeNull();
+  });
+
   it("restores per-type icon tone classes for tree rows and search results", async () => {
     const searchFiles = [
       { path: "src/app.tsx", name: "app.tsx", kind: "file" },

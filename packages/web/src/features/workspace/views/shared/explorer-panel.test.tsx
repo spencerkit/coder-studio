@@ -3,7 +3,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { describe, expect, it, vi } from "vitest";
-import { fileTreeAtomFamily, openFilesAtomFamily } from "../../atoms";
+import { activeFilePathAtomFamily, fileTreeAtomFamily, openFilesAtomFamily } from "../../atoms";
 import { ExplorerPanel } from "./explorer-panel";
 
 const fileTreePanelSpy = vi.fn();
@@ -96,6 +96,39 @@ describe("ExplorerPanel", () => {
       expect.objectContaining({
         collapseVersion: 1,
       })
+    );
+  });
+
+  it("renders the active open editor with the shared selected row contract", () => {
+    const store = createStore();
+    store.set(fileTreeAtomFamily("ws-test"), new Map([[".", []]]));
+    store.set(activeFilePathAtomFamily("ws-test"), "src/alpha.tsx");
+    store.set(openFilesAtomFamily("ws-test"), {
+      "src/alpha.tsx": {
+        kind: "text",
+        path: "src/alpha.tsx",
+        content: "export const alpha = 1;\n",
+        savedContent: "export const alpha = 1;\n",
+        baseHash: "base-alpha",
+        isDirty: false,
+      },
+    });
+
+    render(
+      <Provider store={store}>
+        <ExplorerPanel
+          workspaceId="ws-test"
+          createRequest={null}
+          onCreateRequestConsumed={vi.fn()}
+          onOpenFileCreate={vi.fn()}
+          onOpenFolderCreate={vi.fn()}
+        />
+      </Provider>
+    );
+
+    expect(screen.getByRole("button", { name: "src/alpha.tsx" })).toHaveClass(
+      "workspace-sidebar-row",
+      "workspace-sidebar-row--selected"
     );
   });
 });

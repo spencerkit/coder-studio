@@ -125,7 +125,9 @@ describe("MobileExplorerPanel", () => {
     expect(screen.getByRole("button", { name: "src/mobile-files-sheet.tsx" })).toHaveClass(
       "workspace-open-editors__item--active"
     );
-    expect(screen.getByRole("searchbox", { name: /Quick Jump|快速跳转/i })).toBeInTheDocument();
+    const quickJumpSearch = screen.getByRole("searchbox", { name: /Quick Jump|快速跳转/i });
+    expect(quickJumpSearch).toBeInTheDocument();
+    expect(quickJumpSearch.closest("label")).toHaveClass("workspace-sidebar-control");
     expect(
       screen.getByPlaceholderText(/Type a filename or path|输入文件名或路径/i)
     ).toBeInTheDocument();
@@ -137,7 +139,7 @@ describe("MobileExplorerPanel", () => {
       })
     );
 
-    fireEvent.change(screen.getByRole("searchbox", { name: /Quick Jump|快速跳转/i }), {
+    fireEvent.change(quickJumpSearch, {
       target: { value: "read" },
     });
 

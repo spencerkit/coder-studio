@@ -95,8 +95,10 @@ export function OpenEditorsSection({ workspaceId, onSelectFile, title }: OpenEdi
             <div key={path} className="workspace-open-editors__row">
               <button
                 type="button"
-                className={`workspace-open-editors__item ${
-                  activeFilePath === path ? "workspace-open-editors__item--active" : ""
+                className={`workspace-open-editors__item workspace-sidebar-row ${
+                  activeFilePath === path
+                    ? "workspace-open-editors__item--active workspace-sidebar-row--selected"
+                    : ""
                 }`}
                 aria-current={activeFilePath === path ? "true" : undefined}
                 aria-label={path}

@@ -83,7 +83,10 @@ export function QuickJumpSection({ workspaceId, onSelectFile }: QuickJumpSection
   return (
     <section className="workspace-sidebar-section workspace-quick-jump">
       <h2 className="workspace-sidebar-section__title">{t("workspace.quick_jump.title")}</h2>
-      <label className="workspace-quick-jump__search" htmlFor={`quick-jump-${workspaceId}`}>
+      <label
+        className="workspace-quick-jump__search workspace-sidebar-control"
+        htmlFor={`quick-jump-${workspaceId}`}
+      >
         <ThemedIcon semantic="nav.search" size={14} aria-hidden="true" />
         <input
           id={`quick-jump-${workspaceId}`}
@@ -109,7 +112,7 @@ export function QuickJumpSection({ workspaceId, onSelectFile }: QuickJumpSection
               <button
                 key={file.path}
                 type="button"
-                className="workspace-quick-jump__item"
+                className="workspace-quick-jump__item workspace-sidebar-row"
                 aria-label={file.path}
                 onClick={() => {
                   setEditorMode(deriveEditorModeForPath(file.path));
