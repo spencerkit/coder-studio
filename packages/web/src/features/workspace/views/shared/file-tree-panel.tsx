@@ -395,7 +395,9 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
       <div className={`file-tree-shell file-tree-shell--${variant}`}>
         {showSearch ? (
           <label
-            className={`file-tree-search ${variant === "desktop" ? "file-tree-search--desktop" : ""}`}
+            className={`file-tree-search workspace-sidebar-control ${
+              variant === "desktop" ? "file-tree-search--desktop" : ""
+            }`}
             htmlFor={`file-tree-search-${workspaceId}`}
           >
             <ThemedIcon

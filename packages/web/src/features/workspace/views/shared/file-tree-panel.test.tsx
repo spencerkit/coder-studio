@@ -1329,6 +1329,7 @@ describe("FileTreePanel", () => {
     const activeRow = screen.getByText("app.tsx").closest(".tree-item");
 
     expect(desktopSearch).toBeTruthy();
+    expect(desktopSearch).toHaveClass("workspace-sidebar-control");
     expect(desktopSearch).toContainElement(searchInput);
     expect(activeRow).toHaveClass("selected");
     expect(activeRow?.querySelector(".tree-item-actions")).toBeTruthy();
