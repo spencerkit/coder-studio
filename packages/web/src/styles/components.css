@@ -13014,6 +13014,10 @@ body.is-dragging-pane .session-action-btn-drag {
   background: var(--surface-hover);
 }
 
+.workspace-sidebar-row--selected:hover {
+  background: var(--state-selected-bg);
+}
+
 .workspace-sidebar-row:focus-visible {
   outline: none;
   box-shadow: inset 0 0 0 var(--state-focus-ring-width)
@@ -13290,6 +13294,10 @@ body.is-dragging-pane .session-action-btn-drag {
   font-size: var(--type-body-3-size);
   line-height: var(--type-body-3-line-height);
   font-weight: var(--type-body-3-weight);
+}
+
+.file-tree-shell .file-tree-search-input:focus {
+  outline: none;
 }
 
 .file-tree-shell .file-tree {
@@ -13575,6 +13583,11 @@ body.is-dragging-pane .session-action-btn-drag {
 
 .workspace-search-panel__match:hover {
   background: var(--component-mix-surface-hover-88pct-transparent);
+}
+
+.workspace-search-panel__match--active:hover {
+  border-color: var(--state-selected-border);
+  background: var(--state-selected-bg);
 }
 
 .workspace-search-panel__match:focus-visible {
@@ -13982,6 +13995,7 @@ body.is-dragging-pane .session-action-btn-drag {
 }
 
 .git-panel .git-commit-input:focus {
+  outline: none;
   border-color: var(--component-mix-border-focus-64pct-transparent);
   box-shadow: inset 0 0 0 var(--state-focus-ring-width)
     var(--component-mix-border-focus-64pct-transparent);

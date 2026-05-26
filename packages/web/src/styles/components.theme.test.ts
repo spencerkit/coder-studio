@@ -3075,6 +3075,7 @@ describe("components.css theme-sensitive surfaces", () => {
   it("keeps the desktop file tree search and selected row aligned with the polished panel chrome", () => {
     const search = getLastRuleBlock(".file-tree-shell .file-tree-search");
     const searchInput = getLastRuleBlock(".file-tree-shell .file-tree-search-input");
+    const searchInputFocus = getLastRuleBlock(".file-tree-shell .file-tree-search-input:focus");
     const emptyState = getLastRuleBlock(".file-tree-empty");
     const row = getLastRuleBlock(".file-tree-shell .tree-item");
     const rowSelected = getLastRuleBlock(".file-tree-shell .tree-item.selected");
@@ -3088,6 +3089,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(search).toContain("border-radius: var(--radius-md)");
     expect(search).toContain("background: var(--component-mix-surface-panel-90pct-surface-page)");
     expect(searchInput).toContain("border-radius: var(--radius-md)");
+    expect(searchInputFocus).toContain("outline: none");
     expect(searchInput).toContain("font-size: var(--type-body-3-size)");
     expect(searchInput).toContain("line-height: var(--type-body-3-line-height)");
     expect(searchInput).toContain("font-weight: var(--type-body-3-weight)");
@@ -3110,6 +3112,8 @@ describe("components.css theme-sensitive surfaces", () => {
   });
 
   it("keeps workspace search and quick open on compact editor-search chrome", () => {
+    const sidebarRowSelected = getLastRuleBlock(".workspace-sidebar-row--selected");
+    const sidebarRowSelectedHover = getLastRuleBlock(".workspace-sidebar-row--selected:hover");
     const openEditorsHeader = getLastRuleBlock(".workspace-open-editors__header");
     const openEditorsHeaderMain = getLastRuleBlock(".workspace-open-editors__header-main");
     const openEditorsTitle = getLastRuleBlock(".workspace-open-editors__title");
@@ -3124,6 +3128,7 @@ describe("components.css theme-sensitive surfaces", () => {
     const searchGroupPath = getLastRuleBlock(".workspace-search-panel__group-path");
     const searchMatch = getLastRuleBlock(".workspace-search-panel__match");
     const searchMatchActive = getLastRuleBlock(".workspace-search-panel__match--active");
+    const searchMatchActiveHover = getLastRuleBlock(".workspace-search-panel__match--active:hover");
     const searchLine = getLastRuleBlock(".workspace-search-panel__line");
     const quickOpen = getLastRuleBlock(".quick-open");
     const quickOpenSearch = getLastRuleBlock(".quick-open__search");
@@ -3136,6 +3141,8 @@ describe("components.css theme-sensitive surfaces", () => {
       '.quick-open__item[aria-selected="true"] .quick-open__secondary'
     );
 
+    expect(sidebarRowSelected).toContain("background: var(--state-selected-bg)");
+    expect(sidebarRowSelectedHover).toContain("background: var(--state-selected-bg)");
     expect(openEditorsHeader).toContain("display: flex");
     expect(openEditorsHeaderMain).toContain("flex: 1 1 auto");
     expect(openEditorsHeaderMain).toContain("min-width: 0");
@@ -3173,6 +3180,8 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(searchMatch).toContain("border: 1px solid transparent");
     expect(searchMatchActive).toContain("border-color: var(--state-selected-border)");
     expect(searchMatchActive).toContain("background: var(--state-selected-bg)");
+    expect(searchMatchActiveHover).toContain("border-color: var(--state-selected-border)");
+    expect(searchMatchActiveHover).toContain("background: var(--state-selected-bg)");
     expect(searchLine).toContain("text-align: right");
 
     expect(quickOpen).toContain("border: 1px solid var(--surface-overlay-border)");
@@ -3206,6 +3215,7 @@ describe("components.css theme-sensitive surfaces", () => {
   it("keeps the desktop git panel and command palette on tighter tool-surface chrome", () => {
     const gitScroll = getLastRuleBlock(".git-panel-scroll");
     const gitCommitBlock = getLastRuleBlock(".git-commit-block");
+    const gitCommitInputFocus = getLastRuleBlock(".git-panel .git-commit-input:focus");
     const gitSection = getLastRuleBlock(".git-panel-section");
     const gitWorktreeRow = getLastRuleBlock(".git-worktree-row");
     const gitHistoryRow = getLastRuleBlock(".git-history-row");
@@ -3222,6 +3232,7 @@ describe("components.css theme-sensitive surfaces", () => {
 
     expect(gitScroll).toContain("gap: 14px");
     expect(gitCommitBlock).toContain("gap: var(--sp-2)");
+    expect(gitCommitInputFocus).toContain("outline: none");
     expect(gitSection).toContain("gap: 8px");
     expect(gitWorktreeRow).toContain("min-height: 28px");
     expect(gitHistoryRow).toContain("min-height: 34px");
