@@ -1946,11 +1946,31 @@ export function XtermHost({
     completeHistoricalRecoveryRef.current = completeHistoricalRecovery;
 
     const failHistoricalRecovery = async (error: unknown) => {
-      console.error("Failed to recover terminal output:", error);
       if (!mountedRef.current || !terminalRef.current) {
         return;
       }
 
+      // If the WebSocket is not currently connected, this failure is almost
+      // certainly a symptom of the transport outage rather than a real recovery
+      // problem. The global connection banner already surfaces the outage, and
+      // the coordinator's pendingSocketReconcile (or the legacy reconnect
+      // trigger when no coordinator is installed) will reschedule recovery
+      // once the socket comes back. Keep the UI in a quiet loading state so we
+      // don't stack a "recovery failed" notice on top of the connection banner.
+      const status = getConnectionStatus();
+      if (status !== "connected") {
+        traceTerminal(terminalId, "recovery.fail.deferred-ws-unhealthy", {
+          status,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        activeRecoveryUiModeRef.current = "non_blocking_recovering";
+        setReplayUiState({ kind: "loading" });
+        deferRecoveryUntilReconnect();
+        releaseHydration();
+        return;
+      }
+
+      console.error("Failed to recover terminal output:", error);
       activeRecoveryUiModeRef.current = "error";
       const reason = classifyReplayFailure(error);
       setReplayUiState(
@@ -2802,17 +2822,24 @@ export function XtermHost({
   const shouldBlockTerminal =
     replayUiState.kind === "loading" && activeRecoveryUiModeRef.current === "blocking_rebuild";
   const canShowRecoverySurface = viewport === "mobile" || hydrationState.kind === "granted";
+  // When WS is not connected, the global connection banner already explains the
+  // situation. Suppressing recovery overlays/notices here keeps us from stacking
+  // two competing messages on top of the terminal.
+  const wsHealthy = connectionStatus === "connected";
   const showReplayOverlay =
-    ((replayUiState.kind === "loading" && shouldBlockTerminal && loadingOverlayVisible) ||
+    canShowRecoverySurface &&
+    ((wsHealthy &&
+      replayUiState.kind === "loading" &&
+      shouldBlockTerminal &&
+      loadingOverlayVisible) ||
       replayUiState.kind === "closed" ||
-      replayUiState.kind === "unavailable") &&
-    canShowRecoverySurface;
+      replayUiState.kind === "unavailable");
   const showInlineRecoveryNotice =
-    replayUiState.kind === "recovery_check_failed" ||
-    replayUiState.kind === "retryable_failure" ||
-    replayUiState.kind === "failed" ||
-    replayUiState.kind === "unrecoverable_history" ||
-    replayUiState.kind === "truncated";
+    wsHealthy &&
+    (replayUiState.kind === "recovery_check_failed" ||
+      replayUiState.kind === "retryable_failure" ||
+      replayUiState.kind === "failed" ||
+      replayUiState.kind === "unrecoverable_history");
 
   let replayTitle = "";
   let replayBody = "";
@@ -2880,9 +2907,6 @@ export function XtermHost({
   } else if (replayUiState.kind === "unrecoverable_history") {
     noticeTitle = t("terminal.replay.unrecoverable_title");
     noticeBody = t("terminal.replay.unrecoverable_body");
-  } else if (replayUiState.kind === "truncated") {
-    noticeTitle = t("terminal.replay.truncated_title");
-    noticeBody = t("terminal.replay.truncated_body");
   }
 
   return (

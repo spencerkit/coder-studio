@@ -1392,6 +1392,74 @@ describe("XtermHost", () => {
     global.cancelAnimationFrame = originalCancelAnimationFrame;
   });
 
+  it("suppresses the retryable recovery notice while the websocket is disconnected", async () => {
+    // Regression guard: the global connection banner is already shown when the
+    // socket is down, so xterm-host must not stack a "terminal history not
+    // recovered" notice on top of it. Coverage is split across two layers:
+    //   1. failHistoricalRecovery short-circuits to a quiet loading state
+    //      when getStatus() != "connected".
+    //   2. The UI gate (wsHealthy) hides the notice even if the state were
+    //      somehow set.
+    const store = createStore();
+    const sendCommand = vi.fn().mockImplementation((op: string) => {
+      if (op === "terminal.snapshot") {
+        return Promise.resolve({ status: "unsupported" });
+      }
+
+      if (op === "terminal.replay") {
+        return Promise.reject(new Error("Command timeout: terminal.replay"));
+      }
+
+      return Promise.resolve({ ok: true, data: { status: "ok" } });
+    });
+    const subscribe = vi.fn(() => vi.fn());
+    const rafCallbacks: FrameRequestCallback[] = [];
+    const originalRequestAnimationFrame = global.requestAnimationFrame;
+    const originalCancelAnimationFrame = global.cancelAnimationFrame;
+
+    mockTerminal.cols = 132;
+    mockTerminal.rows = 36;
+
+    global.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      rafCallbacks.push(callback);
+      return rafCallbacks.length;
+    }) as typeof requestAnimationFrame;
+    global.cancelAnimationFrame = vi.fn() as typeof cancelAnimationFrame;
+
+    store.set(localeAtom, "zh");
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe,
+      getStatus: vi.fn(() => "disconnected"),
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="ws-disconnected-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await act(async () => {
+      const callback = rafCallbacks.shift();
+      callback?.(16);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Even after the replay command rejects with a non-network-flavoured error,
+    // no recovery failure notice should appear while the socket itself is down.
+    expect(screen.queryByText("终端历史暂未恢复")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "重试恢复" })).not.toBeInTheDocument();
+    expect(screen.queryByText("终端恢复检查未完成")).not.toBeInTheDocument();
+    // The blocking loading overlay is also gated on a healthy socket.
+    expect(document.querySelector(".xterm-replay-overlay")).toBeFalsy();
+
+    global.requestAnimationFrame = originalRequestAnimationFrame;
+    global.cancelAnimationFrame = originalCancelAnimationFrame;
+  });
+
   it("shows a recovery-check notice instead of retryable recovery when replay is unavailable as a command", async () => {
     const store = createStore();
     const sendCommand = vi.fn().mockImplementation((op: string) => {
