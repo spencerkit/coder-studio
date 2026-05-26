@@ -14613,6 +14613,17 @@ body.is-dragging-pane .session-action-btn-drag {
 .session-card.session-card--active {
   background: var(--workspace-session-active-surface);
   box-shadow: none;
+  position: relative;
+  isolation: isolate;
+}
+
+.workspace-main-stage .session-card.session-card--active::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border: 1px solid var(--component-mix-border-focus-84pct-transparent);
+  pointer-events: none;
 }
 
 .session-header,
@@ -14626,7 +14637,6 @@ body.is-dragging-pane .session-action-btn-drag {
 
 .session-card.session-card--active > .panel-header,
 .session-card.session-card--active .session-header {
-  border-top: 1px solid var(--component-mix-border-focus-76pct-transparent);
   border-bottom-color: var(--component-mix-border-focus-76pct-transparent);
 }
 

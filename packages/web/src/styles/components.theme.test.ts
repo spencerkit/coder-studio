@@ -1028,6 +1028,9 @@ describe("components.css theme-sensitive surfaces", () => {
     const sessionTerminal = getLastRuleBlock(".session-terminal");
     const sessionCard = getLastRuleBlock(".session-card");
     const activeSessionCard = getLastRuleBlock(".session-card.session-card--active");
+    const activeSessionCardOverlay = getLastRuleBlock(
+      ".workspace-main-stage .session-card.session-card--active::after"
+    );
     const activeSessionHeader = getRuleBlocksFrom(
       stylesheet,
       ".session-card.session-card--active > .panel-header"
@@ -1148,8 +1151,15 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(activeSessionCard).toContain("background: var(--workspace-session-active-surface)");
     expect(activeSessionCard).not.toContain("background: var(--bg-active)");
     expect(activeSessionCard).toContain("box-shadow: none");
+    expect(activeSessionCardOverlay).toContain('content: ""');
+    expect(activeSessionCardOverlay).toContain("position: absolute");
+    expect(activeSessionCardOverlay).toContain("inset: 0");
+    expect(activeSessionCardOverlay).toContain(
+      "border: 1px solid var(--component-mix-border-focus-84pct-transparent)"
+    );
+    expect(activeSessionCardOverlay).toContain("pointer-events: none");
     expect(activeSessionHeader).toContain("background: var(--workspace-session-header-surface)");
-    expect(activeSessionHeader).toContain("border-top:");
+    expect(activeSessionHeader).not.toContain("border-top:");
     expect(activeSessionHeader).toContain("backdrop-filter: var(--material-backdrop-filter)");
     expect(activeSessionHeader).not.toContain("var(--bg-active) 88%");
     expect(activeSessionTitle).toContain("color: var(--text-primary)");
@@ -1539,6 +1549,9 @@ describe("components.css theme-sensitive surfaces", () => {
     const sessionProgress = getLastRuleBlock(".session-progress");
     const sessionHeader = getLastRuleBlock(".session-header");
     const activeSessionCard = getLastRuleBlock(".session-card.session-card--active");
+    const activeSessionCardOverlay = getLastRuleBlock(
+      ".workspace-main-stage .session-card.session-card--active::after"
+    );
     const activeSessionHeader = getLastRuleBlock(
       ".session-card.session-card--active > .panel-header"
     );
@@ -1568,7 +1581,10 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(sessionProgress).toContain("background: var(--state-info-bg)");
     expect(sessionHeader).toContain("padding: var(--gap-tight) var(--inset-control-inline)");
     expect(activeSessionCard).toContain("box-shadow: none");
-    expect(activeSessionHeader).toContain("border-top:");
+    expect(activeSessionCardOverlay).toContain(
+      "border: 1px solid var(--component-mix-border-focus-84pct-transparent)"
+    );
+    expect(activeSessionHeader).not.toContain("border-top:");
     expect(supervisorCard).toContain("background: var(--workspace-session-header-surface)");
     expect(supervisorCard).toContain("backdrop-filter: var(--material-backdrop-filter)");
     expect(sessionHeaderLeft).toContain("gap: var(--gap-default)");
