@@ -2632,12 +2632,14 @@ describe("components.css theme-sensitive surfaces", () => {
       "border: 1px solid var(--component-mix-border-default-80pct-transparent)"
     );
     expect(mobileFilesSurface).toContain("border-radius: var(--radius-md)");
+    expect(mobileFilesSurface).toContain("background: var(--bg-panel)");
     expect(mobileFilesSurface).toContain("box-shadow: none");
     expect(mobileFilesSurface).not.toContain("linear-gradient(");
     expect(mobileFilesGitSurface).toContain(
       "border: 1px solid var(--component-mix-border-default-80pct-transparent)"
     );
     expect(mobileFilesGitSurface).toContain("border-radius: var(--radius-md)");
+    expect(mobileFilesGitSurface).toContain("background: var(--bg-panel)");
     expect(mobileFilesGitSurface).toContain("box-shadow: none");
     expect(mobileFileSearch).toContain("margin: 0");
     expect(mobileFileSearch).toContain("border-radius: var(--radius-md)");

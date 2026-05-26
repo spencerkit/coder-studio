@@ -14853,11 +14853,7 @@ body.is-dragging-pane .session-action-btn-drag {
 }
 
 .mobile-shell__agent-stage .session-card:not(.session-card--active),
-.mobile-terminal-sheet .bottom-terminal,
-.mobile-sheet--files .file-tree-shell--mobile,
-.mobile-sheet--files .git-panel--mobile,
-.mobile-sheet--files .workspace-search-panel--mobile,
-.mobile-sheet--files .workspace-git-editor {
+.mobile-terminal-sheet .bottom-terminal {
   background: var(--mobile-sheet-file-surface);
   backdrop-filter: var(--material-backdrop-filter);
 }
@@ -14870,6 +14866,7 @@ body.is-dragging-pane .session-action-btn-drag {
   overflow: hidden;
   border: 1px solid var(--component-mix-border-default-80pct-transparent);
   border-radius: var(--radius-md);
+  background: var(--bg-panel);
   box-shadow: none;
 }
 
