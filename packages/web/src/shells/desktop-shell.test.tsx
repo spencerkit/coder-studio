@@ -146,6 +146,21 @@ describe("DesktopShell auth gating", () => {
     expect(screen.queryByText("MonitoringPage")).not.toBeInTheDocument();
   });
 
+  it("renders not-found instead of MonitoringPage on /monitoring once auth status is resolved", () => {
+    window.history.replaceState({}, "", "/monitoring");
+
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(authEnabledAtom, false);
+    store.set(authenticatedAtom, true);
+
+    renderShell(store);
+
+    expect(screen.getByText("Page not found")).toBeInTheDocument();
+    expect(screen.queryByText("MonitoringPage")).not.toBeInTheDocument();
+    expect(screen.queryByText("正在连接工作区...")).not.toBeInTheDocument();
+  });
+
   it("redirects / to /login when auth is enabled and user is unauthenticated", async () => {
     const store = createStore();
     store.set(connectionStatusAtom, "connected");

@@ -16,7 +16,7 @@ export interface SettingsSectionMeta {
 
 export const SETTINGS_SECTIONS = [
   { id: "general", labelKey: "settings.general", iconSemantic: "nav.settings.general" },
-  { id: "monitoring", labelKey: "monitoring.title", iconSemantic: "nav.diagnostics" },
+  { id: "monitoring", labelKey: "monitoring.title", iconSemantic: "nav.settings.diagnostics" },
   { id: "providers", labelKey: "settings.providers", iconSemantic: "nav.settings.providers" },
   { id: "appearance", labelKey: "settings.appearance", iconSemantic: "nav.settings.appearance" },
   { id: "shortcuts", labelKey: "settings.shortcuts.title", iconSemantic: "nav.settings.shortcuts" },

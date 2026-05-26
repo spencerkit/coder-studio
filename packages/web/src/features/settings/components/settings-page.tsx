@@ -241,16 +241,15 @@ export function SettingsPage() {
   const serverInfo = useAtomValue(serverInfoAtom);
   const resolvedActiveWorkspaceId = useAtomValue(resolvedActiveWorkspaceIdAtom);
   const activeWorkspaceId = resolvedActiveWorkspaceId;
-  const initialRequestedSection = (() => {
+  const requestedSection = (() => {
     const section = new URLSearchParams(location.search).get("section");
     return SETTINGS_SECTIONS.some((item) => item.id === section)
       ? (section as SettingsSection)
       : null;
   })();
-  const initialRequestedSectionRef = useRef<SettingsSection | null>(initialRequestedSection);
   const [navigationState, setNavigationState] = useState<SettingsNavigationState>(() => {
-    if (initialRequestedSection) {
-      return { kind: "detail", section: initialRequestedSection };
+    if (requestedSection) {
+      return { kind: "detail", section: requestedSection };
     }
 
     return isMobile
@@ -352,21 +351,19 @@ export function SettingsPage() {
 
   useEffect(() => {
     setNavigationState((state) => {
+      if (requestedSection) {
+        return state.kind === "detail" && state.section === requestedSection
+          ? state
+          : { kind: "detail", section: requestedSection };
+      }
+
       if (isMobile) {
-        if (
-          initialRequestedSectionRef.current &&
-          state.kind === "detail" &&
-          state.section === initialRequestedSectionRef.current
-        ) {
-          initialRequestedSectionRef.current = null;
-          return state;
-        }
         return state.kind === "root" ? state : { kind: "root", lastSection: state.section };
       }
 
       return state.kind === "detail" ? state : { kind: "detail", section: state.lastSection };
     });
-  }, [isMobile]);
+  }, [isMobile, requestedSection]);
 
   useEffect(() => {
     if (connectionStatus !== "connected") {

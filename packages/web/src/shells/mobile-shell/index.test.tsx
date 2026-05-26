@@ -1163,6 +1163,27 @@ describe("MobileShell Phase 2 workspace", () => {
     expect(screen.queryByText("MonitoringPage")).not.toBeInTheDocument();
   });
 
+  it("renders not-found instead of MonitoringPage on mobile /monitoring once auth status is resolved", () => {
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(authEnabledAtom, false);
+    store.set(authenticatedAtom, true);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/monitoring"]}>
+          <LocationProbe />
+          <MobileShell />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    expect(screen.getByText("Page not found")).toBeInTheDocument();
+    expect(screen.getByTestId("location-display")).toHaveTextContent("/monitoring");
+    expect(screen.queryByText("MonitoringPage")).not.toBeInTheDocument();
+    expect(screen.queryByText("正在连接工作区...")).not.toBeInTheDocument();
+  });
+
   it("does not bootstrap workspaces from / on mobile before redirecting to /login when auth is enabled and user is unauthenticated", async () => {
     const sendCommand = vi.fn();
     const store = createStore();

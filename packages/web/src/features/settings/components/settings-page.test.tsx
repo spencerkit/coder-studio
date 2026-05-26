@@ -57,30 +57,6 @@ vi.mock("../../../appearance", async () => {
   };
 });
 
-vi.mock("../../../components/ui", async () => {
-  const actual =
-    await vi.importActual<typeof import("../../../components/ui")>("../../../components/ui");
-
-  return {
-    ...actual,
-    ThemedIcon: ({
-      semantic,
-      className,
-    }: {
-      semantic: string;
-      className?: string;
-      size?: number;
-    }) => (
-      <span
-        aria-hidden="true"
-        className={className}
-        data-icon-semantic={semantic}
-        data-testid="themed-icon"
-      />
-    ),
-  };
-});
-
 vi.mock("./config-editor", () => ({
   ConfigEditor: ({ configType }: { configType: "claude" | "codex" }) => (
     <div data-testid={`config-editor-${configType}`}>{configType}</div>
@@ -326,9 +302,6 @@ describe("SettingsPage", () => {
       desktopView.container.querySelector('[data-icon-semantic="nav.settings.general"]')
     ).toBeTruthy();
     expect(
-      desktopView.container.querySelector('[data-icon-semantic="nav.diagnostics"]')
-    ).toBeTruthy();
-    expect(
       desktopView.container.querySelector('[data-icon-semantic="nav.settings.providers"]')
     ).toBeTruthy();
     expect(
@@ -342,7 +315,7 @@ describe("SettingsPage", () => {
     ).toBeTruthy();
     expect(
       desktopView.container.querySelector('[data-icon-semantic="nav.settings.diagnostics"]')
-    ).toBeNull();
+    ).toBeTruthy();
 
     desktopView.unmount();
 
@@ -360,9 +333,6 @@ describe("SettingsPage", () => {
       mobileView.container.querySelector('[data-icon-semantic="nav.settings.general"]')
     ).toBeTruthy();
     expect(
-      mobileView.container.querySelector('[data-icon-semantic="nav.diagnostics"]')
-    ).toBeTruthy();
-    expect(
       mobileView.container.querySelector('[data-icon-semantic="nav.settings.providers"]')
     ).toBeTruthy();
     expect(
@@ -376,7 +346,7 @@ describe("SettingsPage", () => {
     ).toBeTruthy();
     expect(
       mobileView.container.querySelector('[data-icon-semantic="nav.settings.diagnostics"]')
-    ).toBeNull();
+    ).toBeTruthy();
   });
 
   it("opens diagnostics from the general settings section", async () => {
@@ -431,6 +401,40 @@ describe("SettingsPage", () => {
     expect(screen.queryByRole("button", { name: "打开监控" })).not.toBeInTheDocument();
     expect(screen.queryByRole("switch", { name: "启用性能监控" })).not.toBeInTheDocument();
     expect(screen.queryByText("设置通知与终端行为。")).not.toBeInTheDocument();
+  });
+
+  it("switches sections after mount when navigating within settings by search param", async () => {
+    const store = createConnectedStore(vi.fn().mockResolvedValue({}));
+
+    window.history.replaceState({ idx: 0 }, "", "/settings?section=about");
+
+    render(
+      <Provider store={store}>
+        <BrowserRouter>
+          <SettingsPage />
+        </BrowserRouter>
+      </Provider>
+    );
+
+    expect(await screen.findByTestId("about-settings")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "关于" })).toHaveClass("settings-nav-item-active");
+
+    await act(async () => {
+      window.history.pushState({ idx: 1 }, "", "/settings?section=monitoring");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "性能监控" })).toHaveClass(
+        "settings-nav-item-active"
+      );
+    });
+
+    expect(screen.queryByTestId("about-settings")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "关于" })).not.toHaveClass(
+      "settings-nav-item-active"
+    );
+    expect(screen.queryByRole("switch", { name: "启用性能监控" })).not.toBeInTheDocument();
   });
 
   it("does not render phone continuation entry from settings even when a workspace is active", async () => {
