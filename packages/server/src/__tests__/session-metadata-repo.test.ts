@@ -1,19 +1,33 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { SessionMetadataRepo } from "../storage/repositories/session-metadata-repo.js";
+import { WorkspaceRepo } from "../storage/repositories/workspace-repo.js";
 
 describe("SessionMetadataRepo", () => {
   let tempDir: string;
-  let filePath: string;
+  let workspacePath: string;
+  let workspaceRepo: WorkspaceRepo;
   let repo: SessionMetadataRepo;
 
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), "session-metadata-repo-"));
-    filePath = join(tempDir, "session-metadata.json");
+    workspacePath = join(tempDir, "workspace");
+    await mkdir(workspacePath, { recursive: true });
+    workspaceRepo = new WorkspaceRepo({
+      filePath: join(tempDir, "workspaces.json"),
+    });
+    workspaceRepo.create({
+      id: "ws-1",
+      path: workspacePath,
+      targetRuntime: "native",
+      openedAt: 1,
+      lastActiveAt: 1,
+      uiState: { leftPanelWidth: 1, bottomPanelHeight: 1, focusMode: false },
+    });
     repo = new SessionMetadataRepo({
-      filePath,
+      workspaceRepo,
     });
   });
 
@@ -21,10 +35,26 @@ describe("SessionMetadataRepo", () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  it("constructs with a filePath option object", () => {
-    const constructed = new SessionMetadataRepo({ filePath });
+  it("constructs with a workspaceRepo option object", () => {
+    const constructed = new SessionMetadataRepo({ workspaceRepo });
 
     expect(constructed).toBeInstanceOf(SessionMetadataRepo);
+  });
+
+  it("stores session metadata under .coder-studio", async () => {
+    repo.upsert({
+      sessionId: "sess-1",
+      workspaceId: "ws-1",
+      providerId: "codex",
+      objective: "Fix the failing tests",
+      baselineGitHead: "abc123",
+      baselineCapturedAt: 1000,
+      verificationRuns: [],
+    });
+
+    await expect(
+      stat(join(workspacePath, ".coder-studio", "session-metadata.json"))
+    ).resolves.toBeDefined();
   });
 
   it("rehydrates session metadata without verification runs in a fresh repo instance", () => {
@@ -38,7 +68,7 @@ describe("SessionMetadataRepo", () => {
       verificationRuns: [],
     });
 
-    const reloadedRepo = new SessionMetadataRepo({ filePath });
+    const reloadedRepo = new SessionMetadataRepo({ workspaceRepo });
 
     expect(reloadedRepo.get("sess-1")).toEqual({
       sessionId: "sess-1",
@@ -76,7 +106,7 @@ describe("SessionMetadataRepo", () => {
       createdAt: 200,
     });
 
-    const reloadedRepo = new SessionMetadataRepo({ filePath });
+    const reloadedRepo = new SessionMetadataRepo({ workspaceRepo });
 
     expect(reloadedRepo.get("sess-1")?.verificationRuns).toEqual([
       {
@@ -96,5 +126,35 @@ describe("SessionMetadataRepo", () => {
         createdAt: 200,
       },
     ]);
+  });
+
+  it("finds metadata across registered workspaces by session id", async () => {
+    const otherWorkspacePath = join(tempDir, "workspace-2");
+    await mkdir(otherWorkspacePath, { recursive: true });
+    workspaceRepo.create({
+      id: "ws-2",
+      path: otherWorkspacePath,
+      targetRuntime: "native",
+      openedAt: 2,
+      lastActiveAt: 2,
+      uiState: { leftPanelWidth: 1, bottomPanelHeight: 1, focusMode: false },
+    });
+
+    repo.upsert({
+      sessionId: "sess-2",
+      workspaceId: "ws-2",
+      providerId: "codex",
+      verificationRuns: [],
+    });
+
+    expect(repo.get("sess-2")).toMatchObject({
+      sessionId: "sess-2",
+      workspaceId: "ws-2",
+      providerId: "codex",
+      verificationRuns: [],
+    });
+    await expect(
+      stat(join(otherWorkspacePath, ".coder-studio", "session-metadata.json"))
+    ).resolves.toBeDefined();
   });
 });

@@ -3,6 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { inspectWorkspaceIntelligence } from "../../workspace/intelligence.js";
+import {
+  AGENT_INSTRUCTIONS_RELATIVE_PATH,
+  WORKSPACE_STATE_DIR,
+} from "../../workspace/workspace-state.js";
 
 describe("inspectWorkspaceIntelligence", () => {
   const tempDirs: string[] = [];
@@ -52,7 +56,8 @@ describe("inspectWorkspaceIntelligence", () => {
     await writeFile(join(rootPath, "pnpm-workspace.yaml"), "packages:\n  - packages/*\n");
     await writeFile(join(rootPath, "README.md"), "# Workspace\n");
     await mkdir(join(rootPath, "docs"), { recursive: true });
-    await writeFile(join(rootPath, "AGENTS.md"), "# Instructions\n");
+    await mkdir(join(rootPath, WORKSPACE_STATE_DIR), { recursive: true });
+    await writeFile(join(rootPath, AGENT_INSTRUCTIONS_RELATIVE_PATH), "# Instructions\n");
 
     const summary = await inspectWorkspaceIntelligence({
       workspaceId: "ws-1",
@@ -86,7 +91,7 @@ describe("inspectWorkspaceIntelligence", () => {
       ],
       agentInstructions: {
         exists: true,
-        path: "AGENTS.md",
+        path: AGENT_INSTRUCTIONS_RELATIVE_PATH,
       },
     });
   });
@@ -120,7 +125,7 @@ describe("inspectWorkspaceIntelligence", () => {
       docs: [{ path: "docs", kind: "docs" }],
       agentInstructions: {
         exists: false,
-        path: "AGENTS.md",
+        path: AGENT_INSTRUCTIONS_RELATIVE_PATH,
       },
     });
   });

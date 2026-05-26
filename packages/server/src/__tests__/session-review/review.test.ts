@@ -6,6 +6,7 @@ import { promisify } from "util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildSessionReviewSummary, getSessionReviewDiff } from "../../session-review/review.js";
 import { SessionMetadataRepo } from "../../storage/repositories/session-metadata-repo.js";
+import { WorkspaceRepo } from "../../storage/repositories/workspace-repo.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -13,12 +14,24 @@ describe("session review", () => {
   let repo: SessionMetadataRepo;
   let repoDir: string;
   let stateDir: string;
+  let workspaceRepo: WorkspaceRepo;
 
   beforeEach(async () => {
     repoDir = await mkdtemp(join(tmpdir(), "session-review-"));
     stateDir = await mkdtemp(join(tmpdir(), "session-review-state-"));
+    workspaceRepo = new WorkspaceRepo({
+      filePath: join(stateDir, "workspaces.json"),
+    });
+    workspaceRepo.create({
+      id: "ws-1",
+      path: repoDir,
+      targetRuntime: "native",
+      openedAt: 1,
+      lastActiveAt: 1,
+      uiState: { leftPanelWidth: 1, bottomPanelHeight: 1, focusMode: false },
+    });
     repo = new SessionMetadataRepo({
-      filePath: join(stateDir, "session-metadata.json"),
+      workspaceRepo,
     });
 
     await execFileAsync("git", ["init"], { cwd: repoDir });

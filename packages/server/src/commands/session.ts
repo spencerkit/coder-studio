@@ -145,6 +145,7 @@ registerCommand(
     }
 
     ctx.sessionMgr.delete(args.sessionId);
+    ctx.sessionMetadataRepo?.delete(args.sessionId);
   }
 );
 
@@ -214,5 +215,6 @@ registerCommand(
 
     ctx.workspaceMgr.updateUiState(session.workspaceId, nextUiState);
     ctx.sessionMgr.delete(args.sessionId);
+    ctx.sessionMetadataRepo?.delete(args.sessionId);
   }
 );

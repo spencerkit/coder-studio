@@ -1,4 +1,5 @@
 import type { AgentInstructionsHealth, AgentInstructionsHealthIssue } from "@coder-studio/core";
+import { AGENT_INSTRUCTIONS_RELATIVE_PATH } from "../workspace/workspace-state.js";
 
 const REQUIRED_WORKING_RULES = [
   "Keep changes focused on the requested task.",
@@ -18,7 +19,7 @@ const PROVIDER_NOTE_MARKERS = ["Claude Code:", "Codex:"] as const;
 export function evaluateAgentInstructionsMarkdown(content: string): AgentInstructionsHealth {
   if (!content.trim()) {
     return {
-      path: "AGENTS.md",
+      path: AGENT_INSTRUCTIONS_RELATIVE_PATH,
       exists: false,
       status: "missing",
       checks: {
@@ -32,7 +33,7 @@ export function evaluateAgentInstructionsMarkdown(content: string): AgentInstruc
       issues: [
         {
           code: "missing_document",
-          message: "AGENTS.md is missing",
+          message: `${AGENT_INSTRUCTIONS_RELATIVE_PATH} is missing`,
         },
       ],
     };
@@ -100,7 +101,7 @@ export function evaluateAgentInstructionsMarkdown(content: string): AgentInstruc
   const status: AgentInstructionsHealth["status"] = issues.length === 0 ? "healthy" : "warning";
 
   return {
-    path: "AGENTS.md",
+    path: AGENT_INSTRUCTIONS_RELATIVE_PATH,
     exists: true,
     status,
     checks: {

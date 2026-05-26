@@ -32,6 +32,7 @@ describe("Session Commands", () => {
   let stateDir: string;
   let tempDirs: string[];
   let sessionMetadataRepo: SessionMetadataRepo;
+  let workspaceRepo: WorkspaceRepo;
   let terminalMgrStub: TerminalManager;
   let sessionDbStub: SessionDatabase;
 
@@ -39,8 +40,11 @@ describe("Session Commands", () => {
     eventBus = new EventBus();
     stateDir = mkdtempSync(join(tmpdir(), "session-command-state-"));
     const providerConfigRepo = createProviderConfigRepo(join(stateDir, "provider-configs.json"));
+    workspaceRepo = new WorkspaceRepo({
+      filePath: join(stateDir, "workspaces.json"),
+    });
     sessionMetadataRepo = new SessionMetadataRepo({
-      filePath: join(stateDir, "session-metadata.json"),
+      workspaceRepo,
     });
     terminalMgrStub = {
       create: () => ({ id: "terminal-1" }),
@@ -57,9 +61,7 @@ describe("Session Commands", () => {
     };
 
     workspaceMgr = new WorkspaceManager({
-      workspaceRepo: new WorkspaceRepo({
-        filePath: join(stateDir, "workspaces.json"),
-      }),
+      workspaceRepo,
       eventBus,
     });
     sessionMgr = new SessionManager({
@@ -321,6 +323,51 @@ describe("Session Commands", () => {
 
       expect(result.ok).toBe(false);
     });
+
+    it("deletes session metadata when removing an ended session", async () => {
+      const workspacePath = mkdtempSync(join(tmpdir(), "coder-studio-remove-metadata-"));
+      tempDirs.push(workspacePath);
+      const workspace = await workspaceMgr.open({ path: workspacePath });
+      sessionMetadataRepo.upsert({
+        sessionId: "sess-ended",
+        workspaceId: workspace.id,
+        providerId: "codex",
+        verificationRuns: [],
+      });
+
+      const deleteSpy = vi.spyOn(sessionMgr, "delete").mockImplementation(() => {});
+      vi.spyOn(sessionMgr, "get").mockImplementation((sessionId: string) =>
+        sessionId === "sess-ended"
+          ? ({
+              id: "sess-ended",
+              workspaceId: workspace.id,
+              terminalId: "term-ended",
+              providerId: "codex",
+              capability: "full",
+              state: "ended",
+              startedAt: 1,
+              lastActiveAt: 1,
+              endedAt: 2,
+            } as const)
+          : undefined
+      );
+
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "test-id-remove-metadata",
+          op: "session.remove",
+          args: {
+            sessionId: "sess-ended",
+          },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(true);
+      expect(deleteSpy).toHaveBeenCalledWith("sess-ended");
+      expect(sessionMetadataRepo.get("sess-ended")).toBeUndefined();
+    });
   });
 
   describe("session.close", () => {
@@ -438,6 +485,52 @@ describe("Session Commands", () => {
           { id: "right", type: "leaf", sessionId: "sess-2" },
         ],
       });
+    });
+
+    it("deletes session metadata when closing an ended session", async () => {
+      const workspacePath = mkdtempSync(join(tmpdir(), "coder-studio-close-metadata-"));
+      tempDirs.push(workspacePath);
+      const workspace = await workspaceMgr.open({ path: workspacePath });
+      sessionMetadataRepo.upsert({
+        sessionId: "sess-meta",
+        workspaceId: workspace.id,
+        providerId: "codex",
+        verificationRuns: [],
+      });
+
+      const deleteSpy = vi.spyOn(sessionMgr, "delete").mockImplementation(() => {});
+      vi.spyOn(sessionMgr, "get").mockImplementation((sessionId: string) =>
+        sessionId === "sess-meta"
+          ? ({
+              id: "sess-meta",
+              workspaceId: workspace.id,
+              terminalId: "term-meta",
+              providerId: "codex",
+              capability: "full",
+              state: "ended",
+              startedAt: 1,
+              lastActiveAt: 1,
+              endedAt: 2,
+            } as const)
+          : undefined
+      );
+
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "test-id-close-metadata",
+          op: "session.close",
+          args: {
+            sessionId: "sess-meta",
+            paneDisposition: "draft",
+          },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(true);
+      expect(deleteSpy).toHaveBeenCalledWith("sess-meta");
+      expect(sessionMetadataRepo.get("sess-meta")).toBeUndefined();
     });
   });
 

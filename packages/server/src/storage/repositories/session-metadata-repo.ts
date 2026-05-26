@@ -1,4 +1,8 @@
 import type { AgentSessionMetadata, AgentSessionVerificationRun } from "@coder-studio/core";
+import {
+  resolveWorkspaceStateFilePath,
+  SESSION_METADATA_FILE_NAME,
+} from "../../workspace/workspace-state.js";
 import { readJsonFile, writeJsonFileAtomic } from "./json-file-store.js";
 
 interface SessionMetadataFileRecord {
@@ -6,8 +10,23 @@ interface SessionMetadataFileRecord {
   metadata: Record<string, AgentSessionMetadata>;
 }
 
+interface SessionMetadataWorkspace {
+  id: string;
+  path: string;
+}
+
+interface SessionMetadataWorkspaceRepo {
+  list(): SessionMetadataWorkspace[];
+  findById(id: string): SessionMetadataWorkspace | undefined;
+}
+
 export interface SessionMetadataRepoOptions {
-  filePath: string;
+  workspaceRepo: SessionMetadataWorkspaceRepo;
+}
+
+interface SessionMetadataLocation {
+  workspace: SessionMetadataWorkspace;
+  fileMetadata: Record<string, AgentSessionMetadata>;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -55,52 +74,84 @@ function normalizeFileMetadata(value: unknown): Record<string, AgentSessionMetad
 }
 
 export class SessionMetadataRepo {
-  private readonly filePath: string;
+  private readonly workspaceRepo: SessionMetadataWorkspaceRepo;
 
   constructor(input: SessionMetadataRepoOptions) {
-    this.filePath = input.filePath;
+    this.workspaceRepo = input.workspaceRepo;
   }
 
   upsert(metadata: AgentSessionMetadata): AgentSessionMetadata {
     const normalized = normalizeMetadata(metadata);
+    const workspace = this.workspaceRepo.findById(normalized.workspaceId);
+    if (!workspace) {
+      throw new Error(`Workspace not found for session metadata: ${normalized.workspaceId}`);
+    }
 
-    const next = this.loadFileMetadata();
+    const existing = this.findSessionLocation(normalized.sessionId);
+    if (existing && existing.workspace.id !== workspace.id) {
+      delete existing.fileMetadata[normalized.sessionId];
+      this.saveWorkspaceFileMetadata(existing.workspace.path, existing.fileMetadata);
+    }
+
+    const next =
+      existing && existing.workspace.id === workspace.id
+        ? existing.fileMetadata
+        : this.loadWorkspaceFileMetadata(workspace.path);
     next[normalized.sessionId] = normalized;
-    this.saveFileMetadata(next);
+    this.saveWorkspaceFileMetadata(workspace.path, next);
     return next[normalized.sessionId]!;
   }
 
   get(sessionId: string): AgentSessionMetadata | undefined {
-    return this.loadFileMetadata()[sessionId];
+    return this.findSessionLocation(sessionId)?.fileMetadata[sessionId];
   }
 
   addVerificationRun(sessionId: string, run: AgentSessionVerificationRun): AgentSessionMetadata {
-    const existing = this.get(sessionId);
+    const existing = this.findSessionLocation(sessionId);
     if (!existing) {
       throw new Error(`Session metadata not found: ${sessionId}`);
     }
 
-    const next = this.loadFileMetadata();
-    next[sessionId] = normalizeMetadata({
-      ...existing,
-      verificationRuns: [...existing.verificationRuns, normalizeRun(run)],
+    existing.fileMetadata[sessionId] = normalizeMetadata({
+      ...existing.fileMetadata[sessionId]!,
+      verificationRuns: [...existing.fileMetadata[sessionId]!.verificationRuns, normalizeRun(run)],
     });
-    this.saveFileMetadata(next);
-    return next[sessionId]!;
+    this.saveWorkspaceFileMetadata(existing.workspace.path, existing.fileMetadata);
+    return existing.fileMetadata[sessionId]!;
   }
 
   delete(sessionId: string): void {
-    const next = this.loadFileMetadata();
-    if (!Object.prototype.hasOwnProperty.call(next, sessionId)) {
-      return;
-    }
-    delete next[sessionId];
-    this.saveFileMetadata(next);
+    this.deleteFromAnyWorkspace(sessionId);
   }
 
-  private loadFileMetadata(): Record<string, AgentSessionMetadata> {
+  private findSessionLocation(sessionId: string): SessionMetadataLocation | undefined {
+    for (const workspace of this.workspaceRepo.list()) {
+      const fileMetadata = this.loadWorkspaceFileMetadata(workspace.path);
+      if (Object.prototype.hasOwnProperty.call(fileMetadata, sessionId)) {
+        return {
+          workspace,
+          fileMetadata,
+        };
+      }
+    }
+
+    return undefined;
+  }
+
+  deleteFromAnyWorkspace(sessionId: string): boolean {
+    const existing = this.findSessionLocation(sessionId);
+    if (!existing) {
+      return false;
+    }
+
+    delete existing.fileMetadata[sessionId];
+    this.saveWorkspaceFileMetadata(existing.workspace.path, existing.fileMetadata);
+    return true;
+  }
+
+  private loadWorkspaceFileMetadata(workspacePath: string): Record<string, AgentSessionMetadata> {
     const parsed = readJsonFile<SessionMetadataFileRecord | Record<string, AgentSessionMetadata>>(
-      this.filePath
+      resolveWorkspaceStateFilePath(workspacePath, SESSION_METADATA_FILE_NAME)
     );
     if (parsed !== undefined) {
       return normalizeFileMetadata(parsed);
@@ -109,11 +160,17 @@ export class SessionMetadataRepo {
     return {};
   }
 
-  private saveFileMetadata(metadata: Record<string, AgentSessionMetadata>): void {
+  private saveWorkspaceFileMetadata(
+    workspacePath: string,
+    metadata: Record<string, AgentSessionMetadata>
+  ): void {
     const payload: SessionMetadataFileRecord = {
       version: 1,
       metadata,
     };
-    writeJsonFileAtomic(this.filePath, payload);
+    writeJsonFileAtomic(
+      resolveWorkspaceStateFilePath(workspacePath, SESSION_METADATA_FILE_NAME),
+      payload
+    );
   }
 }

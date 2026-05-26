@@ -63,7 +63,9 @@ function buildProjectOverview(summary: WorkspaceIntelligenceSummary): string[] {
     lines.push(`- Docs: ${summary.docs.map((doc) => doc.path).join(", ")}`);
   }
 
-  lines.push(`- AGENTS.md: ${summary.agentInstructions.exists ? "exists" : "missing"}`);
+  lines.push(
+    `- ${summary.agentInstructions.path}: ${summary.agentInstructions.exists ? "exists" : "missing"}`
+  );
 
   return lines;
 }

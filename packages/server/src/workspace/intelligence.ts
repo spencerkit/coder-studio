@@ -1,6 +1,7 @@
 import { access, lstat, readFile, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { WorkspaceIntelligenceSummary } from "@coder-studio/core";
+import { AGENT_INSTRUCTIONS_RELATIVE_PATH } from "./workspace-state.js";
 
 type PackageManager = NonNullable<WorkspaceIntelligenceSummary["packageManager"]>;
 type PackageScripts = WorkspaceIntelligenceSummary["scripts"];
@@ -34,7 +35,7 @@ export async function inspectWorkspaceIntelligence(
       readPackageJson(input.rootPath),
       detectGitState(input.rootPath),
       detectDocs(input.rootPath),
-      pathExists(join(input.rootPath, "AGENTS.md")),
+      pathExists(join(input.rootPath, AGENT_INSTRUCTIONS_RELATIVE_PATH)),
       detectFrameworks(input.rootPath),
     ]);
 
@@ -51,7 +52,7 @@ export async function inspectWorkspaceIntelligence(
     docs: docsExistence,
     agentInstructions: {
       exists: agentsExists,
-      path: "AGENTS.md",
+      path: AGENT_INSTRUCTIONS_RELATIVE_PATH,
     },
   };
 }

@@ -11,6 +11,11 @@ import {
   buildSessionReviewContextPackage,
 } from "../../agent-context/context-package.js";
 import { SessionMetadataRepo } from "../../storage/repositories/session-metadata-repo.js";
+import { WorkspaceRepo } from "../../storage/repositories/workspace-repo.js";
+import {
+  AGENT_INSTRUCTIONS_RELATIVE_PATH,
+  WORKSPACE_STATE_DIR,
+} from "../../workspace/workspace-state.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -18,12 +23,24 @@ describe("agent context package builders", () => {
   let metadataRepo: SessionMetadataRepo;
   let repoDir: string;
   let stateDir: string;
+  let workspaceRepo: WorkspaceRepo;
 
   beforeEach(async () => {
     repoDir = await mkdtemp(join(tmpdir(), "agent-context-"));
     stateDir = await mkdtemp(join(tmpdir(), "agent-context-state-"));
+    workspaceRepo = new WorkspaceRepo({
+      filePath: join(stateDir, "workspaces.json"),
+    });
+    workspaceRepo.create({
+      id: "ws-1",
+      path: repoDir,
+      targetRuntime: "native",
+      openedAt: 1,
+      lastActiveAt: 1,
+      uiState: { leftPanelWidth: 1, bottomPanelHeight: 1, focusMode: false },
+    });
     metadataRepo = new SessionMetadataRepo({
-      filePath: join(stateDir, "session-metadata.json"),
+      workspaceRepo,
     });
 
     await execFileAsync("git", ["init"], { cwd: repoDir });
@@ -54,7 +71,8 @@ describe("agent context package builders", () => {
     await writeFile(join(repoDir, "pnpm-lock.yaml"), "lockfileVersion: 9.0\n");
     await writeFile(join(repoDir, "README.md"), "# Demo\n");
     await mkdir(join(repoDir, "docs"), { recursive: true });
-    await writeFile(join(repoDir, "AGENTS.md"), "# Project\n");
+    await mkdir(join(repoDir, WORKSPACE_STATE_DIR), { recursive: true });
+    await writeFile(join(repoDir, AGENT_INSTRUCTIONS_RELATIVE_PATH), "# Project\n");
     await execFileAsync("git", ["add", "."], { cwd: repoDir });
     await execFileAsync("git", ["commit", "-m", "Initial commit"], { cwd: repoDir });
 
@@ -162,7 +180,7 @@ describe("agent context package builders", () => {
         "Docs:",
         "- README.md",
         "- docs",
-        "Agent instructions: AGENTS.md present",
+        `Agent instructions: ${AGENT_INSTRUCTIONS_RELATIVE_PATH} present`,
       ].join("\n"),
       source: {
         workspaceId: "ws-1",

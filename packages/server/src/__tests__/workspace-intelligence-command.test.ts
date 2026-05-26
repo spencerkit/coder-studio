@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { AGENT_INSTRUCTIONS_RELATIVE_PATH } from "../workspace/workspace-state.js";
 import type { CommandContext } from "../ws/dispatch.js";
 import { dispatch } from "../ws/dispatch.js";
 import "../commands/workspace.js";
@@ -109,7 +110,7 @@ describe("workspace.intelligence command", () => {
       docs: [{ path: "README.md", kind: "readme" }],
       agentInstructions: {
         exists: false,
-        path: "AGENTS.md",
+        path: AGENT_INSTRUCTIONS_RELATIVE_PATH,
       },
     });
   });

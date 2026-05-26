@@ -124,7 +124,9 @@ function buildProjectSummaryBody(
   }
 
   lines.push(
-    `Agent instructions: ${summary.agentInstructions.exists ? "AGENTS.md present" : "AGENTS.md missing"}`
+    `Agent instructions: ${summary.agentInstructions.path} ${
+      summary.agentInstructions.exists ? "present" : "missing"
+    }`
   );
 
   return lines.join("\n");

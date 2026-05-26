@@ -7,6 +7,7 @@ import type {
 import { GitError, runGit } from "../git/cli.js";
 import { getFileDiff } from "../git/diff.js";
 import { SessionMetadataRepo } from "../storage/repositories/session-metadata-repo.js";
+import { WORKSPACE_STATE_DIR } from "../workspace/workspace-state.js";
 
 interface SessionReviewInput {
   sessionId: string;
@@ -38,6 +39,10 @@ const NOT_GIT_REPO_WARNING = {
   code: "not_git_repo" as const,
   message: "Workspace is not a Git repository.",
 };
+
+function isWorkspaceStatePath(path: string): boolean {
+  return path === WORKSPACE_STATE_DIR || path.startsWith(`${WORKSPACE_STATE_DIR}/`);
+}
 
 function requireSessionMetadata(
   metadataRepo: SessionMetadataRepo,
@@ -135,6 +140,7 @@ async function listTrackedChangesSinceBaseline(
 
   return changes
     .filter((change): change is ParsedGitFileChange => change !== null)
+    .filter((change) => !isWorkspaceStatePath(change.path))
     .sort(compareGitChanges);
 }
 
@@ -148,6 +154,7 @@ async function listUntrackedChanges(workspacePath: string): Promise<GitFileChang
       path,
       status: "untracked" as const,
     }))
+    .filter((change) => !isWorkspaceStatePath(change.path))
     .sort(compareGitChanges);
 }
 

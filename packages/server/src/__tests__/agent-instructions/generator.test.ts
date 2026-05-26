@@ -1,6 +1,7 @@
 import type { WorkspaceIntelligenceSummary } from "@coder-studio/core";
 import { describe, expect, it } from "vitest";
 import { buildAgentInstructionsMarkdown } from "../../agent-instructions/generator.js";
+import { AGENT_INSTRUCTIONS_RELATIVE_PATH } from "../../workspace/workspace-state.js";
 
 describe("buildAgentInstructionsMarkdown", () => {
   it("builds a deterministic AGENTS.md document from workspace intelligence", () => {
@@ -26,7 +27,7 @@ describe("buildAgentInstructionsMarkdown", () => {
       docs: [{ path: "README.md", kind: "readme" }],
       agentInstructions: {
         exists: false,
-        path: "AGENTS.md",
+        path: AGENT_INSTRUCTIONS_RELATIVE_PATH,
       },
     };
 
@@ -40,7 +41,7 @@ describe("buildAgentInstructionsMarkdown", () => {
         "- Package manager: pnpm",
         "- Frameworks: React",
         "- Docs: README.md",
-        "- AGENTS.md: missing",
+        `- ${AGENT_INSTRUCTIONS_RELATIVE_PATH}: missing`,
         "",
         "## Development Commands",
         "",

@@ -6,6 +6,11 @@ import { promisify } from "util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventBus } from "../bus/event-bus.js";
 import { SessionMetadataRepo } from "../storage/repositories/session-metadata-repo.js";
+import { WorkspaceRepo } from "../storage/repositories/workspace-repo.js";
+import {
+  AGENT_INSTRUCTIONS_RELATIVE_PATH,
+  WORKSPACE_STATE_DIR,
+} from "../workspace/workspace-state.js";
 import type { CommandContext } from "../ws/dispatch.js";
 import { dispatch } from "../ws/dispatch.js";
 import "../commands/agent-context.js";
@@ -16,13 +21,25 @@ describe("agent context commands", () => {
   let repoDir: string;
   let stateDir: string;
   let metadataRepo: SessionMetadataRepo;
+  let workspaceRepo: WorkspaceRepo;
   let ctx: CommandContext & { sessionMetadataRepo: SessionMetadataRepo };
 
   beforeEach(async () => {
     repoDir = await mkdtemp(join(tmpdir(), "agent-context-command-"));
     stateDir = await mkdtemp(join(tmpdir(), "agent-context-command-state-"));
+    workspaceRepo = new WorkspaceRepo({
+      filePath: join(stateDir, "workspaces.json"),
+    });
+    workspaceRepo.create({
+      id: "ws-1",
+      path: repoDir,
+      targetRuntime: "native",
+      openedAt: 1,
+      lastActiveAt: 1,
+      uiState: { leftPanelWidth: 1, bottomPanelHeight: 1, focusMode: false },
+    });
     metadataRepo = new SessionMetadataRepo({
-      filePath: join(stateDir, "session-metadata.json"),
+      workspaceRepo,
     });
 
     await execFileAsync("git", ["init"], { cwd: repoDir });
@@ -42,7 +59,8 @@ describe("agent context commands", () => {
     );
     await writeFile(join(repoDir, "README.md"), "# Demo\n");
     await mkdir(join(repoDir, "docs"), { recursive: true });
-    await writeFile(join(repoDir, "AGENTS.md"), "# Project\n");
+    await mkdir(join(repoDir, WORKSPACE_STATE_DIR), { recursive: true });
+    await writeFile(join(repoDir, AGENT_INSTRUCTIONS_RELATIVE_PATH), "# Project\n");
     await execFileAsync("git", ["add", "."], { cwd: repoDir });
     await execFileAsync("git", ["commit", "-m", "Initial commit"], { cwd: repoDir });
     const { stdout } = await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: repoDir });

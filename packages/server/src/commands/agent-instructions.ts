@@ -8,13 +8,14 @@ import { buildAgentInstructionsMarkdown } from "../agent-instructions/generator.
 import { evaluateAgentInstructionsMarkdown } from "../agent-instructions/health.js";
 import { readFile, writeFile } from "../fs/file-io.js";
 import { inspectWorkspaceIntelligence } from "../workspace/intelligence.js";
+import { AGENT_INSTRUCTIONS_RELATIVE_PATH } from "../workspace/workspace-state.js";
 import { registerCommand } from "../ws/dispatch.js";
 
 async function readAgentInstructionsDocument(
   workspaceId: string,
   rootPath: string
 ): Promise<AgentInstructionsDocument> {
-  const path = "AGENTS.md" as const;
+  const path = AGENT_INSTRUCTIONS_RELATIVE_PATH;
 
   try {
     const result = await readFile(workspaceId, rootPath, path);
@@ -73,7 +74,7 @@ registerCommand(
     });
 
     return {
-      path: "AGENTS.md",
+      path: AGENT_INSTRUCTIONS_RELATIVE_PATH,
       exists: false,
       content: buildAgentInstructionsMarkdown(summary),
     } satisfies AgentInstructionsDocument;
@@ -98,11 +99,16 @@ registerCommand(
     if (existing.exists && !args.overwrite) {
       throw {
         code: "agent_instructions_exists",
-        message: "AGENTS.md already exists",
+        message: `${AGENT_INSTRUCTIONS_RELATIVE_PATH} already exists`,
       };
     }
 
-    const result = await writeFile(workspace.path, "AGENTS.md", args.content, args.baseHash);
+    const result = await writeFile(
+      workspace.path,
+      AGENT_INSTRUCTIONS_RELATIVE_PATH,
+      args.content,
+      args.baseHash
+    );
     ctx.eventBus.emit({
       type: "fs.dirty",
       workspaceId: args.workspaceId,
@@ -110,7 +116,7 @@ registerCommand(
     });
 
     return {
-      path: "AGENTS.md",
+      path: AGENT_INSTRUCTIONS_RELATIVE_PATH,
       exists: true,
       content: args.content,
       baseHash: result.newHash,

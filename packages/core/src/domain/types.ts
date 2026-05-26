@@ -73,12 +73,12 @@ export interface WorkspaceIntelligenceSummary {
   }>;
   agentInstructions: {
     exists: boolean;
-    path: "AGENTS.md";
+    path: ".coder-studio/AGENTS.md";
   };
 }
 
 export interface AgentInstructionsDocument {
-  path: "AGENTS.md";
+  path: ".coder-studio/AGENTS.md";
   exists: boolean;
   content: string;
   baseHash?: string;
@@ -106,7 +106,7 @@ export interface AgentInstructionsHealthChecks {
 }
 
 export interface AgentInstructionsHealth {
-  path: "AGENTS.md";
+  path: ".coder-studio/AGENTS.md";
   exists: boolean;
   status: "healthy" | "warning" | "missing";
   checks: AgentInstructionsHealthChecks;

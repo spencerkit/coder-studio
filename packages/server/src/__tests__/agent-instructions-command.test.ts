@@ -3,6 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { EventBus } from "../bus/event-bus.js";
+import {
+  AGENT_INSTRUCTIONS_RELATIVE_PATH,
+  WORKSPACE_STATE_DIR,
+} from "../workspace/workspace-state.js";
 import type { CommandContext } from "../ws/dispatch.js";
 import { dispatch } from "../ws/dispatch.js";
 import "../commands/workspace.js";
@@ -97,7 +101,7 @@ describe("agentInstructions commands", () => {
 
     expect(result.ok).toBe(true);
     expect(result.data).toMatchObject({
-      path: "AGENTS.md",
+      path: AGENT_INSTRUCTIONS_RELATIVE_PATH,
       exists: false,
       content: "",
     });
@@ -207,7 +211,7 @@ describe("agentInstructions commands", () => {
 
     expect(readResult.ok).toBe(true);
     expect(readResult.data).toMatchObject({
-      path: "AGENTS.md",
+      path: AGENT_INSTRUCTIONS_RELATIVE_PATH,
       exists: true,
       content,
     });
@@ -217,8 +221,9 @@ describe("agentInstructions commands", () => {
     const rootPath = await mkdtemp(join(tmpdir(), "agent-instructions-health-"));
     tempDirs.push(rootPath);
 
+    await mkdir(join(rootPath, WORKSPACE_STATE_DIR), { recursive: true });
     await writeFile(
-      join(rootPath, "AGENTS.md"),
+      join(rootPath, AGENT_INSTRUCTIONS_RELATIVE_PATH),
       [
         "# Agent Instructions",
         "",

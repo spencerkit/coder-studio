@@ -155,11 +155,11 @@ export async function createServer(
   const customProviderRepo = new CustomProviderRepo({
     filePath: join(stateRoot, "state", "custom-providers.json"),
   });
-  const sessionMetadataRepo = new SessionMetadataRepo({
-    filePath: join(stateRoot, "state", "session-metadata.json"),
-  });
   const workspaceRepo = new WorkspaceRepo({
     filePath: join(stateRoot, "state", "workspaces.json"),
+  });
+  const sessionMetadataRepo = new SessionMetadataRepo({
+    workspaceRepo,
   });
   let activeProviderRegistry = [
     ...providerRegistry,
@@ -183,13 +183,14 @@ export async function createServer(
     broadcaster: wsHub,
     autoFetch,
     teardown: async (workspaceId) => {
+      const persistedSessions = sessionRepo.findByWorkspaceId(workspaceId);
       await lspMgr?.disposeWorkspace(workspaceId);
       await supervisorMgr?.deleteForWorkspace(workspaceId);
       await sessionMgr.stopForWorkspace(workspaceId);
       await terminalMgr.closeForWorkspace(workspaceId);
       sessionMgr.deleteEndedForWorkspace(workspaceId);
 
-      for (const session of sessionRepo.findByWorkspaceId(workspaceId)) {
+      for (const session of persistedSessions) {
         sessionRepo.delete(session.id);
         sessionMetadataRepo.delete(session.id);
       }

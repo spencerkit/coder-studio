@@ -1,22 +1,38 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventBus } from "../bus/event-bus.js";
 import { SessionMetadataRepo } from "../storage/repositories/session-metadata-repo.js";
+import { WorkspaceRepo } from "../storage/repositories/workspace-repo.js";
 import type { CommandContext } from "../ws/dispatch.js";
 import { dispatch } from "../ws/dispatch.js";
 import "../commands/session-metadata.js";
 
 describe("session metadata commands", () => {
   let tempDir: string;
+  let workspacePath: string;
+  let workspaceRepo: WorkspaceRepo;
   let metadataRepo: SessionMetadataRepo;
   let ctx: CommandContext & { sessionMetadataRepo: SessionMetadataRepo };
 
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), "session-metadata-command-"));
+    workspacePath = join(tempDir, "workspace");
+    await mkdir(workspacePath, { recursive: true });
+    workspaceRepo = new WorkspaceRepo({
+      filePath: join(tempDir, "workspaces.json"),
+    });
+    workspaceRepo.create({
+      id: "ws-1",
+      path: workspacePath,
+      targetRuntime: "native",
+      openedAt: 1,
+      lastActiveAt: 1,
+      uiState: { leftPanelWidth: 1, bottomPanelHeight: 1, focusMode: false },
+    });
     metadataRepo = new SessionMetadataRepo({
-      filePath: join(tempDir, "session-metadata.json"),
+      workspaceRepo,
     });
     metadataRepo.upsert({
       sessionId: "sess-1",
