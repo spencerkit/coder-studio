@@ -3078,7 +3078,10 @@ describe("components.css theme-sensitive surfaces", () => {
     const emptyState = getLastRuleBlock(".file-tree-empty");
     const row = getLastRuleBlock(".file-tree-shell .tree-item");
     const rowDesktop = getLastRuleBlock(".file-tree-shell--desktop .tree-item");
-    const rowSelected = getLastRuleBlock(".file-tree-shell--desktop .tree-item.selected");
+    const rowSelected = getLastRuleBlock(".file-tree-shell .tree-item.selected");
+    const mobileRowSelected = getLastRuleBlock(
+      ".mobile-sheet--files .file-tree-shell--mobile .tree-item.selected"
+    );
     const rowActionsBase = getLastRuleBlock(".file-tree-shell .tree-item-actions");
     const rowActionsDesktop = getLastRuleBlock(".file-tree-shell--desktop .tree-item-actions");
 
@@ -3110,6 +3113,9 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(rowSelected).toContain("border: 1px solid var(--state-selected-border)");
     expect(rowSelected).toContain("background: var(--state-selected-bg)");
     expect(rowSelected).toContain("color: var(--text-primary)");
+    expect(mobileRowSelected).toContain(
+      "border-left: 2px solid var(--component-mix-status-info-fg-88pct-white-12pct)"
+    );
     expect(rowActionsBase).toContain("gap: var(--gap-compact)");
     expect(rowActionsDesktop).toContain("opacity: 0");
   });
@@ -3200,6 +3206,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(quickOpen).toContain("border: 1px solid var(--surface-overlay-border)");
     expect(quickOpen).toContain("border-radius: var(--radius-overlay)");
     expect(quickOpen).toContain("background: var(--surface-overlay-bg)");
+    expect(quickOpenSearch).toContain("border-radius: var(--radius-md)");
     expect(quickOpenSearch).toContain(
       "border-bottom: 1px solid var(--component-mix-border-default-82pct-transparent)"
     );

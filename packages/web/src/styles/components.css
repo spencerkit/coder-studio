@@ -13323,7 +13323,7 @@ body.is-dragging-pane .session-action-btn-drag {
   background: var(--component-mix-surface-hover-92pct-transparent);
 }
 
-.file-tree-shell--desktop .tree-item.selected {
+.file-tree-shell .tree-item.selected {
   padding-left: var(--inset-row-inline);
   border: 1px solid var(--state-selected-border);
   background: var(--state-selected-bg);
@@ -13671,6 +13671,7 @@ body.is-dragging-pane .session-action-btn-drag {
 }
 
 .mobile-sheet--files .file-tree-shell--mobile .tree-item.selected {
+  border: none;
   padding-left: 14px;
   border-left: 2px solid var(--component-mix-status-info-fg-88pct-white-12pct);
   background: var(--component-mix-status-info-fg-12pct-transparent);
