@@ -1,3 +1,4 @@
+import type { MonitoringResponse, MonitoringSettings } from "@coder-studio/core";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { BrowserRouter, MemoryRouter } from "react-router-dom";
@@ -94,6 +95,54 @@ function createDeferred<T>() {
     reject = rej;
   });
   return { promise, resolve, reject };
+}
+
+function createMonitoringResponse(
+  settings: MonitoringSettings = {
+    enabled: true,
+    hostMetricsEnabled: true,
+    runtimeSummaryEnabled: false,
+    workspaceAttributionEnabled: false,
+    subprocessDrilldownEnabled: false,
+    sampleIntervalMs: 5000,
+  }
+): MonitoringResponse {
+  return {
+    settings,
+    snapshot: {
+      sampledAt: 10,
+      mode: settings.enabled ? "light" : "disabled",
+      host: settings.enabled
+        ? {
+            cpuPercent: 30,
+            memoryUsedBytes: 300,
+            memoryTotalBytes: 1000,
+            memoryAvailableBytes: 700,
+            loadAverage: [0.3, 0.2, 0.1],
+            uptimeSec: 60,
+            pressure: "normal",
+          }
+        : null,
+      runtime: null,
+      workspaces: [],
+      sessions: [],
+      subprocessGroups: [],
+      backgroundGroups: [],
+    },
+    history: {
+      host: { points: [{ sampledAt: 10, cpuPercent: 30, memoryBytes: 300 }] },
+      runtime: null,
+      workspaces: {},
+      sessions: {},
+      subprocessGroups: {},
+    },
+    capabilities: {
+      loadAverageAvailable: true,
+      processMetricsAvailable: false,
+      subprocessHistoryLimited: false,
+    },
+    telemetry: null,
+  };
 }
 
 function renderSettingsPage(
@@ -369,7 +418,7 @@ describe("SettingsPage", () => {
     expect(routerMocks.navigate).toHaveBeenCalledWith("/diagnostics?context=manual_check");
   });
 
-  it("opens the monitoring settings section from section=monitoring without rendering legacy general monitoring controls", async () => {
+  it("renders monitoring inside the settings content surface from section=monitoring", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "settings.get") {
         return {
@@ -383,9 +432,45 @@ describe("SettingsPage", () => {
       }
       if (op === "monitoring.get") {
         return {
-          supported: true,
-          metrics: [],
-          updatedAt: Date.now(),
+          settings: {
+            enabled: true,
+            hostMetricsEnabled: true,
+            runtimeSummaryEnabled: false,
+            workspaceAttributionEnabled: false,
+            subprocessDrilldownEnabled: false,
+            sampleIntervalMs: 5000,
+          },
+          snapshot: {
+            sampledAt: 10,
+            mode: "light",
+            host: {
+              cpuPercent: 30,
+              memoryUsedBytes: 300,
+              memoryTotalBytes: 1000,
+              memoryAvailableBytes: 700,
+              loadAverage: [0.3, 0.2, 0.1],
+              uptimeSec: 60,
+              pressure: "normal",
+            },
+            runtime: null,
+            workspaces: [],
+            sessions: [],
+            subprocessGroups: [],
+            backgroundGroups: [],
+          },
+          history: {
+            host: { points: [{ sampledAt: 10, cpuPercent: 30, memoryBytes: 300 }] },
+            runtime: null,
+            workspaces: {},
+            sessions: {},
+            subprocessGroups: {},
+          },
+          capabilities: {
+            loadAverageAvailable: true,
+            processMetricsAvailable: false,
+            subprocessHistoryLimited: false,
+          },
+          telemetry: null,
         };
       }
 
@@ -396,15 +481,28 @@ describe("SettingsPage", () => {
     renderSettingsPage(store, { initialEntry: "/settings?section=monitoring" });
 
     const monitoringNavButton = await screen.findByRole("button", { name: "性能监控" });
+    const contentSurface = document.querySelector(".settings-content-surface") as HTMLElement;
 
     expect(monitoringNavButton).toHaveClass("settings-nav-item-active");
+    expect(within(contentSurface).getByText("主机概览")).toBeInTheDocument();
+    expect(within(contentSurface).getByRole("switch", { name: "启用性能监控" })).toHaveAttribute(
+      "aria-checked",
+      "true"
+    );
+    expect(within(contentSurface).getByRole("tablist", { name: "预设" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "打开监控" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("switch", { name: "启用性能监控" })).not.toBeInTheDocument();
     expect(screen.queryByText("设置通知与终端行为。")).not.toBeInTheDocument();
   });
 
   it("switches sections after mount when navigating within settings by search param", async () => {
-    const store = createConnectedStore(vi.fn().mockResolvedValue({}));
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "monitoring.get") {
+        return createMonitoringResponse();
+      }
+
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
 
     window.history.replaceState({ idx: 0 }, "", "/settings?section=about");
 
@@ -430,11 +528,70 @@ describe("SettingsPage", () => {
       );
     });
 
+    expect(await screen.findByText("主机概览")).toBeInTheDocument();
     expect(screen.queryByTestId("about-settings")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "关于" })).not.toHaveClass(
       "settings-nav-item-active"
     );
-    expect(screen.queryByRole("switch", { name: "启用性能监控" })).not.toBeInTheDocument();
+  });
+
+  it("leaves a deep-linked section when the user chooses another settings section", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "monitoring.get") {
+        return createMonitoringResponse();
+      }
+
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store, { initialEntry: "/settings?section=monitoring" });
+
+    expect(await screen.findByRole("button", { name: "性能监控" })).toHaveClass(
+      "settings-nav-item-active"
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "关于" }));
+
+    expect(await screen.findByTestId("about-settings")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "关于" })).toHaveClass("settings-nav-item-active");
+    expect(screen.getByRole("button", { name: "性能监控" })).not.toHaveClass(
+      "settings-nav-item-active"
+    );
+    expect(routerMocks.navigate).toHaveBeenCalledWith(
+      {
+        pathname: "/settings",
+        search: "?section=about",
+      },
+      { replace: false }
+    );
+  });
+
+  it("clears a mobile deep-link query when backing out to the settings root", async () => {
+    viewportMocks.viewport = "mobile";
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "monitoring.get") {
+        return createMonitoringResponse();
+      }
+
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store, { initialEntry: "/settings?section=monitoring" });
+
+    expect(await screen.findByText("主机概览")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "返回" }));
+
+    expect(await screen.findByTestId("settings-mobile-root")).toBeInTheDocument();
+    expect(routerMocks.navigate).toHaveBeenCalledWith(
+      {
+        pathname: "/settings",
+        search: "",
+      },
+      { replace: false }
+    );
   });
 
   it("does not render phone continuation entry from settings even when a workspace is active", async () => {

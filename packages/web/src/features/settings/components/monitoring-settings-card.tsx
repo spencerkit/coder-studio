@@ -4,7 +4,8 @@ import {
   type MonitoringSampleIntervalMs,
   type MonitoringSettings,
 } from "@coder-studio/core";
-import { Button, Notice, Pill, SegmentedControl, Switch } from "../../../components/ui";
+import type { ReactNode } from "react";
+import { Notice, Pill, SegmentedControl, Switch } from "../../../components/ui";
 import { useTranslation } from "../../../lib/i18n";
 
 type MonitoringPreset = "light" | "standard" | "deep" | "custom";
@@ -13,7 +14,8 @@ interface MonitoringSettingsCardProps {
   readonly settings: MonitoringSettings;
   readonly mode: MonitoringMode;
   readonly onChange: (next: MonitoringSettings) => Promise<void> | void;
-  readonly onOpenMonitoring: () => void;
+  readonly headerActions?: ReactNode;
+  readonly showHeaderChrome?: boolean;
 }
 
 function formatModeLabel(mode: MonitoringMode, t: ReturnType<typeof useTranslation>) {
@@ -80,7 +82,8 @@ export function MonitoringSettingsCard({
   settings,
   mode,
   onChange,
-  onOpenMonitoring,
+  headerActions,
+  showHeaderChrome = true,
 }: MonitoringSettingsCardProps) {
   const t = useTranslation();
   const resolvedSettings = normalizeSettings(settings);
@@ -132,18 +135,18 @@ export function MonitoringSettingsCard({
 
   return (
     <section className="settings-card settings-card--monitoring" aria-label={t("monitoring.group")}>
-      <div className="settings-card__header">
-        <div>
-          <h3 className="settings-group-title">{t("monitoring.group")}</h3>
-          <p className="settings-group-desc">{t("monitoring.description")}</p>
+      {showHeaderChrome ? (
+        <div className="settings-card__header">
+          <div>
+            <h3 className="settings-group-title">{t("monitoring.group")}</h3>
+            <p className="settings-group-desc">{t("monitoring.description")}</p>
+          </div>
+          <div className="settings-card__header-actions">
+            <Pill disabled>{formatModeLabel(mode, t)}</Pill>
+            {headerActions}
+          </div>
         </div>
-        <div className="settings-card__header-actions">
-          <Pill disabled>{formatModeLabel(mode, t)}</Pill>
-          <Button size="sm" variant="ghost" onClick={onOpenMonitoring}>
-            {t("monitoring.open_monitoring")}
-          </Button>
-        </div>
-      </div>
+      ) : null}
 
       <div className="settings-toggle-row">
         <div className="settings-toggle-info">
@@ -279,7 +282,7 @@ export function MonitoringSettingsCard({
           aria-label={t("monitoring.refresh_rate")}
           onChange={(value) =>
             void onChange({
-              ...settings,
+              ...resolvedSettings,
               sampleIntervalMs: Number(value) as MonitoringSampleIntervalMs,
             })
           }

@@ -65,6 +65,7 @@ import {
   terminalPreferencesAtom,
 } from "../../terminal-panel/preferences";
 import { AboutSettings } from "./about-settings";
+import { MonitoringSettingsSubpage } from "./monitoring-settings-subpage";
 import { type ProviderInfo, ProviderSettings } from "./provider-settings";
 import { resolveSettingsExitTargetFromBrowserHistory } from "./settings-navigation";
 import {
@@ -343,6 +344,22 @@ export function SettingsPage() {
       ...store.get(terminalPreferencesAtom),
       ...next,
     });
+  };
+
+  const selectSettingsSection = (section: SettingsSection) => {
+    const nextSearchParams = new URLSearchParams(location.search);
+    nextSearchParams.set("section", section);
+    const nextSearch = nextSearchParams.toString();
+
+    navigate(
+      {
+        pathname: location.pathname,
+        search: nextSearch ? `?${nextSearch}` : "",
+      },
+      { replace: false }
+    );
+
+    setNavigationState({ kind: "detail", section });
   };
 
   useEffect(() => {
@@ -676,6 +693,21 @@ export function SettingsPage() {
     }
   };
 
+  const handleMonitoringSettingsChange = async (nextSettings: MonitoringSettings) => {
+    const previousSettings = monitoringSettings;
+    setMonitoringSettings(nextSettings);
+
+    const result = await dispatch("settings.update", {
+      settings: {
+        monitoring: nextSettings,
+      },
+    });
+
+    if (result === null || !result.ok) {
+      setMonitoringSettings(previousSettings);
+    }
+  };
+
   useEffect(() => {
     if (detailSection !== "providers") {
       setContentLayoutMode("default");
@@ -695,6 +727,13 @@ export function SettingsPage() {
 
   const handleBack = () => {
     if (isMobile && navigationState.kind === "detail") {
+      navigate(
+        {
+          pathname: location.pathname,
+          search: "",
+        },
+        { replace: false }
+      );
       setNavigationState({ kind: "root", lastSection: navigationState.section });
       return;
     }
@@ -734,7 +773,13 @@ export function SettingsPage() {
           />
         );
       case "monitoring":
-        return <div className="settings-section" />;
+        return (
+          <MonitoringSettingsSubpage
+            mode={deriveMonitoringMode(monitoringSettings)}
+            onChange={handleMonitoringSettingsChange}
+            settings={monitoringSettings}
+          />
+        );
       case "appearance":
         return (
           <AppearanceSettings
@@ -791,7 +836,7 @@ export function SettingsPage() {
                   type="button"
                   className="settings-mobile-item"
                   aria-label={t(section.labelKey)}
-                  onClick={() => setNavigationState({ kind: "detail", section: section.id })}
+                  onClick={() => selectSettingsSection(section.id)}
                 >
                   <span className="settings-mobile-item__icon-shell" aria-hidden="true">
                     <span className="settings-mobile-item__icon">
@@ -856,7 +901,7 @@ export function SettingsPage() {
                     icon={<ThemedIcon semantic={iconSemantic} size={16} />}
                     label={t(labelKey)}
                     active={detailSection === id}
-                    onClick={() => setNavigationState({ kind: "detail", section: id })}
+                    onClick={() => selectSettingsSection(id)}
                   />
                 ))}
               </nav>
