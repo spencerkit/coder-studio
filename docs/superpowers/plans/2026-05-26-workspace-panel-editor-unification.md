@@ -107,15 +107,6 @@ Extend the Git assertions to cover the unified row-selection language:
     expect(gitHistoryRowCurrent).toContain("background: var(--state-selected-bg)");
 ```
 
-Replace the mobile file-row selected assertion with the same block-selected contract:
-
-```ts
-    expect(mobileFileRow).toContain("border-radius: var(--radius-md)");
-    expect(mobileFileRowSelected).not.toContain("border-left:");
-    expect(mobileFileRowSelected).toContain("border: 1px solid var(--state-selected-border)");
-    expect(mobileFileRowSelected).toContain("background: var(--state-selected-bg)");
-```
-
 - [ ] **Step 2: Run the style test to verify it fails**
 
 Run:
@@ -129,6 +120,8 @@ Expected:
 - FAIL because Git diff rows still use `::before`
 - FAIL because Search has no persistent selected-row class
 - FAIL because several controls still use panel-sized or ad hoc radii instead of the shared compact token
+
+Leave the mobile selected-row assertions unchanged for now. Add the mobile block-selected contract in Task 6 so Task 2 can take the desktop/shared primitive layer fully green before the mobile surface pass.
 
 - [ ] **Step 3: Commit nothing yet**
 
@@ -298,6 +291,31 @@ Add this regression to `packages/web/src/features/workspace/views/shared/file-tr
   });
 ```
 
+Add an Explorer-level regression to `packages/web/src/features/workspace/views/shared/explorer-panel.test.tsx` so the open-editor list is covered when the shared row hook lands:
+
+```tsx
+  it("keeps the active open editor on the shared selected-row contract", () => {
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+    store.set(openFilesAtomFamily("ws-test"), {
+      "src/app.tsx": { path: "src/app.tsx", isDirty: false, lineEnding: "lf" },
+    });
+    store.set(activeFilePathAtomFamily("ws-test"), "src/app.tsx");
+
+    render(
+      <Provider store={store}>
+        <ExplorerPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    expect(screen.getByRole("button", { name: "src/app.tsx" })).toHaveClass(
+      "workspace-open-editors__item",
+      "workspace-sidebar-row",
+      "workspace-sidebar-row--selected"
+    );
+  });
+```
+
 Add this regression to `packages/web/src/features/workspace/views/mobile/mobile-explorer-panel.test.tsx`:
 
 ```tsx
@@ -408,7 +426,7 @@ pnpm --filter @coder-studio/web exec vitest run \
 
 Expected:
 - PASS for the new shared-row and shared-control regressions
-- PASS for existing Explorer behavior
+- PASS for existing Explorer behavior, including the open-editor header/action split
 
 - [ ] **Step 5: Commit the Explorer convergence**
 
@@ -700,6 +718,64 @@ Add this test to `packages/web/src/features/workspace/views/shared/git-panel.tes
   });
 ```
 
+Add focused coverage for the other two selected-row surfaces that Task 5 changes:
+
+```tsx
+  it("keeps the current worktree and current history entry on the shared selected-row contract", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return status;
+      }
+
+      if (op === "git.branches") {
+        return {
+          current: "feature/ai-agent",
+          branches: [],
+        };
+      }
+
+      if (op === "git.log") {
+        return { entries: historyEntries };
+      }
+
+      if (op === "worktree.list") {
+        return { worktrees };
+      }
+
+      return {};
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedWorkspaceStore(store);
+
+    render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /Worktrees/i }));
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /feature\\/ai-agent/i })).toHaveClass(
+        "git-worktree-row__main",
+        "workspace-sidebar-row",
+        "workspace-sidebar-row--selected"
+      );
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /History/i }));
+    await waitFor(() => {
+      expect(document.querySelector(".git-history-row.current")).toHaveClass(
+        "git-history-row",
+        "workspace-sidebar-row",
+        "workspace-sidebar-row--selected"
+      );
+    });
+  });
+```
+
 - [ ] **Step 2: Run the Git panel test to verify failure**
 
 Run:
@@ -709,7 +785,7 @@ pnpm --filter @coder-studio/web exec vitest run src/features/workspace/views/sha
 ```
 
 Expected:
-- FAIL because selected Git rows do not yet carry the shared selected-row class
+- FAIL because selected Git rows do not yet carry the shared selected-row class on change rows, worktree rows, or history rows
 
 - [ ] **Step 3: Add the Git markup hooks and tighten Git chrome to match the compact workbench system**
 
@@ -809,11 +885,12 @@ git commit -m "feat(web): unify git panel workbench chrome"
 
 **Files:**
 - Modify: `packages/web/src/styles/components.css`
+- Modify: `packages/web/src/styles/components.theme.test.ts`
 - Modify: `packages/web/src/features/workspace/views/mobile/mobile-files-sheet.test.tsx`
 - Test: `packages/web/src/features/workspace/views/mobile/mobile-files-sheet.test.tsx`
 - Test: `packages/web/src/styles/components.theme.test.ts`
 
-- [ ] **Step 1: Add a mobile regression for the unified small-radius panel language**
+- [ ] **Step 1: Add mobile regressions for the unified small-radius panel language**
 
 Add this assertion to `packages/web/src/features/workspace/views/mobile/mobile-files-sheet.test.tsx` inside the root-sheet test:
 
@@ -827,6 +904,15 @@ Add this assertion to `packages/web/src/features/workspace/views/mobile/mobile-f
 
 This keeps the mobile structure stable while the styling moves to the shared workbench language.
 
+Then update `packages/web/src/styles/components.theme.test.ts` to move the mobile selected-row contract into this task:
+
+```ts
+    expect(mobileFileRow).toContain("border-radius: var(--radius-md)");
+    expect(mobileFileRowSelected).not.toContain("border-left:");
+    expect(mobileFileRowSelected).toContain("border: 1px solid var(--state-selected-border)");
+    expect(mobileFileRowSelected).toContain("background: var(--state-selected-bg)");
+```
+
 - [ ] **Step 2: Run the mobile files and theme tests as a guard**
 
 Run:
@@ -838,7 +924,7 @@ pnpm --filter @coder-studio/web exec vitest run \
 ```
 
 Expected:
-- FAIL only on the theme assertions from Task 1 if any mobile selected-state rules still use the old left-accent contract
+- FAIL on the new mobile theme assertions because the selected mobile tree row still uses the old left-accent contract
 - PASS for the structural mobile files sheet test
 
 - [ ] **Step 3: Apply the shared workbench system to the mobile files surface without softening it**
@@ -942,21 +1028,10 @@ Expected:
 - PASS across all targeted tests
 - No regressions in file opening, Git preview, or mobile tab switching
 
-- [ ] **Step 2: Stage and commit the final verification pass**
+- [ ] **Step 2: Do not create a duplicate aggregate commit**
 
-```bash
-git add \
-  packages/web/src/styles/components.css \
-  packages/web/src/styles/components.theme.test.ts \
-  packages/web/src/features/workspace/views/shared/file-tree-panel.tsx \
-  packages/web/src/features/workspace/views/shared/file-tree-panel.test.tsx \
-  packages/web/src/features/workspace/views/shared/open-editors-section.tsx \
-  packages/web/src/features/workspace/views/shared/quick-jump-section.tsx \
-  packages/web/src/features/workspace/views/shared/search-panel.tsx \
-  packages/web/src/features/workspace/views/shared/search-panel.test.tsx \
-  packages/web/src/features/workspace/views/shared/git-panel.tsx \
-  packages/web/src/features/workspace/views/shared/git-panel.test.tsx \
-  packages/web/src/features/workspace/views/mobile/mobile-explorer-panel.test.tsx \
-  packages/web/src/features/workspace/views/mobile/mobile-files-sheet.test.tsx
-git commit -m "feat(web): unify workspace panels into editor workbench chrome"
-```
+The task commits above are the authoritative implementation history. After the final verification run:
+
+- confirm `git status --short` is clean
+- do not create another aggregate commit that duplicates the task commits
+- if a single squashed commit is desired, treat that as a separate user-directed follow-up
