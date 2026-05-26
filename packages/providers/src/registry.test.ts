@@ -5,6 +5,7 @@ import {
   getProvidersByCapability,
   isValidProviderId,
   providerRegistry,
+  toProviderListItem,
 } from "../src/registry.js";
 
 describe("Provider Registry", () => {
@@ -89,6 +90,58 @@ describe("Provider Registry", () => {
     it("should return empty array for unsupported capability", () => {
       const unsupportedProviders = getProvidersByCapability("unsupported");
       expect(unsupportedProviders.length).toBe(0);
+    });
+  });
+
+  describe("toProviderListItem", () => {
+    it("returns a safe provider DTO for Claude", () => {
+      const provider = getProviderById("claude");
+      expect(provider).toBeDefined();
+
+      const item = toProviderListItem(provider!);
+
+      expect(item).toEqual({
+        id: "claude",
+        displayName: "Claude Code",
+        badge: "Claude",
+        kind: "built_in",
+        capability: "full",
+        capabilities: [
+          { key: "interactive_session", supported: true, label: "Interactive session" },
+          { key: "supervisor_eval", supported: true, label: "Supervisor evaluation" },
+          { key: "idle_detection", supported: true, label: "Idle detection" },
+          { key: "context_attach", supported: false, label: "Context attach" },
+          { key: "review", supported: false, label: "Review" },
+        ],
+        requiredCommands: ["claude"],
+      });
+    });
+
+    it("returns a safe provider DTO for Codex without executable internals", () => {
+      const provider = getProviderById("codex");
+      expect(provider).toBeDefined();
+
+      const item = toProviderListItem(provider!);
+
+      expect(item).toEqual({
+        id: "codex",
+        displayName: "Codex",
+        badge: "Codex",
+        kind: "built_in",
+        capability: "full",
+        capabilities: [
+          { key: "interactive_session", supported: true, label: "Interactive session" },
+          { key: "supervisor_eval", supported: true, label: "Supervisor evaluation" },
+          { key: "idle_detection", supported: true, label: "Idle detection" },
+          { key: "context_attach", supported: false, label: "Context attach" },
+          { key: "review", supported: false, label: "Review" },
+        ],
+        requiredCommands: ["codex"],
+      });
+      expect("buildCommand" in item).toBe(false);
+      expect("install" in item).toBe(false);
+      expect("configSchema" in item).toBe(false);
+      expect("defaultConfig" in item).toBe(false);
     });
   });
 });

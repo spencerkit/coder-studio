@@ -6,7 +6,9 @@
 
 **Coder Studio，生来就是 vibe coding。**
 
-在同一个工作台里运行 Claude Code 和 Codex，让终端、文件、Git 视图和 AI 会话跟着你在不同设备间延续。
+面向真实开发的 agentic workspace。用一个浏览器工作区运行、检查和监督 coding agent，把终端、文件、Git、会话和代码审查放在一起。
+
+当前内置支持：Claude Code 和 Codex。你的代码和运行时保留在自己的机器上。
 
 [![npm version](https://img.shields.io/npm/v/@spencer-kit/coder-studio.svg)](https://www.npmjs.com/package/@spencer-kit/coder-studio)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -21,17 +23,17 @@
 
 [![工作区预览](docs/help/assets/screenshot-desktop-workspace-full.png)](docs/help/assets/screenshot-desktop-workspace-full.png)
 
-<div align="center">预览这个为 vibe coding、Supervisor 监督和跨设备切换而设计的完整工作区布局。</div>
+<div align="center">预览这个为 Agent 运行、改动审查、Supervisor 监督和跨设备切换而设计的完整工作区布局。</div>
 
 ## 为什么它不一样
 
-- **一个浏览器里完成 AI 编程工作流** — 把终端、文件、Git 和 AI 会话放到同一个工作台。
+- **一个浏览器里完成真实 Agent 工作流** — 把终端、文件、Git、会话和代码审查放到同一个工作台。
 - **真正为设备切换而设计** — 在桌面端开始，在平板继续，用手机随时查看 Agent 进度。
-- **目标驱动的多轮调度** — 让 Supervisor 接管长任务推进，你不必全程盯守每一轮输出，减少机械重复的人工催促，并获得更稳定的执行效果。
+- **保留本地控制权** — 你的代码和运行时都留在自己的机器上。
 
 ## 为什么选择 Coder Studio？
 
-vibe coding agent 已经很强，但原始工作流仍然是割裂的：
+vibe coding agent 很快，但真实开发里的工作流仍然是割裂的：
 
 - Agent 跑在一个终端里
 - 文件和 diff 在另一个编辑器里
@@ -46,7 +48,7 @@ Coder Studio 把这些分散的环节收进同一个本地浏览器工作台。
 | 长时间 Agent 任务 | 盯着终端，或者回来后重新拼上下文 | 会话、终端输出、文件和 Git 变更都在同一个工作区里 |
 | 跨设备继续 | SSH、远程桌面，或在另一台机器重新配置 | 桌面、平板、手机重新打开同一个本地工作区 |
 | 审阅 AI 改动 | 在终端、编辑器、Git 工具之间切换 | 在 Agent 会话旁边直接查看文件和 diff |
-| 多 Agent 并行 | 多个终端窗口和历史记录分散管理 | Claude 和 Codex 会话在同一个工作区里并行管理 |
+| 多 Agent 并行 | 多个终端窗口和历史记录分散管理 | 今天先把内置的 Claude Code 和 Codex 会话并行放进同一个工作区 |
 | 本地优先 | 把环境迁到云 IDE 或远程 VM | 运行时和项目文件留在自己的机器上 |
 
 ## 快速开始
@@ -81,7 +83,7 @@ coder-studio open
 
 ### AI 辅助编程
 
-- 并行运行 Claude Code 和 Codex 会话
+- 今天并行运行 Claude Code 和 Codex 会话
 - 终端、编辑器、Git 和 Supervisor 状态统一在一个界面
 - 切换设备后继续当前 AI 工作，不必重新建立上下文
 
@@ -113,11 +115,12 @@ coder-studio open
 |------|------|
 | **跨设备工作区** | 在桌面、平板和手机之间重新打开同一个编码环境，不必重新建立上下文 |
 | **Supervisor 监督循环** | 围绕目标运行评估与续推循环，减少长任务中的人工盯守 |
-| **Claude Code + Codex** | 在同一个工作区里使用两套 Agent CLI，而不是把工作流拆散到多个工具中 |
-| **终端、编辑器和 Git 一体化** | 在同一个浏览器界面里完成 PTY 终端、Monaco 编辑、diff 和变更查看 |
+| **内置 Agent Provider** | 今天先在同一个工作区里使用 Claude Code 和 Codex，而不是把工作流拆散到多个工具中 |
+| **终端、文件和 Git 一体化** | 在同一个浏览器界面里完成 PTY 终端、Monaco 编辑、diff 和变更查看 |
+| **可审查的 AI 改动** | 先在 Agent 会话旁检查文件和 diff，再决定是否信任结果 |
 | **响应式工作区界面** | 提供面向桌面、平板和手机的布局，而不是把桌面界面硬塞进小屏幕 |
 | **会话连续性** | 切换设备后继续当前活跃会话，让 AI 工作保持可见 |
-| **本地优先运行时** | 代码和运行时都留在你的机器上，不依赖云 IDE |
+| **本地运行时控制** | 代码和运行时都留在你的机器上，不依赖云 IDE |
 
 ---
 
@@ -150,7 +153,7 @@ coder-studio open
 
 ## 👥 谁适合使用
 
-- **AI 编程深度用户** — 每天使用 Claude Code / Codex，想要更好的会话管理
+- **运行 coding agent 的开发者** — 希望把终端、文件、Git、会话和代码审查放到同一个地方
 - **多设备开发者** — 频繁在办公室、家和移动设备之间切换
 - **运行长任务的开发者** — 希望由 Supervisor 持续推进多轮任务，而不是全程人工盯守
 - **注重隐私的开发者** — 希望代码留在本地机器，不依赖云 IDE

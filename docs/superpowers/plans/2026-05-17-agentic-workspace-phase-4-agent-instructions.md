@@ -6,7 +6,7 @@
 
 **Goal:** Let users create, inspect, and edit universal project-level agent instructions through `AGENTS.md`.
 
-**Architecture:** Build on Workspace Intelligence. The server generates deterministic `AGENTS.md` content from project facts; the web UI exposes create/edit actions without tying the feature to any single provider.
+**Architecture:** Build on Workspace Intelligence. The server generates deterministic `AGENTS.md` content from project facts and exposes read/write/health commands. No separate workspace intelligence panel or dedicated frontend editor is part of this phase.
 
 **Tech Stack:** TypeScript, Node filesystem APIs, Zod, Vitest, React Testing Library.
 
@@ -17,8 +17,7 @@
 Includes:
 
 - `AGENTS.md` generation from workspace intelligence.
-- Server commands to read, generate, and write instructions.
-- UI panel for instruction state and editing.
+- Server commands to read, generate, write, and inspect instructions.
 - Provider-specific notes section.
 - Instruction health checks.
 
@@ -39,9 +38,6 @@ Excludes:
 - Create: `packages/server/src/commands/agent-instructions.ts`
 - Modify: `packages/server/src/commands/index.ts`
 - Create: `packages/server/src/__tests__/agent-instructions-command.test.ts`
-- Create: `packages/web/src/features/agent-instructions/actions/use-agent-instructions.ts`
-- Create: `packages/web/src/features/agent-instructions/components/agent-instructions-panel.tsx`
-- Create: `packages/web/src/features/agent-instructions/components/agent-instructions-panel.test.tsx`
 
 ## Commands
 
@@ -102,12 +98,7 @@ Omit command lines that are unknown rather than inserting placeholders.
   - has safety rules
 - [ ] Implement server commands using safe workspace path resolution.
 - [ ] Add command tests for missing workspace, missing file, generated content, write roundtrip, and health output.
-- [ ] Add UI panel with actions:
-  - create from project context
-  - open existing instructions
-  - save changes
-  - show health issues
-- [ ] Add tests for create, edit, and health states.
+- [ ] Add command-only workspace tests for create, edit, and health states.
 
 ## Acceptance Criteria
 
@@ -122,8 +113,7 @@ Omit command lines that are unknown rather than inserting placeholders.
 pnpm exec vitest run \
   packages/server/src/__tests__/agent-instructions/generator.test.ts \
   packages/server/src/__tests__/agent-instructions/health.test.ts \
-  packages/server/src/__tests__/agent-instructions-command.test.ts \
-  packages/web/src/features/agent-instructions/components/agent-instructions-panel.test.tsx
+  packages/server/src/__tests__/agent-instructions-command.test.ts
 ```
 
 Expected: all tests pass.
@@ -131,7 +121,6 @@ Expected: all tests pass.
 ## Suggested Commit
 
 ```bash
-git add packages/core packages/server packages/web/src/features/agent-instructions
+git add packages/core packages/server docs/superpowers/plans/2026-05-17-agentic-workspace-phase-4-agent-instructions.md
 git commit -m "feat: add universal agent instructions"
 ```
-

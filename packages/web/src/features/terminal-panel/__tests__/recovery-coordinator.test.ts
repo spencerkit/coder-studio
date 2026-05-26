@@ -481,4 +481,42 @@ describe("RecoveryCoordinator", () => {
 
     expect(setUiMode).toHaveBeenCalledWith("error", { reason: "too_old_no_snapshot" });
   });
+
+  it("surfaces reconcile command failures as reconcile_failed details instead of a generic recovery failure", async () => {
+    const setUiMode = vi.fn();
+    const sendCommand = vi.fn().mockResolvedValueOnce({
+      ok: false,
+      error: {
+        code: "unknown_op",
+        message: "Unknown operation: recovery.reconcile",
+      },
+    });
+
+    const coordinator = createRecoveryCoordinator({
+      wsClient: {
+        getStatus: vi.fn(() => "connected"),
+        probeConnection: vi.fn().mockResolvedValue({ ok: true }),
+        onStatus: vi.fn(() => () => {}),
+        subscribe: vi.fn(() => () => {}),
+      } as never,
+      sendCommand,
+      applyReplay: vi.fn(),
+      applySnapshot: vi.fn(),
+    });
+
+    coordinator.registerTerminal({
+      terminalId: "term-1",
+      workspaceId: "ws-1",
+      getRenderedSeq: () => 20,
+      setUiMode,
+    });
+
+    await coordinator.notifyReason("initial_mount", "term-1");
+
+    expect(setUiMode).toHaveBeenCalledWith("error", {
+      reason: "reconcile_failed",
+      operation: "recovery.reconcile",
+      errorCode: "unknown_op",
+    });
+  });
 });

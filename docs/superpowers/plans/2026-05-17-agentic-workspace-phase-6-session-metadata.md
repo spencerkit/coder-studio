@@ -24,7 +24,7 @@ Includes:
 
 Excludes:
 
-- Full review UI.
+- Full review UI. Deferred to a later UX phase.
 - Perfect attribution of file changes to a session.
 - Automatic test command execution.
 
@@ -38,8 +38,6 @@ Excludes:
 - Create: `packages/server/src/commands/session-metadata.ts`
 - Modify: `packages/server/src/commands/index.ts`
 - Create: `packages/server/src/__tests__/session-metadata-command.test.ts`
-- Modify: `packages/web/src/features/agent-panes/components/session-card.tsx`
-- Modify: `packages/web/src/features/agent-panes/components/session-card.test.tsx`
 
 ## Data Model
 
@@ -76,7 +74,6 @@ export interface AgentSessionVerificationRun {
 - [ ] Register `session.metadata.get`.
 - [ ] Register `session.verification.add`.
 - [ ] Add tests for non-Git workspaces, Git workspaces, and verification append.
-- [ ] Update session card to show objective and baseline state when available.
 
 ## Acceptance Criteria
 
@@ -91,8 +88,7 @@ export interface AgentSessionVerificationRun {
 pnpm exec vitest run \
   packages/server/src/__tests__/session-metadata-repo.test.ts \
   packages/server/src/__tests__/session-metadata-command.test.ts \
-  packages/server/src/__tests__/session-commands.test.ts \
-  packages/web/src/features/agent-panes/components/session-card.test.tsx
+  packages/server/src/__tests__/session-commands.test.ts
 ```
 
 Expected: all tests pass.
@@ -100,7 +96,6 @@ Expected: all tests pass.
 ## Suggested Commit
 
 ```bash
-git add packages/core packages/server packages/web/src/features/agent-panes
+git add packages/core packages/server
 git commit -m "feat: add agent session metadata"
 ```
-

@@ -13,6 +13,8 @@ import type {
   TerminalSnapshotPayload,
 } from "../../ws/client";
 import {
+  isRecoveryControlPlaneError,
+  type RecoveryOperation,
   type RecoveryUiMode,
   type RecoveryUiModeDetail,
   TERMINAL_REPLAY_TIMEOUT_MS,
@@ -203,6 +205,18 @@ export function createRecoveryCoordinator(deps: RecoveryCoordinatorDeps): Recove
     queueRecovery(terminalId, { reason: "socket_reconnected", skipProbe: true });
   };
 
+  const surfaceRecoveryCheckFailure = (
+    terminal: RegisteredTerminal,
+    operation: RecoveryOperation,
+    errorCode?: string
+  ) => {
+    terminal.setUiMode("error", {
+      reason: "reconcile_failed",
+      operation,
+      errorCode,
+    } satisfies RecoveryUiModeDetail);
+  };
+
   const resolveIdleWaiters = (state: TerminalRecoveryState) => {
     const resolvers = state.idleResolvers;
     state.idleResolvers = [];
@@ -256,7 +270,8 @@ export function createRecoveryCoordinator(deps: RecoveryCoordinatorDeps): Recove
   const requestSnapshot = async (
     terminalId: string,
     terminal: RegisteredTerminal,
-    closed?: RecoveryClosedTerminalState
+    closed?: RecoveryClosedTerminalState,
+    options?: { controlPlaneFailureMeansRecoveryFailure?: boolean }
   ) => {
     if (disposed) {
       return;
@@ -274,8 +289,28 @@ export function createRecoveryCoordinator(deps: RecoveryCoordinatorDeps): Recove
     }
 
     if (!snapshotResult.ok || !snapshotResult.data || snapshotResult.data.status !== "ok") {
-      if (shouldRetryAfterReconnect(snapshotResult.ok ? undefined : snapshotResult.error)) {
+      if (!snapshotResult.ok && shouldRetryAfterReconnect(snapshotResult.error)) {
         scheduleReconnectRecovery(terminalId);
+        return;
+      }
+
+      if (!snapshotResult.ok && isRecoveryControlPlaneError(snapshotResult.error)) {
+        if (options?.controlPlaneFailureMeansRecoveryFailure) {
+          terminal.setUiMode("error");
+          return;
+        }
+
+        surfaceRecoveryCheckFailure(terminal, "terminal.snapshot", snapshotResult.error?.code);
+        return;
+      }
+
+      if (!snapshotResult.data) {
+        if (options?.controlPlaneFailureMeansRecoveryFailure) {
+          terminal.setUiMode("error");
+          return;
+        }
+
+        surfaceRecoveryCheckFailure(terminal, "terminal.snapshot");
         return;
       }
 
@@ -350,12 +385,19 @@ export function createRecoveryCoordinator(deps: RecoveryCoordinatorDeps): Recove
           return;
         }
 
-        await requestSnapshot(decision.terminalId, terminal, decision.closed);
+        if (isRecoveryControlPlaneError(replayResult.error)) {
+          surfaceRecoveryCheckFailure(terminal, "terminal.replay", replayResult.error?.code);
+          return;
+        }
+
+        await requestSnapshot(decision.terminalId, terminal, decision.closed, {
+          controlPlaneFailureMeansRecoveryFailure: true,
+        });
         return;
       }
 
       if (!replayResult.data) {
-        terminal.setUiMode("error");
+        surfaceRecoveryCheckFailure(terminal, "terminal.replay");
         return;
       }
 
@@ -364,8 +406,13 @@ export function createRecoveryCoordinator(deps: RecoveryCoordinatorDeps): Recove
         return;
       }
 
+      if (replayResult.data.status === "unknown") {
+        terminal.setUiMode("error", { reason: "unknown_terminal" });
+        return;
+      }
+
       if (replayResult.data.status !== "ok") {
-        terminal.setUiMode("error");
+        surfaceRecoveryCheckFailure(terminal, "terminal.replay");
         return;
       }
 
@@ -416,7 +463,11 @@ export function createRecoveryCoordinator(deps: RecoveryCoordinatorDeps): Recove
       }
 
       for (const entry of entries) {
-        entry.setUiMode("error");
+        surfaceRecoveryCheckFailure(
+          entry,
+          "recovery.reconcile",
+          result.ok ? undefined : result.error?.code
+        );
       }
       return;
     }
@@ -478,7 +529,7 @@ export function createRecoveryCoordinator(deps: RecoveryCoordinatorDeps): Recove
         return;
       }
 
-      terminal.setUiMode("error");
+      surfaceRecoveryCheckFailure(terminal, "recovery.reconcile");
     }
   };
 

@@ -31,8 +31,26 @@ export class ProviderInstallManager {
 
   constructor(providers: ProviderDefinition[], deps: InstallManagerDeps = {}) {
     this.deps = deps;
+    this.setProviders(providers);
+  }
+
+  setProviders(providers: ProviderDefinition[]): void {
+    const nextIds = new Set(providers.map((provider) => provider.id));
+    this.providers.clear();
     for (const provider of providers) {
       this.providers.set(provider.id, provider);
+    }
+
+    for (const providerId of this.activeJobIdsByProviderId.keys()) {
+      if (!nextIds.has(providerId)) {
+        this.activeJobIdsByProviderId.delete(providerId);
+      }
+    }
+
+    for (const providerId of this.inFlightStartsByProviderId.keys()) {
+      if (!nextIds.has(providerId)) {
+        this.inFlightStartsByProviderId.delete(providerId);
+      }
     }
   }
 

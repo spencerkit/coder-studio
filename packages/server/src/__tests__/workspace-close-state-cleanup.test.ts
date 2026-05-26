@@ -4,6 +4,8 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createServer, type Server } from "../server.js";
 import { SessionRepo, TerminalRepo } from "../storage/index.js";
+import { SessionMetadataRepo } from "../storage/repositories/session-metadata-repo.js";
+import { WorkspaceRepo } from "../storage/repositories/workspace-repo.js";
 import { dispatch } from "../ws/dispatch.js";
 
 import "../commands/workspace.js";
@@ -56,6 +58,12 @@ describe("workspace close state cleanup", () => {
     const sessionRepo = new SessionRepo({
       filePath: join(stateDir, "state", "sessions.json"),
     });
+    const workspaceRepo = new WorkspaceRepo({
+      filePath: join(stateDir, "state", "workspaces.json"),
+    });
+    const sessionMetadataRepo = new SessionMetadataRepo({
+      workspaceRepo,
+    });
 
     terminalRepo.insert({
       id: "term-close",
@@ -87,6 +95,12 @@ describe("workspace close state cleanup", () => {
       title: null,
       draft: null,
     });
+    sessionMetadataRepo.upsert({
+      sessionId: "sess-close",
+      workspaceId,
+      providerId: "claude",
+      verificationRuns: [],
+    });
 
     const closeResult = await dispatch(
       {
@@ -102,5 +116,6 @@ describe("workspace close state cleanup", () => {
 
     expect(terminalRepo.listByWorkspace(workspaceId)).toEqual([]);
     expect(sessionRepo.listByWorkspace(workspaceId)).toEqual([]);
+    expect(sessionMetadataRepo.get("sess-close")).toBeUndefined();
   });
 });

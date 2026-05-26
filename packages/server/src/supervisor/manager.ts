@@ -255,6 +255,10 @@ export class SupervisorManager {
     });
   }
 
+  setProviderRegistry(providerRegistry: ProviderDefinition[]): void {
+    this.deps.providerRegistry = providerRegistry;
+  }
+
   start(): void {
     this.lifecycleUnsubscribe?.();
     this.lifecycleUnsubscribe = this.deps.eventBus.on(

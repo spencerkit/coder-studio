@@ -1,5 +1,5 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
-import type { SessionState } from "./types";
+import type { AgentContextKind, CustomProviderSessionMode, SessionState } from "./types";
 import { deriveSessionTitle, SESSION_TITLE_MAX_LENGTH } from "./types";
 
 describe("deriveSessionTitle", () => {
@@ -39,6 +39,20 @@ describe("SessionState", () => {
   it("only allows the PTY-driven lifecycle states", () => {
     expectTypeOf<SessionState>().toEqualTypeOf<
       "draft" | "starting" | "running" | "idle" | "ended"
+    >();
+  });
+});
+
+describe("CustomProviderSessionMode", () => {
+  it("currently only allows interactive PTY-backed custom providers", () => {
+    expectTypeOf<CustomProviderSessionMode>().toEqualTypeOf<"interactive">();
+  });
+});
+
+describe("AgentContextKind", () => {
+  it("covers the backend context package variants", () => {
+    expectTypeOf<AgentContextKind>().toEqualTypeOf<
+      "file" | "selection" | "git_diff" | "terminal_output" | "project_summary" | "session_review"
     >();
   });
 });

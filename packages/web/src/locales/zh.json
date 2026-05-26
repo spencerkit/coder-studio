@@ -343,6 +343,9 @@
       "loading_body": "恢复期间暂时无法使用当前终端；请耐心等待，历史内容恢复完成后再继续。内容较多时可能需要更久。",
       "failed_title": "终端历史暂未恢复",
       "failed_body": "当前终端可以继续使用，但较早输出这次仍未补齐。请稍后或刷新页面后再看；如果服务端仍保留历史，后续仍可能找回。",
+      "reconcile_failed_title": "终端恢复检查未完成",
+      "reconcile_failed_body": "这次没有完成恢复决策，当前终端仍可继续使用，但较早历史是否补齐暂时无法确认。请稍后重新检查。",
+      "recheck_action": "重新检查",
       "retryable_title": "终端历史暂未恢复",
       "retryable_body": "当前终端可以继续使用，但较早输出这次没有补齐。你可以重试恢复；如果服务端仍保留历史，稍后或刷新页面后仍可能找回。",
       "retry_action": "重试恢复",
@@ -353,9 +356,7 @@
       "unknown_body_with_provider": "这个终端会话已经不在服务端。是否重新打开一个 {provider} 会话继续？",
       "closed_title": "当前会话已结束",
       "closed_body": "是否重新打开一个新会话继续。",
-      "closed_body_with_provider": "是否重新打开一个 {provider} 会话继续。",
-      "truncated_title": "历史内容不完整",
-      "truncated_body": "较早的终端输出已被回放缓冲区淘汰，后续输出仍会继续显示。"
+      "closed_body_with_provider": "是否重新打开一个 {provider} 会话继续。"
     }
   },
   "file": {
@@ -987,21 +988,26 @@
     "conflict": "资源冲突"
   },
   "welcome": {
-    "kicker": "一次部署，随处编码",
-    "title": "欢迎使用 Coder Studio",
-    "description": "只需部署一次编码工作区，即可在任何地方继续工作。同一个工作区，同一个上下文，跨所有设备。",
+    "kicker": "本地 AI 编码工作台",
+    "title": "先打开工作区，再启动 AI 编码会话",
+    "description": "先选择一个本地项目目录。打开工作区后，你就可以在同一个界面里启动 Claude Code 或 Codex，同时查看文件、Git 变更和终端输出。",
+    "workflow_title": "使用步骤",
+    "step_1_label": "第 1 步",
+    "step_1_title": "打开你的项目目录",
+    "step_1_detail": "先选择一个本地目录，作为当前工作区。",
+    "step_2_label": "第 2 步",
+    "step_2_title": "启动 Claude 或 Codex",
+    "step_2_detail": "进入工作区后，再为当前项目启动一个 AI 会话。",
+    "settings_hint": "如果要先配置 Provider，可以先去设置。",
+    "support_title": "为什么在这里使用",
     "features": {
-      "agent_first": {
-        "title": "以 Agent 为核心的 AI 编码",
-        "description": "启动能够编写、测试和部署代码的 AI 会话。"
-      },
       "git_tools": {
-        "title": "内置 Git 工具",
-        "description": "无需离开 IDE，就能暂存、提交并管理分支。"
+        "title": "并排查看代码和 Git 变更",
+        "description": "在 Agent 旁边直接查看文件和改动，不用在多个工具之间来回切换。"
       },
       "terminals": {
-        "title": "集成终端",
-        "description": "在 AI 会话旁边直接运行命令和脚本。"
+        "title": "在同一工作区运行命令",
+        "description": "需要手动操作时，可以直接在集成终端里配合 AI 会话执行命令。"
       }
     }
   },

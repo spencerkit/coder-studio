@@ -31,6 +31,7 @@ import { LspToolManager } from "./lsp-tools/manager.js";
 import { FileManifestStore } from "./lsp-tools/manifest-store.js";
 import { resolveLspToolRoot } from "./lsp-tools/tool-root.js";
 import { runCommandAsString } from "./provider-runtime/command-runner.js";
+import { buildCustomProviderDefinition } from "./provider-runtime/custom-provider.js";
 import { createE2EProviderMockOverrides } from "./provider-runtime/e2e-provider-mock.js";
 import { ProviderInstallManager } from "./provider-runtime/install-manager.js";
 import type { RuntimeStatusDeps } from "./provider-runtime/runtime-status.js";
@@ -38,7 +39,9 @@ import { SessionManager } from "./session/manager.js";
 import { AppearanceAssetRepo } from "./storage/repositories/appearance-asset-repo.js";
 import { AuthLoginBlockRepo } from "./storage/repositories/auth-login-block-repo.js";
 import { AuthSessionRepo } from "./storage/repositories/auth-session-repo.js";
+import { CustomProviderRepo } from "./storage/repositories/custom-provider-repo.js";
 import { ProviderConfigRepo } from "./storage/repositories/provider-config-repo.js";
+import { SessionMetadataRepo } from "./storage/repositories/session-metadata-repo.js";
 import { SessionRepo } from "./storage/repositories/session-repo.js";
 import { SettingsRepo } from "./storage/repositories/settings-repo.js";
 import { SupervisorRepo } from "./storage/repositories/supervisor-repo.js";
@@ -149,15 +152,25 @@ export async function createServer(
   const providerConfigRepo = new ProviderConfigRepo({
     filePath: join(stateRoot, "state", "provider-configs.json"),
   });
+  const customProviderRepo = new CustomProviderRepo({
+    filePath: join(stateRoot, "state", "custom-providers.json"),
+  });
   const workspaceRepo = new WorkspaceRepo({
     filePath: join(stateRoot, "state", "workspaces.json"),
   });
+  const sessionMetadataRepo = new SessionMetadataRepo({
+    workspaceRepo,
+  });
+  let activeProviderRegistry = [
+    ...providerRegistry,
+    ...customProviderRepo.list().map((config) => buildCustomProviderDefinition(config)),
+  ];
   const sessionMgr = new SessionManager({
     terminalMgr,
     eventBus,
     db: sessionRepo,
     broadcaster: wsHub,
-    providerRegistry,
+    providerRegistry: activeProviderRegistry,
     providerConfigRepo,
   });
 
@@ -170,14 +183,16 @@ export async function createServer(
     broadcaster: wsHub,
     autoFetch,
     teardown: async (workspaceId) => {
+      const persistedSessions = sessionRepo.findByWorkspaceId(workspaceId);
       await lspMgr?.disposeWorkspace(workspaceId);
       await supervisorMgr?.deleteForWorkspace(workspaceId);
       await sessionMgr.stopForWorkspace(workspaceId);
       await terminalMgr.closeForWorkspace(workspaceId);
       sessionMgr.deleteEndedForWorkspace(workspaceId);
 
-      for (const session of sessionRepo.findByWorkspaceId(workspaceId)) {
+      for (const session of persistedSessions) {
         sessionRepo.delete(session.id);
+        sessionMetadataRepo.delete(session.id);
       }
 
       for (const terminal of terminalRepo.listByWorkspace(workspaceId)) {
@@ -253,7 +268,7 @@ export async function createServer(
     terminalMgr,
     workspaceMgr,
     sessionMgr,
-    providerRegistry,
+    providerRegistry: activeProviderRegistry,
     providerConfigRepo,
     settingsRepo,
     supervisorRepo,
@@ -269,7 +284,7 @@ export async function createServer(
         commandExists: providerMockOverrides.commandExists,
       }
     : {};
-  const providerInstallMgr = new ProviderInstallManager(providerRegistry, {
+  const providerInstallMgr = new ProviderInstallManager(activeProviderRegistry, {
     ...providerRuntimeDeps,
     runCommand: providerMockOverrides?.runCommand ?? runCommandAsString,
   });
@@ -300,7 +315,7 @@ export async function createServer(
     broadcaster: wsHub,
     settingsRepo,
     providerConfigRepo,
-    providerRegistry,
+    providerRegistry: activeProviderRegistry,
     fencingMgr,
     supervisorMgr,
     autoFetch,
@@ -312,6 +327,15 @@ export async function createServer(
     lspToolMgr,
     lspToolInstallMgr,
     updateService,
+    customProviderRepo,
+    sessionMetadataRepo,
+    setProviderRegistry: (providers) => {
+      activeProviderRegistry = providers;
+      commandContext.providerRegistry = providers;
+      providerInstallMgr.setProviders(providers);
+      sessionMgr.setProviderRegistry(providers);
+      supervisorMgr?.setProviderRegistry(providers);
+    },
   };
 
   wsHub.setCommandContext(commandContext);

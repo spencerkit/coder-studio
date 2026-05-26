@@ -45,6 +45,145 @@ export interface WorkspaceLastViewedTarget {
   updatedAt: number;
 }
 
+export interface WorkspaceIntelligenceRecommendedCommand {
+  key: "dev" | "test" | "build" | "lint";
+  command: string;
+  source: "package_json" | "makefile" | "detected";
+}
+
+export interface WorkspaceIntelligenceSummary {
+  workspaceId: string;
+  rootPath: string;
+  git: {
+    isRepo: boolean;
+    branch?: string;
+  };
+  packageManager?: "npm" | "pnpm" | "yarn" | "bun";
+  frameworks: string[];
+  scripts: {
+    dev?: string;
+    test?: string;
+    build?: string;
+    lint?: string;
+  };
+  recommendedCommands: WorkspaceIntelligenceRecommendedCommand[];
+  docs: Array<{
+    path: string;
+    kind: "readme" | "docs";
+  }>;
+  agentInstructions: {
+    exists: boolean;
+    path: ".coder-studio/AGENTS.md";
+  };
+}
+
+export interface AgentInstructionsDocument {
+  path: ".coder-studio/AGENTS.md";
+  exists: boolean;
+  content: string;
+  baseHash?: string;
+}
+
+export interface AgentInstructionsHealthIssue {
+  code:
+    | "missing_document"
+    | "missing_project_overview"
+    | "missing_development_commands"
+    | "missing_working_rules"
+    | "missing_review_expectations"
+    | "missing_safety_rules"
+    | "missing_provider_notes";
+  message: string;
+}
+
+export interface AgentInstructionsHealthChecks {
+  projectOverview: boolean;
+  developmentCommands: boolean;
+  workingRules: boolean;
+  reviewExpectations: boolean;
+  safetyRules: boolean;
+  providerNotes: boolean;
+}
+
+export interface AgentInstructionsHealth {
+  path: ".coder-studio/AGENTS.md";
+  exists: boolean;
+  status: "healthy" | "warning" | "missing";
+  checks: AgentInstructionsHealthChecks;
+  issues: AgentInstructionsHealthIssue[];
+}
+
+export type CustomProviderSessionMode = "interactive";
+
+export interface CustomProviderConfig {
+  id: string;
+  displayName: string;
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+  cwdMode: "workspace_root";
+  sessionMode: CustomProviderSessionMode;
+  startupPrompt?: string;
+  capabilities: import("../provider/definition").ProviderCapabilityDescriptor[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface AgentSessionVerificationRun {
+  id: string;
+  command: string;
+  status: "passed" | "failed" | "unknown";
+  exitCode?: number;
+  summary?: string;
+  createdAt: number;
+}
+
+export interface AgentSessionMetadata {
+  sessionId: string;
+  workspaceId: string;
+  providerId: string;
+  objective?: string;
+  baselineGitHead?: string;
+  baselineCapturedAt?: number;
+  verificationRuns: AgentSessionVerificationRun[];
+}
+
+export interface SessionReviewWarning {
+  code: "missing_baseline" | "not_git_repo";
+  message: string;
+}
+
+export interface SessionReviewSummary {
+  sessionId: string;
+  workspaceId: string;
+  baselineGitHead?: string;
+  changedFiles: GitFileChange[];
+  verificationRuns: AgentSessionVerificationRun[];
+  warnings: SessionReviewWarning[];
+}
+
+export type AgentContextKind =
+  | "file"
+  | "selection"
+  | "git_diff"
+  | "terminal_output"
+  | "project_summary"
+  | "session_review";
+
+export interface AgentContextPackage {
+  id: string;
+  kind: AgentContextKind;
+  title: string;
+  body: string;
+  source: {
+    workspaceId: string;
+    path?: string;
+    sessionId?: string;
+    terminalId?: string;
+  };
+  createdAt: number;
+}
+
 export interface Terminal {
   id: string;
   workspaceId: string;

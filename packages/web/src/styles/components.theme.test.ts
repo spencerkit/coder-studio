@@ -1028,6 +1028,9 @@ describe("components.css theme-sensitive surfaces", () => {
     const sessionTerminal = getLastRuleBlock(".session-terminal");
     const sessionCard = getLastRuleBlock(".session-card");
     const activeSessionCard = getLastRuleBlock(".session-card.session-card--active");
+    const activeSessionCardOverlay = getLastRuleBlock(
+      ".workspace-main-stage .session-card.session-card--active::after"
+    );
     const activeSessionHeader = getRuleBlocksFrom(
       stylesheet,
       ".session-card.session-card--active > .panel-header"
@@ -1147,9 +1150,16 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(sessionCard).toContain("backdrop-filter: var(--material-backdrop-filter)");
     expect(activeSessionCard).toContain("background: var(--workspace-session-active-surface)");
     expect(activeSessionCard).not.toContain("background: var(--bg-active)");
-    expect(activeSessionCard).toContain("box-shadow: inset 0 0 0 1px");
-    expect(activeSessionCard).toContain("var(--component-mix-border-focus-84pct-transparent)");
+    expect(activeSessionCard).toContain("box-shadow: none");
+    expect(activeSessionCardOverlay).toContain('content: ""');
+    expect(activeSessionCardOverlay).toContain("position: absolute");
+    expect(activeSessionCardOverlay).toContain("inset: 0");
+    expect(activeSessionCardOverlay).toContain(
+      "border: 1px solid var(--component-mix-border-focus-84pct-transparent)"
+    );
+    expect(activeSessionCardOverlay).toContain("pointer-events: none");
     expect(activeSessionHeader).toContain("background: var(--workspace-session-header-surface)");
+    expect(activeSessionHeader).not.toContain("border-top:");
     expect(activeSessionHeader).toContain("backdrop-filter: var(--material-backdrop-filter)");
     expect(activeSessionHeader).not.toContain("var(--bg-active) 88%");
     expect(activeSessionTitle).toContain("color: var(--text-primary)");
@@ -1262,6 +1272,33 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(welcomeFeature).toContain("background: transparent");
     expect(welcomeFeature).not.toContain("min-height: 148px");
     expect(authCard).not.toContain("rgba(13, 20, 26, 0.94)");
+  });
+
+  it("styles the welcome page as a step-first workflow with compact support content", () => {
+    const welcomeLayout = getLastRuleBlock(".welcome-layout");
+    const welcomeFlow = getLastRuleBlock(".welcome-flow");
+    const welcomeSteps = getLastRuleBlock(".welcome-flow__steps");
+    const welcomeFlowSupport = getLastRuleBlock(".welcome-flow__support");
+    const stepCard = getLastRuleBlock(".welcome-step-card");
+    const supportList = getLastRuleBlock(".welcome-support-list");
+    const stepHint = getLastRuleBlock(".welcome-step-hint");
+    const stepDetail = getLastRuleBlock(".welcome-step-detail");
+    const settingsHint = getLastRuleBlock(".welcome-settings-hint");
+
+    expect(welcomeLayout).toContain("display: grid");
+    expect(welcomeLayout).toContain("grid-template-columns: minmax(280px, 0.9fr) minmax(0, 1.1fr)");
+    expect(welcomeFlow).toContain("flex-direction: column");
+    expect(welcomeSteps).toContain("display: grid");
+    expect(welcomeSteps).toContain("grid-template-columns: repeat(2, minmax(0, 1fr))");
+    expect(welcomeFlowSupport).toContain("display: flex");
+    expect(stepCard).toContain("border-radius: var(--radius-lg)");
+    expect(stepCard).toContain("background: var(--component-mix-surface-panel-92pct-surface-page)");
+    expect(supportList).toContain("grid-template-columns: repeat(2, minmax(0, 1fr))");
+    expect(stepHint).toContain("text-transform: uppercase");
+    expect(stepHint).toContain("color: var(--text-ter)");
+    expect(stepDetail).toContain("max-width: 34ch");
+    expect(stepDetail).toContain("color: var(--text-secondary)");
+    expect(settingsHint).toContain("color: var(--text-tertiary)");
   });
 
   it("keeps quick actions sized to its label instead of icon-button width", () => {
@@ -1511,6 +1548,13 @@ describe("components.css theme-sensitive surfaces", () => {
     const xtermReplayCard = getLastRuleBlock(".xterm-replay-overlay__card");
     const sessionProgress = getLastRuleBlock(".session-progress");
     const sessionHeader = getLastRuleBlock(".session-header");
+    const activeSessionCard = getLastRuleBlock(".session-card.session-card--active");
+    const activeSessionCardOverlay = getLastRuleBlock(
+      ".workspace-main-stage .session-card.session-card--active::after"
+    );
+    const activeSessionHeader = getLastRuleBlock(
+      ".session-card.session-card--active > .panel-header"
+    );
     const supervisorCard = getLastRuleBlock(".supervisor-card");
     const sessionHeaderLeft = getLastRuleBlock(".session-header-left");
     const sessionHeaderCopyBlocks = getRuleBlocksFrom(stylesheet, ".session-header-copy");
@@ -1536,6 +1580,11 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(xtermReplayCard).toContain("border-radius: var(--terminal-local-overlay-radius)");
     expect(sessionProgress).toContain("background: var(--state-info-bg)");
     expect(sessionHeader).toContain("padding: var(--gap-tight) var(--inset-control-inline)");
+    expect(activeSessionCard).toContain("box-shadow: none");
+    expect(activeSessionCardOverlay).toContain(
+      "border: 1px solid var(--component-mix-border-focus-84pct-transparent)"
+    );
+    expect(activeSessionHeader).not.toContain("border-top:");
     expect(supervisorCard).toContain("background: var(--workspace-session-header-surface)");
     expect(supervisorCard).toContain("backdrop-filter: var(--material-backdrop-filter)");
     expect(sessionHeaderLeft).toContain("gap: var(--gap-default)");
@@ -2613,11 +2662,21 @@ describe("components.css theme-sensitive surfaces", () => {
 
   it("stacks mobile welcome and auth shells vertically so cards size to content", () => {
     const welcomeContainer = getLastRuleBlock(".welcome-container--mobile");
+    const mobileWelcomeLayout = getLastRuleBlock(".welcome-card--mobile .welcome-layout");
+    const mobileWelcomeSteps = getLastRuleBlock(".welcome-card--mobile .welcome-flow__steps");
+    const mobileWelcomeSupport = getLastRuleBlock(".welcome-card--mobile .welcome-flow__support");
+    const mobileSupportList = getLastRuleBlock(".welcome-card--mobile .welcome-support-list");
     const authScreen = getLastRuleBlock(".auth-screen--mobile");
 
     expect(welcomeContainer).toContain("flex-direction: column");
     expect(welcomeContainer).toContain("align-items: stretch");
     expect(welcomeContainer).toContain("justify-content: flex-start");
+    expect(welcomeContainer).toContain("overflow-y: auto");
+    expect(mobileWelcomeLayout).toContain("flex-direction: column");
+    expect(mobileWelcomeSteps).toContain("grid-template-columns: 1fr");
+    expect(mobileWelcomeSupport).toContain("flex-direction: column");
+    expect(mobileWelcomeSupport).toContain("align-items: stretch");
+    expect(mobileSupportList).toContain("grid-template-columns: 1fr");
     expect(authScreen).toContain("padding:");
   });
 
@@ -3196,8 +3255,14 @@ describe("components.css theme-sensitive surfaces", () => {
       ".mobile-shell--landscape-compact .mobile-shell__viewport"
     );
     const sessionCard = getLastRuleBlock(".mobile-shell__agent-stage > .session-card");
+    const activeSessionCard = getLastRuleBlock(
+      ".mobile-shell__agent-stage .session-card.session-card--active"
+    );
     const progress = getLastRuleBlock(".mobile-shell__agent-stage .session-progress");
     const header = getLastRuleBlock(".mobile-shell__agent-stage > .session-card > .panel-header");
+    const activeHeader = getLastRuleBlock(
+      ".mobile-shell__agent-stage > .session-card.session-card--active > .panel-header"
+    );
     const titleRow = getLastRuleBlock(".mobile-shell__agent-stage .session-title-row");
     const headerRight = getLastRuleBlock(".mobile-shell__agent-stage .session-header-right");
     const badges = getLastGroupedRuleBlock(
@@ -3215,9 +3280,11 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(content).toContain("gap: 4px");
     expect(sessionCard).toContain("border-radius: 0");
     expect(sessionCard).toContain("box-shadow: none");
+    expect(activeSessionCard).toContain("box-shadow: none");
     expect(progress).toContain("display: none");
     expect(header).toContain("padding: 4px");
     expect(header).toContain("border-bottom:");
+    expect(activeHeader).toContain("border-top:");
     expect(header).not.toContain("linear-gradient(");
     expect(titleRow).toContain("gap: 6px");
     expect(headerRight).toContain("max-width: 100%");

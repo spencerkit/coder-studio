@@ -4,9 +4,9 @@
 >
 > **Spec:** `docs/superpowers/specs/2026-05-17-agentic-workspace-platform-design.md`
 
-**Goal:** Let users send workspace context to selected agents and add a lightweight preset foundation for future providers.
+**Goal:** Add deterministic workspace-context package builders and a lightweight preset foundation for future providers.
 
-**Architecture:** Build a provider-agnostic context package format. UI actions create text payloads from files, diffs, terminal output, project summary, or session review and send them to a selected existing or new session.
+**Architecture:** Build a provider-agnostic context package format. In the current execution scope, server commands create deterministic text payloads from files, diffs, project summary, or session review. Frontend send actions are explicitly deferred.
 
 **Tech Stack:** TypeScript, React, existing terminal/session input actions, Vitest, React Testing Library.
 
@@ -18,12 +18,12 @@ Includes:
 
 - Context package data model.
 - Server helpers for file/diff/project/session context.
-- Frontend "Send to agent" actions.
-- Send diff to another agent.
 - Preset provider metadata format, without installing presets by default.
 
 Excludes:
 
+- Frontend "Send to agent" menus and routing UI. Deferred to a later UX phase.
+- Automatic session input submission from generated context packages.
 - Real marketplace.
 - Remote registry downloads.
 - OAuth.
@@ -38,11 +38,6 @@ Excludes:
 - Create: `packages/server/src/commands/agent-context.ts`
 - Modify: `packages/server/src/commands/index.ts`
 - Create: `packages/server/src/__tests__/agent-context-command.test.ts`
-- Create: `packages/web/src/features/agent-context/actions/use-send-context-to-agent.ts`
-- Create: `packages/web/src/features/agent-context/components/send-context-menu.tsx`
-- Create: `packages/web/src/features/agent-context/components/send-context-menu.test.tsx`
-- Modify: `packages/web/src/features/session-review/components/session-review-panel.tsx`
-- Modify: `packages/web/src/features/code-editor/views/shared/code-editor-host.tsx`
 - Create: `packages/providers/src/presets.ts`
 - Create: `packages/providers/src/presets.test.ts`
 
@@ -85,8 +80,8 @@ Add:
 
 ## Tasks
 
-- [ ] Add context package types.
-- [ ] Implement deterministic wrappers:
+- [x] Add context package types.
+- [x] Implement deterministic wrappers:
 
 ```text
 Context: [title]
@@ -95,20 +90,13 @@ Source: [source]
 [body]
 ```
 
-- [ ] Implement context builders for file, diff, project summary, and session review.
-- [ ] Add send action that can:
-  - append context to an existing session
-  - start a new session with context as draft
-- [ ] Add UI menu actions:
-  - Send file to agent
-  - Send diff to agent
-  - Send review summary to agent
-  - Send project context to agent
-- [ ] Add first preset metadata for future providers without exposing them as enabled providers:
+- [x] Implement context builders for file, diff, project summary, and session review.
+- [x] Add command coverage for deterministic context package generation only.
+- [x] Add first preset metadata for future providers without exposing them as enabled providers:
   - Gemini CLI
   - Aider
   - OpenCode
-- [ ] Add tests for context body shape and selected-agent routing.
+- [x] Add tests for context body shape and preset metadata shape.
 
 ## Acceptance Criteria
 
@@ -123,7 +111,6 @@ Source: [source]
 pnpm exec vitest run \
   packages/server/src/__tests__/agent-context/context-package.test.ts \
   packages/server/src/__tests__/agent-context-command.test.ts \
-  packages/web/src/features/agent-context/components/send-context-menu.test.tsx \
   packages/providers/src/presets.test.ts
 ```
 
@@ -132,7 +119,6 @@ Expected: all tests pass.
 ## Suggested Commit
 
 ```bash
-git add packages/core packages/server packages/web/src/features/agent-context packages/web/src/features/session-review packages/web/src/features/code-editor packages/providers
+git add packages/core packages/server packages/providers
 git commit -m "feat: attach workspace context to agents"
 ```
-

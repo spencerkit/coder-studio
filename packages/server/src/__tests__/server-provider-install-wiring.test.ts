@@ -16,6 +16,7 @@ vi.mock("node:child_process", async () => {
 });
 
 import { createServer, type Server } from "../server.js";
+import { dispatch } from "../ws/dispatch.js";
 
 describe("createServer provider install wiring", () => {
   let server: Server | undefined;
@@ -158,5 +159,59 @@ describe("createServer provider install wiring", () => {
       ["install", "--id", "OpenJS.NodeJS.LTS", "--exact", "--silent"],
       expect.objectContaining({ shell: false, windowsHide: true })
     );
+  });
+
+  it("keeps provider.install.start wired after creating a custom provider", async () => {
+    stateDir = mkdtempSync(join(tmpdir(), "coder-studio-server-custom-provider-install-"));
+    server = await createServer({
+      stateDir,
+      host: "127.0.0.1",
+      port: 0,
+    });
+
+    const ctx = server.__test__!.commandContext;
+
+    const created = await dispatch(
+      {
+        kind: "command",
+        id: "custom-provider-create",
+        op: "customProvider.create",
+        args: {
+          id: "review-bot",
+          displayName: "Review Bot",
+          command: "review-bot",
+          args: ["--stdio"],
+          env: { REVIEW_MODE: "strict" },
+          cwdMode: "workspace_root",
+          sessionMode: "interactive",
+          startupPrompt: "Review the diff before answering.",
+          capabilities: [
+            { key: "interactive_session", supported: true, label: "Interactive session" },
+            { key: "review", supported: true, label: "Review" },
+          ],
+        },
+      },
+      ctx
+    );
+
+    expect(created.ok).toBe(true);
+
+    const install = await dispatch(
+      {
+        kind: "command",
+        id: "custom-provider-install-start",
+        op: "provider.install.start",
+        args: {
+          providerId: "review-bot",
+        },
+      },
+      ctx
+    );
+
+    expect(install.ok).toBe(true);
+    expect(install.data).toMatchObject({
+      providerId: "review-bot",
+      status: "failed",
+    });
   });
 });
