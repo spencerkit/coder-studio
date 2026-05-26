@@ -12089,7 +12089,14 @@ body.is-dragging-pane .session-action-btn-drag {
   }
 
   .welcome-card--mobile .welcome-flow__steps {
+    grid-template-columns: 1fr;
     gap: var(--sp-2);
+  }
+
+  .welcome-card--mobile .welcome-flow__support {
+    flex-direction: column;
+    align-items: stretch;
+    padding: var(--sp-3);
   }
 
   .welcome-card--mobile .welcome-step-card {

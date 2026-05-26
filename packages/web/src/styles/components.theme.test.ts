@@ -2642,6 +2642,7 @@ describe("components.css theme-sensitive surfaces", () => {
     const welcomeContainer = getLastRuleBlock(".welcome-container--mobile");
     const mobileWelcomeLayout = getLastRuleBlock(".welcome-card--mobile .welcome-layout");
     const mobileWelcomeSteps = getLastRuleBlock(".welcome-card--mobile .welcome-flow__steps");
+    const mobileWelcomeSupport = getLastRuleBlock(".welcome-card--mobile .welcome-flow__support");
     const mobileSupportList = getLastRuleBlock(".welcome-card--mobile .welcome-support-list");
     const authScreen = getLastRuleBlock(".auth-screen--mobile");
 
@@ -2651,6 +2652,8 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(welcomeContainer).toContain("overflow-y: auto");
     expect(mobileWelcomeLayout).toContain("flex-direction: column");
     expect(mobileWelcomeSteps).toContain("grid-template-columns: 1fr");
+    expect(mobileWelcomeSupport).toContain("flex-direction: column");
+    expect(mobileWelcomeSupport).toContain("align-items: stretch");
     expect(mobileSupportList).toContain("grid-template-columns: 1fr");
     expect(authScreen).toContain("padding:");
   });
