@@ -898,9 +898,16 @@ describe("GitPanel", () => {
         };
       }
 
-      if (op === "git.show") {
+      if (op === "git.commitDetail") {
         return {
-          diff: `commit-diff:${JSON.stringify(args)}`,
+          commit: historyEntries[0],
+          files: [
+            {
+              path: "src/auth/AuthGate.tsx",
+              status: "modified",
+              renderAs: "text",
+            },
+          ],
         };
       }
 
@@ -926,7 +933,7 @@ describe("GitPanel", () => {
 
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith(
-        "git.show",
+        "git.commitDetail",
         {
           workspaceId: "ws-test",
           sha: historyEntries[0]?.sha,
@@ -936,16 +943,30 @@ describe("GitPanel", () => {
     });
 
     expect(store.get(gitDiffPreviewAtomFamily("ws-test"))).toEqual({
+      kind: "commit-file-list",
       path: historyEntries[0]?.sha,
       title: `98db173 · ${historyEntries[0]?.subject}`,
-      diff: expect.stringContaining("commit-diff"),
-      source: "commit",
+      commit: historyEntries[0],
+      files: [
+        {
+          path: "src/auth/AuthGate.tsx",
+          status: "modified",
+          renderAs: "text",
+        },
+      ],
     });
     expect(onPreviewOpen).toHaveBeenCalledWith({
+      kind: "commit-file-list",
       path: historyEntries[0]?.sha,
       title: `98db173 · ${historyEntries[0]?.subject}`,
-      diff: expect.stringContaining("commit-diff"),
-      source: "commit",
+      commit: historyEntries[0],
+      files: [
+        {
+          path: "src/auth/AuthGate.tsx",
+          status: "modified",
+          renderAs: "text",
+        },
+      ],
     });
   });
 
@@ -1193,16 +1214,16 @@ describe("GitPanel", () => {
     expect(store.get(gitStateAtomFamily("ws-test"))).toEqual(status);
     expect(store.get(gitBranchListAtomFamily("ws-test")).current).toBe("feature/ai-agent");
     expect(store.get(gitDiffPreviewAtomFamily("ws-test"))).toEqual({
+      kind: "worktree-file-diff",
       path: "src/auth/AuthGate.tsx",
       diff: expect.stringContaining("diff --git a/src/auth/AuthGate.tsx b/src/auth/AuthGate.tsx"),
       staged: true,
-      source: "file",
     });
     expect(onPreviewOpen).toHaveBeenCalledWith({
+      kind: "worktree-file-diff",
       path: "src/auth/AuthGate.tsx",
       diff: expect.stringContaining("diff --git a/src/auth/AuthGate.tsx b/src/auth/AuthGate.tsx"),
       staged: true,
-      source: "file",
     });
     expect(dispatchEventSpy).not.toHaveBeenCalled();
   });

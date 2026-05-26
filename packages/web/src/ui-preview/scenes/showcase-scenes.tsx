@@ -549,6 +549,7 @@ function buildReadmeDesktopReviewSeed(context: {
     },
     gitDiffPreviewByWorkspaceId: {
       [workspace.id]: {
+        kind: "worktree-file-diff",
         path: "packages/web/src/features/topbar/index.tsx",
         title: "README capture polish",
         diff: [
@@ -561,7 +562,8 @@ function buildReadmeDesktopReviewSeed(context: {
           "@@ screenshot staging",
           "+      <WorkspaceLaunchModal onClose={() => setWorkspaceLaunchOpen(false)} />",
         ].join("\n"),
-        source: "file" as const,
+        renderAs: "text" as const,
+        status: "modified" as const,
       },
     },
     commands: {
@@ -583,11 +585,23 @@ function buildReadmeDesktopReviewSeed(context: {
             '+  <span className="topbar-btn-hint">Review README capture targets</span>',
             '+  <span className="topbar-btn-hint">Keep the workspace hero readable at README width</span>',
           ].join("\n"),
+          renderAs: "text",
+          status: "modified",
         },
       },
-      gitShowByWorkspaceId: {
+      gitCommitDetailByWorkspaceId: {
         [workspace.id]: {
-          diff: "@@ latest commit\n+ refresh README desktop review capture",
+          commit: {
+            ...readmeDesktopHistory[0],
+            parentSha: "4d6fd0bbce5100f39277c9c9c92677b87de17b73",
+          },
+          files: [
+            {
+              path: "packages/web/src/features/topbar/index.tsx",
+              status: "modified",
+              renderAs: "text",
+            },
+          ],
         },
       },
       supervisorBySessionId: {

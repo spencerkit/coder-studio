@@ -222,10 +222,24 @@ function buildWorkspaceSeed(context: {
       gitDiffByWorkspaceId: {
         [workspace.id]: {
           diff: "@@ preview diff\n- background: #11181f;\n+ background: var(--bg-elevated);",
+          renderAs: "text",
+          status: "modified",
         },
       },
-      gitShowByWorkspaceId: {
-        [workspace.id]: { diff: "@@ preview commit diff\n+ register desktop review scenes" },
+      gitCommitDetailByWorkspaceId: {
+        [workspace.id]: {
+          commit: {
+            ...gitHistory[0],
+            parentSha: gitHistory[1]?.sha,
+          },
+          files: [
+            {
+              path: "packages/web/src/ui-preview/scenes/desktop-review-scenes.tsx",
+              status: "modified",
+              renderAs: "text",
+            },
+          ],
+        },
       },
       worktreeListByWorkspaceId: {
         [workspace.id]: worktrees,
@@ -345,6 +359,7 @@ export function createDesktopReviewScenes(): UiPreviewSceneDefinition[] {
         ...buildWorkspaceSeed(context),
         gitDiffPreviewByWorkspaceId: {
           [workspace.id]: {
+            kind: "worktree-file-diff",
             path: "packages/web/src/styles/components.css",
             diff: [
               "@@ workspace shell",
@@ -352,7 +367,8 @@ export function createDesktopReviewScenes(): UiPreviewSceneDefinition[] {
               "+  background: var(--bg-elevated);",
               "+  border-radius: var(--radius-xl);",
             ].join("\n"),
-            source: "file",
+            renderAs: "text",
+            status: "modified",
           },
         },
       }),

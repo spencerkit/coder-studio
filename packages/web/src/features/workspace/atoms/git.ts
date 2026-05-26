@@ -4,7 +4,14 @@
  * Server-state projection atoms. Written only by WS event handlers.
  */
 
-import type { GitBranch, GitStatus, WorktreeInfo } from "@coder-studio/core";
+import type {
+  GitBranch,
+  GitCommitDetail,
+  GitCommitFileEntry,
+  GitFileDiffPayload,
+  GitStatus,
+  WorktreeInfo,
+} from "@coder-studio/core";
 import { atom } from "jotai";
 import { atomWithStorage } from "jotai/utils";
 import { atomFamily } from "jotai-family";
@@ -37,18 +44,41 @@ export const gitStateAtomFamily = atomFamily((_workspaceId: string) =>
   atom<GitStatus | null>(null)
 );
 
-export interface GitDiffPreview {
+export interface GitWorktreeFileDiffPreview extends GitFileDiffPayload {
+  kind: "worktree-file-diff";
   path: string;
-  diff: string;
+  staged?: boolean;
+  title?: string;
+}
+
+export interface GitCommitFileListPreview {
+  kind: "commit-file-list";
+  path: string;
+  title?: string;
+  commit: GitCommitDetail["commit"];
+  files: GitCommitFileEntry[];
+}
+
+export interface GitCommitFileDiffPreview extends GitFileDiffPayload {
+  kind: "commit-file-diff";
+  path: string;
+  title?: string;
+  commit: GitCommitDetail["commit"];
+  file: GitCommitFileEntry;
+}
+
+export type GitDiffPreview =
+  | GitWorktreeFileDiffPreview
+  | GitCommitFileListPreview
+  | GitCommitFileDiffPreview;
+
+export interface LegacyGitDiffPreviewShape {
   renderAs?: "text" | "image";
   status?: "modified" | "added" | "deleted";
   originalContent?: string;
   modifiedContent?: string;
   originalRevision?: "HEAD" | "INDEX";
   modifiedRevision?: "INDEX" | "WORKTREE";
-  staged?: boolean;
-  source?: "file" | "commit";
-  title?: string;
 }
 
 export const gitDiffPreviewAtomFamily = atomFamily((_workspaceId: string) =>
