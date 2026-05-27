@@ -76,8 +76,12 @@ describe("ExplorerPanel", () => {
       })
     );
 
+    const stackedBody = container.querySelector(".workspace-sidebar-panel__body--stacked");
+
     expect(screen.queryByText("Explorer")).toBeNull();
-    expect(container.querySelector(".panel-header")).toBeNull();
+    expect(stackedBody).not.toBeNull();
+    expect(stackedBody?.querySelectorAll(".workspace-sidebar-section")).toHaveLength(2);
+    expect(stackedBody?.querySelector(".panel-header")).toBeNull();
 
     const workspaceSection = screen
       .getByRole("heading", { level: 2, name: "Workspace" })

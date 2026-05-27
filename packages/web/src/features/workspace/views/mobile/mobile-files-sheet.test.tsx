@@ -31,7 +31,7 @@ vi.mock("../../../code-editor/views/shared/code-editor-host", () => ({
 vi.mock("./mobile-explorer-panel", () => ({
   MobileExplorerPanel: (props: unknown) => {
     mobileExplorerPanelSpy(props);
-    return <div data-testid="mobile-explorer-panel" />;
+    return <div className="mobile-explorer-panel" data-testid="mobile-explorer-panel" />;
   },
 }));
 
@@ -67,7 +67,7 @@ describe("MobileFilesSheet", () => {
   });
 
   it("renders three icon tabs and keeps explorer actions inside the explorer content", () => {
-    render(
+    const { container } = render(
       <Provider store={createStore()}>
         <MobileFilesSheet workspaceId="ws-test" route={{ kind: "root" }} activeView="explorer" />
       </Provider>
@@ -77,7 +77,11 @@ describe("MobileFilesSheet", () => {
       "mobile-files-sheet__segment",
       "active"
     );
-    expect(document.querySelector(".mobile-files-sheet__content")).not.toBeNull();
+    const content = container.querySelector(".mobile-files-sheet__content");
+
+    expect(container.querySelector(".mobile-files-sheet__segmented")).not.toBeNull();
+    expect(content).not.toBeNull();
+    expect(content?.querySelector(".mobile-explorer-panel")).not.toBeNull();
     expect(screen.getByRole("tab", { name: "Search" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Source Control" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "New File" })).toBeNull();

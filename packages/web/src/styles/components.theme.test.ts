@@ -2575,6 +2575,7 @@ describe("components.css theme-sensitive surfaces", () => {
     );
     const mobileTerminalSheet = getLastRuleBlock(".mobile-terminal-sheet");
     const mobileTerminal = getLastRuleBlock(".mobile-terminal-sheet .bottom-terminal");
+    const workspaceSidebarPanel = getLastRuleBlock(".workspace-sidebar-panel");
     const mobileFilesSurface = getLastRuleBlock(".mobile-sheet--files .file-tree-shell--mobile");
     const mobileFilesGitSurface = getLastRuleBlock(".mobile-sheet--files .git-panel--mobile");
     const mobileFilesSegmented = getLastRuleBlock(".mobile-files-sheet__segmented");
@@ -2617,6 +2618,10 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(mobileTerminalSheet).not.toContain("linear-gradient(");
     expect(mobileTerminal).toContain("border-radius: 0");
     expect(mobileTerminal).not.toContain("var(--radius-xl) var(--radius-xl) 0 0");
+    expect(workspaceSidebarPanel).not.toContain("border-radius:");
+    expect(workspaceSidebarPanel).toContain(
+      "border-right: 1px solid var(--component-mix-border-default-72pct-transparent)"
+    );
     expect(hasRuleBlock(".mobile-supervisor-sheet__root")).toBe(false);
     expect(hasRuleBlock(".mobile-supervisor-sheet__detail-header")).toBe(false);
     expect(mobileFilesSegmented).toContain(
@@ -2643,7 +2648,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(mobileFilesSearchSurface).toContain(
       "border: 1px solid var(--component-mix-border-default-80pct-transparent)"
     );
-    expect(mobileFilesSearchSurface).toContain("border-radius: var(--radius-md)");
+    expect(mobileFilesSearchSurface).toContain("border-radius: 0");
     expect(mobileFilesSearchSurface).toContain(
       "background: var(--component-mix-surface-panel-92pct-surface-page)"
     );
@@ -2651,7 +2656,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(mobileFilesSurface).toContain(
       "border: 1px solid var(--component-mix-border-default-80pct-transparent)"
     );
-    expect(mobileFilesSurface).toContain("border-radius: var(--radius-md)");
+    expect(mobileFilesSurface).toContain("border-radius: 0");
     expect(mobileFilesSurface).toContain(
       "background: var(--component-mix-surface-panel-92pct-surface-page)"
     );
@@ -2660,7 +2665,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(mobileFilesGitSurface).toContain(
       "border: 1px solid var(--component-mix-border-default-80pct-transparent)"
     );
-    expect(mobileFilesGitSurface).toContain("border-radius: var(--radius-md)");
+    expect(mobileFilesGitSurface).toContain("border-radius: 0");
     expect(mobileFilesGitSurface).toContain(
       "background: var(--component-mix-surface-panel-92pct-surface-page)"
     );
@@ -3159,6 +3164,8 @@ describe("components.css theme-sensitive surfaces", () => {
     const sidebarRowSelected = getLastRuleBlock(".workspace-sidebar-row--selected");
     const sidebarRowSelectedHover = getLastRuleBlock(".workspace-sidebar-row--selected:hover");
     const quickJumpSearch = getLastRuleBlock(".workspace-quick-jump__search");
+    const workspaceSection = getLastRuleBlock(".workspace-sidebar-section");
+    const workspaceSectionHeader = getLastRuleBlock(".workspace-sidebar-section__header");
     const openEditorsHeader = getLastRuleBlock(".workspace-open-editors__header");
     const openEditorsHeaderMain = getLastRuleBlock(".workspace-open-editors__header-main");
     const openEditorsTitle = getLastRuleBlock(".workspace-open-editors__title");
@@ -3175,6 +3182,7 @@ describe("components.css theme-sensitive surfaces", () => {
     const searchInput = getLastRuleBlock(".workspace-search-panel__input");
     const openEditorsItem = getLastRuleBlock(".workspace-open-editors__item");
     const openEditorsItemLabel = getLastRuleBlock(".workspace-open-editors__item-label");
+    const searchGroup = getLastRuleBlock(".workspace-search-panel__group");
     const searchGroupHeader = getLastRuleBlock(".workspace-search-panel__group-header");
     const searchGroupPath = getLastRuleBlock(".workspace-search-panel__group-path");
     const searchMatch = getLastRuleBlock(".workspace-search-panel__match");
@@ -3207,6 +3215,9 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(openEditorsCloseAll).toContain("margin-left: auto");
     expect(openEditorsCloseAll).toContain("background: transparent");
     expect(openEditorsCloseAll).toContain("color: var(--text-secondary)");
+    expect(workspaceSection).not.toContain("border:");
+    expect(workspaceSection).not.toContain("border-radius:");
+    expect(workspaceSectionHeader).toContain("margin-bottom: var(--sp-1)");
     expect(openEditorsRow).toContain("grid-template-columns: minmax(0, 1fr) auto");
     expect(openEditorsItemHover).toContain("background: var(--surface-hover)");
     expect(openEditorsItemActiveHover).toContain("background: var(--state-selected-bg)");
@@ -3225,6 +3236,8 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(openEditorsItem).toContain("white-space: nowrap");
     expect(openEditorsItemLabel).toContain("text-overflow: ellipsis");
     expect(openEditorsItemLabel).toContain("white-space: nowrap");
+    expect(searchGroup).not.toContain("border:");
+    expect(searchGroup).not.toContain("border-radius:");
     expect(searchGroupHeader).toContain("grid-template-columns: 14px minmax(0, 1fr) auto");
     expect(searchGroupHeader).toContain("border: 1px solid transparent");
     expect(searchGroupHeader).toContain("border-radius: var(--radius-md)");
@@ -3298,6 +3311,8 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(gitCommitBlock).toContain("gap: var(--sp-2)");
     expect(gitCommitInputFocus).toContain("outline: none");
     expect(gitSection).toContain("gap: 8px");
+    expect(gitSection).not.toContain("border:");
+    expect(gitSection).not.toContain("border-radius:");
     expect(gitWorktreeRow).toContain("min-height: 28px");
     expect(gitHistoryRow).toContain("min-height: 34px");
     expect(hasRuleBlock(".git-panel .git-row.active::before")).toBe(false);
