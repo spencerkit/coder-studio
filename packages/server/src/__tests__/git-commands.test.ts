@@ -245,7 +245,41 @@ describe("Git Commands", () => {
         status: "modified",
         originalRevision: "INDEX",
         modifiedRevision: "WORKTREE",
+        mime: "image/png",
+        originalPath: "pixel.png",
+        modifiedPath: "pixel.png",
         diff: expect.stringContaining("Binary files"),
+      })
+    );
+  });
+
+  it("returns image diff metadata for untracked png files via git.diff", async () => {
+    await writeFile(join(testDir, "scratch.png"), PNG_BYTES);
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "git-diff-image-untracked",
+        op: "git.diff",
+        args: {
+          workspaceId,
+          path: "scratch.png",
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.data).toEqual(
+      expect.objectContaining({
+        renderAs: "image",
+        status: "added",
+        originalRevision: "HEAD",
+        modifiedRevision: "WORKTREE",
+        mime: "image/png",
+        originalPath: undefined,
+        modifiedPath: "scratch.png",
+        diff: expect.stringContaining("diff --git a/scratch.png b/scratch.png"),
       })
     );
   });

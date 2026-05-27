@@ -784,6 +784,8 @@ describe("CodeEditorHost", () => {
       kind: "worktree-file-diff",
       path: "src/unrelated.ts",
       diff: "diff --git a/src/unrelated.ts b/src/unrelated.ts",
+      renderAs: "text",
+      status: "modified",
       staged: false,
     });
 
@@ -829,6 +831,8 @@ describe("CodeEditorHost", () => {
       kind: "worktree-file-diff",
       path: "src/final.ts",
       diff: "diff --git a/src/final.ts b/src/final.ts",
+      renderAs: "text",
+      status: "modified",
       staged: false,
     });
 
@@ -1066,6 +1070,8 @@ describe("CodeEditorHost", () => {
       kind: "worktree-file-diff",
       path: "src/dirty.ts",
       diff: "diff --git a/src/dirty.ts b/src/dirty.ts",
+      renderAs: "text",
+      status: "modified",
       staged: false,
     });
 
@@ -1080,6 +1086,8 @@ describe("CodeEditorHost", () => {
       kind: "worktree-file-diff",
       path: "src/dirty.ts",
       diff: "diff --git a/src/dirty.ts b/src/dirty.ts",
+      renderAs: "text",
+      status: "modified",
       staged: false,
     });
   });
@@ -1106,6 +1114,25 @@ describe("CodeEditorHost", () => {
         path: "src/app.tsx",
         status: "modified",
         renderAs: "text",
+      },
+      parentList: {
+        kind: "commit-file-list",
+        path: "abc123",
+        title: "abc123 · commit subject",
+        commit: {
+          sha: "abc123",
+          shortSha: "abc123",
+          subject: "commit subject",
+          authorName: "Spencer",
+          authoredAt: 1,
+        },
+        files: [
+          {
+            path: "src/app.tsx",
+            status: "modified",
+            renderAs: "text",
+          },
+        ],
       },
     });
 
@@ -1168,6 +1195,25 @@ describe("CodeEditorHost", () => {
         path: "src/app.tsx",
         status: "modified",
         renderAs: "text",
+      },
+      parentList: {
+        kind: "commit-file-list",
+        path: "abc123",
+        title: "abc123 · commit subject",
+        commit: {
+          sha: "abc123",
+          shortSha: "abc123",
+          subject: "commit subject",
+          authorName: "Spencer",
+          authoredAt: 1,
+        },
+        files: [
+          {
+            path: "src/app.tsx",
+            status: "modified",
+            renderAs: "text",
+          },
+        ],
       },
     });
 
@@ -1248,26 +1294,26 @@ describe("CodeEditorHost", () => {
           status: "modified",
           renderAs: "text",
         },
-      });
-    });
-
-    const sendCommand = (store.get(wsClientAtom) as { sendCommand: ReturnType<typeof vi.fn> })
-      .sendCommand;
-    sendCommand.mockResolvedValueOnce({
-      commit: {
-        sha: "abc123",
-        shortSha: "abc123",
-        subject: "commit subject",
-        authorName: "Spencer",
-        authoredAt: 1,
-      },
-      files: [
-        {
-          path: "src/app.tsx",
-          status: "modified",
-          renderAs: "text",
+        parentList: {
+          kind: "commit-file-list",
+          path: "abc123",
+          title: "abc123 · commit subject",
+          commit: {
+            sha: "abc123",
+            shortSha: "abc123",
+            subject: "commit subject",
+            authorName: "Spencer",
+            authoredAt: 1,
+          },
+          files: [
+            {
+              path: "src/app.tsx",
+              status: "modified",
+              renderAs: "text",
+            },
+          ],
         },
-      ],
+      });
     });
 
     await waitFor(() => {
@@ -1298,6 +1344,20 @@ describe("CodeEditorHost", () => {
       });
     });
 
+    const sendCommand = (
+      store.get(wsClientAtom) as unknown as {
+        sendCommand: ReturnType<typeof vi.fn>;
+      }
+    ).sendCommand;
+    expect(sendCommand).not.toHaveBeenCalledWith(
+      "git.commitDetail",
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        sha: "abc123",
+      }),
+      undefined
+    );
+
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
 
     await waitFor(() => {
@@ -1306,6 +1366,206 @@ describe("CodeEditorHost", () => {
       expect(screen.getByTestId("monaco-host")).toHaveTextContent("background");
       expect(screen.queryByTestId("monaco-diff-host")).not.toBeInTheDocument();
     });
+  });
+
+  it("ignores a stale commit file diff response after the user switches to another commit list", async () => {
+    const diffDeferred = createDeferred<{
+      diff: string;
+      renderAs: "text";
+      status: "modified";
+      originalContent: string;
+      modifiedContent: string;
+    }>();
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.commitFileDiff") {
+        return diffDeferred.promise;
+      }
+
+      if (op === "file.read") {
+        return {
+          kind: "text",
+          content: "hello world",
+          baseHash: "abc123",
+          encoding: "utf-8",
+        };
+      }
+
+      return null;
+    });
+    const { store } = setupStore({ sendCommand });
+
+    const parentListA = {
+      kind: "commit-file-list" as const,
+      path: "abc123",
+      title: "abc123 · commit subject",
+      commit: {
+        sha: "abc123",
+        shortSha: "abc123",
+        subject: "commit subject",
+        authorName: "Spencer",
+        authoredAt: 1,
+      },
+      files: [
+        {
+          path: "src/app.tsx",
+          status: "modified" as const,
+          renderAs: "text" as const,
+        },
+      ],
+    };
+    const parentListB = {
+      kind: "commit-file-list" as const,
+      path: "def456",
+      title: "def456 · other commit",
+      commit: {
+        sha: "def456",
+        shortSha: "def456",
+        subject: "other commit",
+        authorName: "Spencer",
+        authoredAt: 2,
+      },
+      files: [
+        {
+          path: "src/other.tsx",
+          status: "modified" as const,
+          renderAs: "text" as const,
+        },
+      ],
+    };
+
+    act(() => {
+      store.set(gitDiffPreviewAtomFamily("ws-1"), parentListA);
+    });
+
+    const { result } = renderHook(() => useCodeEditorActions(), {
+      wrapper: wrapperFor(store),
+    });
+
+    const openPromise = result.current.openCommitFileDiff(parentListA.files[0]!);
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "git.commitFileDiff",
+        {
+          workspaceId: "ws-1",
+          sha: "abc123",
+          path: "src/app.tsx",
+        },
+        undefined
+      );
+    });
+
+    act(() => {
+      store.set(gitDiffPreviewAtomFamily("ws-1"), parentListB);
+    });
+
+    let applied = true;
+    await act(async () => {
+      diffDeferred.resolve({
+        diff: "diff --git a/src/app.tsx b/src/app.tsx",
+        renderAs: "text",
+        status: "modified",
+        originalContent: "const app = 0;\n",
+        modifiedContent: "const app = 1;\n",
+      });
+      applied = await openPromise;
+    });
+
+    expect(applied).toBe(false);
+    expect(store.get(gitDiffPreviewAtomFamily("ws-1"))).toEqual(parentListB);
+  });
+
+  it("ignores a stale commit file diff response after the same commit list is reopened", async () => {
+    const diffDeferred = createDeferred<{
+      diff: string;
+      renderAs: "text";
+      status: "modified";
+      originalContent: string;
+      modifiedContent: string;
+    }>();
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.commitFileDiff") {
+        return diffDeferred.promise;
+      }
+
+      if (op === "file.read") {
+        return {
+          kind: "text",
+          content: "hello world",
+          baseHash: "abc123",
+          encoding: "utf-8",
+        };
+      }
+
+      return null;
+    });
+    const { store } = setupStore({ sendCommand });
+
+    const parentListA = {
+      kind: "commit-file-list" as const,
+      path: "abc123",
+      title: "abc123 · commit subject",
+      commit: {
+        sha: "abc123",
+        shortSha: "abc123",
+        subject: "commit subject",
+        authorName: "Spencer",
+        authoredAt: 1,
+      },
+      files: [
+        {
+          path: "src/app.tsx",
+          status: "modified" as const,
+          renderAs: "text" as const,
+        },
+      ],
+    };
+    const reopenedParentList = {
+      ...parentListA,
+      files: [...parentListA.files],
+    };
+
+    act(() => {
+      store.set(gitDiffPreviewAtomFamily("ws-1"), parentListA);
+    });
+
+    const { result } = renderHook(() => useCodeEditorActions(), {
+      wrapper: wrapperFor(store),
+    });
+
+    const openPromise = result.current.openCommitFileDiff(parentListA.files[0]!);
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "git.commitFileDiff",
+        {
+          workspaceId: "ws-1",
+          sha: "abc123",
+          path: "src/app.tsx",
+        },
+        undefined
+      );
+    });
+
+    act(() => {
+      store.set(gitDiffPreviewAtomFamily("ws-1"), null);
+      store.set(gitDiffPreviewAtomFamily("ws-1"), reopenedParentList);
+    });
+
+    let applied = true;
+    await act(async () => {
+      diffDeferred.resolve({
+        diff: "diff --git a/src/app.tsx b/src/app.tsx",
+        renderAs: "text",
+        status: "modified",
+        originalContent: "const app = 0;\n",
+        modifiedContent: "const app = 1;\n",
+      });
+      applied = await openPromise;
+    });
+
+    expect(applied).toBe(false);
+    expect(store.get(gitDiffPreviewAtomFamily("ws-1"))).toEqual(reopenedParentList);
   });
 
   it("closing a commit-history preview restores the background file save error", async () => {
@@ -1666,6 +1926,8 @@ describe("CodeEditorHost", () => {
       kind: "worktree-file-diff",
       path: "src/app.ts",
       diff: "diff --git a/src/app.ts b/src/app.ts",
+      renderAs: "text",
+      status: "modified",
       staged: false,
     });
 
@@ -1706,6 +1968,7 @@ describe("CodeEditorHost", () => {
       diff: "diff --git a/src/app.ts b/src/app.ts",
       staged: false,
       renderAs: "text",
+      status: "modified",
       originalContent: "export const app = 1;",
       modifiedContent: "export const app = 2;",
     });

@@ -50,7 +50,12 @@ vi.mock("../../components/commit-file-list-preview", () => ({
     <button
       type="button"
       data-testid="commit-file-list-preview"
-      onClick={() => onOpenFile(preview.files[0])}
+      onClick={() => {
+        const firstFile = preview.files[0];
+        if (firstFile) {
+          onOpenFile(firstFile);
+        }
+      }}
     >
       {preview.files[0]?.path ?? "no-files"}
     </button>
@@ -59,6 +64,31 @@ vi.mock("../../components/commit-file-list-preview", () => ({
 
 vi.mock("../../components/image-preview", () => ({
   ImagePreview: () => <div data-testid="image-preview" />,
+}));
+
+vi.mock("../../components/image-diff-preview", () => ({
+  ImageDiffPreview: ({
+    path,
+    mime,
+    status,
+    beforeUrl,
+    afterUrl,
+  }: {
+    path: string;
+    mime: string;
+    status: "modified" | "added" | "deleted";
+    beforeUrl?: string;
+    afterUrl?: string;
+  }) => (
+    <div
+      data-testid="image-diff-preview"
+      data-path={path}
+      data-mime={mime}
+      data-status={status}
+      data-before-url={beforeUrl ?? ""}
+      data-after-url={afterUrl ?? ""}
+    />
+  ),
 }));
 
 vi.mock("../../components/document-preview", () => ({
@@ -322,6 +352,25 @@ describe("EditorSurface", () => {
           status: "modified",
           renderAs: "text",
         },
+        parentList: {
+          kind: "commit-file-list",
+          path: "abc123",
+          title: "abc123 · commit subject",
+          commit: {
+            sha: "abc123",
+            shortSha: "abc123",
+            subject: "commit subject",
+            authorName: "Spencer",
+            authoredAt: 1,
+          },
+          files: [
+            {
+              path: "src/app.ts",
+              status: "modified",
+              renderAs: "text",
+            },
+          ],
+        },
       },
     });
 
@@ -334,6 +383,40 @@ describe("EditorSurface", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(state.handleClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders worktree image diffs from diff payload metadata instead of current file cache", () => {
+    const state = createState({
+      mode: "diff",
+      currentFile: undefined,
+      activeDiffChange: {
+        kind: "worktree-file-diff",
+        path: "assets/logo.png",
+        diff: "Binary files a/assets/logo.png and b/assets/logo.png differ",
+        renderAs: "image",
+        status: "deleted",
+        mime: "image/png",
+        originalPath: "assets/logo.png",
+        modifiedPath: "assets/logo.png",
+        originalRevision: "INDEX",
+        modifiedRevision: "WORKTREE",
+        staged: false,
+      },
+    });
+
+    render(<EditorSurface state={state} />);
+
+    expect(screen.getByTestId("image-diff-preview")).toHaveAttribute(
+      "data-path",
+      "assets/logo.png"
+    );
+    expect(screen.getByTestId("image-diff-preview")).toHaveAttribute("data-mime", "image/png");
+    expect(screen.getByTestId("image-diff-preview")).toHaveAttribute("data-status", "deleted");
+    expect(screen.getByTestId("image-diff-preview")).toHaveAttribute(
+      "data-before-url",
+      "/api/file?workspaceId=ws-1&path=assets%2Flogo.png&revision=INDEX"
+    );
+    expect(screen.getByTestId("image-diff-preview")).toHaveAttribute("data-after-url", "");
   });
 
   it("shows the commit preview title without leaking the background file dirty marker", () => {

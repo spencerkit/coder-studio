@@ -487,13 +487,16 @@ export function useGitPanelActions({
         return null;
       }
 
-      const preview = {
+      const preview: GitDiffPreview = {
         kind: "worktree-file-diff" as const,
         path: change.path,
         diff: result.data.diff,
         staged: type === "staged",
         ...(result.data.renderAs ? { renderAs: result.data.renderAs } : {}),
         ...(result.data.status ? { status: result.data.status } : {}),
+        ...(result.data.mime ? { mime: result.data.mime } : {}),
+        ...(result.data.originalPath ? { originalPath: result.data.originalPath } : {}),
+        ...(result.data.modifiedPath ? { modifiedPath: result.data.modifiedPath } : {}),
         ...(result.data.originalContent !== undefined
           ? { originalContent: result.data.originalContent }
           : {}),

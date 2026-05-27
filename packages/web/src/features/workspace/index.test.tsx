@@ -1403,6 +1403,7 @@ describe("WorkspacePage", () => {
 
     act(() => {
       store.set(gitDiffPreviewAtomFamily("ws-test"), {
+        kind: "worktree-file-diff",
         path: "src/app.tsx",
         diff: "diff --git a/src/app.tsx b/src/app.tsx",
         staged: false,
@@ -1412,6 +1413,7 @@ describe("WorkspacePage", () => {
     expect(screen.getByTestId("agent-panes")).toBeInTheDocument();
     expect(screen.queryByTestId("git-diff-viewer")).not.toBeInTheDocument();
     expect(store.get(gitDiffPreviewAtomFamily("ws-test"))).toEqual({
+      kind: "worktree-file-diff",
       path: "src/app.tsx",
       diff: "diff --git a/src/app.tsx b/src/app.tsx",
       staged: false,

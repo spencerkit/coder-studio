@@ -1,9 +1,9 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { CommitFileListPreview } from "./commit-file-list-preview";
 
 describe("CommitFileListPreview", () => {
-  it("renders commit files and opens a selected commit diff", () => {
+  it("renders commit files with split path metadata and opens a selected commit diff", () => {
     const onOpenFile = vi.fn();
     const files = [
       {
@@ -38,10 +38,17 @@ describe("CommitFileListPreview", () => {
       />
     );
 
-    expect(screen.getByText("src/app.tsx")).toBeInTheDocument();
-    expect(screen.getByText("src/old.ts -> src/renamed.ts")).toBeInTheDocument();
+    const modifiedRow = screen.getByRole("button", { name: "src/app.tsx modified" });
+    expect(within(modifiedRow).getByText("app.tsx")).toBeInTheDocument();
+    expect(within(modifiedRow).getByText("src/")).toBeInTheDocument();
+    expect(within(modifiedRow).getByText("modified")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "src/app.tsx" }));
+    const renamedRow = screen.getByRole("button", { name: "src/old.ts -> src/renamed.ts renamed" });
+    expect(within(renamedRow).getByText("renamed.ts")).toBeInTheDocument();
+    expect(within(renamedRow).getByText("src/old.ts")).toBeInTheDocument();
+    expect(within(renamedRow).getByText("renamed")).toBeInTheDocument();
+
+    fireEvent.click(modifiedRow);
 
     expect(onOpenFile).toHaveBeenCalledWith(files[0]);
   });

@@ -31,7 +31,6 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
     handleSave,
     hasUnsavedChangesOutsideDiff,
     mode,
-    openInDiffMode,
     saveError,
     workspace,
   } = state;
@@ -55,31 +54,38 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
   const currentTextFile = currentFile?.kind === "text" ? currentFile : null;
   const currentImageFile = currentFile?.kind === "image" ? currentFile : null;
   const showHeader = chrome === "full";
-  const isCommitFileListPreview = activePreviewKind === "commit-file-list";
-  const isCommitFileDiffPreview = activePreviewKind === "commit-file-diff";
+  const commitFileListPreview = activePreviewKind === "commit-file-list" ? activeDiffChange : null;
+  const commitFileDiffPreview = activePreviewKind === "commit-file-diff" ? activeDiffChange : null;
+  const worktreeFileDiffPreview =
+    activePreviewKind === "worktree-file-diff" ? activeDiffChange : null;
+  const isCommitFileListPreview = commitFileListPreview !== null;
+  const isCommitFileDiffPreview = commitFileDiffPreview !== null;
   const isCommitPreview = isCommitFileListPreview || isCommitFileDiffPreview;
+  const commitPreview = commitFileListPreview ?? commitFileDiffPreview;
   const dirtyIndicator =
     !isCommitPreview && currentTextFile?.isDirty ? (
       <span className="dirty-indicator">*</span>
     ) : null;
-  const canRenderTextDiff =
-    Boolean(activeDiffChange) &&
-    ((activePreviewKind === "worktree-file-diff" &&
-      mode === "diff" &&
-      activeDiffChange.renderAs === "text") ||
-      (isCommitFileDiffPreview && activeDiffChange.renderAs === "text"));
-  const canRenderImageDiff =
-    Boolean(activeDiffChange) &&
-    ((activePreviewKind === "worktree-file-diff" &&
-      mode === "diff" &&
-      activeDiffChange.renderAs === "image") ||
-      (isCommitFileDiffPreview && activeDiffChange.renderAs === "image"));
+  const textDiffPreview =
+    worktreeFileDiffPreview && mode === "diff" && worktreeFileDiffPreview.renderAs === "text"
+      ? worktreeFileDiffPreview
+      : commitFileDiffPreview?.renderAs === "text"
+        ? commitFileDiffPreview
+        : null;
+  const imageDiffPreview =
+    worktreeFileDiffPreview && mode === "diff" && worktreeFileDiffPreview.renderAs === "image"
+      ? worktreeFileDiffPreview
+      : commitFileDiffPreview?.renderAs === "image"
+        ? commitFileDiffPreview
+        : null;
+  const canRenderTextDiff = textDiffPreview !== null;
+  const canRenderImageDiff = imageDiffPreview !== null;
   const shouldRenderDocumentPreview =
     mode === "preview" &&
     currentTextFile !== null &&
     deriveDocumentPreviewKind(currentTextFile.path) !== null;
-  const titleText = isCommitPreview
-    ? (activeDiffChange.title ?? activeDiffChange.path)
+  const titleText = commitPreview
+    ? (commitPreview.title ?? commitPreview.path)
     : currentFile
       ? currentFile.path
       : (activeDiffChange?.title ?? activeFilePath ?? t("file.title"));
@@ -93,6 +99,29 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
     }
     return `/api/file?${query.toString()}`;
   };
+  const imageDiffPath = imageDiffPreview
+    ? (imageDiffPreview.modifiedPath ?? imageDiffPreview.originalPath ?? imageDiffPreview.path)
+    : null;
+  const imageDiffMime = imageDiffPreview
+    ? (imageDiffPreview.mime ?? currentImageFile?.mime ?? "application/octet-stream")
+    : null;
+  const imageDiffBeforeUrl = imageDiffPreview?.originalPath
+    ? buildRevisionUrl(
+        imageDiffPreview.originalPath,
+        imageDiffPreview.originalRevision === "WORKTREE"
+          ? undefined
+          : imageDiffPreview.originalRevision
+      )
+    : undefined;
+  const imageDiffAfterUrl =
+    imageDiffPreview?.modifiedPath && imageDiffPreview.status !== "deleted"
+      ? buildRevisionUrl(
+          imageDiffPreview.modifiedPath,
+          imageDiffPreview.modifiedRevision === "WORKTREE"
+            ? undefined
+            : imageDiffPreview.modifiedRevision
+        )
+      : undefined;
 
   return (
     <div className="workspace-git-view">
@@ -160,63 +189,27 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
         <div className="code-editor-body">
           {isCommitFileListPreview ? (
             <CommitFileListPreview
-              preview={activeDiffChange}
+              preview={commitFileListPreview}
               onOpenFile={(file) => void state.openCommitFileDiff(file)}
             />
           ) : canRenderTextDiff ? (
             <MonacoDiffHost
               filePath={
-                activeDiffChange?.modifiedPath ??
-                activeDiffChange?.path ??
+                textDiffPreview.modifiedPath ??
+                textDiffPreview.path ??
                 currentFile?.path ??
                 "diff.patch"
               }
-              originalContent={activeDiffChange?.originalContent ?? ""}
-              modifiedContent={activeDiffChange?.modifiedContent ?? activeDiffChange?.diff ?? ""}
+              originalContent={textDiffPreview.originalContent ?? ""}
+              modifiedContent={textDiffPreview.modifiedContent ?? textDiffPreview.diff ?? ""}
             />
-          ) : canRenderImageDiff && currentImageFile ? (
+          ) : canRenderImageDiff && imageDiffPath && imageDiffMime ? (
             <ImageDiffPreview
-              path={currentImageFile.path}
-              mime={currentImageFile.mime}
-              status={activeDiffChange?.status ?? "modified"}
-              beforeUrl={
-                activeDiffChange?.originalRevision
-                  ? `${currentImageFile.url}&revision=${activeDiffChange.originalRevision}`
-                  : undefined
-              }
-              afterUrl={
-                activeDiffChange?.status === "deleted"
-                  ? undefined
-                  : activeDiffChange?.modifiedRevision === "WORKTREE"
-                    ? currentImageFile.url
-                    : activeDiffChange?.modifiedRevision
-                      ? `${currentImageFile.url}&revision=${activeDiffChange.modifiedRevision}`
-                      : currentImageFile.url
-              }
-            />
-          ) : isCommitFileDiffPreview && activeDiffChange.renderAs === "image" ? (
-            <ImageDiffPreview
-              path={activeDiffChange.modifiedPath ?? activeDiffChange.path}
-              mime={activeDiffChange.mime ?? "application/octet-stream"}
-              status={activeDiffChange.status}
-              beforeUrl={
-                activeDiffChange.originalPath
-                  ? buildRevisionUrl(
-                      activeDiffChange.originalPath,
-                      activeDiffChange.originalRevision
-                    )
-                  : undefined
-              }
-              afterUrl={
-                activeDiffChange.status === "deleted"
-                  ? undefined
-                  : activeDiffChange.modifiedPath
-                    ? buildRevisionUrl(
-                        activeDiffChange.modifiedPath,
-                        activeDiffChange.modifiedRevision
-                      )
-                    : undefined
-              }
+              path={imageDiffPath}
+              mime={imageDiffMime}
+              status={imageDiffPreview.status ?? "modified"}
+              beforeUrl={imageDiffBeforeUrl}
+              afterUrl={imageDiffAfterUrl}
             />
           ) : shouldRenderDocumentPreview && currentTextFile ? (
             <DocumentPreview

@@ -18,6 +18,9 @@ export interface FileDiffResult {
   modifiedContent?: string;
   originalRevision?: "HEAD" | "INDEX";
   modifiedRevision?: "INDEX" | "WORKTREE";
+  mime?: string;
+  originalPath?: string;
+  modifiedPath?: string;
 }
 
 interface HistoricalDiffInput {
@@ -205,8 +208,8 @@ export async function buildHistoricalImageDiffPayload(
     renderAs: "image",
     status: deriveHistoricalStatus(originalExists, modifiedExists),
     mime: imageType.mime,
-    ...(input.originalPath ? { originalPath: input.originalPath } : {}),
-    ...(input.modifiedPath ? { modifiedPath: input.modifiedPath } : {}),
+    ...(originalExists && input.originalPath ? { originalPath: input.originalPath } : {}),
+    ...(modifiedExists && input.modifiedPath ? { modifiedPath: input.modifiedPath } : {}),
     ...(input.originalRevision ? { originalRevision: input.originalRevision } : {}),
     ...(input.modifiedRevision ? { modifiedRevision: input.modifiedRevision } : {}),
   };
@@ -260,6 +263,26 @@ async function buildTextDiffResult(
   };
 }
 
+function buildImageDiffResult(
+  filePath: string,
+  imageMime: string,
+  status: "modified" | "added" | "deleted",
+  originalRevision: "HEAD" | "INDEX",
+  modifiedRevision: "INDEX" | "WORKTREE",
+  diff: string
+): FileDiffResult {
+  return {
+    diff,
+    renderAs: "image",
+    status,
+    originalRevision,
+    modifiedRevision,
+    mime: imageMime,
+    originalPath: status === "added" ? undefined : filePath,
+    modifiedPath: status === "deleted" ? undefined : filePath,
+  };
+}
+
 /**
  * Gets diff for a specific file.
  *
@@ -278,21 +301,7 @@ export async function getFileDiff(
   if (!staged && !(await isTrackedPath(cwd, path))) {
     const diff = await getUntrackedFileDiff(cwd, path);
     if (imageType) {
-      const payload = await buildHistoricalImageDiffPayload({
-        cwd,
-        diff,
-        originalPath: path,
-        modifiedPath: path,
-        originalRevision: "HEAD",
-        modifiedRevision: "WORKTREE",
-      });
-      return {
-        diff: payload.diff,
-        renderAs: payload.renderAs,
-        status: "added",
-        originalRevision: "HEAD",
-        modifiedRevision: "WORKTREE",
-      };
+      return buildImageDiffResult(path, imageType.mime, "added", "HEAD", "WORKTREE", diff);
     }
 
     return buildTextDiffResult(cwd, path, staged, diff);
@@ -301,21 +310,14 @@ export async function getFileDiff(
   const args = staged ? ["diff", "--staged", "--", path] : ["diff", "--", path];
   const result = await runGit(cwd, args);
   if (imageType && /Binary files .* differ/.test(result.stdout)) {
-    const payload = await buildHistoricalImageDiffPayload({
-      cwd,
-      diff: result.stdout,
-      originalPath: path,
-      modifiedPath: path,
-      originalRevision: staged ? "HEAD" : "INDEX",
-      modifiedRevision: staged ? "INDEX" : "WORKTREE",
-    });
-    return {
-      diff: payload.diff,
-      renderAs: payload.renderAs,
-      status: await deriveFileDiffStatus(cwd, path, staged),
-      originalRevision: payload.originalRevision as "HEAD" | "INDEX" | undefined,
-      modifiedRevision: payload.modifiedRevision as "INDEX" | "WORKTREE" | undefined,
-    };
+    return buildImageDiffResult(
+      path,
+      imageType.mime,
+      await deriveFileDiffStatus(cwd, path, staged),
+      staged ? "HEAD" : "INDEX",
+      staged ? "INDEX" : "WORKTREE",
+      result.stdout
+    );
   }
 
   return buildTextDiffResult(cwd, path, staged, result.stdout);

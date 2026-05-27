@@ -1,7 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { wsClientAtom } from "../../../../atoms/connection";
 import type { GitDiffPreview } from "../../atoms";
 import { MobileFilesSheet } from "./mobile-files-sheet";
 

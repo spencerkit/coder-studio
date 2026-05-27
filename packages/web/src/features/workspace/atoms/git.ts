@@ -44,9 +44,22 @@ export const gitStateAtomFamily = atomFamily((_workspaceId: string) =>
   atom<GitStatus | null>(null)
 );
 
-export interface GitWorktreeFileDiffPreview extends GitFileDiffPayload {
+export interface LegacyGitDiffPreviewShape {
+  renderAs?: "text" | "image";
+  status?: "modified" | "added" | "deleted";
+  originalContent?: string;
+  modifiedContent?: string;
+  originalRevision?: GitFileDiffPayload["originalRevision"];
+  modifiedRevision?: GitFileDiffPayload["modifiedRevision"];
+}
+
+export interface GitWorktreeFileDiffPreview extends LegacyGitDiffPreviewShape {
   kind: "worktree-file-diff";
   path: string;
+  diff: string;
+  mime?: GitFileDiffPayload["mime"];
+  originalPath?: GitFileDiffPayload["originalPath"];
+  modifiedPath?: GitFileDiffPayload["modifiedPath"];
   staged?: boolean;
   title?: string;
 }
@@ -65,21 +78,13 @@ export interface GitCommitFileDiffPreview extends GitFileDiffPayload {
   title?: string;
   commit: GitCommitDetail["commit"];
   file: GitCommitFileEntry;
+  parentList: GitCommitFileListPreview;
 }
 
 export type GitDiffPreview =
   | GitWorktreeFileDiffPreview
   | GitCommitFileListPreview
   | GitCommitFileDiffPreview;
-
-export interface LegacyGitDiffPreviewShape {
-  renderAs?: "text" | "image";
-  status?: "modified" | "added" | "deleted";
-  originalContent?: string;
-  modifiedContent?: string;
-  originalRevision?: "HEAD" | "INDEX";
-  modifiedRevision?: "INDEX" | "WORKTREE";
-}
 
 export const gitDiffPreviewAtomFamily = atomFamily((_workspaceId: string) =>
   atom<GitDiffPreview | null>(null)

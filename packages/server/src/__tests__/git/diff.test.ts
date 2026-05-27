@@ -103,7 +103,26 @@ describe("git diff operations", () => {
       expect(diff.status).toBe("modified");
       expect(diff.originalRevision).toBe("INDEX");
       expect(diff.modifiedRevision).toBe("WORKTREE");
+      expect(diff.mime).toBe("image/png");
+      expect(diff.originalPath).toBe("pixel.png");
+      expect(diff.modifiedPath).toBe("pixel.png");
       expect(diff.diff).toContain("Binary files");
+    });
+
+    it("returns image diff metadata for untracked png files", async () => {
+      await writeFile(join(testDir, "scratch.png"), PNG_BYTES);
+
+      const diff = await getFileDiff(testDir, "scratch.png");
+
+      expect(diff.renderAs).toBe("image");
+      expect(diff.status).toBe("added");
+      expect(diff.originalRevision).toBe("HEAD");
+      expect(diff.modifiedRevision).toBe("WORKTREE");
+      expect(diff.mime).toBe("image/png");
+      expect(diff.originalPath).toBeUndefined();
+      expect(diff.modifiedPath).toBe("scratch.png");
+      expect(diff.diff).toContain("diff --git a/scratch.png b/scratch.png");
+      expect(diff.diff).toContain("new file mode 100644");
     });
   });
 

@@ -262,7 +262,7 @@ describe("CodeEditorHeaderActions", () => {
     render(<CodeEditorView state={state} />);
 
     expect(screen.getByText("abc123 · commit subject")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "src/app.tsx" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "src/app.tsx modified" })).toBeInTheDocument();
     expect(screen.queryByTestId("monaco-diff-host-mock")).not.toBeInTheDocument();
   });
 
@@ -303,6 +303,25 @@ describe("CodeEditorHeaderActions", () => {
           path: "src/app.tsx",
           status: "modified",
           renderAs: "text",
+        },
+        parentList: {
+          kind: "commit-file-list",
+          path: "abc123",
+          title: "abc123 · commit subject",
+          commit: {
+            sha: "abc123",
+            shortSha: "abc123",
+            subject: "commit subject",
+            authorName: "Spencer",
+            authoredAt: 1,
+          },
+          files: [
+            {
+              path: "src/app.tsx",
+              status: "modified",
+              renderAs: "text",
+            },
+          ],
         },
       },
     });

@@ -266,7 +266,7 @@ describe("GitPanel", () => {
 
     expect(actionRow).not.toBeNull();
     expect(primaryButton).not.toBeNull();
-    expect(actionRow).toContainElement(primaryButton);
+    expect(actionRow).toContainElement(primaryButton as HTMLElement);
     expect(actionRow?.querySelectorAll("button")).toHaveLength(1);
     expect(primaryButton?.querySelector('[data-icon-semantic="git.commit"]')).toBeTruthy();
   });
@@ -766,28 +766,26 @@ describe("GitPanel", () => {
   });
 
   it("loads the latest 20 history entries by default and does not render a show-all control", async () => {
-    const sendCommand = vi
-      .fn()
-      .mockImplementation(async (op: string, args?: { limit?: number }) => {
-        if (op === "git.status") {
-          return status;
-        }
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return status;
+      }
 
-        if (op === "git.branches") {
-          return {
-            current: "feature/ai-agent",
-            branches: [],
-          };
-        }
+      if (op === "git.branches") {
+        return {
+          current: "feature/ai-agent",
+          branches: [],
+        };
+      }
 
-        if (op === "git.log") {
-          return {
-            entries: historyEntries,
-          };
-        }
+      if (op === "git.log") {
+        return {
+          entries: historyEntries,
+        };
+      }
 
-        return {};
-      });
+      return {};
+    });
     const store = createStore();
     store.set(localeAtom, "en");
     store.set(wsClientAtom, { sendCommand } as never);
@@ -874,7 +872,7 @@ describe("GitPanel", () => {
   });
 
   it("opens a commit diff when a history row is clicked", async () => {
-    const sendCommand = vi.fn().mockImplementation(async (op: string, args: unknown) => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "git.status") {
         return status;
       }

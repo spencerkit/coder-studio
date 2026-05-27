@@ -1,4 +1,4 @@
-import type { GitCommitDetail, GitCommitFileEntry, GitFileDiffPayload } from "@coder-studio/core";
+import type { GitCommitFileEntry, GitFileDiffPayload } from "@coder-studio/core";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { dispatchCommandAtom } from "../../../atoms/connection";
@@ -66,7 +66,7 @@ export function useCodeEditorActions() {
   } | null>(null);
 
   const workspaceId = workspace?.id;
-  const [activeFilePath, setActiveFilePath] = useAtom(activeFilePathAtomFamily(workspaceId ?? ""));
+  const [activeFilePath] = useAtom(activeFilePathAtomFamily(workspaceId ?? ""));
   const [openFiles, setOpenFiles] = useAtom(openFilesAtomFamily(workspaceId ?? ""));
   const [mode, setMode] = useAtom(editorModeAtomFamily(workspaceId ?? ""));
   const editorRefreshToken = useAtomValue(editorRefreshTokenAtomFamily(workspaceId ?? ""));
@@ -76,6 +76,7 @@ export function useCodeEditorActions() {
   const pendingActivePathRef = useRef<string | null>(null);
   const nextSaveRequestIdRef = useRef(0);
   const activeSaveRequestIdByPathRef = useRef<Map<string, number>>(new Map());
+  const nextCommitDiffRequestIdRef = useRef(0);
   const previousOpenFilePathsRef = useRef<string[] | null>(null);
   const { closePath } = useOpenEditorsActions(workspaceId ?? "", {
     workspaceRootPath,
@@ -623,37 +624,9 @@ export function useCodeEditorActions() {
     workspaceRootPath,
   ]);
 
-  const restoreCommitFileListPreview = useCallback(
-    async (commitSha: string) => {
-      if (!workspaceId) {
-        setDiffPreview(null);
-        return;
-      }
-
-      const result = await dispatch<GitCommitDetail>("git.commitDetail", {
-        workspaceId,
-        sha: commitSha,
-      });
-
-      if (!result.ok || !result.data) {
-        setDiffPreview(null);
-        return;
-      }
-
-      setDiffPreview({
-        kind: "commit-file-list",
-        path: result.data.commit.sha,
-        title: `${result.data.commit.shortSha} · ${result.data.commit.subject}`,
-        commit: result.data.commit,
-        files: result.data.files,
-      });
-    },
-    [dispatch, setDiffPreview, workspaceId]
-  );
-
   const handleClose = useCallback(async () => {
     if (diffPreview?.kind === "commit-file-diff") {
-      await restoreCommitFileListPreview(diffPreview.commit.sha);
+      setDiffPreview(diffPreview.parentList);
       return;
     }
 
@@ -669,20 +642,11 @@ export function useCodeEditorActions() {
     }
 
     if (currentFile?.path || activeFilePath) {
-      closePath(currentFile?.path ?? activeFilePath);
+      closePath(currentFile?.path ?? activeFilePath ?? undefined);
     }
 
     setSaveError(null);
-  }, [
-    activeFilePath,
-    closePath,
-    currentFile,
-    diffPreview,
-    mode,
-    restoreCommitFileListPreview,
-    setDiffPreview,
-    setMode,
-  ]);
+  }, [activeFilePath, closePath, currentFile, diffPreview, mode, setDiffPreview, setMode]);
 
   const toggleSvgTextMode = useCallback(() => {
     if (!workspaceId || !currentFile) {
@@ -720,13 +684,16 @@ export function useCodeEditorActions() {
       return false;
     }
 
-    const nextPreview: GitDiffPreview = {
+    const nextPreview = {
       kind: "worktree-file-diff",
       path: currentFile.path,
       diff: result.data.diff,
       staged: false,
       ...(result.data.renderAs ? { renderAs: result.data.renderAs } : {}),
       ...(result.data.status ? { status: result.data.status } : {}),
+      ...(result.data.mime ? { mime: result.data.mime } : {}),
+      ...(result.data.originalPath ? { originalPath: result.data.originalPath } : {}),
+      ...(result.data.modifiedPath ? { modifiedPath: result.data.modifiedPath } : {}),
       ...(result.data.originalContent !== undefined
         ? { originalContent: result.data.originalContent }
         : {}),
@@ -735,7 +702,7 @@ export function useCodeEditorActions() {
         : {}),
       ...(result.data.originalRevision ? { originalRevision: result.data.originalRevision } : {}),
       ...(result.data.modifiedRevision ? { modifiedRevision: result.data.modifiedRevision } : {}),
-    };
+    } as GitDiffPreview;
     setDiffPreviewDismissed(false);
     setDiffPreview(nextPreview);
     setMode("diff");
@@ -748,9 +715,13 @@ export function useCodeEditorActions() {
         return false;
       }
 
+      const parentList = diffPreview;
+      const requestId = nextCommitDiffRequestIdRef.current + 1;
+      nextCommitDiffRequestIdRef.current = requestId;
+
       const result = await dispatch<GitFileDiffPayload>("git.commitFileDiff", {
         workspaceId,
-        sha: diffPreview.commit.sha,
+        sha: parentList.commit.sha,
         path: file.path,
         ...(file.oldPath ? { oldPath: file.oldPath } : {}),
       });
@@ -759,28 +730,48 @@ export function useCodeEditorActions() {
         return false;
       }
 
-      setDiffPreview({
-        kind: "commit-file-diff",
-        path: file.path,
-        title: file.path,
-        commit: diffPreview.commit,
-        file,
-        diff: result.data.diff,
-        renderAs: result.data.renderAs,
-        status: result.data.status,
-        ...(result.data.mime ? { mime: result.data.mime } : {}),
-        ...(result.data.originalPath ? { originalPath: result.data.originalPath } : {}),
-        ...(result.data.modifiedPath ? { modifiedPath: result.data.modifiedPath } : {}),
-        ...(result.data.originalContent !== undefined
-          ? { originalContent: result.data.originalContent }
-          : {}),
-        ...(result.data.modifiedContent !== undefined
-          ? { modifiedContent: result.data.modifiedContent }
-          : {}),
-        ...(result.data.originalRevision ? { originalRevision: result.data.originalRevision } : {}),
-        ...(result.data.modifiedRevision ? { modifiedRevision: result.data.modifiedRevision } : {}),
+      const payload = result.data;
+
+      let applied = false;
+      setDiffPreview((current) => {
+        if (requestId !== nextCommitDiffRequestIdRef.current) {
+          return current;
+        }
+
+        if (
+          current?.kind !== "commit-file-list" ||
+          current !== parentList ||
+          current.path !== parentList.path ||
+          current.commit.sha !== parentList.commit.sha
+        ) {
+          return current;
+        }
+
+        applied = true;
+        return {
+          kind: "commit-file-diff",
+          path: file.path,
+          title: file.path,
+          commit: parentList.commit,
+          file,
+          parentList,
+          diff: payload.diff,
+          renderAs: payload.renderAs,
+          status: payload.status,
+          ...(payload.mime ? { mime: payload.mime } : {}),
+          ...(payload.originalPath ? { originalPath: payload.originalPath } : {}),
+          ...(payload.modifiedPath ? { modifiedPath: payload.modifiedPath } : {}),
+          ...(payload.originalContent !== undefined
+            ? { originalContent: payload.originalContent }
+            : {}),
+          ...(payload.modifiedContent !== undefined
+            ? { modifiedContent: payload.modifiedContent }
+            : {}),
+          ...(payload.originalRevision ? { originalRevision: payload.originalRevision } : {}),
+          ...(payload.modifiedRevision ? { modifiedRevision: payload.modifiedRevision } : {}),
+        };
       });
-      return true;
+      return applied;
     },
     [diffPreview, dispatch, setDiffPreview, workspaceId]
   );

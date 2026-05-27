@@ -1,5 +1,6 @@
 import type { FC } from "react";
-import { EmptyState } from "../../../components/ui";
+import { useEffect, useState } from "react";
+import { Button, EmptyState } from "../../../components/ui";
 
 interface ImageDiffPreviewProps {
   path: string;
@@ -15,19 +16,67 @@ function imageLabel(mime: string): string {
   return head.replace(/^x-/, "").toUpperCase();
 }
 
-function ImageDiffPane({ label, url, alt }: { label: string; url?: string; alt: string }) {
+function ImageDiffPane({
+  label,
+  emptyTitle,
+  url,
+  alt,
+}: {
+  label: string;
+  emptyTitle: string;
+  url?: string;
+  alt: string;
+}) {
+  const [errored, setErrored] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    setErrored(false);
+    setReloadKey(0);
+  }, [url]);
+
   return (
     <section className="image-diff-preview__pane">
       <header className="image-diff-preview__pane-header">
         <span>{label}</span>
       </header>
       <div className="image-diff-preview__canvas">
-        {url ? (
-          <img className="image-diff-preview__image" src={url} alt={alt} draggable={false} />
-        ) : (
+        {!url ? (
           <EmptyState
             className="git-diff-empty"
-            title={<p className="git-diff-empty-title">No image</p>}
+            title={<p className="git-diff-empty-title">{emptyTitle}</p>}
+          />
+        ) : errored ? (
+          <EmptyState
+            action={
+              <Button
+                onClick={() => {
+                  setErrored(false);
+                  setReloadKey((current) => current + 1);
+                }}
+                size="sm"
+                variant="ghost"
+              >
+                Retry
+              </Button>
+            }
+            className="git-diff-empty"
+            description={
+              <p className="git-diff-empty-body">
+                The image could not be loaded. The file may have been moved or is larger than the
+                browser allows.
+              </p>
+            }
+            title={<p className="git-diff-empty-title">Preview unavailable</p>}
+          />
+        ) : (
+          <img
+            className="image-diff-preview__image"
+            key={`${url}:${reloadKey}`}
+            src={url}
+            alt={alt}
+            draggable={false}
+            onError={() => setErrored(true)}
           />
         )}
       </div>
@@ -50,8 +99,18 @@ export const ImageDiffPreview: FC<ImageDiffPreviewProps> = ({
         <span>{status}</span>
       </div>
       <div className="image-diff-preview__stack">
-        <ImageDiffPane label="Base" url={beforeUrl} alt={`${path} base`} />
-        <ImageDiffPane label="Current" url={afterUrl} alt={`${path} current`} />
+        <ImageDiffPane
+          label="Base"
+          emptyTitle="No base image"
+          url={beforeUrl}
+          alt={`${path} base`}
+        />
+        <ImageDiffPane
+          label="Current"
+          emptyTitle="No current image"
+          url={afterUrl}
+          alt={`${path} current`}
+        />
       </div>
     </div>
   );
