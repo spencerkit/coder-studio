@@ -13798,7 +13798,7 @@ body.is-dragging-pane .session-action-btn-drag {
   gap: var(--sp-1);
   padding: calc(var(--sp-2) - var(--gap-compact)) var(--sp-3) var(--sp-2);
   border-bottom: 1px solid var(--component-mix-border-default-82pct-transparent);
-  background: var(--component-mix-surface-panel-82pct-transparent);
+  background: transparent;
 }
 
 .workspace-search-panel__input {
@@ -13873,6 +13873,10 @@ body.is-dragging-pane .session-action-btn-drag {
   flex-direction: column;
 }
 
+.workspace-search-panel__group + .workspace-search-panel__group {
+  margin-top: var(--sp-1);
+}
+
 .workspace-search-panel__group-header {
   display: grid;
   grid-template-columns: 14px minmax(0, 1fr) auto;
@@ -13881,8 +13885,6 @@ body.is-dragging-pane .session-action-btn-drag {
   width: 100%;
   padding: calc(var(--sp-2) - var(--gap-hairline)) var(--sp-3) var(--gap-tight)
     calc(var(--sp-3) - var(--gap-compact));
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
   background: transparent;
   color: var(--text-secondary);
   text-align: left;

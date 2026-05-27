@@ -16,13 +16,13 @@ describe("SearchPanel", () => {
     const store = createStore();
     store.set(wsClientAtom, { sendCommand } as never);
 
-    render(
+    const renderResult = render(
       <Provider store={store}>
         <SearchPanel workspaceId="ws-test" />
       </Provider>
     );
 
-    return { store };
+    return { store, ...renderResult };
   }
 
   async function searchFor(query: string) {
@@ -143,6 +143,53 @@ describe("SearchPanel", () => {
     expect(groupHeader).toHaveAttribute("aria-expanded", "true");
     expect(groupHeader).toHaveAttribute("aria-controls");
     expect(screen.getByRole("button", { name: /12.*needle/i })).toBeInTheDocument();
+  });
+
+  it("keeps grouped headers expanded with highlighted preview rows after a rerender", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({
+      files: [
+        {
+          path: "src/app.tsx",
+          name: "app.tsx",
+          matchCount: 1,
+          hasMoreMatches: false,
+          matches: [
+            {
+              line: 12,
+              column: 7,
+              endColumn: 13,
+              preview: "const needle = true;",
+              previewColumnStart: 7,
+              previewColumnEnd: 13,
+            },
+          ],
+        },
+      ],
+      totalMatchCount: 1,
+      hasMoreFiles: false,
+      truncatedMatchFileCount: 0,
+    } satisfies SearchContentResult);
+
+    const { rerender, store } = renderSearchPanel(sendCommand);
+
+    await searchFor("needle");
+
+    rerender(
+      <Provider store={store}>
+        <SearchPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    const groupHeader = screen.getByRole("button", {
+      name: new RegExp(`app\\.tsx.*src/app\\.tsx.*${singleMatchCountPattern.source}`, "i"),
+    });
+    const matchRow = screen.getByRole("button", { name: /12.*needle/i });
+    const mark = matchRow.querySelector("mark");
+
+    expect(groupHeader).toHaveAttribute("aria-expanded", "true");
+    expect(matchRow).toBeInTheDocument();
+    expect(mark).not.toBeNull();
+    expect(mark).toHaveTextContent("needle");
   });
 
   it("collapses and re-expands file matches when the group header is clicked", async () => {
