@@ -82,6 +82,11 @@ describe("GitPanel", () => {
     },
   ];
 
+  const unstagedOnlyStatus: GitStatus = {
+    ...status,
+    staged: [],
+  };
+
   function seedWorkspaceStore(store: ReturnType<typeof createStore>, workspaceId = "ws-test") {
     store.set(workspacesAtom, {
       [workspaceId]: {
@@ -449,6 +454,53 @@ describe("GitPanel", () => {
     expect(
       newWorktreeButton.querySelector('[data-icon-semantic="worktree.action.new"]')
     ).toBeTruthy();
+  });
+
+  it("keeps worktrees history and change groups as section toggles inside one continuous git body", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return unstagedOnlyStatus;
+      }
+
+      if (op === "git.branches") {
+        return { current: "feature/ai-agent", branches: [] };
+      }
+
+      if (op === "worktree.list") {
+        return {
+          worktrees,
+        };
+      }
+
+      if (op === "git.log") {
+        return {
+          entries: historyEntries,
+        };
+      }
+
+      return {};
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedWorkspaceStore(store);
+
+    const { container } = render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    const panel = container.querySelector(".git-panel-scroll");
+    const worktreesToggle = await screen.findByRole("button", { name: /Worktrees/ });
+    const historyToggle = screen.getByRole("button", { name: "History" });
+
+    expect(panel).toBeTruthy();
+    expect(panel?.querySelectorAll(".git-panel-section")).toHaveLength(3);
+    expect(panel?.querySelector(".panel-header")).toBeNull();
+    expect(worktreesToggle).toHaveAttribute("aria-expanded", "false");
+    expect(historyToggle).toHaveAttribute("aria-expanded", "false");
   });
 
   it("keeps the compact worktree list to a single row without branch refs", async () => {

@@ -14179,7 +14179,7 @@ body.is-dragging-pane .session-action-btn-drag {
   min-width: 0;
   flex: 1;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--sp-3);
   padding: 0 var(--sp-3) var(--sp-3);
   overflow-y: auto;
 }
@@ -14195,6 +14195,11 @@ body.is-dragging-pane .session-action-btn-drag {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.git-panel-section + .git-panel-section {
+  padding-top: var(--sp-2);
+  border-top: 1px solid var(--component-mix-border-default-92pct-transparent);
 }
 
 .git-panel-section-header {
@@ -14371,6 +14376,8 @@ body.is-dragging-pane .session-action-btn-drag {
   min-width: 0;
   flex-direction: column;
   gap: var(--sp-2);
+  padding-bottom: var(--sp-2);
+  border-bottom: 1px solid var(--component-mix-border-default-92pct-transparent);
 }
 
 .git-panel .git-commit-input {

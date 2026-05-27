@@ -3301,6 +3301,8 @@ describe("components.css theme-sensitive surfaces", () => {
     const gitCommitBlock = getLastRuleBlock(".git-commit-block");
     const gitCommitInputFocus = getLastRuleBlock(".git-panel .git-commit-input:focus");
     const gitSection = getLastRuleBlock(".git-panel-section");
+    const gitSectionAdjacent = getLastRuleBlock(".git-panel-section + .git-panel-section");
+    const gitSectionBody = getLastRuleBlock(".git-panel-section-body");
     const gitWorktreeRow = getLastRuleBlock(".git-worktree-row");
     const gitHistoryRow = getLastRuleBlock(".git-history-row");
     const gitRowActive = getLastRuleBlock(".git-panel .git-row.active");
@@ -3314,12 +3316,22 @@ describe("components.css theme-sensitive surfaces", () => {
     const commandPaletteItemContent = getLastRuleBlock(".command-palette-item-content");
     const commandPaletteItemShortcut = getLastRuleBlock(".command-palette-item-shortcut");
 
-    expect(gitScroll).toContain("gap: 14px");
+    expect(gitScroll).toContain("gap: var(--sp-3)");
+    expect(gitScroll).toContain("padding: 0 var(--sp-3) var(--sp-3)");
     expect(gitCommitBlock).toContain("gap: var(--sp-2)");
+    expect(gitCommitBlock).toContain("padding-bottom: var(--sp-2)");
+    expect(gitCommitBlock).toContain(
+      "border-bottom: 1px solid var(--component-mix-border-default-92pct-transparent)"
+    );
     expect(gitCommitInputFocus).toContain("outline: none");
     expect(gitSection).toContain("gap: 8px");
     expect(gitSection).not.toContain("border:");
     expect(gitSection).not.toContain("border-radius:");
+    expect(gitSectionAdjacent).toContain("padding-top: var(--sp-2)");
+    expect(gitSectionAdjacent).toContain(
+      "border-top: 1px solid var(--component-mix-border-default-92pct-transparent)"
+    );
+    expect(gitSectionBody).toContain("gap: 4px");
     expect(gitWorktreeRow).toContain("min-height: 28px");
     expect(gitHistoryRow).toContain("min-height: 34px");
     expect(hasRuleBlock(".git-panel .git-row.active::before")).toBe(false);
