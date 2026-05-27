@@ -117,25 +117,33 @@ function renderSubpage(
 function renderStatefulSubpage(options: {
   initialSettings: MonitoringSettings;
   nextMonitoringResponse?: MonitoringResponse;
+  viewport?: "desktop" | "mobile";
+  refreshError?: Error;
 }) {
-  const onChange = vi.fn(async () => {});
+  const onChange = vi.fn(async (_next: MonitoringSettings) => {});
   const store = createStore();
   const refresh = vi.fn(async () => {});
 
   store.set(localeAtom, "en");
-  viewportMocks.viewport = "desktop";
+  viewportMocks.viewport = options.viewport ?? "desktop";
 
   function StatefulSubpage() {
     const [settings, setSettings] = useState(options.initialSettings);
     const [response, setResponse] = useState(createMonitoringResponse(options.initialSettings));
+    const [error, setError] = useState<string | null>(null);
     const handleRefresh = async () => {
       await refresh();
+      if (options.refreshError) {
+        setError(options.refreshError.message);
+        throw options.refreshError;
+      }
       setResponse(
         options.nextMonitoringResponse ?? createMonitoringResponse(options.initialSettings)
       );
+      setError(null);
     };
     const monitoringData: UseMonitoringDataResult = {
-      error: null,
+      error,
       loading: false,
       refresh: handleRefresh,
       response,
@@ -308,6 +316,82 @@ describe("MonitoringSettingsSubpage", () => {
       ).length
     ).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText("Host overview")).not.toBeInTheDocument();
+  });
+
+  it("falls back to an enabled waiting stage when enable succeeds but recheck fails", async () => {
+    const disabledSettings = {
+      ...createDefaultMonitoringSettings(),
+      enabled: false,
+      runtimeSummaryEnabled: true,
+      workspaceAttributionEnabled: true,
+    };
+    const enabledSettings = {
+      ...disabledSettings,
+      enabled: true,
+    };
+
+    renderSubpage(
+      enabledSettings,
+      createMonitoringDataResult(enabledSettings, {
+        error: "recheck failed",
+        response: createMonitoringResponse(disabledSettings),
+      })
+    );
+
+    expect(
+      await screen.findByRole("switch", { name: "Enable performance monitoring" })
+    ).toHaveAttribute("aria-checked", "true");
+    expect(screen.queryByText("Monitoring disabled")).not.toBeInTheDocument();
+    expect(screen.getByText("Host overview")).toBeInTheDocument();
+    expect(screen.getAllByText("Waiting for the first process sample.").length).toBeGreaterThan(0);
+    expect(screen.getByText("recheck failed")).toBeInTheDocument();
+    expect(screen.getByText("Last updated").closest(".monitoring-metric")).toHaveTextContent(
+      "Unavailable"
+    );
+  });
+
+  it("keeps the mobile dock expanded after enabling from the disabled-first layout", async () => {
+    const disabledSettings = {
+      ...createDefaultMonitoringSettings(),
+      enabled: false,
+      runtimeSummaryEnabled: true,
+    };
+    const enabledSettings = {
+      ...disabledSettings,
+      enabled: true,
+    };
+
+    renderStatefulSubpage({
+      initialSettings: disabledSettings,
+      viewport: "mobile",
+      nextMonitoringResponse: createMonitoringResponse(enabledSettings),
+    });
+
+    expect(await screen.findAllByText("Monitoring disabled")).toHaveLength(2);
+    expect(screen.getByRole("switch", { name: "Enable performance monitoring" })).toHaveAttribute(
+      "aria-checked",
+      "false"
+    );
+    expect(
+      screen.queryByRole("button", { name: "Open monitoring configuration" })
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("switch", { name: "Enable performance monitoring" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("switch", { name: "Enable performance monitoring" })).toHaveAttribute(
+        "aria-checked",
+        "true"
+      );
+    });
+    const shell = document.querySelector(".settings-monitoring-shell");
+    expect(shell?.firstElementChild).toHaveClass("settings-monitoring-dock");
+    expect(screen.getByRole("tablist", { name: "Preset" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open monitoring configuration" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Toggle monitoring settings" })).toHaveAttribute(
+      "aria-expanded",
+      "true"
+    );
   });
 
   it("disables monitoring controls before monitoring settings are ready", async () => {

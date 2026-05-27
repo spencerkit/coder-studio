@@ -406,10 +406,10 @@ describe("SettingsPage", () => {
     expect(screen.getByText(/诊断运行环境|Diagnose the runtime environment/)).toBeInTheDocument();
 
     const diagnosticsButton = await waitFor(() => {
-      const button = document.querySelector(
-        ".settings-diagnostics-button"
-      ) as HTMLButtonElement | null;
-      expect(button).not.toBeNull();
+      const button = document.querySelector(".settings-diagnostics-button");
+      if (!(button instanceof HTMLButtonElement)) {
+        throw new Error("Diagnostics button did not render");
+      }
       return button;
     });
     expect(diagnosticsButton).toHaveClass("settings-diagnostics-button");
@@ -1026,7 +1026,6 @@ describe("SettingsPage", () => {
       ...disabledSettings,
       enabled: true,
     } satisfies MonitoringSettings;
-
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "settings.get") {
         return {
@@ -1187,6 +1186,140 @@ describe("SettingsPage", () => {
 
     expect(screen.getAllByText("监控已关闭").length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText("主机概览")).not.toBeInTheDocument();
+  });
+
+  it("falls back to an enabled waiting stage when enabling monitoring succeeds but recheck fails", async () => {
+    const disabledSettings = {
+      enabled: false,
+      hostMetricsEnabled: true,
+      runtimeSummaryEnabled: true,
+      workspaceAttributionEnabled: true,
+      subprocessDrilldownEnabled: false,
+      sampleIntervalMs: 2000,
+    } satisfies MonitoringSettings;
+
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "monitoring.enabled": disabledSettings.enabled,
+          "monitoring.hostMetricsEnabled": disabledSettings.hostMetricsEnabled,
+          "monitoring.runtimeSummaryEnabled": disabledSettings.runtimeSummaryEnabled,
+          "monitoring.workspaceAttributionEnabled": disabledSettings.workspaceAttributionEnabled,
+          "monitoring.subprocessDrilldownEnabled": disabledSettings.subprocessDrilldownEnabled,
+          "monitoring.sampleIntervalMs": disabledSettings.sampleIntervalMs,
+        };
+      }
+
+      if (op === "settings.update") {
+        return {};
+      }
+
+      if (op === "monitoring.get") {
+        return createMonitoringResponse(disabledSettings);
+      }
+
+      if (op === "monitoring.recheck") {
+        throw new Error("recheck failed");
+      }
+
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store, { initialEntry: "/settings?section=monitoring" });
+
+    const enableSwitch = await screen.findByRole("switch", { name: "启用性能监控" });
+    expect(enableSwitch).toHaveAttribute("aria-checked", "false");
+    expect(screen.getAllByText("监控已关闭").length).toBeGreaterThanOrEqual(1);
+
+    fireEvent.click(enableSwitch);
+
+    await waitFor(() => {
+      expect(screen.getByRole("switch", { name: "启用性能监控" })).toHaveAttribute(
+        "aria-checked",
+        "true"
+      );
+    });
+    expect(screen.queryByText("监控已关闭")).not.toBeInTheDocument();
+    expect(screen.getByText("主机概览")).toBeInTheDocument();
+    expect(screen.getAllByText("正在等待首个进程样本。").length).toBeGreaterThan(0);
+    expect(screen.getByText("recheck failed")).toBeInTheDocument();
+    expect(screen.getByText("最后更新").closest(".monitoring-metric")).toHaveTextContent(
+      "Unavailable"
+    );
+  });
+
+  it("keeps the mobile monitoring dock expanded after enabling from the disabled-first layout", async () => {
+    viewportMocks.viewport = "mobile";
+    const disabledSettings = {
+      enabled: false,
+      hostMetricsEnabled: true,
+      runtimeSummaryEnabled: true,
+      workspaceAttributionEnabled: true,
+      subprocessDrilldownEnabled: false,
+      sampleIntervalMs: 2000,
+    } satisfies MonitoringSettings;
+    const enabledSettings = {
+      ...disabledSettings,
+      enabled: true,
+    } satisfies MonitoringSettings;
+
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args?: unknown) => {
+      if (op === "settings.get") {
+        return {
+          "monitoring.enabled": disabledSettings.enabled,
+          "monitoring.hostMetricsEnabled": disabledSettings.hostMetricsEnabled,
+          "monitoring.runtimeSummaryEnabled": disabledSettings.runtimeSummaryEnabled,
+          "monitoring.workspaceAttributionEnabled": disabledSettings.workspaceAttributionEnabled,
+          "monitoring.subprocessDrilldownEnabled": disabledSettings.subprocessDrilldownEnabled,
+          "monitoring.sampleIntervalMs": disabledSettings.sampleIntervalMs,
+        };
+      }
+
+      if (op === "settings.update") {
+        return {};
+      }
+
+      if (op === "monitoring.get") {
+        return createMonitoringResponse(disabledSettings);
+      }
+
+      if (op === "monitoring.recheck") {
+        const nextSettings =
+          (args as { settings?: { monitoring?: MonitoringSettings } } | undefined)?.settings
+            ?.monitoring ?? enabledSettings;
+        return createMonitoringResponse(nextSettings);
+      }
+
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store, { initialEntry: "/settings?section=monitoring" });
+
+    await screen.findByRole("switch", { name: "启用性能监控" });
+    expect(screen.queryByRole("button", { name: "打开监控配置" })).not.toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "启用性能监控" })).toHaveAttribute(
+      "aria-checked",
+      "false"
+    );
+
+    fireEvent.click(screen.getByRole("switch", { name: "启用性能监控" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("switch", { name: "启用性能监控" })).toHaveAttribute(
+        "aria-checked",
+        "true"
+      );
+    });
+    const shell = document.querySelector(".settings-monitoring-shell");
+    expect(shell?.firstElementChild).toHaveClass("settings-monitoring-dock");
+    expect(screen.getByRole("tablist", { name: "预设" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "打开监控配置" })).toBeNull();
+    expect(screen.getByRole("button", { name: "切换监控设置" })).toHaveAttribute(
+      "aria-expanded",
+      "true"
+    );
   });
 
   it("does not render phone continuation entry from settings even when a workspace is active", async () => {
@@ -2618,7 +2751,10 @@ describe("SettingsPage", () => {
         return { updated: ["lsp.mode"] };
       }
       if (op === "lsp.setMode") {
-        throw new CommandResultError("runtime_apply_failed", "runtime apply failed");
+        throw new CommandResultError({
+          code: "runtime_apply_failed",
+          message: "runtime apply failed",
+        });
       }
       return {};
     });

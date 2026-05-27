@@ -1,5 +1,9 @@
-import type { MonitoringMode, MonitoringSettings } from "@coder-studio/core";
-import { useEffect, useState } from "react";
+import {
+  createEmptyMonitoringResponse,
+  type MonitoringMode,
+  type MonitoringSettings,
+} from "@coder-studio/core";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "../../../components/ui";
 import { useViewport } from "../../../hooks/use-viewport";
 import { useTranslation } from "../../../lib/i18n";
@@ -24,13 +28,47 @@ export function MonitoringSettingsSubpage({
 }: MonitoringSettingsSubpageProps) {
   const t = useTranslation();
   const isMobile = useViewport() === "mobile";
-  const shouldPrioritizeDock = isMobile && !settings.enabled;
   const [dockExpanded, setDockExpanded] = useState(!isMobile || !settings.enabled);
+  const [dockPriorityPinned, setDockPriorityPinned] = useState(isMobile && !settings.enabled);
+  const previousViewportRef = useRef(isMobile);
+  const shouldPrioritizeDock = isMobile && dockPriorityPinned;
   const showMobileEntry = isMobile && settings.enabled && !dockExpanded;
 
   useEffect(() => {
-    setDockExpanded(!isMobile || !settings.enabled);
+    const previousIsMobile = previousViewportRef.current;
+
+    if (!isMobile) {
+      setDockExpanded(true);
+      setDockPriorityPinned(false);
+    } else if (!previousIsMobile) {
+      setDockExpanded(!settings.enabled);
+      setDockPriorityPinned(!settings.enabled);
+    } else if (!settings.enabled) {
+      setDockExpanded(true);
+      setDockPriorityPinned(true);
+    }
+
+    previousViewportRef.current = isMobile;
   }, [isMobile, settings.enabled]);
+
+  const stageResponse = monitoringData.response
+    ? settings.enabled && !monitoringData.response.settings.enabled
+      ? {
+          // If the optimistic settings update succeeded but recheck failed, render an
+          // enabled-yet-waiting stage instead of mixing new settings with a stale disabled sample.
+          ...createEmptyMonitoringResponse(settings),
+          capabilities: monitoringData.response.capabilities,
+          telemetry: monitoringData.response.telemetry,
+        }
+      : {
+          ...monitoringData.response,
+          settings,
+          snapshot: {
+            ...monitoringData.response.snapshot,
+            mode,
+          },
+        }
+    : null;
 
   const stage = (
     <section className="settings-monitoring-stage" aria-label={t("monitoring.stage_label")}>
@@ -45,18 +83,7 @@ export function MonitoringSettingsSubpage({
         error={monitoringData.error}
         loading={monitoringData.loading}
         refresh={monitoringData.refresh}
-        response={
-          monitoringData.response
-            ? {
-                ...monitoringData.response,
-                settings,
-                snapshot: {
-                  ...monitoringData.response.snapshot,
-                  mode,
-                },
-              }
-            : null
-        }
+        response={stageResponse}
       />
     </section>
   );
@@ -82,7 +109,10 @@ export function MonitoringSettingsSubpage({
       type="button"
       aria-label={t("monitoring.open_configuration")}
       className="settings-monitoring-mobile-entry"
-      onClick={() => setDockExpanded(true)}
+      onClick={() => {
+        setDockExpanded(true);
+        setDockPriorityPinned(false);
+      }}
     >
       <div className="settings-monitoring-mobile-entry__header">
         <div className="settings-monitoring-mobile-entry__copy">
@@ -120,7 +150,15 @@ export function MonitoringSettingsSubpage({
               className="settings-monitoring-dock-toggle"
               size="sm"
               variant="secondary"
-              onClick={() => setDockExpanded((expanded) => !expanded)}
+              onClick={() =>
+                setDockExpanded((expanded) => {
+                  const nextExpanded = !expanded;
+                  if (!nextExpanded) {
+                    setDockPriorityPinned(false);
+                  }
+                  return nextExpanded;
+                })
+              }
             >
               {dockExpanded ? t("action.collapse") : t("action.expand")}
             </Button>
