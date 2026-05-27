@@ -35,14 +35,6 @@ function getRuleBlock(selector: string): string {
   return blocks.join("\n");
 }
 
-function getLastRuleBlock(selector: string): string {
-  const block = getRuleBlocks(selector).at(-1);
-
-  expect(block, `expected final rule block for ${selector}`).toBeDefined();
-
-  return block ?? "";
-}
-
 function getCustomProperty(block: string, name: string): string | null {
   const matcher = new RegExp(`${name}:\\s*([^;]+);`, "g");
   let value: string | null = null;
@@ -60,6 +52,11 @@ function getDeclaredCustomProperties(block: string): string[] {
 }
 
 describe("tokens.css touch tokens", () => {
+  const builtInThemes = THEME_IDS;
+  const seasonalThemes = THEME_IDS.filter((themeId) =>
+    /^(spring|summer|autumn|winter)-(dark|light)$/.test(themeId)
+  );
+
   const requiredIconTokens = [
     "--icon-primary",
     "--icon-secondary",
@@ -197,11 +194,78 @@ describe("tokens.css touch tokens", () => {
     /^--accent-purple$/,
   ] as const;
 
+  const seasonalExpectations = [
+    {
+      theme: "spring-dark",
+      focus: "#d95f7e",
+      overlay: "color-mix(in srgb, #21161c 96%, transparent)",
+      iconFolder: "#d98c96",
+      shadowGlow: "0 0 12px rgba(217, 95, 126, 0.26)",
+      accentPurple: "#cf7eb3",
+    },
+    {
+      theme: "spring-light",
+      focus: "#c84b6a",
+      overlay: "color-mix(in srgb, #fffafc 96%, transparent)",
+      iconFolder: "#c85d74",
+      shadowGlow: "0 0 12px rgba(200, 75, 106, 0.18)",
+      accentPurple: "#b85c9b",
+    },
+    {
+      theme: "summer-dark",
+      focus: "#4db57a",
+      overlay: "color-mix(in srgb, #18211c 96%, transparent)",
+      iconFolder: "#7fb886",
+      shadowGlow: "0 0 12px rgba(77, 181, 122, 0.24)",
+      accentPurple: "#8d7ccf",
+    },
+    {
+      theme: "summer-light",
+      focus: "#2f9560",
+      overlay: "color-mix(in srgb, #fbfefc 96%, transparent)",
+      iconFolder: "#429b63",
+      shadowGlow: "0 0 12px rgba(47, 149, 96, 0.18)",
+      accentPurple: "#7e73b2",
+    },
+    {
+      theme: "autumn-dark",
+      focus: "#c08a3c",
+      overlay: "color-mix(in srgb, #201913 96%, transparent)",
+      iconFolder: "#c0954d",
+      shadowGlow: "0 0 12px rgba(192, 138, 60, 0.24)",
+      accentPurple: "#a26e90",
+    },
+    {
+      theme: "autumn-light",
+      focus: "#b7791f",
+      overlay: "color-mix(in srgb, #fffbf5 96%, transparent)",
+      iconFolder: "#b77c32",
+      shadowGlow: "0 0 12px rgba(183, 121, 31, 0.18)",
+      accentPurple: "#9a5f80",
+    },
+    {
+      theme: "winter-dark",
+      focus: "#8aa4c8",
+      overlay: "color-mix(in srgb, #161e27 96%, transparent)",
+      iconFolder: "#94aac1",
+      shadowGlow: "0 0 12px rgba(138, 164, 200, 0.22)",
+      accentPurple: "#9a8cc0",
+    },
+    {
+      theme: "winter-light",
+      focus: "#6f89ad",
+      overlay: "color-mix(in srgb, #fbfdff 96%, transparent)",
+      iconFolder: "#8098b5",
+      shadowGlow: "0 0 12px rgba(111, 137, 173, 0.16)",
+      accentPurple: "#8d7fa8",
+    },
+  ] as const;
+
   it("defines named theme blocks for all built-in themes", () => {
     expect(stylesheet).toContain(':root,\n[data-theme="mint-dark"]');
 
-    for (const themeId of THEME_IDS.filter((themeId) => themeId !== "mint-dark")) {
-      expect(stylesheet).toContain(`[data-theme="${themeId}"]`);
+    for (const theme of builtInThemes) {
+      expect(stylesheet).toContain(`[data-theme="${theme}"]`);
     }
   });
 
@@ -658,7 +722,7 @@ describe("tokens.css touch tokens", () => {
   });
 
   it("defines required icon tokens for every built-in theme", () => {
-    for (const theme of THEME_IDS) {
+    for (const theme of builtInThemes) {
       const block = getRuleBlock(`[data-theme="${theme}"]`);
 
       for (const token of requiredIconTokens) {
@@ -728,13 +792,44 @@ describe("tokens.css touch tokens", () => {
     }
   });
 
+  it("keeps seasonal theme overrides on the semantic token layer only", () => {
+    for (const {
+      theme,
+      focus,
+      overlay,
+      iconFolder,
+      shadowGlow,
+      accentPurple,
+    } of seasonalExpectations) {
+      const blocks = getRuleBlocks(`[data-theme="${theme}"]`);
+      const themeSpecificBlock = blocks.at(-1) ?? "";
+
+      expect(
+        blocks.length,
+        `${theme} should have a dedicated theme override block`
+      ).toBeGreaterThan(1);
+      expect(getCustomProperty(themeSpecificBlock, "--ref-fg-0")).not.toBeNull();
+      expect(getCustomProperty(themeSpecificBlock, "--ref-bg-0")).not.toBeNull();
+      expect(getCustomProperty(themeSpecificBlock, "--ref-border-focus")).toBe(focus);
+      expect(getCustomProperty(themeSpecificBlock, "--ref-status-info")).not.toBeNull();
+      expect(getCustomProperty(themeSpecificBlock, "--state-focus-ring-color")).toBe(focus);
+      expect(getCustomProperty(themeSpecificBlock, "--surface-overlay-bg")).toBe(overlay);
+      expect(getCustomProperty(themeSpecificBlock, "--icon-file-folder")).toBe(iconFolder);
+      expect(getCustomProperty(themeSpecificBlock, "--shadow-glow")).toBe(shadowGlow);
+      expect(getCustomProperty(themeSpecificBlock, "--accent-purple")).toBe(accentPurple);
+
+      for (const token of ["--bg-page", "--border", "--color-success", "--accent-blue"] as const) {
+        expect(
+          getCustomProperty(themeSpecificBlock, token),
+          `${theme} should not reintroduce legacy alias ${token}`
+        ).toBeNull();
+      }
+    }
+  });
+
   it("keeps actively themed foundation roles and shared defaults visible in theme blocks", () => {
     const mintDark = getRuleBlock('[data-theme="mint-dark"]');
     const graphiteLight = getRuleBlock('[data-theme="graphite-light"]');
-    const springLight = getRuleBlock('[data-theme="spring-light"]');
-    const summerDark = getRuleBlock('[data-theme="summer-dark"]');
-    const autumnLight = getRuleBlock('[data-theme="autumn-light"]');
-    const winterDark = getRuleBlock('[data-theme="winter-dark"]');
 
     expect(getCustomProperty(mintDark, "--state-focus-ring-color")).not.toBe(
       getCustomProperty(graphiteLight, "--state-focus-ring-color")
@@ -748,42 +843,6 @@ describe("tokens.css touch tokens", () => {
     expect(getCustomProperty(mintDark, "--gap-content")).toBe(
       getCustomProperty(graphiteLight, "--gap-content")
     );
-
-    expect(getCustomProperty(springLight, "--state-focus-ring-color")).toBe("#c84b6a");
-    expect(getCustomProperty(summerDark, "--surface-overlay-bg")).toBe(
-      "color-mix(in srgb, #18211c 96%, transparent)"
-    );
-    expect(getCustomProperty(autumnLight, "--radius-overlay")).toBe("var(--radius-xl)");
-    expect(getCustomProperty(winterDark, "--gap-content")).toBe("var(--sp-3)");
-  });
-
-  it("defines the seasonal bottom override blocks with only the shared foundation overrides", () => {
-    const seasonalOverrideExpectations = [
-      ['[data-theme="spring-dark"]', "#d95f7e", "color-mix(in srgb, #21161c 96%, transparent)"],
-      ['[data-theme="spring-light"]', "#c84b6a", "color-mix(in srgb, #fffafc 96%, transparent)"],
-      ['[data-theme="summer-dark"]', "#4db57a", "color-mix(in srgb, #18211c 96%, transparent)"],
-      ['[data-theme="summer-light"]', "#2f9560", "color-mix(in srgb, #fbfefc 96%, transparent)"],
-      ['[data-theme="autumn-dark"]', "#c08a3c", "color-mix(in srgb, #201913 96%, transparent)"],
-      ['[data-theme="autumn-light"]', "#b7791f", "color-mix(in srgb, #fffbf5 96%, transparent)"],
-      ['[data-theme="winter-dark"]', "#8aa4c8", "color-mix(in srgb, #161e27 96%, transparent)"],
-      ['[data-theme="winter-light"]', "#6f89ad", "color-mix(in srgb, #fbfdff 96%, transparent)"],
-    ] as const;
-
-    for (const [selector, focusRingColor, overlayBackground] of seasonalOverrideExpectations) {
-      const blocks = getRuleBlocks(selector);
-      const overrideBlock = getLastRuleBlock(selector);
-
-      expect(
-        blocks.length,
-        `${selector} should include both the main block and the bottom override`
-      ).toBe(2);
-      expect(getCustomProperty(overrideBlock, "--gap-content")).toBe("var(--sp-3)");
-      expect(getCustomProperty(overrideBlock, "--radius-overlay")).toBe("var(--radius-xl)");
-      expect(getCustomProperty(overrideBlock, "--state-focus-ring-color")).toBe(focusRingColor);
-      expect(getCustomProperty(overrideBlock, "--surface-overlay-bg")).toBe(overlayBackground);
-      expect(getCustomProperty(overrideBlock, "--bg-page")).toBeNull();
-      expect(getCustomProperty(overrideBlock, "--icon-primary")).toBeNull();
-    }
   });
 
   it("keeps light-theme icon tokens visually distinct across families", () => {
