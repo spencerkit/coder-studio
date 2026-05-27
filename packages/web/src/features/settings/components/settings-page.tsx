@@ -267,6 +267,7 @@ interface MonitoringSettingsSectionProps {
     next: MonitoringSettings,
     onLatestSuccess: () => Promise<void>
   ) => Promise<void> | void;
+  readonly onLayoutModeChange?: (mode: SettingsContentLayoutMode) => void;
   readonly settings: MonitoringSettings;
 }
 
@@ -274,9 +275,14 @@ function MonitoringSettingsSection({
   mode,
   monitoringSettingsReady,
   onChange,
+  onLayoutModeChange,
   settings,
 }: MonitoringSettingsSectionProps) {
   const monitoringData = useMonitoringData();
+
+  useEffect(() => {
+    onLayoutModeChange?.("fill-height");
+  }, [onLayoutModeChange]);
 
   return (
     <MonitoringSettingsSubpage
@@ -805,7 +811,7 @@ export function SettingsPage() {
   };
 
   useEffect(() => {
-    if (detailSection !== "providers") {
+    if (detailSection !== "providers" && detailSection !== "monitoring") {
       setContentLayoutMode("default");
     }
   }, [detailSection]);
@@ -874,6 +880,7 @@ export function SettingsPage() {
             mode={deriveMonitoringMode(monitoringSettings)}
             monitoringSettingsReady={monitoringSettingsReady}
             onChange={handleMonitoringSettingsChange}
+            onLayoutModeChange={setContentLayoutMode}
             settings={monitoringSettings}
           />
         );

@@ -3548,11 +3548,18 @@ describe("components.css theme-sensitive surfaces", () => {
 
   it("keeps the unified monitoring shell and compact typography on shared theme tokens", () => {
     const shell = getLastRuleBlock(".settings-monitoring-shell");
+    const shellDesktop = getLastRuleBlock(".settings-monitoring-shell--desktop");
     const controlBar = getLastRuleBlock(".settings-monitoring-control-bar");
     const controlSummary = getLastRuleBlock(".settings-monitoring-control-bar__summary");
     const dashboardStage = getLastRuleBlock(".settings-monitoring-dashboard-stage");
     const primaryToggleCard = getLastRuleBlock(".settings-toggle-row--monitoring-primary");
     const compactToggleCard = getLastRuleBlock(".settings-toggle-row--compact-card");
+    const compactToggleInfo = getLastRuleBlock(
+      ".settings-toggle-row--compact-card .settings-toggle-info"
+    );
+    const compactToggleLabel = getLastRuleBlock(
+      ".settings-toggle-row--compact-card .settings-toggle-label"
+    );
     const coreControlsBase = getRuleBlocksFrom(stylesheet, ".settings-monitoring-core-controls")[0];
     const coreControlsMobile = getLastRuleBlock(".settings-monitoring-core-controls");
     const controlClusterBase = getRuleBlocksFrom(
@@ -3562,11 +3569,17 @@ describe("components.css theme-sensitive surfaces", () => {
     const controlClusterMobile = getLastRuleBlock(".settings-monitoring-control-cluster");
     const advancedGridBase = getRuleBlocksFrom(stylesheet, ".monitoring-settings-grid--toggles")[0];
     const advancedGridMobile = getLastRuleBlock(".monitoring-settings-grid--toggles");
+    const cardHeader = getLastRuleBlock(".monitoring-card__header");
+    const metricRow = getLastRuleBlock(".monitoring-metric");
+    const metricValue = getLastRuleBlock(".monitoring-metric__value");
     const dashboardCardTitle = getLastRuleBlock(".monitoring-card__header h2");
     const detailHeading = getLastRuleBlock(".monitoring-detail h3");
 
     expect(shell).toContain("display: flex");
     expect(shell).toContain("flex-direction: column");
+    expect(shell).toContain("width: 100%");
+    expect(shellDesktop).toContain("max-width: none");
+    expect(shellDesktop).toContain("margin-inline: auto");
     expect(controlBar).toContain(
       "border: 1px solid var(--component-mix-border-default-70pct-transparent)"
     );
@@ -3584,7 +3597,11 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(compactToggleCard).toContain(
       "background: var(--component-mix-surface-panel-72pct-transparent)"
     );
-    expect(coreControlsBase).toContain("grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.8fr)");
+    expect(compactToggleInfo).toContain("min-width: 0");
+    expect(compactToggleLabel).toContain("font-size: var(--type-body-4-size)");
+    expect(coreControlsBase).toContain(
+      "grid-template-columns: minmax(280px, 1fr) minmax(0, 1.6fr)"
+    );
     expect(coreControlsMobile).toContain("grid-template-columns: 1fr");
     expect(controlClusterBase).toContain("grid-template-columns: repeat(2, minmax(0, 1fr))");
     expect(controlClusterMobile).toContain("grid-template-columns: 1fr");
@@ -3592,6 +3609,10 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(stylesheet).toContain("@media (max-width: 1200px)");
     expect(stylesheet).toContain("grid-template-columns: repeat(2, minmax(0, 1fr));");
     expect(advancedGridMobile).toContain("grid-template-columns: 1fr");
+    expect(cardHeader).toContain("display: flex");
+    expect(cardHeader).toContain("justify-content: space-between");
+    expect(metricRow).toContain("grid-template-columns: minmax(0, 1fr) auto");
+    expect(metricValue).toContain("justify-self: end");
     expect(dashboardCardTitle).toContain("font-size: var(--type-heading-6-size)");
     expect(detailHeading).toContain("font-size: var(--type-body-3-size)");
   });

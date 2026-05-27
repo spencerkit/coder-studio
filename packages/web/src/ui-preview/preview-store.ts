@@ -3,6 +3,7 @@ import type {
   GitBranch,
   GitCommitSummary,
   GitStatus,
+  MonitoringResponse,
   Session,
   Supervisor,
   UpdateStateView,
@@ -62,6 +63,8 @@ export interface UiPreviewCommands {
   settingsGet?: Record<string, unknown>;
   settingsUpdate?: Record<string, unknown>;
   settingsPreviewCommandByProviderId?: Record<string, string>;
+  monitoringGet?: MonitoringResponse;
+  monitoringRecheck?: MonitoringResponse;
   workspaceBrowse?: {
     currentPath: string;
     parentPath: string | null;
@@ -207,6 +210,17 @@ function createPreviewDispatcher(seed: UiPreviewSeed): DispatchCommand {
 
     if (op === "settings.writeConfigFile") {
       return ok({ ok: true } as unknown as T);
+    }
+
+    if (op === "monitoring.get") {
+      if (!commands.monitoringGet) {
+        return err("Missing preview handler for monitoring.get");
+      }
+      return ok(commands.monitoringGet as T);
+    }
+
+    if (op === "monitoring.recheck") {
+      return ok((commands.monitoringRecheck ?? commands.monitoringGet ?? null) as T);
     }
 
     if (op === "workspace.list") {

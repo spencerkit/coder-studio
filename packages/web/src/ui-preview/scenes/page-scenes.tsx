@@ -1,4 +1,11 @@
-import type { FileNode, GitStatus, Session, Workspace } from "@coder-studio/core";
+import {
+  deriveMonitoringMode,
+  type FileNode,
+  type GitStatus,
+  type MonitoringResponse,
+  type Session,
+  type Workspace,
+} from "@coder-studio/core";
 import { LoginPage } from "../../features/auth";
 import { SessionGatePage } from "../../features/auth/session-gate";
 import { NotFoundPage } from "../../features/not-found";
@@ -46,6 +53,80 @@ fileTreeMap.set(".", [
 ]);
 
 function buildSettingsSeed(context: UiPreviewSceneContext) {
+  const monitoringSettings = {
+    enabled: true,
+    hostMetricsEnabled: true,
+    runtimeSummaryEnabled: true,
+    workspaceAttributionEnabled: true,
+    subprocessDrilldownEnabled: false,
+    sampleIntervalMs: 10000 as const,
+  };
+  const monitoringResponse: MonitoringResponse = {
+    settings: monitoringSettings,
+    snapshot: {
+      sampledAt: Date.UTC(2026, 4, 27, 14, 27, 49),
+      mode: deriveMonitoringMode(monitoringSettings),
+      host: {
+        cpuPercent: 7.6,
+        memoryUsedBytes: 29.7 * 1024 ** 3,
+        memoryTotalBytes: 63.8 * 1024 ** 3,
+        memoryAvailableBytes: 34.1 * 1024 ** 3,
+        loadAverage: [0.62, 0.54, 0.49],
+        uptimeSec: 139 * 60 * 60,
+        pressure: "normal",
+      },
+      runtime: {
+        serverCpuPercent: null,
+        serverMemoryBytes: null,
+        totalManagedCpuPercent: 0,
+        totalManagedMemoryBytes: 0,
+        managedProcessCount: 4,
+        cpuShareOfHostPercent: 0,
+        memoryShareOfHostPercent: 0,
+      },
+      workspaces: [],
+      sessions: [],
+      subprocessGroups: [],
+      backgroundGroups: [],
+    },
+    history: {
+      host: {
+        points: Array.from({ length: 30 }, (_, index) => ({
+          sampledAt: Date.UTC(2026, 4, 27, 14, 27, 49) - (29 - index) * 30_000,
+          cpuPercent:
+            [
+              9, 6, 8, 7, 7, 6, 7, 9, 8, 7, 8, 6, 5, 12, 7, 9, 8, 16, 11, 10, 8, 7, 6, 8, 7, 6, 5,
+              9, 4, 7,
+            ][index] ?? 7,
+          memoryBytes: (29 + (index % 3)) * 1024 ** 3,
+        })),
+      },
+      runtime: {
+        points: Array.from({ length: 30 }, (_, index) => ({
+          sampledAt: Date.UTC(2026, 4, 27, 14, 27, 49) - (29 - index) * 30_000,
+          cpuPercent: index % 8 === 0 ? 0.2 : 0,
+          memoryBytes: 0,
+          processCount: 4,
+        })),
+      },
+      workspaces: {},
+      sessions: {},
+      subprocessGroups: {},
+    },
+    capabilities: {
+      loadAverageAvailable: true,
+      processMetricsAvailable: true,
+      subprocessHistoryLimited: false,
+    },
+    telemetry: {
+      durationMs: 39,
+      processRowCount: 4,
+      subprocessGroupCount: 0,
+      historyTrimmed: false,
+      degraded: false,
+    },
+  };
+
   return {
     ...context,
     workspaces: [workspace],
@@ -55,6 +136,12 @@ function buildSettingsSeed(context: UiPreviewSceneContext) {
         "notifications.enabled": true,
         "notifications.soundEnabled": true,
         "supervisor.evaluationTimeoutSec": 600,
+        "monitoring.enabled": monitoringSettings.enabled,
+        "monitoring.hostMetricsEnabled": monitoringSettings.hostMetricsEnabled,
+        "monitoring.runtimeSummaryEnabled": monitoringSettings.runtimeSummaryEnabled,
+        "monitoring.workspaceAttributionEnabled": monitoringSettings.workspaceAttributionEnabled,
+        "monitoring.subprocessDrilldownEnabled": monitoringSettings.subprocessDrilldownEnabled,
+        "monitoring.sampleIntervalMs": monitoringSettings.sampleIntervalMs,
         "appearance.locale": context.locale,
         "appearance.themeId": context.theme,
         "appearance.personalization.version": 1,
@@ -77,6 +164,8 @@ function buildSettingsSeed(context: UiPreviewSceneContext) {
         claude: "claude --verbose",
         codex: "codex --sandbox workspace-write",
       },
+      monitoringGet: monitoringResponse,
+      monitoringRecheck: monitoringResponse,
     },
   };
 }
