@@ -4,8 +4,8 @@ import {
   type MonitoringSampleIntervalMs,
   type MonitoringSettings,
 } from "@coder-studio/core";
-import { type ReactNode, useId } from "react";
-import { Button, Notice, Pill, SegmentedControl, Switch } from "../../../components/ui";
+import { type ReactNode } from "react";
+import { Notice, Pill, SegmentedControl, Switch } from "../../../components/ui";
 import { useTranslation } from "../../../lib/i18n";
 
 type MonitoringPreset = "light" | "standard" | "deep" | "custom";
@@ -17,8 +17,6 @@ interface MonitoringSettingsCardProps {
   readonly onChange: (next: MonitoringSettings) => Promise<void> | void;
   readonly headerActions?: ReactNode;
   readonly showHeaderChrome?: boolean;
-  readonly advancedExpanded?: boolean;
-  readonly onAdvancedExpandedChange?: (expanded: boolean) => void;
 }
 
 function formatModeLabel(mode: MonitoringMode, t: ReturnType<typeof useTranslation>) {
@@ -88,11 +86,8 @@ export function MonitoringSettingsCard({
   onChange,
   headerActions,
   showHeaderChrome = true,
-  advancedExpanded = false,
-  onAdvancedExpandedChange,
 }: MonitoringSettingsCardProps) {
   const t = useTranslation();
-  const advancedSettingsId = useId();
   const resolvedSettings = normalizeSettings(settings);
   const controlsDisabled = !monitoringSettingsReady;
   const dependentControlsDisabled = controlsDisabled || !resolvedSettings.enabled;
@@ -228,124 +223,100 @@ export function MonitoringSettingsCard({
       ) : null}
 
       <div className="settings-monitoring-advanced">
-        <Button
-          aria-controls={advancedSettingsId}
-          aria-expanded={advancedExpanded ? "true" : "false"}
-          className="settings-monitoring-advanced__toggle"
-          size="sm"
-          variant="secondary"
-          onClick={() => onAdvancedExpandedChange?.(!advancedExpanded)}
-        >
-          {t("monitoring.show_advanced_settings")}
-        </Button>
-
-        {advancedExpanded ? (
-          <div
-            className="monitoring-settings-grid monitoring-settings-grid--toggles"
-            id={advancedSettingsId}
-          >
-            <div className="settings-toggle-row settings-toggle-row--compact-card">
-              <div className="settings-toggle-info">
-                <span className="settings-toggle-label">{t("monitoring.host_metrics")}</span>
-              </div>
-              <Switch
-                aria-label={t("monitoring.host_metrics")}
-                checked={resolvedSettings.hostMetricsEnabled}
-                className="settings-toggle"
-                disabled={dependentControlsDisabled}
-                onCheckedChange={(checked) =>
-                  void onChange(
-                    normalizeSettings({ ...resolvedSettings, hostMetricsEnabled: checked })
-                  )
-                }
-              />
+        <div className="monitoring-settings-grid monitoring-settings-grid--toggles">
+          <div className="settings-toggle-row settings-toggle-row--compact-card">
+            <div className="settings-toggle-info">
+              <span className="settings-toggle-label">{t("monitoring.host_metrics")}</span>
             </div>
-
-            <div className="settings-toggle-row settings-toggle-row--compact-card">
-              <div className="settings-toggle-info">
-                <span className="settings-toggle-label">
-                  {t("monitoring.runtime_summary_setting")}
-                </span>
-              </div>
-              <Switch
-                aria-label={t("monitoring.runtime_summary_setting")}
-                checked={resolvedSettings.runtimeSummaryEnabled}
-                className="settings-toggle"
-                disabled={dependentControlsDisabled}
-                onCheckedChange={(checked) =>
-                  void onChange(
-                    normalizeSettings({
-                      ...resolvedSettings,
-                      runtimeSummaryEnabled: checked,
-                      workspaceAttributionEnabled: checked
-                        ? resolvedSettings.workspaceAttributionEnabled
-                        : false,
-                      subprocessDrilldownEnabled: checked
-                        ? resolvedSettings.subprocessDrilldownEnabled
-                        : false,
-                    })
-                  )
-                }
-              />
-            </div>
-
-            <div className="settings-toggle-row settings-toggle-row--compact-card">
-              <div className="settings-toggle-info">
-                <span className="settings-toggle-label">
-                  {t("monitoring.workspace_attribution")}
-                </span>
-              </div>
-              <Switch
-                aria-label={t("monitoring.workspace_attribution")}
-                checked={resolvedSettings.workspaceAttributionEnabled}
-                className="settings-toggle"
-                disabled={dependentControlsDisabled}
-                onCheckedChange={(checked) =>
-                  void onChange(
-                    normalizeSettings({
-                      ...resolvedSettings,
-                      runtimeSummaryEnabled: checked
-                        ? true
-                        : resolvedSettings.runtimeSummaryEnabled,
-                      workspaceAttributionEnabled: checked,
-                      subprocessDrilldownEnabled: checked
-                        ? resolvedSettings.subprocessDrilldownEnabled
-                        : false,
-                    })
-                  )
-                }
-              />
-            </div>
-
-            <div className="settings-toggle-row settings-toggle-row--compact-card">
-              <div className="settings-toggle-info">
-                <span className="settings-toggle-label">
-                  {t("monitoring.subprocess_drilldown")}
-                </span>
-              </div>
-              <Switch
-                aria-label={t("monitoring.subprocess_drilldown")}
-                checked={resolvedSettings.subprocessDrilldownEnabled}
-                className="settings-toggle"
-                disabled={dependentControlsDisabled}
-                onCheckedChange={(checked) =>
-                  void onChange(
-                    normalizeSettings({
-                      ...resolvedSettings,
-                      runtimeSummaryEnabled: checked
-                        ? true
-                        : resolvedSettings.runtimeSummaryEnabled,
-                      workspaceAttributionEnabled: checked
-                        ? true
-                        : resolvedSettings.workspaceAttributionEnabled,
-                      subprocessDrilldownEnabled: checked,
-                    })
-                  )
-                }
-              />
-            </div>
+            <Switch
+              aria-label={t("monitoring.host_metrics")}
+              checked={resolvedSettings.hostMetricsEnabled}
+              className="settings-toggle"
+              disabled={dependentControlsDisabled}
+              onCheckedChange={(checked) =>
+                void onChange(
+                  normalizeSettings({ ...resolvedSettings, hostMetricsEnabled: checked })
+                )
+              }
+            />
           </div>
-        ) : null}
+
+          <div className="settings-toggle-row settings-toggle-row--compact-card">
+            <div className="settings-toggle-info">
+              <span className="settings-toggle-label">
+                {t("monitoring.runtime_summary_setting")}
+              </span>
+            </div>
+            <Switch
+              aria-label={t("monitoring.runtime_summary_setting")}
+              checked={resolvedSettings.runtimeSummaryEnabled}
+              className="settings-toggle"
+              disabled={dependentControlsDisabled}
+              onCheckedChange={(checked) =>
+                void onChange(
+                  normalizeSettings({
+                    ...resolvedSettings,
+                    runtimeSummaryEnabled: checked,
+                    workspaceAttributionEnabled: checked
+                      ? resolvedSettings.workspaceAttributionEnabled
+                      : false,
+                    subprocessDrilldownEnabled: checked
+                      ? resolvedSettings.subprocessDrilldownEnabled
+                      : false,
+                  })
+                )
+              }
+            />
+          </div>
+
+          <div className="settings-toggle-row settings-toggle-row--compact-card">
+            <div className="settings-toggle-info">
+              <span className="settings-toggle-label">{t("monitoring.workspace_attribution")}</span>
+            </div>
+            <Switch
+              aria-label={t("monitoring.workspace_attribution")}
+              checked={resolvedSettings.workspaceAttributionEnabled}
+              className="settings-toggle"
+              disabled={dependentControlsDisabled}
+              onCheckedChange={(checked) =>
+                void onChange(
+                  normalizeSettings({
+                    ...resolvedSettings,
+                    runtimeSummaryEnabled: checked ? true : resolvedSettings.runtimeSummaryEnabled,
+                    workspaceAttributionEnabled: checked,
+                    subprocessDrilldownEnabled: checked
+                      ? resolvedSettings.subprocessDrilldownEnabled
+                      : false,
+                  })
+                )
+              }
+            />
+          </div>
+
+          <div className="settings-toggle-row settings-toggle-row--compact-card">
+            <div className="settings-toggle-info">
+              <span className="settings-toggle-label">{t("monitoring.subprocess_drilldown")}</span>
+            </div>
+            <Switch
+              aria-label={t("monitoring.subprocess_drilldown")}
+              checked={resolvedSettings.subprocessDrilldownEnabled}
+              className="settings-toggle"
+              disabled={dependentControlsDisabled}
+              onCheckedChange={(checked) =>
+                void onChange(
+                  normalizeSettings({
+                    ...resolvedSettings,
+                    runtimeSummaryEnabled: checked ? true : resolvedSettings.runtimeSummaryEnabled,
+                    workspaceAttributionEnabled: checked
+                      ? true
+                      : resolvedSettings.workspaceAttributionEnabled,
+                    subprocessDrilldownEnabled: checked,
+                  })
+                )
+              }
+            />
+          </div>
+        </div>
       </div>
     </section>
   );
