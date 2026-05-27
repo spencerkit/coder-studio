@@ -157,60 +157,62 @@ export function MonitoringSettingsCard({
         </div>
       ) : null}
 
-      <div className="settings-toggle-row">
-        <div className="settings-toggle-info">
-          <span className="settings-toggle-label">{t("monitoring.enable_monitoring")}</span>
-          <span className="settings-toggle-desc">{t("monitoring.enable_monitoring_hint")}</span>
+      <div className="settings-monitoring-core-controls">
+        <div className="settings-toggle-row settings-toggle-row--compact">
+          <div className="settings-toggle-info">
+            <span className="settings-toggle-label">{t("monitoring.enable_monitoring")}</span>
+            <span className="settings-toggle-desc">{t("monitoring.enable_monitoring_hint")}</span>
+          </div>
+          <Switch
+            aria-label={t("monitoring.enable_monitoring")}
+            checked={resolvedSettings.enabled}
+            className="settings-toggle"
+            disabled={controlsDisabled}
+            onCheckedChange={(checked) => void onChange({ ...resolvedSettings, enabled: checked })}
+          />
         </div>
-        <Switch
-          aria-label={t("monitoring.enable_monitoring")}
-          checked={resolvedSettings.enabled}
-          className="settings-toggle"
-          disabled={controlsDisabled}
-          onCheckedChange={(checked) => void onChange({ ...resolvedSettings, enabled: checked })}
-        />
-      </div>
 
-      <div className="settings-info-row monitoring-settings-row">
-        <span className="settings-info-label">{t("monitoring.preset")}</span>
-        <SegmentedControl
-          aria-disabled={controlsDisabled ? "true" : "false"}
-          aria-label={t("monitoring.preset")}
-          onChange={(value) => void applyPreset(value as MonitoringPreset)}
-          options={[
-            { value: "light", label: t("monitoring.mode_light"), disabled: controlsDisabled },
-            {
-              value: "standard",
-              label: t("monitoring.mode_standard"),
+        <div className="settings-info-row monitoring-settings-row monitoring-settings-row--compact">
+          <span className="settings-info-label">{t("monitoring.preset")}</span>
+          <SegmentedControl
+            aria-disabled={controlsDisabled ? "true" : "false"}
+            aria-label={t("monitoring.preset")}
+            onChange={(value) => void applyPreset(value as MonitoringPreset)}
+            options={[
+              { value: "light", label: t("monitoring.mode_light"), disabled: controlsDisabled },
+              {
+                value: "standard",
+                label: t("monitoring.mode_standard"),
+                disabled: controlsDisabled,
+              },
+              { value: "deep", label: t("monitoring.mode_deep"), disabled: controlsDisabled },
+              { value: "custom", label: t("monitoring.mode_custom"), disabled: controlsDisabled },
+            ]}
+            size="sm"
+            value={toPreset(resolvedSettings)}
+          />
+        </div>
+
+        <div className="settings-info-row monitoring-settings-row monitoring-settings-row--compact">
+          <span className="settings-info-label">{t("monitoring.refresh_rate")}</span>
+          <SegmentedControl
+            aria-disabled={controlsDisabled ? "true" : "false"}
+            aria-label={t("monitoring.refresh_rate")}
+            onChange={(value) =>
+              void onChange({
+                ...resolvedSettings,
+                sampleIntervalMs: Number(value) as MonitoringSampleIntervalMs,
+              })
+            }
+            options={MONITORING_SAMPLE_INTERVAL_OPTIONS.map((interval) => ({
+              value: String(interval),
+              label: `${interval / 1000}s`,
               disabled: controlsDisabled,
-            },
-            { value: "deep", label: t("monitoring.mode_deep"), disabled: controlsDisabled },
-            { value: "custom", label: t("monitoring.mode_custom"), disabled: controlsDisabled },
-          ]}
-          size="sm"
-          value={toPreset(resolvedSettings)}
-        />
-      </div>
-
-      <div className="settings-info-row monitoring-settings-row">
-        <span className="settings-info-label">{t("monitoring.refresh_rate")}</span>
-        <SegmentedControl
-          aria-disabled={controlsDisabled ? "true" : "false"}
-          aria-label={t("monitoring.refresh_rate")}
-          onChange={(value) =>
-            void onChange({
-              ...resolvedSettings,
-              sampleIntervalMs: Number(value) as MonitoringSampleIntervalMs,
-            })
-          }
-          options={MONITORING_SAMPLE_INTERVAL_OPTIONS.map((interval) => ({
-            value: String(interval),
-            label: `${interval / 1000}s`,
-            disabled: controlsDisabled,
-          }))}
-          size="sm"
-          value={String(resolvedSettings.sampleIntervalMs)}
-        />
+            }))}
+            size="sm"
+            value={String(resolvedSettings.sampleIntervalMs)}
+          />
+        </div>
       </div>
 
       {!resolvedSettings.enabled ? (
@@ -221,11 +223,11 @@ export function MonitoringSettingsCard({
         />
       ) : null}
 
-      <div className="monitoring-settings-advanced">
+      <div className="settings-monitoring-advanced">
         <Button
           aria-controls={advancedSettingsId}
           aria-expanded={advancedExpanded ? "true" : "false"}
-          className="monitoring-settings-advanced__toggle"
+          className="settings-monitoring-advanced__toggle"
           size="sm"
           variant="secondary"
           onClick={() => onAdvancedExpandedChange?.(!advancedExpanded)}
