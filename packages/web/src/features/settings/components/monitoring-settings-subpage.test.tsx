@@ -277,6 +277,9 @@ describe("MonitoringSettingsSubpage", () => {
     fireEvent.click(disclosureButton);
 
     expect(disclosureButton).toHaveAttribute("aria-expanded", "true");
+    const advancedGrid = document.querySelector(".monitoring-settings-grid");
+    expect(advancedGrid).toBeInTheDocument();
+    expect(advancedGrid).toHaveClass("monitoring-settings-grid--toggles");
     expect(screen.getByRole("switch", { name: "Host metrics" })).toBeInTheDocument();
     expect(screen.getByRole("switch", { name: "Runtime summary" })).toBeInTheDocument();
     expect(

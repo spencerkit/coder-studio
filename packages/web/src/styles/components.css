@@ -1242,6 +1242,11 @@
   gap: var(--sp-2);
 }
 
+.monitoring-settings-grid--toggles {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--sp-3);
+}
+
 .monitoring-settings-grid .settings-toggle-row:last-child {
   border-bottom: none;
 }
@@ -1313,8 +1318,53 @@
 
 .settings-monitoring-core-controls {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.8fr);
   gap: var(--sp-3);
+  align-items: stretch;
+}
+
+.settings-toggle-row--monitoring-primary {
+  min-height: 100%;
+  padding: var(--sp-3);
+  border-bottom: none;
+  border: 1px solid var(--component-mix-border-default-78pct-transparent);
+  border-radius: var(--radius-lg);
+  background: var(--component-mix-surface-panel-82pct-transparent);
+}
+
+.settings-monitoring-control-cluster {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-3);
+  min-width: 0;
+}
+
+.monitoring-settings-row--stacked {
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: var(--sp-2);
+  min-width: 0;
+  padding: var(--sp-3);
+  border-bottom: none;
+  border: 1px solid var(--component-mix-border-default-78pct-transparent);
+  border-radius: var(--radius-lg);
+  background: var(--component-mix-surface-panel-82pct-transparent);
+}
+
+.monitoring-settings-segmented-control {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  justify-content: flex-start;
+}
+
+.settings-toggle-row--compact-card {
+  align-items: center;
+  padding: var(--sp-3);
+  border-bottom: none;
+  border: 1px solid var(--component-mix-border-default-78pct-transparent);
+  border-radius: var(--radius-lg);
+  background: var(--component-mix-surface-panel-82pct-transparent);
 }
 
 .monitoring-settings-row--compact,
@@ -15120,6 +15170,12 @@ body.is-dragging-pane .session-action-btn-drag {
   }
 }
 
+@media (max-width: 1200px) {
+  .monitoring-settings-grid--toggles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 900px) {
   .settings-monitoring-control-bar,
   .settings-monitoring-dashboard-stage {
@@ -15127,6 +15183,11 @@ body.is-dragging-pane .session-action-btn-drag {
   }
 
   .settings-monitoring-core-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-monitoring-control-cluster,
+  .monitoring-settings-grid--toggles {
     grid-template-columns: 1fr;
   }
 

@@ -3552,6 +3552,15 @@ describe("components.css theme-sensitive surfaces", () => {
     const controlSummary = getLastRuleBlock(".settings-monitoring-control-bar__summary");
     const advancedToggle = getLastRuleBlock(".settings-monitoring-advanced__toggle");
     const dashboardStage = getLastRuleBlock(".settings-monitoring-dashboard-stage");
+    const coreControlsBase = getRuleBlocksFrom(stylesheet, ".settings-monitoring-core-controls")[0];
+    const coreControlsMobile = getLastRuleBlock(".settings-monitoring-core-controls");
+    const controlClusterBase = getRuleBlocksFrom(
+      stylesheet,
+      ".settings-monitoring-control-cluster"
+    )[0];
+    const controlClusterMobile = getLastRuleBlock(".settings-monitoring-control-cluster");
+    const advancedGridBase = getRuleBlocksFrom(stylesheet, ".monitoring-settings-grid--toggles")[0];
+    const advancedGridMobile = getLastRuleBlock(".monitoring-settings-grid--toggles");
     const dashboardCardTitle = getLastRuleBlock(".monitoring-card__header h2");
     const detailHeading = getLastRuleBlock(".monitoring-detail h3");
 
@@ -3565,6 +3574,14 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(advancedToggle).toContain("font-size: var(--type-body-5-size)");
     expect(advancedToggle).toContain("border-top: 1px solid var(--surface-elevated-border)");
     expect(dashboardStage).toContain("min-width: 0");
+    expect(coreControlsBase).toContain("grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.8fr)");
+    expect(coreControlsMobile).toContain("grid-template-columns: 1fr");
+    expect(controlClusterBase).toContain("grid-template-columns: repeat(2, minmax(0, 1fr))");
+    expect(controlClusterMobile).toContain("grid-template-columns: 1fr");
+    expect(advancedGridBase).toContain("grid-template-columns: repeat(4, minmax(0, 1fr))");
+    expect(stylesheet).toContain("@media (max-width: 1200px)");
+    expect(stylesheet).toContain("grid-template-columns: repeat(2, minmax(0, 1fr));");
+    expect(advancedGridMobile).toContain("grid-template-columns: 1fr");
     expect(dashboardCardTitle).toContain("font-size: var(--type-heading-6-size)");
     expect(detailHeading).toContain("font-size: var(--type-body-3-size)");
   });

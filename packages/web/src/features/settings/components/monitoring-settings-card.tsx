@@ -158,7 +158,7 @@ export function MonitoringSettingsCard({
       ) : null}
 
       <div className="settings-monitoring-core-controls">
-        <div className="settings-toggle-row settings-toggle-row--compact">
+        <div className="settings-toggle-row settings-toggle-row--compact settings-toggle-row--monitoring-primary">
           <div className="settings-toggle-info">
             <span className="settings-toggle-label">{t("monitoring.enable_monitoring")}</span>
             <span className="settings-toggle-desc">{t("monitoring.enable_monitoring_hint")}</span>
@@ -172,46 +172,50 @@ export function MonitoringSettingsCard({
           />
         </div>
 
-        <div className="settings-info-row monitoring-settings-row monitoring-settings-row--compact">
-          <span className="settings-info-label">{t("monitoring.preset")}</span>
-          <SegmentedControl
-            aria-disabled={controlsDisabled ? "true" : "false"}
-            aria-label={t("monitoring.preset")}
-            onChange={(value) => void applyPreset(value as MonitoringPreset)}
-            options={[
-              { value: "light", label: t("monitoring.mode_light"), disabled: controlsDisabled },
-              {
-                value: "standard",
-                label: t("monitoring.mode_standard"),
-                disabled: controlsDisabled,
-              },
-              { value: "deep", label: t("monitoring.mode_deep"), disabled: controlsDisabled },
-              { value: "custom", label: t("monitoring.mode_custom"), disabled: controlsDisabled },
-            ]}
-            size="sm"
-            value={toPreset(resolvedSettings)}
-          />
-        </div>
+        <div className="settings-monitoring-control-cluster">
+          <div className="settings-info-row monitoring-settings-row monitoring-settings-row--compact monitoring-settings-row--stacked">
+            <span className="settings-info-label">{t("monitoring.preset")}</span>
+            <SegmentedControl
+              aria-disabled={controlsDisabled ? "true" : "false"}
+              aria-label={t("monitoring.preset")}
+              className="monitoring-settings-segmented-control"
+              onChange={(value) => void applyPreset(value as MonitoringPreset)}
+              options={[
+                { value: "light", label: t("monitoring.mode_light"), disabled: controlsDisabled },
+                {
+                  value: "standard",
+                  label: t("monitoring.mode_standard"),
+                  disabled: controlsDisabled,
+                },
+                { value: "deep", label: t("monitoring.mode_deep"), disabled: controlsDisabled },
+                { value: "custom", label: t("monitoring.mode_custom"), disabled: controlsDisabled },
+              ]}
+              size="sm"
+              value={toPreset(resolvedSettings)}
+            />
+          </div>
 
-        <div className="settings-info-row monitoring-settings-row monitoring-settings-row--compact">
-          <span className="settings-info-label">{t("monitoring.refresh_rate")}</span>
-          <SegmentedControl
-            aria-disabled={controlsDisabled ? "true" : "false"}
-            aria-label={t("monitoring.refresh_rate")}
-            onChange={(value) =>
-              void onChange({
-                ...resolvedSettings,
-                sampleIntervalMs: Number(value) as MonitoringSampleIntervalMs,
-              })
-            }
-            options={MONITORING_SAMPLE_INTERVAL_OPTIONS.map((interval) => ({
-              value: String(interval),
-              label: `${interval / 1000}s`,
-              disabled: controlsDisabled,
-            }))}
-            size="sm"
-            value={String(resolvedSettings.sampleIntervalMs)}
-          />
+          <div className="settings-info-row monitoring-settings-row monitoring-settings-row--compact monitoring-settings-row--stacked">
+            <span className="settings-info-label">{t("monitoring.refresh_rate")}</span>
+            <SegmentedControl
+              aria-disabled={controlsDisabled ? "true" : "false"}
+              aria-label={t("monitoring.refresh_rate")}
+              className="monitoring-settings-segmented-control"
+              onChange={(value) =>
+                void onChange({
+                  ...resolvedSettings,
+                  sampleIntervalMs: Number(value) as MonitoringSampleIntervalMs,
+                })
+              }
+              options={MONITORING_SAMPLE_INTERVAL_OPTIONS.map((interval) => ({
+                value: String(interval),
+                label: `${interval / 1000}s`,
+                disabled: controlsDisabled,
+              }))}
+              size="sm"
+              value={String(resolvedSettings.sampleIntervalMs)}
+            />
+          </div>
         </div>
       </div>
 
@@ -236,8 +240,11 @@ export function MonitoringSettingsCard({
         </Button>
 
         {advancedExpanded ? (
-          <div className="monitoring-settings-grid" id={advancedSettingsId}>
-            <div className="settings-toggle-row">
+          <div
+            className="monitoring-settings-grid monitoring-settings-grid--toggles"
+            id={advancedSettingsId}
+          >
+            <div className="settings-toggle-row settings-toggle-row--compact-card">
               <div className="settings-toggle-info">
                 <span className="settings-toggle-label">{t("monitoring.host_metrics")}</span>
               </div>
@@ -254,7 +261,7 @@ export function MonitoringSettingsCard({
               />
             </div>
 
-            <div className="settings-toggle-row">
+            <div className="settings-toggle-row settings-toggle-row--compact-card">
               <div className="settings-toggle-info">
                 <span className="settings-toggle-label">
                   {t("monitoring.runtime_summary_setting")}
@@ -282,7 +289,7 @@ export function MonitoringSettingsCard({
               />
             </div>
 
-            <div className="settings-toggle-row">
+            <div className="settings-toggle-row settings-toggle-row--compact-card">
               <div className="settings-toggle-info">
                 <span className="settings-toggle-label">
                   {t("monitoring.workspace_attribution")}
@@ -310,7 +317,7 @@ export function MonitoringSettingsCard({
               />
             </div>
 
-            <div className="settings-toggle-row">
+            <div className="settings-toggle-row settings-toggle-row--compact-card">
               <div className="settings-toggle-info">
                 <span className="settings-toggle-label">
                   {t("monitoring.subprocess_drilldown")}

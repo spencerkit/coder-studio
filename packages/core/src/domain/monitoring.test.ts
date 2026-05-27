@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { Topics } from "../protocol/topics";
 import {
   createDefaultMonitoringSettings,
@@ -10,6 +10,10 @@ import {
 } from "./monitoring";
 
 describe("monitoring domain helpers", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("creates the default monitoring settings shape", () => {
     expect(createDefaultMonitoringSettings()).toEqual({
       enabled: false,
@@ -107,6 +111,12 @@ describe("monitoring domain helpers", () => {
       },
       telemetry: null,
     });
+  });
+
+  it("creates an empty monitoring response without a Node process global", () => {
+    vi.stubGlobal("process", undefined);
+
+    expect(createEmptyMonitoringResponse().capabilities.loadAverageAvailable).toBe(true);
   });
 
   it("defines the websocket topic for monitoring snapshot broadcasts", () => {
