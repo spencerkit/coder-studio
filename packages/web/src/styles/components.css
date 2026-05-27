@@ -15258,7 +15258,7 @@ body.is-dragging-pane .session-action-btn-drag {
   overflow: hidden;
   border: 1px solid var(--component-mix-border-default-80pct-transparent);
   border-radius: var(--radius-md);
-  background: var(--bg-panel);
+  background: var(--component-mix-surface-panel-92pct-surface-page);
   box-shadow: none;
 }
 

@@ -2644,20 +2644,26 @@ describe("components.css theme-sensitive surfaces", () => {
       "border: 1px solid var(--component-mix-border-default-80pct-transparent)"
     );
     expect(mobileFilesSearchSurface).toContain("border-radius: var(--radius-md)");
-    expect(mobileFilesSearchSurface).toContain("background: var(--bg-panel)");
+    expect(mobileFilesSearchSurface).toContain(
+      "background: var(--component-mix-surface-panel-92pct-surface-page)"
+    );
     expect(mobileFilesSearchSurface).toContain("box-shadow: none");
     expect(mobileFilesSurface).toContain(
       "border: 1px solid var(--component-mix-border-default-80pct-transparent)"
     );
     expect(mobileFilesSurface).toContain("border-radius: var(--radius-md)");
-    expect(mobileFilesSurface).toContain("background: var(--bg-panel)");
+    expect(mobileFilesSurface).toContain(
+      "background: var(--component-mix-surface-panel-92pct-surface-page)"
+    );
     expect(mobileFilesSurface).toContain("box-shadow: none");
     expect(mobileFilesSurface).not.toContain("linear-gradient(");
     expect(mobileFilesGitSurface).toContain(
       "border: 1px solid var(--component-mix-border-default-80pct-transparent)"
     );
     expect(mobileFilesGitSurface).toContain("border-radius: var(--radius-md)");
-    expect(mobileFilesGitSurface).toContain("background: var(--bg-panel)");
+    expect(mobileFilesGitSurface).toContain(
+      "background: var(--component-mix-surface-panel-92pct-surface-page)"
+    );
     expect(mobileFilesGitSurface).toContain("box-shadow: none");
     expect(mobileFileSearch).toContain("margin: 0");
     expect(mobileFileSearch).toContain("border-radius: var(--radius-md)");
