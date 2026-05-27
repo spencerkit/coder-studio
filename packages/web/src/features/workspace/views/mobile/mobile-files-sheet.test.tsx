@@ -88,6 +88,18 @@ describe("MobileFilesSheet", () => {
     expect(screen.getByTestId("mobile-explorer-panel")).toBeInTheDocument();
   });
 
+  it("keeps the mobile files root on segmented navigation plus flush content only", () => {
+    const { container } = render(
+      <Provider store={createStore()}>
+        <MobileFilesSheet workspaceId="ws-test" route={{ kind: "root" }} activeView="explorer" />
+      </Provider>
+    );
+
+    expect(container.querySelector(".mobile-files-sheet__segmented")).toBeTruthy();
+    expect(container.querySelector(".mobile-files-sheet__content")).toBeTruthy();
+    expect(container.querySelector(".mobile-files-sheet__header")).toBeNull();
+  });
+
   it("renders the mobile search panel without explorer actions when Search is active", () => {
     render(
       <Provider store={createStore()}>

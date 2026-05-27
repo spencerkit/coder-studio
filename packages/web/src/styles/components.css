@@ -11815,25 +11815,8 @@ body.is-dragging-pane .session-action-btn-drag {
     min-height: 0;
   }
 
-  .mobile-sheet--files .file-tree-shell--mobile,
-  .mobile-sheet--files .git-panel--mobile,
-  .mobile-sheet--files .workspace-git-editor,
-  .mobile-sheet--files .workspace-git-view {
-    overflow: hidden;
-    border: 1px solid var(--component-mix-border-default-80pct-transparent);
-    border-radius: var(--radius-md);
-    background: var(--surface-panel);
-    box-shadow: none;
-  }
-
   .mobile-sheet--files .workspace-git-view {
     padding: 0;
-  }
-
-  .mobile-sheet--files .workspace-git-editor {
-    border: none;
-    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
-    box-shadow: none;
   }
 
   .mobile-sheet--files .mobile-files-sheet__content > *,
@@ -15283,6 +15266,10 @@ body.is-dragging-pane .session-action-btn-drag {
   border-radius: 0;
   background: var(--component-mix-surface-panel-92pct-surface-page);
   box-shadow: none;
+}
+
+.mobile-sheet--files .mobile-files-sheet__content {
+  padding-top: var(--sp-2);
 }
 
 .mobile-sheet--files .workspace-git-view {

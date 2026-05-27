@@ -2578,6 +2578,9 @@ describe("components.css theme-sensitive surfaces", () => {
     const workspaceSidebarPanel = getLastRuleBlock(".workspace-sidebar-panel");
     const mobileFilesSurface = getLastRuleBlock(".mobile-sheet--files .file-tree-shell--mobile");
     const mobileFilesGitSurface = getLastRuleBlock(".mobile-sheet--files .git-panel--mobile");
+    const mobileFilesContent = getLastRuleBlock(
+      ".mobile-sheet--files .mobile-files-sheet__content"
+    );
     const mobileFilesSegmented = getLastRuleBlock(".mobile-files-sheet__segmented");
     const mobileFilesSegment = getLastRuleBlock(".mobile-files-sheet__segment");
     const mobileFilesSegmentIcon = getLastRuleBlock(".mobile-files-sheet__segment-icon");
@@ -2622,6 +2625,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(workspaceSidebarPanel).toContain(
       "border-right: 1px solid var(--component-mix-border-default-72pct-transparent)"
     );
+    expect(mobileFilesContent).toContain("padding-top: var(--sp-2)");
     expect(hasRuleBlock(".mobile-supervisor-sheet__root")).toBe(false);
     expect(hasRuleBlock(".mobile-supervisor-sheet__detail-header")).toBe(false);
     expect(mobileFilesSegmented).toContain(
