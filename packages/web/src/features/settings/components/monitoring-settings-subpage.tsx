@@ -3,7 +3,6 @@ import {
   type MonitoringMode,
   type MonitoringSettings,
 } from "@coder-studio/core";
-import { useEffect, useState } from "react";
 import { useViewport } from "../../../hooks/use-viewport";
 import { useTranslation } from "../../../lib/i18n";
 import type { UseMonitoringDataResult } from "../../monitoring";
@@ -27,13 +26,6 @@ export function MonitoringSettingsSubpage({
 }: MonitoringSettingsSubpageProps) {
   const t = useTranslation();
   const isMobile = useViewport() === "mobile";
-  const [advancedExpanded, setAdvancedExpanded] = useState(!settings.enabled);
-
-  useEffect(() => {
-    if (!settings.enabled) {
-      setAdvancedExpanded(true);
-    }
-  }, [settings.enabled]);
 
   const stageResponse = monitoringData.response
     ? settings.enabled && !monitoringData.response.settings.enabled
@@ -71,10 +63,8 @@ export function MonitoringSettingsSubpage({
           </p>
         </div>
         <MonitoringSettingsCard
-          advancedExpanded={advancedExpanded}
           mode={mode}
           monitoringSettingsReady={monitoringSettingsReady}
-          onAdvancedExpandedChange={setAdvancedExpanded}
           onChange={async (next) => {
             try {
               await onChange(next);

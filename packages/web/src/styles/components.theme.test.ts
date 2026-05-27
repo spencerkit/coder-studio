@@ -3550,8 +3550,9 @@ describe("components.css theme-sensitive surfaces", () => {
     const shell = getLastRuleBlock(".settings-monitoring-shell");
     const controlBar = getLastRuleBlock(".settings-monitoring-control-bar");
     const controlSummary = getLastRuleBlock(".settings-monitoring-control-bar__summary");
-    const advancedToggle = getLastRuleBlock(".settings-monitoring-advanced__toggle");
     const dashboardStage = getLastRuleBlock(".settings-monitoring-dashboard-stage");
+    const primaryToggleCard = getLastRuleBlock(".settings-toggle-row--monitoring-primary");
+    const compactToggleCard = getLastRuleBlock(".settings-toggle-row--compact-card");
     const coreControlsBase = getRuleBlocksFrom(stylesheet, ".settings-monitoring-core-controls")[0];
     const coreControlsMobile = getLastRuleBlock(".settings-monitoring-core-controls");
     const controlClusterBase = getRuleBlocksFrom(
@@ -3566,14 +3567,23 @@ describe("components.css theme-sensitive surfaces", () => {
 
     expect(shell).toContain("display: flex");
     expect(shell).toContain("flex-direction: column");
-    expect(controlBar).toContain("border: 1px solid var(--surface-elevated-border)");
+    expect(controlBar).toContain(
+      "border: 1px solid var(--component-mix-border-default-70pct-transparent)"
+    );
     expect(controlBar).toContain("background: var(--surface-elevated)");
     expect(controlBar).toContain("padding: var(--sp-4)");
     expect(controlSummary).toContain("font-size: var(--type-body-5-size)");
     expect(controlSummary).toContain("color: var(--text-secondary)");
-    expect(advancedToggle).toContain("font-size: var(--type-body-5-size)");
-    expect(advancedToggle).toContain("border-top: 1px solid var(--surface-elevated-border)");
     expect(dashboardStage).toContain("min-width: 0");
+    expect(dashboardStage).toContain(
+      "border: 1px solid var(--component-mix-border-default-70pct-transparent)"
+    );
+    expect(primaryToggleCard).toContain(
+      "background: var(--component-mix-surface-panel-72pct-transparent)"
+    );
+    expect(compactToggleCard).toContain(
+      "background: var(--component-mix-surface-panel-72pct-transparent)"
+    );
     expect(coreControlsBase).toContain("grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.8fr)");
     expect(coreControlsMobile).toContain("grid-template-columns: 1fr");
     expect(controlClusterBase).toContain("grid-template-columns: repeat(2, minmax(0, 1fr))");

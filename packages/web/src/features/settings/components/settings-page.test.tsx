@@ -1316,10 +1316,8 @@ describe("SettingsPage", () => {
     expect(shell?.firstElementChild).toHaveClass("settings-monitoring-control-bar");
     expect(screen.getByRole("tablist", { name: "预设" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "打开监控配置" })).toBeNull();
-    expect(screen.getByRole("button", { name: "显示高级监控设置" })).toHaveAttribute(
-      "aria-expanded",
-      "true"
-    );
+    expect(screen.queryByRole("button", { name: "显示高级监控设置" })).not.toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "主机指标" })).toBeInTheDocument();
   });
 
   it("does not render phone continuation entry from settings even when a workspace is active", async () => {
