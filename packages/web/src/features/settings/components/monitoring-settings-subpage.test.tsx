@@ -175,7 +175,7 @@ function renderStatefulSubpage(options: {
 }
 
 describe("MonitoringSettingsSubpage", () => {
-  it("renders distinct stage and dock regions on desktop", async () => {
+  it("renders a unified control-first shell on desktop", async () => {
     const settings = {
       ...createDefaultMonitoringSettings(),
       enabled: true,
@@ -192,11 +192,16 @@ describe("MonitoringSettingsSubpage", () => {
     );
 
     expect(await screen.findByText("Host overview")).toBeInTheDocument();
-    expect(container.querySelector(".settings-monitoring-shell")).toBeInTheDocument();
-    expect(container.querySelector(".settings-monitoring-stage")).toBeInTheDocument();
-    expect(container.querySelector(".settings-monitoring-dock")).toBeInTheDocument();
+    const shell = container.querySelector(".settings-monitoring-shell");
+    expect(shell).toBeInTheDocument();
+    expect(container.querySelector(".settings-monitoring-control-bar")).toBeInTheDocument();
+    expect(container.querySelector(".settings-monitoring-stage")).not.toBeInTheDocument();
+    expect(container.querySelector(".settings-monitoring-dock")).not.toBeInTheDocument();
+    expect(container.querySelector(".settings-monitoring-mobile-entry")).not.toBeInTheDocument();
+    expect(shell?.firstElementChild).toHaveClass("settings-monitoring-control-bar");
+    expect(shell?.lastElementChild).toHaveClass("settings-monitoring-dashboard-stage");
     expect(
-      container.querySelector(".settings-monitoring-stage .monitoring-toolbar")
+      container.querySelector(".settings-monitoring-dashboard-stage .monitoring-toolbar")
     ).toBeInTheDocument();
     expect(screen.getByRole("switch", { name: "Enable performance monitoring" })).toHaveAttribute(
       "aria-checked",
@@ -209,7 +214,7 @@ describe("MonitoringSettingsSubpage", () => {
     expect(monitoringData.refresh).not.toHaveBeenCalled();
   });
 
-  it("keeps data first and shows a collapsed configuration entry card on mobile without the old segmented nav", async () => {
+  it("keeps the same control-first shell on mobile without a configuration entry card", async () => {
     const settings = {
       ...createDefaultMonitoringSettings(),
       enabled: true,
@@ -224,24 +229,19 @@ describe("MonitoringSettingsSubpage", () => {
     expect(await screen.findByText("Host overview")).toBeInTheDocument();
     const shell = container.querySelector(".settings-monitoring-shell");
     expect(shell).toBeInTheDocument();
-    expect(shell?.firstElementChild).toHaveClass("settings-monitoring-stage");
-    expect(screen.getByRole("button", { name: "Open monitoring configuration" })).toBeVisible();
-    expect(
-      screen.queryByRole("switch", { name: "Enable performance monitoring" })
-    ).not.toBeInTheDocument();
-    expect(screen.queryByRole("tablist", { name: "Preset" })).not.toBeInTheDocument();
-    expect(container.querySelector(".settings-monitoring-mobile-entry")).toBeInTheDocument();
-    expect(
-      container.querySelector(".settings-monitoring-dock__panel .settings-monitoring-mobile-entry")
-    ).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Open monitoring configuration" }));
-
+    expect(shell?.firstElementChild).toHaveClass("settings-monitoring-control-bar");
+    expect(shell?.lastElementChild).toHaveClass("settings-monitoring-dashboard-stage");
+    expect(container.querySelector(".settings-monitoring-stage")).not.toBeInTheDocument();
+    expect(container.querySelector(".settings-monitoring-dock")).not.toBeInTheDocument();
+    expect(container.querySelector(".settings-monitoring-mobile-entry")).not.toBeInTheDocument();
     expect(screen.getByRole("switch", { name: "Enable performance monitoring" })).toHaveAttribute(
       "aria-checked",
       "true"
     );
     expect(screen.getByRole("tablist", { name: "Preset" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Show advanced monitoring settings" })
+    ).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByRole("tab", { name: "Overview" })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Attribution" })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Process" })).not.toBeInTheDocument();
@@ -249,7 +249,43 @@ describe("MonitoringSettingsSubpage", () => {
     expect(screen.queryByRole("button", { name: "Open Settings" })).not.toBeInTheDocument();
   });
 
-  it("auto-expands monitoring configuration and moves it first on mobile when monitoring is disabled", async () => {
+  it("keeps advanced monitoring settings hidden until the disclosure is opened", async () => {
+    const settings = {
+      ...createDefaultMonitoringSettings(),
+      enabled: true,
+      runtimeSummaryEnabled: true,
+      workspaceAttributionEnabled: true,
+      subprocessDrilldownEnabled: true,
+    };
+
+    renderSubpage(settings, createMonitoringDataResult(settings), {
+      viewport: "mobile",
+    });
+
+    expect(await screen.findByText("Host overview")).toBeInTheDocument();
+    const disclosureButton = screen.getByRole("button", {
+      name: "Show advanced monitoring settings",
+    });
+    expect(disclosureButton).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("switch", { name: "Host metrics" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("switch", { name: "Runtime summary" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("switch", { name: "Workspace and session attribution" })
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("switch", { name: "Subprocess drill-down" })).not.toBeInTheDocument();
+
+    fireEvent.click(disclosureButton);
+
+    expect(disclosureButton).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("switch", { name: "Host metrics" })).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "Runtime summary" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("switch", { name: "Workspace and session attribution" })
+    ).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "Subprocess drill-down" })).toBeInTheDocument();
+  });
+
+  it("auto-expands advanced monitoring settings on mobile when monitoring is disabled", async () => {
     const settings = {
       ...createDefaultMonitoringSettings(),
       enabled: false,
@@ -267,7 +303,7 @@ describe("MonitoringSettingsSubpage", () => {
       )
     ).toBeInTheDocument();
     const shell = container.querySelector(".settings-monitoring-shell");
-    expect(shell?.firstElementChild).toHaveClass("settings-monitoring-dock");
+    expect(shell?.firstElementChild).toHaveClass("settings-monitoring-control-bar");
     expect(container.querySelector(".settings-monitoring-dock-toggle")).toBeNull();
     expect(
       screen.queryByRole("button", { name: "Open monitoring configuration" })
@@ -277,6 +313,9 @@ describe("MonitoringSettingsSubpage", () => {
       "false"
     );
     expect(screen.getByRole("tablist", { name: "Preset" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Show advanced monitoring settings" })
+    ).toHaveAttribute("aria-expanded", "true");
     expect(screen.queryByRole("button", { name: "Open Settings" })).not.toBeInTheDocument();
 
     await waitFor(() => {
@@ -350,7 +389,7 @@ describe("MonitoringSettingsSubpage", () => {
     );
   });
 
-  it("keeps the mobile dock expanded after enabling from the disabled-first layout", async () => {
+  it("keeps the mobile advanced settings expanded after enabling from the disabled-first layout", async () => {
     const disabledSettings = {
       ...createDefaultMonitoringSettings(),
       enabled: false,
@@ -375,6 +414,9 @@ describe("MonitoringSettingsSubpage", () => {
     expect(
       screen.queryByRole("button", { name: "Open monitoring configuration" })
     ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Show advanced monitoring settings" })
+    ).toHaveAttribute("aria-expanded", "true");
 
     fireEvent.click(screen.getByRole("switch", { name: "Enable performance monitoring" }));
 
@@ -385,13 +427,12 @@ describe("MonitoringSettingsSubpage", () => {
       );
     });
     const shell = document.querySelector(".settings-monitoring-shell");
-    expect(shell?.firstElementChild).toHaveClass("settings-monitoring-dock");
+    expect(shell?.firstElementChild).toHaveClass("settings-monitoring-control-bar");
     expect(screen.getByRole("tablist", { name: "Preset" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Open monitoring configuration" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Toggle monitoring settings" })).toHaveAttribute(
-      "aria-expanded",
-      "true"
-    );
+    expect(
+      screen.getByRole("button", { name: "Show advanced monitoring settings" })
+    ).toHaveAttribute("aria-expanded", "true");
   });
 
   it("disables monitoring controls before monitoring settings are ready", async () => {
@@ -408,6 +449,7 @@ describe("MonitoringSettingsSubpage", () => {
 
     expect(await screen.findByText("Host overview")).toBeInTheDocument();
     expect(screen.getByRole("switch", { name: "Enable performance monitoring" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Show advanced monitoring settings" }));
     expect(screen.getByRole("switch", { name: "Host metrics" })).toBeDisabled();
     expect(screen.getByRole("tablist", { name: "Preset" })).toHaveAttribute(
       "aria-disabled",

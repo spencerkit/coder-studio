@@ -458,7 +458,7 @@ export function MonitoringDashboard({
   const disabledState =
     response && !response.settings.enabled ? (
       <div className="monitoring-card monitoring-card--empty">
-        <h2>{t("monitoring.disabled_title")}</h2>
+        <h2 className="monitoring-card__title">{t("monitoring.disabled_title")}</h2>
         <p>{t("monitoring.disabled_description")}</p>
         {onOpenSettings ? (
           <div className="settings-actions-row">
@@ -635,7 +635,7 @@ export function MonitoringDashboard({
             <p>{t("monitoring.select_entity")}</p>
             {selectedEntity ? (
               <>
-                <h3>{selectedEntity.label}</h3>
+                <h3 className="monitoring-detail__entity-title">{selectedEntity.label}</h3>
                 {entityDetailRows(selectedEntity, t).map((row) => (
                   <MetricRow key={row.label} label={row.label} value={row.value} />
                 ))}

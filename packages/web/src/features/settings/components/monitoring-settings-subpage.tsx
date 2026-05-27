@@ -3,8 +3,7 @@ import {
   type MonitoringMode,
   type MonitoringSettings,
 } from "@coder-studio/core";
-import { useEffect, useRef, useState } from "react";
-import { Button } from "../../../components/ui";
+import { useEffect, useState } from "react";
 import { useViewport } from "../../../hooks/use-viewport";
 import { useTranslation } from "../../../lib/i18n";
 import type { UseMonitoringDataResult } from "../../monitoring";
@@ -28,28 +27,13 @@ export function MonitoringSettingsSubpage({
 }: MonitoringSettingsSubpageProps) {
   const t = useTranslation();
   const isMobile = useViewport() === "mobile";
-  const [dockExpanded, setDockExpanded] = useState(!isMobile || !settings.enabled);
-  const [dockPriorityPinned, setDockPriorityPinned] = useState(isMobile && !settings.enabled);
-  const previousViewportRef = useRef(isMobile);
-  const shouldPrioritizeDock = isMobile && dockPriorityPinned;
-  const showMobileEntry = isMobile && settings.enabled && !dockExpanded;
+  const [advancedExpanded, setAdvancedExpanded] = useState(!settings.enabled);
 
   useEffect(() => {
-    const previousIsMobile = previousViewportRef.current;
-
-    if (!isMobile) {
-      setDockExpanded(true);
-      setDockPriorityPinned(false);
-    } else if (!previousIsMobile) {
-      setDockExpanded(!settings.enabled);
-      setDockPriorityPinned(!settings.enabled);
-    } else if (!settings.enabled) {
-      setDockExpanded(true);
-      setDockPriorityPinned(true);
+    if (!settings.enabled) {
+      setAdvancedExpanded(true);
     }
-
-    previousViewportRef.current = isMobile;
-  }, [isMobile, settings.enabled]);
+  }, [settings.enabled]);
 
   const stageResponse = monitoringData.response
     ? settings.enabled && !monitoringData.response.settings.enabled
@@ -70,113 +54,47 @@ export function MonitoringSettingsSubpage({
         }
     : null;
 
-  const stage = (
-    <section className="settings-monitoring-stage" aria-label={t("monitoring.stage_label")}>
-      <div className="settings-monitoring-stage__header">
-        <div>
-          <p className="settings-monitoring-stage__eyebrow">{t("monitoring.stage_eyebrow")}</p>
-          <h3 className="settings-monitoring-stage__title">{t("monitoring.stage_title")}</h3>
-          <p className="settings-monitoring-stage__summary">{t("monitoring.stage_summary")}</p>
-        </div>
-      </div>
-      <MonitoringDashboard
-        error={monitoringData.error}
-        loading={monitoringData.loading}
-        refresh={monitoringData.refresh}
-        response={stageResponse}
-      />
-    </section>
-  );
-
-  const dockContent = (
-    <MonitoringSettingsCard
-      mode={mode}
-      monitoringSettingsReady={monitoringSettingsReady}
-      onChange={async (next) => {
-        try {
-          await onChange(next);
-        } catch {
-          return;
-        }
-      }}
-      settings={settings}
-      showHeaderChrome={false}
-    />
-  );
-
-  const dockSurface = showMobileEntry ? (
-    <button
-      type="button"
-      aria-label={t("monitoring.open_configuration")}
-      className="settings-monitoring-mobile-entry"
-      onClick={() => {
-        setDockExpanded(true);
-        setDockPriorityPinned(false);
-      }}
-    >
-      <div className="settings-monitoring-mobile-entry__header">
-        <div className="settings-monitoring-mobile-entry__copy">
-          <p className="settings-monitoring-mobile-entry__eyebrow">
-            {t("monitoring.dock_eyebrow")}
-          </p>
-          <h3 className="settings-monitoring-mobile-entry__title">{t("monitoring.dock_title")}</h3>
-        </div>
-        <span className="settings-monitoring-mobile-entry__badge">{t("action.expand")}</span>
-      </div>
-      <p className="settings-monitoring-mobile-entry__summary">
-        {t("monitoring.mobile_entry_summary")}
-      </p>
-      <span className="settings-monitoring-mobile-entry__action">
-        {t("monitoring.open_configuration")}
-      </span>
-    </button>
-  ) : (
-    <aside className="settings-monitoring-dock" aria-label={t("monitoring.dock_label")}>
-      <div className="settings-monitoring-dock__panel">
-        <div className="settings-monitoring-dock__header">
-          <div className="settings-monitoring-dock__copy">
-            <p className="settings-monitoring-dock__eyebrow">{t("monitoring.dock_eyebrow")}</p>
-            <h3 className="settings-monitoring-dock__title">{t("monitoring.dock_title")}</h3>
-            <p className="settings-monitoring-dock__summary">
-              {settings.enabled
-                ? t("monitoring.dock_summary_enabled")
-                : t("monitoring.dock_summary_disabled")}
-            </p>
-          </div>
-          {isMobile && settings.enabled ? (
-            <Button
-              aria-expanded={dockExpanded ? "true" : "false"}
-              aria-label={t("monitoring.toggle_settings")}
-              className="settings-monitoring-dock-toggle"
-              size="sm"
-              variant="secondary"
-              onClick={() =>
-                setDockExpanded((expanded) => {
-                  const nextExpanded = !expanded;
-                  if (!nextExpanded) {
-                    setDockPriorityPinned(false);
-                  }
-                  return nextExpanded;
-                })
-              }
-            >
-              {dockExpanded ? t("action.collapse") : t("action.expand")}
-            </Button>
-          ) : null}
-        </div>
-        <div className="settings-monitoring-dock__body">{dockContent}</div>
-      </div>
-    </aside>
-  );
-
   return (
-    <div
+    <section
       className={`settings-section settings-monitoring-shell ${
         isMobile ? "settings-monitoring-shell--mobile" : "settings-monitoring-shell--desktop"
-      } ${shouldPrioritizeDock ? "settings-monitoring-shell--dock-priority" : ""}`}
+      }`}
+      aria-label={t("monitoring.mobile_section")}
     >
-      {shouldPrioritizeDock ? dockSurface : stage}
-      {shouldPrioritizeDock ? stage : dockSurface}
-    </div>
+      <div className="settings-monitoring-control-bar">
+        <div className="settings-monitoring-control-bar__copy">
+          <p className="settings-monitoring-control-bar__eyebrow">
+            {t("monitoring.stage_eyebrow")}
+          </p>
+          <p className="settings-monitoring-control-bar__summary">
+            {t("monitoring.stage_summary")}
+          </p>
+        </div>
+        <MonitoringSettingsCard
+          advancedExpanded={advancedExpanded}
+          mode={mode}
+          monitoringSettingsReady={monitoringSettingsReady}
+          onAdvancedExpandedChange={setAdvancedExpanded}
+          onChange={async (next) => {
+            try {
+              await onChange(next);
+            } catch {
+              return;
+            }
+          }}
+          settings={settings}
+          showHeaderChrome={false}
+        />
+      </div>
+
+      <div className="settings-monitoring-dashboard-stage">
+        <MonitoringDashboard
+          error={monitoringData.error}
+          loading={monitoringData.loading}
+          refresh={monitoringData.refresh}
+          response={stageResponse}
+        />
+      </div>
+    </section>
   );
 }

@@ -889,6 +889,7 @@
     "toggle_settings": "切换监控设置",
     "open_configuration": "打开监控配置",
     "mobile_entry_summary": "监控已在采集数据。只有需要调整采样深度或归因时，才需要打开配置。",
+    "show_advanced_settings": "显示高级监控设置",
     "mobile_section": "监控分区",
     "mobile_overview": "概览",
     "mobile_attribution": "归因",

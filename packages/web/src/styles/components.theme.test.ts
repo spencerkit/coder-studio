@@ -101,7 +101,7 @@ const selectStylesheet = readFileSync(
 
 function getLastGroupedRuleBlockFrom(source: string, pattern: RegExp) {
   const matches = Array.from(source.matchAll(pattern));
-  const match = matches.at(-1);
+  const match = matches.length > 0 ? matches[matches.length - 1] : undefined;
 
   expect(match, `expected CSS rule matching ${pattern}`).toBeTruthy();
   return match?.[1] ?? "";
@@ -112,7 +112,8 @@ function getLastGroupedRuleBlock(pattern: RegExp) {
 }
 
 function getLastRuleBlockFrom(source: string, selector: string) {
-  return getRuleBlocksFrom(source, selector).at(-1) ?? "";
+  const blocks = getRuleBlocksFrom(source, selector);
+  return blocks.length > 0 ? blocks[blocks.length - 1] : "";
 }
 
 function getRuleBlocksFrom(source: string, selector: string) {
@@ -122,13 +123,13 @@ function getRuleBlocksFrom(source: string, selector: string) {
   const normalizedSelector = selector.replace(/\s+/g, " ").trim();
 
   while ((match = matcher.exec(source))) {
-    const selectors = match[1]
+    const selectors = (match[1] ?? "")
       .replace(/\/\*[\s\S]*?\*\//g, "")
       .split(",")
       .map((entry) => entry.replace(/\s+/g, " ").trim());
 
     if (selectors.includes(normalizedSelector)) {
-      blocks.push(match[2]);
+      blocks.push(match[2] ?? "");
     }
   }
 
@@ -142,7 +143,7 @@ function hasRuleBlockFrom(source: string, selector: string) {
   let match: RegExpExecArray | null = null;
 
   while ((match = matcher.exec(source))) {
-    const selectors = match[1]
+    const selectors = (match[1] ?? "")
       .replace(/\/\*[\s\S]*?\*\//g, "")
       .split(",")
       .map((entry) => entry.replace(/\s+/g, " ").trim());
@@ -194,18 +195,26 @@ async function buildRuntimeStylesheet() {
     });
 
     const bundle = Array.isArray(output) ? output[0] : output;
-    const chunks = "output" in bundle ? bundle.output : [];
-    const cssAssets = chunks.filter(
-      (chunk): chunk is { type: "asset"; fileName: string; source: string | Uint8Array } =>
-        chunk.type === "asset" && chunk.fileName.endsWith(".css")
-    );
+    expect(bundle).toBeTruthy();
 
-    expect(cssAssets.length, "expected built CSS asset").toBeGreaterThan(0);
-    return cssAssets
-      .map((asset) =>
-        typeof asset.source === "string" ? asset.source : Buffer.from(asset.source).toString("utf8")
-      )
-      .join("\n");
+    if (!bundle || !("output" in bundle)) {
+      throw new Error("expected CSS build output");
+    }
+
+    const cssSources: string[] = [];
+
+    for (const chunk of bundle.output) {
+      if (chunk.type !== "asset" || !chunk.fileName.endsWith(".css")) {
+        continue;
+      }
+
+      cssSources.push(
+        typeof chunk.source === "string" ? chunk.source : Buffer.from(chunk.source).toString("utf8")
+      );
+    }
+
+    expect(cssSources.length, "expected built CSS asset").toBeGreaterThan(0);
+    return cssSources.join("\n");
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -3537,33 +3546,27 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(actionRow).toContain("margin-top: var(--sp-3)");
   });
 
-  it("keeps monitoring subpage stage and dock surfaces on shared theme tokens", () => {
+  it("keeps the unified monitoring shell and compact typography on shared theme tokens", () => {
     const shell = getLastRuleBlock(".settings-monitoring-shell");
-    const stage = getRuleBlocksFrom(stylesheet, ".settings-monitoring-stage")[0];
-    const dockPanel = getRuleBlocksFrom(stylesheet, ".settings-monitoring-dock__panel")[0];
-    const mobileEntry = getLastRuleBlock(".settings-monitoring-mobile-entry");
-    const mobileEntryBadge = getLastRuleBlock(".settings-monitoring-mobile-entry__badge");
-    const mobileEntrySummary = getLastRuleBlock(".settings-monitoring-mobile-entry__summary");
-    const stageEyebrow = getLastRuleBlock(".settings-monitoring-stage__eyebrow");
-    const dockSummary = getLastRuleBlock(".settings-monitoring-dock__summary");
-    const toolbarActions = getRuleBlocksFrom(stylesheet, ".monitoring-toolbar__actions")[0];
+    const controlBar = getLastRuleBlock(".settings-monitoring-control-bar");
+    const controlSummary = getLastRuleBlock(".settings-monitoring-control-bar__summary");
+    const advancedToggle = getLastRuleBlock(".settings-monitoring-advanced__toggle");
+    const dashboardStage = getLastRuleBlock(".settings-monitoring-dashboard-stage");
+    const dashboardCardTitle = getLastRuleBlock(".monitoring-card__header h2");
+    const detailHeading = getLastRuleBlock(".monitoring-detail h3");
 
-    expect(shell).toContain("display: grid");
-    expect(shell).toContain("gap: var(--sp-5)");
-    expect(stage).toContain("border: 1px solid var(--surface-elevated-border)");
-    expect(stage).toContain("background: var(--surface-elevated)");
-    expect(stage).toContain("box-shadow: var(--shadow-sm)");
-    expect(dockPanel).toContain("border-radius: var(--radius-xl)");
-    expect(dockPanel).toContain("padding: var(--sp-4)");
-    expect(mobileEntry).toContain("border: 1px solid var(--surface-elevated-border)");
-    expect(mobileEntry).toContain("background: var(--surface-elevated)");
-    expect(mobileEntry).toContain("box-shadow: var(--shadow-sm)");
-    expect(mobileEntryBadge).toContain("background: var(--state-selected-bg)");
-    expect(mobileEntryBadge).toContain("color: var(--text-primary)");
-    expect(mobileEntrySummary).toContain("color: var(--text-secondary)");
-    expect(stageEyebrow).toContain("color: var(--text-tertiary)");
-    expect(dockSummary).toContain("color: var(--text-secondary)");
-    expect(toolbarActions).toContain("justify-content: flex-end");
+    expect(shell).toContain("display: flex");
+    expect(shell).toContain("flex-direction: column");
+    expect(controlBar).toContain("border: 1px solid var(--surface-elevated-border)");
+    expect(controlBar).toContain("background: var(--surface-elevated)");
+    expect(controlBar).toContain("padding: var(--sp-4)");
+    expect(controlSummary).toContain("font-size: var(--type-body-5-size)");
+    expect(controlSummary).toContain("color: var(--text-secondary)");
+    expect(advancedToggle).toContain("font-size: var(--type-body-5-size)");
+    expect(advancedToggle).toContain("border-top: 1px solid var(--surface-elevated-border)");
+    expect(dashboardStage).toContain("min-width: 0");
+    expect(dashboardCardTitle).toContain("font-size: var(--type-heading-6-size)");
+    expect(detailHeading).toContain("font-size: var(--type-body-3-size)");
   });
 
   it("keeps diagnostics install surfaces on theme tokens", () => {
