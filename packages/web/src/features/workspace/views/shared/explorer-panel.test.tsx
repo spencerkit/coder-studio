@@ -49,7 +49,7 @@ vi.mock("../shared/file-tree-panel", () => ({
 }));
 
 describe("ExplorerPanel", () => {
-  it("keeps the panel header for Explorer and moves file actions into the Workspace section", () => {
+  it("renders without a runtime Explorer panel header and keeps file actions in the Workspace section", () => {
     const onOpenFileCreate = vi.fn();
     const onOpenFolderCreate = vi.fn();
     const store = createStore();
@@ -76,11 +76,8 @@ describe("ExplorerPanel", () => {
       })
     );
 
-    const explorerHeader = screen.getByText("Explorer").closest(".panel-header") as HTMLElement;
-    expect(within(explorerHeader).queryByRole("button", { name: "New File" })).toBeNull();
-    expect(container.querySelector(".workspace-sidebar-panel__actions")).not.toBe(
-      explorerHeader.querySelector(".workspace-sidebar-panel__actions")
-    );
+    expect(screen.queryByText("Explorer")).toBeNull();
+    expect(container.querySelector(".panel-header")).toBeNull();
 
     const workspaceSection = screen
       .getByRole("heading", { level: 2, name: "Workspace" })

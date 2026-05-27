@@ -1,7 +1,5 @@
 import type { FC } from "react";
 import { useState } from "react";
-import { useTranslation } from "../../../../lib/i18n";
-import { PanelHeader } from "../../../shared/components/panel-header";
 import type { WorkspaceCreateRequest } from "../../actions/use-workspace-screen-model";
 import { FileTreePanel } from "./file-tree-panel";
 import { OpenEditorsSection } from "./open-editors-section";
@@ -22,13 +20,10 @@ export const ExplorerPanel: FC<ExplorerPanelProps> = ({
   onOpenFileCreate,
   onOpenFolderCreate,
 }) => {
-  const t = useTranslation();
   const [collapseVersion, setCollapseVersion] = useState(0);
 
   return (
     <div className="workspace-sidebar-view">
-      <PanelHeader title={t("workspace.sidebar.explorer")} />
-
       <div className="workspace-sidebar-panel__body workspace-sidebar-panel__body--stacked">
         <OpenEditorsSection workspaceId={workspaceId} />
 

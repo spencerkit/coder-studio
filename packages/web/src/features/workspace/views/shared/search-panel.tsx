@@ -8,7 +8,6 @@ import { dispatchCommandAtom } from "../../../../atoms/connection";
 import { Button } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { useOpenLocation } from "../../../code-editor/actions/use-open-location";
-import { PanelHeader } from "../../../shared/components/panel-header";
 import { deriveEditorModeForPath, editorModeAtomFamily } from "../../atoms";
 
 interface SearchPanelProps {
@@ -213,8 +212,6 @@ export const SearchPanel: FC<SearchPanelProps> = ({
     <div
       className={`workspace-sidebar-view workspace-search-panel workspace-search-panel--${variant}`}
     >
-      {variant === "desktop" ? <PanelHeader title={t("workspace.sidebar.search")} /> : null}
-
       <div className="workspace-search-panel__controls">
         <input
           ref={inputRef}

@@ -313,11 +313,7 @@ export function WorkspaceMobileView() {
               ? (mobileFilesRoute.title ??
                 mobileFilesRoute.path?.split("/").pop() ??
                 t("mobile.files.editor_fallback"))
-              : mobileFilesView === "explorer"
-                ? t("workspace.sidebar.explorer")
-                : mobileFilesView === "search"
-                  ? t("workspace.sidebar.search")
-                  : t("workspace.sidebar.source_control"),
+              : "",
           body: activeWorkspaceId ? (
             <MobileFilesSheet
               workspaceId={activeWorkspaceId}

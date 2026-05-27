@@ -5,7 +5,6 @@ import { EmptyState } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { AgentPanes } from "../../../agent-panes";
 import { CodeEditorHost } from "../../../code-editor/views/shared/code-editor-host";
-import { PanelHeader } from "../../../shared/components/panel-header";
 import { TerminalPanel } from "../../../terminal-panel";
 import { TopBar } from "../../../topbar";
 import { useWorkspaceFullscreen } from "../../actions/use-workspace-fullscreen";
@@ -34,7 +33,6 @@ function isEditableTarget(target: EventTarget | null): boolean {
 const WorkspaceDesktopScene: FC = () => {
   const fullscreenRootRef = useRef<HTMLDivElement>(null);
   const fullscreenController = useWorkspaceFullscreen(fullscreenRootRef);
-  const t = useTranslation();
   const {
     createRequest,
     desktopSidebarView,
@@ -134,7 +132,6 @@ const WorkspaceDesktopScene: FC = () => {
 
                   {activeSidebarView === "source-control" ? (
                     <div className="workspace-sidebar-view">
-                      <PanelHeader title={t("workspace.sidebar.source_control")} />
                       <div className="workspace-sidebar-panel__body">
                         <GitPanel workspaceId={workspace.id} variant="desktop" />
                       </div>

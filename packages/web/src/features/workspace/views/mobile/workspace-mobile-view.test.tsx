@@ -404,4 +404,28 @@ describe("WorkspaceMobileView", () => {
       expect(store.get(gitDiffPreviewAtomFamily("ws-test"))).toEqual(diffPreview);
     });
   });
+
+  it("uses an empty root files sheet title while keeping root content visible", () => {
+    renderMobileView({
+      activePath: null,
+      openFiles: {
+        "src/a.ts": {
+          kind: "text",
+          path: "src/a.ts",
+          content: "alpha",
+          savedContent: "alpha",
+          baseHash: "hash-a",
+          isDirty: false,
+        },
+      },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Files" }));
+
+    expect(screen.getByTestId("mobile-files-sheet-root")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: /^Sheet$/ })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { level: 2, name: "Explorer" })).toBeNull();
+    expect(screen.queryByRole("heading", { level: 2, name: "Search" })).toBeNull();
+    expect(screen.queryByRole("heading", { level: 2, name: "Source Control" })).toBeNull();
+  });
 });
