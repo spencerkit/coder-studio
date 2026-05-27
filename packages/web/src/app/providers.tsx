@@ -485,6 +485,17 @@ export function AppProviders({ children }: AppProvidersProps) {
     void claim();
   }, [claim, connectionStatus, store]);
 
+  // Forward activation status transitions to the recovery coordinator so that
+  // any recovery deferred during the post-reconnect "no lease yet" window can
+  // resume once the client has re-claimed the activation lease. Without this
+  // the coordinator would either surface a spurious "terminal recovery check
+  // failed" notice or — after the activation-aware defer landed — stay stuck
+  // in loading because nothing else would re-trigger reconcile when the
+  // session is idle.
+  useEffect(() => {
+    getGlobalRecoveryCoordinator()?.handleActivationStatus(activationStatus);
+  }, [activationStatus]);
+
   // Initialize theme from localStorage
   useEffect(() => {
     preferPersistedThemeOnFirstHydrationRef.current =

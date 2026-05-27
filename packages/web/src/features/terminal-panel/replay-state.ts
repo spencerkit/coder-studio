@@ -83,7 +83,6 @@ export function isRecoveryControlPlaneError(error: unknown): boolean {
   if (
     code === "no_client" ||
     code === "unknown_op" ||
-    code === "activation_required" ||
     code === "validation_error" ||
     code === "internal_error"
   ) {
@@ -92,8 +91,25 @@ export function isRecoveryControlPlaneError(error: unknown): boolean {
 
   const message = getErrorMessage(error);
   return (
-    message.startsWith("Unknown operation:") ||
-    message.includes("active session") ||
-    message.includes("WebSocket client not initialized")
+    message.startsWith("Unknown operation:") || message.includes("WebSocket client not initialized")
   );
+}
+
+/**
+ * Detect `activation_required` errors. The server returns this when the
+ * current WebSocket connection does not own the activation lease (e.g. just
+ * after a reconnect, before the client has re-claimed the lease). It is a
+ * transient state — the activation hook will reclaim the lease shortly — so
+ * the recovery coordinator must NOT surface it as a recovery failure.
+ *
+ * `createRecoveryDispatchCommand` wraps the original error and overwrites the
+ * code with "command_error", so we have to fall back to a message match in
+ * the wrapped case while still recognising the raw CommandResultError code.
+ */
+export function isActivationRequiredError(error: unknown): boolean {
+  if (getErrorCode(error) === "activation_required") {
+    return true;
+  }
+
+  return getErrorMessage(error).includes("no longer the active session");
 }

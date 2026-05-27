@@ -13,12 +13,15 @@ import type {
   TerminalSnapshotPayload,
 } from "../../ws/client";
 import {
+  isActivationRequiredError,
   isRecoveryControlPlaneError,
   type RecoveryOperation,
   type RecoveryUiMode,
   type RecoveryUiModeDetail,
   TERMINAL_REPLAY_TIMEOUT_MS,
 } from "./replay-state";
+
+export type ActivationStatus = "idle" | "claiming" | "active" | "revoked" | "gated";
 
 interface RegisteredTerminal {
   terminalId: string;
@@ -75,6 +78,17 @@ export interface RecoveryCoordinator {
   registerTerminal(entry: RegisteredTerminal): () => void;
   notifyReason(reason: RecoveryReason, terminalId?: string): Promise<void>;
   handleConnectionStatus(status: ConnectionStatus): void;
+  /**
+   * Notify the coordinator that the activation lease has changed state.
+   * After a WS reconnect there is a ~1s window where the socket is healthy
+   * but the lease still points at the previous wsClientId. Any non-allowlist
+   * command (recovery.reconcile, terminal.replay, terminal.snapshot) hitting
+   * the server during that window comes back as `activation_required`. We
+   * intentionally do NOT surface that as a recovery failure (see
+   * isActivationRequiredError); instead we defer and replay the recovery
+   * once the activation state goes back to "active".
+   */
+  handleActivationStatus(status: ActivationStatus): void;
   dispose(): void;
 }
 
@@ -113,7 +127,17 @@ export function createRecoveryCoordinator(deps: RecoveryCoordinatorDeps): Recove
   const terminals = new Map<string, RegisteredTerminal>();
   const terminalStates = new Map<string, TerminalRecoveryState>();
   let pendingSocketReconcile = false;
+  // Set when a command hits server-side activation_required (the WS is up but
+  // the activation lease has not been re-claimed yet). Cleared when the
+  // activation status transitions back to "active", at which point we
+  // re-issue a recovery so the deferred reconcile can complete cleanly.
+  let pendingActivationReclaim = false;
+  let lastKnownActivationStatus: ActivationStatus = "active";
   let disposed = false;
+
+  const deferForActivationReclaim = () => {
+    pendingActivationReclaim = true;
+  };
 
   const getTerminalState = (terminalId: string): TerminalRecoveryState => {
     const existing = terminalStates.get(terminalId);
@@ -294,6 +318,11 @@ export function createRecoveryCoordinator(deps: RecoveryCoordinatorDeps): Recove
         return;
       }
 
+      if (!snapshotResult.ok && isActivationRequiredError(snapshotResult.error)) {
+        deferForActivationReclaim();
+        return;
+      }
+
       if (!snapshotResult.ok && isRecoveryControlPlaneError(snapshotResult.error)) {
         if (options?.controlPlaneFailureMeansRecoveryFailure) {
           terminal.setUiMode("error");
@@ -385,6 +414,11 @@ export function createRecoveryCoordinator(deps: RecoveryCoordinatorDeps): Recove
           return;
         }
 
+        if (isActivationRequiredError(replayResult.error)) {
+          deferForActivationReclaim();
+          return;
+        }
+
         if (isRecoveryControlPlaneError(replayResult.error)) {
           surfaceRecoveryCheckFailure(terminal, "terminal.replay", replayResult.error?.code);
           return;
@@ -462,6 +496,11 @@ export function createRecoveryCoordinator(deps: RecoveryCoordinatorDeps): Recove
         return;
       }
 
+      if (!result.ok && isActivationRequiredError(result.error)) {
+        deferForActivationReclaim();
+        return;
+      }
+
       for (const entry of entries) {
         surfaceRecoveryCheckFailure(
           entry,
@@ -499,6 +538,12 @@ export function createRecoveryCoordinator(deps: RecoveryCoordinatorDeps): Recove
         pendingSocketReconcile = true;
         return false;
       }
+      if (isActivationRequiredError(error)) {
+        // connection.probe is in the activation allowlist, so this shouldn't
+        // normally happen — guard defensively in case the allowlist changes.
+        deferForActivationReclaim();
+        return false;
+      }
       throw error;
     }
   };
@@ -529,6 +574,11 @@ export function createRecoveryCoordinator(deps: RecoveryCoordinatorDeps): Recove
         return;
       }
 
+      if (isActivationRequiredError(error)) {
+        deferForActivationReclaim();
+        return;
+      }
+
       surfaceRecoveryCheckFailure(terminal, "recovery.reconcile");
     }
   };
@@ -551,6 +601,44 @@ export function createRecoveryCoordinator(deps: RecoveryCoordinatorDeps): Recove
           skipProbe: true,
         });
       }
+    }
+  };
+
+  const handleActivationStatus = (status: ActivationStatus) => {
+    if (disposed) {
+      return;
+    }
+
+    const previous = lastKnownActivationStatus;
+    lastKnownActivationStatus = status;
+
+    // Any non-active state means an in-flight reconcile would just bounce off
+    // the activation gate on the server. Remember it so we know to replay
+    // once activation comes back.
+    if (status !== "active") {
+      if (previous === "active") {
+        pendingActivationReclaim = true;
+      }
+      return;
+    }
+
+    if (!pendingActivationReclaim) {
+      return;
+    }
+
+    pendingActivationReclaim = false;
+
+    // Skip if the socket itself isn't healthy yet — handleConnectionStatus
+    // will drive recovery via the socket_reconnected path once it is.
+    if (deps.wsClient.getStatus() !== "connected") {
+      return;
+    }
+
+    for (const terminalId of terminals.keys()) {
+      queueRecovery(terminalId, {
+        reason: "socket_reconnected",
+        skipProbe: true,
+      });
     }
   };
 
@@ -617,6 +705,7 @@ export function createRecoveryCoordinator(deps: RecoveryCoordinatorDeps): Recove
       );
     },
     handleConnectionStatus,
+    handleActivationStatus,
     dispose() {
       if (disposed) {
         return;
