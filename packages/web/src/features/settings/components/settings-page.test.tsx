@@ -1313,10 +1313,10 @@ describe("SettingsPage", () => {
       );
     });
     const shell = document.querySelector(".settings-monitoring-shell");
-    expect(shell?.firstElementChild).toHaveClass("settings-monitoring-dock");
+    expect(shell?.firstElementChild).toHaveClass("settings-monitoring-control-bar");
     expect(screen.getByRole("tablist", { name: "预设" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "打开监控配置" })).toBeNull();
-    expect(screen.getByRole("button", { name: "切换监控设置" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "显示高级监控设置" })).toHaveAttribute(
       "aria-expanded",
       "true"
     );
