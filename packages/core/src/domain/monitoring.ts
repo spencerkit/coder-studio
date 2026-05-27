@@ -198,6 +198,14 @@ export function deriveMonitoringMode(settings: MonitoringSettings): MonitoringMo
   return "light";
 }
 
+function canReportLoadAverage() {
+  if (typeof process !== "undefined" && typeof process.platform === "string") {
+    return process.platform !== "win32";
+  }
+
+  return true;
+}
+
 export function createEmptyMonitoringResponse(
   settings = createDefaultMonitoringSettings()
 ): MonitoringResponse {
@@ -221,7 +229,7 @@ export function createEmptyMonitoringResponse(
       subprocessGroups: {},
     },
     capabilities: {
-      loadAverageAvailable: process.platform !== "win32",
+      loadAverageAvailable: canReportLoadAverage(),
       processMetricsAvailable: false,
       subprocessHistoryLimited: false,
     },
