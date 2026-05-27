@@ -2590,6 +2590,9 @@ describe("components.css theme-sensitive surfaces", () => {
     const mobileQuickJumpSearch = getLastRuleBlock(".workspace-quick-jump__search");
     const mobileQuickJumpItem = getLastRuleBlock(".workspace-quick-jump__item");
     const mobileSearchPanel = getLastRuleBlock(".workspace-search-panel--mobile");
+    const mobileFilesSearchSurface = getLastRuleBlock(
+      ".mobile-sheet--files .workspace-search-panel--mobile"
+    );
     const mobileFileSearch = getLastRuleBlock(
       ".mobile-sheet--files .file-tree-shell--mobile .file-tree-search"
     );
@@ -2632,32 +2635,37 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(mobileFilesSegmentActive).toContain("background: transparent");
     expect(mobileFilesSegmentIndicator).toContain("height: 1.5px");
     expect(workspaceSectionHeader).toContain("justify-content: space-between");
-    expect(workspaceSectionHeader).toContain("margin-bottom: var(--sp-2)");
+    expect(workspaceSectionHeader).toContain("margin-bottom: var(--sp-1)");
     expect(workspaceSectionActions).toContain("margin-left: auto");
-    expect(mobileQuickJumpSearch).toContain("border: 1px solid");
+    expect(mobileQuickJumpSearch).toContain("border-radius: var(--radius-md)");
     expect(mobileQuickJumpItem).toContain("grid-template-columns: minmax(0, 1fr)");
     expect(mobileSearchPanel).toContain("background: transparent");
+    expect(mobileFilesSearchSurface).toContain(
+      "border: 1px solid var(--component-mix-border-default-80pct-transparent)"
+    );
+    expect(mobileFilesSearchSurface).toContain("border-radius: var(--radius-md)");
+    expect(mobileFilesSearchSurface).toContain("background: var(--bg-panel)");
+    expect(mobileFilesSearchSurface).toContain("box-shadow: none");
     expect(mobileFilesSurface).toContain(
       "border: 1px solid var(--component-mix-border-default-80pct-transparent)"
     );
     expect(mobileFilesSurface).toContain("border-radius: var(--radius-md)");
+    expect(mobileFilesSurface).toContain("background: var(--bg-panel)");
     expect(mobileFilesSurface).toContain("box-shadow: none");
     expect(mobileFilesSurface).not.toContain("linear-gradient(");
     expect(mobileFilesGitSurface).toContain(
       "border: 1px solid var(--component-mix-border-default-80pct-transparent)"
     );
     expect(mobileFilesGitSurface).toContain("border-radius: var(--radius-md)");
+    expect(mobileFilesGitSurface).toContain("background: var(--bg-panel)");
     expect(mobileFilesGitSurface).toContain("box-shadow: none");
     expect(mobileFileSearch).toContain("margin: 0");
-    expect(mobileFileSearch).toContain("border-radius: 0");
-    expect(mobileFileSearch).toContain("border-right: none");
-    expect(mobileFileSearch).toContain("border-left: none");
-    expect(mobileFileSearch).toContain("background: transparent");
+    expect(mobileFileSearch).toContain("border-radius: var(--radius-md)");
     expect(mobileFileRow).toContain("min-height: 40px");
-    expect(mobileFileRow).toContain("border-radius: 0");
-    expect(mobileFileRowSelected).toContain(
-      "border-left: 2px solid var(--component-mix-status-info-fg-88pct-white-12pct)"
-    );
+    expect(mobileFileRow).toContain("border-radius: var(--radius-md)");
+    expect(mobileFileRowSelected).not.toContain("border-left:");
+    expect(mobileFileRowSelected).toContain("border: 1px solid var(--state-selected-border)");
+    expect(mobileFileRowSelected).toContain("background: var(--state-selected-bg)");
     expect(drawerItem).toContain("border-radius: var(--radius-xl)");
     expect(drawerFooterButton).toContain("border-radius: var(--radius-md)");
     expect(welcomeCard).toContain("border-radius: var(--radius-lg)");
@@ -3102,8 +3110,10 @@ describe("components.css theme-sensitive surfaces", () => {
   it("keeps the desktop file tree search and selected row aligned with the polished panel chrome", () => {
     const search = getLastRuleBlock(".file-tree-shell .file-tree-search");
     const searchInput = getLastRuleBlock(".file-tree-shell .file-tree-search-input");
+    const searchInputFocus = getLastRuleBlock(".file-tree-shell .file-tree-search-input:focus");
     const emptyState = getLastRuleBlock(".file-tree-empty");
     const row = getLastRuleBlock(".file-tree-shell .tree-item");
+    const rowDesktop = getLastRuleBlock(".file-tree-shell--desktop .tree-item");
     const rowSelected = getLastRuleBlock(".file-tree-shell .tree-item.selected");
     const rowActionsBase = getLastRuleBlock(".file-tree-shell .tree-item-actions");
     const rowActionsDesktop = getLastRuleBlock(".file-tree-shell--desktop .tree-item-actions");
@@ -3111,9 +3121,10 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(search).toContain("gap: var(--gap-default)");
     expect(search).toContain("margin: var(--space-default) var(--inset-control-inline)");
     expect(search).toContain("padding-inline: var(--inset-control-inline)");
-    expect(search).toContain("min-height: var(--control-height-md)");
-    expect(search).toContain("border-radius: var(--radius-panel)");
-    expect(search).toContain("background: var(--component-mix-surface-panel-90pct-surface-page)");
+    expect(search).toContain("min-height: 32px");
+    expect(search).toContain("border-radius: var(--radius-md)");
+    expect(searchInput).toContain("border-radius: var(--radius-md)");
+    expect(searchInputFocus).toContain("outline: none");
     expect(searchInput).toContain("font-size: var(--type-body-3-size)");
     expect(searchInput).toContain("line-height: var(--type-body-3-line-height)");
     expect(searchInput).toContain("font-weight: var(--type-body-3-weight)");
@@ -3124,26 +3135,36 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(row).toContain("3px");
     expect(row).toContain("var(--inset-control-block)");
     expect(row).toContain("var(--inset-row-inline)");
-    expect(row).toContain("border-radius: var(--radius-panel)");
+    expect(row).toContain("border-radius: var(--radius-md)");
     expect(row).toContain("transition:");
-    expect(rowSelected).toContain(
-      "border-left: var(--state-focus-ring-width) solid var(--state-selected-border)"
-    );
-    expect(rowSelected).toContain(
-      "padding-left: calc(var(--inset-row-inline) - var(--state-focus-ring-width))"
-    );
+    expect(row).not.toContain("border: 1px solid transparent");
+    expect(rowDesktop).toContain("border: 1px solid transparent");
+    expect(rowSelected).not.toContain("border-left:");
+    expect(rowSelected).not.toContain("padding-left: calc(");
+    expect(rowSelected).toContain("padding-left:");
+    expect(rowSelected).toContain("border: 1px solid var(--state-selected-border)");
     expect(rowSelected).toContain("background: var(--state-selected-bg)");
+    expect(rowSelected).toContain("color: var(--text-primary)");
     expect(rowActionsBase).toContain("gap: var(--gap-compact)");
     expect(rowActionsDesktop).toContain("opacity: 0");
   });
 
   it("keeps workspace search and quick open on compact editor-search chrome", () => {
+    const sidebarRowSelected = getLastRuleBlock(".workspace-sidebar-row--selected");
+    const sidebarRowSelectedHover = getLastRuleBlock(".workspace-sidebar-row--selected:hover");
+    const quickJumpSearch = getLastRuleBlock(".workspace-quick-jump__search");
     const openEditorsHeader = getLastRuleBlock(".workspace-open-editors__header");
     const openEditorsHeaderMain = getLastRuleBlock(".workspace-open-editors__header-main");
     const openEditorsTitle = getLastRuleBlock(".workspace-open-editors__title");
     const openEditorsTitleText = getLastRuleBlock(".workspace-open-editors__title-text");
     const openEditorsCloseAll = getLastRuleBlock(".workspace-open-editors__close-all");
     const openEditorsRow = getLastRuleBlock(".workspace-open-editors__row");
+    const openEditorsItemHover = getLastRuleBlock(
+      ".workspace-open-editors__item:hover:not(.workspace-open-editors__item--active)"
+    );
+    const openEditorsItemActiveHover = getLastRuleBlock(
+      ".workspace-open-editors__item--active:hover"
+    );
     const searchControls = getLastRuleBlock(".workspace-search-panel__controls");
     const searchInput = getLastRuleBlock(".workspace-search-panel__input");
     const openEditorsItem = getLastRuleBlock(".workspace-open-editors__item");
@@ -3151,6 +3172,11 @@ describe("components.css theme-sensitive surfaces", () => {
     const searchGroupHeader = getLastRuleBlock(".workspace-search-panel__group-header");
     const searchGroupPath = getLastRuleBlock(".workspace-search-panel__group-path");
     const searchMatch = getLastRuleBlock(".workspace-search-panel__match");
+    const searchMatchActive = getLastRuleBlock(".workspace-search-panel__match--active");
+    const searchMatchActiveHover = getLastRuleBlock(".workspace-search-panel__match--active:hover");
+    const searchMatchActiveFocus = getLastRuleBlock(
+      ".workspace-search-panel__match--active:focus-visible"
+    );
     const searchLine = getLastRuleBlock(".workspace-search-panel__line");
     const quickOpen = getLastRuleBlock(".quick-open");
     const quickOpenSearch = getLastRuleBlock(".quick-open__search");
@@ -3163,6 +3189,8 @@ describe("components.css theme-sensitive surfaces", () => {
       '.quick-open__item[aria-selected="true"] .quick-open__secondary'
     );
 
+    expect(sidebarRowSelected).toContain("background: var(--state-selected-bg)");
+    expect(sidebarRowSelectedHover).toContain("background: var(--state-selected-bg)");
     expect(openEditorsHeader).toContain("display: flex");
     expect(openEditorsHeaderMain).toContain("flex: 1 1 auto");
     expect(openEditorsHeaderMain).toContain("min-width: 0");
@@ -3174,6 +3202,8 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(openEditorsCloseAll).toContain("background: transparent");
     expect(openEditorsCloseAll).toContain("color: var(--text-secondary)");
     expect(openEditorsRow).toContain("grid-template-columns: minmax(0, 1fr) auto");
+    expect(openEditorsItemHover).toContain("background: var(--surface-hover)");
+    expect(openEditorsItemActiveHover).toContain("background: var(--state-selected-bg)");
     expect(searchControls).toContain(
       "border-bottom: 1px solid var(--component-mix-border-default-82pct-transparent)"
     );
@@ -3181,7 +3211,8 @@ describe("components.css theme-sensitive surfaces", () => {
       "background: var(--component-mix-surface-panel-82pct-transparent)"
     );
     expect(searchInput).toContain("min-height: 34px");
-    expect(searchInput).toContain("border-radius: 4px");
+    expect(searchInput).toContain("border-radius: var(--radius-md)");
+    expect(searchInput).not.toContain("border-radius: 4px");
     expect(searchInput).toContain("box-shadow: none");
     expect(openEditorsItem).toContain("overflow: hidden");
     expect(openEditorsItem).toContain("text-overflow: ellipsis");
@@ -3189,17 +3220,32 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(openEditorsItemLabel).toContain("text-overflow: ellipsis");
     expect(openEditorsItemLabel).toContain("white-space: nowrap");
     expect(searchGroupHeader).toContain("grid-template-columns: 14px minmax(0, 1fr) auto");
+    expect(searchGroupHeader).toContain("border: 1px solid transparent");
+    expect(searchGroupHeader).toContain("border-radius: var(--radius-md)");
     expect(searchGroupHeader).toContain(
       "box-shadow: inset 0 -1px 0 var(--component-mix-border-default-96pct-transparent)"
     );
     expect(searchGroupPath).toContain("font-family: var(--font-mono)");
     expect(searchGroupPath).toContain("font-size: var(--type-body-6-size)");
     expect(searchMatch).toContain("grid-template-columns: 40px minmax(0, 1fr)");
+    expect(searchMatch).toContain("border-radius: var(--radius-md)");
+    expect(searchMatch).toContain("border: 1px solid transparent");
+    expect(searchMatchActive).toContain("border-color: var(--state-selected-border)");
+    expect(searchMatchActive).toContain("background: var(--state-selected-bg)");
+    expect(searchMatchActiveHover).toContain("border-color: var(--state-selected-border)");
+    expect(searchMatchActiveHover).toContain("background: var(--state-selected-bg)");
+    expect(searchMatchActiveFocus).toContain("border-color: var(--state-selected-border)");
+    expect(searchMatchActiveFocus).toContain("background: var(--state-selected-bg)");
+    expect(searchMatchActiveFocus).toContain(
+      "box-shadow: inset 0 0 0 var(--state-focus-ring-width)"
+    );
     expect(searchLine).toContain("text-align: right");
 
+    expect(quickJumpSearch).toContain("border-radius: var(--radius-md)");
     expect(quickOpen).toContain("border: 1px solid var(--surface-overlay-border)");
     expect(quickOpen).toContain("border-radius: var(--radius-overlay)");
     expect(quickOpen).toContain("background: var(--surface-overlay-bg)");
+    expect(quickOpenSearch).toContain("border-radius: var(--radius-md)");
     expect(quickOpenSearch).toContain(
       "border-bottom: 1px solid var(--component-mix-border-default-82pct-transparent)"
     );
@@ -3227,9 +3273,12 @@ describe("components.css theme-sensitive surfaces", () => {
   it("keeps the desktop git panel and command palette on tighter tool-surface chrome", () => {
     const gitScroll = getLastRuleBlock(".git-panel-scroll");
     const gitCommitBlock = getLastRuleBlock(".git-commit-block");
+    const gitCommitInputFocus = getLastRuleBlock(".git-panel .git-commit-input:focus");
     const gitSection = getLastRuleBlock(".git-panel-section");
     const gitWorktreeRow = getLastRuleBlock(".git-worktree-row");
     const gitHistoryRow = getLastRuleBlock(".git-history-row");
+    const gitRowActive = getLastRuleBlock(".git-panel .git-row.active");
+    const gitHistoryRowCurrent = getLastRuleBlock(".git-history-row.current");
     const commandPalette = getLastRuleBlock(".command-palette");
     const commandPaletteDesktop = getLastRuleBlock(".command-palette--desktop");
     const commandPaletteHeader = getLastRuleBlock(".command-palette-header");
@@ -3240,10 +3289,16 @@ describe("components.css theme-sensitive surfaces", () => {
     const commandPaletteItemShortcut = getLastRuleBlock(".command-palette-item-shortcut");
 
     expect(gitScroll).toContain("gap: 14px");
-    expect(gitCommitBlock).toContain("gap: 10px");
+    expect(gitCommitBlock).toContain("gap: var(--sp-2)");
+    expect(gitCommitInputFocus).toContain("outline: none");
     expect(gitSection).toContain("gap: 8px");
     expect(gitWorktreeRow).toContain("min-height: 28px");
     expect(gitHistoryRow).toContain("min-height: 34px");
+    expect(hasRuleBlock(".git-panel .git-row.active::before")).toBe(false);
+    expect(gitRowActive).toContain("border-color: var(--state-selected-border)");
+    expect(gitRowActive).toContain("background: var(--state-selected-bg)");
+    expect(gitHistoryRowCurrent).toContain("border-color: var(--state-selected-border)");
+    expect(gitHistoryRowCurrent).toContain("background: var(--state-selected-bg)");
     expect(commandPalette).toContain("max-width: var(--desktop-modal-max-width-md)");
     expect(commandPaletteDesktop).toContain("overflow: hidden");
     expect(commandPaletteHeader).toContain("padding: var(--sp-3) var(--sp-4)");

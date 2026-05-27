@@ -395,7 +395,9 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
       <div className={`file-tree-shell file-tree-shell--${variant}`}>
         {showSearch ? (
           <label
-            className={`file-tree-search ${variant === "desktop" ? "file-tree-search--desktop" : ""}`}
+            className={`file-tree-search workspace-sidebar-control ${
+              variant === "desktop" ? "file-tree-search--desktop" : ""
+            }`}
             htmlFor={`file-tree-search-${workspaceId}`}
           >
             <ThemedIcon
@@ -559,9 +561,9 @@ const FileSearchResultRow: FC<FileSearchResultRowProps> = ({
 
   return (
     <div
-      className={`tree-item tree-item--file ${selectedPath === node.path ? "selected" : ""} ${
-        isContextTarget ? "tree-item--context-target" : ""
-      }`}
+      className={`tree-item workspace-sidebar-row tree-item--file ${
+        selectedPath === node.path ? "selected workspace-sidebar-row--selected" : ""
+      } ${isContextTarget ? "tree-item--context-target" : ""}`}
       draggable={variant === "desktop" ? true : undefined}
       onDragStart={variant === "desktop" ? handleDragStart : undefined}
       onClick={() => {
@@ -706,8 +708,8 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
   return (
     <>
       <div
-        className={`tree-item tree-item--${node.kind} ${
-          selectedPath === node.path ? "selected" : ""
+        className={`tree-item workspace-sidebar-row tree-item--${node.kind} ${
+          selectedPath === node.path ? "selected workspace-sidebar-row--selected" : ""
         } ${contextTargetPath === node.path ? "tree-item--context-target" : ""}`}
         draggable={variant === "desktop" ? true : undefined}
         onDragStart={variant === "desktop" ? handleDragStart : undefined}
