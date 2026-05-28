@@ -284,6 +284,8 @@ describe("DiagnosticsPage", () => {
 
   it("installs a missing git dependency inline, accepts a sudo password, and rechecks on success", async () => {
     let diagnosticsCallCount = 0;
+    let installGetCalls = 0;
+    let submitted = false;
     let subscriptionHandler: ((topic: string, payload: unknown) => void) | undefined;
     const sendCommand = vi.fn(async (op: string, args?: Record<string, unknown>) => {
       if (op === "diagnostics.get" || op === "diagnostics.recheck") {
@@ -332,6 +334,7 @@ describe("DiagnosticsPage", () => {
       }
 
       if (op === "systemDeps.install.input") {
+        submitted = true;
         expect(args).toEqual({ jobId: "job-1", text: "hunter2\n" });
         return {
           jobId: "job-1",
@@ -345,6 +348,23 @@ describe("DiagnosticsPage", () => {
       }
 
       if (op === "systemDeps.install.get") {
+        installGetCalls += 1;
+        if (!submitted) {
+          return {
+            jobId: "job-1",
+            dependencyId: "git",
+            status: "waiting_input",
+            packageManager: "apt-get",
+            currentStepId: "install-git",
+            steps: [],
+            interaction: {
+              kind: "sudo_password",
+              promptExcerpt: "[sudo] password for spencer:",
+              echo: false,
+            },
+          };
+        }
+
         return {
           jobId: "job-1",
           dependencyId: "git",
@@ -396,6 +416,13 @@ describe("DiagnosticsPage", () => {
 
     expect(await screen.findByText("downloading git")).toBeInTheDocument();
 
+    await waitFor(() => {
+      expect(installGetCalls).toBeGreaterThanOrEqual(1);
+    });
+
+    expect(screen.getByText("downloading git")).toBeInTheDocument();
+    expect(screen.getByTestId("system-dependency-password-form")).toBeInTheDocument();
+
     fireEvent.change(screen.getByLabelText("Administrator password"), {
       target: { value: "hunter2" },
     });
@@ -403,22 +430,16 @@ describe("DiagnosticsPage", () => {
 
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith(
-        "systemDeps.install.get",
-        { jobId: "job-1" },
+        "diagnostics.recheck",
+        {
+          context: "manual_check",
+          workspaceId: undefined,
+          workspacePath: undefined,
+          providerId: undefined,
+        },
         undefined
       );
     });
-
-    expect(sendCommand).toHaveBeenCalledWith(
-      "diagnostics.recheck",
-      {
-        context: "manual_check",
-        workspaceId: undefined,
-        workspacePath: undefined,
-        providerId: undefined,
-      },
-      undefined
-    );
     expect(await screen.findByText("Git is ready")).toBeInTheDocument();
   });
 

@@ -305,6 +305,13 @@ export function WorkspaceMobileView() {
       <CodeEditorHeaderActions state={mobileEditorState} variant="mobile" />
     ) : null;
 
+  const rootFilesSheetTitle =
+    mobileFilesView === "explorer"
+      ? t("workspace.sidebar.explorer")
+      : mobileFilesView === "search"
+        ? t("workspace.sidebar.search")
+        : t("workspace.sidebar.source_control");
+
   const sheetBody =
     mobileSheet === "files"
       ? {
@@ -313,7 +320,7 @@ export function WorkspaceMobileView() {
               ? (mobileFilesRoute.title ??
                 mobileFilesRoute.path?.split("/").pop() ??
                 t("mobile.files.editor_fallback"))
-              : "",
+              : rootFilesSheetTitle,
           body: activeWorkspaceId ? (
             <MobileFilesSheet
               workspaceId={activeWorkspaceId}

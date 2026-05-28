@@ -17,6 +17,25 @@ import {
 import { OpenEditorsSection } from "../shared/open-editors-section";
 import { WorkspaceMobileView } from "./workspace-mobile-view";
 
+vi.hoisted(() => {
+  const matchMedia = vi.fn((query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+  }));
+
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    writable: true,
+    value: matchMedia,
+  });
+});
+
 vi.mock("../../../../lib/i18n", () => ({
   useTranslation: () => (key: string, params?: Record<string, string>) => {
     const translations: Record<string, string> = {
@@ -105,6 +124,31 @@ vi.mock("../../actions/use-workspace-fullscreen", () => ({
 vi.mock("../../actions/use-workspace-ui-state-persistence", () => ({
   useWorkspaceUiStatePersistence: () => ({
     persistUiState: vi.fn().mockResolvedValue(true),
+  }),
+}));
+
+vi.mock("../../../code-editor/views/shared/code-editor-host", () => ({
+  CodeEditorHeaderActions: () => null,
+  CodeEditorHost: () => null,
+}));
+
+vi.mock("../../../code-editor/actions/use-code-editor-actions", () => ({
+  useCodeEditorActions: () => ({
+    activeFilePath: null,
+    activeDiffChange: null,
+    canDiff: false,
+    canEdit: false,
+    canPreview: false,
+    canSave: false,
+    handleClose: vi.fn(),
+    handleSave: vi.fn(),
+    isImageFile: false,
+    isSaving: false,
+    isSvgTextBacked: false,
+    mode: "edit",
+    openInDiffMode: vi.fn(),
+    setMode: vi.fn(),
+    toggleSvgTextMode: vi.fn(),
   }),
 }));
 
@@ -426,7 +470,7 @@ describe("WorkspaceMobileView", () => {
     });
   });
 
-  it("uses an empty root files sheet title while keeping root content visible", () => {
+  it("shows the explorer title for the root files sheet", () => {
     renderMobileView({
       activePath: null,
       openFiles: {
@@ -444,9 +488,7 @@ describe("WorkspaceMobileView", () => {
     fireEvent.click(screen.getByRole("button", { name: "Files" }));
 
     expect(screen.getByTestId("mobile-files-sheet-root")).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: /^Sheet$/ })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { level: 2, name: "Explorer" })).toBeNull();
-    expect(screen.queryByRole("heading", { level: 2, name: "Search" })).toBeNull();
-    expect(screen.queryByRole("heading", { level: 2, name: "Source Control" })).toBeNull();
+    expect(screen.getByRole("region", { name: "Sheet Explorer" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "Explorer" })).toBeInTheDocument();
   });
 });
