@@ -4,9 +4,10 @@
 
 import { readdir, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
-import { isAbsolute, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import type { WorkspacePaneNode } from "@coder-studio/core";
 import { z } from "zod";
+import { createDirectory } from "../fs/file-io.js";
 import { inspectWorkspaceIntelligence } from "../workspace/intelligence.js";
 import { registerCommand } from "../ws/dispatch.js";
 
@@ -118,6 +119,25 @@ registerCommand(
       directories,
       rootPaths: await buildRootPaths(basePath),
     };
+  }
+);
+
+registerCommand(
+  "workspace.mkdir",
+  z.object({
+    path: z.string(),
+  }),
+  async (args) => {
+    const targetPath = resolveBrowsePath(args.path);
+    const parentPath = dirname(targetPath);
+    const dirName = basename(targetPath);
+
+    if (!dirName || dirName === "." || dirName === "..") {
+      throw { code: "invalid_path", message: "Folder name is required" };
+    }
+
+    await createDirectory(parentPath, dirName);
+    return { ok: true };
   }
 );
 

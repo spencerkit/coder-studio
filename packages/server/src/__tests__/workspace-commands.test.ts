@@ -1,5 +1,5 @@
 import { mkdtempSync, rmSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, stat, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -188,6 +188,52 @@ describe("Workspace Commands", () => {
       expect((result.data as { rootPaths?: string[] }).rootPaths).toEqual(
         expect.arrayContaining(["/", homedir()])
       );
+    });
+  });
+
+  describe("workspace.mkdir", () => {
+    it("creates a directory at an absolute browse path", async () => {
+      const dir = join(tmpdir(), `workspace-mkdir-test-${Date.now()}`);
+      await mkdir(dir, { recursive: true });
+
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "workspace-mkdir-success",
+          op: "workspace.mkdir",
+          args: {
+            path: join(dir, "demo"),
+          },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(true);
+      await expect(stat(join(dir, "demo"))).resolves.toMatchObject({
+        isDirectory: expect.any(Function),
+      });
+    });
+
+    it("rejects creating a directory that already exists", async () => {
+      const dir = join(tmpdir(), `workspace-mkdir-exists-${Date.now()}`);
+      await mkdir(join(dir, "demo"), { recursive: true });
+
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "workspace-mkdir-exists",
+          op: "workspace.mkdir",
+          args: {
+            path: join(dir, "demo"),
+          },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.error).toMatchObject({
+        code: "already_exists",
+      });
     });
   });
 
