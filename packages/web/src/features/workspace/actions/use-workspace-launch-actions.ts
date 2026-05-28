@@ -1,6 +1,6 @@
 import type { FileNode, GitStatus, Workspace, WorktreeInfo } from "@coder-studio/core";
 import { useAtomValue, useSetAtom } from "jotai";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { dispatchCommandAtom, wsClientAtom } from "../../../atoms/connection";
 import {
@@ -62,6 +62,7 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
   const [newFolderName, setNewFolderName] = useState("");
   const [createFolderError, setCreateFolderError] = useState<string | null>(null);
   const [creatingFolder, setCreatingFolder] = useState(false);
+  const createRequestIdRef = useRef(0);
 
   const launchTitle = t("workspace.launch.title");
   const launchHint = t("workspace.launch.hint");
@@ -112,6 +113,7 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
 
   const handleNavigate = useCallback(
     (path: string) => {
+      createRequestIdRef.current += 1;
       setSelectedPath(null);
       setIsCreatingFolder(false);
       setNewFolderName("");
@@ -163,11 +165,17 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
 
     setCreatingFolder(true);
     setCreateFolderError(null);
+    const requestId = createRequestIdRef.current + 1;
+    createRequestIdRef.current = requestId;
 
     try {
       const createResult = await dispatch<CreateDirectoryResult>("workspace.mkdir", {
         path: joinChildPath(currentPath, trimmedName),
       });
+
+      if (createRequestIdRef.current !== requestId) {
+        return;
+      }
 
       if (!createResult.ok) {
         setCreateFolderError(
@@ -177,6 +185,10 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
       }
 
       const browseResult = await dispatch<BrowseResult>("workspace.browse", { path: currentPath });
+
+      if (createRequestIdRef.current !== requestId) {
+        return;
+      }
 
       if (!browseResult.ok || !browseResult.data) {
         setCreateFolderError(
@@ -197,9 +209,14 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
       setNewFolderName("");
       setCreateFolderError(null);
     } catch (err) {
+      if (createRequestIdRef.current !== requestId) {
+        return;
+      }
       setCreateFolderError(err instanceof Error ? err.message : String(err));
     } finally {
-      setCreatingFolder(false);
+      if (createRequestIdRef.current === requestId) {
+        setCreatingFolder(false);
+      }
     }
   }, [currentPath, dispatch, newFolderName, t]);
 

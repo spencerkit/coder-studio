@@ -854,5 +854,17 @@ describe("WorkspaceLaunchModal", () => {
     });
 
     resolveCreate?.();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("current-path")).toHaveTextContent("/home/spencer/projects");
+    });
+
+    expect(screen.getByTestId("selected-path")).toHaveTextContent("");
+    expect(screen.getByTestId("is-creating-folder")).toHaveTextContent("false");
+    expect(sendCommand).not.toHaveBeenCalledWith(
+      "workspace.browse",
+      { path: "/home/spencer" },
+      undefined
+    );
   });
 });
