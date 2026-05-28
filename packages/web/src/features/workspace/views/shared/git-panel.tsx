@@ -69,6 +69,7 @@ interface GitPanelState {
   worktreeSurfaceView: "create" | null;
   commitExpanded: boolean;
   worktreesExpanded: boolean;
+  changesExpanded: boolean;
   historyExpanded: boolean;
 }
 
@@ -78,6 +79,7 @@ function createInitialGitPanelState(): GitPanelState {
     worktreeSurfaceView: null,
     commitExpanded: true,
     worktreesExpanded: false,
+    changesExpanded: true,
     historyExpanded: false,
   };
 }
@@ -134,6 +136,7 @@ export const GitPanel: FC<GitPanelProps> = ({
     useWorktreeManagementActions(workspaceId);
   const worktreeAutoLoadAttemptedRef = useRef(false);
   const {
+    changesExpanded,
     commitExpanded,
     historyExpanded,
     pendingWorktreeDeletePath,
@@ -149,6 +152,7 @@ export const GitPanel: FC<GitPanelProps> = ({
     ? t("git.commit_collapse_label")
     : t("git.commit_expand_label");
   const worktreesSectionLabel = `${t("worktree.list_title")}${list.items.length}`;
+  const changesSectionLabel = `${t("git.changes")}${totalChangeCount}`;
   const historySectionLabel = `${t("git.history")}${history.length}`;
 
   useEffect(() => {
@@ -403,14 +407,22 @@ export const GitPanel: FC<GitPanelProps> = ({
           ) : null}
 
           <GitChangesSection
+            changesExpanded={changesExpanded}
             groups={groups}
             totalCount={totalChangeCount}
             isLoading={isLoading}
             mobile={isMobile}
             selectedPath={diffPreview?.path ?? null}
+            sectionLabel={changesSectionLabel}
             onStageAll={handleStageAll}
             onUnstageAll={handleUnstageAll}
             onDiscardAll={handleDiscardAll}
+            onToggleExpanded={() =>
+              setPanelState((current) => ({
+                ...current,
+                changesExpanded: !current.changesExpanded,
+              }))
+            }
             onViewDiff={openDiff}
             onRunMutation={runGitMutation}
             onRequestDiscard={handleRequestDiscardSingle}
@@ -526,13 +538,16 @@ export const GitPanel: FC<GitPanelProps> = ({
 };
 
 interface GitChangesSectionProps {
+  changesExpanded: boolean;
   groups: Array<{ title: string; changes: GitPanelChangeItem[] }>;
   totalCount: number;
   isLoading: boolean;
   mobile: boolean;
+  sectionLabel: string;
   selectedPath: string | null;
   workspaceId: string;
   onDiscardAll: () => void;
+  onToggleExpanded: () => void;
   onRequestDiscard: (path: string) => void;
   onRunMutation: (
     op: "git.stage" | "git.unstage" | "git.discard" | "git.commit",
@@ -547,13 +562,16 @@ interface GitChangesSectionProps {
 }
 
 const GitChangesSection: FC<GitChangesSectionProps> = ({
+  changesExpanded,
   groups,
   totalCount,
   isLoading,
   mobile,
+  sectionLabel,
   selectedPath,
   workspaceId,
   onDiscardAll,
+  onToggleExpanded,
   onRequestDiscard,
   onRunMutation,
   onStageAll,
@@ -568,13 +586,19 @@ const GitChangesSection: FC<GitChangesSectionProps> = ({
   return (
     <section className="git-panel-section git-panel-section-changes">
       <div className="git-panel-section-header">
-        <div className="git-panel-section-toggle git-panel-section-toggle-static">
-          <span className="git-panel-section-chevron expanded" aria-hidden="true">
-            <ChevronDown size={14} />
+        <button
+          type="button"
+          className="git-panel-section-toggle"
+          onClick={onToggleExpanded}
+          aria-expanded={changesExpanded}
+          aria-label={sectionLabel}
+        >
+          <span className="git-panel-section-chevron">
+            {changesExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
           </span>
           <span>{t("git.changes")}</span>
           <span className="git-panel-section-count">{totalCount}</span>
-        </div>
+        </button>
         <div className="git-panel-section-actions">
           {hasStaged ? (
             <Tooltip content={t("git.unstage_all")}>
@@ -608,25 +632,27 @@ const GitChangesSection: FC<GitChangesSectionProps> = ({
         </div>
       </div>
 
-      <div className="git-panel-section-body git-panel-section-body--changes">
-        {totalCount === 0 ? (
-          <GitPanelEmptyState title={isLoading ? t("common.loading") : t("git.no_changes")} />
-        ) : (
-          changes.map(({ change, type }) => (
-            <GitChangeRow
-              key={`${type}:${change.path}`}
-              change={change}
-              type={type}
-              mobile={mobile}
-              workspaceId={workspaceId}
-              selected={selectedPath === change.path}
-              onViewDiff={onViewDiff}
-              onRunMutation={onRunMutation}
-              onRequestDiscard={onRequestDiscard}
-            />
-          ))
-        )}
-      </div>
+      {changesExpanded ? (
+        <div className="git-panel-section-body git-panel-section-body--changes">
+          {totalCount === 0 ? (
+            <GitPanelEmptyState title={isLoading ? t("common.loading") : t("git.no_changes")} />
+          ) : (
+            changes.map(({ change, type }) => (
+              <GitChangeRow
+                key={`${type}:${change.path}`}
+                change={change}
+                type={type}
+                mobile={mobile}
+                workspaceId={workspaceId}
+                selected={selectedPath === change.path}
+                onViewDiff={onViewDiff}
+                onRunMutation={onRunMutation}
+                onRequestDiscard={onRequestDiscard}
+              />
+            ))
+          )}
+        </div>
+      ) : null}
     </section>
   );
 };

@@ -556,6 +556,100 @@ describe("GitPanel", () => {
     expect(historyToggle.querySelector(".git-panel-section-chevron")).not.toBeNull();
   });
 
+  it("renders the desktop changes section as a collapsible header with a chevron", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return status;
+      }
+
+      if (op === "git.branches") {
+        return { current: "feature/ai-agent", branches: [] };
+      }
+
+      if (op === "worktree.list") {
+        return {
+          worktrees,
+        };
+      }
+
+      if (op === "git.log") {
+        return {
+          entries: historyEntries,
+        };
+      }
+
+      return {};
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedWorkspaceStore(store);
+
+    render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    const changesToggle = await screen.findByRole("button", { name: "Changes4" });
+
+    expect(changesToggle).toHaveAttribute("aria-expanded", "true");
+    expect(changesToggle.querySelector(".git-panel-section-chevron")).not.toBeNull();
+  });
+
+  it("toggles the changes list from the changes section header", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return status;
+      }
+
+      if (op === "git.branches") {
+        return { current: "feature/ai-agent", branches: [] };
+      }
+
+      if (op === "worktree.list") {
+        return {
+          worktrees,
+        };
+      }
+
+      if (op === "git.log") {
+        return {
+          entries: historyEntries,
+        };
+      }
+
+      return {};
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedWorkspaceStore(store);
+
+    render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    const changesToggle = await screen.findByRole("button", { name: "Changes4" });
+
+    expect(screen.getByText("AuthGate.tsx")).toBeInTheDocument();
+
+    fireEvent.click(changesToggle);
+
+    expect(changesToggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("AuthGate.tsx")).toBeNull();
+    expect(screen.getByRole("button", { name: "Stage All" })).toBeInTheDocument();
+
+    fireEvent.click(changesToggle);
+
+    expect(changesToggle).toHaveAttribute("aria-expanded", "true");
+    expect(await screen.findByText("AuthGate.tsx")).toBeInTheDocument();
+  });
+
   it("keeps the worktree list collapsed by default", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "git.status") {
@@ -2668,12 +2762,14 @@ describe("GitPanel", () => {
     );
 
     fireEvent.click(await screen.findByRole("button", { name: /Worktrees/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Changes4" }));
     fireEvent.click(screen.getByRole("button", { name: "History2" }));
     fireEvent.click(screen.getByRole("button", { name: "New" }));
 
     expect(await screen.findByText("pr/123-fix-auth")).toBeInTheDocument();
-    expect(await screen.findByText("feat: refresh source control surface")).toBeInTheDocument();
+    expect(screen.queryByText("AuthGate.tsx")).toBeNull();
     expect(await screen.findByLabelText("Branch")).toBeInTheDocument();
+    expect(await screen.findByText("feat: refresh source control surface")).toBeInTheDocument();
 
     rerender(
       <Provider store={store}>
@@ -2689,7 +2785,12 @@ describe("GitPanel", () => {
       "aria-expanded",
       "false"
     );
+    expect(screen.getByRole("button", { name: "Changes4" })).toHaveAttribute(
+      "aria-expanded",
+      "true"
+    );
     expect(screen.queryByText("pr/123-fix-auth")).toBeNull();
+    expect(screen.getByText("AuthGate.tsx")).toBeInTheDocument();
     expect(screen.queryByText("feat: refresh source control surface")).toBeNull();
     expect(screen.queryByLabelText("Branch")).toBeNull();
 
@@ -2707,7 +2808,12 @@ describe("GitPanel", () => {
       "aria-expanded",
       "true"
     );
+    expect(screen.getByRole("button", { name: "Changes4" })).toHaveAttribute(
+      "aria-expanded",
+      "false"
+    );
     expect(await screen.findByText("pr/123-fix-auth")).toBeInTheDocument();
+    expect(screen.queryByText("AuthGate.tsx")).toBeNull();
     expect(await screen.findByText("feat: refresh source control surface")).toBeInTheDocument();
     expect(await screen.findByLabelText("Branch")).toBeInTheDocument();
   });
