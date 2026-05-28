@@ -5936,21 +5936,11 @@ body.is-dragging-pane {
   border-bottom: 1px solid var(--border-default);
 }
 
-.launch-header-left .launch-kicker {
-  font-size: var(--type-body-6-size);
-  line-height: var(--type-body-6-line-height);
-  font-weight: var(--type-body-6-weight);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-tertiary);
-}
-
 .launch-header-left .launch-title {
   font-size: var(--type-heading-4-size);
   line-height: var(--type-heading-4-line-height);
   font-weight: var(--type-heading-4-weight);
   color: var(--text-primary);
-  margin-top: var(--sp-1);
 }
 
 .launch-header-left .launch-hint {
@@ -6032,6 +6022,67 @@ body.is-dragging-pane {
   gap: var(--sp-1);
   margin-bottom: var(--sp-2);
   flex-wrap: wrap;
+}
+
+.fp-create-folder {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+}
+
+.fp-create-folder .form-error {
+  grid-column: 1 / -1;
+  margin-top: 0;
+}
+
+.fp-create-folder__input {
+  min-width: 0;
+}
+
+.fp-create-folder__action,
+.fp-create-folder__cancel {
+  min-height: 36px;
+  padding: 0 var(--sp-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+  font-size: var(--type-body-5-size);
+  line-height: var(--type-body-5-line-height);
+  font-weight: var(--type-body-5-weight);
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    opacity var(--duration-fast) var(--ease-out);
+}
+
+.fp-create-folder__action {
+  background: var(--state-info-bg);
+  border-color: var(--state-info-border);
+  color: var(--state-info-text);
+}
+
+.fp-create-folder__action:hover {
+  background: var(--component-mix-state-info-bg-78pct-surface-panel-22pct);
+  color: var(--text-primary);
+}
+
+.fp-create-folder__cancel {
+  background: var(--surface-panel);
+  color: var(--text-secondary);
+}
+
+.fp-create-folder__cancel:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.fp-create-folder__action:disabled,
+.fp-create-folder__cancel:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .fp-chip {
@@ -11239,6 +11290,16 @@ body.is-dragging-pane .session-action-btn-drag {
 
   .mobile-launch-sheet .fp-root-chips {
     margin-bottom: var(--sp-3);
+  }
+
+  .mobile-launch-sheet .fp-create-folder {
+    grid-template-columns: 1fr;
+    margin-bottom: var(--sp-3);
+  }
+
+  .mobile-launch-sheet .fp-create-folder__action,
+  .mobile-launch-sheet .fp-create-folder__cancel {
+    min-height: 44px;
   }
 
   .mobile-launch-sheet .folder-picker,

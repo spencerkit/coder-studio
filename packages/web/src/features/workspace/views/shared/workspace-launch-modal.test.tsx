@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../../../atoms/app-ui";
 import { wsClientAtom } from "../../../../atoms/connection";
 import { CommandResultError } from "../../../../ws/client";
@@ -29,6 +29,12 @@ vi.mock("react-router-dom", async () => {
     useLocation: () => routerMocks.location,
   };
 });
+
+const activeElementState = {
+  current: null as HTMLElement | null,
+};
+
+const originalFocus = HTMLElement.prototype.focus;
 
 function WorkspaceLaunchActionsHarness() {
   const actions = useWorkspaceLaunchActions(vi.fn());
@@ -59,10 +65,33 @@ function WorkspaceLaunchActionsHarness() {
 }
 
 describe("WorkspaceLaunchModal", () => {
+  beforeEach(() => {
+    activeElementState.current = document.body;
+
+    Object.defineProperty(document, "activeElement", {
+      configurable: true,
+      get: () => activeElementState.current,
+    });
+
+    Object.defineProperty(HTMLElement.prototype, "focus", {
+      configurable: true,
+      writable: true,
+      value: function focus() {
+        activeElementState.current = this;
+      },
+    });
+  });
+
   afterEach(() => {
     viewportMocks.viewport = "desktop";
     routerMocks.navigate.mockReset();
     routerMocks.location.pathname = "/";
+    Object.defineProperty(HTMLElement.prototype, "focus", {
+      configurable: true,
+      writable: true,
+      value: originalFocus,
+    });
+    delete (document as Document & { activeElement?: Element }).activeElement;
     vi.restoreAllMocks();
   });
 
@@ -237,7 +266,7 @@ describe("WorkspaceLaunchModal", () => {
     expect(screen.queryByText(/Target:/)).not.toBeInTheDocument();
     expect(screen.queryByText("Local Folder")).not.toBeInTheDocument();
     expect(screen.queryByText("Remote Git")).not.toBeInTheDocument();
-    expect(screen.getByText("Open Workspace")).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Start Workspace" })).toBeInTheDocument();
     expect(screen.getAllByText("Select a directory to use as the workspace root.")).toHaveLength(1);
     expect(document.querySelector(".launch-path-display")).toBeNull();
 
@@ -493,7 +522,7 @@ describe("WorkspaceLaunchModal", () => {
       </Provider>
     );
 
-    expect(await screen.findByRole("dialog", { name: "Open Workspace" })).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: "Start Workspace" })).toBeInTheDocument();
     expect(document.querySelector(".workbench-layer-backdrop")).toBeTruthy();
     expect(document.querySelector(".launch-overlay")).toBeNull();
     expect(document.querySelector(".launch-modal")).toBeTruthy();
@@ -521,7 +550,7 @@ describe("WorkspaceLaunchModal", () => {
       </Provider>
     );
 
-    expect(await screen.findByText("Open Workspace")).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: "Start Workspace" })).toBeInTheDocument();
     expect(screen.queryByText("Local Folder")).not.toBeInTheDocument();
     expect(screen.queryByText("Remote Git")).not.toBeInTheDocument();
     expect(screen.getAllByText("Select a directory to use as the workspace root.")).toHaveLength(1);
@@ -558,6 +587,144 @@ describe("WorkspaceLaunchModal", () => {
     expect(loadingShell).toBeTruthy();
     expect(spinner).toHaveClass("animate-spin");
     expect(document.querySelector(".directory-loading .animate-spin")).toBe(spinner);
+  });
+
+  it("shows a single desktop launch title with an inline new-folder entry point", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({
+      currentPath: "/home/spencer",
+      parentPath: "/home",
+      directories: [{ name: "workspace", path: "/home/spencer/workspace", itemCount: 3 }],
+    });
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <WorkspaceLaunchModal onClose={vi.fn()} />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    expect(await screen.findByRole("dialog", { name: "Start Workspace" })).toBeInTheDocument();
+    expect(document.querySelector(".launch-header-left .launch-title")?.textContent).toBe(
+      "Start Workspace"
+    );
+    expect(document.querySelector(".launch-kicker")).toBeNull();
+    expect(screen.getByRole("button", { name: "New Folder" })).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Folder Name" })).not.toBeInTheDocument();
+  });
+
+  it("opens the inline new-folder form and closes it without dismissing the modal", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({
+      currentPath: "/home/spencer",
+      parentPath: "/home",
+      directories: [],
+    });
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <WorkspaceLaunchModal onClose={vi.fn()} />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    await screen.findByRole("dialog", { name: "Start Workspace" });
+
+    fireEvent.click(screen.getByRole("button", { name: "New Folder" }));
+
+    const input = screen.getByRole("textbox", { name: "Folder Name" });
+    await waitFor(() => {
+      expect(input).toHaveFocus();
+    });
+    expect(screen.getByRole("button", { name: "Create Folder" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+
+    fireEvent.change(input, { target: { value: "feature-demo" } });
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(screen.queryByRole("textbox", { name: "Folder Name" })).not.toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Start Workspace" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "New Folder" }));
+    const reopenedInput = screen.getByRole("textbox", { name: "Folder Name" });
+    fireEvent.change(reopenedInput, { target: { value: "feature-demo" } });
+    fireEvent.keyDown(reopenedInput, { key: "Escape" });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("textbox", { name: "Folder Name" })).not.toBeInTheDocument();
+    });
+
+    expect(screen.getByRole("dialog", { name: "Start Workspace" })).toBeInTheDocument();
+  });
+
+  it("submits the inline new-folder form with Enter and keeps the new folder selected", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args: { path?: string }) => {
+      if (op === "workspace.browse" && args.path === "/home/spencer") {
+        return {
+          currentPath: "/home/spencer",
+          parentPath: "/home",
+          directories: [
+            { name: "feature-demo", path: "/home/spencer/feature-demo", itemCount: 0 },
+            { name: "workspace", path: "/home/spencer/workspace", itemCount: 3 },
+          ],
+        };
+      }
+
+      if (op === "workspace.browse") {
+        return {
+          currentPath: "/home/spencer",
+          parentPath: "/home",
+          directories: [{ name: "workspace", path: "/home/spencer/workspace", itemCount: 3 }],
+        };
+      }
+
+      if (op === "workspace.mkdir") {
+        return { ok: true };
+      }
+
+      return {};
+    });
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <WorkspaceLaunchModal onClose={vi.fn()} />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    await screen.findByRole("dialog", { name: "Start Workspace" });
+
+    fireEvent.click(screen.getByRole("button", { name: "New Folder" }));
+
+    const input = screen.getByRole("textbox", { name: "Folder Name" });
+    fireEvent.change(input, { target: { value: "feature-demo" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "workspace.mkdir",
+        { path: "/home/spencer/feature-demo" },
+        undefined
+      );
+    });
+
+    await waitFor(() => {
+      expect(document.querySelector(".fp-dir.selected .fp-dir-name")?.textContent?.trim()).toBe(
+        "feature-demo"
+      );
+    });
+
+    expect(screen.queryByRole("textbox", { name: "Folder Name" })).not.toBeInTheDocument();
   });
 
   it("opens and cancels the inline folder form", async () => {

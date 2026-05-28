@@ -67,17 +67,6 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
   const launchTitle = t("workspace.launch.title");
   const launchHint = t("workspace.launch.hint");
 
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
-
   const loadDirectory = useCallback(
     async (path?: string) => {
       setBrowsing(true);
