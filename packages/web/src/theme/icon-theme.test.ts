@@ -126,6 +126,18 @@ describe("theme icon resolver", () => {
     }
   });
 
+  it("keeps workspace activity navigation icons aligned within each built-in theme", () => {
+    for (const themeId of builtInThemes) {
+      const tones = new Set([
+        getIconPresentation(themeId, "nav.explorer").tone,
+        getIconPresentation(themeId, "nav.search").tone,
+        getIconPresentation(themeId, "nav.sourceControl").tone,
+      ]);
+
+      expect(tones.size).toBe(1);
+    }
+  });
+
   it("locks the approved base contract for semantic status icons", () => {
     for (const [semantic, expected] of semanticStatusExpectations) {
       expect(BASE_ICON_THEME.icons[semantic]).toEqual(expected);

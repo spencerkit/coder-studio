@@ -24,7 +24,7 @@ export const WorkspaceActivityBar: FC<WorkspaceActivityBarProps> = ({
     {
       view: "source-control",
       label: t("workspace.sidebar.source_control"),
-      icon: "git.branch",
+      icon: "nav.sourceControl",
     },
   ];
 
