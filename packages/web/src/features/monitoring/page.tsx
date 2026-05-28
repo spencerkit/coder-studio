@@ -13,14 +13,7 @@ import { connectionStatusAtom, wsClientAtom } from "../../atoms/connection";
 import { Button, Notice, SegmentedControl, Tag } from "../../components/ui";
 import { useViewport } from "../../hooks/use-viewport";
 import { useTranslation } from "../../lib/i18n";
-import {
-  formatBytes,
-  formatLoadAverage,
-  formatPercent,
-  formatRefreshInterval,
-  formatTimestamp,
-  formatUptime,
-} from "./formatters";
+import { formatBytes, formatLoadAverage, formatPercent, formatUptime } from "./formatters";
 import { Sparkline } from "./sparkline";
 
 type SortMode = "cpu" | "memory";
@@ -28,6 +21,7 @@ type TimeWindow = "5m" | "15m" | "30m";
 type MonitoringViewStatus = "loading" | "disabled" | "ready" | "degraded" | "waiting" | "empty";
 export type MonitoringDashboardProps = UseMonitoringDataResult & {
   onOpenSettings?: () => void;
+  showRefreshControls?: boolean;
 };
 
 export type UseMonitoringDataResult = {
@@ -181,8 +175,8 @@ function EntityList({
           onClick={() => onSelect(entity)}
         >
           <div className="monitoring-entity-row__copy">
-            <strong>{entity.label}</strong>
-            <span>
+            <strong className="monitoring-entity-row__title">{entity.label}</strong>
+            <span className="monitoring-entity-row__meta">
               {formatPercent(entity.cpuPercent)} / {formatBytes(entity.memoryBytes)}
             </span>
           </div>
@@ -318,6 +312,7 @@ export function MonitoringDashboard({
   onOpenSettings,
   refresh: onRefresh,
   response,
+  showRefreshControls = true,
 }: MonitoringDashboardProps) {
   const t = useTranslation();
   const isMobile = useViewport() === "mobile";
@@ -409,42 +404,42 @@ export function MonitoringDashboard({
     return "empty";
   }, [processEntities.length, response, runtimeStatus]);
 
-  const refreshButton = (
-    <Button
-      aria-label={`${t("action.refresh")} ${t("monitoring.command_label").toLowerCase()}`}
-      size={isMobile ? "sm" : undefined}
-      variant={isMobile ? "ghost" : "secondary"}
-      onClick={() => void onRefresh()}
-    >
-      {t("action.refresh")}
-    </Button>
-  );
-
-  const toolbarSummary = response ? (
-    <div className="monitoring-card">
-      <div className="monitoring-card__header">
-        <strong>{formatRefreshInterval(response.settings.sampleIntervalMs)}</strong>
-        <Tag color="neutral" caps={false}>
-          {formatMonitoringMode(response.snapshot.mode, t)}
-        </Tag>
+  const stageToolbar =
+    response || showRefreshControls ? (
+      <div className="monitoring-stage-toolbar">
+        <div className="monitoring-stage-toolbar__copy">
+          {response ? (
+            <Tag color="neutral" caps={false}>
+              {formatMonitoringMode(response.snapshot.mode, t)}
+            </Tag>
+          ) : null}
+          <span className="monitoring-stage-toolbar__timestamp">{t("monitoring.time_window")}</span>
+        </div>
+        <div className="monitoring-stage-toolbar__controls">
+          <SegmentedControl
+            aria-label={t("monitoring.time_window")}
+            size="sm"
+            value={timeWindow}
+            onChange={(value) => setTimeWindow(value as TimeWindow)}
+            options={[
+              { value: "5m", label: "5m" },
+              { value: "15m", label: "15m" },
+              { value: "30m", label: "30m" },
+            ]}
+          />
+          {showRefreshControls ? (
+            <Button
+              aria-label={`${t("action.refresh")} ${t("monitoring.command_label").toLowerCase()}`}
+              size={isMobile ? "sm" : undefined}
+              variant={isMobile ? "ghost" : "secondary"}
+              onClick={() => void onRefresh()}
+            >
+              {t("action.refresh")}
+            </Button>
+          ) : null}
+        </div>
       </div>
-      <MetricRow
-        label={t("monitoring.last_updated")}
-        value={formatTimestamp(response.snapshot.sampledAt)}
-      />
-      <SegmentedControl
-        aria-label={t("monitoring.time_window")}
-        size="sm"
-        value={timeWindow}
-        onChange={(value) => setTimeWindow(value as TimeWindow)}
-        options={[
-          { value: "5m", label: "5m" },
-          { value: "15m", label: "15m" },
-          { value: "30m", label: "30m" },
-        ]}
-      />
-    </div>
-  ) : null;
+    ) : null;
 
   const primaryState =
     loading || (error && !response) ? (
@@ -569,6 +564,38 @@ export function MonitoringDashboard({
       </section>
     ) : null;
 
+  const attributionDetail =
+    response && response.settings.enabled ? (
+      <div className="monitoring-detail">
+        <div className="monitoring-card__header">
+          <h2>{t("monitoring.detail_panel")}</h2>
+          {selectedEntity ? (
+            <Tag color="neutral" caps={false}>
+              {selectedEntity.kind}
+            </Tag>
+          ) : null}
+        </div>
+        <p>{t("monitoring.select_entity")}</p>
+        {selectedEntity ? (
+          <>
+            <h3 className="monitoring-detail__entity-title">{selectedEntity.label}</h3>
+            {selectedEntity.kind === "subprocess_group" ? (
+              <code className="monitoring-detail__path">{selectedEntity.label}</code>
+            ) : null}
+            {entityDetailRows(selectedEntity, t).map((row) => (
+              <MetricRow key={row.label} label={row.label} value={row.value} />
+            ))}
+            <HistorySparkline
+              bundle={entityHistory(response.history, selectedEntity)}
+              metric="cpuPercent"
+              sampledAt={response.snapshot.sampledAt}
+              timeWindow={timeWindow}
+            />
+          </>
+        ) : null}
+      </div>
+    ) : null;
+
   const attributionSection =
     response && response.settings.enabled ? (
       <section className="monitoring-attribution">
@@ -622,33 +649,7 @@ export function MonitoringDashboard({
           )}
         </div>
 
-        {!isMobile ? (
-          <div className="monitoring-detail">
-            <div className="monitoring-card__header">
-              <h2>{t("monitoring.detail_panel")}</h2>
-              {selectedEntity ? (
-                <Tag color="neutral" caps={false}>
-                  {selectedEntity.kind}
-                </Tag>
-              ) : null}
-            </div>
-            <p>{t("monitoring.select_entity")}</p>
-            {selectedEntity ? (
-              <>
-                <h3 className="monitoring-detail__entity-title">{selectedEntity.label}</h3>
-                {entityDetailRows(selectedEntity, t).map((row) => (
-                  <MetricRow key={row.label} label={row.label} value={row.value} />
-                ))}
-                <HistorySparkline
-                  bundle={entityHistory(response.history, selectedEntity)}
-                  metric="cpuPercent"
-                  sampledAt={response.snapshot.sampledAt}
-                  timeWindow={timeWindow}
-                />
-              </>
-            ) : null}
-          </div>
-        ) : null}
+        {!isMobile ? attributionDetail : null}
       </section>
     ) : null;
 
@@ -697,10 +698,7 @@ export function MonitoringDashboard({
 
   return (
     <div className={`monitoring-dashboard ${isMobile ? "monitoring-dashboard--mobile" : ""}`}>
-      <div className="monitoring-toolbar">
-        {toolbarSummary}
-        <div className="monitoring-toolbar__actions">{refreshButton}</div>
-      </div>
+      {stageToolbar}
       {error && response ? (
         <Notice title={t("monitoring.refresh_failed")} message={error} tone="error" />
       ) : null}
@@ -708,6 +706,7 @@ export function MonitoringDashboard({
       {disabledState}
       {overviewSection}
       {attributionSection}
+      {isMobile && selectedEntity ? attributionDetail : null}
       {processSection}
     </div>
   );

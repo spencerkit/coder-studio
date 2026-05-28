@@ -1329,27 +1329,42 @@
   padding: var(--sp-4);
 }
 
-.settings-monitoring-core-controls {
+.settings-monitoring-signal-bar {
   display: grid;
-  grid-template-columns: minmax(280px, 1fr) minmax(0, 1.6fr);
+  grid-template-columns: minmax(240px, 1fr);
   gap: var(--sp-3);
-  align-items: stretch;
 }
 
-.settings-toggle-row--monitoring-primary {
+.settings-monitoring-signal-bar__primary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--sp-3);
+  align-items: center;
   min-height: 100%;
   padding: var(--sp-3);
-  border-bottom: none;
   border: 1px solid var(--component-mix-border-default-60pct-transparent);
   border-radius: var(--radius-lg);
   background: var(--component-mix-surface-panel-72pct-transparent);
 }
 
-.settings-monitoring-control-cluster {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--sp-3);
+.settings-monitoring-signal-bar__summary {
+  display: flex;
   min-width: 0;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+}
+
+.settings-monitoring-signal-bar__controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+  gap: var(--sp-3);
+  align-items: end;
+}
+
+.settings-monitoring-advanced-toggle-row {
+  display: flex;
+  justify-content: flex-start;
 }
 
 .monitoring-settings-row--stacked {
@@ -1371,29 +1386,33 @@
   justify-content: flex-start;
 }
 
-.settings-toggle-row--compact-card {
+.monitoring-settings-grid--capabilities {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-3);
+}
+
+.settings-monitoring-capability-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--sp-3);
   align-items: start;
-  min-width: 0;
-  min-height: 100%;
   padding: var(--sp-3);
-  border-bottom: none;
   border: 1px solid var(--component-mix-border-default-60pct-transparent);
   border-radius: var(--radius-lg);
   background: var(--component-mix-surface-panel-72pct-transparent);
 }
 
-.settings-toggle-row--compact-card .settings-toggle-info {
+.settings-monitoring-capability-card__copy {
+  display: flex;
   min-width: 0;
+  flex-direction: column;
+  gap: var(--sp-1);
 }
 
-.settings-toggle-row--compact-card .settings-toggle-label {
-  font-size: var(--type-body-4-size);
-  line-height: var(--type-body-4-line-height);
-  font-weight: var(--type-body-4-weight);
-}
-
-.settings-toggle-row--compact-card .settings-toggle {
-  align-self: center;
+.settings-monitoring-capability-card__dependency {
+  color: var(--text-tertiary);
+  font-size: var(--type-body-6-size);
+  line-height: var(--type-body-6-line-height);
 }
 
 .monitoring-settings-row--compact,
@@ -1492,6 +1511,26 @@
   text-align: left;
 }
 
+.monitoring-entity-row__copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.monitoring-entity-row__title {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow-wrap: anywhere;
+}
+
+.monitoring-entity-row__meta {
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
 .monitoring-entity-row--child {
   padding-left: var(--sp-7);
 }
@@ -1519,21 +1558,48 @@
   padding: var(--sp-5);
 }
 
-.monitoring-toolbar,
+.monitoring-stage-toolbar,
 .monitoring-overview-grid,
 .monitoring-attribution {
   display: grid;
   gap: var(--sp-4);
 }
 
-.monitoring-toolbar {
+.monitoring-stage-toolbar {
   grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
+  align-items: center;
 }
 
-.monitoring-toolbar__actions {
+.monitoring-stage-toolbar__copy {
   display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+}
+
+.monitoring-stage-toolbar__timestamp {
+  color: var(--text-tertiary);
+  font-size: var(--type-body-6-size);
+  line-height: var(--type-body-6-line-height);
+}
+
+.monitoring-stage-toolbar__controls {
+  display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
+  gap: var(--sp-3);
+}
+
+.monitoring-detail__path {
+  display: block;
+  margin: 0 0 var(--sp-3);
+  padding: var(--sp-3);
+  border: 1px solid var(--surface-elevated-border);
+  border-radius: var(--radius-md);
+  background: var(--component-mix-surface-panel-82pct-transparent);
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
 }
 
 .monitoring-overview-grid {
@@ -16369,25 +16435,15 @@ body.is-dragging-pane .session-action-btn-drag {
     padding: var(--sp-3);
   }
 
-  .settings-monitoring-core-controls {
-    grid-template-columns: 1fr;
-  }
-
-  .settings-monitoring-control-cluster,
-  .monitoring-settings-grid--toggles {
-    grid-template-columns: 1fr;
-  }
-
-  .monitoring-toolbar {
-    grid-template-columns: 1fr;
-  }
-
-  .monitoring-toolbar__actions {
-    justify-content: flex-start;
-  }
-
+  .settings-monitoring-signal-bar__controls,
+  .monitoring-settings-grid--capabilities,
+  .monitoring-stage-toolbar,
   .monitoring-overview-grid,
   .monitoring-attribution {
     grid-template-columns: 1fr;
+  }
+
+  .monitoring-stage-toolbar__controls {
+    justify-content: flex-start;
   }
 }

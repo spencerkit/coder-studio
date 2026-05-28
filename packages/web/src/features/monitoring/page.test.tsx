@@ -324,7 +324,7 @@ describe("MonitoringContent", () => {
       refreshDeferred.resolve(freshResponse);
     });
 
-    expect(await screen.findByText("Refresh every 2s")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Refresh monitoring" })).toBeInTheDocument();
     expect(screen.getByText("Elevated")).toBeInTheDocument();
 
     await act(async () => {
@@ -332,10 +332,9 @@ describe("MonitoringContent", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText("Refresh every 2s")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Refresh monitoring" })).toBeInTheDocument();
     });
     expect(screen.getByText("Elevated")).toBeInTheDocument();
-    expect(screen.queryByText("Refresh every 5s")).not.toBeInTheDocument();
     expect(screen.queryByText("Normal")).not.toBeInTheDocument();
   });
 
@@ -392,10 +391,10 @@ describe("MonitoringContent", () => {
 
     renderMonitoringPage(response, "desktop", { locale: "zh" });
 
-    expect(await screen.findByText("最后更新")).toBeInTheDocument();
+    expect(await screen.findByText("时间窗口")).toBeInTheDocument();
     expect(screen.getAllByText("标准").length).toBeGreaterThan(0);
     expect(screen.getByText("偏高")).toBeInTheDocument();
-    expect(screen.queryByText("Last updated")).not.toBeInTheDocument();
+    expect(screen.queryByText("Time window")).not.toBeInTheDocument();
     expect(screen.queryByText("standard")).not.toBeInTheDocument();
     expect(screen.queryByText("elevated")).not.toBeInTheDocument();
   });
@@ -658,7 +657,7 @@ describe("MonitoringContent", () => {
 
     renderMonitoringPage(response);
 
-    expect(await screen.findByText("Refresh every 2s")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Refresh monitoring" })).toBeInTheDocument();
     expect(screen.getByText("Workspace Alpha")).toBeInTheDocument();
     expect(screen.getByText("Claude session")).toBeInTheDocument();
     expect(screen.queryByText("python tool.py")).not.toBeInTheDocument();
@@ -669,6 +668,353 @@ describe("MonitoringContent", () => {
     expect(
       screen.getByText("Select a workspace, session, or process to inspect details.")
     ).toBeInTheDocument();
+  });
+
+  it("renders monitoring sections in health-first order without the legacy refresh summary card", async () => {
+    const response = {
+      settings: {
+        enabled: true,
+        hostMetricsEnabled: true,
+        runtimeSummaryEnabled: true,
+        workspaceAttributionEnabled: true,
+        subprocessDrilldownEnabled: true,
+        sampleIntervalMs: 2000,
+      },
+      snapshot: {
+        sampledAt: 1_000_000,
+        mode: "standard",
+        host: {
+          cpuPercent: 85,
+          memoryUsedBytes: 1_600,
+          memoryTotalBytes: 2_000,
+          memoryAvailableBytes: 400,
+          loadAverage: [2.4, 1.9, 1.2],
+          uptimeSec: 3600,
+          pressure: "hot",
+        },
+        runtime: {
+          serverCpuPercent: 14,
+          serverMemoryBytes: 180,
+          totalManagedCpuPercent: 61,
+          totalManagedMemoryBytes: 900,
+          managedProcessCount: 7,
+          cpuShareOfHostPercent: 71.7,
+          memoryShareOfHostPercent: 45,
+        },
+        workspaces: [
+          {
+            id: "workspace:ws-1",
+            kind: "workspace",
+            label: "Workspace Alpha",
+            cpuPercent: 42,
+            memoryBytes: 600,
+            processCount: 4,
+            uptimeSec: 500,
+            trend: "rising",
+          },
+        ],
+        sessions: [
+          {
+            id: "session:sess-1",
+            parentId: "workspace:ws-1",
+            kind: "session",
+            label: "Claude session",
+            cpuPercent: 27,
+            memoryBytes: 320,
+            processCount: 2,
+            uptimeSec: 220,
+            trend: "steady",
+          },
+        ],
+        subprocessGroups: [
+          {
+            id: "subprocess:sess-1:101",
+            parentId: "session:sess-1",
+            kind: "subprocess_group",
+            label: "python tool.py",
+            cpuPercent: 12,
+            memoryBytes: 140,
+            processCount: 1,
+            uptimeSec: 80,
+            trend: "steady",
+          },
+        ],
+        backgroundGroups: [],
+      },
+      history: {
+        host: {
+          points: [
+            { sampledAt: 100_000, cpuPercent: 12, memoryBytes: 400 },
+            { sampledAt: 900_000, cpuPercent: 85, memoryBytes: 1_600 },
+          ],
+        },
+        runtime: {
+          points: [
+            { sampledAt: 100_000, cpuPercent: 22, memoryBytes: 500, processCount: 5 },
+            { sampledAt: 900_000, cpuPercent: 61, memoryBytes: 900, processCount: 7 },
+          ],
+        },
+        workspaces: {},
+        sessions: {},
+        subprocessGroups: {},
+      },
+      capabilities: {
+        loadAverageAvailable: true,
+        processMetricsAvailable: true,
+        subprocessHistoryLimited: false,
+      },
+      telemetry: null,
+    };
+
+    renderMonitoringPage(response);
+
+    expect(await screen.findByText("Host overview")).toBeInTheDocument();
+    expect(screen.queryByText("Refresh every 2s")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { level: 2 }).map((node) => node.textContent)).toEqual([
+      "Host overview",
+      "Coder Studio footprint",
+      "Attribution tree",
+      "Detail panel",
+      "Subprocess drill-down",
+    ]);
+  });
+
+  it("renders the selected entity detail inline on mobile before subprocess drill-down", async () => {
+    const response = {
+      settings: {
+        enabled: true,
+        hostMetricsEnabled: true,
+        runtimeSummaryEnabled: true,
+        workspaceAttributionEnabled: true,
+        subprocessDrilldownEnabled: true,
+        sampleIntervalMs: 2000,
+      },
+      snapshot: {
+        sampledAt: 1_000_000,
+        mode: "standard",
+        host: {
+          cpuPercent: 85,
+          memoryUsedBytes: 1_600,
+          memoryTotalBytes: 2_000,
+          memoryAvailableBytes: 400,
+          loadAverage: [2.4, 1.9, 1.2],
+          uptimeSec: 3600,
+          pressure: "hot",
+        },
+        runtime: {
+          serverCpuPercent: 14,
+          serverMemoryBytes: 180,
+          totalManagedCpuPercent: 61,
+          totalManagedMemoryBytes: 900,
+          managedProcessCount: 7,
+          cpuShareOfHostPercent: 71.7,
+          memoryShareOfHostPercent: 45,
+        },
+        workspaces: [
+          {
+            id: "workspace:ws-1",
+            kind: "workspace",
+            label: "Workspace Alpha",
+            cpuPercent: 42,
+            memoryBytes: 600,
+            processCount: 4,
+            uptimeSec: 500,
+            trend: "rising",
+          },
+        ],
+        sessions: [
+          {
+            id: "session:sess-1",
+            parentId: "workspace:ws-1",
+            kind: "session",
+            label: "Claude session",
+            cpuPercent: 27,
+            memoryBytes: 320,
+            processCount: 2,
+            uptimeSec: 220,
+            trend: "steady",
+          },
+        ],
+        subprocessGroups: [
+          {
+            id: "subprocess:sess-1:101",
+            parentId: "session:sess-1",
+            kind: "subprocess_group",
+            label: "python tool.py",
+            cpuPercent: 12,
+            memoryBytes: 140,
+            processCount: 1,
+            uptimeSec: 80,
+            trend: "steady",
+          },
+        ],
+        backgroundGroups: [],
+      },
+      history: {
+        host: {
+          points: [
+            { sampledAt: 100_000, cpuPercent: 12, memoryBytes: 400 },
+            { sampledAt: 900_000, cpuPercent: 85, memoryBytes: 1_600 },
+          ],
+        },
+        runtime: {
+          points: [
+            { sampledAt: 100_000, cpuPercent: 22, memoryBytes: 500, processCount: 5 },
+            { sampledAt: 900_000, cpuPercent: 61, memoryBytes: 900, processCount: 7 },
+          ],
+        },
+        workspaces: {},
+        sessions: {},
+        subprocessGroups: {},
+      },
+      capabilities: {
+        loadAverageAvailable: true,
+        processMetricsAvailable: true,
+        subprocessHistoryLimited: false,
+      },
+      telemetry: null,
+    };
+
+    renderMonitoringPage(response, "mobile");
+
+    expect(await screen.findByText("Workspace Alpha")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Claude session 27.0% / 320 B" }));
+
+    expect(screen.getByRole("heading", { level: 2, name: "Detail panel" })).toBeInTheDocument();
+    expect(screen.getAllByText("Claude session")).toHaveLength(2);
+    expect(
+      screen
+        .getByRole("heading", { level: 2, name: "Detail panel" })
+        .compareDocumentPosition(
+          screen.getByRole("heading", { level: 2, name: "Subprocess drill-down" })
+        ) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+
+  it("renders subprocess labels inside overflow-safe title and path containers", async () => {
+    const response = {
+      settings: {
+        enabled: true,
+        hostMetricsEnabled: true,
+        runtimeSummaryEnabled: true,
+        workspaceAttributionEnabled: true,
+        subprocessDrilldownEnabled: true,
+        sampleIntervalMs: 2000,
+      },
+      snapshot: {
+        sampledAt: 1_000_000,
+        mode: "deep",
+        host: {
+          cpuPercent: 85,
+          memoryUsedBytes: 1_600,
+          memoryTotalBytes: 2_000,
+          memoryAvailableBytes: 400,
+          loadAverage: [2.4, 1.9, 1.2],
+          uptimeSec: 3600,
+          pressure: "hot",
+        },
+        runtime: {
+          serverCpuPercent: 14,
+          serverMemoryBytes: 180,
+          totalManagedCpuPercent: 61,
+          totalManagedMemoryBytes: 900,
+          managedProcessCount: 7,
+          cpuShareOfHostPercent: 71.7,
+          memoryShareOfHostPercent: 45,
+        },
+        workspaces: [
+          {
+            id: "workspace:ws-1",
+            kind: "workspace",
+            label: "Workspace Alpha",
+            cpuPercent: 42,
+            memoryBytes: 600,
+            processCount: 4,
+            uptimeSec: 500,
+            trend: "rising",
+          },
+        ],
+        sessions: [
+          {
+            id: "session:sess-1",
+            parentId: "workspace:ws-1",
+            kind: "session",
+            label: "Claude session",
+            cpuPercent: 27,
+            memoryBytes: 320,
+            processCount: 2,
+            uptimeSec: 220,
+            trend: "steady",
+          },
+        ],
+        subprocessGroups: [
+          {
+            id: "subprocess:sess-1:101",
+            parentId: "session:sess-1",
+            kind: "subprocess_group",
+            label:
+              "/home/spencer/.local/share/fnm/node-versions/v25.9.0/installation/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex",
+            cpuPercent: 12,
+            memoryBytes: 140,
+            processCount: 1,
+            uptimeSec: 80,
+            trend: "steady",
+          },
+        ],
+        backgroundGroups: [],
+      },
+      history: {
+        host: {
+          points: [
+            { sampledAt: 100_000, cpuPercent: 12, memoryBytes: 400 },
+            { sampledAt: 900_000, cpuPercent: 85, memoryBytes: 1_600 },
+          ],
+        },
+        runtime: {
+          points: [
+            { sampledAt: 100_000, cpuPercent: 22, memoryBytes: 500, processCount: 5 },
+            { sampledAt: 900_000, cpuPercent: 61, memoryBytes: 900, processCount: 7 },
+          ],
+        },
+        workspaces: {},
+        sessions: {},
+        subprocessGroups: {
+          "subprocess:sess-1:101": {
+            points: [
+              { sampledAt: 100_000, cpuPercent: 5, memoryBytes: 60, processCount: 1 },
+              { sampledAt: 900_000, cpuPercent: 12, memoryBytes: 140, processCount: 1 },
+            ],
+          },
+        },
+      },
+      capabilities: {
+        loadAverageAvailable: true,
+        processMetricsAvailable: true,
+        subprocessHistoryLimited: false,
+      },
+      telemetry: null,
+    };
+
+    renderMonitoringPage(response);
+
+    const longPath =
+      "/home/spencer/.local/share/fnm/node-versions/v25.9.0/installation/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex";
+
+    expect(await screen.findByText("Subprocess drill-down")).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: `${longPath} 12.0% / 140 B`,
+      })
+    );
+
+    expect(document.querySelector(".monitoring-detail__path")).toHaveTextContent(longPath);
+    expect(
+      screen
+        .getByRole("button", {
+          name: `${longPath} 12.0% / 140 B`,
+        })
+        .querySelector(".monitoring-entity-row__title")
+    ).toHaveTextContent(longPath);
   });
 
   it("filters sparkline history to the selected time window", async () => {
@@ -734,7 +1080,7 @@ describe("MonitoringContent", () => {
 
     const { container } = renderMonitoringPage(response);
 
-    expect(await screen.findByText("Refresh every 2s")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Refresh monitoring" })).toBeInTheDocument();
     const hostPolyline = () =>
       container.querySelector(".monitoring-overview-grid .monitoring-sparkline polyline");
 

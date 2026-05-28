@@ -63,6 +63,7 @@ export function MonitoringSettingsSubpage({
           </p>
         </div>
         <MonitoringSettingsCard
+          lastSampledAt={stageResponse?.snapshot.sampledAt ?? null}
           mode={mode}
           monitoringSettingsReady={monitoringSettingsReady}
           onChange={async (next) => {
@@ -72,6 +73,8 @@ export function MonitoringSettingsSubpage({
               return;
             }
           }}
+          onRefresh={monitoringData.refresh}
+          refreshDisabled={monitoringData.loading}
           settings={settings}
           showHeaderChrome={false}
         />
@@ -83,6 +86,7 @@ export function MonitoringSettingsSubpage({
           loading={monitoringData.loading}
           refresh={monitoringData.refresh}
           response={stageResponse}
+          showRefreshControls={false}
         />
       </div>
     </section>

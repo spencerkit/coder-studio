@@ -4,9 +4,10 @@ import {
   type MonitoringSampleIntervalMs,
   type MonitoringSettings,
 } from "@coder-studio/core";
-import { type ReactNode } from "react";
-import { Notice, Pill, SegmentedControl, Switch } from "../../../components/ui";
+import { type ReactNode, useId, useState } from "react";
+import { Button, Notice, Pill, SegmentedControl, Switch } from "../../../components/ui";
 import { useTranslation } from "../../../lib/i18n";
+import { formatTimestamp } from "../../monitoring/formatters";
 
 type MonitoringPreset = "light" | "standard" | "deep" | "custom";
 
@@ -15,6 +16,9 @@ interface MonitoringSettingsCardProps {
   readonly mode: MonitoringMode;
   readonly monitoringSettingsReady: boolean;
   readonly onChange: (next: MonitoringSettings) => Promise<void> | void;
+  readonly lastSampledAt?: number | null;
+  readonly onRefresh?: () => Promise<void> | void;
+  readonly refreshDisabled?: boolean;
   readonly headerActions?: ReactNode;
   readonly showHeaderChrome?: boolean;
 }
@@ -79,18 +83,43 @@ function normalizeSettings(settings: MonitoringSettings): MonitoringSettings {
   return next;
 }
 
+function capabilityDescription(
+  key: "host" | "runtime" | "attribution" | "subprocess",
+  t: ReturnType<typeof useTranslation>
+) {
+  switch (key) {
+    case "host":
+      return t("monitoring.host_metrics_hint");
+    case "runtime":
+      return t("monitoring.runtime_summary_hint");
+    case "attribution":
+      return t("monitoring.workspace_attribution_hint");
+    case "subprocess":
+      return t("monitoring.subprocess_drilldown_hint");
+  }
+}
+
 export function MonitoringSettingsCard({
   settings,
   mode,
   monitoringSettingsReady,
   onChange,
+  lastSampledAt = null,
+  onRefresh,
+  refreshDisabled = false,
   headerActions,
   showHeaderChrome = true,
 }: MonitoringSettingsCardProps) {
   const t = useTranslation();
+  const advancedPanelId = useId();
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const resolvedSettings = normalizeSettings(settings);
   const controlsDisabled = !monitoringSettingsReady;
   const dependentControlsDisabled = controlsDisabled || !resolvedSettings.enabled;
+  const signalSummary = resolvedSettings.enabled
+    ? t("monitoring.signal_summary_enabled")
+    : t("monitoring.signal_summary_disabled");
+  const refreshLabel = `${t("action.refresh")} ${t("monitoring.command_label").toLowerCase()}`;
 
   const applyPreset = async (preset: MonitoringPreset) => {
     if (preset === "custom") {
@@ -152,8 +181,8 @@ export function MonitoringSettingsCard({
         </div>
       ) : null}
 
-      <div className="settings-monitoring-core-controls">
-        <div className="settings-toggle-row settings-toggle-row--compact settings-toggle-row--monitoring-primary">
+      <div className="settings-monitoring-signal-bar">
+        <div className="settings-monitoring-signal-bar__primary">
           <div className="settings-toggle-info">
             <span className="settings-toggle-label">{t("monitoring.enable_monitoring")}</span>
             <span className="settings-toggle-desc">{t("monitoring.enable_monitoring_hint")}</span>
@@ -167,7 +196,15 @@ export function MonitoringSettingsCard({
           />
         </div>
 
-        <div className="settings-monitoring-control-cluster">
+        <div className="settings-monitoring-signal-bar__summary">
+          <Pill disabled>{formatModeLabel(mode, t)}</Pill>
+          <span>{signalSummary}</span>
+          <span>
+            {t("monitoring.last_updated")}: {formatTimestamp(lastSampledAt)}
+          </span>
+        </div>
+
+        <div className="settings-monitoring-signal-bar__controls">
           <div className="settings-info-row monitoring-settings-row monitoring-settings-row--compact monitoring-settings-row--stacked">
             <span className="settings-info-label">{t("monitoring.preset")}</span>
             <SegmentedControl
@@ -211,6 +248,16 @@ export function MonitoringSettingsCard({
               value={String(resolvedSettings.sampleIntervalMs)}
             />
           </div>
+
+          <Button
+            aria-label={refreshLabel}
+            disabled={refreshDisabled}
+            onClick={() => void onRefresh?.()}
+            size="sm"
+            variant="secondary"
+          >
+            {t("action.refresh")}
+          </Button>
         </div>
       </div>
 
@@ -222,11 +269,26 @@ export function MonitoringSettingsCard({
         />
       ) : null}
 
-      <div className="settings-monitoring-advanced">
-        <div className="monitoring-settings-grid monitoring-settings-grid--toggles">
-          <div className="settings-toggle-row settings-toggle-row--compact-card">
-            <div className="settings-toggle-info">
+      <div className="settings-monitoring-advanced-toggle-row">
+        <Button
+          aria-controls={advancedPanelId}
+          aria-expanded={advancedOpen ? "true" : "false"}
+          onClick={() => setAdvancedOpen((open) => !open)}
+          size="sm"
+          variant="ghost"
+        >
+          {advancedOpen
+            ? t("monitoring.hide_advanced_capabilities")
+            : t("monitoring.show_advanced_capabilities")}
+        </Button>
+      </div>
+
+      <div className="settings-monitoring-advanced" hidden={!advancedOpen} id={advancedPanelId}>
+        <div className="monitoring-settings-grid monitoring-settings-grid--capabilities">
+          <div className="settings-monitoring-capability-card">
+            <div className="settings-monitoring-capability-card__copy">
               <span className="settings-toggle-label">{t("monitoring.host_metrics")}</span>
+              <span className="settings-toggle-desc">{capabilityDescription("host", t)}</span>
             </div>
             <Switch
               aria-label={t("monitoring.host_metrics")}
@@ -241,10 +303,14 @@ export function MonitoringSettingsCard({
             />
           </div>
 
-          <div className="settings-toggle-row settings-toggle-row--compact-card">
-            <div className="settings-toggle-info">
+          <div className="settings-monitoring-capability-card">
+            <div className="settings-monitoring-capability-card__copy">
               <span className="settings-toggle-label">
                 {t("monitoring.runtime_summary_setting")}
+              </span>
+              <span className="settings-toggle-desc">{capabilityDescription("runtime", t)}</span>
+              <span className="settings-monitoring-capability-card__dependency">
+                {t("monitoring.runtime_summary_dependency")}
               </span>
             </div>
             <Switch
@@ -269,9 +335,12 @@ export function MonitoringSettingsCard({
             />
           </div>
 
-          <div className="settings-toggle-row settings-toggle-row--compact-card">
-            <div className="settings-toggle-info">
+          <div className="settings-monitoring-capability-card">
+            <div className="settings-monitoring-capability-card__copy">
               <span className="settings-toggle-label">{t("monitoring.workspace_attribution")}</span>
+              <span className="settings-toggle-desc">
+                {capabilityDescription("attribution", t)}
+              </span>
             </div>
             <Switch
               aria-label={t("monitoring.workspace_attribution")}
@@ -293,9 +362,10 @@ export function MonitoringSettingsCard({
             />
           </div>
 
-          <div className="settings-toggle-row settings-toggle-row--compact-card">
-            <div className="settings-toggle-info">
+          <div className="settings-monitoring-capability-card">
+            <div className="settings-monitoring-capability-card__copy">
               <span className="settings-toggle-label">{t("monitoring.subprocess_drilldown")}</span>
+              <span className="settings-toggle-desc">{capabilityDescription("subprocess", t)}</span>
             </div>
             <Switch
               aria-label={t("monitoring.subprocess_drilldown")}
