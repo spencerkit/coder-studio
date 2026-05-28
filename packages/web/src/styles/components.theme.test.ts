@@ -3707,23 +3707,33 @@ describe("components.css theme-sensitive surfaces", () => {
     const controlBar = getLastRuleBlock(".settings-monitoring-control-bar");
     const controlSummary = getLastRuleBlock(".settings-monitoring-control-bar__summary");
     const dashboardStage = getLastRuleBlock(".settings-monitoring-dashboard-stage");
-    const primaryToggleCard = getLastRuleBlock(".settings-toggle-row--monitoring-primary");
-    const compactToggleCard = getLastRuleBlock(".settings-toggle-row--compact-card");
-    const compactToggleInfo = getLastRuleBlock(
-      ".settings-toggle-row--compact-card .settings-toggle-info"
-    );
-    const compactToggleLabel = getLastRuleBlock(
-      ".settings-toggle-row--compact-card .settings-toggle-label"
-    );
-    const coreControlsBase = getRuleBlocksFrom(stylesheet, ".settings-monitoring-core-controls")[0];
-    const coreControlsMobile = getLastRuleBlock(".settings-monitoring-core-controls");
-    const controlClusterBase = getRuleBlocksFrom(
+    const signalPrimaryCard = getLastRuleBlock(".settings-monitoring-signal-bar__primary");
+    const signalControlsBase = getRuleBlocksFrom(
       stylesheet,
-      ".settings-monitoring-control-cluster"
+      ".settings-monitoring-signal-bar__controls"
     )[0];
-    const controlClusterMobile = getLastRuleBlock(".settings-monitoring-control-cluster");
+    const stackedControlCard = getLastRuleBlock(".monitoring-settings-row--stacked");
+    const settingsInfoLabel = getLastRuleBlock(".settings-info-label");
+    const settingsToggleLabel = getLastRuleBlock(".settings-toggle-label");
+    const capabilityGridBase = getRuleBlocksFrom(
+      stylesheet,
+      ".monitoring-settings-grid--capabilities"
+    )[0];
+    const capabilityCard = getLastRuleBlock(".settings-monitoring-capability-card");
+    const capabilityCardCopy = getLastRuleBlock(".settings-monitoring-capability-card__copy");
+    const capabilityCardDependency = getLastRuleBlock(
+      ".settings-monitoring-capability-card__dependency"
+    );
     const advancedGridBase = getRuleBlocksFrom(stylesheet, ".monitoring-settings-grid--toggles")[0];
-    const advancedGridMobile = getLastRuleBlock(".monitoring-settings-grid--toggles");
+    const advancedGridTablet = getLastGroupedRuleBlockFrom(
+      stylesheet,
+      /@media\s*\(max-width:\s*1200px\)\s*\{[\s\S]*?\.monitoring-settings-grid--toggles\s*\{([^}]*)\}/g
+    );
+    const signalControlsMobile = getLastGroupedRuleBlockFrom(
+      stylesheet,
+      /@media\s*\(max-width:\s*900px\)\s*\{[\s\S]*?\.settings-monitoring-signal-bar__controls,\s*\.monitoring-settings-grid--capabilities,\s*\.monitoring-stage-toolbar,\s*\.monitoring-overview-grid,\s*\.monitoring-attribution\s*\{([^}]*)\}/g
+    );
+    const capabilityGridMobile = signalControlsMobile;
     const cardHeader = getLastRuleBlock(".monitoring-card__header");
     const metricRow = getLastRuleBlock(".monitoring-metric");
     const metricValue = getLastRuleBlock(".monitoring-metric__value");
@@ -3746,24 +3756,29 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(dashboardStage).toContain(
       "border: 1px solid var(--component-mix-border-default-70pct-transparent)"
     );
-    expect(primaryToggleCard).toContain(
+    expect(signalPrimaryCard).toContain("grid-template-columns: minmax(0, 1fr) auto");
+    expect(signalPrimaryCard).toContain(
       "background: var(--component-mix-surface-panel-72pct-transparent)"
     );
-    expect(compactToggleCard).toContain(
+    expect(stackedControlCard).toContain("grid-template-columns: minmax(0, 1fr)");
+    expect(stackedControlCard).toContain(
       "background: var(--component-mix-surface-panel-72pct-transparent)"
     );
-    expect(compactToggleInfo).toContain("min-width: 0");
-    expect(compactToggleLabel).toContain("font-size: var(--type-body-4-size)");
-    expect(coreControlsBase).toContain(
-      "grid-template-columns: minmax(280px, 1fr) minmax(0, 1.6fr)"
+    expect(settingsInfoLabel).toContain("font-size: var(--type-body-6-size)");
+    expect(settingsToggleLabel).toContain("font-size: var(--type-body-3-size)");
+    expect(signalControlsBase).toContain("grid-template-columns: repeat(2, minmax(0, 1fr)) auto");
+    expect(signalControlsMobile).toContain("grid-template-columns: 1fr");
+    expect(capabilityGridBase).toContain("grid-template-columns: repeat(2, minmax(0, 1fr))");
+    expect(capabilityGridMobile).toContain("grid-template-columns: 1fr");
+    expect(capabilityCard).toContain("grid-template-columns: minmax(0, 1fr) auto");
+    expect(capabilityCard).toContain(
+      "background: var(--component-mix-surface-panel-72pct-transparent)"
     );
-    expect(coreControlsMobile).toContain("grid-template-columns: 1fr");
-    expect(controlClusterBase).toContain("grid-template-columns: repeat(2, minmax(0, 1fr))");
-    expect(controlClusterMobile).toContain("grid-template-columns: 1fr");
+    expect(capabilityCardCopy).toContain("min-width: 0");
+    expect(capabilityCardDependency).toContain("font-size: var(--type-body-6-size)");
     expect(advancedGridBase).toContain("grid-template-columns: repeat(4, minmax(0, 1fr))");
     expect(stylesheet).toContain("@media (max-width: 1200px)");
-    expect(stylesheet).toContain("grid-template-columns: repeat(2, minmax(0, 1fr));");
-    expect(advancedGridMobile).toContain("grid-template-columns: 1fr");
+    expect(advancedGridTablet).toContain("grid-template-columns: repeat(2, minmax(0, 1fr))");
     expect(cardHeader).toContain("display: flex");
     expect(cardHeader).toContain("justify-content: space-between");
     expect(metricRow).toContain("grid-template-columns: minmax(0, 1fr) auto");
