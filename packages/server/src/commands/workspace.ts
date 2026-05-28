@@ -128,7 +128,9 @@ registerCommand(
     path: z.string(),
   }),
   async (args) => {
-    if (args.path === "" || args.path === "." || args.path === "..") {
+    const requestedName = basename(args.path);
+
+    if (!requestedName || requestedName === "." || requestedName === "..") {
       throw { code: "invalid_path", message: "Folder name is required" };
     }
 

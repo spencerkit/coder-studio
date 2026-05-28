@@ -254,6 +254,31 @@ describe("Workspace Commands", () => {
         message: "Folder name is required",
       });
     });
+
+    it.each([
+      "~/.",
+      "~/..",
+      "foo/.",
+      "foo/..",
+    ])('rejects invalid requested folder path with trailing segment "%s"', async (path) => {
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: `workspace-mkdir-invalid-trailing-${path.replaceAll("/", "-")}`,
+          op: "workspace.mkdir",
+          args: {
+            path,
+          },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.error).toMatchObject({
+        code: "invalid_path",
+        message: "Folder name is required",
+      });
+    });
   });
 
   describe("workspace.close", () => {
