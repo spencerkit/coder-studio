@@ -631,6 +631,77 @@ describe("WorkspaceLaunchModal", () => {
     expect(screen.getByTestId("is-creating-folder")).toHaveTextContent("true");
   });
 
+  it("validates when the folder name contains a path separator", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({
+      currentPath: "/home/spencer",
+      parentPath: "/home",
+      directories: [],
+    });
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <WorkspaceLaunchActionsHarness />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("current-path")).toHaveTextContent("/home/spencer");
+    });
+
+    fireEvent.click(screen.getByText("open-create-folder"));
+    fireEvent.click(screen.getByText("set-invalid-name"));
+    fireEvent.click(screen.getByText("submit-create-folder"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("create-folder-error")).toHaveTextContent(
+        "workspace.launch.folder_name_invalid"
+      );
+    });
+
+    expect(sendCommand).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("is-creating-folder")).toHaveTextContent("true");
+  });
+
+  it("shows create-folder failure when there is no current path yet", async () => {
+    const sendCommand = vi.fn(
+      () =>
+        new Promise(() => {
+          return undefined;
+        })
+    );
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <WorkspaceLaunchActionsHarness />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    expect(screen.getByTestId("current-path")).toHaveTextContent("");
+
+    fireEvent.click(screen.getByText("open-create-folder"));
+    fireEvent.click(screen.getByText("set-valid-name"));
+    fireEvent.click(screen.getByText("submit-create-folder"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("create-folder-error")).toHaveTextContent(
+        "workspace.launch.create_folder_failed"
+      );
+    });
+
+    expect(sendCommand).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("creating-folder")).toHaveTextContent("false");
+  });
+
   it("creates a folder, reloads the directory, and selects the new folder", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string, args: { path?: string }) => {
       if (op === "workspace.browse" && args.path === "/home/spencer") {
