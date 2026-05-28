@@ -623,7 +623,7 @@ describe("WorkspaceLaunchModal", () => {
 
     await waitFor(() => {
       expect(screen.getByTestId("create-folder-error")).toHaveTextContent(
-        "workspace.launch.folder_name_required"
+        "Folder name is required"
       );
     });
 
@@ -659,7 +659,7 @@ describe("WorkspaceLaunchModal", () => {
 
     await waitFor(() => {
       expect(screen.getByTestId("create-folder-error")).toHaveTextContent(
-        "workspace.launch.folder_name_invalid"
+        "Folder name cannot include / or \\\\"
       );
     });
 
@@ -694,7 +694,7 @@ describe("WorkspaceLaunchModal", () => {
 
     await waitFor(() => {
       expect(screen.getByTestId("create-folder-error")).toHaveTextContent(
-        "workspace.launch.create_folder_failed"
+        "Failed to create folder"
       );
     });
 
@@ -928,6 +928,70 @@ describe("WorkspaceLaunchModal", () => {
 
     await waitFor(() => {
       expect(screen.getByTestId("current-path")).toHaveTextContent("/home/spencer/projects");
+    });
+
+    expect(screen.getByTestId("selected-path")).toHaveTextContent("");
+    expect(screen.getByTestId("is-creating-folder")).toHaveTextContent("false");
+    expect(sendCommand).not.toHaveBeenCalledWith(
+      "workspace.browse",
+      { path: "/home/spencer" },
+      undefined
+    );
+  });
+
+  it("keeps create-folder state reset when canceling during an active create request", async () => {
+    let resolveCreate: (() => void) | undefined;
+    const sendCommand = vi.fn().mockImplementation((op: string, args: { path?: string }) => {
+      if (op === "workspace.browse") {
+        return Promise.resolve({
+          currentPath: args.path ?? "/home/spencer",
+          parentPath: "/home",
+          directories: [],
+        });
+      }
+
+      if (op === "workspace.mkdir") {
+        return new Promise((resolve) => {
+          resolveCreate = () => resolve({ ok: true });
+        });
+      }
+
+      return Promise.resolve({});
+    });
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <WorkspaceLaunchActionsHarness />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("current-path")).toHaveTextContent("/home/spencer");
+    });
+
+    fireEvent.click(screen.getByText("open-create-folder"));
+    fireEvent.click(screen.getByText("set-valid-name"));
+    fireEvent.click(screen.getByText("submit-create-folder"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("creating-folder")).toHaveTextContent("true");
+    });
+
+    fireEvent.click(screen.getByText("close-create-folder"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("creating-folder")).toHaveTextContent("false");
+    });
+
+    resolveCreate?.();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("current-path")).toHaveTextContent("/home/spencer");
     });
 
     expect(screen.getByTestId("selected-path")).toHaveTextContent("");

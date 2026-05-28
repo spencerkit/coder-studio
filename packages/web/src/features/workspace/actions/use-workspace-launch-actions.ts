@@ -134,6 +134,7 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
   }, []);
 
   const closeCreateFolder = useCallback(() => {
+    createRequestIdRef.current += 1;
     setIsCreatingFolder(false);
     setNewFolderName("");
     setCreateFolderError(null);

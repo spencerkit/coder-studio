@@ -203,6 +203,9 @@
       "start": "Start Workspace",
       "starting": "Starting...",
       "hint": "Select a directory to use as the workspace root.",
+      "folder_name_required": "Folder name is required",
+      "folder_name_invalid": "Folder name cannot include / or \\\\",
+      "create_folder_failed": "Failed to create folder",
       "browse_failed": "Failed to browse directories",
       "select_required": "Please select a directory",
       "open_failed": "Failed to open workspace"
