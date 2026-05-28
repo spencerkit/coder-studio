@@ -233,4 +233,33 @@ describe("DraftLauncher", () => {
     expect(drop.defaultPrevented).toBe(true);
     expect(onOpenFile).toHaveBeenCalledWith("pane-1", "src/app.tsx");
   });
+
+  it("allows drag-over for workspace file drags even when payload data is not readable until drop", async () => {
+    const store = createStore();
+
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn(),
+      subscribe: vi.fn(() => () => {}),
+    } as never);
+
+    const { container } = render(
+      <Provider store={store}>
+        <DraftLauncher workspaceId="ws-123" paneId="pane-1" onOpenFile={vi.fn()} />
+      </Provider>
+    );
+
+    const root = container.querySelector('[data-pane-id="pane-1"]') as HTMLElement;
+    const dataTransfer = {
+      files: [],
+      types: [WORKSPACE_PATH_DRAG_MIME, "text/plain"],
+      items: [],
+      getData: () => "",
+    };
+    const dragOver = createEvent.dragOver(root, { dataTransfer });
+    fireEvent(root, dragOver);
+
+    expect(dragOver.defaultPrevented).toBe(true);
+    expect(await screen.findByText("Open in editor")).toBeInTheDocument();
+  });
 });

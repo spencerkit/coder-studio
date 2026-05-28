@@ -1651,6 +1651,32 @@ describe("AgentPanes", () => {
     expect(await screen.findByTestId("editor-pane-root")).toBeInTheDocument();
   });
 
+  it("opens files from the standalone root draft launcher by converting it into an editor pane", async () => {
+    const { store } = createAgentPaneStore({
+      id: "root",
+      type: "leaf",
+      leafKind: "draft",
+    });
+    store.set(sessionsAtom, {});
+
+    render(
+      <Provider store={store}>
+        <AgentPanes hydrateSessions={false} />
+      </Provider>
+    );
+
+    expect(screen.getByTestId("draft-launcher-root")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "open-file-root" }));
+
+    expect(store.get(paneLayoutAtomFamily("ws-1"))).toEqual({
+      id: "root",
+      type: "leaf",
+      leafKind: "editor",
+    });
+    expect(await screen.findByTestId("editor-pane-root")).toBeInTheDocument();
+  });
+
   it("reuses the existing editor pane when another draft launcher opens a file", async () => {
     const { store } = createAgentPaneStore({
       id: "root",

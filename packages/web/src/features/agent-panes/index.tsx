@@ -157,8 +157,12 @@ export const AgentPanes: FC<AgentPanesProps> = ({ hydrateSessions = true }) => {
   if (shouldShowStandaloneDraftLauncher) {
     return (
       <DraftLauncher
+        paneId="root"
         workspaceId={workspaceId}
+        onAssignSession={paneActions.assignSession}
+        onOpenFile={handleOpenFile}
         onReplaceWithSession={paneActions.replaceWithSession}
+        onSplitPane={paneActions.splitDraftPane}
       />
     );
   }

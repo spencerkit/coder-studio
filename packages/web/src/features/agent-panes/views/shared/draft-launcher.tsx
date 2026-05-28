@@ -6,7 +6,10 @@ import { dispatchCommandAtom } from "../../../../atoms/connection";
 import { sessionsAtom } from "../../../../atoms/sessions";
 import { Button, IconButton, StatusDot, Tag, ThemedIcon, Tooltip } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
-import { getWorkspacePathDragPayload } from "../../../../lib/workspace-path-drag";
+import {
+  getWorkspacePathDragPayload,
+  hasWorkspacePathDragType,
+} from "../../../../lib/workspace-path-drag";
 import { buildDiagnosticsPath } from "../../../diagnostics";
 import type { PaneDropIntent } from "../../actions/pane-drag-types";
 import { type ProviderId, useProviderLauncher } from "../../actions/use-provider-launcher";
@@ -163,8 +166,7 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
   };
 
   const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
-    const path = resolveDroppedFilePath(event);
-    if (!path) {
+    if (!paneId || !hasWorkspacePathDragType(event.dataTransfer)) {
       return;
     }
 
