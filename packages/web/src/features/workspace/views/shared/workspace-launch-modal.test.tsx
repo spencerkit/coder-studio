@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../../../atoms/app-ui";
 import { wsClientAtom } from "../../../../atoms/connection";
 import { CommandResultError } from "../../../../ws/client";
+import { useWorkspaceLaunchActions } from "../../actions/use-workspace-launch-actions";
 import { WorkspaceLaunchModal } from "./workspace-launch-modal";
 
 const viewportMocks = vi.hoisted(() => ({
@@ -28,6 +29,34 @@ vi.mock("react-router-dom", async () => {
     useLocation: () => routerMocks.location,
   };
 });
+
+function WorkspaceLaunchActionsHarness() {
+  const actions = useWorkspaceLaunchActions(vi.fn());
+
+  return (
+    <div>
+      <div data-testid="current-path">{actions.currentPath}</div>
+      <div data-testid="selected-path">{actions.selectedPath ?? ""}</div>
+      <div data-testid="create-folder-error">{actions.createFolderError ?? ""}</div>
+      <div data-testid="is-creating-folder">{String(actions.isCreatingFolder)}</div>
+      <div data-testid="creating-folder">{String(actions.creatingFolder)}</div>
+      <div data-testid="new-folder-name">{actions.newFolderName}</div>
+      <button onClick={() => actions.openCreateFolder()}>open-create-folder</button>
+      <button onClick={() => actions.closeCreateFolder()}>close-create-folder</button>
+      <button onClick={() => actions.handleNavigate("/home/spencer/projects")}>
+        navigate-projects
+      </button>
+      <button onClick={() => actions.handleNavigate("/home/spencer/workspace")}>
+        navigate-workspace
+      </button>
+      <button onClick={() => actions.updateNewFolderName("   ")}>set-empty-name</button>
+      <button onClick={() => actions.updateNewFolderName("feature-demo")}>set-valid-name</button>
+      <button onClick={() => actions.updateNewFolderName("bad/name")}>set-invalid-name</button>
+      <button onClick={() => actions.updateNewFolderName("kept-open")}>set-failing-name</button>
+      <button onClick={() => void actions.submitCreateFolder()}>submit-create-folder</button>
+    </div>
+  );
+}
 
 describe("WorkspaceLaunchModal", () => {
   afterEach(() => {
@@ -529,5 +558,190 @@ describe("WorkspaceLaunchModal", () => {
     expect(loadingShell).toBeTruthy();
     expect(spinner).toHaveClass("animate-spin");
     expect(document.querySelector(".directory-loading .animate-spin")).toBe(spinner);
+  });
+
+  it("opens and cancels the inline folder form", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({
+      currentPath: "/home/spencer",
+      parentPath: "/home",
+      directories: [],
+    });
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <WorkspaceLaunchActionsHarness />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("current-path")).toHaveTextContent("/home/spencer");
+    });
+
+    expect(screen.getByTestId("is-creating-folder")).toHaveTextContent("false");
+    fireEvent.click(screen.getByText("open-create-folder"));
+    expect(screen.getByTestId("is-creating-folder")).toHaveTextContent("true");
+
+    fireEvent.click(screen.getByText("set-valid-name"));
+    expect(screen.getByTestId("new-folder-name")).toHaveTextContent("feature-demo");
+
+    fireEvent.click(screen.getByText("close-create-folder"));
+    expect(screen.getByTestId("is-creating-folder")).toHaveTextContent("false");
+    expect(screen.getByTestId("new-folder-name")).toHaveTextContent("");
+    expect(screen.getByTestId("create-folder-error")).toHaveTextContent("");
+  });
+
+  it("validates when the folder name is empty", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({
+      currentPath: "/home/spencer",
+      parentPath: "/home",
+      directories: [],
+    });
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <WorkspaceLaunchActionsHarness />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("current-path")).toHaveTextContent("/home/spencer");
+    });
+
+    fireEvent.click(screen.getByText("open-create-folder"));
+    fireEvent.click(screen.getByText("set-empty-name"));
+    fireEvent.click(screen.getByText("submit-create-folder"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("create-folder-error")).toHaveTextContent(
+        "workspace.launch.folder_name_required"
+      );
+    });
+
+    expect(sendCommand).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("is-creating-folder")).toHaveTextContent("true");
+  });
+
+  it("creates a folder, reloads the directory, and selects the new folder", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args: { path?: string }) => {
+      if (op === "workspace.browse" && args.path === "/home/spencer") {
+        return {
+          currentPath: "/home/spencer",
+          parentPath: "/home",
+          directories: [
+            { name: "workspace", path: "/home/spencer/workspace" },
+            { name: "feature-demo", path: "/home/spencer/feature-demo" },
+          ],
+        };
+      }
+
+      if (op === "workspace.browse") {
+        return {
+          currentPath: "/home/spencer",
+          parentPath: "/home",
+          directories: [{ name: "workspace", path: "/home/spencer/workspace" }],
+        };
+      }
+
+      if (op === "workspace.mkdir") {
+        return { ok: true };
+      }
+
+      return {};
+    });
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <WorkspaceLaunchActionsHarness />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("current-path")).toHaveTextContent("/home/spencer");
+    });
+
+    fireEvent.click(screen.getByText("open-create-folder"));
+    fireEvent.click(screen.getByText("set-valid-name"));
+    fireEvent.click(screen.getByText("submit-create-folder"));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "workspace.mkdir",
+        { path: "/home/spencer/feature-demo" },
+        undefined
+      );
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "workspace.browse",
+        { path: "/home/spencer" },
+        undefined
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("selected-path")).toHaveTextContent("/home/spencer/feature-demo");
+    });
+
+    expect(screen.getByTestId("is-creating-folder")).toHaveTextContent("false");
+    expect(screen.getByTestId("create-folder-error")).toHaveTextContent("");
+  });
+
+  it("keeps the inline form open and shows command errors when folder creation fails", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "workspace.browse") {
+        return {
+          currentPath: "/home/spencer",
+          parentPath: "/home",
+          directories: [],
+        };
+      }
+
+      throw new CommandResultError({
+        code: "create_failed",
+        message: "Folder already exists",
+      });
+    });
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <WorkspaceLaunchActionsHarness />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("current-path")).toHaveTextContent("/home/spencer");
+    });
+
+    fireEvent.click(screen.getByText("open-create-folder"));
+    fireEvent.click(screen.getByText("set-failing-name"));
+    fireEvent.click(screen.getByText("submit-create-folder"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("create-folder-error")).toHaveTextContent("Folder already exists");
+    });
+
+    expect(screen.getByTestId("is-creating-folder")).toHaveTextContent("true");
+    expect(screen.getByTestId("selected-path")).toHaveTextContent("");
   });
 });

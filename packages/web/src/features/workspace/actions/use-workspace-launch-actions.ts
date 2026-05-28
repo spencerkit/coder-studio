@@ -27,6 +27,10 @@ interface BrowseResult {
   rootPaths?: string[];
 }
 
+interface CreateDirectoryResult {
+  ok: true;
+}
+
 type TabType = "status" | "diff" | "tree";
 
 export function useWorkspaceLaunchActions(onClose: () => void) {
@@ -50,6 +54,10 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
   const [error, setError] = useState<string | null>(null);
   const [rootPaths, setRootPaths] = useState<string[]>(["/"]);
   const [homePath, setHomePath] = useState<string | null>(null);
+  const [isCreatingFolder, setIsCreatingFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [createFolderError, setCreateFolderError] = useState<string | null>(null);
+  const [creatingFolder, setCreatingFolder] = useState(false);
 
   const launchTitle = t("workspace.launch.title");
   const launchHint = t("workspace.launch.hint");
@@ -101,6 +109,9 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
   const handleNavigate = useCallback(
     (path: string) => {
       setSelectedPath(null);
+      setIsCreatingFolder(false);
+      setNewFolderName("");
+      setCreateFolderError(null);
       void loadDirectory(path);
     },
     [loadDirectory]
@@ -109,6 +120,83 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
   const handleSelect = useCallback((path: string) => {
     setSelectedPath(path);
   }, []);
+
+  const openCreateFolder = useCallback(() => {
+    setIsCreatingFolder(true);
+    setCreateFolderError(null);
+  }, []);
+
+  const closeCreateFolder = useCallback(() => {
+    setIsCreatingFolder(false);
+    setNewFolderName("");
+    setCreateFolderError(null);
+    setCreatingFolder(false);
+  }, []);
+
+  const updateNewFolderName = useCallback((value: string) => {
+    setNewFolderName(value);
+    setCreateFolderError(null);
+  }, []);
+
+  const submitCreateFolder = useCallback(async () => {
+    const trimmedName = newFolderName.trim();
+
+    if (!trimmedName) {
+      setCreateFolderError(t("workspace.launch.folder_name_required"));
+      return;
+    }
+
+    if (trimmedName.includes("/") || trimmedName.includes("\\")) {
+      setCreateFolderError(t("workspace.launch.folder_name_invalid"));
+      return;
+    }
+
+    if (!currentPath) {
+      setCreateFolderError(t("workspace.launch.create_folder_failed"));
+      return;
+    }
+
+    setCreatingFolder(true);
+    setCreateFolderError(null);
+
+    try {
+      const createResult = await dispatch<CreateDirectoryResult>("workspace.mkdir", {
+        path: `${currentPath}/${trimmedName}`,
+      });
+
+      if (!createResult.ok) {
+        setCreateFolderError(
+          createResult.error?.message || t("workspace.launch.create_folder_failed")
+        );
+        return;
+      }
+
+      const browseResult = await dispatch<BrowseResult>("workspace.browse", { path: currentPath });
+
+      if (!browseResult.ok || !browseResult.data) {
+        setCreateFolderError(
+          browseResult.error?.message || t("workspace.launch.create_folder_failed")
+        );
+        return;
+      }
+
+      setCurrentPath(browseResult.data.currentPath);
+      setDirectories(browseResult.data.directories);
+      setParentPath(browseResult.data.parentPath);
+      const nextRootPaths = browseResult.data.rootPaths?.filter(Boolean) ?? ["/"];
+      setRootPaths(nextRootPaths);
+      const detectedHomePath = nextRootPaths.find((candidate) => candidate !== "/") ?? null;
+      setHomePath(detectedHomePath);
+      setSelectedPath(`${browseResult.data.currentPath}/${trimmedName}`);
+      setIsCreatingFolder(false);
+      setNewFolderName("");
+      setCreateFolderError(null);
+    } catch (err) {
+      setCreateFolderError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setCreatingFolder(false);
+    }
+  }, [currentPath, dispatch, newFolderName, t]);
 
   const handleOpen = useCallback(async () => {
     if (!selectedPath) {
@@ -197,16 +285,24 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
     currentPath,
     directories,
     error,
+    createFolderError,
+    creatingFolder,
     getShortPath,
     handleNavigate,
     handleOpen,
     handleSelect,
+    isCreatingFolder,
     launchHint,
     launchTitle,
     loading,
+    newFolderName,
+    openCreateFolder,
     parentPath,
     rootPaths,
+    closeCreateFolder,
     selectedPath,
+    submitCreateFolder,
+    updateNewFolderName,
   };
 }
 
