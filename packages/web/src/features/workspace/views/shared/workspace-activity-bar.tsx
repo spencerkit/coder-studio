@@ -1,5 +1,7 @@
 import type { FC } from "react";
+import { ThemedIcon } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
+import type { IconSemantic } from "../../../../theme";
 import type { DesktopSidebarView } from "../../atoms/layout";
 
 interface WorkspaceActivityBarProps {
@@ -15,14 +17,14 @@ export const WorkspaceActivityBar: FC<WorkspaceActivityBarProps> = ({
   const items: Array<{
     view: DesktopSidebarView;
     label: string;
-    icon: string;
+    icon: IconSemantic;
   }> = [
-    { view: "explorer", label: t("workspace.sidebar.explorer"), icon: "⌘" },
-    { view: "search", label: t("workspace.sidebar.search"), icon: "⌕" },
+    { view: "explorer", label: t("workspace.sidebar.explorer"), icon: "nav.explorer" },
+    { view: "search", label: t("workspace.sidebar.search"), icon: "nav.search" },
     {
       view: "source-control",
       label: t("workspace.sidebar.source_control"),
-      icon: "⑂",
+      icon: "git.branch",
     },
   ];
 
@@ -40,7 +42,7 @@ export const WorkspaceActivityBar: FC<WorkspaceActivityBarProps> = ({
           onClick={() => onSelectView(view)}
         >
           <span className="workspace-activity-bar__glyph" aria-hidden="true">
-            {icon}
+            <ThemedIcon semantic={icon} size={18} />
           </span>
           <span className="workspace-activity-bar__label">{label}</span>
         </button>

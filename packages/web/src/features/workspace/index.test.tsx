@@ -340,6 +340,9 @@ describe("WorkspacePage", () => {
     await screen.findByRole("button", { name: /Explorer|资源管理器/i });
 
     expect(document.querySelector(".workspace-activity-bar")).toBeTruthy();
+    expect(document.querySelector('[data-icon-semantic="nav.explorer"]')).toBeTruthy();
+    expect(document.querySelector('[data-icon-semantic="nav.search"]')).toBeTruthy();
+    expect(document.querySelector('[data-icon-semantic="git.branch"]')).toBeTruthy();
     expect(document.querySelector(".workspace-sidebar-panel__tabs")).toBeNull();
     expect(document.querySelector(".workspace-sidebar-panel__tab")).toBeNull();
   });
