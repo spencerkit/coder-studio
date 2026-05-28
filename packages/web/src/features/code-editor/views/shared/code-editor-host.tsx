@@ -26,10 +26,12 @@ interface CodeEditorHeaderActionsProps {
 
 interface CodeEditorDesktopHeaderActionsProps {
   state: CodeEditorState;
+  showCloseAction?: boolean;
 }
 
 export const CodeEditorDesktopHeaderActions: FC<CodeEditorDesktopHeaderActionsProps> = ({
   state,
+  showCloseAction = true,
 }) => {
   const t = useTranslation();
   const {
@@ -112,15 +114,17 @@ export const CodeEditorDesktopHeaderActions: FC<CodeEditorDesktopHeaderActionsPr
           <span>{saveLabel}</span>
         </button>
       </Tooltip>
-      <Tooltip content={t("action.close")}>
-        <IconButton
-          aria-label={t("action.close")}
-          className="code-mode-btn editor-surface__action-btn"
-          icon={<X size={12} />}
-          onClick={handleClose}
-          size="sm"
-        />
-      </Tooltip>
+      {showCloseAction ? (
+        <Tooltip content={t("action.close")}>
+          <IconButton
+            aria-label={t("action.close")}
+            className="code-mode-btn editor-surface__action-btn"
+            icon={<X size={12} />}
+            onClick={handleClose}
+            size="sm"
+          />
+        </Tooltip>
+      ) : null}
     </div>
   );
 };

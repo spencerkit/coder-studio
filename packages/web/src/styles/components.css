@@ -15175,6 +15175,34 @@ body.is-dragging-pane .session-action-btn-drag {
   background: transparent;
 }
 
+.editor-pane-card__body {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.editor-pane-card__toolbar-row {
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
+
+.editor-pane-card__content,
+.editor-pane-card__content > * {
+  min-width: 0;
+  min-height: 0;
+}
+
+.editor-pane-card__content {
+  display: flex;
+  flex: 1;
+}
+
+.editor-pane-card__content > * {
+  flex: 1;
+}
+
 .mobile-terminal-sheet {
   padding: 0;
   gap: 0;

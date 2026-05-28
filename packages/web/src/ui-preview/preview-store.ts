@@ -39,6 +39,10 @@ import {
   workspacesLoadErrorAtom,
   workspacesLoadStateAtom,
 } from "../atoms/workspaces";
+import {
+  activeEditorPaneIdAtomFamily,
+  focusedEditorPaneIdAtomFamily,
+} from "../features/agent-panes/atoms/editor-panes";
 import { type PaneNode, paneLayoutAtomFamily } from "../features/agent-panes/atoms/pane-layout";
 import { type Toast, toastsAtom } from "../features/notifications";
 import { supervisorDialogAtom, supervisorsAtom } from "../features/supervisor/atoms";
@@ -122,6 +126,8 @@ export interface UiPreviewSeed {
   workspacesLoadError?: string | null;
   sessions?: Session[];
   paneLayoutByWorkspaceId?: Record<string, PaneNode>;
+  activeEditorPaneIdByWorkspaceId?: Record<string, string | null>;
+  focusedEditorPaneIdByWorkspaceId?: Record<string, string | null>;
   fileTreeByWorkspaceId?: Record<string, Map<string, FileNode[]>>;
   openFilesByWorkspaceId?: Record<string, Record<string, OpenFile>>;
   activeFilePathByWorkspaceId?: Record<string, string | null>;
@@ -540,6 +546,14 @@ export function buildUiPreviewStore(seed: UiPreviewSeed): Store {
 
   for (const [workspaceId, layout] of Object.entries(seed.paneLayoutByWorkspaceId ?? {})) {
     store.set(paneLayoutAtomFamily(workspaceId), layout);
+  }
+
+  for (const [workspaceId, paneId] of Object.entries(seed.activeEditorPaneIdByWorkspaceId ?? {})) {
+    store.set(activeEditorPaneIdAtomFamily(workspaceId), paneId);
+  }
+
+  for (const [workspaceId, paneId] of Object.entries(seed.focusedEditorPaneIdByWorkspaceId ?? {})) {
+    store.set(focusedEditorPaneIdAtomFamily(workspaceId), paneId);
   }
 
   for (const [workspaceId, treeMap] of Object.entries(seed.fileTreeByWorkspaceId ?? {})) {

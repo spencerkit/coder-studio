@@ -3,7 +3,11 @@ import { FlipHorizontal, FlipVertical, X } from "lucide-react";
 import type { FC } from "react";
 import { IconButton, Tooltip } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
-import { CodeEditorHost } from "../../../code-editor/views/shared/code-editor-host";
+import { useCodeEditorActions } from "../../../code-editor/actions/use-code-editor-actions";
+import {
+  CodeEditorDesktopHeaderActions,
+  CodeEditorHost,
+} from "../../../code-editor/views/shared/code-editor-host";
 import { PanelHeader } from "../../../shared/components/panel-header";
 import { activeFilePathAtomFamily } from "../../../workspace/atoms";
 
@@ -22,6 +26,7 @@ export const EditorPaneCard: FC<EditorPaneCardProps> = ({
 }) => {
   const t = useTranslation();
   const activeFilePath = useAtomValue(activeFilePathAtomFamily(workspaceId));
+  const editorState = useCodeEditorActions();
   const title = activeFilePath ?? "Editor";
 
   return (
@@ -67,7 +72,12 @@ export const EditorPaneCard: FC<EditorPaneCardProps> = ({
       />
 
       <div className="editor-pane-card__body">
-        <CodeEditorHost chrome="content-only" />
+        <div className="code-editor-header editor-pane-card__toolbar-row">
+          <CodeEditorDesktopHeaderActions state={editorState} showCloseAction={false} />
+        </div>
+        <div className="editor-pane-card__content">
+          <CodeEditorHost chrome="content-only" editorState={editorState} />
+        </div>
       </div>
     </div>
   );

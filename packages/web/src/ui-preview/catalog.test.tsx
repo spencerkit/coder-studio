@@ -343,6 +343,20 @@ describe("UI preview catalog", () => {
     expect(screen.getAllByText("DRAFT")).toHaveLength(2);
   });
 
+  it("renders the editor-pane review scene with pane-local editor toolbar chrome", async () => {
+    renderScene("workspace-editor-pane-review");
+
+    expect(
+      await screen.findByRole("navigation", { name: /Workspace activity bar|工作区活动栏/i })
+    ).toBeInTheDocument();
+    expect(await screen.findByTestId("editor-pane-left")).toBeInTheDocument();
+    expect(screen.getByText("packages/web/src/app.tsx")).toBeInTheDocument();
+    expect(screen.getByRole("toolbar", { name: "Editor actions" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Diff|差异/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Edit|编辑/i })).toBeInTheDocument();
+    expect(screen.getAllByText("DRAFT")).toHaveLength(1);
+  });
+
   it("renders the workspace editor review scene", async () => {
     renderScene("workspace-editor-review");
 

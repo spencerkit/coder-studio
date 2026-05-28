@@ -154,6 +154,18 @@ export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
     capture: { selector: ".workspace-page" },
   },
   {
+    id: "workspace-editor-pane-review",
+    title: "Workspace / Editor Pane Review",
+    category: "page",
+    source: "real-route",
+    description:
+      "Desktop workspace scene with an active agent editor pane leaf, toolbar chrome, and neighboring draft pane for acceptance review.",
+    devices: ["desktop"],
+    themes: allThemeIds(),
+    locales: ["zh", "en"],
+    capture: { selector: ".workspace-page" },
+  },
+  {
     id: "auth-preview",
     title: "Auth Preview",
     category: "page",

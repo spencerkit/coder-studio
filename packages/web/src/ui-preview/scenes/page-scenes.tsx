@@ -57,6 +57,37 @@ fileTreeMap.set(".", [
 
 const openPreviewFiles: Record<string, OpenFile> = {};
 
+const editorPanePreviewFiles: Record<string, OpenFile> = {
+  "packages/web/src/app.tsx": {
+    kind: "text",
+    path: "packages/web/src/app.tsx",
+    content: [
+      "export function App() {",
+      "  const searchQuery = workspacePanelState.query;",
+      "",
+      "  if (!searchQuery.trim()) {",
+      "    return null;",
+      "  }",
+      "",
+      "  return <WorkspacePage />;",
+      "}",
+    ].join("\n"),
+    savedContent: [
+      "export function App() {",
+      "  const searchQuery = workspacePanelState.query;",
+      "",
+      "  if (!searchQuery.trim()) {",
+      "    return null;",
+      "  }",
+      "",
+      "  return <WorkspacePage />;",
+      "}",
+    ].join("\n"),
+    baseHash: "preview:app-tsx",
+    isDirty: false,
+  },
+};
+
 const searchContentResults: SearchContentResult = {
   files: [
     {
@@ -476,6 +507,170 @@ function buildDraftPaneEditorReviewSeed(context: UiPreviewSceneContext) {
   };
 }
 
+function buildEditorPaneReviewSeed(context: UiPreviewSceneContext) {
+  const reviewWorkspace: Workspace = {
+    ...workspace,
+    uiState: {
+      ...workspace.uiState,
+      paneLayout: {
+        id: "root",
+        type: "split",
+        direction: "horizontal",
+        children: [
+          {
+            id: "left",
+            type: "leaf",
+            leafKind: "editor",
+          },
+          {
+            id: "right",
+            type: "leaf",
+            leafKind: "draft",
+          },
+        ],
+      },
+    },
+  };
+
+  return {
+    ...context,
+    workspaces: [reviewWorkspace],
+    activeWorkspaceId: reviewWorkspace.id,
+    sessions: [],
+    paneLayoutByWorkspaceId: {
+      [reviewWorkspace.id]: {
+        id: "root",
+        type: "split",
+        direction: "horizontal",
+        children: [
+          {
+            id: "left",
+            type: "leaf",
+            leafKind: "editor",
+          },
+          {
+            id: "right",
+            type: "leaf",
+            leafKind: "draft",
+          },
+        ],
+      },
+    },
+    activeEditorPaneIdByWorkspaceId: {
+      [reviewWorkspace.id]: "left",
+    },
+    focusedEditorPaneIdByWorkspaceId: {
+      [reviewWorkspace.id]: "left",
+    },
+    fileTreeByWorkspaceId: {
+      [reviewWorkspace.id]: fileTreeMap,
+    },
+    openFilesByWorkspaceId: {
+      [reviewWorkspace.id]: editorPanePreviewFiles,
+    },
+    activeFilePathByWorkspaceId: {
+      [reviewWorkspace.id]: "packages/web/src/app.tsx",
+    },
+    gitStateByWorkspaceId: {
+      [reviewWorkspace.id]: gitStatus,
+    },
+    gitDiffPreviewByWorkspaceId: {
+      [reviewWorkspace.id]: {
+        path: "packages/web/src/app.tsx",
+        diff: [
+          "@@ app shell",
+          "-  const query = state.query;",
+          "+  const searchQuery = workspacePanelState.query;",
+          "",
+          "-  return <MainLayout />;",
+          "+  return <WorkspacePage />;",
+        ].join("\n"),
+        source: "file",
+      },
+    },
+    gitBranchListByWorkspaceId: {
+      [reviewWorkspace.id]: {
+        current: "feature/draft-pane-editor-integration",
+        branches: [
+          { name: "develop", isCurrent: false, isRemote: false },
+          {
+            name: "feature/draft-pane-editor-integration",
+            isCurrent: true,
+            isRemote: false,
+          },
+        ],
+      },
+    },
+    terminalPanelVisible: false,
+    commands: {
+      settingsGet: {
+        "appearance.locale": context.locale,
+        "appearance.themeId": context.theme,
+        "appearance.personalization.version": 1,
+        "appearance.personalization.common.backgroundMode": "image",
+        "appearance.personalization.common.backgroundAssetId": "preview-background",
+        "appearance.personalization.common.backgroundFit": "cover",
+        "appearance.personalization.common.backgroundDimness": 36,
+        "appearance.personalization.common.backgroundBlur": 8,
+        "appearance.personalization.common.glassEnabled": true,
+        "appearance.personalization.common.glassIntensity": 18,
+        "appearance.personalization.common.surfaceOpacity": 90,
+        "appearance.personalization.desktop.surfaceOpacity": 88,
+      },
+      workspaceList: [reviewWorkspace],
+      sessionListByWorkspaceId: { [reviewWorkspace.id]: [] },
+      gitStatusByWorkspaceId: { [reviewWorkspace.id]: gitStatus },
+      gitLogByWorkspaceId: {
+        [reviewWorkspace.id]: {
+          entries: [],
+        },
+      },
+      gitBranchesByWorkspaceId: {
+        [reviewWorkspace.id]: {
+          current: "feature/draft-pane-editor-integration",
+          branches: [
+            { name: "develop", isCurrent: false, isRemote: false },
+            {
+              name: "feature/draft-pane-editor-integration",
+              isCurrent: true,
+              isRemote: false,
+            },
+          ],
+        },
+      },
+      fileTreeByWorkspaceId: {
+        [reviewWorkspace.id]: {
+          ".": fileTreeMap.get(".") ?? [],
+        },
+      },
+      fileReadByWorkspaceId: {
+        [reviewWorkspace.id]: draftPaneEditorReviewFileContents,
+      },
+      gitDiffByWorkspaceId: {
+        [reviewWorkspace.id]: {
+          diff: [
+            "@@ app shell",
+            "-  const query = state.query;",
+            "+  const searchQuery = workspacePanelState.query;",
+            "",
+            "-  return <MainLayout />;",
+            "+  return <WorkspacePage />;",
+          ].join("\n"),
+        },
+      },
+      fileSearchContentByWorkspaceId: {
+        [reviewWorkspace.id]: searchContentResults,
+      },
+      worktreeListByWorkspaceId: {
+        [reviewWorkspace.id]: [],
+      },
+      terminalListByWorkspaceId: {
+        [reviewWorkspace.id]: [],
+      },
+    },
+  };
+}
+
 function scene(
   id: string,
   config: Pick<UiPreviewSceneDefinition, "router" | "seed" | "render">
@@ -557,6 +752,15 @@ export function createPageScenes(): UiPreviewSceneDefinition[] {
     scene("workspace-draft-pane-editor-review", {
       router: () => ({ initialEntries: ["/workspace"], path: "/workspace" }),
       seed: (context) => buildDraftPaneEditorReviewSeed(context),
+      render: () => (
+        <WorkspaceRouteGate>
+          <WorkspaceDesktopView />
+        </WorkspaceRouteGate>
+      ),
+    }),
+    scene("workspace-editor-pane-review", {
+      router: () => ({ initialEntries: ["/workspace"], path: "/workspace" }),
+      seed: (context) => buildEditorPaneReviewSeed(context),
       render: () => (
         <WorkspaceRouteGate>
           <WorkspaceDesktopView />

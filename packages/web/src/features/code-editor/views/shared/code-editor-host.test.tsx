@@ -1,6 +1,11 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { CodeEditorHeaderActions, type CodeEditorState, CodeEditorView } from "./code-editor-host";
+import {
+  CodeEditorDesktopHeaderActions,
+  CodeEditorHeaderActions,
+  type CodeEditorState,
+  CodeEditorView,
+} from "./code-editor-host";
 
 vi.mock("../../../../lib/i18n", () => ({
   useTranslation: () => (key: string) => {
@@ -130,6 +135,15 @@ describe("CodeEditorHeaderActions", () => {
 
     fireEvent.click(closeButton);
     expect(state.handleClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("can suppress the desktop close action when pane chrome provides its own close control", () => {
+    const state = createState();
+
+    render(<CodeEditorDesktopHeaderActions state={state} showCloseAction={false} />);
+
+    expect(screen.queryByRole("button", { name: "Close" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save File" })).toBeInTheDocument();
   });
 
   it("renders semantic icons for save and external file alerts", () => {
