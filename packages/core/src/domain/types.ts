@@ -382,6 +382,70 @@ export interface SearchContentResult {
   truncatedMatchFileCount: number;
 }
 
+export interface SearchSessionMatchPreview {
+  id: string;
+  line: number;
+  column: number;
+  endColumn: number;
+  preview: string;
+  previewColumnStart: number;
+  previewColumnEnd: number;
+  replacementPreview: string;
+  replacementPreviewColumnStart: number;
+  replacementPreviewColumnEnd: number;
+  isReplacementPreviewTruncated: boolean;
+}
+
+export interface SearchSessionFileResult {
+  path: string;
+  name: string;
+  matchCount: number;
+  hasMoreMatches: boolean;
+  baseHash: string;
+  matches: SearchSessionMatchPreview[];
+}
+
+export interface SearchSessionStartResult {
+  sessionId: string;
+  files: SearchSessionFileResult[];
+  totalMatchCount: number;
+  totalFileCount: number;
+  hasMoreFiles: boolean;
+  truncatedMatchFileCount: number;
+  skippedBinaryFileCount: number;
+  skippedLargeFileCount: number;
+}
+
+export interface SearchSessionFilePreview {
+  kind: "search-replace-file-diff";
+  path: string;
+  title?: string;
+  sessionId: string;
+  baseHash: string;
+  originalContent: string;
+  modifiedContent: string;
+}
+
+export type SearchSessionApplyScope =
+  | { kind: "all" }
+  | { kind: "file"; path: string }
+  | { kind: "match"; path: string; matchId: string };
+
+export interface SearchSessionApplyFileResult {
+  path: string;
+  status: "applied" | "conflict" | "skipped" | "not_found";
+  replacedMatchCount: number;
+}
+
+export interface SearchSessionApplyResult {
+  sessionId: string;
+  status: "ok" | "partial" | "stale_session";
+  appliedFileCount: number;
+  conflictFileCount: number;
+  skippedFileCount: number;
+  results: SearchSessionApplyFileResult[];
+}
+
 export interface Settings {
   defaultProviderId: string;
   notifications: {

@@ -239,6 +239,26 @@ describe("EditorSurface", () => {
     );
   });
 
+  it("renders Monaco diff for search replace previews", () => {
+    const state = createState({
+      mode: "diff",
+      activeDiffChange: {
+        kind: "search-replace-file-diff",
+        path: "src/app.ts",
+        title: "src/app.ts",
+        sessionId: "session-1",
+        baseHash: "hash-1",
+        originalContent: "before\n",
+        modifiedContent: "after\n",
+      },
+    });
+
+    render(<EditorSurface state={state} />);
+
+    expect(screen.getByTestId("monaco-diff-host")).toHaveAttribute("data-original", "before\n");
+    expect(screen.getByTestId("monaco-diff-host")).toHaveAttribute("data-modified", "after\n");
+  });
+
   it("shows the saved-only warning while diff mode ignores unsaved local edits", () => {
     const state = createState({
       mode: "diff",

@@ -1,14 +1,57 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { Provider } from "jotai";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { terminalOutputAtomFamily } from "../features/terminal-panel/atoms";
 import { getThemeById } from "../theme";
-import { getUiPreviewScene, UI_PREVIEW_SCENES } from "./catalog";
 import { buildUiPreviewStore } from "./preview-store";
 import type { UiPreviewSceneTheme } from "./scene-metadata";
 
+vi.mock("../features/code-editor/views/shared/code-editor-host", () => ({
+  CodeEditorHost: () => <div data-testid="code-editor-host" />,
+  CodeEditorDesktopHeaderActions: () => (
+    <div data-testid="editor-toolbar-mock" role="toolbar" aria-label="Editor actions">
+      <button type="button" aria-label="Diff">
+        Diff
+      </button>
+      <button type="button" aria-label="Edit">
+        Edit
+      </button>
+    </div>
+  ),
+}));
+
+vi.mock("../features/code-editor/components/monaco-host", () => ({
+  MonacoHost: ({ content, readOnly }: { content?: string; readOnly?: boolean }) => (
+    <div data-testid="monaco-host" data-read-only={String(Boolean(readOnly))}>
+      {content ?? ""}
+    </div>
+  ),
+}));
+
+vi.mock("../features/code-editor/components/monaco-diff-host", () => ({
+  MonacoDiffHost: ({
+    filePath,
+    originalContent,
+    modifiedContent,
+  }: {
+    filePath?: string;
+    originalContent: string;
+    modifiedContent: string;
+  }) => (
+    <div data-testid="monaco-diff-host" data-file-path={filePath ?? ""}>
+      <pre>{originalContent}</pre>
+      <pre>{modifiedContent}</pre>
+    </div>
+  ),
+}));
+
 const VIEWPORT_QUERY = "(max-width: 899px), (pointer: coarse)";
+const originalClipboard = navigator.clipboard;
+const originalClipboardItem = globalThis.ClipboardItem;
+const originalGetContext = HTMLCanvasElement.prototype.getContext;
+
+let catalogModule: typeof import("./catalog");
 
 function installMatchMedia(device: "desktop" | "mobile") {
   Object.defineProperty(window, "matchMedia", {
@@ -27,12 +70,20 @@ function installMatchMedia(device: "desktop" | "mobile") {
   });
 }
 
+function getCatalogModule() {
+  if (!catalogModule) {
+    throw new Error("UI preview catalog not loaded");
+  }
+
+  return catalogModule;
+}
+
 function renderScene(
   sceneId: string,
   device: "desktop" | "mobile" = "desktop",
   theme: UiPreviewSceneTheme = "mint-dark"
 ) {
-  const scene = getUiPreviewScene(sceneId);
+  const scene = getCatalogModule().getUiPreviewScene(sceneId);
   if (!scene) {
     throw new Error(`Missing scene ${sceneId}`);
   }
@@ -60,20 +111,64 @@ function renderScene(
 describe("UI preview catalog", () => {
   const originalMatchMedia = window.matchMedia;
 
+  beforeAll(async () => {
+    installMatchMedia("desktop");
+    Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
+      configurable: true,
+      value: vi.fn(() => ({})),
+    });
+    Object.defineProperty(window.navigator, "clipboard", {
+      configurable: true,
+      value: {
+        write: vi.fn().mockResolvedValue(undefined),
+        writeText: vi.fn().mockResolvedValue(undefined),
+        readText: vi.fn().mockResolvedValue(""),
+      },
+    });
+    Object.defineProperty(globalThis, "ClipboardItem", {
+      configurable: true,
+      writable: true,
+      value: class ClipboardItemMock {
+        constructor(public readonly items: Record<string, Blob | Promise<Blob>>) {}
+      },
+    });
+    catalogModule = await import("./catalog");
+  });
+
+  afterAll(() => {
+    Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
+      configurable: true,
+      value: originalGetContext,
+    });
+    Object.defineProperty(window.navigator, "clipboard", {
+      configurable: true,
+      value: originalClipboard,
+    });
+    Object.defineProperty(globalThis, "ClipboardItem", {
+      configurable: true,
+      writable: true,
+      value: originalClipboardItem,
+    });
+  });
+
   beforeEach(() => {
     window.localStorage.clear();
     installMatchMedia("desktop");
   });
 
   afterEach(() => {
-    window.matchMedia = originalMatchMedia;
+    if (originalMatchMedia) {
+      window.matchMedia = originalMatchMedia;
+    } else {
+      installMatchMedia("desktop");
+    }
     document.documentElement.removeAttribute("data-theme");
     document.documentElement.removeAttribute("lang");
     delete document.body.dataset.uiPreviewDevice;
   });
 
   it("registers unique first-batch page scene ids", () => {
-    const ids = UI_PREVIEW_SCENES.map((scene) => scene.id);
+    const ids = getCatalogModule().UI_PREVIEW_SCENES.map((scene) => scene.id);
     expect(new Set(ids).size).toBe(ids.length);
     expect(ids).toEqual(
       expect.arrayContaining([
@@ -96,7 +191,7 @@ describe("UI preview catalog", () => {
   });
 
   it("marks settings section scenes for capture-time navigation", () => {
-    const scene = getUiPreviewScene("settings-appearance");
+    const scene = getCatalogModule().getUiPreviewScene("settings-appearance");
     expect(
       scene?.router({ theme: "mint-dark", locale: "en", device: "desktop" }).initialEntries
     ).toEqual(["/settings"]);
@@ -104,12 +199,12 @@ describe("UI preview catalog", () => {
   });
 
   it("marks the shortcuts settings scene for capture-time navigation", () => {
-    const scene = getUiPreviewScene("settings-shortcuts");
+    const scene = getCatalogModule().getUiPreviewScene("settings-shortcuts");
     expect(scene?.capture?.settingsSection).toBe("shortcuts");
   });
 
   it("limits the mobile settings root scene to mobile variants only", () => {
-    const scene = getUiPreviewScene("settings-mobile-root");
+    const scene = getCatalogModule().getUiPreviewScene("settings-mobile-root");
     expect(scene?.devices).toEqual(["mobile"]);
   });
 
@@ -121,7 +216,7 @@ describe("UI preview catalog", () => {
   });
 
   it("registers the first showcase scene ids", () => {
-    const ids = UI_PREVIEW_SCENES.map((scene) => scene.id);
+    const ids = getCatalogModule().UI_PREVIEW_SCENES.map((scene) => scene.id);
     expect(ids).toEqual(
       expect.arrayContaining([
         "readme-desktop-hero",
@@ -202,13 +297,13 @@ describe("UI preview catalog", () => {
   });
 
   it("captures the mobile terminal showcase from the fullscreen terminal sheet root", () => {
-    const scene = getUiPreviewScene("mobile-terminal-sheet");
+    const scene = getCatalogModule().getUiPreviewScene("mobile-terminal-sheet");
     expect(scene?.capture?.selector).toBe(".mobile-sheet--terminal");
     expect(scene?.devices).toEqual(["mobile"]);
   });
 
   it("keeps mobile terminal showcase history in replay state instead of preloading live output", () => {
-    const scene = getUiPreviewScene("mobile-terminal-sheet");
+    const scene = getCatalogModule().getUiPreviewScene("mobile-terminal-sheet");
     if (!scene) {
       throw new Error("Missing mobile-terminal-sheet scene");
     }
@@ -326,7 +421,7 @@ describe("UI preview catalog", () => {
     expect(screen.getByText("packages/web/src/app.tsx")).toBeInTheDocument();
     expect(
       screen.getByRole("button", {
-        name: /packages\/web\/src\/app\.tsx.*app\.tsx.*4.*(?:matches|匹配)/i,
+        name: /app\.tsx.*packages\/web\/src\/app\.tsx.*4.*(?:matches|匹配)/i,
       })
     ).toBeInTheDocument();
     expect(document.querySelector(".workspace-search-panel__group-count")).toHaveTextContent("4");
@@ -350,10 +445,11 @@ describe("UI preview catalog", () => {
       await screen.findByRole("navigation", { name: /Workspace activity bar|工作区活动栏/i })
     ).toBeInTheDocument();
     expect(await screen.findByTestId("editor-pane-left")).toBeInTheDocument();
-    expect(screen.getByText("packages/web/src/app.tsx")).toBeInTheDocument();
-    expect(screen.getByRole("toolbar", { name: "Editor actions" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Diff|差异/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Edit|编辑/i })).toBeInTheDocument();
+    expect(screen.getAllByText("packages/web/src/app.tsx").length).toBeGreaterThan(0);
+    const toolbar = screen.getByRole("toolbar", { name: "Editor actions" });
+    expect(toolbar).toBeInTheDocument();
+    expect(within(toolbar).getByRole("button", { name: /Diff|差异/i })).toBeInTheDocument();
+    expect(within(toolbar).getByRole("button", { name: /Edit|编辑/i })).toBeInTheDocument();
     expect(screen.getAllByText("DRAFT")).toHaveLength(1);
   });
 

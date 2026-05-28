@@ -15706,6 +15706,53 @@ body.is-dragging-pane .session-action-btn-drag {
   background: transparent;
 }
 
+.workspace-search-panel__toolbar,
+.workspace-search-panel__replace-row,
+.workspace-search-panel__summary,
+.workspace-search-panel__group-header-row,
+.workspace-search-panel__match-shell,
+.workspace-search-panel__match-actions,
+.workspace-search-panel__detail-switch {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.workspace-search-panel__toolbar,
+.workspace-search-panel__replace-row,
+.workspace-search-panel__details {
+  width: 100%;
+}
+
+.workspace-search-panel__toolbar {
+  align-items: stretch;
+}
+
+.workspace-search-panel__icon-actions,
+.workspace-search-panel__detail-switches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.workspace-search-panel__icon-actions {
+  justify-content: flex-end;
+}
+
+.workspace-search-panel__toolbar .workspace-search-panel__input,
+.workspace-search-panel__replace-row .workspace-search-panel__input,
+.workspace-search-panel__detail-field .workspace-search-panel__input {
+  flex: 1 1 auto;
+}
+
+.workspace-search-panel__toolbar-button {
+  flex-shrink: 0;
+}
+
+.workspace-search-panel__toolbar-button--active {
+  background: var(--component-mix-status-info-fg-10pct-surface-panel);
+}
+
 .workspace-search-panel__input {
   min-height: 36px;
   border-color: var(
@@ -15739,12 +15786,14 @@ body.is-dragging-pane .session-action-btn-drag {
   display: inline-flex;
   min-height: 27px;
   align-items: center;
+  gap: 6px;
   padding: 0 8px;
   border: 1px solid var(--component-mix-border-default-84pct-transparent);
   border-radius: var(--radius-sm);
   color: var(--text-tertiary);
   font-size: 12px;
   line-height: 1;
+  background: transparent;
 }
 
 .workspace-search-panel__filter--active {
@@ -15755,13 +15804,41 @@ body.is-dragging-pane .session-action-btn-drag {
 
 .workspace-search-panel__summary {
   min-height: 0;
-  color: transparent;
+  justify-content: space-between;
+  color: var(--text-secondary);
+  font-size: var(--type-body-5-size);
+  line-height: var(--type-body-5-line-height);
+  font-weight: var(--type-body-5-weight);
 }
 
 .workspace-search-panel__results {
   flex: 0 0 auto;
   overflow: visible;
   padding: 0;
+}
+
+.workspace-search-panel__details {
+  display: grid;
+  gap: var(--sp-2);
+}
+
+.workspace-search-panel__detail-field {
+  display: grid;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: var(--type-body-5-size);
+}
+
+.workspace-search-panel__detail-switch {
+  justify-content: space-between;
+  color: var(--text-secondary);
+  font-size: var(--type-body-5-size);
+}
+
+.workspace-search-panel__error {
+  margin: 0;
+  color: var(--status-danger-fg);
+  font-size: var(--type-body-5-size);
 }
 
 .workspace-search-panel__group {
@@ -15826,6 +15903,10 @@ body.is-dragging-pane .session-action-btn-drag {
   padding: 2px 0 var(--sp-1);
 }
 
+.workspace-search-panel__group-header-row {
+  justify-content: space-between;
+}
+
 .workspace-search-panel__match {
   grid-template-columns: 28px minmax(0, 1fr) auto;
   min-height: 32px;
@@ -15833,6 +15914,32 @@ body.is-dragging-pane .session-action-btn-drag {
   padding: 0 12px;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
+}
+
+.workspace-search-panel__match-shell {
+  align-items: stretch;
+  justify-content: space-between;
+}
+
+.workspace-search-panel__match-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.workspace-search-panel__replacement,
+.workspace-search-panel__replacement-preview {
+  color: var(--text-secondary);
+  font-size: var(--type-body-5-size);
+}
+
+.workspace-search-panel__replacement-preview mark {
+  background: color-mix(in srgb, var(--status-success-fg) 18%, transparent);
+  color: var(--status-success-fg);
+}
+
+.workspace-search-panel__match-actions {
+  flex-shrink: 0;
+  align-self: center;
 }
 
 .workspace-sidebar-row--selected,
@@ -16049,8 +16156,8 @@ body.is-dragging-pane .session-action-btn-drag {
 
 .mobile-sheet--files .mobile-files-sheet__segmented {
   gap: 10px;
-  padding: 16px 16px 12px;
-  border-bottom: 1px solid var(--component-mix-border-default-78pct-transparent);
+  padding: 16px 16px 14px;
+  border-bottom: 1px solid var(--component-mix-border-default-92pct-transparent);
 }
 
 .mobile-sheet--files .mobile-files-sheet__tabs {
@@ -16078,6 +16185,10 @@ body.is-dragging-pane .session-action-btn-drag {
   border-color: var(--component-mix-border-default-72pct-transparent);
   background: var(--component-mix-status-info-fg-14pct-transparent);
   color: var(--text-primary);
+}
+
+.mobile-sheet--files .mobile-files-sheet__segment.active::after {
+  display: none;
 }
 
 .mobile-sheet--files .mobile-files-sheet__content,

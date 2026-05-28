@@ -3,7 +3,7 @@ import {
   type FileNode,
   type GitStatus,
   type MonitoringResponse,
-  type SearchContentResult,
+  type SearchSessionStartResult,
   type Session,
   type Workspace,
 } from "@coder-studio/core";
@@ -88,7 +88,8 @@ const editorPanePreviewFiles: Record<string, OpenFile> = {
   },
 };
 
-const searchContentResults: SearchContentResult = {
+const searchContentResults: SearchSessionStartResult = {
+  sessionId: "preview-search-session",
   files: [
     {
       path: "packages/web/src/app.tsx",
@@ -98,23 +99,34 @@ const searchContentResults: SearchContentResult = {
       matches: [
         {
           line: 24,
+          id: "preview-match-1",
           column: 7,
           endColumn: 18,
           preview: "const searchQuery = workspacePanelState.query;",
           previewColumnStart: 7,
           previewColumnEnd: 18,
+          replacementPreview: "const workspaceQuery = workspacePanelState.query;",
+          replacementPreviewColumnStart: 7,
+          replacementPreviewColumnEnd: 21,
+          isReplacementPreviewTruncated: false,
         },
         {
           line: 86,
+          id: "preview-match-2",
           column: 8,
           endColumn: 19,
           preview: "return searchQuery.trim() ? results : [];",
           previewColumnStart: 8,
           previewColumnEnd: 19,
+          replacementPreview: "return workspaceQuery.trim() ? results : [];",
+          replacementPreviewColumnStart: 8,
+          replacementPreviewColumnEnd: 22,
+          isReplacementPreviewTruncated: false,
         },
       ],
     },
     {
+      baseHash: "preview:tree-tsx",
       path: "packages/web/src/tree.tsx",
       name: "tree.tsx",
       matchCount: 2,
@@ -123,8 +135,11 @@ const searchContentResults: SearchContentResult = {
     },
   ],
   totalMatchCount: 12,
+  totalFileCount: 2,
   hasMoreFiles: false,
   truncatedMatchFileCount: 0,
+  skippedBinaryFileCount: 0,
+  skippedLargeFileCount: 0,
 };
 
 const draftPaneEditorReviewFileContents = {
@@ -365,7 +380,7 @@ function buildWorkspaceSeed(context: UiPreviewSceneContext, sessions: Session[] 
           ".": fileTreeMap.get(".") ?? [],
         },
       },
-      fileSearchContentByWorkspaceId: {
+      fileSearchSessionByWorkspaceId: {
         [workspace.id]: searchContentResults,
       },
       worktreeListByWorkspaceId: {
@@ -494,7 +509,7 @@ function buildDraftPaneEditorReviewSeed(context: UiPreviewSceneContext) {
       fileReadByWorkspaceId: {
         [reviewWorkspace.id]: draftPaneEditorReviewFileContents,
       },
-      fileSearchContentByWorkspaceId: {
+      fileSearchSessionByWorkspaceId: {
         [reviewWorkspace.id]: searchContentResults,
       },
       worktreeListByWorkspaceId: {
@@ -658,7 +673,7 @@ function buildEditorPaneReviewSeed(context: UiPreviewSceneContext) {
           ].join("\n"),
         },
       },
-      fileSearchContentByWorkspaceId: {
+      fileSearchSessionByWorkspaceId: {
         [reviewWorkspace.id]: searchContentResults,
       },
       worktreeListByWorkspaceId: {

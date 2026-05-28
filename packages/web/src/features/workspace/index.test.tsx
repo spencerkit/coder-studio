@@ -469,10 +469,7 @@ describe("WorkspacePage", () => {
     fireEvent.click(screen.getByRole("button", { name: /Search|搜索/i }));
     expect(await screen.findByRole("searchbox", { name: /Search|搜索/i })).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", {
-        level: 2,
-        name: /Results|结果/i,
-      })
+      screen.getByText(/Type to search across file contents|输入关键词以搜索文件内容/i)
     ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Source Control|源代码管理/i }));
@@ -593,12 +590,16 @@ describe("WorkspacePage", () => {
         };
       }
 
-      if (op === "file.searchContent") {
+      if (op === "file.searchSession.start") {
         return {
+          sessionId: "search-session-preview",
           files: [],
           totalMatchCount: 0,
+          totalFileCount: 0,
           hasMoreFiles: false,
           truncatedMatchFileCount: 0,
+          skippedBinaryFileCount: 0,
+          skippedLargeFileCount: 0,
         };
       }
 
@@ -750,64 +751,88 @@ describe("WorkspacePage", () => {
           };
         }
 
-        if (op === "file.searchContent") {
+        if (op === "file.searchSession.start") {
           if (args?.workspaceId === "ws-a" && args.query === "alpha") {
             return {
+              sessionId: "search-session-alpha",
               files: [
                 {
                   path: "src/alpha.tsx",
                   name: "alpha.tsx",
                   matchCount: 1,
                   hasMoreMatches: false,
+                  baseHash: "hash-alpha",
                   matches: [
                     {
+                      id: "alpha-match-1",
                       line: 3,
                       column: 7,
                       endColumn: 12,
                       preview: "const alpha = true;",
                       previewColumnStart: 7,
                       previewColumnEnd: 12,
+                      replacementPreview: "const alpha = true;",
+                      replacementPreviewColumnStart: 7,
+                      replacementPreviewColumnEnd: 12,
+                      isReplacementPreviewTruncated: false,
                     },
                   ],
                 },
               ],
               totalMatchCount: 1,
+              totalFileCount: 1,
               hasMoreFiles: false,
               truncatedMatchFileCount: 0,
+              skippedBinaryFileCount: 0,
+              skippedLargeFileCount: 0,
             };
           }
 
           if (args?.workspaceId === "ws-b" && args.query === "beta") {
             return {
+              sessionId: "search-session-beta",
               files: [
                 {
                   path: "src/beta.tsx",
                   name: "beta.tsx",
                   matchCount: 1,
                   hasMoreMatches: false,
+                  baseHash: "hash-beta",
                   matches: [
                     {
+                      id: "beta-match-1",
                       line: 4,
                       column: 7,
                       endColumn: 11,
                       preview: "const beta = true;",
                       previewColumnStart: 7,
                       previewColumnEnd: 11,
+                      replacementPreview: "const beta = true;",
+                      replacementPreviewColumnStart: 7,
+                      replacementPreviewColumnEnd: 11,
+                      isReplacementPreviewTruncated: false,
                     },
                   ],
                 },
               ],
               totalMatchCount: 1,
+              totalFileCount: 1,
               hasMoreFiles: false,
               truncatedMatchFileCount: 0,
+              skippedBinaryFileCount: 0,
+              skippedLargeFileCount: 0,
             };
           }
 
           return {
+            sessionId: "search-session-empty",
             files: [],
             totalMatchCount: 0,
+            totalFileCount: 0,
             hasMoreFiles: false,
             truncatedMatchFileCount: 0,
+            skippedBinaryFileCount: 0,
+            skippedLargeFileCount: 0,
           };
         }
 
